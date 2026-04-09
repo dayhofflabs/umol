@@ -18,6 +18,7 @@ pub mod streaming;
 pub mod symbol_owned;
 pub mod tagged_owned;
 pub mod tags;
+pub mod value;
 
 #[cfg(all(feature = "serde", feature = "bignum"))]
 pub mod bigdecimal_serde;
@@ -39,6 +40,8 @@ pub mod set_serde;
 pub mod symbol_serde;
 #[cfg(feature = "serde")]
 pub mod tagged_serde;
+#[cfg(feature = "serde")]
+pub mod value_serde;
 
 #[cfg(feature = "bignum")]
 pub use bigdecimal::BigDecimal;
@@ -57,6 +60,7 @@ pub use native::{EdnMapHelper, FromEdn, ToEdn};
 pub use set_owned::EdnHashSet;
 pub use symbol_owned::EdnSymbol;
 pub use tagged_owned::EdnTagged;
+pub use value::Value;
 #[cfg(feature = "serde")]
 pub use formatter::{to_string_pretty, to_string_with};
 #[cfg(feature = "bignum")]

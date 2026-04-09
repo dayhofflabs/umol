@@ -16,6 +16,7 @@ pub const SYMBOL_TOKEN: &str = "$edn::symbol";
 pub const LIST_TOKEN: &str = "$edn::list";
 pub const SET_TOKEN: &str = "$edn::set";
 pub const TAGGED_TOKEN: &str = "$edn::tagged";
+pub const VALUE_TOKEN: &str = "$edn::value";
 #[cfg(feature = "bignum")]
 pub const BIGINT_TOKEN: &str = "$edn::bigint";
 #[cfg(feature = "bignum")]

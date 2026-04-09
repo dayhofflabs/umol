@@ -780,19 +780,28 @@ tree-walking path, feature parity with native.
 
 ### Open risks
 
-- **Phase 0 may surface latent test failures** if any current `from_str`
-  test passes through the streaming path but fails through the tree
-  path. Such failures are bugs to fix in `from_value`, not reasons to
-  preserve the streaming path.
-- **`umol_edn::Value` plumbing** needs a way to hand a fully-formed
-  `Edn` to a serde visitor without losing variant information. Three
-  candidate mechanisms (custom byte carrier, thread-local side channel,
-  downcast) all have problems. If none works cleanly, `Value` becomes a
-  non-serde type and dynamic-typed users go through `Reader` directly.
-- **`Tagged<T>` vs enum-variant tagged** must coexist without
-  collision. They are reached through distinct serde calls
-  (`deserialize_newtype_struct` vs `deserialize_enum`), so they should
-  not interfere, but this is an untested assumption until Phase 2.4.
+- **Phase 0 may surface latent test failures** (resolved 2026-04-08):
+  no latent failures surfaced. All 790 tests pass after the tree-walking
+  `from_value` path became the sole deserialize entry point.
+- **`umol_edn::Value` plumbing** (resolved 2026-04-08): the
+  carrier-pair mechanism. `Value::deserialize` uses `deserialize_any`.
+  `EdnDeserializer::deserialize_any` routes standard variants (Nil,
+  Bool, Int, Float, Char, Str, Vector, Map) through matching `visit_*`
+  methods, and routes EDN-specific variants (Keyword, Symbol, List,
+  Set, Tagged, BigInt, BigDecimal) through `visit_newtype_struct` with
+  a purpose-built carrier deserializer that presents itself as a
+  `(tag: &str, payload: Value)` tuple. `ValueVisitor::visit_newtype_struct`
+  reads the pair and reconstructs the precise variant. Lossless over
+  EDN; non-EDN deserializers degrade predictably (keyword/symbol →
+  `Str`, list/set → `Vector`, tagged → tuple). Uses only standard
+  serde machinery — no `Any` downcasting, no thread-local state, no
+  byte smuggling.
+- **`EdnTagged<T>` vs enum-variant tagged** (resolved 2026-04-08 by
+  construction): `EdnTagged<T>` dispatches via
+  `serialize_tuple_struct` / `deserialize_tuple_struct` keyed on the
+  `TAGGED_TOKEN` name, while serde enum variants use
+  `serialize_newtype_variant` / `deserialize_enum`. The paths never
+  intersect. Phase 4 will still add a struct-holding-both spot test.
 - **Wrapper composition with serde attributes** (`#[serde(default)]`,
   `#[serde(rename)]`, `#[serde(flatten)]`) must hold up. Phase 4
   spot-check.

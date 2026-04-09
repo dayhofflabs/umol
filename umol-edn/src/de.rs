@@ -169,6 +169,60 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
                     "expected bigdecimal, got {other:?}"
                 ))),
             },
+            crate::serde_tokens::VALUE_TOKEN => {
+                use crate::serde_tokens::*;
+                use crate::value_serde::{ValueCarrier, ValuePayload};
+                match self.0 {
+                    Edn::Keyword(k) => {
+                        let carrier = ValueCarrier::new(
+                            KEYWORD_TOKEN,
+                            ValuePayload::Str(k.into_cow()),
+                        );
+                        visitor.visit_newtype_struct(carrier)
+                    }
+                    Edn::Symbol(s) => {
+                        let carrier = ValueCarrier::new(
+                            SYMBOL_TOKEN,
+                            ValuePayload::Str(s.into_cow()),
+                        );
+                        visitor.visit_newtype_struct(carrier)
+                    }
+                    Edn::List(v) => {
+                        let carrier =
+                            ValueCarrier::new(LIST_TOKEN, ValuePayload::List(v));
+                        visitor.visit_newtype_struct(carrier)
+                    }
+                    Edn::Set(s) => {
+                        let carrier =
+                            ValueCarrier::new(SET_TOKEN, ValuePayload::Set(s));
+                        visitor.visit_newtype_struct(carrier)
+                    }
+                    Edn::Tagged(tag, inner) => {
+                        let carrier = ValueCarrier::new(
+                            TAGGED_TOKEN,
+                            ValuePayload::Tagged(tag, *inner),
+                        );
+                        visitor.visit_newtype_struct(carrier)
+                    }
+                    #[cfg(feature = "bignum")]
+                    Edn::BigInt(n) => {
+                        let carrier = ValueCarrier::new(
+                            BIGINT_TOKEN,
+                            ValuePayload::Str(Cow::Owned(n.to_string())),
+                        );
+                        visitor.visit_newtype_struct(carrier)
+                    }
+                    #[cfg(feature = "bignum")]
+                    Edn::BigDecimal(d) => {
+                        let carrier = ValueCarrier::new(
+                            BIGDECIMAL_TOKEN,
+                            ValuePayload::Str(Cow::Owned(d.as_inner().to_string())),
+                        );
+                        visitor.visit_newtype_struct(carrier)
+                    }
+                    other => EdnDeserializer(other).deserialize_any(visitor),
+                }
+            }
             _ => visitor.visit_newtype_struct(self),
         }
     }
