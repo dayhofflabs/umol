@@ -6,21 +6,16 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use proptest::prelude::*;
 use umol_edn::{read_string, Edn, EdnKeyword, EdnMap, EdnSeq, EdnSet, EdnSymbol};
 
-// Strategies
-
-/// Characters valid as the first character of a symbol name.
 const SYMBOL_START: &[char] = &[
     'a', 'b', 'c', 'z', 'A', 'B', 'Z', '.', '*', '+', '!', '-', '_', '?', '$', '%', '&', '=', '<',
     '>',
 ];
 
-/// Additional characters valid in the rest of a symbol name.
 const SYMBOL_CONT: &[char] = &[
     'a', 'b', 'c', 'z', 'A', 'B', 'Z', '0', '1', '9', '.', '*', '+', '!', '-', '_', '?', '$', '%',
     '&', '=', '<', '>', '#', ':', '\'',
 ];
 
-/// Returns true if first char is +/-/. and second char is a digit (ambiguous with numbers).
 fn is_ambiguous_symbol(s: &str) -> bool {
     let mut chars = s.chars();
     match chars.next() {
@@ -43,7 +38,6 @@ fn symbol_name_strategy() -> impl Strategy<Value = String> {
         })
         .prop_filter("ambiguous with number", |s| !is_ambiguous_symbol(s));
 
-    // Namespace-qualified: ns/name — alpha first chars to avoid sign/dot ambiguity.
     let qualified = (
         prop::sample::select(&SYMBOL_START[..7]), // letters only (a,b,c,z,A,B,Z)
         prop::collection::vec(prop::sample::select(&SYMBOL_CONT[..15]), 0..4),
@@ -76,26 +70,68 @@ fn tag_strategy() -> impl Strategy<Value = String> {
         .prop_map(|(ns, name)| format!("{ns}/{name}"))
 }
 
+fn string_strategy() -> impl Strategy<Value = String> {
+    prop_oneof![
+        // ASCII without escape-worthy characters.
+        "[ -~]{0,20}",
+        // Strings containing characters that require escaping.
+        prop::collection::vec(
+            prop_oneof![
+                Just('"'),
+                Just('\\'),
+                Just('\n'),
+                Just('\r'),
+                Just('\t'),
+                (0x20u32..0x7Fu32).prop_filter_map("printable", |cp| char::from_u32(cp)),
+            ],
+            1..15,
+        )
+        .prop_map(|chars| chars.into_iter().collect::<String>()),
+        // Non-ASCII Unicode strings.
+        prop::collection::vec(
+            prop_oneof![
+                Just('\u{00E9}'), // é
+                Just('\u{03B1}'), // α
+                Just('\u{4E16}'), // 世
+                Just('\u{1F600}'), // 😀
+                (0x80u32..0x800u32).prop_filter_map("valid", |cp| char::from_u32(cp)),
+            ],
+            1..10,
+        )
+        .prop_map(|chars| chars.into_iter().collect::<String>()),
+    ]
+}
+
 fn edn_leaf() -> impl Strategy<Value = Edn<'static>> {
     prop_oneof![
         Just(Edn::Nil),
         any::<bool>().prop_map(Edn::Bool),
         any::<i64>().prop_map(Edn::Int),
-        // Finite floats only: NaN/Inf cannot roundtrip through display.
         (-1e15f64..1e15f64).prop_map(Edn::Float),
-        // Printable ASCII chars (safe for roundtrip).
+        // Printable ASCII.
         (0x21u32..0x7Fu32)
             .prop_filter_map("valid char", |cp| char::from_u32(cp))
             .prop_map(Edn::Char),
         // Named characters.
         prop::sample::select(&['\n', '\r', ' ', '\t'][..]).prop_map(Edn::Char),
-        "[ -~]{0,20}".prop_map(|s| Edn::Str(Cow::Owned(s))),
+        // Non-ASCII chars that roundtrip via \uXXXX.
+        prop::sample::select(&['\u{03B1}', '\u{00E9}', '\u{4E16}'][..]).prop_map(Edn::Char),
+        // Control chars rendered as \uXXXX.
+        (1u32..0x20u32)
+            .prop_filter_map("not named", |cp| {
+                let c = char::from_u32(cp)?;
+                if matches!(c, '\n' | '\r' | '\t') { None } else { Some(c) }
+            })
+            .prop_map(Edn::Char),
+        string_strategy().prop_map(|s| Edn::Str(Cow::Owned(s))),
         keyword_name_strategy().prop_map(|s| Edn::Keyword(EdnKeyword::owned(s))),
         symbol_name_strategy()
             .prop_filter("not a reserved word", |s| {
                 s != "nil" && s != "true" && s != "false"
             })
             .prop_map(|s| Edn::Symbol(EdnSymbol::owned(s))),
+        // Lone slash symbol.
+        Just(Edn::Symbol(EdnSymbol::owned("/".to_string()))),
     ]
 }
 
@@ -129,8 +165,6 @@ fn edn_strategy() -> impl Strategy<Value = Edn<'static>> {
         },
     )
 }
-
-// Properties
 
 fn hash_of(v: &Edn<'_>) -> u64 {
     let mut h = DefaultHasher::new();

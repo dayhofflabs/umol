@@ -1,6 +1,4 @@
 //! EDN conformance tests — parser and streaming paths.
-//!
-//! Statement IDs (S2, S7, etc.) reference discussion/66-edn-spec-conformance-2026-04-01.md.
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -178,6 +176,15 @@ fn test_string_invalid_escape(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
 
+#[rstest]
+#[case(r#""\uD800""#)]
+#[case(r#""\uDFFF""#)]
+#[case(r#""\u00GG""#)]
+#[case(r#""\u41""#)]
+fn test_string_unicode_escape_error(#[case] input: &str) {
+    assert!(parse(input).is_err(), "Edn should reject {input}");
+}
+
 #[test]
 fn test_string_unterminated() {
     assert!(parse(r#""hello"#).is_err());
@@ -207,6 +214,8 @@ fn test_formfeed_backspace_rejected(#[case] input: &str) {
 #[rstest]
 #[case(r"\ ")]
 #[case(r"\abc")]
+#[case(r"\u00GG")]
+#[case(r"\uD800")]
 fn test_characters_error(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
@@ -275,8 +284,10 @@ fn test_empty_prefix_or_name(#[case] input: &str) {
 #[rstest]
 #[case("a/b/c")]
 #[case("foo/1bar")]
+#[case("foo/#bar")]
+#[case("foo/:bar")]
 fn test_symbol_slash_rejected(#[case] input: &str) {
-    assert!(parse(input).is_err());
+    assert!(parse(input).is_err(), "Edn should reject {input}");
 }
 
 #[rstest]
@@ -332,7 +343,6 @@ fn test_post_slash_symbol_start() {
     assert!(parse(":foo/0bar").is_err());
     assert!(parse(":foo/#bar").is_err(), "Edn should reject :foo/#bar");
     assert!(parse(":foo/:bar").is_err(), "Edn should reject :foo/:bar");
-    // Interior # and : fine:
     assert!(parse(":foo/bar#baz").is_ok());
     assert!(parse(":foo/bar:baz").is_ok());
     // Valid start chars after slash:
@@ -390,6 +400,11 @@ fn test_negative_zero() {
     assert_eq!(parse("-0").unwrap(), Edn::Int(0));
 }
 
+#[test]
+fn test_positive_zero() {
+    assert_eq!(parse("+0").unwrap(), Edn::Int(0));
+}
+
 #[cfg(not(feature = "bignum"))]
 #[test]
 fn test_overflow() {
@@ -400,6 +415,7 @@ fn test_overflow() {
 #[rstest]
 #[case("42N")]
 #[case("0N")]
+#[case("3.14N")]
 fn test_bigint_suffix_error(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
@@ -445,6 +461,9 @@ fn test_negative_zero_float() {
 #[case("##NaN")]
 #[case("##Inf")]
 #[case("##-Inf")]
+#[case("8E1313")]
+#[case("1e999")]
+#[case("-1e999")]
 fn test_special_floats_rejected(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
@@ -610,6 +629,16 @@ fn test_set() {
 }
 
 #[test]
+fn test_set_duplicate_elements() {
+    let result = parse("#{1 1 2}").unwrap();
+    if let Edn::Set(s) = result {
+        assert_eq!(s.len(), 2);
+    } else {
+        panic!("expected Set");
+    }
+}
+
+#[test]
 fn test_set_empty() {
     assert_eq!(parse("#{}").unwrap(), Edn::Set(EdnSet::new()));
 }
@@ -648,8 +677,6 @@ fn test_bare_tag_rejected(#[case] input: &str) {
 
 #[test]
 fn test_bare_tag_rejected_by_serde_default() {
-    // The serde path honors the supplied config verbatim. The default config
-    // rejects unknown tags, matching the native path.
     assert!(matches!(
         stream::<i64>("#foo 1"),
         Err(EdnError::Parse(ParseError::InvalidTag { .. }))
@@ -658,8 +685,6 @@ fn test_bare_tag_rejected_by_serde_default() {
 
 #[test]
 fn test_bare_tag_passes_through_serde_with_permissive_config() {
-    // Callers that want foreign types to use `#Variant` for enum dispatch or
-    // to preserve arbitrary tagged literals must opt in explicitly.
     let mut config = ParseConfig::default();
     config.allow_unknown_tags = true;
     assert_eq!(from_str_with::<i64>("#foo 1", &config).unwrap(), 1);
@@ -687,7 +712,6 @@ fn test_builtin_tags_parse_without_features(
     #[case] tag: &str,
     #[case] inner: Edn<'_>,
 ) {
-    // Built-in tags must parse as Tagged(...) even without chrono/uuid features.
     let result = parse(input).unwrap();
     assert_eq!(result, Edn::Tagged(tag.into(), Box::new(inner)));
 }
@@ -779,7 +803,6 @@ fn test_custom_reader_dispatch() {
         tag_readers: readers,
         ..Default::default()
     };
-    // Bare tag "double" accepted because it's registered.
     let val = read_string_with("#double 5", &config).unwrap();
     assert_eq!(val, Edn::Int(10));
 }
@@ -878,6 +901,14 @@ fn test_discard_in_map() {
     assert_eq!(result, Edn::Map(expected));
 }
 
+#[test]
+fn test_discard_map_key() {
+    let result = parse("{#_ :skip :a 1}").unwrap();
+    let mut expected = EdnMap::new();
+    expected.insert(Edn::keyword("a"), Edn::Int(1));
+    assert_eq!(result, Edn::Map(expected));
+}
+
 #[rstest]
 #[case("#_")]
 #[case("#_ 1")]
@@ -926,6 +957,27 @@ fn test_parsed_list_equals_parsed_vector() {
     assert_eq!(list, vector);
 }
 
+#[test]
+fn test_tagged_equality() {
+    let a = Edn::Tagged("my/tag".into(), Box::new(Edn::Int(1)));
+    let b = Edn::Tagged("my/tag".into(), Box::new(Edn::Int(1)));
+    assert_eq!(a, b);
+}
+
+#[test]
+fn test_tagged_inequality_tag() {
+    let a = Edn::Tagged("my/tag".into(), Box::new(Edn::Int(1)));
+    let b = Edn::Tagged("my/other".into(), Box::new(Edn::Int(1)));
+    assert_ne!(a, b);
+}
+
+#[test]
+fn test_tagged_inequality_value() {
+    let a = Edn::Tagged("my/tag".into(), Box::new(Edn::Int(1)));
+    let b = Edn::Tagged("my/tag".into(), Box::new(Edn::Int(2)));
+    assert_ne!(a, b);
+}
+
 #[rstest]
 #[case("nil")]
 #[case("true")]
@@ -954,11 +1006,23 @@ fn test_parsed_list_equals_parsed_vector() {
 #[case("#{}")]
 #[case("#{1 2 3}")]
 #[case("#my/tag value")]
+#[case("\"é\"")]
+#[case("\"α\"")]
+#[case("\"世界\"")]
 fn test_roundtrip(#[case] input: &str) {
     let parsed = parse(input).unwrap();
     let rendered = parsed.to_string();
     let reparsed = parse(&rendered).unwrap();
     assert_eq!(parsed, reparsed);
+}
+
+#[rstest]
+#[case(Edn::Set(EdnSet::from_iter([Edn::Nil, Edn::Str(Cow::Owned("wbgpo?j".into()))])))]
+#[case(Edn::List(vec![Edn::Str(Cow::Owned("é".into()))].into()))]
+fn test_roundtrip_regression(#[case] edn: Edn<'static>) {
+    let rendered = edn.to_string();
+    let reparsed = parse(&rendered).unwrap();
+    assert_eq!(edn, reparsed);
 }
 
 #[test]
@@ -1011,15 +1075,13 @@ fn test_error_deep_nesting() {
     assert!(parse(&input).is_ok());
 }
 
-/// Fuzzer-found regressions: these inputs must not panic or hang.
 #[rstest]
-#[case("#_(#!V(\0\0\0\0\u{00ff}##")] // skip_atom infinite loop with null bytes in discard+collection
-#[case("#_\"\\")] // skip_string panic with trailing backslash at EOF
+#[case("#_(#!V(\0\0\0\0\u{00ff}##")]
+#[case("#_\"\\")]
 fn test_error_deser_regression_vec(#[case] input: &str) {
     let _ = from_str::<Vec<i64>>(input);
 }
 
-/// Fuzzer-found panic slicing &str at non-char-boundary in \u escape parsing.
 #[test]
 fn test_error_deser_unicode_escape_multibyte_boundary() {
     let input = "\"\u{005c}u2\0`\u{07a0}";

@@ -2,6 +2,5 @@
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &str| {
-    // Must never panic. Errors are fine.
     let _ = umol_edn::read_string(data);
 });

@@ -36,6 +36,29 @@ fn keyword_heavy() -> String {
     s
 }
 
+fn comment_heavy() -> String {
+    let mut s = String::from("[");
+    for i in 0..50 {
+        s.push_str(&format!("; comment line {i}\n"));
+        s.push_str(&format!("#_ :discarded-{i} "));
+        s.push_str(&format!("{i} "));
+    }
+    s.push(']');
+    s
+}
+
+fn set_50() -> String {
+    let mut s = String::from("#{");
+    for i in 0..50 {
+        if i > 0 {
+            s.push(' ');
+        }
+        s.push_str(&format!(":item-{i}"));
+    }
+    s.push('}');
+    s
+}
+
 fn deeply_nested(depth: usize) -> String {
     let open: String = "[".repeat(depth);
     let close: String = "]".repeat(depth);
@@ -66,6 +89,9 @@ fn bench_parse_atoms(c: &mut Criterion) {
     group.bench_function("symbol", |b| {
         b.iter(|| read_string(black_box("my.ns/some-symbol")))
     });
+    group.bench_function("string_unicode", |b| {
+        b.iter(|| read_string(black_box("\"héllo wörld αβγ 世界\"")))
+    });
     group.finish();
 }
 
@@ -73,6 +99,8 @@ fn bench_parse_collections(c: &mut Criterion) {
     let keyword_input = keyword_heavy();
     let nested_50 = deeply_nested(50);
     let nested_100 = deeply_nested(100);
+    let comments = comment_heavy();
+    let set = set_50();
 
     let mut group = c.benchmark_group("parse_collections");
     group.bench_function("molecule_small", |b| {
@@ -89,6 +117,12 @@ fn bench_parse_collections(c: &mut Criterion) {
     });
     group.bench_function("nested_100", |b| {
         b.iter(|| read_string(black_box(&nested_100)))
+    });
+    group.bench_function("comment_heavy", |b| {
+        b.iter(|| read_string(black_box(&comments)))
+    });
+    group.bench_function("set_50", |b| {
+        b.iter(|| read_string(black_box(&set)))
     });
     group.finish();
 }
@@ -126,6 +160,13 @@ fn bench_display(c: &mut Criterion) {
         b.iter(|| black_box(&edn_large).to_string_with(&fmt))
     });
 
+    let escape_heavy = Edn::Str(
+        "line1\nline2\nline3\ttab\there\r\nquote\"end\\back\nmore\tescapes\n".into(),
+    );
+    group.bench_function("string_escape_heavy", |b| {
+        b.iter(|| black_box(&escape_heavy).to_string())
+    });
+
     let float_heavy = Edn::Vector(
         (0..100)
             .map(|i| Edn::Float(i as f64 * 0.1 + 0.001))
@@ -153,7 +194,7 @@ fn bench_roundtrip(c: &mut Criterion) {
 
 #[allow(dead_code)]
 #[derive(Deserialize, Serialize)]
-struct MoleculeProxy {
+struct Molecule {
     atoms: Vec<String>,
     bonds: Vec<(String, String, String)>,
 }
@@ -164,13 +205,13 @@ fn bench_deserialize(c: &mut Criterion) {
     let mut group = c.benchmark_group("deserialize");
 
     group.bench_function("streaming_struct", |b| {
-        b.iter(|| from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL)).unwrap())
+        b.iter(|| from_str::<Molecule>(black_box(MOLECULE_SMALL)).unwrap())
     });
 
     group.bench_function("tree_then_struct", |b| {
         b.iter(|| {
             let edn = read_string(black_box(MOLECULE_SMALL)).unwrap();
-            from_value::<MoleculeProxy>(edn).unwrap()
+            from_value::<Molecule>(edn).unwrap()
         })
     });
 
@@ -178,12 +219,12 @@ fn bench_deserialize(c: &mut Criterion) {
     group.bench_function("from_value_only", |b| {
         b.iter(|| {
             let val = black_box(&edn).clone();
-            from_value::<MoleculeProxy>(val).unwrap()
+            from_value::<Molecule>(val).unwrap()
         })
     });
 
     group.bench_function("json_from_str_struct", |b| {
-        b.iter(|| serde_json::from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL_JSON)).unwrap())
+        b.iter(|| serde_json::from_str::<Molecule>(black_box(MOLECULE_SMALL_JSON)).unwrap())
     });
 
     group.bench_function("json_parse_to_value", |b| {
@@ -196,7 +237,7 @@ fn bench_deserialize(c: &mut Criterion) {
     group.bench_function("json_value_to_struct", |b| {
         b.iter(|| {
             let val = black_box(&json_val).clone();
-            serde_json::from_value::<MoleculeProxy>(val).unwrap()
+            serde_json::from_value::<Molecule>(val).unwrap()
         })
     });
 
@@ -204,14 +245,14 @@ fn bench_deserialize(c: &mut Criterion) {
 }
 
 fn bench_serialize(c: &mut Criterion) {
-    let proxy = from_str::<MoleculeProxy>(MOLECULE_SMALL).unwrap();
+    let proxy = from_str::<Molecule>(MOLECULE_SMALL).unwrap();
 
     let mut group = c.benchmark_group("serialize");
     group.bench_function("to_string_small", |b| {
         b.iter(|| to_string(black_box(&proxy)).unwrap())
     });
 
-    let large_proxy = MoleculeProxy {
+    let large_proxy = Molecule {
         atoms: (0..100).map(|i| format!("C{i}")).collect(),
         bonds: (0..99)
             .map(|i| (i.to_string(), (i + 1).to_string(), "single".into()))
@@ -242,10 +283,9 @@ fn bench_stream_throughput(c: &mut Criterion) {
     for (label, stream) in [("1k", &stream_1k), ("10k", &stream_10k)] {
         group.throughput(Throughput::Bytes(stream.len() as u64));
 
-        // Path A: direct streaming serde deserializer (never materializes full tree).
         group.bench_function(format!("direct_stream_{label}"), |b| {
             b.iter(|| {
-                let iter = EdnStreamDeserializer::<MoleculeProxy>::new(black_box(stream));
+                let iter = EdnStreamDeserializer::<Molecule>::new(black_box(stream));
                 let mut count = 0usize;
                 for r in iter {
                     black_box(r.unwrap());
@@ -255,13 +295,12 @@ fn bench_stream_throughput(c: &mut Criterion) {
             })
         });
 
-        // Path B: eager read_all -> from_value per element (tree-mediated, whole batch in memory).
         group.bench_function(format!("read_all_then_from_value_{label}"), |b| {
             b.iter(|| {
                 let all = read_all(black_box(stream)).unwrap();
                 let mut count = 0usize;
                 for v in all {
-                    black_box(from_value::<MoleculeProxy>(v).unwrap());
+                    black_box(from_value::<Molecule>(v).unwrap());
                     count += 1;
                 }
                 count

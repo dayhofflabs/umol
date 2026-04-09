@@ -7,8 +7,8 @@ use memchr::memchr2;
 use winnow::ascii::digit1;
 use winnow::combinator::opt;
 use winnow::error::ErrMode;
-use winnow::stream::Location;
-use winnow::token::{any, literal, one_of, take, take_while};
+use winnow::stream::{Location, Stream};
+use winnow::token::{any, literal, one_of, take_while};
 use winnow::{LocatingSlice, Parser};
 
 use crate::collections::{EdnMap, EdnSeq, EdnSet};
@@ -296,6 +296,9 @@ fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
         let f: f64 = num_str
             .parse()
             .map_err(|_| ErrMode::Cut(ParseError::InvalidNumber { offset: start }))?;
+        if !f.is_finite() {
+            return Err(ErrMode::Cut(ParseError::InvalidNumber { offset: start }));
+        }
         Ok(Edn::Float(f))
     } else {
         match num_str.parse::<i64>() {
@@ -329,11 +332,13 @@ fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
         let _ = '"'.parse_next(input)?;
 
         // Fast path: scan for closing quote with no escapes.
+        // memchr returns byte offsets; use next_slice (byte-based) instead of
+        // take (character-based) to advance correctly on multi-byte UTF-8.
         let s = rest(input);
         let bytes = s.as_bytes();
         if let Some(end) = memchr2(b'"', b'\\', bytes) {
             if bytes[end] == b'"' {
-                let borrowed: &'a str = take(end).parse_next(input)?;
+                let borrowed: &'a str = input.next_slice(end);
                 let _ = '"'.parse_next(input)?;
                 return Ok(Edn::Str(Cow::Borrowed(borrowed)));
             }
@@ -343,7 +348,7 @@ fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
         let pre_escape = memchr::memchr(b'\\', bytes).unwrap_or(0);
         let mut result = String::new();
         if pre_escape > 0 {
-            let span: &str = take(pre_escape).parse_next(input)?;
+            let span: &str = input.next_slice(pre_escape);
             result.push_str(span);
         }
         loop {
@@ -395,12 +400,11 @@ fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
                             }))
                         }
                     }
-                    // After escape, batch copy until next " or \.
                     let s = rest(input);
                     let sb = s.as_bytes();
                     let span_end = memchr2(b'"', b'\\', sb).unwrap_or(sb.len());
                     if span_end > 0 {
-                        let span: &str = take(span_end).parse_next(input)?;
+                        let span: &str = input.next_slice(span_end);
                         result.push_str(span);
                     }
                 }
@@ -723,6 +727,9 @@ mod tests {
     #[case("##NaN")]
     #[case("##Inf")]
     #[case("##-Inf")]
+    #[case("8E1313")]
+    #[case("1e999")]
+    #[case("-1e999")]
     fn test_read_string_error_special_float(#[case] input: &str) {
         assert!(read_string(input).is_err());
     }
@@ -736,6 +743,10 @@ mod tests {
     #[case(r#""quote\"here""#, "quote\"here")]
     #[case(r#""back\\slash""#, "back\\slash")]
     #[case(r#""cr\rhere""#, "cr\rhere")]
+    #[case("\"é\"", "é")]
+    #[case("\"α\"", "α")]
+    #[case("\"世界\"", "世界")]
+    #[case("\"hello é world\"", "hello é world")]
     fn test_read_string_str(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             read_string(input).unwrap(),
