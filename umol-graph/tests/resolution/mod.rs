@@ -9,7 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use serde::{Deserialize, Serialize};
-use umol_edn::{from_str as edn_from_str, to_string_pretty as edn_to_string_pretty};
+use umol_edn::serde::{from_str as edn_from_str, to_string_pretty as edn_to_string_pretty};
 use umol_graph::dsl::ast::{FromAst, ToAst};
 use umol_graph::dsl::config::{
     ImplicitHydrogenMode, MoleculeDslConfig, MoleculeDslConfigOverrides,
