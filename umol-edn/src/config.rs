@@ -1,7 +1,7 @@
 //! Parser configuration.
 
 use crate::edn::Edn;
-use crate::error::EdnError;
+use crate::error::ParseError;
 #[cfg(feature = "chrono")]
 use crate::tags::read_inst;
 #[cfg(feature = "uuid")]
@@ -16,7 +16,7 @@ pub enum DuplicateKeyPolicy {
 }
 
 /// A tag reader transforms the parsed value after a tag into an `Edn` value.
-pub type TagFn = fn(Edn) -> Result<Edn, EdnError>;
+pub type TagFn = fn(Edn) -> Result<Edn, ParseError>;
 
 /// Registry of tag readers.
 ///

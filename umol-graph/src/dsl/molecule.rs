@@ -12,7 +12,7 @@ use serde::ser::{self, SerializeSeq, Serializer};
 use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
 use umol_edn::streaming::EdnStreamDeserializer;
-use umol_edn::{Edn, EdnError, EdnKeyword, EdnMapHelper, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMapHelper, FromEdn, ToEdn};
 
 use super::ast::DslAst;
 use super::atom::{parse_atom_dsl, AtomAst};
@@ -910,20 +910,28 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<MoleculeInp
                 let s = de.read_string_or_keyword()?;
                 spin = Some(
                     SpinState::from_str(s.as_ref())
-                        .map_err(|e| EdnError::Custom(e.to_string()))?,
+                        .map_err(|e| DeError::Custom(e.to_string()))?,
                 );
             }
             "atom-aliases" | "aliases" => {
                 atom_aliases = read_seq(de, |d| {
-                    d.read_string_or_keyword().map(|c| c.into_owned())
+                    d.read_string_or_keyword()
+                        .map(|c| c.into_owned())
+                        .map_err(Into::into)
                 })?;
             }
             _ => de.read_skip_value()?,
         }
     }
 
-    let atoms = atoms.ok_or_else(|| EdnError::Custom("missing field: atoms".to_string()))?;
-    let bonds = bonds.ok_or_else(|| EdnError::Custom("missing field: bonds".to_string()))?;
+    let atoms = atoms.ok_or_else(|| DeError::MissingField {
+        key: "atoms".to_string(),
+        path: Vec::new(),
+    })?;
+    let bonds = bonds.ok_or_else(|| DeError::MissingField {
+        key: "bonds".to_string(),
+        path: Vec::new(),
+    })?;
 
     Ok(MoleculeInput {
         atoms,
@@ -978,7 +986,7 @@ fn read_atom_ref(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomRef, EdnError
         Some(b'"') => Ok(AtomRef::Tag(de.read_string()?.into_owned())),
         Some(b) if b.is_ascii_digit() || b == b'-' || b == b'+' => {
             let n = de.read_i64()?;
-            let idx = usize::try_from(n).map_err(|_| EdnError::OutOfRange {
+            let idx = usize::try_from(n).map_err(|_| DeError::OutOfRange {
                 value: n.to_string(),
                 target: "AtomRef::Index",
                 path: Vec::new(),
@@ -995,7 +1003,7 @@ fn read_bond_spec(de: &mut EdnStreamDeserializer<'_>) -> Result<BondAst, EdnErro
     if let Some(ast) = aliases.get_by_left(s.as_ref()) {
         return Ok(ast.clone());
     }
-    BondAst::from_str(s.as_ref()).map_err(|e| EdnError::Custom(e.to_string()))
+    BondAst::from_str(s.as_ref()).map_err(|e| DeError::Custom(e.to_string()).into())
 }
 
 fn read_localized_bond(
@@ -1075,6 +1083,7 @@ impl EndpointBondKind {
 }
 
 /// Read a map with `:id? :a :b :bond` (or donor/acceptor for dative).
+#[allow(clippy::complexity)]
 fn read_endpoint_bond_map(
     de: &mut EdnStreamDeserializer<'_>,
     kind: EndpointBondKind,
@@ -1106,9 +1115,18 @@ fn read_endpoint_bond_map(
         }
     }
 
-    let a = a.ok_or_else(|| EdnError::Custom(format!("missing field: {}", first_key)))?;
-    let b = b.ok_or_else(|| EdnError::Custom(format!("missing field: {}", second_key)))?;
-    let bond = bond.ok_or_else(|| EdnError::Custom("missing field: bond".to_string()))?;
+    let a = a.ok_or_else(|| DeError::MissingField {
+        key: first_key.to_string(),
+        path: Vec::new(),
+    })?;
+    let b = b.ok_or_else(|| DeError::MissingField {
+        key: second_key.to_string(),
+        path: Vec::new(),
+    })?;
+    let bond = bond.ok_or_else(|| DeError::MissingField {
+        key: "bond".to_string(),
+        path: Vec::new(),
+    })?;
     Ok((id, a, b, bond, (), ()))
 }
 
@@ -1130,25 +1148,29 @@ fn read_atoms_bond_map(
             _ => de.read_skip_value()?,
         }
     }
-    let atoms = atoms.ok_or_else(|| EdnError::Custom("missing field: atoms".to_string()))?;
+    let atoms = atoms.ok_or_else(|| DeError::MissingField {
+        key: "atoms".to_string(),
+        path: Vec::new(),
+    })?;
     Ok((id, atoms))
 }
 
 fn unexpected(offset: usize, b: Option<u8>) -> EdnError {
     match b {
-        Some(b) => EdnError::UnexpectedToken {
+        Some(b) => umol_edn::ParseError::UnexpectedToken {
             offset,
             found: b as char,
-        },
-        None => EdnError::UnexpectedEof { offset },
+        }
+        .into(),
+        None => umol_edn::ParseError::UnexpectedEof { offset }.into(),
     }
 }
 
 impl<'de> FromEdn<'de> for AtomRef {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Int(n) => {
-                let idx = usize::try_from(*n).map_err(|_| EdnError::OutOfRange {
+                let idx = usize::try_from(*n).map_err(|_| DeError::OutOfRange {
                     value: n.to_string(),
                     target: "AtomRef::Index",
                     path: Vec::new(),
@@ -1157,7 +1179,7 @@ impl<'de> FromEdn<'de> for AtomRef {
             }
             Edn::Keyword(k) => Ok(AtomRef::Tag(k.as_str().to_string())),
             Edn::Str(s) => Ok(AtomRef::Tag(s.to_string())),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "int or keyword",
                 got: other.kind(),
                 path: Vec::new(),
@@ -1285,13 +1307,13 @@ impl ToEdn for MoleculeAst {
 }
 
 impl<'de> FromEdn<'de> for AtomEntryInput {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Str(s) => Ok(AtomEntryInput::Str(s.to_string())),
             Edn::Keyword(k) => Ok(AtomEntryInput::Str(k.as_str().to_string())),
             Edn::Vector(v) | Edn::List(v) => {
                 if v.len() != 2 {
-                    return Err(EdnError::Custom(format!(
+                    return Err(DeError::Custom(format!(
                         "atom entry vector must have length 2, got {}",
                         v.len()
                     )));
@@ -1300,7 +1322,7 @@ impl<'de> FromEdn<'de> for AtomEntryInput {
                     Edn::Keyword(k) => k.as_str().to_string(),
                     Edn::Str(s) => s.to_string(),
                     other => {
-                        return Err(EdnError::TypeMismatch {
+                        return Err(DeError::TypeMismatch {
                             expected: "keyword (atom tag)",
                             got: other.kind(),
                             path: Vec::new(),
@@ -1310,7 +1332,7 @@ impl<'de> FromEdn<'de> for AtomEntryInput {
                 let inner = AtomEntryInput::from_edn(&v[1])?;
                 Ok(AtomEntryInput::Tagged(tag, Box::new(inner)))
             }
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "string, keyword, or [tag def] vector",
                 got: other.kind(),
                 path: Vec::new(),
@@ -1320,11 +1342,11 @@ impl<'de> FromEdn<'de> for AtomEntryInput {
 }
 
 impl<'de> FromEdn<'de> for LocalizedBond {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Vector(v) | Edn::List(v) => {
                 if v.len() != 3 {
-                    return Err(EdnError::Custom(format!(
+                    return Err(DeError::Custom(format!(
                         "bond shorthand vector must have length 3, got {}",
                         v.len()
                     )));
@@ -1344,7 +1366,7 @@ impl<'de> FromEdn<'de> for LocalizedBond {
                 let bond: BondAst = h.required("bond")?;
                 Ok(LocalizedBond { id, a, b, bond })
             }
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "bond vector or map",
                 got: other.kind(),
                 path: Vec::new(),
@@ -1355,11 +1377,11 @@ impl<'de> FromEdn<'de> for LocalizedBond {
 
 /// Read a flat alias vector entry as `String`. Accepts both keyword and
 /// string forms — keywords for alias names, strings for atom-spec defs.
-fn alias_entry_to_string(edn: &Edn<'_>) -> Result<String, EdnError> {
+fn alias_entry_to_string(edn: &Edn<'_>) -> Result<String, DeError> {
     match edn {
         Edn::Keyword(k) => Ok(k.as_str().to_string()),
         Edn::Str(s) => Ok(s.to_string()),
-        other => Err(EdnError::TypeMismatch {
+        other => Err(DeError::TypeMismatch {
             expected: "keyword or string in alias vector",
             got: other.kind(),
             path: Vec::new(),
@@ -1368,7 +1390,7 @@ fn alias_entry_to_string(edn: &Edn<'_>) -> Result<String, EdnError> {
 }
 
 /// Read an `id` field, which must be a keyword.
-fn read_optional_id(map: &umol_edn::EdnMap<'_>) -> Result<Option<EdnKeyword>, EdnError> {
+fn read_optional_id(map: &umol_edn::EdnMap<'_>) -> Result<Option<EdnKeyword>, DeError> {
     match map.get_ref(umol_edn::EdnKeyRef::keyword("id")) {
         Some(edn) => Ok(Some(EdnKeyword::from_edn(edn)?)),
         None => Ok(None),
@@ -1376,11 +1398,11 @@ fn read_optional_id(map: &umol_edn::EdnMap<'_>) -> Result<Option<EdnKeyword>, Ed
 }
 
 impl<'de> FromEdn<'de> for MoleculeInput {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let m = match edn {
             Edn::Map(m) => m,
             other => {
-                return Err(EdnError::TypeMismatch {
+                return Err(DeError::TypeMismatch {
                     expected: "molecule map",
                     got: other.kind(),
                     path: Vec::new(),
@@ -1400,7 +1422,7 @@ impl<'de> FromEdn<'de> for MoleculeInput {
         let charge: Option<i64> = h.optional("charge")?;
         let spin_str: Option<String> = h.optional("spin")?;
         let spin = match spin_str {
-            Some(s) => Some(SpinState::from_str(&s).map_err(|e| EdnError::Custom(e.to_string()))?),
+            Some(s) => Some(SpinState::from_str(&s).map_err(|e| DeError::Custom(e.to_string()))?),
             None => None,
         };
 

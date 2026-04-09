@@ -56,7 +56,7 @@ pub enum ParseError {
 impl From<EdnError> for ParseError {
     fn from(e: EdnError) -> Self {
         match &e {
-            EdnError::UnexpectedEof { .. } => ParseError::Incomplete,
+            EdnError::Parse(umol_edn::ParseError::UnexpectedEof { .. }) => ParseError::Incomplete,
             _ => ParseError::EdnParse(e.to_string()),
         }
     }

@@ -161,12 +161,12 @@ impl<'de> Deserialize<'de> for BondAst {
 }
 
 impl<'de> umol_edn::FromEdn<'de> for BondAst {
-    fn from_edn(edn: &umol_edn::Edn<'de>) -> Result<Self, umol_edn::EdnError> {
+    fn from_edn(edn: &umol_edn::Edn<'de>) -> Result<Self, umol_edn::DeError> {
         let s: &str = match edn {
             umol_edn::Edn::Str(s) => s,
             umol_edn::Edn::Keyword(k) => k.as_str(),
             other => {
-                return Err(umol_edn::EdnError::TypeMismatch {
+                return Err(umol_edn::DeError::TypeMismatch {
                     expected: "string or keyword",
                     got: other.kind(),
                     path: Vec::new(),
@@ -177,7 +177,7 @@ impl<'de> umol_edn::FromEdn<'de> for BondAst {
         if let Some(ast) = aliases.get_by_left(s) {
             return Ok(ast.clone());
         }
-        parse_bond_dsl(s).map_err(|e| umol_edn::EdnError::Custom(e.to_string()))
+        parse_bond_dsl(s).map_err(|e| umol_edn::DeError::Custom(e.to_string()))
     }
 }
 

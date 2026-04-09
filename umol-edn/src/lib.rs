@@ -71,7 +71,7 @@ pub use config::{DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
 #[cfg(feature = "serde")]
 pub use de::{from_str, from_str_with, from_value, EdnDeserializer};
 pub use edn::{Edn, Keyword, Symbol};
-pub use error::EdnError;
+pub use error::{DeError, EdnError, ParseError, SerError};
 pub use formatter::FormatConfig;
 #[cfg(feature = "serde")]
 pub use formatter::{to_string_pretty, to_string_with};

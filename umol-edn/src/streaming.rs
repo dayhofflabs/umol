@@ -8,7 +8,7 @@
 use std::borrow::Cow;
 use std::str::from_utf8;
 
-use crate::error::EdnError;
+use crate::error::ParseError;
 use crate::parser::{is_symbol_char, is_symbol_start, validate_symbol};
 
 pub struct EdnStreamDeserializer<'de> {
@@ -26,10 +26,10 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
-    pub fn expect_eof(&mut self) -> Result<(), EdnError> {
+    pub fn expect_eof(&mut self) -> Result<(), ParseError> {
         self.skip_ws()?;
         if self.pos < self.input.len() {
-            Err(EdnError::TrailingContent { offset: self.pos })
+            Err(ParseError::TrailingContent { offset: self.pos })
         } else {
             Ok(())
         }
@@ -40,18 +40,18 @@ impl<'de> EdnStreamDeserializer<'de> {
         self.input.as_bytes().get(self.pos).copied()
     }
 
-    fn next_byte(&mut self) -> Result<u8, EdnError> {
+    fn next_byte(&mut self) -> Result<u8, ParseError> {
         match self.input.as_bytes().get(self.pos) {
             Some(&b) => {
                 self.pos += 1;
                 Ok(b)
             }
-            None => Err(EdnError::UnexpectedEof { offset: self.pos }),
+            None => Err(ParseError::UnexpectedEof { offset: self.pos }),
         }
     }
 
     #[inline]
-    fn skip_ws(&mut self) -> Result<(), EdnError> {
+    fn skip_ws(&mut self) -> Result<(), ParseError> {
         let bytes = self.input.as_bytes();
         while self.pos < bytes.len() {
             match bytes[self.pos] {
@@ -72,7 +72,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     #[cold]
-    fn skip_ws_discard(&mut self) -> Result<(), EdnError> {
+    fn skip_ws_discard(&mut self) -> Result<(), ParseError> {
         self.pos += 2;
         self.skip_ws()?;
         self.skip_value()?;
@@ -80,13 +80,13 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     #[inline]
-    fn parse_keyword_name(&mut self) -> Result<Cow<'de, str>, EdnError> {
+    fn parse_keyword_name(&mut self) -> Result<Cow<'de, str>, ParseError> {
         debug_assert_eq!(self.input.as_bytes()[self.pos], b':');
         self.pos += 1;
 
         // :/ and :/foo are not legal keywords per the EDN spec.
         if self.input.as_bytes().get(self.pos) == Some(&b'/') {
-            return Err(EdnError::UnexpectedToken {
+            return Err(ParseError::UnexpectedToken {
                 offset: self.pos,
                 found: '/',
             });
@@ -95,15 +95,15 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     #[inline]
-    fn parse_symbol_str(&mut self) -> Result<&'de str, EdnError> {
+    fn parse_symbol_str(&mut self) -> Result<&'de str, ParseError> {
         let start = self.pos;
         let bytes = self.input.as_bytes();
         if self.pos >= bytes.len() {
-            return Err(EdnError::UnexpectedEof { offset: start });
+            return Err(ParseError::UnexpectedEof { offset: start });
         }
         let first = bytes[self.pos] as char;
         if !is_symbol_start(first) && !first.is_ascii_digit() {
-            return Err(EdnError::UnexpectedToken {
+            return Err(ParseError::UnexpectedToken {
                 offset: start,
                 found: first,
             });
@@ -117,14 +117,14 @@ impl<'de> EdnStreamDeserializer<'de> {
         Ok(s)
     }
 
-    fn parse_number_i64(&mut self) -> Result<i64, EdnError> {
+    fn parse_number_i64(&mut self) -> Result<i64, ParseError> {
         let s = self.scan_number_str()?;
-        s.parse::<i64>().map_err(|_| EdnError::InvalidNumber {
+        s.parse::<i64>().map_err(|_| ParseError::InvalidNumber {
             offset: self.pos - s.len(),
         })
     }
 
-    fn scan_number_str(&mut self) -> Result<&'de str, EdnError> {
+    fn scan_number_str(&mut self) -> Result<&'de str, ParseError> {
         let start = self.pos;
         let bytes = self.input.as_bytes();
         // optional sign
@@ -133,10 +133,10 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
         // digits
         if self.pos >= bytes.len() {
-            return Err(EdnError::UnexpectedEof { offset: start });
+            return Err(ParseError::UnexpectedEof { offset: start });
         }
         if !bytes[self.pos].is_ascii_digit() {
-            return Err(EdnError::InvalidNumber { offset: start });
+            return Err(ParseError::InvalidNumber { offset: start });
         }
         let digit_start = self.pos;
         while self.pos < bytes.len() && bytes[self.pos].is_ascii_digit() {
@@ -145,7 +145,7 @@ impl<'de> EdnStreamDeserializer<'de> {
         let digit_len = self.pos - digit_start;
         let has_dot = self.pos < bytes.len() && bytes[self.pos] == b'.';
         if digit_len > 1 && bytes[digit_start] == b'0' && !has_dot {
-            return Err(EdnError::InvalidNumber { offset: start });
+            return Err(ParseError::InvalidNumber { offset: start });
         }
         // optional .digits
         if has_dot {
@@ -167,7 +167,7 @@ impl<'de> EdnStreamDeserializer<'de> {
         // bignum suffix — reject without feature, leave for caller with feature
         if self.pos < bytes.len() && matches!(bytes[self.pos], b'N' | b'M') {
             #[cfg(not(feature = "bignum"))]
-            return Err(EdnError::UnsupportedFeature {
+            return Err(ParseError::UnsupportedFeature {
                 offset: start,
                 feature: "bignum",
             });
@@ -175,7 +175,7 @@ impl<'de> EdnStreamDeserializer<'de> {
         Ok(&self.input[start..self.pos])
     }
 
-    fn parse_string(&mut self) -> Result<Cow<'de, str>, EdnError> {
+    fn parse_string(&mut self) -> Result<Cow<'de, str>, ParseError> {
         debug_assert_eq!(self.input.as_bytes()[self.pos], b'"');
         self.pos += 1;
         let start = self.pos;
@@ -200,13 +200,13 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
         loop {
             if self.pos >= bytes.len() {
-                return Err(EdnError::UnexpectedEof { offset: start });
+                return Err(ParseError::UnexpectedEof { offset: start });
             }
             match bytes[self.pos] {
                 b'"' => {
                     self.pos += 1;
                     let s = from_utf8(&self.scratch)
-                        .map_err(|_| EdnError::Custom("invalid UTF-8".to_string()))?;
+                        .map_err(|_| ParseError::InvalidUtf8 { offset: start })?;
                     return Ok(Cow::Owned(s.to_string()));
                 }
                 b'\\' => {
@@ -214,7 +214,7 @@ impl<'de> EdnStreamDeserializer<'de> {
                     self.pos += 1;
                     let esc = self
                         .next_byte()
-                        .map_err(|_| EdnError::InvalidEscape { offset: esc_offset })?;
+                        .map_err(|_| ParseError::InvalidEscape { offset: esc_offset })?;
                     match esc {
                         b't' => self.scratch.push(b'\t'),
                         b'r' => self.scratch.push(b'\r'),
@@ -223,20 +223,20 @@ impl<'de> EdnStreamDeserializer<'de> {
                         b'"' => self.scratch.push(b'"'),
                         b'u' => {
                             if self.pos + 4 > bytes.len() {
-                                return Err(EdnError::InvalidEscape { offset: esc_offset });
+                                return Err(ParseError::InvalidEscape { offset: esc_offset });
                             }
                             let hex = from_utf8(&bytes[self.pos..self.pos + 4])
-                                .map_err(|_| EdnError::InvalidEscape { offset: esc_offset })?;
+                                .map_err(|_| ParseError::InvalidEscape { offset: esc_offset })?;
                             let cp = u32::from_str_radix(hex, 16)
-                                .map_err(|_| EdnError::InvalidEscape { offset: esc_offset })?;
+                                .map_err(|_| ParseError::InvalidEscape { offset: esc_offset })?;
                             let ch = char::from_u32(cp)
-                                .ok_or(EdnError::InvalidEscape { offset: esc_offset })?;
+                                .ok_or(ParseError::InvalidEscape { offset: esc_offset })?;
                             self.pos += 4;
                             let mut buf = [0u8; 4];
                             let encoded = ch.encode_utf8(&mut buf);
                             self.scratch.extend_from_slice(encoded.as_bytes());
                         }
-                        _ => return Err(EdnError::InvalidEscape { offset: esc_offset }),
+                        _ => return Err(ParseError::InvalidEscape { offset: esc_offset }),
                     }
                     // Batch copy until next " or \.
                     if let Some(span) = memchr::memchr2(b'"', b'\\', &bytes[self.pos..]) {
@@ -256,11 +256,11 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
-    fn skip_value(&mut self) -> Result<(), EdnError> {
+    fn skip_value(&mut self) -> Result<(), ParseError> {
         self.skip_ws()?;
         let b = self
             .peek()
-            .ok_or(EdnError::UnexpectedEof { offset: self.pos })?;
+            .ok_or(ParseError::UnexpectedEof { offset: self.pos })?;
         match b {
             b'(' => {
                 self.pos += 1;
@@ -307,11 +307,11 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
-    fn skip_delimited(&mut self, close: u8) -> Result<(), EdnError> {
+    fn skip_delimited(&mut self, close: u8) -> Result<(), ParseError> {
         loop {
             self.skip_ws()?;
             match self.peek() {
-                None => return Err(EdnError::UnexpectedEof { offset: self.pos }),
+                None => return Err(ParseError::UnexpectedEof { offset: self.pos }),
                 Some(b) if b == close => {
                     self.pos += 1;
                     return Ok(());
@@ -321,13 +321,13 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
-    fn skip_string(&mut self) -> Result<(), EdnError> {
+    fn skip_string(&mut self) -> Result<(), ParseError> {
         debug_assert_eq!(self.input.as_bytes()[self.pos], b'"');
         self.pos += 1;
         let bytes = self.input.as_bytes();
         loop {
             match memchr::memchr2(b'"', b'\\', &bytes[self.pos..]) {
-                None => return Err(EdnError::UnexpectedEof { offset: self.pos }),
+                None => return Err(ParseError::UnexpectedEof { offset: self.pos }),
                 Some(i) => {
                     self.pos += i;
                     if bytes[self.pos] == b'"' {
@@ -337,7 +337,7 @@ impl<'de> EdnStreamDeserializer<'de> {
                     // Skip escape: backslash + escaped content
                     self.pos += 1; // skip backslash
                     if self.pos >= bytes.len() {
-                        return Err(EdnError::UnexpectedEof { offset: self.pos });
+                        return Err(ParseError::UnexpectedEof { offset: self.pos });
                     }
                     if bytes[self.pos] == b'u' {
                         // \uXXXX — skip u + 4 hex digits
@@ -350,17 +350,17 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
-    fn skip_atom(&mut self) -> Result<(), EdnError> {
+    fn skip_atom(&mut self) -> Result<(), ParseError> {
         let bytes = self.input.as_bytes();
         if self.pos >= bytes.len() {
-            return Err(EdnError::UnexpectedEof { offset: self.pos });
+            return Err(ParseError::UnexpectedEof { offset: self.pos });
         }
         let start = self.pos;
         while self.pos < bytes.len() && is_symbol_char(bytes[self.pos] as char) {
             self.pos += 1;
         }
         if self.pos == start {
-            return Err(EdnError::UnexpectedToken {
+            return Err(ParseError::UnexpectedToken {
                 offset: self.pos,
                 found: bytes[self.pos] as char,
             });
@@ -378,13 +378,13 @@ impl<'de> EdnStreamDeserializer<'de> {
 
     /// Skip whitespace and return the next byte without consuming.
     #[inline]
-    pub fn peek_byte(&mut self) -> Result<Option<u8>, EdnError> {
+    pub fn peek_byte(&mut self) -> Result<Option<u8>, ParseError> {
         self.skip_ws()?;
         Ok(self.peek())
     }
 
     /// Skip whitespace and consume `expected`. Errors if it does not match.
-    pub fn consume_byte(&mut self, expected: u8) -> Result<(), EdnError> {
+    pub fn consume_byte(&mut self, expected: u8) -> Result<(), ParseError> {
         self.skip_ws()?;
         match self.peek() {
             Some(b) if b == expected => {
@@ -396,7 +396,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     /// Skip whitespace; consume `expected` if present, returning whether it matched.
-    pub fn try_consume_byte(&mut self, expected: u8) -> Result<bool, EdnError> {
+    pub fn try_consume_byte(&mut self, expected: u8) -> Result<bool, ParseError> {
         self.skip_ws()?;
         if self.peek() == Some(expected) {
             self.pos += 1;
@@ -407,7 +407,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     /// Read a keyword (`:foo`) at the current position; returns its name without `:`.
-    pub fn read_keyword_name(&mut self) -> Result<Cow<'de, str>, EdnError> {
+    pub fn read_keyword_name(&mut self) -> Result<Cow<'de, str>, ParseError> {
         self.skip_ws()?;
         if self.peek() != Some(b':') {
             return Err(unexpected_or_eof(self.pos, self.peek()));
@@ -416,7 +416,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     /// Read a string literal at the current position.
-    pub fn read_string(&mut self) -> Result<Cow<'de, str>, EdnError> {
+    pub fn read_string(&mut self) -> Result<Cow<'de, str>, ParseError> {
         self.skip_ws()?;
         if self.peek() != Some(b'"') {
             return Err(unexpected_or_eof(self.pos, self.peek()));
@@ -425,7 +425,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     /// Read either a string literal or a keyword name (DSL convention for atom names).
-    pub fn read_string_or_keyword(&mut self) -> Result<Cow<'de, str>, EdnError> {
+    pub fn read_string_or_keyword(&mut self) -> Result<Cow<'de, str>, ParseError> {
         self.skip_ws()?;
         match self.peek() {
             Some(b'"') => self.parse_string(),
@@ -435,20 +435,20 @@ impl<'de> EdnStreamDeserializer<'de> {
     }
 
     /// Read a signed 64-bit integer.
-    pub fn read_i64(&mut self) -> Result<i64, EdnError> {
+    pub fn read_i64(&mut self) -> Result<i64, ParseError> {
         self.skip_ws()?;
         self.parse_number_i64()
     }
 
     /// Skip an arbitrary EDN value at the current position.
-    pub fn read_skip_value(&mut self) -> Result<(), EdnError> {
+    pub fn read_skip_value(&mut self) -> Result<(), ParseError> {
         self.skip_value()
     }
 
     /// Return the source slice spanning one EDN value at the current position.
     /// Whitespace is skipped before measuring; the returned slice contains the
     /// raw EDN form of one value (atom, list, vector, map, set, or tagged).
-    pub fn read_value_slice(&mut self) -> Result<&'de str, EdnError> {
+    pub fn read_value_slice(&mut self) -> Result<&'de str, ParseError> {
         self.skip_ws()?;
         let start = self.pos;
         self.skip_value()?;
@@ -457,12 +457,12 @@ impl<'de> EdnStreamDeserializer<'de> {
 }
 
 #[inline]
-fn unexpected_or_eof(offset: usize, b: Option<u8>) -> EdnError {
+fn unexpected_or_eof(offset: usize, b: Option<u8>) -> ParseError {
     match b {
-        Some(b) => EdnError::UnexpectedToken {
+        Some(b) => ParseError::UnexpectedToken {
             offset,
             found: b as char,
         },
-        None => EdnError::UnexpectedEof { offset },
+        None => ParseError::UnexpectedEof { offset },
     }
 }

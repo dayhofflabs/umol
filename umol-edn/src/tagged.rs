@@ -13,12 +13,12 @@ use std::fmt;
 use std::marker::PhantomData;
 
 #[cfg(feature = "serde")]
-use serde::de::{Deserialize, Deserializer, Error as DeError, SeqAccess, Visitor};
+use serde::de::{Deserialize, Deserializer, Error as SerdeDeError, SeqAccess, Visitor};
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 
 use crate::edn::Edn;
-use crate::error::EdnError;
+use crate::error::DeError;
 #[cfg(feature = "serde")]
 use crate::serde_tokens::TAGGED_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
@@ -43,13 +43,13 @@ impl<'de, T> FromEdn<'de> for EdnTagged<T>
 where
     T: FromEdn<'de>,
 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Tagged(tag, inner) => Ok(Self {
                 tag: tag.to_string(),
                 value: T::from_edn(inner)?,
             }),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "tagged",
                 got: other.kind(),
                 path: Vec::new(),
@@ -138,15 +138,15 @@ mod tests {
 
     #[test]
     fn test_edn_tagged_from_edn() {
-        let edn = read_string("#inst \"2026-04-08\"").unwrap();
+        let edn = read_string("#inst \"2026-04-08T00:00:00Z\"").unwrap();
         let tagged: EdnTagged<String> = EdnTagged::from_edn(&edn).unwrap();
         assert_eq!(tagged.tag, "inst");
-        assert_eq!(tagged.value, "2026-04-08");
+        assert_eq!(tagged.value, "2026-04-08T00:00:00Z");
     }
 
     #[test]
     fn test_edn_tagged_from_edn_error() {
-        let edn = read_string("\"2026-04-08\"").unwrap();
+        let edn = read_string("\"2026-04-08T00:00:00Z\"").unwrap();
         let result: Result<EdnTagged<String>, _> = EdnTagged::from_edn(&edn);
         assert!(result.is_err());
     }
@@ -172,8 +172,9 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_edn_tagged_serialize_string_value() {
-        let tagged: EdnTagged<String> = EdnTagged::new("inst", "2026-04-08".to_string());
-        assert_eq!(to_string(&tagged).unwrap(), "#inst \"2026-04-08\"");
+        let tagged: EdnTagged<String> =
+            EdnTagged::new("inst", "2026-04-08T00:00:00Z".to_string());
+        assert_eq!(to_string(&tagged).unwrap(), "#inst \"2026-04-08T00:00:00Z\"");
     }
 
     #[cfg(feature = "serde")]
@@ -195,9 +196,9 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_edn_tagged_deserialize_string_value() {
-        let tagged: EdnTagged<String> = from_str("#inst \"2026-04-08\"").unwrap();
+        let tagged: EdnTagged<String> = from_str("#inst \"2026-04-08T00:00:00Z\"").unwrap();
         assert_eq!(tagged.tag, "inst");
-        assert_eq!(tagged.value, "2026-04-08");
+        assert_eq!(tagged.value, "2026-04-08T00:00:00Z");
     }
 
     #[cfg(feature = "serde")]
@@ -224,10 +225,10 @@ mod tests {
             stamp: EdnTagged<String>,
         }
         let w = Wrapper {
-            stamp: EdnTagged::new("inst", "2026-04-08".to_string()),
+            stamp: EdnTagged::new("inst", "2026-04-08T00:00:00Z".to_string()),
         };
         let edn = to_string(&w).unwrap();
-        assert_eq!(edn, "{:stamp #inst \"2026-04-08\"}");
+        assert_eq!(edn, "{:stamp #inst \"2026-04-08T00:00:00Z\"}");
         let parsed: Wrapper = from_str(&edn).unwrap();
         assert_eq!(parsed, w);
     }

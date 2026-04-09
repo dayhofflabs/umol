@@ -13,7 +13,7 @@ use serde::Deserializer;
 use crate::collections::{EdnMap, EdnSeq, EdnSeqIntoIter};
 use crate::config::ParseConfig;
 use crate::edn::Edn;
-use crate::error::EdnError;
+use crate::error::{DeError, EdnError};
 use crate::reader::{default_config, read_string_with, Reader};
 #[cfg(feature = "bignum")]
 use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
@@ -145,29 +145,52 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         match name {
             SYMBOL_TOKEN => match self.0 {
                 Edn::Symbol(s) => visit_cow_str(visitor, s.into_cow()),
-                other => Err(EdnError::Custom(format!("expected symbol, got {other:?}"))),
+                other => Err(DeError::TypeMismatch {
+                    expected: "symbol",
+                    got: other.kind(),
+                    path: Vec::new(),
+                }
+                .into()),
             },
             SET_TOKEN => match self.0 {
                 Edn::Set(s) => visitor.visit_seq(EdnSetSeqAccess {
                     iter: s.into_iter(),
                 }),
-                other => Err(EdnError::Custom(format!("expected set, got {other:?}"))),
+                other => Err(DeError::TypeMismatch {
+                    expected: "set",
+                    got: other.kind(),
+                    path: Vec::new(),
+                }
+                .into()),
             },
             LIST_TOKEN => match self.0 {
                 Edn::List(v) => visitor.visit_seq(EdnSeqAccess::new(v)),
-                other => Err(EdnError::Custom(format!("expected list, got {other:?}"))),
+                other => Err(DeError::TypeMismatch {
+                    expected: "list",
+                    got: other.kind(),
+                    path: Vec::new(),
+                }
+                .into()),
             },
             #[cfg(feature = "bignum")]
             BIGINT_TOKEN => match self.0 {
                 Edn::BigInt(n) => visitor.visit_string(n.to_string()),
-                other => Err(EdnError::Custom(format!("expected bigint, got {other:?}"))),
+                other => Err(DeError::TypeMismatch {
+                    expected: "bigint",
+                    got: other.kind(),
+                    path: Vec::new(),
+                }
+                .into()),
             },
             #[cfg(feature = "bignum")]
             BIGDECIMAL_TOKEN => match self.0 {
                 Edn::BigDecimal(d) => visitor.visit_string(d.as_inner().to_string()),
-                other => Err(EdnError::Custom(format!(
-                    "expected bigdecimal, got {other:?}"
-                ))),
+                other => Err(DeError::TypeMismatch {
+                    expected: "bigdecimal",
+                    got: other.kind(),
+                    path: Vec::new(),
+                }
+                .into()),
             },
             VALUE_TOKEN => {
                 use crate::serde_tokens::*;
@@ -246,7 +269,12 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         match self.0 {
             Edn::Map(m) => visitor.visit_map(EdnMapAccess::new(m)),
             Edn::Nil => visitor.visit_map(EdnMapAccess::new(EdnMap::new())),
-            other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "map",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
@@ -259,7 +287,12 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         match self.0 {
             Edn::Map(m) => visitor.visit_map(EdnStructMapAccess::new(m)),
             Edn::Nil => visitor.visit_map(EdnStructMapAccess::new(EdnMap::new())),
-            other => Err(EdnError::Custom(format!("expected map, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "map",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
@@ -291,9 +324,12 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
                     tag: Some(tag),
                     inner: Some(*inner),
                 }),
-                other => Err(EdnError::Custom(format!(
-                    "expected tagged literal, got {other:?}"
-                ))),
+                other => Err(DeError::TypeMismatch {
+                    expected: "tagged",
+                    got: other.kind(),
+                    path: Vec::new(),
+                }
+                .into()),
             };
         }
         self.deserialize_seq(visitor)
@@ -302,77 +338,133 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     fn deserialize_i8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Int(i) => {
-                let v = i8::try_from(i)
-                    .map_err(|_| EdnError::Custom(format!("{i} out of range for i8")))?;
+                let v = i8::try_from(i).map_err(|_| DeError::OutOfRange {
+                    value: i.to_string(),
+                    target: "i8",
+                    path: Vec::new(),
+                })?;
                 visitor.visit_i8(v)
             }
-            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "integer",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
     fn deserialize_i16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Int(i) => {
-                let v = i16::try_from(i)
-                    .map_err(|_| EdnError::Custom(format!("{i} out of range for i16")))?;
+                let v = i16::try_from(i).map_err(|_| DeError::OutOfRange {
+                    value: i.to_string(),
+                    target: "i16",
+                    path: Vec::new(),
+                })?;
                 visitor.visit_i16(v)
             }
-            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "integer",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
     fn deserialize_i32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Int(i) => {
-                let v = i32::try_from(i)
-                    .map_err(|_| EdnError::Custom(format!("{i} out of range for i32")))?;
+                let v = i32::try_from(i).map_err(|_| DeError::OutOfRange {
+                    value: i.to_string(),
+                    target: "i32",
+                    path: Vec::new(),
+                })?;
                 visitor.visit_i32(v)
             }
-            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "integer",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
     fn deserialize_u8<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Int(i) => {
-                let v = u8::try_from(i)
-                    .map_err(|_| EdnError::Custom(format!("{i} out of range for u8")))?;
+                let v = u8::try_from(i).map_err(|_| DeError::OutOfRange {
+                    value: i.to_string(),
+                    target: "u8",
+                    path: Vec::new(),
+                })?;
                 visitor.visit_u8(v)
             }
-            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "integer",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
     fn deserialize_u16<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Int(i) => {
-                let v = u16::try_from(i)
-                    .map_err(|_| EdnError::Custom(format!("{i} out of range for u16")))?;
+                let v = u16::try_from(i).map_err(|_| DeError::OutOfRange {
+                    value: i.to_string(),
+                    target: "u16",
+                    path: Vec::new(),
+                })?;
                 visitor.visit_u16(v)
             }
-            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "integer",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
     fn deserialize_u32<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Int(i) => {
-                let v = u32::try_from(i)
-                    .map_err(|_| EdnError::Custom(format!("{i} out of range for u32")))?;
+                let v = u32::try_from(i).map_err(|_| DeError::OutOfRange {
+                    value: i.to_string(),
+                    target: "u32",
+                    path: Vec::new(),
+                })?;
                 visitor.visit_u32(v)
             }
-            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "integer",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
     fn deserialize_u64<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
         match self.0 {
             Edn::Int(i) => {
-                let v = u64::try_from(i)
-                    .map_err(|_| EdnError::Custom(format!("{i} out of range for u64")))?;
+                let v = u64::try_from(i).map_err(|_| DeError::OutOfRange {
+                    value: i.to_string(),
+                    target: "u64",
+                    path: Vec::new(),
+                })?;
                 visitor.visit_u64(v)
             }
-            other => Err(EdnError::Custom(format!("expected integer, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "integer",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
@@ -380,7 +472,12 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         match self.0 {
             Edn::Float(f) => visitor.visit_f32(f as f32),
             Edn::Int(i) => visitor.visit_f32(i as f32),
-            other => Err(EdnError::Custom(format!("expected number, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "number",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
@@ -388,7 +485,12 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         match self.0 {
             Edn::Float(f) => visitor.visit_f64(f),
             Edn::Int(i) => visitor.visit_f64(i as f64),
-            other => Err(EdnError::Custom(format!("expected number, got {other:?}"))),
+            other => Err(DeError::TypeMismatch {
+                expected: "number",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 
@@ -408,7 +510,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     }
 
     fn deserialize_bytes<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value, Self::Error> {
-        Err(EdnError::Custom("bytes not supported".to_string()))
+        Err(DeError::Unsupported("bytes").into())
     }
 
     fn deserialize_byte_buf<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Self::Error> {
@@ -528,7 +630,7 @@ impl<'de> MapAccess<'de> for EdnMapAccess<'de> {
         seed: V,
     ) -> Result<V::Value, Self::Error> {
         let v = self.pending_value.take().ok_or_else(|| {
-            EdnError::Custom("next_value_seed called without preceding next_key_seed".into())
+            DeError::Custom("next_value_seed called without preceding next_key_seed".into())
         })?;
         seed.deserialize(EdnDeserializer(v))
     }
@@ -569,7 +671,7 @@ impl<'de> de::MapAccess<'de> for EdnStructMapAccess<'de> {
         seed: V,
     ) -> Result<V::Value, Self::Error> {
         let v = self.pending_value.take().ok_or_else(|| {
-            EdnError::Custom("next_value_seed called without preceding next_key_seed".into())
+            DeError::Custom("next_value_seed called without preceding next_key_seed".into())
         })?;
         seed.deserialize(EdnDeserializer(v))
     }
@@ -601,9 +703,12 @@ impl<'de> VariantAccess<'de> for EdnTaggedVariantAccess<'de> {
     fn unit_variant(self) -> Result<(), Self::Error> {
         match self.0 {
             Edn::Nil => Ok(()),
-            other => Err(EdnError::Custom(format!(
-                "unit variant expects nil payload, got {other:?}"
-            ))),
+            other => Err(DeError::TypeMismatch {
+                expected: "nil",
+                got: other.kind(),
+                path: Vec::new(),
+            }
+            .into()),
         }
     }
 

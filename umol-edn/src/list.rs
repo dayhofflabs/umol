@@ -23,7 +23,7 @@ use serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use crate::collections::EdnSeq;
 use crate::edn::Edn;
-use crate::error::EdnError;
+use crate::error::DeError;
 #[cfg(feature = "serde")]
 use crate::serde_tokens::LIST_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
@@ -71,7 +71,7 @@ impl<'de, T> FromEdn<'de> for EdnList<T>
 where
     T: FromEdn<'de>,
 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::List(v) => {
                 let mut out = Vec::with_capacity(v.len());
@@ -80,7 +80,7 @@ where
                 }
                 Ok(EdnList(out))
             }
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "list",
                 got: other.kind(),
                 path: Vec::new(),

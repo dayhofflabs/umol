@@ -170,12 +170,12 @@ impl<'de> Deserialize<'de> for AtomAst {
 }
 
 impl<'de> umol_edn::FromEdn<'de> for AtomAst {
-    fn from_edn(edn: &umol_edn::Edn<'de>) -> Result<Self, umol_edn::EdnError> {
+    fn from_edn(edn: &umol_edn::Edn<'de>) -> Result<Self, umol_edn::DeError> {
         match edn {
             umol_edn::Edn::Str(s) => {
-                parse_atom_dsl(s).map_err(|e| umol_edn::EdnError::Custom(e.to_string()))
+                parse_atom_dsl(s).map_err(|e| umol_edn::DeError::Custom(e.to_string()))
             }
-            other => Err(umol_edn::EdnError::TypeMismatch {
+            other => Err(umol_edn::DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),
                 path: Vec::new(),

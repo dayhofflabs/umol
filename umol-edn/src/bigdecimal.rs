@@ -25,7 +25,7 @@ use serde::ser::{Serialize, Serializer};
 #[cfg(feature = "serde")]
 use crate::serde_tokens::BIGDECIMAL_TOKEN;
 
-#[derive(Clone, Debug, Hash)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct EdnBigDecimal(BigDecimal);
 
 impl EdnBigDecimal {
@@ -41,14 +41,6 @@ impl EdnBigDecimal {
         &self.0
     }
 }
-
-impl PartialEq for EdnBigDecimal {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0
-    }
-}
-
-impl Eq for EdnBigDecimal {}
 
 impl PartialOrd for EdnBigDecimal {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

@@ -21,7 +21,7 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::edn::{Edn, Keyword};
-use crate::error::EdnError;
+use crate::error::DeError;
 #[cfg(feature = "serde")]
 use crate::serde_tokens::KEYWORD_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
@@ -76,10 +76,10 @@ impl From<&str> for EdnKeyword {
 }
 
 impl<'de> FromEdn<'de> for EdnKeyword {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Keyword(k) => Ok(EdnKeyword(k.as_str().to_string())),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "keyword",
                 got: other.kind(),
                 path: Vec::new(),

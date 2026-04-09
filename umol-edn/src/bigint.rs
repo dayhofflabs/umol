@@ -13,12 +13,12 @@ use std::str::FromStr;
 
 use num_bigint::BigInt;
 #[cfg(feature = "serde")]
-use serde::de::{Deserialize, Deserializer, Error as DeError, Visitor};
+use serde::de::{Deserialize, Deserializer, Error as SerdeDeError, Visitor};
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, Serializer};
 
 use crate::edn::Edn;
-use crate::error::EdnError;
+use crate::error::DeError;
 #[cfg(feature = "serde")]
 use crate::serde_tokens::BIGINT_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
@@ -64,10 +64,10 @@ impl FromStr for EdnBigInt {
 }
 
 impl<'de> FromEdn<'de> for EdnBigInt {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::BigInt(n) => Ok(Self(n.clone())),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "bigint",
                 got: other.kind(),
                 path: Vec::new(),
@@ -100,17 +100,17 @@ impl<'de> Visitor<'de> for BigIntVisitor {
         f.write_str("an EDN bigint (decimal string)")
     }
 
-    fn visit_str<E: DeError>(self, v: &str) -> Result<EdnBigInt, E> {
+    fn visit_str<E: SerdeDeError>(self, v: &str) -> Result<EdnBigInt, E> {
         BigInt::from_str(v)
             .map(EdnBigInt)
             .map_err(|e| E::custom(format!("invalid bigint {v:?}: {e}")))
     }
 
-    fn visit_string<E: DeError>(self, v: String) -> Result<EdnBigInt, E> {
+    fn visit_string<E: SerdeDeError>(self, v: String) -> Result<EdnBigInt, E> {
         self.visit_str(&v)
     }
 
-    fn visit_borrowed_str<E: DeError>(self, v: &'de str) -> Result<EdnBigInt, E> {
+    fn visit_borrowed_str<E: SerdeDeError>(self, v: &'de str) -> Result<EdnBigInt, E> {
         self.visit_str(v)
     }
 

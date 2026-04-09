@@ -425,7 +425,7 @@ fn wrapper_heavy_fixture() -> WrapperHeavy {
         ]
         .into(),
         ids: (0..16).collect(),
-        marker: EdnTagged::new("inst", "2026-04-08".to_string()),
+        marker: EdnTagged::new("inst", "2026-04-08T00:00:00Z".to_string()),
     }
 }
 

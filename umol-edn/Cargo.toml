@@ -16,6 +16,7 @@ itoa = "1.0"
 zmij = "1.0"
 memchr = "2.7"
 hashbrown = { version = "0.15", features = ["default-hasher"] }
+thiserror = "2.0"
 winnow = "1.0"
 
 serde = { version = "1.0", features = ["derive"], optional = true }
@@ -52,3 +53,5 @@ required-features = ["serde"]
 
 [lints.clippy]
 absolute_paths = "warn"
+mod_module_files = "warn"
+

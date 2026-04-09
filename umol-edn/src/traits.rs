@@ -43,7 +43,7 @@ use crate::collections::{EdnMap, EdnSeq, EdnSet};
 #[cfg(feature = "bignum")]
 use crate::edn::EdnBigDecimal;
 use crate::edn::{Edn, Keyword, Symbol};
-use crate::error::EdnError;
+use crate::error::{DeError, EdnError};
 use crate::reader::read_string;
 
 // Variant discriminator strings come from `Edn::kind()`.
@@ -77,7 +77,7 @@ pub trait FromEdn<'de>: Sized {
     /// Implementations should inspect the tree and report a precise
     /// `EdnError` on shape mismatch. Borrowing string fields from the
     /// tree is permitted via the `'de` lifetime.
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError>;
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError>;
 
     /// Build `Self` directly from EDN source text.
     ///
@@ -93,7 +93,7 @@ pub trait FromEdn<'de>: Sized {
     /// [`from_edn`]: FromEdn::from_edn
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
         let tree = read_string(input)?;
-        Self::from_edn(&tree)
+        Ok(Self::from_edn(&tree)?)
     }
 }
 
@@ -124,10 +124,10 @@ pub trait ToEdn {
 }
 
 impl<'de> FromEdn<'de> for bool {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Bool(b) => Ok(*b),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "bool",
                 got: other.kind(),
                 path: Vec::new(),
@@ -151,16 +151,16 @@ macro_rules! impl_int {
     ($($t:ty),* $(,)?) => {
         $(
             impl<'de> FromEdn<'de> for $t {
-                fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+                fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
                     match edn {
                         Edn::Int(n) => <$t>::try_from(*n).map_err(|_| {
-                            EdnError::OutOfRange {
+                            DeError::OutOfRange {
                                 value: n.to_string(),
                                 target: stringify!($t),
                                 path: Vec::new(),
                             }
                         }),
-                        other => Err(EdnError::TypeMismatch {
+                        other => Err(DeError::TypeMismatch {
                             expected: "int",
                             got: other.kind(),
                             path: Vec::new(),
@@ -181,10 +181,10 @@ macro_rules! impl_int {
 impl_int!(i8, i16, i32, i64, u8, u16, u32);
 
 impl<'de> FromEdn<'de> for f64 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Float(f) => Ok(*f),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "float",
                 got: other.kind(),
                 path: Vec::new(),
@@ -200,10 +200,10 @@ impl ToEdn for f64 {
 }
 
 impl<'de> FromEdn<'de> for f32 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Float(f) => Ok(*f as f32),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "float",
                 got: other.kind(),
                 path: Vec::new(),
@@ -219,10 +219,10 @@ impl ToEdn for f32 {
 }
 
 impl<'de> FromEdn<'de> for char {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Char(c) => Ok(*c),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "char",
                 got: other.kind(),
                 path: Vec::new(),
@@ -238,10 +238,10 @@ impl ToEdn for char {
 }
 
 impl<'de> FromEdn<'de> for String {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Str(s) => Ok(s.to_string()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),
                 path: Vec::new(),
@@ -265,10 +265,10 @@ impl ToEdn for str {
 /// `Cow<'de, str>` preserves zero-copy borrowing when the source string
 /// itself was borrowed from the parsed buffer.
 impl<'de> FromEdn<'de> for Cow<'de, str> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Str(s) => Ok(s.clone()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),
                 path: Vec::new(),
@@ -284,7 +284,7 @@ impl<'a> ToEdn for Cow<'a, str> {
 }
 
 impl<'de, T: FromEdn<'de>> FromEdn<'de> for Option<T> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Nil => Ok(None),
             other => T::from_edn(other).map(Some),
@@ -302,11 +302,11 @@ impl<T: ToEdn> ToEdn for Option<T> {
 }
 
 impl<'de, T: FromEdn<'de>> FromEdn<'de> for Vec<T> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let seq = match edn {
             Edn::Vector(s) | Edn::List(s) => s,
             other => {
-                return Err(EdnError::TypeMismatch {
+                return Err(DeError::TypeMismatch {
                     expected: "vector",
                     got: other.kind(),
                     path: Vec::new(),
@@ -326,11 +326,11 @@ impl<T: ToEdn> ToEdn for Vec<T> {
 }
 
 impl<'de, T: FromEdn<'de>, const N: usize> FromEdn<'de> for [T; N] {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let seq = match edn {
             Edn::Vector(s) | Edn::List(s) => s,
             other => {
-                return Err(EdnError::TypeMismatch {
+                return Err(DeError::TypeMismatch {
                     expected: "vector",
                     got: other.kind(),
                     path: Vec::new(),
@@ -338,7 +338,7 @@ impl<'de, T: FromEdn<'de>, const N: usize> FromEdn<'de> for [T; N] {
             }
         };
         if seq.len() != N {
-            return Err(EdnError::OutOfRange {
+            return Err(DeError::OutOfRange {
                 value: seq.len().to_string(),
                 target: "fixed-length array",
                 path: Vec::new(),
@@ -347,7 +347,7 @@ impl<'de, T: FromEdn<'de>, const N: usize> FromEdn<'de> for [T; N] {
         let parsed: Vec<T> = seq.iter().map(T::from_edn).collect::<Result<_, _>>()?;
         parsed
             .try_into()
-            .map_err(|_| EdnError::Custom("array length conversion failed".into()))
+            .map_err(|_| DeError::Custom("array length conversion failed".into()))
     }
 }
 
@@ -359,17 +359,15 @@ impl<T: ToEdn, const N: usize> ToEdn for [T; N] {
     }
 }
 
-/// Tuple impls for arities 2 and 3 — covers coordinate triples and pairs.
-/// Higher arities are not needed by the molecule DSL and can be added on
-/// demand.
+/// Tuple impls up to arity 8
 macro_rules! impl_tuple {
     ($($n:tt $t:ident),+) => {
         impl<'de, $($t: FromEdn<'de>),+> FromEdn<'de> for ($($t,)+) {
-            fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+            fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
                 let seq = match edn {
                     Edn::Vector(s) | Edn::List(s) => s,
                     other => {
-                        return Err(EdnError::TypeMismatch {
+                        return Err(DeError::TypeMismatch {
                             expected: "vector",
                             got: other.kind(),
                             path: Vec::new(),
@@ -378,7 +376,7 @@ macro_rules! impl_tuple {
                 };
                 const ARITY: usize = [$($n),+].len();
                 if seq.len() != ARITY {
-                    return Err(EdnError::OutOfRange {
+                    return Err(DeError::OutOfRange {
                         value: seq.len().to_string(),
                         target: "tuple arity",
                         path: Vec::new(),
@@ -399,17 +397,20 @@ macro_rules! impl_tuple {
 impl_tuple!(0 A, 1 B);
 impl_tuple!(0 A, 1 B, 2 C);
 impl_tuple!(0 A, 1 B, 2 C, 3 D);
+impl_tuple!(0 A, 1 B, 2 C, 3 D, 4 E, 5 F);
+impl_tuple!(0 A, 1 B, 2 C, 3 D, 4 E, 5 F, 6 G);
+impl_tuple!(0 A, 1 B, 2 C, 3 D, 4 E, 5 F, 6 G, 7 H);
 
 impl<'de, K, V> FromEdn<'de> for HashMap<K, V>
 where
     K: FromEdn<'de> + Eq + Hash,
     V: FromEdn<'de>,
 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let map = match edn {
             Edn::Map(m) => m,
             other => {
-                return Err(EdnError::TypeMismatch {
+                return Err(DeError::TypeMismatch {
                     expected: "map",
                     got: other.kind(),
                     path: Vec::new(),
@@ -441,11 +442,11 @@ where
     K: FromEdn<'de> + Ord,
     V: FromEdn<'de>,
 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let map = match edn {
             Edn::Map(m) => m,
             other => {
-                return Err(EdnError::TypeMismatch {
+                return Err(DeError::TypeMismatch {
                     expected: "map",
                     got: other.kind(),
                     path: Vec::new(),
@@ -476,11 +477,11 @@ impl<'de, T> FromEdn<'de> for HashSet<T>
 where
     T: FromEdn<'de> + Eq + Hash,
 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let set = match edn {
             Edn::Set(s) => s,
             other => {
-                return Err(EdnError::TypeMismatch {
+                return Err(DeError::TypeMismatch {
                     expected: "set",
                     got: other.kind(),
                     path: Vec::new(),
@@ -505,11 +506,11 @@ impl<'de, T> FromEdn<'de> for BTreeSet<T>
 where
     T: FromEdn<'de> + Ord,
 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let set = match edn {
             Edn::Set(s) => s,
             other => {
-                return Err(EdnError::TypeMismatch {
+                return Err(DeError::TypeMismatch {
                     expected: "set",
                     got: other.kind(),
                     path: Vec::new(),
@@ -531,7 +532,7 @@ impl<T: ToEdn> ToEdn for BTreeSet<T> {
 }
 
 impl<'de> FromEdn<'de> for Edn<'de> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         Ok(edn.clone())
     }
 }
@@ -543,10 +544,10 @@ impl<'a> ToEdn for Edn<'a> {
 }
 
 impl<'de> FromEdn<'de> for Keyword<'de> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Keyword(k) => Ok(k.clone()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "keyword",
                 got: other.kind(),
                 path: Vec::new(),
@@ -562,10 +563,10 @@ impl<'a> ToEdn for Keyword<'a> {
 }
 
 impl<'de> FromEdn<'de> for Symbol<'de> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Symbol(s) => Ok(s.clone()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "symbol",
                 got: other.kind(),
                 path: Vec::new(),
@@ -581,10 +582,10 @@ impl<'a> ToEdn for Symbol<'a> {
 }
 
 impl<'de> FromEdn<'de> for EdnMap<'de> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Map(m) => Ok(m.clone()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "map",
                 got: other.kind(),
                 path: Vec::new(),
@@ -600,10 +601,10 @@ impl<'a> ToEdn for EdnMap<'a> {
 }
 
 impl<'de> FromEdn<'de> for EdnSet<'de> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Set(s) => Ok(s.clone()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "set",
                 got: other.kind(),
                 path: Vec::new(),
@@ -623,10 +624,10 @@ impl<'a> ToEdn for EdnSet<'a> {
 /// `to_edn` produces a `Vector`; consumers that need to preserve list-vs-vector
 /// distinction should match on `Edn` directly.
 impl<'de> FromEdn<'de> for EdnSeq<'de> {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Vector(s) | Edn::List(s) => Ok(s.clone()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "vector",
                 got: other.kind(),
                 path: Vec::new(),
@@ -643,11 +644,11 @@ impl<'a> ToEdn for EdnSeq<'a> {
 
 #[cfg(feature = "bignum")]
 impl<'de> FromEdn<'de> for BigInt {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::BigInt(n) => Ok(n.clone()),
             Edn::Int(n) => Ok(BigInt::from(*n)),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "bigint",
                 got: other.kind(),
                 path: Vec::new(),
@@ -665,10 +666,10 @@ impl ToEdn for BigInt {
 
 #[cfg(feature = "bignum")]
 impl<'de> FromEdn<'de> for BigDecimal {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::BigDecimal(d) => Ok(d.as_inner().clone()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "bigdecimal",
                 got: other.kind(),
                 path: Vec::new(),
@@ -686,10 +687,10 @@ impl ToEdn for BigDecimal {
 
 #[cfg(feature = "bignum")]
 impl<'de> FromEdn<'de> for EdnBigDecimal {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::BigDecimal(d) => Ok(d.clone()),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "bigdecimal",
                 got: other.kind(),
                 path: Vec::new(),
@@ -765,7 +766,7 @@ mod tests {
         let err = bool::from_edn(&edn).unwrap_err();
         assert!(matches!(
             err,
-            EdnError::TypeMismatch {
+            DeError::TypeMismatch {
                 expected: "bool",
                 got: "int",
                 ..
@@ -777,7 +778,7 @@ mod tests {
     fn test_i32_from_edn_error_out_of_range() {
         let edn = Edn::Int(i64::MAX);
         let err = i32::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, EdnError::OutOfRange { target: "i32", .. }));
+        assert!(matches!(err, DeError::OutOfRange { target: "i32", .. }));
     }
 
     #[test]
@@ -814,7 +815,7 @@ mod tests {
     fn test_array_wrong_length_errors() {
         let edn = Edn::Vector(EdnSeq::from(vec![Edn::Int(1), Edn::Int(2)]));
         let err = <[i32; 3]>::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, EdnError::OutOfRange { .. }));
+        assert!(matches!(err, DeError::OutOfRange { .. }));
     }
 
     #[test]

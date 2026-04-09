@@ -14,22 +14,22 @@ pub(crate) fn default_config() -> &'static ParseConfig {
 
 /// Parse a single EDN value from a string, rejecting trailing content.
 pub fn read_string<'a>(input: &'a str) -> Result<Edn<'a>, EdnError> {
-    parse_value_strict(input, default_config())
+    parse_value_strict(input, default_config()).map_err(Into::into)
 }
 
 /// Parse a single EDN value with custom config, rejecting trailing content.
 pub fn read_string_with<'a>(input: &'a str, config: &ParseConfig) -> Result<Edn<'a>, EdnError> {
-    parse_value_strict(input, config)
+    parse_value_strict(input, config).map_err(Into::into)
 }
 
 /// Parse all EDN values from a string.
 pub fn read_all<'a>(input: &'a str) -> Result<Vec<Edn<'a>>, EdnError> {
-    parse_all(input, default_config())
+    parse_all(input, default_config()).map_err(Into::into)
 }
 
 /// Parse all EDN values with custom config.
 pub fn read_all_with<'a>(input: &'a str, config: &ParseConfig) -> Result<Vec<Edn<'a>>, EdnError> {
-    parse_all(input, config)
+    parse_all(input, config).map_err(Into::into)
 }
 
 /// Streaming iterator over EDN values in a string.
@@ -74,7 +74,7 @@ impl<'a> Iterator for Reader<'a> {
             }
             Err(e) => {
                 self.remaining = "";
-                Some(Err(e))
+                Some(Err(e.into()))
             }
         }
     }

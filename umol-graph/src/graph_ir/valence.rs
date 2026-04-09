@@ -256,6 +256,7 @@ fn infer_normal_aromatic_implicit_hydrogens(
         Some(3 - valence)
     } else if matches!(
         element,
+        // TODO: Move from code into configuration: list of elements in aromatic systems
         Element::B | Element::N | Element::O | Element::P | Element::S | Element::Se | Element::As
     ) {
         Some(0)

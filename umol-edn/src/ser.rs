@@ -17,7 +17,7 @@ use crate::collections::{EdnMap, EdnSeq};
 #[cfg(feature = "bignum")]
 use crate::edn::EdnBigDecimal;
 use crate::edn::{Edn, Keyword};
-use crate::error::EdnError;
+use crate::error::{EdnError, SerError};
 use crate::formatter::FormatConfig;
 #[cfg(feature = "bignum")]
 use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
@@ -182,9 +182,7 @@ impl Serializer for &mut EdnSerializer {
     }
     fn serialize_f64(self, v: f64) -> Result<(), Self::Error> {
         if v.is_nan() || v.is_infinite() {
-            return Err(EdnError::Custom(
-                "EDN cannot represent NaN or Infinity".into(),
-            ));
+            return Err(SerError::UnsupportedFloat("NaN or Infinity").into());
         }
         let mut buf = zmij::Buffer::new();
         let s = buf.format_finite(v);
@@ -241,7 +239,7 @@ impl Serializer for &mut EdnSerializer {
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<(), Self::Error> {
-        Err(EdnError::Custom("bytes not supported".to_string()))
+        Err(SerError::Unsupported("bytes").into())
     }
 
     fn serialize_none(self) -> Result<(), Self::Error> {
@@ -623,7 +621,7 @@ enum SeqKind {
 }
 
 fn nan_or_inf_error() -> EdnError {
-    EdnError::Custom("EDN cannot represent NaN or Infinity".into())
+    SerError::UnsupportedFloat("NaN or Infinity").into()
 }
 
 impl<'a> Serializer for &'a mut EdnTreeSerializer {
@@ -664,9 +662,13 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
         Ok(Edn::Int(i64::from(v)))
     }
     fn serialize_u64(self, v: u64) -> Result<Self::Ok, Self::Error> {
-        i64::try_from(v)
-            .map(Edn::Int)
-            .map_err(|_| EdnError::Custom(format!("u64 value {v} exceeds i64 range")))
+        i64::try_from(v).map(Edn::Int).map_err(|_| {
+            SerError::OutOfRange {
+                value: v.to_string(),
+                target: "i64",
+            }
+            .into()
+        })
     }
 
     fn serialize_f32(self, v: f32) -> Result<Self::Ok, Self::Error> {
@@ -697,20 +699,20 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
             self.bigint_mode = false;
             return num_bigint::BigInt::from_str(v)
                 .map(Edn::BigInt)
-                .map_err(|e| EdnError::Custom(format!("invalid bigint {v:?}: {e}")));
+                .map_err(|e| SerError::Custom(format!("invalid bigint {v:?}: {e}")).into());
         }
         #[cfg(feature = "bignum")]
         if self.bigdec_mode {
             self.bigdec_mode = false;
             return BigDecimal::from_str(v)
                 .map(|d| Edn::BigDecimal(EdnBigDecimal::new(d)))
-                .map_err(|e| EdnError::Custom(format!("invalid bigdecimal {v:?}: {e}")));
+                .map_err(|e| SerError::Custom(format!("invalid bigdecimal {v:?}: {e}")).into());
         }
         Ok(Edn::Str(Cow::Owned(v.to_string())))
     }
 
     fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
-        Err(EdnError::Custom("bytes not supported".to_string()))
+        Err(SerError::Unsupported("bytes").into())
     }
 
     fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
@@ -914,17 +916,20 @@ impl TreeSeqSerializer<'_> {
                 let tag = match iter.next() {
                     Some(Edn::Symbol(s)) => s.into_cow().into_owned(),
                     Some(other) => {
-                        return Err(EdnError::Custom(format!(
+                        return Err(SerError::Custom(format!(
                             "tagged literal tag must be a symbol, got {other:?}"
-                        )));
+                        ))
+                        .into());
                     }
                     None => {
-                        return Err(EdnError::Custom("tagged literal missing tag".to_string()));
+                        return Err(
+                            SerError::Custom("tagged literal missing tag".to_string()).into()
+                        );
                     }
                 };
-                let inner = iter
-                    .next()
-                    .ok_or_else(|| EdnError::Custom("tagged literal missing value".to_string()))?;
+                let inner = iter.next().ok_or_else(|| {
+                    SerError::Custom("tagged literal missing value".to_string())
+                })?;
                 Ok(Edn::Tagged(Cow::Owned(tag), Box::new(inner)))
             }
         }

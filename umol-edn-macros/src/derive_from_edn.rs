@@ -62,7 +62,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
             },
         };
 
-        let missing_msg = format!("missing field: {}", key);
+        let missing_key = key.clone();
         let (decl, arm, final_bind) = match &kind {
             FieldKind::Option(inner) => (
                 quote! {
@@ -103,9 +103,10 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
                     }
                 },
                 quote! {
-                    let #ident = #ident.ok_or_else(|| ::umol_edn::EdnError::Custom(
-                        #missing_msg.to_string(),
-                    ))?;
+                    let #ident = #ident.ok_or_else(|| ::umol_edn::DeError::MissingField {
+                        key: #missing_key.to_string(),
+                        path: ::std::vec::Vec::new(),
+                    })?;
                 },
             ),
         };
@@ -123,12 +124,12 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
         impl<'de> ::umol_edn::FromEdn<'de> for #struct_name {
             fn from_edn(
                 edn: &::umol_edn::Edn<'de>,
-            ) -> ::std::result::Result<Self, ::umol_edn::EdnError> {
+            ) -> ::std::result::Result<Self, ::umol_edn::DeError> {
                 let m = match edn {
                     ::umol_edn::Edn::Map(m) => m,
                     other => {
                         return ::std::result::Result::Err(
-                            ::umol_edn::EdnError::TypeMismatch {
+                            ::umol_edn::DeError::TypeMismatch {
                                 expected: #expected_label,
                                 got: other.kind(),
                                 path: ::std::vec::Vec::new(),

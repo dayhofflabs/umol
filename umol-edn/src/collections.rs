@@ -14,7 +14,7 @@ use hashbrown::{HashMap, HashSet};
 use crate::edn::Edn;
 #[cfg(feature = "bignum")]
 use crate::edn::EdnBigDecimal;
-use crate::error::EdnError;
+use crate::error::DeError;
 use crate::traits::FromEdn;
 
 /// Borrowed key representation for looking up values in [`EdnMap`] and [`EdnSet`]
@@ -337,11 +337,11 @@ impl<'m, 'de: 'm> EdnMapHelper<'m, 'de> {
 
     /// Read a required keyword-keyed field. Errors with `MissingField` if
     /// absent, or with whatever variant `T::from_edn` returns on the value.
-    pub fn required<T: FromEdn<'de>>(&mut self, key: &str) -> Result<T, EdnError> {
+    pub fn required<T: FromEdn<'de>>(&mut self, key: &str) -> Result<T, DeError> {
         let value =
             self.map
                 .get_ref(EdnKeyRef::keyword(key))
-                .ok_or_else(|| EdnError::MissingField {
+                .ok_or_else(|| DeError::MissingField {
                     key: key.to_string(),
                     path: self.path.clone(),
                 })?;
@@ -350,7 +350,7 @@ impl<'m, 'de: 'm> EdnMapHelper<'m, 'de> {
     }
 
     /// Read an optional keyword-keyed field. Returns `Ok(None)` if absent.
-    pub fn optional<T: FromEdn<'de>>(&mut self, key: &str) -> Result<Option<T>, EdnError> {
+    pub fn optional<T: FromEdn<'de>>(&mut self, key: &str) -> Result<Option<T>, DeError> {
         match self.map.get_ref(EdnKeyRef::keyword(key)) {
             Some(value) => {
                 self.consumed.insert(key.to_string());
@@ -362,11 +362,11 @@ impl<'m, 'de: 'm> EdnMapHelper<'m, 'de> {
 
     /// Strict-mode close: error with `UnknownField` if any keyword key in the
     /// map was not read via `required` or `optional`.
-    pub fn finalize(self) -> Result<(), EdnError> {
+    pub fn finalize(self) -> Result<(), DeError> {
         for (k, _) in self.map.iter() {
             if let Edn::Keyword(kw) = k {
                 if !self.consumed.contains(kw.as_str()) {
-                    return Err(EdnError::UnknownField {
+                    return Err(DeError::UnknownField {
                         key: kw.as_str().to_string(),
                         path: self.path,
                     });
@@ -921,7 +921,7 @@ mod tests {
         let m = EdnMap::new();
         let mut h = EdnMapHelper::new(&m);
         let err = h.required::<String>("name").unwrap_err();
-        assert!(matches!(err, EdnError::MissingField { .. }));
+        assert!(matches!(err, DeError::MissingField { .. }));
     }
 
     #[test]
@@ -933,7 +933,7 @@ mod tests {
         let _name: String = h.required("name").unwrap();
         let err = h.finalize().unwrap_err();
         match err {
-            EdnError::UnknownField { key, .. } => assert_eq!(key, "extra"),
+            DeError::UnknownField { key, .. } => assert_eq!(key, "extra"),
             other => panic!("expected UnknownField, got {other:?}"),
         }
     }

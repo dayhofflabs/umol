@@ -12,7 +12,7 @@ use serde::Deserialize;
 use umol_edn::config::{DuplicateKeyPolicy, ParseConfig, TagReaders};
 use umol_edn::de::{from_str, from_str_with};
 use umol_edn::edn::{Edn, Symbol};
-use umol_edn::error::EdnError;
+use umol_edn::error::{EdnError, ParseError};
 use umol_edn::{read_all_with, read_string_with, EdnMap, EdnSet};
 
 fn cfg() -> ParseConfig {
@@ -652,7 +652,7 @@ fn test_bare_tag_rejected_by_serde_default() {
     // rejects unknown tags, matching the native path.
     assert!(matches!(
         stream::<i64>("#foo 1"),
-        Err(EdnError::InvalidTag { .. })
+        Err(EdnError::Parse(ParseError::InvalidTag { .. }))
     ));
 }
 
@@ -764,10 +764,13 @@ fn test_uuid_to_edn_roundtrip() {
 
 #[test]
 fn test_custom_reader_dispatch() {
-    fn double_reader(val: Edn) -> Result<Edn, EdnError> {
+    fn double_reader(val: Edn) -> Result<Edn, ParseError> {
         match val {
             Edn::Int(n) => Ok(Edn::Int(n * 2)),
-            _ => Err(EdnError::Custom("expected int".into())),
+            _ => Err(ParseError::InvalidTag {
+                offset: 0,
+                tag: "double".into(),
+            }),
         }
     }
     let mut readers = TagReaders::default();
@@ -783,8 +786,11 @@ fn test_custom_reader_dispatch() {
 
 #[test]
 fn test_custom_reader_error_propagation() {
-    fn strict_reader(_val: Edn) -> Result<Edn, EdnError> {
-        Err(EdnError::Custom("reader rejected value".into()))
+    fn strict_reader(_val: Edn) -> Result<Edn, ParseError> {
+        Err(ParseError::InvalidTag {
+            offset: 0,
+            tag: "strict".into(),
+        })
     }
     let mut readers = TagReaders::default();
     readers.insert("strict", strict_reader);
@@ -936,20 +942,26 @@ fn test_roundtrip(#[case] input: &str) {
 #[test]
 fn test_error_trailing_content() {
     let err = parse("1 2").unwrap_err();
-    assert!(matches!(err, EdnError::TrailingContent { .. }));
+    assert!(matches!(
+        err,
+        EdnError::Parse(ParseError::TrailingContent { .. })
+    ));
 }
 
 #[test]
 fn test_error_trailing_content_streaming() {
     let err = stream::<i64>("1 2").unwrap_err();
-    assert!(matches!(err, EdnError::TrailingContent { .. }));
+    assert!(matches!(
+        err,
+        EdnError::Parse(ParseError::TrailingContent { .. })
+    ));
 }
 
 #[test]
 fn test_error_empty_input() {
     assert!(matches!(
         parse("").unwrap_err(),
-        EdnError::UnexpectedEof { .. }
+        EdnError::Parse(ParseError::UnexpectedEof { .. })
     ));
 }
 
@@ -957,7 +969,7 @@ fn test_error_empty_input() {
 fn test_error_whitespace_only() {
     assert!(matches!(
         parse("   ").unwrap_err(),
-        EdnError::UnexpectedEof { .. }
+        EdnError::Parse(ParseError::UnexpectedEof { .. })
     ));
 }
 

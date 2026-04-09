@@ -59,7 +59,7 @@ use crate::edn::Edn;
 use crate::edn::EdnBigDecimal;
 #[cfg(feature = "serde")]
 use crate::edn::{Keyword, Symbol};
-use crate::error::EdnError;
+use crate::error::{DeError, EdnError};
 use crate::reader::read_string_with;
 #[cfg(all(feature = "serde", feature = "bignum"))]
 use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
@@ -138,7 +138,7 @@ impl FromStr for Value {
 }
 
 impl<'de> FromEdn<'de> for Value {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         Ok(Self(edn.clone().into_owned()))
     }
 }
@@ -460,9 +460,7 @@ impl<'de> VariantAccess<'de> for ValueCarrierVariantAccess<'de> {
     type Error = EdnError;
 
     fn unit_variant(self) -> Result<(), Self::Error> {
-        Err(EdnError::Custom(
-            "Value carrier does not support unit variants".into(),
-        ))
+        Err(DeError::Unsupported("Value carrier does not support unit variants").into())
     }
 
     fn newtype_variant_seed<T: DeserializeSeed<'de>>(
@@ -488,9 +486,7 @@ impl<'de> VariantAccess<'de> for ValueCarrierVariantAccess<'de> {
         _len: usize,
         _visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        Err(EdnError::Custom(
-            "Value carrier does not support tuple variants".into(),
-        ))
+        Err(DeError::Unsupported("Value carrier does not support tuple variants").into())
     }
 
     fn struct_variant<V: Visitor<'de>>(
@@ -498,9 +494,7 @@ impl<'de> VariantAccess<'de> for ValueCarrierVariantAccess<'de> {
         _fields: &'static [&'static str],
         _visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        Err(EdnError::Custom(
-            "Value carrier does not support struct variants".into(),
-        ))
+        Err(DeError::Unsupported("Value carrier does not support struct variants").into())
     }
 }
 
@@ -531,14 +525,14 @@ mod tests {
 
     #[test]
     fn test_value_parse_tagged() {
-        let v = Value::parse("#inst \"2026-04-08\"").unwrap();
+        let v = Value::parse("#inst \"2026-04-08T00:00:00Z\"").unwrap();
         let Edn::Tagged(tag, inner) = v.as_edn() else {
             panic!("expected tagged, got {:?}", v.as_edn());
         };
         assert_eq!(tag.as_ref(), "inst");
         assert_eq!(
             inner.as_ref(),
-            &Edn::Str(std::borrow::Cow::Borrowed("2026-04-08"))
+            &Edn::Str(std::borrow::Cow::Borrowed("2026-04-08T00:00:00Z"))
         );
     }
 
@@ -640,12 +634,12 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_roundtrip_tagged() {
-        let v: Value = from_str("#inst \"2026-04-08\"").unwrap();
+        let v: Value = from_str("#inst \"2026-04-08T00:00:00Z\"").unwrap();
         let Edn::Tagged(tag, inner) = v.as_edn() else {
             panic!("expected tagged, got {:?}", v.as_edn());
         };
         assert_eq!(tag.as_ref(), "inst");
-        assert_eq!(inner.as_ref(), &Edn::Str(Cow::Borrowed("2026-04-08")));
+        assert_eq!(inner.as_ref(), &Edn::Str(Cow::Borrowed("2026-04-08T00:00:00Z")));
         let s = to_string(&v).unwrap();
         let v2: Value = from_str(&s).unwrap();
         assert_eq!(v, v2);

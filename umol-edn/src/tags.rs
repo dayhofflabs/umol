@@ -13,19 +13,19 @@ use uuid::Uuid;
 #[cfg(any(feature = "chrono", feature = "uuid"))]
 use crate::edn::Edn;
 #[cfg(any(feature = "chrono", feature = "uuid"))]
-use crate::error::EdnError;
+use crate::error::ParseError;
 
 /// Parse-time reader: validates the string after `#inst` is valid RFC 3339.
 #[cfg(feature = "chrono")]
-pub(crate) fn read_inst(val: Edn) -> Result<Edn, EdnError> {
+pub(crate) fn read_inst(val: Edn) -> Result<Edn, ParseError> {
     match &val {
         Edn::Str(s) => {
-            DateTime::parse_from_rfc3339(s).map_err(|e| EdnError::InvalidInst {
+            DateTime::parse_from_rfc3339(s).map_err(|e| ParseError::InvalidInst {
                 reason: format!("\"{s}\": {e}"),
             })?;
             Ok(Edn::Tagged(Cow::Borrowed("inst"), Box::new(val)))
         }
-        _ => Err(EdnError::InvalidInst {
+        _ => Err(ParseError::InvalidInst {
             reason: "expected string after #inst".into(),
         }),
     }
@@ -45,15 +45,15 @@ where
 
 /// Parse-time reader: validates the string after `#uuid` is a valid UUID.
 #[cfg(feature = "uuid")]
-pub(crate) fn read_uuid(val: Edn) -> Result<Edn, EdnError> {
+pub(crate) fn read_uuid(val: Edn) -> Result<Edn, ParseError> {
     match &val {
         Edn::Str(s) => {
-            Uuid::parse_str(s).map_err(|e| EdnError::InvalidUuid {
+            Uuid::parse_str(s).map_err(|e| ParseError::InvalidUuid {
                 reason: format!("\"{s}\": {e}"),
             })?;
             Ok(Edn::Tagged(Cow::Borrowed("uuid"), Box::new(val)))
         }
-        _ => Err(EdnError::InvalidUuid {
+        _ => Err(ParseError::InvalidUuid {
             reason: "expected string after #uuid".into(),
         }),
     }

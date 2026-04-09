@@ -21,7 +21,7 @@ use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 
 use crate::edn::{Edn, Symbol};
-use crate::error::EdnError;
+use crate::error::DeError;
 #[cfg(feature = "serde")]
 use crate::serde_tokens::SYMBOL_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
@@ -77,10 +77,10 @@ impl From<&str> for EdnSymbol {
 }
 
 impl<'de> FromEdn<'de> for EdnSymbol {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Symbol(s) => Ok(EdnSymbol(s.as_str().to_string())),
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "symbol",
                 got: other.kind(),
                 path: Vec::new(),

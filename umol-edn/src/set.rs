@@ -24,7 +24,7 @@ use serde::de::{Deserialize, DeserializeSeed, Deserializer, SeqAccess, Visitor};
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use crate::edn::Edn;
-use crate::error::EdnError;
+use crate::error::DeError;
 #[cfg(feature = "serde")]
 use crate::serde_tokens::SET_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
@@ -80,7 +80,7 @@ impl<'de, T> FromEdn<'de> for EdnHashSet<T>
 where
     T: FromEdn<'de> + Eq + Hash,
 {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Set(s) => {
                 let mut out = HashSet::with_capacity(s.len());
@@ -89,7 +89,7 @@ where
                 }
                 Ok(EdnHashSet(out))
             }
-            other => Err(EdnError::TypeMismatch {
+            other => Err(DeError::TypeMismatch {
                 expected: "set",
                 got: other.kind(),
                 path: Vec::new(),

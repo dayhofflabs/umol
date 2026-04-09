@@ -225,10 +225,10 @@ fn test_parity_tagged_in_struct() {
         marker: EdnTagged<String>,
     }
     let v = S {
-        marker: EdnTagged::new("inst", "2026-04-08".to_string()),
+        marker: EdnTagged::new("inst", "2026-04-08T00:00:00Z".to_string()),
     };
     let s = to_string(&v).unwrap();
-    assert_eq!(s, "{:marker #inst \"2026-04-08\"}");
+    assert_eq!(s, "{:marker #inst \"2026-04-08T00:00:00Z\"}");
     let back: S = from_str(&s).unwrap();
     assert_eq!(v, back);
 }
@@ -257,11 +257,14 @@ struct MixedTagged {
 #[test]
 fn test_parity_tagged_coexist_with_enum_variant_tagged() {
     let v = MixedTagged {
-        dynamic: EdnTagged::new("uuid", "abc-123".to_string()),
+        dynamic: EdnTagged::new("uuid", "550e8400-e29b-41d4-a716-446655440000".to_string()),
         event: Event::Click(17),
     };
     let s = to_string(&v).unwrap();
-    assert_eq!(s, "{:dynamic #uuid \"abc-123\" :event #Click 17}");
+    assert_eq!(
+        s,
+        "{:dynamic #uuid \"550e8400-e29b-41d4-a716-446655440000\" :event #Click 17}"
+    );
     let back: MixedTagged = from_str_permissive(&s);
     assert_eq!(v, back);
 }
@@ -331,7 +334,7 @@ fn test_parity_bigdecimal_serde_edn_roundtrip() {
 #[case("(1 2 3)")]
 #[case("#{1 2}")]
 #[case(r#"{:name "salt" :count 2}"#)]
-#[case(r#"#inst "2026-04-08""#)]
+#[case(r#"#inst "2026-04-08T00:00:00Z""#)]
 fn test_parity_value_lossless_edn_roundtrip(#[case] input: &str) {
     let v: Value = from_str(input).unwrap();
     let s = to_string(&v).unwrap();

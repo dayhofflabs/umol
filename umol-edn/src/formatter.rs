@@ -3,8 +3,10 @@
 #[cfg(feature = "bignum")]
 use std::fmt::{self, Display, Write};
 
+use itoa::Buffer as ItoaBuffer;
 #[cfg(feature = "serde")]
 use serde::Serialize;
+use zmij::Buffer as ZmijBuffer;
 
 use crate::collections::EdnMap;
 use crate::edn::Edn;
@@ -117,7 +119,7 @@ fn compact_len(edn: &Edn<'_>, limit: usize) -> Option<usize> {
 }
 
 fn itoa_len(n: i64) -> usize {
-    let mut buf = itoa::Buffer::new();
+    let mut buf = ItoaBuffer::new();
     buf.format(n).len()
 }
 
@@ -136,7 +138,7 @@ fn bignum_display_len(v: &impl Display) -> usize {
 }
 
 fn format_float_len(v: f64) -> usize {
-    let mut buf = zmij::Buffer::new();
+    let mut buf = ZmijBuffer::new();
     buf.format_finite(v).len()
 }
 
