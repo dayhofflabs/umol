@@ -29,6 +29,7 @@ fn main() {
     cc::Build::new()
         .files(&sources)
         .include(&src)
+        .include("include")
         .std("c99")
         .define("MSYM_EXPORTS_BUILT_AS_STATIC", None)
         .warnings(false)
