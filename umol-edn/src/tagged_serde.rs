@@ -62,8 +62,18 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for EdnTagged<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::de::from_str;
+    use crate::config::ParseConfig;
+    use crate::de::{from_str, from_str_with};
     use crate::ser::to_string;
+
+    /// Deserialize under a config that preserves unknown tags — required
+    /// when `EdnTagged<T>` carries a caller-chosen tag name that has no
+    /// registered reader.
+    fn from_str_permissive<'a, T: serde::Deserialize<'a>>(s: &'a str) -> T {
+        let mut config = ParseConfig::default();
+        config.allow_unknown_tags = true;
+        from_str_with(s, &config).unwrap()
+    }
 
     #[test]
     fn test_edn_tagged_serialize_edn() {
@@ -88,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_edn_tagged_deserialize_from_edn_tagged() {
-        let tagged: EdnTagged<i64> = from_str("#score 17").unwrap();
+        let tagged: EdnTagged<i64> = from_str_permissive("#score 17");
         assert_eq!(tagged.tag, "score");
         assert_eq!(tagged.value, 17);
     }
@@ -110,7 +120,7 @@ mod tests {
     fn test_edn_tagged_roundtrip() {
         let tagged: EdnTagged<i64> = EdnTagged::new("score", 17);
         let edn = to_string(&tagged).unwrap();
-        let parsed: EdnTagged<i64> = from_str(&edn).unwrap();
+        let parsed: EdnTagged<i64> = from_str_permissive(&edn);
         assert_eq!(parsed, tagged);
     }
 
@@ -134,7 +144,7 @@ mod tests {
         let tagged: EdnTagged<Vec<i64>> = EdnTagged::new("scores", vec![1, 2, 3]);
         let edn = to_string(&tagged).unwrap();
         assert_eq!(edn, "#scores [1 2 3]");
-        let parsed: EdnTagged<Vec<i64>> = from_str(&edn).unwrap();
+        let parsed: EdnTagged<Vec<i64>> = from_str_permissive(&edn);
         assert_eq!(parsed, tagged);
     }
 }

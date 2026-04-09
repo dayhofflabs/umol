@@ -17,10 +17,11 @@
 use std::fmt;
 use std::str::FromStr;
 
+use crate::config::ParseConfig;
 use crate::edn::Edn;
 use crate::error::EdnError;
 use crate::native::{FromEdn, ToEdn};
-use crate::reader::read_string;
+use crate::reader::read_string_with;
 
 /// Owned EDN value. A lossless mirror of [`Edn<'static>`] for use where a
 /// fully owned, lifetime-free value is required.
@@ -33,9 +34,19 @@ impl Value {
         Self(edn)
     }
 
-    /// Parse an EDN string into a `Value`.
+    /// Parse an EDN string into a `Value` using the default config.
+    ///
+    /// Unknown tags are rejected with `InvalidTag`. Callers that need to
+    /// preserve arbitrary tagged literals must supply a config with
+    /// `allow_unknown_tags = true` via [`Value::parse_with`] or register
+    /// the relevant tag readers.
     pub fn parse(input: &str) -> Result<Self, EdnError> {
-        Ok(Self(read_string(input)?.into_owned()))
+        Self::parse_with(input, &ParseConfig::default())
+    }
+
+    /// Parse an EDN string into a `Value` using the supplied config.
+    pub fn parse_with(input: &str, config: &ParseConfig) -> Result<Self, EdnError> {
+        Ok(Self(read_string_with(input, config)?.into_owned()))
     }
 
     /// Borrow the inner `Edn<'static>`.
@@ -126,7 +137,7 @@ mod tests {
 
     #[test]
     fn test_value_from_edn_and_to_edn() {
-        let edn = read_string("[1 2 3]").unwrap();
+        let edn = crate::read_string("[1 2 3]").unwrap();
         let v = Value::from_edn(&edn).unwrap();
         let back = v.to_edn();
         assert_eq!(back, edn);

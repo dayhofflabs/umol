@@ -28,13 +28,12 @@ pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
 
 /// Deserialize a Rust value from an EDN string using a custom config.
 ///
-/// The serde path always parses with `allow_unknown_tags = true` so that
-/// foreign types using `#Variant` for enum dispatch round-trip without
-/// requiring tag-reader registration. Other config fields are honored as-is.
+/// The config is honored verbatim. If the caller relies on `#Variant` for
+/// enum dispatch or on preserving arbitrary tagged literals in `Value`, they
+/// must set `allow_unknown_tags = true` on the config themselves or register
+/// the relevant tag readers.
 pub fn from_str_with<'a, T: Deserialize<'a>>(s: &'a str, config: &ParseConfig) -> Result<T, EdnError> {
-    let mut serde_config = config.clone();
-    serde_config.allow_unknown_tags = true;
-    let edn = read_string_with(s, &serde_config)?;
+    let edn = read_string_with(s, config)?;
     from_value(edn)
 }
 
@@ -665,9 +664,19 @@ mod tests {
     use super::*;
     use crate::collections::{EdnMap, EdnSet};
     use crate::edn::{Keyword, Symbol};
-    use crate::de::{from_str, from_value};
+    use crate::de::{from_str, from_str_with, from_value};
+    use crate::config::ParseConfig;
     use crate::ser::to_string;
     use crate::read_string;
+
+    /// Deserialize under a config that preserves unknown tags — required
+    /// for `#Variant` enum dispatch where the variant names are not
+    /// registered as tag readers.
+    fn from_str_permissive<'a, T: Deserialize<'a>>(s: &'a str) -> T {
+        let mut config = ParseConfig::default();
+        config.allow_unknown_tags = true;
+        from_str_with(s, &config).unwrap()
+    }
 
     #[rstest]
     #[case("12", 12i64)]
@@ -945,7 +954,7 @@ mod tests {
     fn test_enum_tagged_roundtrip(#[case] value: Shape, #[case] expected_edn: &str) {
         let serialized = to_string(&value).unwrap();
         assert_eq!(serialized, expected_edn);
-        let deserialized: Shape = from_str(&serialized).unwrap();
+        let deserialized: Shape = from_str_permissive(&serialized);
         assert_eq!(deserialized, value);
     }
 
@@ -956,7 +965,7 @@ mod tests {
 
     #[test]
     fn test_deserialize_tagged_unit_variant() {
-        let val: UnitEnum = from_str("#Red nil").unwrap();
+        let val: UnitEnum = from_str_permissive("#Red nil");
         assert_eq!(val, UnitEnum::Red);
     }
 
@@ -966,7 +975,9 @@ mod tests {
     #[case("#Red [1 2]")]
     #[case("#Red \"hello\"")]
     fn test_deserialize_tagged_unit_variant_error(#[case] input: &str) {
-        assert!(from_str::<UnitEnum>(input).is_err());
+        let mut config = ParseConfig::default();
+        config.allow_unknown_tags = true;
+        assert!(from_str_with::<UnitEnum>(input, &config).is_err());
     }
 
     // -- from_value paths (value-tree deserializer) ----------------------------

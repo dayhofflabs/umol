@@ -753,7 +753,7 @@ Phase 3 (umol_edn::Value lossless mirror — mechanism TBD; may fall back
    │
 Phase 4 (parity test matrix: variant × wrapper × ser/de path)
    │
-Phase 5 (re-exports under crate root, drop from_str_with, docs)
+Phase 5 (re-exports under crate root, honor ParseConfig verbatim, docs)
 ```
 
 Phase 0 is reversible cleanup that should not change observable
@@ -803,5 +803,65 @@ tree-walking path, feature parity with native.
   `serialize_newtype_variant` / `deserialize_enum`. The paths never
   intersect. Phase 4 will still add a struct-holding-both spot test.
 - **Wrapper composition with serde attributes** (`#[serde(default)]`,
-  `#[serde(rename)]`, `#[serde(flatten)]`) must hold up. Phase 4
-  spot-check.
+  `#[serde(rename)]`, `#[serde(flatten)]` — resolved 2026-04-08):
+  covered by `tests/parity.rs`:
+  `test_parity_serde_default_on_wrapper`,
+  `test_parity_serde_rename_on_wrapper`,
+  `test_parity_serde_flatten_over_wrapper_field`.
+
+## Phase 5 outcome (2026-04-08)
+
+### ParseConfig is honored verbatim
+
+The serde path no longer rewrites the caller's `ParseConfig` behind
+their back. Earlier iterations of `from_str_with` silently flipped
+`allow_unknown_tags = true` "so foreign types using `#Variant` for
+enum dispatch round-trip without tag-reader registration". Similarly,
+`Value::parse` hard-coded `allow_unknown_tags = true` "because `Value`
+is intentionally lossless". Both overrides were wrong in the same way:
+the type being parsed was dictating parse policy that belongs to the
+caller.
+
+The fixed contract:
+
+- `from_str(s)` — parses with `ParseConfig::default()`; unknown tags
+  are rejected.
+- `from_str_with(s, &ParseConfig)` — honors the config verbatim. No
+  silent rewrites.
+- `Value::parse(s)` — parses with `ParseConfig::default()`; unknown
+  tags are rejected. `Value` is still lossless for every construct the
+  default config can produce.
+- `Value::parse_with(s, &ParseConfig)` — explicit opt-in for permissive
+  parsing or custom tag readers.
+
+### When to set `allow_unknown_tags = true`
+
+Callers must opt in explicitly whenever the tag set is open-ended:
+
+| Use case | What to do |
+|---|---|
+| Known, fixed set of tagged literals | Register `tag_readers` on the config. |
+| `#Variant` enum dispatch | Set `config.allow_unknown_tags = true`. |
+| Dynamic `EdnTagged<T>` with caller-chosen tag names | Set `config.allow_unknown_tags = true`. |
+| `Value` containing arbitrary tagged literals | Set `config.allow_unknown_tags = true`. |
+| Both fixed readers + dynamic tags | Compose both on the same config. |
+
+The previous behavior (silent flip for every serde call) hid typos in
+tag names as successful parses. Under the fixed contract a stray
+`#fooo 1` will fail fast against the default config unless the caller
+explicitly opts into permissive handling.
+
+### Re-exports at crate root
+
+`umol_edn` now re-exports the serde entry points at the crate root:
+`from_str`, `from_str_with`, `from_value`, `EdnDeserializer`,
+`to_string`, `to_string_pretty`, `to_string_with`, `to_value`,
+`EdnSerializer`. Plus `Value` unconditionally and all wrappers
+(`EdnKeyword`, `EdnSymbol`, `EdnList`, `EdnHashSet`, `EdnTagged`,
+`EdnBigInt`, `EdnBigDecimal`).
+
+### Net effect on tests
+
+All workspace tests green after the config contract fix:
+`umol-edn` ~870 tests (serde+bignum) + `umol-graph` 3755 tests +
+remaining workspace crates.

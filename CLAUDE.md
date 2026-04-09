@@ -34,11 +34,6 @@
 - Inline comments only where logic is non-obvious.
 - Read the file before modifying it. Never edit blind.
 
-## Warnings and Disclaimers
-- No safety disclaimers unless there is a genuine life-safety or legal risk.
-- No "Note that...", "Keep in mind that...", "It's worth mentioning..." soft warnings.
-- No "As an AI, I..." framing.
-
 ## Session Memory
 - Learn user corrections and preferences within the session.
 - Apply them silently. Do not re-announce learned behavior.
@@ -50,7 +45,7 @@
 - Do not create new files unless strictly necessary.
 
 ## Design
-- Do not consider backward compatibility. This is research code.
+- Do not consider backward compatibility. This is not at all a consideration. Breaking changes are fine if technically necessary.
 - Avoid stubs, shims, bridges whenever possible. Suggest design improvements instead.
 - Do not create manual implementations, where well-designed and supported external libraries exist.
 
@@ -63,7 +58,9 @@
 - Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.
 - Name tests test_<struct>_<method>() and test_<struct>_<method>_error(). Do not include test behavior in the test name.
 - No long comments, no self-talk, no references to previous implementations, no comment art.
-- The symbol names should convey the meaning. Comments only clarify additional points.
+- The symbol names should convey the meaning. Comments only clarify points that are not obvious from names.
+- Do not use fully qualified names in the text. Use bare symbols for structs, enums, traits, and constants, parent module for free functions.
+- Do not place imports inline in code, put them all at the top of the module.
 
 ## Override Rule
 User instructions always override this file.

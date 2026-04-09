@@ -714,13 +714,22 @@ fn test_bare_tag_rejected(#[case] input: &str) {
 }
 
 #[test]
-fn test_bare_tag_passes_through_serde() {
-    // The serde path opts into permissive tag handling so foreign types using
-    // `#Variant` for enum dispatch round-trip without tag-reader registration.
-    // Under `deserialize_any`, the tag is stripped and the inner value is
-    // returned. Native `read_string` callers stay strict (see
-    // `test_bare_tag_rejected`).
-    assert_eq!(stream::<i64>("#foo 1").unwrap(), 1);
+fn test_bare_tag_rejected_by_serde_default() {
+    // The serde path honors the supplied config verbatim. The default config
+    // rejects unknown tags, matching the native path.
+    assert!(matches!(
+        stream::<i64>("#foo 1"),
+        Err(EdnError::InvalidTag { .. })
+    ));
+}
+
+#[test]
+fn test_bare_tag_passes_through_serde_with_permissive_config() {
+    // Callers that want foreign types to use `#Variant` for enum dispatch or
+    // to preserve arbitrary tagged literals must opt in explicitly.
+    let mut config = ParseConfig::default();
+    config.allow_unknown_tags = true;
+    assert_eq!(from_str_with::<i64>("#foo 1", &config).unwrap(), 1);
 }
 
 #[test]

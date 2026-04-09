@@ -2,9 +2,11 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use serde::{Deserialize, Serialize};
-use umol_edn::de::{from_str, from_value, StreamDeserializer};
-use umol_edn::ser::to_string;
-use umol_edn::{read_all, read_string, Edn, EdnFormatter, EdnKeyRef, EdnMap};
+use umol_edn::de::StreamDeserializer;
+use umol_edn::{
+    from_str, from_str_with, from_value, read_all, read_string, to_string, Edn, EdnFormatter,
+    EdnHashSet, EdnKeyRef, EdnKeyword, EdnList, EdnMap, EdnSymbol, EdnTagged, ParseConfig, Value,
+};
 
 const MOLECULE_SMALL: &str = r#"{:atoms [C O] :bonds [["0" "1" :single]]}"#;
 
@@ -369,6 +371,136 @@ fn bench_map_lookup(c: &mut Criterion) {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 3–5 code paths: Value lossless mirror and serde wrappers
+// ---------------------------------------------------------------------------
+//
+// These exercise the carrier-pair dispatch in `value_serde.rs` and the
+// token-dispatch wrappers (`EdnKeyword`, `EdnSymbol`, `EdnList`,
+// `EdnHashSet`, `EdnTagged`). None of these paths are touched by the
+// benches above.
+
+const VALUE_MIXED: &str = r#"{:name :salt
+                              :sym chem/NaCl
+                              :list (1 2 3 4 5)
+                              :set #{:a :b :c :d}
+                              :tagged #score 99
+                              :atoms [C C C C C]
+                              :nested {:k1 1 :k2 [2 3] :k3 #{:x :y}}}"#;
+
+fn permissive_config() -> ParseConfig {
+    let mut cfg = ParseConfig::default();
+    cfg.allow_unknown_tags = true;
+    cfg
+}
+
+fn bench_value_native(c: &mut Criterion) {
+    let mut group = c.benchmark_group("value_native");
+
+    let cfg = permissive_config();
+    group.bench_function("parse_mixed", |b| {
+        b.iter(|| Value::parse_with(black_box(VALUE_MIXED), &cfg).unwrap())
+    });
+
+    let value = Value::parse_with(VALUE_MIXED, &cfg).unwrap();
+    group.bench_function("display_mixed", |b| {
+        b.iter(|| black_box(&value).to_string())
+    });
+
+    group.bench_function("clone_mixed", |b| b.iter(|| black_box(&value).clone()));
+
+    group.finish();
+}
+
+fn bench_value_serde(c: &mut Criterion) {
+    let mut group = c.benchmark_group("value_serde");
+
+    let cfg = permissive_config();
+
+    // Carrier-pair dispatch: from_str_with -> Value via visit_newtype_struct
+    // + visit_enum for every EDN-specific variant in the payload.
+    group.bench_function("from_str_mixed", |b| {
+        b.iter(|| from_str_with::<Value>(black_box(VALUE_MIXED), &cfg).unwrap())
+    });
+
+    let value: Value = from_str_with(VALUE_MIXED, &cfg).unwrap();
+
+    // EdnRef walker: Serialize for Value dispatching through token arms.
+    group.bench_function("to_string_mixed", |b| {
+        b.iter(|| to_string(black_box(&value)).unwrap())
+    });
+
+    group.bench_function("roundtrip_mixed", |b| {
+        b.iter(|| {
+            let v: Value =
+                from_str_with(black_box(VALUE_MIXED), &cfg).unwrap();
+            to_string(&v).unwrap()
+        })
+    });
+
+    // JSON fallback through the lossy-degrade path (keyword/symbol → Str,
+    // list/set → Vector, tagged → tuple).
+    group.bench_function("json_to_string_mixed", |b| {
+        b.iter(|| serde_json::to_string(black_box(&value)).unwrap())
+    });
+
+    group.finish();
+}
+
+#[derive(Serialize, Deserialize)]
+struct WrapperHeavy {
+    name: EdnKeyword,
+    ns: EdnSymbol,
+    aliases: EdnList<String>,
+    ids: EdnHashSet<i64>,
+    marker: EdnTagged<String>,
+}
+
+fn wrapper_heavy_fixture() -> WrapperHeavy {
+    WrapperHeavy {
+        name: EdnKeyword::new("salt"),
+        ns: EdnSymbol::new("chem/NaCl"),
+        aliases: vec![
+            "NaCl".into(),
+            "halite".into(),
+            "rock-salt".into(),
+            "table-salt".into(),
+        ]
+        .into(),
+        ids: (0..16).collect(),
+        marker: EdnTagged::new("inst", "2026-04-08".to_string()),
+    }
+}
+
+fn bench_wrappers_serde(c: &mut Criterion) {
+    let mut group = c.benchmark_group("wrappers_serde");
+
+    let fixture = wrapper_heavy_fixture();
+    let serialized = to_string(&fixture).unwrap();
+
+    group.bench_function("serialize_wrappers", |b| {
+        b.iter(|| to_string(black_box(&fixture)).unwrap())
+    });
+
+    // Permissive parse needed for EdnTagged<String> with caller-chosen tag.
+    let cfg = permissive_config();
+
+    group.bench_function("deserialize_wrappers", |b| {
+        b.iter(|| {
+            from_str_with::<WrapperHeavy>(black_box(&serialized), &cfg).unwrap()
+        })
+    });
+
+    group.bench_function("roundtrip_wrappers", |b| {
+        b.iter(|| {
+            let s = to_string(black_box(&fixture)).unwrap();
+            from_str_with::<WrapperHeavy>(&s, &cfg).unwrap()
+        })
+    });
+
+    group.finish();
+}
+
+// ---------------------------------------------------------------------------
 
 criterion_group!(
     benches,
@@ -381,5 +513,8 @@ criterion_group!(
     bench_serialize,
     bench_stream_throughput,
     bench_map_lookup,
+    bench_value_native,
+    bench_value_serde,
+    bench_wrappers_serde,
 );
 criterion_main!(benches);
