@@ -149,7 +149,7 @@ impl SpinState {
 
     /// Check if molecular spin state is compatible with electron count.
     pub fn is_compatible_with(&self, electrons: u8) -> bool {
-        self.unpaired_electrons <= electrons && (electrons - self.unpaired_electrons) % 2 == 0
+        self.unpaired_electrons <= electrons && (electrons - self.unpaired_electrons).is_multiple_of(2)
     }
 
     /// Check whether this molecular spin state is achievable by coupling
@@ -209,6 +209,7 @@ impl fmt::Display for SpinState {
 ///
 /// - `#u` alone: multiplicity = maximum for given unpaired electrons (Hund's rule).
 /// - `#s` alone: unpaired electrons = `m - 1` (minimum for that multiplicity).
+///
 /// Each tag must not appear more than once.
 /// - Both: validated as a pair.
 impl FromStr for SpinState {
@@ -241,7 +242,7 @@ impl FromStr for SpinState {
                     value = 1;
                 }
                 unpaired = Some(value);
-                rest = &digits_str[digits_len..].trim_start();
+                rest = digits_str[digits_len..].trim_start();
             } else if let Some(digits_str) = rest.strip_prefix("#s") {
                 if multiplicity.is_some() {
                     return Err(SpinStateError::DuplicateTag {
@@ -268,7 +269,7 @@ impl FromStr for SpinState {
                     },
                 )?;
                 multiplicity = Some(mult);
-                rest = &digits_str[digits_len..].trim_start();
+                rest = digits_str[digits_len..].trim_start();
             } else if rest.starts_with("#") {
                 return Err(SpinStateError::InvalidTag {
                     tag: rest.to_string(),

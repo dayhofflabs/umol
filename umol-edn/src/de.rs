@@ -1,10 +1,10 @@
 //! Serde `Deserializer` for `Edn` values.
 
 use std::borrow::Cow;
-use hashbrown::hash_map::IntoIter as HashMapIntoIter;
-use hashbrown::hash_set::IntoIter as HashSetIntoIter;
 use std::marker::PhantomData;
 
+use hashbrown::hash_map::IntoIter as HashMapIntoIter;
+use hashbrown::hash_set::IntoIter as HashSetIntoIter;
 use serde::de::{
     self, Deserialize, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
@@ -15,6 +15,9 @@ use crate::config::ParseConfig;
 use crate::edn::Edn;
 use crate::error::EdnError;
 use crate::reader::{default_config, read_string_with, Reader};
+#[cfg(feature = "bignum")]
+use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
+use crate::serde_tokens::{LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN, VALUE_TOKEN};
 
 /// Deserialize a Rust value from an EDN string.
 ///
@@ -32,7 +35,10 @@ pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
 /// enum dispatch or on preserving arbitrary tagged literals in `Value`, they
 /// must set `allow_unknown_tags = true` on the config themselves or register
 /// the relevant tag readers.
-pub fn from_str_with<'a, T: Deserialize<'a>>(s: &'a str, config: &ParseConfig) -> Result<T, EdnError> {
+pub fn from_str_with<'a, T: Deserialize<'a>>(
+    s: &'a str,
+    config: &ParseConfig,
+) -> Result<T, EdnError> {
     let edn = read_string_with(s, config)?;
     from_value(edn)
 }
@@ -50,8 +56,7 @@ pub(crate) fn visit_cow_str<'de, V: Visitor<'de>>(
 
 /// Deserialize a Rust value from a pre-parsed `Edn` value.
 pub fn from_value<'a, T: Deserialize<'a>>(val: Edn<'a>) -> Result<T, EdnError> {
-    T::deserialize(EdnDeserializer(val)).map_err(Into::into)
-}
+    T::deserialize(EdnDeserializer(val))}
 
 /// Streaming deserializer over multiple EDN values in a string.
 pub struct StreamDeserializer<'a, T> {
@@ -80,7 +85,7 @@ impl<'a, T: Deserialize<'a>> Iterator for StreamDeserializer<'a, T> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.reader.next().map(|result| {
-            result.and_then(|edn| T::deserialize(EdnDeserializer(edn)).map_err(Into::into))
+            result.and_then(|edn| T::deserialize(EdnDeserializer(edn)))
         })
     }
 }
@@ -118,7 +123,9 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
             Edn::Symbol(s) => visit_cow_str(visitor, s.into_cow()),
             Edn::List(v) | Edn::Vector(v) => visitor.visit_seq(EdnSeqAccess::new(v)),
             Edn::Map(m) => visitor.visit_map(EdnMapAccess::new(m)),
-            Edn::Set(s) => visitor.visit_seq(EdnSetSeqAccess { iter: s.into_iter() }),
+            Edn::Set(s) => visitor.visit_seq(EdnSetSeqAccess {
+                iter: s.into_iter(),
+            }),
             Edn::Tagged(_tag, inner) => EdnDeserializer(*inner).deserialize_any(visitor),
         }
     }
@@ -136,71 +143,57 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
         match name {
-            crate::serde_tokens::SYMBOL_TOKEN => match self.0 {
+            SYMBOL_TOKEN => match self.0 {
                 Edn::Symbol(s) => visit_cow_str(visitor, s.into_cow()),
-                other => Err(EdnError::Custom(format!(
-                    "expected symbol, got {other:?}"
-                ))),
+                other => Err(EdnError::Custom(format!("expected symbol, got {other:?}"))),
             },
-            crate::serde_tokens::SET_TOKEN => match self.0 {
-                Edn::Set(s) => visitor.visit_seq(EdnSetSeqAccess { iter: s.into_iter() }),
-                other => Err(EdnError::Custom(format!(
-                    "expected set, got {other:?}"
-                ))),
+            SET_TOKEN => match self.0 {
+                Edn::Set(s) => visitor.visit_seq(EdnSetSeqAccess {
+                    iter: s.into_iter(),
+                }),
+                other => Err(EdnError::Custom(format!("expected set, got {other:?}"))),
             },
-            crate::serde_tokens::LIST_TOKEN => match self.0 {
+            LIST_TOKEN => match self.0 {
                 Edn::List(v) => visitor.visit_seq(EdnSeqAccess::new(v)),
-                other => Err(EdnError::Custom(format!(
-                    "expected list, got {other:?}"
-                ))),
+                other => Err(EdnError::Custom(format!("expected list, got {other:?}"))),
             },
             #[cfg(feature = "bignum")]
-            crate::serde_tokens::BIGINT_TOKEN => match self.0 {
+            BIGINT_TOKEN => match self.0 {
                 Edn::BigInt(n) => visitor.visit_string(n.to_string()),
-                other => Err(EdnError::Custom(format!(
-                    "expected bigint, got {other:?}"
-                ))),
+                other => Err(EdnError::Custom(format!("expected bigint, got {other:?}"))),
             },
             #[cfg(feature = "bignum")]
-            crate::serde_tokens::BIGDECIMAL_TOKEN => match self.0 {
+            BIGDECIMAL_TOKEN => match self.0 {
                 Edn::BigDecimal(d) => visitor.visit_string(d.as_inner().to_string()),
                 other => Err(EdnError::Custom(format!(
                     "expected bigdecimal, got {other:?}"
                 ))),
             },
-            crate::serde_tokens::VALUE_TOKEN => {
+            VALUE_TOKEN => {
                 use crate::serde_tokens::*;
                 use crate::value::{ValueCarrier, ValuePayload};
                 match self.0 {
                     Edn::Keyword(k) => {
-                        let carrier = ValueCarrier::new(
-                            KEYWORD_TOKEN,
-                            ValuePayload::Str(k.into_cow()),
-                        );
+                        let carrier =
+                            ValueCarrier::new(KEYWORD_TOKEN, ValuePayload::Str(k.into_cow()));
                         visitor.visit_newtype_struct(carrier)
                     }
                     Edn::Symbol(s) => {
-                        let carrier = ValueCarrier::new(
-                            SYMBOL_TOKEN,
-                            ValuePayload::Str(s.into_cow()),
-                        );
+                        let carrier =
+                            ValueCarrier::new(SYMBOL_TOKEN, ValuePayload::Str(s.into_cow()));
                         visitor.visit_newtype_struct(carrier)
                     }
                     Edn::List(v) => {
-                        let carrier =
-                            ValueCarrier::new(LIST_TOKEN, ValuePayload::List(v));
+                        let carrier = ValueCarrier::new(LIST_TOKEN, ValuePayload::List(v));
                         visitor.visit_newtype_struct(carrier)
                     }
                     Edn::Set(s) => {
-                        let carrier =
-                            ValueCarrier::new(SET_TOKEN, ValuePayload::Set(s));
+                        let carrier = ValueCarrier::new(SET_TOKEN, ValuePayload::Set(s));
                         visitor.visit_newtype_struct(carrier)
                     }
                     Edn::Tagged(tag, inner) => {
-                        let carrier = ValueCarrier::new(
-                            TAGGED_TOKEN,
-                            ValuePayload::Tagged(tag, *inner),
-                        );
+                        let carrier =
+                            ValueCarrier::new(TAGGED_TOKEN, ValuePayload::Tagged(tag, *inner));
                         visitor.visit_newtype_struct(carrier)
                     }
                     #[cfg(feature = "bignum")]
@@ -292,7 +285,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         _len: usize,
         visitor: V,
     ) -> Result<V::Value, Self::Error> {
-        if name == crate::serde_tokens::TAGGED_TOKEN {
+        if name == TAGGED_TOKEN {
             return match self.0 {
                 Edn::Tagged(tag, inner) => visitor.visit_seq(EdnTaggedSeqAccess {
                     tag: Some(tag),
@@ -475,7 +468,7 @@ impl<'de> SeqAccess<'de> for EdnSetSeqAccess<'de> {
 /// an `Edn::Tagged`. Used to deserialize `EdnTagged<T>` via the
 /// `serialize_tuple_struct(TAGGED_TOKEN, 2)` protocol.
 struct EdnTaggedSeqAccess<'de> {
-    tag: Option<std::borrow::Cow<'de, str>>,
+    tag: Option<Cow<'de, str>>,
     inner: Option<Edn<'de>>,
 }
 
@@ -487,9 +480,7 @@ impl<'de> SeqAccess<'de> for EdnTaggedSeqAccess<'de> {
         seed: T,
     ) -> Result<Option<T::Value>, Self::Error> {
         if let Some(tag) = self.tag.take() {
-            return seed
-                .deserialize(EdnDeserializer(Edn::Str(tag)))
-                .map(Some);
+            return seed.deserialize(EdnDeserializer(Edn::Str(tag))).map(Some);
         }
         if let Some(inner) = self.inner.take() {
             return seed.deserialize(EdnDeserializer(inner)).map(Some);
@@ -536,10 +527,9 @@ impl<'de> MapAccess<'de> for EdnMapAccess<'de> {
         &mut self,
         seed: V,
     ) -> Result<V::Value, Self::Error> {
-        let v = self
-            .pending_value
-            .take()
-            .ok_or_else(|| EdnError::Custom("next_value_seed called without preceding next_key_seed".into()))?;
+        let v = self.pending_value.take().ok_or_else(|| {
+            EdnError::Custom("next_value_seed called without preceding next_key_seed".into())
+        })?;
         seed.deserialize(EdnDeserializer(v))
     }
 }
@@ -578,15 +568,12 @@ impl<'de> de::MapAccess<'de> for EdnStructMapAccess<'de> {
         &mut self,
         seed: V,
     ) -> Result<V::Value, Self::Error> {
-        let v = self
-            .pending_value
-            .take()
-            .ok_or_else(|| EdnError::Custom("next_value_seed called without preceding next_key_seed".into()))?;
+        let v = self.pending_value.take().ok_or_else(|| {
+            EdnError::Custom("next_value_seed called without preceding next_key_seed".into())
+        })?;
         seed.deserialize(EdnDeserializer(v))
     }
 }
-
-// -- Tagged enum access (for #Variant value round-tripping) ------------------
 
 struct EdnTaggedEnumAccess<'de> {
     tag: Cow<'de, str>,
@@ -614,9 +601,9 @@ impl<'de> VariantAccess<'de> for EdnTaggedVariantAccess<'de> {
     fn unit_variant(self) -> Result<(), Self::Error> {
         match self.0 {
             Edn::Nil => Ok(()),
-            other => Err(EdnError::Custom(
-                format!("unit variant expects nil payload, got {other:?}"),
-            )),
+            other => Err(EdnError::Custom(format!(
+                "unit variant expects nil payload, got {other:?}"
+            ))),
         }
     }
 
@@ -653,11 +640,11 @@ mod tests {
 
     use super::*;
     use crate::collections::{EdnMap, EdnSet};
-    use crate::edn::{Keyword, Symbol};
-    use crate::de::{from_str, from_str_with, from_value};
     use crate::config::ParseConfig;
-    use crate::ser::to_string;
+    use crate::de::{from_str, from_str_with, from_value};
+    use crate::edn::{Keyword, Symbol};
     use crate::read_string;
+    use crate::ser::to_string;
 
     /// Deserialize under a config that preserves unknown tags — required
     /// for `#Variant` enum dispatch where the variant names are not
@@ -849,7 +836,10 @@ mod tests {
 
         let val = read_string("{:x 1.0 12 99 :y 2.0}").unwrap();
         assert_eq!(Point::deserialize(EdnDeserializer(val)).unwrap(), expected);
-        assert_eq!(from_str::<Point>("{:x 1.0 12 99 :y 2.0}").unwrap(), expected);
+        assert_eq!(
+            from_str::<Point>("{:x 1.0 12 99 :y 2.0}").unwrap(),
+            expected
+        );
     }
 
     #[test]
@@ -928,8 +918,6 @@ mod tests {
         assert!(results[1].is_err());
     }
 
-    // -- Enum round-tripping via tags ------------------------------------------
-
     #[derive(Debug, Serialize, Deserialize, PartialEq)]
     enum Shape {
         Circle(f64),
@@ -969,8 +957,6 @@ mod tests {
         config.allow_unknown_tags = true;
         assert!(from_str_with::<UnitEnum>(input, &config).is_err());
     }
-
-    // -- from_value paths (value-tree deserializer) ----------------------------
 
     #[test]
     fn test_from_value_set_as_vec() {
@@ -1021,28 +1007,12 @@ mod tests {
     }
 
     #[test]
-    fn test_from_value_i32() {
-        assert_eq!(from_value::<i32>(Edn::Int(100000)).unwrap(), 100000);
-    }
-
-    #[test]
-    fn test_from_value_i32_error() {
-        assert!(from_value::<i32>(Edn::Int(i64::MAX)).is_err());
-    }
-
-    #[test]
-    fn test_from_value_u16() {
+    fn test_from_value_int_narrowing() {
+        assert_eq!(from_value::<i32>(Edn::Int(100000)).unwrap(), 100000i32);
         assert_eq!(from_value::<u16>(Edn::Int(1000)).unwrap(), 1000u16);
-    }
-
-    #[test]
-    fn test_from_value_u32() {
         assert_eq!(from_value::<u32>(Edn::Int(100000)).unwrap(), 100000u32);
-    }
-
-    #[test]
-    fn test_from_value_u64() {
         assert_eq!(from_value::<u64>(Edn::Int(100)).unwrap(), 100u64);
+        assert!(from_value::<i32>(Edn::Int(i64::MAX)).is_err());
     }
 
     #[test]
@@ -1060,12 +1030,8 @@ mod tests {
     }
 
     #[test]
-    fn test_from_value_f32_error() {
+    fn test_from_value_float_error() {
         assert!(from_value::<f32>(Edn::Bool(true)).is_err());
-    }
-
-    #[test]
-    fn test_from_value_f64_error() {
         assert!(from_value::<f64>(Edn::Bool(true)).is_err());
     }
 
@@ -1101,7 +1067,10 @@ mod tests {
     #[case(Edn::Symbol(Symbol::new("red")))]
     #[case(Edn::Str(Cow::Borrowed("red")))]
     fn test_from_value_enum_as_red(#[case] input: Edn<'static>) {
-        assert_eq!(Color::deserialize(EdnDeserializer(input)).unwrap(), Color::Red);
+        assert_eq!(
+            Color::deserialize(EdnDeserializer(input)).unwrap(),
+            Color::Red
+        );
     }
 
     #[test]
@@ -1127,8 +1096,6 @@ mod tests {
             .unwrap();
         assert_eq!(results, vec![1, 2]);
     }
-
-    // -- from_value: forwarded-to-any paths (bool, i64, char, unit, seq) ------
 
     #[test]
     fn test_from_value_bool() {
@@ -1210,7 +1177,13 @@ mod tests {
         m.insert(Edn::keyword("height"), Edn::Float(4.0));
         let val = Edn::Tagged(Cow::Borrowed("Named"), Box::new(Edn::Map(m)));
         let s: Shape = Shape::deserialize(EdnDeserializer(val)).unwrap();
-        assert_eq!(s, Shape::Named { width: 3.0, height: 4.0 });
+        assert_eq!(
+            s,
+            Shape::Named {
+                width: 3.0,
+                height: 4.0
+            }
+        );
     }
 
     #[test]

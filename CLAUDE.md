@@ -27,7 +27,7 @@
 - If a user corrects a factual claim: accept it as ground truth for the entire session. Never re-assert the original claim.
 
 ## Code Output
-- Return the simplest working solution. No over-engineering.
+- The simplest working solution is preferred unless it is significantly affects performance. No over-engineering.
 - No abstractions or helpers for single-use operations.
 - No speculative features or future-proofing.
 - No docstrings or comments on code that was not changed.

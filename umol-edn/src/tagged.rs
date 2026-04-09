@@ -7,7 +7,6 @@
 //! side, only `Edn::Tagged` is accepted.
 
 use std::borrow::Cow;
-
 #[cfg(feature = "serde")]
 use std::fmt;
 #[cfg(feature = "serde")]
@@ -20,9 +19,9 @@ use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::native::{FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 use crate::serde_tokens::TAGGED_TOKEN;
+use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN tagged literal `#tag value`.
 #[derive(Clone, Debug, PartialEq, Eq)]

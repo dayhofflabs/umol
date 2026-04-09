@@ -6,16 +6,16 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::{fmt, iter};
 
-use crate::collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
-use crate::error::EdnError;
-use crate::reader::read_string;
+#[cfg(feature = "bignum")]
+use bigdecimal::BigDecimal;
+#[cfg(feature = "bignum")]
+use num_bigint::BigInt;
 
 #[cfg(feature = "bignum")]
 pub use crate::bigdecimal::EdnBigDecimal;
-#[cfg(feature = "bignum")]
-use ::bigdecimal::BigDecimal;
-#[cfg(feature = "bignum")]
-use num_bigint::BigInt;
+use crate::collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
+use crate::error::EdnError;
+use crate::reader::read_string;
 
 /// A keyword value (`:name` or `:ns/name`).
 #[derive(Clone, Debug, Eq)]
@@ -581,8 +581,9 @@ impl Hash for Edn<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::hash::{DefaultHasher, Hash, Hasher};
+
+    use super::*;
 
     fn hash_of(v: &Edn<'_>) -> u64 {
         let mut h = DefaultHasher::new();
@@ -616,8 +617,6 @@ mod tests {
         assert_ne!(hash_of(&pos), hash_of(&neg));
     }
 
-    // -- Default, FromStr --
-
     #[test]
     fn test_edn_default() {
         assert_eq!(Edn::default(), Edn::Nil);
@@ -630,8 +629,6 @@ mod tests {
         assert!(v.is_vector());
         assert!(Edn::from_str("[invalid").is_err());
     }
-
-    // -- Symbol methods --
 
     #[test]
     fn test_symbol_owned() {
@@ -665,8 +662,6 @@ mod tests {
         assert_eq!(a.partial_cmp(&b), Some(Ordering::Less));
     }
 
-    // -- Keyword into_owned, ordering --
-
     #[test]
     fn test_keyword_into_owned() {
         let k = Keyword::new("key");
@@ -681,8 +676,6 @@ mod tests {
         assert!(a < b);
         assert_eq!(a.partial_cmp(&b), Some(Ordering::Less));
     }
-
-    // -- Type checks --
 
     #[test]
     fn test_edn_is_checks() {
@@ -703,8 +696,6 @@ mod tests {
         assert!(!Edn::Nil.is_bool());
         assert!(!Edn::Int(1).is_float());
     }
-
-    // -- Accessors --
 
     #[test]
     fn test_edn_as_bool() {
@@ -779,8 +770,6 @@ mod tests {
         assert!(Edn::Nil.as_set().is_none());
     }
 
-    // -- Numeric narrowing --
-
     #[test]
     fn test_edn_numeric_narrowing() {
         let v = Edn::Int(200);
@@ -795,14 +784,10 @@ mod tests {
         assert_eq!(Edn::Int(-1).as_u64(), None);
     }
 
-    // -- get_keyword on non-map --
-
     #[test]
     fn test_edn_get_keyword_non_map() {
         assert!(Edn::Nil.get_keyword("x").is_none());
     }
-
-    // -- iter --
 
     #[test]
     fn test_edn_iter_set() {
@@ -817,8 +802,6 @@ mod tests {
     fn test_edn_iter_non_collection() {
         assert_eq!(Edn::Int(5).iter().count(), 0);
     }
-
-    // -- into_owned --
 
     #[test]
     fn test_edn_into_owned() {
@@ -844,8 +827,6 @@ mod tests {
         }
     }
 
-    // -- Ord across variants and within variants --
-
     #[test]
     fn test_edn_ord_cross_variant() {
         assert!(Edn::Nil < Edn::Bool(false));
@@ -866,10 +847,7 @@ mod tests {
 
     #[test]
     fn test_edn_partial_ord() {
-        assert_eq!(
-            Edn::Int(1).partial_cmp(&Edn::Int(2)),
-            Some(Ordering::Less)
-        );
+        assert_eq!(Edn::Int(1).partial_cmp(&Edn::Int(2)), Some(Ordering::Less));
     }
 
     #[test]
@@ -893,8 +871,6 @@ mod tests {
         assert!(t1 < t3);
     }
 
-    // -- PartialEq across variants --
-
     #[test]
     fn test_edn_eq_cross_variant_false() {
         assert_ne!(Edn::Int(0), Edn::Float(0.0));
@@ -904,8 +880,6 @@ mod tests {
             Edn::Keyword(Keyword::new("foo"))
         );
     }
-
-    // -- PartialEq within each variant --
 
     #[test]
     fn test_edn_eq_tagged() {

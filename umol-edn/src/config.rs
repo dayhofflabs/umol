@@ -48,7 +48,10 @@ impl TagReaders {
 
     /// Look up a reader for the given tag.
     pub fn get(&self, tag: &str) -> Option<&TagFn> {
-        self.readers.iter().find(|(k, _)| &**k == tag).map(|(_, f)| f)
+        self.readers
+            .iter()
+            .find(|(k, _)| &**k == tag)
+            .map(|(_, f)| f)
     }
 }
 

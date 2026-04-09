@@ -67,7 +67,7 @@ fn skip_discards(tokens: &mut &[TokenTree]) -> Result<(), String> {
             return Ok(());
         }
         let is_discard = matches!(&tokens[0], TokenTree::Punct(p) if p.as_char() == '#')
-            && matches!(&tokens[1], TokenTree::Ident(id) if id.to_string() == "_");
+            && matches!(&tokens[1], TokenTree::Ident(id) if id == "_");
         if !is_discard {
             return Ok(());
         }
@@ -280,7 +280,7 @@ fn parse_hash(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String> {
         Some(TokenTree::Punct(p)) if p.as_char() == '#' => {
             Err("## special floats (NaN, Inf, -Inf) are not supported in EDN".into())
         }
-        Some(TokenTree::Ident(id)) if id.to_string() == "_" => {
+        Some(TokenTree::Ident(id)) if id == "_" => {
             // #_ discard — already handled in skip_discards, but can appear mid-value
             *tokens = &tokens[1..];
             parse_value(tokens)?; // discard

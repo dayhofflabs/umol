@@ -1,43 +1,32 @@
-//! Native conversion traits between Rust types and EDN values.
+//! Conversion traits between Rust types and [`Edn`] values.
 //!
-//! This module defines the primary deserialization and serialization API for
-//! umol-edn. It is independent of `serde::Deserialize` / `serde::Serialize`
-//! and operates directly on `Edn<'de>` values, which means it can express
-//! the full EDN data model — keywords, symbols, sets, tagged literals,
-//! arbitrary-precision numbers — without the wrapper-newtype gymnastics
-//! that the serde data model forces on EDN-specific features.
+//! [`FromEdn`] builds a Rust value from a parsed [`Edn`] tree, and [`ToEdn`]
+//! turns a Rust value into an [`Edn`] tree. Together they are the primary
+//! deserialization and serialization API for umol-edn and support the full
+//! EDN data model — keywords, symbols, sets, tagged literals, and
+//! arbitrary-precision numbers.
 //!
-//! ## Design
+//! ## The two traits
 //!
-//! The two traits are deliberately minimal:
-//!
-//! - [`FromEdn`] takes a borrowed `&Edn<'de>` (a parsed tree) and produces
-//!   a value. It carries a lifetime parameter so implementations can borrow
+//! - [`FromEdn`] takes a borrowed `&Edn<'de>` and produces a value. It
+//!   carries a `'de` lifetime parameter so implementations can borrow
 //!   string and key references from the source buffer when zero-copy is
 //!   wanted.
 //! - [`ToEdn`] takes `&self` and produces an `Edn<'_>` borrowing from the
 //!   value where possible.
 //!
-//! ## The `from_edn_str` escape hatch
+//! ## Parsing from a string
 //!
-//! [`FromEdn::from_edn_str`] has a default implementation that parses to a
-//! tree and then calls `from_edn`. This is the path that supports the full
-//! EDN data model uniformly. For hot types where parse-time tree
-//! construction is the bottleneck, the trait permits an override that fuses
-//! parsing and deserialization in a single pass — the same architectural
-//! shape as the legacy `serde::Deserialize`-based streaming path, but
-//! per-type and EDN-native.
-//!
-//! Implementations that override `from_edn_str` must produce a value
-//! equivalent to what `Self::from_edn(&read_string(input)?)` would have
-//! produced. This is the contract that lets callers reach for the fast path
-//! without changing semantics.
+//! [`FromEdn::from_edn_str`] has a default implementation that calls
+//! [`read_string`] to build a tree and then dispatches to `from_edn`. This
+//! is correct for every type. Hot types may override `from_edn_str` to fuse
+//! parsing and deserialization in a single pass; the override must produce
+//! the same value and the same errors as the default for every input.
 //!
 //! ## Lifetimes
 //!
-//! `FromEdn<'de>` follows the same convention as `serde::Deserialize<'de>`:
 //! `'de` is the lifetime of the source the implementation is allowed to
-//! borrow from. A type that wants to borrow string slices declares
+//! borrow from. A type that borrows string slices declares
 //! `MyType<'a>: FromEdn<'a>`. A type that always owns its strings is
 //! `MyType: for<'de> FromEdn<'de>`.
 
@@ -45,38 +34,31 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::Hash;
 
-use crate::collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
-use crate::edn::{Edn, Keyword, Symbol};
-use crate::error::EdnError;
-use crate::reader::read_string;
-
-#[cfg(feature = "bignum")]
-use crate::edn::EdnBigDecimal;
 #[cfg(feature = "bignum")]
 use bigdecimal::BigDecimal;
 #[cfg(feature = "bignum")]
 use num_bigint::BigInt;
 
+use crate::collections::{EdnMap, EdnSeq, EdnSet};
+#[cfg(feature = "bignum")]
+use crate::edn::EdnBigDecimal;
+use crate::edn::{Edn, Keyword, Symbol};
+use crate::error::EdnError;
+use crate::reader::read_string;
+
 // Variant discriminator strings come from `Edn::kind()`.
 
 /// Build `Self` from an EDN value.
 ///
-/// This trait is the primary deserialization entry point for umol-edn types.
-/// It replaces direct use of `serde::Deserialize` for EDN-native types,
-/// allowing access to the full EDN data model (keywords, symbols, sets,
-/// tagged literals, big numbers) without serde wrapper indirection.
-///
 /// # Implementing
 ///
 /// At minimum, implementations must provide [`from_edn`]. The default
-/// [`from_edn_str`] implementation will parse EDN source to a tree and
-/// dispatch through `from_edn`, which is correct for all types and matches
-/// MOL parser performance for typical molecule DSL inputs.
+/// [`from_edn_str`] parses EDN source to a tree and dispatches through
+/// `from_edn`, which is correct for all types.
 ///
 /// Performance-critical types may override [`from_edn_str`] to fuse parsing
-/// and deserialization in a single pass. The override is required to be
-/// observationally equivalent to the default — same value, same errors —
-/// for any input.
+/// and deserialization in a single pass. The override must be observationally
+/// equivalent to the default — same value, same errors — for every input.
 ///
 /// # Lifetime
 ///
@@ -115,97 +97,7 @@ pub trait FromEdn<'de>: Sized {
     }
 }
 
-/// Builder helper for `FromEdn` impls that consume keyword-keyed maps.
-///
-/// `EdnMapHelper` tracks which keys have been read so that strict-mode
-/// [`finalize`](Self::finalize) can flag unconsumed keys, and it carries a
-/// path prefix used in error messages for nested structures.
-///
-/// The helper assumes maps use keyword keys, which is the convention for the
-/// molecule DSL and other umol-edn consumers. Non-keyword keys in the map are
-/// ignored by `finalize`'s unknown-key check.
-///
-/// # Path tracking
-///
-/// `path` segments are pushed by callers wrapping nested helpers — e.g. an
-/// outer impl can call `EdnMapHelper::with_path(inner_map, vec![":atoms".into()])`
-/// when descending into a nested map field. Errors raised by the helper itself
-/// (`MissingField`, `UnknownField`) carry that path. Errors raised by inner
-/// `T::from_edn` calls do not currently propagate the path; that requires a
-/// trait-level context parameter and is left for a follow-up.
-pub struct EdnMapHelper<'m, 'de: 'm> {
-    map: &'m EdnMap<'de>,
-    path: Vec<String>,
-    consumed: HashSet<String>,
-}
-
-impl<'m, 'de: 'm> EdnMapHelper<'m, 'de> {
-    /// Create a helper rooted at `<root>` (empty path).
-    pub fn new(map: &'m EdnMap<'de>) -> Self {
-        Self {
-            map,
-            path: Vec::new(),
-            consumed: HashSet::with_capacity(map.len()),
-        }
-    }
-
-    /// Create a helper with an explicit path prefix for nested error messages.
-    pub fn with_path(map: &'m EdnMap<'de>, path: Vec<String>) -> Self {
-        Self {
-            map,
-            path,
-            consumed: HashSet::with_capacity(map.len()),
-        }
-    }
-
-    /// Read a required keyword-keyed field. Errors with `MissingField` if
-    /// absent, or with whatever variant `T::from_edn` returns on the value.
-    pub fn required<T: FromEdn<'de>>(&mut self, key: &str) -> Result<T, EdnError> {
-        let value =
-            self.map
-                .get_ref(EdnKeyRef::keyword(key))
-                .ok_or_else(|| EdnError::MissingField {
-                    key: key.to_string(),
-                    path: self.path.clone(),
-                })?;
-        self.consumed.insert(key.to_string());
-        T::from_edn(value)
-    }
-
-    /// Read an optional keyword-keyed field. Returns `Ok(None)` if absent.
-    pub fn optional<T: FromEdn<'de>>(&mut self, key: &str) -> Result<Option<T>, EdnError> {
-        match self.map.get_ref(EdnKeyRef::keyword(key)) {
-            Some(value) => {
-                self.consumed.insert(key.to_string());
-                T::from_edn(value).map(Some)
-            }
-            None => Ok(None),
-        }
-    }
-
-    /// Strict-mode close: error with `UnknownField` if any keyword key in the
-    /// map was not read via `required` or `optional`.
-    pub fn finalize(self) -> Result<(), EdnError> {
-        for (k, _) in self.map.iter() {
-            if let Edn::Keyword(kw) = k {
-                if !self.consumed.contains(kw.as_str()) {
-                    return Err(EdnError::UnknownField {
-                        key: kw.as_str().to_string(),
-                        path: self.path,
-                    });
-                }
-            }
-        }
-        Ok(())
-    }
-}
-
 /// Convert `&self` into an EDN value.
-///
-/// This trait is the primary serialization entry point for umol-edn types.
-/// It replaces direct use of `serde::Serialize` for EDN-native types,
-/// allowing emission of EDN-specific constructs (keywords, sets, tagged
-/// literals) without serde wrapper indirection.
 ///
 /// # Borrowing
 ///
@@ -815,8 +707,9 @@ impl ToEdn for EdnBigDecimal {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case::bool_true(true)]
@@ -964,43 +857,6 @@ mod tests {
         let k = Keyword::new("atoms");
         let e = k.to_edn();
         assert_eq!(Keyword::from_edn(&e).unwrap(), k);
-    }
-
-    #[test]
-    fn test_map_helper_required_and_optional() {
-        let mut m = EdnMap::new();
-        m.insert(Edn::keyword("name"), Edn::Str(Cow::Borrowed("water")));
-        m.insert(Edn::keyword("count"), Edn::Int(2));
-        let mut h = EdnMapHelper::new(&m);
-        let name: String = h.required("name").unwrap();
-        let count: i32 = h.required("count").unwrap();
-        let charge: Option<i32> = h.optional("charge").unwrap();
-        assert_eq!(name, "water");
-        assert_eq!(count, 2);
-        assert_eq!(charge, None);
-        h.finalize().unwrap();
-    }
-
-    #[test]
-    fn test_map_helper_missing_required() {
-        let m = EdnMap::new();
-        let mut h = EdnMapHelper::new(&m);
-        let err = h.required::<String>("name").unwrap_err();
-        assert!(matches!(err, EdnError::MissingField { .. }));
-    }
-
-    #[test]
-    fn test_map_helper_finalize_unknown_key() {
-        let mut m = EdnMap::new();
-        m.insert(Edn::keyword("name"), Edn::Str(Cow::Borrowed("water")));
-        m.insert(Edn::keyword("extra"), Edn::Int(0));
-        let mut h = EdnMapHelper::new(&m);
-        let _name: String = h.required("name").unwrap();
-        let err = h.finalize().unwrap_err();
-        match err {
-            EdnError::UnknownField { key, .. } => assert_eq!(key, "extra"),
-            other => panic!("expected UnknownField, got {other:?}"),
-        }
     }
 
     #[test]

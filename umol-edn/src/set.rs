@@ -11,13 +11,12 @@
 //! only `Edn::Set`; `Edn::Vector` and `Edn::List` are rejected.
 
 use std::collections::HashSet;
-use std::hash::Hash;
-use std::ops::{Deref, DerefMut};
-
 #[cfg(feature = "serde")]
 use std::fmt;
+use std::hash::Hash;
 #[cfg(feature = "serde")]
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 #[cfg(feature = "serde")]
 use serde::de::{Deserialize, DeserializeSeed, Deserializer, SeqAccess, Visitor};
@@ -26,9 +25,9 @@ use serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::native::{FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 use crate::serde_tokens::SET_TOKEN;
+use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN set. Always serializes as `#{...}` in EDN.
 #[derive(Clone, Debug, Default)]

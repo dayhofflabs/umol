@@ -21,21 +21,3 @@ pub const VALUE_TOKEN: &str = "$edn::value";
 pub const BIGINT_TOKEN: &str = "$edn::bigint";
 #[cfg(feature = "bignum")]
 pub const BIGDECIMAL_TOKEN: &str = "$edn::bigdecimal";
-
-/// Returns `true` if `name` is one of the EDN wrapper newtype-struct tokens.
-#[inline]
-pub fn is_edn_wrapper_token(name: &str) -> bool {
-    matches!(
-        name,
-        KEYWORD_TOKEN | SYMBOL_TOKEN | LIST_TOKEN | SET_TOKEN | TAGGED_TOKEN
-    ) || {
-        #[cfg(feature = "bignum")]
-        {
-            matches!(name, BIGINT_TOKEN | BIGDECIMAL_TOKEN)
-        }
-        #[cfg(not(feature = "bignum"))]
-        {
-            false
-        }
-    }
-}

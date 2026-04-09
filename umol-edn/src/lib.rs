@@ -1,44 +1,37 @@
-//! EDN (Extensible Data Notation) parser, formatter, and serde integration.
+//! EDN (Extensible Data Notation) reader, writer, and Rust type bindings.
 //!
-//! # Architecture
+//! # Overview
 //!
-//! `umol-edn` exposes two parallel paths for moving between Rust values
-//! and EDN text:
+//! The reader turns EDN text into an [`Edn`] tree. [`FromEdn`] / [`ToEdn`]
+//! move between that tree and Rust types and cover the full EDN data model
+//! (keywords, symbols, lists, sets, tagged literals, arbitrary-precision
+//! numbers). [`FormatConfig`] drives the pretty-printer.
 //!
-//! - **Native path** — [`FromEdn`] / [`ToEdn`]. Walks a pre-parsed
-//!   [`Edn`] tree and supports the full EDN data model. Hot types can
-//!   override [`FromEdn::from_edn_str`] for single-pass
-//!   parser-deserializer fusion.
-//! - **Serde path** — [`de::from_str`] / [`ser::to_string`] behind the
-//!   `serde` feature. Parses into an [`Edn`] tree and then walks it
-//!   through an [`EdnDeserializer`](de::EdnDeserializer) /
-//!   [`EdnSerializer`](ser::EdnSerializer). Feature parity with the
-//!   native path is achieved through typed wrappers ([`EdnKeyword`],
-//!   [`EdnSymbol`], [`EdnList`], [`EdnHashSet`], [`EdnTagged`],
-//!   [`EdnBigInt`], [`EdnBigDecimal`]) plus the lossless dynamic
-//!   [`Value`].
+//! ```text
+//! EDN text  ──read_string──▶  Edn tree  ──FromEdn──▶  Rust value
+//! Rust value ──ToEdn────────▶  Edn tree  ──to_string_with(&FormatConfig)──▶ EDN text
+//! ```
 //!
-//! # Feature matrix
+//! Hot types may override [`FromEdn::from_edn_str`] to fuse parsing and
+//! construction in a single pass when the intermediate tree would be
+//! wasted.
 //!
-//! | EDN variant        | Native                    | Serde wrapper                    |
-//! |--------------------|---------------------------|----------------------------------|
-//! | Nil / Bool / Int / Float / Char / Str | built-in       | built-in                         |
-//! | Vector             | `Vec<T>`                  | `Vec<T>`                         |
-//! | Map                | `HashMap` / struct        | `HashMap` / struct               |
-//! | Keyword            | [`EdnKeyword`]            | [`EdnKeyword`]                   |
-//! | Symbol             | [`EdnSymbol`]             | [`EdnSymbol`]                    |
-//! | List               | [`EdnList`]               | [`EdnList`]                      |
-//! | Set                | [`EdnHashSet`]            | [`EdnHashSet`]                   |
-//! | Tagged (dynamic)   | [`EdnTagged`]             | [`EdnTagged`]                    |
-//! | Tagged (variant)   | enum `#[derive(FromEdn)]` | `enum E { Variant(T) }`          |
-//! | BigInt             | [`EdnBigInt`] (bignum)    | [`EdnBigInt`] (bignum)           |
-//! | BigDecimal         | [`EdnBigDecimal`] (bignum)| [`EdnBigDecimal`] (bignum)       |
-//! | Dynamic, lossless  | [`Edn`] / [`Value`]       | [`Value`]                        |
+//! # Typed wrappers for EDN-only constructs
 //!
-//! Every serde wrapper degrades predictably when serialized over a
-//! foreign format: keywords and symbols become strings, lists and sets
-//! become arrays, tagged literals become `[tag, value]` tuples, and
-//! bignum values become strings.
+//! When a value holds an EDN-only construct (keyword, symbol, list, set,
+//! tagged literal, bignum) but needs to pass through another format (JSON,
+//! YAML, a serde-powered pipeline), use the wrapper type so the construct
+//! degrades predictably: [`EdnKeyword`], [`EdnSymbol`], [`EdnList`],
+//! [`EdnHashSet`], [`EdnTagged`], [`EdnBigInt`], [`EdnBigDecimal`]. The
+//! dynamic [`Value`] is lossless and the preferred choice for
+//! schema-agnostic data.
+//!
+//! # Optional features
+//!
+//! - `serde` — adds [`de::from_str`] and [`ser::to_string`] for types
+//!   implementing `serde::Deserialize` / `serde::Serialize`.
+//! - `bignum` — enables [`EdnBigInt`] and [`EdnBigDecimal`].
+//! - `macros` — re-exports `#[derive(FromEdn, ToEdn)]` and the `edn!` macro.
 
 #[cfg(feature = "bignum")]
 pub mod bigdecimal;
@@ -52,7 +45,6 @@ pub mod error;
 pub mod formatter;
 pub mod keyword;
 pub mod list;
-pub mod native;
 pub mod parser;
 pub mod reader;
 pub mod set;
@@ -60,6 +52,7 @@ pub mod streaming;
 pub mod symbol;
 pub mod tagged;
 pub mod tags;
+pub mod traits;
 pub mod value;
 
 #[cfg(feature = "serde")]
@@ -67,31 +60,30 @@ pub mod de;
 #[cfg(feature = "serde")]
 pub mod ser;
 #[cfg(feature = "serde")]
-pub mod serde_tokens;
+pub(crate) mod serde_tokens;
 
 #[cfg(feature = "bignum")]
 pub use bigdecimal::EdnBigDecimal;
 #[cfg(feature = "bignum")]
 pub use bigint::EdnBigInt;
-pub use collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
+pub use collections::{EdnKeyRef, EdnMap, EdnMapHelper, EdnSeq, EdnSet};
 pub use config::{DuplicateKeyPolicy, ParseConfig, TagFn, TagReaders};
+#[cfg(feature = "serde")]
+pub use de::{from_str, from_str_with, from_value, EdnDeserializer};
 pub use edn::{Edn, Keyword, Symbol};
 pub use error::EdnError;
-pub use formatter::EdnFormatter;
+pub use formatter::FormatConfig;
+#[cfg(feature = "serde")]
+pub use formatter::{to_string_pretty, to_string_with};
 pub use keyword::EdnKeyword;
 pub use list::EdnList;
-pub use native::{EdnMapHelper, FromEdn, ToEdn};
+pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader};
+#[cfg(feature = "serde")]
+pub use ser::{to_string, to_value, EdnSerializer};
 pub use set::EdnHashSet;
 pub use symbol::EdnSymbol;
 pub use tagged::EdnTagged;
-pub use value::Value;
-#[cfg(feature = "serde")]
-pub use de::{from_str, from_str_with, from_value, EdnDeserializer};
-#[cfg(feature = "serde")]
-pub use formatter::{to_string_pretty, to_string_with};
-#[cfg(feature = "serde")]
-pub use ser::{to_string, to_value, EdnSerializer};
-pub use reader::{read_all, read_all_with, read_string, read_string_with, Reader};
-
+pub use traits::{FromEdn, ToEdn};
 #[cfg(feature = "macros")]
 pub use umol_edn_macros::{edn, FromEdn, ToEdn};
+pub use value::Value;

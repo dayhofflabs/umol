@@ -86,7 +86,10 @@ impl<'de> EdnStreamDeserializer<'de> {
 
         // :/ and :/foo are not legal keywords per the EDN spec.
         if self.input.as_bytes().get(self.pos) == Some(&b'/') {
-            return Err(EdnError::UnexpectedToken { offset: self.pos, found: '/' });
+            return Err(EdnError::UnexpectedToken {
+                offset: self.pos,
+                found: '/',
+            });
         }
         self.parse_symbol_str().map(Cow::Borrowed)
     }
@@ -116,8 +119,9 @@ impl<'de> EdnStreamDeserializer<'de> {
 
     fn parse_number_i64(&mut self) -> Result<i64, EdnError> {
         let s = self.scan_number_str()?;
-        s.parse::<i64>()
-            .map_err(|_| EdnError::InvalidNumber { offset: self.pos - s.len() })
+        s.parse::<i64>().map_err(|_| EdnError::InvalidNumber {
+            offset: self.pos - s.len(),
+        })
     }
 
     fn scan_number_str(&mut self) -> Result<&'de str, EdnError> {
@@ -190,7 +194,8 @@ impl<'de> EdnStreamDeserializer<'de> {
         self.scratch.clear();
         // Copy bytes before the first backslash.
         if let Some(bs) = memchr::memchr(b'\\', &bytes[self.pos..]) {
-            self.scratch.extend_from_slice(&bytes[self.pos..self.pos + bs]);
+            self.scratch
+                .extend_from_slice(&bytes[self.pos..self.pos + bs]);
             self.pos += bs;
         }
         loop {
@@ -207,7 +212,9 @@ impl<'de> EdnStreamDeserializer<'de> {
                 b'\\' => {
                     let esc_offset = self.pos;
                     self.pos += 1;
-                    let esc = self.next_byte().map_err(|_| EdnError::InvalidEscape { offset: esc_offset })?;
+                    let esc = self
+                        .next_byte()
+                        .map_err(|_| EdnError::InvalidEscape { offset: esc_offset })?;
                     match esc {
                         b't' => self.scratch.push(b'\t'),
                         b'r' => self.scratch.push(b'\r'),
@@ -233,7 +240,8 @@ impl<'de> EdnStreamDeserializer<'de> {
                     }
                     // Batch copy until next " or \.
                     if let Some(span) = memchr::memchr2(b'"', b'\\', &bytes[self.pos..]) {
-                        self.scratch.extend_from_slice(&bytes[self.pos..self.pos + span]);
+                        self.scratch
+                            .extend_from_slice(&bytes[self.pos..self.pos + span]);
                         self.pos += span;
                     } else {
                         self.scratch.extend_from_slice(&bytes[self.pos..]);
@@ -250,15 +258,29 @@ impl<'de> EdnStreamDeserializer<'de> {
 
     fn skip_value(&mut self) -> Result<(), EdnError> {
         self.skip_ws()?;
-        let b = self.peek().ok_or(EdnError::UnexpectedEof { offset: self.pos })?;
+        let b = self
+            .peek()
+            .ok_or(EdnError::UnexpectedEof { offset: self.pos })?;
         match b {
-            b'(' => { self.pos += 1; self.skip_delimited(b')') }
-            b'[' => { self.pos += 1; self.skip_delimited(b']') }
-            b'{' => { self.pos += 1; self.skip_delimited(b'}') }
+            b'(' => {
+                self.pos += 1;
+                self.skip_delimited(b')')
+            }
+            b'[' => {
+                self.pos += 1;
+                self.skip_delimited(b']')
+            }
+            b'{' => {
+                self.pos += 1;
+                self.skip_delimited(b'}')
+            }
             b'#' => {
                 self.pos += 1;
                 match self.peek() {
-                    Some(b'{') => { self.pos += 1; self.skip_delimited(b'}') }
+                    Some(b'{') => {
+                        self.pos += 1;
+                        self.skip_delimited(b'}')
+                    }
                     Some(b'_') => {
                         self.pos += 1;
                         self.skip_ws()?;
@@ -273,8 +295,14 @@ impl<'de> EdnStreamDeserializer<'de> {
                 }
             }
             b'"' => self.skip_string(),
-            b'\\' => { self.pos += 1; self.skip_atom() }
-            b':' => { self.pos += 1; self.skip_atom() }
+            b'\\' => {
+                self.pos += 1;
+                self.skip_atom()
+            }
+            b':' => {
+                self.pos += 1;
+                self.skip_atom()
+            }
             _ => self.skip_atom(),
         }
     }

@@ -1,12 +1,12 @@
 //! Serde `Serializer` for EDN. The compact path writes directly to a `String`;
 //! the tree path builds an `Edn<'static>` so the size-aware formatter can lay
 //! it out.
-
 use std::borrow::Cow;
 use std::fmt::Write;
 #[cfg(feature = "bignum")]
 use std::str::FromStr;
-
+#[cfg(feature = "bignum")]
+use bigdecimal::BigDecimal;
 use serde::ser::{
     SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
     SerializeTupleStruct, SerializeTupleVariant,
@@ -14,9 +14,13 @@ use serde::ser::{
 use serde::{Serialize, Serializer};
 
 use crate::collections::{EdnMap, EdnSeq};
+#[cfg(feature = "bignum")]
+use crate::edn::EdnBigDecimal;
 use crate::edn::{Edn, Keyword};
 use crate::error::EdnError;
-use crate::formatter::EdnFormatter;
+use crate::formatter::FormatConfig;
+#[cfg(feature = "bignum")]
+use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
 use crate::serde_tokens::{KEYWORD_TOKEN, LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN};
 
 /// Serialize a value to a compact EDN string.
@@ -43,13 +47,13 @@ pub fn to_value<T: Serialize>(value: &T) -> Result<Edn<'static>, EdnError> {
 
 /// Serialize a value to a pretty-printed EDN string with default formatting.
 pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, EdnError> {
-    to_string_with(value, &EdnFormatter::default())
+    to_string_with(value, &FormatConfig::default())
 }
 
 /// Serialize a value to an EDN string formatted with `fmt`. Builds an
 /// `Edn<'static>` and lays it out with [`Edn::to_string_with`], so the
 /// formatter's width and compaction settings apply uniformly.
-pub fn to_string_with<T: Serialize>(value: &T, fmt: &EdnFormatter) -> Result<String, EdnError> {
+pub fn to_string_with<T: Serialize>(value: &T, fmt: &FormatConfig) -> Result<String, EdnError> {
     let edn = to_value(value)?;
     Ok(edn.to_string_with(fmt))
 }
@@ -127,7 +131,7 @@ fn write_escaped_str(out: &mut String, s: &str) {
     out.push('"');
 }
 
-impl<'a> Serializer for &'a mut EdnSerializer {
+impl Serializer for &mut EdnSerializer {
     type Ok = ();
     type Error = EdnError;
     type SerializeSeq = Self;
@@ -276,13 +280,13 @@ impl<'a> Serializer for &'a mut EdnSerializer {
     ) -> Result<(), Self::Error> {
         #[cfg(feature = "bignum")]
         {
-            if name == crate::serde_tokens::BIGINT_TOKEN {
+            if name == BIGINT_TOKEN {
                 self.bigint_mode = true;
                 let result = value.serialize(&mut *self);
                 self.bigint_mode = false;
                 return result;
             }
-            if name == crate::serde_tokens::BIGDECIMAL_TOKEN {
+            if name == BIGDECIMAL_TOKEN {
                 self.bigdec_mode = true;
                 let result = value.serialize(&mut *self);
                 self.bigdec_mode = false;
@@ -413,7 +417,10 @@ impl<'a> Serializer for &'a mut EdnSerializer {
 /// (i.e. the previous char is the open delimiter of a vector, set, or list).
 #[inline]
 fn at_seq_start(output: &str) -> bool {
-    matches!(output.as_bytes().last(), Some(b'[') | Some(b'{') | Some(b'('))
+    matches!(
+        output.as_bytes().last(),
+        Some(b'[') | Some(b'{') | Some(b'(')
+    )
 }
 
 impl SerializeSeq for &mut EdnSerializer {
@@ -695,8 +702,8 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
         #[cfg(feature = "bignum")]
         if self.bigdec_mode {
             self.bigdec_mode = false;
-            return bigdecimal::BigDecimal::from_str(v)
-                .map(|d| Edn::BigDecimal(crate::edn::EdnBigDecimal::new(d)))
+            return BigDecimal::from_str(v)
+                .map(|d| Edn::BigDecimal(EdnBigDecimal::new(d)))
                 .map_err(|e| EdnError::Custom(format!("invalid bigdecimal {v:?}: {e}")));
         }
         Ok(Edn::Str(Cow::Owned(v.to_string())))
@@ -738,13 +745,13 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
     ) -> Result<Self::Ok, Self::Error> {
         #[cfg(feature = "bignum")]
         {
-            if name == crate::serde_tokens::BIGINT_TOKEN {
+            if name == BIGINT_TOKEN {
                 self.bigint_mode = true;
                 let result = value.serialize(&mut *self);
                 self.bigint_mode = false;
                 return result;
             }
-            if name == crate::serde_tokens::BIGDECIMAL_TOKEN {
+            if name == BIGDECIMAL_TOKEN {
                 self.bigdec_mode = true;
                 let result = value.serialize(&mut *self);
                 self.bigdec_mode = false;
@@ -912,9 +919,7 @@ impl TreeSeqSerializer<'_> {
                         )));
                     }
                     None => {
-                        return Err(EdnError::Custom(
-                            "tagged literal missing tag".to_string(),
-                        ));
+                        return Err(EdnError::Custom("tagged literal missing tag".to_string()));
                     }
                 };
                 let inner = iter
@@ -1097,7 +1102,7 @@ mod tests {
     use crate::keyword::EdnKeyword;
     use crate::reader::read_string;
     use crate::ser::{to_string, to_string_pretty, to_string_with, to_value, EdnSerializer};
-    use crate::EdnFormatter;
+    use crate::FormatConfig;
 
     #[rstest]
     #[case(true, "true")]
@@ -1438,7 +1443,7 @@ mod tests {
             bonds: vec![(0, 1, "single".into()), (1, 2, "double".into())],
             charge: -1,
         };
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             line_width: Some(30),
             ..Default::default()
         };

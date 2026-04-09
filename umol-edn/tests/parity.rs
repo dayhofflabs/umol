@@ -22,15 +22,12 @@ use std::collections::HashMap;
 
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
-
-use umol_edn::{
-    config::ParseConfig,
-    de::{from_str, from_str_with},
-    edn::Edn,
-    native::{FromEdn, ToEdn},
-    ser::to_string,
-    EdnHashSet, EdnKeyword, EdnList, EdnSymbol, EdnTagged, Value,
-};
+use umol_edn::config::ParseConfig;
+use umol_edn::de::{from_str, from_str_with};
+use umol_edn::edn::Edn;
+use umol_edn::ser::to_string;
+use umol_edn::traits::{FromEdn, ToEdn};
+use umol_edn::{EdnHashSet, EdnKeyword, EdnList, EdnSymbol, EdnTagged, Value};
 
 /// Parse with `allow_unknown_tags = true`, for tests that exercise dynamic
 /// tags (`EdnTagged<T>` with caller-chosen tag names, `#Variant` enum
@@ -315,8 +312,9 @@ fn test_parity_bigint_json_fallback_is_string() {
 #[cfg(feature = "bignum")]
 #[test]
 fn test_parity_bigdecimal_serde_edn_roundtrip() {
-    use bigdecimal::BigDecimal;
     use std::str::FromStr;
+
+    use bigdecimal::BigDecimal;
     let d = EdnBigDecimal::new(BigDecimal::from_str("3.14159").unwrap());
     let s = to_string(&d).unwrap();
     assert_eq!(s, "3.14159M");

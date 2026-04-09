@@ -22,9 +22,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::edn::{Edn, Symbol};
 use crate::error::EdnError;
-use crate::native::{FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 use crate::serde_tokens::SYMBOL_TOKEN;
+use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN symbol (`name` or `ns/name`). Always serializes as a symbol
 /// in EDN.

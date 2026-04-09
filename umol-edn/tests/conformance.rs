@@ -10,9 +10,9 @@ use std::str::FromStr;
 use rstest::rstest;
 use serde::Deserialize;
 use umol_edn::config::{DuplicateKeyPolicy, ParseConfig, TagReaders};
+use umol_edn::de::{from_str, from_str_with};
 use umol_edn::edn::{Edn, Symbol};
 use umol_edn::error::EdnError;
-use umol_edn::de::{from_str, from_str_with};
 use umol_edn::{read_all_with, read_string_with, EdnMap, EdnSet};
 
 fn cfg() -> ParseConfig {
@@ -204,14 +204,11 @@ fn test_formfeed_backspace_rejected(#[case] input: &str) {
     assert!(parse(input).is_err(), "Edn should reject {input}");
 }
 
-#[test]
-fn test_backslash_space_invalid() {
-    assert!(parse(r"\ ").is_err());
-}
-
-#[test]
-fn test_multichar_error() {
-    assert!(parse(r"\abc").is_err());
+#[rstest]
+#[case(r"\ ")]
+#[case(r"\abc")]
+fn test_characters_error(#[case] input: &str) {
+    assert!(parse(input).is_err());
 }
 
 #[test]
@@ -275,14 +272,11 @@ fn test_empty_prefix_or_name(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
 
-#[test]
-fn test_multiple_slashes_rejected() {
-    assert!(parse("a/b/c").is_err(), "Edn should reject a/b/c");
-}
-
-#[test]
-fn test_post_slash_digit_rejected() {
-    assert!(parse("foo/1bar").is_err());
+#[rstest]
+#[case("a/b/c")]
+#[case("foo/1bar")]
+fn test_symbol_slash_rejected(#[case] input: &str) {
+    assert!(parse(input).is_err());
 }
 
 #[rstest]
@@ -829,10 +823,13 @@ fn test_comment_inside_vector() {
 fn test_discard(#[case] input: &str, #[case] expected: Vec<i64>) {
     let parsed = parse(input).unwrap();
     let items: Vec<i64> = match parsed {
-        Edn::Vector(v) => v.iter().map(|e| match e {
-            Edn::Int(n) => *n,
-            _ => panic!("expected int, got {e:?}"),
-        }).collect(),
+        Edn::Vector(v) => v
+            .iter()
+            .map(|e| match e {
+                Edn::Int(n) => *n,
+                _ => panic!("expected int, got {e:?}"),
+            })
+            .collect(),
         other => panic!("expected vector, got {other:?}"),
     };
     assert_eq!(items, expected);
@@ -980,21 +977,15 @@ fn test_error_deep_nesting() {
     assert!(parse(&input).is_ok());
 }
 
-/// Regression: fuzzer-found infinite loop in skip_atom with null bytes inside discard+collection.
-#[test]
-fn test_error_deser_null_bytes_no_hang() {
-    let input = "#_(#!V(\0\0\0\0\u{00ff}##";
+/// Fuzzer-found regressions: these inputs must not panic or hang.
+#[rstest]
+#[case("#_(#!V(\0\0\0\0\u{00ff}##")] // skip_atom infinite loop with null bytes in discard+collection
+#[case("#_\"\\")] // skip_string panic with trailing backslash at EOF
+fn test_error_deser_regression_vec(#[case] input: &str) {
     let _ = from_str::<Vec<i64>>(input);
 }
 
-/// Regression: fuzzer-found panic in skip_string with trailing backslash at EOF.
-#[test]
-fn test_error_deser_truncated_string_escape() {
-    let input = "#_\"\\";
-    let _ = from_str::<Vec<i64>>(input);
-}
-
-/// Regression: fuzzer-found panic slicing &str at non-char-boundary in \u escape parsing.
+/// Fuzzer-found panic slicing &str at non-char-boundary in \u escape parsing.
 #[test]
 fn test_error_deser_unicode_escape_multibyte_boundary() {
     let input = "\"\u{005c}u2\0`\u{07a0}";

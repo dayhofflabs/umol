@@ -1,4 +1,7 @@
-//! Configurable EDN formatter (pretty-printing).
+//! Pretty-printer for [`Edn`] values and configuration knobs for it.
+
+#[cfg(feature = "bignum")]
+use std::fmt::{self, Display, Write};
 
 #[cfg(feature = "serde")]
 use serde::Serialize;
@@ -10,9 +13,9 @@ use crate::error::EdnError;
 #[cfg(feature = "serde")]
 use crate::ser;
 
-/// Configurable EDN formatter.
+/// Layout knobs for [`Edn::to_string_with`] and the serde pretty path.
 #[derive(Clone, Debug)]
-pub struct EdnFormatter {
+pub struct FormatConfig {
     /// Indent string per nesting level.
     pub indent: String,
     /// Newline string (`"\n"` or `"\r\n"`).
@@ -33,7 +36,7 @@ pub struct EdnFormatter {
     pub sort_sets: bool,
 }
 
-impl Default for EdnFormatter {
+impl Default for FormatConfig {
     fn default() -> Self {
         Self {
             indent: "  ".to_string(),
@@ -49,17 +52,16 @@ impl Default for EdnFormatter {
     }
 }
 
-// TODO: Check if this should be moved to edn.rs
 impl<'a> Edn<'a> {
-    /// Format this value using the given formatter.
-    pub fn to_string_with(&self, fmt: &EdnFormatter) -> String {
+    /// Render this value to a string using `fmt` for layout.
+    pub fn to_string_with(&self, fmt: &FormatConfig) -> String {
         let mut out = String::new();
         write_edn(&mut out, self, fmt, 0);
         out
     }
 }
 
-fn write_edn(out: &mut String, edn: &Edn<'_>, fmt: &EdnFormatter, depth: usize) {
+fn write_edn(out: &mut String, edn: &Edn<'_>, fmt: &FormatConfig, depth: usize) {
     match edn {
         Edn::List(items) => write_seq(out, "(", ")", items, fmt, depth),
         Edn::Vector(items) => write_seq(out, "[", "]", items, fmt, depth),
@@ -120,11 +122,10 @@ fn itoa_len(n: i64) -> usize {
 }
 
 #[cfg(feature = "bignum")]
-fn bignum_display_len(v: &impl std::fmt::Display) -> usize {
-    use std::fmt::Write;
+fn bignum_display_len(v: &impl Display) -> usize {
     struct Counter(usize);
     impl Write for Counter {
-        fn write_str(&mut self, s: &str) -> std::fmt::Result {
+        fn write_str(&mut self, s: &str) -> fmt::Result {
             self.0 += s.len();
             Ok(())
         }
@@ -141,12 +142,12 @@ fn format_float_len(v: f64) -> usize {
 
 fn display_char_len(c: char) -> usize {
     match c {
-        '\n' => 8,  // \newline
-        '\r' => 7,  // \return
-        ' ' => 6,   // \space
-        '\t' => 4,  // \tab
+        '\n' => 8,                                    // \newline
+        '\r' => 7,                                    // \return
+        ' ' => 6,                                     // \space
+        '\t' => 4,                                    // \tab
         c if (c as u32) < 0x20 || c == '\u{7F}' => 6, // \uNNNN
-        _ => 1 + c.len_utf8(), // \ + char
+        _ => 1 + c.len_utf8(),                        // \ + char
     }
 }
 
@@ -178,10 +179,7 @@ fn seq_compact_len(items: &[Edn<'_>], overhead: usize, limit: usize) -> Option<u
     Some(total)
 }
 
-fn map_compact_len(
-    m: &EdnMap<'_>,
-    limit: usize,
-) -> Option<usize> {
+fn map_compact_len(m: &EdnMap<'_>, limit: usize) -> Option<usize> {
     if m.is_empty() {
         return Some(2);
     }
@@ -217,14 +215,14 @@ fn set_compact_len(items: &[&Edn<'_>], limit: usize) -> Option<usize> {
     Some(total)
 }
 
-fn fits_compact(fmt: &EdnFormatter, depth: usize, edn_len: Option<usize>) -> bool {
+fn fits_compact(fmt: &FormatConfig, depth: usize, edn_len: Option<usize>) -> bool {
     match (fmt.line_width, edn_len) {
         (Some(width), Some(len)) => depth * fmt.indent.len() + len <= width,
         _ => false,
     }
 }
 
-fn write_newline(out: &mut String, fmt: &EdnFormatter, depth: usize) {
+fn write_newline(out: &mut String, fmt: &FormatConfig, depth: usize) {
     out.push_str(&fmt.newline);
     for _ in 0..depth {
         out.push_str(&fmt.indent);
@@ -236,7 +234,7 @@ fn write_seq(
     open: &str,
     close: &str,
     items: &[Edn<'_>],
-    fmt: &EdnFormatter,
+    fmt: &FormatConfig,
     depth: usize,
 ) {
     if items.is_empty() {
@@ -266,12 +264,7 @@ fn write_seq(
     out.push_str(close);
 }
 
-fn write_map(
-    out: &mut String,
-    m: &EdnMap<'_>,
-    fmt: &EdnFormatter,
-    depth: usize,
-) {
+fn write_map(out: &mut String, m: &EdnMap<'_>, fmt: &FormatConfig, depth: usize) {
     if m.is_empty() {
         out.push_str("{}");
         return;
@@ -323,7 +316,7 @@ fn write_map(
     out.push('}');
 }
 
-fn write_set(out: &mut String, items: &[&Edn<'_>], fmt: &EdnFormatter, depth: usize) {
+fn write_set(out: &mut String, items: &[&Edn<'_>], fmt: &FormatConfig, depth: usize) {
     if items.is_empty() {
         out.push_str("#{}");
         return;
@@ -358,10 +351,7 @@ pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, EdnError> {
 
 /// Serialize a serde value to a formatted EDN string.
 #[cfg(feature = "serde")]
-pub fn to_string_with<T: Serialize>(
-    value: &T,
-    fmt: &EdnFormatter,
-) -> Result<String, EdnError> {
+pub fn to_string_with<T: Serialize>(value: &T, fmt: &FormatConfig) -> Result<String, EdnError> {
     ser::to_string_with(value, fmt)
 }
 
@@ -371,17 +361,17 @@ mod tests {
 
     use rstest::rstest;
 
+    use super::*;
     use crate::collections::EdnMap;
     use crate::edn::{Edn, Keyword};
     use crate::reader::read_string;
-    use super::*;
 
-    fn fmt_default() -> EdnFormatter {
-        EdnFormatter::default()
+    fn fmt_default() -> FormatConfig {
+        FormatConfig::default()
     }
 
-    fn fmt_narrow() -> EdnFormatter {
-        EdnFormatter {
+    fn fmt_narrow() -> FormatConfig {
+        FormatConfig {
             line_width: Some(20),
             ..Default::default()
         }
@@ -404,7 +394,9 @@ mod tests {
 
     #[test]
     fn test_formatter_long_vector_multiline() {
-        let items: Vec<Edn<'_>> = (0..20).map(|i| Edn::Str(Cow::Owned(format!("item-{i}")))).collect();
+        let items: Vec<Edn<'_>> = (0..20)
+            .map(|i| Edn::Str(Cow::Owned(format!("item-{i}"))))
+            .collect();
         let v = Edn::Vector(items.into());
         let result = v.to_string_with(&fmt_narrow());
         assert!(result.contains('\n'));
@@ -453,14 +445,20 @@ mod tests {
 
     #[test]
     fn test_formatter_empty_collections() {
-        assert_eq!(Edn::Vector(vec![].into()).to_string_with(&fmt_default()), "[]");
-        assert_eq!(Edn::List(vec![].into()).to_string_with(&fmt_default()), "()");
+        assert_eq!(
+            Edn::Vector(vec![].into()).to_string_with(&fmt_default()),
+            "[]"
+        );
+        assert_eq!(
+            Edn::List(vec![].into()).to_string_with(&fmt_default()),
+            "()"
+        );
         assert_eq!(Edn::Map(EdnMap::new()).to_string_with(&fmt_default()), "{}");
     }
 
     #[test]
     fn test_formatter_no_line_width() {
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             line_width: None,
             ..Default::default()
         };
@@ -471,14 +469,13 @@ mod tests {
 
     #[test]
     fn test_formatter_custom_indent() {
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             indent: "    ".to_string(),
             line_width: Some(10),
             ..Default::default()
         };
-        let v = Edn::Vector(vec![
-            Edn::Int(100), Edn::Int(200), Edn::Int(300), Edn::Int(400),
-        ].into());
+        let v =
+            Edn::Vector(vec![Edn::Int(100), Edn::Int(200), Edn::Int(300), Edn::Int(400)].into());
         let result = v.to_string_with(&fmt);
         assert!(result.contains("    "));
     }
@@ -488,7 +485,7 @@ mod tests {
         let mut m = EdnMap::new();
         m.insert(Edn::keyword("a"), Edn::Int(1));
         m.insert(Edn::keyword("b"), Edn::Int(2));
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             commas: true,
             ..Default::default()
         };
@@ -505,7 +502,7 @@ mod tests {
                 Edn::Str(Cow::Owned(format!("value-{i}"))),
             );
         }
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             commas: true,
             line_width: Some(20),
             ..Default::default()
@@ -516,7 +513,7 @@ mod tests {
 
     #[test]
     fn test_formatter_no_compact_seqs() {
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             compact_seqs: false,
             ..Default::default()
         };
@@ -527,7 +524,7 @@ mod tests {
 
     #[test]
     fn test_formatter_no_compact_maps() {
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             compact_maps: false,
             ..Default::default()
         };
@@ -539,7 +536,7 @@ mod tests {
 
     #[test]
     fn test_formatter_crlf() {
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             newline: "\r\n".to_string(),
             line_width: None,
             ..Default::default()
@@ -550,19 +547,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case(
-        "{:atoms [\"C\" \"O\"] :bonds [[0 1 :single]]}",
-        20,
-        true
-    )]
-    #[case(
-        "{:a 1}",
-        80,
-        false
-    )]
-    fn test_formatter_molecule_like(#[case] input: &str, #[case] width: usize, #[case] expect_multiline: bool) {
+    #[case("{:atoms [\"C\" \"O\"] :bonds [[0 1 :single]]}", 20, true)]
+    #[case("{:a 1}", 80, false)]
+    fn test_formatter_molecule_like(
+        #[case] input: &str,
+        #[case] width: usize,
+        #[case] expect_multiline: bool,
+    ) {
         let edn = read_string(input).unwrap();
-        let fmt = EdnFormatter {
+        let fmt = FormatConfig {
             line_width: Some(width),
             ..Default::default()
         };
@@ -601,7 +594,7 @@ mod tests {
                 atoms: vec!["C".into(), "O".into(), "H".into()],
                 bonds: vec![("0".into(), "1".into(), "single".into())],
             };
-            let fmt = EdnFormatter {
+            let fmt = FormatConfig {
                 line_width: Some(30),
                 ..Default::default()
             };

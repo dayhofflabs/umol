@@ -13,12 +13,10 @@
 
 use std::cmp::Ordering;
 use std::fmt;
-
-use bigdecimal::BigDecimal;
-
 #[cfg(feature = "serde")]
 use std::str::FromStr;
 
+use bigdecimal::BigDecimal;
 #[cfg(feature = "serde")]
 use serde::de::{Deserialize, Deserializer, Error as DeError, Visitor};
 #[cfg(feature = "serde")]

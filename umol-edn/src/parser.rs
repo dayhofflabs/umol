@@ -1,22 +1,21 @@
-//! Winnow-based EDN parser.
+//  Winnow-based EDN parser.
 
 use std::borrow::Cow;
 use std::cell::Cell;
 
 use memchr::memchr2;
-
 use winnow::ascii::digit1;
 use winnow::combinator::opt;
 use winnow::error::ErrMode;
 use winnow::stream::Location;
-use winnow::token::{any, one_of, take, take_while};
+use winnow::token::{any, literal, one_of, take, take_while};
 use winnow::{LocatingSlice, Parser};
 
-use crate::config::{DuplicateKeyPolicy, ParseConfig};
 use crate::collections::{EdnMap, EdnSeq, EdnSet};
-use crate::edn::{Edn, Keyword, Symbol};
+use crate::config::{DuplicateKeyPolicy, ParseConfig};
 #[cfg(feature = "bignum")]
 use crate::edn::EdnBigDecimal;
+use crate::edn::{Edn, Keyword, Symbol};
 use crate::error::{unwrap_err, EdnError};
 
 type Input<'a> = LocatingSlice<&'a str>;
@@ -87,10 +86,7 @@ pub fn parse_value<'a>(
 }
 
 /// Parse a single EDN value, rejecting trailing non-whitespace content.
-pub fn parse_value_strict<'a>(
-    input: &'a str,
-    config: &ParseConfig,
-) -> Result<Edn<'a>, EdnError> {
+pub fn parse_value_strict<'a>(input: &'a str, config: &ParseConfig) -> Result<Edn<'a>, EdnError> {
     let (val, remaining) = parse_value(input, config)?;
     let ctx = ParseCtx::new(config);
     let mut loc = LocatingSlice::new(remaining);
@@ -106,10 +102,7 @@ pub fn parse_value_strict<'a>(
 }
 
 /// Parse all EDN values from the input.
-pub fn parse_all<'a>(
-    input: &'a str,
-    config: &ParseConfig,
-) -> Result<Vec<Edn<'a>>, EdnError> {
+pub fn parse_all<'a>(input: &'a str, config: &ParseConfig) -> Result<Vec<Edn<'a>>, EdnError> {
     let ctx = ParseCtx::new(config);
     let mut located = LocatingSlice::new(input);
     let mut values = Vec::new();
@@ -150,9 +143,7 @@ fn ws_and_comments<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) {
     }
 }
 
-fn edn_value<'a, 'b>(
-    ctx: &'b ParseCtx<'_>,
-) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
+fn edn_value<'a, 'b>(ctx: &'b ParseCtx<'_>) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
@@ -166,8 +157,7 @@ where
 #[inline(always)]
 fn edn_value_dispatch<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) -> PResult<Edn<'a>> {
     let offset = input.current_token_start();
-    let b = peek_byte(input)
-        .ok_or(ErrMode::Backtrack(EdnError::UnexpectedEof { offset }))?;
+    let b = peek_byte(input).ok_or(ErrMode::Backtrack(EdnError::UnexpectedEof { offset }))?;
     match b {
         b'(' => edn_list(ctx).parse_next(input),
         b'[' => edn_vector(ctx).parse_next(input),
@@ -386,14 +376,22 @@ fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
                         'u' => {
                             let hex: &str = take_while(4..=4, |c: char| c.is_ascii_hexdigit())
                                 .parse_next(input)
-                                .map_err(|_: E| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
-                            let cp = u32::from_str_radix(hex, 16)
-                                .map_err(|_| ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
-                            let ch = char::from_u32(cp)
-                                .ok_or(ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset }))?;
+                                .map_err(|_: E| {
+                                    ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset })
+                                })?;
+                            let cp = u32::from_str_radix(hex, 16).map_err(|_| {
+                                ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset })
+                            })?;
+                            let ch = char::from_u32(cp).ok_or(ErrMode::Cut(
+                                EdnError::InvalidEscape { offset: esc_offset },
+                            ))?;
                             result.push(ch);
                         }
-                        _ => return Err(ErrMode::Cut(EdnError::InvalidEscape { offset: esc_offset })),
+                        _ => {
+                            return Err(ErrMode::Cut(EdnError::InvalidEscape {
+                                offset: esc_offset,
+                            }))
+                        }
                     }
                     // After escape, batch copy until next " or \.
                     let s = rest(input);
@@ -429,13 +427,17 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
             if single_char {
                 let c = s.chars().next().unwrap();
                 if c.is_whitespace() {
-                    return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
+                    return Err(ErrMode::Cut(EdnError::InvalidCharLiteral {
+                        offset: char_offset,
+                    }));
                 }
                 let _ = any.parse_next(input)?;
                 return Ok(Edn::Char(c));
             }
         } else {
-            return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: char_offset }));
+            return Err(ErrMode::Cut(EdnError::UnexpectedEof {
+                offset: char_offset,
+            }));
         }
 
         // Unicode escape \uNNNN — only reached when \u is followed by symbol chars.
@@ -443,11 +445,19 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
             let _ = 'u'.parse_next(input)?;
             let hex: &str = take_while(4..=4, |c: char| c.is_ascii_hexdigit())
                 .parse_next(input)
-                .map_err(|_: E| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
-            let cp = u32::from_str_radix(hex, 16)
-                .map_err(|_| ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
-            let ch =
-                char::from_u32(cp).ok_or(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }))?;
+                .map_err(|_: E| {
+                    ErrMode::Cut(EdnError::InvalidCharLiteral {
+                        offset: char_offset,
+                    })
+                })?;
+            let cp = u32::from_str_radix(hex, 16).map_err(|_| {
+                ErrMode::Cut(EdnError::InvalidCharLiteral {
+                    offset: char_offset,
+                })
+            })?;
+            let ch = char::from_u32(cp).ok_or(ErrMode::Cut(EdnError::InvalidCharLiteral {
+                offset: char_offset,
+            }))?;
             return Ok(Edn::Char(ch));
         }
 
@@ -462,11 +472,12 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
         for &(name, ch) in NAMED {
             if let Some(after) = s.strip_prefix(name) {
                 let terminates = after.is_empty()
-                    || after.as_bytes().first().is_none_or(|&b| {
-                        !is_symbol_char(b as char) || is_ws_byte(b)
-                    });
+                    || after
+                        .as_bytes()
+                        .first()
+                        .is_none_or(|&b| !is_symbol_char(b as char) || is_ws_byte(b));
                 if terminates {
-                    let _ = winnow::token::literal(name).parse_next(input)?;
+                    let _ = literal(name).parse_next(input)?;
                     return Ok(Edn::Char(ch));
                 }
             }
@@ -476,21 +487,23 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
         // (Single chars were handled by the fast path above.)
         let c = s.chars().next().unwrap();
         if c.is_whitespace() {
-            return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
+            return Err(ErrMode::Cut(EdnError::InvalidCharLiteral {
+                offset: char_offset,
+            }));
         }
         let _ = any.parse_next(input)?;
         if let Some(&next) = rest(input).as_bytes().first() {
             if is_symbol_char(next as char) && !is_ws_byte(next) {
-                return Err(ErrMode::Cut(EdnError::InvalidCharLiteral { offset: char_offset }));
+                return Err(ErrMode::Cut(EdnError::InvalidCharLiteral {
+                    offset: char_offset,
+                }));
             }
         }
         Ok(Edn::Char(c))
     }
 }
 
-fn edn_list<'a, 'b>(
-    ctx: &'b ParseCtx<'_>,
-) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
+fn edn_list<'a, 'b>(ctx: &'b ParseCtx<'_>) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
@@ -501,7 +514,11 @@ where
         loop {
             ws_and_comments(input, ctx);
             match peek_byte(input) {
-                None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
+                None => {
+                    return Err(ErrMode::Cut(EdnError::UnexpectedEof {
+                        offset: input.current_token_start(),
+                    }))
+                }
                 Some(b')') => {
                     let _ = ')'.parse_next(input)?;
                     ctx.leave_scope();
@@ -513,9 +530,7 @@ where
     }
 }
 
-fn edn_vector<'a, 'b>(
-    ctx: &'b ParseCtx<'_>,
-) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
+fn edn_vector<'a, 'b>(ctx: &'b ParseCtx<'_>) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
@@ -526,7 +541,11 @@ where
         loop {
             ws_and_comments(input, ctx);
             match peek_byte(input) {
-                None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
+                None => {
+                    return Err(ErrMode::Cut(EdnError::UnexpectedEof {
+                        offset: input.current_token_start(),
+                    }))
+                }
                 Some(b']') => {
                     let _ = ']'.parse_next(input)?;
                     ctx.leave_scope();
@@ -538,9 +557,7 @@ where
     }
 }
 
-fn edn_map<'a, 'b>(
-    ctx: &'b ParseCtx<'_>,
-) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
+fn edn_map<'a, 'b>(ctx: &'b ParseCtx<'_>) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
@@ -551,7 +568,11 @@ where
         loop {
             ws_and_comments(input, ctx);
             match peek_byte(input) {
-                None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
+                None => {
+                    return Err(ErrMode::Cut(EdnError::UnexpectedEof {
+                        offset: input.current_token_start(),
+                    }))
+                }
                 Some(b'}') => {
                     let _ = '}'.parse_next(input)?;
                     ctx.leave_scope();
@@ -562,7 +583,9 @@ where
                     let key = edn_value_dispatch(input, ctx)?;
                     ws_and_comments(input, ctx);
                     let val = edn_value_dispatch(input, ctx)?;
-                    if ctx.config.duplicate_keys == DuplicateKeyPolicy::Error && map.contains_key(&key) {
+                    if ctx.config.duplicate_keys == DuplicateKeyPolicy::Error
+                        && map.contains_key(&key)
+                    {
                         return Err(ErrMode::Cut(EdnError::DuplicateKey { offset: key_offset }));
                     }
                     map.insert(key, val);
@@ -572,9 +595,7 @@ where
     }
 }
 
-fn edn_set<'a, 'b>(
-    ctx: &'b ParseCtx<'_>,
-) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
+fn edn_set<'a, 'b>(ctx: &'b ParseCtx<'_>) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
@@ -585,28 +606,33 @@ where
         loop {
             ws_and_comments(input, ctx);
             match peek_byte(input) {
-                None => return Err(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() })),
+                None => {
+                    return Err(ErrMode::Cut(EdnError::UnexpectedEof {
+                        offset: input.current_token_start(),
+                    }))
+                }
                 Some(b'}') => {
                     let _ = '}'.parse_next(input)?;
                     ctx.leave_scope();
                     return Ok(Edn::Set(set));
                 }
-                _ => { set.insert(edn_value_dispatch(input, ctx)?); }
+                _ => {
+                    set.insert(edn_value_dispatch(input, ctx)?);
+                }
             }
         }
     }
 }
 
-fn edn_dispatch<'a, 'b>(
-    ctx: &'b ParseCtx<'_>,
-) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
+fn edn_dispatch<'a, 'b>(ctx: &'b ParseCtx<'_>) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
 where
     'a: 'b,
 {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '#'.parse_next(input)?;
-        let b = peek_byte(input)
-            .ok_or(ErrMode::Cut(EdnError::UnexpectedEof { offset: input.current_token_start() }))?;
+        let b = peek_byte(input).ok_or(ErrMode::Cut(EdnError::UnexpectedEof {
+            offset: input.current_token_start(),
+        }))?;
         match b {
             b'{' => edn_set(ctx).parse_next(input),
             b'_' => {
@@ -649,14 +675,16 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use pretty_assertions::assert_eq;
     use rstest::rstest;
-    use std::borrow::Cow;
+
     use crate::collections::{EdnMap, EdnSet};
+    use crate::config::{DuplicateKeyPolicy, ParseConfig};
     use crate::edn::{Edn, Keyword};
     use crate::error::EdnError;
     use crate::reader::{read_all, read_string, read_string_with, Reader};
-    use crate::config::{DuplicateKeyPolicy, ParseConfig};
 
     #[rstest]
     #[case("nil", Edn::Nil)]
@@ -713,8 +741,14 @@ mod tests {
 
     #[test]
     fn test_read_string_unicode_escape() {
-        assert_eq!(read_string(r#""\u0041""#).unwrap(), Edn::Str(Cow::Borrowed("A")));
-        assert_eq!(read_string(r#""\u00e9""#).unwrap(), Edn::Str(Cow::Owned("é".to_string())));
+        assert_eq!(
+            read_string(r#""\u0041""#).unwrap(),
+            Edn::Str(Cow::Borrowed("A"))
+        );
+        assert_eq!(
+            read_string(r#""\u00e9""#).unwrap(),
+            Edn::Str(Cow::Owned("é".to_string()))
+        );
     }
 
     #[rstest]
@@ -821,10 +855,13 @@ mod tests {
         let mut expected = EdnMap::new();
         expected.insert(
             Edn::Keyword(Keyword::new("items")),
-            Edn::Vector(vec![
-                Edn::Int(1),
-                Edn::List(vec![Edn::Int(2), Edn::Int(3)].into()),
-            ].into()),
+            Edn::Vector(
+                vec![
+                    Edn::Int(1),
+                    Edn::List(vec![Edn::Int(2), Edn::Int(3)].into()),
+                ]
+                .into(),
+            ),
         );
         expected.insert(Edn::Keyword(Keyword::new("flag")), Edn::Bool(true));
         assert_eq!(val, Edn::Map(expected));
@@ -897,7 +934,10 @@ mod tests {
 
     #[rstest]
     #[case(r"\abc", EdnError::InvalidCharLiteral { offset: 1 })]
-    fn test_read_string_error_invalid_char_literal(#[case] input: &str, #[case] expected: EdnError) {
+    fn test_read_string_error_invalid_char_literal(
+        #[case] input: &str,
+        #[case] expected: EdnError,
+    ) {
         assert_eq!(read_string(input).unwrap_err(), expected);
     }
 
@@ -905,7 +945,10 @@ mod tests {
     fn test_read_string_error_unexpected_token() {
         let err = read_string("##xyz").unwrap_err();
         assert!(
-            matches!(err, EdnError::UnexpectedToken { .. } | EdnError::InvalidSymbol { .. }),
+            matches!(
+                err,
+                EdnError::UnexpectedToken { .. } | EdnError::InvalidSymbol { .. }
+            ),
             "expected error for ##xyz, got {err:?}"
         );
     }
@@ -1045,7 +1088,6 @@ mod tests {
         let reparsed = read_string(&formatted).unwrap();
         assert_eq!(val, reparsed);
     }
-
 
     #[test]
     fn test_edn_get() {

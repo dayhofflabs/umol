@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use serde::{Deserialize, Serialize};
 use umol_edn::de::StreamDeserializer;
 use umol_edn::{
-    from_str, from_str_with, from_value, read_all, read_string, to_string, Edn, EdnFormatter,
+    from_str, from_str_with, from_value, read_all, read_string, to_string, Edn, FormatConfig,
     EdnHashSet, EdnKeyRef, EdnKeyword, EdnList, EdnMap, EdnSymbol, EdnTagged, ParseConfig, Value,
 };
 
@@ -108,7 +108,7 @@ fn bench_read_all(c: &mut Criterion) {
 fn bench_display(c: &mut Criterion) {
     let edn_small = read_string(MOLECULE_SMALL).unwrap();
     let edn_large = read_string(MOLECULE_LARGE).unwrap();
-    let fmt = EdnFormatter::default();
+    let fmt = FormatConfig::default();
 
     let mut group = c.benchmark_group("display");
     group.bench_function("to_string_small", |b| {

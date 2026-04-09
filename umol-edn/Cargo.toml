@@ -50,3 +50,5 @@ name = "memory"
 harness = false
 required-features = ["serde"]
 
+[lints.clippy]
+absolute_paths = "warn"

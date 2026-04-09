@@ -22,9 +22,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::edn::{Edn, Keyword};
 use crate::error::EdnError;
-use crate::native::{FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 use crate::serde_tokens::KEYWORD_TOKEN;
+use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN keyword (`:name`). Always serializes as a keyword in EDN.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

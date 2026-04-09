@@ -15,8 +15,6 @@ use crate::edn::Edn;
 #[cfg(any(feature = "chrono", feature = "uuid"))]
 use crate::error::EdnError;
 
-// -- #inst (RFC 3339 instant) ------------------------------------------------
-
 /// Parse-time reader: validates the string after `#inst` is valid RFC 3339.
 #[cfg(feature = "chrono")]
 pub(crate) fn read_inst(val: Edn) -> Result<Edn, EdnError> {
@@ -44,8 +42,6 @@ where
         Box::new(Edn::Str(Cow::Owned(dt.to_rfc3339()))),
     )
 }
-
-// -- #uuid -------------------------------------------------------------------
 
 /// Parse-time reader: validates the string after `#uuid` is a valid UUID.
 #[cfg(feature = "uuid")]

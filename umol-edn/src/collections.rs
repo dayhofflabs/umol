@@ -1,6 +1,7 @@
-//! EDN collection newtypes: EdnMap, EdnSet, EdnSeq.
+//! EDN collection newtypes: EdnMap, EdnSet, EdnSeq, and the EdnMapHelper reader.
 
 use std::cmp::Ordering;
+use std::collections::HashSet as StdHashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
 use std::slice::Iter as SliceIter;
@@ -10,9 +11,11 @@ use hashbrown::hash_map::{IntoIter as HashMapIntoIter, Iter as HashMapIter};
 use hashbrown::hash_set::{IntoIter as HashSetIntoIter, Iter as HashSetIter};
 use hashbrown::{HashMap, HashSet};
 
+use crate::edn::Edn;
 #[cfg(feature = "bignum")]
 use crate::edn::EdnBigDecimal;
-use crate::edn::Edn;
+use crate::error::EdnError;
+use crate::traits::FromEdn;
 
 /// Borrowed key representation for looking up values in [`EdnMap`] and [`EdnSet`]
 /// without constructing an owned [`Edn`] or matching its lifetime parameter.
@@ -251,8 +254,7 @@ impl<'a> FromIterator<(Edn<'a>, Edn<'a>)> for EdnMap<'a> {
 
 impl PartialEq for EdnMap<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.len() == other.0.len()
-            && self.0.iter().all(|(k, v)| other.0.get(k) == Some(v))
+        self.0.len() == other.0.len() && self.0.iter().all(|(k, v)| other.0.get(k) == Some(v))
     }
 }
 
@@ -288,6 +290,90 @@ impl Hash for EdnMap<'_> {
             combined ^= pair_hasher.finish();
         }
         combined.hash(state);
+    }
+}
+
+/// Reader helper for keyword-keyed maps.
+///
+/// Wraps an [`EdnMap`] and tracks which keys have been read so that
+/// [`finalize`](Self::finalize) can flag unconsumed keyword keys, and carries
+/// a path prefix used in error messages for nested structures. The helper
+/// assumes maps use keyword keys — the convention for the molecule DSL and
+/// other umol-edn consumers. Non-keyword keys in the map are ignored by
+/// `finalize`'s unknown-key check.
+///
+/// # Path tracking
+///
+/// `path` segments are pushed by callers wrapping nested helpers — e.g. an
+/// outer impl can call `EdnMapHelper::with_path(inner_map, vec![":atoms".into()])`
+/// when descending into a nested map field. Errors raised by the helper itself
+/// (`MissingField`, `UnknownField`) carry that path. Errors raised by inner
+/// `T::from_edn` calls do not currently propagate the path; that requires a
+/// trait-level context parameter and is left for a follow-up.
+pub struct EdnMapHelper<'m, 'de: 'm> {
+    map: &'m EdnMap<'de>,
+    path: Vec<String>,
+    consumed: StdHashSet<String>,
+}
+
+impl<'m, 'de: 'm> EdnMapHelper<'m, 'de> {
+    /// Create a helper rooted at `<root>` (empty path).
+    pub fn new(map: &'m EdnMap<'de>) -> Self {
+        Self {
+            map,
+            path: Vec::new(),
+            consumed: StdHashSet::with_capacity(map.len()),
+        }
+    }
+
+    /// Create a helper with an explicit path prefix for nested error messages.
+    pub fn with_path(map: &'m EdnMap<'de>, path: Vec<String>) -> Self {
+        Self {
+            map,
+            path,
+            consumed: StdHashSet::with_capacity(map.len()),
+        }
+    }
+
+    /// Read a required keyword-keyed field. Errors with `MissingField` if
+    /// absent, or with whatever variant `T::from_edn` returns on the value.
+    pub fn required<T: FromEdn<'de>>(&mut self, key: &str) -> Result<T, EdnError> {
+        let value =
+            self.map
+                .get_ref(EdnKeyRef::keyword(key))
+                .ok_or_else(|| EdnError::MissingField {
+                    key: key.to_string(),
+                    path: self.path.clone(),
+                })?;
+        self.consumed.insert(key.to_string());
+        T::from_edn(value)
+    }
+
+    /// Read an optional keyword-keyed field. Returns `Ok(None)` if absent.
+    pub fn optional<T: FromEdn<'de>>(&mut self, key: &str) -> Result<Option<T>, EdnError> {
+        match self.map.get_ref(EdnKeyRef::keyword(key)) {
+            Some(value) => {
+                self.consumed.insert(key.to_string());
+                T::from_edn(value).map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Strict-mode close: error with `UnknownField` if any keyword key in the
+    /// map was not read via `required` or `optional`.
+    pub fn finalize(self) -> Result<(), EdnError> {
+        for (k, _) in self.map.iter() {
+            if let Edn::Keyword(kw) = k {
+                if !self.consumed.contains(kw.as_str()) {
+                    return Err(EdnError::UnknownField {
+                        key: kw.as_str().to_string(),
+                        path: self.path,
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -361,8 +447,7 @@ impl<'a> FromIterator<Edn<'a>> for EdnSet<'a> {
 
 impl PartialEq for EdnSet<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.len() == other.0.len()
-            && self.0.iter().all(|v| other.0.contains(v))
+        self.0.len() == other.0.len() && self.0.iter().all(|v| other.0.contains(v))
     }
 }
 
@@ -501,12 +586,14 @@ impl Hash for EdnSeq<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::edn::{Keyword, Symbol};
-    use hashbrown::Equivalent;
-    use rstest::rstest;
     use std::borrow::Cow;
     use std::hash::{DefaultHasher, Hash, Hasher};
+
+    use hashbrown::Equivalent;
+    use rstest::rstest;
+
+    use super::*;
+    use crate::edn::{Keyword, Symbol};
 
     fn hash_edn(v: &Edn<'_>) -> u64 {
         let mut h = DefaultHasher::new();
@@ -519,8 +606,6 @@ mod tests {
         v.hash(&mut h);
         h.finish()
     }
-
-    // -- Eq/Hash parity: EdnKeyRef must produce identical hashes and match Edn --
 
     #[rstest]
     #[case::nil(Edn::Nil)]
@@ -565,8 +650,6 @@ mod tests {
         assert!(key_ref.equivalent(&edn));
     }
 
-    // -- Float edge cases --
-
     #[test]
     fn test_edn_key_ref_nan_payload() {
         let nan1 = Edn::Float(f64::from_bits(0x7FF8_0000_0000_0001));
@@ -588,8 +671,6 @@ mod tests {
         assert!(!ref_pos.equivalent(&neg));
         assert_ne!(hash_key_ref(&ref_pos), hash_key_ref(&ref_neg));
     }
-
-    // -- Cross-lifetime lookup --
 
     #[test]
     fn test_edn_map_get_ref_cross_lifetime() {
@@ -622,8 +703,6 @@ mod tests {
         assert!(!s.contains_ref(EdnKeyRef::keyword("y")));
     }
 
-    // -- Map/set symmetry: get/contains and get_ref/contains_ref agree --
-
     #[rstest]
     #[case::nil(Edn::Nil)]
     #[case::bool(Edn::Bool(false))]
@@ -655,8 +734,6 @@ mod tests {
         assert_eq!(s.contains(&val), s.contains_ref(key_ref));
     }
 
-    // -- Convenience constructors --
-
     #[test]
     fn test_edn_key_ref_constructors() {
         let m = {
@@ -672,8 +749,6 @@ mod tests {
         assert_eq!(m.get_ref(EdnKeyRef::str_("c")), Some(&Edn::Int(3)));
     }
 
-    // -- Non-equivalent variants return false --
-
     #[test]
     fn test_edn_key_ref_cross_variant_not_equivalent() {
         let int = Edn::Int(1);
@@ -681,8 +756,6 @@ mod tests {
         let ref_int = EdnKeyRef::from(&int);
         assert!(!ref_int.equivalent(&float));
     }
-
-    // -- EdnMap: remove, contains_ref, keys, values, into_owned, trait impls --
 
     #[test]
     fn test_edn_map_remove() {
@@ -751,8 +824,6 @@ mod tests {
         assert_eq!(m1.partial_cmp(&m2), Some(std::cmp::Ordering::Less));
     }
 
-    // -- EdnSet: is_empty, into_owned, Default, trait impls, Ord --
-
     #[test]
     fn test_edn_set_is_empty() {
         let s = EdnSet::new();
@@ -793,8 +864,6 @@ mod tests {
         assert_eq!(s1.partial_cmp(&s2), Some(std::cmp::Ordering::Less));
     }
 
-    // -- EdnSeq: len, is_empty, Default, FromIterator, ref IntoIterator, PartialOrd --
-
     #[test]
     fn test_edn_seq_len_is_empty() {
         let s = EdnSeq::new();
@@ -830,5 +899,42 @@ mod tests {
         let a: EdnSeq<'_> = vec![Edn::Int(1)].into();
         let b: EdnSeq<'_> = vec![Edn::Int(2)].into();
         assert_eq!(a.partial_cmp(&b), Some(std::cmp::Ordering::Less));
+    }
+
+    #[test]
+    fn test_edn_map_helper_required_and_optional() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("name"), Edn::Str(Cow::Borrowed("water")));
+        m.insert(Edn::keyword("count"), Edn::Int(2));
+        let mut h = EdnMapHelper::new(&m);
+        let name: String = h.required("name").unwrap();
+        let count: i32 = h.required("count").unwrap();
+        let charge: Option<i32> = h.optional("charge").unwrap();
+        assert_eq!(name, "water");
+        assert_eq!(count, 2);
+        assert_eq!(charge, None);
+        h.finalize().unwrap();
+    }
+
+    #[test]
+    fn test_edn_map_helper_missing_required() {
+        let m = EdnMap::new();
+        let mut h = EdnMapHelper::new(&m);
+        let err = h.required::<String>("name").unwrap_err();
+        assert!(matches!(err, EdnError::MissingField { .. }));
+    }
+
+    #[test]
+    fn test_edn_map_helper_finalize_unknown_key() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("name"), Edn::Str(Cow::Borrowed("water")));
+        m.insert(Edn::keyword("extra"), Edn::Int(0));
+        let mut h = EdnMapHelper::new(&m);
+        let _name: String = h.required("name").unwrap();
+        let err = h.finalize().unwrap_err();
+        match err {
+            EdnError::UnknownField { key, .. } => assert_eq!(key, "extra"),
+            other => panic!("expected UnknownField, got {other:?}"),
+        }
     }
 }

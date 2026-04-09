@@ -98,13 +98,18 @@ fn format_string(f: &mut fmt::Formatter<'_>, s: &str) -> fmt::Result {
             '\n' => write!(f, "\\n")?,
             '\r' => write!(f, "\\r")?,
             '\t' => write!(f, "\\t")?,
-                _ => write!(f, "{c}")?,
+            _ => write!(f, "{c}")?,
         }
     }
     write!(f, "\"")
 }
 
-fn format_seq(f: &mut fmt::Formatter<'_>, open: &str, close: &str, items: &[Edn<'_>]) -> fmt::Result {
+fn format_seq(
+    f: &mut fmt::Formatter<'_>,
+    open: &str,
+    close: &str,
+    items: &[Edn<'_>],
+) -> fmt::Result {
     write!(f, "{open}")?;
     for (i, item) in items.iter().enumerate() {
         if i > 0 {
@@ -118,6 +123,7 @@ fn format_seq(f: &mut fmt::Formatter<'_>, open: &str, close: &str, items: &[Edn<
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+
     use rstest::rstest;
 
     use crate::collections::{EdnMap, EdnSet};

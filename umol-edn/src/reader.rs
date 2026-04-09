@@ -2,9 +2,9 @@
 
 use std::sync::OnceLock;
 
+use crate::config::ParseConfig;
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::config::ParseConfig;
 use crate::parser::{parse_all, parse_value, parse_value_strict};
 
 pub(crate) fn default_config() -> &'static ParseConfig {
@@ -59,9 +59,9 @@ impl<'a> Iterator for Reader<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         // Skip whitespace/comments to check if we're at the end
-        let trimmed = self.remaining.trim_start_matches(|c: char| {
-            matches!(c, ' ' | '\t' | '\n' | '\r' | ',')
-        });
+        let trimmed = self
+            .remaining
+            .trim_start_matches([' ', '\t', '\n', '\r', ',']);
         if trimmed.is_empty() {
             return None;
         }

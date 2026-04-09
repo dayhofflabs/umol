@@ -6,14 +6,12 @@
 //! serializers see the integer as a decimal string (JSON has no
 //! arbitrary-precision integer literal).
 
+#[cfg(feature = "serde")]
+use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
 use num_bigint::BigInt;
-
-#[cfg(feature = "serde")]
-use std::fmt;
-
 #[cfg(feature = "serde")]
 use serde::de::{Deserialize, Deserializer, Error as DeError, Visitor};
 #[cfg(feature = "serde")]
@@ -21,9 +19,9 @@ use serde::ser::{Serialize, Serializer};
 
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::native::{FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 use crate::serde_tokens::BIGINT_TOKEN;
+use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN arbitrary-precision integer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

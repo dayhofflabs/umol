@@ -10,12 +10,11 @@
 //! see a transparent sequence. `Deserialize` via the EDN tree path accepts
 //! only `Edn::List`; `Edn::Vector` and `Edn::Set` are rejected.
 
-use std::ops::{Deref, DerefMut};
-
 #[cfg(feature = "serde")]
 use std::fmt;
 #[cfg(feature = "serde")]
 use std::marker::PhantomData;
+use std::ops::{Deref, DerefMut};
 
 #[cfg(feature = "serde")]
 use serde::de::{Deserialize, DeserializeSeed, Deserializer, SeqAccess, Visitor};
@@ -25,9 +24,9 @@ use serde::ser::{Serialize, SerializeSeq, Serializer};
 use crate::collections::EdnSeq;
 use crate::edn::Edn;
 use crate::error::EdnError;
-use crate::native::{FromEdn, ToEdn};
 #[cfg(feature = "serde")]
 use crate::serde_tokens::LIST_TOKEN;
+use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN list. Always serializes as `(...)` in EDN.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

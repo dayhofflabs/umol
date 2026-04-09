@@ -30,6 +30,7 @@ pub fn biconnected_components(node_count: usize, adj: &[Vec<usize>]) -> Vec<Vec<
     components
 }
 
+#[allow(clippy::too_many_arguments)]
 fn bcc_dfs(
     u: usize,
     parent: Option<usize>,

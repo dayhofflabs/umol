@@ -35,11 +35,10 @@
 //! the lossy mapping (keyword/symbol → `Str`, list/set → `Vector`,
 //! tagged → tuple).
 
-use std::fmt;
-use std::str::FromStr;
-
 #[cfg(feature = "serde")]
 use std::borrow::Cow;
+use std::fmt;
+use std::str::FromStr;
 
 #[cfg(feature = "serde")]
 use serde::de::{
@@ -50,27 +49,25 @@ use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeTupleStruct, Se
 #[cfg(feature = "serde")]
 use serde::Deserialize;
 
-use crate::config::ParseConfig;
-use crate::edn::Edn;
-use crate::error::EdnError;
-use crate::native::{FromEdn, ToEdn};
-use crate::reader::read_string_with;
-
 #[cfg(feature = "serde")]
 use crate::collections::{EdnMap, EdnSeq, EdnSet};
+use crate::config::ParseConfig;
 #[cfg(feature = "serde")]
 use crate::de::EdnDeserializer;
+use crate::edn::Edn;
+#[cfg(all(feature = "serde", feature = "bignum"))]
+use crate::edn::EdnBigDecimal;
 #[cfg(feature = "serde")]
 use crate::edn::{Keyword, Symbol};
+use crate::error::EdnError;
+use crate::reader::read_string_with;
+#[cfg(all(feature = "serde", feature = "bignum"))]
+use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
 #[cfg(feature = "serde")]
 use crate::serde_tokens::{
     KEYWORD_TOKEN, LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN, VALUE_TOKEN,
 };
-#[cfg(all(feature = "serde", feature = "bignum"))]
-use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
-
-#[cfg(all(feature = "serde", feature = "bignum"))]
-use crate::edn::EdnBigDecimal;
+use crate::traits::{FromEdn, ToEdn};
 
 /// Owned EDN value. A lossless mirror of [`Edn<'static>`] for use where a
 /// fully owned, lifetime-free value is required.
@@ -509,11 +506,12 @@ impl<'de> VariantAccess<'de> for ValueCarrierVariantAccess<'de> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "serde")]
+    use rstest::rstest;
+
     use super::*;
     #[cfg(feature = "serde")]
     use crate::{from_str, to_string};
-    #[cfg(feature = "serde")]
-    use rstest::rstest;
 
     #[test]
     fn test_value_parse() {

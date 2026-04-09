@@ -865,3 +865,29 @@ explicitly opts into permissive handling.
 All workspace tests green after the config contract fix:
 `umol-edn` ~870 tests (serde+bignum) + `umol-graph` 3755 tests +
 remaining workspace crates.
+
+## Status of the numbered issues (2026-04-08)
+
+Audit against the current code, not the historical narrative.
+
+| # | Issue | Status |
+|---|---|---|
+| 1 | Two parallel paths leak through the type system | **Resolved** — Phase 3/3.5. Native `FromEdn` / `ToEdn` is the primary API; serde is an opt-in escape hatch with full wrapper parity. |
+| 2 | `Edn<'a>` lifetime is viral | **Decided** 2026-04-07: keep the lifetime. `EdnOwned = Edn<'static>` alias still not added — minor ergonomic gap. |
+| 3 | `to_value` requires full tree | **Resolved** — Phase 2.5 fusion override exists; tree path competitive or faster on realistic inputs. |
+| 4 | `TagReaders` uses `fn`, not `Box<dyn Fn>` | **Open** — `config.rs` still `pub type TagFn = fn(Edn) -> Result<Edn, EdnError>;`. Closures capturing context can't be registered. |
+| 5 | `DuplicateKeyPolicy` missing `FirstWins` / `Merge` | **Open** — two-variant enum unchanged. Low priority. |
+| 6 | `ParseConfig` and formatter config are unrelated structs | **Partial** — `EdnFormatter` renamed to `FormatConfig` (2026-04-08). Still two independent structs; no umbrella `EdnConfig`, no cross-links in docs. |
+| 7 | `EdnError` opacity (no `kind()`, not split) | **Open** — blocked on the crate-wide error architecture work in `discussion/65-umol-error-handling-2026-03-31.md`. |
+| 8 | `EdnMap` / `EdnSet` ordering undocumented | **Stale** — review assumed insertion order; `EdnMap` is a plain `hashbrown::HashMap` (truly unordered). Struct doc says "An unordered map of EDN values." Formatter defaults `sort_maps: true` / `sort_sets: true`. Effectively resolved. |
+| 9 | `edn!` macro uses runtime `read_string` | **Resolved** — `umol-edn-macros` exposes a `#[proc_macro]` `edn!`; parsing happens at compile time. |
+| 10 | No `Index` / `IndexMut` on `Edn` | **Open** — no `impl Index` in `src/`. `edn["key"]` / `edn[0]` still require manual tree walking. |
+| 11 | `from_value` consumes `Edn` | **Open** — `de.rs` still exposes `from_value<'a, T>(val: Edn<'a>)`; no `from_value_ref(&Edn)`. Friction is now limited to the serde compat path since the native `FromEdn` trait already takes `&Edn`. |
+| 12 | Module visibility — submodules leaking | **Open** — every non-serde module in `lib.rs` is still `pub mod`. `umol_edn::edn::Edn` and `umol_edn::Edn` both compile. Only `serde_tokens` was sealed to `pub(crate)` (2026-04-08). |
+
+**Load-bearing opens**: #4 (closures in tag readers), #10 (`Index`),
+#11 (`from_value_ref`), #12 (seal submodules).
+
+**Low-priority opens**: #5, #6 (cross-link in docs is probably enough).
+
+**Blocked**: #7 (waits on #65).
