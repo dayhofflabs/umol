@@ -5,7 +5,6 @@ use rstest::*;
 use umol_data::{e, Element, NamedIsotope};
 
 use super::*;
-use crate::table_ir::atom::ImplicitHydrogens;
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::parser::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomChargeOverrideEntry, AtomHydrogenCountEntry,
@@ -19,6 +18,7 @@ use crate::io::ctfile::parser::properties::{
     SGroupParentAtomEntry, SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry,
     SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
     Atom, AtomList, AtomSymbol, AttachmentPointType, Bond, BondOrder, ExtendedAtom, ExtendedBond,
     ExtendedMolecule, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount,

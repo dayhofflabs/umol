@@ -4,20 +4,20 @@ use std::borrow::Cow;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use proptest::prelude::*;
-use umol_edn::{read_string, Edn, EdnMap, EdnSeq, EdnSet, Keyword, Symbol};
+use umol_edn::{read_string, Edn, EdnKeyword, EdnMap, EdnSeq, EdnSet, EdnSymbol};
 
 // Strategies
 
 /// Characters valid as the first character of a symbol name.
 const SYMBOL_START: &[char] = &[
-    'a', 'b', 'c', 'z', 'A', 'B', 'Z', '.', '*', '+', '!', '-', '_', '?', '$', '%', '&', '=',
-    '<', '>',
+    'a', 'b', 'c', 'z', 'A', 'B', 'Z', '.', '*', '+', '!', '-', '_', '?', '$', '%', '&', '=', '<',
+    '>',
 ];
 
 /// Additional characters valid in the rest of a symbol name.
 const SYMBOL_CONT: &[char] = &[
-    'a', 'b', 'c', 'z', 'A', 'B', 'Z', '0', '1', '9', '.', '*', '+', '!', '-', '_', '?', '$',
-    '%', '&', '=', '<', '>', '#', ':', '\'',
+    'a', 'b', 'c', 'z', 'A', 'B', 'Z', '0', '1', '9', '.', '*', '+', '!', '-', '_', '?', '$', '%',
+    '&', '=', '<', '>', '#', ':', '\'',
 ];
 
 /// Returns true if first char is +/-/. and second char is a digit (ambiguous with numbers).
@@ -30,17 +30,18 @@ fn is_ambiguous_symbol(s: &str) -> bool {
 }
 
 fn symbol_name_strategy() -> impl Strategy<Value = String> {
-    let simple = prop::sample::select(SYMBOL_START).prop_flat_map(|first| {
-        prop::collection::vec(prop::sample::select(SYMBOL_CONT), 0..6).prop_map(move |rest| {
-            let mut s = String::new();
-            s.push(first);
-            for c in &rest {
-                s.push(*c);
-            }
-            s
+    let simple = prop::sample::select(SYMBOL_START)
+        .prop_flat_map(|first| {
+            prop::collection::vec(prop::sample::select(SYMBOL_CONT), 0..6).prop_map(move |rest| {
+                let mut s = String::new();
+                s.push(first);
+                for c in &rest {
+                    s.push(*c);
+                }
+                s
+            })
         })
-    })
-    .prop_filter("ambiguous with number", |s| !is_ambiguous_symbol(s));
+        .prop_filter("ambiguous with number", |s| !is_ambiguous_symbol(s));
 
     // Namespace-qualified: ns/name — alpha first chars to avoid sign/dot ambiguity.
     let qualified = (
@@ -71,10 +72,7 @@ fn keyword_name_strategy() -> impl Strategy<Value = String> {
 }
 
 fn tag_strategy() -> impl Strategy<Value = String> {
-    (
-        "[a-zA-Z][a-zA-Z0-9]{0,5}",
-        "[a-zA-Z][a-zA-Z0-9]{0,5}",
-    )
+    ("[a-zA-Z][a-zA-Z0-9]{0,5}", "[a-zA-Z][a-zA-Z0-9]{0,5}")
         .prop_map(|(ns, name)| format!("{ns}/{name}"))
 }
 
@@ -92,12 +90,12 @@ fn edn_leaf() -> impl Strategy<Value = Edn<'static>> {
         // Named characters.
         prop::sample::select(&['\n', '\r', ' ', '\t'][..]).prop_map(Edn::Char),
         "[ -~]{0,20}".prop_map(|s| Edn::Str(Cow::Owned(s))),
-        keyword_name_strategy().prop_map(|s| Edn::Keyword(Keyword::owned(s))),
+        keyword_name_strategy().prop_map(|s| Edn::Keyword(EdnKeyword::owned(s))),
         symbol_name_strategy()
             .prop_filter("not a reserved word", |s| {
                 s != "nil" && s != "true" && s != "false"
             })
-            .prop_map(|s| Edn::Symbol(Symbol::owned(s))),
+            .prop_map(|s| Edn::Symbol(EdnSymbol::owned(s))),
     ]
 }
 
@@ -108,8 +106,7 @@ fn edn_strategy() -> impl Strategy<Value = Edn<'static>> {
         8,  // items per collection
         |inner| {
             prop_oneof![
-                prop::collection::vec(inner.clone(), 0..8)
-                    .prop_map(|v| Edn::List(EdnSeq::from(v))),
+                prop::collection::vec(inner.clone(), 0..8).prop_map(|v| Edn::List(EdnSeq::from(v))),
                 prop::collection::vec(inner.clone(), 0..8)
                     .prop_map(|v| Edn::Vector(EdnSeq::from(v))),
                 prop::collection::vec((inner.clone(), inner.clone()), 0..4).prop_map(|pairs| {
@@ -126,9 +123,8 @@ fn edn_strategy() -> impl Strategy<Value = Edn<'static>> {
                     }
                     Edn::Set(s)
                 }),
-                (tag_strategy(), inner).prop_map(|(tag, val)| {
-                    Edn::Tagged(Cow::Owned(tag), Box::new(val))
-                }),
+                (tag_strategy(), inner)
+                    .prop_map(|(tag, val)| { Edn::Tagged(Cow::Owned(tag), Box::new(val)) }),
             ]
         },
     )

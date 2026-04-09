@@ -15,7 +15,7 @@ use crate::collections::{EdnMap, EdnSeq, EdnSet};
 use crate::config::{DuplicateKeyPolicy, ParseConfig};
 #[cfg(feature = "bignum")]
 use crate::edn::EdnBigDecimal;
-use crate::edn::{Edn, Keyword, Symbol};
+use crate::edn::{Edn, EdnKeyword, EdnSymbol};
 use crate::error::{unwrap_err, ParseError};
 
 type Input<'a> = LocatingSlice<&'a str>;
@@ -86,10 +86,7 @@ pub fn parse_value<'a>(
 }
 
 /// Parse a single EDN value, rejecting trailing non-whitespace content.
-pub fn parse_value_strict<'a>(
-    input: &'a str,
-    config: &ParseConfig,
-) -> Result<Edn<'a>, ParseError> {
+pub fn parse_value_strict<'a>(input: &'a str, config: &ParseConfig) -> Result<Edn<'a>, ParseError> {
     let (val, remaining) = parse_value(input, config)?;
     let ctx = ParseCtx::new(config);
     let mut loc = LocatingSlice::new(remaining);
@@ -225,7 +222,7 @@ fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
         "nil" => Ok(Edn::Nil),
         "true" => Ok(Edn::Bool(true)),
         "false" => Ok(Edn::Bool(false)),
-        _ => Ok(Edn::Symbol(Symbol::new(s))),
+        _ => Ok(Edn::Symbol(EdnSymbol::new(s))),
     }
 }
 
@@ -240,7 +237,7 @@ fn edn_keyword<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
         .take()
         .parse_next(input)?;
     validate_symbol(s, start).map_err(ErrMode::Cut)?;
-    Ok(Edn::Keyword(Keyword::new(s)))
+    Ok(Edn::Keyword(EdnKeyword::new(s)))
 }
 
 #[inline]
@@ -368,7 +365,9 @@ fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
                     let esc = s2
                         .chars()
                         .next()
-                        .ok_or(ErrMode::Cut(ParseError::UnexpectedEof { offset: esc_offset }))?;
+                        .ok_or(ErrMode::Cut(ParseError::UnexpectedEof {
+                            offset: esc_offset,
+                        }))?;
                     let _ = any.parse_next(input)?;
                     match esc {
                         't' => result.push('\t'),
@@ -589,7 +588,9 @@ where
                     if ctx.config.duplicate_keys == DuplicateKeyPolicy::Error
                         && map.contains_key(&key)
                     {
-                        return Err(ErrMode::Cut(ParseError::DuplicateKey { offset: key_offset }));
+                        return Err(ErrMode::Cut(ParseError::DuplicateKey {
+                            offset: key_offset,
+                        }));
                     }
                     map.insert(key, val);
                 }
@@ -685,7 +686,7 @@ mod tests {
 
     use crate::collections::{EdnMap, EdnSet};
     use crate::config::{DuplicateKeyPolicy, ParseConfig};
-    use crate::edn::{Edn, Keyword};
+    use crate::edn::{Edn, EdnKeyword};
     use crate::error::{EdnError, ParseError};
     use crate::reader::{read_all, read_string, read_string_with, Reader};
 
@@ -781,17 +782,17 @@ mod tests {
         let val = read_string(input).unwrap();
         match &val {
             Edn::Keyword(k) => assert_eq!(k.as_str(), expected_name),
-            other => panic!("expected Keyword, got {other:?}"),
+            other => panic!("expected EdnKeyword, got {other:?}"),
         }
     }
 
     #[test]
     fn test_keyword_namespace() {
-        let k = Keyword::new("ns/name");
+        let k = EdnKeyword::new("ns/name");
         assert_eq!(k.namespace(), Some("ns"));
         assert_eq!(k.name(), "name");
 
-        let k2 = Keyword::new("bare");
+        let k2 = EdnKeyword::new("bare");
         assert_eq!(k2.namespace(), None);
         assert_eq!(k2.name(), "bare");
     }
@@ -804,7 +805,7 @@ mod tests {
         let val = read_string(input).unwrap();
         match &val {
             Edn::Symbol(s) => assert_eq!(s.as_str(), expected_name),
-            other => panic!("expected Symbol, got {other:?}"),
+            other => panic!("expected EdnSymbol, got {other:?}"),
         }
     }
 
@@ -827,8 +828,8 @@ mod tests {
     fn test_read_string_map() {
         let val = read_string("{:a 1 :b 2}").unwrap();
         let mut expected = EdnMap::new();
-        expected.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
-        expected.insert(Edn::Keyword(Keyword::new("b")), Edn::Int(2));
+        expected.insert(Edn::Keyword(EdnKeyword::new("a")), Edn::Int(1));
+        expected.insert(Edn::Keyword(EdnKeyword::new("b")), Edn::Int(2));
         assert_eq!(val, Edn::Map(expected));
     }
 
@@ -857,7 +858,7 @@ mod tests {
         let val = read_string("{:items [1 (2 3)] :flag true}").unwrap();
         let mut expected = EdnMap::new();
         expected.insert(
-            Edn::Keyword(Keyword::new("items")),
+            Edn::Keyword(EdnKeyword::new("items")),
             Edn::Vector(
                 vec![
                     Edn::Int(1),
@@ -866,7 +867,7 @@ mod tests {
                 .into(),
             ),
         );
-        expected.insert(Edn::Keyword(Keyword::new("flag")), Edn::Bool(true));
+        expected.insert(Edn::Keyword(EdnKeyword::new("flag")), Edn::Bool(true));
         assert_eq!(val, Edn::Map(expected));
     }
 
@@ -991,7 +992,7 @@ mod tests {
         };
         let val = read_string_with("{:a 1 :a 2}", &config).unwrap();
         let mut expected = EdnMap::new();
-        expected.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(2));
+        expected.insert(Edn::Keyword(EdnKeyword::new("a")), Edn::Int(2));
         assert_eq!(val, Edn::Map(expected));
     }
 

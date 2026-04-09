@@ -8,7 +8,9 @@ fn is_dooh(group: &PointGroup) -> bool {
 
 fn linear_info(irrep: Irrep) -> (u32, Option<bool>, Option<bool>) {
     (
-        irrep.lambda().expect("linear_info called on finite group irrep"),
+        irrep
+            .lambda()
+            .expect("linear_info called on finite group irrep"),
         irrep.data.sigma_v,
         irrep.data.gerade,
     )
@@ -35,11 +37,7 @@ fn gu_product(g1: Option<bool>, g2: Option<bool>) -> Option<bool> {
     }
 }
 
-pub fn direct_product(
-    group: &'static PointGroup,
-    a: Irrep,
-    b: Irrep,
-) -> Vec<(Irrep, u32)> {
+pub fn direct_product(group: &'static PointGroup, a: Irrep, b: Irrep) -> Vec<(Irrep, u32)> {
     let (la, sva, ga) = linear_info(a);
     let (lb, svb, gb) = linear_info(b);
     let gu = gu_product(ga, gb);
@@ -248,9 +246,12 @@ pub fn compute_salcs(
             let sigma_v = if lambda == 0 { Some(true) } else { None };
             let irrep = find_irrep(group, lambda, sigma_v, None)
                 .unwrap_or_else(|| panic!("no irrep for λ={lambda}"));
-            add_salc(irrep, Salc {
-                coefficients: vec![(i, 1.0)],
-            });
+            add_salc(
+                irrep,
+                Salc {
+                    coefficients: vec![(i, 1.0)],
+                },
+            );
         }
     } else {
         // D∞h: form ±1/√2 combinations for paired atoms
@@ -280,9 +281,12 @@ pub fn compute_salcs(
                     let sigma_v = if lambda == 0 { Some(true) } else { None };
                     let irrep = find_irrep(group, lambda, sigma_v, gerade)
                         .unwrap_or_else(|| panic!("no irrep for λ={lambda}, g={gerade:?}"));
-                    add_salc(irrep, Salc {
-                        coefficients: vec![(i, 1.0)],
-                    });
+                    add_salc(
+                        irrep,
+                        Salc {
+                            coefficients: vec![(i, 1.0)],
+                        },
+                    );
                     processed[i] = true;
                 }
                 AtomRole::Positive(partner_atom) => {
@@ -303,19 +307,23 @@ pub fn compute_salcs(
                     let sigma_v = if lambda == 0 { Some(true) } else { None };
                     let sym_irrep = find_irrep(group, lambda, sigma_v, sym_gerade)
                         .unwrap_or_else(|| panic!("no irrep for λ={lambda}, g={sym_gerade:?}"));
-                    add_salc(sym_irrep, Salc {
-                        coefficients: vec![(i, inv2), (j, inv2)],
-                    });
+                    add_salc(
+                        sym_irrep,
+                        Salc {
+                            coefficients: vec![(i, inv2), (j, inv2)],
+                        },
+                    );
 
                     // Antisymmetric combination: (f_+ - f_-)/√2
                     let antisym_gerade = Some(!l_even);
-                    let antisym_irrep =
-                        find_irrep(group, lambda, sigma_v, antisym_gerade).unwrap_or_else(|| {
-                            panic!("no irrep for λ={lambda}, g={antisym_gerade:?}")
-                        });
-                    add_salc(antisym_irrep, Salc {
-                        coefficients: vec![(i, inv2), (j, -inv2)],
-                    });
+                    let antisym_irrep = find_irrep(group, lambda, sigma_v, antisym_gerade)
+                        .unwrap_or_else(|| panic!("no irrep for λ={lambda}, g={antisym_gerade:?}"));
+                    add_salc(
+                        antisym_irrep,
+                        Salc {
+                            coefficients: vec![(i, inv2), (j, -inv2)],
+                        },
+                    );
 
                     processed[i] = true;
                     processed[j] = true;

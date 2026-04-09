@@ -13,14 +13,14 @@ use std::fmt;
 use std::marker::PhantomData;
 
 #[cfg(feature = "serde")]
-use serde::de::{Deserialize, Deserializer, Error as SerdeDeError, SeqAccess, Visitor};
+use ::serde::de::{Deserialize, Deserializer, Error as SerdeDeError, SeqAccess, Visitor};
 #[cfg(feature = "serde")]
-use serde::ser::{Serialize, SerializeTupleStruct, Serializer};
+use ::serde::ser::{Serialize, SerializeTupleStruct, Serializer};
 
 use crate::edn::Edn;
 use crate::error::DeError;
 #[cfg(feature = "serde")]
-use crate::serde_tokens::TAGGED_TOKEN;
+use crate::serde::TAGGED_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN tagged literal `#tag value`.
@@ -123,14 +123,14 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for EdnTagged<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::read_string;
     #[cfg(feature = "serde")]
-    use crate::{from_str, from_str_with, to_string, ParseConfig};
+    use crate::serde::{from_str, from_str_with, to_string};
+    use crate::{read_string, ParseConfig};
 
     /// Unknown-tag config needed for `EdnTagged<T>` with caller-chosen tag
     /// names that have no registered reader.
     #[cfg(feature = "serde")]
-    fn from_str_permissive<'a, T: serde::Deserialize<'a>>(s: &'a str) -> T {
+    fn from_str_permissive<'a, T: ::serde::Deserialize<'a>>(s: &'a str) -> T {
         let mut config = ParseConfig::default();
         config.allow_unknown_tags = true;
         from_str_with(s, &config).unwrap()
@@ -172,9 +172,11 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_edn_tagged_serialize_string_value() {
-        let tagged: EdnTagged<String> =
-            EdnTagged::new("inst", "2026-04-08T00:00:00Z".to_string());
-        assert_eq!(to_string(&tagged).unwrap(), "#inst \"2026-04-08T00:00:00Z\"");
+        let tagged: EdnTagged<String> = EdnTagged::new("inst", "2026-04-08T00:00:00Z".to_string());
+        assert_eq!(
+            to_string(&tagged).unwrap(),
+            "#inst \"2026-04-08T00:00:00Z\""
+        );
     }
 
     #[cfg(feature = "serde")]
@@ -220,7 +222,7 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_edn_tagged_serialize_in_struct() {
-        #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
+        #[derive(::serde::Serialize, ::serde::Deserialize, Debug, PartialEq)]
         struct Wrapper {
             stamp: EdnTagged<String>,
         }

@@ -3,10 +3,16 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
-use std::ops::Index;
+use std::ops::{Deref, Index};
 use std::str::FromStr;
 use std::{fmt, iter};
 
+#[cfg(feature = "serde")]
+use ::serde::de::{self, Deserializer, Visitor};
+#[cfg(feature = "serde")]
+use ::serde::ser::Serializer;
+#[cfg(feature = "serde")]
+use ::serde::{Deserialize, Serialize};
 #[cfg(feature = "bignum")]
 use bigdecimal::BigDecimal;
 #[cfg(feature = "bignum")]
@@ -17,22 +23,24 @@ pub use crate::bigdecimal::EdnBigDecimal;
 use crate::collections::{EdnKeyRef, EdnMap, EdnSeq, EdnSet};
 use crate::error::EdnError;
 use crate::reader::read_string;
+#[cfg(feature = "serde")]
+use crate::serde::{KEYWORD_TOKEN, SYMBOL_TOKEN};
 
 /// A keyword value (`:name` or `:ns/name`).
 #[derive(Clone, Debug, Eq)]
-pub struct Keyword<'a>(Cow<'a, str>);
+pub struct EdnKeyword<'a>(Cow<'a, str>);
 
-impl<'a> Keyword<'a> {
+impl<'a> EdnKeyword<'a> {
     pub fn new(name: &'a str) -> Self {
-        Keyword(Cow::Borrowed(name))
+        EdnKeyword(Cow::Borrowed(name))
     }
 
     pub fn owned(name: String) -> Self {
-        Keyword(Cow::Owned(name))
+        EdnKeyword(Cow::Owned(name))
     }
 
     pub fn namespaced(ns: &str, name: &str) -> Self {
-        Keyword(Cow::Owned(format!("{ns}/{name}")))
+        EdnKeyword(Cow::Owned(format!("{ns}/{name}")))
     }
 
     pub fn name(&self) -> &str {
@@ -57,56 +65,95 @@ impl<'a> Keyword<'a> {
         self.0
     }
 
-    pub fn into_owned(self) -> Keyword<'static> {
-        Keyword(Cow::Owned(self.0.into_owned()))
+    pub fn into_owned(self) -> EdnKeyword<'static> {
+        EdnKeyword(Cow::Owned(self.0.into_owned()))
     }
 }
 
-impl PartialEq for Keyword<'_> {
+impl PartialEq for EdnKeyword<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl PartialOrd for Keyword<'_> {
+impl PartialOrd for EdnKeyword<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for Keyword<'_> {
+impl Ord for EdnKeyword<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.0.cmp(&other.0)
     }
 }
 
-impl Hash for Keyword<'_> {
+impl Hash for EdnKeyword<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
 
-impl fmt::Display for Keyword<'_> {
+impl fmt::Display for EdnKeyword<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, ":{}", self.0)
     }
 }
 
+impl Deref for EdnKeyword<'_> {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for EdnKeyword<'_> {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for EdnKeyword<'static> {
+    fn from(s: String) -> Self {
+        EdnKeyword(Cow::Owned(s))
+    }
+}
+
+impl<'a> From<&'a str> for EdnKeyword<'a> {
+    fn from(s: &'a str) -> Self {
+        EdnKeyword(Cow::Borrowed(s))
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for EdnKeyword<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_newtype_struct(KEYWORD_TOKEN, self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for EdnKeyword<'static> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        String::deserialize(deserializer).map(EdnKeyword::owned)
+    }
+}
+
 /// A symbol value (`name` or `ns/name`).
 #[derive(Clone, Debug, Eq)]
-pub struct Symbol<'a>(Cow<'a, str>);
+pub struct EdnSymbol<'a>(Cow<'a, str>);
 
-impl<'a> Symbol<'a> {
+impl<'a> EdnSymbol<'a> {
     pub fn new(name: &'a str) -> Self {
-        Symbol(Cow::Borrowed(name))
+        EdnSymbol(Cow::Borrowed(name))
     }
 
     pub fn owned(name: String) -> Self {
-        Symbol(Cow::Owned(name))
+        EdnSymbol(Cow::Owned(name))
     }
 
     pub fn namespaced(ns: &str, name: &str) -> Self {
-        Symbol(Cow::Owned(format!("{ns}/{name}")))
+        EdnSymbol(Cow::Owned(format!("{ns}/{name}")))
     }
 
     pub fn name(&self) -> &str {
@@ -131,38 +178,108 @@ impl<'a> Symbol<'a> {
         self.0
     }
 
-    pub fn into_owned(self) -> Symbol<'static> {
-        Symbol(Cow::Owned(self.0.into_owned()))
+    pub fn into_owned(self) -> EdnSymbol<'static> {
+        EdnSymbol(Cow::Owned(self.0.into_owned()))
     }
 }
 
-impl PartialEq for Symbol<'_> {
+impl PartialEq for EdnSymbol<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
     }
 }
 
-impl PartialOrd for Symbol<'_> {
+impl PartialOrd for EdnSymbol<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for Symbol<'_> {
+impl Ord for EdnSymbol<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.0.cmp(&other.0)
     }
 }
 
-impl Hash for Symbol<'_> {
+impl Hash for EdnSymbol<'_> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.hash(state);
     }
 }
 
-impl fmt::Display for Symbol<'_> {
+impl fmt::Display for EdnSymbol<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for EdnSymbol<'_> {
+    type Target = str;
+    fn deref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<str> for EdnSymbol<'_> {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<String> for EdnSymbol<'static> {
+    fn from(s: String) -> Self {
+        EdnSymbol(Cow::Owned(s))
+    }
+}
+
+impl<'a> From<&'a str> for EdnSymbol<'a> {
+    fn from(s: &'a str) -> Self {
+        EdnSymbol(Cow::Borrowed(s))
+    }
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for EdnSymbol<'_> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_newtype_struct(SYMBOL_TOKEN, self.as_str())
+    }
+}
+
+#[cfg(feature = "serde")]
+struct EdnSymbolVisitor;
+
+#[cfg(feature = "serde")]
+impl<'de> Visitor<'de> for EdnSymbolVisitor {
+    type Value = EdnSymbol<'static>;
+
+    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("an EDN symbol")
+    }
+
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<EdnSymbol<'static>, E> {
+        Ok(EdnSymbol::owned(v.to_string()))
+    }
+
+    fn visit_string<E: de::Error>(self, v: String) -> Result<EdnSymbol<'static>, E> {
+        Ok(EdnSymbol::owned(v))
+    }
+
+    fn visit_borrowed_str<E: de::Error>(self, v: &'de str) -> Result<EdnSymbol<'static>, E> {
+        Ok(EdnSymbol::owned(v.to_string()))
+    }
+
+    fn visit_newtype_struct<D: Deserializer<'de>>(
+        self,
+        deserializer: D,
+    ) -> Result<EdnSymbol<'static>, D::Error> {
+        String::deserialize(deserializer).map(EdnSymbol::owned)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for EdnSymbol<'static> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_newtype_struct(SYMBOL_TOKEN, EdnSymbolVisitor)
     }
 }
 
@@ -203,21 +320,14 @@ pub enum Edn<'a> {
     BigDecimal(EdnBigDecimal),
     Char(char),
     Str(Cow<'a, str>),
-    Keyword(Keyword<'a>),
-    Symbol(Symbol<'a>),
+    Keyword(EdnKeyword<'a>),
+    Symbol(EdnSymbol<'a>),
     List(EdnSeq<'a>),
     Vector(EdnSeq<'a>),
     Map(EdnMap<'a>),
     Set(EdnSet<'a>),
     Tagged(Cow<'a, str>, Box<Edn<'a>>),
 }
-
-/// Owned form of [`Edn`] with no borrowed data.
-///
-/// Produced by [`Edn::into_owned`] and by any deserializer that materializes
-/// its input before returning. Use this alias in signatures where the `'a`
-/// lifetime parameter is uninformative.
-pub type EdnOwned = Edn<'static>;
 
 impl FromStr for Edn<'static> {
     type Err = EdnError;
@@ -229,11 +339,11 @@ impl FromStr for Edn<'static> {
 
 impl<'a> Edn<'a> {
     pub fn keyword(name: &'a str) -> Self {
-        Edn::Keyword(Keyword::new(name))
+        Edn::Keyword(EdnKeyword::new(name))
     }
 
     pub fn symbol(name: &'a str) -> Self {
-        Edn::Symbol(Symbol::new(name))
+        Edn::Symbol(EdnSymbol::new(name))
     }
 
     pub fn string(s: &'a str) -> Self {
@@ -378,14 +488,14 @@ impl<'a> Edn<'a> {
         }
     }
 
-    pub fn as_keyword(&self) -> Option<&Keyword<'a>> {
+    pub fn as_keyword(&self) -> Option<&EdnKeyword<'a>> {
         match self {
             Edn::Keyword(k) => Some(k),
             _ => None,
         }
     }
 
-    pub fn as_symbol(&self) -> Option<&Symbol<'a>> {
+    pub fn as_symbol(&self) -> Option<&EdnSymbol<'a>> {
         match self {
             Edn::Symbol(s) => Some(s),
             _ => None,
@@ -465,8 +575,8 @@ impl<'a> Edn<'a> {
         }
     }
 
-    /// Materialize any borrowed data and return an [`EdnOwned`].
-    pub fn into_owned(self) -> EdnOwned {
+    /// Materialize any borrowed data, returning `Edn<'static>`.
+    pub fn into_owned(self) -> Edn<'static> {
         match self {
             Edn::Nil => Edn::Nil,
             Edn::Bool(b) => Edn::Bool(b),
@@ -673,47 +783,47 @@ mod tests {
 
     #[test]
     fn test_symbol_owned() {
-        let s = Symbol::owned("foo".into());
+        let s = EdnSymbol::owned("foo".into());
         assert_eq!(s.as_str(), "foo");
     }
 
     #[test]
     fn test_symbol_name_namespace() {
-        let s = Symbol::namespaced("ns", "bar");
+        let s = EdnSymbol::namespaced("ns", "bar");
         assert_eq!(s.name(), "bar");
         assert_eq!(s.namespace(), Some("ns"));
 
-        let s = Symbol::new("simple");
+        let s = EdnSymbol::new("simple");
         assert_eq!(s.name(), "simple");
         assert_eq!(s.namespace(), None);
     }
 
     #[test]
     fn test_symbol_into_owned() {
-        let s = Symbol::new("hello");
-        let owned: Symbol<'static> = s.into_owned();
+        let s = EdnSymbol::new("hello");
+        let owned: EdnSymbol<'static> = s.into_owned();
         assert_eq!(owned.as_str(), "hello");
     }
 
     #[test]
     fn test_symbol_ord() {
-        let a = Symbol::new("alpha");
-        let b = Symbol::new("beta");
+        let a = EdnSymbol::new("alpha");
+        let b = EdnSymbol::new("beta");
         assert!(a < b);
         assert_eq!(a.partial_cmp(&b), Some(Ordering::Less));
     }
 
     #[test]
     fn test_keyword_into_owned() {
-        let k = Keyword::new("key");
-        let owned: Keyword<'static> = k.into_owned();
+        let k = EdnKeyword::new("key");
+        let owned: EdnKeyword<'static> = k.into_owned();
         assert_eq!(owned.as_str(), "key");
     }
 
     #[test]
     fn test_keyword_ord() {
-        let a = Keyword::new("alpha");
-        let b = Keyword::new("beta");
+        let a = EdnKeyword::new("alpha");
+        let b = EdnKeyword::new("beta");
         assert!(a < b);
         assert_eq!(a.partial_cmp(&b), Some(Ordering::Less));
     }
@@ -726,8 +836,8 @@ mod tests {
         assert!(Edn::Float(1.0).is_float());
         assert!(Edn::Char('x').is_char());
         assert!(Edn::Str(Cow::Borrowed("s")).is_str());
-        assert!(Edn::Keyword(Keyword::new("k")).is_keyword());
-        assert!(Edn::Symbol(Symbol::new("s")).is_symbol());
+        assert!(Edn::Keyword(EdnKeyword::new("k")).is_keyword());
+        assert!(Edn::Symbol(EdnSymbol::new("s")).is_symbol());
         assert!(Edn::List(vec![].into()).is_list());
         assert!(Edn::Vector(vec![].into()).is_vector());
         assert!(Edn::Map(EdnMap::new()).is_map());
@@ -771,14 +881,14 @@ mod tests {
 
     #[test]
     fn test_edn_as_keyword() {
-        let k = Edn::Keyword(Keyword::new("k"));
+        let k = Edn::Keyword(EdnKeyword::new("k"));
         assert!(k.as_keyword().is_some());
         assert!(Edn::Nil.as_keyword().is_none());
     }
 
     #[test]
     fn test_edn_as_symbol() {
-        let s = Edn::Symbol(Symbol::new("s"));
+        let s = Edn::Symbol(EdnSymbol::new("s"));
         assert!(s.as_symbol().is_some());
         assert!(Edn::Nil.as_symbol().is_none());
     }
@@ -853,8 +963,8 @@ mod tests {
             Edn::Float(3.14),
             Edn::Char('x'),
             Edn::Str(Cow::Borrowed("hello")),
-            Edn::Keyword(Keyword::new("k")),
-            Edn::Symbol(Symbol::new("s")),
+            Edn::Keyword(EdnKeyword::new("k")),
+            Edn::Symbol(EdnSymbol::new("s")),
             Edn::List(vec![Edn::Int(1)].into()),
             Edn::Vector(vec![Edn::Int(2)].into()),
             Edn::Map(EdnMap::new()),
@@ -882,8 +992,8 @@ mod tests {
         assert!(Edn::Float(1.0) < Edn::Float(2.0));
         assert!(Edn::Char('a') < Edn::Char('b'));
         assert!(Edn::Str(Cow::Borrowed("a")) < Edn::Str(Cow::Borrowed("b")));
-        assert!(Edn::Keyword(Keyword::new("a")) < Edn::Keyword(Keyword::new("b")));
-        assert!(Edn::Symbol(Symbol::new("a")) < Edn::Symbol(Symbol::new("b")));
+        assert!(Edn::Keyword(EdnKeyword::new("a")) < Edn::Keyword(EdnKeyword::new("b")));
+        assert!(Edn::Symbol(EdnSymbol::new("a")) < Edn::Symbol(EdnSymbol::new("b")));
     }
 
     #[test]
@@ -918,7 +1028,7 @@ mod tests {
         assert_ne!(Edn::Nil, Edn::Bool(false));
         assert_ne!(
             Edn::Str(Cow::Borrowed("foo")),
-            Edn::Keyword(Keyword::new("foo"))
+            Edn::Keyword(EdnKeyword::new("foo"))
         );
     }
 

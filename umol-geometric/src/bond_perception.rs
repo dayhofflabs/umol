@@ -37,7 +37,11 @@ pub struct BondDistanceModel {
 impl Default for BondDistanceModel {
     fn default() -> Self {
         Self {
-            sigma: [Length::angstrom(0.10), Length::angstrom(0.10), Length::angstrom(0.10)],
+            sigma: [
+                Length::angstrom(0.10),
+                Length::angstrom(0.10),
+                Length::angstrom(0.10),
+            ],
             // 15.0 Å⁻¹ converted to Bohr⁻¹
             sigmoid_alpha: 15.0 / Length::angstrom(1.0).as_bohr(),
             sigmoid_delta: Length::angstrom(0.30),
@@ -102,7 +106,11 @@ impl Default for BondPerceptionConfig {
 /// Default valence for a neutral atom (octet rule).
 fn default_valence(elem: Element) -> u8 {
     let ve = elem.valence_electrons();
-    if ve <= 4 { ve } else { 8u8.saturating_sub(ve) }
+    if ve <= 4 {
+        ve
+    } else {
+        8u8.saturating_sub(ve)
+    }
 }
 
 /// Result of bond perception.
@@ -117,10 +125,7 @@ pub struct BondPerceptionResult {
 }
 
 /// Perceive bonds from a 3D molecular geometry using Lagrangian relaxation.
-pub fn perceive_bonds(
-    mol: &Molecule,
-    config: &BondPerceptionConfig,
-) -> BondPerceptionResult {
+pub fn perceive_bonds(mol: &Molecule, config: &BondPerceptionConfig) -> BondPerceptionResult {
     let n = mol.atom_count();
 
     let target_valence: Vec<u8> = match &config.target_valences {
@@ -194,10 +199,11 @@ pub fn perceive_bonds(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::{fixture, rstest};
     use umol_data::element::Element::*;
     use umol_data::spin::SpinMultiplicity;
+
+    use super::*;
 
     #[fixture]
     fn config() -> BondPerceptionConfig {
@@ -286,11 +292,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ethane(ethane(),     7, 7,  0, 0)]  // 1 CC + 6 CH, all single
-    #[case::ethylene(ethylene(), 5, 4,  1, 0)]  // 1 CC + 4 CH; 1 double, 0 triple
+    #[case::ethane(ethane(), 7, 7, 0, 0)] // 1 CC + 6 CH, all single
+    #[case::ethylene(ethylene(), 5, 4, 1, 0)] // 1 CC + 4 CH; 1 double, 0 triple
     #[case::acetylene(acetylene(), 3, 2, 0, 1)] // 1 CC + 2 CH; 0 double, 1 triple
-    #[case::water(water(),       2, 2,  0, 0)]  // 2 OH, all single
-    #[case::benzene(benzene(),  12, 9,  3, 0)]  // 6 CC + 6 CH; 3 double (Kekule), 0 triple
+    #[case::water(water(), 2, 2, 0, 0)] // 2 OH, all single
+    #[case::benzene(benzene(), 12, 9, 3, 0)] // 6 CC + 6 CH; 3 double (Kekule), 0 triple
     fn test_perceive_bonds(
         config: BondPerceptionConfig,
         #[case] m: Molecule,
@@ -300,7 +306,11 @@ mod tests {
         #[case] expected_triple: usize,
     ) {
         let result = perceive_bonds(&m, &config);
-        assert!(result.feasible, "valence residuals: {:?}", result.valence_residuals);
+        assert!(
+            result.feasible,
+            "valence residuals: {:?}",
+            result.valence_residuals
+        );
 
         let bonds = sorted_bonds(&result);
         assert_eq!(bonds.len(), expected_bonds, "bond count: {bonds:?}");

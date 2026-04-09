@@ -4,8 +4,9 @@ Rust parser, formatter, and serde integration for
 [EDN (Extensible Data Notation)](https://github.com/edn-format/edn).
 
 Inspired by [edamame](https://github.com/borkdude/edamame) (Clojure),
-[go-edn](https://github.com/go-edn/edn) (Go), and
-[serde_json](https://github.com/serde-rs/json) (Rust).
+[go-edn](https://github.com/go-edn/edn) (Go),
+[toml-spanner](https://github.com/exrok/toml-spanner), and
+[serde_json](https://github.com/serde-rs/json) (both Rust).
 
 Implements the [EDN spec](https://github.com/edn-format/edn) strictly. See
 [`spec/edn-spec.md`](spec/edn-spec.md) for the full specification including

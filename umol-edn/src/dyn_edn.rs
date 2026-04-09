@@ -1,15 +1,15 @@
 //! Owned, serde-friendly EDN value.
 //!
-//! [`Value`] is an owned wrapper around [`Edn<'static>`] that carries the
+//! [`DynEdn`] is an owned wrapper around [`Edn<'static>`] that carries the
 //! full variant information of the internal EDN data model across the serde
 //! boundary. Unlike `Edn<'a>`, which is borrow-parameterized to support
-//! zero-copy parsing, `Value` has no lifetime and can be stored in struct
+//! zero-copy parsing, `DynEdn` has no lifetime and can be stored in struct
 //! fields, sent across threads, and used as a dynamic-typed escape hatch
 //! inside otherwise-typed deserialize paths.
 //!
 //! The EDN data model has variants (keyword, symbol, list, set, tagged,
 //! bigint, bigdecimal) that do not correspond to serde's primitive set.
-//! Under the `serde` feature, `Value` round-trips them losslessly through
+//! Under the `serde` feature, `DynEdn` round-trips them losslessly through
 //! the EDN serializer/deserializer while still producing sensible fallbacks
 //! when the payload travels over a foreign format such as JSON or YAML.
 //!
@@ -41,13 +41,13 @@ use std::fmt;
 use std::str::FromStr;
 
 #[cfg(feature = "serde")]
-use serde::de::{
+use ::serde::de::{
     self, DeserializeSeed, Deserializer, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
 #[cfg(feature = "serde")]
-use serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeTupleStruct, Serializer};
+use ::serde::ser::{Serialize, SerializeMap, SerializeSeq, SerializeTupleStruct, Serializer};
 #[cfg(feature = "serde")]
-use serde::Deserialize;
+use ::serde::Deserialize;
 
 #[cfg(feature = "serde")]
 use crate::collections::{EdnMap, EdnSeq, EdnSet};
@@ -58,39 +58,37 @@ use crate::edn::Edn;
 #[cfg(all(feature = "serde", feature = "bignum"))]
 use crate::edn::EdnBigDecimal;
 #[cfg(feature = "serde")]
-use crate::edn::{Keyword, Symbol};
+use crate::edn::{EdnKeyword, EdnSymbol};
 use crate::error::{DeError, EdnError};
 use crate::reader::read_string_with;
 #[cfg(all(feature = "serde", feature = "bignum"))]
-use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
+use crate::serde::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
 #[cfg(feature = "serde")]
-use crate::serde_tokens::{
-    KEYWORD_TOKEN, LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN, VALUE_TOKEN,
-};
+use crate::serde::{KEYWORD_TOKEN, LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN, VALUE_TOKEN};
 use crate::traits::{FromEdn, ToEdn};
 
 /// Owned EDN value. A lossless mirror of [`Edn<'static>`] for use where a
 /// fully owned, lifetime-free value is required.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Value(pub(crate) Edn<'static>);
+pub struct DynEdn(pub(crate) Edn<'static>);
 
-impl Value {
+impl DynEdn {
     /// Wrap an already-owned `Edn<'static>` value.
     pub fn new(edn: Edn<'static>) -> Self {
         Self(edn)
     }
 
-    /// Parse an EDN string into a `Value` using the default config.
+    /// Parse an EDN string into a `DynEdn` using the default config.
     ///
     /// Unknown tags are rejected with `InvalidTag`. Callers that need to
     /// preserve arbitrary tagged literals must supply a config with
-    /// `allow_unknown_tags = true` via [`Value::parse_with`] or register
+    /// `allow_unknown_tags = true` via [`DynEdn::parse_with`] or register
     /// the relevant tag readers.
     pub fn parse(input: &str) -> Result<Self, EdnError> {
         Self::parse_with(input, &ParseConfig::default())
     }
 
-    /// Parse an EDN string into a `Value` using the supplied config.
+    /// Parse an EDN string into a `DynEdn` using the supplied config.
     pub fn parse_with(input: &str, config: &ParseConfig) -> Result<Self, EdnError> {
         Ok(Self(read_string_with(input, config)?.into_owned()))
     }
@@ -106,58 +104,58 @@ impl Value {
     }
 }
 
-impl From<Edn<'static>> for Value {
+impl From<Edn<'static>> for DynEdn {
     fn from(edn: Edn<'static>) -> Self {
         Self(edn)
     }
 }
 
-impl From<&Edn<'_>> for Value {
+impl From<&Edn<'_>> for DynEdn {
     fn from(edn: &Edn<'_>) -> Self {
         Self(edn.clone().into_owned())
     }
 }
 
-impl From<Value> for Edn<'static> {
-    fn from(v: Value) -> Self {
+impl From<DynEdn> for Edn<'static> {
+    fn from(v: DynEdn) -> Self {
         v.0
     }
 }
 
-impl fmt::Display for Value {
+impl fmt::Display for DynEdn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
 
-impl FromStr for Value {
+impl FromStr for DynEdn {
     type Err = EdnError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::parse(s)
     }
 }
 
-impl<'de> FromEdn<'de> for Value {
+impl<'de> FromEdn<'de> for DynEdn {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         Ok(Self(edn.clone().into_owned()))
     }
 }
 
-impl ToEdn for Value {
+impl ToEdn for DynEdn {
     fn to_edn(&self) -> Edn<'_> {
         self.0.clone()
     }
 }
 
 #[cfg(feature = "serde")]
-impl Serialize for Value {
+impl Serialize for DynEdn {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         EdnRef(&self.0).serialize(serializer)
     }
 }
 
 /// Borrowing helper that serializes any `&Edn` through the same
-/// variant-preserving token dispatch used by `Value`.
+/// variant-preserving token dispatch used by `DynEdn`.
 #[cfg(feature = "serde")]
 struct EdnRef<'a>(&'a Edn<'a>);
 
@@ -234,7 +232,7 @@ impl<'a> Serialize for SetPayload<'a> {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for Value {
+impl<'de> Deserialize<'de> for DynEdn {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         deserializer.deserialize_newtype_struct(VALUE_TOKEN, ValueVisitor)
     }
@@ -245,120 +243,120 @@ pub(crate) struct ValueVisitor;
 
 #[cfg(feature = "serde")]
 impl<'de> Visitor<'de> for ValueVisitor {
-    type Value = Value;
+    type Value = DynEdn;
 
     fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("any EDN value")
     }
 
-    fn visit_unit<E: de::Error>(self) -> Result<Value, E> {
-        Ok(Value(Edn::Nil))
+    fn visit_unit<E: de::Error>(self) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Nil))
     }
 
-    fn visit_none<E: de::Error>(self) -> Result<Value, E> {
-        Ok(Value(Edn::Nil))
+    fn visit_none<E: de::Error>(self) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Nil))
     }
 
-    fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<Value, D::Error> {
-        Value::deserialize(deserializer)
+    fn visit_some<D: Deserializer<'de>>(self, deserializer: D) -> Result<DynEdn, D::Error> {
+        DynEdn::deserialize(deserializer)
     }
 
-    fn visit_bool<E: de::Error>(self, v: bool) -> Result<Value, E> {
-        Ok(Value(Edn::Bool(v)))
+    fn visit_bool<E: de::Error>(self, v: bool) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Bool(v)))
     }
 
-    fn visit_i64<E: de::Error>(self, v: i64) -> Result<Value, E> {
-        Ok(Value(Edn::Int(v)))
+    fn visit_i64<E: de::Error>(self, v: i64) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Int(v)))
     }
 
-    fn visit_i128<E: de::Error>(self, v: i128) -> Result<Value, E> {
+    fn visit_i128<E: de::Error>(self, v: i128) -> Result<DynEdn, E> {
         i64::try_from(v)
-            .map(|i| Value(Edn::Int(i)))
+            .map(|i| DynEdn(Edn::Int(i)))
             .map_err(|_| E::custom(format!("i128 {v} out of range for Edn::Int")))
     }
 
-    fn visit_u64<E: de::Error>(self, v: u64) -> Result<Value, E> {
+    fn visit_u64<E: de::Error>(self, v: u64) -> Result<DynEdn, E> {
         i64::try_from(v)
-            .map(|i| Value(Edn::Int(i)))
+            .map(|i| DynEdn(Edn::Int(i)))
             .map_err(|_| E::custom(format!("u64 {v} out of range for Edn::Int")))
     }
 
-    fn visit_u128<E: de::Error>(self, v: u128) -> Result<Value, E> {
+    fn visit_u128<E: de::Error>(self, v: u128) -> Result<DynEdn, E> {
         i64::try_from(v)
-            .map(|i| Value(Edn::Int(i)))
+            .map(|i| DynEdn(Edn::Int(i)))
             .map_err(|_| E::custom(format!("u128 {v} out of range for Edn::Int")))
     }
 
-    fn visit_f64<E: de::Error>(self, v: f64) -> Result<Value, E> {
-        Ok(Value(Edn::Float(v)))
+    fn visit_f64<E: de::Error>(self, v: f64) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Float(v)))
     }
 
-    fn visit_char<E: de::Error>(self, v: char) -> Result<Value, E> {
-        Ok(Value(Edn::Char(v)))
+    fn visit_char<E: de::Error>(self, v: char) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Char(v)))
     }
 
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<Value, E> {
-        Ok(Value(Edn::Str(Cow::Owned(v.to_string()))))
+    fn visit_str<E: de::Error>(self, v: &str) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Str(Cow::Owned(v.to_string()))))
     }
 
-    fn visit_borrowed_str<E: de::Error>(self, v: &'de str) -> Result<Value, E> {
-        Ok(Value(Edn::Str(Cow::Owned(v.to_string()))))
+    fn visit_borrowed_str<E: de::Error>(self, v: &'de str) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Str(Cow::Owned(v.to_string()))))
     }
 
-    fn visit_string<E: de::Error>(self, v: String) -> Result<Value, E> {
-        Ok(Value(Edn::Str(Cow::Owned(v))))
+    fn visit_string<E: de::Error>(self, v: String) -> Result<DynEdn, E> {
+        Ok(DynEdn(Edn::Str(Cow::Owned(v))))
     }
 
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Value, A::Error> {
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<DynEdn, A::Error> {
         let mut items: Vec<Edn<'static>> = Vec::with_capacity(seq.size_hint().unwrap_or(0));
-        while let Some(element) = seq.next_element::<Value>()? {
+        while let Some(element) = seq.next_element::<DynEdn>()? {
             items.push(element.0);
         }
-        Ok(Value(Edn::Vector(EdnSeq::from(items))))
+        Ok(DynEdn(Edn::Vector(EdnSeq::from(items))))
     }
 
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Value, A::Error> {
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<DynEdn, A::Error> {
         let mut out: EdnMap<'static> = EdnMap::with_capacity(map.size_hint().unwrap_or(0));
-        while let Some((k, v)) = map.next_entry::<Value, Value>()? {
+        while let Some((k, v)) = map.next_entry::<DynEdn, DynEdn>()? {
             out.insert(k.0, v.0);
         }
-        Ok(Value(Edn::Map(out)))
+        Ok(DynEdn(Edn::Map(out)))
     }
 
     fn visit_newtype_struct<D: Deserializer<'de>>(
         self,
         deserializer: D,
-    ) -> Result<Value, D::Error> {
+    ) -> Result<DynEdn, D::Error> {
         deserializer.deserialize_any(self)
     }
 
-    fn visit_enum<A: EnumAccess<'de>>(self, access: A) -> Result<Value, A::Error> {
+    fn visit_enum<A: EnumAccess<'de>>(self, access: A) -> Result<DynEdn, A::Error> {
         let (variant, payload): (String, A::Variant) = access.variant()?;
         match variant.as_str() {
             KEYWORD_TOKEN => {
                 let s: String = payload.newtype_variant()?;
-                Ok(Value(Edn::Keyword(Keyword::owned(s))))
+                Ok(DynEdn(Edn::Keyword(EdnKeyword::owned(s))))
             }
             SYMBOL_TOKEN => {
                 let s: String = payload.newtype_variant()?;
-                Ok(Value(Edn::Symbol(Symbol::owned(s))))
+                Ok(DynEdn(Edn::Symbol(EdnSymbol::owned(s))))
             }
             LIST_TOKEN => {
-                let items: Vec<Value> = payload.newtype_variant()?;
+                let items: Vec<DynEdn> = payload.newtype_variant()?;
                 let owned: Vec<Edn<'static>> = items.into_iter().map(|v| v.0).collect();
-                Ok(Value(Edn::List(EdnSeq::from(owned))))
+                Ok(DynEdn(Edn::List(EdnSeq::from(owned))))
             }
             SET_TOKEN => {
-                let items: Vec<Value> = payload.newtype_variant()?;
+                let items: Vec<DynEdn> = payload.newtype_variant()?;
                 let mut set: EdnSet<'static> = EdnSet::new();
                 for item in items {
                     set.insert(item.0);
                 }
-                Ok(Value(Edn::Set(set)))
+                Ok(DynEdn(Edn::Set(set)))
             }
             TAGGED_TOKEN => {
-                let (tag, inner): (String, Value) = payload.newtype_variant()?;
-                Ok(Value(Edn::Tagged(Cow::Owned(tag), Box::new(inner.0))))
+                let (tag, inner): (String, DynEdn) = payload.newtype_variant()?;
+                Ok(DynEdn(Edn::Tagged(Cow::Owned(tag), Box::new(inner.0))))
             }
             #[cfg(feature = "bignum")]
             BIGINT_TOKEN => {
@@ -366,7 +364,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 let n = num_bigint::BigInt::from_str(&s).map_err(|e| {
                     <A::Error as de::Error>::custom(format!("invalid bigint {s:?}: {e}"))
                 })?;
-                Ok(Value(Edn::BigInt(n)))
+                Ok(DynEdn(Edn::BigInt(n)))
             }
             #[cfg(feature = "bignum")]
             BIGDECIMAL_TOKEN => {
@@ -374,7 +372,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
                 let d = bigdecimal::BigDecimal::from_str(&s).map_err(|e| {
                     <A::Error as de::Error>::custom(format!("invalid bigdecimal {s:?}: {e}"))
                 })?;
-                Ok(Value(Edn::BigDecimal(EdnBigDecimal::new(d))))
+                Ok(DynEdn(Edn::BigDecimal(EdnBigDecimal::new(d))))
             }
             other => Err(<A::Error as de::Error>::custom(format!(
                 "unexpected Value carrier variant: {other}"
@@ -417,7 +415,7 @@ impl<'de> Deserializer<'de> for ValueCarrier<'de> {
         })
     }
 
-    serde::forward_to_deserialize_any! {
+    ::serde::forward_to_deserialize_any! {
         bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
         bytes byte_buf option unit unit_struct newtype_struct seq tuple
         tuple_struct map struct enum identifier ignored_any
@@ -505,27 +503,27 @@ mod tests {
 
     use super::*;
     #[cfg(feature = "serde")]
-    use crate::{from_str, to_string};
+    use crate::serde::{from_str, to_string};
 
     #[test]
     fn test_value_parse() {
-        assert_eq!(Value::parse("nil").unwrap().as_edn(), &Edn::Nil);
-        assert_eq!(Value::parse("true").unwrap().as_edn(), &Edn::Bool(true));
-        assert_eq!(Value::parse("7").unwrap().as_edn(), &Edn::Int(7));
+        assert_eq!(DynEdn::parse("nil").unwrap().as_edn(), &Edn::Nil);
+        assert_eq!(DynEdn::parse("true").unwrap().as_edn(), &Edn::Bool(true));
+        assert_eq!(DynEdn::parse("7").unwrap().as_edn(), &Edn::Int(7));
     }
 
     #[test]
     fn test_value_parse_roundtrip() {
         let input = "{:name \"salt\" :atoms [:Na :Cl]}";
-        let v = Value::parse(input).unwrap();
+        let v = DynEdn::parse(input).unwrap();
         let s = v.to_string();
-        let v2 = Value::parse(&s).unwrap();
+        let v2 = DynEdn::parse(&s).unwrap();
         assert_eq!(v, v2);
     }
 
     #[test]
     fn test_value_parse_tagged() {
-        let v = Value::parse("#inst \"2026-04-08T00:00:00Z\"").unwrap();
+        let v = DynEdn::parse("#inst \"2026-04-08T00:00:00Z\"").unwrap();
         let Edn::Tagged(tag, inner) = v.as_edn() else {
             panic!("expected tagged, got {:?}", v.as_edn());
         };
@@ -539,19 +537,19 @@ mod tests {
     #[test]
     fn test_value_from_edn() {
         let edn = crate::read_string("[1 2 3]").unwrap();
-        let v = Value::from_edn(&edn).unwrap();
+        let v = DynEdn::from_edn(&edn).unwrap();
         assert_eq!(v.to_edn(), edn);
     }
 
     #[test]
     fn test_value_display() {
-        let v = Value::parse(":foo").unwrap();
+        let v = DynEdn::parse(":foo").unwrap();
         assert_eq!(v.to_string(), ":foo");
     }
 
     #[test]
     fn test_value_from_str() {
-        let v: Value = "(1 2 3)".parse().unwrap();
+        let v: DynEdn = "(1 2 3)".parse().unwrap();
         assert!(matches!(v.as_edn(), Edn::List(_)));
     }
 
@@ -566,21 +564,21 @@ mod tests {
     #[case(r#""hi""#, Edn::Str(Cow::Borrowed("hi")))]
     #[case(r#"\a"#, Edn::Char('a'))]
     fn test_value_roundtrip_primitives(#[case] input: &str, #[case] expected: Edn<'static>) {
-        let v: Value = from_str(input).unwrap();
+        let v: DynEdn = from_str(input).unwrap();
         assert_eq!(v.as_edn(), &expected);
         let s = to_string(&v).unwrap();
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert_eq!(v, v2);
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_roundtrip_keyword() {
-        let v: Value = from_str(":name/foo").unwrap();
+        let v: DynEdn = from_str(":name/foo").unwrap();
         assert!(matches!(v.as_edn(), Edn::Keyword(_)));
         let s = to_string(&v).unwrap();
         assert_eq!(s, ":name/foo");
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert_eq!(v, v2);
     }
 
@@ -593,7 +591,7 @@ mod tests {
         #[case] expected: &str,
         #[case] kind: fn(&Edn<'_>) -> bool,
     ) {
-        let v: Value = from_str(input).unwrap();
+        let v: DynEdn = from_str(input).unwrap();
         assert!(kind(v.as_edn()));
         let s = to_string(&v).unwrap();
         assert_eq!(s, expected);
@@ -602,21 +600,21 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_roundtrip_list() {
-        let v: Value = from_str("(1 2 3)").unwrap();
+        let v: DynEdn = from_str("(1 2 3)").unwrap();
         assert!(matches!(v.as_edn(), Edn::List(_)));
         let s = to_string(&v).unwrap();
         assert_eq!(s, "(1 2 3)");
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert!(matches!(v2.as_edn(), Edn::List(_)));
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_roundtrip_set() {
-        let v: Value = from_str("#{1 2 3}").unwrap();
+        let v: DynEdn = from_str("#{1 2 3}").unwrap();
         assert!(matches!(v.as_edn(), Edn::Set(_)));
         let s = to_string(&v).unwrap();
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert!(matches!(v2.as_edn(), Edn::Set(_)));
         assert_eq!(v, v2);
     }
@@ -624,24 +622,27 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_roundtrip_map() {
-        let v: Value = from_str("{:a 1 :b 2}").unwrap();
+        let v: DynEdn = from_str("{:a 1 :b 2}").unwrap();
         assert!(matches!(v.as_edn(), Edn::Map(_)));
         let s = to_string(&v).unwrap();
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert_eq!(v, v2);
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_roundtrip_tagged() {
-        let v: Value = from_str("#inst \"2026-04-08T00:00:00Z\"").unwrap();
+        let v: DynEdn = from_str("#inst \"2026-04-08T00:00:00Z\"").unwrap();
         let Edn::Tagged(tag, inner) = v.as_edn() else {
             panic!("expected tagged, got {:?}", v.as_edn());
         };
         assert_eq!(tag.as_ref(), "inst");
-        assert_eq!(inner.as_ref(), &Edn::Str(Cow::Borrowed("2026-04-08T00:00:00Z")));
+        assert_eq!(
+            inner.as_ref(),
+            &Edn::Str(Cow::Borrowed("2026-04-08T00:00:00Z"))
+        );
         let s = to_string(&v).unwrap();
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert_eq!(v, v2);
     }
 
@@ -649,20 +650,20 @@ mod tests {
     #[test]
     fn test_value_roundtrip_nested() {
         let input = r#"{:name "salt" :atoms [:Na :Cl] :count 2}"#;
-        let v: Value = from_str(input).unwrap();
+        let v: DynEdn = from_str(input).unwrap();
         let s = to_string(&v).unwrap();
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert_eq!(v, v2);
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_serialize_in_struct() {
-        use serde::{Deserialize, Serialize};
+        use ::serde::{Deserialize, Serialize};
         #[derive(Serialize, Deserialize, PartialEq, Debug)]
         struct Wrapper {
             name: String,
-            data: Value,
+            data: DynEdn,
         }
         let input = r#"{:name "thing" :data (1 :two 3)}"#;
         let w: Wrapper = from_str(input).unwrap();
@@ -676,60 +677,60 @@ mod tests {
     #[cfg(all(feature = "serde", feature = "bignum"))]
     #[test]
     fn test_value_roundtrip_bigint() {
-        let v: Value = from_str("123456789012345678901234567890N").unwrap();
+        let v: DynEdn = from_str("123456789012345678901234567890N").unwrap();
         assert!(matches!(v.as_edn(), Edn::BigInt(_)));
         let s = to_string(&v).unwrap();
         assert_eq!(s, "123456789012345678901234567890N");
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert_eq!(v, v2);
     }
 
     #[cfg(all(feature = "serde", feature = "bignum"))]
     #[test]
     fn test_value_roundtrip_bigdecimal() {
-        let v: Value = from_str("3.14159265358979323846M").unwrap();
+        let v: DynEdn = from_str("3.14159265358979323846M").unwrap();
         assert!(matches!(v.as_edn(), Edn::BigDecimal(_)));
         let s = to_string(&v).unwrap();
-        let v2: Value = from_str(&s).unwrap();
+        let v2: DynEdn = from_str(&s).unwrap();
         assert_eq!(v, v2);
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_serialize_json() {
-        let v = Value(Edn::Int(17));
+        let v = DynEdn(Edn::Int(17));
         let json = serde_json::to_string(&v).unwrap();
         assert_eq!(json, "17");
-        let back: Value = serde_json::from_str(&json).unwrap();
+        let back: DynEdn = serde_json::from_str(&json).unwrap();
         assert_eq!(back, v);
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_serialize_json_keyword() {
-        let v = Value(Edn::Keyword(Keyword::owned("foo".to_string())));
+        let v = DynEdn(Edn::Keyword(EdnKeyword::owned("foo".to_string())));
         let json = serde_json::to_string(&v).unwrap();
         assert_eq!(json, "\"foo\"");
-        let back: Value = serde_json::from_str(&json).unwrap();
+        let back: DynEdn = serde_json::from_str(&json).unwrap();
         assert_eq!(back.as_edn(), &Edn::Str(Cow::Owned("foo".to_string())));
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_serialize_json_list() {
-        let v = Value(Edn::List(EdnSeq::from(vec![Edn::Int(1), Edn::Int(2)])));
+        let v = DynEdn(Edn::List(EdnSeq::from(vec![Edn::Int(1), Edn::Int(2)])));
         let json = serde_json::to_string(&v).unwrap();
         assert_eq!(json, "[1,2]");
-        let back: Value = serde_json::from_str(&json).unwrap();
+        let back: DynEdn = serde_json::from_str(&json).unwrap();
         assert!(matches!(back.as_edn(), Edn::Vector(_)));
     }
 
     #[cfg(feature = "serde")]
     #[test]
     fn test_value_serialize_json_map() {
-        let v: Value = from_str(r#"{"a" 1 "b" 2}"#).unwrap();
+        let v: DynEdn = from_str(r#"{"a" 1 "b" 2}"#).unwrap();
         let json = serde_json::to_string(&v).unwrap();
-        let back: Value = serde_json::from_str(&json).unwrap();
+        let back: DynEdn = serde_json::from_str(&json).unwrap();
         assert_eq!(v, back);
     }
 }

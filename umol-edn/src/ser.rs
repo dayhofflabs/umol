@@ -5,23 +5,24 @@ use std::borrow::Cow;
 use std::fmt::Write;
 #[cfg(feature = "bignum")]
 use std::str::FromStr;
-#[cfg(feature = "bignum")]
-use bigdecimal::BigDecimal;
-use serde::ser::{
+
+use ::serde::ser::{
     SerializeMap, SerializeSeq, SerializeStruct, SerializeStructVariant, SerializeTuple,
     SerializeTupleStruct, SerializeTupleVariant,
 };
-use serde::{Serialize, Serializer};
+use ::serde::{Serialize, Serializer};
+#[cfg(feature = "bignum")]
+use bigdecimal::BigDecimal;
 
 use crate::collections::{EdnMap, EdnSeq};
 #[cfg(feature = "bignum")]
 use crate::edn::EdnBigDecimal;
-use crate::edn::{Edn, Keyword};
+use crate::edn::{Edn, EdnKeyword};
 use crate::error::{EdnError, SerError};
 use crate::formatter::FormatConfig;
 #[cfg(feature = "bignum")]
-use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
-use crate::serde_tokens::{KEYWORD_TOKEN, LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN};
+use crate::serde::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
+use crate::serde::{KEYWORD_TOKEN, LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN};
 
 /// Serialize a value to a compact EDN string.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, EdnError> {
@@ -688,11 +689,11 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
     fn serialize_str(self, v: &str) -> Result<Self::Ok, Self::Error> {
         if self.keyword_mode {
             self.keyword_mode = false;
-            return Ok(Edn::Keyword(Keyword::owned(v.to_string())));
+            return Ok(Edn::Keyword(EdnKeyword::owned(v.to_string())));
         }
         if self.symbol_mode {
             self.symbol_mode = false;
-            return Ok(Edn::Symbol(crate::edn::Symbol::owned(v.to_string())));
+            return Ok(Edn::Symbol(crate::edn::EdnSymbol::owned(v.to_string())));
         }
         #[cfg(feature = "bignum")]
         if self.bigint_mode {
@@ -737,7 +738,7 @@ impl<'a> Serializer for &'a mut EdnTreeSerializer {
         _variant_index: u32,
         variant: &'static str,
     ) -> Result<Self::Ok, Self::Error> {
-        Ok(Edn::Keyword(Keyword::owned(variant.to_string())))
+        Ok(Edn::Keyword(EdnKeyword::owned(variant.to_string())))
     }
 
     fn serialize_newtype_struct<T: ?Sized + Serialize>(
@@ -927,9 +928,9 @@ impl TreeSeqSerializer<'_> {
                         );
                     }
                 };
-                let inner = iter.next().ok_or_else(|| {
-                    SerError::Custom("tagged literal missing value".to_string())
-                })?;
+                let inner = iter
+                    .next()
+                    .ok_or_else(|| SerError::Custom("tagged literal missing value".to_string()))?;
                 Ok(Edn::Tagged(Cow::Owned(tag), Box::new(inner)))
             }
         }
@@ -1058,7 +1059,7 @@ impl SerializeStruct for TreeStructSerializer<'_> {
     ) -> Result<(), Self::Error> {
         let v = value.serialize(&mut *self.ser)?;
         self.map
-            .insert(Edn::Keyword(Keyword::owned(key.to_string())), v);
+            .insert(Edn::Keyword(EdnKeyword::owned(key.to_string())), v);
         Ok(())
     }
 
@@ -1084,7 +1085,7 @@ impl SerializeStructVariant for TreeVariantStructSerializer<'_> {
     ) -> Result<(), Self::Error> {
         let v = value.serialize(&mut *self.ser)?;
         self.map
-            .insert(Edn::Keyword(Keyword::owned(key.to_string())), v);
+            .insert(Edn::Keyword(EdnKeyword::owned(key.to_string())), v);
         Ok(())
     }
 
@@ -1100,11 +1101,10 @@ impl SerializeStructVariant for TreeVariantStructSerializer<'_> {
 mod tests {
     use std::collections::HashMap;
 
+    use ::serde::Serialize;
     use rstest::rstest;
-    use serde::Serialize;
 
-    use crate::edn::Edn;
-    use crate::keyword::EdnKeyword;
+    use crate::edn::{Edn, EdnKeyword};
     use crate::reader::read_string;
     use crate::ser::{to_string, to_string_pretty, to_string_with, to_value, EdnSerializer};
     use crate::FormatConfig;
@@ -1337,7 +1337,7 @@ mod tests {
 
     #[test]
     fn test_serialize_bytes_error() {
-        use serde::Serializer;
+        use ::serde::Serializer;
         let mut ser = EdnSerializer::new();
         assert!((&mut ser).serialize_bytes(b"data").is_err());
     }

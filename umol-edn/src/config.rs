@@ -23,8 +23,7 @@ pub enum DuplicateKeyPolicy {
 /// Stored as `Arc<dyn Fn>` so closures capturing external state (e.g. a
 /// registry of allowed tags) can be registered, and so that `ParseConfig`
 /// can keep its `Clone` impl.
-pub type TagFn =
-    Arc<dyn for<'a> Fn(Edn<'a>) -> Result<Edn<'a>, ParseError> + Send + Sync>;
+pub type TagFn = Arc<dyn for<'a> Fn(Edn<'a>) -> Result<Edn<'a>, ParseError> + Send + Sync>;
 
 /// Registry of tag readers.
 ///

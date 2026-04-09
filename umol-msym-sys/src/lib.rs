@@ -216,8 +216,10 @@ unsafe extern "C" {
 
     // Thresholds
     pub fn msymGetDefaultThresholds() -> *const msym_thresholds_t;
-    pub fn msymSetThresholds(ctx: msym_context, thresholds: *const msym_thresholds_t)
-        -> msym_error_t;
+    pub fn msymSetThresholds(
+        ctx: msym_context,
+        thresholds: *const msym_thresholds_t,
+    ) -> msym_error_t;
     pub fn msymGetThresholds(
         ctx: msym_context,
         thresholds: *mut *const msym_thresholds_t,
@@ -270,20 +272,13 @@ unsafe extern "C" {
         type_: msym_point_group_type_t,
         n: c_int,
     ) -> msym_error_t;
-    pub fn msymGetPointGroupName(
-        ctx: msym_context,
-        l: c_int,
-        buf: *mut c_char,
-    ) -> msym_error_t;
+    pub fn msymGetPointGroupName(ctx: msym_context, l: c_int, buf: *mut c_char) -> msym_error_t;
     pub fn msymGetSubgroups(
         ctx: msym_context,
         l: *mut c_int,
         subgroups: *mut *const msym_subgroup_t,
     ) -> msym_error_t;
-    pub fn msymSelectSubgroup(
-        ctx: msym_context,
-        subgroup: *const msym_subgroup_t,
-    ) -> msym_error_t;
+    pub fn msymSelectSubgroup(ctx: msym_context, subgroup: *const msym_subgroup_t) -> msym_error_t;
 
     // Symmetry operations
     pub fn msymGetSymmetryOperations(

@@ -139,11 +139,7 @@ pub fn lagrangian_relaxation(
 ///
 /// Starts from all-zero assignments and greedily increases variable values
 /// by the best marginal log-likelihood gain, subject to constraint capacity.
-fn greedy_recover(
-    variables: &[Variable],
-    constraints: &[Constraint],
-    assignments: &mut [usize],
-) {
+fn greedy_recover(variables: &[Variable], constraints: &[Constraint], assignments: &mut [usize]) {
     let m = constraints.len();
     let mut remaining = vec![0.0_f64; m];
     for j in 0..m {
@@ -165,7 +161,11 @@ fn greedy_recover(
             }
             // Check that all constraints have remaining capacity
             let can_increase = var.constraints.iter().all(|&(j, coeff)| {
-                if coeff > 0.0 { remaining[j] >= coeff } else { true }
+                if coeff > 0.0 {
+                    remaining[j] >= coeff
+                } else {
+                    true
+                }
             });
             if !can_increase {
                 continue;

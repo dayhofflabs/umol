@@ -19,14 +19,14 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
 #[cfg(feature = "serde")]
-use serde::de::{Deserialize, DeserializeSeed, Deserializer, SeqAccess, Visitor};
+use ::serde::de::{Deserialize, DeserializeSeed, Deserializer, SeqAccess, Visitor};
 #[cfg(feature = "serde")]
-use serde::ser::{Serialize, SerializeSeq, Serializer};
+use ::serde::ser::{Serialize, SerializeSeq, Serializer};
 
 use crate::edn::Edn;
 use crate::error::DeError;
 #[cfg(feature = "serde")]
-use crate::serde_tokens::SET_TOKEN;
+use crate::serde::SET_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN set. Always serializes as `#{...}` in EDN.
@@ -207,7 +207,7 @@ mod tests {
     use super::*;
     use crate::read_string;
     #[cfg(feature = "serde")]
-    use crate::{from_str, to_string};
+    use crate::serde::{from_str, to_string};
 
     #[test]
     fn test_edn_hash_set_from_edn() {
@@ -293,7 +293,7 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_edn_hash_set_serialize_in_struct() {
-        #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
+        #[derive(::serde::Serialize, ::serde::Deserialize, Debug, PartialEq)]
         struct Wrapper {
             tags: EdnHashSet<String>,
         }

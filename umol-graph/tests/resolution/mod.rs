@@ -9,11 +9,11 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use serde::{Deserialize, Serialize};
+use umol_edn::{from_str as edn_from_str, to_string_pretty as edn_to_string_pretty};
 use umol_graph::dsl::ast::{FromAst, ToAst};
 use umol_graph::dsl::config::{
     ImplicitHydrogenMode, MoleculeDslConfig, MoleculeDslConfigOverrides,
 };
-use umol_edn::{from_str as edn_from_str, to_string_pretty as edn_to_string_pretty};
 use umol_graph::dsl::molecule::MoleculeAst;
 use umol_graph::graph_ir::config_data::ValenceTable;
 use umol_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};

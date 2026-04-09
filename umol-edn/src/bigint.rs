@@ -11,16 +11,16 @@ use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::str::FromStr;
 
+#[cfg(feature = "serde")]
+use ::serde::de::{Deserialize, Deserializer, Error as SerdeDeError, Visitor};
+#[cfg(feature = "serde")]
+use ::serde::ser::{Serialize, Serializer};
 use num_bigint::BigInt;
-#[cfg(feature = "serde")]
-use serde::de::{Deserialize, Deserializer, Error as SerdeDeError, Visitor};
-#[cfg(feature = "serde")]
-use serde::ser::{Serialize, Serializer};
 
 use crate::edn::Edn;
 use crate::error::DeError;
 #[cfg(feature = "serde")]
-use crate::serde_tokens::BIGINT_TOKEN;
+use crate::serde::BIGINT_TOKEN;
 use crate::traits::{FromEdn, ToEdn};
 
 /// An owned EDN arbitrary-precision integer.
@@ -137,7 +137,7 @@ mod tests {
     use super::*;
     use crate::read_string;
     #[cfg(feature = "serde")]
-    use crate::{from_str, to_string};
+    use crate::serde::{from_str, to_string};
 
     #[test]
     fn test_edn_bigint_from_edn() {
@@ -209,7 +209,7 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_edn_bigint_serialize_in_struct() {
-        #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
+        #[derive(::serde::Serialize, ::serde::Deserialize, Debug, PartialEq)]
         struct Wrapper {
             count: EdnBigInt,
         }

@@ -3,12 +3,12 @@
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
-use hashbrown::hash_map::IntoIter as HashMapIntoIter;
-use hashbrown::hash_set::IntoIter as HashSetIntoIter;
-use serde::de::{
+use ::serde::de::{
     self, Deserialize, DeserializeSeed, EnumAccess, MapAccess, SeqAccess, VariantAccess, Visitor,
 };
-use serde::Deserializer;
+use ::serde::Deserializer;
+use hashbrown::hash_map::IntoIter as HashMapIntoIter;
+use hashbrown::hash_set::IntoIter as HashSetIntoIter;
 
 use crate::collections::{EdnMap, EdnSeq, EdnSeqIntoIter};
 use crate::config::ParseConfig;
@@ -16,8 +16,8 @@ use crate::edn::Edn;
 use crate::error::{DeError, EdnError};
 use crate::reader::{default_config, read_string_with, Reader};
 #[cfg(feature = "bignum")]
-use crate::serde_tokens::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
-use crate::serde_tokens::{LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN, VALUE_TOKEN};
+use crate::serde::{BIGDECIMAL_TOKEN, BIGINT_TOKEN};
+use crate::serde::{LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN, VALUE_TOKEN};
 
 /// Deserialize a Rust value from an EDN string.
 ///
@@ -32,7 +32,7 @@ pub fn from_str<'a, T: Deserialize<'a>>(s: &'a str) -> Result<T, EdnError> {
 /// Deserialize a Rust value from an EDN string using a custom config.
 ///
 /// The config is honored verbatim. If the caller relies on `#Variant` for
-/// enum dispatch or on preserving arbitrary tagged literals in `Value`, they
+/// enum dispatch or on preserving arbitrary tagged literals in `DynEdn`, they
 /// must set `allow_unknown_tags = true` on the config themselves or register
 /// the relevant tag readers.
 pub fn from_str_with<'a, T: Deserialize<'a>>(
@@ -98,9 +98,9 @@ impl<'a, T: Deserialize<'a>> Iterator for StreamDeserializer<'a, T> {
     type Item = Result<T, EdnError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.reader.next().map(|result| {
-            result.and_then(|edn| T::deserialize(EdnDeserializer(edn)))
-        })
+        self.reader
+            .next()
+            .map(|result| result.and_then(|edn| T::deserialize(EdnDeserializer(edn))))
     }
 }
 
@@ -207,8 +207,8 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
                 .into()),
             },
             VALUE_TOKEN => {
-                use crate::serde_tokens::*;
-                use crate::value::{ValueCarrier, ValuePayload};
+                use crate::dyn_edn::{ValueCarrier, ValuePayload};
+                use crate::serde::*;
                 match self.0 {
                     Edn::Keyword(k) => {
                         let carrier =
@@ -531,7 +531,7 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
         self.deserialize_bytes(visitor)
     }
 
-    serde::forward_to_deserialize_any! {
+    ::serde::forward_to_deserialize_any! {
         bool i64 char str unit ignored_any seq
     }
 }
@@ -754,14 +754,14 @@ impl<'de> VariantAccess<'de> for EdnTaggedVariantAccess<'de> {
 mod tests {
     use std::collections::HashMap;
 
+    use ::serde::{Deserialize, Serialize};
     use rstest::rstest;
-    use serde::{Deserialize, Serialize};
 
     use super::*;
     use crate::collections::{EdnMap, EdnSet};
     use crate::config::ParseConfig;
     use crate::de::{from_str, from_str_with, from_value};
-    use crate::edn::{Keyword, Symbol};
+    use crate::edn::{EdnKeyword, EdnSymbol};
     use crate::read_string;
     use crate::ser::to_string;
 
@@ -1183,7 +1183,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Edn::Symbol(Symbol::new("red")))]
+    #[case(Edn::Symbol(EdnSymbol::new("red")))]
     #[case(Edn::Str(Cow::Borrowed("red")))]
     fn test_from_value_enum_as_red(#[case] input: Edn<'static>) {
         assert_eq!(
@@ -1247,8 +1247,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Edn::Keyword(Keyword::new("hello")), "hello")]
-    #[case(Edn::Symbol(Symbol::new("world")), "world")]
+    #[case(Edn::Keyword(EdnKeyword::new("hello")), "hello")]
+    #[case(Edn::Symbol(EdnSymbol::new("world")), "world")]
     fn test_from_value_atom_as_string(#[case] input: Edn<'static>, #[case] expected: &str) {
         let v = from_value::<String>(input).unwrap();
         assert_eq!(v, expected);

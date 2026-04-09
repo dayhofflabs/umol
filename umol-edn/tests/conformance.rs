@@ -9,9 +9,10 @@ use std::str::FromStr;
 
 use rstest::rstest;
 use serde::Deserialize;
+use umol_edn::serde::{from_str, from_str_with};
 use umol_edn::{
-    from_str, from_str_with, read_all_with, read_string_with, DuplicateKeyPolicy, Edn, EdnError,
-    EdnMap, EdnSet, ParseConfig, ParseError, Symbol, TagFn, TagReaders,
+    read_all_with, read_string_with, DuplicateKeyPolicy, Edn, EdnError, EdnMap, EdnSet, EdnSymbol,
+    ParseConfig, ParseError, TagFn, TagReaders,
 };
 
 fn cfg() -> ParseConfig {
@@ -77,11 +78,11 @@ fn test_delimiters_no_whitespace() {
 fn test_hash_is_not_delimiter() {
     assert_eq!(
         parse("foo#bar").unwrap(),
-        Edn::Symbol(Symbol::new("foo#bar"))
+        Edn::Symbol(EdnSymbol::new("foo#bar"))
     );
     assert_eq!(
         parse("[a#b]").unwrap(),
-        Edn::Vector(vec![Edn::Symbol(Symbol::new("a#b"))].into())
+        Edn::Vector(vec![Edn::Symbol(EdnSymbol::new("a#b"))].into())
     );
 }
 
@@ -223,12 +224,12 @@ fn test_termination() {
 #[case("ns/name", "ns/name")]
 #[case("my.ns/sym", "my.ns/sym")]
 fn test_symbols(#[case] input: &str, #[case] name: &str) {
-    assert_eq!(parse(input).unwrap(), Edn::Symbol(Symbol::new(name)));
+    assert_eq!(parse(input).unwrap(), Edn::Symbol(EdnSymbol::new(name)));
 }
 
 #[test]
 fn test_slash_alone() {
-    assert_eq!(parse("/").unwrap(), Edn::Symbol(Symbol::new("/")));
+    assert_eq!(parse("/").unwrap(), Edn::Symbol(EdnSymbol::new("/")));
 }
 
 #[rstest]
@@ -244,14 +245,14 @@ fn test_slash_alone() {
 #[case("<", "<")]
 #[case(">", ">")]
 fn test_start_chars(#[case] input: &str, #[case] name: &str) {
-    assert_eq!(parse(input).unwrap(), Edn::Symbol(Symbol::new(name)));
+    assert_eq!(parse(input).unwrap(), Edn::Symbol(EdnSymbol::new(name)));
 }
 
 #[test]
 fn test_interior_chars() {
     assert_eq!(
         parse("foo+bar-baz#qux:quux'end").unwrap(),
-        Edn::Symbol(Symbol::new("foo+bar-baz#qux:quux'end"))
+        Edn::Symbol(EdnSymbol::new("foo+bar-baz#qux:quux'end"))
     );
 }
 

@@ -9,7 +9,9 @@ mod point_group;
 mod types;
 
 pub use basis::{BasisFunction, BasisKind, CartesianAxis, IrrepBasis, Salc, SalcBasis};
-pub use detect::{compute_salcs, detect_symmetry, generate_symmetry_images, symmetrize, SymmetryResult};
+pub use detect::{
+    compute_salcs, detect_symmetry, generate_symmetry_images, symmetrize, SymmetryResult,
+};
 pub use error::Error;
 pub use point_group::{CharacterTableDisplay, Irrep, PointGroup};
 pub use types::{

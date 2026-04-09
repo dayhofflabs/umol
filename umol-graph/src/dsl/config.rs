@@ -125,17 +125,39 @@ pub struct AtomDslConfigOverrides {
 
 impl AtomDslConfig {
     pub fn with_overrides(mut self, ov: AtomDslConfigOverrides) -> Self {
-        if let Some(v) = ov.isotope_mode { self.isotope_mode = v; }
-        if let Some(v) = ov.charge_mode { self.charge_mode = v; }
-        if let Some(v) = ov.implicit_h_mode { self.implicit_h_mode = v; }
-        if let Some(v) = ov.lone_pairs_mode { self.lone_pairs_mode = v; }
-        if let Some(v) = ov.unpaired_electrons_mode { self.unpaired_electrons_mode = v; }
-        if let Some(v) = ov.multiplicity_mode { self.multiplicity_mode = v; }
-        if let Some(v) = ov.valence_mode { self.valence_mode = v; }
-        if let Some(v) = ov.donated_pairs_mode { self.donated_pairs_mode = v; }
-        if let Some(v) = ov.accepted_pairs_mode { self.accepted_pairs_mode = v; }
-        if let Some(v) = ov.aromatic_valence_mode { self.aromatic_valence_mode = v; }
-        if let Some(v) = ov.multicenter_valence_mode { self.multicenter_valence_mode = v; }
+        if let Some(v) = ov.isotope_mode {
+            self.isotope_mode = v;
+        }
+        if let Some(v) = ov.charge_mode {
+            self.charge_mode = v;
+        }
+        if let Some(v) = ov.implicit_h_mode {
+            self.implicit_h_mode = v;
+        }
+        if let Some(v) = ov.lone_pairs_mode {
+            self.lone_pairs_mode = v;
+        }
+        if let Some(v) = ov.unpaired_electrons_mode {
+            self.unpaired_electrons_mode = v;
+        }
+        if let Some(v) = ov.multiplicity_mode {
+            self.multiplicity_mode = v;
+        }
+        if let Some(v) = ov.valence_mode {
+            self.valence_mode = v;
+        }
+        if let Some(v) = ov.donated_pairs_mode {
+            self.donated_pairs_mode = v;
+        }
+        if let Some(v) = ov.accepted_pairs_mode {
+            self.accepted_pairs_mode = v;
+        }
+        if let Some(v) = ov.aromatic_valence_mode {
+            self.aromatic_valence_mode = v;
+        }
+        if let Some(v) = ov.multicenter_valence_mode {
+            self.multicenter_valence_mode = v;
+        }
         self
     }
 }
@@ -178,9 +200,15 @@ pub struct BondDslConfigOverrides {
 
 impl BondDslConfig {
     pub fn with_overrides(mut self, ov: BondDslConfigOverrides) -> Self {
-        if let Some(v) = ov.charge_mode { self.charge_mode = v; }
-        if let Some(v) = ov.unpaired_electrons_mode { self.unpaired_electrons_mode = v; }
-        if let Some(v) = ov.multiplicity_mode { self.multiplicity_mode = v; }
+        if let Some(v) = ov.charge_mode {
+            self.charge_mode = v;
+        }
+        if let Some(v) = ov.unpaired_electrons_mode {
+            self.unpaired_electrons_mode = v;
+        }
+        if let Some(v) = ov.multiplicity_mode {
+            self.multiplicity_mode = v;
+        }
         self
     }
 }
@@ -229,9 +257,9 @@ impl MoleculeDslConfig {
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_edn::serde::{from_str as edn_from_str, to_string as edn_to_string};
 
     use super::*;
-    use umol_edn::{from_str as edn_from_str, to_string as edn_to_string};
 
     #[rstest]
     #[case::zeroed(MoleculeDslConfig::zeroed(),

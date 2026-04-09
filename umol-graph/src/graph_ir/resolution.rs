@@ -354,7 +354,9 @@ mod tests {
         let result = resolve_molecule_with(&mut builder, &config_with_ch_registry);
         assert!(matches!(
             result,
-            Err(GraphIrError::Resolution(ResolutionError::ValenceAmbiguous(_)))
+            Err(GraphIrError::Resolution(ResolutionError::ValenceAmbiguous(
+                _
+            )))
         ));
     }
 }

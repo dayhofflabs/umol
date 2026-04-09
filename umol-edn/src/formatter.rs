@@ -3,9 +3,9 @@
 #[cfg(feature = "bignum")]
 use std::fmt::{self, Display, Write};
 
-use itoa::Buffer as ItoaBuffer;
 #[cfg(feature = "serde")]
-use serde::Serialize;
+use ::serde::Serialize;
+use itoa::Buffer as ItoaBuffer;
 use zmij::Buffer as ZmijBuffer;
 
 use crate::collections::EdnMap;
@@ -368,7 +368,7 @@ mod tests {
 
     use super::*;
     use crate::collections::EdnMap;
-    use crate::edn::{Edn, Keyword};
+    use crate::edn::{Edn, EdnKeyword};
     use crate::reader::read_string;
 
     fn fmt_default() -> FormatConfig {
@@ -422,7 +422,7 @@ mod tests {
         let mut m = EdnMap::new();
         for i in 0..5 {
             m.insert(
-                Edn::Keyword(Keyword::owned(format!("key-{i}"))),
+                Edn::Keyword(EdnKeyword::owned(format!("key-{i}"))),
                 Edn::Str(Cow::Owned(format!("value-{i}"))),
             );
         }
@@ -503,7 +503,7 @@ mod tests {
         let mut m = EdnMap::new();
         for i in 0..5 {
             m.insert(
-                Edn::Keyword(Keyword::owned(format!("key-{i}"))),
+                Edn::Keyword(EdnKeyword::owned(format!("key-{i}"))),
                 Edn::Str(Cow::Owned(format!("value-{i}"))),
             );
         }
@@ -570,7 +570,7 @@ mod tests {
 
     #[cfg(feature = "serde")]
     mod serde_tests {
-        use serde::Serialize;
+        use ::serde::Serialize;
 
         use super::*;
 

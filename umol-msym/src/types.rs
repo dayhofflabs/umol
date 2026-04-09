@@ -1,9 +1,7 @@
 use std::f64::consts::PI;
 use std::ffi::CStr;
-use std::fmt;
 use std::os::raw::c_int;
-use std::ptr;
-use std::slice;
+use std::{fmt, ptr, slice};
 
 use nalgebra::Matrix3;
 use umol_msym_sys as ffi;
@@ -258,7 +256,10 @@ pub struct SymmetryOp {
 
 impl SymmetryOp {
     pub fn is_proper(&self) -> bool {
-        matches!(self.kind, SymmetryOpKind::Identity | SymmetryOpKind::ProperRotation)
+        matches!(
+            self.kind,
+            SymmetryOpKind::Identity | SymmetryOpKind::ProperRotation
+        )
     }
 
     pub fn transform_point(&self, p: [f64; 3]) -> [f64; 3] {
@@ -267,12 +268,7 @@ impl SymmetryOp {
         [r.x, r.y, r.z]
     }
 
-    fn compute_matrix(
-        kind: SymmetryOpKind,
-        order: i32,
-        power: i32,
-        v: [f64; 3],
-    ) -> Matrix3<f64> {
+    fn compute_matrix(kind: SymmetryOpKind, order: i32, power: i32, v: [f64; 3]) -> Matrix3<f64> {
         match kind {
             SymmetryOpKind::Identity => Matrix3::identity(),
             SymmetryOpKind::Inversion => -Matrix3::identity(),
@@ -295,9 +291,15 @@ fn rotation_matrix(axis: [f64; 3], theta: f64) -> Matrix3<f64> {
     let s = theta.sin();
     let t = 1.0 - c;
     Matrix3::new(
-        t * n.x * n.x + c,       t * n.x * n.y - s * n.z, t * n.x * n.z + s * n.y,
-        t * n.x * n.y + s * n.z, t * n.y * n.y + c,       t * n.y * n.z - s * n.x,
-        t * n.x * n.z - s * n.y, t * n.y * n.z + s * n.x, t * n.z * n.z + c,
+        t * n.x * n.x + c,
+        t * n.x * n.y - s * n.z,
+        t * n.x * n.z + s * n.y,
+        t * n.x * n.y + s * n.z,
+        t * n.y * n.y + c,
+        t * n.y * n.z - s * n.x,
+        t * n.x * n.z - s * n.y,
+        t * n.y * n.z + s * n.x,
+        t * n.z * n.z + c,
     )
 }
 
@@ -312,14 +314,12 @@ impl fmt::Display for SymmetryOp {
         match self.kind {
             SymmetryOpKind::Identity => write!(f, "E"),
             SymmetryOpKind::Inversion => write!(f, "i"),
-            SymmetryOpKind::Reflection => {
-                match self.orientation {
-                    SymmetryOpOrientation::Horizontal => write!(f, "σh"),
-                    SymmetryOpOrientation::Vertical => write!(f, "σv"),
-                    SymmetryOpOrientation::Dihedral => write!(f, "σd"),
-                    SymmetryOpOrientation::None => write!(f, "σ"),
-                }
-            }
+            SymmetryOpKind::Reflection => match self.orientation {
+                SymmetryOpOrientation::Horizontal => write!(f, "σh"),
+                SymmetryOpOrientation::Vertical => write!(f, "σv"),
+                SymmetryOpOrientation::Dihedral => write!(f, "σd"),
+                SymmetryOpOrientation::None => write!(f, "σ"),
+            },
             SymmetryOpKind::ProperRotation => {
                 write!(f, "C{}", self.order)?;
                 write_prime_suffix(f, self.orientation)?;
@@ -334,7 +334,10 @@ impl fmt::Display for SymmetryOp {
     }
 }
 
-fn write_prime_suffix(f: &mut fmt::Formatter<'_>, orientation: SymmetryOpOrientation) -> fmt::Result {
+fn write_prime_suffix(
+    f: &mut fmt::Formatter<'_>,
+    orientation: SymmetryOpOrientation,
+) -> fmt::Result {
     match orientation {
         SymmetryOpOrientation::Vertical => write!(f, "'"),
         SymmetryOpOrientation::Dihedral => write!(f, "''"),
@@ -346,8 +349,16 @@ fn write_superscript_power(f: &mut fmt::Formatter<'_>, power: i32) -> fmt::Resul
     if power > 1 {
         for ch in power.to_string().chars() {
             let sup = match ch {
-                '0' => '⁰', '1' => '¹', '2' => '²', '3' => '³', '4' => '⁴',
-                '5' => '⁵', '6' => '⁶', '7' => '⁷', '8' => '⁸', '9' => '⁹',
+                '0' => '⁰',
+                '1' => '¹',
+                '2' => '²',
+                '3' => '³',
+                '4' => '⁴',
+                '5' => '⁵',
+                '6' => '⁶',
+                '7' => '⁷',
+                '8' => '⁸',
+                '9' => '⁹',
                 _ => ch,
             };
             write!(f, "{sup}")?;
@@ -536,4 +547,3 @@ pub struct EquivalenceSet {
     pub centers: Vec<SymmetryCenter>,
     pub max_error: f64,
 }
-

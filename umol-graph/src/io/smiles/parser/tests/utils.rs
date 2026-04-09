@@ -9,8 +9,8 @@ use super::super::builder::{
     AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder,
 };
 use crate::atom::Chirality;
-use crate::table_ir::atom::ImplicitHydrogens;
 use crate::span::Span;
+use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
     AtomSymbol, BondDonation, BondOrder, BondWedge, ExtendedMolecule, Molecule, Ring, WildcardAtom,
 };

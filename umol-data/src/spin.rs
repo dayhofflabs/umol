@@ -7,11 +7,24 @@ use serde::de::{Deserializer, Error as SerdeError};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
+
 use crate::error::SpinStateError;
 
 /// Spin multiplicity descriptor (2S+1)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Display, EnumString,
-         Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Display,
+    EnumString,
+    Serialize,
+    Deserialize,
+)]
 #[strum(serialize_all = "snake_case", ascii_case_insensitive)]
 pub enum SpinMultiplicity {
     Singlet = 0,
@@ -149,7 +162,8 @@ impl SpinState {
 
     /// Check if molecular spin state is compatible with electron count.
     pub fn is_compatible_with(&self, electrons: u8) -> bool {
-        self.unpaired_electrons <= electrons && (electrons - self.unpaired_electrons).is_multiple_of(2)
+        self.unpaired_electrons <= electrons
+            && (electrons - self.unpaired_electrons).is_multiple_of(2)
     }
 
     /// Check whether this molecular spin state is achievable by coupling

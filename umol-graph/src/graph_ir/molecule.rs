@@ -18,12 +18,12 @@ use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::dsl::ast::ToAst;
-use crate::dsl::config::MoleculeDslConfig;
 use crate::dsl::bond::BondAst;
+use crate::dsl::config::MoleculeDslConfig;
 use crate::dsl::molecule::{
-    AromaticSystem as AromaticSystemAst, AtomRef, Atoms,
-    LocalizedBond as LocalizedBondAst, DativeBond as DativeBondAst, MoleculeAst,
-    MulticenterBond as MulticenterBondAst, NoncovalentBond as NoncovalentBondAst,
+    AromaticSystem as AromaticSystemAst, AtomRef, Atoms, DativeBond as DativeBondAst,
+    LocalizedBond as LocalizedBondAst, MoleculeAst, MulticenterBond as MulticenterBondAst,
+    NoncovalentBond as NoncovalentBondAst,
 };
 
 pub type AtomIndex = NodeIndex<u32>;
@@ -415,7 +415,8 @@ impl Molecule {
         index: AtomIndex,
     ) -> impl Iterator<Item = AromaticSystem> + '_ {
         self.aromatic_systems()
-            .filter(move |s| s.contains_atom(index)).cloned()
+            .filter(move |s| s.contains_atom(index))
+            .cloned()
     }
 
     // Atom-multicenter bond relationships
@@ -442,7 +443,8 @@ impl Molecule {
         index: AtomIndex,
     ) -> impl Iterator<Item = MulticenterBond> + '_ {
         self.multicenter_bonds()
-            .filter(move |b| b.contains_atom(index)).cloned()
+            .filter(move |b| b.contains_atom(index))
+            .cloned()
     }
 
     // Atom-noncovalent bond relationships
@@ -482,9 +484,7 @@ impl ToAst<MoleculeAst> for Molecule {
             atom_vec.push(atom_ast);
         }
 
-        let label = |idx: AtomIndex| -> AtomRef {
-            AtomRef::Index(idx.index())
-        };
+        let label = |idx: AtomIndex| -> AtomRef { AtomRef::Index(idx.index()) };
 
         let bonds: Vec<LocalizedBondAst> = self
             .bond_indices()

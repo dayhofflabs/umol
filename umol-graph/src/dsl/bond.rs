@@ -185,7 +185,7 @@ impl umol_edn::ToEdn for BondAst {
     fn to_edn(&self) -> umol_edn::Edn<'_> {
         let aliases = builtin_bond_aliases();
         if let Some(name) = aliases.get_by_right(self) {
-            umol_edn::Edn::Keyword(umol_edn::Keyword::owned(name.clone()))
+            umol_edn::Edn::Keyword(umol_edn::EdnKeyword::owned(name.clone()))
         } else {
             umol_edn::Edn::Str(std::borrow::Cow::Owned(self.to_string()))
         }

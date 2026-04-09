@@ -1,4 +1,5 @@
 use std::ffi::CStr;
+
 use umol_msym_sys as ffi;
 
 #[derive(Debug, thiserror::Error)]
@@ -24,7 +25,11 @@ impl Error {
                 None
             } else {
                 let s = CStr::from_ptr(ptr).to_string_lossy();
-                if s.is_empty() { None } else { Some(s.into_owned()) }
+                if s.is_empty() {
+                    None
+                } else {
+                    Some(s.into_owned())
+                }
             }
         };
         let message = match detail {

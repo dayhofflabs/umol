@@ -2,10 +2,12 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use serde::{Deserialize, Serialize};
+use umol_edn::serde::{
+    from_str, from_str_with, from_value, to_string, DynEdn, EdnList, EdnSet, EdnStreamDeserializer,
+    EdnTagged,
+};
 use umol_edn::{
-    from_str, from_str_with, from_value, read_all, read_string, to_string, Edn, EdnHashSet,
-    EdnKeyRef, EdnKeyword, EdnList, EdnMap, EdnSymbol, EdnTagged, FormatConfig, ParseConfig,
-    StreamDeserializer, Value,
+    read_all, read_string, Edn, EdnKeyRef, EdnKeyword, EdnMap, EdnSymbol, FormatConfig, ParseConfig,
 };
 
 const MOLECULE_SMALL: &str = r#"{:atoms [C O] :bonds [["0" "1" :single]]}"#;
@@ -181,9 +183,7 @@ fn bench_deserialize(c: &mut Criterion) {
     });
 
     group.bench_function("json_from_str_struct", |b| {
-        b.iter(|| {
-            serde_json::from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL_JSON)).unwrap()
-        })
+        b.iter(|| serde_json::from_str::<MoleculeProxy>(black_box(MOLECULE_SMALL_JSON)).unwrap())
     });
 
     group.bench_function("json_parse_to_value", |b| {
@@ -245,7 +245,7 @@ fn bench_stream_throughput(c: &mut Criterion) {
         // Path A: direct streaming serde deserializer (never materializes full tree).
         group.bench_function(format!("direct_stream_{label}"), |b| {
             b.iter(|| {
-                let iter = StreamDeserializer::<MoleculeProxy>::new(black_box(stream));
+                let iter = EdnStreamDeserializer::<MoleculeProxy>::new(black_box(stream));
                 let mut count = 0usize;
                 for r in iter {
                     black_box(r.unwrap());
@@ -361,10 +361,10 @@ fn bench_value_native(c: &mut Criterion) {
 
     let cfg = permissive_config();
     group.bench_function("parse_mixed", |b| {
-        b.iter(|| Value::parse_with(black_box(VALUE_MIXED), &cfg).unwrap())
+        b.iter(|| DynEdn::parse_with(black_box(VALUE_MIXED), &cfg).unwrap())
     });
 
-    let value = Value::parse_with(VALUE_MIXED, &cfg).unwrap();
+    let value = DynEdn::parse_with(VALUE_MIXED, &cfg).unwrap();
     group.bench_function("display_mixed", |b| {
         b.iter(|| black_box(&value).to_string())
     });
@@ -380,10 +380,10 @@ fn bench_value_serde(c: &mut Criterion) {
     let cfg = permissive_config();
 
     group.bench_function("from_str_mixed", |b| {
-        b.iter(|| from_str_with::<Value>(black_box(VALUE_MIXED), &cfg).unwrap())
+        b.iter(|| from_str_with::<DynEdn>(black_box(VALUE_MIXED), &cfg).unwrap())
     });
 
-    let value: Value = from_str_with(VALUE_MIXED, &cfg).unwrap();
+    let value: DynEdn = from_str_with(VALUE_MIXED, &cfg).unwrap();
 
     group.bench_function("to_string_mixed", |b| {
         b.iter(|| to_string(black_box(&value)).unwrap())
@@ -391,8 +391,7 @@ fn bench_value_serde(c: &mut Criterion) {
 
     group.bench_function("roundtrip_mixed", |b| {
         b.iter(|| {
-            let v: Value =
-                from_str_with(black_box(VALUE_MIXED), &cfg).unwrap();
+            let v: DynEdn = from_str_with(black_box(VALUE_MIXED), &cfg).unwrap();
             to_string(&v).unwrap()
         })
     });
@@ -406,10 +405,10 @@ fn bench_value_serde(c: &mut Criterion) {
 
 #[derive(Serialize, Deserialize)]
 struct WrapperHeavy {
-    name: EdnKeyword,
-    ns: EdnSymbol,
+    name: EdnKeyword<'static>,
+    ns: EdnSymbol<'static>,
     aliases: EdnList<String>,
-    ids: EdnHashSet<i64>,
+    ids: EdnSet<i64>,
     marker: EdnTagged<String>,
 }
 
@@ -442,9 +441,7 @@ fn bench_wrappers_serde(c: &mut Criterion) {
     let cfg = permissive_config();
 
     group.bench_function("deserialize_wrappers", |b| {
-        b.iter(|| {
-            from_str_with::<WrapperHeavy>(black_box(&serialized), &cfg).unwrap()
-        })
+        b.iter(|| from_str_with::<WrapperHeavy>(black_box(&serialized), &cfg).unwrap())
     });
 
     group.bench_function("roundtrip_wrappers", |b| {

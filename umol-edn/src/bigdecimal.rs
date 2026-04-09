@@ -16,14 +16,14 @@ use std::fmt;
 #[cfg(feature = "serde")]
 use std::str::FromStr;
 
+#[cfg(feature = "serde")]
+use ::serde::de::{Deserialize, Deserializer, Error as DeError, Visitor};
+#[cfg(feature = "serde")]
+use ::serde::ser::{Serialize, Serializer};
 use bigdecimal::BigDecimal;
-#[cfg(feature = "serde")]
-use serde::de::{Deserialize, Deserializer, Error as DeError, Visitor};
-#[cfg(feature = "serde")]
-use serde::ser::{Serialize, Serializer};
 
 #[cfg(feature = "serde")]
-use crate::serde_tokens::BIGDECIMAL_TOKEN;
+use crate::serde::BIGDECIMAL_TOKEN;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct EdnBigDecimal(BigDecimal);
@@ -117,7 +117,7 @@ mod tests {
 
     use super::*;
     #[cfg(feature = "serde")]
-    use crate::{from_str, to_string};
+    use crate::serde::{from_str, to_string};
 
     /// Guards the assumption that `BigDecimal`'s `PartialEq` and `Hash` are
     /// consistent across representations of the same value. If this breaks on
@@ -189,7 +189,7 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn test_edn_bigdecimal_serialize_in_struct() {
-        #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
+        #[derive(::serde::Serialize, ::serde::Deserialize, Debug, PartialEq)]
         struct Wrapper {
             ratio: EdnBigDecimal,
         }

@@ -6,7 +6,6 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::error::IsotopeError;
-
 use crate::half_life::HalfLife;
 use crate::isotope_data::{ISOTOPE_DATA, LIGHT_ISOTOPE_MAP};
 use crate::Element;

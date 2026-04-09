@@ -33,7 +33,11 @@ impl CovalentRadii {
 pub fn covalent_radii(element: Element) -> CovalentRadii {
     let z = element.atomic_number() as usize;
     if z == 0 || z > RADII.len() {
-        return CovalentRadii { single: Length::picometer(150.0), double: None, triple: None };
+        return CovalentRadii {
+            single: Length::picometer(150.0),
+            double: None,
+            triple: None,
+        };
     }
     RADII[z - 1]
 }
@@ -45,8 +49,16 @@ const fn pm(v: u16) -> Length {
 const fn cr(single: u16, double: i16, triple: i16) -> CovalentRadii {
     CovalentRadii {
         single: pm(single),
-        double: if double >= 0 { Some(pm(double as u16)) } else { None },
-        triple: if triple >= 0 { Some(pm(triple as u16)) } else { None },
+        double: if double >= 0 {
+            Some(pm(double as u16))
+        } else {
+            None
+        },
+        triple: if triple >= 0 {
+            Some(pm(triple as u16))
+        } else {
+            None
+        },
     }
 }
 
@@ -179,15 +191,16 @@ static RADII: [CovalentRadii; 118] = [
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
 
+    use super::*;
+
     #[rstest]
-    #[case(Element::H,   32, None,       None)]
-    #[case(Element::C,   75, Some(67),   Some(60))]
-    #[case(Element::N,   71, Some(60),   Some(54))]
-    #[case(Element::O,   63, Some(57),   Some(53))]
-    #[case(Element::Fe, 116, Some(109),  Some(102))]
+    #[case(Element::H, 32, None, None)]
+    #[case(Element::C, 75, Some(67), Some(60))]
+    #[case(Element::N, 71, Some(60), Some(54))]
+    #[case(Element::O, 63, Some(57), Some(53))]
+    #[case(Element::Fe, 116, Some(109), Some(102))]
     fn test_covalent_radii(
         #[case] element: Element,
         #[case] single_pm: u16,

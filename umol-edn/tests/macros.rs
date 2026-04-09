@@ -3,7 +3,7 @@
 use std::borrow::Cow;
 
 use rstest::rstest;
-use umol_edn::{edn, Edn, EdnMap, Symbol};
+use umol_edn::{edn, Edn, EdnMap, EdnSymbol};
 
 #[test]
 fn test_nil() {
@@ -44,10 +44,7 @@ fn test_negative_float() {
 
 #[test]
 fn test_string() {
-    assert_eq!(
-        edn!("hello"),
-        Edn::Str(Cow::Owned("hello".to_string()))
-    );
+    assert_eq!(edn!("hello"), Edn::Str(Cow::Owned("hello".to_string())));
 }
 
 #[test]
@@ -62,17 +59,17 @@ fn test_keyword_namespaced() {
 
 #[test]
 fn test_symbol() {
-    assert_eq!(edn!(foo), Edn::Symbol(Symbol::new("foo")));
+    assert_eq!(edn!(foo), Edn::Symbol(EdnSymbol::new("foo")));
 }
 
 #[test]
 fn test_symbol_namespaced() {
-    assert_eq!(edn!(ns/name), Edn::Symbol(Symbol::new("ns/name")));
+    assert_eq!(edn!(ns / name), Edn::Symbol(EdnSymbol::new("ns/name")));
 }
 
 #[test]
 fn test_slash_symbol() {
-    assert_eq!(edn!(/), Edn::Symbol(Symbol::new("/")));
+    assert_eq!(edn!(/), Edn::Symbol(EdnSymbol::new("/")));
 }
 
 #[test]
@@ -114,7 +111,15 @@ fn test_set() {
 fn test_nested() {
     let result = edn!({:items [1 2 3] :meta {:ok true}});
     assert!(result.is_map());
-    assert_eq!(result.get_keyword("items").unwrap().as_vector().unwrap().len(), 3);
+    assert_eq!(
+        result
+            .get_keyword("items")
+            .unwrap()
+            .as_vector()
+            .unwrap()
+            .len(),
+        3
+    );
 }
 
 #[test]

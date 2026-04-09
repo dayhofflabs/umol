@@ -25,15 +25,13 @@ fn make_centers(
 }
 
 /// Compare character tables independent of class ordering and irrep ordering.
-fn compare_character_tables(
-    group_name: &str,
-    pg: &'static PointGroup,
-    reference: &ReferenceTable,
-) {
+fn compare_character_tables(group_name: &str, pg: &'static PointGroup, reference: &ReferenceTable) {
     assert_eq!(
-        pg.order(), reference.order,
+        pg.order(),
+        reference.order,
         "{group_name}: order mismatch (msym={}, reference={})",
-        pg.order(), reference.order
+        pg.order(),
+        reference.order
     );
 
     let irreps = pg.irreps();
@@ -263,7 +261,8 @@ fn test_character_table_vs_reference(#[case] group: &str, #[case] elements: Vec<
     let reference = reference_table(group).unwrap();
 
     assert_eq!(
-        result.group.to_string(), group,
+        result.group.to_string(),
+        group,
         "Expected {group}, detected {}",
         result.group
     );

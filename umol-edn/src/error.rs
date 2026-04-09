@@ -20,15 +20,14 @@
 #[cfg(feature = "serde")]
 use std::fmt;
 
+#[cfg(feature = "serde")]
+use ::serde::de::Error as SerdeDeError;
+#[cfg(feature = "serde")]
+use ::serde::ser::Error as SerdeSerError;
 use thiserror::Error;
 use winnow::error::{ErrMode, ParserError};
 use winnow::stream::Location;
 use winnow::LocatingSlice;
-
-#[cfg(feature = "serde")]
-use serde::de::Error as SerdeDeError;
-#[cfg(feature = "serde")]
-use serde::ser::Error as SerdeSerError;
 
 /// EDN error. Dispatches to one of [`ParseError`], [`DeError`], or
 /// [`SerError`] depending on which phase failed.
@@ -122,10 +121,7 @@ pub enum SerError {
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
     #[error("value '{value}' out of range for {target}")]
-    OutOfRange {
-        value: String,
-        target: &'static str,
-    },
+    OutOfRange { value: String, target: &'static str },
     #[error("{0}")]
     Custom(String),
 }

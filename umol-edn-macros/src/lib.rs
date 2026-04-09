@@ -4,8 +4,7 @@
 mod derive_from_edn;
 mod derive_to_edn;
 
-use proc_macro2::TokenStream as TokenStream2;
-use proc_macro2::{Delimiter, TokenTree};
+use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
 
@@ -101,7 +100,7 @@ fn parse_ident(id: &proc_macro2::Ident, tokens: &mut &[TokenTree]) -> Result<Tok
         "false" => Ok(quote! { umol_edn::Edn::Bool(false) }),
         _ => {
             let full = maybe_slashed_name(&name, tokens);
-            Ok(quote! { umol_edn::Edn::Symbol(umol_edn::Symbol::new(#full)) })
+            Ok(quote! { umol_edn::Edn::Symbol(umol_edn::EdnSymbol::new(#full)) })
         }
     }
 }
@@ -191,19 +190,19 @@ fn parse_punct(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String> {
                     let name = format!("{sign}{}", id);
                     // Check for ns/name continuation
                     let full = maybe_slashed_name(&name, tokens);
-                    Ok(quote! { umol_edn::Edn::Symbol(umol_edn::Symbol::new(#full)) })
+                    Ok(quote! { umol_edn::Edn::Symbol(umol_edn::EdnSymbol::new(#full)) })
                 }
                 _ => {
                     // Bare symbol / or +
                     let name = sign.to_string();
-                    Ok(quote! { umol_edn::Edn::Symbol(umol_edn::Symbol::new(#name)) })
+                    Ok(quote! { umol_edn::Edn::Symbol(umol_edn::EdnSymbol::new(#name)) })
                 }
             }
         }
         '/' => {
             // The division symbol
             *tokens = &tokens[1..];
-            Ok(quote! { umol_edn::Edn::Symbol(umol_edn::Symbol::new("/")) })
+            Ok(quote! { umol_edn::Edn::Symbol(umol_edn::EdnSymbol::new("/")) })
         }
         '\\' => {
             // Character literal: \a, \newline, \u0041
@@ -221,7 +220,7 @@ fn parse_punct(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String> {
             } else {
                 start
             };
-            Ok(quote! { umol_edn::Edn::Symbol(umol_edn::Symbol::new(#name)) })
+            Ok(quote! { umol_edn::Edn::Symbol(umol_edn::EdnSymbol::new(#name)) })
         }
         _ => Err(format!("unexpected punctuation: '{}'", p.as_char())),
     }
@@ -292,7 +291,9 @@ fn parse_hash(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String> {
             let tag_name = id.to_string();
             let tag = maybe_slashed_name(&tag_name, tokens);
             let val = parse_value(tokens)?;
-            Ok(quote! { umol_edn::Edn::Tagged(std::borrow::Cow::Owned(#tag.to_string()), Box::new(#val)) })
+            Ok(
+                quote! { umol_edn::Edn::Tagged(std::borrow::Cow::Owned(#tag.to_string()), Box::new(#val)) },
+            )
         }
         _ => Err("unexpected token after #".into()),
     }
@@ -316,8 +317,8 @@ fn parse_char_literal(tokens: &mut &[TokenTree]) -> Result<TokenStream2, String>
                     let hex = &s[1..];
                     let cp = u32::from_str_radix(hex, 16)
                         .map_err(|_| format!("invalid unicode escape: \\{s}"))?;
-                    let ch = char::from_u32(cp)
-                        .ok_or_else(|| format!("invalid code point: \\{s}"))?;
+                    let ch =
+                        char::from_u32(cp).ok_or_else(|| format!("invalid code point: \\{s}"))?;
                     Ok(quote! { umol_edn::Edn::Char(#ch) })
                 }
                 _ => Err(format!("invalid character literal: \\{name}")),

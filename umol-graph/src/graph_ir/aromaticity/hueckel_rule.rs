@@ -420,7 +420,12 @@ mod tests {
     fn borazine() -> MoleculeBuilder {
         // B contributes 0π electrons (empty p orbital); N contributes 2π (lone pair).
         make_ring(&[
-            "B#h#v2#a0", "N#h#v2#a2", "B#h#v2#a0", "N#h#v2#a2", "B#h#v2#a0", "N#h#v2#a2",
+            "B#h#v2#a0",
+            "N#h#v2#a2",
+            "B#h#v2#a0",
+            "N#h#v2#a2",
+            "B#h#v2#a0",
+            "N#h#v2#a2",
         ])
     }
 

@@ -5,10 +5,10 @@ use umol_data::element::Element;
 use umol_data::spin::SpinMultiplicity;
 use umol_data::units::{Angle, Length};
 use umol_msym::{
-    compute_salcs as compute_salcs_raw, detect_symmetry, symmetrize as symmetrize_centers,
-    generate_symmetry_images as generate_image_centers, BasisFunction, BasisKind, CartesianAxis,
-    EquivalenceSet, Error as SymmetryError, Irrep, PointGroup, SalcBasis, SchoenfliesLabel,
-    SymmetryCenter, SymmetryOp, Thresholds,
+    compute_salcs as compute_salcs_raw, detect_symmetry,
+    generate_symmetry_images as generate_image_centers, symmetrize as symmetrize_centers,
+    BasisFunction, BasisKind, CartesianAxis, EquivalenceSet, Error as SymmetryError, Irrep,
+    PointGroup, SalcBasis, SchoenfliesLabel, SymmetryCenter, SymmetryOp, Thresholds,
 };
 
 use crate::coordinates::Coordinates;
@@ -310,7 +310,11 @@ impl Molecule {
                 continue;
             }
             class_seen[c] = true;
-            let n_fixed: usize = perms[k].iter().enumerate().filter(|(i, &j)| *i == j).count();
+            let n_fixed: usize = perms[k]
+                .iter()
+                .enumerate()
+                .filter(|(i, &j)| *i == j)
+                .count();
             gamma_3n[c] = n_fixed as f64 * op.matrix.trace();
         }
 
@@ -372,7 +376,12 @@ impl Molecule {
         }
 
         // Step 5: classify as trans/rot/vib
-        classify_coordinates(&mut coordinates, self.cartesian_coordinates(), n, &thresholds);
+        classify_coordinates(
+            &mut coordinates,
+            self.cartesian_coordinates(),
+            n,
+            &thresholds,
+        );
 
         SymmetryCoordinates {
             gamma_total,
@@ -410,13 +419,23 @@ impl Molecule {
         }
 
         // Classify
-        classify_coordinates(&mut coordinates, self.cartesian_coordinates(), n, &thresholds);
+        classify_coordinates(
+            &mut coordinates,
+            self.cartesian_coordinates(),
+            n,
+            &thresholds,
+        );
 
         // Build Γ decompositions from the classified coordinates
         let gamma_total = count_irrep_reps(&coordinates, |_| true);
-        let gamma_trans = count_irrep_reps(&coordinates, |c| matches!(c.kind, CoordinateKind::Translation));
-        let gamma_rot = count_irrep_reps(&coordinates, |c| matches!(c.kind, CoordinateKind::Rotation));
-        let gamma_vib = count_irrep_reps(&coordinates, |c| matches!(c.kind, CoordinateKind::Vibration));
+        let gamma_trans = count_irrep_reps(&coordinates, |c| {
+            matches!(c.kind, CoordinateKind::Translation)
+        });
+        let gamma_rot =
+            count_irrep_reps(&coordinates, |c| matches!(c.kind, CoordinateKind::Rotation));
+        let gamma_vib = count_irrep_reps(&coordinates, |c| {
+            matches!(c.kind, CoordinateKind::Vibration)
+        });
 
         SymmetryCoordinates {
             gamma_total,
@@ -544,9 +563,7 @@ impl Molecule {
 }
 
 fn flat_to_atom_vectors(flat: &[f64]) -> Vec<[f64; 3]> {
-    flat.chunks_exact(3)
-        .map(|c| [c[0], c[1], c[2]])
-        .collect()
+    flat.chunks_exact(3).map(|c| [c[0], c[1], c[2]]).collect()
 }
 
 fn atom_vectors_to_flat(vecs: &[[f64; 3]]) -> Vec<f64> {
@@ -606,7 +623,11 @@ fn translation_trial_vectors(n_atoms: usize) -> Vec<DVector<f64>> {
 }
 
 /// Build rotation trial vectors (normalized): r_i × e_axis for each atom.
-fn rotation_trial_vectors(coords_bohr: &DMatrix<f64>, n_atoms: usize, zero: f64) -> Vec<DVector<f64>> {
+fn rotation_trial_vectors(
+    coords_bohr: &DMatrix<f64>,
+    n_atoms: usize,
+    zero: f64,
+) -> Vec<DVector<f64>> {
     let dim3n = 3 * n_atoms;
     (0..3)
         .filter_map(|axis| {
@@ -1038,7 +1059,9 @@ mod tests {
         #[case] expected_irreps: &[&str],
     ) {
         let sym = m.perceive_symmetry(Thresholds::default()).unwrap();
-        let result = sym.salc_basis(&sym.permutation_basis(), Thresholds::default()).unwrap();
+        let result = sym
+            .salc_basis(&sym.permutation_basis(), Thresholds::default())
+            .unwrap();
 
         let total: usize = result.irreps.iter().map(|ib| ib.salcs.len()).sum();
         assert_eq!(total, expected_total);
@@ -1129,16 +1152,32 @@ mod tests {
         let total = sc.coordinates.len();
         assert_eq!(total, expected_total);
 
-        let n_trans = sc.coordinates.iter().filter(|c| c.kind == CoordinateKind::Translation).count();
-        let n_rot = sc.coordinates.iter().filter(|c| c.kind == CoordinateKind::Rotation).count();
-        let n_vib = sc.coordinates.iter().filter(|c| c.kind == CoordinateKind::Vibration).count();
+        let n_trans = sc
+            .coordinates
+            .iter()
+            .filter(|c| c.kind == CoordinateKind::Translation)
+            .count();
+        let n_rot = sc
+            .coordinates
+            .iter()
+            .filter(|c| c.kind == CoordinateKind::Rotation)
+            .count();
+        let n_vib = sc
+            .coordinates
+            .iter()
+            .filter(|c| c.kind == CoordinateKind::Vibration)
+            .count();
         assert_eq!(n_trans, expected_trans, "translation count");
         assert_eq!(n_rot, expected_rot, "rotation count");
         assert_eq!(n_vib, expected_vib, "vibration count");
 
         // Vibrational irrep decomposition
         let mut vib_irreps: Vec<(String, usize)> = Vec::new();
-        for c in sc.coordinates.iter().filter(|c| c.kind == CoordinateKind::Vibration) {
+        for c in sc
+            .coordinates
+            .iter()
+            .filter(|c| c.kind == CoordinateKind::Vibration)
+        {
             if let Some(entry) = vib_irreps.iter_mut().find(|(s, _)| s == c.irrep.symbol()) {
                 entry.1 += 1;
             } else {
@@ -1147,7 +1186,10 @@ mod tests {
         }
         vib_irreps.sort();
         let expected_sorted: Vec<(String, usize)> = {
-            let mut v: Vec<_> = expected_vib_irreps.iter().map(|(s, n)| (s.to_string(), *n)).collect();
+            let mut v: Vec<_> = expected_vib_irreps
+                .iter()
+                .map(|(s, n)| (s.to_string(), *n))
+                .collect();
             v.sort();
             v
         };
@@ -1160,9 +1202,15 @@ mod tests {
                 let v2 = DVector::from_column_slice(&atom_vectors_to_flat(&c2.atom_vectors));
                 let dot = v1.dot(&v2);
                 if i == j {
-                    assert!((dot - 1.0).abs() < 1e-6, "coordinate {i} not normalized: {dot}");
+                    assert!(
+                        (dot - 1.0).abs() < 1e-6,
+                        "coordinate {i} not normalized: {dot}"
+                    );
                 } else {
-                    assert!(dot.abs() < 1e-6, "coordinates {i},{j} not orthogonal: {dot}");
+                    assert!(
+                        dot.abs() < 1e-6,
+                        "coordinates {i},{j} not orthogonal: {dot}"
+                    );
                 }
             }
         }

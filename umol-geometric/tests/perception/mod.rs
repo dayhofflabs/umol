@@ -60,11 +60,7 @@ fn run_perception_test(file_path: &Path) {
         .join("perception")
         .join("data");
     let rel = file_path.strip_prefix(&data_dir).unwrap();
-    let suffix = rel
-        .with_extension("")
-        .to_str()
-        .unwrap()
-        .replace('/', "_");
+    let suffix = rel.with_extension("").to_str().unwrap().replace('/', "_");
 
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

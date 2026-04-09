@@ -114,14 +114,14 @@ impl BondPattern {
         let mult = self.multiplicity.into_option();
         let spin = match (unpaired, mult) {
             (Some(u), Some(m)) => SpinState::try_new(u, m)?,
-            (Some(u), None) => SpinState::max_multiplicity(u).ok_or(
-                ValidationError::OutOfRange {
+            (Some(u), None) => {
+                SpinState::max_multiplicity(u).ok_or(ValidationError::OutOfRange {
                     field: "unpaired_electrons",
                     value: u as i64,
                     min: 0,
                     max: 254,
-                },
-            )?,
+                })?
+            }
             (None, Some(m)) => SpinState::try_new(m.multiplicity() - 1, m)?,
             (None, None) => SpinState::closed_shell(),
         };

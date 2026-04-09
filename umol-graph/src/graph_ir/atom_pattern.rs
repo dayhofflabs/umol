@@ -383,8 +383,7 @@ impl AtomPattern {
             accepted_pairs,
             aromatic_valence,
             multicenter_valence,
-        )
-?;
+        )?;
 
         atom.check_invariants()?;
 
@@ -553,54 +552,48 @@ impl FromAst<AtomAst> for AtomPattern {
             Some(_) => return Err(LoweringError::NonGround { field: "charge" }),
         };
 
-        let implicit_hydrogens =
-            match ast
-                .implicit_hydrogens
-                .or(match cfg.implicit_h_mode {
-                    ImplicitHydrogenMode::Normal => Some(HydrogenExpr::Normal),
-                    ImplicitHydrogenMode::Zero => Some(HydrogenExpr::Value(ValueAst::Lit(0))),
-                    ImplicitHydrogenMode::Required => None,
-                }) {
-                None => HydrogenPattern::Any,
-                Some(HydrogenExpr::Normal) => HydrogenPattern::Normal,
-                Some(HydrogenExpr::Value(ValueAst::Wildcard)) => HydrogenPattern::Any,
-                Some(HydrogenExpr::Value(ValueAst::Lit(n))) => {
-                    HydrogenPattern::Is(u8::try_from(n).map_err(|_| LoweringError::NonGround {
-                        field: "implicit_hydrogens",
-                    })?)
-                }
-                Some(HydrogenExpr::Value(_)) => {
-                    return Err(LoweringError::NonGround {
-                        field: "implicit_hydrogens",
-                    })
-                }
-            };
+        let implicit_hydrogens = match ast.implicit_hydrogens.or(match cfg.implicit_h_mode {
+            ImplicitHydrogenMode::Normal => Some(HydrogenExpr::Normal),
+            ImplicitHydrogenMode::Zero => Some(HydrogenExpr::Value(ValueAst::Lit(0))),
+            ImplicitHydrogenMode::Required => None,
+        }) {
+            None => HydrogenPattern::Any,
+            Some(HydrogenExpr::Normal) => HydrogenPattern::Normal,
+            Some(HydrogenExpr::Value(ValueAst::Wildcard)) => HydrogenPattern::Any,
+            Some(HydrogenExpr::Value(ValueAst::Lit(n))) => {
+                HydrogenPattern::Is(u8::try_from(n).map_err(|_| LoweringError::NonGround {
+                    field: "implicit_hydrogens",
+                })?)
+            }
+            Some(HydrogenExpr::Value(_)) => {
+                return Err(LoweringError::NonGround {
+                    field: "implicit_hydrogens",
+                })
+            }
+        };
 
-        let aromatic_valence =
-            match ast
-                .aromatic_valence
-                .or(match cfg.aromatic_valence_mode {
-                    AromaticValenceMode::NotAromatic => Some(AromaticExpr::NotAromatic),
-                    AromaticValenceMode::Aromatic => Some(AromaticExpr::Value(ValueAst::Wildcard)),
-                    AromaticValenceMode::Required => None,
-                }) {
-                None => AromaticValencePattern::Any,
-                Some(AromaticExpr::Unspecified) => AromaticValencePattern::Any,
-                Some(AromaticExpr::NotAromatic) => AromaticValencePattern::NotAromatic,
-                Some(AromaticExpr::Value(ValueAst::Wildcard)) => AromaticValencePattern::Aromatic,
-                Some(AromaticExpr::Value(ValueAst::Lit(n))) => {
-                    AromaticValencePattern::Is(u8::try_from(n).map_err(|_| {
-                        LoweringError::NonGround {
-                            field: "aromatic_valence",
-                        }
-                    })?)
-                }
-                Some(AromaticExpr::Value(_)) => {
-                    return Err(LoweringError::NonGround {
+        let aromatic_valence = match ast.aromatic_valence.or(match cfg.aromatic_valence_mode {
+            AromaticValenceMode::NotAromatic => Some(AromaticExpr::NotAromatic),
+            AromaticValenceMode::Aromatic => Some(AromaticExpr::Value(ValueAst::Wildcard)),
+            AromaticValenceMode::Required => None,
+        }) {
+            None => AromaticValencePattern::Any,
+            Some(AromaticExpr::Unspecified) => AromaticValencePattern::Any,
+            Some(AromaticExpr::NotAromatic) => AromaticValencePattern::NotAromatic,
+            Some(AromaticExpr::Value(ValueAst::Wildcard)) => AromaticValencePattern::Aromatic,
+            Some(AromaticExpr::Value(ValueAst::Lit(n))) => {
+                AromaticValencePattern::Is(u8::try_from(n).map_err(|_| {
+                    LoweringError::NonGround {
                         field: "aromatic_valence",
-                    })
-                }
-            };
+                    }
+                })?)
+            }
+            Some(AromaticExpr::Value(_)) => {
+                return Err(LoweringError::NonGround {
+                    field: "aromatic_valence",
+                })
+            }
+        };
 
         // Coupled spin resolution: resolve u first (may derive from raw m), then m (may derive from resolved u)
         let (unpaired_electrons, multiplicity) = lower_spin(

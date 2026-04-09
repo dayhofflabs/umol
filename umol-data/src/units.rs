@@ -172,8 +172,9 @@ impl Div<Angle> for Angle {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use rstest::rstest;
+
+    use super::*;
 
     #[rstest]
     #[case::bohr_identity(Length::bohr(1.0), 1.0)]

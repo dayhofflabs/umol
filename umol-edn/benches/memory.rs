@@ -13,7 +13,8 @@ use std::hint::black_box;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
-use umol_edn::{from_str, from_value, read_string};
+use umol_edn::read_string;
+use umol_edn::serde::{from_str, from_value};
 
 // Tracking allocator
 
@@ -30,12 +31,7 @@ unsafe impl GlobalAlloc for TrackingAlloc {
             let n = LIVE.fetch_add(layout.size(), Ordering::Relaxed) + layout.size();
             let mut peak = PEAK.load(Ordering::Relaxed);
             while n > peak {
-                match PEAK.compare_exchange_weak(
-                    peak,
-                    n,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                ) {
+                match PEAK.compare_exchange_weak(peak, n, Ordering::Relaxed, Ordering::Relaxed) {
                     Ok(_) => break,
                     Err(cur) => peak = cur,
                 }
@@ -60,7 +56,8 @@ fn reset_peak() {
 }
 
 fn peak_since_reset() -> usize {
-    PEAK.load(Ordering::Relaxed).saturating_sub(BASELINE.load(Ordering::Relaxed))
+    PEAK.load(Ordering::Relaxed)
+        .saturating_sub(BASELINE.load(Ordering::Relaxed))
 }
 
 // Workload
@@ -109,8 +106,11 @@ fn run_sizes() {
         10 * 1024 * 1024, // 10 MB
     ] {
         let input = build_input(target);
-        println!("\ninput size: {:>10} bytes ({} records)", input.len(),
-                 (input.len() / (MOLECULE_SMALL.len() + 1)).max(1));
+        println!(
+            "\ninput size: {:>10} bytes ({} records)",
+            input.len(),
+            (input.len() / (MOLECULE_SMALL.len() + 1)).max(1)
+        );
 
         // Path A: direct serde streaming deserializer, never builds a full Edn tree.
         measure("direct  from_str::<Vec<Record>>", || {

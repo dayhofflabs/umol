@@ -188,6 +188,16 @@ impl<'a> EdnMap<'a> {
         self.0.get(&key)
     }
 
+    /// Look up by keyword name (without the leading `:`).
+    pub fn get_keyword(&self, name: &str) -> Option<&Edn<'a>> {
+        self.get_ref(EdnKeyRef::Keyword(name))
+    }
+
+    /// Look up by string key.
+    pub fn get_str(&self, key: &str) -> Option<&Edn<'a>> {
+        self.get_ref(EdnKeyRef::Str(key))
+    }
+
     pub fn contains_ref(&self, key: EdnKeyRef<'_>) -> bool {
         self.0.contains_key(&key)
     }
@@ -593,7 +603,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::edn::{Keyword, Symbol};
+    use crate::edn::{EdnKeyword, EdnSymbol};
 
     fn hash_edn(v: &Edn<'_>) -> u64 {
         let mut h = DefaultHasher::new();
@@ -618,8 +628,8 @@ mod tests {
     #[case::float_neg_zero(Edn::Float(-0.0))]
     #[case::char(Edn::Char('x'))]
     #[case::str(Edn::Str(Cow::Borrowed("hello")))]
-    #[case::keyword(Edn::Keyword(Keyword::new("foo")))]
-    #[case::symbol(Edn::Symbol(Symbol::new("bar")))]
+    #[case::keyword(Edn::Keyword(EdnKeyword::new("foo")))]
+    #[case::symbol(Edn::Symbol(EdnSymbol::new("bar")))]
     #[case::list(Edn::List(EdnSeq::from(vec![Edn::Int(1), Edn::Int(2)])))]
     #[case::vector(Edn::Vector(EdnSeq::from(vec![Edn::Bool(true)])))]
     #[case::tagged(Edn::Tagged(Cow::Borrowed("my/tag"), Box::new(Edn::Int(5))))]
@@ -710,8 +720,8 @@ mod tests {
     #[case::float(Edn::Float(2.718))]
     #[case::char(Edn::Char('z'))]
     #[case::str(Edn::Str(Cow::Borrowed("test")))]
-    #[case::keyword(Edn::Keyword(Keyword::new("k")))]
-    #[case::symbol(Edn::Symbol(Symbol::new("s")))]
+    #[case::keyword(Edn::Keyword(EdnKeyword::new("k")))]
+    #[case::symbol(Edn::Symbol(EdnSymbol::new("s")))]
     fn test_edn_map_get_ref_agrees_with_get(#[case] key: Edn<'static>) {
         let mut m = EdnMap::new();
         m.insert(key.clone(), Edn::Int(1));
@@ -725,7 +735,7 @@ mod tests {
     #[case::bool(Edn::Bool(true))]
     #[case::int(Edn::Int(0))]
     #[case::float(Edn::Float(1.0))]
-    #[case::keyword(Edn::Keyword(Keyword::new("k")))]
+    #[case::keyword(Edn::Keyword(EdnKeyword::new("k")))]
     fn test_edn_set_contains_ref_agrees_with_contains(#[case] val: Edn<'static>) {
         let mut s = EdnSet::new();
         s.insert(val.clone());
@@ -899,6 +909,43 @@ mod tests {
         let a: EdnSeq<'_> = vec![Edn::Int(1)].into();
         let b: EdnSeq<'_> = vec![Edn::Int(2)].into();
         assert_eq!(a.partial_cmp(&b), Some(std::cmp::Ordering::Less));
+    }
+
+    #[test]
+    fn test_edn_map_get_keyword() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("name"), Edn::Str(Cow::Borrowed("water")));
+        m.insert(Edn::keyword("count"), Edn::Int(3));
+        assert_eq!(
+            m.get_keyword("name"),
+            Some(&Edn::Str(Cow::Borrowed("water")))
+        );
+        assert_eq!(m.get_keyword("count"), Some(&Edn::Int(3)));
+        assert_eq!(m.get_keyword("missing"), None);
+    }
+
+    #[test]
+    fn test_edn_map_get_str() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::string("alpha"), Edn::Int(1));
+        m.insert(Edn::string("beta"), Edn::Bool(true));
+        assert_eq!(m.get_str("alpha"), Some(&Edn::Int(1)));
+        assert_eq!(m.get_str("beta"), Some(&Edn::Bool(true)));
+        assert_eq!(m.get_str("gamma"), None);
+    }
+
+    #[test]
+    fn test_edn_map_get_keyword_ignores_string_keys() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::string("name"), Edn::Int(1));
+        assert_eq!(m.get_keyword("name"), None);
+    }
+
+    #[test]
+    fn test_edn_map_get_str_ignores_keyword_keys() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("name"), Edn::Int(1));
+        assert_eq!(m.get_str("name"), None);
     }
 
     #[test]

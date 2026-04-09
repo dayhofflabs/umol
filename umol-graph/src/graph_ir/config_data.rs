@@ -127,10 +127,7 @@ impl AtomTypeRegistry {
                     .entry((element, Some(charge)))
                     .or_default()
                     .extend(atoms.iter().cloned());
-                atom_types
-                    .entry((element, None))
-                    .or_default()
-                    .extend(atoms);
+                atom_types.entry((element, None)).or_default().extend(atoms);
             }
         }
         let mut reg = AtomTypeRegistry {
@@ -269,9 +266,7 @@ impl ValenceTable {
             let _ = writeln!(
                 buf,
                 "{}:{:?}:{:?}",
-                element,
-                entry.allowed_valences,
-                entry.allowed_aromatic_valences
+                element, entry.allowed_valences, entry.allowed_aromatic_valences
             );
         }
         self.content_hash = xxh3_64(buf.as_bytes());

@@ -143,7 +143,12 @@ pub fn compute_salcs(
 
     if group.is_linear() {
         let aligned = ctx.centers()?;
-        return Ok(linear::compute_salcs(&aligned, basis, group, thresholds.equivalence));
+        return Ok(linear::compute_salcs(
+            &aligned,
+            basis,
+            group,
+            thresholds.equivalence,
+        ));
     }
 
     ctx.set_basis_functions(basis)?;
@@ -168,7 +173,9 @@ pub fn compute_salcs(
         if sparse.is_empty() {
             continue;
         }
-        irrep_salcs[species_idx as usize].push(Salc { coefficients: sparse });
+        irrep_salcs[species_idx as usize].push(Salc {
+            coefficients: sparse,
+        });
     }
 
     let irrep_bases: Vec<IrrepBasis> = irreps
@@ -258,7 +265,11 @@ mod tests {
         let centers = make_centers(
             &[8, 1, 1],
             &[15.999, 1.008, 1.008],
-            &[[0.0, 0.0, 0.117], [0.0, 0.757, -0.469], [0.0, -0.757, -0.469]],
+            &[
+                [0.0, 0.0, 0.117],
+                [0.0, 0.757, -0.469],
+                [0.0, -0.757, -0.469],
+            ],
         );
         let result = symmetrize(&centers, Thresholds::default()).unwrap();
         assert_eq!(result.group.to_string(), "C2v");
@@ -267,7 +278,10 @@ mod tests {
         // H atoms should have exactly opposite y coordinates after symmetrization
         let y1 = result.centers[1].position[1];
         let y2 = result.centers[2].position[1];
-        assert!((y1 + y2).abs() < 1e-10, "H atoms not symmetric: {y1} vs {y2}");
+        assert!(
+            (y1 + y2).abs() < 1e-10,
+            "H atoms not symmetric: {y1} vs {y2}"
+        );
     }
 
     #[rstest]
@@ -383,9 +397,7 @@ mod tests {
         let mut salc_symbols: Vec<String> = result
             .irreps
             .iter()
-            .flat_map(|ib| {
-                std::iter::repeat_n(ib.irrep.symbol().to_owned(), ib.salcs.len())
-            })
+            .flat_map(|ib| std::iter::repeat_n(ib.irrep.symbol().to_owned(), ib.salcs.len()))
             .collect();
         salc_symbols.sort();
         let mut expected: Vec<&str> = expected_salc_irreps.to_vec();
@@ -397,11 +409,16 @@ mod tests {
         for ib in &result.irreps {
             for (i, s1) in ib.salcs.iter().enumerate() {
                 for (j, s2) in ib.salcs.iter().enumerate() {
-                    let dot: f64 = s1.coefficients.iter().map(|&(k, c1)| {
-                        s2.coefficients.iter()
-                            .find(|&&(k2, _)| k2 == k)
-                            .map_or(0.0, |&(_, c2)| c1 * c2)
-                    }).sum();
+                    let dot: f64 = s1
+                        .coefficients
+                        .iter()
+                        .map(|&(k, c1)| {
+                            s2.coefficients
+                                .iter()
+                                .find(|&&(k2, _)| k2 == k)
+                                .map_or(0.0, |&(_, c2)| c1 * c2)
+                        })
+                        .sum();
                     if i == j {
                         assert!((dot - 1.0).abs() < 1e-8, "SALC {i} not normalized: {dot}");
                     } else {

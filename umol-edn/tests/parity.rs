@@ -1,7 +1,7 @@
 //! Parity test matrix: variant × wrapper × ser/de path.
 //!
 //! For each EDN-specific wrapper (`EdnKeyword`, `EdnSymbol`, `EdnList`,
-//! `EdnHashSet`, `EdnTagged`, `EdnBigInt`, `EdnBigDecimal`, `Value`), this
+//! `EdnSet`, `EdnTagged`, `EdnBigInt`, `EdnBigDecimal`, `DynEdn`), this
 //! suite verifies four cells:
 //!
 //! 1. Native `ToEdn`/`FromEdn` round-trip.
@@ -22,14 +22,12 @@ use std::collections::HashMap;
 
 use rstest::rstest;
 use serde::{Deserialize, Serialize};
-use umol_edn::{
-    from_str, from_str_with, to_string, Edn, EdnHashSet, EdnKeyword, EdnList, EdnSymbol, EdnTagged,
-    FromEdn, ParseConfig, ToEdn, Value,
-};
+use umol_edn::serde::{from_str, from_str_with, to_string, DynEdn, EdnList, EdnSet, EdnTagged};
+use umol_edn::{Edn, EdnKeyword, EdnSymbol, FromEdn, ParseConfig, ToEdn};
 
 /// Parse with `allow_unknown_tags = true`, for tests that exercise dynamic
 /// tags (`EdnTagged<T>` with caller-chosen tag names, `#Variant` enum
-/// dispatch, or `Value` containing unknown tagged literals).
+/// dispatch, or `DynEdn` containing unknown tagged literals).
 fn from_str_permissive<'a, T: serde::Deserialize<'a>>(s: &'a str) -> T {
     let mut config = ParseConfig::default();
     config.allow_unknown_tags = true;
@@ -37,7 +35,7 @@ fn from_str_permissive<'a, T: serde::Deserialize<'a>>(s: &'a str) -> T {
 }
 
 #[cfg(feature = "bignum")]
-use umol_edn::{EdnBigDecimal, EdnBigInt};
+use umol_edn::serde::{EdnBigDecimal, EdnBigInt};
 
 #[test]
 fn test_parity_keyword_native_roundtrip() {
@@ -60,7 +58,7 @@ fn test_parity_keyword_serde_edn_roundtrip() {
 fn test_parity_keyword_in_struct() {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct S {
-        tag: EdnKeyword,
+        tag: EdnKeyword<'static>,
     }
     let v = S {
         tag: EdnKeyword::new("active"),
@@ -171,30 +169,30 @@ fn test_parity_list_json_fallback_is_array() {
 
 #[test]
 fn test_parity_set_native_roundtrip() {
-    let s: EdnHashSet<i64> = [1i64, 2, 3].into_iter().collect();
+    let s: EdnSet<i64> = [1i64, 2, 3].into_iter().collect();
     let edn = s.to_edn();
-    let back = EdnHashSet::<i64>::from_edn(&edn).unwrap();
+    let back = EdnSet::<i64>::from_edn(&edn).unwrap();
     assert_eq!(s, back);
 }
 
 #[test]
 fn test_parity_set_serde_edn_roundtrip() {
-    let s: EdnHashSet<i64> = [1i64, 2, 3].into_iter().collect();
+    let s: EdnSet<i64> = [1i64, 2, 3].into_iter().collect();
     let ser = to_string(&s).unwrap();
     assert!(ser.starts_with("#{") && ser.ends_with('}'));
-    let back: EdnHashSet<i64> = from_str(&ser).unwrap();
+    let back: EdnSet<i64> = from_str(&ser).unwrap();
     assert_eq!(s, back);
 }
 
 #[test]
 fn test_parity_set_rejects_vector() {
-    let result: Result<EdnHashSet<i64>, _> = from_str("[1 2 3]");
+    let result: Result<EdnSet<i64>, _> = from_str("[1 2 3]");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_parity_set_json_fallback_is_array() {
-    let s: EdnHashSet<i64> = [7i64].into_iter().collect();
+    let s: EdnSet<i64> = [7i64].into_iter().collect();
     let j = serde_json::to_string(&s).unwrap();
     assert_eq!(j, "[7]");
 }
@@ -334,9 +332,9 @@ fn test_parity_bigdecimal_serde_edn_roundtrip() {
 #[case(r#"{:name "salt" :count 2}"#)]
 #[case(r#"#inst "2026-04-08T00:00:00Z""#)]
 fn test_parity_value_lossless_edn_roundtrip(#[case] input: &str) {
-    let v: Value = from_str(input).unwrap();
+    let v: DynEdn = from_str(input).unwrap();
     let s = to_string(&v).unwrap();
-    let v2: Value = from_str(&s).unwrap();
+    let v2: DynEdn = from_str(&s).unwrap();
     assert_eq!(v, v2);
 }
 
@@ -344,10 +342,10 @@ fn test_parity_value_lossless_edn_roundtrip(#[case] input: &str) {
 fn test_parity_value_as_field() {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct S {
-        meta: Value,
+        meta: DynEdn,
     }
     let v = S {
-        meta: Value::parse("(1 :two [3 4])").unwrap(),
+        meta: DynEdn::parse("(1 :two [3 4])").unwrap(),
     };
     let s = to_string(&v).unwrap();
     let back: S = from_str(&s).unwrap();
@@ -360,7 +358,7 @@ fn test_parity_serde_default_on_wrapper() {
     struct S {
         name: String,
         #[serde(default)]
-        kind: Option<EdnKeyword>,
+        kind: Option<EdnKeyword<'static>>,
     }
     let v: S = from_str(r#"{:name "x"}"#).unwrap();
     assert_eq!(
@@ -384,7 +382,7 @@ fn test_parity_serde_rename_on_wrapper() {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct S {
         #[serde(rename = "type")]
-        kind: EdnKeyword,
+        kind: EdnKeyword<'static>,
     }
     let v = S {
         kind: EdnKeyword::new("molecule"),
@@ -399,7 +397,7 @@ fn test_parity_serde_rename_on_wrapper() {
 fn test_parity_serde_flatten_over_wrapper_field() {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct Inner {
-        kind: EdnKeyword,
+        kind: EdnKeyword<'static>,
         count: i64,
     }
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -424,10 +422,10 @@ fn test_parity_serde_flatten_over_wrapper_field() {
 fn test_parity_multiple_wrappers_in_one_struct() {
     #[derive(Serialize, Deserialize, PartialEq, Debug)]
     struct S {
-        name: EdnKeyword,
+        name: EdnKeyword<'static>,
         aliases: EdnList<String>,
-        ids: EdnHashSet<i64>,
-        extra: Value,
+        ids: EdnSet<i64>,
+        extra: DynEdn,
     }
     let mut config = ParseConfig::default();
     config.allow_unknown_tags = true;
@@ -435,7 +433,7 @@ fn test_parity_multiple_wrappers_in_one_struct() {
         name: EdnKeyword::new("salt"),
         aliases: vec!["NaCl".into(), "halite".into()].into(),
         ids: [1i64, 2, 3].into_iter().collect(),
-        extra: Value::parse_with("#custom {:k 1}", &config).unwrap(),
+        extra: DynEdn::parse_with("#custom {:k 1}", &config).unwrap(),
     };
     let s = to_string(&v).unwrap();
     let back: S = from_str_permissive(&s);
@@ -460,6 +458,6 @@ fn test_parity_hashmap_string_to_wrapper() {
 #[case::float("2.5", Edn::Float(2.5))]
 #[case::str(r#""abc""#, Edn::Str(std::borrow::Cow::Borrowed("abc")))]
 fn test_parity_primitive_edn_roundtrip(#[case] input: &str, #[case] expected: Edn<'static>) {
-    let v: Value = from_str(input).unwrap();
+    let v: DynEdn = from_str(input).unwrap();
     assert_eq!(v.as_edn(), &expected);
 }

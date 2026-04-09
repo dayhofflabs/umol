@@ -127,7 +127,7 @@ mod tests {
     use rstest::rstest;
 
     use crate::collections::{EdnMap, EdnSet};
-    use crate::edn::{Edn, Keyword, Symbol};
+    use crate::edn::{Edn, EdnKeyword, EdnSymbol};
 
     #[rstest]
     #[case(Edn::Nil, "nil")]
@@ -173,16 +173,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Keyword::new("foo"), ":foo")]
-    #[case(Keyword::namespaced("ns", "bar"), ":ns/bar")]
-    fn test_display_keyword(#[case] k: Keyword<'_>, #[case] expected: &str) {
+    #[case(EdnKeyword::new("foo"), ":foo")]
+    #[case(EdnKeyword::namespaced("ns", "bar"), ":ns/bar")]
+    fn test_display_keyword(#[case] k: EdnKeyword<'_>, #[case] expected: &str) {
         assert_eq!(Edn::Keyword(k).to_string(), expected);
     }
 
     #[rstest]
-    #[case(Symbol::new("foo"), "foo")]
-    #[case(Symbol::namespaced("ns", "bar"), "ns/bar")]
-    fn test_display_symbol(#[case] s: Symbol<'_>, #[case] expected: &str) {
+    #[case(EdnSymbol::new("foo"), "foo")]
+    #[case(EdnSymbol::namespaced("ns", "bar"), "ns/bar")]
+    fn test_display_symbol(#[case] s: EdnSymbol<'_>, #[case] expected: &str) {
         assert_eq!(Edn::Symbol(s).to_string(), expected);
     }
 
@@ -198,15 +198,15 @@ mod tests {
     #[test]
     fn test_display_map() {
         let mut m = EdnMap::new();
-        m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
+        m.insert(Edn::Keyword(EdnKeyword::new("a")), Edn::Int(1));
         assert_eq!(Edn::Map(m).to_string(), "{:a 1}");
     }
 
     #[test]
     fn test_display_map_multi() {
         let mut m = EdnMap::new();
-        m.insert(Edn::Keyword(Keyword::new("a")), Edn::Int(1));
-        m.insert(Edn::Keyword(Keyword::new("b")), Edn::Int(2));
+        m.insert(Edn::Keyword(EdnKeyword::new("a")), Edn::Int(1));
+        m.insert(Edn::Keyword(EdnKeyword::new("b")), Edn::Int(2));
         let s = Edn::Map(m).to_string();
         assert!(s == "{:a 1 :b 2}" || s == "{:b 2 :a 1}");
     }
@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn test_display_nested() {
         let inner = Edn::Vector(vec![Edn::Int(1), Edn::Int(2)].into());
-        let outer = Edn::List(vec![Edn::Keyword(Keyword::new("data")), inner].into());
+        let outer = Edn::List(vec![Edn::Keyword(EdnKeyword::new("data")), inner].into());
         assert_eq!(outer.to_string(), "(:data [1 2])");
     }
 

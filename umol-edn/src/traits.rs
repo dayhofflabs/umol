@@ -42,7 +42,7 @@ use num_bigint::BigInt;
 use crate::collections::{EdnMap, EdnSeq, EdnSet};
 #[cfg(feature = "bignum")]
 use crate::edn::EdnBigDecimal;
-use crate::edn::{Edn, Keyword, Symbol};
+use crate::edn::{Edn, EdnKeyword, EdnSymbol};
 use crate::error::{DeError, EdnError};
 use crate::reader::read_string;
 
@@ -543,10 +543,10 @@ impl<'a> ToEdn for Edn<'a> {
     }
 }
 
-impl<'de> FromEdn<'de> for Keyword<'de> {
+impl<'de> FromEdn<'de> for EdnKeyword<'static> {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Keyword(k) => Ok(k.clone()),
+            Edn::Keyword(k) => Ok(k.clone().into_owned()),
             other => Err(DeError::TypeMismatch {
                 expected: "keyword",
                 got: other.kind(),
@@ -556,16 +556,16 @@ impl<'de> FromEdn<'de> for Keyword<'de> {
     }
 }
 
-impl<'a> ToEdn for Keyword<'a> {
+impl<'a> ToEdn for EdnKeyword<'a> {
     fn to_edn(&self) -> Edn<'_> {
         Edn::Keyword(self.clone())
     }
 }
 
-impl<'de> FromEdn<'de> for Symbol<'de> {
+impl<'de> FromEdn<'de> for EdnSymbol<'static> {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Symbol(s) => Ok(s.clone()),
+            Edn::Symbol(s) => Ok(s.clone().into_owned()),
             other => Err(DeError::TypeMismatch {
                 expected: "symbol",
                 got: other.kind(),
@@ -575,7 +575,7 @@ impl<'de> FromEdn<'de> for Symbol<'de> {
     }
 }
 
-impl<'a> ToEdn for Symbol<'a> {
+impl<'a> ToEdn for EdnSymbol<'a> {
     fn to_edn(&self) -> Edn<'_> {
         Edn::Symbol(self.clone())
     }
@@ -846,7 +846,7 @@ mod tests {
     #[test]
     fn test_edn_passthrough() {
         let edn = Edn::Vector(EdnSeq::from(vec![
-            Edn::Keyword(Keyword::new("atoms")),
+            Edn::Keyword(EdnKeyword::new("atoms")),
             Edn::Int(2),
         ]));
         let parsed = <Edn<'_>>::from_edn(&edn).unwrap();
@@ -855,9 +855,9 @@ mod tests {
 
     #[test]
     fn test_keyword_roundtrip() {
-        let k = Keyword::new("atoms");
+        let k = EdnKeyword::new("atoms");
         let e = k.to_edn();
-        assert_eq!(Keyword::from_edn(&e).unwrap(), k);
+        assert_eq!(EdnKeyword::from_edn(&e).unwrap(), k);
     }
 
     #[test]
