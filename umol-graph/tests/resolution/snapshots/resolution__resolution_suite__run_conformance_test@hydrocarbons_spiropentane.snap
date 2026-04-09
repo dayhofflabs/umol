@@ -14,7 +14,7 @@ expression: edn_to_string_pretty(&results).unwrap()
         [3 4 :single]
         [0 4 :single]]
       :charge 0
-      :spin "#u0 #s1"}
+      :spin "#u0#s1"}
     :success true}
   :counts {
     :output {
@@ -27,5 +27,5 @@ expression: edn_to_string_pretty(&results).unwrap()
         [3 4 :single]
         [0 4 :single]]
       :charge 0
-      :spin "#u0 #s1"}
+      :spin "#u0#s1"}
     :success true}}

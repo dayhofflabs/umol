@@ -4,8 +4,8 @@ expression: edn_to_string_pretty(&results).unwrap()
 ---
 {
   :atom-typing {
-    :output {:atoms ["Yb#c+2#n7"] :bonds [] :charge 2 :spin "#u0 #s1"}
+    :output {:atoms ["Yb#c+2#n7"] :bonds [] :charge 2 :spin "#u0#s1"}
     :success true}
   :counts {
-    :output {:atoms ["Yb#c+2#n7"] :bonds [] :charge 2 :spin "#u0 #s1"}
+    :output {:atoms ["Yb#c+2#n7"] :bonds [] :charge 2 :spin "#u0#s1"}
     :success true}}

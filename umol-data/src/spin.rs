@@ -211,7 +211,7 @@ impl fmt::Display for SpinState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "#u{} #s{}",
+            "#u{}#s{}",
             self.unpaired_electrons,
             self.multiplicity.multiplicity()
         )
@@ -468,11 +468,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(0, SpinMultiplicity::Singlet, "#u0 #s1")]
-    #[case(1, SpinMultiplicity::Doublet, "#u1 #s2")]
-    #[case(2, SpinMultiplicity::Singlet, "#u2 #s1")]
-    #[case(2, SpinMultiplicity::Triplet, "#u2 #s3")]
-    #[case(3, SpinMultiplicity::Quartet, "#u3 #s4")]
+    #[case(0, SpinMultiplicity::Singlet, "#u0#s1")]
+    #[case(1, SpinMultiplicity::Doublet, "#u1#s2")]
+    #[case(2, SpinMultiplicity::Singlet, "#u2#s1")]
+    #[case(2, SpinMultiplicity::Triplet, "#u2#s3")]
+    #[case(3, SpinMultiplicity::Quartet, "#u3#s4")]
     fn test_spin_state_to_string(
         #[case] n: u8,
         #[case] m: SpinMultiplicity,

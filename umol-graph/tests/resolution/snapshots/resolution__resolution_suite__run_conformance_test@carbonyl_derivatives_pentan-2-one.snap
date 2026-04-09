@@ -8,12 +8,12 @@ expression: edn_to_string_pretty(&results).unwrap()
       :atoms ["C#h3#v" "C#v4" "C#h2#v2" "C#h2#v2" "C#h3#v" "O#n2#v2"]
       :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 4 :single] [1 5 :double]]
       :charge 0
-      :spin "#u0 #s1"}
+      :spin "#u0#s1"}
     :success true}
   :counts {
     :output {
       :atoms ["C#h3#v" "C#v4" "C#h2#v2" "C#h2#v2" "C#h3#v" "O#n2#v2"]
       :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 4 :single] [1 5 :double]]
       :charge 0
-      :spin "#u0 #s1"}
+      :spin "#u0#s1"}
     :success true}}
