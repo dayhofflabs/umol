@@ -142,6 +142,9 @@ impl<'de> Deserialize<'de> for EdnSymbol {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "serde")]
+    use rstest::rstest;
+
     use super::*;
     use crate::read_string;
     #[cfg(feature = "serde")]
@@ -176,15 +179,11 @@ mod tests {
     }
 
     #[cfg(feature = "serde")]
-    #[test]
-    fn test_edn_symbol_serialize() {
-        assert_eq!(to_string(&EdnSymbol::new("foo")).unwrap(), "foo");
-    }
-
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_edn_symbol_serialize_namespaced() {
-        assert_eq!(to_string(&EdnSymbol::new("ns/foo")).unwrap(), "ns/foo");
+    #[rstest]
+    #[case("foo", "foo")]
+    #[case("ns/foo", "ns/foo")]
+    fn test_edn_symbol_serialize(#[case] input: &str, #[case] expected: &str) {
+        assert_eq!(to_string(&EdnSymbol::new(input)).unwrap(), expected);
     }
 
     #[cfg(feature = "serde")]

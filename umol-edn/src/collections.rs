@@ -14,10 +14,6 @@ use hashbrown::{HashMap, HashSet};
 use crate::edn::EdnBigDecimal;
 use crate::edn::Edn;
 
-// ---------------------------------------------------------------------------
-// EdnKeyRef — borrowed key view for cross-lifetime lookups
-// ---------------------------------------------------------------------------
-
 /// Borrowed key representation for looking up values in [`EdnMap`] and [`EdnSet`]
 /// without constructing an owned [`Edn`] or matching its lifetime parameter.
 pub enum EdnKeyRef<'k> {
@@ -155,10 +151,6 @@ impl hashbrown::Equivalent<Edn<'_>> for EdnKeyRef<'_> {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// EdnMap
-// ---------------------------------------------------------------------------
 
 /// An unordered map of EDN values.
 #[derive(Clone, Debug)]
@@ -299,10 +291,6 @@ impl Hash for EdnMap<'_> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// EdnSet
-// ---------------------------------------------------------------------------
-
 /// An unordered set of EDN values.
 #[derive(Clone, Debug)]
 pub struct EdnSet<'a>(HashSet<Edn<'a>>);
@@ -410,10 +398,6 @@ impl Hash for EdnSet<'_> {
         combined.hash(state);
     }
 }
-
-// ---------------------------------------------------------------------------
-// EdnSeq
-// ---------------------------------------------------------------------------
 
 /// An ordered sequence of EDN values (backing both lists and vectors).
 #[derive(Clone, Debug)]

@@ -126,8 +126,6 @@ pub fn parse_all<'a>(
     Ok(values)
 }
 
-// --- Whitespace and comments ---
-
 fn is_ws(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\n' | '\r' | ',')
 }
@@ -151,8 +149,6 @@ fn ws_and_comments<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) {
         }
     }
 }
-
-// --- Top-level value dispatch ---
 
 fn edn_value<'a, 'b>(
     ctx: &'b ParseCtx<'_>,
@@ -185,8 +181,6 @@ fn edn_value_dispatch<'a>(input: &mut Input<'a>, ctx: &ParseCtx<'_>) -> PResult<
         _ => edn_symbol_or_literal(input),
     }
 }
-
-// --- Nil, booleans, symbols ---
 
 pub(crate) fn is_symbol_start(c: char) -> bool {
     matches!(
@@ -242,8 +236,6 @@ fn edn_symbol_or_literal<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
     }
 }
 
-// --- Keywords ---
-
 #[inline]
 fn edn_keyword<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
     let _ = ':'.parse_next(input)?;
@@ -257,8 +249,6 @@ fn edn_keyword<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
     validate_symbol(s, start).map_err(ErrMode::Cut)?;
     Ok(Edn::Keyword(Keyword::new(s)))
 }
-
-// --- Numbers ---
 
 #[inline]
 fn edn_number<'a>(input: &mut Input<'a>) -> PResult<Edn<'a>> {
@@ -344,8 +334,6 @@ fn edn_number_or_symbol<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
     }
 }
 
-// --- Strings ---
-
 fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '"'.parse_next(input)?;
@@ -425,8 +413,6 @@ fn edn_string<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
     }
 }
 
-// --- Characters ---
-
 fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
     move |input: &mut Input<'a>| -> PResult<Edn<'a>> {
         let _ = '\\'.parse_next(input)?;
@@ -501,8 +487,6 @@ fn edn_char<'a>() -> impl Parser<Input<'a>, Edn<'a>, E> {
         Ok(Edn::Char(c))
     }
 }
-
-// --- Collections ---
 
 fn edn_list<'a, 'b>(
     ctx: &'b ParseCtx<'_>,
@@ -613,8 +597,6 @@ where
     }
 }
 
-// --- # dispatch ---
-
 fn edn_dispatch<'a, 'b>(
     ctx: &'b ParseCtx<'_>,
 ) -> impl Parser<Input<'a>, Edn<'a>, E> + 'b
@@ -676,8 +658,6 @@ mod tests {
     use crate::reader::{read_all, read_string, read_string_with, Reader};
     use crate::config::{DuplicateKeyPolicy, ParseConfig};
 
-    // --- Primitives ---
-
     #[rstest]
     #[case("nil", Edn::Nil)]
     #[case("true", Edn::Bool(true))]
@@ -715,8 +695,6 @@ mod tests {
         assert!(read_string(input).is_err());
     }
 
-    // --- Strings ---
-
     #[rstest]
     #[case(r#""""#, "")]
     #[case(r#""hello""#, "hello")]
@@ -746,8 +724,6 @@ mod tests {
         assert!(read_string(input).is_err());
     }
 
-    // --- Characters ---
-
     #[rstest]
     #[case("\\a", 'a')]
     #[case("\\Z", 'Z')]
@@ -759,8 +735,6 @@ mod tests {
     fn test_read_string_char(#[case] input: &str, #[case] expected: char) {
         assert_eq!(read_string(input).unwrap(), Edn::Char(expected));
     }
-
-    // --- Keywords ---
 
     #[rstest]
     #[case(":foo", "foo")]
@@ -785,8 +759,6 @@ mod tests {
         assert_eq!(k2.name(), "bare");
     }
 
-    // --- Symbols ---
-
     #[rstest]
     #[case("foo", "foo")]
     #[case("ns/name", "ns/name")]
@@ -798,8 +770,6 @@ mod tests {
             other => panic!("expected Symbol, got {other:?}"),
         }
     }
-
-    // --- Collections ---
 
     #[rstest]
     #[case("()", Edn::List(vec![].into()))]
@@ -845,8 +815,6 @@ mod tests {
         assert_eq!(read_string("#{}").unwrap(), Edn::Set(EdnSet::new()));
     }
 
-    // --- Nested ---
-
     #[test]
     fn test_read_string_nested() {
         let val = read_string("{:items [1 (2 3)] :flag true}").unwrap();
@@ -862,8 +830,6 @@ mod tests {
         assert_eq!(val, Edn::Map(expected));
     }
 
-    // --- Tagged literals ---
-
     #[test]
     fn test_read_string_tagged() {
         let val = read_string("#myapp/Person {:name \"Alice\"}").unwrap();
@@ -876,8 +842,6 @@ mod tests {
         }
     }
 
-    // --- Comments ---
-
     #[rstest]
     #[case("; comment\n12", Edn::Int(12))]
     #[case("12 ; trailing", Edn::Int(12))]
@@ -885,16 +849,12 @@ mod tests {
         assert_eq!(read_string(input).unwrap(), expected);
     }
 
-    // --- Discard ---
-
     #[rstest]
     #[case("#_ foo 12", Edn::Int(12))]
     #[case("[1 #_ 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(3)].into()))]
     fn test_read_string_discard(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
-
-    // --- Whitespace variants ---
 
     #[rstest]
     #[case("  12  ", Edn::Int(12))]
@@ -904,8 +864,6 @@ mod tests {
     fn test_read_string_whitespace(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
-
-    // --- Error cases ---
 
     #[rstest]
     #[case("", EdnError::UnexpectedEof { offset: 0 })]
@@ -990,8 +948,6 @@ mod tests {
         assert_eq!(val, Edn::Map(expected));
     }
 
-    // --- Integer overflow ---
-
     #[cfg(not(feature = "bignum"))]
     #[test]
     fn test_read_string_error_integer_overflow() {
@@ -1001,8 +957,6 @@ mod tests {
             "expected InvalidNumber, got {err:?}"
         );
     }
-
-    // --- read_all ---
 
     #[test]
     fn test_read_all() {
@@ -1025,8 +979,6 @@ mod tests {
         assert!(values[2].is_nil());
     }
 
-    // --- Reader iterator ---
-
     #[test]
     fn test_reader_iterator() {
         let reader = Reader::new("1 :foo [3]");
@@ -1044,8 +996,6 @@ mod tests {
         let values: Vec<_> = reader.collect();
         assert!(values.is_empty());
     }
-
-    // --- Round-trip ---
 
     #[rstest]
     #[case("nil")]
@@ -1097,8 +1047,6 @@ mod tests {
     }
 
 
-    // --- Edn accessors ---
-
     #[test]
     fn test_edn_get() {
         let val = read_string("{:name \"Alice\" :age 30}").unwrap();
@@ -1126,8 +1074,6 @@ mod tests {
         let items: Vec<_> = val.iter().collect();
         assert_eq!(items.len(), 3);
     }
-
-    // --- EDN strict behavior ---
 
     #[rstest]
     #[case(":0")]

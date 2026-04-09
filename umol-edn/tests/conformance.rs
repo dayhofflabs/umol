@@ -498,16 +498,10 @@ fn test_bigdecimal_parse(#[case] input: &str) {
 }
 
 #[cfg(feature = "bignum")]
-#[test]
-fn test_bigint_overflow_promotes() {
-    let input = "9223372036854775808"; // i64::MAX + 1
-    assert!(matches!(parse(input).unwrap(), Edn::BigInt(_)));
-}
-
-#[cfg(feature = "bignum")]
-#[test]
-fn test_bigint_negative_overflow_promotes() {
-    let input = "-9223372036854775809"; // i64::MIN - 1
+#[rstest]
+#[case("9223372036854775808")] // i64::MAX + 1
+#[case("-9223372036854775809")] // i64::MIN - 1
+fn test_bigint_overflow_promotes(#[case] input: &str) {
     assert!(matches!(parse(input).unwrap(), Edn::BigInt(_)));
 }
 
@@ -828,38 +822,27 @@ fn test_comment_inside_vector() {
     );
 }
 
-#[test]
-fn test_discard() {
-    assert_eq!(
-        parse("[1 #_ 2 3]").unwrap(),
-        Edn::Vector(vec![Edn::Int(1), Edn::Int(3)].into())
-    );
+#[rstest]
+#[case("[1 #_ 2 3]", vec![1, 3])]
+#[case("[#_ #_ 1 2 3]", vec![3])]
+#[case("[#_ #my/tag \"2024\" 1]", vec![1])]
+fn test_discard(#[case] input: &str, #[case] expected: Vec<i64>) {
+    let parsed = parse(input).unwrap();
+    let items: Vec<i64> = match parsed {
+        Edn::Vector(v) => v.iter().map(|e| match e {
+            Edn::Int(n) => *n,
+            _ => panic!("expected int, got {e:?}"),
+        }).collect(),
+        other => panic!("expected vector, got {other:?}"),
+    };
+    assert_eq!(items, expected);
 }
 
-#[test]
-fn test_discard_streaming() {
-    assert_eq!(stream::<Vec<i64>>("[1 #_ 2 3]").unwrap(), vec![1, 3]);
-}
-
-#[test]
-fn test_discard_nested() {
-    assert_eq!(
-        parse("[#_ #_ 1 2 3]").unwrap(),
-        Edn::Vector(vec![Edn::Int(3)].into())
-    );
-}
-
-#[test]
-fn test_discard_nested_streaming() {
-    assert_eq!(stream::<Vec<i64>>("[#_ #_ 1 2 3]").unwrap(), vec![3]);
-}
-
-#[test]
-fn test_discard_tagged_literal() {
-    assert_eq!(
-        parse("[#_ #my/tag \"2024\" 1]").unwrap(),
-        Edn::Vector(vec![Edn::Int(1)].into())
-    );
+#[rstest]
+#[case("[1 #_ 2 3]", vec![1, 3])]
+#[case("[#_ #_ 1 2 3]", vec![3])]
+fn test_discard_streaming(#[case] input: &str, #[case] expected: Vec<i64>) {
+    assert_eq!(stream::<Vec<i64>>(input).unwrap(), expected);
 }
 
 #[test]
@@ -870,14 +853,11 @@ fn test_discard_in_map() {
     assert_eq!(result, Edn::Map(expected));
 }
 
-#[test]
-fn test_discard_at_eof_error() {
-    assert!(parse("#_").is_err());
-}
-
-#[test]
-fn test_discard_only_content_error() {
-    assert!(parse("#_ 1").is_err());
+#[rstest]
+#[case("#_")]
+#[case("#_ 1")]
+fn test_discard_error(#[case] input: &str) {
+    assert!(parse(input).is_err());
 }
 
 #[test]
@@ -885,10 +865,12 @@ fn test_int_not_equal_to_float() {
     assert_ne!(Edn::Int(1), Edn::Float(1.0));
 }
 
-#[test]
-fn test_list_equals_vector() {
-    let list = Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into());
-    let vector = Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into());
+#[rstest]
+#[case(vec![])]
+#[case(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)])]
+fn test_list_equals_vector(#[case] items: Vec<Edn<'static>>) {
+    let list = Edn::List(items.clone().into());
+    let vector = Edn::Vector(items.into());
     assert_eq!(list, vector);
 }
 
@@ -910,14 +892,6 @@ fn test_list_not_equal_to_vector_different_elements() {
     let list = Edn::List(vec![Edn::Int(1)].into());
     let vector = Edn::Vector(vec![Edn::Int(2)].into());
     assert_ne!(list, vector);
-}
-
-#[test]
-fn test_empty_list_equals_empty_vector() {
-    assert_eq!(
-        Edn::List(vec![].into()),
-        Edn::Vector(vec![].into()),
-    );
 }
 
 #[test]

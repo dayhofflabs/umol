@@ -187,6 +187,9 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for EdnList<T> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "serde")]
+    use rstest::rstest;
+
     use super::*;
     use crate::read_string;
     #[cfg(feature = "serde")]
@@ -217,17 +220,12 @@ mod tests {
     }
 
     #[cfg(feature = "serde")]
-    #[test]
-    fn test_edn_list_serialize() {
-        let list: EdnList<i64> = vec![1, 2, 3].into();
-        assert_eq!(to_string(&list).unwrap(), "(1 2 3)");
-    }
-
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_edn_list_serialize_empty() {
-        let list: EdnList<i64> = EdnList::new();
-        assert_eq!(to_string(&list).unwrap(), "()");
+    #[rstest]
+    #[case(vec![1, 2, 3], "(1 2 3)")]
+    #[case(vec![], "()")]
+    fn test_edn_list_serialize(#[case] input: Vec<i64>, #[case] expected: &str) {
+        let list: EdnList<i64> = input.into();
+        assert_eq!(to_string(&list).unwrap(), expected);
     }
 
     #[cfg(feature = "serde")]

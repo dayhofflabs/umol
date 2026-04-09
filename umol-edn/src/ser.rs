@@ -19,10 +19,6 @@ use crate::error::EdnError;
 use crate::formatter::EdnFormatter;
 use crate::serde_tokens::{KEYWORD_TOKEN, LIST_TOKEN, SET_TOKEN, SYMBOL_TOKEN, TAGGED_TOKEN};
 
-// ---------------------------------------------------------------------------
-// Public entry points
-// ---------------------------------------------------------------------------
-
 /// Serialize a value to a compact EDN string.
 pub fn to_string<T: Serialize>(value: &T) -> Result<String, EdnError> {
     let mut ser = EdnSerializer::new();
@@ -57,10 +53,6 @@ pub fn to_string_with<T: Serialize>(value: &T, fmt: &EdnFormatter) -> Result<Str
     let edn = to_value(value)?;
     Ok(edn.to_string_with(fmt))
 }
-
-// ---------------------------------------------------------------------------
-// Compact string serializer
-// ---------------------------------------------------------------------------
 
 /// Serializer that writes compact EDN into a `String`.
 pub struct EdnSerializer {
@@ -597,10 +589,6 @@ impl SerializeStructVariant for &mut EdnSerializer {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tree serializer (builds Edn<'static>)
-// ---------------------------------------------------------------------------
-
 /// Serializer that materializes a value as an `Edn<'static>` so the size-aware
 /// formatter can lay it out. Used by `to_value`, `to_string_pretty`, and
 /// `to_string_with`.
@@ -1098,10 +1086,6 @@ impl SerializeStructVariant for TreeVariantStructSerializer<'_> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -1158,13 +1142,10 @@ mod tests {
     #[case("with \"quotes\"", r#""with \"quotes\"""#)]
     #[case("line\nbreak", r#""line\nbreak""#)]
     #[case("tab\there", r#""tab\there""#)]
+    #[case("a\rb", r#""a\rb""#)]
+    #[case(r"a\b", r#""a\\b""#)]
     fn test_serialize_string(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
-    }
-
-    #[test]
-    fn test_serialize_char() {
-        assert_eq!(to_string(&'a').unwrap(), "\\a");
     }
 
     #[test]
@@ -1332,31 +1313,16 @@ mod tests {
     }
 
     #[rstest]
+    #[case('a', "\\a")]
     #[case('\n', "\\newline")]
     #[case('\r', "\\return")]
     #[case(' ', "\\space")]
     #[case('\t', "\\tab")]
     #[case('x', "\\x")]
-    fn test_serialize_char_special(#[case] input: char, #[case] expected: &str) {
+    #[case('\x01', "\\u0001")]
+    #[case('\x7F', "\\u007F")]
+    fn test_serialize_char(#[case] input: char, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
-    }
-
-    #[test]
-    fn test_serialize_char_control() {
-        let s = to_string(&'\x01').unwrap();
-        assert_eq!(s, "\\u0001");
-        let s = to_string(&'\x7F').unwrap();
-        assert_eq!(s, "\\u007F");
-    }
-
-    #[test]
-    fn test_serialize_string_carriage_return() {
-        assert_eq!(to_string(&"a\rb").unwrap(), r#""a\rb""#);
-    }
-
-    #[test]
-    fn test_serialize_string_backslash() {
-        assert_eq!(to_string(&r"a\b").unwrap(), r#""a\\b""#);
     }
 
     #[test]
@@ -1379,10 +1345,6 @@ mod tests {
         struct Pair(i64, i64);
         assert_eq!(to_string(&Pair(3, 4)).unwrap(), "[3 4]");
     }
-
-    // -----------------------------------------------------------------------
-    // Tree serializer / pretty path
-    // -----------------------------------------------------------------------
 
     #[test]
     fn test_to_value_primitives() {

@@ -16,9 +16,7 @@ use serde::{Deserialize, Serialize};
 use umol_edn::de::{from_str, from_value};
 use umol_edn::read_string;
 
-// ---------------------------------------------------------------------------
 // Tracking allocator
-// ---------------------------------------------------------------------------
 
 struct TrackingAlloc;
 
@@ -66,9 +64,7 @@ fn peak_since_reset() -> usize {
     PEAK.load(Ordering::Relaxed).saturating_sub(BASELINE.load(Ordering::Relaxed))
 }
 
-// ---------------------------------------------------------------------------
 // Workload
-// ---------------------------------------------------------------------------
 
 #[allow(dead_code)]
 #[derive(Deserialize, Serialize)]

@@ -220,8 +220,6 @@ impl FromStr for Edn<'static> {
 }
 
 impl<'a> Edn<'a> {
-    // --- Constructors ---
-
     pub fn keyword(name: &'a str) -> Self {
         Edn::Keyword(Keyword::new(name))
     }
@@ -233,8 +231,6 @@ impl<'a> Edn<'a> {
     pub fn string(s: &'a str) -> Self {
         Edn::Str(Cow::Borrowed(s))
     }
-
-    // --- Type checks ---
 
     pub fn is_nil(&self) -> bool {
         matches!(self, Edn::Nil)
@@ -321,8 +317,6 @@ impl<'a> Edn<'a> {
             Edn::Tagged(_, _) => "tagged",
         }
     }
-
-    // --- Narrowing accessors ---
 
     pub fn as_bool(&self) -> Option<bool> {
         match self {
@@ -418,8 +412,6 @@ impl<'a> Edn<'a> {
         }
     }
 
-    // --- Numeric narrowing ---
-
     pub fn as_u8(&self) -> Option<u8> {
         self.as_i64().and_then(|n| u8::try_from(n).ok())
     }
@@ -448,8 +440,6 @@ impl<'a> Edn<'a> {
         self.as_i64().and_then(|n| i32::try_from(n).ok())
     }
 
-    // --- Collection access ---
-
     /// Look up a keyword in a map by its string name.
     pub fn get_keyword(&self, key: &str) -> Option<&Edn<'a>> {
         match self {
@@ -466,8 +456,6 @@ impl<'a> Edn<'a> {
             _ => Box::new(iter::empty()),
         }
     }
-
-    // --- Ownership ---
 
     pub fn into_owned(self) -> Edn<'static> {
         match self {

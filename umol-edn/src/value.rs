@@ -593,21 +593,18 @@ mod tests {
     }
 
     #[cfg(feature = "serde")]
-    #[test]
-    fn test_value_roundtrip_symbol() {
-        let v: Value = from_str("sym").unwrap();
-        assert!(matches!(v.as_edn(), Edn::Symbol(_)));
+    #[rstest]
+    #[case("sym", "sym", |e: &Edn<'_>| matches!(e, Edn::Symbol(_)))]
+    #[case("[1 2 3]", "[1 2 3]", |e: &Edn<'_>| matches!(e, Edn::Vector(_)))]
+    fn test_value_roundtrip_shape(
+        #[case] input: &str,
+        #[case] expected: &str,
+        #[case] kind: fn(&Edn<'_>) -> bool,
+    ) {
+        let v: Value = from_str(input).unwrap();
+        assert!(kind(v.as_edn()));
         let s = to_string(&v).unwrap();
-        assert_eq!(s, "sym");
-    }
-
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_value_roundtrip_vector() {
-        let v: Value = from_str("[1 2 3]").unwrap();
-        assert!(matches!(v.as_edn(), Edn::Vector(_)));
-        let s = to_string(&v).unwrap();
-        assert_eq!(s, "[1 2 3]");
+        assert_eq!(s, expected);
     }
 
     #[cfg(feature = "serde")]

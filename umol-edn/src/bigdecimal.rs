@@ -119,9 +119,13 @@ impl<'de> Deserialize<'de> for EdnBigDecimal {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::hash::{DefaultHasher, Hash, Hasher};
     use std::str::FromStr;
+
+    #[cfg(feature = "serde")]
+    use rstest::rstest;
+
+    use super::*;
     #[cfg(feature = "serde")]
     use crate::{from_str, to_string};
 
@@ -153,17 +157,12 @@ mod tests {
     }
 
     #[cfg(feature = "serde")]
-    #[test]
-    fn test_edn_bigdecimal_serialize() {
-        let d = EdnBigDecimal::new(BigDecimal::from_str("3.14159265358979323846").unwrap());
-        assert_eq!(to_string(&d).unwrap(), "3.14159265358979323846M");
-    }
-
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_edn_bigdecimal_serialize_negative() {
-        let d = EdnBigDecimal::new(BigDecimal::from_str("-1.5").unwrap());
-        assert_eq!(to_string(&d).unwrap(), "-1.5M");
+    #[rstest]
+    #[case("3.14159265358979323846", "3.14159265358979323846M")]
+    #[case("-1.5", "-1.5M")]
+    fn test_edn_bigdecimal_serialize(#[case] input: &str, #[case] expected: &str) {
+        let d = EdnBigDecimal::new(BigDecimal::from_str(input).unwrap());
+        assert_eq!(to_string(&d).unwrap(), expected);
     }
 
     #[cfg(feature = "serde")]

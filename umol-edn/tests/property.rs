@@ -8,9 +8,7 @@ use umol_edn::collections::{EdnMap, EdnSeq, EdnSet};
 use umol_edn::edn::{Edn, Keyword, Symbol};
 use umol_edn::read_string;
 
-// ---------------------------------------------------------------------------
 // Strategies
-// ---------------------------------------------------------------------------
 
 /// Characters valid as the first character of a symbol name.
 const SYMBOL_START: &[char] = &[
@@ -138,9 +136,7 @@ fn edn_strategy() -> impl Strategy<Value = Edn<'static>> {
     )
 }
 
-// ---------------------------------------------------------------------------
 // Properties
-// ---------------------------------------------------------------------------
 
 fn hash_of(v: &Edn<'_>) -> u64 {
     let mut h = DefaultHasher::new();

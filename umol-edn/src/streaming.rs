@@ -35,8 +35,6 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
-    // --- Low-level ---
-
     #[inline]
     fn peek(&self) -> Option<u8> {
         self.input.as_bytes().get(self.pos).copied()
@@ -80,8 +78,6 @@ impl<'de> EdnStreamDeserializer<'de> {
         self.skip_value()?;
         self.skip_ws()
     }
-
-    // --- Token parsing ---
 
     #[inline]
     fn parse_keyword_name(&mut self) -> Result<Cow<'de, str>, EdnError> {
@@ -252,8 +248,6 @@ impl<'de> EdnStreamDeserializer<'de> {
         }
     }
 
-    // --- Value skipping (for ignored_any / #_ discard) ---
-
     fn skip_value(&mut self) -> Result<(), EdnError> {
         self.skip_ws()?;
         let b = self.peek().ok_or(EdnError::UnexpectedEof { offset: self.pos })?;
@@ -346,10 +340,6 @@ impl<'de> EdnStreamDeserializer<'de> {
         Ok(())
     }
 }
-
-// ---------------------------------------------------------------------------
-// Public streaming API for non-serde callers (FromEdn fusion overrides).
-// ---------------------------------------------------------------------------
 
 impl<'de> EdnStreamDeserializer<'de> {
     /// Current byte offset into the input.

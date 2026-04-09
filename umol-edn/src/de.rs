@@ -427,8 +427,6 @@ impl<'de> de::Deserializer<'de> for EdnDeserializer<'de> {
     }
 }
 
-// --- SeqAccess ---
-
 struct EdnSeqAccess<'de> {
     iter: EdnSeqIntoIter<'de>,
 }
@@ -455,8 +453,6 @@ impl<'de> SeqAccess<'de> for EdnSeqAccess<'de> {
     }
 }
 
-// --- SetSeqAccess ---
-
 struct EdnSetSeqAccess<'de> {
     iter: HashSetIntoIter<Edn<'de>>,
 }
@@ -474,8 +470,6 @@ impl<'de> SeqAccess<'de> for EdnSetSeqAccess<'de> {
         }
     }
 }
-
-// --- TaggedSeqAccess ---
 
 /// Two-step `SeqAccess` that yields the tag string, then the inner value of
 /// an `Edn::Tagged`. Used to deserialize `EdnTagged<T>` via the
@@ -507,8 +501,6 @@ impl<'de> SeqAccess<'de> for EdnTaggedSeqAccess<'de> {
         Some(self.tag.is_some() as usize + self.inner.is_some() as usize)
     }
 }
-
-// --- MapAccess ---
 
 struct EdnMapAccess<'de> {
     iter: HashMapIntoIter<Edn<'de>, Edn<'de>>,
@@ -551,8 +543,6 @@ impl<'de> MapAccess<'de> for EdnMapAccess<'de> {
         seed.deserialize(EdnDeserializer(v))
     }
 }
-
-// --- StructMap (filters to string-like keys) ---
 
 struct EdnStructMapAccess<'de> {
     iter: HashMapIntoIter<Edn<'de>, Edn<'de>>,
@@ -1107,17 +1097,11 @@ mod tests {
         assert_eq!(from_value::<Pair>(val).unwrap(), Pair(3, 4));
     }
 
-    #[test]
-    fn test_from_value_enum_via_symbol() {
-        let val = Edn::Symbol(Symbol::new("red"));
-        assert_eq!(Color::deserialize(EdnDeserializer(val)).unwrap(), Color::Red);
-    }
-
-    #[test]
-    fn test_from_value_enum_via_string() {
-        use std::borrow::Cow;
-        let val = Edn::Str(Cow::Borrowed("red"));
-        assert_eq!(Color::deserialize(EdnDeserializer(val)).unwrap(), Color::Red);
+    #[rstest]
+    #[case(Edn::Symbol(Symbol::new("red")))]
+    #[case(Edn::Str(Cow::Borrowed("red")))]
+    fn test_from_value_enum_as_red(#[case] input: Edn<'static>) {
+        assert_eq!(Color::deserialize(EdnDeserializer(input)).unwrap(), Color::Red);
     }
 
     #[test]
@@ -1167,30 +1151,21 @@ mod tests {
         assert_eq!(from_value::<()>(Edn::Nil).unwrap(), ());
     }
 
-    #[test]
-    fn test_from_value_vec_from_list() {
-        let val = read_string("(1 2 3)").unwrap();
+    #[rstest]
+    #[case("(1 2 3)", vec![1, 2, 3])]
+    #[case("[4 5]", vec![4, 5])]
+    fn test_from_value_vec(#[case] input: &str, #[case] expected: Vec<i64>) {
+        let val = read_string(input).unwrap();
         let v: Vec<i64> = from_value(val).unwrap();
-        assert_eq!(v, vec![1, 2, 3]);
+        assert_eq!(v, expected);
     }
 
-    #[test]
-    fn test_from_value_vec_from_vector() {
-        let val = read_string("[4 5]").unwrap();
-        let v: Vec<i64> = from_value(val).unwrap();
-        assert_eq!(v, vec![4, 5]);
-    }
-
-    #[test]
-    fn test_from_value_keyword_as_string() {
-        let v = from_value::<String>(Edn::Keyword(Keyword::new("hello"))).unwrap();
-        assert_eq!(v, "hello");
-    }
-
-    #[test]
-    fn test_from_value_symbol_as_string() {
-        let v = from_value::<String>(Edn::Symbol(Symbol::new("world"))).unwrap();
-        assert_eq!(v, "world");
+    #[rstest]
+    #[case(Edn::Keyword(Keyword::new("hello")), "hello")]
+    #[case(Edn::Symbol(Symbol::new("world")), "world")]
+    fn test_from_value_atom_as_string(#[case] input: Edn<'static>, #[case] expected: &str) {
+        let v = from_value::<String>(input).unwrap();
+        assert_eq!(v, expected);
     }
 
     #[test]
@@ -1199,20 +1174,11 @@ mod tests {
         assert!((v - 2.718).abs() < 1e-10);
     }
 
-    #[test]
-    fn test_from_value_option_some() {
-        assert_eq!(
-            from_value::<Option<i64>>(Edn::Int(7)).unwrap(),
-            Some(7)
-        );
-    }
-
-    #[test]
-    fn test_from_value_option_none() {
-        assert_eq!(
-            from_value::<Option<i64>>(Edn::Nil).unwrap(),
-            None
-        );
+    #[rstest]
+    #[case(Edn::Int(7), Some(7))]
+    #[case(Edn::Nil, None)]
+    fn test_from_value_option(#[case] input: Edn<'static>, #[case] expected: Option<i64>) {
+        assert_eq!(from_value::<Option<i64>>(input).unwrap(), expected);
     }
 
     #[test]

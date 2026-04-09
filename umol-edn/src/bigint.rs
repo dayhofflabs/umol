@@ -133,6 +133,9 @@ impl<'de> Deserialize<'de> for EdnBigInt {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "serde")]
+    use rstest::rstest;
+
     use super::*;
     use crate::read_string;
     #[cfg(feature = "serde")]
@@ -162,20 +165,13 @@ mod tests {
     }
 
     #[cfg(feature = "serde")]
-    #[test]
-    fn test_edn_bigint_serialize() {
-        let n = EdnBigInt::new(BigInt::from_str("123456789012345678901234567890").unwrap());
-        assert_eq!(
-            to_string(&n).unwrap(),
-            "123456789012345678901234567890N"
-        );
-    }
-
-    #[cfg(feature = "serde")]
-    #[test]
-    fn test_edn_bigint_serialize_negative() {
-        let n = EdnBigInt::new(BigInt::from(-17));
-        assert_eq!(to_string(&n).unwrap(), "-17N");
+    #[rstest]
+    #[case("123456789012345678901234567890", "123456789012345678901234567890N")]
+    #[case("-17", "-17N")]
+    #[case("0", "0N")]
+    fn test_edn_bigint_serialize(#[case] input: &str, #[case] expected: &str) {
+        let n = EdnBigInt::new(BigInt::from_str(input).unwrap());
+        assert_eq!(to_string(&n).unwrap(), expected);
     }
 
     #[cfg(feature = "serde")]

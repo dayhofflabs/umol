@@ -231,10 +231,6 @@ pub trait ToEdn {
     fn to_edn(&self) -> Edn<'_>;
 }
 
-// ---------------------------------------------------------------------------
-// Primitive impls
-// ---------------------------------------------------------------------------
-
 impl<'de> FromEdn<'de> for bool {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
         match edn {
@@ -394,10 +390,6 @@ impl<'a> ToEdn for Cow<'a, str> {
         Edn::Str(Cow::Borrowed(self.as_ref()))
     }
 }
-
-// ---------------------------------------------------------------------------
-// Collection impls
-// ---------------------------------------------------------------------------
 
 impl<'de, T: FromEdn<'de>> FromEdn<'de> for Option<T> {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
@@ -646,10 +638,6 @@ impl<T: ToEdn> ToEdn for BTreeSet<T> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// EDN-native passthrough impls
-// ---------------------------------------------------------------------------
-
 impl<'de> FromEdn<'de> for Edn<'de> {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, EdnError> {
         Ok(edn.clone())
@@ -830,8 +818,6 @@ mod tests {
     use super::*;
     use rstest::rstest;
 
-    // -- Round-trip via Edn tree -------------------------------------------
-
     #[rstest]
     #[case::bool_true(true)]
     #[case::bool_false(false)]
@@ -880,8 +866,6 @@ mod tests {
         assert!(matches!(cow, Cow::Borrowed("oxygen")));
     }
 
-    // -- Type errors carry the right discriminator -------------------------
-
     #[test]
     fn test_bool_from_edn_error() {
         let edn = Edn::Int(1);
@@ -903,8 +887,6 @@ mod tests {
         assert!(matches!(err, EdnError::OutOfRange { target: "i32", .. }));
     }
 
-    // -- Collections -------------------------------------------------------
-
     #[test]
     fn test_vec_roundtrip() {
         let v = vec![1i32, 2, 3];
@@ -920,19 +902,12 @@ mod tests {
         assert_eq!(Vec::<i32>::from_edn(&list).unwrap(), vec![1, 2]);
     }
 
-    #[test]
-    fn test_option_some_roundtrip() {
-        let v: Option<i32> = Some(7);
+    #[rstest]
+    #[case(Some(7))]
+    #[case(None)]
+    fn test_option_roundtrip(#[case] v: Option<i32>) {
         let e = v.to_edn();
-        assert_eq!(<Option<i32>>::from_edn(&e).unwrap(), Some(7));
-    }
-
-    #[test]
-    fn test_option_none_roundtrip() {
-        let v: Option<i32> = None;
-        let e = v.to_edn();
-        assert!(matches!(e, Edn::Nil));
-        assert_eq!(<Option<i32>>::from_edn(&e).unwrap(), None);
+        assert_eq!(<Option<i32>>::from_edn(&e).unwrap(), v);
     }
 
     #[test]
@@ -974,8 +949,6 @@ mod tests {
         assert_eq!(<BTreeSet<i32>>::from_edn(&e).unwrap(), s);
     }
 
-    // -- EDN-native passthrough --------------------------------------------
-
     #[test]
     fn test_edn_passthrough() {
         let edn = Edn::Vector(EdnSeq::from(vec![
@@ -992,8 +965,6 @@ mod tests {
         let e = k.to_edn();
         assert_eq!(Keyword::from_edn(&e).unwrap(), k);
     }
-
-    // -- EdnMapHelper ------------------------------------------------------
 
     #[test]
     fn test_map_helper_required_and_optional() {
@@ -1031,8 +1002,6 @@ mod tests {
             other => panic!("expected UnknownField, got {other:?}"),
         }
     }
-
-    // -- from_edn_str default path -----------------------------------------
 
     #[test]
     fn test_from_edn_str_default() {

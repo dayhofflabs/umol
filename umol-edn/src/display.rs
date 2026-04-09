@@ -180,26 +180,13 @@ mod tests {
         assert_eq!(Edn::Symbol(s).to_string(), expected);
     }
 
-    #[test]
-    fn test_display_list() {
-        let v = Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into());
-        assert_eq!(v.to_string(), "(1 2 3)");
-    }
-
-    #[test]
-    fn test_display_list_empty() {
-        assert_eq!(Edn::List(vec![].into()).to_string(), "()");
-    }
-
-    #[test]
-    fn test_display_vector() {
-        let v = Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into());
-        assert_eq!(v.to_string(), "[1 2 3]");
-    }
-
-    #[test]
-    fn test_display_vector_empty() {
-        assert_eq!(Edn::Vector(vec![].into()).to_string(), "[]");
+    #[rstest]
+    #[case(Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()), "(1 2 3)")]
+    #[case(Edn::List(vec![].into()), "()")]
+    #[case(Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()), "[1 2 3]")]
+    #[case(Edn::Vector(vec![].into()), "[]")]
+    fn test_display_seq(#[case] edn: Edn<'_>, #[case] expected: &str) {
+        assert_eq!(edn.to_string(), expected);
     }
 
     #[test]
