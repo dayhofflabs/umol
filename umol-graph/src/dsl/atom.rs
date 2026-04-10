@@ -334,7 +334,7 @@ pub enum AtomPredicate {
     MulticenterValence(ValueAst),
 }
 
-pub(crate) fn atom_predicate(i: &str) -> IResult<&str, AtomPredicate, AtomDslError> {
+fn atom_predicate(i: &str) -> IResult<&str, AtomPredicate, AtomDslError> {
     let (remaining, prefix) = take(2usize)(i)?;
     match prefix {
         "#i" => map(isotope_expr, AtomPredicate::IsotopeMass).parse(remaining),
@@ -355,7 +355,7 @@ pub(crate) fn atom_predicate(i: &str) -> IResult<&str, AtomPredicate, AtomDslErr
     }
 }
 
-pub(crate) fn element_expr(i: &str) -> IResult<&str, ElementExpr, AtomDslError> {
+fn element_expr(i: &str) -> IResult<&str, ElementExpr, AtomDslError> {
     alt((
         value(ElementExpr::Wildcard, char('*')),
         map(element_set, ElementExpr::Set),

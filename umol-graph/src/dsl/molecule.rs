@@ -202,7 +202,6 @@ impl Metadata {
     }
 }
 
-
 fn validate(ast: &MoleculeAst) -> Result<(), ParseError> {
     let mut atom_labels: HashSet<String> = (0..ast.atoms.entries.len())
         .map(|i| i.to_string())
@@ -762,7 +761,9 @@ impl ToEdn for Atoms {
                 } else {
                     atom.to_edn()
                 };
-                Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned((*tag).to_owned())), def_edn].into())
+                Edn::Vector(
+                    vec![Edn::Keyword(EdnKeyword::owned((*tag).to_owned())), def_edn].into(),
+                )
             } else if let Some(alias) = alias_name {
                 Edn::Keyword(EdnKeyword::owned(alias.clone()))
             } else {

@@ -234,7 +234,7 @@ pub enum BondPredicate {
     Multiplicity(ValueAst),
 }
 
-pub(crate) fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, BondDslError> {
+fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, BondDslError> {
     let (remaining, prefix) = take(2usize)(i)?;
     match prefix {
         "#c" => map(charge_value, BondPredicate::Charge).parse(remaining),
@@ -247,7 +247,7 @@ pub(crate) fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, BondDslErr
     }
 }
 
-pub(crate) fn bond_order(i: &str) -> IResult<&str, ValueAst, BondDslError> {
+fn bond_order(i: &str) -> IResult<&str, ValueAst, BondDslError> {
     value_dsl
         .parse(i)
         .map_err(|_| Err::Failure(BondDslError::InvalidBondOrder(i.to_string())))

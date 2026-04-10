@@ -9,10 +9,11 @@ use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 use super::ast_utils::{raise_i8_ground, raise_spin_ground, raise_u8_ground};
 use crate::atom::{AromaticValence, IsotopeMass};
 use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::atom::{parse_atom_dsl, AtomAst};
+use crate::dsl::atom::{
+    parse_atom_dsl, AromaticExpr, AtomAst, ElementExpr, HydrogenExpr, IsotopeExpr,
+};
 use crate::dsl::config::{AromaticValenceMode, AtomDslConfig, ImplicitHydrogenMode, IsotopeMode};
 use crate::dsl::error::LoweringError;
-use crate::dsl::atom::{AromaticExpr, ElementExpr, HydrogenExpr, IsotopeExpr};
 use crate::dsl::value::ValueAst;
 use crate::graph_ir::atom_pattern::AtomPattern;
 use crate::graph_ir::error::ValidationError;
@@ -170,7 +171,7 @@ impl Atom {
         }
 
         let aromatic_valence = self.aromatic_valence.valence() as i16;
-        let aromatic_increment = aromatic_increment(self.aromatic_valence) as i16;
+        let aromatic_increment = self.aromatic_valence.valence_increment() as i16;
         let total_e_inv_o = unpaired_electrons as i16
             + (2 * self.lone_pairs as i16)
             + (2 * self.donated_pairs as i16)
@@ -283,25 +284,13 @@ impl Display for Atom {
 impl<'de> FromEdn<'de> for Atom {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = AtomAst::from_edn(edn)?;
-        Self::from_ast(ast, &AtomDslConfig::zeroed())
-            .map_err(|e| DeError::subgrammar("atom", e))
+        Self::from_ast(ast, &AtomDslConfig::zeroed()).map_err(|e| DeError::subgrammar("atom", e))
     }
 }
 
 impl ToEdn for Atom {
     fn to_edn(&self) -> Edn<'static> {
         self.to_ast(&AtomDslConfig::zeroed()).to_edn()
-    }
-}
-
-// TODO: Combine with identical function in atom_pattern.rs
-fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
-    match aromatic_valence {
-        AromaticValence::NotAromatic => 0,
-        AromaticValence::Valence(0) => 0,
-        AromaticValence::Valence(1) => 1,
-        AromaticValence::Valence(2) => 0,
-        AromaticValence::Valence(_) => 0,
     }
 }
 

@@ -252,7 +252,7 @@ impl AtomPattern {
         }
 
         let aromatic_valence_i16 = aromatic_valence.valence() as i16;
-        let aromatic_increment = aromatic_increment(aromatic_valence) as i16;
+        let aromatic_increment = aromatic_valence.valence_increment() as i16;
         let total_e_inv_o = spin.unpaired_electrons() as i16
             + (2 * lone_pairs as i16)
             + (2 * donated_pairs as i16)
@@ -728,16 +728,6 @@ impl<'de> FromEdn<'de> for AtomPattern {
 impl ToEdn for AtomPattern {
     fn to_edn(&self) -> Edn<'static> {
         self.to_ast(&AtomDslConfig::open()).to_edn()
-    }
-}
-
-// TODO: Combine with identical function in atom.rs
-fn aromatic_increment(aromatic_valence: AromaticValence) -> u8 {
-    match aromatic_valence {
-        AromaticValence::NotAromatic => 0,
-        AromaticValence::Valence(0) => 0,
-        AromaticValence::Valence(1) => 1,
-        AromaticValence::Valence(_) => 0,
     }
 }
 
