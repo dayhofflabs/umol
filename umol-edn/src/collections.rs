@@ -597,6 +597,7 @@ impl Hash for EdnSeq<'_> {
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
+    use std::cmp::Ordering;
     use std::hash::{DefaultHasher, Hash, Hasher};
 
     use hashbrown::Equivalent;
@@ -623,7 +624,7 @@ mod tests {
     #[case::bool_false(Edn::Bool(false))]
     #[case::int(Edn::Int(77))]
     #[case::int_neg(Edn::Int(-1))]
-    #[case::float(Edn::Float(3.14))]
+    #[case::float(Edn::Float(2.5))]
     #[case::float_zero(Edn::Float(0.0))]
     #[case::float_neg_zero(Edn::Float(-0.0))]
     #[case::char(Edn::Char('x'))]
@@ -717,7 +718,7 @@ mod tests {
     #[case::nil(Edn::Nil)]
     #[case::bool(Edn::Bool(false))]
     #[case::int(Edn::Int(99))]
-    #[case::float(Edn::Float(2.718))]
+    #[case::float(Edn::Float(1.618))]
     #[case::char(Edn::Char('z'))]
     #[case::str(Edn::Str(Cow::Borrowed("test")))]
     #[case::keyword(Edn::Keyword(EdnKeyword::new("k")))]
@@ -831,7 +832,7 @@ mod tests {
         let mut m2 = EdnMap::new();
         m2.insert(Edn::Int(2), Edn::Int(20));
         assert!(m1 < m2);
-        assert_eq!(m1.partial_cmp(&m2), Some(std::cmp::Ordering::Less));
+        assert_eq!(m1.partial_cmp(&m2), Some(Ordering::Less));
     }
 
     #[test]
@@ -871,7 +872,7 @@ mod tests {
         let mut s2 = EdnSet::new();
         s2.insert(Edn::Int(2));
         assert!(s1 < s2);
-        assert_eq!(s1.partial_cmp(&s2), Some(std::cmp::Ordering::Less));
+        assert_eq!(s1.partial_cmp(&s2), Some(Ordering::Less));
     }
 
     #[test]
@@ -908,7 +909,7 @@ mod tests {
     fn test_edn_seq_partial_ord() {
         let a: EdnSeq<'_> = vec![Edn::Int(1)].into();
         let b: EdnSeq<'_> = vec![Edn::Int(2)].into();
-        assert_eq!(a.partial_cmp(&b), Some(std::cmp::Ordering::Less));
+        assert_eq!(a.partial_cmp(&b), Some(Ordering::Less));
     }
 
     #[test]

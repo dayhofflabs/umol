@@ -17,18 +17,18 @@ enum Color {
 }
 
 #[rstest]
-#[case(":red", Color::Red)]
-#[case(":dark-blue", Color::DarkBlue)]
-#[case(":light-green", Color::LightGreen)]
+#[case::red(":red", Color::Red)]
+#[case::dark_blue(":dark-blue", Color::DarkBlue)]
+#[case::light_green(":light-green", Color::LightGreen)]
 fn test_unit_enum_from_edn(#[case] input: &str, #[case] expected: Color) {
     let tree = read_string(input).unwrap();
     assert_eq!(Color::from_edn(&tree).unwrap(), expected);
 }
 
 #[rstest]
-#[case(Color::Red, ":red")]
-#[case(Color::DarkBlue, ":dark-blue")]
-#[case(Color::LightGreen, ":light-green")]
+#[case::red(Color::Red, ":red")]
+#[case::dark_blue(Color::DarkBlue, ":dark-blue")]
+#[case::light_green(Color::LightGreen, ":light-green")]
 fn test_unit_enum_to_edn(#[case] value: Color, #[case] expected_edn: &str) {
     let edn = value.to_edn();
     assert_eq!(edn.to_string(), expected_edn);
@@ -75,8 +75,8 @@ enum Bond {
 }
 
 #[rstest]
-#[case(":single", Bond::Single)]
-#[case(":double", Bond::Double)]
+#[case::single(":single", Bond::Single)]
+#[case::double(":double", Bond::Double)]
 fn test_unit_enum_rename(#[case] input: &str, #[case] expected: Bond) {
     let tree = read_string(input).unwrap();
     assert_eq!(Bond::from_edn(&tree).unwrap(), expected);
@@ -96,10 +96,10 @@ enum Value {
 }
 
 #[rstest]
-#[case(":nil", Value::Nil)]
-#[case("{:int 7}", Value::Int(7))]
-#[case("{:pair [3 5]}", Value::Pair(3, 5))]
-#[case("{:named {:name \"x\" :value 10}}", Value::Named { name: "x".into(), value: 10 })]
+#[case::unit(":nil", Value::Nil)]
+#[case::newtype("{:int 7}", Value::Int(7))]
+#[case::tuple("{:pair [3 5]}", Value::Pair(3, 5))]
+#[case::struct_variant("{:named {:name \"x\" :value 10}}", Value::Named { name: "x".into(), value: 10 })]
 fn test_mixed_enum_from_edn(#[case] input: &str, #[case] expected: Value) {
     let tree = read_string(input).unwrap();
     assert_eq!(Value::from_edn(&tree).unwrap(), expected);

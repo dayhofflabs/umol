@@ -11,25 +11,25 @@ fn test_nil() {
 }
 
 #[rstest]
-#[case(edn!(true), Edn::Bool(true))]
-#[case(edn!(false), Edn::Bool(false))]
+#[case::true_val(edn!(true), Edn::Bool(true))]
+#[case::false_val(edn!(false), Edn::Bool(false))]
 fn test_booleans(#[case] actual: Edn<'static>, #[case] expected: Edn<'static>) {
     assert_eq!(actual, expected);
 }
 
 #[rstest]
-#[case(edn!(0), Edn::Int(0))]
-#[case(edn!(1), Edn::Int(1))]
-#[case(edn!(-1), Edn::Int(-1))]
-#[case(edn!(+5), Edn::Int(5))]
+#[case::zero(edn!(0), Edn::Int(0))]
+#[case::positive(edn!(1), Edn::Int(1))]
+#[case::negative(edn!(-1), Edn::Int(-1))]
+#[case::plus_sign(edn!(+5), Edn::Int(5))]
 fn test_integers(#[case] actual: Edn<'static>, #[case] expected: Edn<'static>) {
     assert_eq!(actual, expected);
 }
 
 #[test]
 fn test_float() {
-    match edn!(3.14) {
-        Edn::Float(v) => assert!((v - 3.14).abs() < f64::EPSILON),
+    match edn!(2.5) {
+        Edn::Float(v) => assert!((v - 2.5).abs() < f64::EPSILON),
         other => panic!("expected Float, got {other:?}"),
     }
 }

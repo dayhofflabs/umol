@@ -12,7 +12,7 @@ use crate::dsl::ast::{FromAst, ToAst};
 use crate::dsl::atom::{parse_atom_dsl, AtomAst};
 use crate::dsl::config::{AromaticValenceMode, AtomDslConfig, ImplicitHydrogenMode, IsotopeMode};
 use crate::dsl::error::LoweringError;
-use crate::dsl::predicates::{AromaticExpr, ElementExpr, HydrogenExpr, IsotopeExpr};
+use crate::dsl::atom::{AromaticExpr, ElementExpr, HydrogenExpr, IsotopeExpr};
 use crate::dsl::value::ValueAst;
 use crate::graph_ir::atom_pattern::AtomPattern;
 use crate::graph_ir::error::ValidationError;
@@ -284,7 +284,7 @@ impl<'de> FromEdn<'de> for Atom {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = AtomAst::from_edn(edn)?;
         Self::from_ast(ast, &AtomDslConfig::zeroed())
-            .map_err(|e| DeError::Custom(e.to_string()))
+            .map_err(|e| DeError::subgrammar("atom", e))
     }
 }
 

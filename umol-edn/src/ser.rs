@@ -1110,50 +1110,50 @@ mod tests {
     use crate::FormatConfig;
 
     #[rstest]
-    #[case(true, "true")]
-    #[case(false, "false")]
+    #[case::true_val(true, "true")]
+    #[case::false_val(false, "false")]
     fn test_serialize_bool(#[case] input: bool, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(12i64, "12")]
-    #[case(-1i64, "-1")]
-    #[case(0i64, "0")]
+    #[case::positive(12i64, "12")]
+    #[case::negative(-1i64, "-1")]
+    #[case::zero(0i64, "0")]
     fn test_serialize_i64(#[case] input: i64, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(12u64, "12")]
-    #[case(0u64, "0")]
+    #[case::positive(12u64, "12")]
+    #[case::zero(0u64, "0")]
     fn test_serialize_u64(#[case] input: u64, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(3.14f64, "3.14")]
-    #[case(1.0f64, "1.0")]
-    #[case(12.0f64, "12.0")]
+    #[case::fractional(2.5f64, "2.5")]
+    #[case::one(1.0f64, "1.0")]
+    #[case::integer_like(12.0f64, "12.0")]
     fn test_serialize_f64(#[case] input: f64, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(f64::NAN)]
-    #[case(f64::INFINITY)]
-    #[case(f64::NEG_INFINITY)]
+    #[case::nan(f64::NAN)]
+    #[case::inf(f64::INFINITY)]
+    #[case::neg_inf(f64::NEG_INFINITY)]
     fn test_serialize_f64_error(#[case] input: f64) {
         assert!(to_string(&input).is_err());
     }
 
     #[rstest]
-    #[case("hello", r#""hello""#)]
-    #[case("with \"quotes\"", r#""with \"quotes\"""#)]
-    #[case("line\nbreak", r#""line\nbreak""#)]
-    #[case("tab\there", r#""tab\there""#)]
-    #[case("a\rb", r#""a\rb""#)]
-    #[case(r"a\b", r#""a\\b""#)]
+    #[case::plain("hello", r#""hello""#)]
+    #[case::quotes("with \"quotes\"", r#""with \"quotes\"""#)]
+    #[case::newline("line\nbreak", r#""line\nbreak""#)]
+    #[case::tab("tab\there", r#""tab\there""#)]
+    #[case::carriage_return("a\rb", r#""a\rb""#)]
+    #[case::backslash(r"a\b", r#""a\\b""#)]
     fn test_serialize_string(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
@@ -1209,9 +1209,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Color::Red, ":red")]
-    #[case(Color::Green, ":green")]
-    #[case(Color::Blue, ":blue")]
+    #[case::red(Color::Red, ":red")]
+    #[case::green(Color::Green, ":green")]
+    #[case::blue(Color::Blue, ":blue")]
     fn test_serialize_unit_variant(#[case] input: Color, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
@@ -1278,59 +1278,59 @@ mod tests {
     }
 
     #[rstest]
-    #[case(7i8, "7")]
-    #[case(-1i8, "-1")]
+    #[case::positive(7i8, "7")]
+    #[case::negative(-1i8, "-1")]
     fn test_serialize_i8(#[case] input: i8, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(300i16, "300")]
-    #[case(-300i16, "-300")]
+    #[case::positive(300i16, "300")]
+    #[case::negative(-300i16, "-300")]
     fn test_serialize_i16(#[case] input: i16, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(100000i32, "100000")]
+    #[case::large(100000i32, "100000")]
     fn test_serialize_i32(#[case] input: i32, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(7u8, "7")]
-    #[case(255u8, "255")]
+    #[case::small(7u8, "7")]
+    #[case::max(255u8, "255")]
     fn test_serialize_u8(#[case] input: u8, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(1000u16, "1000")]
+    #[case::large(1000u16, "1000")]
     fn test_serialize_u16(#[case] input: u16, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case(100000u32, "100000")]
+    #[case::large(100000u32, "100000")]
     fn test_serialize_u32(#[case] input: u32, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
 
     #[test]
     fn test_serialize_f32() {
-        let s = to_string(&3.14f32).unwrap();
-        assert!(s.starts_with("3.14"));
+        let s = to_string(&2.5f32).unwrap();
+        assert!(s.starts_with("2.5"));
     }
 
     #[rstest]
-    #[case('a', "\\a")]
-    #[case('\n', "\\newline")]
-    #[case('\r', "\\return")]
-    #[case(' ', "\\space")]
-    #[case('\t', "\\tab")]
-    #[case('x', "\\x")]
-    #[case('\x01', "\\u0001")]
-    #[case('\x7F', "\\u007F")]
+    #[case::ascii('a', "\\a")]
+    #[case::newline('\n', "\\newline")]
+    #[case::return_char('\r', "\\return")]
+    #[case::space(' ', "\\space")]
+    #[case::tab('\t', "\\tab")]
+    #[case::letter('x', "\\x")]
+    #[case::control('\x01', "\\u0001")]
+    #[case::del('\x7F', "\\u007F")]
     fn test_serialize_char(#[case] input: char, #[case] expected: &str) {
         assert_eq!(to_string(&input).unwrap(), expected);
     }
@@ -1460,5 +1460,231 @@ mod tests {
         let via_parse = parsed.to_string_with(&fmt);
 
         assert_eq!(via_tree, via_parse);
+    }
+
+    #[rstest]
+    #[case::nan(f64::NAN)]
+    #[case::inf(f64::INFINITY)]
+    #[case::neg_inf(f64::NEG_INFINITY)]
+    fn test_to_value_f64_error(#[case] input: f64) {
+        assert!(to_value(&input).is_err());
+    }
+
+    #[test]
+    fn test_to_value_u64_overflow() {
+        use ::serde::Serializer;
+        let mut ser = super::EdnTreeSerializer {
+            keyword_mode: false,
+            symbol_mode: false,
+            set_mode: false,
+            list_mode: false,
+            #[cfg(feature = "bignum")]
+            bigint_mode: false,
+            #[cfg(feature = "bignum")]
+            bigdec_mode: false,
+        };
+        assert!((&mut ser).serialize_u64(u64::MAX).is_err());
+    }
+
+    #[test]
+    fn test_to_value_bytes_error() {
+        use ::serde::Serializer;
+        let mut ser = super::EdnTreeSerializer {
+            keyword_mode: false,
+            symbol_mode: false,
+            set_mode: false,
+            list_mode: false,
+            #[cfg(feature = "bignum")]
+            bigint_mode: false,
+            #[cfg(feature = "bignum")]
+            bigdec_mode: false,
+        };
+        assert!((&mut ser).serialize_bytes(b"data").is_err());
+    }
+
+    #[test]
+    fn test_to_value_struct_variant() {
+        let s = Shape::Rect { w: 3.0, h: 4.0 };
+        let edn = to_value(&s).unwrap();
+        let (tag, inner) = match edn {
+            Edn::Tagged(t, i) => (t, i),
+            _ => panic!("expected tagged"),
+        };
+        assert_eq!(&*tag, "Rect");
+        assert!(inner.is_map());
+    }
+
+    #[test]
+    fn test_to_value_map() {
+        let mut m = HashMap::new();
+        m.insert("a", 1);
+        let edn = to_value(&m).unwrap();
+        assert!(edn.is_map());
+    }
+
+    #[test]
+    fn test_to_value_none() {
+        let edn = to_value(&None::<i64>).unwrap();
+        assert_eq!(edn, Edn::Nil);
+    }
+
+    #[test]
+    fn test_to_value_unit_struct() {
+        #[derive(Serialize)]
+        struct Marker;
+        let edn = to_value(&Marker).unwrap();
+        assert_eq!(edn, Edn::Nil);
+    }
+
+    #[test]
+    fn test_to_value_char() {
+        let edn = to_value(&'z').unwrap();
+        assert_eq!(edn, Edn::Char('z'));
+    }
+
+    #[test]
+    fn test_to_value_string() {
+        let edn = to_value(&"hello").unwrap();
+        assert!(edn.is_str());
+    }
+
+    #[test]
+    fn test_to_value_small_signed_ints() {
+        assert_eq!(to_value(&7i8).unwrap(), Edn::Int(7));
+        assert_eq!(to_value(&300i16).unwrap(), Edn::Int(300));
+        assert_eq!(to_value(&100_000i32).unwrap(), Edn::Int(100_000));
+    }
+
+    #[test]
+    fn test_to_value_small_unsigned_ints() {
+        assert_eq!(to_value(&7u8).unwrap(), Edn::Int(7));
+        assert_eq!(to_value(&1000u16).unwrap(), Edn::Int(1000));
+        assert_eq!(to_value(&100_000u32).unwrap(), Edn::Int(100_000));
+    }
+
+    #[test]
+    fn test_to_value_f32() {
+        let edn = to_value(&2.5f32).unwrap();
+        assert!(matches!(edn, Edn::Float(_)));
+    }
+
+    #[test]
+    fn test_to_value_tuple() {
+        let edn = to_value(&(1i64, 2i64)).unwrap();
+        assert!(edn.is_vector());
+    }
+
+    #[test]
+    fn test_to_value_tuple_struct() {
+        #[derive(Serialize)]
+        struct Pair(i64, i64);
+        let edn = to_value(&Pair(3, 4)).unwrap();
+        assert!(edn.is_vector());
+    }
+
+    #[test]
+    fn test_to_value_newtype_struct() {
+        #[derive(Serialize)]
+        struct Wrapper(i64);
+        let edn = to_value(&Wrapper(12)).unwrap();
+        assert_eq!(edn, Edn::Int(12));
+    }
+
+    #[test]
+    fn test_to_value_some() {
+        let edn = to_value(&Some(5i64)).unwrap();
+        assert_eq!(edn, Edn::Int(5));
+    }
+
+    #[test]
+    fn test_to_value_seq() {
+        let edn = to_value(&vec![1i64, 2, 3]).unwrap();
+        assert!(edn.is_vector());
+        assert_eq!(edn.as_vector().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_to_value_symbol() {
+        use crate::edn::EdnSymbol;
+        let sym = EdnSymbol::new("my-sym");
+        let edn = to_value(&sym).unwrap();
+        assert_eq!(edn.as_symbol().unwrap().as_str(), "my-sym");
+    }
+
+    #[test]
+    fn test_to_string_with_custom_width() {
+        let v: Vec<i64> = (0..50).collect();
+        let fmt = FormatConfig {
+            line_width: Some(20),
+            ..Default::default()
+        };
+        let s = to_string_with(&v, &fmt).unwrap();
+        assert!(s.contains('\n'));
+    }
+
+    #[test]
+    fn test_serialize_compact_set() {
+        use crate::set::EdnHashSet;
+        let s: EdnHashSet<i64> = [1, 2, 3].into_iter().collect();
+        let out = to_string(&s).unwrap();
+        assert!(out.starts_with("#{"));
+        assert!(out.ends_with('}'));
+    }
+
+    #[test]
+    fn test_serialize_compact_list() {
+        use crate::list::EdnList;
+        let l = EdnList(vec![1i64, 2, 3]);
+        let out = to_string(&l).unwrap();
+        assert!(out.starts_with('('));
+        assert!(out.ends_with(')'));
+    }
+
+    #[test]
+    fn test_serialize_compact_tagged() {
+        use crate::tagged::EdnTagged;
+        let tagged = EdnTagged {
+            tag: "myns/thing".to_string(),
+            value: vec![1i64, 2],
+        };
+        let out = to_string(&tagged).unwrap();
+        assert!(out.starts_with("#myns/thing "));
+    }
+
+    #[test]
+    fn test_to_value_set() {
+        use crate::set::EdnHashSet;
+        let s: EdnHashSet<i64> = [1, 2].into_iter().collect();
+        let edn = to_value(&s).unwrap();
+        assert!(edn.is_set());
+    }
+
+    #[test]
+    fn test_to_value_list() {
+        use crate::list::EdnList;
+        let l = EdnList(vec![1i64, 2]);
+        let edn = to_value(&l).unwrap();
+        assert!(matches!(edn, Edn::List(_)));
+    }
+
+    #[test]
+    fn test_to_value_tagged() {
+        use crate::tagged::EdnTagged;
+        let tagged = EdnTagged {
+            tag: "myns/thing".to_string(),
+            value: 7i64,
+        };
+        let edn = to_value(&tagged).unwrap();
+        assert!(edn.is_tagged());
+    }
+
+    #[test]
+    fn test_to_value_newtype_variant() {
+        let edn = to_value(&Shape::Circle(5.0)).unwrap();
+        let (tag, _) = match edn {
+            Edn::Tagged(t, i) => (t, i),
+            _ => panic!("expected tagged"),
+        };
+        assert_eq!(&*tag, "Circle");
     }
 }

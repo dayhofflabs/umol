@@ -383,10 +383,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Edn::Nil, "nil")]
-    #[case(Edn::Int(12), "12")]
-    #[case(Edn::Bool(true), "true")]
-    #[case(Edn::Str(Cow::Borrowed("hello")), r#""hello""#)]
+    #[case::nil(Edn::Nil, "nil")]
+    #[case::int(Edn::Int(12), "12")]
+    #[case::bool(Edn::Bool(true), "true")]
+    #[case::string(Edn::Str(Cow::Borrowed("hello")), r#""hello""#)]
     fn test_formatter_atoms(#[case] edn: Edn<'_>, #[case] expected: &str) {
         assert_eq!(edn.to_string_with(&fmt_default()), expected);
     }
@@ -552,8 +552,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case("{:atoms [\"C\" \"O\"] :bonds [[0 1 :single]]}", 20, true)]
-    #[case("{:a 1}", 80, false)]
+    #[case::narrow_molecule("{:atoms [\"C\" \"O\"] :bonds [[0 1 :single]]}", 20, true)]
+    #[case::wide_simple("{:a 1}", 80, false)]
     fn test_formatter_molecule_like(
         #[case] input: &str,
         #[case] width: usize,
@@ -566,6 +566,178 @@ mod tests {
         };
         let result = edn.to_string_with(&fmt);
         assert_eq!(result.contains('\n'), expect_multiline);
+    }
+
+    #[test]
+    fn test_formatter_empty_set() {
+        let s = Edn::Set(Default::default());
+        assert_eq!(s.to_string_with(&fmt_default()), "#{}");
+    }
+
+    #[test]
+    fn test_formatter_short_set_compact() {
+        let edn = read_string("#{1 2 3}").unwrap();
+        let result = edn.to_string_with(&fmt_default());
+        assert!(!result.contains('\n'));
+        assert!(result.starts_with("#{"));
+        assert!(result.ends_with('}'));
+    }
+
+    #[test]
+    fn test_formatter_long_set_multiline() {
+        let items: Vec<Edn<'_>> = (0..15)
+            .map(|i| Edn::Str(Cow::Owned(format!("item-{i}"))))
+            .collect();
+        let mut set = crate::collections::EdnSet::new();
+        for item in items {
+            set.insert(item);
+        }
+        let result = Edn::Set(set).to_string_with(&fmt_narrow());
+        assert!(result.contains('\n'));
+        assert!(result.starts_with("#{"));
+        assert!(result.ends_with('}'));
+    }
+
+    #[test]
+    fn test_formatter_no_compact_sets() {
+        let fmt = FormatConfig {
+            compact_sets: false,
+            ..Default::default()
+        };
+        let edn = read_string("#{1 2}").unwrap();
+        let result = edn.to_string_with(&fmt);
+        assert!(result.contains('\n'));
+    }
+
+    #[test]
+    fn test_formatter_sort_sets_false() {
+        let fmt = FormatConfig {
+            sort_sets: false,
+            ..Default::default()
+        };
+        let edn = read_string("#{3 1 2}").unwrap();
+        let result = edn.to_string_with(&fmt);
+        assert!(result.starts_with("#{"));
+        assert!(result.ends_with('}'));
+    }
+
+    #[test]
+    fn test_formatter_sort_maps_false() {
+        let fmt = FormatConfig {
+            sort_maps: false,
+            ..Default::default()
+        };
+        let mut m = EdnMap::new();
+        m.insert(Edn::keyword("b"), Edn::Int(2));
+        m.insert(Edn::keyword("a"), Edn::Int(1));
+        let result = Edn::Map(m).to_string_with(&fmt);
+        assert!(result.contains(":a") && result.contains(":b"));
+    }
+
+    #[test]
+    fn test_formatter_tagged() {
+        let edn = read_string("#inst \"2026-04-08T00:00:00Z\"").unwrap();
+        let result = edn.to_string_with(&fmt_default());
+        assert_eq!(result, "#inst \"2026-04-08T00:00:00Z\"");
+    }
+
+    #[test]
+    fn test_formatter_tagged_nested_collection() {
+        use crate::config::ParseConfig;
+        use crate::reader::read_string_with;
+        let config = ParseConfig {
+            allow_unknown_tags: true,
+            ..Default::default()
+        };
+        let edn = read_string_with("#my/tag [1 2 3]", &config).unwrap();
+        let result = edn.to_string_with(&fmt_default());
+        assert!(result.starts_with("#my/tag "));
+        assert!(result.contains("[1 2 3]"));
+    }
+
+    #[test]
+    fn test_formatter_short_list_compact() {
+        let edn = read_string("(1 2 3)").unwrap();
+        let result = edn.to_string_with(&fmt_default());
+        assert_eq!(result, "(1 2 3)");
+    }
+
+    #[test]
+    fn test_formatter_long_list_multiline() {
+        let items: Vec<Edn<'_>> = (0..15)
+            .map(|i| Edn::Str(Cow::Owned(format!("item-{i}"))))
+            .collect();
+        let edn = Edn::List(items.into());
+        let result = edn.to_string_with(&fmt_narrow());
+        assert!(result.contains('\n'));
+        assert!(result.starts_with('('));
+        assert!(result.ends_with(')'));
+    }
+
+    #[rstest]
+    #[case::newline_char('\n', 8)]
+    #[case::return_char('\r', 7)]
+    #[case::space_char(' ', 6)]
+    #[case::tab_char('\t', 4)]
+    #[case::ascii_char('a', 2)]
+    #[case::control_char('\x01', 6)]
+    fn test_formatter_display_char_len(#[case] c: char, #[case] expected: usize) {
+        assert_eq!(display_char_len(c), expected);
+    }
+
+    #[rstest]
+    #[case::plain("hello", 7)]
+    #[case::with_newline("a\nb", 6)]
+    #[case::with_quote("say\"hi", 9)]
+    #[case::with_backslash("a\\b", 6)]
+    #[case::with_tab("a\tb", 6)]
+    #[case::empty("", 2)]
+    fn test_formatter_display_string_len(#[case] s: &str, #[case] expected: usize) {
+        assert_eq!(display_string_len(s), expected);
+    }
+
+    #[rstest]
+    #[case::nil(Edn::Nil, Some(3))]
+    #[case::bool_true(Edn::Bool(true), Some(4))]
+    #[case::bool_false(Edn::Bool(false), Some(5))]
+    #[case::int(Edn::Int(123), Some(3))]
+    #[case::float(Edn::Float(1.5), Some(3))]
+    #[case::char_a(Edn::Char('a'), Some(2))]
+    #[case::string(Edn::Str(Cow::Borrowed("hi")), Some(4))]
+    fn test_formatter_compact_len_atoms(#[case] edn: Edn<'_>, #[case] expected: Option<usize>) {
+        assert_eq!(compact_len(&edn, 100), expected);
+    }
+
+    #[test]
+    fn test_formatter_compact_len_keyword() {
+        let edn = Edn::keyword("foo");
+        assert_eq!(compact_len(&edn, 100), Some(4)); // :foo
+    }
+
+    #[test]
+    fn test_formatter_compact_len_symbol() {
+        let edn = read_string("bar").unwrap();
+        assert_eq!(compact_len(&edn, 100), Some(3));
+    }
+
+    #[test]
+    fn test_formatter_compact_len_tagged() {
+        let edn = read_string("#inst \"2026-04-08T00:00:00Z\"").unwrap();
+        // #inst  = 6 prefix, "2026-04-08T00:00:00Z" = 22 display → 28
+        assert_eq!(compact_len(&edn, 100), Some(28));
+    }
+
+    #[test]
+    fn test_formatter_compact_len_set() {
+        let edn = read_string("#{1 2 3}").unwrap();
+        // #{1 2 3} = 8
+        assert_eq!(compact_len(&edn, 100), Some(8));
+    }
+
+    #[test]
+    fn test_formatter_compact_len_exceeds_limit() {
+        let edn = read_string("[1 2 3 4 5 6 7 8 9 10]").unwrap();
+        assert_eq!(compact_len(&edn, 5), None);
     }
 
     #[cfg(feature = "serde")]

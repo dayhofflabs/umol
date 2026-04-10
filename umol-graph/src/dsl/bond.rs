@@ -1,18 +1,23 @@
 //! Bond-string DSL: parser, AST, and display
 
+use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
+use nom::branch::alt;
+use nom::bytes::complete::{tag, take};
 use nom::character::complete::multispace0;
-use nom::combinator::all_consuming;
+use nom::combinator::{all_consuming, map, success, value};
 use nom::multi::many0;
-use nom::sequence::{delimited, pair, terminated};
+use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
+use umol_edn::{DeError, Edn, EdnKeyword, FromEdn, ToEdn};
+
 use super::ast::DslAst;
 use super::config::BondDslConfig;
-use super::error::ParseError;
-use super::predicates::{bond_order, bond_predicate, BondPredicate};
 use super::value::ValueAst;
+use crate::dsl::error::BondDslError;
+use crate::dsl::value::value_dsl;
 
 /// Parsed bond-string AST
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -48,7 +53,7 @@ impl DslAst for BondAst {
 }
 
 impl FromStr for BondAst {
-    type Err = ParseError;
+    type Err = BondDslError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_bond_dsl(s)
@@ -134,13 +139,13 @@ pub fn builtin_bond_aliases() -> bimap::BiMap<String, BondAst> {
     ])
 }
 
-impl<'de> umol_edn::FromEdn<'de> for BondAst {
-    fn from_edn(edn: &umol_edn::Edn<'de>) -> Result<Self, umol_edn::DeError> {
+impl<'de> FromEdn<'de> for BondAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let s: &str = match edn {
-            umol_edn::Edn::Str(s) => s,
-            umol_edn::Edn::Keyword(k) => k.as_str(),
+            Edn::Str(s) => s,
+            Edn::Keyword(k) => k.as_str(),
             other => {
-                return Err(umol_edn::DeError::TypeMismatch {
+                return Err(DeError::TypeMismatch {
                     expected: "string or keyword",
                     got: other.kind(),
                     path: Vec::new(),
@@ -151,34 +156,34 @@ impl<'de> umol_edn::FromEdn<'de> for BondAst {
         if let Some(ast) = aliases.get_by_left(s) {
             return Ok(ast.clone());
         }
-        parse_bond_dsl(s).map_err(|e| umol_edn::DeError::Custom(e.to_string()))
+        parse_bond_dsl(s).map_err(|e| umol_edn::DeError::subgrammar("bond", e))
     }
 }
 
-impl umol_edn::ToEdn for BondAst {
-    fn to_edn(&self) -> umol_edn::Edn<'static> {
+impl ToEdn for BondAst {
+    fn to_edn(&self) -> Edn<'static> {
         let aliases = builtin_bond_aliases();
         if let Some(name) = aliases.get_by_right(self) {
-            umol_edn::Edn::Keyword(umol_edn::EdnKeyword::owned(name.clone()))
+            Edn::Keyword(EdnKeyword::owned(name.clone()))
         } else {
-            umol_edn::Edn::Str(std::borrow::Cow::Owned(self.to_string()))
+            Edn::Str(Cow::Owned(self.to_string()))
         }
     }
 }
 
 /// Parse a bond subgrammar string
-pub fn parse_bond_dsl(input: &str) -> Result<BondAst, ParseError> {
+pub fn parse_bond_dsl(input: &str) -> Result<BondAst, BondDslError> {
     all_consuming(bond_dsl)
         .parse(input)
         .map(|(_, result)| result)
         .map_err(|e| match e {
             Err::Error(e) | Err::Failure(e) => e,
-            Err::Incomplete(_) => ParseError::Incomplete,
+            Err::Incomplete(_) => BondDslError::Incomplete,
         })
 }
 
 /// Bond subgrammar parser
-pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, ParseError> {
+pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, BondDslError> {
     let (remaining, (order, preds)) = pair(
         delimited(multispace0, bond_order, multispace0),
         many0(terminated(bond_predicate, multispace0)),
@@ -196,30 +201,75 @@ pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, ParseError> {
 }
 
 /// Merge a list of bond predicates into a `BondAst`
-fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), ParseError> {
+fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), BondDslError> {
     for pred in preds {
         match pred {
             BondPredicate::Charge(v) => {
                 if ast.charge.is_some() {
-                    return Err(ParseError::DuplicateBondPredicate("#c".to_string()));
+                    return Err(BondDslError::DuplicateBondPredicate("#c".to_string()));
                 }
                 ast.charge = Some(v);
             }
             BondPredicate::UnpairedElectrons(v) => {
                 if ast.unpaired_electrons.is_some() {
-                    return Err(ParseError::DuplicateBondPredicate("#u".to_string()));
+                    return Err(BondDslError::DuplicateBondPredicate("#u".to_string()));
                 }
                 ast.unpaired_electrons = Some(v);
             }
             BondPredicate::Multiplicity(v) => {
                 if ast.multiplicity.is_some() {
-                    return Err(ParseError::DuplicateBondPredicate("#s".to_string()));
+                    return Err(BondDslError::DuplicateBondPredicate("#s".to_string()));
                 }
                 ast.multiplicity = Some(v);
             }
         }
     }
     Ok(())
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BondPredicate {
+    Charge(ValueAst),
+    UnpairedElectrons(ValueAst),
+    Multiplicity(ValueAst),
+}
+
+pub(crate) fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, BondDslError> {
+    let (remaining, prefix) = take(2usize)(i)?;
+    match prefix {
+        "#c" => map(charge_value, BondPredicate::Charge).parse(remaining),
+        "#u" => map(optional_value, BondPredicate::UnpairedElectrons).parse(remaining),
+        "#s" => map(optional_value, BondPredicate::Multiplicity).parse(remaining),
+        p if p.starts_with("#") => Err(Err::Failure(BondDslError::UnknownBondPredicate(
+            p.to_string(),
+        ))),
+        _ => Err(Err::Failure(BondDslError::TrailingInput(i.to_string()))),
+    }
+}
+
+pub(crate) fn bond_order(i: &str) -> IResult<&str, ValueAst, BondDslError> {
+    value_dsl
+        .parse(i)
+        .map_err(|_| Err::Failure(BondDslError::InvalidBondOrder(i.to_string())))
+}
+
+fn charge_value(i: &str) -> IResult<&str, ValueAst, BondDslError> {
+    preceded(
+        multispace0,
+        alt((
+            value_dsl,
+            value(ValueAst::Lit(1), tag("+")),
+            value(ValueAst::Lit(-1), tag("-")),
+        )),
+    )
+    .parse(i)
+    .map_err(|_| Err::Failure(BondDslError::InvalidCharge(i.to_string())))
+}
+
+fn optional_value(i: &str) -> IResult<&str, ValueAst, BondDslError> {
+    preceded(multispace0, alt((value_dsl, success(ValueAst::Lit(1)))))
+        .parse(i)
+        .map_err(|_| Err::Failure(BondDslError::InvalidValue(i.to_string())))
 }
 
 fn fmt_bond_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
@@ -273,7 +323,8 @@ mod tests {
         let result = bond_dsl(input);
         assert!(
             result.is_ok(),
-            "{input:?} should succeed, got {:?}",
+            "{:?} should succeed, got {:?}",
+            input,
             result.unwrap_err()
         );
         let (remaining, ast) = result.unwrap();
@@ -285,28 +336,64 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty("", ParseError::InvalidBondOrder("".to_string()))]
-    #[case::tag_whitespace("1# c", ParseError::UnknownBondPredicate("# ".to_string()))]
-    #[case::invalid_tag("1#x", ParseError::UnknownBondPredicate("#x".to_string()))]
-    #[case::trailing("1#c+ foo", ParseError::TrailingInput("foo".to_string()))]
-    #[case::dup_charge("1#c+#c-", ParseError::DuplicateBondPredicate("#c".to_string()))]
-    #[case::dup_unpaired("1#u2#u3", ParseError::DuplicateBondPredicate("#u".to_string()))]
-    #[case::dup_multiplicity("1#s1#s2", ParseError::DuplicateBondPredicate("#s".to_string()))]
-    fn test_parse_bond_dsl_invalid(#[case] input: &str, #[case] expected: ParseError) {
+    #[case::empty("", BondDslError::InvalidBondOrder("".to_string()))]
+    #[case::tag_whitespace("1# c", BondDslError::UnknownBondPredicate("# ".to_string()))]
+    #[case::invalid_tag("1#x", BondDslError::UnknownBondPredicate("#x".to_string()))]
+    #[case::trailing("1#c+ foo", BondDslError::TrailingInput("foo".to_string()))]
+    #[case::dup_charge("1#c+#c-", BondDslError::DuplicateBondPredicate("#c".to_string()))]
+    #[case::dup_unpaired("1#u2#u3", BondDslError::DuplicateBondPredicate("#u".to_string()))]
+    #[case::dup_multiplicity("1#s1#s2", BondDslError::DuplicateBondPredicate("#s".to_string()))]
+    fn test_parse_bond_dsl_invalid(#[case] input: &str, #[case] expected: BondDslError) {
         let result = bond_dsl(input);
         assert!(
             result.is_err(),
-            "{input:?} should fail, got {:?}",
+            "{:?} should fail, got {:?}",
+            input,
             result.unwrap_err()
         );
         let err = match result.unwrap_err() {
             Err::Error(e) | Err::Failure(e) => e,
-            Err::Incomplete(_) => ParseError::Incomplete,
+            Err::Incomplete(_) => BondDslError::Incomplete,
         };
         assert_eq!(
             err, expected,
             "{:?} should fail with {:?}, got {:?}",
             input, expected, err
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::charge_pos("#c+2", BondPredicate::Charge(ValueAst::Lit(2)))]
+    #[case::charge_neg("#c-2", BondPredicate::Charge(ValueAst::Lit(-2)))]
+    #[case::charge_plus("#c+", BondPredicate::Charge(ValueAst::Lit(1)))]
+    #[case::charge_minus("#c-", BondPredicate::Charge(ValueAst::Lit(-1)))]
+    #[case::charge_zero("#c0", BondPredicate::Charge(ValueAst::Lit(0)))]
+    #[case::charge_wildcard("#c*", BondPredicate::Charge(ValueAst::Wildcard))]
+    #[case::unpaired("#u2", BondPredicate::UnpairedElectrons(ValueAst::Lit(2)))]
+    #[case::unpaired_omit("#u", BondPredicate::UnpairedElectrons(ValueAst::Lit(1)))]
+    #[case::unpaired_wildcard("#u*", BondPredicate::UnpairedElectrons(ValueAst::Wildcard))]
+    #[case::multiplicity("#s3", BondPredicate::Multiplicity(ValueAst::Lit(3)))]
+    #[case::multiplicity_omit("#s", BondPredicate::Multiplicity(ValueAst::Lit(1)))]
+    #[case::multiplicity_wildcard("#s*", BondPredicate::Multiplicity(ValueAst::Wildcard))]
+    fn test_bond_predicate(#[case] input: &str, #[case] expected: BondPredicate) {
+        let result = bond_predicate(input);
+        assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
+        let (_, pred) = result.unwrap();
+        assert_eq!(pred, expected);
+    }
+
+    #[rstest]
+    #[case::unknown("#x", BondDslError::UnknownBondPredicate("#x".to_string()))]
+    #[case::unknown_tag("#z", BondDslError::UnknownBondPredicate("#z".to_string()))]
+    #[case::trailing_no_hash("fo", BondDslError::TrailingInput("fo".to_string()))]
+    fn test_bond_predicate_error(#[case] input: &str, #[case] expected: BondDslError) {
+        let result = bond_predicate(input);
+        assert!(result.is_err(), "{input:?} should fail, got {:?}", result.unwrap());
+        let err = match result.unwrap_err() {
+            Err::Error(e) | Err::Failure(e) => e,
+            Err::Incomplete(_) => BondDslError::Incomplete,
+        };
+        assert_eq!(err, expected);
     }
 }

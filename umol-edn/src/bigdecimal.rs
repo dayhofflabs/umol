@@ -148,8 +148,8 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[rstest]
-    #[case("3.14159265358979323846", "3.14159265358979323846M")]
-    #[case("-1.5", "-1.5M")]
+    #[case::pi("3.14159265358979323846", "3.14159265358979323846M")]
+    #[case::negative("-1.5", "-1.5M")]
     fn test_edn_bigdecimal_serialize(#[case] input: &str, #[case] expected: &str) {
         let d = EdnBigDecimal::new(BigDecimal::from_str(input).unwrap());
         assert_eq!(to_string(&d).unwrap(), expected);

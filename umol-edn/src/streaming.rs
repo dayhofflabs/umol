@@ -6,9 +6,11 @@
 //! parsers; it is not a serde Deserializer.
 
 use std::borrow::Cow;
+use std::fmt;
 use std::str::from_utf8;
+use std::str::FromStr;
 
-use crate::error::ParseError;
+use crate::error::{DeError, EdnError, ParseError};
 use crate::parser::{is_symbol_char, is_symbol_start, validate_symbol};
 
 pub struct EdnStreamDeserializer<'de> {
@@ -454,6 +456,30 @@ impl<'de> EdnStreamDeserializer<'de> {
         self.skip_value()?;
         Ok(&self.input[start..self.pos])
     }
+
+    /// Read a string token and parse its contents via `FromStr`.
+    ///
+    /// On failure, wraps the subgrammar error in `DeError::Subgrammar` with
+    /// the byte offset of the string token in the outer EDN source.
+    pub fn read_subgrammar<T: FromStr>(
+        &mut self,
+        grammar: &'static str,
+    ) -> Result<T, EdnError>
+    where
+        T::Err: fmt::Display,
+    {
+        let offset = self.position();
+        let s = self.read_string()?;
+        s.parse::<T>().map_err(|e| {
+            DeError::Subgrammar {
+                grammar,
+                message: e.to_string(),
+                path: vec![format!("@{offset}")],
+            }
+            .into()
+        })
+    }
+
 }
 
 #[inline]
@@ -465,4 +491,269 @@ fn unexpected_or_eof(offset: usize, b: Option<u8>) -> ParseError {
         },
         None => ParseError::UnexpectedEof { offset },
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+
+    use super::*;
+
+    #[test]
+    fn test_edn_stream_deserializer_position() {
+        let mut d = EdnStreamDeserializer::new("abc");
+        assert_eq!(d.position(), 0);
+        d.consume_byte(b'a').unwrap();
+        assert_eq!(d.position(), 1);
+    }
+
+    #[rstest]
+    #[case::empty("", true)]
+    #[case::whitespace_only("  \t\n", true)]
+    #[case::comment_only("; comment\n", true)]
+    #[case::discard_form("#_ 123", true)]
+    #[case::trailing_atom("x", false)]
+    #[case::trailing_after_ws("  x", false)]
+    fn test_edn_stream_deserializer_expect_eof(#[case] input: &str, #[case] ok: bool) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.expect_eof().is_ok(), ok);
+    }
+
+    #[rstest]
+    #[case::first_byte("abc", Some(b'a'))]
+    #[case::skips_spaces("  x", Some(b'x'))]
+    #[case::skips_commas(",, y", Some(b'y'))]
+    #[case::skips_comment("; comment\nz", Some(b'z'))]
+    #[case::empty_none("", None)]
+    #[case::ws_only_none("  ", None)]
+    fn test_edn_stream_deserializer_peek_byte(#[case] input: &str, #[case] expected: Option<u8>) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.peek_byte().unwrap(), expected);
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_consume_byte() {
+        let mut d = EdnStreamDeserializer::new("  [1]");
+        d.consume_byte(b'[').unwrap();
+        assert_eq!(d.position(), 3);
+    }
+
+    #[rstest]
+    #[case::wrong_byte("x")]
+    #[case::eof("")]
+    fn test_edn_stream_deserializer_consume_byte_error(#[case] input: &str) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert!(d.consume_byte(b'[').is_err());
+    }
+
+    #[rstest]
+    #[case::matches("[x", b'[', true, 1)]
+    #[case::no_match("x", b'[', false, 0)]
+    #[case::skips_ws("  ]", b']', true, 3)]
+    fn test_edn_stream_deserializer_try_consume_byte(
+        #[case] input: &str,
+        #[case] expected: u8,
+        #[case] matched: bool,
+        #[case] pos: usize,
+    ) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.try_consume_byte(expected).unwrap(), matched);
+        assert_eq!(d.position(), pos);
+    }
+
+    #[rstest]
+    #[case::simple(":foo", "foo")]
+    #[case::with_ws("  :bar", "bar")]
+    #[case::namespaced(":ns/name", "ns/name")]
+    fn test_edn_stream_deserializer_read_keyword_name(
+        #[case] input: &str,
+        #[case] expected: &str,
+    ) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.read_keyword_name().unwrap().as_ref(), expected);
+    }
+
+    #[rstest]
+    #[case::not_keyword("foo")]
+    #[case::leading_slash(":/foo")]
+    fn test_edn_stream_deserializer_read_keyword_name_error(#[case] input: &str) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert!(d.read_keyword_name().is_err());
+    }
+
+    #[rstest]
+    #[case::simple(r#""hello""#, "hello")]
+    #[case::with_ws(r#"  "world""#, "world")]
+    #[case::empty(r#""""#, "")]
+    fn test_edn_stream_deserializer_read_string(#[case] input: &str, #[case] expected: &str) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.read_string().unwrap().as_ref(), expected);
+    }
+
+    #[rstest]
+    #[case::tab(r#""a\tb""#, "a\tb")]
+    #[case::newline(r#""a\nb""#, "a\nb")]
+    #[case::carriage_return(r#""a\rb""#, "a\rb")]
+    #[case::backslash(r#""a\\b""#, "a\\b")]
+    #[case::quote(r#""a\"b""#, "a\"b")]
+    #[case::unicode(r#""a\u0041b""#, "aAb")]
+    fn test_edn_stream_deserializer_read_string_escapes(
+        #[case] input: &str,
+        #[case] expected: &str,
+    ) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.read_string().unwrap().as_ref(), expected);
+    }
+
+    #[rstest]
+    #[case::not_string("foo")]
+    #[case::unterminated(r#""abc"#)]
+    #[case::bad_escape(r#""a\qb""#)]
+    #[case::truncated_unicode(r#""a\u00""#)]
+    #[case::escape_at_eof(r#""abc\"#)]
+    fn test_edn_stream_deserializer_read_string_error(#[case] input: &str) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert!(d.read_string().is_err());
+    }
+
+    #[rstest]
+    #[case::string(r#""hello""#, "hello")]
+    #[case::keyword(":foo", "foo")]
+    fn test_edn_stream_deserializer_read_string_or_keyword(
+        #[case] input: &str,
+        #[case] expected: &str,
+    ) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.read_string_or_keyword().unwrap().as_ref(), expected);
+    }
+
+    #[rstest]
+    #[case::zero("0", 0)]
+    #[case::positive("123", 123)]
+    #[case::negative("-7", -7)]
+    #[case::plus_sign("+5", 5)]
+    #[case::with_ws("  99", 99)]
+    fn test_edn_stream_deserializer_read_i64(#[case] input: &str, #[case] expected: i64) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.read_i64().unwrap(), expected);
+    }
+
+
+    #[rstest]
+    #[case::number("123")]
+    #[case::boolean("true")]
+    #[case::string(r#""hello""#)]
+    #[case::vector("[1 2 3]")]
+    #[case::list("(1 2)")]
+    #[case::map("{:a 1}")]
+    #[case::set("#{1 2}")]
+    #[case::tagged("#tag value")]
+    #[case::discard("#_ foo bar")]
+    #[case::char(r#"\c"#)]
+    #[case::keyword(":keyword")]
+    fn test_edn_stream_deserializer_read_skip_value(#[case] input: &str) {
+        let mut d = EdnStreamDeserializer::new(input);
+        d.read_skip_value().unwrap();
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_read_skip_value_nested() {
+        let mut d = EdnStreamDeserializer::new("[{:a [1 2]} #{3}]");
+        d.read_skip_value().unwrap();
+        assert!(d.expect_eof().is_ok());
+    }
+
+    #[rstest]
+    #[case::eof("")]
+    #[case::unterminated_vector("[1 2")]
+    #[case::unterminated_string(r#""abc"#)]
+    #[case::unexpected_close(")")]
+    fn test_edn_stream_deserializer_read_skip_value_error(#[case] input: &str) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert!(d.read_skip_value().is_err());
+    }
+
+    #[rstest]
+    #[case::number("123 rest", "123")]
+    #[case::vector("[1 2] rest", "[1 2]")]
+    #[case::boolean("  true rest", "true")]
+    #[case::string(r#""hi" rest"#, r#""hi""#)]
+    fn test_edn_stream_deserializer_read_value_slice(
+        #[case] input: &str,
+        #[case] expected: &str,
+    ) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert_eq!(d.read_value_slice().unwrap(), expected);
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_read_subgrammar() {
+        let mut d = EdnStreamDeserializer::new(r#""123""#);
+        let v: i64 = d.read_subgrammar("test").unwrap();
+        assert_eq!(v, 123);
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_read_subgrammar_error() {
+        let mut d = EdnStreamDeserializer::new(r#""not_a_number""#);
+        let err = d.read_subgrammar::<i64>("test").unwrap_err();
+        assert!(matches!(err, EdnError::De(DeError::Subgrammar { grammar: "test", .. })));
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_skip_comment() {
+        let mut d = EdnStreamDeserializer::new("; comment\n123");
+        assert_eq!(d.read_i64().unwrap(), 123);
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_skip_discard() {
+        let mut d = EdnStreamDeserializer::new("#_ [ignored] 7");
+        assert_eq!(d.read_i64().unwrap(), 7);
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_skip_nested_discard() {
+        let mut d = EdnStreamDeserializer::new("#_ #_ a b 9");
+        assert_eq!(d.read_i64().unwrap(), 9);
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_skip_string_with_escapes() {
+        let mut d = EdnStreamDeserializer::new(r#""a\"b\u0041c" 5"#);
+        d.read_skip_value().unwrap();
+        assert_eq!(d.read_i64().unwrap(), 5);
+    }
+
+    #[rstest]
+    #[case::decimal("3.14")]
+    #[case::exponent("1e2")]
+    #[case::letters("abc")]
+    #[case::bare_sign("+")]
+    #[case::leading_zeros("00123")]
+    fn test_edn_stream_deserializer_read_i64_not_i64(#[case] input: &str) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert!(d.read_i64().is_err());
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_sequential_reads() {
+        let mut d = EdnStreamDeserializer::new("{:name \"water\" :charge -1}");
+        d.consume_byte(b'{').unwrap();
+        assert_eq!(d.read_keyword_name().unwrap().as_ref(), "name");
+        assert_eq!(d.read_string().unwrap().as_ref(), "water");
+        assert_eq!(d.read_keyword_name().unwrap().as_ref(), "charge");
+        assert_eq!(d.read_i64().unwrap(), -1);
+        d.consume_byte(b'}').unwrap();
+        d.expect_eof().unwrap();
+    }
+
+    #[rstest]
+    #[case::eof("")]
+    #[case::number("123")]
+    fn test_edn_stream_deserializer_read_string_or_keyword_error(#[case] input: &str) {
+        let mut d = EdnStreamDeserializer::new(input);
+        assert!(d.read_string_or_keyword().is_err());
+    }
+
 }

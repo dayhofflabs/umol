@@ -761,7 +761,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::pos(2.71828f64)]
+    #[case::pos(1.618f64)]
     #[case::neg(-1.5f64)]
     #[case::zero(0.0f64)]
     fn test_f64_roundtrip(#[case] v: f64) {
@@ -828,8 +828,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Some(7))]
-    #[case(None)]
+    #[case::some(Some(7))]
+    #[case::none(None)]
     fn test_option_roundtrip(#[case] v: Option<i32>) {
         let e = v.to_edn();
         assert_eq!(<Option<i32>>::from_edn(&e).unwrap(), v);
@@ -895,5 +895,302 @@ mod tests {
     fn test_from_edn_str_default() {
         let v: Vec<i32> = Vec::<i32>::from_edn_str("[1 2 3]").unwrap();
         assert_eq!(v, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_from_edn_str_error() {
+        let err = Vec::<i32>::from_edn_str("[1 2").unwrap_err();
+        assert!(matches!(err, EdnError::Parse(_)));
+    }
+
+    #[rstest]
+    #[case::int_as_bool(Edn::Int(1), "bool")]
+    #[case::str_as_bool(Edn::Str(Cow::Borrowed("x")), "bool")]
+    fn test_bool_from_edn_type_mismatch(#[case] edn: Edn, #[case] expected: &str) {
+        let err = bool::from_edn(&edn).unwrap_err();
+        assert!(matches!(err, DeError::TypeMismatch { expected: e, .. } if e == expected));
+    }
+
+    #[rstest]
+    #[case::bool_as_int(Edn::Bool(true))]
+    #[case::str_as_int(Edn::Str(Cow::Borrowed("3")))]
+    #[case::float_as_int(Edn::Float(1.0))]
+    fn test_int_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(i32::from_edn(&edn).is_err());
+        assert!(i64::from_edn(&edn).is_err());
+        assert!(u8::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::bool(Edn::Bool(true))]
+    #[case::int(Edn::Int(1))]
+    #[case::str(Edn::Str(Cow::Borrowed("1.0")))]
+    fn test_f64_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(f64::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::bool(Edn::Bool(true))]
+    #[case::int(Edn::Int(1))]
+    fn test_f32_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(f32::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(65))]
+    #[case::str(Edn::Str(Cow::Borrowed("a")))]
+    fn test_char_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(char::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::bool(Edn::Bool(true))]
+    fn test_string_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(String::from_edn(&edn).is_err());
+        assert!(<Cow<'_, str>>::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::str(Edn::Str(Cow::Borrowed("a")))]
+    fn test_vec_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(Vec::<i32>::from_edn(&edn).is_err());
+    }
+
+    #[test]
+    fn test_array_from_edn_type_mismatch() {
+        assert!(<[i32; 2]>::from_edn(&Edn::Int(1)).is_err());
+    }
+
+    #[test]
+    fn test_tuple_from_edn_type_mismatch() {
+        assert!(<(i32, i32)>::from_edn(&Edn::Int(1)).is_err());
+    }
+
+    #[rstest]
+    #[case::too_few(1)]
+    #[case::too_many(3)]
+    fn test_tuple2_from_edn_wrong_arity(#[case] len: usize) {
+        let items: Vec<Edn> = (0..len as i64).map(Edn::Int).collect();
+        let edn = Edn::Vector(EdnSeq::from(items));
+        assert!(<(i32, i32)>::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::vector(Edn::Vector(EdnSeq::from(vec![Edn::Int(1)])))]
+    fn test_hashmap_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(HashMap::<String, i32>::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::vector(Edn::Vector(EdnSeq::from(vec![Edn::Int(1)])))]
+    fn test_btreemap_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(BTreeMap::<String, i32>::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::vector(Edn::Vector(EdnSeq::from(vec![Edn::Int(1)])))]
+    fn test_hashset_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(HashSet::<i32>::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::vector(Edn::Vector(EdnSeq::from(vec![Edn::Int(1)])))]
+    fn test_btreeset_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(BTreeSet::<i32>::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::str(Edn::Str(Cow::Borrowed("kw")))]
+    fn test_keyword_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(EdnKeyword::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::str(Edn::Str(Cow::Borrowed("sym")))]
+    fn test_symbol_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(EdnSymbol::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::vector(Edn::Vector(EdnSeq::from(vec![])))]
+    fn test_edn_map_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(EdnMap::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::vector(Edn::Vector(EdnSeq::from(vec![])))]
+    fn test_edn_set_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(EdnSet::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::int(Edn::Int(1))]
+    #[case::map(Edn::Map(EdnMap::new()))]
+    fn test_edn_seq_from_edn_type_mismatch(#[case] edn: Edn) {
+        assert!(EdnSeq::from_edn(&edn).is_err());
+    }
+
+    #[rstest]
+    #[case::i8_over(Edn::Int(200), "i8")]
+    #[case::i16_over(Edn::Int(100_000), "i16")]
+    #[case::u8_over(Edn::Int(300), "u8")]
+    #[case::u16_over(Edn::Int(100_000), "u16")]
+    #[case::u32_over(Edn::Int(i64::MAX), "u32")]
+    #[case::u8_neg(Edn::Int(-1), "u8")]
+    fn test_int_from_edn_out_of_range(#[case] edn: Edn, #[case] target: &str) {
+        match target {
+            "i8" => assert!(i8::from_edn(&edn).is_err()),
+            "i16" => assert!(i16::from_edn(&edn).is_err()),
+            "u8" => assert!(u8::from_edn(&edn).is_err()),
+            "u16" => assert!(u16::from_edn(&edn).is_err()),
+            "u32" => assert!(u32::from_edn(&edn).is_err()),
+            _ => unreachable!(),
+        }
+    }
+
+    #[test]
+    fn test_symbol_roundtrip() {
+        let s = EdnSymbol::new("foo/bar");
+        let e = s.to_edn();
+        assert_eq!(EdnSymbol::from_edn(&e).unwrap(), s);
+    }
+
+    #[test]
+    fn test_str_to_edn() {
+        let e = "hello".to_edn();
+        assert_eq!(e, Edn::Str(Cow::Owned("hello".to_owned())));
+    }
+
+    #[test]
+    fn test_cow_str_to_edn() {
+        let cow: Cow<'_, str> = Cow::Borrowed("test");
+        let e = cow.to_edn();
+        assert_eq!(e, Edn::Str(Cow::Owned("test".to_owned())));
+    }
+
+    #[test]
+    fn test_hashmap_roundtrip() {
+        let mut m = HashMap::new();
+        m.insert("x".to_string(), 10i32);
+        let e = m.to_edn();
+        assert_eq!(HashMap::<String, i32>::from_edn(&e).unwrap(), m);
+    }
+
+    #[test]
+    fn test_hashset_roundtrip() {
+        let mut s = HashSet::new();
+        s.insert(5i32);
+        s.insert(10i32);
+        let e = s.to_edn();
+        assert_eq!(HashSet::<i32>::from_edn(&e).unwrap(), s);
+    }
+
+    #[test]
+    fn test_edn_seq_roundtrip() {
+        let seq = EdnSeq::from(vec![Edn::Int(1), Edn::Int(2)]);
+        let e = seq.to_edn();
+        assert_eq!(EdnSeq::from_edn(&e).unwrap(), seq);
+    }
+
+    #[test]
+    fn test_edn_seq_from_list() {
+        let list = Edn::List(EdnSeq::from(vec![Edn::Int(1)]));
+        assert!(EdnSeq::from_edn(&list).is_ok());
+    }
+
+    #[test]
+    fn test_edn_map_roundtrip() {
+        let mut m = EdnMap::new();
+        m.insert(Edn::Keyword(EdnKeyword::new("a")), Edn::Int(1));
+        let e = m.to_edn();
+        assert_eq!(EdnMap::from_edn(&e).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_edn_set_roundtrip() {
+        let mut s = EdnSet::new();
+        s.insert(Edn::Int(1));
+        let e = s.to_edn();
+        assert_eq!(EdnSet::from_edn(&e).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_edn_passthrough_to_edn() {
+        let edn = Edn::Int(7);
+        let owned = edn.to_edn();
+        assert_eq!(owned, Edn::Int(7));
+    }
+
+    #[test]
+    fn test_option_some_wraps_nil() {
+        let edn = Edn::Nil;
+        assert_eq!(<Option<i32>>::from_edn(&edn).unwrap(), None);
+    }
+
+    #[test]
+    fn test_option_none_to_edn() {
+        assert_eq!(None::<i32>.to_edn(), Edn::Nil);
+    }
+
+    #[test]
+    fn test_f32_roundtrip() {
+        let v = 2.5f32;
+        let e = v.to_edn();
+        let back = f32::from_edn(&e).unwrap();
+        assert!((back - v).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_tuple2_roundtrip() {
+        let t = (1i32, 2i32);
+        let e = t.to_edn();
+        assert_eq!(<(i32, i32)>::from_edn(&e).unwrap(), t);
+    }
+
+    #[test]
+    fn test_tuple4_roundtrip() {
+        let t = (1i32, 2i32, 3i32, 4i32);
+        let e = t.to_edn();
+        assert_eq!(<(i32, i32, i32, i32)>::from_edn(&e).unwrap(), t);
+    }
+
+    #[test]
+    fn test_array_to_edn() {
+        let arr = [10i32, 20];
+        let e = arr.to_edn();
+        assert_eq!(Vec::<i32>::from_edn(&e).unwrap(), vec![10, 20]);
+    }
+
+    #[test]
+    fn test_vec_to_edn_empty() {
+        let v: Vec<i32> = vec![];
+        let e = v.to_edn();
+        assert!(matches!(e, Edn::Vector(s) if s.is_empty()));
+    }
+
+    #[test]
+    fn test_btreeset_to_edn() {
+        let mut s = BTreeSet::new();
+        s.insert(3i32);
+        let e = s.to_edn();
+        assert!(matches!(e, Edn::Set(_)));
+    }
+
+    #[test]
+    fn test_hashset_to_edn() {
+        let mut s = HashSet::new();
+        s.insert(3i32);
+        let e = s.to_edn();
+        assert!(matches!(e, Edn::Set(_)));
     }
 }

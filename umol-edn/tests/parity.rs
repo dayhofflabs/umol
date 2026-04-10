@@ -18,6 +18,7 @@
 
 #![cfg(feature = "serde")]
 
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 use rstest::rstest;
@@ -29,8 +30,10 @@ use umol_edn::{Edn, EdnKeyword, EdnSymbol, FromEdn, ParseConfig, ToEdn};
 /// tags (`EdnTagged<T>` with caller-chosen tag names, `#Variant` enum
 /// dispatch, or `DynEdn` containing unknown tagged literals).
 fn from_str_permissive<'a, T: serde::Deserialize<'a>>(s: &'a str) -> T {
-    let mut config = ParseConfig::default();
-    config.allow_unknown_tags = true;
+    let config = ParseConfig {
+        allow_unknown_tags: true,
+        ..Default::default()
+    };
     from_str_with(s, &config).unwrap()
 }
 
@@ -80,7 +83,7 @@ fn test_parity_keyword_json_fallback_is_string() {
 
 #[test]
 fn test_parity_keyword_native_rejects_string() {
-    let edn = Edn::Str(std::borrow::Cow::Borrowed("not a keyword"));
+    let edn = Edn::Str(Cow::Borrowed("not a keyword"));
     assert!(EdnKeyword::from_edn(&edn).is_err());
 }
 
@@ -322,15 +325,15 @@ fn test_parity_bigdecimal_serde_edn_roundtrip() {
 }
 
 #[rstest]
-#[case("nil")]
-#[case("true")]
-#[case(":kw")]
-#[case("sym")]
-#[case("[1 2 3]")]
-#[case("(1 2 3)")]
-#[case("#{1 2}")]
-#[case(r#"{:name "salt" :count 2}"#)]
-#[case(r#"#inst "2026-04-08T00:00:00Z""#)]
+#[case::nil("nil")]
+#[case::bool("true")]
+#[case::keyword(":kw")]
+#[case::symbol("sym")]
+#[case::vector("[1 2 3]")]
+#[case::list("(1 2 3)")]
+#[case::set("#{1 2}")]
+#[case::map(r#"{:name "salt" :count 2}"#)]
+#[case::tagged(r#"#inst "2026-04-08T00:00:00Z""#)]
 fn test_parity_value_lossless_edn_roundtrip(#[case] input: &str) {
     let v: DynEdn = from_str(input).unwrap();
     let s = to_string(&v).unwrap();
@@ -427,8 +430,10 @@ fn test_parity_multiple_wrappers_in_one_struct() {
         ids: EdnSet<i64>,
         extra: DynEdn,
     }
-    let mut config = ParseConfig::default();
-    config.allow_unknown_tags = true;
+    let config = ParseConfig {
+        allow_unknown_tags: true,
+        ..Default::default()
+    };
     let v = S {
         name: EdnKeyword::new("salt"),
         aliases: vec!["NaCl".into(), "halite".into()].into(),
@@ -456,7 +461,7 @@ fn test_parity_hashmap_string_to_wrapper() {
 #[case::bool_false("false", Edn::Bool(false))]
 #[case::int("-7", Edn::Int(-7))]
 #[case::float("2.5", Edn::Float(2.5))]
-#[case::str(r#""abc""#, Edn::Str(std::borrow::Cow::Borrowed("abc")))]
+#[case::str(r#""abc""#, Edn::Str(Cow::Borrowed("abc")))]
 fn test_parity_primitive_edn_roundtrip(#[case] input: &str, #[case] expected: Edn<'static>) {
     let v: DynEdn = from_str(input).unwrap();
     assert_eq!(v.as_edn(), &expected);

@@ -220,8 +220,8 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[rstest]
-    #[case(vec![1, 2, 3], "(1 2 3)")]
-    #[case(vec![], "()")]
+    #[case::three_elements(vec![1, 2, 3], "(1 2 3)")]
+    #[case::empty(vec![], "()")]
     fn test_edn_list_serialize(#[case] input: Vec<i64>, #[case] expected: &str) {
         let list: EdnList<i64> = input.into();
         assert_eq!(to_string(&list).unwrap(), expected);

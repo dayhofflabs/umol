@@ -6,10 +6,12 @@ use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::character::complete::{char, i32 as nom_i32, multispace0, satisfy};
 use nom::combinator::{all_consuming, map, opt, recognize, value};
+use nom::error::{Error as NomError, ErrorKind};
 use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
-use super::error::{EvaluationError, ParseError};
+
+use super::error::EvaluationError;
 
 /// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`]
 pub type Bindings = HashMap<String, i32>;
@@ -217,17 +219,11 @@ impl Expr {
     }
 }
 
-pub fn parse_value_dsl(input: &str) -> Result<ValueAst, ParseError> {
-    all_consuming(value_dsl)
-        .parse(input)
-        .map(|(_, v)| v)
-        .map_err(|e| match e {
-            Err::Error(e) | Err::Failure(e) => e,
-            Err::Incomplete(_) => ParseError::Incomplete,
-        })
+pub fn parse_value_dsl(input: &str) -> Result<ValueAst, Err<NomError<&str>>> {
+    all_consuming(value_dsl).parse(input).map(|(_, v)| v)
 }
 
-pub fn value_dsl(i: &str) -> IResult<&str, ValueAst, ParseError> {
+pub fn value_dsl(i: &str) -> IResult<&str, ValueAst, NomError<&str>> {
     alt((
         map(
             terminated(nom_i32, (multispace0, terminator)),
@@ -238,18 +234,17 @@ pub fn value_dsl(i: &str) -> IResult<&str, ValueAst, ParseError> {
         map(bool_expr, ValueAst::Expr),
     ))
     .parse(i)
-    .map_err(|_| Err::Error(ParseError::InvalidValue(i.to_string())))
 }
 
-fn terminator(i: &str) -> IResult<&str, (), ParseError> {
+fn terminator(i: &str) -> IResult<&str, (), NomError<&str>> {
     if i.is_empty() || i.starts_with('#') {
         Ok((i, ()))
     } else {
-        Err(Err::Error(ParseError::InvalidValue(i.to_string())))
+        Err(Err::Error(NomError::new(i, ErrorKind::Tag)))
     }
 }
 
-fn bool_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn bool_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     map(
         pair(and_expr, many0(preceded(op_char('|'), and_expr))),
         |(first, rest)| {
@@ -265,7 +260,7 @@ fn bool_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-fn and_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn and_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     map(
         pair(not_expr, many0(preceded(op_char('&'), not_expr))),
         |(first, rest)| {
@@ -281,7 +276,7 @@ fn and_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-fn not_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn not_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     alt((
         map(preceded((char('!'), multispace0), not_expr), |n| {
             Expr::Not(Box::new(n))
@@ -299,7 +294,7 @@ fn not_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-fn rel_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn rel_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     map(
         pair(
             mem_expr,
@@ -316,7 +311,7 @@ fn rel_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-fn mem_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn mem_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     map(
         pair(
             add_expr,
@@ -333,7 +328,7 @@ fn mem_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-pub(crate) fn lit_set(i: &str) -> IResult<&str, Vec<i32>, ParseError> {
+pub(crate) fn lit_set(i: &str) -> IResult<&str, Vec<i32>, NomError<&str>> {
     delimited(
         char('{'),
         delimited(
@@ -346,7 +341,7 @@ pub(crate) fn lit_set(i: &str) -> IResult<&str, Vec<i32>, ParseError> {
     .parse(i)
 }
 
-fn rel_op(i: &str) -> IResult<&str, RelOp, ParseError> {
+fn rel_op(i: &str) -> IResult<&str, RelOp, NomError<&str>> {
     alt((
         value(RelOp::Le, tag("<=")),
         value(RelOp::Ge, tag(">=")),
@@ -357,7 +352,7 @@ fn rel_op(i: &str) -> IResult<&str, RelOp, ParseError> {
     .parse(i)
 }
 
-fn add_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn add_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     map(
         pair(
             mult_expr,
@@ -372,7 +367,7 @@ fn add_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-fn add_op(i: &str) -> IResult<&str, ArithOp, ParseError> {
+fn add_op(i: &str) -> IResult<&str, ArithOp, NomError<&str>> {
     alt((
         value(ArithOp::Add, char('+')),
         value(ArithOp::Sub, char('-')),
@@ -380,7 +375,7 @@ fn add_op(i: &str) -> IResult<&str, ArithOp, ParseError> {
     .parse(i)
 }
 
-fn mult_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn mult_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     map(
         pair(
             unary_expr,
@@ -398,7 +393,7 @@ fn mult_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-fn mult_op(i: &str) -> IResult<&str, ArithOp, ParseError> {
+fn mult_op(i: &str) -> IResult<&str, ArithOp, NomError<&str>> {
     alt((
         value(ArithOp::Mul, char('*')),
         value(ArithOp::Div, char('/')),
@@ -407,7 +402,7 @@ fn mult_op(i: &str) -> IResult<&str, ArithOp, ParseError> {
     .parse(i)
 }
 
-fn unary_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn unary_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     map(
         pair(
             map(
@@ -427,7 +422,7 @@ fn unary_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-fn base_expr(i: &str) -> IResult<&str, Expr, ParseError> {
+fn base_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     alt((
         map(nom_i32, Expr::Lit),
         map(preceded(char('?'), parse_id), Expr::Var),
@@ -443,7 +438,7 @@ fn base_expr(i: &str) -> IResult<&str, Expr, ParseError> {
     .parse(i)
 }
 
-pub(crate) fn parse_id(i: &str) -> IResult<&str, String, ParseError> {
+pub(crate) fn parse_id(i: &str) -> IResult<&str, String, NomError<&str>> {
     map(
         recognize(pair(
             satisfy(|c: char| c.is_ascii_alphabetic()),
@@ -454,7 +449,9 @@ pub(crate) fn parse_id(i: &str) -> IResult<&str, String, ParseError> {
     .parse(i)
 }
 
-pub(crate) fn op_char<'a>(c: char) -> impl Parser<&'a str, Output = char, Error = ParseError> {
+pub(crate) fn op_char<'a>(
+    c: char,
+) -> impl Parser<&'a str, Output = char, Error = NomError<&'a str>> {
     delimited(multispace0, char(c), multispace0)
 }
 
@@ -492,7 +489,7 @@ mod tests {
     ])))]
     #[case::paren_arith("(0 + 1) * 1", ValueAst::Expr(Expr::BinOp(Box::new(Expr::BinOp(Box::new(Expr::Lit(0)), ArithOp::Add, Box::new(Expr::Lit(1)))), ArithOp::Mul, Box::new(Expr::Lit(1)))))]
     fn test_value_dsl(#[case] input: &str, #[case] expected: ValueAst) {
-        let result = value_dsl(input);
+        let result = value_dsl.parse(input);
         assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input, result.clone().unwrap_err());
         let (remaining, value) = result.unwrap();
         assert!(remaining.is_empty(), "{:?} should have consumed all input, remaining: {:?}", input, remaining);
@@ -519,18 +516,12 @@ mod tests {
     #[case::empty_set("{}")]
     #[case::unclosed_paren_add("(0 + 1")]
     fn test_value_dsl_error(#[case] input: &str) {
-        let result = value_dsl(input);
-        assert!(result.is_err(), "{input:?} should fail, got {result:?}");
-        let err = match result.unwrap_err() {
-            Err::Error(e) | Err::Failure(e) => e,
-            Err::Incomplete(_) => ParseError::Incomplete,
-        };
-        assert_eq!(
-            err,
-            ParseError::InvalidValue(input.to_string()),
-            "{:?} should fail with InvalidValue, got {:?}",
-            input,
-            err
+        let res = value_dsl.parse(input);
+        assert!(res.is_err(), "{input:?} should fail, got {:?}", res.unwrap());
+        assert!(
+            matches!(&res, Err(Err::Error(e)) if e.code == ErrorKind::Char),
+            "{input:?} should fail with ErrorKind::Char, got {:?}",
+            res.unwrap_err().map(|e| e.code)
         );
     }
 

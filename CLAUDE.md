@@ -3,7 +3,6 @@
 - No preamble. No "Great question!", "Sure!", "Of course!", "Certainly!", "Absolutely!".
 - No hollow closings. No "I hope this helps!", "Let me know if you need anything!".
 - No restating the prompt. If the task is clear, execute immediately.
-- No explaining what you are about to do. Just do it.
 - No unsolicited suggestions. Do exactly what was asked, nothing more.
 - Structured output only: bullets, tables, code blocks. Prose only when explicitly requested.
 
@@ -45,7 +44,7 @@
 - Do not create new files unless strictly necessary.
 
 ## Design
-- Do not consider backward compatibility. This is not at all a consideration. Breaking changes are fine if technically necessary.
+- Do not ever consider backward compatibility. Breaking changes are fine if technically necessary.
 - Avoid stubs, shims, bridges whenever possible. Suggest design improvements instead.
 - Do not create manual implementations, where well-designed and supported external libraries exist.
 

@@ -45,25 +45,25 @@ bench = false
 conformance = []
 
 [dependencies]
-bitflags = { version = "2.9.4", features = ["serde"] }
+bitflags = "2.9.4"
 bstr = "1.12.0"
 clap = { version = "4", features = ["derive"] }
-umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["serde", "macros", "indexmap"] }
+umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "indexmap"] }
 fast-float2 = "0.2.3"
-indexmap = { version = "2.11.1", features = ["serde"] }
+indexmap = "2.11.1"
 itertools = "0.14.0"
 map-macro = "0.3.0"
 murmur3 = "0.5"
 nauty-Traces-sys = "0.11"
-nalgebra = { version = "0.34.0", features = ["serde-serialize"] }
+nalgebra = "0.34.0"
 nom = { version = "8.0.0" }
 num = "0.4.3"
-petgraph = { version = "0.8.2", features = ["stable_graph", "serde-1"] }
+petgraph = { version = "0.8.2", features = ["stable_graph"] }
 rand = "0.10"
 rand_chacha = "0.10"
 regex = "1.11.2"
 serde = { version = "1.0.221", features = ["derive"] }
-smallvec = { version = "1.15.1", features = ["serde"] }
+smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
 toml = "1.1.0"
@@ -71,7 +71,7 @@ umol = { path = "../umol", version = "0.1.0" }
 umol-data = { path = "../umol-data", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3"] }
-bimap = { version = "0.6.3", features = ["serde"] }
+bimap = "0.6.3"
 
 [build-dependencies]
 walkdir = "2.5.0"
@@ -82,7 +82,6 @@ fastrand = "2.3.0"
 float-cmp = "0.10.0"
 insta = { version = "1.43.2", features = ["yaml", "glob"] }
 pretty_assertions = "1.4.1"
-serde_json = "1"
 proptest = "1.7.0"
 rand = "0.10"
 rand_chacha = "0.10"

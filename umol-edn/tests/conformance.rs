@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 #[cfg(feature = "bignum")]
 use std::str::FromStr;
+use std::sync::Arc;
 
 use rstest::rstest;
 use serde::Deserialize;
@@ -26,21 +27,21 @@ fn stream<'a, T: Deserialize<'a>>(input: &'a str) -> Result<T, EdnError> {
 }
 
 #[rstest]
-#[case(" 1 ", Edn::Int(1))]
-#[case("\t1\t", Edn::Int(1))]
-#[case("\n1\n", Edn::Int(1))]
-#[case("\r1\r", Edn::Int(1))]
-#[case(",1,", Edn::Int(1))]
-#[case(" \t\n\r,1", Edn::Int(1))]
+#[case::spaces(" 1 ", Edn::Int(1))]
+#[case::tabs("\t1\t", Edn::Int(1))]
+#[case::newlines("\n1\n", Edn::Int(1))]
+#[case::carriage_returns("\r1\r", Edn::Int(1))]
+#[case::commas(",1,", Edn::Int(1))]
+#[case::mixed(" \t\n\r,1", Edn::Int(1))]
 fn test_whitespace(#[case] input: &str, #[case] expected: Edn<'_>) {
     assert_eq!(parse(input).unwrap(), expected);
 }
 
 #[rstest]
-#[case(" 1 ", 1i64)]
-#[case("\t1\t", 1)]
-#[case("\n1\n", 1)]
-#[case(",1,", 1)]
+#[case::spaces(" 1 ", 1i64)]
+#[case::tabs("\t1\t", 1)]
+#[case::newlines("\n1\n", 1)]
+#[case::commas(",1,", 1)]
 fn test_whitespace_streaming(#[case] input: &str, #[case] expected: i64) {
     assert_eq!(stream::<i64>(input).unwrap(), expected);
 }
@@ -95,35 +96,35 @@ fn test_nil_streaming() {
 }
 
 #[rstest]
-#[case("true", Edn::Bool(true))]
-#[case("false", Edn::Bool(false))]
+#[case::true_val("true", Edn::Bool(true))]
+#[case::false_val("false", Edn::Bool(false))]
 fn test_booleans(#[case] input: &str, #[case] expected: Edn<'_>) {
     assert_eq!(parse(input).unwrap(), expected);
 }
 
 #[rstest]
-#[case("true", true)]
-#[case("false", false)]
+#[case::true_val("true", true)]
+#[case::false_val("false", false)]
 fn test_booleans_streaming(#[case] input: &str, #[case] expected: bool) {
     assert_eq!(stream::<bool>(input).unwrap(), expected);
 }
 
 #[rstest]
-#[case("Nil")]
-#[case("TRUE")]
-#[case("False")]
+#[case::nil_capitalized("Nil")]
+#[case::true_upper("TRUE")]
+#[case::false_capitalized("False")]
 fn test_case_sensitive(#[case] input: &str) {
     assert!(matches!(parse(input).unwrap(), Edn::Symbol(_)));
 }
 
 #[rstest]
-#[case(r#""""#, "")]
-#[case(r#""hello""#, "hello")]
-#[case(r#""line\nbreak""#, "line\nbreak")]
-#[case(r#""tab\there""#, "tab\there")]
-#[case(r#""cr\rhere""#, "cr\rhere")]
-#[case(r#""slash\\here""#, "slash\\here")]
-#[case(r#""quote\"here""#, "quote\"here")]
+#[case::empty(r#""""#, "")]
+#[case::simple(r#""hello""#, "hello")]
+#[case::newline(r#""line\nbreak""#, "line\nbreak")]
+#[case::tab(r#""tab\there""#, "tab\there")]
+#[case::carriage_return(r#""cr\rhere""#, "cr\rhere")]
+#[case::backslash(r#""slash\\here""#, "slash\\here")]
+#[case::quote(r#""quote\"here""#, "quote\"here")]
 fn test_string_escapes(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(
         parse(input).unwrap(),
@@ -132,24 +133,24 @@ fn test_string_escapes(#[case] input: &str, #[case] expected: &str) {
 }
 
 #[rstest]
-#[case(r#""hello""#, "hello")]
-#[case(r#""line\nbreak""#, "line\nbreak")]
-#[case(r#""tab\there""#, "tab\there")]
+#[case::simple(r#""hello""#, "hello")]
+#[case::newline(r#""line\nbreak""#, "line\nbreak")]
+#[case::tab(r#""tab\there""#, "tab\there")]
 fn test_string_escapes_streaming(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(stream::<String>(input).unwrap(), expected);
 }
 
 #[rstest]
-#[case(r#""\b""#)]
-#[case(r#""\f""#)]
-#[case(r#""\101""#)]
+#[case::backspace(r#""\b""#)]
+#[case::formfeed(r#""\f""#)]
+#[case::octal(r#""\101""#)]
 fn test_string_clojure_escapes_rejected(#[case] input: &str) {
     assert!(parse(input).is_err(), "Edn should reject {input}");
 }
 
 #[rstest]
-#[case(r#""\u0041""#, "A")]
-#[case(r#""\u00e9""#, "é")]
+#[case::ascii(r#""\u0041""#, "A")]
+#[case::accent(r#""\u00e9""#, "é")]
 fn test_string_unicode_escape(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(
         parse(input).unwrap(),
@@ -159,8 +160,8 @@ fn test_string_unicode_escape(#[case] input: &str, #[case] expected: &str) {
 }
 
 #[rstest]
-#[case(r#""\b""#)]
-#[case(r#""\f""#)]
+#[case::backspace(r#""\b""#)]
+#[case::formfeed(r#""\f""#)]
 fn test_string_clojure_escapes_rejected_streaming(#[case] input: &str) {
     assert!(
         stream::<String>(input).is_err(),
@@ -169,18 +170,18 @@ fn test_string_clojure_escapes_rejected_streaming(#[case] input: &str) {
 }
 
 #[rstest]
-#[case(r#""\x""#)]
-#[case(r#""\a""#)]
-#[case(r#""\v""#)]
+#[case::backslash_x(r#""\x""#)]
+#[case::backslash_a(r#""\a""#)]
+#[case::backslash_v(r#""\v""#)]
 fn test_string_invalid_escape(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
 
 #[rstest]
-#[case(r#""\uD800""#)]
-#[case(r#""\uDFFF""#)]
-#[case(r#""\u00GG""#)]
-#[case(r#""\u41""#)]
+#[case::high_surrogate(r#""\uD800""#)]
+#[case::low_surrogate(r#""\uDFFF""#)]
+#[case::invalid_hex(r#""\u00GG""#)]
+#[case::too_short(r#""\u41""#)]
 fn test_string_unicode_escape_error(#[case] input: &str) {
     assert!(parse(input).is_err(), "Edn should reject {input}");
 }
@@ -191,31 +192,31 @@ fn test_string_unterminated() {
 }
 
 #[rstest]
-#[case(r"\a", 'a')]
-#[case(r"\Z", 'Z')]
-#[case(r"\!", '!')]
-#[case(r"\newline", '\n')]
-#[case(r"\return", '\r')]
-#[case(r"\space", ' ')]
-#[case(r"\tab", '\t')]
-#[case(r"\u0041", 'A')]
-#[case(r"\u03B1", '\u{03B1}')]
+#[case::lowercase(r"\a", 'a')]
+#[case::uppercase(r"\Z", 'Z')]
+#[case::punctuation(r"\!", '!')]
+#[case::newline(r"\newline", '\n')]
+#[case::return_char(r"\return", '\r')]
+#[case::space(r"\space", ' ')]
+#[case::tab(r"\tab", '\t')]
+#[case::unicode_ascii(r"\u0041", 'A')]
+#[case::unicode_alpha(r"\u03B1", '\u{03B1}')]
 fn test_characters(#[case] input: &str, #[case] expected: char) {
     assert_eq!(parse(input).unwrap(), Edn::Char(expected));
 }
 
 #[rstest]
-#[case(r"\formfeed")]
-#[case(r"\backspace")]
+#[case::formfeed(r"\formfeed")]
+#[case::backspace(r"\backspace")]
 fn test_formfeed_backspace_rejected(#[case] input: &str) {
     assert!(parse(input).is_err(), "Edn should reject {input}");
 }
 
 #[rstest]
-#[case(r"\ ")]
-#[case(r"\abc")]
-#[case(r"\u00GG")]
-#[case(r"\uD800")]
+#[case::backslash_space(r"\ ")]
+#[case::multi_char(r"\abc")]
+#[case::invalid_hex(r"\u00GG")]
+#[case::surrogate(r"\uD800")]
 fn test_characters_error(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
@@ -229,9 +230,9 @@ fn test_termination() {
 }
 
 #[rstest]
-#[case("foo", "foo")]
-#[case("ns/name", "ns/name")]
-#[case("my.ns/sym", "my.ns/sym")]
+#[case::bare("foo", "foo")]
+#[case::namespaced("ns/name", "ns/name")]
+#[case::dotted_ns("my.ns/sym", "my.ns/sym")]
 fn test_symbols(#[case] input: &str, #[case] name: &str) {
     assert_eq!(parse(input).unwrap(), Edn::Symbol(EdnSymbol::new(name)));
 }
@@ -242,17 +243,17 @@ fn test_slash_alone() {
 }
 
 #[rstest]
-#[case(".", ".")]
-#[case("*", "*")]
-#[case("!", "!")]
-#[case("_", "_")]
-#[case("?", "?")]
-#[case("$", "$")]
-#[case("%", "%")]
-#[case("&", "&")]
-#[case("=", "=")]
-#[case("<", "<")]
-#[case(">", ">")]
+#[case::dot(".", ".")]
+#[case::star("*", "*")]
+#[case::bang("!", "!")]
+#[case::underscore("_", "_")]
+#[case::question("?", "?")]
+#[case::dollar("$", "$")]
+#[case::percent("%", "%")]
+#[case::ampersand("&", "&")]
+#[case::equals("=", "=")]
+#[case::less_than("<", "<")]
+#[case::greater_than(">", ">")]
 fn test_start_chars(#[case] input: &str, #[case] name: &str) {
     assert_eq!(parse(input).unwrap(), Edn::Symbol(EdnSymbol::new(name)));
 }
@@ -275,47 +276,47 @@ fn test_sign_dot_first_char() {
 }
 
 #[rstest]
-#[case("ns/")]
-#[case("/name")]
+#[case::empty_name("ns/")]
+#[case::empty_prefix("/name")]
 fn test_empty_prefix_or_name(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
 
 #[rstest]
-#[case("a/b/c")]
-#[case("foo/1bar")]
-#[case("foo/#bar")]
-#[case("foo/:bar")]
+#[case::double_slash("a/b/c")]
+#[case::digit_after_slash("foo/1bar")]
+#[case::hash_after_slash("foo/#bar")]
+#[case::colon_after_slash("foo/:bar")]
 fn test_symbol_slash_rejected(#[case] input: &str) {
     assert!(parse(input).is_err(), "Edn should reject {input}");
 }
 
 #[rstest]
-#[case("foo/_bar")]
-#[case("foo/bar")]
+#[case::underscore("foo/_bar")]
+#[case::simple("foo/bar")]
 fn test_post_slash_valid(#[case] input: &str) {
     assert!(parse(input).is_ok());
 }
 
 #[rstest]
-#[case(":foo", "foo")]
-#[case(":a", "a")]
-#[case(":ns/name", "ns/name")]
-#[case(":my.ns/foo", "my.ns/foo")]
+#[case::simple(":foo", "foo")]
+#[case::single_char(":a", "a")]
+#[case::namespaced(":ns/name", "ns/name")]
+#[case::dotted_ns(":my.ns/foo", "my.ns/foo")]
 fn test_keywords(#[case] input: &str, #[case] name: &str) {
     assert_eq!(parse(input).unwrap(), Edn::keyword(name));
 }
 
 #[rstest]
-#[case(":foo", "foo")]
-#[case(":ns/name", "ns/name")]
+#[case::bare(":foo", "foo")]
+#[case::namespaced(":ns/name", "ns/name")]
 fn test_keywords_streaming(#[case] input: &str, #[case] expected: &str) {
     assert_eq!(stream::<String>(input).unwrap(), expected);
 }
 
 #[rstest]
-#[case(":0")]
-#[case(":0foo")]
+#[case::single_digit(":0")]
+#[case::digit_prefix(":0foo")]
 fn test_digit_start_rejected(#[case] input: &str) {
     assert!(parse(input).is_err(), "Edn should reject {input}");
 }
@@ -326,9 +327,9 @@ fn test_hash_start_rejected() {
 }
 
 #[rstest]
-#[case(":.foo")]
-#[case(":+foo")]
-#[case(":-foo")]
+#[case::dot(":.foo")]
+#[case::plus(":+foo")]
+#[case::minus(":-foo")]
 fn test_special_start_chars(#[case] input: &str) {
     assert!(parse(input).is_ok());
 }
@@ -357,8 +358,8 @@ fn test_double_colon_rejected() {
 }
 
 #[rstest]
-#[case(":/")]
-#[case(":/foo")]
+#[case::bare_slash(":/")]
+#[case::slash_prefix(":/foo")]
 fn test_invalid_slash(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
@@ -369,28 +370,28 @@ fn test_bare_colon_error() {
 }
 
 #[rstest]
-#[case("0", 0)]
-#[case("1", 1)]
-#[case("-1", -1)]
-#[case("+1", 1)]
-#[case("9223372036854775807", i64::MAX)]
-#[case("-9223372036854775808", i64::MIN)]
+#[case::zero("0", 0)]
+#[case::positive("1", 1)]
+#[case::negative("-1", -1)]
+#[case::plus_sign("+1", 1)]
+#[case::max("9223372036854775807", i64::MAX)]
+#[case::min("-9223372036854775808", i64::MIN)]
 fn test_integers(#[case] input: &str, #[case] expected: i64) {
     assert_eq!(parse(input).unwrap(), Edn::Int(expected));
 }
 
 #[rstest]
-#[case("0", 0i64)]
-#[case("1", 1)]
-#[case("-1", -1)]
-#[case("+5", 5)]
+#[case::zero("0", 0i64)]
+#[case::positive("1", 1)]
+#[case::negative("-1", -1)]
+#[case::plus_sign("+5", 5)]
 fn test_integers_streaming(#[case] input: &str, #[case] expected: i64) {
     assert_eq!(stream::<i64>(input).unwrap(), expected);
 }
 
 #[rstest]
-#[case("007")]
-#[case("00")]
+#[case::triple_zero("007")]
+#[case::double_zero("00")]
 fn test_leading_zeros_rejected(#[case] input: &str) {
     assert!(parse(input).is_err(), "Edn should reject {input}");
 }
@@ -413,23 +414,23 @@ fn test_overflow() {
 
 #[cfg(not(feature = "bignum"))]
 #[rstest]
-#[case("42N")]
-#[case("0N")]
-#[case("3.14N")]
+#[case::positive("42N")]
+#[case::zero("0N")]
+#[case::float("3.14N")]
 fn test_bigint_suffix_error(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
 
 #[rstest]
-#[case("1.0", 1.0)]
-#[case("-3.14", -3.14)]
-#[case("1e10", 1e10)]
-#[case("1E10", 1e10)]
-#[case("1e-10", 1e-10)]
-#[case("1e+10", 1e10)]
-#[case("1.5e3", 1.5e3)]
-#[case("1.5E-3", 1.5e-3)]
-#[case("+1.0", 1.0)]
+#[case::one("1.0", 1.0)]
+#[case::negative("-2.5", -2.5)]
+#[case::lower_e("1e10", 1e10)]
+#[case::upper_e("1E10", 1e10)]
+#[case::neg_exponent("1e-10", 1e-10)]
+#[case::pos_exponent("1e+10", 1e10)]
+#[case::fractional_exp("1.5e3", 1.5e3)]
+#[case::fractional_neg_exp("1.5E-3", 1.5e-3)]
+#[case::plus_sign("+1.0", 1.0)]
 fn test_floats(#[case] input: &str, #[case] expected: f64) {
     match parse(input).unwrap() {
         Edn::Float(v) => assert!((v - expected).abs() < f64::EPSILON),
@@ -438,9 +439,9 @@ fn test_floats(#[case] input: &str, #[case] expected: f64) {
 }
 
 #[rstest]
-#[case("1.0", 1.0f64)]
-#[case("-3.14", -3.14)]
-#[case("1e10", 1e10)]
+#[case::one("1.0", 1.0f64)]
+#[case::negative("-2.5", -2.5)]
+#[case::exponent("1e10", 1e10)]
 fn test_floats_streaming(#[case] input: &str, #[case] expected: f64) {
     let val: f64 = stream(input).unwrap();
     assert!((val - expected).abs() < 1e-10);
@@ -458,36 +459,36 @@ fn test_negative_zero_float() {
 }
 
 #[rstest]
-#[case("##NaN")]
-#[case("##Inf")]
-#[case("##-Inf")]
-#[case("8E1313")]
-#[case("1e999")]
-#[case("-1e999")]
+#[case::nan("##NaN")]
+#[case::inf("##Inf")]
+#[case::neg_inf("##-Inf")]
+#[case::huge_exponent("8E1313")]
+#[case::overflow("1e999")]
+#[case::neg_overflow("-1e999")]
 fn test_special_floats_rejected(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
 
 #[rstest]
-#[case("##NaN")]
-#[case("##Inf")]
+#[case::nan("##NaN")]
+#[case::inf("##Inf")]
 fn test_special_floats_rejected_streaming(#[case] input: &str) {
     assert!(stream::<f64>(input).is_err());
 }
 
 #[cfg(not(feature = "bignum"))]
 #[rstest]
-#[case("3.14M")]
+#[case::decimal("3.14M")]
 fn test_bigdec_suffix_error(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
 
 #[cfg(feature = "bignum")]
 #[rstest]
-#[case("42N", num_bigint::BigInt::from(42))]
-#[case("0N", num_bigint::BigInt::from(0))]
-#[case("-1N", num_bigint::BigInt::from(-1))]
-#[case("+7N", num_bigint::BigInt::from(7))]
+#[case::positive("42N", num_bigint::BigInt::from(42))]
+#[case::zero("0N", num_bigint::BigInt::from(0))]
+#[case::negative("-1N", num_bigint::BigInt::from(-1))]
+#[case::plus_sign("+7N", num_bigint::BigInt::from(7))]
 fn test_bigint_parse(#[case] input: &str, #[case] expected: num_bigint::BigInt) {
     assert_eq!(parse(input).unwrap(), Edn::BigInt(expected));
 }
@@ -502,18 +503,18 @@ fn test_bigint_parse_large() {
 
 #[cfg(feature = "bignum")]
 #[rstest]
-#[case("3.14M")]
-#[case("0.0M")]
-#[case("-1.5M")]
-#[case("42M")]
+#[case::pi("3.14M")]
+#[case::zero("0.0M")]
+#[case::negative("-1.5M")]
+#[case::integer("42M")]
 fn test_bigdecimal_parse(#[case] input: &str) {
     assert!(matches!(parse(input).unwrap(), Edn::BigDecimal(_)));
 }
 
 #[cfg(feature = "bignum")]
 #[rstest]
-#[case("9223372036854775808")] // i64::MAX + 1
-#[case("-9223372036854775809")] // i64::MIN - 1
+#[case::positive_overflow("9223372036854775808")] // i64::MAX + 1
+#[case::negative_overflow("-9223372036854775809")] // i64::MIN - 1
 fn test_bigint_overflow_promotes(#[case] input: &str) {
     assert!(matches!(parse(input).unwrap(), Edn::BigInt(_)));
 }
@@ -526,10 +527,10 @@ fn test_bigint_n_suffix_on_float_rejected() {
 
 #[cfg(feature = "bignum")]
 #[rstest]
-#[case("42N")]
-#[case("3.14M")]
-#[case("99999999999999999999N")]
-#[case("-0.001M")]
+#[case::bigint("42N")]
+#[case::bigdecimal("3.14M")]
+#[case::large_bigint("99999999999999999999N")]
+#[case::small_bigdecimal("-0.001M")]
 fn test_bignum_roundtrip(#[case] input: &str) {
     let parsed = parse(input).unwrap();
     let rendered = parsed.to_string();
@@ -538,10 +539,10 @@ fn test_bignum_roundtrip(#[case] input: &str) {
 }
 
 #[rstest]
-#[case("()", Edn::List(vec![].into()))]
-#[case("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
-#[case("[]", Edn::Vector(vec![].into()))]
-#[case("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+#[case::empty_list("()", Edn::List(vec![].into()))]
+#[case::list("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+#[case::empty_vector("[]", Edn::Vector(vec![].into()))]
+#[case::vector("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
 fn test_seqs(#[case] input: &str, #[case] expected: Edn<'_>) {
     assert_eq!(parse(input).unwrap(), expected);
 }
@@ -666,8 +667,8 @@ fn test_qualified_tag_streaming() {
 }
 
 #[rstest]
-#[case("#foo 1")]
-#[case("#bar [1 2]")]
+#[case::scalar("#foo 1")]
+#[case::collection("#bar [1 2]")]
 fn test_bare_tag_rejected(#[case] input: &str) {
     assert!(
         parse(input).is_err(),
@@ -685,8 +686,10 @@ fn test_bare_tag_rejected_by_serde_default() {
 
 #[test]
 fn test_bare_tag_passes_through_serde_with_permissive_config() {
-    let mut config = ParseConfig::default();
-    config.allow_unknown_tags = true;
+    let config = ParseConfig {
+        allow_unknown_tags: true,
+        ..Default::default()
+    };
     assert_eq!(from_str_with::<i64>("#foo 1", &config).unwrap(), 1);
 }
 
@@ -697,12 +700,12 @@ fn test_tag_without_value_error() {
 }
 
 #[rstest]
-#[case(
+#[case::inst(
     "#inst \"2024-01-01T00:00:00Z\"",
     "inst",
     Edn::Str(Cow::Borrowed("2024-01-01T00:00:00Z"))
 )]
-#[case(
+#[case::uuid(
     "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"",
     "uuid",
     Edn::Str(Cow::Borrowed("f81d4fae-7dec-11d0-a765-00a0c91e6bf6"))
@@ -746,8 +749,8 @@ fn test_uuid_accepted() {
 
 #[cfg(feature = "chrono")]
 #[rstest]
-#[case("#inst \"not-a-date\"")]
-#[case("#inst \"2024-01-01\"")]
+#[case::not_a_date("#inst \"not-a-date\"")]
+#[case::no_time("#inst \"2024-01-01\"")]
 fn test_inst_invalid_rejected(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
@@ -798,7 +801,7 @@ fn test_custom_reader_dispatch() {
         }
     }
     let mut readers = TagReaders::default();
-    readers.insert("double", std::sync::Arc::new(double_reader));
+    readers.insert("double", Arc::new(double_reader));
     let config = ParseConfig {
         tag_readers: readers,
         ..Default::default()
@@ -816,7 +819,7 @@ fn test_custom_reader_error_propagation() {
         })
     }
     let mut readers = TagReaders::default();
-    readers.insert("strict", std::sync::Arc::new(strict_reader));
+    readers.insert("strict", Arc::new(strict_reader));
     let config = ParseConfig {
         tag_readers: readers,
         ..Default::default()
@@ -826,10 +829,10 @@ fn test_custom_reader_error_propagation() {
 
 #[test]
 fn test_tag_reader_captures_registry() {
-    let registry: std::sync::Arc<HashMap<&'static str, i64>> =
-        std::sync::Arc::new([("one", 1), ("two", 2)].into_iter().collect());
+    let registry: Arc<HashMap<&'static str, i64>> =
+        Arc::new([("one", 1), ("two", 2)].into_iter().collect());
     let captured = registry.clone();
-    let reader: TagFn = std::sync::Arc::new(move |edn| match edn {
+    let reader: TagFn = Arc::new(move |edn| match edn {
         Edn::Str(s) => Ok(Edn::Int(captured.get(s.as_ref()).copied().unwrap_or(-1))),
         _ => Err(ParseError::InvalidTag {
             offset: 0,
@@ -847,9 +850,9 @@ fn test_tag_reader_captures_registry() {
 }
 
 #[rstest]
-#[case("; comment\n1", Edn::Int(1))]
-#[case("1 ; trailing", Edn::Int(1))]
-#[case("; full line comment\n; another\n1", Edn::Int(1))]
+#[case::leading("; comment\n1", Edn::Int(1))]
+#[case::trailing("1 ; trailing", Edn::Int(1))]
+#[case::multiple("; full line comment\n; another\n1", Edn::Int(1))]
 fn test_comments(#[case] input: &str, #[case] expected: Edn<'_>) {
     assert_eq!(parse(input).unwrap(), expected);
 }
@@ -868,9 +871,9 @@ fn test_comment_inside_vector() {
 }
 
 #[rstest]
-#[case("[1 #_ 2 3]", vec![1, 3])]
-#[case("[#_ #_ 1 2 3]", vec![3])]
-#[case("[#_ #my/tag \"2024\" 1]", vec![1])]
+#[case::skip_middle("[1 #_ 2 3]", vec![1, 3])]
+#[case::nested_discard("[#_ #_ 1 2 3]", vec![3])]
+#[case::discard_tagged("[#_ #my/tag \"2024\" 1]", vec![1])]
 fn test_discard(#[case] input: &str, #[case] expected: Vec<i64>) {
     let parsed = parse(input).unwrap();
     let items: Vec<i64> = match parsed {
@@ -887,8 +890,8 @@ fn test_discard(#[case] input: &str, #[case] expected: Vec<i64>) {
 }
 
 #[rstest]
-#[case("[1 #_ 2 3]", vec![1, 3])]
-#[case("[#_ #_ 1 2 3]", vec![3])]
+#[case::skip_middle("[1 #_ 2 3]", vec![1, 3])]
+#[case::nested_discard("[#_ #_ 1 2 3]", vec![3])]
 fn test_discard_streaming(#[case] input: &str, #[case] expected: Vec<i64>) {
     assert_eq!(stream::<Vec<i64>>(input).unwrap(), expected);
 }
@@ -910,8 +913,8 @@ fn test_discard_map_key() {
 }
 
 #[rstest]
-#[case("#_")]
-#[case("#_ 1")]
+#[case::bare_discard("#_")]
+#[case::discard_only("#_ 1")]
 fn test_discard_error(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
@@ -922,8 +925,8 @@ fn test_int_not_equal_to_float() {
 }
 
 #[rstest]
-#[case(vec![])]
-#[case(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)])]
+#[case::empty(vec![])]
+#[case::three_ints(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)])]
 fn test_list_equals_vector(#[case] items: Vec<Edn<'static>>) {
     let list = Edn::List(items.clone().into());
     let vector = Edn::Vector(items.into());
@@ -979,36 +982,36 @@ fn test_tagged_inequality_value() {
 }
 
 #[rstest]
-#[case("nil")]
-#[case("true")]
-#[case("false")]
-#[case("0")]
-#[case("-1")]
-#[case("9223372036854775807")]
-#[case("1.0")]
-#[case("-3.14")]
-#[case("1.5e3")]
-#[case(r#""hello""#)]
-#[case(r#""line\nbreak""#)]
-#[case(r"\a")]
-#[case(r"\newline")]
-#[case(r"\space")]
-#[case(":foo")]
-#[case(":ns/name")]
-#[case("my-sym")]
-#[case("/")]
-#[case("()")]
-#[case("(1 2 3)")]
-#[case("[]")]
-#[case("[1 2 3]")]
-#[case("{}")]
-#[case("{:a 1}")]
-#[case("#{}")]
-#[case("#{1 2 3}")]
-#[case("#my/tag value")]
-#[case("\"é\"")]
-#[case("\"α\"")]
-#[case("\"世界\"")]
+#[case::nil("nil")]
+#[case::true_val("true")]
+#[case::false_val("false")]
+#[case::zero("0")]
+#[case::negative_int("-1")]
+#[case::max_int("9223372036854775807")]
+#[case::float("1.0")]
+#[case::negative_float("-3.14")]
+#[case::scientific("1.5e3")]
+#[case::string(r#""hello""#)]
+#[case::string_escape(r#""line\nbreak""#)]
+#[case::char(r"\a")]
+#[case::newline(r"\newline")]
+#[case::space(r"\space")]
+#[case::keyword(":foo")]
+#[case::namespaced_keyword(":ns/name")]
+#[case::symbol("my-sym")]
+#[case::slash("/")]
+#[case::empty_list("()")]
+#[case::list("(1 2 3)")]
+#[case::empty_vector("[]")]
+#[case::vector("[1 2 3]")]
+#[case::empty_map("{}")]
+#[case::map("{:a 1}")]
+#[case::empty_set("#{}")]
+#[case::set("#{1 2 3}")]
+#[case::tagged("#my/tag value")]
+#[case::accent("\"é\"")]
+#[case::greek("\"α\"")]
+#[case::cjk("\"世界\"")]
 fn test_roundtrip(#[case] input: &str) {
     let parsed = parse(input).unwrap();
     let rendered = parsed.to_string();
@@ -1017,8 +1020,8 @@ fn test_roundtrip(#[case] input: &str) {
 }
 
 #[rstest]
-#[case(Edn::Set(EdnSet::from_iter([Edn::Nil, Edn::Str(Cow::Owned("wbgpo?j".into()))])))]
-#[case(Edn::List(vec![Edn::Str(Cow::Owned("é".into()))].into()))]
+#[case::set_with_nil(Edn::Set(EdnSet::from_iter([Edn::Nil, Edn::Str(Cow::Owned("wbgpo?j".into()))])))]
+#[case::list_with_accent(Edn::List(vec![Edn::Str(Cow::Owned("é".into()))].into()))]
 fn test_roundtrip_regression(#[case] edn: Edn<'static>) {
     let rendered = edn.to_string();
     let reparsed = parse(&rendered).unwrap();
@@ -1060,10 +1063,10 @@ fn test_error_whitespace_only() {
 }
 
 #[rstest]
-#[case("[1 2")]
-#[case("{:a 1")]
-#[case("(1 2")]
-#[case("#{1 2")]
+#[case::vector("[1 2")]
+#[case::map("{:a 1")]
+#[case::list("(1 2")]
+#[case::set("#{1 2")]
 fn test_error_unclosed(#[case] input: &str) {
     assert!(parse(input).is_err());
 }
@@ -1076,8 +1079,8 @@ fn test_error_deep_nesting() {
 }
 
 #[rstest]
-#[case("#_(#!V(\0\0\0\0\u{00ff}##")]
-#[case("#_\"\\")]
+#[case::malformed_discard("#_(#!V(\0\0\0\0\u{00ff}##")]
+#[case::unterminated_string("#_\"\\")]
 fn test_error_deser_regression_vec(#[case] input: &str) {
     let _ = from_str::<Vec<i64>>(input);
 }

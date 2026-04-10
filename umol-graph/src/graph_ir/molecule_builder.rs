@@ -1606,9 +1606,9 @@ impl<'de> FromEdn<'de> for MoleculeBuilder {
                 });
             }
         };
-        let ast = parse_molecule_dsl(s).map_err(|e| DeError::Custom(e.to_string()))?;
+        let ast = parse_molecule_dsl(s).map_err(|e| DeError::subgrammar("molecule", e))?;
         Self::from_ast(ast, &MoleculeDslConfig::zeroed())
-            .map_err(|e| DeError::Custom(e.to_string()))
+            .map_err(|e| DeError::subgrammar("molecule", e))
     }
 }
 

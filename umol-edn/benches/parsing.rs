@@ -344,7 +344,7 @@ fn bench_map_lookup(c: &mut Criterion) {
         let (kw_map, kw_keys) = make_keyword_map(size);
         let (mixed_map, mixed_keys) = make_mixed_map(size);
 
-        group.bench_function(&format!("get_keyword_{size}"), |b| {
+        group.bench_function(format!("get_keyword_{size}"), |b| {
             b.iter(|| {
                 for k in &kw_keys {
                     black_box(kw_map.get_ref(EdnKeyRef::keyword(k)));
@@ -352,7 +352,7 @@ fn bench_map_lookup(c: &mut Criterion) {
             })
         });
 
-        group.bench_function(&format!("get_ref_mixed_{size}"), |b| {
+        group.bench_function(format!("get_ref_mixed_{size}"), |b| {
             b.iter(|| {
                 for k in &mixed_keys {
                     black_box(mixed_map.get_ref(EdnKeyRef::from(k)));
@@ -360,7 +360,7 @@ fn bench_map_lookup(c: &mut Criterion) {
             })
         });
 
-        group.bench_function(&format!("get_exact_mixed_{size}"), |b| {
+        group.bench_function(format!("get_exact_mixed_{size}"), |b| {
             b.iter(|| {
                 for k in &mixed_keys {
                     black_box(mixed_map.get(k));
@@ -369,7 +369,7 @@ fn bench_map_lookup(c: &mut Criterion) {
         });
 
         let miss_keys: Vec<String> = (0..size).map(|i| format!("miss-{i}")).collect();
-        group.bench_function(&format!("get_ref_miss_{size}"), |b| {
+        group.bench_function(format!("get_ref_miss_{size}"), |b| {
             b.iter(|| {
                 for k in &miss_keys {
                     black_box(kw_map.get_ref(EdnKeyRef::keyword(k)));
@@ -390,9 +390,10 @@ const VALUE_MIXED: &str = r#"{:name :salt
                               :nested {:k1 1 :k2 [2 3] :k3 #{:x :y}}}"#;
 
 fn permissive_config() -> ParseConfig {
-    let mut cfg = ParseConfig::default();
-    cfg.allow_unknown_tags = true;
-    cfg
+    ParseConfig {
+        allow_unknown_tags: true,
+        ..Default::default()
+    }
 }
 
 fn bench_value_native(c: &mut Criterion) {

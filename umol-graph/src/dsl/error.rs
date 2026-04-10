@@ -3,32 +3,82 @@
 use nom::error::{ErrorKind as NomErrorKind, ParseError as NomParseError};
 use thiserror::Error;
 use umol_data::SpinStateError;
-use umol_edn::EdnError;
+use umol_edn::{EdnError, ParseError as EdnParseError};
+
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum AtomDslError {
+    #[error("Invalid atom element: {0}")]
+    InvalidElement(String),
+    #[error("Invalid isotope: {0}")]
+    InvalidIsotope(String),
+    #[error("Invalid charge: {0}")]
+    InvalidCharge(String),
+    #[error("Invalid implicit hydrogens: {0}")]
+    InvalidImplicitHydrogens(String),
+    #[error("Invalid aromatic valence: {0}")]
+    InvalidAromaticValence(String),
+    #[error("Invalid value: {0}")]
+    InvalidValue(String),
+    #[error("Unknown atom predicate: {0}")]
+    UnknownAtomPredicate(String),
+    #[error("Duplicate {0} atom predicate")]
+    DuplicateAtomPredicate(String),
+    #[error("Trailing input: {0:?}")]
+    TrailingInput(String),
+    #[error("Incomplete input")]
+    Incomplete,
+    #[error("Nom error: {0:?}")]
+    NomError(NomErrorKind),
+}
+
+impl<I> NomParseError<I> for AtomDslError {
+    fn from_error_kind(_input: I, kind: NomErrorKind) -> Self {
+        AtomDslError::NomError(kind)
+    }
+
+    fn append(_input: I, _kind: NomErrorKind, other: Self) -> Self {
+        other
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum BondDslError {
+    #[error("Invalid bond order: {0}")]
+    InvalidBondOrder(String),
+    #[error("Invalid charge: {0}")]
+    InvalidCharge(String),
+    #[error("Unknown bond predicate: {0}")]
+    UnknownBondPredicate(String),
+    #[error("Duplicate {0} bond predicate")]
+    DuplicateBondPredicate(String),
+    #[error("Invalid value: {0}")]
+    InvalidValue(String),
+    #[error("Trailing input: {0:?}")]
+    TrailingInput(String),
+    #[error("Incomplete input")]
+    Incomplete,
+    #[error("Nom error: {0:?}")]
+    NomError(NomErrorKind),
+}
+
+impl<I> NomParseError<I> for BondDslError {
+    fn from_error_kind(_input: I, kind: NomErrorKind) -> Self {
+        BondDslError::NomError(kind)
+    }
+
+    fn append(_input: I, _kind: NomErrorKind, other: Self) -> Self {
+        other
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ParseError {
     #[error("Invalid number")]
     InvalidNumber,
-    #[error("Invalid bond order: {0}")]
-    InvalidBondOrder(String),
-    #[error("Unknown bond predicate: {0}")]
-    UnknownBondPredicate(String),
-    #[error("Duplicate {0} bond predicate")]
-    DuplicateBondPredicate(String),
-    #[error("Invalid bond data {0}")]
-    InvalidBondData(String),
-    #[error("Incomplete input")]
-    Incomplete,
     #[error("Trailing input: {0:?}")]
     TrailingInput(String),
     #[error("Invalid value: {0}")]
     InvalidValue(String),
-    #[error("Invalid atom element: {0}")]
-    InvalidElement(String),
-    #[error("Unknown atom predicate: {0}")]
-    UnknownAtomPredicate(String),
-    #[error("Duplicate {0} atom predicate")]
-    DuplicateAtomPredicate(String),
     #[error("Nom error: {0:?}")]
     NomError(NomErrorKind),
     #[error("EDN parse error: {0}")]
@@ -51,24 +101,28 @@ pub enum ParseError {
     UnknownAlias(String),
     #[error("Invalid spin state: {0}")]
     InvalidSpinState(#[from] SpinStateError),
+    #[error("Incomplete input")]
+    Incomplete,
+}
+
+impl From<AtomDslError> for ParseError {
+    fn from(e: AtomDslError) -> Self {
+        ParseError::InvalidAtomSpec(e.to_string())
+    }
+}
+
+impl From<BondDslError> for ParseError {
+    fn from(e: BondDslError) -> Self {
+        ParseError::InvalidBondSpec(e.to_string())
+    }
 }
 
 impl From<EdnError> for ParseError {
     fn from(e: EdnError) -> Self {
         match &e {
-            EdnError::Parse(umol_edn::ParseError::UnexpectedEof { .. }) => ParseError::Incomplete,
+            EdnError::Parse(EdnParseError::UnexpectedEof { .. }) => ParseError::Incomplete,
             _ => ParseError::EdnParse(e.to_string()),
         }
-    }
-}
-
-impl<I> NomParseError<I> for ParseError {
-    fn from_error_kind(_input: I, kind: NomErrorKind) -> Self {
-        ParseError::NomError(kind)
-    }
-
-    fn append(_input: I, _kind: NomErrorKind, other: Self) -> Self {
-        other
     }
 }
 

@@ -164,9 +164,9 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[rstest]
-    #[case("123456789012345678901234567890", "123456789012345678901234567890N")]
-    #[case("-17", "-17N")]
-    #[case("0", "0N")]
+    #[case::large_positive("123456789012345678901234567890", "123456789012345678901234567890N")]
+    #[case::negative("-17", "-17N")]
+    #[case::zero("0", "0N")]
     fn test_edn_bigint_serialize(#[case] input: &str, #[case] expected: &str) {
         let n = EdnBigInt::new(BigInt::from_str(input).unwrap());
         assert_eq!(to_string(&n).unwrap(), expected);

@@ -82,7 +82,7 @@ fn string_strategy() -> impl Strategy<Value = String> {
                 Just('\n'),
                 Just('\r'),
                 Just('\t'),
-                (0x20u32..0x7Fu32).prop_filter_map("printable", |cp| char::from_u32(cp)),
+                (0x20u32..0x7Fu32).prop_filter_map("printable", char::from_u32),
             ],
             1..15,
         )
@@ -94,7 +94,7 @@ fn string_strategy() -> impl Strategy<Value = String> {
                 Just('\u{03B1}'), // α
                 Just('\u{4E16}'), // 世
                 Just('\u{1F600}'), // 😀
-                (0x80u32..0x800u32).prop_filter_map("valid", |cp| char::from_u32(cp)),
+                (0x80u32..0x800u32).prop_filter_map("valid", char::from_u32),
             ],
             1..10,
         )
@@ -110,7 +110,7 @@ fn edn_leaf() -> impl Strategy<Value = Edn<'static>> {
         (-1e15f64..1e15f64).prop_map(Edn::Float),
         // Printable ASCII.
         (0x21u32..0x7Fu32)
-            .prop_filter_map("valid char", |cp| char::from_u32(cp))
+            .prop_filter_map("valid char", char::from_u32)
             .prop_map(Edn::Char),
         // Named characters.
         prop::sample::select(&['\n', '\r', ' ', '\t'][..]).prop_map(Edn::Char),

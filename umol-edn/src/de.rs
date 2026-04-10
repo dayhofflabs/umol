@@ -769,44 +769,46 @@ mod tests {
     /// for `#Variant` enum dispatch where the variant names are not
     /// registered as tag readers.
     fn from_str_permissive<'a, T: Deserialize<'a>>(s: &'a str) -> T {
-        let mut config = ParseConfig::default();
-        config.allow_unknown_tags = true;
+        let config = ParseConfig {
+            allow_unknown_tags: true,
+            ..Default::default()
+        };
         from_str_with(s, &config).unwrap()
     }
 
     #[rstest]
-    #[case("12", 12i64)]
-    #[case("-1", -1i64)]
-    #[case("0", 0i64)]
+    #[case::positive("12", 12i64)]
+    #[case::negative("-1", -1i64)]
+    #[case::zero("0", 0i64)]
     fn test_deserialize_i64(#[case] input: &str, #[case] expected: i64) {
         assert_eq!(from_str::<i64>(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("12", 12u32)]
-    #[case("0", 0u32)]
+    #[case::positive("12", 12u32)]
+    #[case::zero("0", 0u32)]
     fn test_deserialize_u32(#[case] input: &str, #[case] expected: u32) {
         assert_eq!(from_str::<u32>(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("256")]
-    #[case("-1")]
+    #[case::overflow("256")]
+    #[case::negative("-1")]
     fn test_deserialize_u8_error(#[case] input: &str) {
         assert!(from_str::<u8>(input).is_err());
     }
 
     #[rstest]
-    #[case("3.14", 3.14f64)]
-    #[case("12", 12.0f64)]
-    #[case("-0.5", -0.5f64)]
+    #[case::fractional("2.5", 2.5f64)]
+    #[case::from_int("12", 12.0f64)]
+    #[case::negative("-0.5", -0.5f64)]
     fn test_deserialize_f64(#[case] input: &str, #[case] expected: f64) {
         assert!((from_str::<f64>(input).unwrap() - expected).abs() < 1e-10);
     }
 
     #[rstest]
-    #[case("true", true)]
-    #[case("false", false)]
+    #[case::true_val("true", true)]
+    #[case::false_val("false", false)]
     fn test_deserialize_bool(#[case] input: &str, #[case] expected: bool) {
         assert_eq!(from_str::<bool>(input).unwrap(), expected);
     }
@@ -817,9 +819,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(r#""hello""#, "hello")]
-    #[case(r#""with \"quotes\"""#, "with \"quotes\"")]
-    #[case(r#""line\nbreak""#, "line\nbreak")]
+    #[case::simple(r#""hello""#, "hello")]
+    #[case::quotes(r#""with \"quotes\"""#, "with \"quotes\"")]
+    #[case::newline(r#""line\nbreak""#, "line\nbreak")]
     fn test_deserialize_string(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(from_str::<String>(input).unwrap(), expected);
     }
@@ -830,16 +832,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case("12", Some(12i64))]
-    #[case("nil", None)]
+    #[case::some("12", Some(12i64))]
+    #[case::none("nil", None)]
     fn test_deserialize_option(#[case] input: &str, #[case] expected: Option<i64>) {
         assert_eq!(from_str::<Option<i64>>(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("[1 2 3]", vec![1, 2, 3])]
-    #[case("(1 2 3)", vec![1, 2, 3])]
-    #[case("[]", vec![])]
+    #[case::vector("[1 2 3]", vec![1, 2, 3])]
+    #[case::list("(1 2 3)", vec![1, 2, 3])]
+    #[case::empty("[]", vec![])]
     fn test_deserialize_vec(#[case] input: &str, #[case] expected: Vec<i64>) {
         assert_eq!(from_str::<Vec<i64>>(input).unwrap(), expected);
     }
@@ -897,9 +899,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(":red", Color::Red)]
-    #[case(":green", Color::Green)]
-    #[case(":blue", Color::Blue)]
+    #[case::red(":red", Color::Red)]
+    #[case::green(":green", Color::Green)]
+    #[case::blue(":blue", Color::Blue)]
     fn test_deserialize_enum(#[case] input: &str, #[case] expected: Color) {
         assert_eq!(from_str::<Color>(input).unwrap(), expected);
     }
@@ -977,15 +979,15 @@ mod tests {
 
     #[test]
     fn test_deserialize_f32() {
-        assert!((from_str::<f32>("3.14").unwrap() - 3.14f32).abs() < 1e-5);
+        assert!((from_str::<f32>("2.5").unwrap() - 2.5f32).abs() < 1e-5);
         assert!((from_str::<f32>("12").unwrap() - 12.0f32).abs() < 1e-5);
     }
 
     #[rstest]
-    #[case("1 2 3", vec![1, 2, 3])]
-    #[case("  1  2  3  ", vec![1, 2, 3])]
-    #[case("", vec![])]
-    #[case("7", vec![7])]
+    #[case::three_values("1 2 3", vec![1, 2, 3])]
+    #[case::extra_whitespace("  1  2  3  ", vec![1, 2, 3])]
+    #[case::empty("", vec![])]
+    #[case::single("7", vec![7])]
     fn test_stream_deserializer_i64(#[case] input: &str, #[case] expected: Vec<i64>) {
         let results: Result<Vec<i64>, _> = StreamDeserializer::new(input).collect();
         assert_eq!(results.unwrap(), expected);
@@ -1045,9 +1047,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Shape::Circle(3.14), "#Circle 3.14")]
-    #[case(Shape::Rect(1.0, 2.0), "#Rect [1.0 2.0]")]
-    #[case(Shape::Named { width: 5.0, height: 10.0 }, "#Named {:width 5.0 :height 10.0}")]
+    #[case::circle(Shape::Circle(2.5), "#Circle 2.5")]
+    #[case::rect(Shape::Rect(1.0, 2.0), "#Rect [1.0 2.0]")]
+    #[case::named(Shape::Named { width: 5.0, height: 10.0 }, "#Named {:width 5.0 :height 10.0}")]
     fn test_enum_tagged_roundtrip(#[case] value: Shape, #[case] expected_edn: &str) {
         let serialized = to_string(&value).unwrap();
         assert_eq!(serialized, expected_edn);
@@ -1067,13 +1069,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case("#Red 1")]
-    #[case("#Red {:a 1}")]
-    #[case("#Red [1 2]")]
-    #[case("#Red \"hello\"")]
+    #[case::int("#Red 1")]
+    #[case::map("#Red {:a 1}")]
+    #[case::vector("#Red [1 2]")]
+    #[case::string("#Red \"hello\"")]
     fn test_deserialize_tagged_unit_variant_error(#[case] input: &str) {
-        let mut config = ParseConfig::default();
-        config.allow_unknown_tags = true;
+        let config = ParseConfig {
+            allow_unknown_tags: true,
+            ..Default::default()
+        };
         assert!(from_str_with::<UnitEnum>(input, &config).is_err());
     }
 
@@ -1102,8 +1106,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(7i64, 7i8)]
-    #[case(-1, -1i8)]
+    #[case::positive(7i64, 7i8)]
+    #[case::negative(-1, -1i8)]
     fn test_from_value_i8(#[case] input: i64, #[case] expected: i8) {
         assert_eq!(from_value::<i8>(Edn::Int(input)).unwrap(), expected);
     }
@@ -1115,7 +1119,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(300i64, 300i16)]
+    #[case::in_range(300i64, 300i16)]
     fn test_from_value_i16(#[case] input: i64, #[case] expected: i16) {
         assert_eq!(from_value::<i16>(Edn::Int(input)).unwrap(), expected);
     }
@@ -1142,8 +1146,8 @@ mod tests {
 
     #[test]
     fn test_from_value_f32() {
-        let v = from_value::<f32>(Edn::Float(3.14)).unwrap();
-        assert!((v - 3.14f32).abs() < 1e-5);
+        let v = from_value::<f32>(Edn::Float(2.5)).unwrap();
+        assert!((v - 2.5f32).abs() < 1e-5);
         let v = from_value::<f32>(Edn::Int(7)).unwrap();
         assert!((v - 7.0f32).abs() < 1e-5);
     }
@@ -1183,8 +1187,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Edn::Symbol(EdnSymbol::new("red")))]
-    #[case(Edn::Str(Cow::Borrowed("red")))]
+    #[case::symbol(Edn::Symbol(EdnSymbol::new("red")))]
+    #[case::string(Edn::Str(Cow::Borrowed("red")))]
     fn test_from_value_enum_as_red(#[case] input: Edn<'static>) {
         assert_eq!(
             Color::deserialize(EdnDeserializer(input)).unwrap(),
@@ -1218,8 +1222,8 @@ mod tests {
 
     #[test]
     fn test_from_value_bool() {
-        assert_eq!(from_value::<bool>(Edn::Bool(true)).unwrap(), true);
-        assert_eq!(from_value::<bool>(Edn::Bool(false)).unwrap(), false);
+        assert!(from_value::<bool>(Edn::Bool(true)).unwrap());
+        assert!(!from_value::<bool>(Edn::Bool(false)).unwrap());
     }
 
     #[test]
@@ -1238,8 +1242,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case("(1 2 3)", vec![1, 2, 3])]
-    #[case("[4 5]", vec![4, 5])]
+    #[case::list("(1 2 3)", vec![1, 2, 3])]
+    #[case::vector("[4 5]", vec![4, 5])]
     fn test_from_value_vec(#[case] input: &str, #[case] expected: Vec<i64>) {
         let val = read_string(input).unwrap();
         let v: Vec<i64> = from_value(val).unwrap();
@@ -1247,8 +1251,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Edn::Keyword(EdnKeyword::new("hello")), "hello")]
-    #[case(Edn::Symbol(EdnSymbol::new("world")), "world")]
+    #[case::keyword(Edn::Keyword(EdnKeyword::new("hello")), "hello")]
+    #[case::symbol(Edn::Symbol(EdnSymbol::new("world")), "world")]
     fn test_from_value_atom_as_string(#[case] input: Edn<'static>, #[case] expected: &str) {
         let v = from_value::<String>(input).unwrap();
         assert_eq!(v, expected);
@@ -1256,13 +1260,13 @@ mod tests {
 
     #[test]
     fn test_from_value_float() {
-        let v = from_value::<f64>(Edn::Float(2.718)).unwrap();
-        assert!((v - 2.718).abs() < 1e-10);
+        let v = from_value::<f64>(Edn::Float(1.618)).unwrap();
+        assert!((v - 1.618).abs() < 1e-10);
     }
 
     #[rstest]
-    #[case(Edn::Int(7), Some(7))]
-    #[case(Edn::Nil, None)]
+    #[case::some(Edn::Int(7), Some(7))]
+    #[case::none(Edn::Nil, None)]
     fn test_from_value_option(#[case] input: Edn<'static>, #[case] expected: Option<i64>) {
         assert_eq!(from_value::<Option<i64>>(input).unwrap(), expected);
     }

@@ -6,5 +6,4 @@ pub mod bond;
 pub mod config;
 pub mod error;
 pub mod molecule;
-pub mod predicates;
 pub mod value;

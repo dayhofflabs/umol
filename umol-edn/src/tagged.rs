@@ -131,8 +131,10 @@ mod tests {
     /// names that have no registered reader.
     #[cfg(feature = "serde")]
     fn from_str_permissive<'a, T: ::serde::Deserialize<'a>>(s: &'a str) -> T {
-        let mut config = ParseConfig::default();
-        config.allow_unknown_tags = true;
+        let config = ParseConfig {
+            allow_unknown_tags: true,
+            ..Default::default()
+        };
         from_str_with(s, &config).unwrap()
     }
 

@@ -130,67 +130,67 @@ mod tests {
     use crate::edn::{Edn, EdnKeyword, EdnSymbol};
 
     #[rstest]
-    #[case(Edn::Nil, "nil")]
-    #[case(Edn::Bool(true), "true")]
-    #[case(Edn::Bool(false), "false")]
-    #[case(Edn::Int(12), "12")]
-    #[case(Edn::Int(-1), "-1")]
-    #[case(Edn::Int(0), "0")]
+    #[case::nil(Edn::Nil, "nil")]
+    #[case::bool_true(Edn::Bool(true), "true")]
+    #[case::bool_false(Edn::Bool(false), "false")]
+    #[case::positive_int(Edn::Int(12), "12")]
+    #[case::negative_int(Edn::Int(-1), "-1")]
+    #[case::zero(Edn::Int(0), "0")]
     fn test_display_primitives(#[case] edn: Edn<'_>, #[case] expected: &str) {
         assert_eq!(edn.to_string(), expected);
     }
 
     #[rstest]
-    #[case(3.14, "3.14")]
-    #[case(1.0, "1.0")]
-    #[case(12.0, "12.0")]
-    #[case(-0.5, "-0.5")]
+    #[case::fractional(2.5, "2.5")]
+    #[case::one(1.0, "1.0")]
+    #[case::whole(12.0, "12.0")]
+    #[case::negative(-0.5, "-0.5")]
     fn test_display_float(#[case] v: f64, #[case] expected: &str) {
         assert_eq!(Edn::Float(v).to_string(), expected);
     }
 
     #[rstest]
-    #[case('a', "\\a")]
-    #[case('Z', "\\Z")]
-    #[case('\n', "\\newline")]
-    #[case('\r', "\\return")]
-    #[case(' ', "\\space")]
-    #[case('\t', "\\tab")]
-    #[case('\u{000C}', "\\u000C")]
-    #[case('\u{0008}', "\\u0008")]
+    #[case::lowercase('a', "\\a")]
+    #[case::uppercase('Z', "\\Z")]
+    #[case::newline('\n', "\\newline")]
+    #[case::return_char('\r', "\\return")]
+    #[case::space(' ', "\\space")]
+    #[case::tab('\t', "\\tab")]
+    #[case::formfeed('\u{000C}', "\\u000C")]
+    #[case::backspace('\u{0008}', "\\u0008")]
     fn test_display_char(#[case] c: char, #[case] expected: &str) {
         assert_eq!(Edn::Char(c).to_string(), expected);
     }
 
     #[rstest]
-    #[case("hello", r#""hello""#)]
-    #[case("with \"quotes\"", r#""with \"quotes\"""#)]
-    #[case("line\nbreak", r#""line\nbreak""#)]
-    #[case("tab\there", r#""tab\there""#)]
-    #[case("back\\slash", r#""back\\slash""#)]
+    #[case::simple("hello", r#""hello""#)]
+    #[case::quotes("with \"quotes\"", r#""with \"quotes\"""#)]
+    #[case::newline("line\nbreak", r#""line\nbreak""#)]
+    #[case::tab("tab\there", r#""tab\there""#)]
+    #[case::backslash("back\\slash", r#""back\\slash""#)]
     fn test_display_string(#[case] s: &str, #[case] expected: &str) {
         assert_eq!(Edn::Str(Cow::Borrowed(s)).to_string(), expected);
     }
 
     #[rstest]
-    #[case(EdnKeyword::new("foo"), ":foo")]
-    #[case(EdnKeyword::namespaced("ns", "bar"), ":ns/bar")]
+    #[case::bare(EdnKeyword::new("foo"), ":foo")]
+    #[case::namespaced(EdnKeyword::namespaced("ns", "bar"), ":ns/bar")]
     fn test_display_keyword(#[case] k: EdnKeyword<'_>, #[case] expected: &str) {
         assert_eq!(Edn::Keyword(k).to_string(), expected);
     }
 
     #[rstest]
-    #[case(EdnSymbol::new("foo"), "foo")]
-    #[case(EdnSymbol::namespaced("ns", "bar"), "ns/bar")]
+    #[case::bare(EdnSymbol::new("foo"), "foo")]
+    #[case::namespaced(EdnSymbol::namespaced("ns", "bar"), "ns/bar")]
     fn test_display_symbol(#[case] s: EdnSymbol<'_>, #[case] expected: &str) {
         assert_eq!(Edn::Symbol(s).to_string(), expected);
     }
 
     #[rstest]
-    #[case(Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()), "(1 2 3)")]
-    #[case(Edn::List(vec![].into()), "()")]
-    #[case(Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()), "[1 2 3]")]
-    #[case(Edn::Vector(vec![].into()), "[]")]
+    #[case::list(Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()), "(1 2 3)")]
+    #[case::empty_list(Edn::List(vec![].into()), "()")]
+    #[case::vector(Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()), "[1 2 3]")]
+    #[case::empty_vector(Edn::Vector(vec![].into()), "[]")]
     fn test_display_seq(#[case] edn: Edn<'_>, #[case] expected: &str) {
         assert_eq!(edn.to_string(), expected);
     }
@@ -247,10 +247,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case("my tag")]
-    #[case("")]
-    #[case("123")]
-    #[case("/bad")]
+    #[case::space_in_tag("my tag")]
+    #[case::empty("")]
+    #[case::numeric("123")]
+    #[case::leading_slash("/bad")]
     fn test_display_tagged_invalid(#[case] tag: &str) {
         use std::fmt::Write;
         let tagged = Edn::Tagged(Cow::Borrowed(tag), Box::new(Edn::Nil));

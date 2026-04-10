@@ -441,7 +441,7 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<MoleculeInp
             "spin" => {
                 let s = de.read_string_or_keyword()?;
                 spin = Some(
-                    SpinState::from_str(s.as_ref()).map_err(|e| DeError::Custom(e.to_string()))?,
+                    SpinState::from_str(s.as_ref()).map_err(|e| DeError::subgrammar("spin", e))?,
                 );
             }
             "atom-aliases" | "aliases" => {
@@ -531,7 +531,7 @@ fn read_bond_spec(de: &mut EdnStreamDeserializer<'_>) -> Result<BondAst, EdnErro
     if let Some(ast) = aliases.get_by_left(s.as_ref()) {
         return Ok(ast.clone());
     }
-    BondAst::from_str(s.as_ref()).map_err(|e| DeError::Custom(e.to_string()).into())
+    BondAst::from_str(s.as_ref()).map_err(|e| DeError::subgrammar("bond", e).into())
 }
 
 fn read_localized_bond(de: &mut EdnStreamDeserializer<'_>) -> Result<LocalizedBond, EdnError> {
@@ -954,7 +954,7 @@ impl<'de> FromEdn<'de> for MoleculeInput {
         let charge: Option<i64> = h.optional("charge")?;
         let spin_str: Option<String> = h.optional("spin")?;
         let spin = match spin_str {
-            Some(s) => Some(SpinState::from_str(&s).map_err(|e| DeError::Custom(e.to_string()))?),
+            Some(s) => Some(SpinState::from_str(&s).map_err(|e| DeError::subgrammar("spin", e))?),
             None => None,
         };
 
@@ -990,7 +990,7 @@ impl<'de> FromEdn<'de> for MoleculeAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         MoleculeInput::from_edn(edn)?
             .into_ast()
-            .map_err(|e| DeError::Custom(e.to_string()))
+            .map_err(|e| DeError::subgrammar("molecule", e))
     }
 }
 
@@ -1007,7 +1007,7 @@ mod tests {
     use umol_data::{e, Element};
 
     use super::super::ast::{FromAst, ToAst};
-    use super::super::predicates::{ElementExpr, HydrogenExpr};
+    use super::super::atom::{ElementExpr, HydrogenExpr};
     use super::super::value::ValueAst;
     use super::*;
     use crate::graph_ir::molecule_builder::MoleculeBuilder;

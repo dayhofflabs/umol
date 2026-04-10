@@ -17,7 +17,6 @@
 //!
 //! [`Edn`]: crate::edn::Edn
 
-#[cfg(feature = "serde")]
 use std::fmt;
 
 #[cfg(feature = "serde")]
@@ -75,6 +74,12 @@ pub enum ParseError {
     RecursionLimit { offset: usize },
     #[error("invalid UTF-8 at byte {offset}")]
     InvalidUtf8 { offset: usize },
+    #[error("tag reader '{tag}' failed at byte {offset}: {message}")]
+    TagReaderFailed {
+        offset: usize,
+        tag: String,
+        message: String,
+    },
 }
 
 /// Errors raised while turning an [`Edn`] tree into a Rust value.
@@ -107,8 +112,27 @@ pub enum DeError {
     },
     #[error("unsupported: {0}")]
     Unsupported(&'static str),
+    /// A domain-specific subgrammar embedded in a string or tagged literal
+    /// failed to parse or validate.
+    #[error("{grammar}: {message}")]
+    Subgrammar {
+        grammar: &'static str,
+        message: String,
+        path: Vec<String>,
+    },
     #[error("{0}")]
     Custom(String),
+}
+
+impl DeError {
+    /// Convenience constructor for subgrammar errors.
+    pub fn subgrammar(grammar: &'static str, err: impl fmt::Display) -> Self {
+        Self::Subgrammar {
+            grammar,
+            message: err.to_string(),
+            path: Vec::new(),
+        }
+    }
 }
 
 /// Errors raised while turning a Rust value into EDN via the serde

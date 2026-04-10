@@ -227,7 +227,7 @@ impl<'de> FromEdn<'de> for BondPattern {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = BondAst::from_edn(edn)?;
         Self::from_ast(ast, &BondDslConfig::open())
-            .map_err(|e| DeError::Custom(e.to_string()))
+            .map_err(|e| DeError::subgrammar("bond", e))
     }
 }
 

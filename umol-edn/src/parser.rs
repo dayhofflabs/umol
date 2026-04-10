@@ -695,58 +695,58 @@ mod tests {
     use crate::reader::{read_all, read_string, read_string_with, Reader};
 
     #[rstest]
-    #[case("nil", Edn::Nil)]
-    #[case("true", Edn::Bool(true))]
-    #[case("false", Edn::Bool(false))]
+    #[case::nil("nil", Edn::Nil)]
+    #[case::true_val("true", Edn::Bool(true))]
+    #[case::false_val("false", Edn::Bool(false))]
     fn test_read_string_literals(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("0", 0)]
-    #[case("12", 12)]
-    #[case("-1", -1)]
-    #[case("+5", 5)]
-    #[case("9223372036854775807", i64::MAX)]
-    #[case("-9223372036854775808", i64::MIN)]
+    #[case::zero("0", 0)]
+    #[case::positive("12", 12)]
+    #[case::negative("-1", -1)]
+    #[case::plus_sign("+5", 5)]
+    #[case::max("9223372036854775807", i64::MAX)]
+    #[case::min("-9223372036854775808", i64::MIN)]
     fn test_read_string_int(#[case] input: &str, #[case] expected: i64) {
         assert_eq!(read_string(input).unwrap(), Edn::Int(expected));
     }
 
     #[rstest]
-    #[case("1.0", 1.0)]
-    #[case("-3.14", -3.14)]
-    #[case("1e10", 1e10)]
-    #[case("1.5e-3", 1.5e-3)]
-    #[case("1E10", 1e10)]
+    #[case::one("1.0", 1.0)]
+    #[case::negative("-2.5", -2.5)]
+    #[case::exponent("1e10", 1e10)]
+    #[case::negative_exponent("1.5e-3", 1.5e-3)]
+    #[case::upper_e("1E10", 1e10)]
     fn test_read_string_float(#[case] input: &str, #[case] expected: f64) {
         assert_eq!(read_string(input).unwrap(), Edn::Float(expected));
     }
 
     #[rstest]
-    #[case("##NaN")]
-    #[case("##Inf")]
-    #[case("##-Inf")]
-    #[case("8E1313")]
-    #[case("1e999")]
-    #[case("-1e999")]
+    #[case::nan("##NaN")]
+    #[case::inf("##Inf")]
+    #[case::neg_inf("##-Inf")]
+    #[case::huge_exponent("8E1313")]
+    #[case::overflow("1e999")]
+    #[case::neg_overflow("-1e999")]
     fn test_read_string_error_special_float(#[case] input: &str) {
         assert!(read_string(input).is_err());
     }
 
     #[rstest]
-    #[case(r#""""#, "")]
-    #[case(r#""hello""#, "hello")]
-    #[case(r#""hello world""#, "hello world")]
-    #[case(r#""line\nbreak""#, "line\nbreak")]
-    #[case(r#""tab\there""#, "tab\there")]
-    #[case(r#""quote\"here""#, "quote\"here")]
-    #[case(r#""back\\slash""#, "back\\slash")]
-    #[case(r#""cr\rhere""#, "cr\rhere")]
-    #[case("\"é\"", "é")]
-    #[case("\"α\"", "α")]
-    #[case("\"世界\"", "世界")]
-    #[case("\"hello é world\"", "hello é world")]
+    #[case::empty(r#""""#, "")]
+    #[case::simple(r#""hello""#, "hello")]
+    #[case::with_space(r#""hello world""#, "hello world")]
+    #[case::newline(r#""line\nbreak""#, "line\nbreak")]
+    #[case::tab(r#""tab\there""#, "tab\there")]
+    #[case::quote(r#""quote\"here""#, "quote\"here")]
+    #[case::backslash(r#""back\\slash""#, "back\\slash")]
+    #[case::carriage_return(r#""cr\rhere""#, "cr\rhere")]
+    #[case::accent("\"é\"", "é")]
+    #[case::greek("\"α\"", "α")]
+    #[case::cjk("\"世界\"", "世界")]
+    #[case::mixed_unicode("\"hello é world\"", "hello é world")]
     fn test_read_string_str(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             read_string(input).unwrap(),
@@ -767,28 +767,28 @@ mod tests {
     }
 
     #[rstest]
-    #[case(r#""\b""#)]
-    #[case(r#""\f""#)]
+    #[case::backspace(r#""\b""#)]
+    #[case::formfeed(r#""\f""#)]
     fn test_read_string_error_invalid_string_escape(#[case] input: &str) {
         assert!(read_string(input).is_err());
     }
 
     #[rstest]
-    #[case("\\a", 'a')]
-    #[case("\\Z", 'Z')]
-    #[case("\\newline", '\n')]
-    #[case("\\return", '\r')]
-    #[case("\\space", ' ')]
-    #[case("\\tab", '\t')]
-    #[case("\\u0041", 'A')]
+    #[case::lowercase("\\a", 'a')]
+    #[case::uppercase("\\Z", 'Z')]
+    #[case::newline("\\newline", '\n')]
+    #[case::return_char("\\return", '\r')]
+    #[case::space("\\space", ' ')]
+    #[case::tab("\\tab", '\t')]
+    #[case::unicode_escape("\\u0041", 'A')]
     fn test_read_string_char(#[case] input: &str, #[case] expected: char) {
         assert_eq!(read_string(input).unwrap(), Edn::Char(expected));
     }
 
     #[rstest]
-    #[case(":foo", "foo")]
-    #[case(":ns/name", "ns/name")]
-    #[case(":a.b/c", "a.b/c")]
+    #[case::bare(":foo", "foo")]
+    #[case::namespaced(":ns/name", "ns/name")]
+    #[case::dotted_ns(":a.b/c", "a.b/c")]
     fn test_read_string_keyword(#[case] input: &str, #[case] expected_name: &str) {
         let val = read_string(input).unwrap();
         match &val {
@@ -809,9 +809,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case("foo", "foo")]
-    #[case("ns/name", "ns/name")]
-    #[case("my.ns/sym", "my.ns/sym")]
+    #[case::bare("foo", "foo")]
+    #[case::namespaced("ns/name", "ns/name")]
+    #[case::dotted_ns("my.ns/sym", "my.ns/sym")]
     fn test_read_string_symbol(#[case] input: &str, #[case] expected_name: &str) {
         let val = read_string(input).unwrap();
         match &val {
@@ -821,16 +821,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case("()", Edn::List(vec![].into()))]
-    #[case("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
-    #[case("(nil true)", Edn::List(vec![Edn::Nil, Edn::Bool(true)].into()))]
+    #[case::empty("()", Edn::List(vec![].into()))]
+    #[case::three_ints("(1 2 3)", Edn::List(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+    #[case::mixed("(nil true)", Edn::List(vec![Edn::Nil, Edn::Bool(true)].into()))]
     fn test_read_string_list(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("[]", Edn::Vector(vec![].into()))]
-    #[case("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+    #[case::empty("[]", Edn::Vector(vec![].into()))]
+    #[case::three_ints("[1 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
     fn test_read_string_vector(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
@@ -895,31 +895,31 @@ mod tests {
     }
 
     #[rstest]
-    #[case("; comment\n12", Edn::Int(12))]
-    #[case("12 ; trailing", Edn::Int(12))]
+    #[case::leading("; comment\n12", Edn::Int(12))]
+    #[case::trailing("12 ; trailing", Edn::Int(12))]
     fn test_read_string_comment(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("#_ foo 12", Edn::Int(12))]
-    #[case("[1 #_ 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(3)].into()))]
+    #[case::top_level("#_ foo 12", Edn::Int(12))]
+    #[case::in_vector("[1 #_ 2 3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(3)].into()))]
     fn test_read_string_discard(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("  12  ", Edn::Int(12))]
-    #[case("\t12\n", Edn::Int(12))]
-    #[case(",12,", Edn::Int(12))]
-    #[case("[1,,2,,3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+    #[case::spaces("  12  ", Edn::Int(12))]
+    #[case::tab_newline("\t12\n", Edn::Int(12))]
+    #[case::commas(",12,", Edn::Int(12))]
+    #[case::commas_in_vector("[1,,2,,3]", Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
     fn test_read_string_whitespace(#[case] input: &str, #[case] expected: Edn<'_>) {
         assert_eq!(read_string(input).unwrap(), expected);
     }
 
     #[rstest]
-    #[case("", EdnError::Parse(ParseError::UnexpectedEof { offset: 0 }))]
-    #[case("   ", EdnError::Parse(ParseError::UnexpectedEof { offset: 3 }))]
+    #[case::empty("", EdnError::Parse(ParseError::UnexpectedEof { offset: 0 }))]
+    #[case::whitespace_only("   ", EdnError::Parse(ParseError::UnexpectedEof { offset: 3 }))]
     fn test_read_string_error_empty(#[case] input: &str, #[case] expected: EdnError) {
         assert_eq!(read_string(input).unwrap_err(), expected);
     }
@@ -941,14 +941,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case(r#""\q""#, EdnError::Parse(ParseError::InvalidEscape { offset: 1 }))]
-    #[case(r#""\u000G""#, EdnError::Parse(ParseError::InvalidEscape { offset: 1 }))]
+    #[case::bad_letter(r#""\q""#, EdnError::Parse(ParseError::InvalidEscape { offset: 1 }))]
+    #[case::bad_unicode(r#""\u000G""#, EdnError::Parse(ParseError::InvalidEscape { offset: 1 }))]
     fn test_read_string_error_invalid_escape(#[case] input: &str, #[case] expected: EdnError) {
         assert_eq!(read_string(input).unwrap_err(), expected);
     }
 
     #[rstest]
-    #[case(r"\abc", EdnError::Parse(ParseError::InvalidCharLiteral { offset: 1 }))]
+    #[case::multi_char(r"\abc", EdnError::Parse(ParseError::InvalidCharLiteral { offset: 1 }))]
     fn test_read_string_error_invalid_char_literal(
         #[case] input: &str,
         #[case] expected: EdnError,
@@ -971,8 +971,8 @@ mod tests {
 
     #[cfg(not(feature = "bignum"))]
     #[rstest]
-    #[case("12N", EdnError::Parse(ParseError::UnsupportedFeature { offset: 0, feature: "bignum" }))]
-    #[case("12M", EdnError::Parse(ParseError::UnsupportedFeature { offset: 0, feature: "bignum" }))]
+    #[case::bigint("12N", EdnError::Parse(ParseError::UnsupportedFeature { offset: 0, feature: "bignum" }))]
+    #[case::bigdecimal("12M", EdnError::Parse(ParseError::UnsupportedFeature { offset: 0, feature: "bignum" }))]
     fn test_read_string_error_unsupported_feature(#[case] input: &str, #[case] expected: EdnError) {
         assert_eq!(read_string(input).unwrap_err(), expected);
     }
@@ -1060,23 +1060,23 @@ mod tests {
     }
 
     #[rstest]
-    #[case("nil")]
-    #[case("true")]
-    #[case("false")]
-    #[case("12")]
-    #[case("-1")]
-    #[case("1.5")]
-    #[case(":keyword")]
-    #[case(":ns/name")]
-    #[case("symbol")]
-    #[case("()")]
-    #[case("(1 2 3)")]
-    #[case("[]")]
-    #[case("[1 2 3]")]
-    #[case("{}")]
-    #[case("\\a")]
-    #[case("\\newline")]
-    #[case("\\space")]
+    #[case::nil("nil")]
+    #[case::true_val("true")]
+    #[case::false_val("false")]
+    #[case::positive_int("12")]
+    #[case::negative_int("-1")]
+    #[case::float("1.5")]
+    #[case::keyword(":keyword")]
+    #[case::namespaced_keyword(":ns/name")]
+    #[case::symbol("symbol")]
+    #[case::empty_list("()")]
+    #[case::list("(1 2 3)")]
+    #[case::empty_vector("[]")]
+    #[case::vector("[1 2 3]")]
+    #[case::empty_map("{}")]
+    #[case::char("\\a")]
+    #[case::newline("\\newline")]
+    #[case::space("\\space")]
     fn test_roundtrip(#[case] input: &str) {
         let val = read_string(input).unwrap();
         let formatted = val.to_string();
@@ -1137,9 +1137,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(":0")]
-    #[case(":1")]
-    #[case(":123")]
+    #[case::single_digit(":0")]
+    #[case::digit_one(":1")]
+    #[case::multi_digit(":123")]
     fn test_read_string_error_digit_keywords(#[case] input: &str) {
         assert!(read_string(input).is_err());
     }

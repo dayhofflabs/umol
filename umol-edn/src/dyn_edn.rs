@@ -498,8 +498,12 @@ impl<'de> VariantAccess<'de> for ValueCarrierVariantAccess<'de> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     #[cfg(feature = "serde")]
     use rstest::rstest;
+    #[cfg(feature = "serde")]
+    use serde::de::value::{Error as SerdeValueError, I64Deserializer};
 
     use super::*;
     #[cfg(feature = "serde")]
@@ -530,7 +534,7 @@ mod tests {
         assert_eq!(tag.as_ref(), "inst");
         assert_eq!(
             inner.as_ref(),
-            &Edn::Str(std::borrow::Cow::Borrowed("2026-04-08T00:00:00Z"))
+            &Edn::Str(Cow::Borrowed("2026-04-08T00:00:00Z"))
         );
     }
 
@@ -555,14 +559,14 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[rstest]
-    #[case("nil", Edn::Nil)]
-    #[case("true", Edn::Bool(true))]
-    #[case("false", Edn::Bool(false))]
-    #[case("7", Edn::Int(7))]
-    #[case("-3", Edn::Int(-3))]
-    #[case("2.5", Edn::Float(2.5))]
-    #[case(r#""hi""#, Edn::Str(Cow::Borrowed("hi")))]
-    #[case(r#"\a"#, Edn::Char('a'))]
+    #[case::nil("nil", Edn::Nil)]
+    #[case::bool_true("true", Edn::Bool(true))]
+    #[case::bool_false("false", Edn::Bool(false))]
+    #[case::positive_int("7", Edn::Int(7))]
+    #[case::negative_int("-3", Edn::Int(-3))]
+    #[case::float("2.5", Edn::Float(2.5))]
+    #[case::string(r#""hi""#, Edn::Str(Cow::Borrowed("hi")))]
+    #[case::char(r#"\a"#, Edn::Char('a'))]
     fn test_value_roundtrip_primitives(#[case] input: &str, #[case] expected: Edn<'static>) {
         let v: DynEdn = from_str(input).unwrap();
         assert_eq!(v.as_edn(), &expected);
@@ -584,8 +588,8 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[rstest]
-    #[case("sym", "sym", |e: &Edn<'_>| matches!(e, Edn::Symbol(_)))]
-    #[case("[1 2 3]", "[1 2 3]", |e: &Edn<'_>| matches!(e, Edn::Vector(_)))]
+    #[case::symbol("sym", "sym", |e: &Edn<'_>| matches!(e, Edn::Symbol(_)))]
+    #[case::vector("[1 2 3]", "[1 2 3]", |e: &Edn<'_>| matches!(e, Edn::Vector(_)))]
     fn test_value_roundtrip_shape(
         #[case] input: &str,
         #[case] expected: &str,
@@ -732,5 +736,200 @@ mod tests {
         let json = serde_json::to_string(&v).unwrap();
         let back: DynEdn = serde_json::from_str(&json).unwrap();
         assert_eq!(v, back);
+    }
+
+    #[test]
+    fn test_dyn_edn_default() {
+        assert_eq!(DynEdn::default(), DynEdn(Edn::Nil));
+    }
+
+    #[test]
+    fn test_dyn_edn_new() {
+        let v = DynEdn::new(Edn::Int(5));
+        assert_eq!(v.as_edn(), &Edn::Int(5));
+    }
+
+    #[test]
+    fn test_dyn_edn_from_borrowed_edn() {
+        let edn = Edn::Str(Cow::Borrowed("hello"));
+        let v = DynEdn::from(&edn);
+        assert_eq!(v.as_edn(), &Edn::Str(Cow::Owned("hello".to_string())));
+    }
+
+    #[test]
+    fn test_dyn_edn_into_edn() {
+        let v = DynEdn(Edn::Int(8));
+        assert_eq!(v.into_edn(), Edn::Int(8));
+    }
+
+    #[test]
+    fn test_dyn_edn_into_conversion() {
+        let v = DynEdn(Edn::Bool(true));
+        let edn: Edn<'static> = v.into();
+        assert_eq!(edn, Edn::Bool(true));
+    }
+
+    #[test]
+    fn test_dyn_edn_parse_error() {
+        assert!(DynEdn::parse("[unclosed").is_err());
+    }
+
+    #[test]
+    fn test_dyn_edn_from_str_error() {
+        assert!("[unclosed".parse::<DynEdn>().is_err());
+    }
+
+    #[test]
+    fn test_dyn_edn_parse_with() {
+        let config = ParseConfig {
+            allow_unknown_tags: true,
+            ..Default::default()
+        };
+        let v = DynEdn::parse_with("#custom [1 2 3]", &config).unwrap();
+        assert!(matches!(v.as_edn(), Edn::Tagged(_, _)));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_json_null() {
+        let v: DynEdn = serde_json::from_str("null").unwrap();
+        assert_eq!(v.as_edn(), &Edn::Nil);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_json_bool() {
+        let v: DynEdn = serde_json::from_str("true").unwrap();
+        assert_eq!(v.as_edn(), &Edn::Bool(true));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_json_float() {
+        let v: DynEdn = serde_json::from_str("2.5").unwrap();
+        assert_eq!(v.as_edn(), &Edn::Float(2.5));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_json_u64_overflow() {
+        let result: Result<DynEdn, _> = serde_json::from_str("9223372036854775808");
+        assert!(result.is_err());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_json_escaped_string() {
+        let v: DynEdn = serde_json::from_str(r#""line\none""#).unwrap();
+        assert_eq!(v.as_edn(), &Edn::Str(Cow::Owned("line\none".to_string())));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_json_nested() {
+        let v: DynEdn = serde_json::from_str(r#"[1, [2, 3], {"a": true}]"#).unwrap();
+        assert!(matches!(v.as_edn(), Edn::Vector(_)));
+        if let Edn::Vector(items) = v.as_edn() {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(&items[1], Edn::Vector(_)));
+            assert!(matches!(&items[2], Edn::Map(_)));
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_roundtrip_symbol() {
+        let v: DynEdn = from_str("my-sym").unwrap();
+        assert!(matches!(v.as_edn(), Edn::Symbol(_)));
+        let s = to_string(&v).unwrap();
+        assert_eq!(s, "my-sym");
+        let v2: DynEdn = from_str(&s).unwrap();
+        assert_eq!(v, v2);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_json_set_degrades_to_vector() {
+        let v: DynEdn = from_str("#{1 2 3}").unwrap();
+        let json = serde_json::to_string(&v).unwrap();
+        let back: DynEdn = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back.as_edn(), Edn::Vector(_)));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_dyn_edn_json_tagged_degrades() {
+        let v: DynEdn = from_str("#inst \"2026-04-08T00:00:00Z\"").unwrap();
+        let json = serde_json::to_string(&v).unwrap();
+        let back: DynEdn = serde_json::from_str(&json).unwrap();
+        assert!(matches!(back.as_edn(), Edn::Vector(_)));
+    }
+
+    #[test]
+    fn test_dyn_edn_from_owned_edn() {
+        let edn = Edn::Int(5);
+        let v: DynEdn = edn.into();
+        assert_eq!(v.as_edn(), &Edn::Int(5));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_visitor_visit_i128() {
+        use ::serde::de::Visitor;
+        let v = ValueVisitor.visit_i128::<SerdeValueError>(42).unwrap();
+        assert_eq!(v.as_edn(), &Edn::Int(42));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_visitor_visit_i128_overflow() {
+        use ::serde::de::Visitor;
+        assert!(ValueVisitor
+            .visit_i128::<SerdeValueError>(i128::MAX)
+            .is_err());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_visitor_visit_u128() {
+        use ::serde::de::Visitor;
+        let v = ValueVisitor.visit_u128::<SerdeValueError>(42).unwrap();
+        assert_eq!(v.as_edn(), &Edn::Int(42));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_visitor_visit_u128_overflow() {
+        use ::serde::de::Visitor;
+        assert!(ValueVisitor
+            .visit_u128::<SerdeValueError>(u128::MAX)
+            .is_err());
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_visitor_visit_string() {
+        use ::serde::de::Visitor;
+        let v = ValueVisitor
+            .visit_string::<SerdeValueError>("owned".to_string())
+            .unwrap();
+        assert_eq!(v.as_edn(), &Edn::Str(Cow::Owned("owned".to_string())));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_visitor_visit_none() {
+        use ::serde::de::Visitor;
+        let v = ValueVisitor.visit_none::<SerdeValueError>().unwrap();
+        assert_eq!(v.as_edn(), &Edn::Nil);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn test_value_visitor_visit_some() {
+        use ::serde::de::{IntoDeserializer, Visitor};
+        let deser: I64Deserializer<SerdeValueError> = 7i64.into_deserializer();
+        let v = ValueVisitor.visit_some(deser).unwrap();
+        assert_eq!(v.as_edn(), &Edn::Int(7));
     }
 }

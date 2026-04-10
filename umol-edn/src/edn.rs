@@ -862,7 +862,7 @@ mod tests {
 
     #[test]
     fn test_edn_as_f64() {
-        assert_eq!(Edn::Float(3.14).as_f64(), Some(3.14));
+        assert_eq!(Edn::Float(2.5).as_f64(), Some(2.5));
         assert_eq!(Edn::Int(5).as_f64(), Some(5.0));
         assert_eq!(Edn::Bool(true).as_f64(), None);
     }
@@ -960,7 +960,7 @@ mod tests {
             Edn::Nil,
             Edn::Bool(true),
             Edn::Int(7),
-            Edn::Float(3.14),
+            Edn::Float(2.5),
             Edn::Char('x'),
             Edn::Str(Cow::Borrowed("hello")),
             Edn::Keyword(EdnKeyword::new("k")),
