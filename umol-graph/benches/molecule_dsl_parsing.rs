@@ -1,16 +1,11 @@
-//! Benchmarks comparing the three molecule DSL parsing paths:
-//! canonical fused (`parse_molecule_dsl`), serde streaming
-//! (`parse_molecule_dsl_serde`), and native tree
-//! (`parse_molecule_dsl_tree`). The fused path is the canonical entry
-//! point per the Phase 3 architectural decision; the other two are
-//! retained as regression detectors.
+//! Benchmarks comparing the two molecule DSL parsing paths:
+//! canonical fused (`parse_molecule_dsl`) and native tree
+//! (`parse_molecule_dsl_tree`).
 
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use umol_graph::dsl::molecule::{
-    parse_molecule_dsl, parse_molecule_dsl_serde, parse_molecule_dsl_tree,
-};
+use umol_graph::dsl::molecule::{parse_molecule_dsl, parse_molecule_dsl_tree};
 
 const EMPTY: &str = r#"{:atoms [] :bonds []}"#;
 
@@ -45,14 +40,6 @@ fn bench_molecule_dsl(c: &mut Criterion) {
     for (name, input) in cases {
         group.bench_function(*name, |b| {
             b.iter(|| parse_molecule_dsl(black_box(input)).unwrap())
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("molecule_dsl_serde");
-    for (name, input) in cases {
-        group.bench_function(*name, |b| {
-            b.iter(|| parse_molecule_dsl_serde(black_box(input)).unwrap())
         });
     }
     group.finish();

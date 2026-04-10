@@ -7,9 +7,6 @@ use std::str::FromStr;
 
 use bimap::BiMap;
 use indexmap::IndexMap;
-use serde::de::{self, Deserializer, MapAccess, SeqAccess, Visitor};
-use serde::ser::{self, SerializeSeq, Serializer};
-use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
 use umol_edn::{
     DeError, Edn, EdnError, EdnKeyword, EdnMapHelper, EdnStreamDeserializer, FromEdn, ToEdn,
@@ -64,48 +61,6 @@ impl From<String> for AtomRef {
 impl From<&str> for AtomRef {
     fn from(s: &str) -> Self {
         AtomRef::Tag(s.to_string())
-    }
-}
-
-impl Serialize for AtomRef {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            AtomRef::Index(n) => serializer.serialize_u64(*n as u64),
-            AtomRef::Tag(s) => EdnKeyword::new(s).serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for AtomRef {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(AtomRefVisitor)
-    }
-}
-
-struct AtomRefVisitor;
-
-impl<'de> Visitor<'de> for AtomRefVisitor {
-    type Value = AtomRef;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("an atom reference (integer or keyword/string tag)")
-    }
-
-    fn visit_i64<E: de::Error>(self, v: i64) -> Result<AtomRef, E> {
-        let n = usize::try_from(v).map_err(|_| de::Error::custom("negative atom index"))?;
-        Ok(AtomRef::Index(n))
-    }
-
-    fn visit_u64<E: de::Error>(self, v: u64) -> Result<AtomRef, E> {
-        Ok(AtomRef::Index(v as usize))
-    }
-
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<AtomRef, E> {
-        Ok(AtomRef::Tag(v.to_string()))
-    }
-
-    fn visit_string<E: de::Error>(self, v: String) -> Result<AtomRef, E> {
-        Ok(AtomRef::Tag(v))
     }
 }
 
@@ -167,32 +122,28 @@ pub struct LocalizedBond {
     pub bond: BondAst,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, FromEdn, ToEdn)]
+#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct DativeBond {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<EdnKeyword<'static>>,
     pub donor: AtomRef,
     pub acceptor: AtomRef,
     pub bond: BondAst,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, FromEdn, ToEdn)]
+#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct AromaticSystem {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<EdnKeyword<'static>>,
     pub atoms: Vec<AtomRef>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, FromEdn, ToEdn)]
+#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct MulticenterBond {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<EdnKeyword<'static>>,
     pub atoms: Vec<AtomRef>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, FromEdn, ToEdn)]
+#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct NoncovalentBond {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<EdnKeyword<'static>>,
     pub a: AtomRef,
     pub b: AtomRef,
@@ -251,308 +202,6 @@ impl Metadata {
     }
 }
 
-// Serde: Atoms
-impl Serialize for Atoms {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let tag_for_pos: IndexMap<usize, &str> = self
-            .tags
-            .iter()
-            .map(|(name, &pos)| (pos, name.as_str()))
-            .collect();
-
-        let mut s = serializer.serialize_seq(Some(self.entries.len()))?;
-        for (i, atom) in self.entries.iter().enumerate() {
-            let alias_name = self.aliases.get_by_right(atom);
-            if let Some(tag) = tag_for_pos.get(&i) {
-                // Tagged entry: [:tag <def-or-alias>]
-                if let Some(alias) = alias_name {
-                    s.serialize_element(&(EdnKeyword::new(tag), EdnKeyword::new(alias)))?;
-                } else {
-                    s.serialize_element(&(EdnKeyword::new(tag), atom))?;
-                }
-            } else if let Some(alias) = alias_name {
-                // Aliased entry (no tag): emit alias name as keyword
-                s.serialize_element(&EdnKeyword::new(alias))?;
-            } else {
-                // Plain entry
-                s.serialize_element(atom)?;
-            }
-        }
-        s.end()
-    }
-}
-
-impl<'de> Deserialize<'de> for Atoms {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(AtomsVisitor)
-    }
-}
-
-struct AtomsVisitor;
-
-impl<'de> Visitor<'de> for AtomsVisitor {
-    type Value = Atoms;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a vector of atoms")
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Atoms, A::Error> {
-        let mut named = IndexMap::new();
-        while let Some((label, atom)) = map.next_entry::<String, AtomAst>()? {
-            named.insert(label, atom);
-        }
-        Ok(Atoms::named(named))
-    }
-
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Atoms, A::Error> {
-        let mut atoms = Vec::new();
-        while let Some(atom) = seq.next_element::<AtomAst>()? {
-            atoms.push(atom);
-        }
-        Ok(Atoms::indexed(atoms))
-    }
-
-    fn visit_unit<E: de::Error>(self) -> Result<Atoms, E> {
-        Ok(Atoms::default())
-    }
-}
-
-// Serde: LocalizedBond
-impl Serialize for LocalizedBond {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        if self.id.is_none() {
-            // Shorthand: [:a :b :bond-spec]
-            let mut t = serializer.serialize_tuple(3)?;
-            ser::SerializeTuple::serialize_element(&mut t, &self.a)?;
-            ser::SerializeTuple::serialize_element(&mut t, &self.b)?;
-            ser::SerializeTuple::serialize_element(&mut t, &self.bond)?;
-            ser::SerializeTuple::end(t)
-        } else {
-            // Map form: {:id :b1 :a :0 :b :1 :bond :single}
-            let mut m = serializer.serialize_struct("LocalizedBond", 4)?;
-            if let Some(id) = &self.id {
-                ser::SerializeStruct::serialize_field(&mut m, "id", id)?;
-            }
-            ser::SerializeStruct::serialize_field(&mut m, "a", &self.a)?;
-            ser::SerializeStruct::serialize_field(&mut m, "b", &self.b)?;
-            ser::SerializeStruct::serialize_field(&mut m, "bond", &self.bond)?;
-            ser::SerializeStruct::end(m)
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for LocalizedBond {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(LocalizedBondVisitor)
-    }
-}
-
-struct LocalizedBondVisitor;
-
-impl<'de> Visitor<'de> for LocalizedBondVisitor {
-    type Value = LocalizedBond;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a bond vector [:a :b :spec] or map {:a :A :b :B :bond :spec}")
-    }
-
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<LocalizedBond, A::Error> {
-        let a: AtomRef = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(0, &"3-element vector"))?;
-        let b: AtomRef = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(1, &"3-element vector"))?;
-        let bond: BondAst = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(2, &"3-element vector"))?;
-        Ok(LocalizedBond {
-            id: None,
-            a,
-            b,
-            bond,
-        })
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<LocalizedBond, A::Error> {
-        let mut id = None;
-        let mut a = None;
-        let mut b = None;
-        let mut bond = None;
-        while let Some(key) = map.next_key::<String>()? {
-            match key.as_str() {
-                "id" => id = Some(map.next_value::<EdnKeyword>()?),
-                "a" => a = Some(map.next_value::<AtomRef>()?),
-                "b" => b = Some(map.next_value::<AtomRef>()?),
-                "bond" => bond = Some(map.next_value::<BondAst>()?),
-                _ => {
-                    let _ = map.next_value::<de::IgnoredAny>()?;
-                }
-            }
-        }
-        Ok(LocalizedBond {
-            id,
-            a: a.ok_or_else(|| de::Error::missing_field("a"))?,
-            b: b.ok_or_else(|| de::Error::missing_field("b"))?,
-            bond: bond.ok_or_else(|| de::Error::missing_field("bond"))?,
-        })
-    }
-}
-
-// Serde: MoleculeAst
-impl Serialize for MoleculeAst {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let has_aliases = !self.atoms.aliases.is_empty();
-        let mut count = 2;
-        if !self.dative_bonds.is_empty() {
-            count += 1;
-        }
-        if !self.aromatic_systems.is_empty() {
-            count += 1;
-        }
-        if !self.multicenter_bonds.is_empty() {
-            count += 1;
-        }
-        if !self.noncovalent_bonds.is_empty() {
-            count += 1;
-        }
-        if self.charge.is_some() {
-            count += 1;
-        }
-        if self.spin.is_some() {
-            count += 1;
-        }
-        if has_aliases {
-            count += 1;
-        }
-
-        let mut m = serializer.serialize_struct("MoleculeAst", count)?;
-        ser::SerializeStruct::serialize_field(&mut m, "atoms", &self.atoms)?;
-        ser::SerializeStruct::serialize_field(&mut m, "bonds", &self.bonds)?;
-        if !self.dative_bonds.is_empty() {
-            ser::SerializeStruct::serialize_field(&mut m, "dative", &self.dative_bonds)?;
-        }
-        if !self.aromatic_systems.is_empty() {
-            ser::SerializeStruct::serialize_field(&mut m, "aromatic", &self.aromatic_systems)?;
-        }
-        if !self.multicenter_bonds.is_empty() {
-            ser::SerializeStruct::serialize_field(&mut m, "multicenter", &self.multicenter_bonds)?;
-        }
-        if !self.noncovalent_bonds.is_empty() {
-            ser::SerializeStruct::serialize_field(&mut m, "noncovalent", &self.noncovalent_bonds)?;
-        }
-        if let Some(charge) = self.charge {
-            ser::SerializeStruct::serialize_field(&mut m, "charge", &charge)?;
-        }
-        if let Some(spin) = &self.spin {
-            ser::SerializeStruct::serialize_field(&mut m, "spin", &spin.to_string())?;
-        }
-        if has_aliases {
-            let alias_vec: Vec<AliasEntry<'_>> = self
-                .atoms
-                .aliases
-                .iter()
-                .flat_map(|(name, atom)| {
-                    [
-                        AliasEntry::Name(EdnKeyword::new(name)),
-                        AliasEntry::Def(atom),
-                    ]
-                })
-                .collect();
-            ser::SerializeStruct::serialize_field(&mut m, "atom-aliases", &alias_vec)?;
-        }
-        ser::SerializeStruct::end(m)
-    }
-}
-
-enum AliasEntry<'a> {
-    Name(EdnKeyword<'a>),
-    Def(&'a AtomAst),
-}
-
-impl Serialize for AliasEntry<'_> {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match self {
-            AliasEntry::Name(kw) => kw.serialize(serializer),
-            AliasEntry::Def(atom) => atom.serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for MoleculeAst {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(MoleculeAstVisitor)
-    }
-}
-
-struct MoleculeAstVisitor;
-
-impl<'de> Visitor<'de> for MoleculeAstVisitor {
-    type Value = MoleculeAst;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a molecule map with :atoms and :bonds")
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<MoleculeAst, A::Error> {
-        let mut atoms = None;
-        let mut bonds = None;
-        let mut dative_bonds = None;
-        let mut aromatic_systems = None;
-        let mut multicenter_bonds = None;
-        let mut noncovalent_bonds = None;
-        let mut charge = None;
-        let mut spin = None;
-        // Aliases are resolved inline during atom deserialization (not stored).
-        // We collect them as raw strings here, then resolve after all fields are read.
-        let mut aliases: Option<Vec<(String, String)>> = None;
-
-        while let Some(key) = map.next_key::<String>()? {
-            match key.as_str() {
-                "atoms" => atoms = Some(map.next_value::<Atoms>()?),
-                "bonds" => bonds = Some(map.next_value::<Vec<LocalizedBond>>()?),
-                "dative" => dative_bonds = Some(map.next_value::<Vec<DativeBond>>()?),
-                "aromatic" => aromatic_systems = Some(map.next_value::<Vec<AromaticSystem>>()?),
-                "multicenter" => {
-                    multicenter_bonds = Some(map.next_value::<Vec<MulticenterBond>>()?)
-                }
-                "noncovalent" => {
-                    noncovalent_bonds = Some(map.next_value::<Vec<NoncovalentBond>>()?)
-                }
-                "charge" => charge = map.next_value::<Option<i64>>()?,
-                "spin" => {
-                    let s: Option<String> = map.next_value()?;
-                    spin = match s {
-                        Some(ref s) => Some(
-                            SpinState::from_str(s).map_err(|e| de::Error::custom(e.to_string()))?,
-                        ),
-                        None => None,
-                    };
-                }
-                "aliases" => aliases = Some(map.next_value::<Vec<(String, String)>>()?),
-                _ => {
-                    let _ = map.next_value::<de::IgnoredAny>()?;
-                }
-            }
-        }
-
-        let atoms = atoms.ok_or_else(|| de::Error::missing_field("atoms"))?;
-        let bonds = bonds.ok_or_else(|| de::Error::missing_field("bonds"))?;
-        let _ = aliases;
-
-        Ok(MoleculeAst {
-            atoms,
-            bonds,
-            dative_bonds: dative_bonds.unwrap_or_default(),
-            aromatic_systems: aromatic_systems.unwrap_or_default(),
-            multicenter_bonds: multicenter_bonds.unwrap_or_default(),
-            noncovalent_bonds: noncovalent_bonds.unwrap_or_default(),
-            charge,
-            spin,
-        })
-    }
-}
 
 fn validate(ast: &MoleculeAst) -> Result<(), ParseError> {
     let mut atom_labels: HashSet<String> = (0..ast.atoms.entries.len())
@@ -624,40 +273,6 @@ enum AtomEntryInput {
     Tagged(String, Box<AtomEntryInput>),
 }
 
-impl<'de> Deserialize<'de> for AtomEntryInput {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(AtomEntryInputVisitor)
-    }
-}
-
-struct AtomEntryInputVisitor;
-
-impl<'de> Visitor<'de> for AtomEntryInputVisitor {
-    type Value = AtomEntryInput;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("an atom definition string, alias keyword, or [:tag def] vector")
-    }
-
-    fn visit_str<E: de::Error>(self, v: &str) -> Result<AtomEntryInput, E> {
-        Ok(AtomEntryInput::Str(v.to_string()))
-    }
-
-    fn visit_string<E: de::Error>(self, v: String) -> Result<AtomEntryInput, E> {
-        Ok(AtomEntryInput::Str(v))
-    }
-
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<AtomEntryInput, A::Error> {
-        let tag: String = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(0, &"2-element [tag def] vector"))?;
-        let entry: AtomEntryInput = seq
-            .next_element()?
-            .ok_or_else(|| de::Error::invalid_length(1, &"2-element [tag def] vector"))?;
-        Ok(AtomEntryInput::Tagged(tag, Box::new(entry)))
-    }
-}
-
 /// Intermediate struct for streaming deserialization of the molecule DSL.
 /// Collects raw strings and defers alias resolution to `into_ast()`.
 struct MoleculeInput {
@@ -670,78 +285,6 @@ struct MoleculeInput {
     atom_aliases: Vec<String>,
     charge: Option<i64>,
     spin: Option<SpinState>,
-}
-
-impl<'de> Deserialize<'de> for MoleculeInput {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_any(MoleculeInputVisitor)
-    }
-}
-
-struct MoleculeInputVisitor;
-
-impl<'de> Visitor<'de> for MoleculeInputVisitor {
-    type Value = MoleculeInput;
-
-    fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("a molecule map with :atoms and :bonds")
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<MoleculeInput, A::Error> {
-        let mut atoms = None;
-        let mut bonds = None;
-        let mut dative_bonds = None;
-        let mut aromatic_systems = None;
-        let mut multicenter_bonds = None;
-        let mut noncovalent_bonds = None;
-        let mut charge = None;
-        let mut spin = None;
-        let mut atom_aliases = None;
-
-        while let Some(key) = map.next_key::<String>()? {
-            match key.as_str() {
-                "atoms" => atoms = Some(map.next_value::<Vec<AtomEntryInput>>()?),
-                "bonds" => bonds = Some(map.next_value::<Vec<LocalizedBond>>()?),
-                "dative" => dative_bonds = Some(map.next_value::<Vec<DativeBond>>()?),
-                "aromatic" => aromatic_systems = Some(map.next_value::<Vec<AromaticSystem>>()?),
-                "multicenter" => {
-                    multicenter_bonds = Some(map.next_value::<Vec<MulticenterBond>>()?)
-                }
-                "noncovalent" => {
-                    noncovalent_bonds = Some(map.next_value::<Vec<NoncovalentBond>>()?)
-                }
-                "charge" => charge = map.next_value::<Option<i64>>()?,
-                "spin" => {
-                    let s: Option<String> = map.next_value()?;
-                    spin = match s {
-                        Some(ref s) => Some(
-                            SpinState::from_str(s).map_err(|e| de::Error::custom(e.to_string()))?,
-                        ),
-                        None => None,
-                    };
-                }
-                "atom-aliases" | "aliases" => atom_aliases = Some(map.next_value::<Vec<String>>()?),
-                _ => {
-                    let _ = map.next_value::<de::IgnoredAny>()?;
-                }
-            }
-        }
-
-        let atoms = atoms.ok_or_else(|| de::Error::missing_field("atoms"))?;
-        let bonds = bonds.ok_or_else(|| de::Error::missing_field("bonds"))?;
-
-        Ok(MoleculeInput {
-            atoms,
-            bonds,
-            dative_bonds: dative_bonds.unwrap_or_default(),
-            aromatic_systems: aromatic_systems.unwrap_or_default(),
-            multicenter_bonds: multicenter_bonds.unwrap_or_default(),
-            noncovalent_bonds: noncovalent_bonds.unwrap_or_default(),
-            atom_aliases: atom_aliases.unwrap_or_default(),
-            charge,
-            spin,
-        })
-    }
 }
 
 impl MoleculeInput {
@@ -861,19 +404,7 @@ impl FromStr for MoleculeAst {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Alternative parsing paths (kept for benchmarking and regression detection).
-// ---------------------------------------------------------------------------
-
-/// Parse via serde streaming. Retained for benchmark comparison only.
-pub fn parse_molecule_dsl_serde(input: &str) -> Result<MoleculeAst, ParseError> {
-    let mol_input: MoleculeInput =
-        umol_edn::serde::from_str(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
-    mol_input.into_ast()
-}
-
 /// Parse via native `FromEdn` walking an intermediate `Edn` tree.
-/// Retained for benchmark comparison only.
 pub fn parse_molecule_dsl_tree(input: &str) -> Result<MoleculeAst, ParseError> {
     let tree = umol_edn::read_string(input).map_err(|e| ParseError::EdnParse(e.to_string()))?;
     let mol_input =
@@ -1190,16 +721,16 @@ impl<'de> FromEdn<'de> for AtomRef {
 }
 
 impl ToEdn for AtomRef {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         match self {
             AtomRef::Index(n) => Edn::Int(*n as i64),
-            AtomRef::Tag(s) => Edn::keyword(s),
+            AtomRef::Tag(s) => Edn::Keyword(EdnKeyword::owned(s.clone())),
         }
     }
 }
 
 impl ToEdn for LocalizedBond {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         match &self.id {
             None => Edn::Vector(vec![self.a.to_edn(), self.b.to_edn(), self.bond.to_edn()].into()),
             Some(id) => {
@@ -1215,7 +746,7 @@ impl ToEdn for LocalizedBond {
 }
 
 impl ToEdn for Atoms {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         let tag_for_pos: IndexMap<usize, &str> = self
             .tags
             .iter()
@@ -1227,13 +758,13 @@ impl ToEdn for Atoms {
             let alias_name = self.aliases.get_by_right(atom);
             let entry = if let Some(tag) = tag_for_pos.get(&i) {
                 let def_edn = if let Some(alias) = alias_name {
-                    Edn::keyword(alias)
+                    Edn::Keyword(EdnKeyword::owned(alias.clone()))
                 } else {
                     atom.to_edn()
                 };
-                Edn::Vector(vec![Edn::keyword(tag), def_edn].into())
+                Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned((*tag).to_owned())), def_edn].into())
             } else if let Some(alias) = alias_name {
-                Edn::keyword(alias)
+                Edn::Keyword(EdnKeyword::owned(alias.clone()))
             } else {
                 atom.to_edn()
             };
@@ -1244,7 +775,7 @@ impl ToEdn for Atoms {
 }
 
 impl ToEdn for MoleculeAst {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         let has_aliases = !self.atoms.aliases.is_empty();
         let mut count = 2;
         if !self.dative_bonds.is_empty() {
@@ -1296,7 +827,7 @@ impl ToEdn for MoleculeAst {
         if has_aliases {
             let mut alias_elems = Vec::with_capacity(self.atoms.aliases.len() * 2);
             for (name, atom) in self.atoms.aliases.iter() {
-                alias_elems.push(Edn::keyword(name));
+                alias_elems.push(Edn::Keyword(EdnKeyword::owned(name.clone())));
                 alias_elems.push(atom.to_edn());
             }
             m.insert(
@@ -1455,6 +986,14 @@ impl<'de> FromEdn<'de> for MoleculeInput {
     }
 }
 
+impl<'de> FromEdn<'de> for MoleculeAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        MoleculeInput::from_edn(edn)?
+            .into_ast()
+            .map_err(|e| DeError::Custom(e.to_string()))
+    }
+}
+
 impl fmt::Display for MoleculeAst {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_edn())
@@ -1574,20 +1113,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty(MoleculeAst::default())]
-    #[case::indexed_atoms(MoleculeAst {
-        atoms: Atoms::indexed(vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))]),
-        bonds: vec![LocalizedBond { id: None, a: AtomRef::Index(0), b: AtomRef::Index(1), bond: BondAst::from_order(3) }],
-        ..Default::default()
-    })]
-    fn test_molecule_ast_json_roundtrip(#[case] ast: MoleculeAst) {
-        let json = serde_json::to_string(&ast).expect("serialize to JSON");
-        let back: MoleculeAst =
-            serde_json::from_str(&json).expect(&format!("deserialize from JSON: {json}"));
-        assert_eq!(ast, back);
-    }
-
-    #[rstest]
     #[case::non_map("3")]
     #[case::missing_atoms(r#"{:bonds []}"#)]
     #[case::missing_bonds(r#"{:atoms ["C"]}"#)]
@@ -1656,8 +1181,8 @@ mod tests {
         assert!(result.is_err(), "alias and tag with same name should fail");
     }
 
-    /// All three parsing paths (canonical fused, serde streaming, native
-    /// tree) must produce identical ASTs on every accepted input.
+    /// Both parsing paths (canonical fused, native tree) must produce
+    /// identical ASTs on every accepted input.
     #[rstest]
     #[case::empty(r#"{:atoms [] :bonds []}"#)]
     #[case::plain_atoms(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
@@ -1670,9 +1195,7 @@ mod tests {
     )]
     fn test_parse_molecule_dsl_path_parity(#[case] input: &str) {
         let canonical = parse_molecule_dsl(input).unwrap();
-        let serde_ast = parse_molecule_dsl_serde(input).unwrap();
         let tree_ast = parse_molecule_dsl_tree(input).unwrap();
-        assert_eq!(canonical, serde_ast);
         assert_eq!(canonical, tree_ast);
     }
 

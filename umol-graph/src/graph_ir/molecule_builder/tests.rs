@@ -171,20 +171,23 @@ fn test_molecule_builder_atom_aromatic_valence(
 }
 
 #[rstest]
-#[case::empty(ResolutionContext::default(), "{:atom_candidates {} :atom_aromatic_hints {} :bond_aromatic_hints {} :atom_normal_implicit_hydrogens []}")]
+#[case::empty(ResolutionContext::default())]
 #[case::nonaromatic(ResolutionContext { atom_candidates: HashMap::from([(AtomIndex::new(0), smallvec!["C#h4".parse::<Atom>().unwrap()])]),
-    atom_aromatic_hints: HashMap::from([(AtomIndex::new(0), false)]), bond_aromatic_hints: HashMap::new(), atom_normal_implicit_hydrogens: HashSet::from([AtomIndex::new(0)]) },
-    "{:atom_candidates {0 [\"C#h4\"]} :atom_aromatic_hints {0 false} :bond_aromatic_hints {} :atom_normal_implicit_hydrogens [0]}")]
-fn test_resolution_context_display(#[case] ctx: ResolutionContext, #[case] expected: &str) {
-    assert_eq!(ctx.to_string(), expected);
+    atom_aromatic_hints: HashMap::from([(AtomIndex::new(0), false)]), bond_aromatic_hints: HashMap::new(), atom_normal_implicit_hydrogens: HashSet::from([AtomIndex::new(0)]) })]
+fn test_resolution_context_display(#[case] ctx: ResolutionContext) {
+    let roundtripped = ResolutionContext::from_str(&ctx.to_string()).unwrap();
+    assert_eq!(roundtripped.atom_candidates, ctx.atom_candidates);
+    assert_eq!(roundtripped.atom_aromatic_hints, ctx.atom_aromatic_hints);
+    assert_eq!(roundtripped.bond_aromatic_hints, ctx.bond_aromatic_hints);
+    assert_eq!(roundtripped.atom_normal_implicit_hydrogens, ctx.atom_normal_implicit_hydrogens);
 }
 
 #[rstest]
-#[case::nonaromatic("{:atom_candidates {0 [\"C#h4\"]} :atom_aromatic_hints {0 false} :bond_aromatic_hints {} :atom_normal_implicit_hydrogens [0]}",
+#[case::nonaromatic("{:atom-candidates {0 [\"C#h4\"]} :atom-aromatic-hints {0 false} :bond-aromatic-hints {} :atom-normal-implicit-hydrogens #{0}}",
     ResolutionContext { atom_candidates: HashMap::from([(AtomIndex::new(0), smallvec!["C#h4".parse::<Atom>().unwrap()])]), atom_aromatic_hints: HashMap::from([(AtomIndex::new(0), false)]),
     bond_aromatic_hints: HashMap::new(), atom_normal_implicit_hydrogens: HashSet::from([AtomIndex::new(0)]) })]
-#[case::aromatic("{:atom_candidates {0 [\"C#h#v2#a\"] 1 [\"C#h#v2#a\"] 2 [\"C#h#v2#a\"] 3 [\"C#h#v2#a\"] 4 [\"C#h#v2#a\"] 5 [\"C#h#v2#a\"]} :atom_aromatic_hints {0 true 1 true 2 true 3 true 4 true 5 true}
-                   :bond_aromatic_hints {0 true 1 true 2 true 3 true 4 true 5 true} :atom_normal_implicit_hydrogens [0 1 2 3 4 5]}",
+#[case::aromatic("{:atom-candidates {0 [\"C#h#v2#a\"] 1 [\"C#h#v2#a\"] 2 [\"C#h#v2#a\"] 3 [\"C#h#v2#a\"] 4 [\"C#h#v2#a\"] 5 [\"C#h#v2#a\"]} :atom-aromatic-hints {0 true 1 true 2 true 3 true 4 true 5 true}
+                   :bond-aromatic-hints {0 true 1 true 2 true 3 true 4 true 5 true} :atom-normal-implicit-hydrogens #{0 1 2 3 4 5}}",
     ResolutionContext { atom_candidates: HashMap::from([ (AtomIndex::new(0), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]), (AtomIndex::new(1), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]),
                                                          (AtomIndex::new(2), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]), (AtomIndex::new(3), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]),
                                                          (AtomIndex::new(4), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()]), (AtomIndex::new(5), smallvec!["C#h#v2#a".parse::<Atom>().unwrap()])]),

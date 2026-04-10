@@ -12,8 +12,7 @@
 //!   carries a `'de` lifetime parameter so implementations can borrow
 //!   string and key references from the source buffer when zero-copy is
 //!   wanted.
-//! - [`ToEdn`] takes `&self` and produces an `Edn<'_>` borrowing from the
-//!   value where possible.
+//! - [`ToEdn`] takes `&self` and produces an owned `Edn<'static>`.
 //!
 //! ## Parsing from a string
 //!
@@ -97,15 +96,13 @@ pub trait FromEdn<'de>: Sized {
     }
 }
 
-/// Convert `&self` into an EDN value.
+/// Convert `&self` into an owned EDN value.
 ///
-/// # Borrowing
+/// # Ownership
 ///
-/// `to_edn` returns `Edn<'_>` with the lifetime bound to `&self`, so
-/// implementations can produce zero-copy `Cow::Borrowed` strings for
-/// fields that already live in the value. The returned tree is otherwise
-/// owned and may be passed to a formatter, written to a string, or
-/// returned to a caller for further processing.
+/// `to_edn` returns `Edn<'static>` — a fully owned tree with no
+/// borrows. This allows callers to delegate through temporaries
+/// (e.g. `self.to_ast().to_edn()`) without lifetime issues.
 ///
 /// # Infallibility
 ///
@@ -115,12 +112,8 @@ pub trait FromEdn<'de>: Sized {
 /// serialization should add their own `try_to_edn` method until a concrete
 /// need establishes a trait-level contract for it.
 pub trait ToEdn {
-    /// Produce an `Edn` value representing `self`.
-    ///
-    /// The returned value may borrow string and key references from
-    /// `&self`. Implementations should prefer borrowed `Cow` variants over
-    /// owned ones to keep allocation cost low for round-trip workflows.
-    fn to_edn(&self) -> Edn<'_>;
+    /// Produce a fully owned `Edn` value representing `self`.
+    fn to_edn(&self) -> Edn<'static>;
 }
 
 impl<'de> FromEdn<'de> for bool {
@@ -137,7 +130,7 @@ impl<'de> FromEdn<'de> for bool {
 }
 
 impl ToEdn for bool {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::Bool(*self)
     }
 }
@@ -170,7 +163,7 @@ macro_rules! impl_int {
             }
 
             impl ToEdn for $t {
-                fn to_edn(&self) -> Edn<'_> {
+                fn to_edn(&self) -> Edn<'static> {
                     Edn::Int(i64::from(*self))
                 }
             }
@@ -194,7 +187,7 @@ impl<'de> FromEdn<'de> for f64 {
 }
 
 impl ToEdn for f64 {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::Float(*self)
     }
 }
@@ -213,7 +206,7 @@ impl<'de> FromEdn<'de> for f32 {
 }
 
 impl ToEdn for f32 {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::Float(f64::from(*self))
     }
 }
@@ -232,7 +225,7 @@ impl<'de> FromEdn<'de> for char {
 }
 
 impl ToEdn for char {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::Char(*self)
     }
 }
@@ -251,14 +244,14 @@ impl<'de> FromEdn<'de> for String {
 }
 
 impl ToEdn for String {
-    fn to_edn(&self) -> Edn<'_> {
-        Edn::Str(Cow::Borrowed(self.as_str()))
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.clone()))
     }
 }
 
 impl ToEdn for str {
-    fn to_edn(&self) -> Edn<'_> {
-        Edn::Str(Cow::Borrowed(self))
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.to_owned()))
     }
 }
 
@@ -278,8 +271,8 @@ impl<'de> FromEdn<'de> for Cow<'de, str> {
 }
 
 impl<'a> ToEdn for Cow<'a, str> {
-    fn to_edn(&self) -> Edn<'_> {
-        Edn::Str(Cow::Borrowed(self.as_ref()))
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.as_ref().to_owned()))
     }
 }
 
@@ -293,7 +286,7 @@ impl<'de, T: FromEdn<'de>> FromEdn<'de> for Option<T> {
 }
 
 impl<T: ToEdn> ToEdn for Option<T> {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         match self {
             Some(t) => t.to_edn(),
             None => Edn::Nil,
@@ -318,7 +311,7 @@ impl<'de, T: FromEdn<'de>> FromEdn<'de> for Vec<T> {
 }
 
 impl<T: ToEdn> ToEdn for Vec<T> {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::Vector(EdnSeq::from(
             self.iter().map(ToEdn::to_edn).collect::<Vec<_>>(),
         ))
@@ -352,7 +345,7 @@ impl<'de, T: FromEdn<'de>, const N: usize> FromEdn<'de> for [T; N] {
 }
 
 impl<T: ToEdn, const N: usize> ToEdn for [T; N] {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::Vector(EdnSeq::from(
             self.iter().map(ToEdn::to_edn).collect::<Vec<_>>(),
         ))
@@ -387,7 +380,7 @@ macro_rules! impl_tuple {
         }
 
         impl<$($t: ToEdn),+> ToEdn for ($($t,)+) {
-            fn to_edn(&self) -> Edn<'_> {
+            fn to_edn(&self) -> Edn<'static> {
                 Edn::Vector(EdnSeq::from(vec![$(self.$n.to_edn()),+]))
             }
         }
@@ -428,7 +421,7 @@ where
     K: ToEdn,
     V: ToEdn,
 {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         let mut m = EdnMap::with_capacity(self.len());
         for (k, v) in self {
             m.insert(k.to_edn(), v.to_edn());
@@ -464,7 +457,7 @@ where
     K: ToEdn,
     V: ToEdn,
 {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         let mut m = EdnMap::with_capacity(self.len());
         for (k, v) in self {
             m.insert(k.to_edn(), v.to_edn());
@@ -493,7 +486,7 @@ where
 }
 
 impl<T: ToEdn> ToEdn for HashSet<T> {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         let mut s = EdnSet::new();
         for item in self {
             s.insert(item.to_edn());
@@ -522,12 +515,50 @@ where
 }
 
 impl<T: ToEdn> ToEdn for BTreeSet<T> {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         let mut s = EdnSet::new();
         for item in self {
             s.insert(item.to_edn());
         }
         Edn::Set(s)
+    }
+}
+
+#[cfg(feature = "indexmap")]
+impl<'de, K, V> FromEdn<'de> for indexmap::IndexMap<K, V>
+where
+    K: FromEdn<'de> + Eq + Hash,
+    V: FromEdn<'de>,
+{
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let map = match edn {
+            Edn::Map(m) => m,
+            other => {
+                return Err(DeError::TypeMismatch {
+                    expected: "map",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        map.iter()
+            .map(|(k, v)| Ok((K::from_edn(k)?, V::from_edn(v)?)))
+            .collect()
+    }
+}
+
+#[cfg(feature = "indexmap")]
+impl<K, V> ToEdn for indexmap::IndexMap<K, V>
+where
+    K: ToEdn,
+    V: ToEdn,
+{
+    fn to_edn(&self) -> Edn<'static> {
+        let mut m = EdnMap::with_capacity(self.len());
+        for (k, v) in self {
+            m.insert(k.to_edn(), v.to_edn());
+        }
+        Edn::Map(m)
     }
 }
 
@@ -538,8 +569,8 @@ impl<'de> FromEdn<'de> for Edn<'de> {
 }
 
 impl<'a> ToEdn for Edn<'a> {
-    fn to_edn(&self) -> Edn<'_> {
-        self.clone()
+    fn to_edn(&self) -> Edn<'static> {
+        self.clone().into_owned()
     }
 }
 
@@ -557,8 +588,8 @@ impl<'de> FromEdn<'de> for EdnKeyword<'static> {
 }
 
 impl<'a> ToEdn for EdnKeyword<'a> {
-    fn to_edn(&self) -> Edn<'_> {
-        Edn::Keyword(self.clone())
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Keyword(self.clone().into_owned())
     }
 }
 
@@ -576,8 +607,8 @@ impl<'de> FromEdn<'de> for EdnSymbol<'static> {
 }
 
 impl<'a> ToEdn for EdnSymbol<'a> {
-    fn to_edn(&self) -> Edn<'_> {
-        Edn::Symbol(self.clone())
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Symbol(self.clone().into_owned())
     }
 }
 
@@ -595,8 +626,8 @@ impl<'de> FromEdn<'de> for EdnMap<'de> {
 }
 
 impl<'a> ToEdn for EdnMap<'a> {
-    fn to_edn(&self) -> Edn<'_> {
-        Edn::Map(self.clone())
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Map(self.clone().into_owned())
     }
 }
 
@@ -614,8 +645,8 @@ impl<'de> FromEdn<'de> for EdnSet<'de> {
 }
 
 impl<'a> ToEdn for EdnSet<'a> {
-    fn to_edn(&self) -> Edn<'_> {
-        Edn::Set(self.clone())
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Set(self.clone().into_owned())
     }
 }
 
@@ -637,8 +668,8 @@ impl<'de> FromEdn<'de> for EdnSeq<'de> {
 }
 
 impl<'a> ToEdn for EdnSeq<'a> {
-    fn to_edn(&self) -> Edn<'_> {
-        Edn::Vector(self.clone())
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Vector(self.clone().into_owned())
     }
 }
 
@@ -659,7 +690,7 @@ impl<'de> FromEdn<'de> for BigInt {
 
 #[cfg(feature = "bignum")]
 impl ToEdn for BigInt {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::BigInt(self.clone())
     }
 }
@@ -680,7 +711,7 @@ impl<'de> FromEdn<'de> for BigDecimal {
 
 #[cfg(feature = "bignum")]
 impl ToEdn for BigDecimal {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::BigDecimal(EdnBigDecimal::new(self.clone()))
     }
 }
@@ -701,7 +732,7 @@ impl<'de> FromEdn<'de> for EdnBigDecimal {
 
 #[cfg(feature = "bignum")]
 impl ToEdn for EdnBigDecimal {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::BigDecimal(self.clone())
     }
 }

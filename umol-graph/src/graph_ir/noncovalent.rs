@@ -1,7 +1,5 @@
 //! Non-covalent bond representation for GraphIR.
 
-use serde::{Deserialize, Serialize};
-
 use super::molecule::AtomIndex;
 use crate::bond::BondNoncovalent;
 use crate::table_ir::bond::Bond as TableBond;
@@ -9,7 +7,7 @@ use crate::table_ir::bond::Bond as TableBond;
 /// A non-covalent interaction (hydrogen bond, halogen bond, etc.) in GraphIR.
 /// Non-covalent bonds are not stored in the main connectivity graph and do not
 /// contribute to valence calculations.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct NoncovalentBond {
     a: AtomIndex,
     b: AtomIndex,

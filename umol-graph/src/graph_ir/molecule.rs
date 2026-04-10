@@ -6,7 +6,6 @@ use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
-use serde::{Deserialize, Serialize};
 use umol_data::SpinState;
 
 use super::aromaticity::AromaticSystem;
@@ -29,7 +28,7 @@ use crate::dsl::molecule::{
 pub type AtomIndex = NodeIndex<u32>;
 pub type BondIndex = EdgeIndex<u32>;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DativeBondIndex(pub u32);
 
 impl DativeBondIndex {
@@ -38,7 +37,7 @@ impl DativeBondIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct AromaticSystemIndex(pub u32);
 
 impl AromaticSystemIndex {
@@ -47,7 +46,7 @@ impl AromaticSystemIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct MulticenterBondIndex(pub u32);
 
 impl MulticenterBondIndex {
@@ -56,7 +55,7 @@ impl MulticenterBondIndex {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NoncovalentBondIndex(pub u32);
 
 impl NoncovalentBondIndex {
@@ -66,7 +65,7 @@ impl NoncovalentBondIndex {
 }
 
 /// Resolved molecule in GraphIR. All atoms and bonds are fully validated.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Molecule {
     graph: StableGraph<Atom, Bond, Undirected, u32>,
     dative_bonds: Vec<DativeBond>,

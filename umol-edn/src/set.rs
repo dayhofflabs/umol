@@ -102,10 +102,10 @@ impl<T> ToEdn for EdnHashSet<T>
 where
     T: ToEdn,
 {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         let mut set = crate::collections::EdnSet::new();
         for v in &self.0 {
-            set.insert(v.to_edn().into_owned());
+            set.insert(v.to_edn());
         }
         Edn::Set(set)
     }

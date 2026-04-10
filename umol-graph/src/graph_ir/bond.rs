@@ -3,10 +3,8 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use serde::de::{Deserializer, Error as SerdeError};
-use serde::ser::Serializer;
-use serde::{Deserialize, Serialize};
 use umol_data::{SpinMultiplicity, SpinState, SpinStateError};
+use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::raise_spin_ground;
 use super::bond_pattern::BondPattern;
@@ -120,16 +118,17 @@ impl Display for Bond {
     }
 }
 
-impl Serialize for Bond {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+impl<'de> FromEdn<'de> for Bond {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let ast = BondAst::from_edn(edn)?;
+        Self::from_ast(ast, &BondDslConfig::zeroed())
+            .map_err(|e| DeError::Custom(e.to_string()))
     }
 }
 
-impl<'de> Deserialize<'de> for Bond {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(SerdeError::custom)
+impl ToEdn for Bond {
+    fn to_edn(&self) -> Edn<'static> {
+        self.to_ast(&BondDslConfig::zeroed()).to_edn()
     }
 }
 
@@ -189,25 +188,24 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(Bond::new(1), r#""1""#)]
+    #[case::single(Bond::new(1), ":single")]
     #[case::charged_doublet(Bond::from_parts(2, 1, SpinState::new(1, SpinMultiplicity::Doublet)), r#""2#c+#u""#)]
-    fn test_bond_serialize(#[case] bond: Bond, #[case] expected: &str) {
-        let json = serde_json::to_string(&bond).unwrap();
-        assert_eq!(json, expected);
+    fn test_bond_to_edn(#[case] bond: Bond, #[case] expected: &str) {
+        assert_eq!(bond.to_edn().to_string(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(r#""1""#, 1, 0, 0, SpinMultiplicity::Singlet)]
+    #[case::single(":single", 1, 0, 0, SpinMultiplicity::Singlet)]
     #[case::charged_doublet(r#""2#c+#u""#, 2, 1, 1, SpinMultiplicity::Doublet)]
-    fn test_bond_deserialize(
+    fn test_bond_from_edn(
         #[case] input: &str,
         #[case] expected_order: u8,
         #[case] expected_charge: i8,
         #[case] expected_unpaired: u8,
         #[case] expected_multiplicity: SpinMultiplicity,
     ) {
-        let bond: Bond = serde_json::from_str(input).unwrap();
+        let bond = Bond::from_edn_str(input).unwrap();
         assert_eq!(bond.order(), expected_order);
         assert_eq!(bond.charge(), expected_charge);
         assert_eq!(bond.unpaired_electrons(), expected_unpaired);

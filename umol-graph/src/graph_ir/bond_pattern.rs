@@ -3,10 +3,8 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use serde::de::{Deserializer, Error as SerdeError};
-use serde::ser::Serializer;
-use serde::{Deserialize, Serialize};
 use umol_data::{SpinMultiplicity, SpinState};
+use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{lower_spin, raise_spin_pattern};
 use super::atom_pattern::Pattern;
@@ -225,16 +223,17 @@ impl Display for BondPattern {
     }
 }
 
-impl Serialize for BondPattern {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+impl<'de> FromEdn<'de> for BondPattern {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let ast = BondAst::from_edn(edn)?;
+        Self::from_ast(ast, &BondDslConfig::open())
+            .map_err(|e| DeError::Custom(e.to_string()))
     }
 }
 
-impl<'de> Deserialize<'de> for BondPattern {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(SerdeError::custom)
+impl ToEdn for BondPattern {
+    fn to_edn(&self) -> Edn<'static> {
+        self.to_ast(&BondDslConfig::open()).to_edn()
     }
 }
 
@@ -378,12 +377,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(BondPattern::new(1), r#""1""#)]
+    #[case::single(BondPattern::new(1), ":single")]
     #[case::charged(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) }, r#""2#c+#u#s*""#)]
     #[case::wildcard_order(BondPattern { order: Pattern::Any, ..BondPattern::new(1) }, r#""*""#)]
-    fn test_bond_pattern_serialize(#[case] pattern: BondPattern, #[case] expected: &str) {
-        let json = serde_json::to_string(&pattern).unwrap();
-        assert_eq!(json, expected);
+    fn test_bond_pattern_to_edn(#[case] pattern: BondPattern, #[case] expected: &str) {
+        assert_eq!(pattern.to_edn().to_string(), expected);
     }
 
     #[rustfmt::skip]
@@ -391,14 +389,14 @@ mod tests {
     #[case::single(r#""1""#, Pattern::Is(1), Pattern::Any, Pattern::Any, Pattern::Any)]
     #[case::charged(r#""2#c+#u""#, Pattern::Is(2), Pattern::Is(1), Pattern::Is(1), Pattern::Is(SpinMultiplicity::Doublet))]
     #[case::full(r#""1#c0#u1#s2""#, Pattern::Is(1), Pattern::Is(0), Pattern::Is(1), Pattern::Is(SpinMultiplicity::Doublet))]
-    fn test_bond_pattern_deserialize(
+    fn test_bond_pattern_from_edn(
         #[case] input: &str,
         #[case] expected_order: Pattern<u8>,
         #[case] expected_charge: Pattern<i8>,
         #[case] expected_unpaired: Pattern<u8>,
         #[case] expected_multiplicity: Pattern<SpinMultiplicity>,
     ) {
-        let pattern: BondPattern = serde_json::from_str(input).unwrap();
+        let pattern = BondPattern::from_edn_str(input).unwrap();
         assert_eq!(pattern.order, expected_order);
         assert_eq!(pattern.charge, expected_charge);
         assert_eq!(pattern.unpaired_electrons, expected_unpaired);

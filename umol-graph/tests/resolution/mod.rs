@@ -8,8 +8,7 @@ use std::path::{Component, Path, PathBuf};
 
 use insta::{assert_snapshot, Settings};
 use rstest::*;
-use serde::{Deserialize, Serialize};
-use umol_edn::serde::{from_str as edn_from_str, to_string_pretty as edn_to_string_pretty};
+use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::dsl::ast::{FromAst, ToAst};
 use umol_graph::dsl::config::{
     ImplicitHydrogenMode, MoleculeDslConfig, MoleculeDslConfigOverrides,
@@ -19,29 +18,25 @@ use umol_graph::graph_ir::config_data::ValenceTable;
 use umol_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};
 use umol_graph::graph_ir::{resolve_molecule_with, ResolveConfig, ValenceStrategy};
 
-#[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(FromEdn)]
 struct TestInput {
     input: MoleculeAst,
-    #[serde(default)]
+    #[edn(default)]
     config_overrides: MoleculeDslConfigOverrides,
-    #[serde(default)]
+    #[edn(default)]
     context: ResolutionContext,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(ToEdn)]
 struct TestResults {
     atom_typing: ResolveResult,
     counts: ResolveResult,
 }
 
-#[derive(Serialize)]
+#[derive(ToEdn)]
 struct ResolveResult {
     success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     output: Option<MoleculeAst>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
 }
 
@@ -110,7 +105,7 @@ fn extract_category(path: &Path) -> String {
 
 fn run_conformance_test(file_path: &Path) {
     let content = fs::read_to_string(file_path).expect("failed to read test file");
-    let test_input: TestInput = edn_from_str(&content).expect("failed to parse EDN input");
+    let test_input = TestInput::from_edn_str(&content).expect("failed to parse EDN input");
     let config = MoleculeDslConfig::open().with_overrides(test_input.config_overrides);
 
     let atom_typing = resolve_with_config(
@@ -142,7 +137,7 @@ fn run_conformance_test(file_path: &Path) {
     settings.set_snapshot_path(base.join("snapshots"));
     settings.set_snapshot_suffix(format!("{}_{}", source_dir, filename));
     settings.bind(|| {
-        assert_snapshot!(edn_to_string_pretty(&results).unwrap());
+        assert_snapshot!(results.to_edn().to_string_with(&FormatConfig::default()));
     });
 }
 

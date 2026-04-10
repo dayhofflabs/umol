@@ -1,3 +1,3 @@
-{:input {:atoms [B]
+{:input {:atoms ["B"]
          :bonds []}
  :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}}

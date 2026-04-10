@@ -1,7 +1,5 @@
 //! Dative (coordinate) bond representation for GraphIR.
 
-use serde::{Deserialize, Serialize};
-
 use super::molecule::AtomIndex;
 use crate::table_ir::bond::{Bond as TableBond, BondDonation};
 
@@ -9,7 +7,7 @@ use crate::table_ir::bond::{Bond as TableBond, BondDonation};
 /// indices and the bond order (typically 1). Unlike shared bonds, dative bonds
 /// are not stored in the main connectivity graph and do not contribute to
 /// `atom_bond_order_sum`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct DativeBond {
     donor: AtomIndex,
     acceptor: AtomIndex,

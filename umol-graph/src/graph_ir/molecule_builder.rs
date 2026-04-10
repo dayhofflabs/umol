@@ -8,11 +8,9 @@ use indexmap::IndexMap;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
-use serde::de::Error as SerdeError;
-use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use umol_data::{SpinMultiplicity, SpinState};
-use umol_edn::serde::{from_str as edn_from_str, to_string as edn_to_string};
+use umol_edn::{DeError, Edn, EdnMap, EdnMapHelper, EdnSet, FormatConfig, FromEdn, ToEdn};
 
 use super::aromaticity::{AromaticContribution, AromaticSystem};
 use super::atom::Atom;
@@ -44,21 +42,210 @@ use crate::table_ir::{BondDonation, Molecule as TableMolecule};
 
 /// Transient resolution state carried by `MoleculeBuilder` during the resolution
 /// pipeline. Not part of the final `Molecule` or the `MoleculeAst`.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct ResolutionContext {
-    #[serde(default)]
     pub atom_candidates: HashMap<AtomIndex, SmallVec<[Atom; 4]>>,
-    #[serde(default)]
     pub atom_aromatic_hints: HashMap<AtomIndex, bool>,
-    #[serde(default)]
     pub bond_aromatic_hints: HashMap<BondIndex, bool>,
-    #[serde(default)]
     pub atom_normal_implicit_hydrogens: HashSet<AtomIndex>,
+}
+
+impl<'de> FromEdn<'de> for ResolutionContext {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let m = match edn {
+            Edn::Map(m) => m,
+            other => {
+                return Err(DeError::TypeMismatch {
+                    expected: "ResolutionContext map",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let mut h = EdnMapHelper::new(m);
+
+        let atom_candidates = match h.optional::<Edn>("atom-candidates")? {
+            Some(Edn::Map(m)) => parse_atom_candidates(&m)?,
+            Some(other) => {
+                return Err(DeError::TypeMismatch {
+                    expected: "map",
+                    got: other.kind(),
+                    path: vec!["atom-candidates".into()],
+                });
+            }
+            None => HashMap::new(),
+        };
+
+        let atom_aromatic_hints = match h.optional::<Edn>("atom-aromatic-hints")? {
+            Some(Edn::Map(m)) => parse_node_map(&m, edn_to_bool)?,
+            Some(other) => {
+                return Err(DeError::TypeMismatch {
+                    expected: "map",
+                    got: other.kind(),
+                    path: vec!["atom-aromatic-hints".into()],
+                });
+            }
+            None => HashMap::new(),
+        };
+
+        let bond_aromatic_hints = match h.optional::<Edn>("bond-aromatic-hints")? {
+            Some(Edn::Map(m)) => parse_edge_map(&m, edn_to_bool)?,
+            Some(other) => {
+                return Err(DeError::TypeMismatch {
+                    expected: "map",
+                    got: other.kind(),
+                    path: vec!["bond-aromatic-hints".into()],
+                });
+            }
+            None => HashMap::new(),
+        };
+
+        // Accept both EDN sets and vectors (serde legacy format)
+        let atom_normal_implicit_hydrogens = match h.optional::<Edn>("atom-normal-implicit-hydrogens")? {
+            Some(edn) => parse_index_set(&edn)?,
+            None => HashSet::new(),
+        };
+
+        Ok(Self {
+            atom_candidates,
+            atom_aromatic_hints,
+            bond_aromatic_hints,
+            atom_normal_implicit_hydrogens,
+        })
+    }
+}
+
+impl ToEdn for ResolutionContext {
+    fn to_edn(&self) -> Edn<'static> {
+        let mut m = EdnMap::with_capacity(4);
+
+        let mut ac = EdnMap::with_capacity(self.atom_candidates.len());
+        for (k, v) in &self.atom_candidates {
+            let atoms: Vec<_> = v.iter().map(|a| a.to_edn()).collect();
+            ac.insert(Edn::Int(k.index() as i64), Edn::Vector(atoms.into()));
+        }
+        m.insert(Edn::keyword("atom-candidates"), Edn::Map(ac));
+
+        m.insert(
+            Edn::keyword("atom-aromatic-hints"),
+            Edn::Map(index_map_to_edn(&self.atom_aromatic_hints)),
+        );
+        m.insert(
+            Edn::keyword("bond-aromatic-hints"),
+            Edn::Map(edge_map_to_edn(&self.bond_aromatic_hints)),
+        );
+
+        let mut set = EdnSet::new();
+        for idx in &self.atom_normal_implicit_hydrogens {
+            set.insert(Edn::Int(idx.index() as i64));
+        }
+        m.insert(
+            Edn::keyword("atom-normal-implicit-hydrogens"),
+            Edn::Set(set),
+        );
+
+        Edn::Map(m)
+    }
+}
+
+fn edn_to_usize(edn: &Edn<'_>) -> Result<usize, DeError> {
+    match edn {
+        Edn::Int(n) => Ok(*n as usize),
+        other => Err(DeError::TypeMismatch {
+            expected: "integer",
+            got: other.kind(),
+            path: Vec::new(),
+        }),
+    }
+}
+
+fn edn_to_bool(edn: &Edn<'_>) -> Result<bool, DeError> {
+    match edn {
+        Edn::Bool(b) => Ok(*b),
+        other => Err(DeError::TypeMismatch {
+            expected: "boolean",
+            got: other.kind(),
+            path: Vec::new(),
+        }),
+    }
+}
+
+fn parse_node_map<V>(
+    map: &EdnMap<'_>,
+    parse_value: fn(&Edn<'_>) -> Result<V, DeError>,
+) -> Result<HashMap<AtomIndex, V>, DeError> {
+    let mut result = HashMap::with_capacity(map.len());
+    for (k, v) in map.iter() {
+        result.insert(NodeIndex::new(edn_to_usize(k)?), parse_value(v)?);
+    }
+    Ok(result)
+}
+
+fn parse_edge_map<V>(
+    map: &EdnMap<'_>,
+    parse_value: fn(&Edn<'_>) -> Result<V, DeError>,
+) -> Result<HashMap<BondIndex, V>, DeError> {
+    let mut result = HashMap::with_capacity(map.len());
+    for (k, v) in map.iter() {
+        result.insert(EdgeIndex::new(edn_to_usize(k)?), parse_value(v)?);
+    }
+    Ok(result)
+}
+
+fn parse_atom_candidates(map: &EdnMap<'_>) -> Result<HashMap<AtomIndex, SmallVec<[Atom; 4]>>, DeError> {
+    let mut result = HashMap::with_capacity(map.len());
+    for (k, v) in map.iter() {
+        let atoms: Vec<Atom> = Vec::from_edn(v)?;
+        result.insert(NodeIndex::new(edn_to_usize(k)?), SmallVec::from_vec(atoms));
+    }
+    Ok(result)
+}
+
+/// Parse EDN set or vector of integers into a HashSet of AtomIndex.
+fn parse_index_set(edn: &Edn<'_>) -> Result<HashSet<AtomIndex>, DeError> {
+    let mut result = HashSet::new();
+    match edn {
+        Edn::Set(s) => {
+            for e in s.iter() {
+                result.insert(NodeIndex::new(edn_to_usize(e)?));
+            }
+        }
+        Edn::Vector(v) => {
+            for e in v.iter() {
+                result.insert(NodeIndex::new(edn_to_usize(e)?));
+            }
+        }
+        other => {
+            return Err(DeError::TypeMismatch {
+                expected: "set or vector",
+                got: other.kind(),
+                path: Vec::new(),
+            });
+        }
+    }
+    Ok(result)
+}
+
+fn index_map_to_edn(map: &HashMap<AtomIndex, bool>) -> EdnMap<'static> {
+    let mut m = EdnMap::with_capacity(map.len());
+    for (k, v) in map {
+        m.insert(Edn::Int(k.index() as i64), Edn::Bool(*v));
+    }
+    m
+}
+
+fn edge_map_to_edn(map: &HashMap<BondIndex, bool>) -> EdnMap<'static> {
+    let mut m = EdnMap::with_capacity(map.len());
+    for (k, v) in map {
+        m.insert(Edn::Int(k.index() as i64), Edn::Bool(*v));
+    }
+    m
 }
 
 impl fmt::Display for ResolutionContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        edn_to_string(self).map_err(|_| fmt::Error)?.fmt(f)
+        let edn = self.to_edn();
+        edn.to_string_with(&FormatConfig::default()).fmt(f)
     }
 }
 
@@ -66,7 +253,8 @@ impl FromStr for ResolutionContext {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(edn_from_str(s)?)
+        let tree = umol_edn::read_string(s)?;
+        Self::from_edn(&tree).map_err(|e| ParseError::EdnParse(e.to_string()))
     }
 }
 
@@ -1406,17 +1594,27 @@ impl FromStr for MoleculeBuilder {
     }
 }
 
-impl Serialize for MoleculeBuilder {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+impl<'de> FromEdn<'de> for MoleculeBuilder {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let s = match edn {
+            Edn::Str(s) => s.as_ref(),
+            other => {
+                return Err(DeError::TypeMismatch {
+                    expected: "string",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let ast = parse_molecule_dsl(s).map_err(|e| DeError::Custom(e.to_string()))?;
+        Self::from_ast(ast, &MoleculeDslConfig::zeroed())
+            .map_err(|e| DeError::Custom(e.to_string()))
     }
 }
 
-impl<'de> Deserialize<'de> for MoleculeBuilder {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        let ast = parse_molecule_dsl(&s).map_err(SerdeError::custom)?;
-        Self::from_ast(ast, &MoleculeDslConfig::zeroed()).map_err(SerdeError::custom)
+impl ToEdn for MoleculeBuilder {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(std::borrow::Cow::Owned(self.to_string()))
     }
 }
 

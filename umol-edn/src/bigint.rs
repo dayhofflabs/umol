@@ -77,7 +77,7 @@ impl<'de> FromEdn<'de> for EdnBigInt {
 }
 
 impl ToEdn for EdnBigInt {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::BigInt(self.0.clone())
     }
 }

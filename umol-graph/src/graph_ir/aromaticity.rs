@@ -12,7 +12,6 @@ pub mod hueckel_rule;
 pub use clar::*;
 pub use hmo::*;
 pub use hueckel_rule::*;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use umol_data::SpinState;
 
@@ -38,7 +37,7 @@ pub enum AromaticityError {
 }
 
 /// Per-atom contribution to an aromatic system.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AromaticContribution {
     atom: AtomIndex,
     aromatic_valence: u8,
@@ -65,7 +64,7 @@ impl AromaticContribution {
 /// Charge is delocalized charge, not assignable to any individual atom.
 /// Each atom can participate in at most one aromatic system, appears only once
 /// in the contributions list.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AromaticSystem {
     contributions: Vec<AromaticContribution>,
     charge: i8,

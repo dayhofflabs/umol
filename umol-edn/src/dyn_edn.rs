@@ -142,7 +142,7 @@ impl<'de> FromEdn<'de> for DynEdn {
 }
 
 impl ToEdn for DynEdn {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         self.0.clone()
     }
 }

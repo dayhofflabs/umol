@@ -4,7 +4,6 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
-use serde::{Deserialize, Serialize};
 use umol_data::Element;
 
 use super::config::RingEnumerationStrategy;
@@ -101,7 +100,7 @@ impl AtomAdjacency {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RingIndex(pub u32);
 
 impl RingIndex {
@@ -110,7 +109,7 @@ impl RingIndex {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Ring {
     atoms: Vec<AtomIndex>,
     bonds: Vec<BondIndex>,

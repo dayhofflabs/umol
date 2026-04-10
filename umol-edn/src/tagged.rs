@@ -62,10 +62,10 @@ impl<T> ToEdn for EdnTagged<T>
 where
     T: ToEdn,
 {
-    fn to_edn(&self) -> Edn<'_> {
+    fn to_edn(&self) -> Edn<'static> {
         Edn::Tagged(
             Cow::Owned(self.tag.clone()),
-            Box::new(self.value.to_edn().into_owned()),
+            Box::new(self.value.to_edn()),
         )
     }
 }

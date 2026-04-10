@@ -93,8 +93,8 @@ impl<T> ToEdn for EdnList<T>
 where
     T: ToEdn,
 {
-    fn to_edn(&self) -> Edn<'_> {
-        let items: Vec<Edn<'static>> = self.0.iter().map(|v| v.to_edn().into_owned()).collect();
+    fn to_edn(&self) -> Edn<'static> {
+        let items: Vec<Edn<'static>> = self.0.iter().map(|v| v.to_edn()).collect();
         Edn::List(EdnSeq::from(items))
     }
 }

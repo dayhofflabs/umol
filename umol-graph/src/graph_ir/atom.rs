@@ -3,10 +3,8 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use serde::de::{Deserializer, Error as SerdeError};
-use serde::ser::Serializer;
-use serde::{Deserialize, Serialize};
 use umol_data::{Element, SpinMultiplicity, SpinState, SpinStateError};
+use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{raise_i8_ground, raise_spin_ground, raise_u8_ground};
 use crate::atom::{AromaticValence, IsotopeMass};
@@ -282,16 +280,17 @@ impl Display for Atom {
     }
 }
 
-impl Serialize for Atom {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+impl<'de> FromEdn<'de> for Atom {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let ast = AtomAst::from_edn(edn)?;
+        Self::from_ast(ast, &AtomDslConfig::zeroed())
+            .map_err(|e| DeError::Custom(e.to_string()))
     }
 }
 
-impl<'de> Deserialize<'de> for Atom {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        s.parse().map_err(SerdeError::custom)
+impl ToEdn for Atom {
+    fn to_edn(&self) -> Edn<'static> {
+        self.to_ast(&AtomDslConfig::zeroed()).to_edn()
     }
 }
 
@@ -410,20 +409,20 @@ mod tests {
     #[case::isotope_mass("C#i13#h4".parse::<Atom>().unwrap(), r#""C#i13#h4""#)]
     #[case::aromatic("C#h#v2#a1".parse::<Atom>().unwrap(), r#""C#h#v2#a""#)]
     #[case::multiplicity("C#n#u2#s".parse::<Atom>().unwrap(), r#""C#n#u2#s""#)]
-    fn test_atom_serialize(#[case] atom: Atom, #[case] expected: &str) {
-        let json = serde_json::to_string(&atom).unwrap();
-        assert_eq!(json, expected);
+    fn test_atom_to_edn(#[case] atom: Atom, #[case] expected: &str) {
+        let edn = atom.to_edn();
+        assert_eq!(edn.to_string(), expected);
     }
 
     #[rstest]
-    #[case::defaults(r#""He""#, "He".parse::<Atom>().unwrap(), )]
+    #[case::defaults(r#""He""#, "He".parse::<Atom>().unwrap())]
     #[case::charge_plus(r#""C#c+#h3""#, "C#c+#h3".parse::<Atom>().unwrap())]
     #[case::charge_minus(r#""C#c-#h3#n1""#, "C#c-#h3#n".parse::<Atom>().unwrap())]
     #[case::isotope_mass(r#""C#i13#h4""#, "C#i13#h4".parse::<Atom>().unwrap())]
     #[case::aromatic(r#""C#h#v2#a1""#, "C#h#v2#a".parse::<Atom>().unwrap())]
     #[case::multiplicity(r#""C#n#u2#s""#, "C#n#u2#s".parse::<Atom>().unwrap())]
-    fn test_atom_deserialize(#[case] input: &str, #[case] expected: Atom) {
-        let atom: Atom = serde_json::from_str(input).unwrap();
+    fn test_atom_from_edn(#[case] input: &str, #[case] expected: Atom) {
+        let atom = Atom::from_edn_str(input).unwrap();
         assert_eq!(atom, expected);
     }
 }

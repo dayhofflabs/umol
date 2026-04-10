@@ -1,3 +1,3 @@
-{:input {:atoms ["Sb #c-" H H]
+{:input {:atoms ["Sb #c-" "H" "H"]
          :bonds [[0 1 :single] [0 2 :single]]}
  :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero}}}

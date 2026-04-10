@@ -8,10 +8,6 @@ use nom::combinator::all_consuming;
 use nom::multi::many0;
 use nom::sequence::{delimited, pair, terminated};
 use nom::{Err, IResult, Parser};
-use serde::de::{Deserializer, Error as DeError};
-use serde::ser::Serializer;
-use serde::{Deserialize, Serialize};
-
 use super::ast::DslAst;
 use super::config::BondDslConfig;
 use super::error::ParseError;
@@ -138,28 +134,6 @@ pub fn builtin_bond_aliases() -> bimap::BiMap<String, BondAst> {
     ])
 }
 
-impl Serialize for BondAst {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let aliases = builtin_bond_aliases();
-        if let Some(name) = aliases.get_by_right(self) {
-            umol_edn::EdnKeyword::new(name).serialize(serializer)
-        } else {
-            serializer.serialize_str(&self.to_string())
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for BondAst {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        let aliases = builtin_bond_aliases();
-        if let Some(ast) = aliases.get_by_left(&s) {
-            return Ok(ast.clone());
-        }
-        parse_bond_dsl(&s).map_err(DeError::custom)
-    }
-}
-
 impl<'de> umol_edn::FromEdn<'de> for BondAst {
     fn from_edn(edn: &umol_edn::Edn<'de>) -> Result<Self, umol_edn::DeError> {
         let s: &str = match edn {
@@ -182,7 +156,7 @@ impl<'de> umol_edn::FromEdn<'de> for BondAst {
 }
 
 impl umol_edn::ToEdn for BondAst {
-    fn to_edn(&self) -> umol_edn::Edn<'_> {
+    fn to_edn(&self) -> umol_edn::Edn<'static> {
         let aliases = builtin_bond_aliases();
         if let Some(name) = aliases.get_by_right(self) {
             umol_edn::Edn::Keyword(umol_edn::EdnKeyword::owned(name.clone()))

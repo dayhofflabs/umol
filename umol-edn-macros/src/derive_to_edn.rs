@@ -1,33 +1,53 @@
-//! `#[derive(ToEdn)]` proc macro for named structs.
+//! `#[derive(ToEdn)]` proc macro for named structs and enums.
+//!
+//! ## Named structs
 //!
 //! Generates an `impl ToEdn` that builds an `EdnMap` from each field, using
 //! kebab-case field keys by default. `Option<T>` fields are skipped when
 //! `None`; all other fields (including empty `Vec<T>`) are emitted.
+//!
+//! ## Enums
+//!
+//! Generates an `impl ToEdn` that serializes:
+//! - Unit variants as EDN keywords: `:variant-name`
+//! - Newtype variants as single-key maps: `{:variant-name value}`
+//! - Tuple variants as single-key maps with vector values: `{:variant-name [v1 v2]}`
+//! - Struct variants as single-key maps with map values: `{:variant-name {:field v}}`
+//!
+//! Variant naming: Rust `PascalCase` is converted to `kebab-case` by default.
+//! Override with `#[edn(rename = "...")]`.
 
+use heck::ToKebabCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Data, DataStruct, DeriveInput, Field, Fields, GenericArgument, PathArguments, Type};
+use syn::{Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, PathArguments, Type};
 
 pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
-    let struct_name = input.ident.clone();
-
-    let fields = match input.data {
+    match &input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(named),
             ..
-        }) => named.named,
-        _ => {
-            return Err(syn::Error::new_spanned(
-                struct_name,
-                "ToEdn can only be derived on structs with named fields",
-            ));
-        }
-    };
+        }) => expand_struct(&input.ident, &named.named),
+        Data::Enum(data_enum) => expand_enum(&input.ident, data_enum),
+        _ => Err(syn::Error::new_spanned(
+            input.ident,
+            "ToEdn can only be derived on structs with named fields or enums",
+        )),
+    }
+}
 
+// ---------------------------------------------------------------------------
+// Structs
+// ---------------------------------------------------------------------------
+
+fn expand_struct(
+    struct_name: &syn::Ident,
+    fields: &syn::punctuated::Punctuated<Field, syn::Token![,]>,
+) -> Result<TokenStream2, syn::Error> {
     let mut inserts = Vec::new();
     let len = fields.len();
 
-    for field in &fields {
+    for field in fields {
         let info = parse_field(field)?;
         let ident = info.ident;
         let key = info.key;
@@ -55,7 +75,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
 
     Ok(quote! {
         impl ::umol_edn::ToEdn for #struct_name {
-            fn to_edn(&self) -> ::umol_edn::Edn<'_> {
+            fn to_edn(&self) -> ::umol_edn::Edn<'static> {
                 let mut m = ::umol_edn::EdnMap::with_capacity(#len);
                 #(#inserts)*
                 ::umol_edn::Edn::Map(m)
@@ -63,6 +83,137 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
         }
     })
 }
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+fn expand_enum(name: &syn::Ident, data: &DataEnum) -> Result<TokenStream2, syn::Error> {
+    let mut arms = Vec::new();
+
+    for variant in &data.variants {
+        let ident = &variant.ident;
+        let rename = read_rename(&variant.attrs)?;
+        let key = rename.unwrap_or_else(|| ident.to_string().to_kebab_case());
+
+        let arm = match &variant.fields {
+            Fields::Unit => {
+                quote! {
+                    #name::#ident => ::umol_edn::Edn::keyword(#key),
+                }
+            }
+            Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
+                quote! {
+                    #name::#ident(ref __v0) => {
+                        let mut __m = ::umol_edn::EdnMap::with_capacity(1);
+                        __m.insert(
+                            ::umol_edn::Edn::keyword(#key),
+                            ::umol_edn::ToEdn::to_edn(__v0),
+                        );
+                        ::umol_edn::Edn::Map(__m)
+                    }
+                }
+            }
+            Fields::Unnamed(fields) => {
+                let field_refs: Vec<_> = (0..fields.unnamed.len())
+                    .map(|i| {
+                        let name = syn::Ident::new(&format!("__v{}", i), ident.span());
+                        quote! { ref #name }
+                    })
+                    .collect();
+                let field_edns: Vec<_> = (0..fields.unnamed.len())
+                    .map(|i| {
+                        let name = syn::Ident::new(&format!("__v{}", i), ident.span());
+                        quote! { ::umol_edn::ToEdn::to_edn(#name) }
+                    })
+                    .collect();
+
+                quote! {
+                    #name::#ident(#(#field_refs),*) => {
+                        let mut __m = ::umol_edn::EdnMap::with_capacity(1);
+                        __m.insert(
+                            ::umol_edn::Edn::keyword(#key),
+                            ::umol_edn::Edn::Vector(
+                                vec![#(#field_edns),*].into(),
+                            ),
+                        );
+                        ::umol_edn::Edn::Map(__m)
+                    }
+                }
+            }
+            Fields::Named(fields) => {
+                let field_refs: Vec<_> = fields
+                    .named
+                    .iter()
+                    .map(|f| {
+                        let f_ident = f.ident.as_ref().unwrap();
+                        quote! { ref #f_ident }
+                    })
+                    .collect();
+
+                let field_count = fields.named.len();
+                let field_inserts: Vec<_> = fields
+                    .named
+                    .iter()
+                    .map(|f| {
+                        let f_ident = f.ident.as_ref().unwrap();
+                        let f_key = read_rename(&f.attrs)
+                            .unwrap()
+                            .unwrap_or_else(|| to_kebab_case(&f_ident.to_string()));
+                        let is_opt = is_option_type(&f.ty);
+
+                        if is_opt {
+                            quote! {
+                                if let ::std::option::Option::Some(__v) = #f_ident {
+                                    __inner.insert(
+                                        ::umol_edn::Edn::keyword(#f_key),
+                                        ::umol_edn::ToEdn::to_edn(__v),
+                                    );
+                                }
+                            }
+                        } else {
+                            quote! {
+                                __inner.insert(
+                                    ::umol_edn::Edn::keyword(#f_key),
+                                    ::umol_edn::ToEdn::to_edn(#f_ident),
+                                );
+                            }
+                        }
+                    })
+                    .collect();
+
+                quote! {
+                    #name::#ident { #(#field_refs),* } => {
+                        let mut __inner = ::umol_edn::EdnMap::with_capacity(#field_count);
+                        #(#field_inserts)*
+                        let mut __m = ::umol_edn::EdnMap::with_capacity(1);
+                        __m.insert(
+                            ::umol_edn::Edn::keyword(#key),
+                            ::umol_edn::Edn::Map(__inner),
+                        );
+                        ::umol_edn::Edn::Map(__m)
+                    }
+                }
+            }
+        };
+
+        arms.push(arm);
+    }
+
+    Ok(quote! {
+        impl ::umol_edn::ToEdn for #name {
+            fn to_edn(&self) -> ::umol_edn::Edn<'static> {
+                match self {
+                    #(#arms)*
+                }
+            }
+        }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 struct FieldInfo {
     ident: syn::Ident,
@@ -76,7 +227,7 @@ fn parse_field(field: &Field) -> Result<FieldInfo, syn::Error> {
         .clone()
         .ok_or_else(|| syn::Error::new_spanned(field, "field must be named"))?;
 
-    let key = read_rename_attr(field)?.unwrap_or_else(|| to_kebab_case(&ident.to_string()));
+    let key = read_rename(&field.attrs)?.unwrap_or_else(|| to_kebab_case(&ident.to_string()));
     let is_option = is_option_type(&field.ty);
 
     Ok(FieldInfo {
@@ -86,9 +237,9 @@ fn parse_field(field: &Field) -> Result<FieldInfo, syn::Error> {
     })
 }
 
-fn read_rename_attr(field: &Field) -> Result<Option<String>, syn::Error> {
+fn read_rename(attrs: &[syn::Attribute]) -> Result<Option<String>, syn::Error> {
     let mut found: Option<String> = None;
-    for attr in &field.attrs {
+    for attr in attrs {
         if !attr.path().is_ident("edn") {
             continue;
         }
@@ -97,6 +248,8 @@ fn read_rename_attr(field: &Field) -> Result<Option<String>, syn::Error> {
                 let value: syn::LitStr = meta.value()?.parse()?;
                 found = Some(value.value());
                 Ok(())
+            } else if meta.path.is_ident("default") {
+                Ok(()) // only relevant for FromEdn
             } else {
                 Err(meta.error("unsupported #[edn(...)] attribute"))
             }
@@ -123,3 +276,4 @@ fn is_option_type(ty: &Type) -> bool {
 fn to_kebab_case(s: &str) -> String {
     s.replace('_', "-")
 }
+

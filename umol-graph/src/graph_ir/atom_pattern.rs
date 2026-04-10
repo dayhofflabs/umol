@@ -3,10 +3,8 @@
 use std::fmt;
 use std::str::FromStr;
 
-use serde::de::{Deserializer, Error as SerdeError};
-use serde::ser::Serializer;
-use serde::{Deserialize, Serialize};
 use umol_data::{Element, SpinMultiplicity, SpinState};
+use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{lower_spin, raise_i8_pattern, raise_spin_pattern, raise_u8_pattern};
 use super::atom::Atom;
@@ -408,7 +406,7 @@ impl AtomPattern {
 }
 
 /// Generic pattern for a scalar-valued field: unconstrained or an exact value.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Pattern<T> {
     Any,
     Is(T),
@@ -434,7 +432,7 @@ impl<T: PartialEq + Copy> Pattern<T> {
 }
 
 /// Pattern on a chemical element.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ElementPattern {
     Any,
     Is(Element),
@@ -452,7 +450,7 @@ impl ElementPattern {
 }
 
 /// Pattern on isotope mass.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IsotopePattern {
     Any,
     Natural,
@@ -475,7 +473,7 @@ impl IsotopePattern {
 }
 
 /// Pattern on implicit hydrogen count.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HydrogenPattern {
     Any,
     Normal,
@@ -494,7 +492,7 @@ impl HydrogenPattern {
 }
 
 /// Pattern on aromatic valence.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AromaticValencePattern {
     Any,
     NotAromatic,
@@ -719,17 +717,17 @@ impl fmt::Display for AtomPattern {
     }
 }
 
-impl Serialize for AtomPattern {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_string())
+impl<'de> FromEdn<'de> for AtomPattern {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let ast = AtomAst::from_edn(edn)?;
+        Self::from_ast(ast, &AtomDslConfig::open())
+            .map_err(|e| DeError::Custom(e.to_string()))
     }
 }
 
-impl<'de> Deserialize<'de> for AtomPattern {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(deserializer)?;
-        let ast = parse_atom_dsl(&s).map_err(SerdeError::custom)?;
-        AtomPattern::from_ast(ast, &AtomDslConfig::open()).map_err(SerdeError::custom)
+impl ToEdn for AtomPattern {
+    fn to_edn(&self) -> Edn<'static> {
+        self.to_ast(&AtomDslConfig::open()).to_edn()
     }
 }
 
@@ -877,9 +875,8 @@ mod tests {
     #[case::isotope_mass(AtomPattern { isotope_mass: IsotopePattern::Is(13), implicit_hydrogens: HydrogenPattern::Is(4), ..AtomPattern::new(Element::C) }, r#""C#i13#h4""#)]
     #[case::aromatic_none(AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..AtomPattern::new(Element::C) }, r#""C#a!""#)]
     #[case::aromatic(AtomPattern { aromatic_valence: AromaticValencePattern::Aromatic, ..AtomPattern::new(Element::C) }, r#""C#a*""#)]
-    fn test_atom_pattern_serialize(#[case] pattern: AtomPattern, #[case] expected: &str) {
-        let json = serde_json::to_string(&pattern).unwrap();
-        assert_eq!(json, expected);
+    fn test_atom_pattern_to_edn(#[case] pattern: AtomPattern, #[case] expected: &str) {
+        assert_eq!(pattern.to_edn().to_string(), expected);
     }
 
     #[rustfmt::skip]
@@ -892,8 +889,8 @@ mod tests {
     #[case::aromatic_unspecified(r#""C#a?""#, AtomPattern::new(Element::C))]
     #[case::aromatic_none(r#""C#a!""#, AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..AtomPattern::new(Element::C) })]
     #[case::aromatic(r#""C#a*""#, AtomPattern { aromatic_valence: AromaticValencePattern::Aromatic, ..AtomPattern::new(Element::C) })]
-    fn test_atom_pattern_deserialize(#[case] input: &str, #[case] expected: AtomPattern) {
-        let pattern: AtomPattern = serde_json::from_str(input).unwrap();
+    fn test_atom_pattern_from_edn(#[case] input: &str, #[case] expected: AtomPattern) {
+        let pattern = AtomPattern::from_edn_str(input).unwrap();
         assert_eq!(pattern, expected);
     }
 }

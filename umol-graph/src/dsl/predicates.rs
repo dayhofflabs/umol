@@ -7,14 +7,13 @@ use nom::combinator::{map, recognize, success, value};
 use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
-use serde::{Deserialize, Serialize};
 use umol_data::Element;
 
 use super::error::ParseError;
 use super::value::{op_char, parse_id, value_dsl, ValueAst};
 
 /// Element expressions
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ElementExpr {
     Lit(Element),
     Wildcard,
@@ -30,7 +29,7 @@ impl ElementExpr {
 }
 
 /// Isotope-mass expressions (Natural = #i=)
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum IsotopeExpr {
     Natural,
     Lit(u32),
@@ -41,7 +40,7 @@ pub enum IsotopeExpr {
 }
 
 /// Implicit hydrogen expressions (Normal = #h=)
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum HydrogenExpr {
     Normal,
     Value(ValueAst),
@@ -54,7 +53,7 @@ impl HydrogenExpr {
 }
 
 /// Aromatic valence expressions
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AromaticExpr {
     Unspecified,
     NotAromatic,
