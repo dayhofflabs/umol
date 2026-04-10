@@ -10,9 +10,18 @@ Usage:
     python3 scripts/generate_reference_tables.py > tests/reference_tables_data.rs
 """
 
+import math
 import os
 import sys
 from pathlib import Path
+
+# Known irrational characters. Generated file uses std::f64::consts names so
+# the Rust constant carries full precision instead of the truncated decimal
+# from the source tables.
+NAMED_CONSTANTS = [
+    ("SQRT_2", math.sqrt(2.0)),
+]
+CONSTANT_TOL = 1e-3
 
 # Groups to include. File name mapping: Cs→C1h.lis, Ci→S2.lis.
 GROUPS = [
@@ -110,6 +119,11 @@ def format_f64(v: float) -> str:
     """Format a float as a Rust f64 literal."""
     if v == int(v) and abs(v) < 1e12:
         return f"{int(v)}.0"
+    for name, value in NAMED_CONSTANTS:
+        if abs(v - value) < CONSTANT_TOL:
+            return name
+        if abs(v + value) < CONSTANT_TOL:
+            return f"-{name}"
     return f"{v}"
 
 
@@ -161,6 +175,8 @@ def main():
     print("// Source: http://gernot-katzers-spice-pages.com/character_tables/")
     print("//")
     print("// Do not edit by hand.")
+    print()
+    print("use std::f64::consts::SQRT_2;")
     print()
     print("#[allow(dead_code)]")
     print("pub struct ReferenceTable {")

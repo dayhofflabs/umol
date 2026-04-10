@@ -68,18 +68,10 @@ pub fn kekulize(
 
     // Collect aromatic bonds (both endpoints in the aromatic system).
     let mut aromatic_bonds: Vec<(BondIndex, AtomIndex, AtomIndex)> = Vec::new();
-    let mut atom_bonds: HashMap<AtomIndex, Vec<usize>> = HashMap::new();
-    for &atom in &aromatic_atoms {
-        atom_bonds.entry(atom).or_default();
-    }
-
     for bond_idx in builder.bond_indices() {
         if let Some((a, b)) = builder.bond_atom_indices(bond_idx) {
             if aromatic_atoms.contains(&a) && aromatic_atoms.contains(&b) {
-                let idx = aromatic_bonds.len();
                 aromatic_bonds.push((bond_idx, a, b));
-                atom_bonds.entry(a).or_default().push(idx);
-                atom_bonds.entry(b).or_default().push(idx);
             }
         }
     }
@@ -121,7 +113,6 @@ pub fn kekulize(
         0,
         &bond_order,
         &aromatic_bonds,
-        &atom_bonds,
         &mut assignment,
         &mut current_demand,
         &mut backtracks,
@@ -146,12 +137,10 @@ pub fn kekulize(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn dfs_kekulize(
     depth: usize,
     bond_order: &[usize],
     aromatic_bonds: &[(BondIndex, AtomIndex, AtomIndex)],
-    atom_bonds: &HashMap<AtomIndex, Vec<usize>>,
     assignment: &mut [u8],
     current_demand: &mut HashMap<AtomIndex, u8>,
     backtracks: &mut usize,
@@ -179,7 +168,6 @@ fn dfs_kekulize(
             depth + 1,
             bond_order,
             aromatic_bonds,
-            atom_bonds,
             assignment,
             current_demand,
             backtracks,
@@ -198,7 +186,6 @@ fn dfs_kekulize(
         depth + 1,
         bond_order,
         aromatic_bonds,
-        atom_bonds,
         assignment,
         current_demand,
         backtracks,

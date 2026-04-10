@@ -242,7 +242,7 @@ mod tests {
         indexmap! {"BOILING.POINT".to_string() => "100.5".to_string(), "CAS NR".to_string() => "110-82-7,12217-02-6".to_string()})]
     fn test_sdf_data_block(#[case] input: &[u8], #[case] expected: IndexMap<String, String>) {
         let result = sdf_data_block(0).parse(input);
-        let input_str = input.to_str_lossy().to_owned();
+        let input_str = input.to_str_lossy().into_owned();
         assert!(
             result.is_ok(),
             "{:?} should have succeeded, result: {:?}",

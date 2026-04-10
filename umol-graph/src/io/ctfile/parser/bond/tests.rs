@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use bstr::ByteSlice;
 use nom::error::ErrorKind as NomErrorKind;
 use nom::{Err, Parser};

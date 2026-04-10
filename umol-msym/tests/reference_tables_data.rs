@@ -3,6 +3,8 @@
 //
 // Do not edit by hand.
 
+use std::f64::consts::SQRT_2;
+
 #[allow(dead_code)]
 pub struct ReferenceTable {
     pub group_name: String,
@@ -537,9 +539,9 @@ pub fn reference_table(group: &str) -> Option<ReferenceTable> {
                 vec![1.0, 1.0, 1.0, 1.0, 1.0, -1.0, -1.0],
                 vec![1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0],
                 vec![1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0],
-                vec![2.0, 1.4142, 0.0, -1.4142, -2.0, 0.0, 0.0],
+                vec![2.0, SQRT_2, 0.0, -SQRT_2, -2.0, 0.0, 0.0],
                 vec![2.0, 0.0, -2.0, 0.0, 2.0, 0.0, 0.0],
-                vec![2.0, -1.4142, 0.0, 1.4142, -2.0, 0.0, 0.0],
+                vec![2.0, -SQRT_2, 0.0, SQRT_2, -2.0, 0.0, 0.0],
             ],
             order: 16,
         }),
@@ -631,9 +633,9 @@ pub fn reference_table(group: &str) -> Option<ReferenceTable> {
             characters: vec![
                 vec![1.0, 1.0, 1.0, 1.0, 1.0],
                 vec![1.0, -1.0, 1.0, -1.0, 1.0],
-                vec![2.0, 1.4142, 0.0, -1.4142, -2.0],
+                vec![2.0, SQRT_2, 0.0, -SQRT_2, -2.0],
                 vec![2.0, 0.0, -2.0, 0.0, 2.0],
-                vec![2.0, -1.4142, 0.0, 1.4142, -2.0],
+                vec![2.0, -SQRT_2, 0.0, SQRT_2, -2.0],
             ],
             order: 8,
         }),

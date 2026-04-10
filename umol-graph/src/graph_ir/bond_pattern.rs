@@ -317,7 +317,7 @@ mod tests {
         BondPattern { unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
     #[case::wildcard_order(BondAst { order: ValueAst::Wildcard, charge: None, unpaired_electrons: None, multiplicity: None },
         BondDslConfig::zeroed(),
-        BondPattern { order: Pattern::Any, charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
+        BondPattern { order: Pattern::Any, charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet) })]
     #[case::full(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(2)), multiplicity: Some(ValueAst::Lit(1)) },
         BondDslConfig::zeroed(),
         BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]

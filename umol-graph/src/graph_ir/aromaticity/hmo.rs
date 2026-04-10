@@ -453,7 +453,7 @@ mod tests {
         let systems = hmo_model.find_from_rings(&builder, &ring_info).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(
-            systems.get(0).map(|s| s.contributions().len()),
+            systems.first().map(|s| s.contributions().len()),
             expected_atoms
         );
     }

@@ -42,7 +42,7 @@ proptest! {
     #[test]
     fn never_panics_on_ascii(input in smilesish()) {
         let config = SmilesIoConfig::basic_opensmiles();
-        let _ = std::panic::catch_unwind(|| {
+        std::panic::catch_unwind(|| {
             let _ = parse_smiles_bytes_with(&input, &config);
         }).expect("parse_smiles panicked");
     }

@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use bstr::ByteSlice;
 use float_cmp::*;
 use nom::error::ErrorKind as NomErrorKind;

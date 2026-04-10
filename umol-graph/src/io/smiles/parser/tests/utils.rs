@@ -1,5 +1,7 @@
 //! Utilities for SMILES parser tests.
 
+#![allow(clippy::type_complexity)]
+
 use std::collections::HashMap;
 
 use regex::Regex;
@@ -288,7 +290,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         );
     }
     let mut mols = b.finish();
-    let mut mol = mols.pop().unwrap_or_else(|| Molecule::empty());
+    let mut mol = mols.pop().unwrap_or_else(Molecule::empty);
 
     if let Some(rings_src) = rings_s {
         let ring_tokens: Vec<_> = rings_src.split_whitespace().collect();
@@ -507,7 +509,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
         );
     }
     let mut mols = b.finish();
-    let mut mol = mols.pop().unwrap_or_else(|| ExtendedMolecule::empty());
+    let mut mol = mols.pop().unwrap_or_else(ExtendedMolecule::empty);
 
     if let Some(rings_src) = rings_s {
         let ring_tokens: Vec<_> = rings_src.split_whitespace().collect();

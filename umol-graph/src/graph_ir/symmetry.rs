@@ -219,6 +219,7 @@ pub fn compute_symmetry(builder: &MoleculeBuilder) -> GraphSymmetry {
 
     let mut sg = SparseGraph::new(n_total, n_dir_edges);
     let mut pos = 0usize;
+    #[allow(clippy::needless_range_loop)]
     for i in 0..n_total {
         sg.v[i] = pos;
         sg.d[i] = degree[i] as c_int;
@@ -267,8 +268,8 @@ pub fn compute_symmetry(builder: &MoleculeBuilder) -> GraphSymmetry {
 
     let num_orbits = {
         let mut reps = HashSet::new();
-        for i in 0..n_atoms {
-            reps.insert(orbits[i]);
+        for &orbit in &orbits[..n_atoms] {
+            reps.insert(orbit);
         }
         reps.len()
     };
