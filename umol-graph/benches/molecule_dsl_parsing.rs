@@ -1,11 +1,9 @@
-//! Benchmarks comparing the two molecule DSL parsing paths:
-//! canonical fused (`parse_molecule_dsl`) and native tree
-//! (`parse_molecule_dsl_tree`).
+//! Benchmarks for the molecule DSL fused parser.
 
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use umol_graph::dsl::molecule::{parse_molecule_dsl, parse_molecule_dsl_tree};
+use umol_graph::dsl::molecule::parse_molecule_dsl;
 
 const EMPTY: &str = r#"{:atoms [] :bonds []}"#;
 
@@ -40,14 +38,6 @@ fn bench_molecule_dsl(c: &mut Criterion) {
     for (name, input) in cases {
         group.bench_function(*name, |b| {
             b.iter(|| parse_molecule_dsl(black_box(input)).unwrap())
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("molecule_dsl_tree");
-    for (name, input) in cases {
-        group.bench_function(*name, |b| {
-            b.iter(|| parse_molecule_dsl_tree(black_box(input)).unwrap())
         });
     }
     group.finish();

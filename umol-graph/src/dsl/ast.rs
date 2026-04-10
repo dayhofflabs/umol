@@ -9,7 +9,7 @@ pub trait DslAst {
 
 /// AST lowering targets.
 pub trait FromAst<A: DslAst>: Sized {
-    fn from_ast(ast: A, cfg: &A::Config) -> Result<Self, LoweringError>;
+    fn from_ast(ast: &A, cfg: &A::Config) -> Result<Self, LoweringError>;
 }
 
 /// Raise a ground or pattern type to its AST representation, for formatting.

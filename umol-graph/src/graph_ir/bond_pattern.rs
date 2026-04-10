@@ -143,19 +143,19 @@ impl BondPattern {
 }
 
 impl FromAst<BondAst> for BondPattern {
-    fn from_ast(ast: BondAst, cfg: &BondDslConfig) -> Result<Self, LoweringError> {
-        let order = match ast.order {
+    fn from_ast(ast: &BondAst, cfg: &BondDslConfig) -> Result<Self, LoweringError> {
+        let order = match &ast.order {
             ValueAst::Lit(n) => {
-                Pattern::Is(u8::try_from(n).map_err(|_| LoweringError::OutOfRange {
+                Pattern::Is(u8::try_from(*n).map_err(|_| LoweringError::OutOfRange {
                     field: "order",
-                    value: n as i64,
+                    value: *n as i64,
                 })?)
             }
             ValueAst::Wildcard => Pattern::Any,
             _ => return Err(LoweringError::NonGround { field: "order" }),
         };
 
-        let charge = match ast.charge.or(match cfg.charge_mode {
+        let charge = match ast.charge.clone().or(match cfg.charge_mode {
             NumericMode::Zero => Some(ValueAst::Lit(0)),
             NumericMode::Required => None,
         }) {
@@ -168,8 +168,8 @@ impl FromAst<BondAst> for BondPattern {
         };
 
         let (unpaired_electrons, multiplicity) = lower_spin(
-            ast.unpaired_electrons,
-            ast.multiplicity,
+            ast.unpaired_electrons.clone(),
+            ast.multiplicity.clone(),
             &cfg.unpaired_electrons_mode,
             &cfg.multiplicity_mode,
         )?;
@@ -213,7 +213,7 @@ impl FromStr for BondPattern {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_bond_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
-        Self::from_ast(ast, &BondDslConfig::open())
+        Self::from_ast(&ast, &BondDslConfig::open())
     }
 }
 
@@ -226,7 +226,7 @@ impl Display for BondPattern {
 impl<'de> FromEdn<'de> for BondPattern {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = BondAst::from_edn(edn)?;
-        Self::from_ast(ast, &BondDslConfig::open())
+        Self::from_ast(&ast, &BondDslConfig::open())
             .map_err(|e| DeError::subgrammar("bond", e))
     }
 }
@@ -325,7 +325,7 @@ mod tests {
         BondDslConfig::open(),
         BondPattern::new(1))]
     fn test_bond_pattern_from_ast(#[case] ast: BondAst, #[case] cfg: BondDslConfig, #[case] expected: BondPattern) {
-        assert_eq!(BondPattern::from_ast(ast, &cfg).unwrap(), expected);
+        assert_eq!(BondPattern::from_ast(&ast, &cfg).unwrap(), expected);
     }
 
     #[rustfmt::skip]

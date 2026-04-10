@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::str::FromStr;
 
-use indexmap::IndexMap;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
@@ -32,8 +31,8 @@ use crate::dsl::bond::BondAst;
 use crate::dsl::config::MoleculeDslConfig;
 use crate::dsl::error::{LoweringError, ParseError};
 use crate::dsl::molecule::{
-    parse_molecule_dsl, AromaticSystem as AromaticSystemAst, AtomRef, Atoms,
-    DativeBond as DativeBondAst, LocalizedBond as LocalizedBondAst, Metadata, MoleculeAst,
+    AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
+    LocalizedBond as LocalizedBondAst, MoleculeAst, MoleculeAstWrapper,
     MulticenterBond as MulticenterBondAst, NoncovalentBond as NoncovalentBondAst,
 };
 use crate::table_ir::atom::ImplicitHydrogens;
@@ -1333,50 +1332,42 @@ impl Default for MoleculeBuilder {
 }
 
 impl FromAst<MoleculeAst> for MoleculeBuilder {
-    fn from_ast(ast: MoleculeAst, cfg: &MoleculeDslConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: &MoleculeAst, cfg: &MoleculeDslConfig) -> Result<Self, LoweringError> {
         let mut builder = Self::new();
-        let mut label_to_index: IndexMap<String, AtomIndex> = IndexMap::new();
+        let mut indices: Vec<AtomIndex> = Vec::with_capacity(ast.atoms.len());
 
-        let tag_for_pos: IndexMap<usize, String> = ast
-            .atoms
-            .tags
-            .iter()
-            .map(|(name, &pos)| (pos, name.clone()))
-            .collect();
-
-        for (i, atom_ast) in ast.atoms.entries.into_iter().enumerate() {
+        for atom_ast in &ast.atoms {
             let pattern = AtomPattern::from_ast(atom_ast, &cfg.atom)?;
-            let idx = builder.add_atom(pattern);
-            label_to_index.insert(i.to_string(), idx);
-            if let Some(tag) = tag_for_pos.get(&i) {
-                label_to_index.insert(tag.clone(), idx);
-            }
+            indices.push(builder.add_atom(pattern));
         }
 
-        let resolve = |atom_ref: &AtomRef| -> Result<AtomIndex, LoweringError> {
-            let key = atom_ref.name();
-            label_to_index
-                .get(key.as_ref())
+        let resolve = |i: usize| -> Result<AtomIndex, LoweringError> {
+            indices
+                .get(i)
                 .copied()
-                .ok_or_else(|| LoweringError::UnknownLabel(key.into_owned()))
+                .ok_or_else(|| LoweringError::UnknownLabel(i.to_string()))
         };
 
-        for bond in ast.bonds {
-            let a = resolve(&bond.a)?;
-            let b = resolve(&bond.b)?;
-            let pattern = BondPattern::from_ast(bond.bond, &cfg.bond)?;
+        for bond in &ast.bonds {
+            let a = resolve(bond.a)?;
+            let b = resolve(bond.b)?;
+            let pattern = BondPattern::from_ast(&bond.bond, &cfg.bond)?;
             builder.add_bond_unchecked(a, b, pattern);
         }
 
-        for db in ast.dative_bonds {
-            let donor = resolve(&db.donor)?;
-            let acceptor = resolve(&db.acceptor)?;
-            let order = BondPattern::from_ast(db.bond, &cfg.bond)?.order();
+        for db in &ast.dative_bonds {
+            let donor = resolve(db.donor)?;
+            let acceptor = resolve(db.acceptor)?;
+            let order = BondPattern::from_ast(&db.bond, &cfg.bond)?.order();
             builder.add_dative_bond(DativeBond::new(donor, acceptor, order));
         }
 
-        for sys in ast.aromatic_systems {
-            let atoms: Vec<AtomIndex> = sys.atoms.iter().map(&resolve).collect::<Result<_, _>>()?;
+        for sys in &ast.aromatic_systems {
+            let atoms: Vec<AtomIndex> = sys
+                .atoms
+                .iter()
+                .map(|i| resolve(*i))
+                .collect::<Result<_, _>>()?;
             let contributions: Vec<AromaticContribution> = atoms
                 .into_iter()
                 .map(|a| AromaticContribution::new(a, 0))
@@ -1384,15 +1375,19 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
             builder.add_aromatic_system(AromaticSystem::new(contributions));
         }
 
-        for mc in ast.multicenter_bonds {
-            let atoms: Vec<AtomIndex> = mc.atoms.iter().map(&resolve).collect::<Result<_, _>>()?;
+        for mc in &ast.multicenter_bonds {
+            let atoms: Vec<AtomIndex> = mc
+                .atoms
+                .iter()
+                .map(|i| resolve(*i))
+                .collect::<Result<_, _>>()?;
             let set = MulticenterSet::topology_only(atoms);
             builder.add_multicenter_bond(MulticenterBond::new(std::iter::once(set)));
         }
 
-        for nc in ast.noncovalent_bonds {
-            let a = resolve(&nc.a)?;
-            let b = resolve(&nc.b)?;
+        for nc in &ast.noncovalent_bonds {
+            let a = resolve(nc.a)?;
+            let b = resolve(nc.b)?;
             builder.add_noncovalent_bond(NoncovalentBond::new(
                 a,
                 b,
@@ -1418,23 +1413,27 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
 
 impl ToAst<MoleculeAst> for MoleculeBuilder {
     fn to_ast(&self, cfg: &MoleculeDslConfig) -> MoleculeAst {
-        let mut atom_vec = Vec::new();
+        let atom_indices: Vec<AtomIndex> = self.atom_indices().collect();
+        let position_of: HashMap<AtomIndex, usize> = atom_indices
+            .iter()
+            .enumerate()
+            .map(|(i, &idx)| (idx, i))
+            .collect();
 
-        for idx in self.atom_indices() {
-            let atom_ast = self.atom(idx).unwrap().to_ast(&cfg.atom);
-            atom_vec.push(atom_ast);
-        }
+        let atoms: Vec<_> = atom_indices
+            .iter()
+            .map(|&idx| self.atom(idx).unwrap().to_ast(&cfg.atom))
+            .collect();
 
-        let label = |idx: AtomIndex| -> AtomRef { AtomRef::Index(idx.index()) };
+        let pos = |idx: AtomIndex| -> usize { *position_of.get(&idx).unwrap() };
 
         let bonds: Vec<LocalizedBondAst> = self
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
                 LocalizedBondAst {
-                    id: None,
-                    a: label(a),
-                    b: label(b),
+                    a: pos(a),
+                    b: pos(b),
                     bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
                 }
             })
@@ -1443,10 +1442,8 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
         let dative_bonds: Vec<DativeBondAst> = self
             .dative_bonds()
             .map(|db| DativeBondAst {
-                id: None,
-                donor: label(db.donor()),
-                acceptor: label(db.acceptor()),
-                // TODO: missing other bond fields
+                donor: pos(db.donor()),
+                acceptor: pos(db.acceptor()),
                 bond: BondAst::from_order(db.order()),
             })
             .collect();
@@ -1454,114 +1451,22 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
         let aromatic_systems: Vec<AromaticSystemAst> = self
             .aromatic_systems()
             .map(|sys| AromaticSystemAst {
-                id: None,
-                atoms: sys.atoms().map(&label).collect(),
+                atoms: sys.atoms().map(pos).collect(),
             })
             .collect();
 
         let multicenter_bonds: Vec<MulticenterBondAst> = self
             .multicenter_bonds()
             .map(|mc| MulticenterBondAst {
-                id: None,
-                atoms: mc.all_atoms().into_iter().map(&label).collect(),
+                atoms: mc.all_atoms().into_iter().map(pos).collect(),
             })
             .collect();
 
         let noncovalent_bonds: Vec<NoncovalentBondAst> = self
             .noncovalent_bonds()
             .map(|nc| NoncovalentBondAst {
-                id: None,
-                a: label(nc.a()),
-                b: label(nc.b()),
-                bond: BondAst::from_order(1),
-            })
-            .collect();
-
-        MoleculeAst {
-            atoms: Atoms::indexed(atom_vec),
-            bonds,
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            charge: self.charge().map(|c| c as i64),
-            spin: self.spin(),
-        }
-    }
-}
-
-impl MoleculeBuilder {
-    pub fn from_ast_with_metadata(
-        ast: MoleculeAst,
-        cfg: &MoleculeDslConfig,
-    ) -> Result<(Self, Metadata), LoweringError> {
-        let meta = Metadata::extract(&ast.atoms);
-        let builder = Self::from_ast(ast, cfg)?;
-        Ok((builder, meta))
-    }
-
-    pub fn to_ast_with_metadata(&self, meta: &Metadata, cfg: &MoleculeDslConfig) -> MoleculeAst {
-        let mut atom_vec = Vec::new();
-        for idx in self.atom_indices() {
-            let atom_ast = self.atom(idx).unwrap().to_ast(&cfg.atom);
-            atom_vec.push(atom_ast);
-        }
-
-        let atoms = meta.apply(atom_vec);
-
-        let label = |idx: AtomIndex| -> AtomRef {
-            if let Some(tag) = meta.atom_tags.get(&idx.index()) {
-                AtomRef::Tag(tag.clone())
-            } else {
-                AtomRef::Index(idx.index())
-            }
-        };
-
-        let bonds: Vec<LocalizedBondAst> = self
-            .bond_indices()
-            .map(|bi| {
-                let (a, b) = self.bond_atom_indices(bi).unwrap();
-                LocalizedBondAst {
-                    id: None,
-                    a: label(a),
-                    b: label(b),
-                    bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
-                }
-            })
-            .collect();
-
-        let dative_bonds: Vec<DativeBondAst> = self
-            .dative_bonds()
-            .map(|db| DativeBondAst {
-                id: None,
-                donor: label(db.donor()),
-                acceptor: label(db.acceptor()),
-                bond: BondAst::from_order(db.order()),
-            })
-            .collect();
-
-        let aromatic_systems: Vec<AromaticSystemAst> = self
-            .aromatic_systems()
-            .map(|sys| AromaticSystemAst {
-                id: None,
-                atoms: sys.atoms().map(&label).collect(),
-            })
-            .collect();
-
-        let multicenter_bonds: Vec<MulticenterBondAst> = self
-            .multicenter_bonds()
-            .map(|mc| MulticenterBondAst {
-                id: None,
-                atoms: mc.all_atoms().into_iter().map(&label).collect(),
-            })
-            .collect();
-
-        let noncovalent_bonds: Vec<NoncovalentBondAst> = self
-            .noncovalent_bonds()
-            .map(|nc| NoncovalentBondAst {
-                id: None,
-                a: label(nc.a()),
-                b: label(nc.b()),
+                a: pos(nc.a()),
+                b: pos(nc.b()),
                 bond: BondAst::from_order(1),
             })
             .collect();
@@ -1581,7 +1486,7 @@ impl MoleculeBuilder {
 
 impl fmt::Display for MoleculeBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_ast(&MoleculeDslConfig::zeroed()).fmt(f)
+        MoleculeAstWrapper::from_ast(self.to_ast(&MoleculeDslConfig::zeroed())).fmt(f)
     }
 }
 
@@ -1589,8 +1494,8 @@ impl FromStr for MoleculeBuilder {
     type Err = LoweringError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let ast = parse_molecule_dsl(s).map_err(|e| LoweringError::Molecule(e.to_string()))?;
-        Self::from_ast(ast, &MoleculeDslConfig::zeroed())
+        let dsl = MoleculeAstWrapper::from_str(s).map_err(|e| LoweringError::Molecule(e.to_string()))?;
+        Self::from_ast(&dsl.ast, &MoleculeDslConfig::zeroed())
     }
 }
 
@@ -1606,8 +1511,8 @@ impl<'de> FromEdn<'de> for MoleculeBuilder {
                 });
             }
         };
-        let ast = parse_molecule_dsl(s).map_err(|e| DeError::subgrammar("molecule", e))?;
-        Self::from_ast(ast, &MoleculeDslConfig::zeroed())
+        let dsl = MoleculeAstWrapper::from_str(s).map_err(|e| DeError::subgrammar("molecule", e))?;
+        Self::from_ast(&dsl.ast, &MoleculeDslConfig::zeroed())
             .map_err(|e| DeError::subgrammar("molecule", e))
     }
 }

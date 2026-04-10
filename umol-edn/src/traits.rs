@@ -135,11 +135,11 @@ impl ToEdn for bool {
     }
 }
 
-/// FromEdn/ToEdn for integer types that always round-trip through `i64`.
+/// FromEdn/ToEdn for integer types that round-trip through `i64`.
 ///
-/// Skips `i128`, `u64`, `u128`, `usize`, `isize` — those need either bignum
-/// support or platform-aware fallbacks and are deferred until a concrete need
-/// arises.
+/// `i128`/`u128` are omitted (would need bignum). `u64`, `usize`, and `isize`
+/// are included: values > `i64::MAX` panic in `to_edn`, and negative or
+/// out-of-range EDN ints return `OutOfRange` in `from_edn`.
 macro_rules! impl_int {
     ($($t:ty),* $(,)?) => {
         $(
@@ -164,14 +164,16 @@ macro_rules! impl_int {
 
             impl ToEdn for $t {
                 fn to_edn(&self) -> Edn<'static> {
-                    Edn::Int(i64::from(*self))
+                    Edn::Int(i64::try_from(*self).unwrap_or_else(|_| {
+                        panic!("{} value {} exceeds i64::MAX", stringify!($t), self)
+                    }))
                 }
             }
         )*
     };
 }
 
-impl_int!(i8, i16, i32, i64, u8, u16, u32);
+impl_int!(i8, i16, i32, i64, isize, u8, u16, u32, usize);
 
 impl<'de> FromEdn<'de> for f64 {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {

@@ -13,14 +13,14 @@ use umol_graph::dsl::ast::{FromAst, ToAst};
 use umol_graph::dsl::config::{
     ImplicitHydrogenMode, MoleculeDslConfig, MoleculeDslConfigOverrides,
 };
-use umol_graph::dsl::molecule::MoleculeAst;
+use umol_graph::dsl::molecule::MoleculeAstWrapper;
 use umol_graph::graph_ir::config_data::ValenceTable;
 use umol_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};
 use umol_graph::graph_ir::{resolve_molecule_with, ResolveConfig, ValenceStrategy};
 
 #[derive(FromEdn)]
 struct TestInput {
-    input: MoleculeAst,
+    input: MoleculeAstWrapper,
     #[edn(default)]
     config_overrides: MoleculeDslConfigOverrides,
     #[edn(default)]
@@ -36,17 +36,17 @@ struct TestResults {
 #[derive(ToEdn)]
 struct ResolveResult {
     success: bool,
-    output: Option<MoleculeAst>,
+    output: Option<MoleculeAstWrapper>,
     error: Option<String>,
 }
 
 fn resolve_with_config(
-    input: &MoleculeAst,
+    input: &MoleculeAstWrapper,
     dsl_config: &MoleculeDslConfig,
     context: &ResolutionContext,
     resolve_config: &ResolveConfig,
 ) -> ResolveResult {
-    let builder = MoleculeBuilder::from_ast(input.clone(), dsl_config);
+    let builder = MoleculeBuilder::from_ast(&input.ast, dsl_config);
     match builder {
         Err(e) => ResolveResult {
             success: false,
@@ -63,7 +63,7 @@ fn resolve_with_config(
                     ast.aromatic_systems.sort_by(|a, b| a.atoms.cmp(&b.atoms));
                     ResolveResult {
                         success: true,
-                        output: Some(ast),
+                        output: Some(MoleculeAstWrapper::new(ast, input.metadata.clone())),
                         error: None,
                     }
                 }

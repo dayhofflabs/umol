@@ -512,17 +512,17 @@ impl AromaticValencePattern {
 }
 
 impl FromAst<AtomAst> for AtomPattern {
-    fn from_ast(ast: AtomAst, cfg: &AtomDslConfig) -> Result<Self, LoweringError> {
-        let element = match ast.element {
-            ElementExpr::Lit(e) => ElementPattern::Is(e),
+    fn from_ast(ast: &AtomAst, cfg: &AtomDslConfig) -> Result<Self, LoweringError> {
+        let element = match &ast.element {
+            ElementExpr::Lit(e) => ElementPattern::Is(*e),
             ElementExpr::Wildcard => ElementPattern::Any,
-            ElementExpr::Set(set) => ElementPattern::OneOf(set),
+            ElementExpr::Set(set) => ElementPattern::OneOf(set.clone()),
             ElementExpr::Bind { .. } | ElementExpr::Ref(_) => {
                 return Err(LoweringError::NonGround { field: "element" })
             }
         };
 
-        let isotope_mass = match ast.isotope_mass.or(match cfg.isotope_mode {
+        let isotope_mass = match ast.isotope_mass.clone().or(match cfg.isotope_mode {
             IsotopeMode::Natural => Some(IsotopeExpr::Natural),
             IsotopeMode::Required => None,
         }) {
@@ -538,7 +538,7 @@ impl FromAst<AtomAst> for AtomPattern {
             }
         };
 
-        let charge = match ast.charge.or(match cfg.charge_mode {
+        let charge = match ast.charge.clone().or(match cfg.charge_mode {
             NumericMode::Zero => Some(ValueAst::Lit(0)),
             NumericMode::Required => None,
         }) {
@@ -550,7 +550,7 @@ impl FromAst<AtomAst> for AtomPattern {
             Some(_) => return Err(LoweringError::NonGround { field: "charge" }),
         };
 
-        let implicit_hydrogens = match ast.implicit_hydrogens.or(match cfg.implicit_h_mode {
+        let implicit_hydrogens = match ast.implicit_hydrogens.clone().or(match cfg.implicit_h_mode {
             ImplicitHydrogenMode::Normal => Some(HydrogenExpr::Normal),
             ImplicitHydrogenMode::Zero => Some(HydrogenExpr::Value(ValueAst::Lit(0))),
             ImplicitHydrogenMode::Required => None,
@@ -570,7 +570,7 @@ impl FromAst<AtomAst> for AtomPattern {
             }
         };
 
-        let aromatic_valence = match ast.aromatic_valence.or(match cfg.aromatic_valence_mode {
+        let aromatic_valence = match ast.aromatic_valence.clone().or(match cfg.aromatic_valence_mode {
             AromaticValenceMode::NotAromatic => Some(AromaticExpr::NotAromatic),
             AromaticValenceMode::Aromatic => Some(AromaticExpr::Value(ValueAst::Wildcard)),
             AromaticValenceMode::Required => None,
@@ -595,8 +595,8 @@ impl FromAst<AtomAst> for AtomPattern {
 
         // Coupled spin resolution: resolve u first (may derive from raw m), then m (may derive from resolved u)
         let (unpaired_electrons, multiplicity) = lower_spin(
-            ast.unpaired_electrons,
-            ast.multiplicity,
+            ast.unpaired_electrons.clone(),
+            ast.multiplicity.clone(),
             &cfg.unpaired_electrons_mode,
             &cfg.multiplicity_mode,
         )?;
@@ -624,19 +624,23 @@ impl FromAst<AtomAst> for AtomPattern {
             isotope_mass,
             charge,
             implicit_hydrogens,
-            lone_pairs: lower_u8(ast.lone_pairs, &cfg.lone_pairs_mode, "lone_pairs")?,
+            lone_pairs: lower_u8(ast.lone_pairs.clone(), &cfg.lone_pairs_mode, "lone_pairs")?,
             unpaired_electrons,
             multiplicity,
-            valence: lower_u8(ast.valence, &cfg.valence_mode, "valence")?,
-            donated_pairs: lower_u8(ast.donated_pairs, &cfg.donated_pairs_mode, "donated_pairs")?,
+            valence: lower_u8(ast.valence.clone(), &cfg.valence_mode, "valence")?,
+            donated_pairs: lower_u8(
+                ast.donated_pairs.clone(),
+                &cfg.donated_pairs_mode,
+                "donated_pairs",
+            )?,
             accepted_pairs: lower_u8(
-                ast.accepted_pairs,
+                ast.accepted_pairs.clone(),
                 &cfg.accepted_pairs_mode,
                 "accepted_pairs",
             )?,
             aromatic_valence,
             multicenter_valence: lower_u8(
-                ast.multicenter_valence,
+                ast.multicenter_valence.clone(),
                 &cfg.multicenter_valence_mode,
                 "multicenter_valence",
             )?,
@@ -707,7 +711,7 @@ impl FromStr for AtomPattern {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_atom_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
-        Self::from_ast(ast, &AtomDslConfig::open())
+        Self::from_ast(&ast, &AtomDslConfig::open())
     }
 }
 
@@ -720,7 +724,7 @@ impl fmt::Display for AtomPattern {
 impl<'de> FromEdn<'de> for AtomPattern {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = AtomAst::from_edn(edn)?;
-        Self::from_ast(ast, &AtomDslConfig::open())
+        Self::from_ast(&ast, &AtomDslConfig::open())
             .map_err(|e| DeError::subgrammar("atom", e))
     }
 }
@@ -815,7 +819,7 @@ mod tests {
         #[case] cfg: AtomDslConfig,
         #[case] expected: AtomPattern,
     ) {
-        assert_eq!(AtomPattern::from_ast(ast, &cfg).unwrap(), expected);
+        assert_eq!(AtomPattern::from_ast(&ast, &cfg).unwrap(), expected);
     }
 
     #[rustfmt::skip]

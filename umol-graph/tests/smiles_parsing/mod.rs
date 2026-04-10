@@ -139,7 +139,7 @@ struct FileParseResults {
 fn error_type_name(e: &ParseError) -> String {
     let debug = format!("{:?}", e);
     debug
-        .split(|c| c == '{' || c == '(')
+        .split(['{', '('])
         .next()
         .unwrap_or(&debug)
         .trim()

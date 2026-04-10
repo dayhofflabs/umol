@@ -20,7 +20,7 @@ use crate::dsl::ast::ToAst;
 use crate::dsl::bond::BondAst;
 use crate::dsl::config::MoleculeDslConfig;
 use crate::dsl::molecule::{
-    AromaticSystem as AromaticSystemAst, AtomRef, Atoms, DativeBond as DativeBondAst,
+    AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
     LocalizedBond as LocalizedBondAst, MoleculeAst, MulticenterBond as MulticenterBondAst,
     NoncovalentBond as NoncovalentBondAst,
 };
@@ -476,23 +476,27 @@ impl Molecule {
 
 impl ToAst<MoleculeAst> for Molecule {
     fn to_ast(&self, cfg: &MoleculeDslConfig) -> MoleculeAst {
-        let mut atom_vec = Vec::new();
+        let atom_indices: Vec<AtomIndex> = self.atom_indices().collect();
+        let position_of: HashMap<AtomIndex, usize> = atom_indices
+            .iter()
+            .enumerate()
+            .map(|(i, &idx)| (idx, i))
+            .collect();
 
-        for idx in self.atom_indices() {
-            let atom_ast = self.atom(idx).unwrap().to_ast(&cfg.atom);
-            atom_vec.push(atom_ast);
-        }
+        let atoms: Vec<_> = atom_indices
+            .iter()
+            .map(|&idx| self.atom(idx).unwrap().to_ast(&cfg.atom))
+            .collect();
 
-        let label = |idx: AtomIndex| -> AtomRef { AtomRef::Index(idx.index()) };
+        let pos = |idx: AtomIndex| -> usize { *position_of.get(&idx).unwrap() };
 
         let bonds: Vec<LocalizedBondAst> = self
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
                 LocalizedBondAst {
-                    id: None,
-                    a: label(a),
-                    b: label(b),
+                    a: pos(a),
+                    b: pos(b),
                     bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
                 }
             })
@@ -501,9 +505,8 @@ impl ToAst<MoleculeAst> for Molecule {
         let dative_bonds: Vec<DativeBondAst> = self
             .dative_bonds()
             .map(|db| DativeBondAst {
-                id: None,
-                donor: label(db.donor()),
-                acceptor: label(db.acceptor()),
+                donor: pos(db.donor()),
+                acceptor: pos(db.acceptor()),
                 bond: BondAst::from_order(db.order()),
             })
             .collect();
@@ -511,31 +514,28 @@ impl ToAst<MoleculeAst> for Molecule {
         let aromatic_systems: Vec<AromaticSystemAst> = self
             .aromatic_systems()
             .map(|sys| AromaticSystemAst {
-                id: None,
-                atoms: sys.atoms().map(&label).collect(),
+                atoms: sys.atoms().map(pos).collect(),
             })
             .collect();
 
         let multicenter_bonds: Vec<MulticenterBondAst> = self
             .multicenter_bonds()
             .map(|mc| MulticenterBondAst {
-                id: None,
-                atoms: mc.all_atoms().into_iter().map(&label).collect(),
+                atoms: mc.all_atoms().into_iter().map(pos).collect(),
             })
             .collect();
 
         let noncovalent_bonds: Vec<NoncovalentBondAst> = self
             .noncovalent_bonds()
             .map(|nc| NoncovalentBondAst {
-                id: None,
-                a: label(nc.a()),
-                b: label(nc.b()),
+                a: pos(nc.a()),
+                b: pos(nc.b()),
                 bond: BondAst::from_order(1),
             })
             .collect();
 
         MoleculeAst {
-            atoms: Atoms::indexed(atom_vec),
+            atoms,
             bonds,
             dative_bonds,
             aromatic_systems,

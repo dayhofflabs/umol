@@ -201,7 +201,7 @@ impl Atom {
 }
 
 impl FromAst<AtomAst> for Atom {
-    fn from_ast(ast: AtomAst, cfg: &AtomDslConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: &AtomAst, cfg: &AtomDslConfig) -> Result<Self, LoweringError> {
         let pattern = AtomPattern::from_ast(ast, cfg)?;
         pattern.to_atom().map_err(|e| match e {
             ValidationError::NonGround { field } => LoweringError::NonGround { field },
@@ -271,7 +271,7 @@ impl FromStr for Atom {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_atom_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
-        Self::from_ast(ast, &AtomDslConfig::zeroed())
+        Self::from_ast(&ast, &AtomDslConfig::zeroed())
     }
 }
 
@@ -284,7 +284,7 @@ impl Display for Atom {
 impl<'de> FromEdn<'de> for Atom {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = AtomAst::from_edn(edn)?;
-        Self::from_ast(ast, &AtomDslConfig::zeroed()).map_err(|e| DeError::subgrammar("atom", e))
+        Self::from_ast(&ast, &AtomDslConfig::zeroed()).map_err(|e| DeError::subgrammar("atom", e))
     }
 }
 
@@ -312,7 +312,7 @@ mod tests {
     #[case::charge(AtomAst { charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))),
         ..AtomAst::from_element(Element::C) }, AtomDslConfig::zeroed(), "C#c+#h3".parse::<Atom>().unwrap())]
     fn test_atom_from_ast(#[case] ast: AtomAst, #[case] cfg: AtomDslConfig, #[case] expected: Atom) {
-        let atom = Atom::from_ast(ast, &cfg).unwrap();
+        let atom = Atom::from_ast(&ast, &cfg).unwrap();
         assert_eq!(atom, expected);
     }
 

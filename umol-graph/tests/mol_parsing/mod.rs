@@ -138,7 +138,7 @@ fn error_type_name(e: &ParseError) -> String {
     let debug = format!("{:?}", e);
     // Take first word (variant name) before any { or (
     debug
-        .split(|c| c == '{' || c == '(')
+        .split(['{', '('])
         .next()
         .unwrap_or(&debug)
         .trim()

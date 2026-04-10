@@ -63,7 +63,7 @@ impl Bond {
 }
 
 impl FromAst<BondAst> for Bond {
-    fn from_ast(ast: BondAst, cfg: &BondDslConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: &BondAst, cfg: &BondDslConfig) -> Result<Self, LoweringError> {
         let pattern = BondPattern::from_ast(ast, cfg)?;
         pattern.to_bond().map_err(|e| match e {
             ValidationError::NonGround { field } => LoweringError::NonGround { field },
@@ -108,7 +108,7 @@ impl FromStr for Bond {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_bond_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
-        Bond::from_ast(ast, &BondDslConfig::zeroed())
+        Bond::from_ast(&ast, &BondDslConfig::zeroed())
     }
 }
 
@@ -121,7 +121,7 @@ impl Display for Bond {
 impl<'de> FromEdn<'de> for Bond {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = BondAst::from_edn(edn)?;
-        Self::from_ast(ast, &BondDslConfig::zeroed())
+        Self::from_ast(&ast, &BondDslConfig::zeroed())
             .map_err(|e| DeError::subgrammar("bond", e))
     }
 }
@@ -148,7 +148,7 @@ mod tests {
     #[case::full(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(2)), multiplicity: Some(ValueAst::Lit(1)), },
         Bond::from_parts(1, 0, SpinState::new(2, SpinMultiplicity::Singlet)))]
     fn test_bond_from_ast(#[case] ast: BondAst, #[case] expected: Bond) {
-        assert_eq!(Bond::from_ast(ast, &BondDslConfig::zeroed()).unwrap(), expected);
+        assert_eq!(Bond::from_ast(&ast, &BondDslConfig::zeroed()).unwrap(), expected);
     }
 
     #[rustfmt::skip]
