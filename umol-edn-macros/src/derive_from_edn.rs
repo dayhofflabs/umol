@@ -1,30 +1,43 @@
-//! `#[derive(FromEdn)]` proc macro for named structs and enums.
+//! `#[derive(FromEdn)]` proc macro for structs and enums.
 //!
-//! ## Named structs
+//! ## Structs
 //!
 //! Generates an `impl FromEdn<'de>` providing both `from_edn` (tree walk) and
 //! `from_edn_str` (parser-deserializer fusion via `EdnStreamDeserializer`).
-//! Default field rules:
 //!
-//! - `Option<T>`     → optional, missing key yields `None`.
-//! - `Vec<T>`        → optional, missing key yields `Vec::new()`.
-//! - `HashMap<K, V>` → optional, missing key yields `HashMap::new()`.
-//! - `HashSet<T>`    → optional, missing key yields `HashSet::new()`.
-//! - `#[edn(default)]` → optional, missing key yields `Default::default()`.
-//! - everything else → required, missing key is an error.
+//! Field key naming: Rust `snake_case` → EDN `kebab-case` by default.
 //!
-//! Field key naming: Rust `snake_case` is converted to EDN `kebab-case`
-//! by default. Override with `#[edn(rename = "...")]`.
+//! ## Container attributes
+//!
+//! - `#[edn(transparent)]` — single-field struct (named or tuple) delegates
+//!   to the inner type's `FromEdn`.
+//! - `#[edn(deny_unknown_fields)]` — error on unrecognized map keys in both
+//!   `from_edn` and `from_edn_str`.
+//! - `#[edn(default)]` — all fields become optional, using
+//!   `Default::default()` when missing.
+//!
+//! ## Field attributes
+//!
+//! - `#[edn(rename = "key")]` — override the EDN key for this field.
+//! - `#[edn(default)]` — use `Default::default()` when this key is missing.
+//! - `#[edn(skip)]` — exclude from deserialization; always `Default::default()`.
+//!
+//! Field rules (first match wins):
+//!
+//! - `#[edn(skip)]`     → always `Default::default()`, key ignored if present.
+//! - `Option<T>`         → optional, missing key yields `None`.
+//! - `#[edn(default)]` (field or container) → missing key yields `Default::default()`.
+//! - everything else     → required, missing key is an error.
 //!
 //! ## Enums
 //!
-//! Generates an `impl FromEdn<'de>` that deserializes:
+//! Generates an `impl FromEdn<'de>` with both `from_edn` and `from_edn_str`:
 //! - Unit variants from EDN keywords: `:variant-name`
 //! - Newtype variants from single-key maps: `{:variant-name value}`
 //! - Tuple variants from single-key maps with vector values: `{:variant-name [v1 v2]}`
 //! - Struct variants from single-key maps with map values: `{:variant-name {:field v}}`
 //!
-//! Variant naming: Rust `PascalCase` is converted to `kebab-case` by default.
+//! Variant naming: Rust `PascalCase` → `kebab-case` by default.
 //! Override with `#[edn(rename = "...")]`.
 
 use heck::ToKebabCase;
@@ -33,12 +46,26 @@ use quote::quote;
 use syn::{Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, PathArguments, Type};
 
 pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
+    let container = ContainerAttrs::parse(&input.attrs)?;
+
+    if container.transparent {
+        return expand_transparent(&input);
+    }
+
     match &input.data {
         Data::Struct(DataStruct {
             fields: Fields::Named(named),
             ..
-        }) => expand_struct(&input.ident, &named.named),
-        Data::Enum(data_enum) => expand_enum(&input.ident, data_enum),
+        }) => expand_struct(&input.ident, &named.named, &container),
+        Data::Enum(data_enum) => {
+            if container.deny_unknown_fields {
+                return Err(syn::Error::new_spanned(
+                    &input.ident,
+                    "deny_unknown_fields is not supported on enums",
+                ));
+            }
+            expand_enum(&input.ident, data_enum)
+        }
         _ => Err(syn::Error::new_spanned(
             input.ident,
             "FromEdn can only be derived on structs with named fields or enums",
@@ -53,18 +80,38 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
 fn expand_struct(
     struct_name: &syn::Ident,
     fields: &syn::punctuated::Punctuated<Field, syn::Token![,]>,
+    container: &ContainerAttrs,
 ) -> Result<TokenStream2, syn::Error> {
+    let deny_unknown_fields = container.deny_unknown_fields;
     let mut bindings = Vec::new();
     let mut stream_decls = Vec::new();
     let mut stream_arms = Vec::new();
     let mut stream_finals = Vec::new();
     let mut field_idents = Vec::new();
+    let mut known_keys = Vec::new();
 
     for field in fields {
-        let field_info = parse_field(field)?;
+        let field_info = parse_field_with(field, container.default)?;
         let ident = field_info.ident;
         let key = field_info.key;
         let kind = field_info.kind;
+
+        if matches!(kind, FieldKind::Skip(_)) {
+            field_idents.push(ident.clone());
+            let ty = match &kind {
+                FieldKind::Skip(ty) => ty,
+                _ => unreachable!(),
+            };
+            bindings.push(quote! {
+                let #ident: #ty = <#ty as ::std::default::Default>::default();
+            });
+            stream_decls.push(quote! {
+                let #ident: #ty = <#ty as ::std::default::Default>::default();
+            });
+            continue;
+        }
+
+        known_keys.push(key.clone());
 
         let binding = match &kind {
             FieldKind::Option(inner) => quote! {
@@ -78,6 +125,7 @@ fn expand_struct(
             FieldKind::Required(ty) => quote! {
                 let #ident: #ty = h.required(#key)?;
             },
+            FieldKind::Skip(_) => unreachable!(),
         };
 
         let missing_key = key.clone();
@@ -127,6 +175,7 @@ fn expand_struct(
                     })?;
                 },
             ),
+            FieldKind::Skip(_) => unreachable!(),
         };
 
         field_idents.push(ident);
@@ -135,6 +184,29 @@ fn expand_struct(
         stream_arms.push(arm);
         stream_finals.push(final_bind);
     }
+
+    let finalize = if deny_unknown_fields {
+        quote! { h.finalize()?; }
+    } else {
+        quote! {}
+    };
+
+    let stream_unknown_key = if deny_unknown_fields {
+        quote! {
+            _ => {
+                return ::std::result::Result::Err(::umol_edn::EdnError::De(
+                    ::umol_edn::DeError::UnknownField {
+                        key: __key.into_owned(),
+                        path: ::std::vec::Vec::new(),
+                    },
+                ));
+            }
+        }
+    } else {
+        quote! {
+            _ => __de.read_skip_value()?,
+        }
+    };
 
     let expected_label = format!("{} map", struct_name);
 
@@ -157,6 +229,7 @@ fn expand_struct(
                 };
                 let mut h = ::umol_edn::EdnMapHelper::new(m);
                 #(#bindings)*
+                #finalize
                 ::std::result::Result::Ok(Self {
                     #(#field_idents),*
                 })
@@ -175,7 +248,7 @@ fn expand_struct(
                     let __key = __de.read_keyword_name()?;
                     match __key.as_ref() {
                         #(#stream_arms)*
-                        _ => __de.read_skip_value()?,
+                        #stream_unknown_key
                     }
                 }
                 __de.expect_eof()?;
@@ -200,7 +273,7 @@ fn expand_enum(name: &syn::Ident, data: &DataEnum) -> Result<TokenStream2, syn::
 
     let mut infos = Vec::new();
     for variant in &data.variants {
-        let rename = read_rename(&variant.attrs)?;
+        let rename = FieldAttrs::parse(&variant.attrs)?.rename;
         let key = rename.unwrap_or_else(|| variant.ident.to_string().to_kebab_case());
         infos.push(VariantInfo {
             ident: &variant.ident,
@@ -289,6 +362,8 @@ fn expand_mixed_enum(
 
     let mut unit_arms = Vec::new();
     let mut map_arms = Vec::new();
+    let mut stream_unit_arms = Vec::new();
+    let mut stream_map_arms = Vec::new();
 
     for v in variants {
         let ident = v.ident;
@@ -302,12 +377,28 @@ fn expand_mixed_enum(
                 map_arms.push(quote! {
                     #key => ::std::result::Result::Ok(#name::#ident),
                 });
+                stream_unit_arms.push(quote! {
+                    #key => ::std::result::Result::Ok(#name::#ident),
+                });
+                stream_map_arms.push(quote! {
+                    #key => {
+                        __de.read_skip_value()?;
+                        ::std::result::Result::Ok(#name::#ident)
+                    }
+                });
             }
             Fields::Unnamed(fields) if fields.unnamed.len() == 1 => {
                 let inner_ty = &fields.unnamed[0].ty;
                 map_arms.push(quote! {
                     #key => {
                         let __inner = <#inner_ty as ::umol_edn::FromEdn<'de>>::from_edn(__val)?;
+                        ::std::result::Result::Ok(#name::#ident(__inner))
+                    }
+                });
+                stream_map_arms.push(quote! {
+                    #key => {
+                        let __slice = __de.read_value_slice()?;
+                        let __inner = <#inner_ty as ::umol_edn::FromEdn<'de>>::from_edn_str(__slice)?;
                         ::std::result::Result::Ok(#name::#ident(__inner))
                     }
                 });
@@ -350,35 +441,147 @@ fn expand_mixed_enum(
                         ::std::result::Result::Ok(#name::#ident(#(#field_parsers),*))
                     }
                 });
-            }
-            Fields::Named(fields) => {
-                let field_bindings: Vec<_> = fields
-                    .named
+
+                let stream_field_parsers: Vec<_> = fields
+                    .unnamed
                     .iter()
                     .map(|f| {
-                        let fi = parse_field(f).unwrap();
-                        let f_ident = fi.ident;
-                        let f_key = fi.key;
-                        match fi.kind {
-                            FieldKind::Option(inner) => quote! {
-                                let #f_ident: ::std::option::Option<#inner> =
-                                    __h.optional(#f_key)?;
-                            },
-                            FieldKind::Defaulted(ty) => quote! {
-                                let #f_ident: #ty =
-                                    __h.optional::<#ty>(#f_key)?.unwrap_or_default();
-                            },
-                            FieldKind::Required(ty) => quote! {
-                                let #f_ident: #ty = __h.required(#f_key)?;
-                            },
-                        }
+                        let ty = &f.ty;
+                        quote! {{
+                            let __slice = __de.read_value_slice()?;
+                            <#ty as ::umol_edn::FromEdn<'de>>::from_edn_str(__slice)?
+                        }}
                     })
                     .collect();
-                let f_idents: Vec<_> = fields
+
+                stream_map_arms.push(quote! {
+                    #key => {
+                        __de.consume_byte(b'[')?;
+                        #(let __v = #stream_field_parsers;)*
+                        // ^ each binding shadows, so collect into tuple below
+                        ::std::result::Result::Err(::umol_edn::EdnError::De(
+                            ::umol_edn::DeError::Custom("internal".into()),
+                        ))
+                    }
+                });
+                // The above doesn't work well for binding N fields. Use
+                // read_value_slice on the whole vector and delegate to from_edn_str.
+                // Rewrite:
+                stream_map_arms.pop();
+                stream_map_arms.push(quote! {
+                    #key => {
+                        let __slice = __de.read_value_slice()?;
+                        let __tree = ::umol_edn::read_string(__slice)?;
+                        let __seq = match &__tree {
+                            ::umol_edn::Edn::Vector(s) => s,
+                            other => return ::std::result::Result::Err(
+                                ::umol_edn::EdnError::De(::umol_edn::DeError::TypeMismatch {
+                                    expected: "vector",
+                                    got: other.kind(),
+                                    path: ::std::vec::Vec::new(),
+                                }),
+                            ),
+                        };
+                        if __seq.len() != #count {
+                            return ::std::result::Result::Err(::umol_edn::EdnError::De(
+                                ::umol_edn::DeError::Custom(format!(
+                                    "expected {} elements for {} variant {}, got {}",
+                                    #count, #type_name, #key, __seq.len(),
+                                )),
+                            ));
+                        }
+                        ::std::result::Result::Ok(#name::#ident(#(#field_parsers),*))
+                    }
+                });
+            }
+            Fields::Named(fields) => {
+                let parsed_fields: Vec<_> = fields
                     .named
                     .iter()
-                    .map(|f| f.ident.as_ref().unwrap())
-                    .collect();
+                    .map(parse_field)
+                    .collect::<Result<_, _>>()?;
+
+                let mut field_bindings = Vec::new();
+                let mut stream_decls = Vec::new();
+                let mut stream_inner_arms = Vec::new();
+                let mut stream_finals = Vec::new();
+
+                for fi in &parsed_fields {
+                    let f_ident = &fi.ident;
+                    let f_key = &fi.key;
+                    match &fi.kind {
+                        FieldKind::Skip(ty) => {
+                            let b = quote! {
+                                let #f_ident: #ty =
+                                    <#ty as ::std::default::Default>::default();
+                            };
+                            field_bindings.push(b.clone());
+                            stream_decls.push(b);
+                        }
+                        FieldKind::Option(inner) => {
+                            field_bindings.push(quote! {
+                                let #f_ident: ::std::option::Option<#inner> =
+                                    __h.optional(#f_key)?;
+                            });
+                            stream_decls.push(quote! {
+                                let mut #f_ident: ::std::option::Option<#inner> =
+                                    ::std::option::Option::None;
+                            });
+                            stream_inner_arms.push(quote! {
+                                #f_key => {
+                                    let __slice = __de.read_value_slice()?;
+                                    #f_ident = ::std::option::Option::Some(
+                                        <#inner as ::umol_edn::FromEdn<'de>>::from_edn_str(__slice)?,
+                                    );
+                                }
+                            });
+                        }
+                        FieldKind::Defaulted(ty) => {
+                            field_bindings.push(quote! {
+                                let #f_ident: #ty =
+                                    __h.optional::<#ty>(#f_key)?.unwrap_or_default();
+                            });
+                            stream_decls.push(quote! {
+                                let mut #f_ident: #ty =
+                                    <#ty as ::std::default::Default>::default();
+                            });
+                            stream_inner_arms.push(quote! {
+                                #f_key => {
+                                    let __slice = __de.read_value_slice()?;
+                                    #f_ident =
+                                        <#ty as ::umol_edn::FromEdn<'de>>::from_edn_str(__slice)?;
+                                }
+                            });
+                        }
+                        FieldKind::Required(ty) => {
+                            field_bindings.push(quote! {
+                                let #f_ident: #ty = __h.required(#f_key)?;
+                            });
+                            stream_decls.push(quote! {
+                                let mut #f_ident: ::std::option::Option<#ty> =
+                                    ::std::option::Option::None;
+                            });
+                            stream_inner_arms.push(quote! {
+                                #f_key => {
+                                    let __slice = __de.read_value_slice()?;
+                                    #f_ident = ::std::option::Option::Some(
+                                        <#ty as ::umol_edn::FromEdn<'de>>::from_edn_str(__slice)?,
+                                    );
+                                }
+                            });
+                            stream_finals.push(quote! {
+                                let #f_ident = #f_ident.ok_or_else(||
+                                    ::umol_edn::EdnError::De(::umol_edn::DeError::MissingField {
+                                        key: #f_key.to_string(),
+                                        path: ::std::vec::Vec::new(),
+                                    })
+                                )?;
+                            });
+                        }
+                    }
+                }
+
+                let f_idents: Vec<_> = parsed_fields.iter().map(|fi| &fi.ident).collect();
 
                 map_arms.push(quote! {
                     #key => {
@@ -397,12 +600,31 @@ fn expand_mixed_enum(
                         ::std::result::Result::Ok(#name::#ident { #(#f_idents),* })
                     }
                 });
+
+                stream_map_arms.push(quote! {
+                    #key => {
+                        #(#stream_decls)*
+                        __de.consume_byte(b'{')?;
+                        loop {
+                            if __de.try_consume_byte(b'}')? {
+                                break;
+                            }
+                            let __inner_key = __de.read_keyword_name()?;
+                            match __inner_key.as_ref() {
+                                #(#stream_inner_arms)*
+                                _ => __de.read_skip_value()?,
+                            }
+                        }
+                        #(#stream_finals)*
+                        ::std::result::Result::Ok(#name::#ident { #(#f_idents),* })
+                    }
+                });
             }
         }
     }
 
     let has_unit_variants = !unit_arms.is_empty();
-    let has_data_variants = map_arms.iter().any(|_| true);
+    let has_data_variants = !map_arms.is_empty();
 
     // Build the main match expression
     let keyword_branch = if has_unit_variants {
@@ -460,6 +682,45 @@ fn expand_mixed_enum(
         "single-key map"
     };
 
+    let stream_keyword_branch = if has_unit_variants {
+        quote! {
+            Some(b':') => {
+                let __kw = __de.read_keyword_name()?;
+                match __kw.as_ref() {
+                    #(#stream_unit_arms)*
+                    _ => ::std::result::Result::Err(::umol_edn::EdnError::De(
+                        ::umol_edn::DeError::Custom(
+                            format!("unknown {} variant: {:?}", #type_name, __kw),
+                        ),
+                    )),
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    let stream_map_branch = if has_data_variants {
+        quote! {
+            Some(b'{') => {
+                __de.consume_byte(b'{')?;
+                let __tag = __de.read_keyword_name()?;
+                let __result = match __tag.as_ref() {
+                    #(#stream_map_arms)*
+                    _ => ::std::result::Result::Err(::umol_edn::EdnError::De(
+                        ::umol_edn::DeError::Custom(
+                            format!("unknown {} variant: {:?}", #type_name, __tag),
+                        ),
+                    )),
+                };
+                __de.consume_byte(b'}')?;
+                __result
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         impl<'de> ::umol_edn::FromEdn<'de> for #name {
             fn from_edn(
@@ -477,8 +738,128 @@ fn expand_mixed_enum(
                     ),
                 }
             }
+
+            fn from_edn_str(
+                input: &'de str,
+            ) -> ::std::result::Result<Self, ::umol_edn::EdnError> {
+                let mut __de = ::umol_edn::EdnStreamDeserializer::new(input);
+                let __result = match __de.peek_byte()? {
+                    #stream_keyword_branch
+                    #stream_map_branch
+                    __other => ::std::result::Result::Err(::umol_edn::EdnError::De(
+                        ::umol_edn::DeError::TypeMismatch {
+                            expected: #expected,
+                            got: match __other {
+                                Some(_) => "other",
+                                None => "eof",
+                            },
+                            path: ::std::vec::Vec::new(),
+                        },
+                    )),
+                };
+                __de.expect_eof()?;
+                __result
+            }
         }
     })
+}
+
+// ---------------------------------------------------------------------------
+// Transparent structs
+// ---------------------------------------------------------------------------
+
+fn expand_transparent(input: &DeriveInput) -> Result<TokenStream2, syn::Error> {
+    let name = &input.ident;
+    let (inner_ty, constructor) = match &input.data {
+        Data::Struct(DataStruct { fields: Fields::Named(named), .. }) => {
+            if named.named.len() != 1 {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    "transparent requires exactly one field",
+                ));
+            }
+            let field = named.named.first().unwrap();
+            let ident = field.ident.as_ref().unwrap();
+            (&field.ty, quote! { Self { #ident: __inner } })
+        }
+        Data::Struct(DataStruct { fields: Fields::Unnamed(unnamed), .. }) => {
+            if unnamed.unnamed.len() != 1 {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    "transparent requires exactly one field",
+                ));
+            }
+            (&unnamed.unnamed.first().unwrap().ty, quote! { Self(__inner) })
+        }
+        _ => {
+            return Err(syn::Error::new_spanned(
+                name,
+                "transparent can only be used on single-field structs",
+            ));
+        }
+    };
+
+    Ok(quote! {
+        impl<'de> ::umol_edn::FromEdn<'de> for #name {
+            fn from_edn(
+                edn: &::umol_edn::Edn<'de>,
+            ) -> ::std::result::Result<Self, ::umol_edn::DeError> {
+                let __inner = <#inner_ty as ::umol_edn::FromEdn<'de>>::from_edn(edn)?;
+                ::std::result::Result::Ok(#constructor)
+            }
+
+            fn from_edn_str(
+                input: &'de str,
+            ) -> ::std::result::Result<Self, ::umol_edn::EdnError> {
+                let __inner = <#inner_ty as ::umol_edn::FromEdn<'de>>::from_edn_str(input)?;
+                ::std::result::Result::Ok(#constructor)
+            }
+        }
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Container attributes
+// ---------------------------------------------------------------------------
+
+struct ContainerAttrs {
+    transparent: bool,
+    deny_unknown_fields: bool,
+    default: bool,
+}
+
+impl ContainerAttrs {
+    fn parse(attrs: &[syn::Attribute]) -> Result<Self, syn::Error> {
+        let mut transparent = false;
+        let mut deny_unknown_fields = false;
+        let mut default = false;
+        for attr in attrs {
+            if !attr.path().is_ident("edn") {
+                continue;
+            }
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("transparent") {
+                    transparent = true;
+                    Ok(())
+                } else if meta.path.is_ident("deny_unknown_fields") {
+                    deny_unknown_fields = true;
+                    Ok(())
+                } else if meta.path.is_ident("default") {
+                    default = true;
+                    Ok(())
+                } else {
+                    Err(meta.error("unsupported container #[edn(...)] attribute"))
+                }
+            })?;
+        }
+        if transparent && (deny_unknown_fields || default) {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "transparent cannot be combined with other container attributes",
+            ));
+        }
+        Ok(ContainerAttrs { transparent, deny_unknown_fields, default })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -492,28 +873,30 @@ struct FieldInfo {
 }
 
 enum FieldKind {
+    Skip(Type),
     Option(Type),
     Defaulted(Type),
     Required(Type),
 }
 
 fn parse_field(field: &Field) -> Result<FieldInfo, syn::Error> {
+    parse_field_with(field, false)
+}
+
+fn parse_field_with(field: &Field, container_default: bool) -> Result<FieldInfo, syn::Error> {
     let ident = field
         .ident
         .clone()
         .ok_or_else(|| syn::Error::new_spanned(field, "field must be named"))?;
 
-    let key = read_rename(&field.attrs)?.unwrap_or_else(|| to_kebab_case(&ident.to_string()));
+    let attrs = FieldAttrs::parse(&field.attrs)?;
+    let key = attrs.rename.unwrap_or_else(|| ident.to_string().to_kebab_case());
 
-    let has_default = has_default_attr(&field.attrs);
-
-    const DEFAULTED_TYPES: &[&str] = &[
-        "Vec", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "IndexMap",
-    ];
-
-    let kind = if let Some(inner) = inner_of(&field.ty, "Option") {
+    let kind = if attrs.skip {
+        FieldKind::Skip(field.ty.clone())
+    } else if let Some(inner) = inner_of(&field.ty, "Option") {
         FieldKind::Option(inner.clone())
-    } else if has_default || DEFAULTED_TYPES.iter().any(|t| is_type(&field.ty, t)) {
+    } else if attrs.default || container_default {
         FieldKind::Defaulted(field.ty.clone())
     } else {
         FieldKind::Required(field.ty.clone())
@@ -522,46 +905,43 @@ fn parse_field(field: &Field) -> Result<FieldInfo, syn::Error> {
     Ok(FieldInfo { ident, key, kind })
 }
 
-/// Read `#[edn(rename = "key")]` from attributes.
-fn read_rename(attrs: &[syn::Attribute]) -> Result<Option<String>, syn::Error> {
-    let mut found: Option<String> = None;
-    for attr in attrs {
-        if !attr.path().is_ident("edn") {
-            continue;
-        }
-        attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("rename") {
-                let value: syn::LitStr = meta.value()?.parse()?;
-                found = Some(value.value());
-                Ok(())
-            } else if meta.path.is_ident("default") {
-                Ok(()) // handled by has_default_attr
-            } else {
-                Err(meta.error("unsupported #[edn(...)] attribute"))
-            }
-        })?;
-    }
-    Ok(found)
+struct FieldAttrs {
+    rename: Option<String>,
+    default: bool,
+    skip: bool,
 }
 
-/// Check for `#[edn(default)]` on a field.
-fn has_default_attr(attrs: &[syn::Attribute]) -> bool {
-    for attr in attrs {
-        if !attr.path().is_ident("edn") {
-            continue;
-        }
-        let mut found = false;
-        let _ = attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("default") {
-                found = true;
+impl FieldAttrs {
+    fn parse(attrs: &[syn::Attribute]) -> Result<Self, syn::Error> {
+        let mut rename = None;
+        let mut default = false;
+        let mut skip = false;
+        for attr in attrs {
+            if !attr.path().is_ident("edn") {
+                continue;
             }
-            Ok(())
-        });
-        if found {
-            return true;
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("rename") {
+                    let value: syn::LitStr = meta.value()?.parse()?;
+                    rename = Some(value.value());
+                    Ok(())
+                } else if meta.path.is_ident("default") {
+                    default = true;
+                    Ok(())
+                } else if meta.path.is_ident("skip") {
+                    skip = true;
+                    Ok(())
+                } else if meta.path.is_ident("skip_if") {
+                    // skip_if is ser-only, accept silently
+                    let _: syn::LitStr = meta.value()?.parse()?;
+                    Ok(())
+                } else {
+                    Err(meta.error("unsupported #[edn(...)] attribute"))
+                }
+            })?;
         }
+        Ok(FieldAttrs { rename, default, skip })
     }
-    false
 }
 
 /// If `ty` is `Wrapper<T>`, return `T`. Otherwise return `None`.
@@ -580,18 +960,4 @@ fn inner_of<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
     None
 }
 
-/// Check if `ty` is `Name<...>`.
-fn is_type(ty: &Type, name: &str) -> bool {
-    if let Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            return segment.ident == name;
-        }
-    }
-    false
-}
-
-/// Convert `snake_case` to `kebab-case`.
-fn to_kebab_case(s: &str) -> String {
-    s.replace('_', "-")
-}
 

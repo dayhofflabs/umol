@@ -103,7 +103,34 @@
 //! | `bignum` | `Edn::BigInt`, `Edn::BigDecimal`, [`serde::EdnBigInt`], [`serde::EdnBigDecimal`] |
 //! | `chrono` | [`inst_to_edn`] — tag reader for `#inst` → `chrono::DateTime` |
 //! | `uuid` | [`uuid_to_edn`] — tag reader for `#uuid` → `uuid::Uuid` |
-//! | `macros` | `#[derive(FromEdn, ToEdn)]` and `edn!` literal macro |
+//! | `macros` | `#[derive(FromEdn, ToEdn)]`, `edn!` literal macro, field/container attributes |
+//!
+//! # Derive attributes
+//!
+//! The `macros` feature enables `#[derive(FromEdn)]` and `#[derive(ToEdn)]`.
+//!
+//! ## Container attributes (`#[edn(...)]` on the type)
+//!
+//! | Attribute | Derives | Effect |
+//! |---|---|---|
+//! | `transparent` | Both | Single-field struct delegates to inner type |
+//! | `deny_unknown_fields` | `FromEdn` | Error on unrecognized map keys |
+//! | `default` | `FromEdn` | All fields optional via `Default::default()` |
+//!
+//! ## Field attributes (`#[edn(...)]` on a field)
+//!
+//! | Attribute | Derives | Effect |
+//! |---|---|---|
+//! | `rename = "key"` | Both | Override the EDN keyword for this field |
+//! | `default` | `FromEdn` | Use `Default::default()` when key is missing |
+//! | `skip` | Both | Omit from ser; use `Default::default()` on deser |
+//! | `skip_if = "path"` | `ToEdn` | Omit from ser when `path(&field)` is true |
+//!
+//! ## Variant attributes (`#[edn(...)]` on an enum variant)
+//!
+//! | Attribute | Derives | Effect |
+//! |---|---|---|
+//! | `rename = "key"` | Both | Override the variant's kebab-case name |
 //!
 //! # ParseConfig / FormatConfig
 //!
