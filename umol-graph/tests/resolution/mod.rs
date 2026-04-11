@@ -9,10 +9,10 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
-use umol_graph::dsl::ast::{FromAst, ToAst};
-use umol_graph::dsl::config::{
-    ImplicitHydrogenMode, MoleculeDslConfig, MoleculeDslConfigOverrides,
+use umol_graph::ast::config::{
+    ImplicitHydrogenMode, MoleculeAstConfig, MoleculeAstConfigOverrides,
 };
+use umol_graph::ast::{FromAst, ToAst};
 use umol_graph::dsl::molecule::MoleculeAstWrapper;
 use umol_graph::graph_ir::config_data::ValenceTable;
 use umol_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};
@@ -22,7 +22,7 @@ use umol_graph::graph_ir::{resolve_molecule_with, ResolveConfig, ValenceStrategy
 struct TestInput {
     input: MoleculeAstWrapper,
     #[edn(default)]
-    config_overrides: MoleculeDslConfigOverrides,
+    config_overrides: MoleculeAstConfigOverrides,
     #[edn(default)]
     context: ResolutionContext,
 }
@@ -42,7 +42,7 @@ struct ResolveResult {
 
 fn resolve_with_config(
     input: &MoleculeAstWrapper,
-    dsl_config: &MoleculeDslConfig,
+    dsl_config: &MoleculeAstConfig,
     context: &ResolutionContext,
     resolve_config: &ResolveConfig,
 ) -> ResolveResult {
@@ -59,7 +59,7 @@ fn resolve_with_config(
                 .and_then(|()| builder.build(resolve_config));
             match result {
                 Ok(mol) => {
-                    let mut ast = mol.to_ast(&MoleculeDslConfig::zeroed());
+                    let mut ast = mol.to_ast(&MoleculeAstConfig::zeroed());
                     ast.aromatic_systems.sort_by(|a, b| a.atoms.cmp(&b.atoms));
                     ResolveResult {
                         success: true,
@@ -77,7 +77,7 @@ fn resolve_with_config(
     }
 }
 
-fn counts_config(dsl_config: &MoleculeDslConfig) -> ResolveConfig {
+fn counts_config(dsl_config: &MoleculeAstConfig) -> ResolveConfig {
     let mut config = ResolveConfig::default();
     config.valence.strategy = ValenceStrategy::Counts {
         table: ValenceTable::default_table().clone(),
@@ -106,7 +106,7 @@ fn extract_category(path: &Path) -> String {
 fn run_conformance_test(file_path: &Path) {
     let content = fs::read_to_string(file_path).expect("failed to read test file");
     let test_input = TestInput::from_edn_str(&content).expect("failed to parse EDN input");
-    let config = MoleculeDslConfig::open().with_overrides(test_input.config_overrides);
+    let config = MoleculeAstConfig::open().with_overrides(test_input.config_overrides);
 
     let atom_typing = resolve_with_config(
         &test_input.input,

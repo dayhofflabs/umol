@@ -9,58 +9,13 @@ use indexmap::IndexMap;
 use umol_data::SpinState;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
-use super::ast::DslAst;
-use super::atom::{parse_atom_dsl, AtomAst};
-use super::bond::BondAst;
-use super::config::MoleculeDslConfig;
+use super::atom::parse_atom_dsl;
 use super::error::ParseError;
-
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct LocalizedBond {
-    pub a: usize,
-    pub b: usize,
-    pub bond: BondAst,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct DativeBond {
-    pub donor: usize,
-    pub acceptor: usize,
-    pub bond: BondAst,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct AromaticSystem {
-    pub atoms: Vec<usize>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct MulticenterBond {
-    pub atoms: Vec<usize>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct NoncovalentBond {
-    pub a: usize,
-    pub b: usize,
-    pub bond: BondAst,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-pub struct MoleculeAst {
-    pub atoms: Vec<AtomAst>,
-    pub bonds: Vec<LocalizedBond>,
-    pub dative_bonds: Vec<DativeBond>,
-    pub aromatic_systems: Vec<AromaticSystem>,
-    pub multicenter_bonds: Vec<MulticenterBond>,
-    pub noncovalent_bonds: Vec<NoncovalentBond>,
-    pub charge: Option<i64>,
-    pub spin: Option<SpinState>,
-}
-
-impl DslAst for MoleculeAst {
-    type Config = MoleculeDslConfig;
-}
+use crate::ast::atom::AtomAst;
+use crate::ast::bond::BondAst;
+use crate::ast::molecule::{
+    AromaticSystem, DativeBond, LocalizedBond, MoleculeAst, MulticenterBond, NoncovalentBond,
+};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
@@ -893,10 +848,11 @@ mod tests {
     use rstest::*;
     use umol_data::{e, Element};
 
-    use super::super::ast::{FromAst, ToAst};
-    use super::super::atom::{ElementExpr, HydrogenExpr};
-    use super::super::value::ValueAst;
     use super::*;
+    use crate::ast::atom::{ElementExpr, HydrogenExpr};
+    use crate::ast::config::MoleculeAstConfig;
+    use crate::ast::value::ValueAst;
+    use crate::ast::{FromAst, ToAst};
     use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
     fn atoms(a: Vec<AtomAst>) -> MoleculeAst {
@@ -1113,7 +1069,7 @@ mod tests {
             parse_molecule_dsl(r#"{:atoms [[:C "C #h3"] [:O "O #h1"]] :bonds [[:C :O :single]]}"#)
                 .unwrap();
 
-        let cfg = MoleculeDslConfig::zeroed();
+        let cfg = MoleculeAstConfig::zeroed();
         let builder = MoleculeBuilder::from_ast(&dsl.ast, &cfg).unwrap();
         let dsl2 = MoleculeAstWrapper::new(builder.to_ast(&cfg), dsl.metadata.clone());
 
@@ -1131,7 +1087,7 @@ mod tests {
             parse_molecule_dsl(r#"{:atoms [[:C "C #h3"] [:O "O #h1"]] :bonds [[:C :O :single]]}"#)
                 .unwrap();
 
-        let cfg = MoleculeDslConfig::zeroed();
+        let cfg = MoleculeAstConfig::zeroed();
         let builder = MoleculeBuilder::from_ast(&dsl.ast, &cfg).unwrap();
         let ast2 = builder.to_ast(&cfg);
 

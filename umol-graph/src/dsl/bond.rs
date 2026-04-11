@@ -13,44 +13,10 @@ use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
 use umol_edn::{DeError, Edn, EdnKeyword, FromEdn, ToEdn};
 
-use super::ast::DslAst;
-use super::config::BondDslConfig;
-use super::value::ValueAst;
+use crate::ast::bond::BondAst;
+use crate::ast::value::ValueAst;
 use crate::dsl::error::BondDslError;
 use crate::dsl::value::value_dsl;
-
-/// Parsed bond-string AST
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BondAst {
-    pub order: ValueAst,
-    pub charge: Option<ValueAst>,
-    pub unpaired_electrons: Option<ValueAst>,
-    pub multiplicity: Option<ValueAst>,
-}
-
-impl BondAst {
-    pub fn new(order: ValueAst) -> Self {
-        Self {
-            order,
-            charge: None,
-            unpaired_electrons: None,
-            multiplicity: None,
-        }
-    }
-
-    pub fn from_order(order: u8) -> Self {
-        Self {
-            order: ValueAst::Lit(order as i32),
-            charge: None,
-            unpaired_electrons: None,
-            multiplicity: None,
-        }
-    }
-}
-
-impl DslAst for BondAst {
-    type Config = BondDslConfig;
-}
 
 impl FromStr for BondAst {
     type Err = BondDslError;

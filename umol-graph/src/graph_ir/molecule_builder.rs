@@ -26,15 +26,17 @@ use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSe
 use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
-use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::bond::BondAst;
-use crate::dsl::config::MoleculeDslConfig;
-use crate::dsl::error::{LoweringError, ParseError};
-use crate::dsl::molecule::{
+use crate::ast::bond::BondAst;
+use crate::ast::config::MoleculeAstConfig;
+use crate::ast::error::LoweringError;
+use crate::ast::molecule::{
     AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
-    LocalizedBond as LocalizedBondAst, MoleculeAst, MoleculeAstWrapper,
-    MulticenterBond as MulticenterBondAst, NoncovalentBond as NoncovalentBondAst,
+    LocalizedBond as LocalizedBondAst, MoleculeAst, MulticenterBond as MulticenterBondAst,
+    NoncovalentBond as NoncovalentBondAst,
 };
+use crate::ast::{FromAst, ToAst};
+use crate::dsl::error::ParseError;
+use crate::dsl::molecule::MoleculeAstWrapper;
 use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::bond::BondOrder;
 use crate::table_ir::{BondDonation, Molecule as TableMolecule};
@@ -1332,7 +1334,7 @@ impl Default for MoleculeBuilder {
 }
 
 impl FromAst<MoleculeAst> for MoleculeBuilder {
-    fn from_ast(ast: &MoleculeAst, cfg: &MoleculeDslConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: &MoleculeAst, cfg: &MoleculeAstConfig) -> Result<Self, LoweringError> {
         let mut builder = Self::new();
         let mut indices: Vec<AtomIndex> = Vec::with_capacity(ast.atoms.len());
 
@@ -1412,7 +1414,7 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
 }
 
 impl ToAst<MoleculeAst> for MoleculeBuilder {
-    fn to_ast(&self, cfg: &MoleculeDslConfig) -> MoleculeAst {
+    fn to_ast(&self, cfg: &MoleculeAstConfig) -> MoleculeAst {
         let atom_indices: Vec<AtomIndex> = self.atom_indices().collect();
         let position_of: HashMap<AtomIndex, usize> = atom_indices
             .iter()
@@ -1486,7 +1488,7 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
 
 impl fmt::Display for MoleculeBuilder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        MoleculeAstWrapper::from_ast(self.to_ast(&MoleculeDslConfig::zeroed())).fmt(f)
+        MoleculeAstWrapper::from_ast(self.to_ast(&MoleculeAstConfig::zeroed())).fmt(f)
     }
 }
 
@@ -1495,7 +1497,7 @@ impl FromStr for MoleculeBuilder {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let dsl = MoleculeAstWrapper::from_str(s).map_err(|e| LoweringError::Molecule(e.to_string()))?;
-        Self::from_ast(dsl.ast(), &MoleculeDslConfig::zeroed())
+        Self::from_ast(dsl.ast(), &MoleculeAstConfig::zeroed())
     }
 }
 
@@ -1512,7 +1514,7 @@ impl<'de> FromEdn<'de> for MoleculeBuilder {
             }
         };
         let dsl = MoleculeAstWrapper::from_str(s).map_err(|e| DeError::subgrammar("molecule", e))?;
-        Self::from_ast(dsl.ast(), &MoleculeDslConfig::zeroed())
+        Self::from_ast(dsl.ast(), &MoleculeAstConfig::zeroed())
             .map_err(|e| DeError::subgrammar("molecule", e))
     }
 }

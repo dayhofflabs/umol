@@ -1,4 +1,4 @@
-//! DSL configuration: mode enums and config structs for lowering/raising.
+//! AST lowering/raising configuration: mode enums and config structs.
 
 use umol_edn::{FromEdn, ToEdn};
 
@@ -47,9 +47,9 @@ pub enum AromaticValenceMode {
     Required,
 }
 
-/// Atom DSL configuration for lowering and raising.
+/// Atom AST configuration for lowering and raising.
 #[derive(Clone, Debug, FromEdn, ToEdn)]
-pub struct AtomDslConfig {
+pub struct AtomAstConfig {
     pub isotope_mode: IsotopeMode,
     pub charge_mode: NumericMode,
     pub implicit_h_mode: ImplicitHydrogenMode,
@@ -63,7 +63,7 @@ pub struct AtomDslConfig {
     pub multicenter_valence_mode: NumericMode,
 }
 
-impl AtomDslConfig {
+impl AtomAstConfig {
     /// Ground config: absent fields → zero/natural. For `Atom` lowering/raising.
     pub fn zeroed() -> Self {
         Self {
@@ -99,9 +99,9 @@ impl AtomDslConfig {
     }
 }
 
-/// Partial atom DSL config: all fields optional, for merging onto a base config.
+/// Partial atom AST config: all fields optional, for merging onto a base config.
 #[derive(Clone, Debug, Default, FromEdn)]
-pub struct AtomDslConfigOverrides {
+pub struct AtomAstConfigOverrides {
     pub isotope_mode: Option<IsotopeMode>,
     pub charge_mode: Option<NumericMode>,
     pub implicit_h_mode: Option<ImplicitHydrogenMode>,
@@ -115,8 +115,8 @@ pub struct AtomDslConfigOverrides {
     pub multicenter_valence_mode: Option<NumericMode>,
 }
 
-impl AtomDslConfig {
-    pub fn with_overrides(mut self, ov: AtomDslConfigOverrides) -> Self {
+impl AtomAstConfig {
+    pub fn with_overrides(mut self, ov: AtomAstConfigOverrides) -> Self {
         if let Some(v) = ov.isotope_mode {
             self.isotope_mode = v;
         }
@@ -154,15 +154,15 @@ impl AtomDslConfig {
     }
 }
 
-/// Bond DSL configuration for lowering and raising.
+/// Bond AST configuration for lowering and raising.
 #[derive(Clone, Debug, FromEdn, ToEdn)]
-pub struct BondDslConfig {
+pub struct BondAstConfig {
     pub charge_mode: NumericMode,
     pub unpaired_electrons_mode: UnpairedElectronsMode,
     pub multiplicity_mode: MultiplicityMode,
 }
 
-impl BondDslConfig {
+impl BondAstConfig {
     pub fn zeroed() -> Self {
         Self {
             charge_mode: NumericMode::Zero,
@@ -180,16 +180,16 @@ impl BondDslConfig {
     }
 }
 
-/// Partial bond DSL config: all fields optional, for merging onto a base config.
+/// Partial bond AST config: all fields optional, for merging onto a base config.
 #[derive(Clone, Debug, Default, FromEdn)]
-pub struct BondDslConfigOverrides {
+pub struct BondAstConfigOverrides {
     pub charge_mode: Option<NumericMode>,
     pub unpaired_electrons_mode: Option<UnpairedElectronsMode>,
     pub multiplicity_mode: Option<MultiplicityMode>,
 }
 
-impl BondDslConfig {
-    pub fn with_overrides(mut self, ov: BondDslConfigOverrides) -> Self {
+impl BondAstConfig {
+    pub fn with_overrides(mut self, ov: BondAstConfigOverrides) -> Self {
         if let Some(v) = ov.charge_mode {
             self.charge_mode = v;
         }
@@ -203,17 +203,17 @@ impl BondDslConfig {
     }
 }
 
-/// Partial molecule DSL config: all fields optional, for merging onto a base config.
+/// Partial molecule AST config: all fields optional, for merging onto a base config.
 #[derive(Clone, Debug, Default, FromEdn)]
-pub struct MoleculeDslConfigOverrides {
+pub struct MoleculeAstConfigOverrides {
     #[edn(default)]
-    pub atom: AtomDslConfigOverrides,
+    pub atom: AtomAstConfigOverrides,
     #[edn(default)]
-    pub bond: BondDslConfigOverrides,
+    pub bond: BondAstConfigOverrides,
 }
 
-impl MoleculeDslConfig {
-    pub fn with_overrides(self, ov: MoleculeDslConfigOverrides) -> Self {
+impl MoleculeAstConfig {
+    pub fn with_overrides(self, ov: MoleculeAstConfigOverrides) -> Self {
         Self {
             atom: self.atom.with_overrides(ov.atom),
             bond: self.bond.with_overrides(ov.bond),
@@ -221,25 +221,25 @@ impl MoleculeDslConfig {
     }
 }
 
-/// Molecule DSL configuration (combines atom + bond configs).
+/// Molecule AST configuration (combines atom + bond configs).
 #[derive(Debug, Clone, FromEdn, ToEdn)]
-pub struct MoleculeDslConfig {
-    pub atom: AtomDslConfig,
-    pub bond: BondDslConfig,
+pub struct MoleculeAstConfig {
+    pub atom: AtomAstConfig,
+    pub bond: BondAstConfig,
 }
 
-impl MoleculeDslConfig {
+impl MoleculeAstConfig {
     pub fn zeroed() -> Self {
         Self {
-            atom: AtomDslConfig::zeroed(),
-            bond: BondDslConfig::zeroed(),
+            atom: AtomAstConfig::zeroed(),
+            bond: BondAstConfig::zeroed(),
         }
     }
 
     pub fn open() -> Self {
         Self {
-            atom: AtomDslConfig::open(),
-            bond: BondDslConfig::open(),
+            atom: AtomAstConfig::open(),
+            bond: BondAstConfig::open(),
         }
     }
 }
@@ -252,11 +252,11 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::zeroed(MoleculeDslConfig::zeroed())]
-    #[case::open(MoleculeDslConfig::open())]
-    fn test_molecule_dsl_config_roundtrip(#[case] cfg: MoleculeDslConfig) {
+    #[case::zeroed(MoleculeAstConfig::zeroed())]
+    #[case::open(MoleculeAstConfig::open())]
+    fn test_molecule_ast_config_roundtrip(#[case] cfg: MoleculeAstConfig) {
         let edn = cfg.to_edn();
-        let back = MoleculeDslConfig::from_edn(&edn).unwrap();
+        let back = MoleculeAstConfig::from_edn(&edn).unwrap();
         assert_eq!(cfg.atom.charge_mode, back.atom.charge_mode);
         assert_eq!(cfg.atom.implicit_h_mode, back.atom.implicit_h_mode);
         assert_eq!(cfg.atom.aromatic_valence_mode, back.atom.aromatic_valence_mode);
@@ -270,14 +270,14 @@ mod tests {
     #[case::open(concat!("{:atom {:isotope-mode :required :charge-mode :required :implicit-h-mode :required :lone-pairs-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived :valence-mode :required ",
                          ":donated-pairs-mode :required :accepted-pairs-mode :required :aromatic-valence-mode :required :multicenter-valence-mode :required} :bond {:charge-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived}}"),
         NumericMode::Required, ImplicitHydrogenMode::Required, AromaticValenceMode::Required)]
-    fn test_molecule_dsl_config_from_edn(
+    fn test_molecule_ast_config_from_edn(
         #[case] edn: &str,
         #[case] expected_charge: NumericMode,
         #[case] expected_h: ImplicitHydrogenMode,
         #[case] expected_aromatic: AromaticValenceMode,
     ) {
         let tree = read_string(edn).unwrap();
-        let cfg = MoleculeDslConfig::from_edn(&tree).unwrap();
+        let cfg = MoleculeAstConfig::from_edn(&tree).unwrap();
         assert_eq!(cfg.atom.charge_mode, expected_charge);
         assert_eq!(cfg.atom.implicit_h_mode, expected_h);
         assert_eq!(cfg.atom.aromatic_valence_mode, expected_aromatic);

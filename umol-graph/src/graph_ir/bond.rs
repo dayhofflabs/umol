@@ -9,11 +9,12 @@ use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 use super::ast_utils::raise_spin_ground;
 use super::bond_pattern::BondPattern;
 use super::error::ValidationError;
-use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::bond::{parse_bond_dsl, BondAst};
-use crate::dsl::config::{BondDslConfig, NumericMode};
-use crate::dsl::error::LoweringError;
-use crate::dsl::value::ValueAst;
+use crate::ast::bond::BondAst;
+use crate::ast::config::{BondAstConfig, NumericMode};
+use crate::ast::error::LoweringError;
+use crate::ast::value::ValueAst;
+use crate::ast::{FromAst, ToAst};
+use crate::dsl::bond::parse_bond_dsl;
 
 /// Resolved shared (covalent) bond in GraphIR. Order is the localized (σ-skeleton)
 /// bond order. Dative and non-covalent bonds are stored separately.
@@ -63,7 +64,7 @@ impl Bond {
 }
 
 impl FromAst<BondAst> for Bond {
-    fn from_ast(ast: &BondAst, cfg: &BondDslConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: &BondAst, cfg: &BondAstConfig) -> Result<Self, LoweringError> {
         let pattern = BondPattern::from_ast(ast, cfg)?;
         pattern.to_bond().map_err(|e| match e {
             ValidationError::NonGround { field } => LoweringError::NonGround { field },
@@ -84,7 +85,7 @@ impl FromAst<BondAst> for Bond {
 }
 
 impl ToAst<BondAst> for Bond {
-    fn to_ast(&self, cfg: &BondDslConfig) -> BondAst {
+    fn to_ast(&self, cfg: &BondAstConfig) -> BondAst {
         let (spin_u, spin_m) = raise_spin_ground(
             self.unpaired_electrons(),
             self.multiplicity(),
@@ -108,27 +109,27 @@ impl FromStr for Bond {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_bond_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
-        Bond::from_ast(&ast, &BondDslConfig::zeroed())
+        Bond::from_ast(&ast, &BondAstConfig::zeroed())
     }
 }
 
 impl Display for Bond {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_ast(&BondDslConfig::zeroed()).fmt(f)
+        self.to_ast(&BondAstConfig::zeroed()).fmt(f)
     }
 }
 
 impl<'de> FromEdn<'de> for Bond {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = BondAst::from_edn(edn)?;
-        Self::from_ast(&ast, &BondDslConfig::zeroed())
+        Self::from_ast(&ast, &BondAstConfig::zeroed())
             .map_err(|e| DeError::subgrammar("bond", e))
     }
 }
 
 impl ToEdn for Bond {
     fn to_edn(&self) -> Edn<'static> {
-        self.to_ast(&BondDslConfig::zeroed()).to_edn()
+        self.to_ast(&BondAstConfig::zeroed()).to_edn()
     }
 }
 
@@ -148,7 +149,7 @@ mod tests {
     #[case::full(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), unpaired_electrons: Some(ValueAst::Lit(2)), multiplicity: Some(ValueAst::Lit(1)), },
         Bond::from_parts(1, 0, SpinState::new(2, SpinMultiplicity::Singlet)))]
     fn test_bond_from_ast(#[case] ast: BondAst, #[case] expected: Bond) {
-        assert_eq!(Bond::from_ast(&ast, &BondDslConfig::zeroed()).unwrap(), expected);
+        assert_eq!(Bond::from_ast(&ast, &BondAstConfig::zeroed()).unwrap(), expected);
     }
 
     #[rustfmt::skip]
@@ -157,7 +158,7 @@ mod tests {
     #[case::charged_doublet(Bond::from_parts(2, 1, SpinState::new(1, SpinMultiplicity::Doublet)), BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)),
         unpaired_electrons: Some(ValueAst::Lit(1)), multiplicity: None })]
     fn test_bond_to_ast(#[case] bond: Bond, #[case] expected: BondAst) {
-        assert_eq!(bond.to_ast(&BondDslConfig::zeroed()), expected);
+        assert_eq!(bond.to_ast(&BondAstConfig::zeroed()), expected);
     }
 
     #[rstest]

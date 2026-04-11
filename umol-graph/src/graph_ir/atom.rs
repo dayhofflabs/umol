@@ -8,13 +8,12 @@ use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{raise_i8_ground, raise_spin_ground, raise_u8_ground};
 use crate::atom::{AromaticValence, IsotopeMass};
-use crate::dsl::ast::{FromAst, ToAst};
-use crate::dsl::atom::{
-    parse_atom_dsl, AromaticExpr, AtomAst, ElementExpr, HydrogenExpr, IsotopeExpr,
-};
-use crate::dsl::config::{AromaticValenceMode, AtomDslConfig, ImplicitHydrogenMode, IsotopeMode};
-use crate::dsl::error::LoweringError;
-use crate::dsl::value::ValueAst;
+use crate::ast::atom::{AromaticExpr, AtomAst, ElementExpr, HydrogenExpr, IsotopeExpr};
+use crate::ast::config::{AromaticValenceMode, AtomAstConfig, ImplicitHydrogenMode, IsotopeMode};
+use crate::ast::error::LoweringError;
+use crate::ast::value::ValueAst;
+use crate::ast::{FromAst, ToAst};
+use crate::dsl::atom::parse_atom_dsl;
 use crate::graph_ir::atom_pattern::AtomPattern;
 use crate::graph_ir::error::ValidationError;
 
@@ -201,7 +200,7 @@ impl Atom {
 }
 
 impl FromAst<AtomAst> for Atom {
-    fn from_ast(ast: &AtomAst, cfg: &AtomDslConfig) -> Result<Self, LoweringError> {
+    fn from_ast(ast: &AtomAst, cfg: &AtomAstConfig) -> Result<Self, LoweringError> {
         let pattern = AtomPattern::from_ast(ast, cfg)?;
         pattern.to_atom().map_err(|e| match e {
             ValidationError::NonGround { field } => LoweringError::NonGround { field },
@@ -222,7 +221,7 @@ impl FromAst<AtomAst> for Atom {
 }
 
 impl ToAst<AtomAst> for Atom {
-    fn to_ast(&self, cfg: &AtomDslConfig) -> AtomAst {
+    fn to_ast(&self, cfg: &AtomAstConfig) -> AtomAst {
         let (spin_u, spin_m) = raise_spin_ground(
             self.unpaired_electrons(),
             self.multiplicity(),
@@ -271,26 +270,26 @@ impl FromStr for Atom {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let ast = parse_atom_dsl(s).map_err(|e| LoweringError::Atom(e.to_string()))?;
-        Self::from_ast(&ast, &AtomDslConfig::zeroed())
+        Self::from_ast(&ast, &AtomAstConfig::zeroed())
     }
 }
 
 impl Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.to_ast(&AtomDslConfig::zeroed()).fmt(f)
+        self.to_ast(&AtomAstConfig::zeroed()).fmt(f)
     }
 }
 
 impl<'de> FromEdn<'de> for Atom {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let ast = AtomAst::from_edn(edn)?;
-        Self::from_ast(&ast, &AtomDslConfig::zeroed()).map_err(|e| DeError::subgrammar("atom", e))
+        Self::from_ast(&ast, &AtomAstConfig::zeroed()).map_err(|e| DeError::subgrammar("atom", e))
     }
 }
 
 impl ToEdn for Atom {
     fn to_edn(&self) -> Edn<'static> {
-        self.to_ast(&AtomDslConfig::zeroed()).to_edn()
+        self.to_ast(&AtomAstConfig::zeroed()).to_edn()
     }
 }
 
@@ -306,26 +305,26 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::helium(AtomAst::from_element(Element::He), AtomDslConfig::zeroed(), "He".parse::<Atom>().unwrap())]
+    #[case::helium(AtomAst::from_element(Element::He), AtomAstConfig::zeroed(), "He".parse::<Atom>().unwrap())]
     #[case::isotope(AtomAst { isotope_mass: Some(IsotopeExpr::Lit(13)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))),
-        ..AtomAst::from_element(Element::C) }, AtomDslConfig::zeroed(), "C#i13#h4".parse::<Atom>().unwrap())]
+        ..AtomAst::from_element(Element::C) }, AtomAstConfig::zeroed(), "C#i13#h4".parse::<Atom>().unwrap())]
     #[case::charge(AtomAst { charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))),
-        ..AtomAst::from_element(Element::C) }, AtomDslConfig::zeroed(), "C#c+#h3".parse::<Atom>().unwrap())]
-    fn test_atom_from_ast(#[case] ast: AtomAst, #[case] cfg: AtomDslConfig, #[case] expected: Atom) {
+        ..AtomAst::from_element(Element::C) }, AtomAstConfig::zeroed(), "C#c+#h3".parse::<Atom>().unwrap())]
+    fn test_atom_from_ast(#[case] ast: AtomAst, #[case] cfg: AtomAstConfig, #[case] expected: Atom) {
         let atom = Atom::from_ast(&ast, &cfg).unwrap();
         assert_eq!(atom, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::helium("He".parse::<Atom>().unwrap(), "He".parse::<Atom>().unwrap().to_ast(&AtomDslConfig::zeroed()))]
+    #[case::helium("He".parse::<Atom>().unwrap(), "He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()))]
     #[case::isotope("C#i13#h4".parse::<Atom>().unwrap(), AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: Some(IsotopeExpr::Lit(13)),
-            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))), .."He".parse::<Atom>().unwrap().to_ast(&AtomDslConfig::zeroed()) })]
+            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))), .."He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()) })]
     #[case::aromatic("C#h#v2#a1".parse::<Atom>().unwrap(), AtomAst { element: ElementExpr::Lit(Element::C),
             implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), valence: Some(ValueAst::Lit(2)), aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(1))),
-            .."He".parse::<Atom>().unwrap().to_ast(&AtomDslConfig::zeroed()) })]
+            .."He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()) })]
     fn test_atom_to_ast(#[case] atom: Atom, #[case] expected: AtomAst) {
-        assert_eq!(atom.to_ast(&AtomDslConfig::zeroed()), expected);
+        assert_eq!(atom.to_ast(&AtomAstConfig::zeroed()), expected);
     }
 
     #[rustfmt::skip]

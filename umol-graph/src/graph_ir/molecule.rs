@@ -16,14 +16,14 @@ use super::multicenter::MulticenterBond;
 use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
-use crate::dsl::ast::ToAst;
-use crate::dsl::bond::BondAst;
-use crate::dsl::config::MoleculeDslConfig;
-use crate::dsl::molecule::{
+use crate::ast::bond::BondAst;
+use crate::ast::config::MoleculeAstConfig;
+use crate::ast::molecule::{
     AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
     LocalizedBond as LocalizedBondAst, MoleculeAst, MulticenterBond as MulticenterBondAst,
     NoncovalentBond as NoncovalentBondAst,
 };
+use crate::ast::ToAst;
 
 pub type AtomIndex = NodeIndex<u32>;
 pub type BondIndex = EdgeIndex<u32>;
@@ -475,7 +475,7 @@ impl Molecule {
 }
 
 impl ToAst<MoleculeAst> for Molecule {
-    fn to_ast(&self, cfg: &MoleculeDslConfig) -> MoleculeAst {
+    fn to_ast(&self, cfg: &MoleculeAstConfig) -> MoleculeAst {
         let atom_indices: Vec<AtomIndex> = self.atom_indices().collect();
         let position_of: HashMap<AtomIndex, usize> = atom_indices
             .iter()
