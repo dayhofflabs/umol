@@ -24,7 +24,7 @@ These two commitments only work together. Separate resolution from matching and 
 |---|---|---|
 | D1 | Unified constraint solving? | Yes. Commit now; fail fast if performance fails. |
 | D2 | `MoleculeAst` as THE type? | Yes. `GroundMolecule` newtype for ground-only APIs. |
-| D3 | `MoleculeConstraint` starter set? | `SubPattern`, `Derived`, `Matcher`. |
+| D3 | `MoleculeConstraint` starter set? | `SubPattern`, `Derived`, `Matcher`, `And`/`Or`/`Not`. |
 | D4 | Atom identity in constraints? | `usize` (wrapped `AtomIdx`). Labels stay in parsers. |
 | D5 | Sub-patterns: where? | In `constraints` vec. Bindings scope lexically inward. |
 | D6 | Injective matching default? | Yes. Non-injective via `MatcherFlag`. |
@@ -36,9 +36,9 @@ These two commitments only work together. Separate resolution from matching and 
 
 Several pieces of this design collide with existing symbols. Flagging them here; the nomenclature pass is deferred per the general preference for non-abbreviated names, and can be done in a cleanup PR once the constraint machinery is in place.
 
-- **`AtomIndex` / `BondIndex`** already exist in `graph_ir::molecule` as `pub type AtomIndex = NodeIndex<u32>;` / `pub type BondIndex = EdgeIndex<u32>;`. They are petgraph handles tied to a specific `StableGraph` instance and cannot be directly repurposed as indices into `MoleculeAst::atoms` without a translation layer. The constraint-side index in the D3/D4 sketch is a distinct concept. Long-term resolution: keep the petgraph aliases local to the view layer (rename to something like `GraphNodeIdx` / `GraphEdgeIdx` once specialized views land) and use `AtomIndex` / `BondIndex` as the AST-level newtypes. Until the rename, the sketch below uses placeholder names so the reader does not conflate them.
+- **`AtomIndex` / `BondIndex`** already exist in `graph_ir::molecule` as `pub type AtomIndex = NodeIndex<u32>;` / `pub type BondIndex = EdgeIndex<u32>;`. They are petgraph handles tied to a specific `StableGraph` instance and cannot be directly repurposed as indices into `MoleculeAst::atoms` without a translation layer. The constraint-side index is a distinct concept and is currently a bare `usize` indexing into `MoleculeAst::atoms` (and the parallel relation vecs). Long-term resolution: keep the petgraph aliases local to the view layer (rename to something like `GraphNodeIdx` / `GraphEdgeIdx` once specialized views land) and use `AtomIndex` / `BondIndex` as the AST-level newtypes wrapping the current `usize`.
 
-- **`ValueAst`** already exists in `ast::value` with `Bindings = HashMap<String, i32>`, `Expr`, `ArithOp`, `RelOp`, and `capture` / `evaluate` / `evaluate_bool`. It is the scalar constraint language used by atom and bond specs in the DSL. **Reuse, do not reinvent.** The `Derived` constraints that compare integer attributes (valence sum, total charge, ring size, multiplicity) should accept a `ValueAst` rather than a fresh `(CompareOp, i64)` pair. `ValueAst::capture` already implements the unification-on-match behavior that D5 needs for sub-pattern bindings, so the sub-pattern scoping story and the scalar-guard story share one substrate.
+- **`ValueAst`** already exists in `umol_shared` with `Bindings = HashMap<String, i64>`, `Expr`, `ArithOp`, `RelOp`, and `capture` / `evaluate` / `evaluate_bool`. It is the scalar constraint language used by atom and bond specs in the DSL. **Reuse, do not reinvent.** The `Derived` constraints that compare integer attributes (valence sum, total charge, ring size) accept a `ValueAst` rather than a fresh `(CompareOp, i64)` pair. `ValueAst::capture` already implements the unification-on-match behavior that D5 needs for sub-pattern bindings, so the sub-pattern scoping story and the scalar-guard story share one substrate. Spin is the exception — `TotalSpin` carries `SpinStateAst`, not `ValueAst`, because the multiplicity and unpaired-electron fields are coupled and must be expressible as a single ground value or capture pair.
 
 - **`TableIR`** is the real input boundary for SMILES and MOL. Parsers produce `TableIR::Molecule`, which is currently lowered via `MoleculeBuilder::from_table_molecule`. After the migration, the lowering target is `MoleculeAst`. The DSL path is a second source that also lands in `MoleculeAst`. D8's parse step below reflects both paths.
 
@@ -50,18 +50,30 @@ Several pieces of this design collide with existing symbols. Flagging them here;
 
 ```rust
 pub enum MoleculeConstraint {
-    SubPattern { anchor: AstAtomIdx, pattern: Box<MoleculeAst> },
-    Derived { predicate: DerivedPred, atoms: Vec<AstAtomIdx> },
+    SubPattern { anchor: usize, pattern: Box<MoleculeAst> },
+    Derived { predicate: DerivedPred, refs: RelationRefs },
     Matcher(MatcherFlag),
+    And(Vec<MoleculeConstraint>),
+    Or(Vec<MoleculeConstraint>),
+    Not(Box<MoleculeConstraint>),
+}
+
+pub struct RelationRefs {
+    pub atoms: Vec<usize>,
+    pub bonds: Vec<usize>,
+    pub dative_bonds: Vec<usize>,
+    pub aromatic_systems: Vec<usize>,
+    pub multicenter_bonds: Vec<usize>,
+    pub noncovalent_bonds: Vec<usize>,
 }
 
 pub enum DerivedPred {
-    // Scalar predicates — all accept ValueAst for match/bind/guard semantics.
+    // Scalar predicates — accept ValueAst for match/bind/guard semantics.
     // ValueAst::Lit(n) means "=n"; ValueAst::Expr(rel) means "satisfies rel"
     // with variables bound to the computed scalar. Unification with outer
     // bindings is handled by ValueAst::capture.
     TotalCharge(ValueAst),          // sum over atom charges
-    TotalMultiplicity(ValueAst),    // from per-atom spin coupling
+    TotalSpin(SpinStateAst),        // from per-atom spin coupling
     ValenceSum(ValueAst),           // σ-bond-order sum at an atom
     AromaticElectronCount(ValueAst),// Hückel count on a ring system
     RingSize(ValueAst),             // smallest containing ring size
@@ -71,9 +83,6 @@ pub enum DerivedPred {
     NotInRing,
     InRelation(RelationSym),
     NotInRelation(RelationSym),
-
-    // Registry-backed, used by the resolver rather than pattern authors.
-    AtomTypeCandidate(RegistryRef),
 }
 
 pub enum MatcherFlag {
@@ -83,9 +92,15 @@ pub enum MatcherFlag {
 }
 ```
 
-`AstAtomIdx` is a placeholder name — it is a newtype over `usize` indexing into `MoleculeAst::atoms`, to be renamed `AtomIndex` after the petgraph-side aliases are relocated (see "Integration with existing code"). `RelationSym` is an enum identifying one of the six core relations (`Bonds`, `DativeBonds`, `AromaticSystems`, `MulticenterBonds`, `NoncovalentBonds`, plus `Atoms` for uniformity).
+`Derived` carries `RelationRefs` rather than a single `atoms: Vec<usize>` so a predicate can scope over any sort (e.g., `AromaticElectronCount` over an aromatic-system tuple, `RingSize` over a ring closure encoded as a multicenter set). Molecule-wide aggregates like `TotalCharge` and `TotalSpin` use `RelationRefs::default()` (all sorts empty) by convention — the predicate is its own scope hint.
 
-**Deferred (no slots yet):** `Path` (Kleene), external-solver constraints, probabilistic constraints, explicit negation of sub-patterns. Add when a concrete use case arrives; do not pre-build.
+`TotalSpin` carries a `SpinStateAst` rather than `ValueAst` because the spin state has two coupled fields (unpaired electrons and multiplicity) and the round-trip surface for `:spin` on `MoleculeAst` already speaks `SpinStateAst`. `SpinStateAst` admits `Wildcard`, `Lit(SpinState)`, and `Pair { unpaired, multiplicity }` forms — `Pair` is what allows `?u` and `?m` capture variables.
+
+`And`, `Or`, and `Not` are pure structural combinators on `MoleculeConstraint`. They are recursive (like `SubPattern`'s `Box<MoleculeAst>`) and have no semantic ordering. The relational matcher will discharge them by recursing — there is no separate Boolean-CSP backend.
+
+`RelationSym` is an enum identifying one of the six core relations (`Atoms`, `Bonds`, `DativeBonds`, `AromaticSystems`, `MulticenterBonds`, `NoncovalentBonds`).
+
+**Deferred (no slots yet):** `Path` (Kleene), external-solver constraints, probabilistic constraints, registry-backed `AtomTypeCandidate` (will live in solver state, not the AST). Add when a concrete use case arrives; do not pre-build.
 
 ## D5 — Variable bindings and sub-patterns
 
@@ -140,7 +155,7 @@ Two input paths:
 - **SMILES / MOL** → `TableIR::Molecule` (existing parsers, unchanged) → `MoleculeAst`. The `TableIR` → `MoleculeAst` lowering replaces the current `MoleculeBuilder::from_table_molecule`.
 - **DSL** (EDN-based) → `MoleculeAst` directly via `FromEdn`.
 
-Output: `MoleculeAst` with attribute fields set where known, `None` elsewhere. Constraints vec populated with any assertions from the input (`TotalCharge` / `TotalMultiplicity` from top-level `:charge` / `:spin`, explicit `SubPattern`s, user guards).
+Output: `MoleculeAst` with attribute fields set where known, `None` elsewhere. Constraints vec populated with any assertions from the input (`TotalCharge` / `TotalSpin` from top-level `:charge` / `:spin`, explicit `SubPattern`s, user guards).
 
 ### Valence resolution
 
@@ -203,7 +218,8 @@ Not a generic CSP engine. Dispatch by constraint variant to a specialized backen
 | `Derived { ValenceSum, ... }` | Finite-domain propagator | propagate |
 | `Derived { AtomTypeCandidate }` | Registry filter | propagate |
 | `Derived { Aromatic* }` | Hückel verifier | verify |
-| `Derived { TotalCharge }` | Arithmetic over tuples | verify |
+| `Derived { TotalCharge / TotalSpin }` | Arithmetic over tuples | verify |
+| `And / Or / Not` | Recursive matcher dispatch | match |
 | `Derived { InRing, RingSize }` | Cached view lookup | verify |
 | `Derived { Distance }` | Cached distance matrix | verify |
 | `Matcher(...)` | Configures backtracker | match-setup |
@@ -381,8 +397,11 @@ Homoiconicity is preserved at the AST level; type safety is preserved at the API
 
 Ordered steps. Each step leaves the tree green.
 
-1. **Add `constraints: Vec<MoleculeConstraint>` and the enum with the D3 starter set** to `MoleculeAst`. Constraints vec always empty for now. Parser, serializer, resolution unchanged. ~2 days.
-2. **Fold `charge` and `spin` fields into constraint emissions** at parse time; remove the struct fields; add `TotalCharge` / `TotalMultiplicity` handlers in the validator. ~3 days.
+1. **Add `constraints: Vec<MoleculeConstraint>` and the enum with the D3 starter set** to `MoleculeAst`. Constraints vec always empty for now. Parser, serializer, resolution unchanged. ~2 days. *(Done.)*
+2. **Fold `charge` and `spin` fields into constraint emissions** at parse time and remove the struct fields. ~3 days. *(Done 2026-04-11.)*
+   - `:charge` / `:spin` keys parse into `MoleculeConstraint::Derived { TotalCharge | TotalSpin, RelationRefs::default() }` and emit back the same way through `MoleculeAst`.
+   - The `MoleculeBuilder` carrier for explicit charge/spin (`set_charge` / `set_spin` plus the `MolecularChargeMismatch` / `MolecularSpinIncompatible` validation in `build()`) was removed in the same step. It was never load-bearing — no fixture in the conformance corpus or unit tests asserted a molecule-level `:charge` / `:spin`. Without an asserted value, `build()` always derives charge from atom/bond/aromatic/multicenter sums and picks the unique compatible total spin (or errors with `MolecularSpinIncomplete` if multiple are compatible). The validator handler the original step called for is therefore moot at this stage; reintroduce it when a downstream pass actually wants to assert something about the resolved molecule.
+   - Ancillary in this step: introduce `SpinStateAst` (Wildcard / Lit / Pair) so atom and bond `spin` fields carry the same coupled (unpaired, multiplicity) shape that `TotalSpin` does; widen `Derived` from `atoms: Vec<usize>` to `refs: RelationRefs`; add `And` / `Or` / `Not` combinators (no consumer yet — they exist so future predicates can compose without another schema change).
 3. **Implement `GroundMolecule` newtype** and migrate ground-requiring APIs. ~3 days.
 4. **Relational matcher over core relations** (no constraint vec support yet). Enough for basic substructure search. ~2 weeks.
 5. **Benchmark checkpoint**: Morgan fingerprints, `MoleculeAst` vs. view vs. RDKit. If within 2×, proceed. If not, design the packed `MoleculeView` escape hatch before continuing. ~3 days.
