@@ -3,7 +3,10 @@
 use std::fmt;
 use std::str::FromStr;
 
-use umol_shared::{Element, SpinMultiplicity, SpinState};
+use umol_shared::{
+    AromaticAst, Element, ElementAst, HydrogenAst, IsotopeAst, SpinMultiplicity, SpinState,
+    SpinStateAst, ValueAst,
+};
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{lower_spin, raise_i8_pattern, raise_spin_pattern, raise_u8_pattern};
@@ -12,12 +15,11 @@ use super::error::ValidationError;
 use super::molecule::AtomIndex;
 use super::molecule_builder::MoleculeBuilder;
 use crate::atom::{AromaticValence, IsotopeMass};
-use crate::ast::atom::{AromaticAst, AtomAst, ElementAst, HydrogenAst, IsotopeAst};
+use crate::ast::atom::AtomAst;
 use crate::ast::config::{
     AromaticValenceMode, AtomAstConfig, ImplicitHydrogenMode, IsotopeMode, NumericMode,
 };
 use crate::ast::error::LoweringError;
-use crate::ast::value::ValueAst;
 use crate::ast::{FromAst, ToAst};
 use crate::dsl::atom::parse_atom_dsl;
 use crate::table_ir::atom::{Atom as TableAtom, ImplicitHydrogens};
@@ -594,9 +596,14 @@ impl FromAst<AtomAst> for AtomPattern {
         };
 
         // Coupled spin resolution: resolve u first (may derive from raw m), then m (may derive from resolved u)
+        let (u_ast, m_ast) = ast
+            .spin
+            .as_ref()
+            .map(SpinStateAst::to_pair)
+            .unwrap_or((None, None));
         let (unpaired_electrons, multiplicity) = lower_spin(
-            ast.unpaired_electrons.clone(),
-            ast.multiplicity.clone(),
+            u_ast,
+            m_ast,
             &cfg.unpaired_electrons_mode,
             &cfg.multiplicity_mode,
         )?;
@@ -680,8 +687,7 @@ impl ToAst<AtomAst> for AtomPattern {
                 (HydrogenPattern::Is(n), _) => Some(HydrogenAst::Value(ValueAst::Lit(*n as i64))),
             },
             lone_pairs: raise_u8_pattern(self.lone_pairs, &cfg.lone_pairs_mode),
-            unpaired_electrons: spin_u,
-            multiplicity: spin_m,
+            spin: SpinStateAst::from_pair(spin_u, spin_m),
             valence: raise_u8_pattern(self.valence, &cfg.valence_mode),
             donated_pairs: raise_u8_pattern(self.donated_pairs, &cfg.donated_pairs_mode),
             accepted_pairs: raise_u8_pattern(self.accepted_pairs, &cfg.accepted_pairs_mode),

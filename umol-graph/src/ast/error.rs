@@ -1,4 +1,4 @@
-//! AST lowering and evaluation errors.
+//! AST lowering errors.
 
 use thiserror::Error;
 use umol_shared::SpinStateError;
@@ -21,14 +21,4 @@ pub enum LoweringError {
     UnknownLabel(String),
     #[error("invalid molecule spec: {0}")]
     Molecule(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Error)]
-pub enum EvaluationError {
-    #[error("Unbound variable: {0}")]
-    UnboundVariable(String),
-    #[error("Division by zero")]
-    DivisionByZero,
-    #[error("Type mismatch")]
-    TypeMismatch,
 }

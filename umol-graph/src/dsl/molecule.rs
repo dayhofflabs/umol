@@ -847,12 +847,10 @@ impl fmt::Display for MoleculeAstWrapper {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::{e, Element};
+    use umol_shared::{e, Element, ElementAst, HydrogenAst, ValueAst};
 
     use super::*;
-    use crate::ast::atom::{ElementAst, HydrogenAst};
     use crate::ast::config::MoleculeAstConfig;
-    use crate::ast::value::ValueAst;
     use crate::ast::{FromAst, ToAst};
     use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
@@ -924,8 +922,7 @@ mod tests {
                 implicit_hydrogens: None,
                 charge: Some(ValueAst::Lit(-1)),
                 lone_pairs: None,
-                unpaired_electrons: None,
-                multiplicity: None,
+                spin: None,
                 valence: None,
                 donated_pairs: None,
                 accepted_pairs: None,
@@ -948,8 +945,7 @@ mod tests {
             implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))),
             charge: None,
             lone_pairs: None,
-            unpaired_electrons: None,
-            multiplicity: None,
+            spin: None,
             valence: None,
             donated_pairs: None,
             accepted_pairs: None,
@@ -965,8 +961,7 @@ mod tests {
                     implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))),
                     charge: None,
                     lone_pairs: None,
-                    unpaired_electrons: None,
-                    multiplicity: None,
+                    spin: None,
                     valence: None,
                     donated_pairs: None,
                     accepted_pairs: None,

@@ -1,11 +1,10 @@
 //! Utility functions for converting between AST and IR types.
 
-use umol_shared::SpinMultiplicity;
+use umol_shared::{SpinMultiplicity, ValueAst};
 
 use super::atom_pattern::Pattern;
 use crate::ast::config::{MultiplicityMode, NumericMode, UnpairedElectronsMode};
 use crate::ast::error::LoweringError;
-use crate::ast::value::ValueAst;
 
 pub(crate) fn raise_u8_ground(value: u8, mode: &NumericMode) -> Option<ValueAst> {
     match (value, mode) {

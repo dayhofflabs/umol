@@ -1,7 +1,8 @@
 //! Bond structural AST.
 
+use umol_shared::{SpinStateAst, ValueAst};
+
 use crate::ast::config::BondAstConfig;
-use crate::ast::value::ValueAst;
 use crate::ast::Ast;
 
 /// Bond AST: structural representation of a bond (ground or pattern).
@@ -9,8 +10,7 @@ use crate::ast::Ast;
 pub struct BondAst {
     pub order: ValueAst,
     pub charge: Option<ValueAst>,
-    pub unpaired_electrons: Option<ValueAst>,
-    pub multiplicity: Option<ValueAst>,
+    pub spin: Option<SpinStateAst>,
 }
 
 impl BondAst {
@@ -18,8 +18,7 @@ impl BondAst {
         Self {
             order,
             charge: None,
-            unpaired_electrons: None,
-            multiplicity: None,
+            spin: None,
         }
     }
 
@@ -27,8 +26,7 @@ impl BondAst {
         Self {
             order: ValueAst::Lit(order as i64),
             charge: None,
-            unpaired_electrons: None,
-            multiplicity: None,
+            spin: None,
         }
     }
 }

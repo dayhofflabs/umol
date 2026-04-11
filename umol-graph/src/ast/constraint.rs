@@ -1,7 +1,8 @@
 //! Constraint AST: declarative facts over MoleculeAst consumed by the matcher and resolver.
 
+use umol_shared::ValueAst;
+
 use crate::ast::molecule::MoleculeAst;
-use crate::ast::value::ValueAst;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraint {

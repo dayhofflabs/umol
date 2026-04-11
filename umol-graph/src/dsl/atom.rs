@@ -12,13 +12,14 @@ use nom::error::{Error as NomError, ErrorKind};
 use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
-use umol_shared::Element;
+use umol_shared::{
+    AromaticAst, Element, ElementAst, HydrogenAst, IsotopeAst, SpinStateAst, ValueAst,
+};
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::error::AtomDslError;
 use super::value::{op_char, parse_id, value_dsl};
-use crate::ast::atom::{AromaticAst, AtomAst, ElementAst, HydrogenAst, IsotopeAst};
-use crate::ast::value::ValueAst;
+use crate::ast::atom::AtomAst;
 
 impl FromStr for AtomAst {
     type Err = AtomDslError;
@@ -86,8 +87,13 @@ impl Display for AtomAst {
         }
 
         fmt_unsigned_field(f, "#n", &self.lone_pairs)?;
-        fmt_unsigned_field(f, "#u", &self.unpaired_electrons)?;
-        fmt_multiplicity(f, &self.multiplicity, &self.unpaired_electrons)?;
+        let (u_field, m_field) = self
+            .spin
+            .as_ref()
+            .map(SpinStateAst::to_pair)
+            .unwrap_or((None, None));
+        fmt_unsigned_field(f, "#u", &u_field)?;
+        fmt_multiplicity(f, &m_field, &u_field)?;
         fmt_unsigned_field(f, "#v", &self.valence)?;
         fmt_unsigned_field(f, "#d", &self.donated_pairs)?;
         fmt_unsigned_field(f, "#r", &self.accepted_pairs)?;
@@ -181,16 +187,30 @@ fn update_atom_ast(ast: &mut AtomAst, preds: Vec<AtomPredicate>) -> Result<(), A
                 ast.lone_pairs = Some(v);
             }
             AtomPredicate::UnpairedElectrons(v) => {
-                if ast.unpaired_electrons.is_some() {
+                let pair = ast.spin.get_or_insert(SpinStateAst::Pair {
+                    unpaired: None,
+                    multiplicity: None,
+                });
+                let SpinStateAst::Pair { unpaired, .. } = pair else {
+                    unreachable!("parser only constructs Pair")
+                };
+                if unpaired.is_some() {
                     return Err(AtomDslError::DuplicateAtomPredicate("#u".to_string()));
                 }
-                ast.unpaired_electrons = Some(v);
+                *unpaired = Some(v);
             }
             AtomPredicate::Multiplicity(v) => {
-                if ast.multiplicity.is_some() {
+                let pair = ast.spin.get_or_insert(SpinStateAst::Pair {
+                    unpaired: None,
+                    multiplicity: None,
+                });
+                let SpinStateAst::Pair { multiplicity, .. } = pair else {
+                    unreachable!("parser only constructs Pair")
+                };
+                if multiplicity.is_some() {
                     return Err(AtomDslError::DuplicateAtomPredicate("#s".to_string()));
                 }
-                ast.multiplicity = Some(v);
+                *multiplicity = Some(v);
             }
             AtomPredicate::Valence(v) => {
                 if ast.valence.is_some() {
@@ -521,10 +541,9 @@ mod tests {
     use nom::Err;
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::Element;
+    use umol_shared::{Element, Expr, RelOp, ValueAst};
 
     use super::*;
-    use crate::ast::value::{Expr, RelOp, ValueAst};
 
     #[rustfmt::skip]
     #[rstest]
@@ -552,10 +571,10 @@ mod tests {
     #[case::h_omit("C#h", AtomAst { implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
     #[case::lone_pairs("O#n2", AtomAst { lone_pairs: Some(ValueAst::Lit(2)), ..AtomAst::new(ElementAst::Lit(Element::O)) })]
     #[case::lone_pairs_omit("O#n", AtomAst { lone_pairs: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::O)) })]
-    #[case::unpaired("C#u2", AtomAst { unpaired_electrons: Some(ValueAst::Lit(2)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::unpaired_omit("C#u", AtomAst { unpaired_electrons: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::multiplicity("C#s3", AtomAst { multiplicity: Some(ValueAst::Lit(3)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::multiplicity_omit("C#s", AtomAst { multiplicity: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::unpaired("C#u2", AtomAst { spin: Some(SpinStateAst::Pair { unpaired: Some(ValueAst::Lit(2)), multiplicity: None }), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::unpaired_omit("C#u", AtomAst { spin: Some(SpinStateAst::Pair { unpaired: Some(ValueAst::Lit(1)), multiplicity: None }), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::multiplicity("C#s3", AtomAst { spin: Some(SpinStateAst::Pair { unpaired: None, multiplicity: Some(ValueAst::Lit(3)) }), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::multiplicity_omit("C#s", AtomAst { spin: Some(SpinStateAst::Pair { unpaired: None, multiplicity: Some(ValueAst::Lit(1)) }), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
     #[case::valence("C#v4", AtomAst { valence: Some(ValueAst::Lit(4)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
     #[case::donated_pairs("N#d1", AtomAst { donated_pairs: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::N)) })]
     #[case::accepted_pairs("B#r1", AtomAst { accepted_pairs: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::B)) })]

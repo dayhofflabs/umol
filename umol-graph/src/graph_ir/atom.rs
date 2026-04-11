@@ -3,15 +3,17 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_shared::{Element, SpinMultiplicity, SpinState, SpinStateError};
+use umol_shared::{
+    AromaticAst, Element, ElementAst, HydrogenAst, IsotopeAst, SpinMultiplicity, SpinState,
+    SpinStateAst, SpinStateError, ValueAst,
+};
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{raise_i8_ground, raise_spin_ground, raise_u8_ground};
 use crate::atom::{AromaticValence, IsotopeMass};
-use crate::ast::atom::{AromaticAst, AtomAst, ElementAst, HydrogenAst, IsotopeAst};
+use crate::ast::atom::AtomAst;
 use crate::ast::config::{AromaticValenceMode, AtomAstConfig, ImplicitHydrogenMode, IsotopeMode};
 use crate::ast::error::LoweringError;
-use crate::ast::value::ValueAst;
 use crate::ast::{FromAst, ToAst};
 use crate::dsl::atom::parse_atom_dsl;
 use crate::graph_ir::atom_pattern::AtomPattern;
@@ -241,8 +243,7 @@ impl ToAst<AtomAst> for Atom {
                 (_, n) => Some(HydrogenAst::Value(ValueAst::Lit(n as i64))),
             },
             lone_pairs: raise_u8_ground(self.lone_pairs(), &cfg.lone_pairs_mode),
-            unpaired_electrons: spin_u,
-            multiplicity: spin_m,
+            spin: SpinStateAst::from_pair(spin_u, spin_m),
             valence: raise_u8_ground(self.valence(), &cfg.valence_mode),
             donated_pairs: raise_u8_ground(self.donated_pairs(), &cfg.donated_pairs_mode),
             accepted_pairs: raise_u8_ground(self.accepted_pairs(), &cfg.accepted_pairs_mode),

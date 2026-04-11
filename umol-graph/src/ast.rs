@@ -8,7 +8,6 @@ pub mod config;
 pub mod constraint;
 pub mod error;
 pub mod molecule;
-pub mod value;
 
 use error::LoweringError;
 
