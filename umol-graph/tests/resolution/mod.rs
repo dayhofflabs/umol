@@ -46,7 +46,7 @@ fn resolve_with_config(
     context: &ResolutionContext,
     resolve_config: &ResolveConfig,
 ) -> ResolveResult {
-    let builder = MoleculeBuilder::from_ast(&input.ast, dsl_config);
+    let builder = MoleculeBuilder::from_ast(input.ast(), dsl_config);
     match builder {
         Err(e) => ResolveResult {
             success: false,
@@ -63,7 +63,7 @@ fn resolve_with_config(
                     ast.aromatic_systems.sort_by(|a, b| a.atoms.cmp(&b.atoms));
                     ResolveResult {
                         success: true,
-                        output: Some(MoleculeAstWrapper::new(ast, input.metadata.clone())),
+                        output: Some(MoleculeAstWrapper::new(ast, input.metadata().clone())),
                         error: None,
                     }
                 }

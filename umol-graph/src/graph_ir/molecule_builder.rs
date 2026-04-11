@@ -1495,7 +1495,7 @@ impl FromStr for MoleculeBuilder {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let dsl = MoleculeAstWrapper::from_str(s).map_err(|e| LoweringError::Molecule(e.to_string()))?;
-        Self::from_ast(&dsl.ast, &MoleculeDslConfig::zeroed())
+        Self::from_ast(dsl.ast(), &MoleculeDslConfig::zeroed())
     }
 }
 
@@ -1512,7 +1512,7 @@ impl<'de> FromEdn<'de> for MoleculeBuilder {
             }
         };
         let dsl = MoleculeAstWrapper::from_str(s).map_err(|e| DeError::subgrammar("molecule", e))?;
-        Self::from_ast(&dsl.ast, &MoleculeDslConfig::zeroed())
+        Self::from_ast(dsl.ast(), &MoleculeDslConfig::zeroed())
             .map_err(|e| DeError::subgrammar("molecule", e))
     }
 }

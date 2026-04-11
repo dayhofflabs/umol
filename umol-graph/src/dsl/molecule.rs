@@ -73,13 +73,14 @@ pub struct Metadata {
     pub noncovalent_bond_ids: IndexMap<usize, String>,
 }
 
-/// Pairing of semantic AST and formatting metadata. This is the only type
-/// with `FromEdn`/`ToEdn` impls for the molecule DSL. Plain-indexed EDN is
-/// produced by wrapping a `MoleculeAst` with `Metadata::default()`.
+/// Owns a `MoleculeAst` together with the `Metadata` bound to it. Fields are
+/// private so that metadata cannot drift onto a different AST: once paired,
+/// the pair is either rewrapped atomically or taken apart via `into_parts`.
+/// This is the only type with `FromEdn`/`ToEdn` impls for the molecule DSL.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MoleculeAstWrapper {
-    pub ast: MoleculeAst,
-    pub metadata: Metadata,
+    ast: MoleculeAst,
+    metadata: Metadata,
 }
 
 impl MoleculeAstWrapper {
@@ -92,6 +93,14 @@ impl MoleculeAstWrapper {
             ast,
             metadata: Metadata::default(),
         }
+    }
+
+    pub fn ast(&self) -> &MoleculeAst {
+        &self.ast
+    }
+
+    pub fn metadata(&self) -> &Metadata {
+        &self.metadata
     }
 
     pub fn into_parts(self) -> (MoleculeAst, Metadata) {
