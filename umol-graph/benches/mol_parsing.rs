@@ -216,9 +216,7 @@ fn extended_mol_parsing(c: &mut Criterion) {
 
         for (id, data) in test_cases.iter() {
             group.bench_with_input(BenchmarkId::from_parameter(id), data, |b, &input| {
-                b.iter(|| {
-                    extended_atom_input(CtabParseFlags::EXTENDED).parse(std::hint::black_box(input))
-                })
+                b.iter(|| extended_atom_input(CtabParseFlags::EXTENDED).parse(black_box(input)))
             });
         }
 

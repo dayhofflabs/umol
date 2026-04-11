@@ -150,7 +150,7 @@ impl FromAst<BondAst> for BondPattern {
             ValueAst::Lit(n) => {
                 Pattern::Is(u8::try_from(*n).map_err(|_| LoweringError::OutOfRange {
                     field: "order",
-                    value: *n as i64,
+                    value: *n,
                 })?)
             }
             ValueAst::Wildcard => Pattern::Any,

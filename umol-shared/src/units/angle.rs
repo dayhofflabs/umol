@@ -1,5 +1,6 @@
 //! Angle in radians.
 
+use std::f64::consts::PI;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -10,7 +11,7 @@ pub enum AngleUnit {
 
 impl AngleUnit {
     pub const fn to_radians_factor(&self) -> f64 {
-        const RADIANS_PER_DEGREE: f64 = std::f64::consts::PI / 180.0;
+        const RADIANS_PER_DEGREE: f64 = PI / 180.0;
         match *self {
             AngleUnit::Radians => 1.0,
             AngleUnit::Degrees => RADIANS_PER_DEGREE,
@@ -116,7 +117,7 @@ mod tests {
 
     #[rstest]
     #[case::radians_identity(Angle::radians(1.0), 1.0)]
-    #[case::degrees_to_radians(Angle::degrees(180.0), std::f64::consts::PI)]
+    #[case::degrees_to_radians(Angle::degrees(180.0), PI)]
     fn test_angle_as_radians(#[case] angle: Angle, #[case] expected: f64) {
         assert!((angle.as_radians() - expected).abs() < 1e-14);
     }

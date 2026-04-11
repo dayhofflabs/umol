@@ -1,15 +1,19 @@
 //! GraphIR molecule builder.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::iter::once;
+use std::mem::replace;
 use std::str::FromStr;
 
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use smallvec::SmallVec;
-use umol_shared::spin::{SpinMultiplicity, SpinState};
 use umol_edn::{DeError, Edn, EdnMap, EdnMapHelper, EdnSet, FormatConfig, FromEdn, ToEdn};
+use umol_shared::element::Element;
+use umol_shared::spin::{SpinMultiplicity, SpinState};
 
 use super::aromaticity::{AromaticContribution, AromaticSystem};
 use super::atom::Atom;
@@ -25,7 +29,6 @@ use super::molecule::{
 use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
 use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
-use crate::atom::AromaticValence;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::error::LoweringError;
@@ -35,6 +38,8 @@ use crate::ast::molecule::{
     NoncovalentBond as NoncovalentBondAst,
 };
 use crate::ast::{FromAst, ToAst};
+use crate::atom::AromaticValence;
+use crate::bond::BondNoncovalent;
 use crate::dsl::error::ParseError;
 use crate::dsl::molecule::MoleculeAstWrapper;
 use crate::table_ir::atom::ImplicitHydrogens;
@@ -102,10 +107,11 @@ impl<'de> FromEdn<'de> for ResolutionContext {
         };
 
         // Accept both EDN sets and vectors (serde legacy format)
-        let atom_normal_implicit_hydrogens = match h.optional::<Edn>("atom-normal-implicit-hydrogens")? {
-            Some(edn) => parse_index_set(&edn)?,
-            None => HashSet::new(),
-        };
+        let atom_normal_implicit_hydrogens =
+            match h.optional::<Edn>("atom-normal-implicit-hydrogens")? {
+                Some(edn) => parse_index_set(&edn)?,
+                None => HashSet::new(),
+            };
 
         Ok(Self {
             atom_candidates,
@@ -193,7 +199,9 @@ fn parse_edge_map<V>(
     Ok(result)
 }
 
-fn parse_atom_candidates(map: &EdnMap<'_>) -> Result<HashMap<AtomIndex, SmallVec<[Atom; 4]>>, DeError> {
+fn parse_atom_candidates(
+    map: &EdnMap<'_>,
+) -> Result<HashMap<AtomIndex, SmallVec<[Atom; 4]>>, DeError> {
     let mut result = HashMap::with_capacity(map.len());
     for (k, v) in map.iter() {
         let atoms: Vec<Atom> = Vec::from_edn(v)?;
@@ -518,7 +526,7 @@ impl MoleculeBuilder {
     ) -> Option<AtomPattern> {
         self.graph
             .node_weight_mut(index)
-            .map(|old| std::mem::replace(old, atom.into()))
+            .map(|old| replace(old, atom.into()))
     }
 
     pub fn set_atom_candidates(
@@ -705,7 +713,7 @@ impl MoleculeBuilder {
     pub fn replace_bond(&mut self, index: BondIndex, bond: BondPattern) -> Option<BondPattern> {
         self.graph
             .edge_weight_mut(index)
-            .map(|old| std::mem::replace(old, bond))
+            .map(|old| replace(old, bond))
     }
 
     // Dative bonds
@@ -748,7 +756,7 @@ impl MoleculeBuilder {
     ) -> Option<DativeBond> {
         self.dative_bonds
             .get_mut(index.index())
-            .map(|b| std::mem::replace(b, bond))
+            .map(|b| replace(b, bond))
     }
 
     // Aromatic systems
@@ -798,7 +806,7 @@ impl MoleculeBuilder {
     ) -> Option<AromaticSystem> {
         self.aromatic_systems
             .get_mut(index.index())
-            .map(|s| std::mem::replace(s, system))
+            .map(|s| replace(s, system))
     }
 
     // Multicenter bonds
@@ -847,7 +855,7 @@ impl MoleculeBuilder {
     ) -> Option<MulticenterBond> {
         self.multicenter_bonds
             .get_mut(index.index())
-            .map(|b| std::mem::replace(b, bond))
+            .map(|b| replace(b, bond))
     }
 
     // Non-covalent bonds
@@ -896,7 +904,7 @@ impl MoleculeBuilder {
     ) -> Option<NoncovalentBond> {
         self.noncovalent_bonds
             .get_mut(index.index())
-            .map(|b| std::mem::replace(b, bond))
+            .map(|b| replace(b, bond))
     }
 
     pub fn resolution_context(&self) -> &ResolutionContext {
@@ -1223,18 +1231,17 @@ impl MoleculeBuilder {
             .iter()
             .map(|s| s.unpaired_electrons() as u16)
             .sum();
-        let compatible =
-            compatible_molecular_multiplicities(&feature_spins).ok_or_else(|| {
-                let element = graph
-                    .node_weights()
-                    .next()
-                    .map(|a| a.element())
-                    .unwrap_or(umol_shared::element::Element::C);
-                ResolutionError::ValenceViolation(
-                    element,
-                    "molecular spin exceeds maximum representable".to_string(),
-                )
-            })?;
+        let compatible = compatible_molecular_multiplicities(&feature_spins).ok_or_else(|| {
+            let element = graph
+                .node_weights()
+                .next()
+                .map(|a| a.element())
+                .unwrap_or(Element::C);
+            ResolutionError::ValenceViolation(
+                element,
+                "molecular spin exceeds maximum representable".to_string(),
+            )
+        })?;
         let spin = match compatible.as_slice() {
             [single] => {
                 let multiplicity = SpinMultiplicity::from_multiplicity(*single)
@@ -1324,17 +1331,13 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
                 .map(|i| resolve(*i))
                 .collect::<Result<_, _>>()?;
             let set = MulticenterSet::topology_only(atoms);
-            builder.add_multicenter_bond(MulticenterBond::new(std::iter::once(set)));
+            builder.add_multicenter_bond(MulticenterBond::new(once(set)));
         }
 
         for nc in &ast.noncovalent_bonds {
             let a = resolve(nc.a)?;
             let b = resolve(nc.b)?;
-            builder.add_noncovalent_bond(NoncovalentBond::new(
-                a,
-                b,
-                crate::bond::BondNoncovalent::Hydrogen,
-            ));
+            builder.add_noncovalent_bond(NoncovalentBond::new(a, b, BondNoncovalent::Hydrogen));
         }
 
         Ok(builder)
@@ -1423,7 +1426,8 @@ impl FromStr for MoleculeBuilder {
     type Err = LoweringError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let dsl = MoleculeAstWrapper::from_str(s).map_err(|e| LoweringError::Molecule(e.to_string()))?;
+        let dsl =
+            MoleculeAstWrapper::from_str(s).map_err(|e| LoweringError::Molecule(e.to_string()))?;
         Self::from_ast(dsl.ast(), &MoleculeAstConfig::zeroed())
     }
 }
@@ -1440,7 +1444,8 @@ impl<'de> FromEdn<'de> for MoleculeBuilder {
                 });
             }
         };
-        let dsl = MoleculeAstWrapper::from_str(s).map_err(|e| DeError::subgrammar("molecule", e))?;
+        let dsl =
+            MoleculeAstWrapper::from_str(s).map_err(|e| DeError::subgrammar("molecule", e))?;
         Self::from_ast(dsl.ast(), &MoleculeAstConfig::zeroed())
             .map_err(|e| DeError::subgrammar("molecule", e))
     }
@@ -1448,7 +1453,7 @@ impl<'de> FromEdn<'de> for MoleculeBuilder {
 
 impl ToEdn for MoleculeBuilder {
     fn to_edn(&self) -> Edn<'static> {
-        Edn::Str(std::borrow::Cow::Owned(self.to_string()))
+        Edn::Str(Cow::Owned(self.to_string()))
     }
 }
 

@@ -3,13 +3,16 @@ use crate::context::Context;
 use crate::error::Error;
 use crate::linear;
 use crate::point_group::PointGroup;
-use crate::subgroup::CorrelationTable;
-use crate::types::{EquivalenceSet, SchoenfliesLabel, SymmetryCenter, Thresholds};
+use crate::subgroup::{correlation_table, CorrelationTable};
+use crate::types::{EquivalenceSet, SchoenfliesLabel, SymmetryCenter, SymmetryOp, Thresholds};
 
 /// Result of symmetry detection or symmetrization.
 #[derive(Debug)]
 pub struct SymmetryResult {
     pub group: &'static PointGroup,
+    /// Symmetry operations in the molecule's coordinate frame.
+    /// Use these (not `group.ops()`) for atom permutations and coordinate transforms.
+    pub ops: Vec<SymmetryOp>,
     pub equivalence_sets: Vec<EquivalenceSet>,
     /// Atom positions after processing. Same as input for `detect_symmetry`,
     /// snapped to exact symmetry for `symmetrize`.
@@ -17,6 +20,7 @@ pub struct SymmetryResult {
 }
 
 fn c1_result(centers: &[SymmetryCenter]) -> SymmetryResult {
+    let group = PointGroup::c1();
     let equivalence_sets = centers
         .iter()
         .map(|c| EquivalenceSet {
@@ -25,7 +29,8 @@ fn c1_result(centers: &[SymmetryCenter]) -> SymmetryResult {
         })
         .collect();
     SymmetryResult {
-        group: PointGroup::c1(),
+        group,
+        ops: group.ops().to_vec(),
         equivalence_sets,
         centers: centers.to_vec(),
     }
@@ -50,11 +55,13 @@ pub fn detect_symmetry(
     }
 
     let group = PointGroup::from_context(&ctx)?;
+    let ops = ctx.symmetry_operations()?;
     let equivalence_sets = ctx.equivalence_sets()?;
     let centers = ctx.centers()?;
 
     Ok(SymmetryResult {
         group,
+        ops,
         equivalence_sets,
         centers,
     })
@@ -79,12 +86,14 @@ pub fn symmetrize(
         Err(e) => return Err(e),
     }
     let group = PointGroup::from_context(&ctx)?;
+    let ops = ctx.symmetry_operations()?;
     let equivalence_sets = ctx.equivalence_sets()?;
     ctx.symmetrize_centers()?;
     let centers = ctx.centers()?;
 
     Ok(SymmetryResult {
         group,
+        ops,
         equivalence_sets,
         centers,
     })
@@ -115,11 +124,13 @@ pub fn generate_symmetry_images(
     ctx.find_symmetry()?;
 
     let group = PointGroup::from_context(&ctx)?;
+    let ops = ctx.symmetry_operations()?;
     let equivalence_sets = ctx.equivalence_sets()?;
     let centers = ctx.centers()?;
 
     Ok(SymmetryResult {
         group,
+        ops,
         equivalence_sets,
         centers,
     })
@@ -129,6 +140,7 @@ pub fn generate_symmetry_images(
 pub struct SymmetryDescentResult {
     pub parent_group: &'static PointGroup,
     pub child_group: &'static PointGroup,
+    pub child_ops: Vec<SymmetryOp>,
     pub transform: [[f64; 3]; 3],
     pub correlation: Option<CorrelationTable>,
     pub centers: Vec<SymmetryCenter>,
@@ -140,7 +152,7 @@ fn build_correlation(
     child: &'static PointGroup,
     class_map: &[usize],
 ) -> Result<CorrelationTable, Error> {
-    crate::subgroup::correlation_table(parent, child, class_map).map_err(|e| Error {
+    correlation_table(parent, child, class_map).map_err(|e| Error {
         code: umol_msym_sys::MSYM_INVALID_CHARACTER_TABLE,
         message: format!("correlation table computation failed: {e}"),
     })
@@ -175,6 +187,7 @@ pub fn lower_symmetry(
         return Ok(SymmetryDescentResult {
             parent_group,
             child_group: parent_group,
+            child_ops: parent_group.ops().to_vec(),
             transform: identity_transform,
             correlation,
             centers: centers_out,
@@ -201,6 +214,7 @@ pub fn lower_symmetry(
         return Ok(SymmetryDescentResult {
             parent_group,
             child_group,
+            child_ops: child_group.ops().to_vec(),
             transform: identity_transform,
             correlation,
             centers: centers_out,
@@ -229,13 +243,15 @@ pub fn lower_symmetry(
             });
         }
 
-        let child_group = PointGroup::from_context(&ctx2)?;
+        let child_group = PointGroup::from_schoenflies(&child_name)?;
+        let child_ops = ctx2.symmetry_operations()?;
         let centers_out = ctx2.centers()?;
         let equivalence_sets = ctx2.equivalence_sets()?;
 
         return Ok(SymmetryDescentResult {
             parent_group,
             child_group,
+            child_ops,
             transform: identity_transform,
             correlation: None,
             centers: centers_out,
@@ -257,7 +273,8 @@ pub fn lower_symmetry(
 
     ctx.select_subgroup(&sg)?;
 
-    let child_group = PointGroup::from_context(&ctx)?;
+    let child_name = ctx.point_group_name()?;
+    let child_group = PointGroup::from_schoenflies(&child_name)?;
     let transform = ctx.alignment_transform()?;
     let child_ops = ctx.symmetry_operations()?;
     let centers_out = ctx.centers()?;
@@ -292,6 +309,7 @@ pub fn lower_symmetry(
     Ok(SymmetryDescentResult {
         parent_group,
         child_group,
+        child_ops,
         transform,
         correlation,
         centers: centers_out,

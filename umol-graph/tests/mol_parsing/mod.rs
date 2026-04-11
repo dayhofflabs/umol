@@ -8,6 +8,7 @@
 //! - extended_molecule_lenient: needs lenient flags for extended parser
 //! - invalid: fails all parsers
 
+use std::fs::read;
 use std::path::{Component, Path, PathBuf};
 
 use insta::{assert_yaml_snapshot, Settings};
@@ -252,7 +253,7 @@ fn extract_expected_category(path: &Path) -> Category {
 }
 
 fn parse_file(path: &Path) -> FileParseResults {
-    let bytes = std::fs::read(path).expect("Failed to read file");
+    let bytes = read(path).expect("Failed to read file");
     let expected_category = extract_expected_category(path);
 
     let molecule = parse_with_basic_flags(&bytes);

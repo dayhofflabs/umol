@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::error::Error as StdError;
 use std::hash::{Hash, Hasher};
 use std::sync::{LazyLock, Mutex};
 use std::{fmt, ptr};
@@ -37,7 +38,7 @@ impl fmt::Display for ReductionError {
     }
 }
 
-impl std::error::Error for ReductionError {}
+impl StdError for ReductionError {}
 
 static REGISTRY: LazyLock<Mutex<HashMap<SchoenfliesLabel, &'static PointGroup>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -333,7 +334,8 @@ impl PointGroup {
                     .zip(b.characters())
                     .map(|(ca, cb)| ca * cb)
                     .collect();
-                self.reduce(&product_chars).expect("valid product characters")
+                self.reduce(&product_chars)
+                    .expect("valid product characters")
             }
             PointGroupKind::Linear => linear::direct_product(self, a, b),
         }
@@ -352,7 +354,8 @@ impl PointGroup {
                 let sym_chars: Vec<f64> = (0..n_classes)
                     .map(|c| 0.5 * (chars[c] * chars[c] + chars[r2_class[c]]))
                     .collect();
-                self.reduce(&sym_chars).expect("valid symmetric square characters")
+                self.reduce(&sym_chars)
+                    .expect("valid symmetric square characters")
             }
             PointGroupKind::Linear => linear::symmetric_square(self, a),
         }
@@ -371,7 +374,8 @@ impl PointGroup {
                 let anti_chars: Vec<f64> = (0..n_classes)
                     .map(|c| 0.5 * (chars[c] * chars[c] - chars[r2_class[c]]))
                     .collect();
-                self.reduce(&anti_chars).expect("valid antisymmetric square characters")
+                self.reduce(&anti_chars)
+                    .expect("valid antisymmetric square characters")
             }
             PointGroupKind::Linear => linear::antisymmetric_square(self, a),
         }

@@ -8,7 +8,8 @@
 //! - extended_molecule_lenient: needs lenient flags for extended parser
 //! - invalid: fails all parsers
 
-use std::path::{Path, PathBuf};
+use std::fs::read;
+use std::path::{Component, Path, PathBuf};
 
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
@@ -243,9 +244,9 @@ fn extract_expected_category(path: &Path) -> Category {
     // We need to find the category directory (child of "data")
     let components: Vec<_> = path.components().collect();
     for (i, comp) in components.iter().enumerate() {
-        if let std::path::Component::Normal(name) = comp {
+        if let Component::Normal(name) = comp {
             if name.to_str() == Some("data") && i + 1 < components.len() {
-                if let std::path::Component::Normal(category_name) = &components[i + 1] {
+                if let Component::Normal(category_name) = &components[i + 1] {
                     if let Some(cat) = Category::from_dir_name(category_name.to_str().unwrap_or(""))
                     {
                         return cat;
@@ -261,7 +262,7 @@ fn extract_expected_category(path: &Path) -> Category {
 }
 
 fn parse_file(path: &Path) -> FileParseResults {
-    let bytes = std::fs::read(path).expect("Failed to read file");
+    let bytes = read(path).expect("Failed to read file");
     let expected_category = extract_expected_category(path);
 
     let molecule = parse_with_basic_flags(&bytes);

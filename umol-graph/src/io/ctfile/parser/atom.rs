@@ -1,5 +1,7 @@
 //! Atom block parsers for CTab files.
 
+use std::collections::HashMap;
+
 use bstr::ByteSlice;
 use nom::character::complete::space0;
 use nom::combinator::all_consuming;
@@ -565,7 +567,7 @@ pub fn extended_atom_input<'inp>(
                     attachment_point: None,
                     attachment_order: None,
                     ligand_order: None,
-                    properties: std::collections::HashMap::new(),
+                    properties: HashMap::new(),
                 },
                 position,
             ),

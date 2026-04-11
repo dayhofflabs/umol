@@ -106,13 +106,13 @@ fn assert_correlation_valid(result: &umol_msym::SymmetryDescentResult) {
 }
 
 fn assert_orthogonal_transform(t: [[f64; 3]; 3]) {
-    for i in 0..3 {
+    (0..3).for_each(|i| {
         let norm: f64 = (0..3).map(|j| t[i][j] * t[i][j]).sum();
         assert!(
             (norm - 1.0).abs() < 1e-10,
             "transform row {i} not normalized: {norm}"
         );
-    }
+    });
 }
 
 #[rstest]
@@ -159,11 +159,7 @@ fn test_lower_symmetry_linear(#[case] target: SchoenfliesLabel) {
     assert_eq!(result.parent_group.label(), SchoenfliesLabel::Coov);
     assert_eq!(result.child_group.label(), target);
     assert_eq!(result.centers.len(), 2);
-    if target == SchoenfliesLabel::Cn(1) {
-        assert!(result.correlation.is_none());
-    } else {
-        assert!(result.correlation.is_none());
-    }
+    assert!(result.correlation.is_none());
     assert_orthogonal_transform(result.transform);
 }
 

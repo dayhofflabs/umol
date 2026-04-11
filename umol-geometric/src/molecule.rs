@@ -1,5 +1,7 @@
 //! Born-Oppenheimer molecular model: N classical nuclei in 3D space.
 
+use std::collections::HashMap;
+
 use nalgebra::{DMatrix, DVector, Vector3};
 use umol_shared::element::Element;
 use umol_shared::spin::SpinMultiplicity;
@@ -7,8 +9,9 @@ use umol_shared::units::angle::Angle;
 use umol_shared::units::length::Length;
 use umol_msym::{
     compute_salcs as compute_salcs_raw, detect_symmetry,
-    generate_symmetry_images as generate_image_centers, symmetrize as symmetrize_centers,
-    BasisFunction, BasisKind, CartesianAxis, EquivalenceSet, Error as SymmetryError, Irrep,
+    generate_symmetry_images as generate_image_centers,
+    lower_symmetry as lower_symmetry_centers, symmetrize as symmetrize_centers, BasisFunction,
+    BasisKind, CartesianAxis, CorrelationTable, EquivalenceSet, Error as SymmetryError, Irrep,
     PointGroup, SalcBasis, SchoenfliesLabel, SymmetryCenter, SymmetryOp, Thresholds,
 };
 
@@ -39,6 +42,13 @@ pub struct SymmetryCoordinates {
     pub coordinates: Vec<SymmetryCoordinate>,
 }
 
+pub struct SymmetryDescentResult {
+    pub molecule: Molecule,
+    pub parent_group: &'static PointGroup,
+    pub transform: [[f64; 3]; 3],
+    pub correlation: Option<CorrelationTable>,
+}
+
 /// 3D molecular geometry under the Born-Oppenheimer approximation.
 ///
 /// Every molecule carries point group symmetry data. Defaults to C1 (trivial).
@@ -50,6 +60,8 @@ pub struct Molecule {
     multiplicity: SpinMultiplicity,
 
     group: &'static PointGroup,
+    /// Symmetry operations in the molecule's coordinate frame.
+    ops: Vec<SymmetryOp>,
     /// Atom index orbits under symmetry operations. Each inner vec is one equivalence set.
     equivalence_sets: Vec<Vec<usize>>,
     /// One permutation per symmetry operation: atom_permutations[op][i] = j means
@@ -194,7 +206,7 @@ impl Molecule {
         let coords = self.cartesian_coordinates();
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(coords, result.group.ops(), &self.elements);
+            compute_atom_permutations(coords, &result.ops, &self.elements);
 
         Ok(Molecule {
             elements: self.elements.clone(),
@@ -202,6 +214,7 @@ impl Molecule {
             charge: self.charge,
             multiplicity: self.multiplicity,
             group: result.group,
+            ops: result.ops,
             equivalence_sets: eq_sets,
             atom_permutations,
         })
@@ -219,7 +232,7 @@ impl Molecule {
 
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(&matrix, result.group.ops(), &self.elements);
+            compute_atom_permutations(&matrix, &result.ops, &self.elements);
 
         Ok(Molecule {
             elements: self.elements.clone(),
@@ -227,8 +240,40 @@ impl Molecule {
             charge: self.charge,
             multiplicity: self.multiplicity,
             group: result.group,
+            ops: result.ops,
             equivalence_sets: eq_sets,
             atom_permutations,
+        })
+    }
+
+    /// Lower the symmetry to a specified subgroup.
+    /// Returns the molecule re-perceived under the child group, plus the
+    /// parent-to-child orientation transform and correlation table.
+    pub fn lower_symmetry(
+        &self,
+        target: SchoenfliesLabel,
+        thresholds: Thresholds,
+    ) -> Result<SymmetryDescentResult, SymmetryError> {
+        let result = lower_symmetry_centers(&self.to_symmetry_centers(), target, thresholds)?;
+        let coords = self.cartesian_coordinates();
+        let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
+        let atom_permutations =
+            compute_atom_permutations(coords, &result.child_ops, &self.elements);
+
+        Ok(SymmetryDescentResult {
+            molecule: Molecule {
+                elements: self.elements.clone(),
+                coordinates: Coordinates::Cartesian(coords.clone()),
+                charge: self.charge,
+                multiplicity: self.multiplicity,
+                group: result.child_group,
+                ops: result.child_ops,
+                equivalence_sets: eq_sets,
+                atom_permutations,
+            },
+            parent_group: result.parent_group,
+            transform: result.transform,
+            correlation: result.correlation,
         })
     }
 
@@ -267,7 +312,7 @@ impl Molecule {
 
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(&matrix, result.group.ops(), &gen_elements);
+            compute_atom_permutations(&matrix, &result.ops, &gen_elements);
 
         Ok(Molecule {
             elements: gen_elements,
@@ -275,6 +320,7 @@ impl Molecule {
             charge: 0,
             multiplicity: SpinMultiplicity::Singlet,
             group: result.group,
+            ops: result.ops,
             equivalence_sets: eq_sets,
             atom_permutations,
         })
@@ -294,7 +340,7 @@ impl Molecule {
             return self.symmetry_coordinates_linear(thresholds);
         }
 
-        let ops = group.ops();
+        let ops = &self.ops;
         let perms = self.atom_permutations();
         let h = group.order();
         assert_eq!(ops.len(), h);
@@ -500,7 +546,7 @@ impl Molecule {
                     .find(|(e, _)| e == elem)
                     .unwrap_or_else(|| panic!("no shell spec for {elem}"))
                     .1;
-                let mut shell_index_by_l = std::collections::HashMap::<u32, u32>::new();
+                let mut shell_index_by_l = HashMap::<u32, u32>::new();
                 shells.iter().flat_map(move |&(l, count)| {
                     let base = *shell_index_by_l.entry(l).or_insert(0);
                     shell_index_by_l.insert(l, base + count);
@@ -549,6 +595,7 @@ impl Molecule {
         multiplicity: SpinMultiplicity,
     ) -> Self {
         let n = elements.len();
+        let group = PointGroup::c1();
         let equivalence_sets: Vec<Vec<usize>> = (0..n).map(|i| vec![i]).collect();
         let atom_permutations = vec![(0..n).collect()];
         Self {
@@ -556,7 +603,8 @@ impl Molecule {
             coordinates: coords,
             charge,
             multiplicity,
-            group: PointGroup::c1(),
+            group,
+            ops: group.ops().to_vec(),
             equivalence_sets,
             atom_permutations,
         }
@@ -860,6 +908,8 @@ fn compute_atom_permutations(
 
 #[cfg(test)]
 mod tests {
+    use std::iter::repeat_n;
+
     use float_cmp::approx_eq;
     use rstest::rstest;
     use umol_shared::element::Element::*;
@@ -1071,7 +1121,7 @@ mod tests {
         let mut salc_symbols: Vec<String> = result
             .irreps
             .iter()
-            .flat_map(|ib| std::iter::repeat_n(ib.irrep.symbol().to_owned(), ib.salcs.len()))
+            .flat_map(|ib| repeat_n(ib.irrep.symbol().to_owned(), ib.salcs.len()))
             .collect();
         salc_symbols.sort();
         let mut expected: Vec<&str> = expected_irreps.to_vec();
@@ -1216,5 +1266,59 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[allow(dead_code)]
+    #[rustfmt::skip]
+    fn methane() -> Molecule {
+        mol(&[C, H, H, H, H], &[
+            0.000,  0.000,  0.000,
+            0.629,  0.629,  0.629,
+           -0.629, -0.629,  0.629,
+           -0.629,  0.629, -0.629,
+            0.629, -0.629, -0.629,
+        ])
+    }
+
+    #[rstest]
+    #[case(SchoenfliesLabel::Cs, "Cs", true)]
+    #[case(SchoenfliesLabel::Cn(2), "C2", true)]
+    #[case(SchoenfliesLabel::Cnv(2), "C2v", true)]
+    #[case(SchoenfliesLabel::Cn(1), "C1", true)]
+    fn test_molecule_lower_symmetry_water(
+        #[case] target: SchoenfliesLabel,
+        #[case] expected_name: &str,
+        #[case] has_correlation: bool,
+    ) {
+        let m = symmetric_water().perceive_symmetry(Thresholds::default()).unwrap();
+        assert_eq!(m.point_group().to_string(), "C2v");
+
+        let result = m.lower_symmetry(target, Thresholds::default()).unwrap();
+        assert_eq!(result.molecule.point_group().to_string(), expected_name);
+        assert_eq!(result.molecule.atom_count(), 3);
+        assert_eq!(result.parent_group.to_string(), "C2v");
+        assert_eq!(result.correlation.is_some(), has_correlation);
+
+        if let Some(ref ct) = result.correlation {
+            assert_eq!(ct.rows.len(), result.parent_group.irreps().len());
+        }
+    }
+
+    #[rstest]
+    #[case(SchoenfliesLabel::Cnv(3), "C3v")]
+    #[case(SchoenfliesLabel::Cnv(2), "C2v")]
+    #[case(SchoenfliesLabel::Dnd(2), "D2d")]
+    fn test_molecule_lower_symmetry_methane(
+        #[case] target: SchoenfliesLabel,
+        #[case] expected_name: &str,
+    ) {
+        let m = symmetric_methane().perceive_symmetry(Thresholds::default()).unwrap();
+        assert_eq!(m.point_group().to_string(), "Td");
+
+        let result = m.lower_symmetry(target, Thresholds::default()).unwrap();
+        assert_eq!(result.molecule.point_group().to_string(), expected_name);
+        assert_eq!(result.molecule.atom_count(), 5);
+        assert_eq!(result.parent_group.to_string(), "Td");
+        assert!(result.correlation.is_some());
     }
 }

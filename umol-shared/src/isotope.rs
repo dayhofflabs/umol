@@ -1,7 +1,7 @@
 //! Isotope definitions and data
 
 use std::fmt::{self, Display};
-use std::str::FromStr;
+use std::str::{from_utf8, FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -168,7 +168,7 @@ impl Isotope {
             return None;
         }
 
-        let mass_number = std::str::from_utf8(mass_number_bytes)
+        let mass_number = from_utf8(mass_number_bytes)
             .ok()
             .and_then(|s| s.parse::<u32>().ok())?;
         if mass_number == 0 {
@@ -294,7 +294,14 @@ mod tests {
 
     #[rstest]
     #[case(NamedIsotope::D, Element::H, 2, 2.014102, None, "D")]
-    #[case(NamedIsotope::T, Element::H, 3, 3.016049, Some(Time::new(12.32, TimeUnit::Years)), "T")]
+    #[case(
+        NamedIsotope::T,
+        Element::H,
+        3,
+        3.016049,
+        Some(Time::new(12.32, TimeUnit::Years)),
+        "T"
+    )]
     fn test_named_isotope_properties(
         #[case] named_isotope: NamedIsotope,
         #[case] expected_element: Element,

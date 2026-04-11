@@ -1,5 +1,6 @@
 //! Error types for umol-shared.
 
+use std::any::Any;
 use std::error::Error as StdError;
 
 use thiserror::Error;
@@ -10,7 +11,7 @@ use crate::spin::SpinMultiplicity;
 ///
 /// Used as `Box<dyn UmolError>` at cross-module boundaries.
 pub trait UmolError: StdError + Send + Sync + 'static {
-    fn as_any(&self) -> &dyn std::any::Any;
+    fn as_any(&self) -> &dyn Any;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -26,7 +27,7 @@ pub enum DataError {
 }
 
 impl UmolError for DataError {
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -40,7 +41,7 @@ pub enum ElementError {
 }
 
 impl UmolError for ElementError {
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -52,7 +53,7 @@ pub enum IsotopeError {
 }
 
 impl UmolError for IsotopeError {
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -64,7 +65,7 @@ pub enum OccupationError {
 }
 
 impl UmolError for OccupationError {
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -91,7 +92,7 @@ pub enum SpinStateError {
 }
 
 impl UmolError for SpinStateError {
-    fn as_any(&self) -> &dyn std::any::Any {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }

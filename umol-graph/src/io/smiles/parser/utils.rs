@@ -1,6 +1,7 @@
 //! Utilities for SMILES parser.
 
 use std::borrow::Cow;
+use std::str::from_utf8;
 
 use umol_shared::element::Element;
 
@@ -982,7 +983,7 @@ pub(crate) fn unescape_html_entities(input: &[u8]) -> Cow<'_, [u8]> {
                 j += 1;
             }
             if j < input.len() && input[j] == b';' {
-                if let Ok(s) = std::str::from_utf8(&input[i + 2..j]) {
+                if let Ok(s) = from_utf8(&input[i + 2..j]) {
                     if let Ok(code) = s.parse::<u8>() {
                         result.push(code);
                         i = j + 1;

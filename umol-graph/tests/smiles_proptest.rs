@@ -1,5 +1,8 @@
 //! Minimal property-based crash test coverage for m4 parser
 
+use std::panic::catch_unwind;
+
+use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
@@ -13,7 +16,7 @@ fn smilesish() -> impl Strategy<Value = Vec<u8>> {
     // Common SMILES characters: letters, digits, bonds, ring, parens, brackets, slash/backslash, percent, dot
     const ALPHABET: &[u8] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-=#$:/\\().%[]";
-    proptest::collection::vec(select(ALPHABET.to_vec()), 0..256)
+    vec(select(ALPHABET.to_vec()), 0..256)
 }
 
 // TODO: Add more fine-grained property tests
@@ -42,7 +45,7 @@ proptest! {
     #[test]
     fn never_panics_on_ascii(input in smilesish()) {
         let config = SmilesIoConfig::basic_opensmiles();
-        std::panic::catch_unwind(|| {
+        catch_unwind(|| {
             let _ = parse_smiles_bytes_with(&input, &config);
         }).expect("parse_smiles panicked");
     }

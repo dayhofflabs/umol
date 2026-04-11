@@ -1,3 +1,5 @@
+use std::process::exit;
+
 use clap::Parser;
 use umol_graph::graph_ir::molecule_builder::MoleculeBuilder;
 use umol_graph::graph_ir::resolve_molecule;
@@ -16,7 +18,7 @@ fn main() {
         Ok(m) => m,
         Err(e) => {
             eprintln!("parse error: {}", e);
-            std::process::exit(1);
+            exit(1);
         }
     };
 

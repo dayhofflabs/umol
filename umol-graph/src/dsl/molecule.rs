@@ -1,5 +1,6 @@
 //! Molecule DSL definitions
 
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
 use std::str::FromStr;
@@ -753,10 +754,7 @@ impl ToEdn for MoleculeAstWrapper {
                     m.insert(Edn::keyword("charge"), Edn::Int(*n));
                 }
                 DerivedPred::TotalSpin(SpinStateAst::Lit(s)) => {
-                    m.insert(
-                        Edn::keyword("spin"),
-                        Edn::Str(std::borrow::Cow::Owned(s.to_string())),
-                    );
+                    m.insert(Edn::keyword("spin"), Edn::Str(Cow::Owned(s.to_string())));
                 }
                 _ => {}
             }
