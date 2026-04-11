@@ -2,7 +2,7 @@
 
 use std::mem;
 
-use umol_data::Element;
+use umol_shared::Element;
 
 use crate::atom::Chirality;
 use crate::span::Span;

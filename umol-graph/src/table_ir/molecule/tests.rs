@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 use pretty_assertions::assert_eq;
-use umol_data::Element;
+use umol_shared::Element;
 
 use super::*;
 use crate::table_ir::{

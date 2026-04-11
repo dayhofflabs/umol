@@ -1,7 +1,7 @@
 use pretty_assertions::assert_eq;
 use rstest::*;
 use smallvec::SmallVec;
-use umol_data::Element;
+use umol_shared::Element;
 
 use super::*;
 use crate::graph_ir::atom::Atom;

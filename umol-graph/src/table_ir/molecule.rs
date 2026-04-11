@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
-use umol_data::Element;
+use umol_shared::Element;
 
 use super::atom::{Atom, AtomSymbol, ExtendedAtom};
 use super::bond::{Bond, ExtendedBond};

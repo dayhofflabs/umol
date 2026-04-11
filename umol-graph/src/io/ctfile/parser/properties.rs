@@ -9,7 +9,7 @@ use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::multi::{count as nom_count, length_count};
 use nom::sequence::{delimited, preceded, terminated};
 use nom::{Err, Parser};
-use umol_data::Element;
+use umol_shared::Element;
 
 use super::sgroup::{sgroup_connectivity, sgroup_subtype, sgroup_type};
 use super::utils::{

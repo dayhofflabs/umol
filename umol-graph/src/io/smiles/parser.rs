@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
-use umol_data::Element;
+use umol_shared::Element;
 
 mod builder;
 mod cx;

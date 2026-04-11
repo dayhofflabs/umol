@@ -3,12 +3,12 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_data::{Element, SpinMultiplicity, SpinState, SpinStateError};
+use umol_shared::{Element, SpinMultiplicity, SpinState, SpinStateError};
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{raise_i8_ground, raise_spin_ground, raise_u8_ground};
 use crate::atom::{AromaticValence, IsotopeMass};
-use crate::ast::atom::{AromaticExpr, AtomAst, ElementExpr, HydrogenExpr, IsotopeExpr};
+use crate::ast::atom::{AromaticAst, AtomAst, ElementAst, HydrogenAst, IsotopeAst};
 use crate::ast::config::{AromaticValenceMode, AtomAstConfig, ImplicitHydrogenMode, IsotopeMode};
 use crate::ast::error::LoweringError;
 use crate::ast::value::ValueAst;
@@ -229,16 +229,16 @@ impl ToAst<AtomAst> for Atom {
             &cfg.multiplicity_mode,
         );
         AtomAst {
-            element: ElementExpr::Lit(self.element()),
+            element: ElementAst::Lit(self.element()),
             isotope_mass: match (self.isotope_mass(), &cfg.isotope_mode) {
                 (IsotopeMass::Natural, IsotopeMode::Natural) => None,
-                (IsotopeMass::Natural, IsotopeMode::Required) => Some(IsotopeExpr::Natural),
-                (IsotopeMass::MassNumber(n), _) => Some(IsotopeExpr::Lit(n)),
+                (IsotopeMass::Natural, IsotopeMode::Required) => Some(IsotopeAst::Natural),
+                (IsotopeMass::MassNumber(n), _) => Some(IsotopeAst::Lit(n)),
             },
             charge: raise_i8_ground(self.charge(), &cfg.charge_mode),
             implicit_hydrogens: match (&cfg.implicit_h_mode, self.implicit_hydrogens()) {
                 (ImplicitHydrogenMode::Zero, 0) => None,
-                (_, n) => Some(HydrogenExpr::Value(ValueAst::Lit(n as i32))),
+                (_, n) => Some(HydrogenAst::Value(ValueAst::Lit(n as i64))),
             },
             lone_pairs: raise_u8_ground(self.lone_pairs(), &cfg.lone_pairs_mode),
             unpaired_electrons: spin_u,
@@ -251,10 +251,10 @@ impl ToAst<AtomAst> for Atom {
                 // Unspecified → Any → NotAromatic in to_atom(); safe to suppress
                 (AromaticValence::NotAromatic, AromaticValenceMode::Required) => None,
                 (AromaticValence::NotAromatic, AromaticValenceMode::Aromatic) => {
-                    Some(AromaticExpr::NotAromatic)
+                    Some(AromaticAst::NotAromatic)
                 }
                 (AromaticValence::Valence(n), _) => {
-                    Some(AromaticExpr::Value(ValueAst::Lit(n as i32)))
+                    Some(AromaticAst::Value(ValueAst::Lit(n as i64)))
                 }
             },
             multicenter_valence: raise_u8_ground(
@@ -299,16 +299,16 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::{Element, SpinMultiplicity, SpinState};
+    use umol_shared::{Element, SpinMultiplicity, SpinState};
 
     use super::*;
 
     #[rustfmt::skip]
     #[rstest]
     #[case::helium(AtomAst::from_element(Element::He), AtomAstConfig::zeroed(), "He".parse::<Atom>().unwrap())]
-    #[case::isotope(AtomAst { isotope_mass: Some(IsotopeExpr::Lit(13)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))),
+    #[case::isotope(AtomAst { isotope_mass: Some(IsotopeAst::Lit(13)), implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(4))),
         ..AtomAst::from_element(Element::C) }, AtomAstConfig::zeroed(), "C#i13#h4".parse::<Atom>().unwrap())]
-    #[case::charge(AtomAst { charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(3))),
+    #[case::charge(AtomAst { charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(3))),
         ..AtomAst::from_element(Element::C) }, AtomAstConfig::zeroed(), "C#c+#h3".parse::<Atom>().unwrap())]
     fn test_atom_from_ast(#[case] ast: AtomAst, #[case] cfg: AtomAstConfig, #[case] expected: Atom) {
         let atom = Atom::from_ast(&ast, &cfg).unwrap();
@@ -318,10 +318,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::helium("He".parse::<Atom>().unwrap(), "He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()))]
-    #[case::isotope("C#i13#h4".parse::<Atom>().unwrap(), AtomAst { element: ElementExpr::Lit(Element::C), isotope_mass: Some(IsotopeExpr::Lit(13)),
-            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(4))), .."He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()) })]
-    #[case::aromatic("C#h#v2#a1".parse::<Atom>().unwrap(), AtomAst { element: ElementExpr::Lit(Element::C),
-            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))), valence: Some(ValueAst::Lit(2)), aromatic_valence: Some(AromaticExpr::Value(ValueAst::Lit(1))),
+    #[case::isotope("C#i13#h4".parse::<Atom>().unwrap(), AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: Some(IsotopeAst::Lit(13)),
+            implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(4))), .."He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()) })]
+    #[case::aromatic("C#h#v2#a1".parse::<Atom>().unwrap(), AtomAst { element: ElementAst::Lit(Element::C),
+            implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))), valence: Some(ValueAst::Lit(2)), aromatic_valence: Some(AromaticAst::Value(ValueAst::Lit(1))),
             .."He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()) })]
     fn test_atom_to_ast(#[case] atom: Atom, #[case] expected: AtomAst) {
         assert_eq!(atom.to_ast(&AtomAstConfig::zeroed()), expected);

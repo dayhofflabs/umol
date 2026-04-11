@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::ast::error::EvaluationError;
+use thiserror::Error;
 
 /// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`].
 pub type Bindings = HashMap<String, i64>;
@@ -44,6 +44,16 @@ pub enum RelOp {
     Eq,
     Lt,
     Gt,
+}
+
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum EvaluationError {
+    #[error("Unbound variable: {0}")]
+    UnboundVariable(String),
+    #[error("Division by zero")]
+    DivisionByZero,
+    #[error("Type mismatch")]
+    TypeMismatch,
 }
 
 impl ValueAst {

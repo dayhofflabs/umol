@@ -13,7 +13,7 @@ pub use clar::*;
 pub use hmo::*;
 pub use hueckel_rule::*;
 use thiserror::Error;
-use umol_data::SpinState;
+use umol_shared::SpinState;
 
 use crate::graph_ir::config::AromaticityStrategy;
 use crate::graph_ir::molecule::AtomIndex;

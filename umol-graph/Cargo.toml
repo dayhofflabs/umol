@@ -68,7 +68,7 @@ strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
 toml = "1.1.0"
 umol = { path = "../umol", version = "0.1.0" }
-umol-data = { path = "../umol-data", version = "0.1.0" }
+umol-shared = { path = "../umol-shared", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3"] }
 bimap = "0.6.3"

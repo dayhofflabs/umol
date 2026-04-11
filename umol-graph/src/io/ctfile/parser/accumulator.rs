@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 use std::mem;
 
-use umol_data::Element;
+use umol_shared::Element;
 
 use super::context::Context;
 use super::convert::{

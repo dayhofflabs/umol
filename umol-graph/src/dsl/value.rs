@@ -2,7 +2,7 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
-use nom::character::complete::{char, i32 as nom_i32, multispace0, satisfy};
+use nom::character::complete::{char, i64 as nom_i64, multispace0, satisfy};
 use nom::combinator::{all_consuming, map, opt, recognize, value};
 use nom::error::{Error as NomError, ErrorKind};
 use nom::multi::{many0, separated_list1};
@@ -18,7 +18,7 @@ pub fn parse_value_dsl(input: &str) -> Result<ValueAst, Err<NomError<&str>>> {
 pub fn value_dsl(i: &str) -> IResult<&str, ValueAst, NomError<&str>> {
     alt((
         map(
-            terminated(nom_i32, (multispace0, terminator)),
+            terminated(nom_i64, (multispace0, terminator)),
             ValueAst::Lit,
         ),
         value(ValueAst::Wildcard, tag("*")),
@@ -120,12 +120,12 @@ fn mem_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     .parse(i)
 }
 
-pub(crate) fn lit_set(i: &str) -> IResult<&str, Vec<i32>, NomError<&str>> {
+pub(crate) fn lit_set(i: &str) -> IResult<&str, Vec<i64>, NomError<&str>> {
     delimited(
         char('{'),
         delimited(
             multispace0,
-            separated_list1(op_char(','), nom_i32),
+            separated_list1(op_char(','), nom_i64),
             multispace0,
         ),
         char('}'),
@@ -216,7 +216,7 @@ fn unary_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
 
 fn base_expr(i: &str) -> IResult<&str, Expr, NomError<&str>> {
     alt((
-        map(nom_i32, Expr::Lit),
+        map(nom_i64, Expr::Lit),
         map(preceded(char('?'), parse_id), Expr::Var),
         map(
             delimited(

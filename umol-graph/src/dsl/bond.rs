@@ -78,12 +78,12 @@ impl Display for BondAst {
                 return fmt_bond_value(f, v);
             }
         };
-        let u: i32 = match &self.unpaired_electrons {
+        let u: i64 = match &self.unpaired_electrons {
             Some(ValueAst::Lit(u)) => *u,
             None => 0,
             _ => -1,
         };
-        if m as i32 != u + 1 {
+        if m as i64 != u + 1 {
             if m == 1 {
                 write!(f, "#s")?;
             } else {

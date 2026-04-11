@@ -6,7 +6,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
-use umol_data::SpinState;
+use umol_shared::SpinState;
 
 use super::aromaticity::AromaticSystem;
 use super::atom::Atom;
@@ -543,6 +543,7 @@ impl ToAst<MoleculeAst> for Molecule {
             noncovalent_bonds,
             charge: Some(self.charge() as i64),
             spin: Some(self.spin()),
+            constraints: Vec::new(),
         }
     }
 }

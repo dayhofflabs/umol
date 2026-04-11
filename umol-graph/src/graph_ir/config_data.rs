@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 use smallvec::SmallVec;
-use umol_data::Element;
+use umol_shared::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use super::atom::Atom;
@@ -362,7 +362,7 @@ macro_rules! valence_table {
         let mut table = $crate::graph_ir::config_data::ValenceTable::empty();
         $(
             table.insert(
-                <umol_data::Element as std::str::FromStr>::from_str(stringify!($el))
+                <umol_shared::Element as std::str::FromStr>::from_str(stringify!($el))
                     .expect("invalid element symbol in valence_table!"),
                 $crate::graph_ir::config_data::ValenceEntry {
                     allowed_valences: vec![$($v),*],
@@ -423,7 +423,7 @@ static DEFAULT_NORMAL_VALENCE_TABLE: LazyLock<NormalValenceTable> = LazyLock::ne
 
 #[cfg(test)]
 mod tests {
-    use umol_data::Element;
+    use umol_shared::Element;
 
     use super::*;
 

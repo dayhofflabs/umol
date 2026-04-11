@@ -25,7 +25,7 @@ impl BondAst {
 
     pub fn from_order(order: u8) -> Self {
         Self {
-            order: ValueAst::Lit(order as i32),
+            order: ValueAst::Lit(order as i64),
             charge: None,
             unpaired_electrons: None,
             multiplicity: None,

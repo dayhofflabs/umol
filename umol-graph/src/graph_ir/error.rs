@@ -1,7 +1,7 @@
 //! Error types for graph_ir module.
 
 use thiserror::Error;
-use umol_data::{Element, SpinMultiplicity, SpinStateError};
+use umol_shared::{Element, SpinMultiplicity, SpinStateError};
 
 use super::aromaticity::AromaticityError;
 use super::kekule::KekulizationError;

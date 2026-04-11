@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
-use umol_data::Element;
+use umol_shared::Element;
 
 use super::config::RingEnumerationStrategy;
 use super::molecule::{AtomIndex, BondIndex, Molecule};
@@ -823,7 +823,7 @@ fn molecule_biconnected_components(
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::Element;
+    use umol_shared::Element;
 
     use super::*;
     use crate::graph_ir::atom::Atom;

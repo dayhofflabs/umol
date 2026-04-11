@@ -7,7 +7,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use nalgebra::{DMatrix, SymmetricEigen};
-use umol_data::Element;
+use umol_shared::Element;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
 use super::{AromaticContribution, AromaticSystem, AromaticityError};

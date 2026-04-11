@@ -1,7 +1,7 @@
 use bstr::ByteSlice;
 use pretty_assertions::assert_eq;
 use rstest::*;
-use umol_data::SpinMultiplicity;
+use umol_shared::SpinMultiplicity;
 
 use super::super::*;
 use crate::bond::BondNoncovalent;

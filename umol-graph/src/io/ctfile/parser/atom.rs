@@ -6,7 +6,7 @@ use nom::combinator::all_consuming;
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::terminated;
 use nom::{Err, Parser};
-use umol_data::{Element, NamedIsotope};
+use umol_shared::{Element, NamedIsotope};
 
 use super::convert::{
     convert_atom_charge_code, convert_atom_exact_change_flag_code,

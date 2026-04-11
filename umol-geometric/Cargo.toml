@@ -23,7 +23,7 @@ nom = { version = "8.0.0" }
 num = "0.4.3"
 num-traits = "0.2.19"
 umol = { path = "../umol", version = "0.1.0" }
-umol-data = { path = "../umol-data", version = "0.1.0" }
+umol-shared = { path = "../umol-shared", version = "0.1.0" }
 umol-msym = { path = "../umol-msym", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }
 

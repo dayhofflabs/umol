@@ -3,7 +3,7 @@
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind, ParseError as NomParseError};
 use nom::Err;
 use thiserror::Error;
-use umol_data::Element;
+use umol_shared::Element;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
 use crate::span::Span;

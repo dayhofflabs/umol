@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use umol_data::{Element, NamedIsotope, SpinMultiplicity};
+use umol_shared::{Element, NamedIsotope, SpinMultiplicity};
 
 use super::error::ConversionError;
 use super::rgroup::RGroup;

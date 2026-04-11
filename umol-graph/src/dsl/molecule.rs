@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use bimap::BiMap;
 use indexmap::IndexMap;
-use umol_data::SpinState;
+use umol_shared::SpinState;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
 use super::atom::parse_atom_dsl;
@@ -278,6 +278,7 @@ impl RawMoleculeAst {
             noncovalent_bonds,
             charge: self.charge,
             spin: self.spin,
+            constraints: Vec::new(),
         };
         let metadata = Metadata {
             atom_tags,
@@ -846,10 +847,10 @@ impl fmt::Display for MoleculeAstWrapper {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::{e, Element};
+    use umol_shared::{e, Element};
 
     use super::*;
-    use crate::ast::atom::{ElementExpr, HydrogenExpr};
+    use crate::ast::atom::{ElementAst, HydrogenAst};
     use crate::ast::config::MoleculeAstConfig;
     use crate::ast::value::ValueAst;
     use crate::ast::{FromAst, ToAst};
@@ -918,7 +919,7 @@ mod tests {
         r#"{:atoms [[:F "F#c-"]] :bonds [] :charge -1}"#,
         MoleculeAst {
             atoms: vec![AtomAst {
-                element: ElementExpr::Lit(Element::F),
+                element: ElementAst::Lit(Element::F),
                 isotope_mass: None,
                 implicit_hydrogens: None,
                 charge: Some(ValueAst::Lit(-1)),
@@ -942,9 +943,9 @@ mod tests {
     #[case::alias_indexed(
         r#"{:atoms [:ch] :bonds [] :aliases [:ch "C #h1"]}"#,
         atoms(vec![AtomAst {
-            element: ElementExpr::Lit(Element::C),
+            element: ElementAst::Lit(Element::C),
             isotope_mass: None,
-            implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))),
+            implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))),
             charge: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -959,9 +960,9 @@ mod tests {
             atom_aliases: BiMap::from_iter([(
                 "ch".to_string(),
                 AtomAst {
-                    element: ElementExpr::Lit(Element::C),
+                    element: ElementAst::Lit(Element::C),
                     isotope_mass: None,
-                    implicit_hydrogens: Some(HydrogenExpr::Value(ValueAst::Lit(1))),
+                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))),
                     charge: None,
                     lone_pairs: None,
                     unpaired_electrons: None,

@@ -2,7 +2,7 @@
 
 use nom::error::{ErrorKind as NomErrorKind, ParseError as NomParseError};
 use thiserror::Error;
-use umol_data::SpinStateError;
+use umol_shared::SpinStateError;
 use umol_edn::{EdnError, ParseError as EdnParseError};
 
 #[derive(Clone, Debug, PartialEq, Error)]

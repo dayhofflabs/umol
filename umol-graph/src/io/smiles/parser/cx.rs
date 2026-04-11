@@ -17,7 +17,7 @@ use nom::multi::{count, many1, separated_list0};
 use nom::number::complete::double;
 use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Err, IResult, Parser};
-use umol_data::SpinMultiplicity;
+use umol_shared::SpinMultiplicity;
 
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
@@ -2297,7 +2297,7 @@ mod tests {
     use bstr::ByteSlice;
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::Element;
+    use umol_shared::Element;
 
     use super::*;
     use crate::atom::Chirality;

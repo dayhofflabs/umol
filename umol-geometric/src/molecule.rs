@@ -1,9 +1,9 @@
 //! Born-Oppenheimer molecular model: N classical nuclei in 3D space.
 
 use nalgebra::{DMatrix, DVector, Vector3};
-use umol_data::element::Element;
-use umol_data::spin::SpinMultiplicity;
-use umol_data::units::{Angle, Length};
+use umol_shared::element::Element;
+use umol_shared::spin::SpinMultiplicity;
+use umol_shared::units::{Angle, Length};
 use umol_msym::{
     compute_salcs as compute_salcs_raw, detect_symmetry,
     generate_symmetry_images as generate_image_centers, symmetrize as symmetrize_centers,
@@ -860,7 +860,7 @@ fn compute_atom_permutations(
 mod tests {
     use float_cmp::approx_eq;
     use rstest::rstest;
-    use umol_data::element::Element::*;
+    use umol_shared::element::Element::*;
 
     use super::*;
 

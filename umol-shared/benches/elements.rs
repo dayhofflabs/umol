@@ -1,7 +1,7 @@
 //! Benchmark for data structures
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use umol_data::{e, Element, Isotope};
+use umol_shared::{e, Element, Isotope};
 
 fn elements(c: &mut Criterion) {
     {

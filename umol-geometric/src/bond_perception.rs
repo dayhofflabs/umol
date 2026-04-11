@@ -3,8 +3,8 @@
 //! Assigns bond orders to atom pairs based on interatomic distances
 //! and valence constraints, using Lagrangian relaxation.
 
-use umol_data::element::Element;
-use umol_data::units::Length;
+use umol_shared::element::Element;
+use umol_shared::units::Length;
 use umol_params::covalent_radii::covalent_radii;
 
 use crate::algorithms::optimization::{
@@ -200,8 +200,8 @@ pub fn perceive_bonds(mol: &Molecule, config: &BondPerceptionConfig) -> BondPerc
 #[cfg(test)]
 mod tests {
     use rstest::{fixture, rstest};
-    use umol_data::element::Element::*;
-    use umol_data::spin::SpinMultiplicity;
+    use umol_shared::element::Element::*;
+    use umol_shared::spin::SpinMultiplicity;
 
     use super::*;
 

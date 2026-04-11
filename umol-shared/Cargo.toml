@@ -1,5 +1,5 @@
 [package]
-name = "umol-data"
+name = "umol-shared"
 version = "0.1.0"
 authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
 edition = "2021"
@@ -12,7 +12,7 @@ keywords = [
     "molecular modeling",
     "molecular representation",
 ]
-description = "Chemical data repository for umol."
+description = "Shared algebraic and chemistry types for umol."
 
 [lib]
 bench = false

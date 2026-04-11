@@ -1,6 +1,6 @@
 //! Utility functions for converting between AST and IR types.
 
-use umol_data::SpinMultiplicity;
+use umol_shared::SpinMultiplicity;
 
 use super::atom_pattern::Pattern;
 use crate::ast::config::{MultiplicityMode, NumericMode, UnpairedElectronsMode};
@@ -10,14 +10,14 @@ use crate::ast::value::ValueAst;
 pub(crate) fn raise_u8_ground(value: u8, mode: &NumericMode) -> Option<ValueAst> {
     match (value, mode) {
         (0, NumericMode::Zero) => None,
-        (n, _) => Some(ValueAst::Lit(n as i32)),
+        (n, _) => Some(ValueAst::Lit(n as i64)),
     }
 }
 
 pub(crate) fn raise_i8_ground(value: i8, mode: &NumericMode) -> Option<ValueAst> {
     match (value, mode) {
         (0, NumericMode::Zero) => None,
-        (n, _) => Some(ValueAst::Lit(n as i32)),
+        (n, _) => Some(ValueAst::Lit(n as i64)),
     }
 }
 
@@ -26,7 +26,7 @@ pub(crate) fn raise_u8_pattern(pattern: Pattern<u8>, mode: &NumericMode) -> Opti
         (Pattern::Is(0), NumericMode::Zero) => None,
         (Pattern::Any, NumericMode::Required) => None,
         (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Wildcard),
-        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i32)),
+        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
     }
 }
 
@@ -35,7 +35,7 @@ pub(crate) fn raise_i8_pattern(pattern: Pattern<i8>, mode: &NumericMode) -> Opti
         (Pattern::Is(0), NumericMode::Zero) => None,
         (Pattern::Any, NumericMode::Required) => None,
         (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Wildcard),
-        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i32)),
+        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
     }
 }
 
@@ -156,14 +156,14 @@ pub(crate) fn raise_spin_ground(
         UnpairedElectronsMode::Derived if derived => match m_mode {
             MultiplicityMode::Required => None,
             MultiplicityMode::Derived if u_value == 0 => None,
-            MultiplicityMode::Derived => Some(ValueAst::Lit(u_value as i32)),
+            MultiplicityMode::Derived => Some(ValueAst::Lit(u_value as i64)),
         },
-        _ => Some(ValueAst::Lit(u_value as i32)),
+        _ => Some(ValueAst::Lit(u_value as i64)),
     };
 
     let m_ast = match m_mode {
         MultiplicityMode::Derived if derived => None,
-        _ => Some(ValueAst::Lit(m_value.multiplicity() as i32)),
+        _ => Some(ValueAst::Lit(m_value.multiplicity() as i64)),
     };
 
     (u_ast, m_ast)
@@ -201,7 +201,7 @@ pub(crate) fn raise_spin_pattern(
             Pattern::Any => None,
             Pattern::Is(_) => Some(ValueAst::Wildcard),
         },
-        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i32)),
+        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
     };
 
     // Reconstruct what lower_spin will see after processing u_ast
@@ -223,10 +223,10 @@ pub(crate) fn raise_spin_pattern(
         },
         (Pattern::Is(m_val), MultiplicityMode::Derived) => match effective_u {
             Pattern::Is(u_val) if m_val.multiplicity() == u_val + 1 => None,
-            _ => Some(ValueAst::Lit(m_val.multiplicity() as i32)),
+            _ => Some(ValueAst::Lit(m_val.multiplicity() as i64)),
         },
         (Pattern::Is(m_val), MultiplicityMode::Required) => {
-            Some(ValueAst::Lit(m_val.multiplicity() as i32))
+            Some(ValueAst::Lit(m_val.multiplicity() as i64))
         }
     };
 

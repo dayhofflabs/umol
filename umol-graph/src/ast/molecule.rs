@@ -1,11 +1,12 @@
 //! Molecule structural AST.
 
-use umol_data::SpinState;
+use umol_shared::SpinState;
 use umol_edn::{FromEdn, ToEdn};
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
+use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::Ast;
 
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
@@ -50,6 +51,7 @@ pub struct MoleculeAst {
     pub noncovalent_bonds: Vec<NoncovalentBond>,
     pub charge: Option<i64>,
     pub spin: Option<SpinState>,
+    pub constraints: Vec<MoleculeConstraint>,
 }
 
 impl Ast for MoleculeAst {

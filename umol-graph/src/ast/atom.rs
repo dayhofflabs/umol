@@ -1,6 +1,6 @@
 //! Atom structural AST.
 
-use umol_data::Element;
+use umol_shared::Element;
 
 use crate::ast::config::AtomAstConfig;
 use crate::ast::value::ValueAst;
@@ -9,22 +9,22 @@ use crate::ast::Ast;
 /// Atom AST: structural representation of an atom (ground or pattern).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AtomAst {
-    pub element: ElementExpr,
-    pub isotope_mass: Option<IsotopeExpr>,
+    pub element: ElementAst,
+    pub isotope_mass: Option<IsotopeAst>,
     pub charge: Option<ValueAst>,
-    pub implicit_hydrogens: Option<HydrogenExpr>,
+    pub implicit_hydrogens: Option<HydrogenAst>,
     pub lone_pairs: Option<ValueAst>,
     pub unpaired_electrons: Option<ValueAst>,
     pub multiplicity: Option<ValueAst>,
     pub valence: Option<ValueAst>,
     pub donated_pairs: Option<ValueAst>,
     pub accepted_pairs: Option<ValueAst>,
-    pub aromatic_valence: Option<AromaticExpr>,
+    pub aromatic_valence: Option<AromaticAst>,
     pub multicenter_valence: Option<ValueAst>,
 }
 
 impl AtomAst {
-    pub fn new(element: ElementExpr) -> Self {
+    pub fn new(element: ElementAst) -> Self {
         Self {
             element,
             isotope_mass: None,
@@ -42,7 +42,7 @@ impl AtomAst {
     }
 
     pub fn from_element(element: Element) -> Self {
-        Self::new(ElementExpr::Lit(element))
+        Self::new(ElementAst::Lit(element))
     }
 }
 
@@ -52,7 +52,7 @@ impl Ast for AtomAst {
 
 /// Element expressions
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum ElementExpr {
+pub enum ElementAst {
     Lit(Element),
     Wildcard,
     Set(Vec<Element>),
@@ -60,7 +60,7 @@ pub enum ElementExpr {
     Ref(String),
 }
 
-impl ElementExpr {
+impl ElementAst {
     pub fn new(element: Element) -> Self {
         Self::Lit(element)
     }
@@ -68,7 +68,7 @@ impl ElementExpr {
 
 /// Isotope-mass expressions (Natural = #i=)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum IsotopeExpr {
+pub enum IsotopeAst {
     Natural,
     Lit(u32),
     Wildcard,
@@ -79,12 +79,12 @@ pub enum IsotopeExpr {
 
 /// Implicit hydrogen expressions (Normal = #h=)
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum HydrogenExpr {
+pub enum HydrogenAst {
     Normal,
     Value(ValueAst),
 }
 
-impl HydrogenExpr {
+impl HydrogenAst {
     pub fn from_value(value: ValueAst) -> Self {
         Self::Value(value)
     }
@@ -92,7 +92,7 @@ impl HydrogenExpr {
 
 /// Aromatic valence expressions
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum AromaticExpr {
+pub enum AromaticAst {
     Unspecified,
     NotAromatic,
     Value(ValueAst),

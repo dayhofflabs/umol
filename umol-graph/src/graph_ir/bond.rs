@@ -3,7 +3,7 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_data::{SpinMultiplicity, SpinState, SpinStateError};
+use umol_shared::{SpinMultiplicity, SpinState, SpinStateError};
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::raise_spin_ground;
@@ -93,10 +93,10 @@ impl ToAst<BondAst> for Bond {
             &cfg.multiplicity_mode,
         );
         BondAst {
-            order: ValueAst::Lit(self.order() as i32),
+            order: ValueAst::Lit(self.order() as i64),
             charge: match (self.charge(), &cfg.charge_mode) {
                 (0, NumericMode::Zero) => None,
-                (n, _) => Some(ValueAst::Lit(n as i32)),
+                (n, _) => Some(ValueAst::Lit(n as i64)),
             },
             unpaired_electrons: spin_u,
             multiplicity: spin_m,
@@ -137,7 +137,7 @@ impl ToEdn for Bond {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_data::SpinMultiplicity;
+    use umol_shared::SpinMultiplicity;
 
     use super::*;
 

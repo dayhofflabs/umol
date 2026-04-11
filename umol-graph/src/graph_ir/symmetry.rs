@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::os::raw::c_int;
 
 use nauty_Traces_sys::*;
-use umol_data::{Element, SpinMultiplicity};
+use umol_shared::{Element, SpinMultiplicity};
 
 use super::atom_pattern::AtomPattern;
 use super::bond_pattern::BondPattern;
@@ -288,7 +288,7 @@ pub fn compute_symmetry(builder: &MoleculeBuilder) -> GraphSymmetry {
 
 #[cfg(test)]
 mod tests {
-    use umol_data::Element;
+    use umol_shared::Element;
 
     use super::*;
     use crate::graph_ir::atom_pattern::AtomPattern;
