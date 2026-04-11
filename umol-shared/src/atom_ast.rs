@@ -1,7 +1,7 @@
 //! Atom-level AST fragments shared across crates.
 
+use crate::element::Element;
 use crate::value_ast::ValueAst;
-use crate::Element;
 
 /// Element expressions
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

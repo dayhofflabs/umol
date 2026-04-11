@@ -1,9 +1,17 @@
-//! Error types for umol-data.
+//! Error types for umol-shared.
+
+use std::error::Error as StdError;
 
 use thiserror::Error;
-use umol::error::Error as UmolError;
 
 use crate::spin::SpinMultiplicity;
+
+/// Trait for all umol module-level error types.
+///
+/// Used as `Box<dyn UmolError>` at cross-module boundaries.
+pub trait UmolError: StdError + Send + Sync + 'static {
+    fn as_any(&self) -> &dyn std::any::Any;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DataError {

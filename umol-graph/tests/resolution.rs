@@ -13,7 +13,7 @@ pub mod resolution_suite;
 mod topology_graph_behavior {
     use petgraph::prelude::Undirected;
     use petgraph::stable_graph::StableGraph;
-    use umol_shared::Element;
+    use umol_shared::element::Element;
     use umol_graph::graph_ir::atom_pattern::AtomPattern;
     use umol_graph::graph_ir::bond_pattern::BondPattern;
     use umol_graph::graph_ir::molecule_builder::MoleculeBuilder;

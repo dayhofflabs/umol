@@ -1,7 +1,9 @@
 //! Atom structural AST.
 
-use umol_shared::{AromaticAst, ElementAst, HydrogenAst, IsotopeAst, SpinStateAst, ValueAst};
-use umol_shared::Element;
+use umol_shared::atom_ast::{AromaticAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::element::Element;
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 
 use crate::ast::config::AtomAstConfig;
 use crate::ast::Ast;

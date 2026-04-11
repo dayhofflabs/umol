@@ -1,6 +1,7 @@
 //! Constraint AST: declarative facts over MoleculeAst consumed by the matcher and resolver.
 
-use umol_shared::{SpinStateAst, ValueAst};
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 
 use crate::ast::molecule::MoleculeAst;
 
@@ -99,7 +100,7 @@ pub enum RelationSym {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::ValueAst;
+    use umol_shared::value_ast::ValueAst;
 
     use super::*;
 

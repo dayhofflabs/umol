@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use strum::{Display, EnumString};
-use umol_shared::SpinMultiplicity;
+use umol_shared::spin::SpinMultiplicity;
 
 use super::error::ConversionError;
 use crate::bond::BondNoncovalent;

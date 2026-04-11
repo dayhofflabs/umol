@@ -1,6 +1,7 @@
 //! Bond structural AST.
 
-use umol_shared::{SpinStateAst, ValueAst};
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 
 use crate::ast::config::BondAstConfig;
 use crate::ast::Ast;

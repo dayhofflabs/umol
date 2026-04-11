@@ -22,3 +22,7 @@ umol-shared = { path = "../umol-shared", version = "0.1.0" }
 
 [dev-dependencies]
 rstest = "0.26.1"
+
+[lints.clippy]
+absolute_paths = "warn"
+mod_module_files = "warn"

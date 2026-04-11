@@ -2,7 +2,8 @@
 
 use pretty_assertions::assert_eq;
 use rstest::*;
-use umol_shared::{e, Element, NamedIsotope};
+use umol_shared::e;
+use umol_shared::isotope::NamedIsotope;
 
 use super::*;
 use crate::io::ctfile::config::CtabParseFlags;

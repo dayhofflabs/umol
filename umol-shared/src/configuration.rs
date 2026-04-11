@@ -7,7 +7,10 @@ use std::sync::LazyLock;
 
 use map_macro::hash_map;
 
-use crate::{e, occ, Element, Occupation, MAX_UNPAIRED_ELECTRONS};
+use crate::element::Element;
+use crate::occupation::Occupation;
+use crate::spin::MAX_UNPAIRED_ELECTRONS;
+use crate::{e, occ};
 
 /// Electronic configuration of atom or atomic ion
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

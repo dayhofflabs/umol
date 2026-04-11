@@ -12,9 +12,10 @@ use nom::error::{Error as NomError, ErrorKind};
 use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
-use umol_shared::{
-    AromaticAst, Element, ElementAst, HydrogenAst, IsotopeAst, SpinStateAst, ValueAst,
-};
+use umol_shared::atom_ast::{AromaticAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::element::Element;
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::error::AtomDslError;
@@ -541,7 +542,8 @@ mod tests {
     use nom::Err;
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::{Element, Expr, RelOp, ValueAst};
+    use umol_shared::element::Element;
+    use umol_shared::value_ast::{Expr, RelOp, ValueAst};
 
     use super::*;
 

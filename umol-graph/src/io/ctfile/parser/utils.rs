@@ -17,7 +17,8 @@ use nom::multi::separated_list1;
 use nom::sequence::delimited;
 use nom::{Err, Parser};
 use num::{Float, Integer};
-use umol_shared::{Element, NamedIsotope};
+use umol_shared::element::Element;
+use umol_shared::isotope::NamedIsotope;
 
 use crate::table_ir::RGroupOccurrence;
 

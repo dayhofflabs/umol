@@ -1,6 +1,7 @@
 //! Utility functions for converting between AST and IR types.
 
-use umol_shared::{SpinMultiplicity, ValueAst};
+use umol_shared::spin::SpinMultiplicity;
+use umol_shared::value_ast::ValueAst;
 
 use super::atom_pattern::Pattern;
 use crate::ast::config::{MultiplicityMode, NumericMode, UnpairedElectronsMode};

@@ -5,7 +5,7 @@
 //! Triple-bond: Pyykko & Atsumi, Chem. Eur. J. 2005, 11, 3511-3520.
 
 use umol_shared::element::Element;
-use umol_shared::units::Length;
+use umol_shared::units::length::Length;
 
 /// Covalent radii for single, double, and triple bonds.
 /// Values stored in atomic units (Bohr). `None` means no data available.

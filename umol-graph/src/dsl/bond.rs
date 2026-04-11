@@ -12,7 +12,8 @@ use nom::multi::many0;
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
 use umol_edn::{DeError, Edn, EdnKeyword, FromEdn, ToEdn};
-use umol_shared::{SpinStateAst, ValueAst};
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 
 use crate::ast::bond::BondAst;
 use crate::dsl::error::BondDslError;

@@ -3,10 +3,11 @@
 use std::fmt;
 use std::str::FromStr;
 
-use umol_shared::{
-    AromaticAst, Element, ElementAst, HydrogenAst, IsotopeAst, SpinMultiplicity, SpinState,
-    SpinStateAst, ValueAst,
-};
+use umol_shared::atom_ast::{AromaticAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::element::Element;
+use umol_shared::spin::{SpinMultiplicity, SpinState};
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{lower_spin, raise_i8_pattern, raise_spin_pattern, raise_u8_pattern};
@@ -745,7 +746,8 @@ impl ToEdn for AtomPattern {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::{Element, SpinMultiplicity};
+    use umol_shared::element::Element;
+    use umol_shared::spin::SpinMultiplicity;
 
     use super::*;
     use crate::graph_ir::error::ValidationError;

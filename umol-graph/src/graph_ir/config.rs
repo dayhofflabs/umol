@@ -1,7 +1,7 @@
 //! Configuration for TableIR → GraphIR resolution.
 
 use bitflags::bitflags;
-use umol_shared::Element;
+use umol_shared::element::Element;
 
 use super::config_data::{AtomTypeRegistry, ValenceTable};
 

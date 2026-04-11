@@ -1,7 +1,7 @@
 //! AST lowering errors.
 
 use thiserror::Error;
-use umol_shared::SpinStateError;
+use umol_shared::error::SpinStateError;
 
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum LoweringError {

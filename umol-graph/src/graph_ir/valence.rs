@@ -1,7 +1,8 @@
 //! Valence resolution strategies and atom typing support for GraphIR.
 
 use smallvec::SmallVec;
-use umol_shared::{Element, SpinState, MAX_UNPAIRED_ELECTRONS};
+use umol_shared::element::Element;
+use umol_shared::spin::{SpinState, MAX_UNPAIRED_ELECTRONS};
 
 use super::atom::Atom;
 use super::atom_pattern::{AtomPattern, HydrogenPattern, Pattern};

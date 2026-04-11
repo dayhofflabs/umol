@@ -5,10 +5,10 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
+use crate::element::Element;
 use crate::error::IsotopeError;
-use crate::half_life::HalfLife;
 use crate::isotope_data::{ISOTOPE_DATA, LIGHT_ISOTOPE_MAP};
-use crate::Element;
+use crate::units::time::Time;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd)]
 pub enum NamedIsotope {
@@ -55,7 +55,7 @@ impl NamedIsotope {
     }
 
     /// Get the isotope half-life (in s)
-    pub fn half_life(&self) -> Option<HalfLife> {
+    pub fn half_life(&self) -> Option<Time> {
         ISOTOPE_DATA.get(&self.key()).unwrap().1
     }
 
@@ -207,7 +207,7 @@ impl Isotope {
     }
 
     /// Get isotope half-life (in s)
-    pub fn half_life(&self) -> Option<HalfLife> {
+    pub fn half_life(&self) -> Option<Time> {
         ISOTOPE_DATA.get(&self.key()).unwrap().1
     }
 
@@ -259,7 +259,7 @@ impl From<Isotope> for Element {
 #[macro_export]
 macro_rules! iso {
     ($isotope:expr) => {
-        Isotope::from_symbol($isotope).unwrap()
+        $crate::isotope::Isotope::from_symbol($isotope).unwrap()
     };
 }
 
@@ -270,7 +270,7 @@ mod tests {
     use serde_json;
 
     use super::*;
-    use crate::half_life::TimeUnit;
+    use crate::units::time::TimeUnit;
 
     #[test]
     fn test_named_isotope_from_symbol_bytes() {
@@ -294,13 +294,13 @@ mod tests {
 
     #[rstest]
     #[case(NamedIsotope::D, Element::H, 2, 2.014102, None, "D")]
-    #[case(NamedIsotope::T, Element::H, 3, 3.016049, Some(HalfLife { value: 12.32, unit: TimeUnit::Years }), "T")]
+    #[case(NamedIsotope::T, Element::H, 3, 3.016049, Some(Time::new(12.32, TimeUnit::Years)), "T")]
     fn test_named_isotope_properties(
         #[case] named_isotope: NamedIsotope,
         #[case] expected_element: Element,
         #[case] expected_mass_number: u32,
         #[case] expected_mass: f64,
-        #[case] expected_half_life: Option<HalfLife>,
+        #[case] expected_half_life: Option<Time>,
         #[case] expected_symbol: &str,
     ) {
         assert_eq!(named_isotope.element(), expected_element);
@@ -489,7 +489,7 @@ mod tests {
     #[rstest]
     #[case("1H", 1.007825, None, "1H")]
     #[case("2H", 2.014102, None, "2H")]
-    #[case("3H", 3.016049, Some(HalfLife { value: 12.32, unit: TimeUnit::Years }), "3H")]
+    #[case("3H", 3.016049, Some(Time::new(12.32, TimeUnit::Years)), "3H")]
     #[case("4He", 4.002603, None, "4He")]
     #[case("12C", 12.000000, None, "12C")]
     #[case("13C", 13.003355, None, "13C")]
@@ -497,13 +497,15 @@ mod tests {
     fn test_isotope_properties(
         #[case] sym: &str,
         #[case] mass: f64,
-        #[case] half_life: Option<HalfLife>,
+        #[case] half_life: Option<Time>,
         #[case] expected_sym: &str,
     ) {
         let isotope = Isotope::from_symbol(sym).unwrap();
         assert!(approx_eq!(f64, isotope.mass(), mass, ulps = 4));
         match (isotope.half_life(), half_life) {
-            (Some(v1), Some(v2)) => assert!(approx_eq!(f64, v1.value, v2.value, ulps = 4)),
+            (Some(v1), Some(v2)) => {
+                assert!(approx_eq!(f64, v1.as_seconds(), v2.as_seconds(), ulps = 4))
+            }
             (None, None) => (),
             _ => panic!("Half-life mismatch"),
         }

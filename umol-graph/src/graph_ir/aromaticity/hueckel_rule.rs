@@ -255,7 +255,7 @@ fn merge_overlapping_systems(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::Element;
+    use umol_shared::element::Element;
 
     use super::*;
     use crate::graph_ir::bond_pattern::BondPattern;

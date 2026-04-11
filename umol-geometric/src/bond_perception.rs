@@ -4,7 +4,7 @@
 //! and valence constraints, using Lagrangian relaxation.
 
 use umol_shared::element::Element;
-use umol_shared::units::Length;
+use umol_shared::units::length::Length;
 use umol_params::covalent_radii::covalent_radii;
 
 use crate::algorithms::optimization::{

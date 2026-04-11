@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use umol_shared::Element;
+use umol_shared::element::Element;
 
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;

@@ -212,7 +212,7 @@ fn resolve_stereo_with(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::Element;
+    use umol_shared::element::Element;
 
     use super::super::config::ValenceStrategy;
     use super::super::config_data::{AtomTypeRegistry, ValenceTable};

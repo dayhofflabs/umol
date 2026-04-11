@@ -3,7 +3,8 @@
 use nalgebra::{DMatrix, DVector, Vector3};
 use umol_shared::element::Element;
 use umol_shared::spin::SpinMultiplicity;
-use umol_shared::units::{Angle, Length};
+use umol_shared::units::angle::Angle;
+use umol_shared::units::length::Length;
 use umol_msym::{
     compute_salcs as compute_salcs_raw, detect_symmetry,
     generate_symmetry_images as generate_image_centers, symmetrize as symmetrize_centers,
@@ -784,6 +785,7 @@ fn classify_coordinates(
     *coordinates = new_coords;
 }
 
+// TODO: Move into shared algorithm crate
 fn gram_schmidt(vecs: &mut Vec<DVector<f64>>, tol: f64) {
     let mut i = 0;
     while i < vecs.len() {

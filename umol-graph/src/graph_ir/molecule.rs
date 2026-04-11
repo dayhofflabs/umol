@@ -6,7 +6,9 @@ use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
-use umol_shared::{SpinState, SpinStateAst, ValueAst};
+use umol_shared::spin::SpinState;
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 
 use super::aromaticity::AromaticSystem;
 use super::atom::Atom;

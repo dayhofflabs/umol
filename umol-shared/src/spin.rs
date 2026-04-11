@@ -75,7 +75,7 @@ impl SpinMultiplicity {
 #[macro_export]
 macro_rules! spin {
     ($s:expr) => {{
-        $crate::SpinState::from_str($s).expect("invalid spin state")
+        $crate::spin::SpinState::from_str($s).expect("invalid spin state")
     }};
 }
 

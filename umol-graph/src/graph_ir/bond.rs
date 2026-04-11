@@ -3,7 +3,10 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_shared::{SpinMultiplicity, SpinState, SpinStateAst, SpinStateError, ValueAst};
+use umol_shared::error::SpinStateError;
+use umol_shared::spin::{SpinMultiplicity, SpinState};
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::raise_spin_ground;
@@ -135,7 +138,7 @@ impl ToEdn for Bond {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::SpinMultiplicity;
+    use umol_shared::spin::SpinMultiplicity;
 
     use super::*;
 

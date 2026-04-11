@@ -6,10 +6,10 @@ use std::str::FromStr;
 
 use bimap::BiMap;
 use indexmap::IndexMap;
-use umol_shared::SpinState;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
-
-use umol_shared::{SpinStateAst, ValueAst};
+use umol_shared::spin::SpinState;
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 
 use super::atom::parse_atom_dsl;
 use super::error::ParseError;
@@ -872,7 +872,10 @@ impl fmt::Display for MoleculeAstWrapper {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::{e, Element, ElementAst, HydrogenAst, ValueAst};
+    use umol_shared::atom_ast::{ElementAst, HydrogenAst};
+    use umol_shared::e;
+    use umol_shared::element::Element;
+    use umol_shared::value_ast::ValueAst;
 
     use super::*;
     use crate::ast::config::MoleculeAstConfig;

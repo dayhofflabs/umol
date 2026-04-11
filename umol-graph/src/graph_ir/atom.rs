@@ -3,10 +3,12 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_shared::{
-    AromaticAst, Element, ElementAst, HydrogenAst, IsotopeAst, SpinMultiplicity, SpinState,
-    SpinStateAst, SpinStateError, ValueAst,
-};
+use umol_shared::atom_ast::{AromaticAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::element::Element;
+use umol_shared::error::SpinStateError;
+use umol_shared::spin::{SpinMultiplicity, SpinState};
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::ast_utils::{raise_i8_ground, raise_spin_ground, raise_u8_ground};
@@ -300,7 +302,8 @@ mod tests {
 
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::{Element, SpinMultiplicity, SpinState};
+    use umol_shared::element::Element;
+    use umol_shared::spin::{SpinMultiplicity, SpinState};
 
     use super::*;
 

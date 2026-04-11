@@ -2,13 +2,13 @@
 
 use std::collections::BTreeMap;
 
-use umol_shared::Element;
+use umol_shared::element::Element;
 
 /// Format sum formula according to Hill notation
 pub(super) fn format_sum_formula(
     c_count: usize,
     h_count: usize,
-    atom_counts: BTreeMap<[u8; 2], (umol_shared::Element, usize)>,
+    atom_counts: BTreeMap<[u8; 2], (Element, usize)>,
     charge: i32,
 ) -> String {
     let mut sum_formula = String::new();

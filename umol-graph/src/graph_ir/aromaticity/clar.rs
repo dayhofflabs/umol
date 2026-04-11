@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 
-use umol_shared::Element;
+use umol_shared::element::Element;
 
 use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::algorithms::maximum_independent_set;

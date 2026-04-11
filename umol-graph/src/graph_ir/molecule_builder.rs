@@ -8,7 +8,7 @@ use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use smallvec::SmallVec;
-use umol_shared::{SpinMultiplicity, SpinState};
+use umol_shared::spin::{SpinMultiplicity, SpinState};
 use umol_edn::{DeError, Edn, EdnMap, EdnMapHelper, EdnSet, FormatConfig, FromEdn, ToEdn};
 
 use super::aromaticity::{AromaticContribution, AromaticSystem};
@@ -1229,7 +1229,7 @@ impl MoleculeBuilder {
                     .node_weights()
                     .next()
                     .map(|a| a.element())
-                    .unwrap_or(umol_shared::Element::C);
+                    .unwrap_or(umol_shared::element::Element::C);
                 ResolutionError::ValenceViolation(
                     element,
                     "molecular spin exceeds maximum representable".to_string(),

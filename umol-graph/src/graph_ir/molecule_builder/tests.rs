@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use rstest::*;
 use smallvec::{smallvec, SmallVec};
-use umol_shared::Element;
+use umol_shared::element::Element;
 
 use super::super::atom_pattern::AtomPattern;
 use super::super::bond_pattern::BondPattern;

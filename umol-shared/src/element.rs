@@ -854,7 +854,7 @@ impl Display for Element {
 #[macro_export]
 macro_rules! e {
     ($elem:ident) => {
-        Element::$elem
+        $crate::element::Element::$elem
     };
 }
 

@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 use smallvec::SmallVec;
-use umol_shared::Element;
+use umol_shared::element::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use super::atom::Atom;
@@ -423,7 +423,7 @@ static DEFAULT_NORMAL_VALENCE_TABLE: LazyLock<NormalValenceTable> = LazyLock::ne
 
 #[cfg(test)]
 mod tests {
-    use umol_shared::Element;
+    use umol_shared::element::Element;
 
     use super::*;
 

@@ -2,8 +2,8 @@
 
 use nom::error::{ErrorKind as NomErrorKind, ParseError as NomParseError};
 use thiserror::Error;
-use umol_shared::SpinStateError;
 use umol_edn::{EdnError, ParseError as EdnParseError};
+use umol_shared::error::SpinStateError;
 
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum AtomDslError {

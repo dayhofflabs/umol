@@ -4,7 +4,7 @@ use bstr::ByteSlice;
 use nom::{Finish, Parser};
 use pretty_assertions::assert_eq;
 use rstest::*;
-use umol_shared::Element;
+use umol_shared::element::Element;
 
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;

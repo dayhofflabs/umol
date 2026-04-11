@@ -2,7 +2,8 @@
 //!
 //! All functions return table_ir types.
 
-use umol_shared::{Element, Isotope};
+use umol_shared::element::Element;
+use umol_shared::isotope::Isotope;
 
 use crate::atom::Chirality;
 use crate::io::ctfile::error::ParseError;
@@ -421,7 +422,7 @@ pub(super) fn convert_attachment_point_code(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::NamedIsotope;
+    use umol_shared::isotope::NamedIsotope;
 
     use super::*;
     use crate::table_ir::atom::ImplicitHydrogens;
