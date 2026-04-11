@@ -9,6 +9,16 @@ use crate::basis::{BasisFunction, BasisKind};
 use crate::error::{self, Error};
 use crate::types::*;
 
+#[derive(Debug, Clone)]
+pub struct SubgroupInfo {
+    pub label: SchoenfliesLabel,
+    pub name: String,
+    pub order: usize,
+    /// Each entry is (SymmetryOp from parent, parent class index) for the corresponding subgroup operation.
+    pub parent_ops: Vec<(SymmetryOp, usize)>,
+    pub(crate) index: usize,
+}
+
 /// Generate the orbital name string libmsym expects (e.g. "1s", "1px", "2d1+").
 fn orbital_name(n: i32, l: i32, m: i32) -> [i8; 8] {
     let s = match l {
@@ -309,6 +319,60 @@ impl Context {
         error::check(unsafe {
             ffi::msymGenerateElements(self.ctx, ffi_elems.len() as c_int, ffi_elems.as_mut_ptr())
         })
+    }
+
+    pub fn subgroups(&self) -> Result<Vec<SubgroupInfo>, Error> {
+        let mut len: c_int = 0;
+        let mut ptr = ptr::null();
+        error::check(unsafe { ffi::msymGetSubgroups(self.ctx, &mut len, &mut ptr) })?;
+        let slice = unsafe { slice::from_raw_parts(ptr, len as usize) };
+
+        let mut result = Vec::with_capacity(len as usize);
+        for (i, sg) in slice.iter().enumerate() {
+            let label = SchoenfliesLabel::from_ffi(sg.type_, sg.n);
+            let name = unsafe { CStr::from_ptr(sg.name.as_ptr()) }
+                .to_string_lossy()
+                .into_owned();
+            let order = sg.order as usize;
+
+            let sops_slice = unsafe { slice::from_raw_parts(sg.sops, order) };
+            let parent_ops: Vec<(SymmetryOp, usize)> = sops_slice
+                .iter()
+                .map(|sop_ptr| {
+                    let sop = unsafe { &**sop_ptr };
+                    (SymmetryOp::from(sop), sop.cla as usize)
+                })
+                .collect();
+
+            result.push(SubgroupInfo {
+                label,
+                name,
+                order,
+                parent_ops,
+                index: i,
+            });
+        }
+        Ok(result)
+    }
+
+    pub fn select_subgroup(&mut self, sg: &SubgroupInfo) -> Result<(), Error> {
+        self.character_table = None;
+
+        let mut len: c_int = 0;
+        let mut ptr = ptr::null();
+        error::check(unsafe { ffi::msymGetSubgroups(self.ctx, &mut len, &mut ptr) })?;
+
+        let sg_ptr = unsafe { ptr.add(sg.index) };
+        error::check(unsafe { ffi::msymSelectSubgroup(self.ctx, sg_ptr) })?;
+
+        let label = self.point_group()?;
+        if !matches!(label, SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh) {
+            let mut ct_ptr = ptr::null();
+            error::check(unsafe { ffi::msymGetCharacterTable(self.ctx, &mut ct_ptr) })?;
+            self.character_table = Some(unsafe { CharacterTable::from_ffi(&*ct_ptr) });
+        }
+
+        Ok(())
     }
 }
 

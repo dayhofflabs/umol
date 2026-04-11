@@ -3,6 +3,7 @@ use crate::context::Context;
 use crate::error::Error;
 use crate::linear;
 use crate::point_group::PointGroup;
+use crate::subgroup::CorrelationTable;
 use crate::types::{EquivalenceSet, SchoenfliesLabel, SymmetryCenter, Thresholds};
 
 /// Result of symmetry detection or symmetrization.
@@ -121,6 +122,180 @@ pub fn generate_symmetry_images(
         group,
         equivalence_sets,
         centers,
+    })
+}
+
+#[derive(Debug)]
+pub struct SymmetryDescentResult {
+    pub parent_group: &'static PointGroup,
+    pub child_group: &'static PointGroup,
+    pub transform: [[f64; 3]; 3],
+    pub correlation: Option<CorrelationTable>,
+    pub centers: Vec<SymmetryCenter>,
+    pub equivalence_sets: Vec<EquivalenceSet>,
+}
+
+fn build_correlation(
+    parent: &'static PointGroup,
+    child: &'static PointGroup,
+    class_map: &[usize],
+) -> Result<CorrelationTable, Error> {
+    crate::subgroup::correlation_table(parent, child, class_map).map_err(|e| Error {
+        code: umol_msym_sys::MSYM_INVALID_CHARACTER_TABLE,
+        message: format!("correlation table computation failed: {e}"),
+    })
+}
+
+/// Lower the symmetry of a molecule to a specified subgroup.
+pub fn lower_symmetry(
+    centers: &[SymmetryCenter],
+    target: SchoenfliesLabel,
+    thresholds: Thresholds,
+) -> Result<SymmetryDescentResult, Error> {
+    let mut ctx = Context::new()?;
+    ctx.set_centers(centers)?;
+    ctx.set_thresholds(&thresholds)?;
+    ctx.find_symmetry()?;
+
+    let parent_group = PointGroup::from_context(&ctx)?;
+    let centers_out = ctx.centers()?;
+
+    let identity_transform = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+    // Identity descent: target is the same group.
+    if target == parent_group.label() {
+        let equivalence_sets = ctx.equivalence_sets()?;
+        let correlation = if parent_group.is_linear() {
+            None
+        } else {
+            let n_classes = parent_group.class_reps().len();
+            let class_map: Vec<usize> = (0..n_classes).collect();
+            Some(build_correlation(parent_group, parent_group, &class_map)?)
+        };
+        return Ok(SymmetryDescentResult {
+            parent_group,
+            child_group: parent_group,
+            transform: identity_transform,
+            correlation,
+            centers: centers_out,
+            equivalence_sets,
+        });
+    }
+
+    // C1 is always a subgroup but libmsym doesn't list it.
+    if target == SchoenfliesLabel::Cn(1) {
+        let child_group = PointGroup::c1();
+        let class_map = vec![0]; // E → E
+        let equivalence_sets = centers_out
+            .iter()
+            .map(|c| EquivalenceSet {
+                centers: vec![c.clone()],
+                max_error: 0.0,
+            })
+            .collect();
+        let correlation = if parent_group.is_linear() {
+            None
+        } else {
+            Some(build_correlation(parent_group, child_group, &class_map)?)
+        };
+        return Ok(SymmetryDescentResult {
+            parent_group,
+            child_group,
+            transform: identity_transform,
+            correlation,
+            centers: centers_out,
+            equivalence_sets,
+        });
+    }
+
+    // Infinite → finite: re-perceive the molecule under the target finite group.
+    // No correlation table (infinite parent has no finite character table).
+    if parent_group.is_linear() {
+        let child_name = target.to_string();
+        let mut ctx2 = Context::new()?;
+        ctx2.set_centers(centers)?;
+        ctx2.set_thresholds(&thresholds)?;
+        ctx2.set_point_group_by_name(&child_name)?;
+        ctx2.find_symmetry()?;
+
+        let detected = ctx2.point_group()?;
+        if detected != target {
+            return Err(Error {
+                code: umol_msym_sys::MSYM_INVALID_SUBGROUPS,
+                message: format!(
+                    "{target} is not a subgroup of {}, or the molecule cannot be perceived under it",
+                    parent_group.label()
+                ),
+            });
+        }
+
+        let child_group = PointGroup::from_context(&ctx2)?;
+        let centers_out = ctx2.centers()?;
+        let equivalence_sets = ctx2.equivalence_sets()?;
+
+        return Ok(SymmetryDescentResult {
+            parent_group,
+            child_group,
+            transform: identity_transform,
+            correlation: None,
+            centers: centers_out,
+            equivalence_sets,
+        });
+    }
+
+    let subgroups = ctx.subgroups()?;
+    let sg = subgroups
+        .iter()
+        .find(|sg| sg.label == target)
+        .ok_or_else(|| Error {
+            code: umol_msym_sys::MSYM_INVALID_SUBGROUPS,
+            message: format!("{target} is not a subgroup of {}", parent_group.label()),
+        })?
+        .clone();
+
+    let parent_ops_with_class = sg.parent_ops.clone();
+
+    ctx.select_subgroup(&sg)?;
+
+    let child_group = PointGroup::from_context(&ctx)?;
+    let transform = ctx.alignment_transform()?;
+    let child_ops = ctx.symmetry_operations()?;
+    let centers_out = ctx.centers()?;
+    let equivalence_sets = ctx.equivalence_sets()?;
+
+    // Build class_map: child class → parent class.
+    // Match each child op to the closest parent subgroup op by 3×3 matrix.
+    let child_n_classes = child_group.class_reps().len();
+    let mut class_map = vec![0usize; child_n_classes];
+    let mut class_assigned = vec![false; child_n_classes];
+
+    for child_op in &child_ops {
+        let child_class = child_op.class;
+        if class_assigned[child_class] {
+            continue;
+        }
+        let (_, parent_class) = parent_ops_with_class
+            .iter()
+            .map(|(pop, pcls)| {
+                let diff = pop.matrix - child_op.matrix;
+                let dist: f64 = diff.iter().map(|x| x * x).sum();
+                (dist, *pcls)
+            })
+            .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
+            .unwrap();
+        class_map[child_class] = parent_class;
+        class_assigned[child_class] = true;
+    }
+
+    let correlation = Some(build_correlation(parent_group, child_group, &class_map)?);
+
+    Ok(SymmetryDescentResult {
+        parent_group,
+        child_group,
+        transform,
+        correlation,
+        centers: centers_out,
+        equivalence_sets,
     })
 }
 

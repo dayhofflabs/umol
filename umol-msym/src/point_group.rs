@@ -14,6 +14,31 @@ use crate::types::{
     SymmetryOpOrientation,
 };
 
+#[derive(Debug, Clone)]
+pub enum ReductionError {
+    InfiniteGroup,
+    DimensionMismatch { expected: usize, got: usize },
+    NonIntegralMultiplicity { irrep: String, value: f64 },
+}
+
+impl fmt::Display for ReductionError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InfiniteGroup => {
+                write!(f, "character-based reduction undefined for infinite groups")
+            }
+            Self::DimensionMismatch { expected, got } => {
+                write!(f, "expected {expected} class characters, got {got}")
+            }
+            Self::NonIntegralMultiplicity { irrep, value } => {
+                write!(f, "non-integral multiplicity {value:.4} for irrep {irrep}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ReductionError {}
+
 static REGISTRY: LazyLock<Mutex<HashMap<SchoenfliesLabel, &'static PointGroup>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
@@ -228,12 +253,29 @@ impl PointGroup {
     }
 
     /// True if some irreps are complex conjugate pairs fused into real 2D representations.
-    /// This occurs in cyclic groups with order > 2 (Cn, Cnh, Sn with n > 2).
+    ///
+    /// Detected structurally: a dim-2 irrep is a fused pair iff its squared-norm
+    /// Σ|C|χ² equals 2|G| rather than |G|.
     pub fn has_complex_irreps(&self) -> bool {
-        match self.label {
-            SchoenfliesLabel::Cn(n) | SchoenfliesLabel::Cnh(n) | SchoenfliesLabel::Sn(n) => n > 2,
-            _ => false,
-        }
+        let PointGroupKind::Finite {
+            order, class_sizes, ..
+        } = &self.kind
+        else {
+            return false;
+        };
+        let h = *order as f64;
+        self.irrep_data.iter().any(|ir| {
+            if ir.dimension != 2 {
+                return false;
+            }
+            let norm_sq: f64 = ir
+                .characters
+                .iter()
+                .zip(class_sizes)
+                .map(|(chi, &size)| size as f64 * chi * chi)
+                .sum();
+            (norm_sq - 2.0 * h).abs() < 0.5
+        })
     }
 
     /// True iff the group contains only proper operations (no reflections, inversions,
@@ -291,7 +333,7 @@ impl PointGroup {
                     .zip(b.characters())
                     .map(|(ca, cb)| ca * cb)
                     .collect();
-                self.reduce(&product_chars)
+                self.reduce(&product_chars).expect("valid product characters")
             }
             PointGroupKind::Linear => linear::direct_product(self, a, b),
         }
@@ -310,7 +352,7 @@ impl PointGroup {
                 let sym_chars: Vec<f64> = (0..n_classes)
                     .map(|c| 0.5 * (chars[c] * chars[c] + chars[r2_class[c]]))
                     .collect();
-                self.reduce(&sym_chars)
+                self.reduce(&sym_chars).expect("valid symmetric square characters")
             }
             PointGroupKind::Linear => linear::symmetric_square(self, a),
         }
@@ -329,7 +371,7 @@ impl PointGroup {
                 let anti_chars: Vec<f64> = (0..n_classes)
                     .map(|c| 0.5 * (chars[c] * chars[c] - chars[r2_class[c]]))
                     .collect();
-                self.reduce(&anti_chars)
+                self.reduce(&anti_chars).expect("valid antisymmetric square characters")
             }
             PointGroupKind::Linear => linear::antisymmetric_square(self, a),
         }
@@ -337,22 +379,21 @@ impl PointGroup {
 
     /// Reduce a representation (given by its class characters) into irreps with multiplicities.
     ///
-    /// Only valid for finite groups. Panics for infinite groups (C∞v, D∞h).
-    pub fn reduce(&'static self, characters: &[f64]) -> Vec<(Irrep, u32)> {
+    /// Only valid for finite groups.
+    pub fn reduce(&'static self, characters: &[f64]) -> Result<Vec<(Irrep, u32)>, ReductionError> {
         let PointGroupKind::Finite {
             order, class_sizes, ..
         } = &self.kind
         else {
-            panic!("character-based reduction undefined for infinite groups");
+            return Err(ReductionError::InfiniteGroup);
         };
         let d = self.irrep_data.len();
-        assert_eq!(
-            characters.len(),
-            d,
-            "expected {} class characters, got {}",
-            d,
-            characters.len()
-        );
+        if characters.len() != d {
+            return Err(ReductionError::DimensionMismatch {
+                expected: d,
+                got: characters.len(),
+            });
+        }
         let h = *order as f64;
 
         let mut result = Vec::new();
@@ -361,6 +402,12 @@ impl PointGroup {
                 .map(|c| class_sizes[c] as f64 * ir_data.characters[c] * characters[c])
                 .sum::<f64>()
                 / h;
+            if (n - n.round()).abs() > 0.01 {
+                return Err(ReductionError::NonIntegralMultiplicity {
+                    irrep: ir_data.symbol.clone(),
+                    value: n,
+                });
+            }
             let n_rounded = n.round() as u32;
             if n_rounded > 0 {
                 result.push((
@@ -372,7 +419,7 @@ impl PointGroup {
                 ));
             }
         }
-        result
+        Ok(result)
     }
 
     /// Irreps spanned by the translational degrees of freedom (x, y, z).
@@ -380,7 +427,7 @@ impl PointGroup {
         match &self.kind {
             PointGroupKind::Finite { class_reps, .. } => {
                 let chars: Vec<f64> = class_reps.iter().map(|op| op.matrix.trace()).collect();
-                self.reduce(&chars)
+                self.reduce(&chars).expect("valid translation characters")
             }
             PointGroupKind::Linear => linear::translation_irreps(self),
         }
@@ -394,7 +441,7 @@ impl PointGroup {
                     .iter()
                     .map(|op| op.matrix.determinant() * op.matrix.trace())
                     .collect();
-                self.reduce(&chars)
+                self.reduce(&chars).expect("valid rotation characters")
             }
             PointGroupKind::Linear => linear::rotation_irreps(self),
         }
@@ -412,7 +459,7 @@ impl PointGroup {
                         (tr * tr + tr2) / 2.0
                     })
                     .collect();
-                self.reduce(&chars)
+                self.reduce(&chars).expect("valid quadratic characters")
             }
             PointGroupKind::Linear => linear::quadratic_irreps(self),
         }
@@ -1049,7 +1096,7 @@ mod tests {
         #[case] expected: &[(&str, u32)],
     ) {
         let g = PointGroup::from_schoenflies(group).unwrap();
-        let result = g.reduce(characters);
+        let result = g.reduce(characters).unwrap();
         let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
         assert_eq!(actual, expected);
     }
@@ -1069,7 +1116,7 @@ mod tests {
                 chars[c] += mult as f64 * ch;
             }
         }
-        let result = g.reduce(&chars);
+        let result = g.reduce(&chars).unwrap();
         let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
         let expected: Vec<(&str, u32)> = composition.to_vec();
         assert_eq!(actual, expected);
@@ -1368,10 +1415,15 @@ E1  │ 2  -1    0
     #[case("C3h", true)]
     #[case("S4", true)]
     #[case("S6", true)]
+    #[case("T", true)]
+    #[case("Th", true)]
     #[case("C1", false)]
     #[case("C2", false)]
     #[case("C2v", false)]
     #[case("Td", false)]
+    #[case("Oh", false)]
+    #[case("C3v", false)]
+    #[case("D3h", false)]
     fn test_point_group_has_complex_irreps(#[case] group: &str, #[case] expected: bool) {
         let g = PointGroup::from_schoenflies(group).unwrap();
         assert_eq!(g.has_complex_irreps(), expected);

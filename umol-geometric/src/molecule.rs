@@ -319,7 +319,7 @@ impl Molecule {
         }
 
         // Step 2: reduce
-        let gamma_total = group.reduce(&gamma_3n);
+        let gamma_total = group.reduce(&gamma_3n).expect("valid 3N representation characters");
         let gamma_trans = group.translation_irreps();
         let gamma_rot = group.rotation_irreps();
         let gamma_vib = subtract_irrep_reps(&gamma_total, &gamma_trans, &gamma_rot);
