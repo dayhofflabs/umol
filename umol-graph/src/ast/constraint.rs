@@ -94,3 +94,75 @@ pub enum RelationSym {
     MulticenterBonds,
     NoncovalentBonds,
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_shared::ValueAst;
+
+    use super::*;
+
+    fn charge(n: i64) -> MoleculeConstraint {
+        MoleculeConstraint::Derived {
+            predicate: DerivedPred::TotalCharge(ValueAst::Lit(n)),
+            refs: RelationRefs::default(),
+        }
+    }
+
+    fn in_ring_atom(atom: usize) -> MoleculeConstraint {
+        MoleculeConstraint::Derived {
+            predicate: DerivedPred::InRing,
+            refs: RelationRefs::atoms(vec![atom]),
+        }
+    }
+
+    #[rstest]
+    #[case::and_pair(
+        MoleculeConstraint::And(vec![charge(0), in_ring_atom(1)]),
+        MoleculeConstraint::And(vec![charge(0), in_ring_atom(1)]),
+        true,
+    )]
+    #[case::and_order_matters(
+        MoleculeConstraint::And(vec![charge(0), in_ring_atom(1)]),
+        MoleculeConstraint::And(vec![in_ring_atom(1), charge(0)]),
+        false,
+    )]
+    #[case::or_distinct_payload(
+        MoleculeConstraint::Or(vec![charge(0), charge(1)]),
+        MoleculeConstraint::Or(vec![charge(0), charge(2)]),
+        false,
+    )]
+    #[case::not_idempotent_eq(
+        MoleculeConstraint::Not(Box::new(charge(-1))),
+        MoleculeConstraint::Not(Box::new(charge(-1))),
+        true,
+    )]
+    #[case::and_or_distinct(
+        MoleculeConstraint::And(vec![charge(0)]),
+        MoleculeConstraint::Or(vec![charge(0)]),
+        false,
+    )]
+    fn test_molecule_constraint_combinators_eq(
+        #[case] left: MoleculeConstraint,
+        #[case] right: MoleculeConstraint,
+        #[case] equal: bool,
+    ) {
+        assert_eq!(left == right, equal);
+    }
+
+    #[test]
+    fn test_molecule_constraint_combinators_nested() {
+        let inner = MoleculeConstraint::Or(vec![
+            charge(-1),
+            MoleculeConstraint::Not(Box::new(in_ring_atom(0))),
+        ]);
+        let outer = MoleculeConstraint::And(vec![charge(0), inner.clone()]);
+
+        let MoleculeConstraint::And(children) = &outer else {
+            panic!("expected And");
+        };
+        assert_eq!(children.len(), 2);
+        assert_eq!(children[1], inner);
+    }
+}

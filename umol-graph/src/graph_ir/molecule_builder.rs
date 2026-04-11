@@ -8,7 +8,7 @@ use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use smallvec::SmallVec;
-use umol_shared::{SpinMultiplicity, SpinState, SpinStateAst, ValueAst};
+use umol_shared::{SpinMultiplicity, SpinState};
 use umol_edn::{DeError, Edn, EdnMap, EdnMapHelper, EdnSet, FormatConfig, FromEdn, ToEdn};
 
 use super::aromaticity::{AromaticContribution, AromaticSystem};
@@ -28,7 +28,6 @@ use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
-use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
 use crate::ast::error::LoweringError;
 use crate::ast::molecule::{
     AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
@@ -273,8 +272,6 @@ pub struct MoleculeBuilder {
     aromatic_systems: Vec<AromaticSystem>,
     multicenter_bonds: Vec<MulticenterBond>,
     noncovalent_bonds: Vec<NoncovalentBond>,
-    charge: Option<i8>,
-    spin: Option<SpinState>,
 }
 
 impl MoleculeBuilder {
@@ -286,8 +283,6 @@ impl MoleculeBuilder {
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
             noncovalent_bonds: Vec::new(),
-            charge: None,
-            spin: None,
         }
     }
 
@@ -304,8 +299,6 @@ impl MoleculeBuilder {
             aromatic_systems: Vec::new(),
             multicenter_bonds: Vec::new(),
             noncovalent_bonds: Vec::new(),
-            charge: None,
-            spin: None,
         }
     }
 
@@ -336,8 +329,6 @@ impl MoleculeBuilder {
         builder.aromatic_systems = molecule.aromatic_systems().cloned().collect();
         builder.multicenter_bonds = molecule.multicenter_bonds().cloned().collect();
         builder.noncovalent_bonds = molecule.noncovalent_bonds().cloned().collect();
-        builder.charge = Some(molecule.charge());
-        builder.spin = Some(molecule.spin());
         builder
     }
 
@@ -908,31 +899,6 @@ impl MoleculeBuilder {
             .map(|b| std::mem::replace(b, bond))
     }
 
-    // Molecular charge and spin
-    pub fn charge(&self) -> Option<i8> {
-        self.charge
-    }
-
-    pub fn spin(&self) -> Option<SpinState> {
-        self.spin
-    }
-
-    pub fn set_charge(&mut self, charge: i8) {
-        self.charge = Some(charge);
-    }
-
-    pub fn clear_charge(&mut self) {
-        self.charge = None;
-    }
-
-    pub fn set_spin(&mut self, spin: SpinState) {
-        self.spin = Some(spin);
-    }
-
-    pub fn clear_spin(&mut self) {
-        self.spin = None;
-    }
-
     pub fn resolution_context(&self) -> &ResolutionContext {
         &self.resolution
     }
@@ -1250,69 +1216,42 @@ impl MoleculeBuilder {
             .sum();
         let charge = atom_charge + bond_charge + aromatic_charge + multicenter_charge;
 
-        if let Some(explicit) = self.charge {
-            if explicit != charge {
-                return Err(ResolutionError::MolecularChargeMismatch {
-                    explicit,
-                    atom_sum: charge,
-                });
-            }
-        }
-
         let mut feature_spins: Vec<SpinState> = graph.node_weights().map(|a| a.spin()).collect();
         feature_spins.extend(self.aromatic_systems.iter().map(|s| s.spin()));
 
-        let spin = match self.spin {
-            Some(explicit) => {
-                if !explicit.is_constructible_from(&feature_spins) {
-                    let atom_unpaired_sum: u16 = feature_spins
-                        .iter()
-                        .map(|s| s.unpaired_electrons() as u16)
-                        .sum();
-                    return Err(ResolutionError::MolecularSpinIncompatible {
-                        explicit_unpaired: explicit.unpaired_electrons(),
-                        explicit_multiplicity: explicit.multiplicity().multiplicity(),
-                        atom_unpaired_sum,
-                    });
-                }
-                explicit
+        let atom_unpaired_sum: u16 = feature_spins
+            .iter()
+            .map(|s| s.unpaired_electrons() as u16)
+            .sum();
+        let compatible =
+            compatible_molecular_multiplicities(&feature_spins).ok_or_else(|| {
+                let element = graph
+                    .node_weights()
+                    .next()
+                    .map(|a| a.element())
+                    .unwrap_or(umol_shared::Element::C);
+                ResolutionError::ValenceViolation(
+                    element,
+                    "molecular spin exceeds maximum representable".to_string(),
+                )
+            })?;
+        let spin = match compatible.as_slice() {
+            [single] => {
+                let multiplicity = SpinMultiplicity::from_multiplicity(*single)
+                    .expect("compatible multiplicity is always in 1..=10");
+                SpinState::new(atom_unpaired_sum as u8, multiplicity)
             }
-            None => {
-                let atom_unpaired_sum: u16 = feature_spins
-                    .iter()
-                    .map(|s| s.unpaired_electrons() as u16)
-                    .sum();
-                let compatible =
-                    compatible_molecular_multiplicities(&feature_spins).ok_or_else(|| {
-                        let element = graph
-                            .node_weights()
-                            .next()
-                            .map(|a| a.element())
-                            .unwrap_or(umol_shared::Element::C);
-                        ResolutionError::ValenceViolation(
-                            element,
-                            "molecular spin exceeds maximum representable".to_string(),
-                        )
-                    })?;
-                match compatible.as_slice() {
-                    [single] => {
-                        let multiplicity = SpinMultiplicity::from_multiplicity(*single)
-                            .expect("compatible multiplicity is always in 1..=10");
-                        SpinState::new(atom_unpaired_sum as u8, multiplicity)
-                    }
-                    [] => {
-                        return Err(ResolutionError::ValenceViolation(
-                            graph.node_weights().next().unwrap().element(),
-                            "no compatible molecular spin for atom-level spins".to_string(),
-                        ));
-                    }
-                    _ => {
-                        return Err(ResolutionError::MolecularSpinIncomplete {
-                            atom_unpaired_sum,
-                            compatible_multiplicities: compatible,
-                        });
-                    }
-                }
+            [] => {
+                return Err(ResolutionError::ValenceViolation(
+                    graph.node_weights().next().unwrap().element(),
+                    "no compatible molecular spin for atom-level spins".to_string(),
+                ));
+            }
+            _ => {
+                return Err(ResolutionError::MolecularSpinIncomplete {
+                    atom_unpaired_sum,
+                    compatible_multiplicities: compatible,
+                });
             }
         };
 
@@ -1398,28 +1337,6 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
             ));
         }
 
-        for constraint in &ast.constraints {
-            let MoleculeConstraint::Derived { predicate, refs } = constraint else {
-                continue;
-            };
-            if !refs.is_empty() {
-                continue;
-            }
-            match predicate {
-                DerivedPred::TotalCharge(ValueAst::Lit(charge)) => {
-                    let c = i8::try_from(*charge).map_err(|_| LoweringError::OutOfRange {
-                        field: "charge",
-                        value: *charge,
-                    })?;
-                    builder.set_charge(c);
-                }
-                DerivedPred::TotalSpin(SpinStateAst::Lit(spin)) => {
-                    builder.set_spin(*spin);
-                }
-                _ => {}
-            }
-        }
-
         Ok(builder)
     }
 }
@@ -1484,20 +1401,6 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             })
             .collect();
 
-        let mut constraints: Vec<MoleculeConstraint> = Vec::new();
-        if let Some(charge) = self.charge() {
-            constraints.push(MoleculeConstraint::Derived {
-                predicate: DerivedPred::TotalCharge(ValueAst::Lit(charge as i64)),
-                refs: RelationRefs::default(),
-            });
-        }
-        if let Some(spin) = self.spin() {
-            constraints.push(MoleculeConstraint::Derived {
-                predicate: DerivedPred::TotalSpin(SpinStateAst::Lit(spin)),
-                refs: RelationRefs::default(),
-            });
-        }
-
         MoleculeAst {
             atoms,
             bonds,
@@ -1505,7 +1408,7 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             aromatic_systems,
             multicenter_bonds,
             noncovalent_bonds,
-            constraints,
+            constraints: Vec::new(),
         }
     }
 }

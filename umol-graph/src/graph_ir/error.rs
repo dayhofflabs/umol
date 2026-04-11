@@ -134,17 +134,6 @@ pub enum ResolutionError {
     ValenceAmbiguous(String),
     #[error("Aromaticity inconsistent: {0}")]
     AromaticityInconsistent(String),
-    #[error("Molecular charge mismatch: explicit {explicit}, from atoms {atom_sum}")]
-    MolecularChargeMismatch { explicit: i8, atom_sum: i8 },
-    #[error(
-        "Molecular spin incompatible: {explicit_unpaired} unpaired electrons (multiplicity {explicit_multiplicity}) \
-         from atoms (total unpaired: {atom_unpaired_sum})"
-    )]
-    MolecularSpinIncompatible {
-        explicit_unpaired: u8,
-        explicit_multiplicity: u8,
-        atom_unpaired_sum: u16,
-    },
     #[error(
         "Molecular spin incomplete: explicit multiplicity is required (compatible multiplicities: {compatible_multiplicities:?}, total unpaired: {atom_unpaired_sum})"
     )]
