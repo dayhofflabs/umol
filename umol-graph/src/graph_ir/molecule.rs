@@ -6,7 +6,7 @@ use petgraph::graph::NodeIndex;
 use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::EdgeRef;
-use umol_shared::SpinState;
+use umol_shared::{SpinState, SpinStateAst, ValueAst};
 
 use super::aromaticity::AromaticSystem;
 use super::atom::Atom;
@@ -18,6 +18,7 @@ use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
+use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
 use crate::ast::molecule::{
     AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
     LocalizedBond as LocalizedBondAst, MoleculeAst, MulticenterBond as MulticenterBondAst,
@@ -534,6 +535,17 @@ impl ToAst<MoleculeAst> for Molecule {
             })
             .collect();
 
+        let constraints = vec![
+            MoleculeConstraint::Derived {
+                predicate: DerivedPred::TotalCharge(ValueAst::Lit(self.charge() as i64)),
+                refs: RelationRefs::default(),
+            },
+            MoleculeConstraint::Derived {
+                predicate: DerivedPred::TotalSpin(SpinStateAst::Lit(self.spin())),
+                refs: RelationRefs::default(),
+            },
+        ];
+
         MoleculeAst {
             atoms,
             bonds,
@@ -541,9 +553,7 @@ impl ToAst<MoleculeAst> for Molecule {
             aromatic_systems,
             multicenter_bonds,
             noncovalent_bonds,
-            charge: Some(self.charge() as i64),
-            spin: Some(self.spin()),
-            constraints: Vec::new(),
+            constraints,
         }
     }
 }

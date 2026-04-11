@@ -1,6 +1,5 @@
 //! Molecule structural AST.
 
-use umol_shared::SpinState;
 use umol_edn::{FromEdn, ToEdn};
 
 use crate::ast::atom::AtomAst;
@@ -49,8 +48,6 @@ pub struct MoleculeAst {
     pub aromatic_systems: Vec<AromaticSystem>,
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub noncovalent_bonds: Vec<NoncovalentBond>,
-    pub charge: Option<i64>,
-    pub spin: Option<SpinState>,
     pub constraints: Vec<MoleculeConstraint>,
 }
 

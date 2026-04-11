@@ -8,7 +8,7 @@ use petgraph::prelude::*;
 use petgraph::stable_graph::StableGraph;
 use petgraph::visit::{EdgeRef, NodeIndexable};
 use smallvec::SmallVec;
-use umol_shared::{SpinMultiplicity, SpinState};
+use umol_shared::{SpinMultiplicity, SpinState, SpinStateAst, ValueAst};
 use umol_edn::{DeError, Edn, EdnMap, EdnMapHelper, EdnSet, FormatConfig, FromEdn, ToEdn};
 
 use super::aromaticity::{AromaticContribution, AromaticSystem};
@@ -28,6 +28,7 @@ use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
+use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
 use crate::ast::error::LoweringError;
 use crate::ast::molecule::{
     AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
@@ -1397,16 +1398,26 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
             ));
         }
 
-        if let Some(charge) = ast.charge {
-            let c = i8::try_from(charge).map_err(|_| LoweringError::OutOfRange {
-                field: "charge",
-                value: charge,
-            })?;
-            builder.set_charge(c);
-        }
-
-        if let Some(spin) = ast.spin {
-            builder.set_spin(spin);
+        for constraint in &ast.constraints {
+            let MoleculeConstraint::Derived { predicate, refs } = constraint else {
+                continue;
+            };
+            if !refs.is_empty() {
+                continue;
+            }
+            match predicate {
+                DerivedPred::TotalCharge(ValueAst::Lit(charge)) => {
+                    let c = i8::try_from(*charge).map_err(|_| LoweringError::OutOfRange {
+                        field: "charge",
+                        value: *charge,
+                    })?;
+                    builder.set_charge(c);
+                }
+                DerivedPred::TotalSpin(SpinStateAst::Lit(spin)) => {
+                    builder.set_spin(*spin);
+                }
+                _ => {}
+            }
         }
 
         Ok(builder)
@@ -1473,6 +1484,20 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             })
             .collect();
 
+        let mut constraints: Vec<MoleculeConstraint> = Vec::new();
+        if let Some(charge) = self.charge() {
+            constraints.push(MoleculeConstraint::Derived {
+                predicate: DerivedPred::TotalCharge(ValueAst::Lit(charge as i64)),
+                refs: RelationRefs::default(),
+            });
+        }
+        if let Some(spin) = self.spin() {
+            constraints.push(MoleculeConstraint::Derived {
+                predicate: DerivedPred::TotalSpin(SpinStateAst::Lit(spin)),
+                refs: RelationRefs::default(),
+            });
+        }
+
         MoleculeAst {
             atoms,
             bonds,
@@ -1480,9 +1505,7 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             aromatic_systems,
             multicenter_bonds,
             noncovalent_bonds,
-            charge: self.charge().map(|c| c as i64),
-            spin: self.spin(),
-            constraints: Vec::new(),
+            constraints,
         }
     }
 }

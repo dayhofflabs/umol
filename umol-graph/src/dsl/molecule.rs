@@ -9,10 +9,13 @@ use indexmap::IndexMap;
 use umol_shared::SpinState;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
+use umol_shared::{SpinStateAst, ValueAst};
+
 use super::atom::parse_atom_dsl;
 use super::error::ParseError;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
+use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
 use crate::ast::molecule::{
     AromaticSystem, DativeBond, LocalizedBond, MoleculeAst, MulticenterBond, NoncovalentBond,
 };
@@ -269,6 +272,19 @@ impl RawMoleculeAst {
             });
         }
 
+        let mut constraints: Vec<MoleculeConstraint> = Vec::new();
+        if let Some(charge) = self.charge {
+            constraints.push(MoleculeConstraint::Derived {
+                predicate: DerivedPred::TotalCharge(ValueAst::Lit(charge)),
+                refs: RelationRefs::default(),
+            });
+        }
+        if let Some(spin) = self.spin {
+            constraints.push(MoleculeConstraint::Derived {
+                predicate: DerivedPred::TotalSpin(SpinStateAst::Lit(spin)),
+                refs: RelationRefs::default(),
+            });
+        }
         let ast = MoleculeAst {
             atoms,
             bonds,
@@ -276,9 +292,7 @@ impl RawMoleculeAst {
             aromatic_systems,
             multicenter_bonds,
             noncovalent_bonds,
-            charge: self.charge,
-            spin: self.spin,
-            constraints: Vec::new(),
+            constraints,
         };
         let metadata = Metadata {
             atom_tags,
@@ -727,14 +741,25 @@ impl ToEdn for MoleculeAstWrapper {
                 Edn::Vector(noncovalent_edn.into()),
             );
         }
-        if let Some(charge) = self.ast.charge {
-            m.insert(Edn::keyword("charge"), Edn::Int(charge));
-        }
-        if let Some(spin) = &self.ast.spin {
-            m.insert(
-                Edn::keyword("spin"),
-                Edn::Str(std::borrow::Cow::Owned(spin.to_string())),
-            );
+        for constraint in &self.ast.constraints {
+            let MoleculeConstraint::Derived { predicate, refs } = constraint else {
+                continue;
+            };
+            if !refs.is_empty() {
+                continue;
+            }
+            match predicate {
+                DerivedPred::TotalCharge(ValueAst::Lit(n)) => {
+                    m.insert(Edn::keyword("charge"), Edn::Int(*n));
+                }
+                DerivedPred::TotalSpin(SpinStateAst::Lit(s)) => {
+                    m.insert(
+                        Edn::keyword("spin"),
+                        Edn::Str(std::borrow::Cow::Owned(s.to_string())),
+                    );
+                }
+                _ => {}
+            }
         }
         if has_aliases {
             let mut alias_elems = Vec::with_capacity(self.metadata.atom_aliases.len() * 2);
@@ -929,7 +954,10 @@ mod tests {
                 aromatic_valence: None,
                 multicenter_valence: None,
             }],
-            charge: Some(-1),
+            constraints: vec![MoleculeConstraint::Derived {
+                predicate: DerivedPred::TotalCharge(ValueAst::Lit(-1)),
+                refs: RelationRefs::default(),
+            }],
             ..Default::default()
         },
         Metadata {
