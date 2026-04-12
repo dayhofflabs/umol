@@ -228,6 +228,7 @@ fn superscript(n: i32) -> String {
 pub(crate) struct FiniteGroupData {
     pub(crate) order: usize,
     pub(crate) op_data: Vec<SymmetryOpData>,
+    #[allow(dead_code)]
     pub(crate) classes: Vec<Vec<usize>>,
     pub(crate) class_rep_indices: Vec<usize>,
     pub(crate) class_sizes: Vec<i32>,

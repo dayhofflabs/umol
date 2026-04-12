@@ -23,6 +23,6 @@ pub use matrix_rep::MatrixRep;
 pub use point_group::{
     CharacterTableDisplay, PointGroup, SymmetryOp, SymmetryOpKind, SymmetryOpOrientation,
 };
-pub use subgroup::{correlation_table, CorrelationTable, SubgroupData};
+pub use subgroup::{correlation_table, CorrelationTable, Subgroup};
 pub use thresholds::Thresholds;
 pub use types::{EquivalenceSet, MolecularShape, SchoenfliesSymbol, SymmetryCenter};

@@ -265,17 +265,17 @@ pub fn lower_symmetry(
         });
     }
 
-    let subgroups = ctx.subgroups()?;
+    let subgroups = ctx.subgroups(parent_group)?;
     let sg = subgroups
         .iter()
-        .find(|sg| sg.symbol == target)
+        .find(|sg| sg.symbol() == target)
         .ok_or_else(|| MsymError {
             code: umol_msym_sys::MSYM_INVALID_SUBGROUPS,
             message: format!("{target} is not a subgroup of {}", parent_group.symbol()),
         })?
         .clone();
 
-    let parent_ops_with_class = sg.parent_ops.clone();
+    let parent_ops_with_class = sg.parent_ops().to_vec();
 
     ctx.select_subgroup(&sg)?;
 
