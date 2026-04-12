@@ -65,9 +65,13 @@ fn compare_character_tables(group_name: &str, pg: &'static PointGroup, reference
         pairs
     }
 
+    let class_reps = pg.class_reps();
     let msym_fingerprints: Vec<Vec<(i32, i64)>> = irreps
         .iter()
-        .map(|ir| irrep_fingerprint(pg.class_sizes(), ir.characters()))
+        .map(|ir| {
+            let chars: Vec<f64> = class_reps.iter().map(|op| op.character(*ir)).collect();
+            irrep_fingerprint(pg.class_sizes(), &chars)
+        })
         .collect();
 
     let ref_fingerprints: Vec<Vec<(i32, i64)>> = reference
@@ -282,10 +286,10 @@ fn test_character_table_vs_reference(#[case] group: &str, #[case] elements: Vec<
 #[case("O")]
 #[case("I")]
 fn test_character_table_by_name_vs_reference(#[case] group: &str) {
-    let pg = match PointGroup::from_schoenflies(group) {
+    let pg = match PointGroup::parse(group) {
         Ok(pg) => pg,
         Err(e) => {
-            eprintln!("{group}: from_schoenflies failed: {e}, falling back to shape check");
+            eprintln!("{group}: parse failed: {e}, falling back to shape check");
             let reference = reference_table(group).unwrap();
             assert_eq!(
                 reference.irrep_names.len(),

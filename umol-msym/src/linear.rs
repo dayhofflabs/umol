@@ -1,21 +1,23 @@
 //! Linear molecular point groups (C∞v, D∞h)
 
 use crate::basis::{BasisFunction, IrrepBasis, Salc, SalcBasis};
-use crate::point_group::{Irrep, PointGroup};
-use crate::types::{SchoenfliesLabel, SymmetryCenter};
+use crate::irrep::{Irrep, ReductionData};
+use crate::point_group::PointGroup;
+use crate::types::{SchoenfliesSymbol, SymmetryCenter};
 
 fn is_dooh(group: &PointGroup) -> bool {
-    group.label() == SchoenfliesLabel::Dooh
+    group.symbol() == SchoenfliesSymbol::Dooh
 }
 
-fn linear_info(irrep: Irrep) -> (u32, Option<bool>, Option<bool>) {
-    (
-        irrep
-            .lambda()
-            .expect("linear_info called on finite group irrep"),
-        irrep.data.sigma_v,
-        irrep.data.gerade,
-    )
+fn linear_data(irrep: Irrep) -> (u32, Option<bool>, Option<bool>) {
+    match &irrep.data.reduction {
+        ReductionData::Linear {
+            lambda,
+            sigma_v,
+            gerade,
+        } => (*lambda, *sigma_v, *gerade),
+        ReductionData::Finite { .. } => panic!("linear_data called on finite group irrep"),
+    }
 }
 
 fn find_irrep(
@@ -25,7 +27,7 @@ fn find_irrep(
     gerade: Option<bool>,
 ) -> Option<Irrep> {
     group.irreps().into_iter().find(|ir| {
-        let (l, sv, g) = linear_info(*ir);
+        let (l, sv, g) = linear_data(*ir);
         l == lambda && sv == sigma_v && g == gerade
     })
 }
@@ -39,9 +41,9 @@ fn gu_product(g1: Option<bool>, g2: Option<bool>) -> Option<bool> {
     }
 }
 
-pub fn direct_product(group: &'static PointGroup, a: Irrep, b: Irrep) -> Vec<(Irrep, u32)> {
-    let (la, sva, ga) = linear_info(a);
-    let (lb, svb, gb) = linear_info(b);
+pub(crate) fn direct_product(group: &'static PointGroup, a: Irrep, b: Irrep) -> Vec<(Irrep, u32)> {
+    let (la, sva, ga) = linear_data(a);
+    let (lb, svb, gb) = linear_data(b);
     let gu = gu_product(ga, gb);
 
     let mut result = Vec::new();
@@ -96,8 +98,8 @@ pub fn direct_product(group: &'static PointGroup, a: Irrep, b: Irrep) -> Vec<(Ir
 }
 
 /// [a²]: For 1D irreps (Σ) → Σ+. For 2D irreps (λ>0) → Σ+ + irrep(2λ).
-pub fn symmetric_square(group: &'static PointGroup, a: Irrep) -> Vec<(Irrep, u32)> {
-    let (la, _sva, ga) = linear_info(a);
+pub(crate) fn symmetric_square(group: &'static PointGroup, a: Irrep) -> Vec<(Irrep, u32)> {
+    let (la, _sva, ga) = linear_data(a);
     let gu = gu_product(ga, ga);
     let mut result = Vec::new();
     if let Some(ir) = find_irrep(group, 0, Some(true), gu) {
@@ -112,8 +114,8 @@ pub fn symmetric_square(group: &'static PointGroup, a: Irrep) -> Vec<(Irrep, u32
 }
 
 /// {a²}: For 1D irreps (Σ) → empty. For 2D irreps (λ>0) → Σ-.
-pub fn antisymmetric_square(group: &'static PointGroup, a: Irrep) -> Vec<(Irrep, u32)> {
-    let (la, _sva, ga) = linear_info(a);
+pub(crate) fn antisymmetric_square(group: &'static PointGroup, a: Irrep) -> Vec<(Irrep, u32)> {
+    let (la, _sva, ga) = linear_data(a);
     if la == 0 {
         return Vec::new();
     }
@@ -126,7 +128,7 @@ pub fn antisymmetric_square(group: &'static PointGroup, a: Irrep) -> Vec<(Irrep,
 }
 
 /// C∞v: Σ+ + Π. D∞h: Σ+u + Πu.
-pub fn translation_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
+pub(crate) fn translation_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
     let gu = if is_dooh(group) { Some(false) } else { None };
     let mut result = Vec::new();
     if let Some(ir) = find_irrep(group, 0, Some(true), gu) {
@@ -139,7 +141,7 @@ pub fn translation_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
 }
 
 /// C∞v: Π. D∞h: Πg. (Linear molecules: 2 rotational DOF, no Rz.)
-pub fn rotation_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
+pub(crate) fn rotation_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
     let gu = if is_dooh(group) { Some(true) } else { None };
     let mut result = Vec::new();
     if let Some(ir) = find_irrep(group, 1, None, gu) {
@@ -149,7 +151,7 @@ pub fn rotation_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
 }
 
 /// Sym²(translation): C∞v: 2Σ+ + Π + Δ. D∞h: 2Σ+g + Πg + Δg.
-pub fn quadratic_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
+pub(crate) fn quadratic_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
     let gu = if is_dooh(group) { Some(true) } else { None };
     let mut result = Vec::new();
     if let Some(ir) = find_irrep(group, 0, Some(true), gu) {
@@ -165,7 +167,7 @@ pub fn quadratic_irreps(group: &'static PointGroup) -> Vec<(Irrep, u32)> {
 }
 
 /// a ⊗ b ⊗ c ⊃ Σ+ (or Σ+g)?
-pub fn contains_totally_symmetric(
+pub(crate) fn contains_totally_symmetric(
     group: &'static PointGroup,
     a: Irrep,
     b: Irrep,
@@ -224,7 +226,7 @@ fn find_pairs(centers: &[SymmetryCenter], equivalence: f64) -> (Vec<(usize, usiz
     (pairs, singletons)
 }
 
-pub fn compute_salcs(
+pub(crate) fn compute_salcs(
     centers: &[SymmetryCenter],
     basis: &[BasisFunction],
     group: &'static PointGroup,

@@ -1,11 +1,12 @@
 use crate::basis::{BasisFunction, IrrepBasis, Salc, SalcBasis};
 use crate::context::Context;
-use crate::error::Error;
+use crate::error::MsymError;
 use crate::linear;
 use crate::matrix_rep::MatrixRep;
 use crate::point_group::PointGroup;
 use crate::subgroup::{correlation_table, CorrelationTable};
-use crate::types::{EquivalenceSet, SchoenfliesLabel, SymmetryCenter, Thresholds};
+use crate::thresholds::Thresholds;
+use crate::types::{EquivalenceSet, SchoenfliesSymbol, SymmetryCenter};
 
 /// Result of symmetry detection or symmetrization.
 #[derive(Debug)]
@@ -27,7 +28,6 @@ fn c1_result(centers: &[SymmetryCenter]) -> SymmetryResult {
         .iter()
         .map(|c| EquivalenceSet {
             centers: vec![c.clone()],
-            max_error: 0.0,
         })
         .collect();
     SymmetryResult {
@@ -38,8 +38,8 @@ fn c1_result(centers: &[SymmetryCenter]) -> SymmetryResult {
     }
 }
 
-fn group_from_ctx(ctx: &Context) -> Result<&'static PointGroup, Error> {
-    PointGroup::from_label(ctx.point_group()?)
+fn group_from_ctx(ctx: &Context) -> Result<&'static PointGroup, MsymError> {
+    PointGroup::from_symbol(ctx.point_group()?)
 }
 
 /// Detect point group symmetry of a set of atoms.
@@ -48,7 +48,7 @@ fn group_from_ctx(ctx: &Context) -> Result<&'static PointGroup, Error> {
 pub fn detect_symmetry(
     centers: &[SymmetryCenter],
     thresholds: Thresholds,
-) -> Result<SymmetryResult, Error> {
+) -> Result<SymmetryResult, MsymError> {
     let mut ctx = Context::new()?;
     ctx.set_centers(centers)?;
     ctx.set_thresholds(&thresholds)?;
@@ -80,7 +80,7 @@ pub fn detect_symmetry(
 pub fn symmetrize(
     centers: &[SymmetryCenter],
     thresholds: Thresholds,
-) -> Result<SymmetryResult, Error> {
+) -> Result<SymmetryResult, MsymError> {
     let mut ctx = Context::new()?;
     ctx.set_centers(centers)?;
     ctx.set_thresholds(&thresholds)?;
@@ -115,10 +115,10 @@ pub fn symmetrize(
 /// center of mass (the origin). On-axis atoms will generate fewer copies than
 /// general-position atoms. Centers must have positions in Angstroms.
 pub fn generate_symmetry_images(
-    label: SchoenfliesLabel,
+    label: SchoenfliesSymbol,
     asymmetric_unit: &[SymmetryCenter],
     thresholds: Thresholds,
-) -> Result<SymmetryResult, Error> {
+) -> Result<SymmetryResult, MsymError> {
     let mut ctx = Context::new()?;
     ctx.set_thresholds(&thresholds)?;
     // Set asymmetric unit to establish center of mass in the context.
@@ -157,8 +157,8 @@ fn build_correlation(
     parent: &'static PointGroup,
     child: &'static PointGroup,
     class_map: &[usize],
-) -> Result<CorrelationTable, Error> {
-    correlation_table(parent, child, class_map).map_err(|e| Error {
+) -> Result<CorrelationTable, MsymError> {
+    correlation_table(parent, child, class_map).map_err(|e| MsymError {
         code: umol_msym_sys::MSYM_INVALID_CHARACTER_TABLE,
         message: format!("correlation table computation failed: {e}"),
     })
@@ -167,9 +167,9 @@ fn build_correlation(
 /// Lower the symmetry of a molecule to a specified subgroup.
 pub fn lower_symmetry(
     centers: &[SymmetryCenter],
-    target: SchoenfliesLabel,
+    target: SchoenfliesSymbol,
     thresholds: Thresholds,
-) -> Result<SymmetryDescentResult, Error> {
+) -> Result<SymmetryDescentResult, MsymError> {
     let mut ctx = Context::new()?;
     ctx.set_centers(centers)?;
     ctx.set_thresholds(&thresholds)?;
@@ -181,7 +181,7 @@ pub fn lower_symmetry(
     let identity_transform = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
     // Identity descent: target is the same group.
-    if target == parent_group.label() {
+    if target == parent_group.symbol() {
         let equivalence_sets = ctx.equivalence_sets()?;
         let child_representation = ctx.symmetry_representation(parent_group)?;
         let correlation = if parent_group.is_linear() {
@@ -203,15 +203,14 @@ pub fn lower_symmetry(
     }
 
     // C1 is always a subgroup but libmsym doesn't list it.
-    if target == SchoenfliesLabel::Cn(1) {
+    if target == SchoenfliesSymbol::Cn(1) {
         let child_group = PointGroup::c1();
         let class_map = vec![0]; // E → E
         let equivalence_sets = centers_out
             .iter()
             .map(|c| EquivalenceSet {
                 centers: vec![c.clone()],
-                max_error: 0.0,
-            })
+                })
             .collect();
         let correlation = if parent_group.is_linear() {
             None
@@ -241,16 +240,16 @@ pub fn lower_symmetry(
 
         let detected = ctx2.point_group()?;
         if detected != target {
-            return Err(Error {
+            return Err(MsymError {
                 code: umol_msym_sys::MSYM_INVALID_SUBGROUPS,
                 message: format!(
                     "{target} is not a subgroup of {}, or the molecule cannot be perceived under it",
-                    parent_group.label()
+                    parent_group.symbol()
                 ),
             });
         }
 
-        let child_group = PointGroup::from_schoenflies(&child_name)?;
+        let child_group = PointGroup::parse(&child_name)?;
         let child_representation = ctx2.symmetry_representation(child_group)?;
         let centers_out = ctx2.centers()?;
         let equivalence_sets = ctx2.equivalence_sets()?;
@@ -269,10 +268,10 @@ pub fn lower_symmetry(
     let subgroups = ctx.subgroups()?;
     let sg = subgroups
         .iter()
-        .find(|sg| sg.label == target)
-        .ok_or_else(|| Error {
+        .find(|sg| sg.symbol == target)
+        .ok_or_else(|| MsymError {
             code: umol_msym_sys::MSYM_INVALID_SUBGROUPS,
-            message: format!("{target} is not a subgroup of {}", parent_group.label()),
+            message: format!("{target} is not a subgroup of {}", parent_group.symbol()),
         })?
         .clone();
 
@@ -281,7 +280,7 @@ pub fn lower_symmetry(
     ctx.select_subgroup(&sg)?;
 
     let child_name = ctx.point_group_name()?;
-    let child_group = PointGroup::from_schoenflies(&child_name)?;
+    let child_group = PointGroup::parse(&child_name)?;
     let transform = ctx.alignment_transform()?;
     let child_representation = ctx.symmetry_representation(child_group)?;
     let centers_out = ctx.centers()?;
@@ -334,7 +333,7 @@ pub fn compute_salcs(
     centers: &[SymmetryCenter],
     basis: &[BasisFunction],
     thresholds: Thresholds,
-) -> Result<SalcBasis, Error> {
+) -> Result<SalcBasis, MsymError> {
     let mut ctx = Context::new()?;
     ctx.set_centers(centers)?;
     ctx.set_thresholds(&thresholds)?;
@@ -490,25 +489,25 @@ mod tests {
 
     #[rstest]
     #[case(
-        SchoenfliesLabel::Cnv(2),
+        SchoenfliesSymbol::Cnv(2),
         &[8], &[15.999], &[[0.0, 0.0, 0.117]],
         &[1],  &[1.008], &[[0.0, 0.757, -0.469]],
         "C2v", 3
     )]
     #[case(
-        SchoenfliesLabel::Td,
+        SchoenfliesSymbol::Td,
         &[6], &[12.011], &[[0.0, 0.0, 0.0]],
         &[1], &[1.008],  &[[0.629, 0.629, 0.629]],
         "Td", 5
     )]
     #[case(
-        SchoenfliesLabel::Dnh(6),
+        SchoenfliesSymbol::Dnh(6),
         &[6], &[12.011], &[[1.4, 0.0, 0.0]],
         &[1], &[1.008],  &[[2.48, 0.0, 0.0]],
         "D6h", 12
     )]
     fn test_generate_symmetry_images(
-        #[case] label: SchoenfliesLabel,
+        #[case] label: SchoenfliesSymbol,
         #[case] zs1: &[i32],
         #[case] ms1: &[f64],
         #[case] ps1: &[[f64; 3]],

@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
+use std::iter::repeat;
 
 use rstest::rstest;
 use umol_msym::{
-    lower_symmetry, Irrep, SchoenfliesLabel, SymmetryCenter, SymmetryDescentResult, Thresholds,
+    lower_symmetry, Irrep, SchoenfliesSymbol, SymmetryCenter, SymmetryDescentResult, Thresholds,
 };
 
 fn water() -> Vec<SymmetryCenter> {
@@ -182,13 +183,13 @@ const C2V_TO_C2: AltmannColumn = &[
     ("B2", &["B"]),
 ];
 
-// T 73.9 (p. 639): Td → (C3v). Cyclic E in libmsym is split-labeled "E1".
+// T 73.9 (p. 639): Td → (C3v).
 const TD_TO_C3V: AltmannColumn = &[
     ("A1", &["A1"]),
     ("A2", &["A2"]),
-    ("E", &["E1"]),
-    ("T1", &["A2", "E1"]),
-    ("T2", &["A1", "E1"]),
+    ("E", &["E"]),
+    ("T1", &["A2", "E"]),
+    ("T2", &["A1", "E"]),
 ];
 
 // T 73.9 (p. 639): Td → (C2v). Altmann's column lists A2 → A1 by reassigning
@@ -202,13 +203,13 @@ const TD_TO_C2V: AltmannColumn = &[
     ("T2", &["A1", "B1", "B2"]),
 ];
 
-// T 73.9 (p. 639): Td → (D2d). Cyclic E is "E1" in libmsym.
+// T 73.9 (p. 639): Td → (D2d).
 const TD_TO_D2D: AltmannColumn = &[
     ("A1", &["A1"]),
     ("A2", &["B1"]),
     ("E", &["A1", "B1"]),
-    ("T1", &["A2", "E1"]),
-    ("T2", &["B2", "E1"]),
+    ("T1", &["A2", "E"]),
+    ("T2", &["B2", "E"]),
 ];
 
 // T 71.9 (p. 629): Oh → (Td). Td is not a canonical subgroup of Oh; this
@@ -242,18 +243,18 @@ const OH_TO_O: AltmannColumn = &[
 
 // T 71.9 (p. 630): Oh → (D4h), C4 along z. Altmann's labeling; libmsym may
 // emit a B1↔B2 swap (an outer-automorphism orientation) which is accepted via
-// OH_TO_D4H_SWAPPED. Cyclic Eg/Eu are "E1g/E1u" in libmsym.
+// OH_TO_D4H_SWAPPED.
 const OH_TO_D4H: AltmannColumn = &[
     ("A1g", &["A1g"]),
     ("A2g", &["B1g"]),
     ("Eg", &["A1g", "B1g"]),
-    ("T1g", &["A2g", "E1g"]),
-    ("T2g", &["B2g", "E1g"]),
+    ("T1g", &["A2g", "Eg"]),
+    ("T2g", &["B2g", "Eg"]),
     ("A1u", &["A1u"]),
     ("A2u", &["B1u"]),
     ("Eu", &["A1u", "B1u"]),
-    ("T1u", &["A2u", "E1u"]),
-    ("T2u", &["B2u", "E1u"]),
+    ("T1u", &["A2u", "Eu"]),
+    ("T2u", &["B2u", "Eu"]),
 ];
 
 // T 71.9 (p. 630): Oh → (D4h), B1 ↔ B2 swap of OH_TO_D4H.
@@ -261,41 +262,39 @@ const OH_TO_D4H_SWAPPED: AltmannColumn = &[
     ("A1g", &["A1g"]),
     ("A2g", &["B2g"]),
     ("Eg", &["A1g", "B2g"]),
-    ("T1g", &["A2g", "E1g"]),
-    ("T2g", &["B1g", "E1g"]),
+    ("T1g", &["A2g", "Eg"]),
+    ("T2g", &["B1g", "Eg"]),
     ("A1u", &["A1u"]),
     ("A2u", &["B2u"]),
     ("Eu", &["A1u", "B2u"]),
-    ("T1u", &["A2u", "E1u"]),
-    ("T2u", &["B1u", "E1u"]),
+    ("T1u", &["A2u", "Eu"]),
+    ("T2u", &["B1u", "Eu"]),
 ];
 
-// T 71.9 (p. 630): Oh → (D3d), C3 along a body diagonal. Cyclic Eg/Eu are
-// "E1g/E1u" in libmsym.
+// T 71.9 (p. 630): Oh → (D3d), C3 along a body diagonal.
 const OH_TO_D3D: AltmannColumn = &[
     ("A1g", &["A1g"]),
     ("A2g", &["A2g"]),
-    ("Eg", &["E1g"]),
-    ("T1g", &["A2g", "E1g"]),
-    ("T2g", &["A1g", "E1g"]),
+    ("Eg", &["Eg"]),
+    ("T1g", &["A2g", "Eg"]),
+    ("T2g", &["A1g", "Eg"]),
     ("A1u", &["A1u"]),
     ("A2u", &["A2u"]),
-    ("Eu", &["E1u"]),
-    ("T1u", &["A2u", "E1u"]),
-    ("T2u", &["A1u", "E1u"]),
+    ("Eu", &["Eu"]),
+    ("T1u", &["A2u", "Eu"]),
+    ("T2u", &["A1u", "Eu"]),
 ];
 
 // T 71.9 (p. 630): Oh → D2h, C2 orientation (three orthogonal Oh C2 axes).
-// libmsym names the totally-symmetric D2h irrep "A1g" rather than Altmann's "Ag".
 const OH_TO_D2H_C2: AltmannColumn = &[
-    ("A1g", &["A1g"]),
-    ("A2g", &["A1g"]),
-    ("Eg", &["A1g", "A1g"]),
+    ("A1g", &["Ag"]),
+    ("A2g", &["Ag"]),
+    ("Eg", &["Ag", "Ag"]),
     ("T1g", &["B1g", "B2g", "B3g"]),
     ("T2g", &["B1g", "B2g", "B3g"]),
-    ("A1u", &["A1u"]),
-    ("A2u", &["A1u"]),
-    ("Eu", &["A1u", "A1u"]),
+    ("A1u", &["Au"]),
+    ("A2u", &["Au"]),
+    ("Eu", &["Au", "Au"]),
     ("T1u", &["B1u", "B2u", "B3u"]),
     ("T2u", &["B1u", "B2u", "B3u"]),
 ];
@@ -304,48 +303,48 @@ const OH_TO_D2H_C2: AltmannColumn = &[
 // The S3 outer automorphism of D2h permutes {B1,B2,B3}, so libmsym may emit
 // any of three distinct orbit representatives: B1 fixed, B2 fixed, or B3 fixed.
 const OH_TO_D2H_C2_PRIME_B1: AltmannColumn = &[
-    ("A1g", &["A1g"]),
+    ("A1g", &["Ag"]),
     ("A2g", &["B1g"]),
-    ("Eg", &["A1g", "B1g"]),
+    ("Eg", &["Ag", "B1g"]),
     ("T1g", &["B1g", "B2g", "B3g"]),
-    ("T2g", &["A1g", "B2g", "B3g"]),
-    ("A1u", &["A1u"]),
+    ("T2g", &["Ag", "B2g", "B3g"]),
+    ("A1u", &["Au"]),
     ("A2u", &["B1u"]),
-    ("Eu", &["A1u", "B1u"]),
+    ("Eu", &["Au", "B1u"]),
     ("T1u", &["B1u", "B2u", "B3u"]),
-    ("T2u", &["A1u", "B2u", "B3u"]),
+    ("T2u", &["Au", "B2u", "B3u"]),
 ];
 
 const OH_TO_D2H_C2_PRIME_B2: AltmannColumn = &[
-    ("A1g", &["A1g"]),
+    ("A1g", &["Ag"]),
     ("A2g", &["B2g"]),
-    ("Eg", &["A1g", "B2g"]),
+    ("Eg", &["Ag", "B2g"]),
     ("T1g", &["B1g", "B2g", "B3g"]),
-    ("T2g", &["A1g", "B1g", "B3g"]),
-    ("A1u", &["A1u"]),
+    ("T2g", &["Ag", "B1g", "B3g"]),
+    ("A1u", &["Au"]),
     ("A2u", &["B2u"]),
-    ("Eu", &["A1u", "B2u"]),
+    ("Eu", &["Au", "B2u"]),
     ("T1u", &["B1u", "B2u", "B3u"]),
-    ("T2u", &["A1u", "B1u", "B3u"]),
+    ("T2u", &["Au", "B1u", "B3u"]),
 ];
 
 const OH_TO_D2H_C2_PRIME_B3: AltmannColumn = &[
-    ("A1g", &["A1g"]),
+    ("A1g", &["Ag"]),
     ("A2g", &["B3g"]),
-    ("Eg", &["A1g", "B3g"]),
+    ("Eg", &["Ag", "B3g"]),
     ("T1g", &["B1g", "B2g", "B3g"]),
-    ("T2g", &["A1g", "B1g", "B2g"]),
-    ("A1u", &["A1u"]),
+    ("T2g", &["Ag", "B1g", "B2g"]),
+    ("A1u", &["Au"]),
     ("A2u", &["B3u"]),
-    ("Eu", &["A1u", "B3u"]),
+    ("Eu", &["Au", "B3u"]),
     ("T1u", &["B1u", "B2u", "B3u"]),
-    ("T2u", &["A1u", "B1u", "B2u"]),
+    ("T2u", &["Au", "B1u", "B2u"]),
 ];
 
 fn decomp_multiset(row: &[(Irrep, u32)]) -> Vec<String> {
     let mut symbols: Vec<String> = row
         .iter()
-        .flat_map(|(ir, n)| std::iter::repeat(ir.symbol().to_string()).take(*n as usize))
+        .flat_map(|(ir, n)| repeat(ir.symbol().to_string()).take(*n as usize))
         .collect();
     symbols.sort();
     symbols
@@ -383,10 +382,7 @@ fn format_decomp(ms: &BTreeMap<String, Vec<String>>) -> String {
         .join("\n")
 }
 
-fn assert_descent_matches_altmann(
-    result: &SymmetryDescentResult,
-    acceptable: &[AltmannColumn],
-) {
+fn assert_descent_matches_altmann(result: &SymmetryDescentResult, acceptable: &[AltmannColumn]) {
     let actual = build_actual(result);
     for column in acceptable {
         if actual == build_expected(column) {
@@ -406,8 +402,8 @@ fn assert_descent_matches_altmann(
         .join("\n");
     panic!(
         "{} → {} subduction does not match Altmann.\n--- actual ---\n{}\n{}",
-        result.parent_group.label(),
-        result.child_group.label(),
+        result.parent_group.symbol(),
+        result.child_group.symbol(),
         format_decomp(&actual),
         expected_dump,
     );
@@ -424,41 +420,41 @@ fn assert_orthogonal_transform(t: [[f64; 3]; 3]) {
 }
 
 #[rstest]
-#[case::to_cs(SchoenfliesLabel::Cs, &[C2V_TO_CS_SIGMA_X, C2V_TO_CS_SIGMA_Y])]
-#[case::to_c2(SchoenfliesLabel::Cn(2), &[C2V_TO_C2])]
+#[case::to_cs(SchoenfliesSymbol::Cs, &[C2V_TO_CS_SIGMA_X, C2V_TO_CS_SIGMA_Y])]
+#[case::to_c2(SchoenfliesSymbol::Cn(2), &[C2V_TO_C2])]
 fn test_lower_symmetry_water(
-    #[case] target: SchoenfliesLabel,
+    #[case] target: SchoenfliesSymbol,
     #[case] acceptable: &[AltmannColumn],
 ) {
     let result = lower_symmetry(&water(), target, Thresholds::default()).unwrap();
-    assert_eq!(result.parent_group.label(), SchoenfliesLabel::Cnv(2));
-    assert_eq!(result.child_group.label(), target);
+    assert_eq!(result.parent_group.symbol(), SchoenfliesSymbol::Cnv(2));
+    assert_eq!(result.child_group.symbol(), target);
     assert_descent_matches_altmann(&result, acceptable);
     assert_orthogonal_transform(result.transform);
 }
 
 #[rstest]
-#[case::to_c3v(SchoenfliesLabel::Cnv(3), &[TD_TO_C3V])]
-#[case::to_c2v(SchoenfliesLabel::Cnv(2), &[TD_TO_C2V])]
-#[case::to_d2d(SchoenfliesLabel::Dnd(2), &[TD_TO_D2D])]
+#[case::to_c3v(SchoenfliesSymbol::Cnv(3), &[TD_TO_C3V])]
+#[case::to_c2v(SchoenfliesSymbol::Cnv(2), &[TD_TO_C2V])]
+#[case::to_d2d(SchoenfliesSymbol::Dnd(2), &[TD_TO_D2D])]
 fn test_lower_symmetry_methane(
-    #[case] target: SchoenfliesLabel,
+    #[case] target: SchoenfliesSymbol,
     #[case] acceptable: &[AltmannColumn],
 ) {
     let result = lower_symmetry(&methane(), target, Thresholds::default()).unwrap();
-    assert_eq!(result.parent_group.label(), SchoenfliesLabel::Td);
-    assert_eq!(result.child_group.label(), target);
+    assert_eq!(result.parent_group.symbol(), SchoenfliesSymbol::Td);
+    assert_eq!(result.child_group.symbol(), target);
     assert_descent_matches_altmann(&result, acceptable);
     assert_orthogonal_transform(result.transform);
 }
 
 #[rstest]
-#[case::to_td(SchoenfliesLabel::Td, &[OH_TO_TD])]
-#[case::to_o(SchoenfliesLabel::O, &[OH_TO_O])]
-#[case::to_d4h(SchoenfliesLabel::Dnh(4), &[OH_TO_D4H, OH_TO_D4H_SWAPPED])]
-#[case::to_d3d(SchoenfliesLabel::Dnd(3), &[OH_TO_D3D])]
+#[case::to_td(SchoenfliesSymbol::Td, &[OH_TO_TD])]
+#[case::to_o(SchoenfliesSymbol::O, &[OH_TO_O])]
+#[case::to_d4h(SchoenfliesSymbol::Dnh(4), &[OH_TO_D4H, OH_TO_D4H_SWAPPED])]
+#[case::to_d3d(SchoenfliesSymbol::Dnd(3), &[OH_TO_D3D])]
 #[case::to_d2h(
-    SchoenfliesLabel::Dnh(2),
+    SchoenfliesSymbol::Dnh(2),
     &[
         OH_TO_D2H_C2,
         OH_TO_D2H_C2_PRIME_B1,
@@ -467,37 +463,37 @@ fn test_lower_symmetry_methane(
     ],
 )]
 fn test_lower_symmetry_sf6(
-    #[case] target: SchoenfliesLabel,
+    #[case] target: SchoenfliesSymbol,
     #[case] acceptable: &[AltmannColumn],
 ) {
     let result = lower_symmetry(&sf6(), target, Thresholds::default()).unwrap();
-    assert_eq!(result.parent_group.label(), SchoenfliesLabel::Oh);
-    assert_eq!(result.child_group.label(), target);
+    assert_eq!(result.parent_group.symbol(), SchoenfliesSymbol::Oh);
+    assert_eq!(result.child_group.symbol(), target);
     assert_descent_matches_altmann(&result, acceptable);
     assert_orthogonal_transform(result.transform);
 }
 
 #[rstest]
-#[case(SchoenfliesLabel::Cnv(4))]
-#[case(SchoenfliesLabel::Cnv(2))]
-#[case(SchoenfliesLabel::Cn(1))]
-fn test_lower_symmetry_linear(#[case] target: SchoenfliesLabel) {
+#[case(SchoenfliesSymbol::Cnv(4))]
+#[case(SchoenfliesSymbol::Cnv(2))]
+#[case(SchoenfliesSymbol::Cn(1))]
+fn test_lower_symmetry_linear(#[case] target: SchoenfliesSymbol) {
     let result = lower_symmetry(&hcl(), target, Thresholds::default()).unwrap();
-    assert_eq!(result.parent_group.label(), SchoenfliesLabel::Coov);
-    assert_eq!(result.child_group.label(), target);
+    assert_eq!(result.parent_group.symbol(), SchoenfliesSymbol::Coov);
+    assert_eq!(result.child_group.symbol(), target);
     assert_eq!(result.centers.len(), 2);
     assert!(result.correlation.is_none());
     assert_orthogonal_transform(result.transform);
 }
 
 #[rstest]
-#[case(SchoenfliesLabel::Dnh(2))]
-#[case(SchoenfliesLabel::Cnv(2))]
-#[case(SchoenfliesLabel::Cn(1))]
-fn test_lower_symmetry_co2(#[case] target: SchoenfliesLabel) {
+#[case(SchoenfliesSymbol::Dnh(2))]
+#[case(SchoenfliesSymbol::Cnv(2))]
+#[case(SchoenfliesSymbol::Cn(1))]
+fn test_lower_symmetry_co2(#[case] target: SchoenfliesSymbol) {
     let result = lower_symmetry(&co2(), target, Thresholds::default()).unwrap();
-    assert_eq!(result.parent_group.label(), SchoenfliesLabel::Dooh);
-    assert_eq!(result.child_group.label(), target);
+    assert_eq!(result.parent_group.symbol(), SchoenfliesSymbol::Dooh);
+    assert_eq!(result.child_group.symbol(), target);
     assert_eq!(result.centers.len(), 3);
     assert!(result.correlation.is_none());
     assert_orthogonal_transform(result.transform);
@@ -505,6 +501,6 @@ fn test_lower_symmetry_co2(#[case] target: SchoenfliesLabel) {
 
 #[rstest]
 fn test_lower_symmetry_invalid_subgroup() {
-    let result = lower_symmetry(&water(), SchoenfliesLabel::Ci, Thresholds::default());
+    let result = lower_symmetry(&water(), SchoenfliesSymbol::Ci, Thresholds::default());
     assert!(result.is_err());
 }

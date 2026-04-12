@@ -6,10 +6,11 @@ use nalgebra::Vector3;
 use umol_msym_sys as ffi;
 
 use crate::basis::{BasisFunction, BasisKind};
-use crate::error::{self, Error};
+use crate::error::{self, MsymError};
 use crate::matrix_rep::MatrixRep;
 use crate::point_group::{compute_op_matrix, PointGroup};
-use crate::subgroup::SubgroupInfo;
+use crate::subgroup::SubgroupData;
+use crate::thresholds::Thresholds;
 use crate::types::*;
 
 pub struct Context {
@@ -27,10 +28,10 @@ impl Drop for Context {
 }
 
 impl Context {
-    pub fn new() -> Result<Self, Error> {
+    pub fn new() -> Result<Self, MsymError> {
         let ctx = unsafe { ffi::msymCreateContext() };
         if ctx.is_null() {
-            return Err(Error {
+            return Err(MsymError {
                 code: ffi::MSYM_MEMORY_ERROR,
                 message: "failed to create context".into(),
             });
@@ -38,25 +39,25 @@ impl Context {
         Ok(Self { ctx })
     }
 
-    pub fn set_thresholds(&mut self, t: &Thresholds) -> Result<(), Error> {
+    pub fn set_thresholds(&mut self, t: &Thresholds) -> Result<(), MsymError> {
         let ft = t.to_ffi();
         error::check(unsafe { ffi::msymSetThresholds(self.ctx, &ft) })
     }
 
-    pub fn thresholds(&self) -> Result<Thresholds, Error> {
+    pub fn thresholds(&self) -> Result<Thresholds, MsymError> {
         let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetThresholds(self.ctx, &mut ptr) })?;
         Ok(Thresholds::from_ffi(unsafe { &*ptr }))
     }
 
-    pub fn set_centers(&mut self, centers: &[SymmetryCenter]) -> Result<(), Error> {
+    pub fn set_centers(&mut self, centers: &[SymmetryCenter]) -> Result<(), MsymError> {
         let mut ffi_elems: Vec<ffi::msym_element_t> = centers.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
             ffi::msymSetElements(self.ctx, ffi_elems.len() as c_int, ffi_elems.as_mut_ptr())
         })
     }
 
-    pub fn centers(&self) -> Result<Vec<SymmetryCenter>, Error> {
+    pub fn centers(&self) -> Result<Vec<SymmetryCenter>, MsymError> {
         let mut len: c_int = 0;
         let mut ptr = ptr::null_mut();
         error::check(unsafe { ffi::msymGetElements(self.ctx, &mut len, &mut ptr) })?;
@@ -64,33 +65,33 @@ impl Context {
         Ok(slice.iter().map(SymmetryCenter::from_ffi).collect())
     }
 
-    pub fn find_symmetry(&mut self) -> Result<(), Error> {
+    pub fn find_symmetry(&mut self) -> Result<(), MsymError> {
         error::check(unsafe { ffi::msymFindSymmetry(self.ctx) })
     }
 
-    pub fn point_group(&self) -> Result<SchoenfliesLabel, Error> {
+    pub fn point_group(&self) -> Result<SchoenfliesSymbol, MsymError> {
         let mut pg_type: ffi::msym_point_group_type_t = 0;
         let mut n: c_int = 0;
         error::check(unsafe { ffi::msymGetPointGroupType(self.ctx, &mut pg_type, &mut n) })?;
-        Ok(SchoenfliesLabel::from_ffi(pg_type, n))
+        Ok(SchoenfliesSymbol::from_ffi(pg_type, n))
     }
 
-    pub fn point_group_name(&self) -> Result<String, Error> {
+    pub fn point_group_name(&self) -> Result<String, MsymError> {
         let mut buf = [0i8; 16];
         error::check(unsafe { ffi::msymGetPointGroupName(self.ctx, 16, buf.as_mut_ptr()) })?;
         let name = unsafe { CStr::from_ptr(buf.as_ptr()) };
         Ok(name.to_string_lossy().into_owned())
     }
 
-    pub fn set_point_group_by_name(&mut self, name: &str) -> Result<(), Error> {
-        let cname = CString::new(name).map_err(|_| Error {
+    pub fn set_point_group_by_name(&mut self, name: &str) -> Result<(), MsymError> {
+        let cname = CString::new(name).map_err(|_| MsymError {
             code: ffi::MSYM_INVALID_INPUT,
             message: "invalid group name".into(),
         })?;
         error::check(unsafe { ffi::msymSetPointGroupByName(self.ctx, cname.as_ptr()) })
     }
 
-    pub fn set_point_group(&mut self, label: SchoenfliesLabel) -> Result<(), Error> {
+    pub fn set_point_group(&mut self, label: SchoenfliesSymbol) -> Result<(), MsymError> {
         let (pg_type, n) = label.to_ffi();
         error::check(unsafe { ffi::msymSetPointGroupByType(self.ctx, pg_type, n) })
     }
@@ -103,7 +104,7 @@ impl Context {
     pub fn symmetry_representation(
         &self,
         group: &'static PointGroup,
-    ) -> Result<MatrixRep, Error> {
+    ) -> Result<MatrixRep, MsymError> {
         let mut len: c_int = 0;
         let mut p = ptr::null();
         error::check(unsafe { ffi::msymGetSymmetryOperations(self.ctx, &mut len, &mut p) })?;
@@ -113,42 +114,42 @@ impl Context {
         Ok(MatrixRep::new(group, matrices, axes))
     }
 
-    pub fn geometry(&self) -> Result<Geometry, Error> {
+    pub fn molecular_shape(&self) -> Result<MolecularShape, MsymError> {
         let mut g: ffi::msym_geometry_t = 0;
         error::check(unsafe { ffi::msymGetGeometry(self.ctx, &mut g) })?;
         Ok(g.into())
     }
 
-    pub fn center_of_mass(&self) -> Result<[f64; 3], Error> {
+    pub fn center_of_mass(&self) -> Result<[f64; 3], MsymError> {
         let mut v = [0.0f64; 3];
         error::check(unsafe { ffi::msymGetCenterOfMass(self.ctx, v.as_mut_ptr()) })?;
         Ok(v)
     }
 
-    pub fn set_center_of_mass(&mut self, v: [f64; 3]) -> Result<(), Error> {
+    pub fn set_center_of_mass(&mut self, v: [f64; 3]) -> Result<(), MsymError> {
         let mut v = v;
         error::check(unsafe { ffi::msymSetCenterOfMass(self.ctx, v.as_mut_ptr()) })
     }
 
-    pub fn radius(&self) -> Result<f64, Error> {
+    pub fn radius(&self) -> Result<f64, MsymError> {
         let mut r = 0.0f64;
         error::check(unsafe { ffi::msymGetRadius(self.ctx, &mut r) })?;
         Ok(r)
     }
 
-    pub fn principal_moments(&self) -> Result<[f64; 3], Error> {
+    pub fn principal_moments(&self) -> Result<[f64; 3], MsymError> {
         let mut eigval = [0.0f64; 3];
         error::check(unsafe { ffi::msymGetPrincipalMoments(self.ctx, eigval.as_mut_ptr()) })?;
         Ok(eigval)
     }
 
-    pub fn principal_axes(&self) -> Result<[[f64; 3]; 3], Error> {
+    pub fn principal_axes(&self) -> Result<[[f64; 3]; 3], MsymError> {
         let mut eigvec = [[0.0f64; 3]; 3];
         error::check(unsafe { ffi::msymGetPrincipalAxes(self.ctx, eigvec.as_mut_ptr()) })?;
         Ok(eigvec)
     }
 
-    pub fn equivalence_sets(&self) -> Result<Vec<EquivalenceSet>, Error> {
+    pub fn equivalence_sets(&self) -> Result<Vec<EquivalenceSet>, MsymError> {
         let mut len: c_int = 0;
         let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetEquivalenceSets(self.ctx, &mut len, &mut ptr) })?;
@@ -162,29 +163,28 @@ impl Context {
                         .iter()
                         .map(|e| SymmetryCenter::from_ffi(unsafe { &**e }))
                         .collect(),
-                    max_error: es.err,
                 }
             })
             .collect())
     }
 
-    pub fn symmetrize_centers(&mut self) -> Result<f64, Error> {
+    pub fn symmetrize_centers(&mut self) -> Result<f64, MsymError> {
         let mut err = 0.0f64;
         error::check(unsafe { ffi::msymSymmetrizeElements(self.ctx, &mut err) })?;
         Ok(err)
     }
 
-    pub fn align_axes(&mut self) -> Result<(), Error> {
+    pub fn align_axes(&mut self) -> Result<(), MsymError> {
         error::check(unsafe { ffi::msymAlignAxes(self.ctx) })
     }
 
-    pub fn alignment_transform(&self) -> Result<[[f64; 3]; 3], Error> {
+    pub fn alignment_transform(&self) -> Result<[[f64; 3]; 3], MsymError> {
         let mut transform = [[0.0f64; 3]; 3];
         error::check(unsafe { ffi::msymGetAlignmentTransform(self.ctx, transform.as_mut_ptr()) })?;
         Ok(transform)
     }
 
-    pub fn set_basis_functions(&mut self, basis: &[BasisFunction]) -> Result<(), Error> {
+    pub fn set_basis_functions(&mut self, basis: &[BasisFunction]) -> Result<(), MsymError> {
         let mut elem_len: c_int = 0;
         let mut elem_ptr = ptr::null_mut();
         error::check(unsafe { ffi::msymGetElements(self.ctx, &mut elem_len, &mut elem_ptr) })?;
@@ -224,14 +224,14 @@ impl Context {
         })
     }
 
-    pub fn generate_subrepresentation_spaces(&mut self) -> Result<(), Error> {
+    pub fn generate_subrepresentation_spaces(&mut self) -> Result<(), MsymError> {
         error::check(unsafe { ffi::msymGenerateSubrepresentationSpaces(self.ctx) })
     }
 
     /// Returns (coefficients, species_indices) where coefficients is an l×l row-major
     /// matrix and species_indices maps each SALC row to an irrep index in the
     /// character table.
-    pub fn salcs(&self, basis_count: usize) -> Result<(Vec<f64>, Vec<i32>), Error> {
+    pub fn salcs(&self, basis_count: usize) -> Result<(Vec<f64>, Vec<i32>), MsymError> {
         let l = basis_count as c_int;
         let mut coefficients = vec![0.0f64; (l * l) as usize];
         let mut species = vec![0i32; l as usize];
@@ -252,7 +252,7 @@ impl Context {
         Ok((coefficients, species))
     }
 
-    pub fn generate_centers(&mut self, asymmetric_unit: &[SymmetryCenter]) -> Result<(), Error> {
+    pub fn generate_centers(&mut self, asymmetric_unit: &[SymmetryCenter]) -> Result<(), MsymError> {
         let mut ffi_elems: Vec<ffi::msym_element_t> =
             asymmetric_unit.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
@@ -260,7 +260,7 @@ impl Context {
         })
     }
 
-    pub fn subgroups(&self) -> Result<Vec<SubgroupInfo>, Error> {
+    pub fn subgroups(&self) -> Result<Vec<SubgroupData>, MsymError> {
         let mut len: c_int = 0;
         let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetSubgroups(self.ctx, &mut len, &mut ptr) })?;
@@ -268,7 +268,7 @@ impl Context {
 
         let mut result = Vec::with_capacity(len as usize);
         for (i, sg) in slice.iter().enumerate() {
-            let label = SchoenfliesLabel::from_ffi(sg.type_, sg.n);
+            let symbol = SchoenfliesSymbol::from_ffi(sg.type_, sg.n);
             let name = unsafe { CStr::from_ptr(sg.name.as_ptr()) }
                 .to_string_lossy()
                 .into_owned();
@@ -283,8 +283,8 @@ impl Context {
                 })
                 .collect();
 
-            result.push(SubgroupInfo {
-                label,
+            result.push(SubgroupData {
+                symbol,
                 name,
                 order,
                 parent_ops,
@@ -294,7 +294,7 @@ impl Context {
         Ok(result)
     }
 
-    pub fn select_subgroup(&mut self, sg: &SubgroupInfo) -> Result<(), Error> {
+    pub fn select_subgroup(&mut self, sg: &SubgroupData) -> Result<(), MsymError> {
         let mut len: c_int = 0;
         let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetSubgroups(self.ctx, &mut len, &mut ptr) })?;
@@ -369,11 +369,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(water(), SchoenfliesLabel::Cnv(2), "C2v")]
-    #[case(methane(), SchoenfliesLabel::Td, "Td")]
+    #[case(water(), SchoenfliesSymbol::Cnv(2), "C2v")]
+    #[case(methane(), SchoenfliesSymbol::Td, "Td")]
     fn test_context_find_symmetry(
         #[case] elements: Vec<SymmetryCenter>,
-        #[case] expected_label: SchoenfliesLabel,
+        #[case] expected_label: SchoenfliesSymbol,
         #[case] expected_name: &str,
     ) {
         let mut ctx = Context::new().unwrap();
@@ -385,17 +385,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case(water(), SchoenfliesLabel::Cnv(2), 4)]
-    #[case(methane(), SchoenfliesLabel::Td, 24)]
+    #[case(water(), SchoenfliesSymbol::Cnv(2), 4)]
+    #[case(methane(), SchoenfliesSymbol::Td, 24)]
     fn test_context_symmetry_representation(
         #[case] elements: Vec<SymmetryCenter>,
-        #[case] label: SchoenfliesLabel,
+        #[case] label: SchoenfliesSymbol,
         #[case] expected_count: usize,
     ) {
         let mut ctx = Context::new().unwrap();
         ctx.set_centers(&elements).unwrap();
         ctx.find_symmetry().unwrap();
-        let group = PointGroup::from_label(label).unwrap();
+        let group = PointGroup::from_symbol(label).unwrap();
         let rep = ctx.symmetry_representation(group).unwrap();
         assert_eq!(rep.order(), expected_count);
     }

@@ -11,8 +11,8 @@ use umol_msym::{
     compute_salcs as compute_salcs_raw, detect_symmetry,
     generate_symmetry_images as generate_image_centers,
     lower_symmetry as lower_symmetry_centers, symmetrize as symmetrize_centers, BasisFunction,
-    BasisKind, CartesianAxis, CorrelationTable, EquivalenceSet, Error as SymmetryError, Irrep,
-    MatrixRep, PointGroup, SalcBasis, SchoenfliesLabel, SymmetryCenter, Thresholds,
+    BasisKind, CartesianAxis, CorrelationTable, EquivalenceSet, Irrep, MsymError,
+    MatrixRep, PointGroup, SalcBasis, SchoenfliesSymbol, SymmetryCenter, Thresholds,
 };
 
 use crate::coordinates::Coordinates;
@@ -201,7 +201,7 @@ impl Molecule {
 
     /// Detect point group symmetry. Returns a new molecule with the discovered
     /// group, equivalence sets, and atom permutations.
-    pub fn perceive_symmetry(&self, thresholds: Thresholds) -> Result<Molecule, SymmetryError> {
+    pub fn perceive_symmetry(&self, thresholds: Thresholds) -> Result<Molecule, MsymError> {
         let result = detect_symmetry(&self.to_symmetry_centers(), thresholds)?;
         let coords = self.cartesian_coordinates();
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
@@ -222,7 +222,7 @@ impl Molecule {
 
     /// Symmetrize: perceive symmetry and snap coordinates to exact symmetry.
     /// Returns a new molecule with exact symmetry.
-    pub fn symmetrize(&self, thresholds: Thresholds) -> Result<Molecule, SymmetryError> {
+    pub fn symmetrize(&self, thresholds: Thresholds) -> Result<Molecule, MsymError> {
         let result = symmetrize_centers(&self.to_symmetry_centers(), thresholds)?;
 
         let n = result.centers.len();
@@ -251,9 +251,9 @@ impl Molecule {
     /// parent-to-child orientation transform and correlation table.
     pub fn lower_symmetry(
         &self,
-        target: SchoenfliesLabel,
+        target: SchoenfliesSymbol,
         thresholds: Thresholds,
-    ) -> Result<SymmetryDescentResult, SymmetryError> {
+    ) -> Result<SymmetryDescentResult, MsymError> {
         let result = lower_symmetry_centers(&self.to_symmetry_centers(), target, thresholds)?;
         let coords = self.cartesian_coordinates();
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
@@ -281,11 +281,11 @@ impl Molecule {
     ///
     /// Positions are in Angstroms, relative to the molecular center (origin).
     pub fn generate_symmetry_images(
-        label: SchoenfliesLabel,
+        label: SchoenfliesSymbol,
         elements: &[Element],
         positions_angstrom: &[[f64; 3]],
         thresholds: Thresholds,
-    ) -> Result<Molecule, SymmetryError> {
+    ) -> Result<Molecule, MsymError> {
         let centers: Vec<SymmetryCenter> = elements
             .iter()
             .zip(positions_angstrom)
@@ -397,13 +397,12 @@ impl Molecule {
         let mut coordinates = Vec::new();
 
         for irrep in &irreps {
-            let chars = irrep.characters();
             let dim = irrep.dimension() as f64;
 
             // P_μ = (l_μ / h) Σ_R χ_μ(R) · D_3N(R)
             let mut proj = DMatrix::zeros(dim3n, dim3n);
             for (k, op) in group.ops().into_iter().enumerate() {
-                let chi = chars[op.class()];
+                let chi = op.character(*irrep);
                 proj += &d3n_mats[k] * (dim * chi / h as f64);
             }
 
@@ -567,7 +566,7 @@ impl Molecule {
         &self,
         basis: &[BasisFunction],
         thresholds: Thresholds,
-    ) -> Result<SalcBasis, SymmetryError> {
+    ) -> Result<SalcBasis, MsymError> {
         compute_salcs_raw(&self.to_symmetry_centers(), basis, thresholds)
     }
 
@@ -1283,12 +1282,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case(SchoenfliesLabel::Cs, "Cs", true)]
-    #[case(SchoenfliesLabel::Cn(2), "C2", true)]
-    #[case(SchoenfliesLabel::Cnv(2), "C2v", true)]
-    #[case(SchoenfliesLabel::Cn(1), "C1", true)]
+    #[case(SchoenfliesSymbol::Cs, "Cs", true)]
+    #[case(SchoenfliesSymbol::Cn(2), "C2", true)]
+    #[case(SchoenfliesSymbol::Cnv(2), "C2v", true)]
+    #[case(SchoenfliesSymbol::Cn(1), "C1", true)]
     fn test_molecule_lower_symmetry_water(
-        #[case] target: SchoenfliesLabel,
+        #[case] target: SchoenfliesSymbol,
         #[case] expected_name: &str,
         #[case] has_correlation: bool,
     ) {
@@ -1307,11 +1306,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(SchoenfliesLabel::Cnv(3), "C3v")]
-    #[case(SchoenfliesLabel::Cnv(2), "C2v")]
-    #[case(SchoenfliesLabel::Dnd(2), "D2d")]
+    #[case(SchoenfliesSymbol::Cnv(3), "C3v")]
+    #[case(SchoenfliesSymbol::Cnv(2), "C2v")]
+    #[case(SchoenfliesSymbol::Dnd(2), "D2d")]
     fn test_molecule_lower_symmetry_methane(
-        #[case] target: SchoenfliesLabel,
+        #[case] target: SchoenfliesSymbol,
         #[case] expected_name: &str,
     ) {
         let m = symmetric_methane().perceive_symmetry(Thresholds::default()).unwrap();

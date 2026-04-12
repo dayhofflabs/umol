@@ -1,6 +1,6 @@
 //! Symmetry-adapted basis definition and reduction.
 
-use crate::point_group::Irrep;
+use crate::irrep::Irrep;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CartesianAxis {

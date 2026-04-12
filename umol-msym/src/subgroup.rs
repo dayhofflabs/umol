@@ -2,15 +2,17 @@ use std::fmt;
 
 use nalgebra::Matrix3;
 
-use crate::point_group::{Irrep, PointGroup, ReductionError};
-use crate::types::SchoenfliesLabel;
+use crate::error::ReductionError;
+use crate::irrep::Irrep;
+use crate::point_group::PointGroup;
+use crate::types::SchoenfliesSymbol;
 
 /// Subgroup descent transport: parent-group ops that survive into a target
 /// subgroup, together with the libmsym subgroup-table index used to drive
 /// `msymSelectSubgroup`.
 #[derive(Debug, Clone)]
-pub struct SubgroupInfo {
-    pub label: SchoenfliesLabel,
+pub struct SubgroupData {
+    pub symbol: SchoenfliesSymbol,
     pub name: String,
     pub order: usize,
     /// For each subgroup op, the 3×3 matrix in the parent coordinate frame
@@ -58,7 +60,7 @@ impl fmt::Display for CorrelationTable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let parent_irreps = self.parent.irreps();
 
-        writeln!(f, "{} → {}", self.parent.label(), self.child.label())?;
+        writeln!(f, "{} → {}", self.parent.symbol(), self.child.symbol())?;
 
         let label_width = parent_irreps
             .iter()

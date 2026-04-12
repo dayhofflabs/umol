@@ -104,7 +104,7 @@ impl fmt::Display for MatrixRep {
         write!(
             f,
             "MatrixRep({}, order={})",
-            self.group.label(),
+            self.group.symbol(),
             self.order()
         )
     }

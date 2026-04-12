@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::error::Error as StdError;
 use std::f64::consts::PI;
 use std::ffi::{CStr, CString};
 use std::hash::{Hash, Hasher};
@@ -12,42 +11,66 @@ use umol_msym_sys::{
     self as ffi, MSYM_INVALID_CHARACTER_TABLE, MSYM_INVALID_INPUT, MSYM_MEMORY_ERROR,
 };
 
-use crate::error::{self, Error};
+use crate::error::{self, MsymError, ReductionError};
+use crate::irrep::{Irrep, IrrepData, ReductionData};
 use crate::linear;
-use crate::types::{
-    IrrepData, OpData, SchoenfliesLabel, SymmetryOpKind, SymmetryOpOrientation,
-};
+use crate::thresholds::{CHARACTER_DISPLAY_ROUNDING, COMPLEX_IRREP_NORM, REDUCTION_INTEGRALITY};
+use crate::types::SchoenfliesSymbol;
 
-#[derive(Debug, Clone)]
-pub enum ReductionError {
-    InfiniteGroup,
-    DimensionMismatch { expected: usize, got: usize },
-    NonIntegralMultiplicity { irrep: String, value: f64 },
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SymmetryOpKind {
+    Identity,
+    ProperRotation,
+    ImproperRotation,
+    Reflection,
+    Inversion,
 }
 
-impl fmt::Display for ReductionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InfiniteGroup => {
-                write!(f, "character-based reduction undefined for infinite groups")
-            }
-            Self::DimensionMismatch { expected, got } => {
-                write!(f, "expected {expected} class characters, got {got}")
-            }
-            Self::NonIntegralMultiplicity { irrep, value } => {
-                write!(f, "non-integral multiplicity {value:.4} for irrep {irrep}")
-            }
+impl From<ffi::msym_symmetry_operation_type_t> for SymmetryOpKind {
+    fn from(t: ffi::msym_symmetry_operation_type_t) -> Self {
+        match t {
+            ffi::MSYM_SYMMETRY_OPERATION_TYPE_PROPER_ROTATION => Self::ProperRotation,
+            ffi::MSYM_SYMMETRY_OPERATION_TYPE_IMPROPER_ROTATION => Self::ImproperRotation,
+            ffi::MSYM_SYMMETRY_OPERATION_TYPE_REFLECTION => Self::Reflection,
+            ffi::MSYM_SYMMETRY_OPERATION_TYPE_INVERSION => Self::Inversion,
+            _ => Self::Identity,
         }
     }
 }
 
-impl StdError for ReductionError {}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SymmetryOpOrientation {
+    None,
+    Horizontal,
+    Vertical,
+    Dihedral,
+}
 
-static REGISTRY: LazyLock<Mutex<HashMap<SchoenfliesLabel, &'static PointGroup>>> =
+impl From<ffi::msym_symmetry_operation_orientation_t> for SymmetryOpOrientation {
+    fn from(o: ffi::msym_symmetry_operation_orientation_t) -> Self {
+        match o {
+            ffi::MSYM_SYMMETRY_OPERATION_ORIENTATION_HORIZONTAL => Self::Horizontal,
+            ffi::MSYM_SYMMETRY_OPERATION_ORIENTATION_VERTICAL => Self::Vertical,
+            ffi::MSYM_SYMMETRY_OPERATION_ORIENTATION_DIHEDRAL => Self::Dihedral,
+            _ => Self::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SymmetryOpData {
+    pub kind: SymmetryOpKind,
+    pub order: i32,
+    pub power: i32,
+    pub orientation: SymmetryOpOrientation,
+    pub class: usize,
+}
+
+static REGISTRY: LazyLock<Mutex<HashMap<SchoenfliesSymbol, &'static PointGroup>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn register(pg: PointGroup) -> &'static PointGroup {
-    let label = pg.label;
+    let label = pg.symbol;
     let mut map = REGISTRY.lock().unwrap();
     if let Some(&existing) = map.get(&label) {
         return existing;
@@ -55,87 +78,6 @@ fn register(pg: PointGroup) -> &'static PointGroup {
     let leaked: &'static PointGroup = Box::leak(Box::new(pg));
     map.insert(label, leaked);
     leaked
-}
-
-/// An irreducible representation, bound to its parent point group.
-#[derive(Copy, Clone)]
-pub struct Irrep {
-    pub(crate) data: &'static IrrepData,
-    pub(crate) group: &'static PointGroup,
-}
-
-impl Irrep {
-    pub fn symbol(&self) -> &str {
-        &self.data.symbol
-    }
-
-    pub fn index(&self) -> usize {
-        self.data.index
-    }
-
-    pub fn dimension(&self) -> i32 {
-        self.data.dimension
-    }
-
-    pub fn characters(&self) -> &[f64] {
-        &self.data.characters
-    }
-
-    pub fn lambda(&self) -> Option<u32> {
-        self.data.lambda
-    }
-
-    pub fn is_gerade(&self) -> Option<bool> {
-        if let Some(g) = self.data.gerade {
-            return Some(g);
-        }
-        let finite = self.group.finite.as_ref()?;
-        let inv_index = finite
-            .op_data
-            .iter()
-            .position(|d| d.kind == SymmetryOpKind::Inversion)?;
-        let inv_class = finite.op_data[inv_index].class;
-        let chi = self.data.characters.get(inv_class)?;
-        Some(*chi > 0.0)
-    }
-
-    pub fn is_sigma_plus(&self) -> Option<bool> {
-        if self.data.lambda == Some(0) {
-            self.data.sigma_v
-        } else {
-            None
-        }
-    }
-
-    pub fn group(&self) -> &'static PointGroup {
-        self.group
-    }
-}
-
-impl PartialEq for Irrep {
-    fn eq(&self, other: &Self) -> bool {
-        ptr::eq(self.data, other.data)
-    }
-}
-
-impl Eq for Irrep {}
-
-impl Hash for Irrep {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.data as *const IrrepData).hash(state);
-    }
-}
-
-impl fmt::Debug for Irrep {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Irrep({}:{})", self.group.label, self.data.symbol)
-    }
-}
-
-impl fmt::Display for Irrep {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.data.symbol)
-    }
 }
 
 /// A symmetry operation handle: parent point group plus opaque positional index.
@@ -157,7 +99,7 @@ impl SymmetryOp {
         self.index
     }
 
-    fn data(&self) -> &OpData {
+    fn data(&self) -> &SymmetryOpData {
         &self
             .group
             .finite
@@ -196,7 +138,7 @@ impl SymmetryOp {
     /// Character of this operation under the given irrep.
     pub fn character(&self, irrep: Irrep) -> f64 {
         debug_assert!(ptr::eq(irrep.group, self.group));
-        irrep.data.characters[self.class()]
+        irrep.data.characters()[self.class()]
     }
 }
 
@@ -217,7 +159,7 @@ impl Hash for SymmetryOp {
 
 impl fmt::Debug for SymmetryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SymmetryOp({}:{})", self.group.label, self.index)
+        write!(f, "SymmetryOp({}:{})", self.group.symbol, self.index)
     }
 }
 
@@ -227,7 +169,7 @@ impl fmt::Display for SymmetryOp {
     }
 }
 
-impl fmt::Display for OpData {
+impl fmt::Display for SymmetryOpData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             SymmetryOpKind::Identity => return write!(f, "E"),
@@ -283,56 +225,301 @@ fn superscript(n: i32) -> String {
 }
 
 #[derive(Debug)]
-pub(crate) struct FiniteData {
-    pub order: usize,
-    pub op_data: Vec<OpData>,
-    pub classes: Vec<Vec<usize>>,
-    pub class_rep_indices: Vec<usize>,
-    pub class_sizes: Vec<i32>,
-    pub mul_table: Vec<Vec<usize>>,
+pub(crate) struct FiniteGroupData {
+    pub(crate) order: usize,
+    pub(crate) op_data: Vec<SymmetryOpData>,
+    pub(crate) classes: Vec<Vec<usize>>,
+    pub(crate) class_rep_indices: Vec<usize>,
+    pub(crate) class_sizes: Vec<i32>,
+    pub(crate) mul_table: Vec<Vec<usize>>,
     /// For each class `c`, the class containing the square of its representative.
-    pub r_squared_class: Vec<usize>,
+    pub(crate) r_squared_class: Vec<usize>,
     /// Trace of ρ(R) per class, for the R³ representation.
-    pub translation_chars: Vec<f64>,
+    pub(crate) translation_chars: Vec<f64>,
     /// det·trace of ρ(R) per class, for the axial vector representation.
-    pub rotation_chars: Vec<f64>,
+    pub(crate) rotation_chars: Vec<f64>,
     /// Sym² of the R³ representation, per class.
-    pub quadratic_chars: Vec<f64>,
+    pub(crate) quadratic_chars: Vec<f64>,
 }
 
 /// A molecular point group: orientation-independent algebraic data.
 ///
 /// Point groups are `&'static` singletons cached in a process-global registry.
 /// There is exactly one C₂ᵥ, one Td, etc. Access via named constructors
-/// (`PointGroup::c2v()`) or `PointGroup::from_schoenflies("C2v")`.
+/// (`PointGroup::c2v()`) or `PointGroup::parse("C2v")`.
 #[derive(Debug)]
 pub struct PointGroup {
-    pub(crate) label: SchoenfliesLabel,
-    pub(crate) irrep_data: Vec<IrrepData>,
-    pub(crate) finite: Option<FiniteData>,
+    pub(crate) symbol: SchoenfliesSymbol,
+    pub(crate) irreps: Vec<IrrepData>,
+    pub(crate) finite: Option<FiniteGroupData>,
 }
 
 impl PointGroup {
-    pub fn label(&self) -> SchoenfliesLabel {
-        self.label
+    /// Construct point group from Schoenflies symbol
+    pub fn parse(name: &str) -> Result<&'static PointGroup, MsymError> {
+        let label: SchoenfliesSymbol = name.parse().map_err(|_| MsymError {
+            code: MSYM_INVALID_INPUT,
+            message: format!("cannot parse Schoenflies symbol '{name}'"),
+        })?;
+        Self::get_or_build(label)
+    }
+
+    /// Construct point group by parsed Schoenflies symbol
+    pub fn from_symbol(label: SchoenfliesSymbol) -> Result<&'static PointGroup, MsymError> {
+        Self::get_or_build(label)
+    }
+
+    fn get_or_build(label: SchoenfliesSymbol) -> Result<&'static PointGroup, MsymError> {
+        {
+            let map = REGISTRY.lock().unwrap();
+            if let Some(&pg) = map.get(&label) {
+                return Ok(pg);
+            }
+        }
+
+        let pg = if matches!(label, SchoenfliesSymbol::Coov | SchoenfliesSymbol::Dooh) {
+            Self::build_linear(label)
+        } else if label == SchoenfliesSymbol::Cn(1) {
+            Self::build_c1()
+        } else if matches!(label, SchoenfliesSymbol::K | SchoenfliesSymbol::Kh) {
+            return Err(MsymError {
+                code: MSYM_INVALID_INPUT,
+                message: format!("{label} is a continuous group and cannot be instantiated"),
+            });
+        } else {
+            Self::build_finite(label)?
+        };
+        Ok(register(pg))
+    }
+
+    fn build_finite(label: SchoenfliesSymbol) -> Result<PointGroup, MsymError> {
+        let name = label.to_string();
+        let c_name = CString::new(name.as_str()).expect("no NUL in label");
+
+        let ctx = unsafe { ffi::msymCreateContext() };
+        if ctx.is_null() {
+            return Err(MsymError {
+                code: MSYM_MEMORY_ERROR,
+                message: "failed to create msym context".into(),
+            });
+        }
+
+        let result = build_finite_inner(ctx, label, &c_name);
+        unsafe {
+            ffi::msymReleaseContext(ctx);
+        }
+        result
+    }
+
+    fn build_c1() -> PointGroup {
+        let op_data = vec![SymmetryOpData {
+            kind: SymmetryOpKind::Identity,
+            order: 1,
+            power: 0,
+            orientation: SymmetryOpOrientation::None,
+            class: 0,
+        }];
+        PointGroup {
+            symbol: SchoenfliesSymbol::Cn(1),
+            irreps: vec![IrrepData {
+                symbol: "A".into(),
+                dimension: 1,
+                reduction: ReductionData::Finite {
+                    characters: vec![1.0],
+                },
+            }],
+            finite: Some(FiniteGroupData {
+                order: 1,
+                op_data,
+                classes: vec![vec![0]],
+                class_rep_indices: vec![0],
+                class_sizes: vec![1],
+                mul_table: vec![vec![0]],
+                r_squared_class: vec![0],
+                translation_chars: vec![3.0],
+                rotation_chars: vec![3.0],
+                quadratic_chars: vec![6.0],
+            }),
+        }
+    }
+
+    fn build_linear(label: SchoenfliesSymbol) -> PointGroup {
+        let is_dooh = label == SchoenfliesSymbol::Dooh;
+        let lambda_symbols = ["Σ", "Π", "Δ", "Φ", "Γ", "H", "I"];
+        let mut irrep_data = Vec::new();
+
+        let gu_list: &[Option<bool>] = if is_dooh {
+            &[Some(true), Some(false)]
+        } else {
+            &[None]
+        };
+
+        for &gerade in gu_list {
+            let gu_suffix = match gerade {
+                Some(true) => "g",
+                Some(false) => "u",
+                None => "",
+            };
+
+            for (lambda, &base) in lambda_symbols.iter().enumerate() {
+                let lambda = lambda as u32;
+                let dim = if lambda == 0 { 1 } else { 2 };
+
+                if lambda == 0 {
+                    for &sv in &[true, false] {
+                        let sign = if sv { "+" } else { "-" };
+                        irrep_data.push(IrrepData {
+                            symbol: format!("{base}{sign}{gu_suffix}"),
+                            dimension: dim,
+                            reduction: ReductionData::Linear {
+                                lambda,
+                                sigma_v: Some(sv),
+                                gerade,
+                            },
+                        });
+                    }
+                } else {
+                    irrep_data.push(IrrepData {
+                        symbol: format!("{base}{gu_suffix}"),
+                        dimension: dim,
+                        reduction: ReductionData::Linear {
+                            lambda,
+                            sigma_v: None,
+                            gerade,
+                        },
+                    });
+                }
+            }
+        }
+
+        PointGroup {
+            symbol: label,
+            irreps: irrep_data,
+            finite: None,
+        }
+    }
+    pub fn symbol(&self) -> SchoenfliesSymbol {
+        self.symbol
+    }
+
+    pub fn is_finite(&self) -> bool {
+        self.finite.is_some()
+    }
+
+    pub fn is_abelian(&self) -> bool {
+        matches!(
+            self.symbol,
+            SchoenfliesSymbol::Ci
+                | SchoenfliesSymbol::Cs
+                | SchoenfliesSymbol::Cn(_)
+                | SchoenfliesSymbol::Cnh(_)
+                | SchoenfliesSymbol::Sn(_)
+                | SchoenfliesSymbol::Cnv(2)
+                | SchoenfliesSymbol::Dn(2)
+                | SchoenfliesSymbol::Dnh(2)
+        )
+    }
+
+    pub fn is_cyclic(&self) -> bool {
+        matches!(
+            self.symbol,
+            SchoenfliesSymbol::Ci
+                | SchoenfliesSymbol::Cs
+                | SchoenfliesSymbol::Cn(_)
+                | SchoenfliesSymbol::Cnh(_)
+                | SchoenfliesSymbol::Sn(_)
+        )
+    }
+
+    pub fn is_dihedral(&self) -> bool {
+        matches!(
+            self.symbol,
+            SchoenfliesSymbol::Dn(_)
+                | SchoenfliesSymbol::Dnh(_)
+                | SchoenfliesSymbol::Dnd(_)
+                | SchoenfliesSymbol::Dooh
+        )
+    }
+
+    pub fn is_cubic(&self) -> bool {
+        matches!(
+            self.symbol,
+            SchoenfliesSymbol::T
+                | SchoenfliesSymbol::Td
+                | SchoenfliesSymbol::Th
+                | SchoenfliesSymbol::O
+                | SchoenfliesSymbol::Oh
+        )
+    }
+
+    pub fn is_icosahedral(&self) -> bool {
+        matches!(self.symbol, SchoenfliesSymbol::I | SchoenfliesSymbol::Ih)
+    }
+
+    pub fn is_linear(&self) -> bool {
+        matches!(
+            self.symbol,
+            SchoenfliesSymbol::Coov | SchoenfliesSymbol::Dooh
+        )
+    }
+
+    pub fn is_spherical(&self) -> bool {
+        matches!(self.symbol, SchoenfliesSymbol::K | SchoenfliesSymbol::Kh)
+    }
+
+    /// True if some irreps are complex conjugate pairs fused into real 2D representations.
+    pub fn has_complex_irreps(&self) -> bool {
+        let Some(f) = &self.finite else {
+            return false;
+        };
+        let h = f.order as f64;
+        self.irreps.iter().any(|ir| {
+            if ir.dimension != 2 {
+                return false;
+            }
+            let norm_sq: f64 = ir
+                .characters()
+                .iter()
+                .zip(&f.class_sizes)
+                .map(|(chi, &size)| size as f64 * chi * chi)
+                .sum();
+            (norm_sq - 2.0 * h).abs() < COMPLEX_IRREP_NORM
+        })
+    }
+
+    /// True iff the group contains only proper operations (no reflections, inversions,
+    /// or improper rotations). Chiral groups: Cn, Dn, T, O, I.
+    pub fn is_chiral(&'static self) -> bool {
+        self.ops().iter().all(|op| op.is_proper())
+    }
+
+    pub fn has_inversion(&self) -> bool {
+        self.finite
+            .as_ref()
+            .map(|f| {
+                f.op_data
+                    .iter()
+                    .any(|d| d.kind == SymmetryOpKind::Inversion)
+            })
+            .unwrap_or(false)
     }
 
     /// Order of the principal rotation axis. Returns 0 for linear groups.
     pub fn principal_axis_order(&self) -> u32 {
-        match self.label {
-            SchoenfliesLabel::Cn(n)
-            | SchoenfliesLabel::Cnh(n)
-            | SchoenfliesLabel::Cnv(n)
-            | SchoenfliesLabel::Sn(n)
-            | SchoenfliesLabel::Dn(n)
-            | SchoenfliesLabel::Dnh(n)
-            | SchoenfliesLabel::Dnd(n) => n,
-            SchoenfliesLabel::Ci | SchoenfliesLabel::Cs => 1,
-            SchoenfliesLabel::T | SchoenfliesLabel::Td | SchoenfliesLabel::Th => 3,
-            SchoenfliesLabel::O | SchoenfliesLabel::Oh => 4,
-            SchoenfliesLabel::I | SchoenfliesLabel::Ih => 5,
-            SchoenfliesLabel::K | SchoenfliesLabel::Kh => 0,
-            SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh => 0,
+        match self.symbol {
+            SchoenfliesSymbol::Cn(n)
+            | SchoenfliesSymbol::Cnh(n)
+            | SchoenfliesSymbol::Cnv(n)
+            | SchoenfliesSymbol::Sn(n)
+            | SchoenfliesSymbol::Dn(n)
+            | SchoenfliesSymbol::Dnh(n)
+            | SchoenfliesSymbol::Dnd(n) => n,
+            SchoenfliesSymbol::Ci | SchoenfliesSymbol::Cs => 1,
+            SchoenfliesSymbol::T | SchoenfliesSymbol::Td | SchoenfliesSymbol::Th => 3,
+            SchoenfliesSymbol::O | SchoenfliesSymbol::Oh => 4,
+            SchoenfliesSymbol::I | SchoenfliesSymbol::Ih => 5,
+            SchoenfliesSymbol::K | SchoenfliesSymbol::Kh => 0,
+            SchoenfliesSymbol::Coov | SchoenfliesSymbol::Dooh => 0,
         }
     }
 
@@ -341,11 +528,10 @@ impl PointGroup {
     }
 
     pub fn class_sizes(&self) -> &[i32] {
-        self.finite.as_ref().map(|f| f.class_sizes.as_slice()).unwrap_or(&[])
-    }
-
-    pub fn is_linear(&self) -> bool {
-        self.finite.is_none()
+        self.finite
+            .as_ref()
+            .map(|f| f.class_sizes.as_slice())
+            .unwrap_or(&[])
     }
 
     /// All symmetry operations in positional order (one handle per group element).
@@ -388,89 +574,8 @@ impl PointGroup {
         }
     }
 
-    pub fn is_abelian(&self) -> bool {
-        matches!(
-            self.label,
-            SchoenfliesLabel::Ci
-                | SchoenfliesLabel::Cs
-                | SchoenfliesLabel::Cn(_)
-                | SchoenfliesLabel::Cnh(_)
-                | SchoenfliesLabel::Sn(_)
-                | SchoenfliesLabel::Cnv(2)
-                | SchoenfliesLabel::Dn(2)
-                | SchoenfliesLabel::Dnh(2)
-        )
-    }
-
-    pub fn is_cyclic(&self) -> bool {
-        matches!(
-            self.label,
-            SchoenfliesLabel::Ci
-                | SchoenfliesLabel::Cs
-                | SchoenfliesLabel::Cn(_)
-                | SchoenfliesLabel::Cnh(_)
-                | SchoenfliesLabel::Sn(_)
-        )
-    }
-
-    pub fn is_cubic(&self) -> bool {
-        matches!(
-            self.label,
-            SchoenfliesLabel::T
-                | SchoenfliesLabel::Td
-                | SchoenfliesLabel::Th
-                | SchoenfliesLabel::O
-                | SchoenfliesLabel::Oh
-                | SchoenfliesLabel::I
-                | SchoenfliesLabel::Ih
-                | SchoenfliesLabel::K
-                | SchoenfliesLabel::Kh
-        )
-    }
-
-    /// True if some irreps are complex conjugate pairs fused into real 2D representations.
-    pub fn has_complex_irreps(&self) -> bool {
-        let Some(f) = &self.finite else {
-            return false;
-        };
-        let h = f.order as f64;
-        self.irrep_data.iter().any(|ir| {
-            if ir.dimension != 2 {
-                return false;
-            }
-            let norm_sq: f64 = ir
-                .characters
-                .iter()
-                .zip(&f.class_sizes)
-                .map(|(chi, &size)| size as f64 * chi * chi)
-                .sum();
-            (norm_sq - 2.0 * h).abs() < 0.5
-        })
-    }
-
-    /// True iff the group contains only proper operations (no reflections, inversions,
-    /// or improper rotations). Chiral groups: Cn, Dn, T, O, I.
-    pub fn is_chiral(&'static self) -> bool {
-        self.ops().iter().all(|op| op.is_proper())
-    }
-
-    pub fn has_inversion(&self) -> bool {
-        self.finite
-            .as_ref()
-            .map(|f| f.op_data.iter().any(|d| d.kind == SymmetryOpKind::Inversion))
-            .unwrap_or(false)
-    }
-
-    /// The totally symmetric irrep (A1, Ag, Σ+, etc.).
-    pub fn totally_symmetric_irrep(&'static self) -> Irrep {
-        Irrep {
-            data: &self.irrep_data[0],
-            group: self,
-        }
-    }
-
     pub fn irreps(&'static self) -> Vec<Irrep> {
-        self.irrep_data
+        self.irreps
             .iter()
             .map(|d| Irrep {
                 data: d,
@@ -479,10 +584,32 @@ impl PointGroup {
             .collect()
     }
 
+    /// The totally symmetric irrep (A1, Ag, Σ+, etc.).
+    pub fn totally_symmetric_irrep(&'static self) -> Irrep {
+        Irrep {
+            data: &self.irreps[0],
+            group: self,
+        }
+    }
+
     pub fn irrep(&'static self, symbol: &str) -> Option<Irrep> {
-        self.irrep_data
+        self.irreps
             .iter()
             .find(|d| d.symbol == symbol)
+            .or_else(|| {
+                // Use standard Mulliken notation (E in C3v) instead of libmsym (E1)
+                let b = symbol.as_bytes();
+                if b.len() >= 2
+                    && b[0].is_ascii_uppercase()
+                    && b[1] == b'1'
+                    && (b.len() == 2 || !b[2].is_ascii_digit())
+                {
+                    let stripped = format!("{}{}", b[0] as char, &symbol[2..]);
+                    self.irreps.iter().find(|d| d.symbol == stripped)
+                } else {
+                    None
+                }
+            })
             .map(|d| Irrep {
                 data: d,
                 group: self,
@@ -541,7 +668,7 @@ impl PointGroup {
         let Some(f) = &self.finite else {
             return Err(ReductionError::InfiniteGroup);
         };
-        let d = self.irrep_data.len();
+        let d = self.irreps.len();
         if characters.len() != d {
             return Err(ReductionError::DimensionMismatch {
                 expected: d,
@@ -551,12 +678,12 @@ impl PointGroup {
         let h = f.order as f64;
 
         let mut result = Vec::new();
-        for ir_data in &self.irrep_data {
+        for ir_data in &self.irreps {
             let n: f64 = (0..d)
-                .map(|c| f.class_sizes[c] as f64 * ir_data.characters[c] * characters[c])
+                .map(|c| f.class_sizes[c] as f64 * ir_data.characters()[c] * characters[c])
                 .sum::<f64>()
                 / h;
-            if (n - n.round()).abs() > 0.01 {
+            if (n - n.round()).abs() > REDUCTION_INTEGRALITY {
                 return Err(ReductionError::NonIntegralMultiplicity {
                     irrep: ir_data.symbol.clone(),
                     value: n,
@@ -642,7 +769,7 @@ impl PointGroup {
         let Some(f) = &self.finite else {
             return linear::contains_totally_symmetric(self, a, b, c);
         };
-        let d = self.irrep_data.len();
+        let d = self.irreps.len();
         let h = f.order as f64;
         let n: f64 = (0..d)
             .map(|cls| {
@@ -660,165 +787,16 @@ impl PointGroup {
         CharacterTableDisplay { group: self }
     }
 
-    pub(crate) fn finite_data(&self) -> Option<&FiniteData> {
+    pub(crate) fn finite_data(&self) -> Option<&FiniteGroupData> {
         self.finite.as_ref()
-    }
-
-    /// Construct a point group by Schoenflies symbol (e.g. "C2v", "Td", "Oh").
-    pub fn from_schoenflies(name: &str) -> Result<&'static PointGroup, Error> {
-        let label = SchoenfliesLabel::parse(name).ok_or_else(|| Error {
-            code: MSYM_INVALID_INPUT,
-            message: format!("cannot parse Schoenflies symbol '{name}'"),
-        })?;
-        Self::get_or_build(label)
-    }
-
-    /// Construct a point group by its parsed Schoenflies label.
-    pub fn from_label(label: SchoenfliesLabel) -> Result<&'static PointGroup, Error> {
-        Self::get_or_build(label)
-    }
-
-    fn get_or_build(label: SchoenfliesLabel) -> Result<&'static PointGroup, Error> {
-        {
-            let map = REGISTRY.lock().unwrap();
-            if let Some(&pg) = map.get(&label) {
-                return Ok(pg);
-            }
-        }
-
-        let pg = if matches!(label, SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh) {
-            Self::build_linear(label)
-        } else if label == SchoenfliesLabel::Cn(1) {
-            Self::build_c1()
-        } else if matches!(label, SchoenfliesLabel::K | SchoenfliesLabel::Kh) {
-            return Err(Error {
-                code: MSYM_INVALID_INPUT,
-                message: format!("{label} is a continuous group and cannot be instantiated"),
-            });
-        } else {
-            Self::build_finite(label)?
-        };
-        Ok(register(pg))
-    }
-
-    fn build_finite(label: SchoenfliesLabel) -> Result<PointGroup, Error> {
-        let name = label.to_string();
-        let c_name = CString::new(name.as_str()).expect("no NUL in label");
-
-        let ctx = unsafe { ffi::msymCreateContext() };
-        if ctx.is_null() {
-            return Err(Error {
-                code: MSYM_MEMORY_ERROR,
-                message: "failed to create msym context".into(),
-            });
-        }
-
-        let result = build_finite_inner(ctx, label, &c_name);
-        unsafe {
-            ffi::msymReleaseContext(ctx);
-        }
-        result
-    }
-
-    fn build_c1() -> PointGroup {
-        let op_data = vec![OpData {
-            kind: SymmetryOpKind::Identity,
-            order: 1,
-            power: 0,
-            orientation: SymmetryOpOrientation::None,
-            class: 0,
-        }];
-        PointGroup {
-            label: SchoenfliesLabel::Cn(1),
-            irrep_data: vec![IrrepData {
-                symbol: "A".into(),
-                dimension: 1,
-                index: 0,
-                characters: vec![1.0],
-                lambda: None,
-                sigma_v: None,
-                gerade: None,
-            }],
-            finite: Some(FiniteData {
-                order: 1,
-                op_data,
-                classes: vec![vec![0]],
-                class_rep_indices: vec![0],
-                class_sizes: vec![1],
-                mul_table: vec![vec![0]],
-                r_squared_class: vec![0],
-                translation_chars: vec![3.0],
-                rotation_chars: vec![3.0],
-                quadratic_chars: vec![6.0],
-            }),
-        }
-    }
-
-    fn build_linear(label: SchoenfliesLabel) -> PointGroup {
-        let is_dooh = label == SchoenfliesLabel::Dooh;
-        let lambda_symbols = ["Σ", "Π", "Δ", "Φ", "Γ", "H", "I"];
-        let mut irrep_data = Vec::new();
-        let mut idx = 0;
-
-        let gu_list: &[Option<bool>] = if is_dooh {
-            &[Some(true), Some(false)]
-        } else {
-            &[None]
-        };
-
-        for &gerade in gu_list {
-            let gu_suffix = match gerade {
-                Some(true) => "g",
-                Some(false) => "u",
-                None => "",
-            };
-
-            for (lambda, &base) in lambda_symbols.iter().enumerate() {
-                let lambda = lambda as u32;
-                let dim = if lambda == 0 { 1 } else { 2 };
-
-                if lambda == 0 {
-                    for &sv in &[true, false] {
-                        let sign = if sv { "+" } else { "-" };
-                        irrep_data.push(IrrepData {
-                            symbol: format!("{base}{sign}{gu_suffix}"),
-                            dimension: dim,
-                            index: idx,
-                            characters: vec![],
-                            lambda: Some(lambda),
-                            sigma_v: Some(sv),
-                            gerade,
-                        });
-                        idx += 1;
-                    }
-                } else {
-                    irrep_data.push(IrrepData {
-                        symbol: format!("{base}{gu_suffix}"),
-                        dimension: dim,
-                        index: idx,
-                        characters: vec![],
-                        lambda: Some(lambda),
-                        sigma_v: None,
-                        gerade,
-                    });
-                    idx += 1;
-                }
-            }
-        }
-
-        PointGroup {
-            label,
-            irrep_data,
-            finite: None,
-        }
     }
 }
 
 fn build_finite_inner(
     ctx: ffi::msym_context,
-    label: SchoenfliesLabel,
+    label: SchoenfliesSymbol,
     c_name: &CStr,
-) -> Result<PointGroup, Error> {
+) -> Result<PointGroup, MsymError> {
     error::check(unsafe { ffi::msymSetPointGroupByName(ctx, c_name.as_ptr()) })?;
 
     let mut len: c_int = 0;
@@ -826,9 +804,9 @@ fn build_finite_inner(
     error::check(unsafe { ffi::msymGetSymmetryOperations(ctx, &mut len, &mut sops_ptr) })?;
     let sops_slice = unsafe { slice::from_raw_parts(sops_ptr, len as usize) };
 
-    let op_data: Vec<OpData> = sops_slice
+    let op_data: Vec<SymmetryOpData> = sops_slice
         .iter()
-        .map(|sop| OpData {
+        .map(|sop| SymmetryOpData {
             kind: sop.type_.into(),
             order: sop.order,
             power: sop.power,
@@ -876,12 +854,13 @@ fn build_finite_inner(
 
     let mut ct_ptr: *const ffi::msym_character_table_t = ptr::null();
     error::check(unsafe { ffi::msymGetCharacterTable(ctx, &mut ct_ptr) })?;
-    let irrep_data = unsafe { extract_irrep_data(&*ct_ptr)? };
+    let mut irrep_data = unsafe { extract_irrep_data(&*ct_ptr)? };
+    normalize_irrep_symbols(&mut irrep_data);
 
     Ok(PointGroup {
-        label,
-        irrep_data,
-        finite: Some(FiniteData {
+        symbol: label,
+        irreps: irrep_data,
+        finite: Some(FiniteGroupData {
             order,
             op_data,
             classes,
@@ -958,10 +937,12 @@ fn build_mul_table(matrices: &[Matrix3<f64>]) -> Vec<Vec<usize>> {
     table
 }
 
-unsafe fn extract_irrep_data(ct: &ffi::msym_character_table_t) -> Result<Vec<IrrepData>, Error> {
+unsafe fn extract_irrep_data(
+    ct: &ffi::msym_character_table_t,
+) -> Result<Vec<IrrepData>, MsymError> {
     let d = ct.d as usize;
     if d == 0 {
-        return Err(Error {
+        return Err(MsymError {
             code: MSYM_INVALID_CHARACTER_TABLE,
             message: "character table has zero dimension".into(),
         });
@@ -979,20 +960,45 @@ unsafe fn extract_irrep_data(ct: &ffi::msym_character_table_t) -> Result<Vec<Irr
         irrep_data.push(IrrepData {
             symbol,
             dimension: species[i].d,
-            index: i,
-            characters,
-            lambda: None,
-            sigma_v: None,
-            gerade: None,
+            reduction: ReductionData::Finite { characters },
         });
     }
     Ok(irrep_data)
 }
 
+/// Strip redundant "1" subscripts from irrep symbols to match standard Mulliken notation.
+/// libmsym always numbers E/A irreps (E1, A1) even when only one exists.
+fn normalize_irrep_symbols(data: &mut [IrrepData]) {
+    let mut max_sub: HashMap<u8, u32> = HashMap::new();
+    for d in data.iter() {
+        let b = d.symbol.as_bytes();
+        if b.len() >= 2 && b[0].is_ascii_uppercase() && b[1].is_ascii_digit() {
+            let end = b[1..]
+                .iter()
+                .position(|c| !c.is_ascii_digit())
+                .map_or(b.len(), |i| i + 1);
+            if let Ok(n) = d.symbol[1..end].parse::<u32>() {
+                let entry = max_sub.entry(b[0]).or_insert(0);
+                *entry = (*entry).max(n);
+            }
+        }
+    }
+    for d in data.iter_mut() {
+        let b = d.symbol.as_bytes();
+        if b.len() >= 2
+            && b[1] == b'1'
+            && (b.len() == 2 || !b[2].is_ascii_digit())
+            && max_sub.get(&b[0]) == Some(&1)
+        {
+            d.symbol.remove(1);
+        }
+    }
+}
+
 macro_rules! point_group_fn {
     ($name:ident, $schoenflies:expr) => {
         pub fn $name() -> &'static PointGroup {
-            Self::from_schoenflies($schoenflies).unwrap()
+            Self::parse($schoenflies).unwrap()
         }
     };
 }
@@ -1066,7 +1072,7 @@ impl fmt::Display for CharacterTableDisplay {
         let g = self.group;
         let class_reps = g.class_reps();
         if class_reps.is_empty() {
-            return write!(f, "{} (linear group, no finite character table)", g.label);
+            return write!(f, "{} (linear group, no finite character table)", g.symbol);
         }
         let class_sizes = g.class_sizes();
         let irreps = g.irreps();
@@ -1084,7 +1090,7 @@ impl fmt::Display for CharacterTableDisplay {
             .collect();
 
         let irrep_col_width = irreps.iter().map(|ir| ir.symbol().len()).max().unwrap_or(0);
-        let label_width = g.label.to_string().len().max(irrep_col_width);
+        let label_width = g.symbol.to_string().len().max(irrep_col_width);
 
         let col_widths: Vec<usize> = col_headers
             .iter()
@@ -1099,7 +1105,7 @@ impl fmt::Display for CharacterTableDisplay {
             })
             .collect();
 
-        write!(f, "{:width$} │", g.label, width = label_width)?;
+        write!(f, "{:width$} │", g.symbol, width = label_width)?;
         for (c, header) in col_headers.iter().enumerate() {
             write!(f, " {:>width$}", header, width = col_widths[c])?;
         }
@@ -1130,7 +1136,7 @@ impl fmt::Display for CharacterTableDisplay {
 
 fn format_character(value: f64) -> String {
     let rounded = value.round();
-    if (value - rounded).abs() < 1e-6 {
+    if (value - rounded).abs() < CHARACTER_DISPLAY_ROUNDING {
         format!("{}", rounded as i64)
     } else {
         format!("{value:.4}")
@@ -1139,7 +1145,7 @@ fn format_character(value: f64) -> String {
 
 impl fmt::Display for PointGroup {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.label)
+        write!(f, "{}", self.symbol)
     }
 }
 
@@ -1155,25 +1161,25 @@ mod tests {
         assert_eq!(g.to_string(), "C1");
         assert_eq!(g.order(), 1);
         assert_eq!(g.ops().len(), 1);
-        assert_eq!(g.label(), SchoenfliesLabel::Cn(1));
+        assert_eq!(g.symbol(), SchoenfliesSymbol::Cn(1));
         assert_eq!(g.irreps().len(), 1);
         assert_eq!(g.irreps()[0].symbol(), "A");
     }
 
     #[rstest]
-    #[case("C2v", SchoenfliesLabel::Cnv(2), 4)]
-    #[case("Td", SchoenfliesLabel::Td, 24)]
-    #[case("Oh", SchoenfliesLabel::Oh, 48)]
-    #[case("C3v", SchoenfliesLabel::Cnv(3), 6)]
-    #[case("D2h", SchoenfliesLabel::Dnh(2), 8)]
-    fn test_point_group_from_schoenflies(
+    #[case::c2v("C2v", SchoenfliesSymbol::Cnv(2), 4)]
+    #[case::td("Td", SchoenfliesSymbol::Td, 24)]
+    #[case::oh("Oh", SchoenfliesSymbol::Oh, 48)]
+    #[case::c3v("C3v", SchoenfliesSymbol::Cnv(3), 6)]
+    #[case::d2h("D2h", SchoenfliesSymbol::Dnh(2), 8)]
+    fn test_point_group_parse(
         #[case] name: &str,
-        #[case] expected_label: SchoenfliesLabel,
+        #[case] expected_label: SchoenfliesSymbol,
         #[case] expected_order: usize,
     ) {
-        let g = PointGroup::from_schoenflies(name).unwrap();
+        let g = PointGroup::parse(name).unwrap();
         assert_eq!(g.to_string(), name);
-        assert_eq!(g.label(), expected_label);
+        assert_eq!(g.symbol(), expected_label);
         assert_eq!(g.order(), expected_order);
         assert_eq!(g.ops().len(), expected_order);
     }
@@ -1181,7 +1187,7 @@ mod tests {
     #[rstest]
     fn test_point_group_pointer_identity() {
         let a = PointGroup::c2v();
-        let b = PointGroup::from_schoenflies("C2v").unwrap();
+        let b = PointGroup::parse("C2v").unwrap();
         assert!(ptr::eq(a, b));
     }
 
@@ -1191,6 +1197,172 @@ mod tests {
         assert_eq!(PointGroup::oh().to_string(), "Oh");
         assert_eq!(PointGroup::ih().to_string(), "Ih");
         assert_eq!(PointGroup::d2h().to_string(), "D2h");
+    }
+
+    #[rstest]
+    #[case::c1("C1", true)]
+    #[case::ci("Ci", true)]
+    #[case::cs("Cs", true)]
+    #[case::c2("C2", true)]
+    #[case::c3("C3", true)]
+    #[case::c2v("C2v", true)]
+    #[case::c2h("C2h", true)]
+    #[case::c3h("C3h", true)]
+    #[case::d2("D2", true)]
+    #[case::d2h("D2h", true)]
+    #[case::s4("S4", true)]
+    #[case::s6("S6", true)]
+    #[case::c3v("C3v", false)]
+    #[case::d3("D3", false)]
+    #[case::d3h("D3h", false)]
+    #[case::d2d("D2d", false)]
+    #[case::td("Td", false)]
+    #[case::oh("Oh", false)]
+    #[case::ih("Ih", false)]
+    fn test_point_group_is_abelian(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.is_abelian(), expected);
+    }
+
+    #[rstest]
+    #[case::c1("C1", true)]
+    #[case::c3("C3", true)]
+    #[case::c3h("C3h", true)]
+    #[case::s4("S4", true)]
+    #[case::ci("Ci", true)]
+    #[case::cs("Cs", true)]
+    #[case::c2v("C2v", false)]
+    #[case::d2("D2", false)]
+    #[case::td("Td", false)]
+    fn test_point_group_is_cyclic(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.is_cyclic(), expected);
+    }
+
+    #[rstest]
+    #[case::c1("C1", false)]
+    #[case::d2("D2", true)]
+    #[case::d2h("D2h", true)]
+    #[case::d3d("D3d", true)]
+    #[case::dooh("Dooh", true)]
+    #[case::td("Td", false)]
+    fn test_point_group_is_dihedral(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.is_dihedral(), expected);
+    }
+
+    #[rstest]
+    #[case::t("T", true)]
+    #[case::td("Td", true)]
+    #[case::th("Th", true)]
+    #[case::o("O", true)]
+    #[case::oh("Oh", true)]
+    #[case::ih("Ih", false)]
+    #[case::c2v("C2v", false)]
+    #[case::d6h("D6h", false)]
+    fn test_point_group_is_cubic(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.is_cubic(), expected);
+    }
+
+    #[rstest]
+    #[case::t("T", false)]
+    #[case::td("Td", false)]
+    #[case::th("Th", false)]
+    #[case::i("I", true)]
+    #[case::ih("Ih", true)]
+    #[case::c2v("C2v", false)]
+    #[case::d6h("D6h", false)]
+    fn test_point_group_is_icosahedral(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.is_icosahedral(), expected);
+    }
+
+    #[rstest]
+    #[case::c1("C1", false)]
+    #[case::coov("Coov", true)]
+    #[case::dooh("Dooh", true)]
+    fn test_point_group_is_linear(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.is_linear(), expected);
+    }
+
+    #[rstest]
+    #[case::c3("C3", true)]
+    #[case::c4("C4", true)]
+    #[case::c5("C5", true)]
+    #[case::c3h("C3h", true)]
+    #[case::s4("S4", true)]
+    #[case::s6("S6", true)]
+    #[case::t("T", true)]
+    #[case::th("Th", true)]
+    #[case::c1("C1", false)]
+    #[case::c2("C2", false)]
+    #[case::c2v("C2v", false)]
+    #[case::td("Td", false)]
+    #[case::oh("Oh", false)]
+    #[case::c3v("C3v", false)]
+    #[case::d3h("D3h", false)]
+    fn test_point_group_has_complex_irreps(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.has_complex_irreps(), expected);
+    }
+
+    #[rstest]
+    #[case::ci("Ci", true)]
+    #[case::c2h("C2h", true)]
+    #[case::d2h("D2h", true)]
+    #[case::oh("Oh", true)]
+    #[case::ih("Ih", true)]
+    #[case::th("Th", true)]
+    #[case::c2v("C2v", false)]
+    #[case::td("Td", false)]
+    #[case::c3v("C3v", false)]
+    #[case::d3("D3", false)]
+    #[case::c1("C1", false)]
+    fn test_point_group_has_inversion(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.has_inversion(), expected);
+    }
+
+    #[rstest]
+    #[case::c1("C1", true)]
+    #[case::c2("C2", true)]
+    #[case::c3("C3", true)]
+    #[case::d2("D2", true)]
+    #[case::d3("D3", true)]
+    #[case::t("T", true)]
+    #[case::o("O", true)]
+    #[case::i("I", true)]
+    #[case::cs("Cs", false)]
+    #[case::ci("Ci", false)]
+    #[case::c2v("C2v", false)]
+    #[case::c2h("C2h", false)]
+    #[case::d2h("D2h", false)]
+    #[case::d3h("D3h", false)]
+    #[case::td("Td", false)]
+    #[case::oh("Oh", false)]
+    #[case::ih("Ih", false)]
+    #[case::s4("S4", false)]
+    fn test_point_group_is_chiral(#[case] group: &str, #[case] expected: bool) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.is_chiral(), expected);
+    }
+
+    #[rstest]
+    #[case::c1("C1", 1)]
+    #[case::cs("Cs", 1)]
+    #[case::ci("Ci", 1)]
+    #[case::c2v("C2v", 2)]
+    #[case::c3v("C3v", 3)]
+    #[case::d6h("D6h", 6)]
+    #[case::s4("S4", 4)]
+    #[case::td("Td", 3)]
+    #[case::oh("Oh", 4)]
+    #[case::ih("Ih", 5)]
+    fn test_point_group_principal_axis_order(#[case] group: &str, #[case] expected: u32) {
+        let g = PointGroup::parse(group).unwrap();
+        assert_eq!(g.principal_axis_order(), expected);
     }
 
     #[rstest]
@@ -1218,24 +1390,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case("C2v", "B1", "B2", &[("A2", 1)])]
-    #[case("C2v", "A1", "B1", &[("B1", 1)])]
-    #[case("Td", "E", "T2", &[("T1", 1), ("T2", 1)])]
-    #[case("Oh", "Eg", "T1u", &[("T1u", 1), ("T2u", 1)])]
-    #[case("C3", "A", "E1", &[("E1", 2)])]
-    #[case("C3", "E1", "E1", &[("A", 2), ("E1", 2)])]
-    #[case("C4", "B", "E1", &[("E1", 2)])]
-    #[case("C4", "E1", "E1", &[("A", 2), ("B", 2)])]
-    #[case("C3h", "A''", "E1'", &[("E1''", 2)])]
-    #[case("C3h", "E1'", "E1'", &[("A'", 2), ("E1'", 2)])]
-    #[case("C3h", "E1'", "E1''", &[("A''", 2), ("E1''", 2)])]
+    #[case::c2v_b1_b2("C2v", "B1", "B2", &[("A2", 1)])]
+    #[case::c2v_a1_b1("C2v", "A1", "B1", &[("B1", 1)])]
+    #[case::td_e_t2("Td", "E", "T2", &[("T1", 1), ("T2", 1)])]
+    #[case::oh_eg_t1u("Oh", "Eg", "T1u", &[("T1u", 1), ("T2u", 1)])]
+    #[case::c3_a_e("C3", "A", "E", &[("E", 2)])]
+    #[case::c3_e_e("C3", "E", "E", &[("A", 2), ("E", 2)])]
+    #[case::c4_b_e("C4", "B", "E", &[("E", 2)])]
+    #[case::c4_e_e("C4", "E", "E", &[("A", 2), ("B", 2)])]
+    #[case::c3h_app_ep("C3h", "A''", "E'", &[("E''", 2)])]
+    #[case::c3h_ep_ep("C3h", "E'", "E'", &[("A'", 2), ("E'", 2)])]
+    #[case::c3h_ep_epp("C3h", "E'", "E''", &[("A''", 2), ("E''", 2)])]
     fn test_point_group_direct_product(
         #[case] group: &str,
         #[case] a: &str,
         #[case] b: &str,
         #[case] expected: &[(&str, u32)],
     ) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         let ir_a = g.irrep(a).unwrap();
         let ir_b = g.irrep(b).unwrap();
         let product = g.direct_product(ir_a, ir_b);
@@ -1244,18 +1416,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case("C2v", "B1", &[("A1", 1)], &[])]
-    #[case("Td", "E", &[("A1", 1), ("E", 1)], &[("A2", 1)])]
-    #[case("Td", "T2", &[("A1", 1), ("E", 1), ("T2", 1)], &[("T1", 1)])]
-    #[case("Oh", "T1u", &[("A1g", 1), ("Eg", 1), ("T2g", 1)], &[("T1g", 1)])]
-    #[case("Ih", "Hg", &[("Ag", 1), ("Gg", 1), ("Hg", 2)], &[("T1g", 1), ("T2g", 1), ("Gg", 1)])]
+    #[case::c2v_b1("C2v", "B1", &[("A1", 1)], &[])]
+    #[case::td_e("Td", "E", &[("A1", 1), ("E", 1)], &[("A2", 1)])]
+    #[case::td_t2("Td", "T2", &[("A1", 1), ("E", 1), ("T2", 1)], &[("T1", 1)])]
+    #[case::oh_t1u("Oh", "T1u", &[("A1g", 1), ("Eg", 1), ("T2g", 1)], &[("T1g", 1)])]
+    #[case::ih_hg("Ih", "Hg", &[("Ag", 1), ("Gg", 1), ("Hg", 2)], &[("T1g", 1), ("T2g", 1), ("Gg", 1)])]
     fn test_point_group_symmetric_antisymmetric_square(
         #[case] group: &str,
         #[case] irrep: &str,
         #[case] expected_sym: &[(&str, u32)],
         #[case] expected_anti: &[(&str, u32)],
     ) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         let ir = g.irrep(irrep).unwrap();
 
         let sym = g.symmetric_square(ir);
@@ -1288,26 +1460,26 @@ mod tests {
     }
 
     #[rstest]
-    #[case("C2v", &[4.0, 0.0, 0.0, 0.0], &[("A1", 1), ("A2", 1), ("B1", 1), ("B2", 1)])]
-    #[case("C2v", &[1.0, 1.0, 1.0, 1.0], &[("A1", 1)])]
-    #[case("C1",  &[7.0], &[("A", 7)])]
+    #[case::c2v_regular("C2v", &[4.0, 0.0, 0.0, 0.0], &[("A1", 1), ("A2", 1), ("B1", 1), ("B2", 1)])]
+    #[case::c2v_totally_symmetric("C2v", &[1.0, 1.0, 1.0, 1.0], &[("A1", 1)])]
+    #[case::c1_septuple("C1",  &[7.0], &[("A", 7)])]
     fn test_point_group_reduce(
         #[case] group: &str,
         #[case] characters: &[f64],
         #[case] expected: &[(&str, u32)],
     ) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         let result = g.reduce(characters).unwrap();
         let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
         assert_eq!(actual, expected);
     }
 
     #[rstest]
-    #[case("C2v", &[("A1", 2), ("B2", 3)])]
-    #[case("Td",  &[("A1", 1), ("E", 1), ("T2", 3)])]
-    #[case("Oh",  &[("Eg", 2), ("T1u", 1)])]
+    #[case::c2v("C2v", &[("A1", 2), ("B2", 3)])]
+    #[case::td("Td",  &[("A1", 1), ("E", 1), ("T2", 3)])]
+    #[case::oh("Oh",  &[("Eg", 2), ("T1u", 1)])]
     fn test_point_group_reduce_roundtrip(#[case] group: &str, #[case] composition: &[(&str, u32)]) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         let n_classes = g.class_sizes().len();
         let mut chars = vec![0.0; n_classes];
         for &(sym, mult) in composition {
@@ -1323,68 +1495,45 @@ mod tests {
     }
 
     #[rstest]
-    #[case("C2v", &[("A1", 1), ("B1", 1), ("B2", 1)])]
-    #[case("Td",  &[("T2", 1)])]
-    #[case("C1",  &[("A", 3)])]
+    #[case::c2v("C2v", &[("A1", 1), ("B1", 1), ("B2", 1)])]
+    #[case::td("Td",  &[("T2", 1)])]
+    #[case::c1("C1",  &[("A", 3)])]
     fn test_point_group_translation_irreps(#[case] group: &str, #[case] expected: &[(&str, u32)]) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         let result = g.translation_irreps();
         let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
         assert_eq!(actual, expected);
     }
 
     #[rstest]
-    #[case("C2v", &[("A2", 1), ("B1", 1), ("B2", 1)])]
-    #[case("Td",  &[("T1", 1)])]
-    #[case("C1",  &[("A", 3)])]
+    #[case::c2v("C2v", &[("A2", 1), ("B1", 1), ("B2", 1)])]
+    #[case::td("Td",  &[("T1", 1)])]
+    #[case::c1("C1",  &[("A", 3)])]
     fn test_point_group_rotation_irreps(#[case] group: &str, #[case] expected: &[(&str, u32)]) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         let result = g.rotation_irreps();
         let actual: Vec<(&str, u32)> = result.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
         assert_eq!(actual, expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case("C1", true)]
-    #[case("C2", true)]
-    #[case("C3", true)]
-    #[case("D2", true)]
-    #[case("D3", true)]
-    #[case("T", true)]
-    #[case("O", true)]
-    #[case("I", true)]
-    #[case("Cs", false)]
-    #[case("Ci", false)]
-    #[case("C2v", false)]
-    #[case("C2h", false)]
-    #[case("D2h", false)]
-    #[case("D3h", false)]
-    #[case("Td", false)]
-    #[case("Oh", false)]
-    #[case("Ih", false)]
-    #[case("S4", false)]
-    fn test_point_group_is_chiral(#[case] group: &str, #[case] expected: bool) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
-        assert_eq!(g.is_chiral(), expected);
-    }
-
-    #[rstest]
-    #[case(SymmetryOpKind::Identity, 1, 1, SymmetryOpOrientation::None, "E")]
-    #[case(SymmetryOpKind::Inversion, 1, 1, SymmetryOpOrientation::None, "i")]
-    #[case(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Horizontal, "σh")]
-    #[case(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Vertical, "σv")]
-    #[case(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Dihedral, "σd")]
-    #[case(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::None, "σ")]
-    #[case(SymmetryOpKind::ProperRotation, 3, 1, SymmetryOpOrientation::None, "C3")]
-    #[case(SymmetryOpKind::ProperRotation, 3, 2, SymmetryOpOrientation::None, "C3²")]
-    #[case(SymmetryOpKind::ProperRotation, 6, 5, SymmetryOpOrientation::None, "C6⁵")]
-    #[case(SymmetryOpKind::ImproperRotation, 4, 1, SymmetryOpOrientation::None, "S4")]
-    #[case(SymmetryOpKind::ImproperRotation, 4, 3, SymmetryOpOrientation::None, "S4³")]
-    #[case(SymmetryOpKind::ImproperRotation, 10, 7, SymmetryOpOrientation::None, "S10⁷")]
-    #[case(SymmetryOpKind::ProperRotation, 2, 1, SymmetryOpOrientation::Vertical, "C2'")]
-    #[case(SymmetryOpKind::ProperRotation, 2, 1, SymmetryOpOrientation::Dihedral, "C2''")]
-    #[case(SymmetryOpKind::ProperRotation, 3, 2, SymmetryOpOrientation::Vertical, "C3'²")]
-    #[case(SymmetryOpKind::ImproperRotation, 4, 1, SymmetryOpOrientation::Vertical, "S4'")]
+    #[case::identity(SymmetryOpKind::Identity, 1, 1, SymmetryOpOrientation::None, "E")]
+    #[case::inversion(SymmetryOpKind::Inversion, 1, 1, SymmetryOpOrientation::None, "i")]
+    #[case::sigma_h(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Horizontal, "σh")]
+    #[case::sigma_v(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Vertical, "σv")]
+    #[case::sigma_d(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Dihedral, "σd")]
+    #[case::sigma_bare(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::None, "σ")]
+    #[case::c3(SymmetryOpKind::ProperRotation, 3, 1, SymmetryOpOrientation::None, "C3")]
+    #[case::c3_squared(SymmetryOpKind::ProperRotation, 3, 2, SymmetryOpOrientation::None, "C3²")]
+    #[case::c6_fifth(SymmetryOpKind::ProperRotation, 6, 5, SymmetryOpOrientation::None, "C6⁵")]
+    #[case::s4(SymmetryOpKind::ImproperRotation, 4, 1, SymmetryOpOrientation::None, "S4")]
+    #[case::s4_cubed(SymmetryOpKind::ImproperRotation, 4, 3, SymmetryOpOrientation::None, "S4³")]
+    #[case::s10_seventh(SymmetryOpKind::ImproperRotation, 10, 7, SymmetryOpOrientation::None, "S10⁷")]
+    #[case::c2_prime(SymmetryOpKind::ProperRotation, 2, 1, SymmetryOpOrientation::Vertical, "C2'")]
+    #[case::c2_double_prime(SymmetryOpKind::ProperRotation, 2, 1, SymmetryOpOrientation::Dihedral, "C2''")]
+    #[case::c3_prime_squared(SymmetryOpKind::ProperRotation, 3, 2, SymmetryOpOrientation::Vertical, "C3'²")]
+    #[case::s4_prime(SymmetryOpKind::ImproperRotation, 4, 1, SymmetryOpOrientation::Vertical, "S4'")]
     fn test_op_data_display(
         #[case] kind: SymmetryOpKind,
         #[case] order: i32,
@@ -1392,7 +1541,7 @@ mod tests {
         #[case] orientation: SymmetryOpOrientation,
         #[case] expected: &str,
     ) {
-        let d = OpData {
+        let d = SymmetryOpData {
             kind,
             order,
             power,
@@ -1419,150 +1568,42 @@ B2  │ 1 -1  -1   1
 
     #[rstest]
     fn test_character_table_display_c3v() {
-        let g = PointGroup::from_schoenflies("C3v").unwrap();
+        let g = PointGroup::parse("C3v").unwrap();
         let table = g.character_table().to_string();
         let expected = "\
 C3v │ E 2C3  3σv
 ────┼───────────
 A1  │ 1   1    1
 A2  │ 1   1   -1
-E1  │ 2  -1    0
+E   │ 2  -1    0
 ";
         assert_eq!(table, expected);
     }
 
     #[rstest]
-    #[case("C1", 1)]
-    #[case("Cs", 1)]
-    #[case("Ci", 1)]
-    #[case("C2v", 2)]
-    #[case("C3v", 3)]
-    #[case("D6h", 6)]
-    #[case("S4", 4)]
-    #[case("Td", 3)]
-    #[case("Oh", 4)]
-    #[case("Ih", 5)]
-    fn test_point_group_principal_axis_order(#[case] group: &str, #[case] expected: u32) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
-        assert_eq!(g.principal_axis_order(), expected);
-    }
-
-    #[rstest]
-    #[case("C1", true)]
-    #[case("Ci", true)]
-    #[case("Cs", true)]
-    #[case("C2", true)]
-    #[case("C3", true)]
-    #[case("C2v", true)]
-    #[case("C2h", true)]
-    #[case("C3h", true)]
-    #[case("D2", true)]
-    #[case("D2h", true)]
-    #[case("S4", true)]
-    #[case("S6", true)]
-    #[case("C3v", false)]
-    #[case("D3", false)]
-    #[case("D3h", false)]
-    #[case("D2d", false)]
-    #[case("Td", false)]
-    #[case("Oh", false)]
-    #[case("Ih", false)]
-    fn test_point_group_is_abelian(#[case] group: &str, #[case] expected: bool) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
-        assert_eq!(g.is_abelian(), expected);
-    }
-
-    #[rstest]
-    #[case("C1", true)]
-    #[case("C3", true)]
-    #[case("C3h", true)]
-    #[case("S4", true)]
-    #[case("Ci", true)]
-    #[case("Cs", true)]
-    #[case("C2v", false)]
-    #[case("D2", false)]
-    #[case("Td", false)]
-    fn test_point_group_is_cyclic(#[case] group: &str, #[case] expected: bool) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
-        assert_eq!(g.is_cyclic(), expected);
-    }
-
-    #[rstest]
-    #[case("Td", true)]
-    #[case("Oh", true)]
-    #[case("Ih", true)]
-    #[case("T", true)]
-    #[case("O", true)]
-    #[case("Th", true)]
-    #[case("C2v", false)]
-    #[case("D6h", false)]
-    fn test_point_group_is_cubic(#[case] group: &str, #[case] expected: bool) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
-        assert_eq!(g.is_cubic(), expected);
-    }
-
-    #[rstest]
-    #[case("C3", true)]
-    #[case("C4", true)]
-    #[case("C5", true)]
-    #[case("C3h", true)]
-    #[case("S4", true)]
-    #[case("S6", true)]
-    #[case("T", true)]
-    #[case("Th", true)]
-    #[case("C1", false)]
-    #[case("C2", false)]
-    #[case("C2v", false)]
-    #[case("Td", false)]
-    #[case("Oh", false)]
-    #[case("C3v", false)]
-    #[case("D3h", false)]
-    fn test_point_group_has_complex_irreps(#[case] group: &str, #[case] expected: bool) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
-        assert_eq!(g.has_complex_irreps(), expected);
-    }
-
-    #[rstest]
-    #[case("Ci", true)]
-    #[case("C2h", true)]
-    #[case("D2h", true)]
-    #[case("Oh", true)]
-    #[case("Ih", true)]
-    #[case("Th", true)]
-    #[case("C2v", false)]
-    #[case("Td", false)]
-    #[case("C3v", false)]
-    #[case("D3", false)]
-    #[case("C1", false)]
-    fn test_point_group_has_inversion(#[case] group: &str, #[case] expected: bool) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
-        assert_eq!(g.has_inversion(), expected);
-    }
-
-    #[rstest]
-    #[case("C1", "A")]
-    #[case("C2v", "A1")]
-    #[case("Oh", "A1g")]
-    #[case("Td", "A1")]
+    #[case::c1("C1", "A")]
+    #[case::c2v("C2v", "A1")]
+    #[case::oh("Oh", "A1g")]
+    #[case::td("Td", "A1")]
     fn test_point_group_totally_symmetric_irrep(#[case] group: &str, #[case] expected: &str) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         assert_eq!(g.totally_symmetric_irrep().symbol(), expected);
     }
 
     #[rstest]
-    fn test_irrep_is_gerade_finite() {
+    fn test_irrep_gerade_finite() {
         let g = PointGroup::oh();
-        assert_eq!(g.irrep("A1g").unwrap().is_gerade(), Some(true));
-        assert_eq!(g.irrep("Eg").unwrap().is_gerade(), Some(true));
-        assert_eq!(g.irrep("T1u").unwrap().is_gerade(), Some(false));
-        assert_eq!(g.irrep("T2u").unwrap().is_gerade(), Some(false));
+        assert_eq!(g.irrep("A1g").unwrap().gerade(), Some(true));
+        assert_eq!(g.irrep("Eg").unwrap().gerade(), Some(true));
+        assert_eq!(g.irrep("T1u").unwrap().gerade(), Some(false));
+        assert_eq!(g.irrep("T2u").unwrap().gerade(), Some(false));
     }
 
     #[rstest]
-    fn test_irrep_is_gerade_no_inversion() {
+    fn test_irrep_gerade_no_inversion() {
         let g = PointGroup::c2v();
         for ir in g.irreps() {
-            assert_eq!(ir.is_gerade(), None);
+            assert_eq!(ir.gerade(), None);
         }
     }
 
@@ -1599,8 +1640,16 @@ E1  │ 2  -1    0
     fn test_symmetry_op_cross_group_inequality() {
         let c2v = PointGroup::c2v();
         let d2h = PointGroup::d2h();
-        let c2v_inv = c2v.ops().iter().find(|op| op.kind() == SymmetryOpKind::Identity).copied();
-        let d2h_inv = d2h.ops().iter().find(|op| op.kind() == SymmetryOpKind::Identity).copied();
+        let c2v_inv = c2v
+            .ops()
+            .iter()
+            .find(|op| op.kind() == SymmetryOpKind::Identity)
+            .copied();
+        let d2h_inv = d2h
+            .ops()
+            .iter()
+            .find(|op| op.kind() == SymmetryOpKind::Identity)
+            .copied();
         assert!(c2v_inv.is_some() && d2h_inv.is_some());
         assert_ne!(c2v_inv.unwrap(), d2h_inv.unwrap());
     }
@@ -1620,13 +1669,13 @@ E1  │ 2  -1    0
     }
 
     #[rstest]
-    #[case("C2v")]
-    #[case("Td")]
-    #[case("Oh")]
-    #[case("D3h")]
-    #[case("C1")]
+    #[case::c2v("C2v")]
+    #[case::td("Td")]
+    #[case::oh("Oh")]
+    #[case::d3h("D3h")]
+    #[case::c1("C1")]
     fn test_point_group_trans_rot_dimensions(#[case] group: &str) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         let trans_dim: u32 = g
             .translation_irreps()
             .iter()
@@ -1660,15 +1709,15 @@ E1  │ 2  -1    0
     }
 
     #[rstest]
-    #[case("C1",  &["A"],                  &["A"])]
-    #[case("C2v", &["A1", "B1", "B2"],     &["A1", "A2", "B1", "B2"])]
-    #[case("Td",  &["T2"],                 &["A1", "E", "T2"])]
+    #[case::c1("C1",  &["A"],                  &["A"])]
+    #[case::c2v("C2v", &["A1", "B1", "B2"],     &["A1", "A2", "B1", "B2"])]
+    #[case::td("Td",  &["T2"],                 &["A1", "E", "T2"])]
     fn test_point_group_ir_active(
         #[case] group: &str,
         #[case] expected_ir: &[&str],
         #[case] expected_raman: &[&str],
     ) {
-        let g = PointGroup::from_schoenflies(group).unwrap();
+        let g = PointGroup::parse(group).unwrap();
         assert_eq!(ir_active_symbols(g), expected_ir);
         assert_eq!(raman_active_symbols(g), expected_raman);
     }
