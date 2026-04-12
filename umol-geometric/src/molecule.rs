@@ -8,10 +8,10 @@ use umol_shared::spin::SpinMultiplicity;
 use umol_shared::units::angle::Angle;
 use umol_shared::units::length::Length;
 use umol_msym::{
-    compute_salcs as compute_salcs_raw, detect_symmetry,
+    compute_salcs as compute_salcs_raw, detect_symmetry, group,
     generate_symmetry_images as generate_image_centers,
     lower_symmetry as lower_symmetry_centers, symmetrize as symmetrize_centers, BasisFunction,
-    BasisKind, CartesianAxis, CorrelationTable, EquivalenceSet, Irrep, MsymError,
+    BasisKind, CartesianAxis, EquivalenceSet, Irrep, MsymError,
     MatrixRep, PointGroup, SalcBasis, SchoenfliesSymbol, SymmetryCenter, Thresholds,
 };
 
@@ -45,8 +45,7 @@ pub struct SymmetryCoordinates {
 pub struct SymmetryDescentResult {
     pub molecule: Molecule,
     pub parent_group: &'static PointGroup,
-    pub transform: [[f64; 3]; 3],
-    pub correlation: Option<CorrelationTable>,
+    pub transform: nalgebra::Matrix3<f64>,
 }
 
 /// 3D molecular geometry under the Born-Oppenheimer approximation.
@@ -273,7 +272,6 @@ impl Molecule {
             },
             parent_group: result.parent_group,
             transform: result.transform,
-            correlation: result.correlation,
         })
     }
 
@@ -289,10 +287,10 @@ impl Molecule {
         let centers: Vec<SymmetryCenter> = elements
             .iter()
             .zip(positions_angstrom)
-            .map(|(&elem, &pos)| SymmetryCenter {
+            .map(|(&elem, pos)| SymmetryCenter {
                 atomic_number: elem.atomic_number() as i32,
                 mass: elem.mass(),
-                position: pos,
+                position: Vector3::from(*pos),
                 name: String::new(),
             })
             .collect();
@@ -579,11 +577,11 @@ impl Molecule {
             .map(|(i, &elem)| SymmetryCenter {
                 atomic_number: elem.atomic_number() as i32,
                 mass: elem.mass(),
-                position: [
+                position: Vector3::new(
                     Length::bohr(m[(0, i)]).as_angstrom(),
                     Length::bohr(m[(1, i)]).as_angstrom(),
                     Length::bohr(m[(2, i)]).as_angstrom(),
-                ],
+                ),
                 name: String::new(),
             })
             .collect()
@@ -596,7 +594,7 @@ impl Molecule {
         multiplicity: SpinMultiplicity,
     ) -> Self {
         let n = elements.len();
-        let group = PointGroup::c1();
+        let group = group!(C1);
         let equivalence_sets: Vec<Vec<usize>> = (0..n).map(|i| vec![i]).collect();
         let atom_permutations = vec![(0..n).collect()];
         Self {
@@ -1282,14 +1280,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case(SchoenfliesSymbol::Cs, "Cs", true)]
-    #[case(SchoenfliesSymbol::Cn(2), "C2", true)]
-    #[case(SchoenfliesSymbol::Cnv(2), "C2v", true)]
-    #[case(SchoenfliesSymbol::Cn(1), "C1", true)]
+    #[case(SchoenfliesSymbol::Cs, "Cs")]
+    #[case(SchoenfliesSymbol::Cn(2), "C2")]
+    #[case(SchoenfliesSymbol::Cnv(2), "C2v")]
+    #[case(SchoenfliesSymbol::Cn(1), "C1")]
     fn test_molecule_lower_symmetry_water(
         #[case] target: SchoenfliesSymbol,
         #[case] expected_name: &str,
-        #[case] has_correlation: bool,
     ) {
         let m = symmetric_water().perceive_symmetry(Thresholds::default()).unwrap();
         assert_eq!(m.point_group().to_string(), "C2v");
@@ -1298,11 +1295,6 @@ mod tests {
         assert_eq!(result.molecule.point_group().to_string(), expected_name);
         assert_eq!(result.molecule.atom_count(), 3);
         assert_eq!(result.parent_group.to_string(), "C2v");
-        assert_eq!(result.correlation.is_some(), has_correlation);
-
-        if let Some(ref ct) = result.correlation {
-            assert_eq!(ct.rows.len(), result.parent_group.irreps().len());
-        }
     }
 
     #[rstest]
@@ -1320,6 +1312,5 @@ mod tests {
         assert_eq!(result.molecule.point_group().to_string(), expected_name);
         assert_eq!(result.molecule.atom_count(), 5);
         assert_eq!(result.parent_group.to_string(), "Td");
-        assert!(result.correlation.is_some());
     }
 }

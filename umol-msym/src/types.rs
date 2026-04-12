@@ -1,8 +1,11 @@
+//! Miscellanious type definitions.
+
 use std::ffi::CStr;
 use std::os::raw::c_int;
 use std::str::FromStr;
 use std::{fmt, ptr};
 
+use nalgebra::Vector3;
 use umol_msym_sys as ffi;
 
 use crate::error::ParseError;
@@ -204,7 +207,7 @@ impl From<ffi::msym_geometry_t> for MolecularShape {
 pub struct SymmetryCenter {
     pub atomic_number: i32,
     pub mass: f64,
-    pub position: [f64; 3],
+    pub position: Vector3<f64>,
     pub name: String,
 }
 
@@ -217,7 +220,7 @@ impl SymmetryCenter {
         ffi::msym_element_t {
             id: ptr::null_mut(),
             m: self.mass,
-            v: self.position,
+            v: self.position.into(),
             n: self.atomic_number,
             name,
         }
@@ -230,7 +233,7 @@ impl SymmetryCenter {
         Self {
             atomic_number: e.n,
             mass: e.m,
-            position: e.v,
+            position: Vector3::from(e.v),
             name,
         }
     }

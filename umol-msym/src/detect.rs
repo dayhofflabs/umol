@@ -1,10 +1,16 @@
+//! Symmetry detection and processing.
+
+use std::ptr::eq;
+
+use nalgebra::{Matrix3, Vector3};
+
 use crate::basis::{BasisFunction, IrrepBasis, Salc, SalcBasis};
 use crate::context::Context;
 use crate::error::MsymError;
+use crate::irrep::Irrep;
 use crate::linear;
 use crate::matrix_rep::MatrixRep;
 use crate::point_group::PointGroup;
-use crate::subgroup::{correlation_table, CorrelationTable};
 use crate::thresholds::Thresholds;
 use crate::types::{EquivalenceSet, SchoenfliesSymbol, SymmetryCenter};
 
@@ -23,7 +29,7 @@ pub struct SymmetryResult {
 }
 
 fn c1_result(centers: &[SymmetryCenter]) -> SymmetryResult {
-    let group = PointGroup::c1();
+    let group = group!(C1);
     let equivalence_sets = centers
         .iter()
         .map(|c| EquivalenceSet {
@@ -36,10 +42,6 @@ fn c1_result(centers: &[SymmetryCenter]) -> SymmetryResult {
         equivalence_sets,
         centers: centers.to_vec(),
     }
-}
-
-fn group_from_ctx(ctx: &Context) -> Result<&'static PointGroup, MsymError> {
-    PointGroup::from_symbol(ctx.point_group()?)
 }
 
 /// Detect point group symmetry of a set of atoms.
@@ -60,8 +62,8 @@ pub fn detect_symmetry(
         Err(e) => return Err(e),
     }
 
-    let group = group_from_ctx(&ctx)?;
-    let representation = ctx.symmetry_representation(group)?;
+    let group = ctx.point_group()?;
+    let representation = ctx.matrix_rep()?;
     let equivalence_sets = ctx.equivalence_sets()?;
     let centers = ctx.centers()?;
 
@@ -91,8 +93,8 @@ pub fn symmetrize(
         }
         Err(e) => return Err(e),
     }
-    let group = group_from_ctx(&ctx)?;
-    let representation = ctx.symmetry_representation(group)?;
+    let group = ctx.point_group()?;
+    let representation = ctx.matrix_rep()?;
     let equivalence_sets = ctx.equivalence_sets()?;
     ctx.symmetrize_centers()?;
     let centers = ctx.centers()?;
@@ -124,13 +126,13 @@ pub fn generate_symmetry_images(
     // Set asymmetric unit to establish center of mass in the context.
     // Then override center of mass to origin so generation works correctly.
     ctx.set_centers(asymmetric_unit)?;
-    ctx.set_center_of_mass([0.0, 0.0, 0.0])?;
-    ctx.set_point_group(label)?;
+    ctx.set_center_of_mass(Vector3::zeros())?;
+    ctx.set_point_group_by_symbol(label)?;
     ctx.generate_centers(asymmetric_unit)?;
     ctx.find_symmetry()?;
 
-    let group = group_from_ctx(&ctx)?;
-    let representation = ctx.symmetry_representation(group)?;
+    let group = ctx.point_group()?;
+    let representation = ctx.matrix_rep()?;
     let equivalence_sets = ctx.equivalence_sets()?;
     let centers = ctx.centers()?;
 
@@ -147,21 +149,9 @@ pub struct SymmetryDescentResult {
     pub parent_group: &'static PointGroup,
     pub child_group: &'static PointGroup,
     pub child_representation: MatrixRep,
-    pub transform: [[f64; 3]; 3],
-    pub correlation: Option<CorrelationTable>,
+    pub transform: Matrix3<f64>,
     pub centers: Vec<SymmetryCenter>,
     pub equivalence_sets: Vec<EquivalenceSet>,
-}
-
-fn build_correlation(
-    parent: &'static PointGroup,
-    child: &'static PointGroup,
-    class_map: &[usize],
-) -> Result<CorrelationTable, MsymError> {
-    correlation_table(parent, child, class_map).map_err(|e| MsymError {
-        code: umol_msym_sys::MSYM_INVALID_CHARACTER_TABLE,
-        message: format!("correlation table computation failed: {e}"),
-    })
 }
 
 /// Lower the symmetry of a molecule to a specified subgroup.
@@ -175,28 +165,20 @@ pub fn lower_symmetry(
     ctx.set_thresholds(&thresholds)?;
     ctx.find_symmetry()?;
 
-    let parent_group = group_from_ctx(&ctx)?;
+    let parent_group = ctx.point_group()?;
     let centers_out = ctx.centers()?;
 
-    let identity_transform = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let identity_transform = Matrix3::identity();
 
     // Identity descent: target is the same group.
     if target == parent_group.symbol() {
         let equivalence_sets = ctx.equivalence_sets()?;
-        let child_representation = ctx.symmetry_representation(parent_group)?;
-        let correlation = if parent_group.is_linear() {
-            None
-        } else {
-            let n_classes = parent_group.class_reps().len();
-            let class_map: Vec<usize> = (0..n_classes).collect();
-            Some(build_correlation(parent_group, parent_group, &class_map)?)
-        };
+        let child_representation = ctx.matrix_rep()?;
         return Ok(SymmetryDescentResult {
             parent_group,
             child_group: parent_group,
             child_representation,
             transform: identity_transform,
-            correlation,
             centers: centers_out,
             equivalence_sets,
         });
@@ -204,25 +186,18 @@ pub fn lower_symmetry(
 
     // C1 is always a subgroup but libmsym doesn't list it.
     if target == SchoenfliesSymbol::Cn(1) {
-        let child_group = PointGroup::c1();
-        let class_map = vec![0]; // E → E
+        let child_group = group!(C1);
         let equivalence_sets = centers_out
             .iter()
             .map(|c| EquivalenceSet {
                 centers: vec![c.clone()],
-                })
+            })
             .collect();
-        let correlation = if parent_group.is_linear() {
-            None
-        } else {
-            Some(build_correlation(parent_group, child_group, &class_map)?)
-        };
         return Ok(SymmetryDescentResult {
             parent_group,
             child_group,
             child_representation: MatrixRep::identity_only(child_group),
             transform: identity_transform,
-            correlation,
             centers: centers_out,
             equivalence_sets,
         });
@@ -238,7 +213,7 @@ pub fn lower_symmetry(
         ctx2.set_point_group_by_name(&child_name)?;
         ctx2.find_symmetry()?;
 
-        let detected = ctx2.point_group()?;
+        let detected = ctx2.point_group_symbol()?;
         if detected != target {
             return Err(MsymError {
                 code: umol_msym_sys::MSYM_INVALID_SUBGROUPS,
@@ -249,8 +224,8 @@ pub fn lower_symmetry(
             });
         }
 
-        let child_group = PointGroup::parse(&child_name)?;
-        let child_representation = ctx2.symmetry_representation(child_group)?;
+        let child_group = ctx2.point_group()?;
+        let child_representation = ctx2.matrix_rep()?;
         let centers_out = ctx2.centers()?;
         let equivalence_sets = ctx2.equivalence_sets()?;
 
@@ -259,13 +234,12 @@ pub fn lower_symmetry(
             child_group,
             child_representation,
             transform: identity_transform,
-            correlation: None,
             centers: centers_out,
             equivalence_sets,
         });
     }
 
-    let subgroups = ctx.subgroups(parent_group)?;
+    let subgroups = ctx.subgroups()?;
     let sg = subgroups
         .iter()
         .find(|sg| sg.symbol() == target)
@@ -275,50 +249,19 @@ pub fn lower_symmetry(
         })?
         .clone();
 
-    let parent_ops_with_class = sg.parent_ops().to_vec();
+    ctx.into_subgroup(&sg)?;
 
-    ctx.select_subgroup(&sg)?;
-
-    let child_name = ctx.point_group_name()?;
-    let child_group = PointGroup::parse(&child_name)?;
+    let child_group = ctx.point_group()?;
     let transform = ctx.alignment_transform()?;
-    let child_representation = ctx.symmetry_representation(child_group)?;
+    let child_representation = ctx.matrix_rep()?;
     let centers_out = ctx.centers()?;
     let equivalence_sets = ctx.equivalence_sets()?;
-
-    // Build class_map: child class → parent class.
-    // Match each child op to the closest parent subgroup op by 3×3 matrix.
-    let child_n_classes = child_group.class_reps().len();
-    let mut class_map = vec![0usize; child_n_classes];
-    let mut class_assigned = vec![false; child_n_classes];
-
-    for child_op in child_group.ops() {
-        let child_class = child_op.class();
-        if class_assigned[child_class] {
-            continue;
-        }
-        let child_matrix = child_representation.matrix(child_op);
-        let (_, parent_class) = parent_ops_with_class
-            .iter()
-            .map(|(pmat, pcls)| {
-                let diff = pmat - child_matrix;
-                let dist: f64 = diff.iter().map(|x| x * x).sum();
-                (dist, *pcls)
-            })
-            .min_by(|a, b| a.0.partial_cmp(&b.0).unwrap())
-            .unwrap();
-        class_map[child_class] = parent_class;
-        class_assigned[child_class] = true;
-    }
-
-    let correlation = Some(build_correlation(parent_group, child_group, &class_map)?);
 
     Ok(SymmetryDescentResult {
         parent_group,
         child_group,
         child_representation,
         transform,
-        correlation,
         centers: centers_out,
         equivalence_sets,
     })
@@ -339,7 +282,7 @@ pub fn compute_salcs(
     ctx.set_thresholds(&thresholds)?;
     ctx.find_symmetry()?;
 
-    let group = group_from_ctx(&ctx)?;
+    let group = ctx.point_group()?;
 
     if group.is_linear() {
         let aligned = ctx.centers()?;
@@ -353,16 +296,12 @@ pub fn compute_salcs(
 
     ctx.set_basis_functions(basis)?;
 
-    let l = basis.len();
-    let (coefficients, species) = ctx.salcs(l)?;
-
-    let irreps = group.irreps();
+    let (coefficients, irreps) = ctx.salcs()?;
+    let l = irreps.len();
     let zero_thresh = thresholds.zero;
 
-    // Group SALCs by irrep
-    let mut irrep_salcs: Vec<Vec<Salc>> = vec![Vec::new(); irreps.len()];
-
-    for (salc_idx, &species_idx) in species.iter().enumerate() {
+    let mut irrep_salcs: Vec<(Irrep, Vec<Salc>)> = Vec::new();
+    for (salc_idx, &irrep) in irreps.iter().enumerate() {
         let row = &coefficients[salc_idx * l..(salc_idx + 1) * l];
         let sparse: Vec<(usize, f64)> = row
             .iter()
@@ -373,15 +312,25 @@ pub fn compute_salcs(
         if sparse.is_empty() {
             continue;
         }
-        irrep_salcs[species_idx as usize].push(Salc {
-            coefficients: sparse,
-        });
+        if let Some(entry) = irrep_salcs
+            .iter_mut()
+            .find(|(ir, _)| eq(ir.data, irrep.data))
+        {
+            entry.1.push(Salc {
+                coefficients: sparse,
+            });
+        } else {
+            irrep_salcs.push((
+                irrep,
+                vec![Salc {
+                    coefficients: sparse,
+                }],
+            ));
+        }
     }
 
-    let irrep_bases: Vec<IrrepBasis> = irreps
+    let irrep_bases: Vec<IrrepBasis> = irrep_salcs
         .into_iter()
-        .zip(irrep_salcs)
-        .filter(|(_, salcs)| !salcs.is_empty())
         .map(|(irrep, salcs)| IrrepBasis { irrep, salcs })
         .collect();
 
@@ -410,10 +359,10 @@ mod tests {
             .iter()
             .zip(masses.iter())
             .zip(positions.iter())
-            .map(|((&z, &m), &pos)| SymmetryCenter {
+            .map(|((&z, &m), pos)| SymmetryCenter {
                 atomic_number: z,
                 mass: m,
-                position: pos,
+                position: Vector3::from(*pos),
                 name: String::new(),
             })
             .collect()

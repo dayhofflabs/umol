@@ -1,3 +1,5 @@
+//! Symmetry operations and point group data.
+
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::ffi::{CStr, CString};
@@ -246,8 +248,8 @@ pub(crate) struct FiniteGroupData {
 /// A molecular point group: orientation-independent algebraic data.
 ///
 /// Point groups are `&'static` singletons cached in a process-global registry.
-/// There is exactly one C₂ᵥ, one Td, etc. Access via named constructors
-/// (`PointGroup::c2v()`) or `PointGroup::parse("C2v")`.
+/// There is exactly one C₂ᵥ, one Td, etc. Access via macro (`group!(C2v)`) or
+/// `PointGroup::parse("C2v")`.
 #[derive(Debug)]
 pub struct PointGroup {
     pub(crate) symbol: SchoenfliesSymbol,
@@ -455,6 +457,10 @@ impl PointGroup {
 
     pub fn is_icosahedral(&self) -> bool {
         matches!(self.symbol, SchoenfliesSymbol::I | SchoenfliesSymbol::Ih)
+    }
+
+    pub fn is_simply_reducible(&self) -> bool {
+        !self.is_icosahedral()
     }
 
     pub fn is_linear(&self) -> bool {
@@ -996,74 +1002,6 @@ fn normalize_irrep_symbols(data: &mut [IrrepData]) {
     }
 }
 
-macro_rules! point_group_fn {
-    ($name:ident, $schoenflies:expr) => {
-        pub fn $name() -> &'static PointGroup {
-            Self::parse($schoenflies).unwrap()
-        }
-    };
-}
-
-impl PointGroup {
-    point_group_fn!(c1, "C1");
-    point_group_fn!(cs, "Cs");
-    point_group_fn!(ci, "Ci");
-
-    point_group_fn!(c2, "C2");
-    point_group_fn!(c3, "C3");
-    point_group_fn!(c4, "C4");
-    point_group_fn!(c5, "C5");
-    point_group_fn!(c6, "C6");
-    point_group_fn!(c7, "C7");
-    point_group_fn!(c8, "C8");
-
-    point_group_fn!(c2v, "C2v");
-    point_group_fn!(c3v, "C3v");
-    point_group_fn!(c4v, "C4v");
-    point_group_fn!(c5v, "C5v");
-    point_group_fn!(c6v, "C6v");
-
-    point_group_fn!(c2h, "C2h");
-    point_group_fn!(c3h, "C3h");
-    point_group_fn!(c4h, "C4h");
-    point_group_fn!(c5h, "C5h");
-    point_group_fn!(c6h, "C6h");
-
-    point_group_fn!(d2, "D2");
-    point_group_fn!(d3, "D3");
-    point_group_fn!(d4, "D4");
-    point_group_fn!(d5, "D5");
-    point_group_fn!(d6, "D6");
-
-    point_group_fn!(d2h, "D2h");
-    point_group_fn!(d3h, "D3h");
-    point_group_fn!(d4h, "D4h");
-    point_group_fn!(d5h, "D5h");
-    point_group_fn!(d6h, "D6h");
-    point_group_fn!(d8h, "D8h");
-
-    point_group_fn!(d2d, "D2d");
-    point_group_fn!(d3d, "D3d");
-    point_group_fn!(d4d, "D4d");
-    point_group_fn!(d5d, "D5d");
-    point_group_fn!(d6d, "D6d");
-
-    point_group_fn!(s4, "S4");
-    point_group_fn!(s6, "S6");
-    point_group_fn!(s8, "S8");
-
-    point_group_fn!(t, "T");
-    point_group_fn!(th, "Th");
-    point_group_fn!(td, "Td");
-    point_group_fn!(o, "O");
-    point_group_fn!(oh, "Oh");
-
-    point_group_fn!(ih, "Ih");
-
-    point_group_fn!(coov, "C∞v");
-    point_group_fn!(dooh, "D∞h");
-}
-
 pub struct CharacterTableDisplay {
     group: &'static PointGroup,
 }
@@ -1158,7 +1096,7 @@ mod tests {
 
     #[rstest]
     fn test_point_group_c1() {
-        let g = PointGroup::c1();
+        let g = group!(C1);
         assert_eq!(g.to_string(), "C1");
         assert_eq!(g.order(), 1);
         assert_eq!(g.ops().len(), 1);
@@ -1187,17 +1125,19 @@ mod tests {
 
     #[rstest]
     fn test_point_group_pointer_identity() {
-        let a = PointGroup::c2v();
+        let a = group!(C2v);
         let b = PointGroup::parse("C2v").unwrap();
         assert!(ptr::eq(a, b));
     }
 
     #[rstest]
-    fn test_point_group_named_constructors() {
-        assert_eq!(PointGroup::td().to_string(), "Td");
-        assert_eq!(PointGroup::oh().to_string(), "Oh");
-        assert_eq!(PointGroup::ih().to_string(), "Ih");
-        assert_eq!(PointGroup::d2h().to_string(), "D2h");
+    fn test_group_macro() {
+        assert_eq!(group!(Td).to_string(), "Td");
+        assert_eq!(group!(Oh).to_string(), "Oh");
+        assert_eq!(group!(Ih).to_string(), "Ih");
+        assert_eq!(group!(D2h).to_string(), "D2h");
+        assert_eq!(group!(Coov).to_string(), "C∞v");
+        assert_eq!(group!(Dooh).to_string(), "D∞h");
     }
 
     #[rstest]
@@ -1368,7 +1308,7 @@ mod tests {
 
     #[rstest]
     fn test_point_group_irreps() {
-        let g = PointGroup::c2v();
+        let g = group!(C2v);
         let irreps = g.irreps();
         assert_eq!(irreps.len(), 4);
         let symbols: Vec<&str> = irreps.iter().map(|ir| ir.symbol()).collect();
@@ -1384,7 +1324,7 @@ mod tests {
 
     #[rstest]
     fn test_point_group_irrep() {
-        let g = PointGroup::c2v();
+        let g = group!(C2v);
         let a1 = g.irrep("A1").unwrap();
         assert_eq!(a1.symbol(), "A1");
         assert!(g.irrep("nonexistent").is_none());
@@ -1442,7 +1382,7 @@ mod tests {
 
     #[rstest]
     fn test_point_group_contains_totally_symmetric() {
-        let g = PointGroup::c2v();
+        let g = group!(C2v);
         let a1 = g.irrep("A1").unwrap();
         let b1 = g.irrep("B1").unwrap();
         let b2 = g.irrep("B2").unwrap();
@@ -1452,7 +1392,7 @@ mod tests {
 
     #[rstest]
     fn test_irrep_equality() {
-        let g = PointGroup::c2v();
+        let g = group!(C2v);
         let a1_first = g.irrep("A1").unwrap();
         let a1_second = g.irrep("A1").unwrap();
         let b1 = g.irrep("B1").unwrap();
@@ -1554,7 +1494,7 @@ mod tests {
 
     #[rstest]
     fn test_character_table_display_c2v() {
-        let g = PointGroup::c2v();
+        let g = group!(C2v);
         let table = g.character_table().to_string();
         let expected = "\
 C2v │ E C2  σv  σd
@@ -1593,7 +1533,7 @@ E   │ 2  -1    0
 
     #[rstest]
     fn test_irrep_gerade_finite() {
-        let g = PointGroup::oh();
+        let g = group!(Oh);
         assert_eq!(g.irrep("A1g").unwrap().gerade(), Some(true));
         assert_eq!(g.irrep("Eg").unwrap().gerade(), Some(true));
         assert_eq!(g.irrep("T1u").unwrap().gerade(), Some(false));
@@ -1602,7 +1542,7 @@ E   │ 2  -1    0
 
     #[rstest]
     fn test_irrep_gerade_no_inversion() {
-        let g = PointGroup::c2v();
+        let g = group!(C2v);
         for ir in g.irreps() {
             assert_eq!(ir.gerade(), None);
         }
@@ -1610,7 +1550,7 @@ E   │ 2  -1    0
 
     #[rstest]
     fn test_symmetry_op_is_proper() {
-        let g = PointGroup::oh();
+        let g = group!(Oh);
         for op in g.ops() {
             assert_eq!(
                 op.is_proper(),
@@ -1624,7 +1564,7 @@ E   │ 2  -1    0
 
     #[rstest]
     fn test_symmetry_op_equality_via_handle_identity() {
-        let g = PointGroup::c2v();
+        let g = group!(C2v);
         let ops = g.ops();
         // Two reflections in C2v share descriptive tuple but must compare unequal.
         let reflections: Vec<SymmetryOp> = ops
@@ -1639,8 +1579,8 @@ E   │ 2  -1    0
 
     #[rstest]
     fn test_symmetry_op_cross_group_inequality() {
-        let c2v = PointGroup::c2v();
-        let d2h = PointGroup::d2h();
+        let c2v = group!(C2v);
+        let d2h = group!(D2h);
         let c2v_inv = c2v
             .ops()
             .iter()
@@ -1657,7 +1597,7 @@ E   │ 2  -1    0
 
     #[rstest]
     fn test_point_group_multiply_closure() {
-        let g = PointGroup::c2v();
+        let g = group!(C2v);
         let ops = g.ops();
         // Closure: for every pair (a, b), multiply(a, b) returns an op in the group.
         for a in &ops {

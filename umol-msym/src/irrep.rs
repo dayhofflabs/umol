@@ -1,4 +1,4 @@
-//! Irrep data structures for umol-msym.
+//! Irrep data structures.
 
 use std::hash::{Hash, Hasher};
 use std::{fmt, ptr};
@@ -192,12 +192,12 @@ mod tests {
 
     #[rstest]
     fn test_irrep_totally_symmetric_linear() {
-        let g = PointGroup::coov();
+        let g = group!(Coov);
         assert!(g.irrep("Σ+").unwrap().totally_symmetric());
         assert!(!g.irrep("Σ-").unwrap().totally_symmetric());
         assert!(!g.irrep("Π").unwrap().totally_symmetric());
 
-        let g = PointGroup::dooh();
+        let g = group!(Dooh);
         assert!(g.irrep("Σ+g").unwrap().totally_symmetric());
         assert!(!g.irrep("Σ+u").unwrap().totally_symmetric());
         assert!(!g.irrep("Σ-g").unwrap().totally_symmetric());
@@ -258,7 +258,7 @@ mod tests {
 
     #[rstest]
     fn test_irrep_vertical_mirror_symmetric_linear() {
-        let g = PointGroup::coov();
+        let g = group!(Coov);
         assert_eq!(g.irrep("Σ+").unwrap().vertical_mirror_symmetric(), Some(true));
         assert_eq!(g.irrep("Σ-").unwrap().vertical_mirror_symmetric(), Some(false));
         assert_eq!(g.irrep("Π").unwrap().vertical_mirror_symmetric(), None);

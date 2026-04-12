@@ -4,16 +4,10 @@
 
 use std::os::raw::{c_char, c_double, c_int, c_void};
 
-// ---------------------------------------------------------------------------
 // Opaque context
-// ---------------------------------------------------------------------------
-
 pub type msym_context = *mut c_void;
 
-// ---------------------------------------------------------------------------
 // Enums
-// ---------------------------------------------------------------------------
-
 pub type msym_error_t = c_int;
 
 pub const MSYM_SUCCESS: msym_error_t = 0;
@@ -89,10 +83,7 @@ pub type msym_basis_type_t = c_int;
 pub const MSYM_BASIS_TYPE_REAL_SPHERICAL_HARMONIC: msym_basis_type_t = 0;
 pub const MSYM_BASIS_TYPE_CARTESIAN: msym_basis_type_t = 1;
 
-// ---------------------------------------------------------------------------
 // Structs
-// ---------------------------------------------------------------------------
-
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct msym_symmetry_operation_t {
@@ -205,10 +196,7 @@ pub struct msym_subgroup_t {
     pub name: [c_char; 8],
 }
 
-// ---------------------------------------------------------------------------
 // Functions
-// ---------------------------------------------------------------------------
-
 unsafe extern "C" {
     // Context
     pub fn msymCreateContext() -> msym_context;

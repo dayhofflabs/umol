@@ -1,5 +1,6 @@
 mod reference_tables_data;
 
+use nalgebra::Vector3;
 use reference_tables_data::{reference_table, ReferenceTable};
 use rstest::rstest;
 use umol_msym::{detect_symmetry, PointGroup, SymmetryCenter, Thresholds};
@@ -15,10 +16,10 @@ fn make_centers(
         .iter()
         .zip(masses.iter())
         .zip(positions.iter())
-        .map(|((&z, &m), &pos)| SymmetryCenter {
+        .map(|((&z, &m), pos)| SymmetryCenter {
             atomic_number: z,
             mass: m,
-            position: pos,
+            position: Vector3::from(*pos),
             name: String::new(),
         })
         .collect()

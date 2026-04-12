@@ -6,11 +6,12 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
 use std::{ptr, slice};
 
-use nalgebra::Vector3;
+use nalgebra::{Matrix3, Vector3};
 use umol_msym_sys as ffi;
 
 use crate::basis::{BasisFunction, BasisKind, IrrepBasis, Salc};
 use crate::error::{self, MsymError};
+use crate::irrep::Irrep;
 use crate::matrix_rep::MatrixRep;
 use crate::point_group::{compute_op_matrix, PointGroup};
 use crate::subgroup::{Subgroup, SubgroupData};
@@ -31,6 +32,27 @@ impl Drop for Context {
     }
 }
 
+impl Clone for Context {
+    fn clone(&self) -> Self {
+        let mut ctx = Self::new().expect("failed to allocate context");
+        let centers = self.centers().expect("failed to read centers");
+        ctx.set_centers(&centers).expect("failed to set centers");
+        if let Ok(t) = self.thresholds() {
+            ctx.set_thresholds(&t).expect("failed to set thresholds");
+        }
+        if let Ok(symbol) = self.point_group_symbol() {
+            ctx.find_symmetry().expect("failed to find symmetry");
+            assert_eq!(
+                ctx.point_group_symbol()
+                    .expect("failed to read point group"),
+                symbol,
+                "cloned context detected different point group"
+            );
+        }
+        ctx
+    }
+}
+
 impl Context {
     pub(crate) fn new() -> Result<Self, MsymError> {
         let ctx = unsafe { ffi::msymCreateContext() };
@@ -41,6 +63,17 @@ impl Context {
             });
         }
         Ok(Self { ctx })
+    }
+
+    /// Resolve the current point group from the context.
+    /// Requires `find_symmetry` or `set_point_group*`.
+    pub(crate) fn point_group(&self) -> Result<&'static PointGroup, MsymError> {
+        PointGroup::from_symbol(self.point_group_symbol()?)
+    }
+
+    /// Manually set the point group (skipping detection). Alternative to `find_symmetry`.
+    pub(crate) fn set_point_group(&mut self, group: &'static PointGroup) -> Result<(), MsymError> {
+        self.set_point_group_by_symbol(group.symbol())
     }
 
     /// Set numerical thresholds for symmetry detection and comparison. Optional — libmsym
@@ -59,7 +92,7 @@ impl Context {
 
     /// Load a complete set of centers into the context. Used in two paths:
     /// `set_centers` → `find_symmetry` → `symmetrize_centers`, or
-    /// `set_point_group` + `set_centers` → `symmetrize_centers`.
+    /// `set_point_group*` + `set_centers` → `symmetrize_centers`.
     pub(crate) fn set_centers(&mut self, centers: &[SymmetryCenter]) -> Result<(), MsymError> {
         let mut ffi_elems: Vec<ffi::msym_element_t> = centers.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
@@ -78,7 +111,7 @@ impl Context {
 
     /// Expand an asymmetric unit into the full set of centers under the current point
     /// group. Internally computes equivalence sets, permutations, and symmetrization.
-    /// Requires `set_point_group`.
+    /// Requires `set_point_group*`.
     pub(crate) fn generate_centers(
         &mut self,
         asymmetric_unit: &[SymmetryCenter],
@@ -91,7 +124,7 @@ impl Context {
     }
 
     /// Snap centers to exact symmetry positions. Returns the RMS displacement.
-    /// Requires a point group (from `find_symmetry` or `set_point_group`); lazily
+    /// Requires a point group (from `find_symmetry` or `set_point_group*`); lazily
     /// computes equivalence sets and permutations if not already cached.
     pub(crate) fn symmetrize_centers(&mut self) -> Result<f64, MsymError> {
         let mut err = 0.0f64;
@@ -101,26 +134,28 @@ impl Context {
 
     /// Displace one center by a vector while preserving the point group. The translation
     /// is projected onto the totally symmetric subspace: each symmetry operation is applied
-    /// to `v`, the results are accumulated on equivalent centers, and the antisymmetric
-    /// component is discarded. Requires a point group; lazily computes equivalence sets
-    /// and permutations if not already cached.
-    pub(crate) fn apply_translation(
+    /// to the displacement, the results are accumulated on equivalent centers, and the
+    /// antisymmetric component is discarded. Returns the actually applied (projected)
+    /// displacement. Requires a point group; lazily computes equivalence sets and
+    /// permutations if not already cached.
+    pub(crate) fn translate_center(
         &mut self,
         center_index: usize,
-        v: [f64; 3],
-    ) -> Result<(), MsymError> {
+        displacement: Vector3<f64>,
+    ) -> Result<Vector3<f64>, MsymError> {
         let mut len: c_int = 0;
         let mut ptr = ptr::null_mut();
         error::check(unsafe { ffi::msymGetElements(self.ctx, &mut len, &mut ptr) })?;
-        assert!(
+        debug_assert!(
             (center_index as c_int) < len,
             "center_index {} out of range ({})",
             center_index,
             len
         );
         let element = unsafe { ptr.add(center_index) };
-        let mut v = v;
-        error::check(unsafe { ffi::msymApplyTranslation(self.ctx, element, v.as_mut_ptr()) })
+        let mut arr = [displacement.x, displacement.y, displacement.z];
+        error::check(unsafe { ffi::msymApplyTranslation(self.ctx, element, arr.as_mut_ptr()) })?;
+        Ok(Vector3::new(arr[0], arr[1], arr[2]))
     }
 
     /// Register basis functions (AOs or displacement vectors) on the centers.
@@ -181,16 +216,26 @@ impl Context {
             .collect())
     }
 
+    fn basis_count(&self) -> Result<usize, MsymError> {
+        let mut len: c_int = 0;
+        let mut ptr = ptr::null_mut();
+        error::check(unsafe { ffi::msymGetBasisFunctions(self.ctx, &mut len, &mut ptr) })?;
+        Ok(len as usize)
+    }
+
     /// Return the detected or manually set point group as a Schoenflies symbol.
-    pub(crate) fn point_group(&self) -> Result<SchoenfliesSymbol, MsymError> {
+    pub(crate) fn point_group_symbol(&self) -> Result<SchoenfliesSymbol, MsymError> {
         let mut pg_type: ffi::msym_point_group_type_t = 0;
         let mut n: c_int = 0;
         error::check(unsafe { ffi::msymGetPointGroupType(self.ctx, &mut pg_type, &mut n) })?;
         Ok(SchoenfliesSymbol::from_ffi(pg_type, n))
     }
 
-    /// Manually set the point group (skipping detection). Alternative to `find_symmetry`.
-    pub(crate) fn set_point_group(&mut self, label: SchoenfliesSymbol) -> Result<(), MsymError> {
+    /// Manually set the point group by Schoenflies symbol.
+    pub(crate) fn set_point_group_by_symbol(
+        &mut self,
+        label: SchoenfliesSymbol,
+    ) -> Result<(), MsymError> {
         let (pg_type, n) = label.to_ffi();
         error::check(unsafe { ffi::msymSetPointGroupByType(self.ctx, pg_type, n) })
     }
@@ -204,7 +249,7 @@ impl Context {
         error::check(unsafe { ffi::msymSetPointGroupByName(self.ctx, cname.as_ptr()) })
     }
 
-    /// Return the point group name as a string. Requires `find_symmetry` or `set_point_group`.
+    /// Return the point group name as a string. Requires `find_symmetry` or `set_point_group*`.
     pub(crate) fn point_group_name(&self) -> Result<String, MsymError> {
         let mut buf = [0i8; 16];
         error::check(unsafe { ffi::msymGetPointGroupName(self.ctx, 16, buf.as_mut_ptr()) })?;
@@ -213,10 +258,8 @@ impl Context {
     }
 
     /// List subgroups of the current point group. Requires `find_symmetry`.
-    pub(crate) fn subgroups(
-        &self,
-        parent: &'static PointGroup,
-    ) -> Result<Vec<Subgroup>, MsymError> {
+    pub(crate) fn subgroups(&self) -> Result<Vec<Subgroup>, MsymError> {
+        let parent = self.point_group()?;
         let mut len: c_int = 0;
         let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetSubgroups(self.ctx, &mut len, &mut ptr) })?;
@@ -236,15 +279,6 @@ impl Context {
             let order = sg.order as usize;
             let multiplicity = symbols.iter().filter(|&&s| s == symbol).count();
 
-            let sops_slice = unsafe { slice::from_raw_parts(sg.sops, order) };
-            let parent_ops = sops_slice
-                .iter()
-                .map(|sop_ptr| {
-                    let sop = unsafe { &**sop_ptr };
-                    (compute_op_matrix(sop), sop.cla as usize)
-                })
-                .collect();
-
             result.push(Subgroup::new(
                 parent,
                 i,
@@ -252,7 +286,6 @@ impl Context {
                     symbol,
                     name,
                     order,
-                    parent_ops,
                     multiplicity,
                 },
             ));
@@ -260,21 +293,29 @@ impl Context {
         Ok(result)
     }
 
-    /// Lower the context to a subgroup. Requires `subgroups` to obtain `sg`.
-    pub(crate) fn select_subgroup(&mut self, sg: &Subgroup) -> Result<(), MsymError> {
+    /// Destructively lower the context to a subgroup. The parent group state is
+    /// lost. Requires `subgroups` to obtain `sg`; panics if `sg` was not created
+    /// from the given `parent`.
+    #[allow(clippy::wrong_self_convention)]
+    pub(crate) fn into_subgroup(&mut self, subgroup: &Subgroup) -> Result<(), MsymError> {
+        let parent = self.point_group()?;
+        assert!(
+            ptr::eq(subgroup.parent(), parent),
+            "subgroup belongs to {}, not {}",
+            subgroup.parent().symbol(),
+            parent.symbol(),
+        );
         let mut len: c_int = 0;
         let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetSubgroups(self.ctx, &mut len, &mut ptr) })?;
 
-        let sg_ptr = unsafe { ptr.add(sg.index()) };
+        let sg_ptr = unsafe { ptr.add(subgroup.index()) };
         error::check(unsafe { ffi::msymSelectSubgroup(self.ctx, sg_ptr) })
     }
 
     /// Build 3×3 matrix representations for each symmetry operation. Requires `find_symmetry`.
-    pub(crate) fn symmetry_representation(
-        &self,
-        group: &'static PointGroup,
-    ) -> Result<MatrixRep, MsymError> {
+    pub(crate) fn matrix_rep(&self) -> Result<MatrixRep, MsymError> {
+        let group = self.point_group()?;
         let mut len: c_int = 0;
         let mut p = ptr::null();
         error::check(unsafe { ffi::msymGetSymmetryOperations(self.ctx, &mut len, &mut p) })?;
@@ -341,7 +382,7 @@ impl Context {
     }
 
     /// Compute equivalence sets without running full symmetry detection.
-    /// Requires `set_centers` and `set_point_group`.
+    /// Requires `set_centers` and `set_point_group*`.
     pub(crate) fn find_equivalence_sets(&mut self) -> Result<(), MsymError> {
         error::check(unsafe { ffi::msymFindEquivalenceSets(self.ctx) })
     }
@@ -355,10 +396,8 @@ impl Context {
     /// Return SALCs grouped by irrep as structured data. Each SALC stores sparse
     /// coefficients referencing the basis function indices from `set_basis_functions`.
     /// Requires `generate_salcs`.
-    pub(crate) fn salcs_by_irrep(
-        &self,
-        group: &'static PointGroup,
-    ) -> Result<Vec<IrrepBasis>, MsymError> {
+    pub(crate) fn salcs_by_irrep(&self) -> Result<Vec<IrrepBasis>, MsymError> {
+        let group = self.point_group()?;
         let mut len: c_int = 0;
         let mut srs_ptr: *const ffi::msym_subrepresentation_space_t = ptr::null();
         error::check(unsafe {
@@ -411,15 +450,20 @@ impl Context {
     }
 
     /// Project MO coefficients onto SALC subspaces in-place. The coefficient matrix
-    /// is rewritten so each row belongs to a single irrep; `species` is updated with
-    /// the irrep index for each row. Requires `generate_salcs`.
+    /// (l×l, row-major) is rewritten so each row belongs to a single irrep. Returns
+    /// the irrep assignment for each row. Requires `generate_salcs`.
     pub(crate) fn symmetrize_salcs(
         &mut self,
-        basis_count: usize,
         coefficients: &mut [f64],
-        species: &mut [i32],
-    ) -> Result<(), MsymError> {
-        let l = basis_count as c_int;
+    ) -> Result<Vec<Irrep>, MsymError> {
+        let l = self.basis_count()? as c_int;
+        assert_eq!(
+            coefficients.len(),
+            (l * l) as usize,
+            "coefficient matrix size does not match basis function count"
+        );
+        let irreps = self.point_group()?.irreps();
+        let mut ffi_species = vec![0i32; l as usize];
         let mut partner: Vec<ffi::msym_partner_function_t> = (0..l)
             .map(|_| ffi::msym_partner_function_t { i: 0, d: 0 })
             .collect();
@@ -428,19 +472,20 @@ impl Context {
                 self.ctx,
                 l,
                 coefficients.as_mut_ptr(),
-                species.as_mut_ptr(),
+                ffi_species.as_mut_ptr(),
                 partner.as_mut_ptr(),
             )
-        })
+        })?;
+        Ok(ffi_species.iter().map(|&i| irreps[i as usize]).collect())
     }
 
-    /// Return SALCs as a dense l×l row-major coefficient matrix and a species index
-    /// vector mapping each row to an irrep in the character table.
-    /// Requires `generate_salcs`.
-    pub(crate) fn salcs(&self, basis_count: usize) -> Result<(Vec<f64>, Vec<i32>), MsymError> {
-        let l = basis_count as c_int;
+    /// Return SALCs as a dense l×l row-major coefficient matrix and the irrep
+    /// assignment for each row. Requires `generate_salcs`.
+    pub(crate) fn salcs(&self) -> Result<(Vec<f64>, Vec<Irrep>), MsymError> {
+        let l = self.basis_count()? as c_int;
+        let irreps = self.point_group()?.irreps();
         let mut coefficients = vec![0.0f64; (l * l) as usize];
-        let mut species = vec![0i32; l as usize];
+        let mut ffi_species = vec![0i32; l as usize];
         let mut partner: Vec<ffi::msym_partner_function_t> = (0..l)
             .map(|_| ffi::msym_partner_function_t { i: 0, d: 0 })
             .collect();
@@ -450,23 +495,29 @@ impl Context {
                 self.ctx,
                 l,
                 coefficients.as_mut_ptr(),
-                species.as_mut_ptr(),
+                ffi_species.as_mut_ptr(),
                 partner.as_mut_ptr(),
             )
         })?;
 
-        Ok((coefficients, species))
+        let irrep_assignments = ffi_species.iter().map(|&i| irreps[i as usize]).collect();
+        Ok((coefficients, irrep_assignments))
     }
 
-    /// Measure per-irrep projection norms of a single wavefunction vector.
-    /// `components` must have length equal to the number of irreps. Read-only diagnostic.
-    /// Requires `generate_salcs`.
-    pub(crate) fn irrep_components(
-        &self,
-        wavefunction: &[f64],
-        components: &mut [f64],
-    ) -> Result<(), MsymError> {
-        let mut wf = wavefunction.to_vec();
+    /// Project a coefficient vector onto each irrep subspace and return the
+    /// squared norms. The input vector has length `basis_count` (one coefficient
+    /// per basis function); the output has one entry per irrep in character-table
+    /// order. Requires `generate_salcs`.
+    pub(crate) fn project_onto_irreps(&self, coefficients: &[f64]) -> Result<Vec<f64>, MsymError> {
+        assert_eq!(
+            coefficients.len(),
+            self.basis_count()?,
+            "coefficient vector length does not match basis function count"
+        );
+        let group = self.point_group()?;
+        let mut wf = coefficients.to_vec();
+        let n_irreps = group.irreps().len();
+        let mut components = vec![0.0f64; n_irreps];
         error::check(unsafe {
             ffi::msymSymmetrySpeciesComponents(
                 self.ctx,
@@ -475,19 +526,20 @@ impl Context {
                 components.len() as c_int,
                 components.as_mut_ptr(),
             )
-        })
+        })?;
+        Ok(components)
     }
 
     /// Return the mass-weighted centroid. Requires `set_centers`.
-    pub(crate) fn center_of_mass(&self) -> Result<[f64; 3], MsymError> {
+    pub(crate) fn center_of_mass(&self) -> Result<Vector3<f64>, MsymError> {
         let mut v = [0.0f64; 3];
         error::check(unsafe { ffi::msymGetCenterOfMass(self.ctx, v.as_mut_ptr()) })?;
-        Ok(v)
+        Ok(Vector3::from(v))
     }
 
     /// Override the center of mass used for alignment. Requires `set_centers`.
-    pub(crate) fn set_center_of_mass(&mut self, v: [f64; 3]) -> Result<(), MsymError> {
-        let mut v = v;
+    pub(crate) fn set_center_of_mass(&mut self, v: Vector3<f64>) -> Result<(), MsymError> {
+        let mut v: [f64; 3] = v.into();
         error::check(unsafe { ffi::msymSetCenterOfMass(self.ctx, v.as_mut_ptr()) })
     }
 
@@ -515,10 +567,10 @@ impl Context {
     }
 
     /// Return the three principal axes as row vectors. Requires `set_centers`.
-    pub(crate) fn principal_axes(&self) -> Result<[[f64; 3]; 3], MsymError> {
+    pub(crate) fn principal_axes(&self) -> Result<[Vector3<f64>; 3], MsymError> {
         let mut eigvec = [[0.0f64; 3]; 3];
         error::check(unsafe { ffi::msymGetPrincipalAxes(self.ctx, eigvec.as_mut_ptr()) })?;
-        Ok(eigvec)
+        Ok(eigvec.map(Vector3::from))
     }
 
     /// Rotate centers so the principal axis is along z and the secondary along y.
@@ -528,23 +580,23 @@ impl Context {
     }
 
     /// Return the primary and secondary alignment axes. Requires `find_symmetry`.
-    pub(crate) fn alignment_axes(&self) -> Result<([f64; 3], [f64; 3]), MsymError> {
+    pub(crate) fn alignment_axes(&self) -> Result<(Vector3<f64>, Vector3<f64>), MsymError> {
         let mut primary = [0.0f64; 3];
         let mut secondary = [0.0f64; 3];
         error::check(unsafe {
             ffi::msymGetAlignmentAxes(self.ctx, primary.as_mut_ptr(), secondary.as_mut_ptr())
         })?;
-        Ok((primary, secondary))
+        Ok((Vector3::from(primary), Vector3::from(secondary)))
     }
 
     /// Override the primary and secondary alignment axes. Call before `align_axes`.
     pub(crate) fn set_alignment_axes(
         &mut self,
-        primary: [f64; 3],
-        secondary: [f64; 3],
+        primary: Vector3<f64>,
+        secondary: Vector3<f64>,
     ) -> Result<(), MsymError> {
-        let mut primary = primary;
-        let mut secondary = secondary;
+        let mut primary: [f64; 3] = primary.into();
+        let mut secondary: [f64; 3] = secondary.into();
         error::check(unsafe {
             ffi::msymSetAlignmentAxes(self.ctx, primary.as_mut_ptr(), secondary.as_mut_ptr())
         })
@@ -552,19 +604,19 @@ impl Context {
 
     /// Return the 3×3 rotation matrix applied during `align_axes`.
     /// Requires `find_symmetry`.
-    pub(crate) fn alignment_transform(&self) -> Result<[[f64; 3]; 3], MsymError> {
+    pub(crate) fn alignment_transform(&self) -> Result<Matrix3<f64>, MsymError> {
         let mut transform = [[0.0f64; 3]; 3];
         error::check(unsafe { ffi::msymGetAlignmentTransform(self.ctx, transform.as_mut_ptr()) })?;
-        Ok(transform)
+        Ok(Matrix3::from(transform))
     }
 
     /// Override the 3×3 alignment rotation matrix. Call before `align_axes`.
     pub(crate) fn set_alignment_transform(
         &mut self,
-        transform: [[f64; 3]; 3],
+        transform: Matrix3<f64>,
     ) -> Result<(), MsymError> {
-        let mut transform = transform;
-        error::check(unsafe { ffi::msymSetAlignmentTransform(self.ctx, transform.as_mut_ptr()) })
+        let mut arr: [[f64; 3]; 3] = transform.into();
+        error::check(unsafe { ffi::msymSetAlignmentTransform(self.ctx, arr.as_mut_ptr()) })
     }
 }
 
@@ -572,28 +624,27 @@ impl Context {
 mod tests {
     use rstest::rstest;
 
-    use crate::basis::{BasisFunction, BasisKind, CartesianAxis};
-
     use super::*;
+    use crate::basis::{BasisFunction, BasisKind, CartesianAxis};
 
     fn water() -> Vec<SymmetryCenter> {
         vec![
             SymmetryCenter {
                 atomic_number: 8,
                 mass: 15.999,
-                position: [0.0, 0.0, 0.117_370_3],
+                position: Vector3::new(0.0, 0.0, 0.117_370_3),
                 name: "O".into(),
             },
             SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
-                position: [0.0, 0.757_160_4, -0.469_481_2],
+                position: Vector3::new(0.0, 0.757_160_4, -0.469_481_2),
                 name: "H".into(),
             },
             SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
-                position: [0.0, -0.757_160_4, -0.469_481_2],
+                position: Vector3::new(0.0, -0.757_160_4, -0.469_481_2),
                 name: "H".into(),
             },
         ]
@@ -604,31 +655,31 @@ mod tests {
             SymmetryCenter {
                 atomic_number: 6,
                 mass: 12.011,
-                position: [0.0, 0.0, 0.0],
+                position: Vector3::new(0.0, 0.0, 0.0),
                 name: "C".into(),
             },
             SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
-                position: [0.629_118_5, 0.629_118_5, 0.629_118_5],
+                position: Vector3::new(0.629_118_5, 0.629_118_5, 0.629_118_5),
                 name: "H".into(),
             },
             SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
-                position: [-0.629_118_5, -0.629_118_5, 0.629_118_5],
+                position: Vector3::new(-0.629_118_5, -0.629_118_5, 0.629_118_5),
                 name: "H".into(),
             },
             SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
-                position: [-0.629_118_5, 0.629_118_5, -0.629_118_5],
+                position: Vector3::new(-0.629_118_5, 0.629_118_5, -0.629_118_5),
                 name: "H".into(),
             },
             SymmetryCenter {
                 atomic_number: 1,
                 mass: 1.008,
-                position: [0.629_118_5, -0.629_118_5, -0.629_118_5],
+                position: Vector3::new(0.629_118_5, -0.629_118_5, -0.629_118_5),
                 name: "H".into(),
             },
         ]
@@ -644,60 +695,94 @@ mod tests {
     fn displacement_basis(atom_count: usize) -> Vec<BasisFunction> {
         (0..atom_count)
             .flat_map(|atom| {
-                [(CartesianAxis::X, 1), (CartesianAxis::Y, -1), (CartesianAxis::Z, 0)]
-                    .into_iter()
-                    .map(move |(axis, m)| BasisFunction {
-                        atom_index: atom,
-                        kind: BasisKind::Displacement(axis),
-                        shell_index: 0,
-                        l: 1,
-                        m,
-                    })
+                [
+                    (CartesianAxis::X, 1),
+                    (CartesianAxis::Y, -1),
+                    (CartesianAxis::Z, 0),
+                ]
+                .into_iter()
+                .map(move |(axis, m)| BasisFunction {
+                    atom_index: atom,
+                    kind: BasisKind::Displacement(axis),
+                    shell_index: 0,
+                    l: 1,
+                    m,
+                })
             })
             .collect()
     }
 
-    fn water_salc_ctx() -> (Context, &'static PointGroup) {
+    fn water_salc_ctx() -> Context {
         let mut ctx = water_ctx();
-        let group = PointGroup::from_symbol(SchoenfliesSymbol::Cnv(2)).unwrap();
         ctx.set_basis_functions(&displacement_basis(3)).unwrap();
         ctx.generate_salcs().unwrap();
-        (ctx, group)
+        ctx
     }
 
     fn sf6() -> Vec<SymmetryCenter> {
         vec![
-            SymmetryCenter { atomic_number: 16, mass: 32.06, position: [0.0, 0.0, 0.0], name: "S".into() },
-            SymmetryCenter { atomic_number: 9, mass: 18.998, position: [1.564, 0.0, 0.0], name: "F".into() },
-            SymmetryCenter { atomic_number: 9, mass: 18.998, position: [-1.564, 0.0, 0.0], name: "F".into() },
-            SymmetryCenter { atomic_number: 9, mass: 18.998, position: [0.0, 1.564, 0.0], name: "F".into() },
-            SymmetryCenter { atomic_number: 9, mass: 18.998, position: [0.0, -1.564, 0.0], name: "F".into() },
-            SymmetryCenter { atomic_number: 9, mass: 18.998, position: [0.0, 0.0, 1.564], name: "F".into() },
-            SymmetryCenter { atomic_number: 9, mass: 18.998, position: [0.0, 0.0, -1.564], name: "F".into() },
+            SymmetryCenter {
+                atomic_number: 16,
+                mass: 32.06,
+                position: Vector3::new(0.0, 0.0, 0.0),
+                name: "S".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 9,
+                mass: 18.998,
+                position: Vector3::new(1.564, 0.0, 0.0),
+                name: "F".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 9,
+                mass: 18.998,
+                position: Vector3::new(-1.564, 0.0, 0.0),
+                name: "F".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 9,
+                mass: 18.998,
+                position: Vector3::new(0.0, 1.564, 0.0),
+                name: "F".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 9,
+                mass: 18.998,
+                position: Vector3::new(0.0, -1.564, 0.0),
+                name: "F".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 9,
+                mass: 18.998,
+                position: Vector3::new(0.0, 0.0, 1.564),
+                name: "F".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 9,
+                mass: 18.998,
+                position: Vector3::new(0.0, 0.0, -1.564),
+                name: "F".into(),
+            },
         ]
     }
 
     #[rstest]
-    #[case(water(), SchoenfliesSymbol::Cnv(2), SchoenfliesSymbol::Cs, 2)]
-    #[case(water(), SchoenfliesSymbol::Cnv(2), SchoenfliesSymbol::Cn(2), 1)]
-    #[case(sf6(), SchoenfliesSymbol::Oh, SchoenfliesSymbol::Cn(2), 9)]
-    #[case(sf6(), SchoenfliesSymbol::Oh, SchoenfliesSymbol::Ci, 1)]
+    #[case(water(), SchoenfliesSymbol::Cs, 2)]
+    #[case(water(), SchoenfliesSymbol::Cn(2), 1)]
+    #[case(sf6(), SchoenfliesSymbol::Cn(2), 9)]
+    #[case(sf6(), SchoenfliesSymbol::Ci, 1)]
     fn test_subgroup_multiplicity(
         #[case] centers: Vec<SymmetryCenter>,
-        #[case] parent_sym: SchoenfliesSymbol,
         #[case] child_sym: SchoenfliesSymbol,
         #[case] expected: usize,
     ) {
         let mut ctx = Context::new().unwrap();
         ctx.set_centers(&centers).unwrap();
         ctx.find_symmetry().unwrap();
-        let group = PointGroup::from_symbol(parent_sym).unwrap();
-        let sgs = ctx.subgroups(group).unwrap();
+        let sgs = ctx.subgroups().unwrap();
         let sg = sgs.iter().find(|s| s.symbol() == child_sym).unwrap();
         assert_eq!(sg.multiplicity(), expected);
     }
-
-    // --- Thresholds ---
 
     #[rstest]
     fn test_context_thresholds() {
@@ -708,8 +793,6 @@ mod tests {
         assert!((t.geometry - t2.geometry).abs() < 1e-15);
         assert!((t.angle - t2.angle).abs() < 1e-15);
     }
-
-    // --- Centers ---
 
     #[rstest]
     fn test_context_centers() {
@@ -729,18 +812,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_context_apply_translation() {
+    fn test_context_translate_center() {
         let mut ctx = water_ctx();
         let before = ctx.centers().unwrap();
-        ctx.apply_translation(0, [0.0, 0.0, 0.1]).unwrap();
+        let requested = Vector3::new(0.0, 0.0, 0.1);
+        let projected = ctx.translate_center(0, requested).unwrap();
+        assert!(projected.norm() > 0.0);
+        assert!(projected.norm() <= requested.norm() + 1e-10);
         let after = ctx.centers().unwrap();
         let delta_sq: f64 = (0..3)
             .map(|i| (after[0].position[i] - before[0].position[i]).powi(2))
             .sum();
         assert!(delta_sq.sqrt() > 0.05);
     }
-
-    // --- Basis functions ---
 
     #[rstest]
     fn test_context_basis_functions() {
@@ -756,8 +840,6 @@ mod tests {
         }
     }
 
-    // --- Point group ---
-
     #[rstest]
     #[case(water(), SchoenfliesSymbol::Cnv(2), "C2v")]
     #[case(methane(), SchoenfliesSymbol::Td, "Td")]
@@ -769,15 +851,16 @@ mod tests {
         let mut ctx = Context::new().unwrap();
         ctx.set_centers(&elements).unwrap();
         ctx.find_symmetry().unwrap();
-        assert_eq!(ctx.point_group().unwrap(), expected_label);
+        assert_eq!(ctx.point_group_symbol().unwrap(), expected_label);
         assert_eq!(ctx.point_group_name().unwrap(), expected_name);
     }
 
     #[rstest]
     fn test_context_set_point_group() {
         let mut ctx = Context::new().unwrap();
-        ctx.set_point_group(SchoenfliesSymbol::Cnv(3)).unwrap();
-        assert_eq!(ctx.point_group().unwrap(), SchoenfliesSymbol::Cnv(3));
+        ctx.set_point_group_by_symbol(SchoenfliesSymbol::Cnv(3))
+            .unwrap();
+        assert_eq!(ctx.point_group_symbol().unwrap(), SchoenfliesSymbol::Cnv(3));
         assert_eq!(ctx.point_group_name().unwrap(), "C3v");
     }
 
@@ -785,14 +868,13 @@ mod tests {
     fn test_context_set_point_group_by_name() {
         let mut ctx = Context::new().unwrap();
         ctx.set_point_group_by_name("D6h").unwrap();
-        assert_eq!(ctx.point_group().unwrap(), SchoenfliesSymbol::Dnh(6));
+        assert_eq!(ctx.point_group_symbol().unwrap(), SchoenfliesSymbol::Dnh(6));
     }
 
     #[rstest]
     fn test_context_subgroups() {
         let ctx = water_ctx();
-        let group = PointGroup::from_symbol(SchoenfliesSymbol::Cnv(2)).unwrap();
-        let sgs = ctx.subgroups(group).unwrap();
+        let sgs = ctx.subgroups().unwrap();
         assert!(!sgs.is_empty());
         let names: Vec<&str> = sgs.iter().map(|s| s.name()).collect();
         assert!(names.contains(&"C2"));
@@ -800,41 +882,82 @@ mod tests {
     }
 
     #[rstest]
-    fn test_context_select_subgroup() {
+    fn test_context_into_subgroup() {
         let mut ctx = water_ctx();
-        let group = PointGroup::from_symbol(SchoenfliesSymbol::Cnv(2)).unwrap();
-        let sgs = ctx.subgroups(group).unwrap();
+        let sgs = ctx.subgroups().unwrap();
         let c2 = sgs.iter().find(|s| s.name() == "C2").unwrap();
-        ctx.select_subgroup(c2).unwrap();
+        ctx.into_subgroup(c2).unwrap();
         assert_eq!(ctx.point_group_name().unwrap(), "C2");
     }
 
     #[rstest]
-    fn test_subgroup_indices_independent_of_orientation() {
-        let group = PointGroup::from_symbol(SchoenfliesSymbol::Cnv(2)).unwrap();
+    #[should_panic(expected = "subgroup belongs to")]
+    fn test_context_into_subgroup_wrong_parent() {
+        // Get a subgroup from methane (Td), then try to use it with water (C2v).
+        let mut td_ctx = Context::new().unwrap();
+        td_ctx.set_centers(&methane()).unwrap();
+        td_ctx.find_symmetry().unwrap();
+        let td_sgs = td_ctx.subgroups().unwrap();
+        let c3v = td_sgs.iter().find(|s| s.name() == "C3v").unwrap();
 
+        let mut ctx = water_ctx();
+        ctx.into_subgroup(c3v).unwrap();
+    }
+
+    #[rstest]
+    fn test_subgroup_indices_independent_of_orientation() {
         // Water in xz plane.
         let water_xz = vec![
-            SymmetryCenter { atomic_number: 8, mass: 15.999, position: [0.0, 0.0, 0.117], name: "O".into() },
-            SymmetryCenter { atomic_number: 1, mass: 1.008, position: [0.757, 0.0, -0.469], name: "H".into() },
-            SymmetryCenter { atomic_number: 1, mass: 1.008, position: [-0.757, 0.0, -0.469], name: "H".into() },
+            SymmetryCenter {
+                atomic_number: 8,
+                mass: 15.999,
+                position: Vector3::new(0.0, 0.0, 0.117),
+                name: "O".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 1,
+                mass: 1.008,
+                position: Vector3::new(0.757, 0.0, -0.469),
+                name: "H".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 1,
+                mass: 1.008,
+                position: Vector3::new(-0.757, 0.0, -0.469),
+                name: "H".into(),
+            },
         ];
         // Water in yz plane.
         let water_yz = vec![
-            SymmetryCenter { atomic_number: 8, mass: 15.999, position: [0.0, 0.0, 0.117], name: "O".into() },
-            SymmetryCenter { atomic_number: 1, mass: 1.008, position: [0.0, 0.757, -0.469], name: "H".into() },
-            SymmetryCenter { atomic_number: 1, mass: 1.008, position: [0.0, -0.757, -0.469], name: "H".into() },
+            SymmetryCenter {
+                atomic_number: 8,
+                mass: 15.999,
+                position: Vector3::new(0.0, 0.0, 0.117),
+                name: "O".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 1,
+                mass: 1.008,
+                position: Vector3::new(0.0, 0.757, -0.469),
+                name: "H".into(),
+            },
+            SymmetryCenter {
+                atomic_number: 1,
+                mass: 1.008,
+                position: Vector3::new(0.0, -0.757, -0.469),
+                name: "H".into(),
+            },
         ];
 
         let mut ctx_xz = Context::new().unwrap();
         ctx_xz.set_centers(&water_xz).unwrap();
         ctx_xz.find_symmetry().unwrap();
-        let sgs_xz = ctx_xz.subgroups(group).unwrap();
+        let sgs_xz = ctx_xz.subgroups().unwrap();
 
         let mut ctx_yz = Context::new().unwrap();
         ctx_yz.set_centers(&water_yz).unwrap();
         ctx_yz.find_symmetry().unwrap();
-        let sgs_yz = ctx_yz.subgroups(group).unwrap();
+        let sgs_yz = ctx_yz.subgroups().unwrap();
 
         assert_eq!(sgs_xz.len(), sgs_yz.len());
         for (a, b) in sgs_xz.iter().zip(sgs_yz.iter()) {
@@ -843,30 +966,30 @@ mod tests {
             assert_eq!(a.order(), b.order());
         }
 
-        let cs_xz = sgs_xz.iter().find(|s| s.symbol() == SchoenfliesSymbol::Cs).unwrap();
-        let cs_yz = sgs_yz.iter().find(|s| s.symbol() == SchoenfliesSymbol::Cs).unwrap();
+        let cs_xz = sgs_xz
+            .iter()
+            .find(|s| s.symbol() == SchoenfliesSymbol::Cs)
+            .unwrap();
+        let cs_yz = sgs_yz
+            .iter()
+            .find(|s| s.symbol() == SchoenfliesSymbol::Cs)
+            .unwrap();
         assert_eq!(cs_xz.index(), cs_yz.index());
     }
 
-    // --- Symmetry operations ---
-
     #[rstest]
-    #[case(water(), SchoenfliesSymbol::Cnv(2), 4)]
-    #[case(methane(), SchoenfliesSymbol::Td, 24)]
-    fn test_context_symmetry_representation(
+    #[case(water(), 4)]
+    #[case(methane(), 24)]
+    fn test_context_symmetry_rep(
         #[case] elements: Vec<SymmetryCenter>,
-        #[case] label: SchoenfliesSymbol,
         #[case] expected_count: usize,
     ) {
         let mut ctx = Context::new().unwrap();
         ctx.set_centers(&elements).unwrap();
         ctx.find_symmetry().unwrap();
-        let group = PointGroup::from_symbol(label).unwrap();
-        let rep = ctx.symmetry_representation(group).unwrap();
+        let rep = ctx.matrix_rep().unwrap();
         assert_eq!(rep.order(), expected_count);
     }
-
-    // --- Equivalence sets ---
 
     #[rstest]
     fn test_context_equivalence_sets() {
@@ -881,10 +1004,7 @@ mod tests {
     #[rstest]
     #[case(0, 1)]
     #[case(1, 2)]
-    fn test_context_equivalence_set_for_center(
-        #[case] index: usize,
-        #[case] expected_size: usize,
-    ) {
+    fn test_context_equivalence_set_for_center(#[case] index: usize, #[case] expected_size: usize) {
         let ctx = water_ctx();
         let es = ctx.equivalence_set_for_center(index).unwrap();
         assert_eq!(es.centers.len(), expected_size);
@@ -894,7 +1014,8 @@ mod tests {
     fn test_context_find_equivalence_sets() {
         let mut ctx = Context::new().unwrap();
         ctx.set_centers(&water()).unwrap();
-        ctx.set_point_group(SchoenfliesSymbol::Cnv(2)).unwrap();
+        ctx.set_point_group_by_symbol(SchoenfliesSymbol::Cnv(2))
+            .unwrap();
         ctx.find_equivalence_sets().unwrap();
         let sets = ctx.equivalence_sets().unwrap();
         assert_eq!(sets.len(), 2);
@@ -906,8 +1027,6 @@ mod tests {
         ctx.find_equivalence_set_permutations().unwrap();
     }
 
-    // --- SALCs ---
-
     #[rstest]
     fn test_context_generate_salcs() {
         let mut ctx = water_ctx();
@@ -917,42 +1036,38 @@ mod tests {
 
     #[rstest]
     fn test_context_salcs() {
-        let (ctx, _) = water_salc_ctx();
-        let (coeffs, species) = ctx.salcs(9).unwrap();
+        let ctx = water_salc_ctx();
+        let (coeffs, irreps) = ctx.salcs().unwrap();
         assert_eq!(coeffs.len(), 81);
-        assert_eq!(species.len(), 9);
+        assert_eq!(irreps.len(), 9);
     }
 
     #[rstest]
     fn test_context_salcs_by_irrep() {
-        let (ctx, group) = water_salc_ctx();
-        let irrep_bases = ctx.salcs_by_irrep(group).unwrap();
+        let ctx = water_salc_ctx();
+        let irrep_bases = ctx.salcs_by_irrep().unwrap();
         let total: usize = irrep_bases.iter().map(|ib| ib.salcs.len()).sum();
         assert_eq!(total, 9);
     }
 
     #[rstest]
     fn test_context_symmetrize_salcs() {
-        let (mut ctx, _) = water_salc_ctx();
-        let (mut coeffs, mut species) = ctx.salcs(9).unwrap();
-        ctx.symmetrize_salcs(9, &mut coeffs, &mut species).unwrap();
-        for &s in &species {
-            assert!(s >= 0);
-        }
+        let mut ctx = water_salc_ctx();
+        let (mut coeffs, _) = ctx.salcs().unwrap();
+        let irreps = ctx.symmetrize_salcs(&mut coeffs).unwrap();
+        assert_eq!(irreps.len(), 9);
     }
 
     #[rstest]
-    fn test_context_irrep_components() {
-        let (ctx, group) = water_salc_ctx();
-        let irrep_count = group.irreps().len();
-        let mut components = vec![0.0f64; irrep_count];
-        let wf = vec![1.0f64; 9];
-        ctx.irrep_components(&wf, &mut components).unwrap();
+    fn test_context_project_onto_irreps() {
+        let ctx = water_salc_ctx();
+        let coefficients = vec![1.0f64; 9];
+        let components = ctx.project_onto_irreps(&coefficients).unwrap();
+        let group = ctx.point_group().unwrap();
+        assert_eq!(components.len(), group.irreps().len());
         let total: f64 = components.iter().sum();
         assert!(total > 0.0);
     }
-
-    // --- Geometry and alignment ---
 
     #[rstest]
     fn test_context_center_of_mass() {
@@ -966,7 +1081,7 @@ mod tests {
     fn test_context_set_center_of_mass() {
         let mut ctx = Context::new().unwrap();
         ctx.set_centers(&water()).unwrap();
-        ctx.set_center_of_mass([1.0, 2.0, 3.0]).unwrap();
+        ctx.set_center_of_mass(Vector3::new(1.0, 2.0, 3.0)).unwrap();
         let com = ctx.center_of_mass().unwrap();
         assert!((com[0] - 1.0).abs() < 1e-10);
         assert!((com[1] - 2.0).abs() < 1e-10);
@@ -1029,8 +1144,8 @@ mod tests {
     fn test_context_alignment_transform() {
         let ctx = water_ctx();
         let transform = ctx.alignment_transform().unwrap();
-        for row in &transform {
-            let norm_sq: f64 = row.iter().map(|x| x * x).sum();
+        for i in 0..3 {
+            let norm_sq: f64 = transform.row(i).norm_squared();
             assert!((norm_sq - 1.0).abs() < 1e-10);
         }
     }
@@ -1038,13 +1153,9 @@ mod tests {
     #[rstest]
     fn test_context_set_alignment_transform() {
         let mut ctx = water_ctx();
-        let identity = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+        let identity = Matrix3::identity();
         ctx.set_alignment_transform(identity).unwrap();
         let t = ctx.alignment_transform().unwrap();
-        for i in 0..3 {
-            for j in 0..3 {
-                assert!((t[i][j] - identity[i][j]).abs() < 1e-10);
-            }
-        }
+        assert!((t - identity).norm() < 1e-10);
     }
 }

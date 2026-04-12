@@ -355,11 +355,9 @@ pub(crate) fn compute_salcs(
 mod tests {
     use rstest::rstest;
 
-    use crate::point_group::PointGroup;
-
     #[rstest]
     fn test_coov_irreps() {
-        let g = PointGroup::coov();
+        let g = group!(Coov);
         assert_eq!(g.to_string(), "C∞v");
         assert_eq!(g.order(), 0);
         assert!(g.is_linear());
@@ -372,7 +370,7 @@ mod tests {
 
     #[rstest]
     fn test_dooh_irreps() {
-        let g = PointGroup::dooh();
+        let g = group!(Dooh);
         assert_eq!(g.to_string(), "D∞h");
         assert_eq!(g.order(), 0);
         assert!(g.is_linear());
@@ -398,7 +396,7 @@ mod tests {
         #[case] b: &str,
         #[case] expected: &[(&str, u32)],
     ) {
-        let g = PointGroup::coov();
+        let g = group!(Coov);
         let ia = g.irrep(a).unwrap();
         let ib = g.irrep(b).unwrap();
         let result = g.direct_product(ia, ib);
@@ -416,7 +414,7 @@ mod tests {
         #[case] b: &str,
         #[case] expected: &[(&str, u32)],
     ) {
-        let g = PointGroup::dooh();
+        let g = group!(Dooh);
         let ia = g.irrep(a).unwrap();
         let ib = g.irrep(b).unwrap();
         let result = g.direct_product(ia, ib);
@@ -426,7 +424,7 @@ mod tests {
 
     #[rstest]
     fn test_coov_translation_rotation() {
-        let g = PointGroup::coov();
+        let g = group!(Coov);
         let ti = g.translation_irreps();
         let trans: Vec<(&str, u32)> = ti.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
         assert_eq!(trans, vec![("Σ+", 1), ("Π", 1)]);
@@ -438,7 +436,7 @@ mod tests {
 
     #[rstest]
     fn test_dooh_translation_rotation() {
-        let g = PointGroup::dooh();
+        let g = group!(Dooh);
         let ti = g.translation_irreps();
         let trans: Vec<(&str, u32)> = ti.iter().map(|(ir, n)| (ir.symbol(), *n)).collect();
         assert_eq!(trans, vec![("Σ+u", 1), ("Πu", 1)]);
@@ -450,7 +448,7 @@ mod tests {
 
     #[rstest]
     fn test_coov_selection_rules() {
-        let g = PointGroup::coov();
+        let g = group!(Coov);
         let sp = g.irrep("Σ+").unwrap();
         let sm = g.irrep("Σ-").unwrap();
         let pi = g.irrep("Π").unwrap();
@@ -468,7 +466,7 @@ mod tests {
 
     #[rstest]
     fn test_dooh_mutual_exclusion() {
-        let g = PointGroup::dooh();
+        let g = group!(Dooh);
         let spg = g.irrep("Σ+g").unwrap();
 
         // D∞h has mutual exclusion: IR-active modes are Raman-inactive and vice versa
