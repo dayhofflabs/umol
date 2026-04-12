@@ -1,5 +1,7 @@
 # Fix PointGroup: one libmsym-backed source of truth, clean abstract / detection split
 
+**Status:** implemented. 203 umol-msym + 42 umol-geometric tests pass against the rewritten types. Remaining warnings are pre-existing `dead_code` on unused `Context` methods.
+
 ## 1. Problem
 
 Two tangled defects in `umol-msym`:
@@ -58,10 +60,11 @@ The split is module-level policy, not a second crate. Both layers link against `
 - Calls libmsym in exactly one place: `PointGroup::from_schoenflies(label)`, which opens a minimal context, calls `msymSetPointGroupByName`, extracts ops + character table into owned Rust data, releases the context. After that call returns, no libmsym pointer is retained anywhere on the singleton.
 - Never holds a molecule, an equivalence set, or any frame-dependent data.
 
-**Detection layer** — `context.rs`, `detect.rs`, `basis.rs`:
-- Owns `Context` (the FFI wrapper), `SymmetryResult`, `SymmetryDescentResult`, `MatrixRepresentation`, SALC construction.
+**Detection layer** — `context.rs`, `detect.rs`, `matrix_rep.rs`, `basis.rs`:
+- Owns `Context` (the FFI wrapper), `SymmetryResult`, `SymmetryDescentResult`, `MatrixRep`, SALC construction.
 - Calls libmsym for molecule perception, subgroup descent, SALC/basis-function machinery.
-- Produces `SymmetryResult` values that reference `&'static PointGroup` from the abstract layer plus a per-molecule `MatrixRepresentation`.
+- Produces `SymmetryResult` values that reference `&'static PointGroup` from the abstract layer plus a per-molecule `MatrixRep`.
+- `Context` owns its `ffi::msym_context` and never exposes it. Callers obtain a `MatrixRep` via `Context::symmetry_representation(group)`, which reads libmsym's op list and hands back owned Rust data. No FFI handle leaks across the module boundary.
 
 Linear groups (`C∞v`, `D∞h`) stay in `linear.rs` with their existing hand-rolled tables; libmsym has no finite character table for them and there is nothing to extract.
 
@@ -71,12 +74,12 @@ The registry itself is a reasonable idea: there *is* one C₂ᵥ. Every construc
 
 What makes the current registry broken is not the pattern, it's the contents. Today, a `PointGroup` stores `ops[i].matrix` and `ops[i].vector` from whichever libmsym context built it first. Those fields are frame-dependent, so first-writer-wins *does* leak into observable behaviour: subsequent callers of a given label get matrices from an unrelated molecule's orientation. The `select_subgroup` path hits this particularly hard, because descent starts from a libmsym subgroup context whose axis alignment depends entirely on the parent molecule.
 
-Once matrices and axis vectors are removed from `PointGroup` (§5.2) and relocated to per-molecule `MatrixRepresentation` (§5.3), the cached content is invariant across all construction sites. Whichever molecule happens to populate the singleton first, every other caller would have populated it identically. The race becomes harmless by construction, the subgroup descent bug disappears, and the lock is contended only on first-registration of each label (≤ 40 labels per process, one lock acquisition each).
+Once matrices and axis vectors are removed from `PointGroup` (§5.2) and relocated to per-molecule `MatrixRep` (§5.3), the cached content is invariant across all construction sites. Whichever molecule happens to populate the singleton first, every other caller would have populated it identically. The race becomes harmless by construction, the subgroup descent bug disappears, and the lock is contended only on first-registration of each label (≤ 40 labels per process, one lock acquisition each).
 
 Two notions of "same group" remain, and they answer different questions:
 
 - **Same abstract group** — `a.group.label() == b.group.label()`. True for water's and formaldehyde's C₂ᵥ handles, because the registry hands both molecules the same singleton. Used when asking whether a character table, irrep symbol set, or reduction formula from one analysis applies to another.
-- **Same singleton instance** — `std::ptr::eq(a.group, b.group)`. Equivalent to label equality in the presence of the registry — this is exactly what "one C₂ᵥ" means — and remains the fast path for `SymmetryOp::eq`. Used as the basis for op-index identity when matching `SymmetryOp` values to `MatrixRepresentation` slots.
+- **Same singleton instance** — `std::ptr::eq(a.group, b.group)`. Equivalent to label equality in the presence of the registry — this is exactly what "one C₂ᵥ" means — and remains the fast path for `SymmetryOp::eq`. Used as the basis for op-index identity when matching `SymmetryOp` values to `MatrixRep` slots.
 
 ## 5. Type design
 
@@ -145,29 +148,36 @@ Public accessors:
 - `reduce`, `direct_product`, `symmetric_square`, `antisymmetric_square` — unchanged in meaning; characters reached through the character table indexed by class.
 - Semantic accessors: `identity()`, `inversion()` (where present), `principal_rotations()` (ops with kind=Proper, order=n_max), etc., as needed by callers currently grepping through ops for a specific element.
 
-### 5.3 `MatrixRepresentation` is a separate per-molecule object
+### 5.3 `MatrixRep` is a separate per-molecule object
 
-A (faithful) 3D matrix representation of G is a homomorphism ρ : G → O(3). Concretely it is a vector of 3×3 matrices and axis vectors, one per group element, indexed by `SymmetryOp::index`. "Matrix representation" is the standard group-theory name for this, and it denotes the *whole homomorphism*, not a single matrix.
+A (faithful) 3D matrix representation of G is a homomorphism ρ : G → O(3). Concretely it is a vector of 3×3 matrices and axis vectors, one per group element, indexed by `SymmetryOp::index`. "Matrix representation" is the standard group-theory name for this, and it denotes the *whole homomorphism*, not a single matrix. The type name is shortened to `MatrixRep` at call sites.
 
 ```rust
-pub struct MatrixRepresentation {
+pub struct MatrixRep {
     group: &'static PointGroup,
     matrices: Vec<Matrix3<f64>>,   // matrices[op.index()] = ρ(op)
     axes: Vec<Vector3<f64>>,       // axes[op.index()] = rotation axis / reflection normal
 }
 
-impl MatrixRepresentation {
+impl MatrixRep {
     pub fn group(&self) -> &'static PointGroup { self.group }
-    pub fn matrix(&self, op: SymmetryOp) -> Matrix3<f64> {
-        debug_assert!(std::ptr::eq(op.group(), self.group));
-        self.matrices[op.index()]
+    pub fn order(&self) -> usize { self.matrices.len() }
+    pub fn matrix(&self, op: SymmetryOp) -> &Matrix3<f64> {
+        assert!(std::ptr::eq(op.group(), self.group));
+        &self.matrices[op.index()]
     }
-    pub fn axis(&self, op: SymmetryOp) -> Vector3<f64> { ... }
-    pub fn transform_point(&self, op: SymmetryOp, p: Point3<f64>) -> Point3<f64> { ... }
+    pub fn axis(&self, op: SymmetryOp) -> &Vector3<f64> { ... }
+    pub fn transform_point(&self, op: SymmetryOp, p: Vector3<f64>) -> Vector3<f64> { ... }
+    pub fn matrices(&self) -> &[Matrix3<f64>] { ... }
+    pub fn axes(&self) -> &[Vector3<f64>] { ... }
+    pub fn iter(&self) -> impl Iterator<Item = (SymmetryOp, &Matrix3<f64>, &Vector3<f64>)> + '_ { ... }
+    pub fn identity_only(group: &'static PointGroup) -> Self { ... }
 }
 ```
 
-Construction happens once, inside the detection layer, from a libmsym `msym_symmetry_operation_t` array. Because libmsym generates ops canonically (§3), the `i`-th libmsym op corresponds to the `i`-th `op_data` entry in the abstract singleton. Construction asserts this agreement per index and then copies matrices and axes into owned storage. The `MatrixRepresentation` has no libmsym pointer after construction.
+Construction happens inside the detection layer via `Context::symmetry_representation(group)`, which calls `msymGetSymmetryOperations` and reconstructs each 3×3 matrix from the libmsym sop tuple `(type, order, power, axis)`. Because libmsym generates ops canonically (§3), the `i`-th libmsym op corresponds to the `i`-th `op_data` entry in the abstract singleton. Construction asserts the op count matches `group.order()` and copies matrices and axes into owned storage. `MatrixRep` holds no FFI pointer.
+
+`identity_only` produces a C₁ realization directly from a `&'static PointGroup`, used by the `Molecule::from_parts` default constructor and by the C₁ descent path.
 
 ## 6. Data locations on the caller side
 
@@ -176,31 +186,34 @@ Construction happens once, inside the detection layer, from a libmsym `msym_symm
 ```rust
 pub struct SymmetryResult {
     pub group: &'static PointGroup,
-    pub representation: MatrixRepresentation,
-    pub equivalence_sets: Vec<Vec<usize>>,
+    pub representation: MatrixRep,
+    pub equivalence_sets: Vec<EquivalenceSet>,
     pub centers: Vec<SymmetryCenter>,
 }
 ```
 
 `ops: Vec<SymmetryOp>` goes away from `SymmetryResult`; the same information is reachable as `group.ops()` (abstract handles) + `representation.matrix(op)` / `representation.axis(op)` (frame-dependent data).
 
-`SymmetryDescentResult` gains `child_representation: MatrixRepresentation` in place of `child_ops: Vec<SymmetryOp>`.
+`SymmetryDescentResult` gains `child_representation: MatrixRep` in place of `child_ops: Vec<SymmetryOp>`.
 
-### 6.2 `Molecule` loses `ops`
+### 6.2 `Molecule` carries `MatrixRep` instead of `Vec<SymmetryOp>`
 
 ```rust
 pub struct Molecule {
-    elements: ...,
-    coordinates: ...,
+    elements: Vec<Element>,
+    coordinates: Coordinates,
+    charge: i32,
+    multiplicity: SpinMultiplicity,
     group: &'static PointGroup,
+    representation: MatrixRep,
     equivalence_sets: Vec<Vec<usize>>,
     atom_permutations: Vec<Vec<usize>>,   // indexed by op.index()
 }
 ```
 
-`ops: Vec<SymmetryOp>` is gone. `atom_permutations` stays: once computed, the permutation `atom i → atom π(i)` under a given op is invariant under rigid-body rotation and is a property of the labelled atoms, not of the coordinate frame. The permutation vector is indexed by op index — the same index that selects matrices from a `MatrixRepresentation`.
+`ops: Vec<SymmetryOp>` is gone. `representation: MatrixRep` replaces it and is the sole carrier of frame-dependent data. `atom_permutations` stays: once computed, the permutation `atom i → atom π(i)` under a given op is invariant under rigid-body rotation and is a property of the labelled atoms, not of the coordinate frame. The permutation vector is indexed by op index — the same index that selects matrices from `representation`.
 
-`symmetry_coordinates` currently builds `D_{3N}(R)` from `op.matrix`. It now needs a `MatrixRepresentation`. I prefer moving it off `Molecule` entirely onto `SymmetryResult` (or a dedicated analysis type), so it has direct access to `{group, representation, atom_permutations}` as one bundle. This removes the last frame-dependent method from `Molecule` and colocates the analysis with the object it analyses. Alternative: keep it on `Molecule` and take `&MatrixRepresentation` as a parameter. I will go with the first unless blocked.
+`symmetry_coordinates` stays on `Molecule` and reads `self.representation`. The earlier sketch considered moving it to `SymmetryResult`; in practice the method needs `{group, representation, atom_permutations, coordinates}` as a bundle, all of which are already owned by `Molecule`, and the analysis is naturally phrased as a method on a symmetrized molecule. Moving it would require `SymmetryResult` to duplicate coordinates and atom permutations or take them as parameters, which is less clean.
 
 ## 7. What the abstract layer gets from libmsym, concretely
 
@@ -225,7 +238,7 @@ After step 6 the `PointGroup` owns all its data and never touches libmsym again.
 - `Molecule.ops`.
 - `SymmetryResult.ops` (becomes `representation`).
 - `SymmetryDescentResult.child_ops` (becomes `child_representation`).
-- The identity-descent / C₁-descent paths in `lower_symmetry` that clone `group.ops()` into frame-dependent matrices — they now clone the parent `representation` instead, or construct an identity `MatrixRepresentation` from the molecule's frame.
+- The identity-descent / C₁-descent paths in `lower_symmetry` that clone `group.ops()` into frame-dependent matrices — they now clone the parent `representation` instead, or construct an identity `MatrixRep` from the molecule's frame.
 
 ## 9. Implementation strategy
 
@@ -235,13 +248,13 @@ Rewrite the core in place; preserve the periphery that already works. Not a full
 
 - **`types.rs`** — redefine `SymmetryOp` as `{ group: &'static PointGroup, index: usize }`. Collapse `PointGroupKind::{ops, class_reps}` into a single `op_data: Vec<OpData>` store plus `class_rep_indices: Vec<usize>`. Drop `SymmetryOp::{matrix, vector}` and `compute_matrix`.
 - **`point_group.rs`** — `PointGroup` internals, `REGISTRY`, `from_schoenflies` rewritten on top of `msymSetPointGroupByName`. Delete the seed-atom `construct`. Port `reduce`, `direct_product`, `symmetric_square`, `antisymmetric_square`, `translation_irreps`, `rotation_irreps`, `quadratic_irreps`, `r_squared_classes`, `is_chiral`, `has_inversion`, `Irrep::is_gerade` to read class-indexed characters — none need matrices. Rewrite `CharacterTableDisplay` on the handle view of `class_reps()`.
-- **`MatrixRepresentation`** — new type. Either its own file or inside `detect.rs` if it stays small.
+- **`MatrixRep`** — new type in its own module `matrix_rep.rs`. FFI-free: construction takes `(group, matrices, axes)` and is driven by `Context::symmetry_representation(group)`.
 
 ### 9.2 Mechanical rewrite — same logic, new types
 
-- **`detect.rs`** — `SymmetryResult.ops` → `representation: MatrixRepresentation`; same for `SymmetryDescentResult.child_ops` → `child_representation`. Identity-descent and C₁-descent paths build a `MatrixRepresentation` instead of cloning matrices off `group.ops()`. Per-molecule sop list is zipped against the abstract op list by index, asserting `(type, order, power, class)` agreement per slot.
-- **`context.rs`** — `symmetry_operations()` return type changes. The `SymmetryOp::from(&msym_symmetry_operation_t)` impl is replaced by a helper used only by `MatrixRepresentation` construction: "produce this op's matrix + axis, given the per-slot libmsym sop."
-- **`umol-geometric/molecule.rs`** — remove `ops` field. Update `symmetry_coordinates` and `compute_atom_permutations` per §6.2. Preference: move `symmetry_coordinates` onto `SymmetryResult`.
+- **`detect.rs`** — `SymmetryResult.ops` → `representation: MatrixRep`; same for `SymmetryDescentResult.child_ops` → `child_representation`. Identity-descent and C₁-descent paths build `MatrixRep::identity_only(group)` instead of cloning matrices off `group.ops()`. The `lower_symmetry` class-mapping loop iterates `child_group.ops()` and matches each `child_representation.matrix(child_op)` against the parent-op matrices carried on `SubgroupInfo.parent_ops`, which is now `Vec<(Matrix3<f64>, usize)>`.
+- **`context.rs`** — the old `symmetry_operations()` and `character_table()` methods are gone. Their replacement is `Context::symmetry_representation(&self, group: &'static PointGroup) -> Result<MatrixRep, Error>`, which reads libmsym's op list via `msymGetSymmetryOperations`, reconstructs the 3×3 matrices via `compute_op_matrix`, and returns a `MatrixRep`. `Context` never exposes its `ffi::msym_context`.
+- **`umol-geometric/molecule.rs`** — remove `ops` field; add `representation: MatrixRep`. `compute_atom_permutations` takes `&MatrixRep` and iterates `representation.matrices()`. `symmetry_coordinates` reads `self.representation` and accesses matrices via `self.representation.matrix(op)` and classes via `op.class()` (now a method, not a field).
 
 ### 9.3 Preserve — do not touch beyond what the type rename forces
 

@@ -1,3 +1,5 @@
+//! Symmetry-adapted basis definition and reduction.
+
 use crate::point_group::Irrep;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,6 +49,44 @@ impl BasisFunction {
     /// Principal quantum number for libmsym FFI (n = l + 1 + shell_index).
     pub(crate) fn ffi_n(&self) -> i32 {
         self.l + 1 + self.shell_index as i32
+    }
+
+    /// Fixed-width orbital name in the format libmsym expects for
+    /// `msym_basis_function_t.name` (e.g. "1s", "2px", "3d1+").
+    pub(crate) fn libmsym_name_bytes(&self) -> [i8; 8] {
+        let n = self.ffi_n();
+        let s = match self.l {
+            0 => format!("{n}s"),
+            1 => {
+                let axis = match self.m {
+                    1 => "x",
+                    -1 => "y",
+                    0 => "z",
+                    _ => "?",
+                };
+                format!("{n}p{axis}")
+            }
+            l => {
+                let shell = (b'f' - 3
+                    + l as u8
+                    + if l >= 5 { 1 } else { 0 }
+                    + if l >= 10 { 1 } else { 0 }
+                    + if l >= 12 { 1 } else { 0 }) as char;
+                let sign = if self.m > 0 {
+                    "+"
+                } else if self.m < 0 {
+                    "-"
+                } else {
+                    ""
+                };
+                format!("{n}{shell}{}{sign}", self.m.unsigned_abs())
+            }
+        };
+        let mut name = [0i8; 8];
+        for (i, &b) in s.as_bytes().iter().take(7).enumerate() {
+            name[i] = b as i8;
+        }
+        name
     }
 }
 

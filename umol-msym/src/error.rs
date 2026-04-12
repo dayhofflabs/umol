@@ -1,3 +1,5 @@
+//! Error definitions for umol-msym.
+
 use std::ffi::CStr;
 
 use umol_msym_sys as ffi;

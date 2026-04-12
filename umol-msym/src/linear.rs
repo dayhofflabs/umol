@@ -1,3 +1,5 @@
+//! Linear molecular point groups (C∞v, D∞h)
+
 use crate::basis::{BasisFunction, IrrepBasis, Salc, SalcBasis};
 use crate::point_group::{Irrep, PointGroup};
 use crate::types::{SchoenfliesLabel, SymmetryCenter};

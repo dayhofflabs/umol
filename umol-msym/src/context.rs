@@ -2,61 +2,18 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_int;
 use std::{ptr, slice};
 
+use nalgebra::Vector3;
 use umol_msym_sys as ffi;
 
 use crate::basis::{BasisFunction, BasisKind};
 use crate::error::{self, Error};
+use crate::matrix_rep::MatrixRep;
+use crate::point_group::{compute_op_matrix, PointGroup};
+use crate::subgroup::SubgroupInfo;
 use crate::types::*;
-
-#[derive(Debug, Clone)]
-pub struct SubgroupInfo {
-    pub label: SchoenfliesLabel,
-    pub name: String,
-    pub order: usize,
-    /// Each entry is (SymmetryOp from parent, parent class index) for the corresponding subgroup operation.
-    pub parent_ops: Vec<(SymmetryOp, usize)>,
-    pub(crate) index: usize,
-}
-
-/// Generate the orbital name string libmsym expects (e.g. "1s", "1px", "2d1+").
-fn orbital_name(n: i32, l: i32, m: i32) -> [i8; 8] {
-    let s = match l {
-        0 => format!("{n}s"),
-        1 => {
-            let axis = match m {
-                1 => "x",
-                -1 => "y",
-                0 => "z",
-                _ => "?",
-            };
-            format!("{n}p{axis}")
-        }
-        _ => {
-            let shell = (b'f' - 3
-                + l as u8
-                + if l >= 5 { 1 } else { 0 }
-                + if l >= 10 { 1 } else { 0 }
-                + if l >= 12 { 1 } else { 0 }) as char;
-            let sign = if m > 0 {
-                "+"
-            } else if m < 0 {
-                "-"
-            } else {
-                ""
-            };
-            format!("{n}{shell}{}{sign}", m.unsigned_abs())
-        }
-    };
-    let mut name = [0i8; 8];
-    for (i, &b) in s.as_bytes().iter().take(7).enumerate() {
-        name[i] = b as i8;
-    }
-    name
-}
 
 pub struct Context {
     ctx: ffi::msym_context,
-    character_table: Option<CharacterTable>,
 }
 
 unsafe impl Send for Context {}
@@ -78,10 +35,7 @@ impl Context {
                 message: "failed to create context".into(),
             });
         }
-        Ok(Self {
-            ctx,
-            character_table: None,
-        })
+        Ok(Self { ctx })
     }
 
     pub fn set_thresholds(&mut self, t: &Thresholds) -> Result<(), Error> {
@@ -96,7 +50,6 @@ impl Context {
     }
 
     pub fn set_centers(&mut self, centers: &[SymmetryCenter]) -> Result<(), Error> {
-        self.character_table = None;
         let mut ffi_elems: Vec<ffi::msym_element_t> = centers.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
             ffi::msymSetElements(self.ctx, ffi_elems.len() as c_int, ffi_elems.as_mut_ptr())
@@ -112,20 +65,7 @@ impl Context {
     }
 
     pub fn find_symmetry(&mut self) -> Result<(), Error> {
-        self.character_table = None;
-        error::check(unsafe { ffi::msymFindSymmetry(self.ctx) })?;
-
-        // Linear molecules have no finite character table
-        let label = self.point_group()?;
-        if matches!(label, SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh) {
-            return Ok(());
-        }
-
-        // Cache the character table for finite groups
-        let mut ct_ptr = ptr::null();
-        error::check(unsafe { ffi::msymGetCharacterTable(self.ctx, &mut ct_ptr) })?;
-        self.character_table = Some(unsafe { CharacterTable::from_ffi(&*ct_ptr) });
-        Ok(())
+        error::check(unsafe { ffi::msymFindSymmetry(self.ctx) })
     }
 
     pub fn point_group(&self) -> Result<SchoenfliesLabel, Error> {
@@ -143,7 +83,6 @@ impl Context {
     }
 
     pub fn set_point_group_by_name(&mut self, name: &str) -> Result<(), Error> {
-        self.character_table = None;
         let cname = CString::new(name).map_err(|_| Error {
             code: ffi::MSYM_INVALID_INPUT,
             message: "invalid group name".into(),
@@ -152,21 +91,26 @@ impl Context {
     }
 
     pub fn set_point_group(&mut self, label: SchoenfliesLabel) -> Result<(), Error> {
-        self.character_table = None;
         let (pg_type, n) = label.to_ffi();
         error::check(unsafe { ffi::msymSetPointGroupByType(self.ctx, pg_type, n) })
     }
 
-    pub fn symmetry_operations(&self) -> Result<Vec<SymmetryOp>, Error> {
+    /// Read libmsym's symmetry operations for the currently-set point group
+    /// and bind them to `group` as a matrix realization.
+    ///
+    /// `group` must match the context's current point group; op-slot order is
+    /// canonical per `(type, n)`, so indices into `group.ops()` align.
+    pub fn symmetry_representation(
+        &self,
+        group: &'static PointGroup,
+    ) -> Result<MatrixRep, Error> {
         let mut len: c_int = 0;
-        let mut ptr = ptr::null();
-        error::check(unsafe { ffi::msymGetSymmetryOperations(self.ctx, &mut len, &mut ptr) })?;
-        let slice = unsafe { slice::from_raw_parts(ptr, len as usize) };
-        Ok(slice.iter().map(SymmetryOp::from).collect())
-    }
-
-    pub fn character_table(&self) -> Option<&CharacterTable> {
-        self.character_table.as_ref()
+        let mut p = ptr::null();
+        error::check(unsafe { ffi::msymGetSymmetryOperations(self.ctx, &mut len, &mut p) })?;
+        let sops = unsafe { slice::from_raw_parts(p, len as usize) };
+        let matrices = sops.iter().map(compute_op_matrix).collect();
+        let axes = sops.iter().map(|s| Vector3::from(s.v)).collect();
+        Ok(MatrixRep::new(group, matrices, axes))
     }
 
     pub fn geometry(&self) -> Result<Geometry, Error> {
@@ -225,7 +169,6 @@ impl Context {
     }
 
     pub fn symmetrize_centers(&mut self) -> Result<f64, Error> {
-        self.character_table = None;
         let mut err = 0.0f64;
         error::check(unsafe { ffi::msymSymmetrizeElements(self.ctx, &mut err) })?;
         Ok(err)
@@ -260,20 +203,18 @@ impl Context {
                     BasisKind::CartesianHarmonic => ffi::MSYM_BASIS_TYPE_CARTESIAN,
                     _ => ffi::MSYM_BASIS_TYPE_REAL_SPHERICAL_HARMONIC,
                 };
-                let n = bf.ffi_n();
-                let name = orbital_name(n, bf.l, bf.m);
                 ffi::msym_basis_function_t {
                     id: ptr::null_mut(),
                     type_,
                     element,
                     f: ffi::msym_basis_function_union_t {
                         rsh: ffi::msym_real_spherical_harmonic_t {
-                            n,
+                            n: bf.ffi_n(),
                             l: bf.l,
                             m: bf.m,
                         },
                     },
-                    name,
+                    name: bf.libmsym_name_bytes(),
                 }
             })
             .collect();
@@ -312,7 +253,6 @@ impl Context {
     }
 
     pub fn generate_centers(&mut self, asymmetric_unit: &[SymmetryCenter]) -> Result<(), Error> {
-        self.character_table = None;
         let mut ffi_elems: Vec<ffi::msym_element_t> =
             asymmetric_unit.iter().map(|e| e.to_ffi()).collect();
         error::check(unsafe {
@@ -335,11 +275,11 @@ impl Context {
             let order = sg.order as usize;
 
             let sops_slice = unsafe { slice::from_raw_parts(sg.sops, order) };
-            let parent_ops: Vec<(SymmetryOp, usize)> = sops_slice
+            let parent_ops = sops_slice
                 .iter()
                 .map(|sop_ptr| {
                     let sop = unsafe { &**sop_ptr };
-                    (SymmetryOp::from(sop), sop.cla as usize)
+                    (compute_op_matrix(sop), sop.cla as usize)
                 })
                 .collect();
 
@@ -355,23 +295,12 @@ impl Context {
     }
 
     pub fn select_subgroup(&mut self, sg: &SubgroupInfo) -> Result<(), Error> {
-        self.character_table = None;
-
         let mut len: c_int = 0;
         let mut ptr = ptr::null();
         error::check(unsafe { ffi::msymGetSubgroups(self.ctx, &mut len, &mut ptr) })?;
 
         let sg_ptr = unsafe { ptr.add(sg.index) };
-        error::check(unsafe { ffi::msymSelectSubgroup(self.ctx, sg_ptr) })?;
-
-        let label = self.point_group()?;
-        if !matches!(label, SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh) {
-            let mut ct_ptr = ptr::null();
-            error::check(unsafe { ffi::msymGetCharacterTable(self.ctx, &mut ct_ptr) })?;
-            self.character_table = Some(unsafe { CharacterTable::from_ffi(&*ct_ptr) });
-        }
-
-        Ok(())
+        error::check(unsafe { ffi::msymSelectSubgroup(self.ctx, sg_ptr) })
     }
 }
 
@@ -456,38 +385,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case(water(), 4)] // C2v: E, C2, σv, σv'
-    #[case(methane(), 24)] // Td: 24 operations
-    fn test_context_symmetry_operations(
+    #[case(water(), SchoenfliesLabel::Cnv(2), 4)]
+    #[case(methane(), SchoenfliesLabel::Td, 24)]
+    fn test_context_symmetry_representation(
         #[case] elements: Vec<SymmetryCenter>,
+        #[case] label: SchoenfliesLabel,
         #[case] expected_count: usize,
     ) {
         let mut ctx = Context::new().unwrap();
         ctx.set_centers(&elements).unwrap();
         ctx.find_symmetry().unwrap();
-        assert_eq!(ctx.symmetry_operations().unwrap().len(), expected_count);
-    }
-
-    #[rstest]
-    fn test_context_character_table() {
-        let mut ctx = Context::new().unwrap();
-        ctx.set_centers(&water()).unwrap();
-        ctx.find_symmetry().unwrap();
-
-        let ct = ctx.character_table().unwrap();
-
-        // C2v has 4 irreps: A1, A2, B1, B2
-        assert_eq!(ct.irrep_data.len(), 4);
-        assert_eq!(ct.order, 4);
-
-        let symbols: Vec<&str> = ct.irrep_data.iter().map(|ir| ir.symbol.as_str()).collect();
-        assert!(symbols.contains(&"A1"));
-        assert!(symbols.contains(&"A2"));
-        assert!(symbols.contains(&"B1"));
-        assert!(symbols.contains(&"B2"));
-
-        for ir in &ct.irrep_data {
-            assert_eq!(ir.dimension, 1);
-        }
+        let group = PointGroup::from_label(label).unwrap();
+        let rep = ctx.symmetry_representation(group).unwrap();
+        assert_eq!(rep.order(), expected_count);
     }
 }

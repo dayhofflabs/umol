@@ -2,17 +2,19 @@ use crate::basis::{BasisFunction, IrrepBasis, Salc, SalcBasis};
 use crate::context::Context;
 use crate::error::Error;
 use crate::linear;
+use crate::matrix_rep::MatrixRep;
 use crate::point_group::PointGroup;
 use crate::subgroup::{correlation_table, CorrelationTable};
-use crate::types::{EquivalenceSet, SchoenfliesLabel, SymmetryCenter, SymmetryOp, Thresholds};
+use crate::types::{EquivalenceSet, SchoenfliesLabel, SymmetryCenter, Thresholds};
 
 /// Result of symmetry detection or symmetrization.
 #[derive(Debug)]
 pub struct SymmetryResult {
     pub group: &'static PointGroup,
-    /// Symmetry operations in the molecule's coordinate frame.
-    /// Use these (not `group.ops()`) for atom permutations and coordinate transforms.
-    pub ops: Vec<SymmetryOp>,
+    /// 3×3 matrices for each symmetry operation, placed in the molecule's
+    /// coordinate frame. Use this (not `group.ops()` alone) for atom permutations
+    /// and coordinate transforms.
+    pub representation: MatrixRep,
     pub equivalence_sets: Vec<EquivalenceSet>,
     /// Atom positions after processing. Same as input for `detect_symmetry`,
     /// snapped to exact symmetry for `symmetrize`.
@@ -30,10 +32,14 @@ fn c1_result(centers: &[SymmetryCenter]) -> SymmetryResult {
         .collect();
     SymmetryResult {
         group,
-        ops: group.ops().to_vec(),
+        representation: MatrixRep::identity_only(group),
         equivalence_sets,
         centers: centers.to_vec(),
     }
+}
+
+fn group_from_ctx(ctx: &Context) -> Result<&'static PointGroup, Error> {
+    PointGroup::from_label(ctx.point_group()?)
 }
 
 /// Detect point group symmetry of a set of atoms.
@@ -54,14 +60,14 @@ pub fn detect_symmetry(
         Err(e) => return Err(e),
     }
 
-    let group = PointGroup::from_context(&ctx)?;
-    let ops = ctx.symmetry_operations()?;
+    let group = group_from_ctx(&ctx)?;
+    let representation = ctx.symmetry_representation(group)?;
     let equivalence_sets = ctx.equivalence_sets()?;
     let centers = ctx.centers()?;
 
     Ok(SymmetryResult {
         group,
-        ops,
+        representation,
         equivalence_sets,
         centers,
     })
@@ -85,15 +91,15 @@ pub fn symmetrize(
         }
         Err(e) => return Err(e),
     }
-    let group = PointGroup::from_context(&ctx)?;
-    let ops = ctx.symmetry_operations()?;
+    let group = group_from_ctx(&ctx)?;
+    let representation = ctx.symmetry_representation(group)?;
     let equivalence_sets = ctx.equivalence_sets()?;
     ctx.symmetrize_centers()?;
     let centers = ctx.centers()?;
 
     Ok(SymmetryResult {
         group,
-        ops,
+        representation,
         equivalence_sets,
         centers,
     })
@@ -123,14 +129,14 @@ pub fn generate_symmetry_images(
     ctx.generate_centers(asymmetric_unit)?;
     ctx.find_symmetry()?;
 
-    let group = PointGroup::from_context(&ctx)?;
-    let ops = ctx.symmetry_operations()?;
+    let group = group_from_ctx(&ctx)?;
+    let representation = ctx.symmetry_representation(group)?;
     let equivalence_sets = ctx.equivalence_sets()?;
     let centers = ctx.centers()?;
 
     Ok(SymmetryResult {
         group,
-        ops,
+        representation,
         equivalence_sets,
         centers,
     })
@@ -140,7 +146,7 @@ pub fn generate_symmetry_images(
 pub struct SymmetryDescentResult {
     pub parent_group: &'static PointGroup,
     pub child_group: &'static PointGroup,
-    pub child_ops: Vec<SymmetryOp>,
+    pub child_representation: MatrixRep,
     pub transform: [[f64; 3]; 3],
     pub correlation: Option<CorrelationTable>,
     pub centers: Vec<SymmetryCenter>,
@@ -169,7 +175,7 @@ pub fn lower_symmetry(
     ctx.set_thresholds(&thresholds)?;
     ctx.find_symmetry()?;
 
-    let parent_group = PointGroup::from_context(&ctx)?;
+    let parent_group = group_from_ctx(&ctx)?;
     let centers_out = ctx.centers()?;
 
     let identity_transform = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
@@ -177,6 +183,7 @@ pub fn lower_symmetry(
     // Identity descent: target is the same group.
     if target == parent_group.label() {
         let equivalence_sets = ctx.equivalence_sets()?;
+        let child_representation = ctx.symmetry_representation(parent_group)?;
         let correlation = if parent_group.is_linear() {
             None
         } else {
@@ -187,7 +194,7 @@ pub fn lower_symmetry(
         return Ok(SymmetryDescentResult {
             parent_group,
             child_group: parent_group,
-            child_ops: parent_group.ops().to_vec(),
+            child_representation,
             transform: identity_transform,
             correlation,
             centers: centers_out,
@@ -214,7 +221,7 @@ pub fn lower_symmetry(
         return Ok(SymmetryDescentResult {
             parent_group,
             child_group,
-            child_ops: child_group.ops().to_vec(),
+            child_representation: MatrixRep::identity_only(child_group),
             transform: identity_transform,
             correlation,
             centers: centers_out,
@@ -244,14 +251,14 @@ pub fn lower_symmetry(
         }
 
         let child_group = PointGroup::from_schoenflies(&child_name)?;
-        let child_ops = ctx2.symmetry_operations()?;
+        let child_representation = ctx2.symmetry_representation(child_group)?;
         let centers_out = ctx2.centers()?;
         let equivalence_sets = ctx2.equivalence_sets()?;
 
         return Ok(SymmetryDescentResult {
             parent_group,
             child_group,
-            child_ops,
+            child_representation,
             transform: identity_transform,
             correlation: None,
             centers: centers_out,
@@ -276,7 +283,7 @@ pub fn lower_symmetry(
     let child_name = ctx.point_group_name()?;
     let child_group = PointGroup::from_schoenflies(&child_name)?;
     let transform = ctx.alignment_transform()?;
-    let child_ops = ctx.symmetry_operations()?;
+    let child_representation = ctx.symmetry_representation(child_group)?;
     let centers_out = ctx.centers()?;
     let equivalence_sets = ctx.equivalence_sets()?;
 
@@ -286,15 +293,16 @@ pub fn lower_symmetry(
     let mut class_map = vec![0usize; child_n_classes];
     let mut class_assigned = vec![false; child_n_classes];
 
-    for child_op in &child_ops {
-        let child_class = child_op.class;
+    for child_op in child_group.ops() {
+        let child_class = child_op.class();
         if class_assigned[child_class] {
             continue;
         }
+        let child_matrix = child_representation.matrix(child_op);
         let (_, parent_class) = parent_ops_with_class
             .iter()
-            .map(|(pop, pcls)| {
-                let diff = pop.matrix - child_op.matrix;
+            .map(|(pmat, pcls)| {
+                let diff = pmat - child_matrix;
                 let dist: f64 = diff.iter().map(|x| x * x).sum();
                 (dist, *pcls)
             })
@@ -309,7 +317,7 @@ pub fn lower_symmetry(
     Ok(SymmetryDescentResult {
         parent_group,
         child_group,
-        child_ops,
+        child_representation,
         transform,
         correlation,
         centers: centers_out,
@@ -332,7 +340,7 @@ pub fn compute_salcs(
     ctx.set_thresholds(&thresholds)?;
     ctx.find_symmetry()?;
 
-    let group = PointGroup::from_context(&ctx)?;
+    let group = group_from_ctx(&ctx)?;
 
     if group.is_linear() {
         let aligned = ctx.centers()?;

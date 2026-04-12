@@ -1,6 +1,23 @@
 use std::fmt;
 
+use nalgebra::Matrix3;
+
 use crate::point_group::{Irrep, PointGroup, ReductionError};
+use crate::types::SchoenfliesLabel;
+
+/// Subgroup descent transport: parent-group ops that survive into a target
+/// subgroup, together with the libmsym subgroup-table index used to drive
+/// `msymSelectSubgroup`.
+#[derive(Debug, Clone)]
+pub struct SubgroupInfo {
+    pub label: SchoenfliesLabel,
+    pub name: String,
+    pub order: usize,
+    /// For each subgroup op, the 3×3 matrix in the parent coordinate frame
+    /// and the parent-group class index.
+    pub parent_ops: Vec<(Matrix3<f64>, usize)>,
+    pub(crate) index: usize,
+}
 
 /// Correlation table mapping parent irreps to child irrep decompositions.
 #[derive(Debug)]

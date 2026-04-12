@@ -12,7 +12,7 @@ use umol_msym::{
     generate_symmetry_images as generate_image_centers,
     lower_symmetry as lower_symmetry_centers, symmetrize as symmetrize_centers, BasisFunction,
     BasisKind, CartesianAxis, CorrelationTable, EquivalenceSet, Error as SymmetryError, Irrep,
-    PointGroup, SalcBasis, SchoenfliesLabel, SymmetryCenter, SymmetryOp, Thresholds,
+    MatrixRep, PointGroup, SalcBasis, SchoenfliesLabel, SymmetryCenter, Thresholds,
 };
 
 use crate::coordinates::Coordinates;
@@ -60,8 +60,8 @@ pub struct Molecule {
     multiplicity: SpinMultiplicity,
 
     group: &'static PointGroup,
-    /// Symmetry operations in the molecule's coordinate frame.
-    ops: Vec<SymmetryOp>,
+    /// Matrix realization of the point group in the molecule's coordinate frame.
+    representation: MatrixRep,
     /// Atom index orbits under symmetry operations. Each inner vec is one equivalence set.
     equivalence_sets: Vec<Vec<usize>>,
     /// One permutation per symmetry operation: atom_permutations[op][i] = j means
@@ -206,7 +206,7 @@ impl Molecule {
         let coords = self.cartesian_coordinates();
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(coords, &result.ops, &self.elements);
+            compute_atom_permutations(coords, &result.representation, &self.elements);
 
         Ok(Molecule {
             elements: self.elements.clone(),
@@ -214,7 +214,7 @@ impl Molecule {
             charge: self.charge,
             multiplicity: self.multiplicity,
             group: result.group,
-            ops: result.ops,
+            representation: result.representation,
             equivalence_sets: eq_sets,
             atom_permutations,
         })
@@ -232,7 +232,7 @@ impl Molecule {
 
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(&matrix, &result.ops, &self.elements);
+            compute_atom_permutations(&matrix, &result.representation, &self.elements);
 
         Ok(Molecule {
             elements: self.elements.clone(),
@@ -240,7 +240,7 @@ impl Molecule {
             charge: self.charge,
             multiplicity: self.multiplicity,
             group: result.group,
-            ops: result.ops,
+            representation: result.representation,
             equivalence_sets: eq_sets,
             atom_permutations,
         })
@@ -258,7 +258,7 @@ impl Molecule {
         let coords = self.cartesian_coordinates();
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(coords, &result.child_ops, &self.elements);
+            compute_atom_permutations(coords, &result.child_representation, &self.elements);
 
         Ok(SymmetryDescentResult {
             molecule: Molecule {
@@ -267,7 +267,7 @@ impl Molecule {
                 charge: self.charge,
                 multiplicity: self.multiplicity,
                 group: result.child_group,
-                ops: result.child_ops,
+                representation: result.child_representation,
                 equivalence_sets: eq_sets,
                 atom_permutations,
             },
@@ -312,7 +312,7 @@ impl Molecule {
 
         let eq_sets = equivalence_sets_as_indices(&result.equivalence_sets);
         let atom_permutations =
-            compute_atom_permutations(&matrix, &result.ops, &gen_elements);
+            compute_atom_permutations(&matrix, &result.representation, &gen_elements);
 
         Ok(Molecule {
             elements: gen_elements,
@@ -320,7 +320,7 @@ impl Molecule {
             charge: 0,
             multiplicity: SpinMultiplicity::Singlet,
             group: result.group,
-            ops: result.ops,
+            representation: result.representation,
             equivalence_sets: eq_sets,
             atom_permutations,
         })
@@ -340,10 +340,10 @@ impl Molecule {
             return self.symmetry_coordinates_linear(thresholds);
         }
 
-        let ops = &self.ops;
+        let rep = &self.representation;
         let perms = self.atom_permutations();
         let h = group.order();
-        assert_eq!(ops.len(), h);
+        assert_eq!(rep.order(), h);
         assert_eq!(perms.len(), h);
 
         // Step 1: Γ_3N characters (one per class)
@@ -351,8 +351,8 @@ impl Molecule {
         let mut gamma_3n = vec![0.0; n_classes];
         // Use first operation of each class
         let mut class_seen = vec![false; n_classes];
-        for (k, op) in ops.iter().enumerate() {
-            let c = op.class;
+        for (k, op) in group.ops().into_iter().enumerate() {
+            let c = op.class();
             if class_seen[c] {
                 continue;
             }
@@ -362,7 +362,7 @@ impl Molecule {
                 .enumerate()
                 .filter(|(i, &j)| *i == j)
                 .count();
-            gamma_3n[c] = n_fixed as f64 * op.matrix.trace();
+            gamma_3n[c] = n_fixed as f64 * rep.matrix(op).trace();
         }
 
         // Step 2: reduce
@@ -372,17 +372,19 @@ impl Molecule {
         let gamma_vib = subtract_irrep_reps(&gamma_total, &gamma_trans, &gamma_rot);
 
         // Step 3: build D_3N(R) matrices for each operation
-        let d3n_mats: Vec<DMatrix<f64>> = ops
-            .iter()
+        let d3n_mats: Vec<DMatrix<f64>> = group
+            .ops()
+            .into_iter()
             .zip(perms.iter())
             .map(|(op, perm)| {
                 let mut d = DMatrix::zeros(dim3n, dim3n);
+                let matrix = rep.matrix(op);
                 for i in 0..n {
                     let j = perm[i];
                     // block (3*j, 3*i) = M_R
                     for r in 0..3 {
                         for c in 0..3 {
-                            d[(3 * j + r, 3 * i + c)] = op.matrix[(r, c)];
+                            d[(3 * j + r, 3 * i + c)] = matrix[(r, c)];
                         }
                     }
                 }
@@ -400,8 +402,8 @@ impl Molecule {
 
             // P_μ = (l_μ / h) Σ_R χ_μ(R) · D_3N(R)
             let mut proj = DMatrix::zeros(dim3n, dim3n);
-            for (k, op) in ops.iter().enumerate() {
-                let chi = chars[op.class];
+            for (k, op) in group.ops().into_iter().enumerate() {
+                let chi = chars[op.class()];
                 proj += &d3n_mats[k] * (dim * chi / h as f64);
             }
 
@@ -604,7 +606,7 @@ impl Molecule {
             charge,
             multiplicity,
             group,
-            ops: group.ops().to_vec(),
+            representation: MatrixRep::identity_only(group),
             equivalence_sets,
             atom_permutations,
         }
@@ -873,19 +875,19 @@ fn equivalence_sets_as_indices(sets: &[EquivalenceSet]) -> Vec<Vec<usize>> {
 /// the atom j whose position is closest to M·p.
 fn compute_atom_permutations(
     coords: &DMatrix<f64>,
-    operations: &[SymmetryOp],
+    representation: &MatrixRep,
     elements: &[Element],
 ) -> Vec<Vec<usize>> {
     let n = coords.ncols();
-    operations
+    representation
+        .matrices()
         .iter()
-        .map(|op| {
+        .map(|matrix| {
             let mut perm = vec![0usize; n];
             for i in 0..n {
                 let p = Vector3::new(coords[(0, i)], coords[(1, i)], coords[(2, i)]);
-                let rp = op.matrix * p;
+                let rp = matrix * p;
 
-                // Find nearest atom of same element
                 let mut best_j = 0;
                 let mut best_d2 = f64::MAX;
                 for j in 0..n {

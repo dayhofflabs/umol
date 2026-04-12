@@ -1,9 +1,7 @@
-use std::f64::consts::PI;
 use std::ffi::CStr;
 use std::os::raw::c_int;
-use std::{fmt, ptr, slice};
+use std::{fmt, ptr};
 
-use nalgebra::Matrix3;
 use umol_msym_sys as ffi;
 
 /// Structured Schoenflies symbol identifying a point group.
@@ -89,7 +87,6 @@ impl SchoenfliesLabel {
 
     /// Parse a Schoenflies symbol string (e.g. "C2v", "Td", "D6h").
     pub fn parse(s: &str) -> Option<Self> {
-        // Fixed groups (no axis order parameter)
         match s {
             "Ci" => return Some(Self::Ci),
             "Cs" => return Some(Self::Cs),
@@ -107,7 +104,6 @@ impl SchoenfliesLabel {
             _ => {}
         }
 
-        // Parametric groups: extract family prefix, number, and optional suffix
         if let Some(rest) = s.strip_prefix('C') {
             parse_parametric(rest, |n, suffix| match suffix {
                 "" => Some(Self::Cn(n)),
@@ -131,9 +127,9 @@ impl SchoenfliesLabel {
             None
         }
     }
+
 }
 
-/// Parse "3v" into (3, "v"), "6h" into (6, "h"), "2" into (2, ""), etc.
 fn parse_parametric<F>(s: &str, f: F) -> Option<SchoenfliesLabel>
 where
     F: FnOnce(u32, &str) -> Option<SchoenfliesLabel>,
@@ -241,146 +237,14 @@ impl From<ffi::msym_symmetry_operation_orientation_t> for SymmetryOpOrientation 
     }
 }
 
+/// Per-operation abstract data stored on `PointGroup`, indexed by op position.
 #[derive(Debug, Clone)]
-pub struct SymmetryOp {
+pub(crate) struct OpData {
     pub kind: SymmetryOpKind,
     pub order: i32,
     pub power: i32,
     pub orientation: SymmetryOpOrientation,
-    pub vector: [f64; 3],
-    /// Conjugacy class index: indexes into `PointGroup::class_sizes()`,
-    /// `PointGroup::class_reps()`, and `Irrep::characters()`.
     pub class: usize,
-    pub matrix: Matrix3<f64>,
-}
-
-impl SymmetryOp {
-    pub fn is_proper(&self) -> bool {
-        matches!(
-            self.kind,
-            SymmetryOpKind::Identity | SymmetryOpKind::ProperRotation
-        )
-    }
-
-    pub fn transform_point(&self, p: [f64; 3]) -> [f64; 3] {
-        let v = nalgebra::Vector3::new(p[0], p[1], p[2]);
-        let r = self.matrix * v;
-        [r.x, r.y, r.z]
-    }
-
-    fn compute_matrix(kind: SymmetryOpKind, order: i32, power: i32, v: [f64; 3]) -> Matrix3<f64> {
-        match kind {
-            SymmetryOpKind::Identity => Matrix3::identity(),
-            SymmetryOpKind::Inversion => -Matrix3::identity(),
-            SymmetryOpKind::Reflection => reflection_matrix(v),
-            SymmetryOpKind::ProperRotation => {
-                rotation_matrix(v, 2.0 * PI * power as f64 / order as f64)
-            }
-            SymmetryOpKind::ImproperRotation => {
-                let rot = rotation_matrix(v, 2.0 * PI * power as f64 / order as f64);
-                reflection_matrix(v) * rot
-            }
-        }
-    }
-}
-
-/// Rotation matrix via Rodrigues' formula: R(n, θ) = cosθ·I + (1-cosθ)·nnᵀ + sinθ·[n]×
-fn rotation_matrix(axis: [f64; 3], theta: f64) -> Matrix3<f64> {
-    let n = nalgebra::Vector3::new(axis[0], axis[1], axis[2]).normalize();
-    let c = theta.cos();
-    let s = theta.sin();
-    let t = 1.0 - c;
-    Matrix3::new(
-        t * n.x * n.x + c,
-        t * n.x * n.y - s * n.z,
-        t * n.x * n.z + s * n.y,
-        t * n.x * n.y + s * n.z,
-        t * n.y * n.y + c,
-        t * n.y * n.z - s * n.x,
-        t * n.x * n.z - s * n.y,
-        t * n.y * n.z + s * n.x,
-        t * n.z * n.z + c,
-    )
-}
-
-/// Reflection matrix through plane with normal n: R = I - 2nnᵀ
-fn reflection_matrix(normal: [f64; 3]) -> Matrix3<f64> {
-    let n = nalgebra::Vector3::new(normal[0], normal[1], normal[2]).normalize();
-    Matrix3::identity() - 2.0 * n * n.transpose()
-}
-
-impl fmt::Display for SymmetryOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
-            SymmetryOpKind::Identity => write!(f, "E"),
-            SymmetryOpKind::Inversion => write!(f, "i"),
-            SymmetryOpKind::Reflection => match self.orientation {
-                SymmetryOpOrientation::Horizontal => write!(f, "σh"),
-                SymmetryOpOrientation::Vertical => write!(f, "σv"),
-                SymmetryOpOrientation::Dihedral => write!(f, "σd"),
-                SymmetryOpOrientation::None => write!(f, "σ"),
-            },
-            SymmetryOpKind::ProperRotation => {
-                write!(f, "C{}", self.order)?;
-                write_prime_suffix(f, self.orientation)?;
-                write_superscript_power(f, self.power)
-            }
-            SymmetryOpKind::ImproperRotation => {
-                write!(f, "S{}", self.order)?;
-                write_prime_suffix(f, self.orientation)?;
-                write_superscript_power(f, self.power)
-            }
-        }
-    }
-}
-
-fn write_prime_suffix(
-    f: &mut fmt::Formatter<'_>,
-    orientation: SymmetryOpOrientation,
-) -> fmt::Result {
-    match orientation {
-        SymmetryOpOrientation::Vertical => write!(f, "'"),
-        SymmetryOpOrientation::Dihedral => write!(f, "''"),
-        _ => Ok(()),
-    }
-}
-
-fn write_superscript_power(f: &mut fmt::Formatter<'_>, power: i32) -> fmt::Result {
-    if power > 1 {
-        for ch in power.to_string().chars() {
-            let sup = match ch {
-                '0' => '⁰',
-                '1' => '¹',
-                '2' => '²',
-                '3' => '³',
-                '4' => '⁴',
-                '5' => '⁵',
-                '6' => '⁶',
-                '7' => '⁷',
-                '8' => '⁸',
-                '9' => '⁹',
-                _ => ch,
-            };
-            write!(f, "{sup}")?;
-        }
-    }
-    Ok(())
-}
-
-impl From<&ffi::msym_symmetry_operation_t> for SymmetryOp {
-    fn from(op: &ffi::msym_symmetry_operation_t) -> Self {
-        let kind = op.type_.into();
-        let matrix = Self::compute_matrix(kind, op.order, op.power, op.v);
-        Self {
-            kind,
-            order: op.order,
-            power: op.power,
-            orientation: op.orientation.into(),
-            vector: op.v,
-            class: op.cla as usize,
-            matrix,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -481,65 +345,6 @@ pub(crate) struct IrrepData {
     pub sigma_v: Option<bool>,
     /// Gerade/ungerade for D∞h irreps.
     pub gerade: Option<bool>,
-}
-
-#[derive(Debug)]
-pub(crate) enum PointGroupKind {
-    Finite {
-        order: usize,
-        ops: Vec<SymmetryOp>,
-        class_sizes: Vec<i32>,
-        class_reps: Vec<SymmetryOp>,
-    },
-    Linear,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct CharacterTable {
-    pub irrep_data: Vec<IrrepData>,
-    pub class_sizes: Vec<i32>,
-    pub class_reps: Vec<SymmetryOp>,
-    pub order: usize,
-}
-
-impl CharacterTable {
-    pub(crate) unsafe fn from_ffi(ct: &ffi::msym_character_table_t) -> Self {
-        let d = ct.d as usize;
-
-        let class_sizes = slice::from_raw_parts(ct.classc, d).to_vec();
-
-        let class_reps: Vec<SymmetryOp> = (0..d)
-            .map(|i| SymmetryOp::from(&**ct.sops.add(i)))
-            .collect();
-
-        let species = slice::from_raw_parts(ct.s, d);
-        let table_ptr = ct.table as *const f64;
-
-        let irrep_data: Vec<IrrepData> = species
-            .iter()
-            .enumerate()
-            .map(|(i, s)| IrrepData {
-                symbol: CStr::from_ptr(s.name.as_ptr())
-                    .to_string_lossy()
-                    .into_owned(),
-                dimension: s.d,
-                index: i,
-                characters: slice::from_raw_parts(table_ptr.add(i * d), d).to_vec(),
-                lambda: None,
-                sigma_v: None,
-                gerade: None,
-            })
-            .collect();
-
-        let order = class_sizes.iter().sum::<i32>() as usize;
-
-        Self {
-            irrep_data,
-            class_sizes,
-            class_reps,
-            order,
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

@@ -1,18 +1,21 @@
 use std::collections::HashMap;
 use std::error::Error as StdError;
+use std::f64::consts::PI;
+use std::ffi::{CStr, CString};
 use std::hash::{Hash, Hasher};
+use std::os::raw::c_int;
 use std::sync::{LazyLock, Mutex};
-use std::{fmt, ptr};
+use std::{fmt, ptr, slice};
 
-use nalgebra::Matrix3;
-use umol_msym_sys::{MSYM_INVALID_CHARACTER_TABLE, MSYM_INVALID_INPUT, MSYM_POINT_GROUP_ERROR};
+use nalgebra::{Matrix3, Vector3};
+use umol_msym_sys::{
+    self as ffi, MSYM_INVALID_CHARACTER_TABLE, MSYM_INVALID_INPUT, MSYM_MEMORY_ERROR,
+};
 
-use crate::context::Context;
-use crate::error::Error;
+use crate::error::{self, Error};
 use crate::linear;
 use crate::types::{
-    IrrepData, PointGroupKind, SchoenfliesLabel, SymmetryCenter, SymmetryOp, SymmetryOpKind,
-    SymmetryOpOrientation,
+    IrrepData, OpData, SchoenfliesLabel, SymmetryOpKind, SymmetryOpOrientation,
 };
 
 #[derive(Debug, Clone)]
@@ -55,9 +58,6 @@ fn register(pg: PointGroup) -> &'static PointGroup {
 }
 
 /// An irreducible representation, bound to its parent point group.
-///
-/// `Copy` view type — carries `&'static` references to both its data and its group.
-/// Two irreps are equal iff they point to the same `IrrepData` (pointer identity).
 #[derive(Copy, Clone)]
 pub struct Irrep {
     pub(crate) data: &'static IrrepData,
@@ -65,45 +65,40 @@ pub struct Irrep {
 }
 
 impl Irrep {
-    /// Mulliken symbol (e.g. "A1", "B2", "T2g").
     pub fn symbol(&self) -> &str {
         &self.data.symbol
     }
 
-    /// Position in the character table (row index).
     pub fn index(&self) -> usize {
         self.data.index
     }
 
-    /// Dimensionality (1 for A/B, 2 for E, 3 for T).
     pub fn dimension(&self) -> i32 {
         self.data.dimension
     }
 
-    /// Character values, one per conjugacy class. Empty for infinite groups.
     pub fn characters(&self) -> &[f64] {
         &self.data.characters
     }
 
-    /// Angular momentum quantum number for infinite-group irreps.
     pub fn lambda(&self) -> Option<u32> {
         self.data.lambda
     }
 
-    /// Gerade (true) or ungerade (false) for centrosymmetric groups.
-    /// Returns `None` for groups without inversion.
     pub fn is_gerade(&self) -> Option<bool> {
         if let Some(g) = self.data.gerade {
             return Some(g);
         }
-        // Finite centrosymmetric groups: find inversion op, check character sign
-        let ops = self.group.ops();
-        let inv_op = ops.iter().find(|op| op.kind == SymmetryOpKind::Inversion)?;
-        let chi = self.data.characters.get(inv_op.class)?;
+        let finite = self.group.finite.as_ref()?;
+        let inv_index = finite
+            .op_data
+            .iter()
+            .position(|d| d.kind == SymmetryOpKind::Inversion)?;
+        let inv_class = finite.op_data[inv_index].class;
+        let chi = self.data.characters.get(inv_class)?;
         Some(*chi > 0.0)
     }
 
-    /// Sigma-v parity for Σ irreps: true = Σ+, false = Σ-.
     pub fn is_sigma_plus(&self) -> Option<bool> {
         if self.data.lambda == Some(0) {
             self.data.sigma_v
@@ -112,7 +107,6 @@ impl Irrep {
         }
     }
 
-    /// Parent point group.
     pub fn group(&self) -> &'static PointGroup {
         self.group
     }
@@ -144,15 +138,178 @@ impl fmt::Display for Irrep {
     }
 }
 
-/// A molecular point group: singleton algebraic object with operations and character table.
+/// A symmetry operation handle: parent point group plus opaque positional index.
 ///
-/// Point groups are `&'static` singletons. There is exactly one C2v, one Td, etc.
-/// Access via named constructors (`PointGroup::c2v()`) or `PointGroup::from_schoenflies("C2v")`.
+/// Equality and hashing use `(group, index)`, so σv and σv′ in C₂ᵥ compare
+/// unequal even though their `(kind, order, power, orientation)` tuples agree.
+#[derive(Clone, Copy)]
+pub struct SymmetryOp {
+    group: &'static PointGroup,
+    index: usize,
+}
+
+impl SymmetryOp {
+    pub fn group(&self) -> &'static PointGroup {
+        self.group
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    fn data(&self) -> &OpData {
+        &self
+            .group
+            .finite
+            .as_ref()
+            .expect("SymmetryOp on linear group")
+            .op_data[self.index]
+    }
+
+    pub fn kind(&self) -> SymmetryOpKind {
+        self.data().kind
+    }
+
+    pub fn order(&self) -> i32 {
+        self.data().order
+    }
+
+    pub fn power(&self) -> i32 {
+        self.data().power
+    }
+
+    pub fn orientation(&self) -> SymmetryOpOrientation {
+        self.data().orientation
+    }
+
+    pub fn class(&self) -> usize {
+        self.data().class
+    }
+
+    pub fn is_proper(&self) -> bool {
+        matches!(
+            self.kind(),
+            SymmetryOpKind::Identity | SymmetryOpKind::ProperRotation
+        )
+    }
+
+    /// Character of this operation under the given irrep.
+    pub fn character(&self, irrep: Irrep) -> f64 {
+        debug_assert!(ptr::eq(irrep.group, self.group));
+        irrep.data.characters[self.class()]
+    }
+}
+
+impl PartialEq for SymmetryOp {
+    fn eq(&self, other: &Self) -> bool {
+        ptr::eq(self.group, other.group) && self.index == other.index
+    }
+}
+
+impl Eq for SymmetryOp {}
+
+impl Hash for SymmetryOp {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        (self.group as *const PointGroup).hash(state);
+        self.index.hash(state);
+    }
+}
+
+impl fmt::Debug for SymmetryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SymmetryOp({}:{})", self.group.label, self.index)
+    }
+}
+
+impl fmt::Display for SymmetryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.data())
+    }
+}
+
+impl fmt::Display for OpData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            SymmetryOpKind::Identity => return write!(f, "E"),
+            SymmetryOpKind::Inversion => return write!(f, "i"),
+            SymmetryOpKind::Reflection => {
+                let s = match self.orientation {
+                    SymmetryOpOrientation::Horizontal => "σh",
+                    SymmetryOpOrientation::Vertical => "σv",
+                    SymmetryOpOrientation::Dihedral => "σd",
+                    SymmetryOpOrientation::None => "σ",
+                };
+                return write!(f, "{s}");
+            }
+            _ => {}
+        }
+
+        let letter = match self.kind {
+            SymmetryOpKind::ProperRotation => "C",
+            SymmetryOpKind::ImproperRotation => "S",
+            _ => unreachable!(),
+        };
+        let prime = match self.orientation {
+            SymmetryOpOrientation::Vertical => "'",
+            SymmetryOpOrientation::Dihedral => "''",
+            _ => "",
+        };
+        write!(f, "{letter}{}{prime}", self.order)?;
+        if self.power != 1 {
+            write!(f, "{}", superscript(self.power))?;
+        }
+        Ok(())
+    }
+}
+
+fn superscript(n: i32) -> String {
+    n.to_string()
+        .chars()
+        .map(|c| match c {
+            '0' => '⁰',
+            '1' => '¹',
+            '2' => '²',
+            '3' => '³',
+            '4' => '⁴',
+            '5' => '⁵',
+            '6' => '⁶',
+            '7' => '⁷',
+            '8' => '⁸',
+            '9' => '⁹',
+            '-' => '⁻',
+            _ => c,
+        })
+        .collect()
+}
+
+#[derive(Debug)]
+pub(crate) struct FiniteData {
+    pub order: usize,
+    pub op_data: Vec<OpData>,
+    pub classes: Vec<Vec<usize>>,
+    pub class_rep_indices: Vec<usize>,
+    pub class_sizes: Vec<i32>,
+    pub mul_table: Vec<Vec<usize>>,
+    /// For each class `c`, the class containing the square of its representative.
+    pub r_squared_class: Vec<usize>,
+    /// Trace of ρ(R) per class, for the R³ representation.
+    pub translation_chars: Vec<f64>,
+    /// det·trace of ρ(R) per class, for the axial vector representation.
+    pub rotation_chars: Vec<f64>,
+    /// Sym² of the R³ representation, per class.
+    pub quadratic_chars: Vec<f64>,
+}
+
+/// A molecular point group: orientation-independent algebraic data.
+///
+/// Point groups are `&'static` singletons cached in a process-global registry.
+/// There is exactly one C₂ᵥ, one Td, etc. Access via named constructors
+/// (`PointGroup::c2v()`) or `PointGroup::from_schoenflies("C2v")`.
 #[derive(Debug)]
 pub struct PointGroup {
     pub(crate) label: SchoenfliesLabel,
     pub(crate) irrep_data: Vec<IrrepData>,
-    pub(crate) kind: PointGroupKind,
+    pub(crate) finite: Option<FiniteData>,
 }
 
 impl PointGroup {
@@ -180,37 +337,55 @@ impl PointGroup {
     }
 
     pub fn order(&self) -> usize {
-        match &self.kind {
-            PointGroupKind::Finite { order, .. } => *order,
-            PointGroupKind::Linear => 0,
-        }
-    }
-
-    pub fn ops(&self) -> &[SymmetryOp] {
-        match &self.kind {
-            PointGroupKind::Finite { ops, .. } => ops,
-            PointGroupKind::Linear => &[],
-        }
+        self.finite.as_ref().map(|f| f.order).unwrap_or(0)
     }
 
     pub fn class_sizes(&self) -> &[i32] {
-        match &self.kind {
-            PointGroupKind::Finite { class_sizes, .. } => class_sizes,
-            PointGroupKind::Linear => &[],
-        }
-    }
-
-    /// One representative symmetry operation per conjugacy class.
-    /// `class_reps()[i]` corresponds to `class_sizes()[i]` and `Irrep::characters()[i]`.
-    pub fn class_reps(&self) -> &[SymmetryOp] {
-        match &self.kind {
-            PointGroupKind::Finite { class_reps, .. } => class_reps,
-            PointGroupKind::Linear => &[],
-        }
+        self.finite.as_ref().map(|f| f.class_sizes.as_slice()).unwrap_or(&[])
     }
 
     pub fn is_linear(&self) -> bool {
-        matches!(self.kind, PointGroupKind::Linear)
+        self.finite.is_none()
+    }
+
+    /// All symmetry operations in positional order (one handle per group element).
+    pub fn ops(&'static self) -> Vec<SymmetryOp> {
+        match &self.finite {
+            Some(f) => (0..f.op_data.len())
+                .map(|i| SymmetryOp {
+                    group: self,
+                    index: i,
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// One representative per conjugacy class.
+    /// `class_reps()[i]` corresponds to `class_sizes()[i]` and `Irrep::characters()[i]`.
+    pub fn class_reps(&'static self) -> Vec<SymmetryOp> {
+        match &self.finite {
+            Some(f) => f
+                .class_rep_indices
+                .iter()
+                .map(|&i| SymmetryOp {
+                    group: self,
+                    index: i,
+                })
+                .collect(),
+            None => Vec::new(),
+        }
+    }
+
+    /// Product of two ops in the group: returns the op `a · b`.
+    pub fn multiply(&'static self, a: SymmetryOp, b: SymmetryOp) -> SymmetryOp {
+        debug_assert!(ptr::eq(a.group, self));
+        debug_assert!(ptr::eq(b.group, self));
+        let finite = self.finite.as_ref().expect("multiply on linear group");
+        SymmetryOp {
+            group: self,
+            index: finite.mul_table[a.index][b.index],
+        }
     }
 
     pub fn is_abelian(&self) -> bool {
@@ -254,17 +429,11 @@ impl PointGroup {
     }
 
     /// True if some irreps are complex conjugate pairs fused into real 2D representations.
-    ///
-    /// Detected structurally: a dim-2 irrep is a fused pair iff its squared-norm
-    /// Σ|C|χ² equals 2|G| rather than |G|.
     pub fn has_complex_irreps(&self) -> bool {
-        let PointGroupKind::Finite {
-            order, class_sizes, ..
-        } = &self.kind
-        else {
+        let Some(f) = &self.finite else {
             return false;
         };
-        let h = *order as f64;
+        let h = f.order as f64;
         self.irrep_data.iter().any(|ir| {
             if ir.dimension != 2 {
                 return false;
@@ -272,7 +441,7 @@ impl PointGroup {
             let norm_sq: f64 = ir
                 .characters
                 .iter()
-                .zip(class_sizes)
+                .zip(&f.class_sizes)
                 .map(|(chi, &size)| size as f64 * chi * chi)
                 .sum();
             (norm_sq - 2.0 * h).abs() < 0.5
@@ -281,14 +450,15 @@ impl PointGroup {
 
     /// True iff the group contains only proper operations (no reflections, inversions,
     /// or improper rotations). Chiral groups: Cn, Dn, T, O, I.
-    pub fn is_chiral(&self) -> bool {
+    pub fn is_chiral(&'static self) -> bool {
         self.ops().iter().all(|op| op.is_proper())
     }
 
     pub fn has_inversion(&self) -> bool {
-        self.ops()
-            .iter()
-            .any(|op| op.kind == SymmetryOpKind::Inversion)
+        self.finite
+            .as_ref()
+            .map(|f| f.op_data.iter().any(|d| d.kind == SymmetryOpKind::Inversion))
+            .unwrap_or(false)
     }
 
     /// The totally symmetric irrep (A1, Ag, Σ+, etc.).
@@ -299,7 +469,6 @@ impl PointGroup {
         }
     }
 
-    /// All irreducible representations of this group.
     pub fn irreps(&'static self) -> Vec<Irrep> {
         self.irrep_data
             .iter()
@@ -310,7 +479,6 @@ impl PointGroup {
             .collect()
     }
 
-    /// Look up an irrep by Mulliken symbol.
     pub fn irrep(&'static self, symbol: &str) -> Option<Irrep> {
         self.irrep_data
             .iter()
@@ -326,69 +494,51 @@ impl PointGroup {
         debug_assert!(ptr::eq(a.group, self));
         debug_assert!(ptr::eq(b.group, self));
 
-        match &self.kind {
-            PointGroupKind::Finite { .. } => {
-                let product_chars: Vec<f64> = a
-                    .characters()
-                    .iter()
-                    .zip(b.characters())
-                    .map(|(ca, cb)| ca * cb)
-                    .collect();
-                self.reduce(&product_chars)
-                    .expect("valid product characters")
-            }
-            PointGroupKind::Linear => linear::direct_product(self, a, b),
+        if self.finite.is_some() {
+            let product_chars: Vec<f64> = a
+                .characters()
+                .iter()
+                .zip(b.characters())
+                .map(|(ca, cb)| ca * cb)
+                .collect();
+            self.reduce(&product_chars)
+                .expect("valid product characters")
+        } else {
+            linear::direct_product(self, a, b)
         }
     }
 
     /// Symmetric square [a²]: decompose the symmetric part of a ⊗ a.
     pub fn symmetric_square(&'static self, a: Irrep) -> Vec<(Irrep, u32)> {
         debug_assert!(ptr::eq(a.group, self));
-        match &self.kind {
-            PointGroupKind::Finite {
-                ops, class_reps, ..
-            } => {
-                let chars = a.characters();
-                let n_classes = class_reps.len();
-                let r2_class = r_squared_classes(class_reps, ops);
-                let sym_chars: Vec<f64> = (0..n_classes)
-                    .map(|c| 0.5 * (chars[c] * chars[c] + chars[r2_class[c]]))
-                    .collect();
-                self.reduce(&sym_chars)
-                    .expect("valid symmetric square characters")
-            }
-            PointGroupKind::Linear => linear::symmetric_square(self, a),
-        }
+        let Some(f) = &self.finite else {
+            return linear::symmetric_square(self, a);
+        };
+        let chars = a.characters();
+        let sym_chars: Vec<f64> = (0..f.class_sizes.len())
+            .map(|c| 0.5 * (chars[c] * chars[c] + chars[f.r_squared_class[c]]))
+            .collect();
+        self.reduce(&sym_chars)
+            .expect("valid symmetric square characters")
     }
 
     /// Antisymmetric square {a²}: decompose the antisymmetric part of a ⊗ a.
     pub fn antisymmetric_square(&'static self, a: Irrep) -> Vec<(Irrep, u32)> {
         debug_assert!(ptr::eq(a.group, self));
-        match &self.kind {
-            PointGroupKind::Finite {
-                ops, class_reps, ..
-            } => {
-                let chars = a.characters();
-                let n_classes = class_reps.len();
-                let r2_class = r_squared_classes(class_reps, ops);
-                let anti_chars: Vec<f64> = (0..n_classes)
-                    .map(|c| 0.5 * (chars[c] * chars[c] - chars[r2_class[c]]))
-                    .collect();
-                self.reduce(&anti_chars)
-                    .expect("valid antisymmetric square characters")
-            }
-            PointGroupKind::Linear => linear::antisymmetric_square(self, a),
-        }
+        let Some(f) = &self.finite else {
+            return linear::antisymmetric_square(self, a);
+        };
+        let chars = a.characters();
+        let anti_chars: Vec<f64> = (0..f.class_sizes.len())
+            .map(|c| 0.5 * (chars[c] * chars[c] - chars[f.r_squared_class[c]]))
+            .collect();
+        self.reduce(&anti_chars)
+            .expect("valid antisymmetric square characters")
     }
 
     /// Reduce a representation (given by its class characters) into irreps with multiplicities.
-    ///
-    /// Only valid for finite groups.
     pub fn reduce(&'static self, characters: &[f64]) -> Result<Vec<(Irrep, u32)>, ReductionError> {
-        let PointGroupKind::Finite {
-            order, class_sizes, ..
-        } = &self.kind
-        else {
+        let Some(f) = &self.finite else {
             return Err(ReductionError::InfiniteGroup);
         };
         let d = self.irrep_data.len();
@@ -398,12 +548,12 @@ impl PointGroup {
                 got: characters.len(),
             });
         }
-        let h = *order as f64;
+        let h = f.order as f64;
 
         let mut result = Vec::new();
         for ir_data in &self.irrep_data {
             let n: f64 = (0..d)
-                .map(|c| class_sizes[c] as f64 * ir_data.characters[c] * characters[c])
+                .map(|c| f.class_sizes[c] as f64 * ir_data.characters[c] * characters[c])
                 .sum::<f64>()
                 / h;
             if (n - n.round()).abs() > 0.01 {
@@ -428,48 +578,34 @@ impl PointGroup {
 
     /// Irreps spanned by the translational degrees of freedom (x, y, z).
     pub fn translation_irreps(&'static self) -> Vec<(Irrep, u32)> {
-        match &self.kind {
-            PointGroupKind::Finite { class_reps, .. } => {
-                let chars: Vec<f64> = class_reps.iter().map(|op| op.matrix.trace()).collect();
-                self.reduce(&chars).expect("valid translation characters")
-            }
-            PointGroupKind::Linear => linear::translation_irreps(self),
+        match &self.finite {
+            Some(f) => self
+                .reduce(&f.translation_chars)
+                .expect("valid translation characters"),
+            None => linear::translation_irreps(self),
         }
     }
 
     /// Irreps spanned by the rotational degrees of freedom (Rx, Ry, Rz).
     pub fn rotation_irreps(&'static self) -> Vec<(Irrep, u32)> {
-        match &self.kind {
-            PointGroupKind::Finite { class_reps, .. } => {
-                let chars: Vec<f64> = class_reps
-                    .iter()
-                    .map(|op| op.matrix.determinant() * op.matrix.trace())
-                    .collect();
-                self.reduce(&chars).expect("valid rotation characters")
-            }
-            PointGroupKind::Linear => linear::rotation_irreps(self),
+        match &self.finite {
+            Some(f) => self
+                .reduce(&f.rotation_chars)
+                .expect("valid rotation characters"),
+            None => linear::rotation_irreps(self),
         }
     }
 
     /// Irreps of the symmetric square of the vector representation.
     fn quadratic_irreps(&'static self) -> Vec<(Irrep, u32)> {
-        match &self.kind {
-            PointGroupKind::Finite { class_reps, .. } => {
-                let chars: Vec<f64> = class_reps
-                    .iter()
-                    .map(|op| {
-                        let tr = op.matrix.trace();
-                        let tr2 = (op.matrix * op.matrix).trace();
-                        (tr * tr + tr2) / 2.0
-                    })
-                    .collect();
-                self.reduce(&chars).expect("valid quadratic characters")
-            }
-            PointGroupKind::Linear => linear::quadratic_irreps(self),
+        match &self.finite {
+            Some(f) => self
+                .reduce(&f.quadratic_chars)
+                .expect("valid quadratic characters"),
+            None => linear::quadratic_irreps(self),
         }
     }
 
-    /// Electric dipole transition allowed? Checks Γ_i ⊗ Γ(x,y,z) ⊗ Γ_f ⊃ A1.
     pub fn electric_dipole_allowed(&'static self, initial: Irrep, final_: Irrep) -> bool {
         debug_assert!(ptr::eq(initial.group, self));
         debug_assert!(ptr::eq(final_.group, self));
@@ -478,7 +614,6 @@ impl PointGroup {
             .any(|(gamma_t, _)| self.contains_totally_symmetric(initial, *gamma_t, final_))
     }
 
-    /// Magnetic dipole transition allowed? Checks Γ_i ⊗ Γ(Rx,Ry,Rz) ⊗ Γ_f ⊃ A1.
     pub fn magnetic_dipole_allowed(&'static self, initial: Irrep, final_: Irrep) -> bool {
         debug_assert!(ptr::eq(initial.group, self));
         debug_assert!(ptr::eq(final_.group, self));
@@ -487,7 +622,6 @@ impl PointGroup {
             .any(|(gamma_r, _)| self.contains_totally_symmetric(initial, *gamma_r, final_))
     }
 
-    /// Raman transition allowed? Checks Γ_i ⊗ Γ(x²,y²,...,yz) ⊗ Γ_f ⊃ A1.
     pub fn raman_allowed(&'static self, initial: Irrep, final_: Irrep) -> bool {
         debug_assert!(ptr::eq(initial.group, self));
         debug_assert!(ptr::eq(final_.group, self));
@@ -496,43 +630,38 @@ impl PointGroup {
             .any(|(gamma_q, _)| self.contains_totally_symmetric(initial, *gamma_q, final_))
     }
 
-    /// Electric quadrupole transition allowed? Same basis as Raman (symmetric square).
     pub fn electric_quadrupole_allowed(&'static self, initial: Irrep, final_: Irrep) -> bool {
         self.raman_allowed(initial, final_)
     }
 
-    /// Whether a ⊗ b ⊗ c contains the totally symmetric representation.
     pub fn contains_totally_symmetric(&'static self, a: Irrep, b: Irrep, c: Irrep) -> bool {
         debug_assert!(ptr::eq(a.group, self));
         debug_assert!(ptr::eq(b.group, self));
         debug_assert!(ptr::eq(c.group, self));
 
-        match &self.kind {
-            PointGroupKind::Finite {
-                order, class_sizes, ..
-            } => {
-                let d = self.irrep_data.len();
-                let h = *order as f64;
-                let n: f64 = (0..d)
-                    .map(|cls| {
-                        class_sizes[cls] as f64
-                            * a.characters()[cls]
-                            * b.characters()[cls]
-                            * c.characters()[cls]
-                    })
-                    .sum::<f64>()
-                    / h;
-                n.round() as u32 > 0
-            }
-            PointGroupKind::Linear => linear::contains_totally_symmetric(self, a, b, c),
-        }
+        let Some(f) = &self.finite else {
+            return linear::contains_totally_symmetric(self, a, b, c);
+        };
+        let d = self.irrep_data.len();
+        let h = f.order as f64;
+        let n: f64 = (0..d)
+            .map(|cls| {
+                f.class_sizes[cls] as f64
+                    * a.characters()[cls]
+                    * b.characters()[cls]
+                    * c.characters()[cls]
+            })
+            .sum::<f64>()
+            / h;
+        n.round() as u32 > 0
     }
 
-    /// Returns a displayable character table.
-    ///
-    /// Only meaningful for finite groups; returns an empty display for linear groups.
     pub fn character_table(&'static self) -> CharacterTableDisplay {
         CharacterTableDisplay { group: self }
+    }
+
+    pub(crate) fn finite_data(&self) -> Option<&FiniteData> {
+        self.finite.as_ref()
     }
 
     /// Construct a point group by Schoenflies symbol (e.g. "C2v", "Td", "Oh").
@@ -541,26 +670,15 @@ impl PointGroup {
             code: MSYM_INVALID_INPUT,
             message: format!("cannot parse Schoenflies symbol '{name}'"),
         })?;
-
-        // Fast path: already registered
-        {
-            let map = REGISTRY.lock().unwrap();
-            if let Some(&pg) = map.get(&label) {
-                return Ok(pg);
-            }
-        }
-
-        // Slow path: construct and register
-        let pg = Self::construct(name)?;
-        debug_assert_eq!(pg.label, label);
-        Ok(register(pg))
+        Self::get_or_build(label)
     }
 
-    /// Extract from a Context after find_symmetry. Registers in the global registry.
-    pub(crate) fn from_context(ctx: &Context) -> Result<&'static PointGroup, Error> {
-        let label = ctx.point_group()?;
+    /// Construct a point group by its parsed Schoenflies label.
+    pub fn from_label(label: SchoenfliesLabel) -> Result<&'static PointGroup, Error> {
+        Self::get_or_build(label)
+    }
 
-        // Fast path
+    fn get_or_build(label: SchoenfliesLabel) -> Result<&'static PointGroup, Error> {
         {
             let map = REGISTRY.lock().unwrap();
             if let Some(&pg) = map.get(&label) {
@@ -568,103 +686,48 @@ impl PointGroup {
             }
         }
 
-        // Linear groups: build analytically (no character table from libmsym)
-        if matches!(label, SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh) {
-            return Ok(register(Self::build_linear(label)));
-        }
-
-        // Finite groups: extract from libmsym context
-        let ops = ctx.symmetry_operations()?;
-        let ct = ctx.character_table().ok_or_else(|| Error {
-            code: MSYM_INVALID_CHARACTER_TABLE,
-            message: "character table not available".into(),
-        })?;
-
-        let pg = PointGroup {
-            label,
-            irrep_data: ct.irrep_data.clone(),
-            kind: PointGroupKind::Finite {
-                order: ct.order,
-                ops,
-                class_sizes: ct.class_sizes.clone(),
-                class_reps: ct.class_reps.clone(),
-            },
+        let pg = if matches!(label, SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh) {
+            Self::build_linear(label)
+        } else if label == SchoenfliesLabel::Cn(1) {
+            Self::build_c1()
+        } else if matches!(label, SchoenfliesLabel::K | SchoenfliesLabel::Kh) {
+            return Err(Error {
+                code: MSYM_INVALID_INPUT,
+                message: format!("{label} is a continuous group and cannot be instantiated"),
+            });
+        } else {
+            Self::build_finite(label)?
         };
         Ok(register(pg))
     }
 
-    /// Internal construction. Builds C1 and linear groups inline; others via libmsym.
-    fn construct(name: &str) -> Result<PointGroup, Error> {
-        if name == "C1" {
-            return Ok(Self::build_c1());
-        }
-        if let Some(label @ (SchoenfliesLabel::Coov | SchoenfliesLabel::Dooh)) =
-            SchoenfliesLabel::parse(name)
-        {
-            return Ok(Self::build_linear(label));
-        }
+    fn build_finite(label: SchoenfliesLabel) -> Result<PointGroup, Error> {
+        let name = label.to_string();
+        let c_name = CString::new(name.as_str()).expect("no NUL in label");
 
-        let mut ctx = Context::new()?;
-
-        let seeds = vec![
-            SymmetryCenter {
-                atomic_number: 6,
-                mass: 12.011,
-                position: [1.0, 0.3, 0.7],
-                name: String::new(),
-            },
-            SymmetryCenter {
-                atomic_number: 1,
-                mass: 1.008,
-                position: [0.5, 0.8, 0.2],
-                name: String::new(),
-            },
-        ];
-
-        ctx.set_centers(&seeds)?;
-        ctx.set_point_group_by_name(name)?;
-        ctx.generate_centers(&seeds)?;
-        ctx.find_symmetry()?;
-
-        let detected = ctx.point_group_name()?;
-        if detected != name {
+        let ctx = unsafe { ffi::msymCreateContext() };
+        if ctx.is_null() {
             return Err(Error {
-                code: MSYM_POINT_GROUP_ERROR,
-                message: format!(
-                    "requested group '{name}' but detected '{detected}' on generated molecule"
-                ),
+                code: MSYM_MEMORY_ERROR,
+                message: "failed to create msym context".into(),
             });
         }
 
-        let label = ctx.point_group()?;
-        let ops = ctx.symmetry_operations()?;
-        let ct = ctx.character_table().ok_or_else(|| Error {
-            code: MSYM_INVALID_CHARACTER_TABLE,
-            message: "character table not available".into(),
-        })?;
-
-        Ok(PointGroup {
-            label,
-            irrep_data: ct.irrep_data.clone(),
-            kind: PointGroupKind::Finite {
-                order: ct.order,
-                ops,
-                class_sizes: ct.class_sizes.clone(),
-                class_reps: ct.class_reps.clone(),
-            },
-        })
+        let result = build_finite_inner(ctx, label, &c_name);
+        unsafe {
+            ffi::msymReleaseContext(ctx);
+        }
+        result
     }
 
     fn build_c1() -> PointGroup {
-        let identity = SymmetryOp {
+        let op_data = vec![OpData {
             kind: SymmetryOpKind::Identity,
             order: 1,
             power: 0,
             orientation: SymmetryOpOrientation::None,
-            vector: [0.0, 0.0, 1.0],
             class: 0,
-            matrix: Matrix3::identity(),
-        };
+        }];
         PointGroup {
             label: SchoenfliesLabel::Cn(1),
             irrep_data: vec![IrrepData {
@@ -676,23 +739,27 @@ impl PointGroup {
                 sigma_v: None,
                 gerade: None,
             }],
-            kind: PointGroupKind::Finite {
+            finite: Some(FiniteData {
                 order: 1,
-                ops: vec![identity.clone()],
+                op_data,
+                classes: vec![vec![0]],
+                class_rep_indices: vec![0],
                 class_sizes: vec![1],
-                class_reps: vec![identity],
-            },
+                mul_table: vec![vec![0]],
+                r_squared_class: vec![0],
+                translation_chars: vec![3.0],
+                rotation_chars: vec![3.0],
+                quadratic_chars: vec![6.0],
+            }),
         }
     }
 
     fn build_linear(label: SchoenfliesLabel) -> PointGroup {
         let is_dooh = label == SchoenfliesLabel::Dooh;
-        // λ symbols: Σ(0), Π(1), Δ(2), Φ(3), Γ(4), H(5), I(6)
         let lambda_symbols = ["Σ", "Π", "Δ", "Φ", "Γ", "H", "I"];
         let mut irrep_data = Vec::new();
         let mut idx = 0;
 
-        // Ordering: all gerade first (for D∞h), then ungerade
         let gu_list: &[Option<bool>] = if is_dooh {
             &[Some(true), Some(false)]
         } else {
@@ -742,9 +809,184 @@ impl PointGroup {
         PointGroup {
             label,
             irrep_data,
-            kind: PointGroupKind::Linear,
+            finite: None,
         }
     }
+}
+
+fn build_finite_inner(
+    ctx: ffi::msym_context,
+    label: SchoenfliesLabel,
+    c_name: &CStr,
+) -> Result<PointGroup, Error> {
+    error::check(unsafe { ffi::msymSetPointGroupByName(ctx, c_name.as_ptr()) })?;
+
+    let mut len: c_int = 0;
+    let mut sops_ptr: *const ffi::msym_symmetry_operation_t = ptr::null();
+    error::check(unsafe { ffi::msymGetSymmetryOperations(ctx, &mut len, &mut sops_ptr) })?;
+    let sops_slice = unsafe { slice::from_raw_parts(sops_ptr, len as usize) };
+
+    let op_data: Vec<OpData> = sops_slice
+        .iter()
+        .map(|sop| OpData {
+            kind: sop.type_.into(),
+            order: sop.order,
+            power: sop.power,
+            orientation: sop.orientation.into(),
+            class: sop.cla as usize,
+        })
+        .collect();
+    let matrices: Vec<Matrix3<f64>> = sops_slice.iter().map(compute_op_matrix).collect();
+
+    let order = op_data.len();
+    let n_classes = op_data.iter().map(|d| d.class).max().unwrap_or(0) + 1;
+
+    let mut classes: Vec<Vec<usize>> = vec![Vec::new(); n_classes];
+    for (i, d) in op_data.iter().enumerate() {
+        classes[d.class].push(i);
+    }
+
+    let class_rep_indices: Vec<usize> = classes.iter().map(|c| c[0]).collect();
+    let class_sizes: Vec<i32> = classes.iter().map(|c| c.len() as i32).collect();
+
+    let mul_table = build_mul_table(&matrices);
+
+    let r_squared_class: Vec<usize> = class_rep_indices
+        .iter()
+        .map(|&rep| op_data[mul_table[rep][rep]].class)
+        .collect();
+
+    let translation_chars: Vec<f64> = class_rep_indices
+        .iter()
+        .map(|&i| matrices[i].trace())
+        .collect();
+    let rotation_chars: Vec<f64> = class_rep_indices
+        .iter()
+        .map(|&i| matrices[i].determinant() * matrices[i].trace())
+        .collect();
+    let quadratic_chars: Vec<f64> = class_rep_indices
+        .iter()
+        .map(|&i| {
+            let m = &matrices[i];
+            let tr = m.trace();
+            let tr2 = (m * m).trace();
+            (tr * tr + tr2) / 2.0
+        })
+        .collect();
+
+    let mut ct_ptr: *const ffi::msym_character_table_t = ptr::null();
+    error::check(unsafe { ffi::msymGetCharacterTable(ctx, &mut ct_ptr) })?;
+    let irrep_data = unsafe { extract_irrep_data(&*ct_ptr)? };
+
+    Ok(PointGroup {
+        label,
+        irrep_data,
+        finite: Some(FiniteData {
+            order,
+            op_data,
+            classes,
+            class_rep_indices,
+            class_sizes,
+            mul_table,
+            r_squared_class,
+            translation_chars,
+            rotation_chars,
+            quadratic_chars,
+        }),
+    })
+}
+
+pub(crate) fn compute_op_matrix(sop: &ffi::msym_symmetry_operation_t) -> Matrix3<f64> {
+    match sop.type_ {
+        ffi::MSYM_SYMMETRY_OPERATION_TYPE_IDENTITY => Matrix3::identity(),
+        ffi::MSYM_SYMMETRY_OPERATION_TYPE_INVERSION => -Matrix3::identity(),
+        ffi::MSYM_SYMMETRY_OPERATION_TYPE_REFLECTION => reflection_matrix(sop.v),
+        ffi::MSYM_SYMMETRY_OPERATION_TYPE_PROPER_ROTATION => {
+            let theta = 2.0 * PI * sop.power as f64 / sop.order as f64;
+            rotation_matrix(sop.v, theta)
+        }
+        ffi::MSYM_SYMMETRY_OPERATION_TYPE_IMPROPER_ROTATION => {
+            let theta = 2.0 * PI * sop.power as f64 / sop.order as f64;
+            rotation_matrix(sop.v, theta) * reflection_matrix(sop.v)
+        }
+        _ => Matrix3::identity(),
+    }
+}
+
+fn rotation_matrix(axis: [f64; 3], theta: f64) -> Matrix3<f64> {
+    let axis = Vector3::from(axis).normalize();
+    let (s, c) = theta.sin_cos();
+    let one_c = 1.0 - c;
+    let (x, y, z) = (axis.x, axis.y, axis.z);
+    Matrix3::new(
+        c + x * x * one_c,
+        x * y * one_c - z * s,
+        x * z * one_c + y * s,
+        y * x * one_c + z * s,
+        c + y * y * one_c,
+        y * z * one_c - x * s,
+        z * x * one_c - y * s,
+        z * y * one_c + x * s,
+        c + z * z * one_c,
+    )
+}
+
+fn reflection_matrix(normal: [f64; 3]) -> Matrix3<f64> {
+    let n = Vector3::from(normal).normalize();
+    Matrix3::identity() - 2.0 * n * n.transpose()
+}
+
+fn build_mul_table(matrices: &[Matrix3<f64>]) -> Vec<Vec<usize>> {
+    let n = matrices.len();
+    let mut table = vec![vec![0usize; n]; n];
+    for i in 0..n {
+        for j in 0..n {
+            let product = matrices[i] * matrices[j];
+            let (best, _) = matrices
+                .iter()
+                .enumerate()
+                .map(|(k, m)| {
+                    let diff = product - m;
+                    let dist: f64 = diff.iter().map(|x| x * x).sum();
+                    (k, dist)
+                })
+                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+                .unwrap();
+            table[i][j] = best;
+        }
+    }
+    table
+}
+
+unsafe fn extract_irrep_data(ct: &ffi::msym_character_table_t) -> Result<Vec<IrrepData>, Error> {
+    let d = ct.d as usize;
+    if d == 0 {
+        return Err(Error {
+            code: MSYM_INVALID_CHARACTER_TABLE,
+            message: "character table has zero dimension".into(),
+        });
+    }
+
+    let species = unsafe { slice::from_raw_parts(ct.s, d) };
+    let table: &[f64] = unsafe { slice::from_raw_parts(ct.table as *const f64, d * d) };
+
+    let mut irrep_data = Vec::with_capacity(d);
+    for i in 0..d {
+        let symbol = unsafe { CStr::from_ptr(species[i].name.as_ptr()) }
+            .to_string_lossy()
+            .into_owned();
+        let characters: Vec<f64> = (0..d).map(|c| table[i * d + c]).collect();
+        irrep_data.push(IrrepData {
+            symbol,
+            dimension: species[i].d,
+            index: i,
+            characters,
+            lambda: None,
+            sigma_v: None,
+            gerade: None,
+        });
+    }
+    Ok(irrep_data)
 }
 
 macro_rules! point_group_fn {
@@ -755,14 +997,11 @@ macro_rules! point_group_fn {
     };
 }
 
-// Named constructors: Cotton's character table appendix
 impl PointGroup {
-    // Non-axial
     point_group_fn!(c1, "C1");
     point_group_fn!(cs, "Cs");
     point_group_fn!(ci, "Ci");
 
-    // Cn
     point_group_fn!(c2, "C2");
     point_group_fn!(c3, "C3");
     point_group_fn!(c4, "C4");
@@ -771,28 +1010,24 @@ impl PointGroup {
     point_group_fn!(c7, "C7");
     point_group_fn!(c8, "C8");
 
-    // Cnv
     point_group_fn!(c2v, "C2v");
     point_group_fn!(c3v, "C3v");
     point_group_fn!(c4v, "C4v");
     point_group_fn!(c5v, "C5v");
     point_group_fn!(c6v, "C6v");
 
-    // Cnh
     point_group_fn!(c2h, "C2h");
     point_group_fn!(c3h, "C3h");
     point_group_fn!(c4h, "C4h");
     point_group_fn!(c5h, "C5h");
     point_group_fn!(c6h, "C6h");
 
-    // Dn
     point_group_fn!(d2, "D2");
     point_group_fn!(d3, "D3");
     point_group_fn!(d4, "D4");
     point_group_fn!(d5, "D5");
     point_group_fn!(d6, "D6");
 
-    // Dnh
     point_group_fn!(d2h, "D2h");
     point_group_fn!(d3h, "D3h");
     point_group_fn!(d4h, "D4h");
@@ -800,51 +1035,26 @@ impl PointGroup {
     point_group_fn!(d6h, "D6h");
     point_group_fn!(d8h, "D8h");
 
-    // Dnd
     point_group_fn!(d2d, "D2d");
     point_group_fn!(d3d, "D3d");
     point_group_fn!(d4d, "D4d");
     point_group_fn!(d5d, "D5d");
     point_group_fn!(d6d, "D6d");
 
-    // Sn
     point_group_fn!(s4, "S4");
     point_group_fn!(s6, "S6");
     point_group_fn!(s8, "S8");
 
-    // Cubic
     point_group_fn!(t, "T");
     point_group_fn!(th, "Th");
     point_group_fn!(td, "Td");
     point_group_fn!(o, "O");
     point_group_fn!(oh, "Oh");
 
-    // Icosahedral
     point_group_fn!(ih, "Ih");
 
-    // Linear
     point_group_fn!(coov, "C∞v");
     point_group_fn!(dooh, "D∞h");
-}
-
-/// For each class representative R, find which class R² belongs to.
-fn r_squared_classes(class_reps: &[SymmetryOp], ops: &[SymmetryOp]) -> Vec<usize> {
-    class_reps
-        .iter()
-        .map(|rep| {
-            let m2 = rep.matrix * rep.matrix;
-            ops.iter()
-                .map(|op| {
-                    let diff = op.matrix - m2;
-                    diff.iter().map(|x| x * x).sum::<f64>()
-                })
-                .enumerate()
-                .min_by(|(_, da), (_, db)| da.partial_cmp(db).unwrap())
-                .unwrap()
-                .0
-        })
-        .map(|best_idx| ops[best_idx].class)
-        .collect()
 }
 
 pub struct CharacterTableDisplay {
@@ -861,7 +1071,6 @@ impl fmt::Display for CharacterTableDisplay {
         let class_sizes = g.class_sizes();
         let irreps = g.irreps();
 
-        // Column headers: "2C3", "3σv", etc. (omit multiplicity of 1)
         let col_headers: Vec<String> = class_reps
             .iter()
             .zip(class_sizes)
@@ -874,7 +1083,6 @@ impl fmt::Display for CharacterTableDisplay {
             })
             .collect();
 
-        // Column widths: max of header width and widest formatted character in that column
         let irrep_col_width = irreps.iter().map(|ir| ir.symbol().len()).max().unwrap_or(0);
         let label_width = g.label.to_string().len().max(irrep_col_width);
 
@@ -891,21 +1099,18 @@ impl fmt::Display for CharacterTableDisplay {
             })
             .collect();
 
-        // Header row
         write!(f, "{:width$} │", g.label, width = label_width)?;
         for (c, header) in col_headers.iter().enumerate() {
             write!(f, " {:>width$}", header, width = col_widths[c])?;
         }
         writeln!(f)?;
 
-        // Separator
         write!(f, "{:─>width$}─┼", "", width = label_width)?;
         for &w in &col_widths {
             write!(f, "─{:─>width$}", "", width = w)?;
         }
         writeln!(f)?;
 
-        // Irrep rows
         for ir in &irreps {
             write!(f, "{:width$} │", ir.symbol(), width = label_width)?;
             for (c, &w) in col_widths.iter().enumerate() {
@@ -1017,9 +1222,6 @@ mod tests {
     #[case("C2v", "A1", "B1", &[("B1", 1)])]
     #[case("Td", "E", "T2", &[("T1", 1), ("T2", 1)])]
     #[case("Oh", "Eg", "T1u", &[("T1u", 1), ("T2u", 1)])]
-    // Real-representation groups: multiplicities are doubled for complex irreps
-    // because the standard reduction formula applied to merged classes over-counts.
-    // These values are internally consistent but differ from complex Katzer tables.
     #[case("C3", "A", "E1", &[("E1", 2)])]
     #[case("C3", "E1", "E1", &[("A", 2), ("E1", 2)])]
     #[case("C4", "B", "E1", &[("E1", 2)])]
@@ -1042,15 +1244,10 @@ mod tests {
     }
 
     #[rstest]
-    // C2v: all irreps are 1D, symmetric square = A1, antisymmetric = empty
     #[case("C2v", "B1", &[("A1", 1)], &[])]
-    // Td: E is 2D, [E²] = A1 + E, {E²} = A2
     #[case("Td", "E", &[("A1", 1), ("E", 1)], &[("A2", 1)])]
-    // Td: T2 is 3D, [T2²] = A1 + E + T2, {T2²} = T1
     #[case("Td", "T2", &[("A1", 1), ("E", 1), ("T2", 1)], &[("T1", 1)])]
-    // Oh: T1u is 3D, [T1u²] = A1g + Eg + T2g, {T1u²} = T1g
     #[case("Oh", "T1u", &[("A1g", 1), ("Eg", 1), ("T2g", 1)], &[("T1g", 1)])]
-    // Ih: Hg is 5D, [Hg²] has dim 15, {Hg²} has dim 10
     #[case("Ih", "Hg", &[("Ag", 1), ("Gg", 1), ("Hg", 2)], &[("T1g", 1), ("T2g", 1), ("Gg", 1)])]
     fn test_point_group_symmetric_antisymmetric_square(
         #[case] group: &str,
@@ -1105,7 +1302,6 @@ mod tests {
         assert_eq!(actual, expected);
     }
 
-    /// Roundtrip: build characters from known irrep multiplicities, reduce, verify.
     #[rstest]
     #[case("C2v", &[("A1", 2), ("B2", 3)])]
     #[case("Td",  &[("A1", 1), ("E", 1), ("T2", 3)])]
@@ -1175,115 +1371,35 @@ mod tests {
     #[rstest]
     #[case(SymmetryOpKind::Identity, 1, 1, SymmetryOpOrientation::None, "E")]
     #[case(SymmetryOpKind::Inversion, 1, 1, SymmetryOpOrientation::None, "i")]
-    #[case(
-        SymmetryOpKind::Reflection,
-        1,
-        1,
-        SymmetryOpOrientation::Horizontal,
-        "σh"
-    )]
-    #[case(
-        SymmetryOpKind::Reflection,
-        1,
-        1,
-        SymmetryOpOrientation::Vertical,
-        "σv"
-    )]
-    #[case(
-        SymmetryOpKind::Reflection,
-        1,
-        1,
-        SymmetryOpOrientation::Dihedral,
-        "σd"
-    )]
+    #[case(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Horizontal, "σh")]
+    #[case(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Vertical, "σv")]
+    #[case(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::Dihedral, "σd")]
     #[case(SymmetryOpKind::Reflection, 1, 1, SymmetryOpOrientation::None, "σ")]
-    #[case(
-        SymmetryOpKind::ProperRotation,
-        3,
-        1,
-        SymmetryOpOrientation::None,
-        "C3"
-    )]
-    #[case(
-        SymmetryOpKind::ProperRotation,
-        3,
-        2,
-        SymmetryOpOrientation::None,
-        "C3²"
-    )]
-    #[case(
-        SymmetryOpKind::ProperRotation,
-        6,
-        5,
-        SymmetryOpOrientation::None,
-        "C6⁵"
-    )]
-    #[case(
-        SymmetryOpKind::ImproperRotation,
-        4,
-        1,
-        SymmetryOpOrientation::None,
-        "S4"
-    )]
-    #[case(
-        SymmetryOpKind::ImproperRotation,
-        4,
-        3,
-        SymmetryOpOrientation::None,
-        "S4³"
-    )]
-    #[case(
-        SymmetryOpKind::ImproperRotation,
-        10,
-        7,
-        SymmetryOpOrientation::None,
-        "S10⁷"
-    )]
-    #[case(
-        SymmetryOpKind::ProperRotation,
-        2,
-        1,
-        SymmetryOpOrientation::Vertical,
-        "C2'"
-    )]
-    #[case(
-        SymmetryOpKind::ProperRotation,
-        2,
-        1,
-        SymmetryOpOrientation::Dihedral,
-        "C2''"
-    )]
-    #[case(
-        SymmetryOpKind::ProperRotation,
-        3,
-        2,
-        SymmetryOpOrientation::Vertical,
-        "C3'²"
-    )]
-    #[case(
-        SymmetryOpKind::ImproperRotation,
-        4,
-        1,
-        SymmetryOpOrientation::Vertical,
-        "S4'"
-    )]
-    fn test_symmetry_op_display(
+    #[case(SymmetryOpKind::ProperRotation, 3, 1, SymmetryOpOrientation::None, "C3")]
+    #[case(SymmetryOpKind::ProperRotation, 3, 2, SymmetryOpOrientation::None, "C3²")]
+    #[case(SymmetryOpKind::ProperRotation, 6, 5, SymmetryOpOrientation::None, "C6⁵")]
+    #[case(SymmetryOpKind::ImproperRotation, 4, 1, SymmetryOpOrientation::None, "S4")]
+    #[case(SymmetryOpKind::ImproperRotation, 4, 3, SymmetryOpOrientation::None, "S4³")]
+    #[case(SymmetryOpKind::ImproperRotation, 10, 7, SymmetryOpOrientation::None, "S10⁷")]
+    #[case(SymmetryOpKind::ProperRotation, 2, 1, SymmetryOpOrientation::Vertical, "C2'")]
+    #[case(SymmetryOpKind::ProperRotation, 2, 1, SymmetryOpOrientation::Dihedral, "C2''")]
+    #[case(SymmetryOpKind::ProperRotation, 3, 2, SymmetryOpOrientation::Vertical, "C3'²")]
+    #[case(SymmetryOpKind::ImproperRotation, 4, 1, SymmetryOpOrientation::Vertical, "S4'")]
+    fn test_op_data_display(
         #[case] kind: SymmetryOpKind,
         #[case] order: i32,
         #[case] power: i32,
         #[case] orientation: SymmetryOpOrientation,
         #[case] expected: &str,
     ) {
-        let op = SymmetryOp {
+        let d = OpData {
             kind,
             order,
             power,
             orientation,
-            vector: [0.0, 0.0, 1.0],
             class: 0,
-            matrix: Matrix3::identity(),
         };
-        assert_eq!(op.to_string(), expected);
+        assert_eq!(d.to_string(), expected);
     }
 
     #[rstest]
@@ -1313,33 +1429,6 @@ A2  │ 1   1   -1
 E1  │ 2  -1    0
 ";
         assert_eq!(table, expected);
-    }
-
-    #[rstest]
-    fn test_symmetry_op_transform_point() {
-        let g = PointGroup::c2v();
-        let ops = g.ops();
-        let p = [1.0, 2.0, 3.0];
-
-        // E leaves point unchanged
-        let e = ops
-            .iter()
-            .find(|op| op.kind == SymmetryOpKind::Identity)
-            .unwrap();
-        let r = e.transform_point(p);
-        assert!((r[0] - 1.0).abs() < 1e-12);
-        assert!((r[1] - 2.0).abs() < 1e-12);
-        assert!((r[2] - 3.0).abs() < 1e-12);
-
-        // C2 around z: (x,y,z) → (-x,-y,z)
-        let c2 = ops
-            .iter()
-            .find(|op| op.kind == SymmetryOpKind::ProperRotation)
-            .unwrap();
-        let r = c2.transform_point(p);
-        assert!((r[0] + 1.0).abs() < 1e-12);
-        assert!((r[1] + 2.0).abs() < 1e-12);
-        assert!((r[2] - 3.0).abs() < 1e-12);
     }
 
     #[rstest]
@@ -1484,10 +1573,49 @@ E1  │ 2  -1    0
             assert_eq!(
                 op.is_proper(),
                 matches!(
-                    op.kind,
+                    op.kind(),
                     SymmetryOpKind::Identity | SymmetryOpKind::ProperRotation
                 ),
             );
+        }
+    }
+
+    #[rstest]
+    fn test_symmetry_op_equality_via_handle_identity() {
+        let g = PointGroup::c2v();
+        let ops = g.ops();
+        // Two reflections in C2v share descriptive tuple but must compare unequal.
+        let reflections: Vec<SymmetryOp> = ops
+            .iter()
+            .filter(|op| op.kind() == SymmetryOpKind::Reflection)
+            .copied()
+            .collect();
+        assert_eq!(reflections.len(), 2);
+        assert_ne!(reflections[0], reflections[1]);
+        assert_ne!(reflections[0].index(), reflections[1].index());
+    }
+
+    #[rstest]
+    fn test_symmetry_op_cross_group_inequality() {
+        let c2v = PointGroup::c2v();
+        let d2h = PointGroup::d2h();
+        let c2v_inv = c2v.ops().iter().find(|op| op.kind() == SymmetryOpKind::Identity).copied();
+        let d2h_inv = d2h.ops().iter().find(|op| op.kind() == SymmetryOpKind::Identity).copied();
+        assert!(c2v_inv.is_some() && d2h_inv.is_some());
+        assert_ne!(c2v_inv.unwrap(), d2h_inv.unwrap());
+    }
+
+    #[rstest]
+    fn test_point_group_multiply_closure() {
+        let g = PointGroup::c2v();
+        let ops = g.ops();
+        // Closure: for every pair (a, b), multiply(a, b) returns an op in the group.
+        for a in &ops {
+            for b in &ops {
+                let c = g.multiply(*a, *b);
+                assert!(c.index() < ops.len());
+                assert!(ptr::eq(c.group(), g));
+            }
         }
     }
 
