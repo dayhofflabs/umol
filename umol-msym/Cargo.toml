@@ -11,6 +11,8 @@ nalgebra = "0.34.0"
 thiserror = "2"
 
 [dev-dependencies]
+rand = "0.9"
+rand_chacha = "0.9"
 rstest = "0.25"
 
 [lints.clippy]
