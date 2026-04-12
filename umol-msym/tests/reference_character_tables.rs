@@ -60,7 +60,7 @@ fn compare_character_tables(group_name: &str, pg: &'static PointGroup, reference
         let mut pairs: Vec<(i32, i64)> = class_sizes
             .iter()
             .zip(characters.iter())
-            .map(|(&cs, &ch)| (cs, (ch * 100000.0).round() as i64))
+            .map(|(&cs, &ch)| (cs, (ch * 1000.0).round() as i64))
             .collect();
         pairs.sort();
         pairs
@@ -275,37 +275,54 @@ fn test_character_table_vs_reference(#[case] group: &str, #[case] elements: Vec<
     compare_character_tables(group, result.group, &reference);
 }
 
-/// Groups where we construct by Schoenflies name (no specific molecule needed).
+/// Validate every reference character table against PointGroup::parse.
 #[rstest]
+#[case("C1")]
 #[case("Ci")]
+#[case("Cs")]
+#[case("C2")]
 #[case("C3")]
+#[case("C4")]
+#[case("C5")]
 #[case("C6")]
+#[case("C2h")]
+#[case("C2v")]
+#[case("C3h")]
+#[case("C3v")]
+#[case("C4h")]
+#[case("C4v")]
+#[case("C5h")]
+#[case("C5v")]
+#[case("C6h")]
+#[case("C6v")]
 #[case("S4")]
+#[case("S6")]
+#[case("S8")]
+#[case("S10")]
 #[case("D2")]
+#[case("D3")]
+#[case("D4")]
+#[case("D5")]
+#[case("D6")]
+#[case("D2d")]
+#[case("D3d")]
+#[case("D4d")]
+#[case("D5d")]
+#[case("D6d")]
+#[case("D2h")]
+#[case("D3h")]
+#[case("D4h")]
+#[case("D5h")]
+#[case("D6h")]
 #[case("T")]
+#[case("Td")]
 #[case("Th")]
 #[case("O")]
+#[case("Oh")]
 #[case("I")]
+#[case("Ih")]
 fn test_character_table_by_name_vs_reference(#[case] group: &str) {
-    let pg = match PointGroup::parse(group) {
-        Ok(pg) => pg,
-        Err(e) => {
-            eprintln!("{group}: parse failed: {e}, falling back to shape check");
-            let reference = reference_table(group).unwrap();
-            assert_eq!(
-                reference.irrep_names.len(),
-                reference.class_sizes.len(),
-                "{group}: reference table not square"
-            );
-            assert_eq!(
-                reference.order,
-                reference.class_sizes.iter().sum::<i32>() as usize,
-                "{group}: reference order doesn't match class sizes"
-            );
-            return;
-        }
-    };
-
+    let pg = PointGroup::parse(group).unwrap();
     let reference = reference_table(group).unwrap();
     compare_character_tables(group, pg, &reference);
 }

@@ -1,9 +1,9 @@
 use umol_msym_sys as ffi;
 
-pub const REDUCTION_INTEGRALITY: f64 = 0.01;
-pub const COMPLEX_IRREP_NORM: f64 = 0.5;
-pub const CHARACTER_DISPLAY_ROUNDING: f64 = 1e-6;
-pub const DEFAULT_PROJECTION: f64 = 1e-8;
+pub(crate) const REDUCTION_INTEGRALITY: f64 = 0.01;
+pub(crate) const COMPLEX_IRREP_NORM: f64 = 0.5;
+pub(crate) const CHARACTER_DISPLAY_ROUNDING: f64 = 1e-6;
+pub(crate) const DEFAULT_PROJECTION: f64 = 1e-8;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Thresholds {

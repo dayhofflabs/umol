@@ -61,11 +61,11 @@ impl From<ffi::msym_symmetry_operation_orientation_t> for SymmetryOpOrientation 
 
 #[derive(Debug, Clone)]
 pub(crate) struct SymmetryOpData {
-    pub kind: SymmetryOpKind,
-    pub order: i32,
-    pub power: i32,
-    pub orientation: SymmetryOpOrientation,
-    pub class: usize,
+    pub(crate) kind: SymmetryOpKind,
+    pub(crate) order: i32,
+    pub(crate) power: i32,
+    pub(crate) orientation: SymmetryOpOrientation,
+    pub(crate) class: usize,
 }
 
 static REGISTRY: LazyLock<Mutex<HashMap<SchoenfliesSymbol, &'static PointGroup>>> =
