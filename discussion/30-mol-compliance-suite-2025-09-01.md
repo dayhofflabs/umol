@@ -1,4 +1,6 @@
-# Data sources for Mol V2000 files for compliance suite
+# MOL Compliance Suite
+
+## Data sources for Mol V2000 files for compliance suite
 
 - [RDKit](https://github.com/rdkit/rdkit)
 - [CDK](https://github.com/cdk/cdk)
@@ -24,7 +26,7 @@ Missing:
 
 Additionally retrieved MOL3k, SDF, RXN files, but not touching them for now.
 
-# MOL File Classification Results
+## MOL File Classification Results
 
 (Using umol-models-graphs/bin/mol_classifier)
 

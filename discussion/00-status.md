@@ -81,4 +81,5 @@
 | [77-umol-edn-usability-review-2026-04-07.md](77-umol-edn-usability-review-2026-04-07.md)                                         | Completed     | 2026-04-08   |
 | [78-edn-subgrammar-design-2026-04-09.md](78-edn-subgrammar-design-2026-04-09.md)                                                 | Active        | 2026-04-09   |
 | [79-pattern-language-design-2026-04-10.md](79-pattern-language-design-2026-04-10.md)                                             | Informational | 2026-04-10   |
-| [80-unified-constraint-ast-2026-04-10.md](80-unified-constraint-ast-2026-04-10.md)                                               | Active | 2026-04-10 |
+| [80-unified-constraint-ast-2026-04-10.md](80-unified-constraint-ast-2026-04-10.md)                                               | Active        | 2026-04-10   |
+| [81-fix-point-group-impl-2026-04-11.md](81-fix-point-group-impl-2026-04-11.md)                                                   | Completed     | 2026-04-12   |

@@ -1,12 +1,12 @@
 # Data structures for efficient linting of molecular IRs
 
-# Prompt
+## Prompt
 
 I am curious if it would make sense to generate a "redundant" tree, where each atom and bond belongs to >= 1 fragments (e.g., functional group, tetrahedral center, ring, ...). are there precendents for "overcomplete" IR representations -- does not have to be the single source of truth, can be derived from the latter for the purpose of linting?
 
 The underlying data model of CodeQL is explicitly **relational** and uses **Datalog**, a declarative logic programming language. This approach is fundamental to how it handles "overcomplete" or redundant data: it doesn't store a single tree but rather a collection of tables (relations) that describe the code.
 
-# Response (Google Gemini 3 Pro via GitHub Copilot)
+## Response (Google Gemini 3 Pro via GitHub Copilot)
 
 ### The CodeQL Data Model: Relational & Logic-Based
 In CodeQL, source code is treated as data. The "database" is literally a relational database containing tables extracted from the source code during the build process.
@@ -44,11 +44,11 @@ Atom 1 is fully defined by the intersection of all tables containing `atom_id: 1
 
 For `umol`, you don't need a full SQL engine. A simple in-memory "Entity Component System" or a set of `map[string][]int` (Index Maps) as discussed previously effectively implements a lightweight relational database tailored for your graph.
 
-# Prompt
+## Prompt
 
 Can you give some more background on ECS? How does this model differ from a relational? A set of flat indexes for specific fragment type makes sense but seems too restrictive for the case that one would want to create novel fragment types. Is that correct?
 
-# Response
+## Response
 
 ### ECS vs. Relational: The "Database of Objects"
 
@@ -139,11 +139,11 @@ This gives you the "overcomplete" representation you wanted:
 
 This is exactly how search engines (Inverted Indexes) and tag-based file systems work. It is maximally flexible for "novel types" because a type is just a string key.
 
-# Prompt
+## Prompt
 
 For hash map based inverted indexes, no additional tooling is needed. Are there efficient Datalog implementations in Rust that one could use here, e.g., related to the new borrow checker?
 
-# Response
+## Response
 
 Yes, there are highly efficient Datalog implementations in Rust that align perfectly with your "overcomplete" relational model.
 

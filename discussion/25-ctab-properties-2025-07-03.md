@@ -1,5 +1,7 @@
 # Property parsing functions for MOL files.
 
+## MOL properties
+
 Implementation status for the Property Block MOL v2000 file
 https://en.wikipedia.org/wiki/Chemical_table_file
 
@@ -61,7 +63,7 @@ B Parsed by basic parser
 ^ CDK: https://cdk.github.io/cdk/latest/docs/api/org/openscience/cdk/io/MDLV2000Reader.html
 + Indigo: https://github.com/epam/Indigo/blob/master/core/indigo-core/molecule/src/molfile_loader.cpp
 
-# Chemaxon specific information in SDT property field
+## Chemaxon specific information in SDT property field
 
 |-----------------|---------------------------------------|---------------------------------------|-----------------------|
 | Property        | Symbol                                | Additional properties                 | Interpretation        |

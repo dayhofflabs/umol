@@ -1,4 +1,6 @@
-# Prompt
+# SMILES Conformance Suite
+
+## Prompt
 
 I'd like to work on creating a conformance suite for SMILES formats similar to those for MOL and SDF formats. It should not be limited to the OpenSMILES dialect but should serve a dual purpose:
 1. Collect reference data from relevant sources:
@@ -9,7 +11,7 @@ c. SMILES strings from programmatic generators (rule-based and NN-based ones)
 We should also be looking for sources of SMARTS and extended SMARTS strings for future work.
 Please make a plan for collecting a set of relevant sources first
 
-# Response
+## Response
 
 Based on the existing MOL/SDF conformance suite structure and the materials already gathered, here's a plan for the SMILES conformance suite:
 

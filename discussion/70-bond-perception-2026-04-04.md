@@ -1,6 +1,6 @@
 # Bond perception algorithm
 
-# Query
+## Query
 
 Here is an optimization problem. Let's assume that we're given N integer
 variables {b_i} with l_i <= b_i <= u_i and corresponding real valued functions
@@ -8,7 +8,7 @@ f_i. Maximize the product of f_i(b_i), i = 1, .., N subject to a set of M sum
 rules in b_i : sum_k b_{jk} = v_j, where v_j are constant. Which approaches
 exist to solve this problem?
 
-# Response
+## Response
 
 Good problem. Since the objective is a product of separable functions and the
 constraints are linear equality constraints on integers, you're in a nicely
@@ -62,11 +62,11 @@ work) suggests $M$ is small, ranges are tight, and variables cluster—Lagrangia
 relaxation is probably your best bet there.
 
 
-# Reply
+## Reply
 
 If N is a few hundred and the ranges are at most 4, usually smaller?
 
-# Response
+## Response
 
 With $N \sim$ hundreds and $|[l_i, u_i]| \leq 4$, the binary reformulation
 (approach 1) is tiny. You get at most $\sim 4N$ binary variables (~few hundred)
@@ -88,11 +88,11 @@ constraints, separable objective) is exactly where it shines. Fall back to
 HiGHS via the `highs` crate only if you hit cases where the duality gap doesn't
 close.
 
-# Reply
+## Reply
 
 Ok you got me. It's just a bond order perception problem with valence constraints. ;-)
 
-# Response
+## Response
 
 Right, so the variables are bond orders $b_i \in \{1,2,3\}$ (or $\{0,1,2,3\}$
 in some contexts), the $f_i$ score how plausible each bond order is (from
@@ -113,13 +113,13 @@ need to handle kekulization as a separate step. But for assigning integer bond
 orders from 3D coordinates, LP on the incidence matrix is about as clean as it
 gets.
 
-# Reply 
+## Reply 
 
 Is unimodularity a function of the graph being connected? Was curious if I
 could allow 0 bond orders.
 
 
-# Response
+## Response
 
 TU of the incidence matrix holds for any bipartite graph, not just connected
 ones. The classical result is:
@@ -152,11 +152,11 @@ ILP if not
 At $N \sim$ hundreds with range ≤ 4, just go ILP via HiGHS and stop thinking
 about it.
 
-# Reply
+## Reply
 
 Is a solution guaranteed to exist? I don't think it can be unique.
 
-# Response
+## Response
 
 **Existence:** Not guaranteed. The valence constraints may be infeasible for a
 given connectivity—think a carbon with only one neighbor and no option for a
@@ -188,11 +188,11 @@ degeneracy (multiple optima exist). You can detect degeneracy cheaply: solve
 the LP relaxation and check if any $b_i$ is fractional or if the optimal
 objective has multiplicity (perturb slightly and re-solve).
 
-# Reply
+## Reply
 
 Both are interesting but probabilities are cool.
 
-# Response
+## Response
 
 Then you want the Boltzmann distribution over feasible assignments:
 

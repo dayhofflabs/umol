@@ -12,7 +12,7 @@ Please review the plan in @/Users/dr/.cursor/plans/aromaticity_perception_framew
 8. Critique design and implementation
 9. Testing and comparison with existing implementations (RDKit, CDK, RMG)
 
-# Premium
+## Premium
 
 ## Findings
 
@@ -76,7 +76,7 @@ Please review the plan in @/Users/dr/.cursor/plans/aromaticity_perception_framew
   (b) then HMO descriptor mode,
   (c) then Clar ILP and optional HMO classification.
 
-# GPT-5.3 Codex
+## GPT-5.3 Codex
 
 ## Findings
 
@@ -125,7 +125,7 @@ Please review the plan in @/Users/dr/.cursor/plans/aromaticity_perception_framew
   - Clar as opt-in advanced module
   - Add observability from day 1 (debug trace of candidate elimination decisions).
 
-# Gemini 3 Pro
+## Gemini 3 Pro
 
 ## Algorithmic comment
 
@@ -191,7 +191,7 @@ This decouples the detection (topology) from the model (electron counting).
 5. Integration: Wire into resolver.rs.
 6. HmoAromaticity: Implement using nalgebra
 
-# Composer 1.5
+## Composer 1.5
 
 ## Design gaps
 
@@ -291,7 +291,7 @@ pub trait AromaticityModel {
   Pentalene — 4n antiaromatic; should be rejected.
   Biphenylene — 4- and 6-rings; Clar does not apply; HueckelRule edge case.
 
-# Opus 4.6
+## Opus 4.6
 
 ## Design gaps
 
@@ -516,7 +516,7 @@ but should specify the error message content clearly.
   module provides reference implementations. Particularly useful for Clar and HMO validation on PAHs. RMG's test suite
   (test_aromatic.py) has cases for phenanthrene, pyrene, coronene with expected sextet counts.
 
-# Comments
+## Comments
 
 - A seed set of aromatic atom types for C, N, O, S, Se have been added to the default registry, covering aromaticity in
   benzene, tropylium, cyclopentadienyl, pyrrole, pyridine, pyridinium, furan, pyrylium, thiophene, and thiopyrylium,
@@ -541,7 +541,7 @@ but should specify the error message content clearly.
 - Question in need of additional exploration: How should the aromaticity perception interact with the `aromatic_hint`
   fields in `AtomBuilder` and `BondBuilder`? Should the treatment of aromatic hints be configurable?
 
-# Prompt
+## Prompt
 
 Ok, let's review status of the aromatic flags in the inputs to aromaticity perception carefully. We talked about that a bit in @discussion/58-aromaticity-perception-2026-03-11.md but it is not fully worked out, seems like.
 
@@ -568,7 +568,7 @@ Ok, let's review status of the aromatic flags in the inputs to aromaticity perce
     Please start by reviewing this outline, the current state of implementation (see @discussion/53-molecule-validation-scheme-2026-02-17.md and @discussion/54-molecule-validation-phases-2026-02-17.md . The aromaticity perception discussion is in @discussion/58-aromaticity-perception-2026-03-11.md and @discussion/59-aromaticity-perception-review-2026-03-12.md ).
     Then make a suggestion for the implementation plan, identify missing pieces, current blockers, restructuring needs in the current umol-models-graph codebase. Ask clariying questions as necessary.
 
-# Composer 1.5
+## Composer 1.5
 
 ## 2. Current implementation status
 
@@ -689,7 +689,7 @@ pub struct AromaticityResolveConfig {
 }
 ```
 
-# Premium
+## Premium
 
 ## Proposed Architecture Restructure
 
@@ -812,7 +812,7 @@ Add tests under tests/resolution/ and aromaticity unit suites:
 
 -> **TODO**: Fine
 
-# Claude Opus 4.6
+## Claude Opus 4.6
 
 ## Analysis: Aromatic Flags in Resolution
 

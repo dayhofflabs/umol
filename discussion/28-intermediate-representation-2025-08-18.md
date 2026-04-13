@@ -1,12 +1,10 @@
-# Summary
+# Intermediate representations
 
-* Informational
-
-# Prompt (Gemini 2.5 pro)
+## Prompt (Gemini 2.5 pro)
 
 Ok, here is another question. Building the progressive parser and comparing the implementation with the actual parser seems to reveal a typical parsing pattern, in which the parsing procedure generates some intermediate representation, which can be processed in different ways. Here, it can be either used to build an in-memory molecule model or formatted for output. The accumulation is currently coupled to the parsing, and it's probably best to leave it as is. But I do wonder what a good pattern here would be, just as a thought exercise. I am primarily thinking of an object that could be used for semantic validation (in particular valence rules but possibly other aspects) *before* building the molecule. That would ensure that every Molecule or MoleculeStandard object is a valid molecule. RDKit uses the opposite approach, in which the Mol object may or may not be valid, depending on sanitization, and would randomly crash on some operations. The more I think about this, the more useful the intermediate representation appears to. If I understand it correctly, it is the equivalent to an AST in parsing program code. Now, for AST, is it necessary that the input code is valid? In other words, is the validation happening at the AST stage or prior to it? If there is an intermediate step, how is it usually structured? It also seems that this task is different from that handled by parser combinators. Is there some tooling for this task (for example from interpreter building toolkits) or is it so performance-critical that it is usually coded manually? I know that in yacc/bison and Antlr4, one typically has to call processing functions during parsing. Is this the only approach available? How are ASTs / IRs manipulated in some applications? Please give some background (I know very little about this) and reason through some ideas that could help us make MOL parsing more robust. No code is needed at this point.
 
-# Response
+## Response
 
 That is an absolutely fantastic line of questioning. You've gone from the tactical details of parsing to the core architectural strategy of building robust scientific software. Your analogy to an AST (Abstract Syntax Tree) in compilers is exactly right, and it's the key to answering all your questions.
 
@@ -106,11 +104,11 @@ This construction step is now guaranteed to succeed. Any `Molecule` object that 
 
 By separating the stages, you create a pipeline where these independent, testable components can operate on a common data structure. This is a hallmark of robust, extensible scientific software.
 
-# Prompt
+## Prompt
 
 Ok, this does seem a big improvement compared to the current approach, which resembles RDKit's parse to molecule, then validate approach. There is also the tempation to generate the same AST from SMILES/SMARTS strings, which are the next feature to implement. I supoose there are two competing issues here. One is trying to unify the semantics of graph-based molecule representations, which would align well with the name and purpose of this crate (umol-models-graph). The other is wanting to keep the subtle differences between the semantics of the SMILES and MOL representations and their quirks apart. I am just a bit worried that trying to build the grand unified theory of graph-based molecule representations will represent neither format faithfully, creating the problems discussed in @02-design-summary-2025-02-16.md .  On the other hand, I want to be pragmatic and the advantage of having a unified AST that can be manipulated and validated is quite compelling. The MOL and SMILES/SMARTS are pretty sprawling and not well standardized formats so how would one go about unifying the two? Btw, I don't think I need to worry about any other representations here, so that's something. To go back to the RDKit example, imperfect as it may be, it defined its own mini-query language and seems to convert the input formats to this unified representations. If we assume that the advantages of the unified representation outweight the drawbacks of having to invent a "superformat" of the two, then we would need an AST (raw) format that can be produced from either MOL or SMILES/SMARTS and a validated molecule type (perhaps a standard and a general type again, the distniction could be useful). The question then arises how would one go about defining these representations under these circumstances?
 
-# Response
+## Response
 
 You've hit the nail on the head. This is the central tension in designing cheminformatics toolkits: the pragmatic desire for a unified model versus the chemical reality of format-specific semantics. Your reference to `02-design-summary-2025-02-16.md` is perfect—the goal is to avoid coercing structures into a single representation that is "unphysically unified."
 
@@ -195,11 +193,11 @@ Finally, the `MoleculeStandard` and `MoleculeGeneral` structs are constructed fr
 
 This layered approach directly addresses your concerns. It allows you to build a powerful, unified manipulation and validation pipeline *without* losing the fidelity of the original formats during the initial, crucial parsing step. It avoids the "unphysically unified model" by making the unification an explicit, algorithmic step rather than an implicit side-effect of parsing.
 
-# Prompt
+## Prompt
 
 Now, we don't have a SMILES/SMARTS parser at the moment. Your recommendation: Build a direct-to-structure SMILES/SMARTS now (after building the compliance suite for MOL) and, with that information, make the petit unified (opposite of grand unified) IR and validated molecules types? Or attempt to build the frist half of the IR and Molecule types based on MOL data alone (perhaps with some tentative SMILES/SMARTS info) and merge in the SMILES/SMARTS part as we go along?
 
-# Response
+## Response
 
 That's the crucial strategic question. The trade-off is between making immediate architectural progress versus designing with complete information.
 

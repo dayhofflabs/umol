@@ -1,10 +1,10 @@
 # Mutative's approach to serializable, undoable JSON patching
 
-# Prompt
+## Prompt
 
 Can you analyze Mutative (fast JSON mutation library), please, and check if the underlying mutation language, patch application methods, and data model could be a useful template for molecular manipulation? not trying to replace proper graph-derived methods (DPO or others) but looking for the engineering overlayer on top of that. This is for a molecular manipulation model, in which the molecules are stored as an attributed undirected graph. But also interested if this can be applied to the atom cloud (atom positions in 3D) data model of chemistry.
 
-# Response
+## Response
 
 ## Mutative's architecture as a template for molecular manipulation systems
 
@@ -285,7 +285,7 @@ The structural sharing concept translates: unchanged frames reference the origin
 #### The draft/finalize pattern for transactional editing
 
 ```python
-# Proposed API mirroring Mutative's pattern
+## Proposed API mirroring Mutative's pattern
 class MoleculeEditor:
     def __init__(self, molecule):
         self.base = molecule
@@ -302,11 +302,11 @@ class MoleculeEditor:
         # Apply structural sharing: only copy changed portions
         return self.draft.with_structural_sharing(self.base)
 
-# Usage
+## Usage
 with MoleculeEditor(mol) as draft:
     draft.atoms[0].charge = 1
     draft.add_bond(0, 5, order=2)
-# editor.result has new state, editor.patches has changes
+## editor.result has new state, editor.patches has changes
 ```
 
 ### Lazy proxy creation for large molecules
@@ -379,11 +379,11 @@ class TrajectoryFrame:
 
 The key insight from Mutative is that **separating change specification (the draft) from change application (finalization)** enables powerful capabilities—undo, structural sharing, operation logging—that imperative APIs lack. This pattern transfers to molecular manipulation even though the underlying data structure (undirected attributed graphs vs. JSON trees) differs substantially.
 
-# Prompt
+## Prompt
 
 Independent of the Mutative's approach now, how does the requirement for efficient serializable, composable, undoable mutations with structural sharing inform the design of the molecular internal representation? Again, applies both to molecular graphs and atom clouds. Ask clarifying questions before launching research tasks if necessary.
 
-# Clarification
+## Clarification
 
 Good question—this is really about deriving representation from requirements rather than retrofitting an existing library's approach.
 
@@ -407,7 +407,7 @@ Before I reason through this systematically, a few clarifying questions that sig
 
 The answers substantially change whether you'd want, say, a persistent HAMTs with content-addressing vs. a simpler copy-on-write tree vs. a log-structured approach with periodic compaction.
 
-# Answers
+## Answers
 
 1. Let's talk about the 100--1k atoms range, small to medium sized molecules, so no biomolecules
 2. Mutations should describe reaction modeling, structure optimizations, so 100--1k events at most, likely much less.
@@ -419,7 +419,7 @@ The answers substantially change whether you'd want, say, a persistent HAMTs wit
 8. Both topology (implicit in atom cloud anyway) and coordinates are mutable. If atoms are swapped, atom index tracking (mapping) is a must, as for graph structures.
 Please ask additional questions before proceeding if necessary.
 
-# Clarification
+## Clarification
 
 Clear picture forming. A few more targeted questions:
 
@@ -435,14 +435,14 @@ Clear picture forming. A few more targeted questions:
 **Identity scope:**
 4. Are atom IDs globally unique (UUID-style) or locally unique within a molecule? The former enables tracking atoms across molecule splits/merges in reactions; the latter is simpler but loses identity when `A → B + C`.
 
-# Answers
+## Answers
 
 1. Let's assume that the full trajectory may be needed but that coalescing ops should be available. That's because for optimizations a full trajectory is rarely necessary but the approach could also be used for chain-of-states methods, where the intermediates are needed individually.
 2. Let's assume that the atomic attribute set is fixed and no free-form properties are allowed. All refinement to this model are out of scope.
 3. No, I am talking about two separate sets of data models (with conversion framework but that's not the point here): one for molecular graphs and one for atom clouds. No need to design of unification of manipulations of both types. Good catch, didn't specify it clearly enough before.
 4. Good q. Reactions are a core application here so global atom IDs are probably better. No strong opinions on this point, can see both, depending on practicalities.
 
-# Response
+## Response
 
 Got it. This is now a clean systems design problem. No research needed—let me reason through how each requirement constrains the representation.
 
@@ -698,11 +698,11 @@ enum CloudPatch {
 | Coalescing | Transformation on patch sequence, preserves invertibility |
 | Coordinate batch ops | Hybrid AoS/SoA with ID→index mapping |
 
-# Prompt
+## Prompt
 
 That level of detail should suffice for now, just recording thoughts. One more q: this design makes it harder to do any graph-based operations, correct?
 
-# Response
+## Response
 
 Yes, exactly. The `HashMap<BondKey, Bond>` representation optimizes for:
 
@@ -733,11 +733,11 @@ For reaction modeling with occasional substructure queries, I'd lean toward **(2
 
 The deeper point: **patch-friendly representations and traversal-friendly representations pull in opposite directions.** Patches want stable keys and minimal redundancy; graph algorithms want adjacency locality. You're paying for undo/compose/serialize somewhere.
 
-# Prompt
+## Prompt
 
 Thinking of a proper graph storage, like petgraph, which includes adjacencies internally but exposes a clean graph API. Not looking to reinvent the wheel here.
 
-# Response
+## Response
 
 Right. Then the design becomes a wrapper layer:
 
@@ -769,11 +769,11 @@ If full-graph clones per snapshot are tolerable, this is the pragmatic path. pet
 
 The patch layer becomes purely a journaling/undo concern on top of a mutable graph, rather than the graph representation itself being patch-native. Cleaner separation, honestly.
 
-# Prompt
+## Prompt
 
 Ok, that basically torpedoes the Mutative style design entirely. Thanks for the clarification. Will have to weigh the pros and cons.
 
-# Response
+## Response
 
 Exactly. The tradeoff crystallizes to:
 
