@@ -21,6 +21,18 @@ pub enum MoleculeConstraint {
     Not(Box<MoleculeConstraint>),
 }
 
+impl MoleculeConstraint {
+    /// A ground assertion is a `Derived` constraint whose predicate carries only
+    /// literal values (no wildcards, variables, or expressions). These are facts
+    /// about a resolved molecule, not queries.
+    pub fn is_ground_assertion(&self) -> bool {
+        match self {
+            Self::Derived { predicate, .. } => predicate.is_ground(),
+            _ => false,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RelationRefs {
     pub atoms: Vec<usize>,
@@ -77,6 +89,16 @@ pub enum DerivedPred {
     NotInRing,
     InRelation(RelationSym),
     NotInRelation(RelationSym),
+}
+
+impl DerivedPred {
+    pub fn is_ground(&self) -> bool {
+        match self {
+            Self::TotalCharge(v) | Self::ValenceSum(v) | Self::AromaticElectronCount(v) | Self::RingSize(v) => v.is_ground(),
+            Self::TotalSpin(s) => s.is_ground(),
+            Self::InRing | Self::NotInRing | Self::InRelation(_) | Self::NotInRelation(_) => true,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

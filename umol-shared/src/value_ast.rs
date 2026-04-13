@@ -57,6 +57,10 @@ pub enum EvaluationError {
 }
 
 impl ValueAst {
+    pub fn is_ground(&self) -> bool {
+        matches!(self, Self::Lit(_))
+    }
+
     /// Match a concrete integer value against this pattern
     pub fn matches(&self, value: i64) -> bool {
         self.capture(value).is_some()
@@ -290,6 +294,15 @@ mod tests {
         let result = expr.evaluate_bool(&vars);
         assert!(result.is_err(), "{:?} should have failed, error: {:?}", expr, result.clone().unwrap_err());
         assert_eq!(result.unwrap_err(), expected);
+    }
+
+    #[rstest]
+    #[case::lit(ValueAst::Lit(3), true)]
+    #[case::wildcard(ValueAst::Wildcard, false)]
+    #[case::lit_set(ValueAst::LitSet(vec![1, 2]), false)]
+    #[case::expr(ValueAst::Expr(Expr::Var("x".to_string())), false)]
+    fn test_value_ast_is_ground(#[case] ast: ValueAst, #[case] expected: bool) {
+        assert_eq!(ast.is_ground(), expected);
     }
 
     #[rustfmt::skip]

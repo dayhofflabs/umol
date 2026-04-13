@@ -3,7 +3,7 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_shared::atom_ast::{AromaticAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::error::SpinStateError;
 use umol_shared::spin::{SpinMultiplicity, SpinState};
@@ -254,10 +254,10 @@ impl ToAst<AtomAst> for Atom {
                 // Unspecified → Any → NotAromatic in to_atom(); safe to suppress
                 (AromaticValence::NotAromatic, AromaticValenceMode::Required) => None,
                 (AromaticValence::NotAromatic, AromaticValenceMode::Aromatic) => {
-                    Some(AromaticAst::NotAromatic)
+                    Some(AromaticValenceAst::NotAromatic)
                 }
                 (AromaticValence::Valence(n), _) => {
-                    Some(AromaticAst::Value(ValueAst::Lit(n as i64)))
+                    Some(AromaticValenceAst::Value(ValueAst::Lit(n as i64)))
                 }
             },
             multicenter_valence: raise_u8_ground(
@@ -325,7 +325,7 @@ mod tests {
     #[case::isotope("C#i13#h4".parse::<Atom>().unwrap(), AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: Some(IsotopeAst::Lit(13)),
             implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(4))), .."He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()) })]
     #[case::aromatic("C#h#v2#a1".parse::<Atom>().unwrap(), AtomAst { element: ElementAst::Lit(Element::C),
-            implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))), valence: Some(ValueAst::Lit(2)), aromatic_valence: Some(AromaticAst::Value(ValueAst::Lit(1))),
+            implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))), valence: Some(ValueAst::Lit(2)), aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Lit(1))),
             .."He".parse::<Atom>().unwrap().to_ast(&AtomAstConfig::zeroed()) })]
     fn test_atom_to_ast(#[case] atom: Atom, #[case] expected: AtomAst) {
         assert_eq!(atom.to_ast(&AtomAstConfig::zeroed()), expected);

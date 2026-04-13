@@ -12,7 +12,7 @@ use nom::error::{Error as NomError, ErrorKind};
 use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
-use umol_shared::atom_ast::{AromaticAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
@@ -101,11 +101,11 @@ impl Display for AtomAst {
 
         match &self.aromatic_valence {
             None => {}
-            Some(AromaticAst::Unspecified) => write!(f, "#a?")?,
-            Some(AromaticAst::NotAromatic) => write!(f, "#a!")?,
-            Some(AromaticAst::Value(ValueAst::Lit(1))) => write!(f, "#a")?,
-            Some(AromaticAst::Value(ValueAst::Lit(n))) => write!(f, "#a{}", n)?,
-            Some(AromaticAst::Value(v)) => {
+            Some(AromaticValenceAst::Unspecified) => write!(f, "#a?")?,
+            Some(AromaticValenceAst::NotAromatic) => write!(f, "#a!")?,
+            Some(AromaticValenceAst::Value(ValueAst::Lit(1))) => write!(f, "#a")?,
+            Some(AromaticValenceAst::Value(ValueAst::Lit(n))) => write!(f, "#a{}", n)?,
+            Some(AromaticValenceAst::Value(v)) => {
                 write!(f, "#a")?;
                 fmt_value(f, v)?;
             }
@@ -259,7 +259,7 @@ pub enum AtomPredicate {
     Valence(ValueAst),
     DonatedPairs(ValueAst),
     AcceptedPairs(ValueAst),
-    AromaticValence(AromaticAst),
+    AromaticValence(AromaticValenceAst),
     MulticenterValence(ValueAst),
 }
 
@@ -424,14 +424,14 @@ fn hydrogen_expr(i: &str) -> IResult<&str, HydrogenAst, AtomDslError> {
     .map_err(|_| Err::Error(AtomDslError::InvalidImplicitHydrogens(i.to_string())))
 }
 
-fn aromatic_valence_expr(i: &str) -> IResult<&str, AromaticAst, AtomDslError> {
+fn aromatic_valence_expr(i: &str) -> IResult<&str, AromaticValenceAst, AtomDslError> {
     preceded(
         multispace0,
         alt((
-            value(AromaticAst::NotAromatic, tag("!")),
-            value(AromaticAst::Unspecified, tag("?")),
-            map(value_dsl, AromaticAst::Value),
-            success(AromaticAst::Value(ValueAst::Lit(1))),
+            value(AromaticValenceAst::NotAromatic, tag("!")),
+            value(AromaticValenceAst::Unspecified, tag("?")),
+            map(value_dsl, AromaticValenceAst::Value),
+            success(AromaticValenceAst::Value(ValueAst::Lit(1))),
         )),
     )
     .parse(i)
@@ -580,12 +580,12 @@ mod tests {
     #[case::valence("C#v4", AtomAst { valence: Some(ValueAst::Lit(4)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
     #[case::donated_pairs("N#d1", AtomAst { donated_pairs: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::N)) })]
     #[case::accepted_pairs("B#r1", AtomAst { accepted_pairs: Some(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::B)) })]
-    #[case::arom_unspecified("C#a?", AtomAst { aromatic_valence: Some(AromaticAst::Unspecified), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_not_aromatic("C#a!", AtomAst { aromatic_valence: Some(AromaticAst::NotAromatic), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_aromatic("C#a*", AtomAst { aromatic_valence: Some(AromaticAst::Value(ValueAst::Wildcard)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_zero("C#a0", AtomAst { aromatic_valence: Some(AromaticAst::Value(ValueAst::Lit(0))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_one("C#a1", AtomAst { aromatic_valence: Some(AromaticAst::Value(ValueAst::Lit(1))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_omit("C#a", AtomAst { aromatic_valence: Some(AromaticAst::Value(ValueAst::Lit(1))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::arom_unspecified("C#a?", AtomAst { aromatic_valence: Some(AromaticValenceAst::Unspecified), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::arom_not_aromatic("C#a!", AtomAst { aromatic_valence: Some(AromaticValenceAst::NotAromatic), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::arom_aromatic("C#a*", AtomAst { aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Wildcard)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::arom_zero("C#a0", AtomAst { aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Lit(0))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::arom_one("C#a1", AtomAst { aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Lit(1))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
+    #[case::arom_omit("C#a", AtomAst { aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Lit(1))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
     #[case::multicenter("C#m2", AtomAst { multicenter_valence: Some(ValueAst::Lit(2)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
     fn test_parse_atom_dsl(#[case] input: &str, #[case] expected: AtomAst) {
         let result = atom_dsl(input);
@@ -694,11 +694,11 @@ mod tests {
     #[case::valence("#v4", AtomPredicate::Valence(ValueAst::Lit(4)))]
     #[case::donated_pairs("#d1", AtomPredicate::DonatedPairs(ValueAst::Lit(1)))]
     #[case::accepted_pairs("#r1", AtomPredicate::AcceptedPairs(ValueAst::Lit(1)))]
-    #[case::arom_unspecified("#a?", AtomPredicate::AromaticValence(AromaticAst::Unspecified))]
-    #[case::arom_not_aromatic("#a!", AtomPredicate::AromaticValence(AromaticAst::NotAromatic))]
-    #[case::arom_wildcard("#a*", AtomPredicate::AromaticValence(AromaticAst::Value(ValueAst::Wildcard)))]
-    #[case::arom_lit("#a2", AtomPredicate::AromaticValence(AromaticAst::Value(ValueAst::Lit(2))))]
-    #[case::arom_omit("#a", AtomPredicate::AromaticValence(AromaticAst::Value(ValueAst::Lit(1))))]
+    #[case::arom_unspecified("#a?", AtomPredicate::AromaticValence(AromaticValenceAst::Unspecified))]
+    #[case::arom_not_aromatic("#a!", AtomPredicate::AromaticValence(AromaticValenceAst::NotAromatic))]
+    #[case::arom_wildcard("#a*", AtomPredicate::AromaticValence(AromaticValenceAst::Value(ValueAst::Wildcard)))]
+    #[case::arom_lit("#a2", AtomPredicate::AromaticValence(AromaticValenceAst::Value(ValueAst::Lit(2))))]
+    #[case::arom_omit("#a", AtomPredicate::AromaticValence(AromaticValenceAst::Value(ValueAst::Lit(1))))]
     #[case::multicenter("#m2", AtomPredicate::MulticenterValence(ValueAst::Lit(2)))]
     fn test_atom_predicate(#[case] input: &str, #[case] expected: AtomPredicate) {
         let result = atom_predicate(input);

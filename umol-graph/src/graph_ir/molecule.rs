@@ -26,6 +26,7 @@ use crate::ast::molecule::{
     LocalizedBond as LocalizedBondAst, MoleculeAst, MulticenterBond as MulticenterBondAst,
     NoncovalentBond as NoncovalentBondAst,
 };
+use crate::ast::molecule::GroundMolecule;
 use crate::ast::ToAst;
 
 pub type AtomIndex = NodeIndex<u32>;
@@ -474,6 +475,13 @@ impl Molecule {
     ) -> impl Iterator<Item = &NoncovalentBond> + '_ {
         self.noncovalent_bonds()
             .filter(move |b| b.contains_atom(index))
+    }
+}
+
+impl Molecule {
+    pub fn to_ground(&self, cfg: &MoleculeAstConfig) -> GroundMolecule {
+        let ast = self.to_ast(cfg);
+        GroundMolecule::new(ast).expect("Molecule is ground by construction")
     }
 }
 

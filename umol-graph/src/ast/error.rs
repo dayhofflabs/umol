@@ -4,6 +4,10 @@ use thiserror::Error;
 use umol_shared::error::SpinStateError;
 
 #[derive(Clone, Debug, PartialEq, Error)]
+#[error("molecule AST is not fully ground")]
+pub struct GroundError;
+
+#[derive(Clone, Debug, PartialEq, Error)]
 pub enum LoweringError {
     #[error("non-ground value for field '{field}'")]
     NonGround { field: &'static str },

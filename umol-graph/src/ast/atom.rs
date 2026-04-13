@@ -1,6 +1,6 @@
 //! Atom structural AST.
 
-use umol_shared::atom_ast::{AromaticAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
@@ -20,7 +20,7 @@ pub struct AtomAst {
     pub valence: Option<ValueAst>,
     pub donated_pairs: Option<ValueAst>,
     pub accepted_pairs: Option<ValueAst>,
-    pub aromatic_valence: Option<AromaticAst>,
+    pub aromatic_valence: Option<AromaticValenceAst>,
     pub multicenter_valence: Option<ValueAst>,
 }
 
@@ -43,6 +43,20 @@ impl AtomAst {
 
     pub fn from_element(element: Element) -> Self {
         Self::new(ElementAst::Lit(element))
+    }
+
+    pub fn is_ground(&self) -> bool {
+        self.element.is_ground()
+            && self.isotope_mass.as_ref().map_or(true, |v| v.is_ground())
+            && self.charge.as_ref().map_or(true, |v| v.is_ground())
+            && self.implicit_hydrogens.as_ref().map_or(true, |v| v.is_ground())
+            && self.lone_pairs.as_ref().map_or(true, |v| v.is_ground())
+            && self.spin.as_ref().map_or(true, |v| v.is_ground())
+            && self.valence.as_ref().map_or(true, |v| v.is_ground())
+            && self.donated_pairs.as_ref().map_or(true, |v| v.is_ground())
+            && self.accepted_pairs.as_ref().map_or(true, |v| v.is_ground())
+            && self.aromatic_valence.as_ref().map_or(true, |v| v.is_ground())
+            && self.multicenter_valence.as_ref().map_or(true, |v| v.is_ground())
     }
 }
 

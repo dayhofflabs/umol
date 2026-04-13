@@ -30,6 +30,12 @@ impl BondAst {
             spin: None,
         }
     }
+
+    pub fn is_ground(&self) -> bool {
+        self.order.is_ground()
+            && self.charge.as_ref().map_or(true, |v| v.is_ground())
+            && self.spin.as_ref().map_or(true, |v| v.is_ground())
+    }
 }
 
 impl Ast for BondAst {
