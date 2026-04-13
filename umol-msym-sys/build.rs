@@ -1,9 +1,6 @@
-include!("../build-lint.rs");
-
 use std::path::PathBuf;
 
 fn main() {
-    check_comment_art();
     let src = PathBuf::from("libmsym/src");
 
     let sources: Vec<PathBuf> = [

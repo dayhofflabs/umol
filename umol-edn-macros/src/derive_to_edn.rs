@@ -59,10 +59,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
     }
 }
 
-// ---------------------------------------------------------------------------
 // Structs
-// ---------------------------------------------------------------------------
-
 fn expand_struct(
     struct_name: &syn::Ident,
     fields: &syn::punctuated::Punctuated<Field, syn::Token![,]>,
@@ -115,10 +112,7 @@ fn expand_struct(
     })
 }
 
-// ---------------------------------------------------------------------------
 // Enums
-// ---------------------------------------------------------------------------
-
 fn expand_enum(name: &syn::Ident, data: &DataEnum) -> Result<TokenStream2, syn::Error> {
     let mut arms = Vec::new();
 
@@ -255,10 +249,7 @@ fn expand_enum(name: &syn::Ident, data: &DataEnum) -> Result<TokenStream2, syn::
     })
 }
 
-// ---------------------------------------------------------------------------
 // Transparent structs
-// ---------------------------------------------------------------------------
-
 fn expand_transparent(input: &DeriveInput) -> Result<TokenStream2, syn::Error> {
     let name = &input.ident;
     let accessor = match &input.data {
@@ -317,10 +308,7 @@ fn has_container_attr(attrs: &[syn::Attribute], name: &str) -> bool {
     false
 }
 
-// ---------------------------------------------------------------------------
 // Helpers
-// ---------------------------------------------------------------------------
-
 enum FieldSer {
     Normal,
     Option,
