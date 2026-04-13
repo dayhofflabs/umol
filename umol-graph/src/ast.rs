@@ -7,6 +7,7 @@ pub mod bond;
 pub mod config;
 pub mod constraint;
 pub mod error;
+pub mod matcher;
 pub mod molecule;
 
 use error::LoweringError;

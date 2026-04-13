@@ -21,6 +21,16 @@ impl ElementAst {
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Lit(_))
     }
+
+    pub fn matches(&self, target: &Element) -> bool {
+        match self {
+            Self::Lit(e) => e == target,
+            Self::Wildcard => true,
+            Self::Set(s) => s.contains(target),
+            Self::Bind { set, .. } => set.contains(target),
+            Self::Ref(_) => false,
+        }
+    }
 }
 
 /// Isotope-mass expressions (Natural = #i=)
@@ -37,6 +47,17 @@ pub enum IsotopeAst {
 impl IsotopeAst {
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Natural | Self::Lit(_))
+    }
+
+    pub fn matches(&self, target: &IsotopeAst) -> bool {
+        match (self, target) {
+            (Self::Wildcard, _) => true,
+            (Self::Natural, Self::Natural) => true,
+            (Self::Lit(a), Self::Lit(b)) => a == b,
+            (Self::Set(s), Self::Lit(b)) => s.contains(b),
+            (Self::Bind { set, .. }, Self::Lit(b)) => set.contains(b),
+            _ => false,
+        }
     }
 }
 
@@ -58,6 +79,14 @@ impl HydrogenAst {
             Self::Value(v) => v.is_ground(),
         }
     }
+
+    pub fn matches(&self, target: &HydrogenAst) -> bool {
+        match (self, target) {
+            (Self::Normal, Self::Normal) => true,
+            (Self::Value(pattern), Self::Value(ValueAst::Lit(n))) => pattern.matches(*n),
+            _ => false,
+        }
+    }
 }
 
 /// Aromatic valence expressions
@@ -73,6 +102,15 @@ impl AromaticValenceAst {
         match self {
             Self::Unspecified | Self::NotAromatic => true,
             Self::Value(v) => v.is_ground(),
+        }
+    }
+
+    pub fn matches(&self, target: &AromaticValenceAst) -> bool {
+        match (self, target) {
+            (Self::Unspecified, Self::Unspecified) => true,
+            (Self::NotAromatic, Self::NotAromatic) => true,
+            (Self::Value(pattern), Self::Value(ValueAst::Lit(n))) => pattern.matches(*n),
+            _ => false,
         }
     }
 }
@@ -120,5 +158,55 @@ mod tests {
     #[case::wildcard(AromaticValenceAst::Value(ValueAst::Wildcard), false)]
     fn test_aromatic_ast_is_ground(#[case] ast: AromaticValenceAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rstest]
+    #[case::lit_match(ElementAst::Lit(Element::C), Element::C, true)]
+    #[case::lit_mismatch(ElementAst::Lit(Element::C), Element::N, false)]
+    #[case::wildcard(ElementAst::Wildcard, Element::C, true)]
+    #[case::set_match(ElementAst::Set(vec![Element::C, Element::N]), Element::N, true)]
+    #[case::set_mismatch(ElementAst::Set(vec![Element::C, Element::N]), Element::O, false)]
+    #[case::bind_match(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, Element::C, true)]
+    #[case::bind_mismatch(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, Element::N, false)]
+    #[case::ref_no_match(ElementAst::Ref("e".into()), Element::C, false)]
+    fn test_element_ast_matches_element(#[case] ast: ElementAst, #[case] target: Element, #[case] expected: bool) {
+        assert_eq!(ast.matches(&target), expected);
+    }
+
+    #[rstest]
+    #[case::natural_match(IsotopeAst::Natural, IsotopeAst::Natural, true)]
+    #[case::lit_match(IsotopeAst::Lit(12), IsotopeAst::Lit(12), true)]
+    #[case::lit_mismatch(IsotopeAst::Lit(12), IsotopeAst::Lit(13), false)]
+    #[case::wildcard(IsotopeAst::Wildcard, IsotopeAst::Lit(12), true)]
+    #[case::wildcard_natural(IsotopeAst::Wildcard, IsotopeAst::Natural, true)]
+    #[case::set_match(IsotopeAst::Set(vec![12, 13]), IsotopeAst::Lit(13), true)]
+    #[case::set_mismatch(IsotopeAst::Set(vec![12, 13]), IsotopeAst::Lit(14), false)]
+    #[case::set_vs_natural(IsotopeAst::Set(vec![12]), IsotopeAst::Natural, false)]
+    #[case::natural_vs_lit(IsotopeAst::Natural, IsotopeAst::Lit(12), false)]
+    fn test_isotope_ast_matches_isotope(#[case] pattern: IsotopeAst, #[case] target: IsotopeAst, #[case] expected: bool) {
+        assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    #[case::normal_match(HydrogenAst::Normal, HydrogenAst::Normal, true)]
+    #[case::lit_match(HydrogenAst::Value(ValueAst::Lit(2)), HydrogenAst::Value(ValueAst::Lit(2)), true)]
+    #[case::lit_mismatch(HydrogenAst::Value(ValueAst::Lit(2)), HydrogenAst::Value(ValueAst::Lit(3)), false)]
+    #[case::wildcard_match(HydrogenAst::Value(ValueAst::Wildcard), HydrogenAst::Value(ValueAst::Lit(2)), true)]
+    #[case::normal_vs_value(HydrogenAst::Normal, HydrogenAst::Value(ValueAst::Lit(0)), false)]
+    #[case::value_vs_normal(HydrogenAst::Value(ValueAst::Lit(0)), HydrogenAst::Normal, false)]
+    fn test_hydrogen_ast_matches_hydrogen(#[case] pattern: HydrogenAst, #[case] target: HydrogenAst, #[case] expected: bool) {
+        assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    #[case::unspecified_match(AromaticValenceAst::Unspecified, AromaticValenceAst::Unspecified, true)]
+    #[case::not_aromatic_match(AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic, true)]
+    #[case::lit_match(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
+    #[case::lit_mismatch(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::Value(ValueAst::Lit(3)), false)]
+    #[case::wildcard_match(AromaticValenceAst::Value(ValueAst::Wildcard), AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
+    #[case::unspecified_vs_not_aromatic(AromaticValenceAst::Unspecified, AromaticValenceAst::NotAromatic, false)]
+    #[case::value_vs_unspecified(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::Unspecified, false)]
+    fn test_aromatic_valence_ast_matches(#[case] pattern: AromaticValenceAst, #[case] target: AromaticValenceAst, #[case] expected: bool) {
+        assert_eq!(pattern.matches(&target), expected);
     }
 }

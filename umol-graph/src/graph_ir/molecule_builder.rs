@@ -33,9 +33,8 @@ use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::error::LoweringError;
 use crate::ast::molecule::{
-    AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
-    LocalizedBond as LocalizedBondAst, MoleculeAst, MulticenterBond as MulticenterBondAst,
-    NoncovalentBond as NoncovalentBondAst,
+    AromaticSystem as AromaticSystemAst, BondTuple, MoleculeAst,
+    MulticenterBond as MulticenterBondAst,
 };
 use crate::ast::{FromAst, ToAst};
 use crate::atom::AromaticValence;
@@ -1298,15 +1297,15 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
         };
 
         for bond in &ast.bonds {
-            let a = resolve(bond.a)?;
-            let b = resolve(bond.b)?;
+            let a = resolve(bond.source)?;
+            let b = resolve(bond.target)?;
             let pattern = BondPattern::from_ast(&bond.bond, &cfg.bond)?;
             builder.add_bond_unchecked(a, b, pattern);
         }
 
         for db in &ast.dative_bonds {
-            let donor = resolve(db.donor)?;
-            let acceptor = resolve(db.acceptor)?;
+            let donor = resolve(db.source)?;
+            let acceptor = resolve(db.target)?;
             let order = BondPattern::from_ast(&db.bond, &cfg.bond)?.order();
             builder.add_dative_bond(DativeBond::new(donor, acceptor, order));
         }
@@ -1335,8 +1334,8 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
         }
 
         for nc in &ast.noncovalent_bonds {
-            let a = resolve(nc.a)?;
-            let b = resolve(nc.b)?;
+            let a = resolve(nc.source)?;
+            let b = resolve(nc.target)?;
             builder.add_noncovalent_bond(NoncovalentBond::new(a, b, BondNoncovalent::Hydrogen));
         }
 
@@ -1360,23 +1359,23 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
 
         let pos = |idx: AtomIndex| -> usize { *position_of.get(&idx).unwrap() };
 
-        let bonds: Vec<LocalizedBondAst> = self
+        let bonds: Vec<BondTuple> = self
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
-                LocalizedBondAst {
-                    a: pos(a),
-                    b: pos(b),
+                BondTuple {
+                    source: pos(a),
+                    target: pos(b),
                     bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
                 }
             })
             .collect();
 
-        let dative_bonds: Vec<DativeBondAst> = self
+        let dative_bonds: Vec<BondTuple> = self
             .dative_bonds()
-            .map(|db| DativeBondAst {
-                donor: pos(db.donor()),
-                acceptor: pos(db.acceptor()),
+            .map(|db| BondTuple {
+                source: pos(db.donor()),
+                target: pos(db.acceptor()),
                 bond: BondAst::from_order(db.order()),
             })
             .collect();
@@ -1395,11 +1394,11 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             })
             .collect();
 
-        let noncovalent_bonds: Vec<NoncovalentBondAst> = self
+        let noncovalent_bonds: Vec<BondTuple> = self
             .noncovalent_bonds()
-            .map(|nc| NoncovalentBondAst {
-                a: pos(nc.a()),
-                b: pos(nc.b()),
+            .map(|nc| BondTuple {
+                source: pos(nc.a()),
+                target: pos(nc.b()),
                 bond: BondAst::from_order(1),
             })
             .collect();

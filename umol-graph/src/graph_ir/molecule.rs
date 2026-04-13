@@ -22,11 +22,9 @@ use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
 use crate::ast::molecule::{
-    AromaticSystem as AromaticSystemAst, DativeBond as DativeBondAst,
-    LocalizedBond as LocalizedBondAst, MoleculeAst, MulticenterBond as MulticenterBondAst,
-    NoncovalentBond as NoncovalentBondAst,
+    AromaticSystem as AromaticSystemAst, BondTuple, GroundMolecule, MoleculeAst,
+    MulticenterBond as MulticenterBondAst,
 };
-use crate::ast::molecule::GroundMolecule;
 use crate::ast::ToAst;
 
 pub type AtomIndex = NodeIndex<u32>;
@@ -501,23 +499,23 @@ impl ToAst<MoleculeAst> for Molecule {
 
         let pos = |idx: AtomIndex| -> usize { *position_of.get(&idx).unwrap() };
 
-        let bonds: Vec<LocalizedBondAst> = self
+        let bonds: Vec<BondTuple> = self
             .bond_indices()
             .map(|bi| {
                 let (a, b) = self.bond_atom_indices(bi).unwrap();
-                LocalizedBondAst {
-                    a: pos(a),
-                    b: pos(b),
+                BondTuple {
+                    source: pos(a),
+                    target: pos(b),
                     bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
                 }
             })
             .collect();
 
-        let dative_bonds: Vec<DativeBondAst> = self
+        let dative_bonds: Vec<BondTuple> = self
             .dative_bonds()
-            .map(|db| DativeBondAst {
-                donor: pos(db.donor()),
-                acceptor: pos(db.acceptor()),
+            .map(|db| BondTuple {
+                source: pos(db.donor()),
+                target: pos(db.acceptor()),
                 bond: BondAst::from_order(db.order()),
             })
             .collect();
@@ -536,11 +534,11 @@ impl ToAst<MoleculeAst> for Molecule {
             })
             .collect();
 
-        let noncovalent_bonds: Vec<NoncovalentBondAst> = self
+        let noncovalent_bonds: Vec<BondTuple> = self
             .noncovalent_bonds()
-            .map(|nc| NoncovalentBondAst {
-                a: pos(nc.a()),
-                b: pos(nc.b()),
+            .map(|nc| BondTuple {
+                source: pos(nc.a()),
+                target: pos(nc.b()),
                 bond: BondAst::from_order(1),
             })
             .collect();

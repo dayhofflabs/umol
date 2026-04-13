@@ -17,9 +17,7 @@ use super::error::ParseError;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
-use crate::ast::molecule::{
-    AromaticSystem, DativeBond, LocalizedBond, MoleculeAst, MulticenterBond, NoncovalentBond,
-};
+use crate::ast::molecule::{AromaticSystem, BondTuple, MoleculeAst, MulticenterBond};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
@@ -210,9 +208,9 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(b.id)? {
                 bond_ids.insert(i, id);
             }
-            bonds.push(LocalizedBond {
-                a,
-                b: bb,
+            bonds.push(BondTuple {
+                source: a,
+                target: bb,
                 bond: b.bond,
             });
         }
@@ -225,9 +223,9 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(db.id)? {
                 dative_bond_ids.insert(i, id);
             }
-            dative_bonds.push(DativeBond {
-                donor,
-                acceptor,
+            dative_bonds.push(BondTuple {
+                source: donor,
+                target: acceptor,
                 bond: db.bond,
             });
         }
@@ -266,9 +264,9 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(nc.id)? {
                 noncovalent_bond_ids.insert(i, id);
             }
-            noncovalent_bonds.push(NoncovalentBond {
-                a,
-                b: bb,
+            noncovalent_bonds.push(BondTuple {
+                source: a,
+                target: bb,
                 bond: nc.bond,
             });
         }
@@ -775,13 +773,13 @@ impl ToEdn for MoleculeAstWrapper {
 }
 
 fn render_localized(
-    b: &LocalizedBond,
+    b: &BondTuple,
     i: usize,
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
 ) -> Edn<'static> {
-    let a = render_endpoint(b.a);
-    let bb = render_endpoint(b.b);
+    let a = render_endpoint(b.source);
+    let bb = render_endpoint(b.target);
     let bond = b.bond.to_edn();
     if let Some(id) = ids.get(&i) {
         let mut m = EdnMap::with_capacity(4);
@@ -799,13 +797,13 @@ fn render_localized(
 }
 
 fn render_dative(
-    b: &DativeBond,
+    b: &BondTuple,
     i: usize,
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
 ) -> Edn<'static> {
-    let donor = render_endpoint(b.donor);
-    let acceptor = render_endpoint(b.acceptor);
+    let donor = render_endpoint(b.source);
+    let acceptor = render_endpoint(b.target);
     let bond = b.bond.to_edn();
     let mut m = EdnMap::with_capacity(4);
     if let Some(id) = ids.get(&i) {
@@ -821,13 +819,13 @@ fn render_dative(
 }
 
 fn render_noncovalent(
-    b: &NoncovalentBond,
+    b: &BondTuple,
     i: usize,
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
 ) -> Edn<'static> {
-    let a = render_endpoint(b.a);
-    let bb = render_endpoint(b.b);
+    let a = render_endpoint(b.source);
+    let bb = render_endpoint(b.target);
     let bond = b.bond.to_edn();
     let mut m = EdnMap::with_capacity(4);
     if let Some(id) = ids.get(&i) {
@@ -910,7 +908,7 @@ mod tests {
         r#"{:atoms ["N" "N"] :bonds [[0 1 :triple]]}"#,
         MoleculeAst {
             atoms: vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))],
-            bonds: vec![LocalizedBond { a: 0, b: 1, bond: BondAst::from_order(3) }],
+            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::from_order(3) }],
             ..Default::default()
         },
         Metadata::default()
@@ -919,7 +917,7 @@ mod tests {
         r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#,
         MoleculeAst {
             atoms: vec![AtomAst::from_element(e!(C)), AtomAst::from_element(e!(O))],
-            bonds: vec![LocalizedBond { a: 0, b: 1, bond: BondAst::from_order(1) }],
+            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::from_order(1) }],
             ..Default::default()
         },
         Metadata {
@@ -931,7 +929,7 @@ mod tests {
         r#"{:atoms ["H" "F"] :bonds [{:id :b1 :a 0 :b 1 :bond :single}]}"#,
         MoleculeAst {
             atoms: vec![AtomAst::from_element(e!(H)), AtomAst::from_element(e!(F))],
-            bonds: vec![LocalizedBond { a: 0, b: 1, bond: BondAst::from_order(1) }],
+            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::from_order(1) }],
             ..Default::default()
         },
         Metadata {
@@ -1005,7 +1003,7 @@ mod tests {
         r#"{:atoms [:n :n] :bonds [[0 1 :single]] :aliases [:n "N"]}"#,
         MoleculeAst {
             atoms: vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))],
-            bonds: vec![LocalizedBond { a: 0, b: 1, bond: BondAst::from_order(1) }],
+            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::from_order(1) }],
             ..Default::default()
         },
         Metadata {
@@ -1032,8 +1030,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(dsl.ast.dative_bonds.len(), 1);
-        assert_eq!(dsl.ast.dative_bonds[0].donor, 1);
-        assert_eq!(dsl.ast.dative_bonds[0].acceptor, 0);
+        assert_eq!(dsl.ast.dative_bonds[0].source, 1);
+        assert_eq!(dsl.ast.dative_bonds[0].target, 0);
         assert_eq!(
             dsl.metadata.dative_bond_ids.get(&0),
             Some(&"d1".to_string())
@@ -1116,8 +1114,8 @@ mod tests {
         let builder = MoleculeBuilder::from_ast(&dsl.ast, &cfg).unwrap();
         let ast2 = builder.to_ast(&cfg);
 
-        assert_eq!(ast2.bonds[0].a, 0);
-        assert_eq!(ast2.bonds[0].b, 1);
+        assert_eq!(ast2.bonds[0].source, 0);
+        assert_eq!(ast2.bonds[0].target, 1);
     }
 
     #[test]

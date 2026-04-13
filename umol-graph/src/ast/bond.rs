@@ -31,6 +31,21 @@ impl BondAst {
         }
     }
 
+    pub fn matches_ground(&self, target: &BondAst) -> bool {
+        (match &target.order {
+            ValueAst::Lit(n) => self.order.matches(*n),
+            _ => false,
+        }) && (match (&self.charge, &target.charge) {
+            (None, _) => true,
+            (Some(pattern), Some(ValueAst::Lit(n))) => pattern.matches(*n),
+            (Some(_), _) => false,
+        }) && (match (&self.spin, &target.spin) {
+            (None, _) => true,
+            (Some(pattern), Some(SpinStateAst::Lit(s))) => pattern.matches(*s),
+            (Some(_), _) => false,
+        })
+    }
+
     pub fn is_ground(&self) -> bool {
         self.order.is_ground()
             && self.charge.as_ref().map_or(true, |v| v.is_ground())

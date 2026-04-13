@@ -9,17 +9,15 @@ use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::error::GroundError;
 use crate::ast::Ast;
 
+/// Binary relation over two atoms with bond attributes.
+///
+/// For directed relations (dative, noncovalent), `source` is the donor/origin
+/// and `target` is the acceptor/destination. For undirected relations
+/// (localized bonds), the ordering is canonical (`source <= target`).
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct LocalizedBond {
-    pub a: usize,
-    pub b: usize,
-    pub bond: BondAst,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct DativeBond {
-    pub donor: usize,
-    pub acceptor: usize,
+pub struct BondTuple {
+    pub source: usize,
+    pub target: usize,
     pub bond: BondAst,
 }
 
@@ -33,22 +31,15 @@ pub struct MulticenterBond {
     pub atoms: Vec<usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct NoncovalentBond {
-    pub a: usize,
-    pub b: usize,
-    pub bond: BondAst,
-}
-
 /// Molecule AST: structural representation of a molecule (ground or pattern).
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct MoleculeAst {
     pub atoms: Vec<AtomAst>,
-    pub bonds: Vec<LocalizedBond>,
-    pub dative_bonds: Vec<DativeBond>,
+    pub bonds: Vec<BondTuple>,
+    pub dative_bonds: Vec<BondTuple>,
     pub aromatic_systems: Vec<AromaticSystem>,
     pub multicenter_bonds: Vec<MulticenterBond>,
-    pub noncovalent_bonds: Vec<NoncovalentBond>,
+    pub noncovalent_bonds: Vec<BondTuple>,
     pub constraints: Vec<MoleculeConstraint>,
 }
 
@@ -138,7 +129,7 @@ mod tests {
                 AtomAst::from_element(umol_shared::element::Element::C),
                 AtomAst::from_element(umol_shared::element::Element::O),
             ],
-            bonds: vec![LocalizedBond { a: 0, b: 1, bond: BondAst::new(ValueAst::Wildcard) }],
+            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::new(ValueAst::Wildcard) }],
             ..MoleculeAst::default()
         },
         false,
