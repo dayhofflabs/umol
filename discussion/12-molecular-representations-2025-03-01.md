@@ -1,3 +1,5 @@
+# Molecular Representation
+
 ## Question 1
 
 I am prototyping an implementation of molecule generation and manipulation
@@ -1524,7 +1526,7 @@ the framework can balance scientific rigor with practical usability, maintain
 robust error tracking across domains, and demonstrate clear advantages over
 existing approaches.
 
-# Question
+## Question
 
 In light of your assessment, which kind of research or development effort would
 be more helpful in 1. probing the most apparent challenges of the project
@@ -1532,7 +1534,7 @@ be more helpful in 1. probing the most apparent challenges of the project
 multi-fidelity models) and 2. creating small-scale design and implementation
 prototypes as a starting point for incremental development?
 
-# Response
+## Response
 
 To provide precise recommendations for research and development efforts:
 
@@ -1548,7 +1550,7 @@ To provide precise recommendations for research and development efforts:
 
 Let me know your preferences so I can provide the most targeted insights.
 
-# Question
+## Question
 
 To 1. A. Yes, a deeper dive into the currently available methods and implementations that can bridge graph <-> quantum <-> ensemble representations would be most helpful.
 B. Yes, it would be good to have a simple implementation of a multi-fidelity model for chemical systems. To make it more concrete, one possible example would be a multi-fidelity model including a graph representation (pure topology) and the corresponding conformers (3D structures including stereochemistry).
@@ -1558,13 +1560,13 @@ B. Yes, an experimental study on a set of molecular structures would be the best
 C. I am flexible on whether software design or a working implementation is most important. I am happy to start with examples. Hopefully, that will help inform the design decisions.
 
 
-# Response
+## Response
 
 I will conduct a deep dive into current methods and implementations that bridge molecular graph, quantum, and ensemble representations. Additionally, I will research existing multi-fidelity models in chemistry, particularly focusing on approaches that integrate molecular graphs (topology) with 3D conformers (including stereochemistry). Furthermore, I will explore methodologies relevant to reaction free enthalpy computations based on thermodynamic ensembles, as illustrated in your referenced work.
 
 For the practical aspect, I will look into experimental studies that assess interconversion accuracy and lossy data compression techniques, using systematic molecular datasets that align with reaction network and molecular library generation workflows. This research will provide a foundation for small-scale prototype implementation and guide subsequent design decisions. I'll report back with findings soon.
 
-# Introduction  
+## Introduction  
 Molecules can be represented in multiple complementary ways, each capturing different chemical information. A **2D molecular graph** (atoms and bonds) concisely encodes connectivity (topology) and is widely used for cheminformatics, but lacks explicit stereochemistry or conformational details. A **quantum mechanical (QM) representation** typically involves a 3D geometry with electron distribution (wavefunction) or derived properties, capturing the rich stereochemical and electronic details of a specific conformation. An **ensemble representation** considers the collection of all relevant conformations (conformers) a molecule can adopt at finite temperature, reflecting its thermodynamic flexibility. Bridging these representations is crucial for chemical accuracy and efficiency: for example, converting a 2D graph into a 3D structure (or ensemble of structures) is a prerequisite for QM property calculations and conformational analysis ([
             Conformer Generation for Structure-Based Drug Design: How Many and How Good? - PMC
         ](https://pmc.ncbi.nlm.nih.gov/articles/PMC10647020/#:~:text=Conformer%20generation%2C%20the%20assignment%20of,many%20cases%2C%20our%20findings%20may)) ([

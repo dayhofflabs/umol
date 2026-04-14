@@ -1,4 +1,6 @@
-# Question
+# Molecule Builder API
+
+## Question
 
 I am researching designs for an API for constructing molecular graphs, represented as attributed graphs with node attributes defining atom types and edge attributes describing bond types. What I'm considering right now is a modal and incremental  construction API, which is similar to molecular editor software, for example, ChemDraw. The approach consists of 3 steps:
 * Define active mode (add atoms, add bonds, change atoms, change bonds) and perhaps submode (which atom type, bond type, etc., stereochemical information)
@@ -10,7 +12,7 @@ I'd like you to research the following questions:
 * Can you carefully considered potential designs for this API and critique its ergonomicity? Have similar modal modification APIs been developed in any domains, not necessarily graph- or chemistry-related? 
 * Can you imagine a DSL that is based on this type of grammar? Is it suitable for generative approaches, that is, molecular generation by composing production rules in this grammar? Is it possible to enforce valence rules during construction?
 
-# ChatGPT 4.5 Deep Research
+## ChatGPT 4.5 Deep Research
 
 Your research questions are quite detailed and insightful. To make sure I focus on what’s most relevant for you, could you clarify a few points?
 
@@ -22,7 +24,7 @@ Your research questions are quite detailed and insightful. To make sure I focus 
 
 Let me know how you'd like me to refine the research!
 
-# Question
+## Question
 
 Thank you for the questions:
 * I'm interested in design patterns that can be used in the specific application for molecule construction but am also looking to other areas for inspiration.
@@ -31,13 +33,13 @@ Thank you for the questions:
 * AI-driven molecular design is not a consideration at this point, perhaps in the future.
 * Either static or dynamic enforcement of rules is fine. For what it's worth, I'm thinking of defining atom types such that they encode the number of free valences within the type.
 
-# Response
+## Response
 
 Thanks for the clarification! I'll research potential API designs for molecular graph construction, focusing on modal and incremental approaches inspired by molecular editors. I'll also look into similar API paradigms from other domains, especially fluent APIs, and assess their ergonomics. Additionally, I'll explore the feasibility of formalizing this approach as a grammar, evaluating its suitability for a DSL, its potential for enforcing valence rules, and its role in generative molecular construction.
 
 I'll get back to you with my findings soon!
 
-# Designing a Modal and Incremental Molecular Graph Construction API
+## Designing a Modal and Incremental Molecular Graph Construction API
 
 Building molecular structures programmatically can draw inspiration from how chemists sketch molecules in editors like ChemDraw. A **modal, incremental API** would let developers construct a molecular graph step-by-step (adding atoms, bonds, branches, etc.) in distinct “modes” of operation, much like using different tools in a drawing program. Below, we analyze the ergonomics of such an API, compare it to similar patterns in other domains, explore fluent interface designs (in Rust and Python), discuss formalizing the approach as a grammar or DSL, and examine how valence rules could be enforced during construction.
 
@@ -195,11 +197,11 @@ Designing a modal, incremental API for molecular graph construction involves bal
 - Martin Fowler. *Fluent Interface.* (2005).  ([Fluent interface - Wikipedia](https://en.wikipedia.org/wiki/Fluent_interface#:~:text=In%20software%20engineering%20%2C%20a,1)) ([Fluent interface - Wikipedia](https://en.wikipedia.org/wiki/Fluent_interface#:~:text=Note%20that%20a%20,1))  
 - Jef Raskin. *The Humane Interface.* (2000). 
 
-# Question
+## Question
 
 -- Same as above
 
-# Claude 3.7 Sonnet
+## Claude 3.7 Sonnet
 
 I'll analyze your API concept for molecular graph construction from a functional programming perspective.
 
@@ -266,12 +268,12 @@ The closest analog might be:
 
 What specific aspects of this API design are you most concerned about in terms of ergonomics or expressiveness?
 
-# Question
+## Question
 
 How useful would such an api be? Most of the time people do not construct molecules this way but would it offer advantages for creating valid molecular graphs programmatically, perhaps driven by a textual DSL?
 
-# Response
-# DSL Primitives for Generative Chemistry
+## Response
+## DSL Primitives for Generative Chemistry
 
 Here's a concise mapping of core primitives for a generative chemistry DSL based on your modal construction approach:
 
@@ -346,11 +348,11 @@ apply_template(name, mapping)
 
 This DSL combines the step-by-step molecular construction with higher-level abstractions that support generative approaches while maintaining chemical validity at each step. The operations are composable and can be stacked to create complex molecule generation rules.
 
-# Question
+## Question
 
 -- Same as above
 
-# Gemini 2.0 Flash
+## Gemini 2.0 Flash
 
 Absolutely! Let's dive into the design, ergonomics, and formalization of your molecular graph construction API.
 

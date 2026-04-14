@@ -1,4 +1,6 @@
-# Prompt
+# Molecule builder API
+
+## Prompt
 
 We need first to improve the fluent interface for the builder at this point. One
 of our problems is that adding an atom returns an index, which is not the
@@ -10,7 +12,7 @@ inspiration from similar problems with graph builders or other non-trivial
 fluent interfaces? Or is the fluent interface paradigm just not appropriate
 here? Any additional considerations?
 
-# Response
+## Response
 
 ## Designing a Better Molecule Builder API
 You've identified some key challenges with the current builder API:
@@ -358,7 +360,7 @@ let molecule = result.expect("Failed to build molecule");
 ```
 This hybrid approach provides the best balance of flexibility, usability, and error handling for your molecule builder API.
 
-# Question
+## Question
 
 I don't know if I agree. The #3 seems to align really well with parsing MOL
 files and similar molecular data formats and parallels their approach exactly.
@@ -384,7 +386,7 @@ no rush to finish this implementation. I would rather spend more time on the
 design questions. Please ask any questions you need. And take an extensive look
 at any cheminformatics or other complex domain software that you have access to.
 
-# Response
+## Response
 
 ## Rethinking Molecule Builder API Design: A Deeper Exploration
 
@@ -742,7 +744,7 @@ The design is inspired by successful patterns from other domains while addressin
 
 Would you like me to elaborate on any specific aspect of this design, or would you prefer to focus on implementing a particular part of it?
 
-# Question
+## Question
 
 This is a rich and fertile ground for exploration. I am collecting all the ideas but would like to reason through some more inspirations and examples before proceeding to design and implementation. Let me ask a few questions to kick off the process. Please research each of them carefully in turn first. Let's collect ideas and summarize later. Wide variety of ideas, even very unconventional ones, is most welcome at this stage.
 
@@ -762,7 +764,7 @@ Is it useful to have a set of atom / bond selection commands? Should they be lik
 
 7. Is GraphMoleculeBuilder, etc. too long for a name? Should we rename them to Mol, GraphMol, ... for brevity? Just thinking that it will become very tedious to type out "molecule" all the time, especially with all sorts of variants. I don't like the naming conventions in RDKit but this one may be worth using.
 
-# Response
+## Response
 
 Exploring Molecule Builder API Design: Research and Inspirations
 

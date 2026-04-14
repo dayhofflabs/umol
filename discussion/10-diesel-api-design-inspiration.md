@@ -1,8 +1,10 @@
-# New Thread
+# Diesel API Design
+
+## Query
 
 Separately, you mentioned that Diesel's query builder is using traits to defined query components and is combining traits through type composition. Can you give some more background with specific examples, in particular of type composition patterns?
 
-# Response
+## Response
 
 Diesel, a Rust ORM, uses an elegant type composition pattern based on traits to build its query system. Let me break down how this works with specific examples.
 

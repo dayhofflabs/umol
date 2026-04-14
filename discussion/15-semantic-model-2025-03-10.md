@@ -1,5 +1,7 @@
 # Four-Domains Semantic Model
 
+## Model
+
 The semantic model consists of four domains, each with its own conceptual role and relationships.
 
 * __Structure Domain__. Entities: chemical structures, Relationships: transformations
@@ -36,7 +38,7 @@ The semantic model consists of four domains, each with its own conceptual role a
   - Properties include metadata about calculation methods, uncertainties, and dependencies.
   - Some properties may be associated with ensembles rather than individual structures.
 
-# Previous Three-Graph Semantic Model
+## Previous Three-Graph Semantic Model
 
 The semantic model consists of three sets of entities, each forming a graph structure.
 
@@ -100,7 +102,7 @@ The semantic model consists of three sets of entities, each forming a graph stru
 
   * Suggested by Claude
 
-# Prompt
+## Prompt
 
 We have previously discussed the challenges and opportunities in developing a
 computational framework that bridges multiple molecular representations—namely,
@@ -153,7 +155,7 @@ Rust. No actual implementation proposal is necessatry but I'd like to see how
 well the design fits the Rust idioms. If there is tension, what improvements
 would you suggest for this design?
 
-# Response (Cursor, Claude 3.7 Sonnet)
+## Response (Cursor, Claude 3.7 Sonnet)
 
 ## Analysis of the Semantic Model for Molecular Representation Framework
 
@@ -355,11 +357,11 @@ The proposed semantic model provides a solid foundation for a flexible molecular
 
 Would you like me to elaborate on any specific aspect of this analysis or discuss additional use cases that might stress-test the design?
 
-# Question
+## Question
 
 Could you please discuss the use cases you proposed above within the context of this semantic model? Do they uncover additional weak points or require adjustments to the model?
 
-# Response
+## Response
 
 ## Analysis of Additional Use Cases for the Semantic Model
 
@@ -449,11 +451,11 @@ These additional use cases highlight several areas where the semantic model coul
 
 These enhancements would make the semantic model more robust and flexible, better able to support a wide range of chemical informatics workflows. The core three-graph structure remains sound, but these refinements would address potential weak points revealed by the additional use cases.
 
-# Question
+## Question
 
 Let's additionally reason through the blurry boundary between model and structure graphs. Based on our conversation thus far, do you see a principled approach that allows to cleanly separate these concerns? Or is it best to explicitly acknowledge the uncertainty and provide conversions between specific combinations of structures and models? I do not particularly like the entanglement of the structure and model concept, even if it's potentially unavoidable. It does make composition much more complex. Can the three-graph model be modified to better take the structure-model uncertainty into consideration?
 
-# Response
+## Response
 
 ## Addressing the Structure-Model Boundary in the Semantic Model
 
@@ -586,11 +588,11 @@ This approach would modify your semantic model to make the structure-model relat
 
 The key insight is that separating the abstract concepts (Structure Graph and Model Graph) from their concrete instantiations (Instance Graph) allows you to maintain conceptual clarity while dealing with the practical reality that chemical computations always involve both a structure and a model.
 
-# Question
+## Question
 
 An aspect of the three-graph model that I don't think was sufficiently discussed is that one can consider the models to form an algebra with two operations: ensemble and aggregate. An ensemble model is a set of models (e.g., graph models) that generate properties as a (weighted) average from the individual models. This concept is not dependent on whether the component models have a physical reality or not: it can be equally applied to resonance models (no distinct physical reality at typical chemical timescales) and protonation states of a molecule in solution (distinct chemical entities but subject to a fast equilibrium under typical conditions). An aggregate model is a set of models (e.g., three-dimensional structures) that generate properties as a (weighted) sum from the individual models.  An example is the reaction between two molecules. Can you critically examine this proposal and evaluate if it help to clarify the structure--model boundary?
 
-# Response
+## Response
 
 ## Examining Model Algebra in the Four-Domain Semantic Model
 

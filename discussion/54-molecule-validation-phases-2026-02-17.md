@@ -1,11 +1,13 @@
-# Resolution phases
+# Molecule Resolution
+
+## Resolution phases
 
 1. Topology
 2. Valence
 3. Aromaticity
 4. Stereo
 
-# Molecule information by phase
+## Molecule information by phase
 
 | Item                      | Input | Topology | Valence | Aromaticity | Stereo | Notes                                                                                     | TODO |
 | ------------------------- | ----- | -------- | ------- | ----------- | ------ | ----------------------------------------------------------------------------------------- | ---- |

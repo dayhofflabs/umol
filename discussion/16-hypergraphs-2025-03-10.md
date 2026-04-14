@@ -1,4 +1,6 @@
-# Prompt
+# Hypergraphs
+
+## Prompt
 
 Could you please give an overview of the current state of the art in the theory
 and algorithms in hypergraphs? Are there efficient algorithms for performing
@@ -7,9 +9,9 @@ library for storing, searching, and manipulating hypergraphs? For reference: I'm
 mostly interested in relatively small hypergraphs (~ 50 nodes) with bounded
 number of hyperedges per node.
 
-# Claude 3.7 Sonnet
+## Claude 3.7 Sonnet
 
-# Hypergraph Theory and Algorithms: State of the Art
+## Hypergraph Theory and Algorithms: State of the Art
 
 ## Theoretical Foundations
 - **Generalized graph properties**: Recent work extends classic graph properties to hypergraphs (coloring, matching, connectivity)
@@ -42,7 +44,7 @@ For your scale (~50 nodes with bounded hyperedges per node):
 
 Would you like me to elaborate on any particular aspect of hypergraph theory or algorithms?
 
-# Question
+## Question
 
 Please discuss the existing representations of hypergraphs in memory and the
 subhypergraph searching algorithms in principle. Include literature references
@@ -53,7 +55,7 @@ more questions: Are there  equivalents of the graph-grammar (single- or
 double-pushout algorithms) for hypergraphs? Are there compact notations for
 hypergraphs in ASCII?
 
-# Hypergraph Representations & Algorithms
+## Hypergraph Representations & Algorithms
 
 ## Memory Representations
 
@@ -140,7 +142,7 @@ v5: e3
 }
 ```
 
-# Prompt
+## Prompt
 
 Could you please give an overview of the current state of the art in the theory
 and algorithms in hypergraphs? Are there efficient algorithms for performing
@@ -156,7 +158,7 @@ petgraph-based Rust implementation? Two more questions: Are there  equivalents
 of the graph-grammar (single- or double-pushout algorithms) for hypergraphs? Are
 there compact notations for hypergraphs in ASCII?
 
-# ChatGPT 4.5
+## ChatGPT 4.5
 
 Hypergraphs, which generalize traditional graphs by allowing hyperedges to connect any number of vertices, have become essential in modeling complex relationships across various domains. Here's an overview addressing your specific interests:
 

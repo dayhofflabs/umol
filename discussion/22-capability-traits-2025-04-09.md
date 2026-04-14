@@ -1,21 +1,23 @@
-# Prompt (o3-mini-high, Deep Research)
+# Capability Traits
+
+## Prompt (o3-mini-high, Deep Research)
 
 I am looking to design a system of capabilities for computational models in Rust. Models can perform computations of properties based on capabilities. The relationships are thus as follows:
 A model M is a concrete type implements the Model trait; property P implements the Property<M> trait, which enables the user to call the P::compute(&m) property, passing in a reference to the instance m of M. The computation of the property P depends on one or more capabilities C that model M must possess. The capabilities C can in turn depend on each other, that is capability C1 requires C2 and C3 to be implemented, etc. The set of capabilities should also be open-ended, allowing users (or model developers) to define new capabilities. Now, my question: How should capabilities be represented? The most obvious method is through traits. But how would one express the interdependencies of capabilities, while keeping the system open-ended and manageable? Please give short concrete examples, ideally in Rust code. I'd prefer standard, stable features (not-nightly dependent) if possible. Also, please limit the amount of text to an absolute minimum.
 
-# Response
+## Response
 
 Just to confirm before giving code: Would you like capabilities to be dynamically composable at runtime (like plugin systems), or is compile-time trait-based composition sufficient for your use case? Also, should capabilities allow default method implementations, or only act as compile-time interface markers?
 
-# Reply
+## Reply
 
 Compile-time definitions should be fine. Default implementations are not necessary although that's a good idea.
 
-# Response
+## Response
 
 Thanks! I’ll put together a minimal example of how to define capabilities as traits, model interdependencies via trait bounds, and keep the system extensible—all using stable Rust features. I’ll keep it concise and focused on what you need.
 
-# Rust Trait-Based Capability System
+## Rust Trait-Based Capability System
 
 To model capabilities and properties in Rust, we can use **traits** for each capability and enforce their requirements via trait bounds. Below is a minimal, concrete example showing how models, capabilities, and properties interrelate at compile time.
 
@@ -143,11 +145,11 @@ In the code above, computing `density_prop` for `ball` works because `Ball` impl
 
 This design ensures that **capability requirements are checked at compile time**. New models can be added freely by implementing the needed traits, and new capabilities or properties can be introduced in a modular way, all while leveraging Rust’s trait bounds to enforce correct usage.
 
-# Reply
+## Reply
 
 In this approach, all Capabilities are traits, which is good. How can I create a clear distinction between capability traits and other traits. Would I create a Capability base trait and define all Capabilities as subtraits of it?
 
-# Response
+## Response
 
 Yes. One common approach is to introduce a marker trait (for example, `Capability`) and then have all capability traits extend it. This provides a clear, compile‐time way to distinguish capability traits from others. Here’s a minimal example:
 
@@ -199,11 +201,11 @@ fn main() {
 
 In this design, all capabilities are clearly identified by being subtraits of `Capability`. This keeps them distinct from other types of traits.
 
-# Reply
+## Reply
 
 With this setup, is it possible to probe the capabilities of a model?
 
-# Response
+## Response
 
 With the static, generic setup, a type’s capabilities are enforced at compile time rather than being “probeable” at runtime. In other words, if a model type is generic over a trait bound (e.g. `M: HasDensity`) the compiler ensures the capability is present. However, if you need to inspect (or “probe”) which capabilities a model has at runtime, you’d have to add extra machinery.
 
@@ -338,13 +340,13 @@ fn main() {
 
 In practice, if your system only needs compile-time guarantees, the static approach is simpler and more idiomatic in Rust. Use runtime probing only when you really need dynamic introspection of a model’s capabilities.
 
-# Prompt (Gemini 2.5 Pro)
+## Prompt (Gemini 2.5 Pro)
 
 I am looking to design a system of capabilities for computational models in Rust. Models can perform computations of properties based on capabilities. The relationships are thus as follows:
 
 A model M is a concrete type implements the Model trait; property P implements the Property<M> trait, which enables the user to call the P::compute(&m) property, passing in a reference to the instance m of M. The computation of the property P depends on one or more capabilities C that model M must possess. The capabilities C can in turn depend on each other, that is capability C1 requires C2 and C3 to be implemented, etc. The set of capabilities should also be open-ended, allowing users (or model developers) to define new capabilities. Now, my question: How should capabilities be represented? The most obvious method is through traits. But how would one express the interdependencies of capabilities, while keeping the system open-ended and manageable? Please give short concrete examples, ideally in Rust code. I'd prefer standard, stable features (not-nightly dependent) if possible. It would be good, but not strictly necessary to be able to retrieve the traits of a model at runtime.
 
-# Response
+## Response
 
 Okay, let's break down how to design this capability system in Rust using stable features, focusing on traits and supertraits for dependency management.
 

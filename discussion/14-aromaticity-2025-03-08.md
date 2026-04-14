@@ -1,4 +1,6 @@
-# Prompt
+# Aromaticity Treatment
+
+## Prompt
 
 We have previously discussed the challenges and opportunities in developing a
 computational framework that bridges multiple molecular representations—namely,
@@ -48,7 +50,7 @@ canonicalization look like?
 
 Please ask clarifying questions if necessary and provide references where appropriate.
 
-# State of the Art in Aromaticity Representation
+## State of the Art in Aromaticity Representation
 
 ## Current Approaches to Aromaticity Perception
 
@@ -159,7 +161,7 @@ The most promising developments combine:
 
 5. Kruszewski, J., & Krygowski, T. M. (1972). Definition of aromaticity basing on the harmonic oscillator model. Tetrahedron Letters, 13(36), 3839-3842.
 
-# Question
+## Question
 
 In the planned framework, I would like to emphasize two key aspects of molecular
 structure:
@@ -185,7 +187,7 @@ graph-based representations of aromatic molecules? Please include the
 possibility of including an ensemble of graphs instead of a single graph. Ask
 clarifying questions if necessary,
 
-# Graph-Based Representations for Aromatic Molecules
+## Graph-Based Representations for Aromatic Molecules
 
 ## Analyzing the Multi-View Challenge
 
@@ -293,7 +295,7 @@ This approach preserves the strong typing advantage while accurately representin
 
 Would you like me to elaborate on any specific aspect of this hybrid approach? In particular, I could discuss how transformations would operate on this representation or how canonicalization might work.
 
-# Question
+## Question
 
 Yes, please, I would like to hear more details about this approach. Two notes:
 1. I'm not particularly concerned about interfacing with the existing
@@ -307,7 +309,7 @@ molecular transformations, including reactions, would work here. Would the
 matching system need to be extended (beyond the current capabilities, which are
 essentially SMARTS with some extensions)?
 
-# Implementing Ensembles for Aromatic Molecular Representations
+## Implementing Ensembles for Aromatic Molecular Representations
 
 ## Implicit Structure Generation
 
@@ -420,7 +422,7 @@ The weights of structures in the ensemble can be calibrated to match electron de
 
 This approach effectively balances the strong typing system you proposed with the inherent electron delocalization of aromatic systems, while maintaining practical computational efficiency through implicit structure generation.
 
-# Question
+## Question
 
 Can you carefully and critically examine the proposal, the outlines of which we just
 worked out together? The points to consider:
@@ -442,7 +444,7 @@ worked out together? The points to consider:
    of creating a more rigorous but still practical framework for molecular
    representation?
 
-# Critical Analysis of the Proposed Molecular Ensemble Representation
+## Critical Analysis of the Proposed Molecular Ensemble Representation
 
 ## 1. Precedents and R&D Requirements
 
@@ -552,9 +554,9 @@ I would cautiously undertake this project with a phased approach:
 
 The concept has significant potential for advancing molecular modeling theory, particularly for aromaticity and reaction mechanisms, but would require substantial commitment and a clear understanding of the performance tradeoffs involved.
 
-# Question
+## Question
 
-# A Staged Implementation Approach for Aromaticity in Strongly Typed Molecular Representations
+## A Staged Implementation Approach for Aromaticity in Strongly Typed Molecular Representations
 
 ## Hybrid Model as a Transitional Framework
 

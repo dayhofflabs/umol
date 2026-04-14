@@ -50,10 +50,11 @@ petgraph is the default Rust graph library. Benchmarks show it is sufficient for
 ## Better designs in the literature
 
 - **Compressed Sparse Row (CSR/CSC)**: optimal for static graphs with iteration-heavy workloads. One contiguous slice per vertex for neighbor access. This is what the Morgan benchmark validated.
-- **LEDA / GraphTool (C++)**: separate topology from attributes. GraphTool uses contiguous arrays internally.
-- **Ligra / GBBS (MIT, Shun & Blelloch)**: parallel graph algorithms over compressed sparse representations. Edge-map/vertex-map primitives.
+- **LEDA / GraphTool (C++)**: separate topology from attributes. GraphTool uses contiguous arrays internally (relies on Boost for VF2). https://leda.uni-trier.de /, https://graph-tool.skewed.de
+- **Ligra / GBBS (MIT, Shun & Blelloch)**: parallel graph algorithms over compressed sparse representations. Edge-map/vertex-map primitives. https://github.com/ParAlg/gbbs
 - **Graphs.jl (Julia)**: clean interface/storage separation. `SimpleGraph` is `Vector{Vector{Int}}` with no abstraction tax.
 - **ECS pattern (game engines)**: topology in one array, atom data in parallel array, bond data in parallel array. Same index space. This is effectively what `MorganTargetOpt` does.
+- **BYO**: benchmark suite, not an impl. https://github.com/wheatman/BYO
 
 ## What molecular graphs need
 

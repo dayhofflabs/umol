@@ -1,8 +1,10 @@
-# Summary
+# Alternative stacks
+
+## Summary
 
 * Informational
 
-# Implementation discussion
+## Implementation discussion
 
 ## Me
 

@@ -1,8 +1,10 @@
-# Prompt
+# Torch API design
+
+## Prompt
 
 In a separate thread, we are working on the API design for creating ergonomic builders for complex hierarchical objects. Here my objective is a modern molecular input API. We are discussing the namespaced modules design strategy, as implemented by Tensorflow and PyTorch, with core functionality in the main namespace and specialized builders in submodules. An example you gave is tf.keras vs tf.data vs tf.nn. Can you dive deeper into the design decisions used in PyTorch (just to pick one) and the NN building workflows they enable? Don't worry about the molecular example; I'm still doing research at this point and am not directly interested in specific suggestions. Please give as much detail on the design and the ergonomics of the PyTorch API as possible.
 
-# Response
+## Response
 
 PyTorch's API design follows a carefully considered hierarchical structure that balances usability with organization. Let me analyze its key design principles:
 
@@ -73,10 +75,10 @@ model = nn.Sequential(
 
 3. Explicit over implicit: Operations are explicit and avoid "magic":
 ```python
-# Explicit forward pass
+## Explicit forward pass
 output = model(input)
 
-# Explicit optimization step
+## Explicit optimization step
 loss = criterion(output, target)
 optimizer.zero_grad()
 loss.backward()
@@ -138,7 +140,7 @@ class DynamicNet(nn.Module):
 
 1. Named dimensions: PyTorch tensors are dimension-agnostic but libraries like einops extend them:
 ```python
-# With einops
+## With einops
 from einops import rearrange
 batch = rearrange(tensor, 'b c h w -> b (c h w)')
 ```

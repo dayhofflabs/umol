@@ -1,4 +1,4 @@
-# General
+# Cheminformatics Libraries
 
 ## [Awesome Cheminformatics](https://github.com/hsiaoyi0504/awesome-cheminformatics)
 
@@ -22,7 +22,7 @@ The command line Python scripts based on AutoDock Vina provide functionality for
 * Performing rigid and flexible docking
 * Scoring molecules
 
-# Python tools of interest
+## Python tools of interest
 
 ## [CGRtools](https://github.com/cimm-kzn/CGRtools)
 
@@ -34,7 +34,7 @@ Condensed Graph of Reaction (CGR) -> Is this the same as bond shift graph?
 
 * Fork of CGRtools
 
-# C++
+## C++
 
 ## [CDPKit](https://cdpkit.org)
 
@@ -54,7 +54,7 @@ CDPKit comes bundled with a set of ready-to-use command line tools and GUI appli
 * Molecule building seems to use a deferred approach (set_modified, _partially_built flags)
 * Uses atom indices ("numbers") to manipulate molecules.
 
-# Julia
+## Julia
 
 ## [MolecularGraph.jl](https://github.com/mojaie/MolecularGraph.jl)
 
@@ -121,7 +121,7 @@ Properties are recomputed only when needed
 
 ### Validation seems to be using callbacks
 
-# Rust
+## Rust
 
 ## [molecule.rs](https://github.com/rapodaca/molecule.rs)
 
@@ -169,7 +169,7 @@ Properties are recomputed only when needed
 * Bonds can be single, double, up, down, ... seems to be borrowed from RDKit.
 * Has [SMILES parser](https://github.com/molrs/molrs-core/blob/main/src/molecule.rs) and some formatter.
 
-# OCaml
+## OCaml
 
 ## [consent](https://github.com/UnixJunkie/consent)
 
@@ -266,7 +266,7 @@ type Formula = Map[Isotope,Int]
 * Error handling using scalaz::Validation (similar to Either)
 
 
-# Haskell
+## Haskell
 
 ## [smiles](https://github.com/zmactep/smiles)
 

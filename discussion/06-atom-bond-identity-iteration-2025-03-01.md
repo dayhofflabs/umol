@@ -1,18 +1,20 @@
-# Summary
+# Atom and bond value types
+
+## Summary
 
 * Value types for atom and bond types
 * Graph-centric API design always returns an atom index + atom type / bond index + bond type
 * Possible to create several convenience layers based on the graph-centric API
 * Molecule builder accepts atom type, returns atom index, same for bonds
 
-# Prompt
+## Prompt
 Let's now reason through the identity and equality properties the GraphAtom and GraphBond types. These are value types with derived equality, which, in my understanding, means that every C atom (with the same change, ....) and every double bond, say, are not just equal but identical, correct? This is not quite consistent with the semantics of atom definitions in molecular graph definitions, in which atoms are distinguishable. Since the atoms are included in the graph data structure, it may be ok; in the end, the connectivity information makes the atoms distinct. However, I'm concerned that an atom itself does not have information about its environment. How can the API be designed so that one can always determine the environment whenever one is considering a given atom? Several scenarios come to mind:
 * Iterating over all atoms
 * Matching atoms / substructures and iterating over all atoms in them
 There may be other cases but for now those are the most important ones. Can we achieve that with an appropriate iteration API design?
 In RDKit, this is solved by having backlinks, which is complicated, brittle, and sort of unphysical. Semantically, the idea that a carbon atom is a carbon atom is right, only the environment makes them different. I was considering including an (optional) atom index and/or bond index but that suffers from the same problems as backlinks (circular dependencies, non-atomic operations, need to update properties all the time) so I would rather avoid them. But what other problems can you envision here
 
-# Answer
+## Answer
 
 ## Atom Identity and Environment in Molecular Graphs
 
@@ -133,11 +135,11 @@ For substructure matching, the result would be a mapping of pattern atom indices
 
 This approach aligns with Rust's ownership model and allows for clear reasoning about the lifetime of references to atoms and bonds.
 
-# Question
+## Question
 
 Ok, this is great. I really like the approach of #1 and #2 as convenience layer. Moreover, #3 and #4 are built on top of #1, correct? In that case, it should always be possible to add them at a later stage.
 
-# Response
+## Response
 
 You're absolutely right. Approaches #3 (Visitor Pattern) and #4 (Functional Approach) are indeed built on top of the graph-centric API design (#1). They're essentially different ways to utilize the core functionality provided by #1.
 This layered approach gives you several advantages:
@@ -152,11 +154,11 @@ The implementation priority I would recommend is:
 3. Later, if needed, add the visitor pattern (#3) and functional approaches (#4)
 This incremental approach allows you to get a working system quickly while leaving room for more sophisticated APIs as your library evolves.
 
-# Question
+## Question
 
 To clarify, the bond definition should behave the same way, that is, a double bond is a double bond (no reference to the type of atoms, maybe should do that?) and the iterators should be defined to return  a pair of atoms and a bond object, correct?
 
-# Response
+## Response
 
 You're right about the bond definition. Following the same principles we discussed for atoms, bonds should also be treated as value types without references to their connected atoms. This maintains the clean separation of concerns and avoids circular references.
 
