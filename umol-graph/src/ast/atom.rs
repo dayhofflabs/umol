@@ -86,6 +86,13 @@ impl AtomAst {
             && self.aromatic_valence.is_ground()
             && self.multicenter_valence.is_ground()
     }
+
+    pub fn charge_or_zero(&self) -> i8 {
+        match &self.charge {
+            ValueAst::Lit(n) => *n as i8,
+            _ => 0,
+        }
+    }
 }
 
 impl Ast for AtomAst {

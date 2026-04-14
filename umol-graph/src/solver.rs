@@ -7,7 +7,9 @@ use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
+use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
+use crate::ast::matcher::Assignment;
 use crate::ast::molecule::MoleculeAst;
 use crate::atom::{AromaticValence, IsotopeMass};
 use crate::graph_ir::atom::Atom;
@@ -69,6 +71,23 @@ impl Solver {
         }
     }
 
+    pub fn filter(
+        &self,
+        _query: &MoleculeAst,
+        target: &MoleculeAst,
+        assignments: Vec<Assignment>,
+    ) -> Vec<Assignment> {
+        assignments
+            .into_iter()
+            .filter(|a| {
+                a.0.iter().all(|&t_idx| {
+                    self.valence
+                        .validate(&target.atoms[AtomIdx(t_idx)], target, t_idx)
+                })
+            })
+            .collect()
+    }
+
     pub fn validate(&self, ast: &MoleculeAst) -> Solution<()> {
         for (i, atom) in ast.atoms.iter().enumerate() {
             if !self.valence.validate(atom, ast, i) {
@@ -94,12 +113,13 @@ impl ValenceStrategy {
                 ElementAst::Lit(e) => e,
                 _ => continue,
             };
-            let Some(valence) = bond_order_sum(ast, i) else {
+            let atom_idx = AtomIdx(i);
+            let Some(valence) = ast.bond_order_sum(atom_idx) else {
                 continue;
             };
-            let charge = extract_charge(&ast.atoms[i]);
-            let (donated_pairs, accepted_pairs) = dative_bond_order_sums(ast, i);
-            let is_aromatic = is_in_aromatic_system(ast, i);
+            let charge = ast.atoms[i].charge_or_zero();
+            let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(atom_idx);
+            let is_aromatic = ast.is_in_aromatic_system(atom_idx);
 
             let candidates = match self {
                 Self::AtomTyping { registry } => atom_typing_candidates(
@@ -146,12 +166,13 @@ impl ValenceStrategy {
             ElementAst::Lit(e) => e,
             _ => return true, // non-ground element: can't validate, pass through
         };
-        let Some(valence) = bond_order_sum(ast, atom_index) else {
+        let atom_idx = AtomIdx(atom_index);
+        let Some(valence) = ast.bond_order_sum(atom_idx) else {
             return true;
         };
-        let charge = extract_charge(atom);
-        let (donated_pairs, accepted_pairs) = dative_bond_order_sums(ast, atom_index);
-        let is_aromatic = is_in_aromatic_system(ast, atom_index);
+        let charge = atom.charge_or_zero();
+        let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(atom_idx);
+        let is_aromatic = ast.is_in_aromatic_system(atom_idx);
 
         let candidates = match self {
             Self::AtomTyping { registry } => {
@@ -174,49 +195,6 @@ impl ValenceStrategy {
         };
 
         !candidates.is_empty()
-    }
-}
-
-fn bond_order_sum(ast: &MoleculeAst, atom_index: usize) -> Option<u8> {
-    let mut sum: u8 = 0;
-    for bond in &ast.bonds {
-        if bond.source == atom_index || bond.target == atom_index {
-            match bond.bond.order {
-                ValueAst::Lit(n) => sum += n as u8,
-                _ => return None,
-            }
-        }
-    }
-    Some(sum)
-}
-
-fn dative_bond_order_sums(ast: &MoleculeAst, atom_index: usize) -> (u8, u8) {
-    let mut donated: u8 = 0;
-    let mut accepted: u8 = 0;
-    for bond in &ast.dative_bonds {
-        let order = match bond.bond.order {
-            ValueAst::Lit(n) => n as u8,
-            _ => continue,
-        };
-        if bond.source == atom_index {
-            donated += order;
-        } else if bond.target == atom_index {
-            accepted += order;
-        }
-    }
-    (donated, accepted)
-}
-
-fn is_in_aromatic_system(ast: &MoleculeAst, atom_index: usize) -> bool {
-    ast.aromatic_systems
-        .iter()
-        .any(|sys| sys.atoms.contains(&atom_index))
-}
-
-fn extract_charge(atom: &AtomAst) -> i8 {
-    match &atom.charge {
-        ValueAst::Lit(n) => *n as i8,
-        _ => 0,
     }
 }
 
@@ -645,21 +623,23 @@ mod tests {
     use crate::ast::molecule::BondTuple;
     use crate::registry;
 
+    use crate::ast::matcher::Assignment;
+
     fn atom(e: Element) -> AtomAst {
         AtomAst::from_element(e)
     }
 
     fn bond(source: usize, target: usize, order: u8) -> BondTuple {
         BondTuple {
-            source,
-            target,
+            source: AtomIdx(source),
+            target: AtomIdx(target),
             bond: BondAst::from_order(order),
         }
     }
 
     fn h2() -> MoleculeAst {
         MoleculeAst {
-            atoms: vec![atom(Element::H), atom(Element::H)],
+            atoms: vec![atom(Element::H), atom(Element::H)].into(),
             bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         }
@@ -690,7 +670,7 @@ mod tests {
             },
         };
         let mut ast = MoleculeAst {
-            atoms: vec![atom(Element::C)],
+            atoms: vec![atom(Element::C)].into(),
             ..Default::default()
         };
         let result = solver.resolve(&mut ast);
@@ -709,7 +689,7 @@ mod tests {
     fn test_solver_resolve_wildcard_element_underdetermined() {
         let solver = Solver::default();
         let mut ast = MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Undetermined)],
+            atoms: vec![AtomAst::new(ElementAst::Undetermined)].into(),
             ..Default::default()
         };
         let result = solver.resolve(&mut ast);
@@ -743,7 +723,7 @@ mod tests {
             },
         };
         let mut ast = MoleculeAst {
-            atoms: vec![atom(Element::C)],
+            atoms: vec![atom(Element::C)].into(),
             ..Default::default()
         };
         let result = solver.resolve(&mut ast);
@@ -773,7 +753,7 @@ mod tests {
     fn test_solver_validate_non_ground() {
         let solver = Solver::default();
         let ast = MoleculeAst {
-            atoms: vec![atom(Element::C)],
+            atoms: vec![atom(Element::C)].into(),
             ..Default::default()
         };
         let result = solver.validate(&ast);
@@ -783,13 +763,13 @@ mod tests {
 
     #[rstest]
     #[case::no_bonds(
-        MoleculeAst { atoms: vec![atom(Element::C)], ..Default::default() },
+        MoleculeAst { atoms: vec![atom(Element::C)].into(), ..Default::default() },
         0,
         Some(0),
     )]
     #[case::single_bond(
         MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::C)],
+            atoms: vec![atom(Element::C), atom(Element::C)].into(),
             bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         },
@@ -798,7 +778,7 @@ mod tests {
     )]
     #[case::double_bond_sum(
         MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::O)],
+            atoms: vec![atom(Element::C), atom(Element::O)].into(),
             bonds: vec![bond(0, 1, 2)],
             ..Default::default()
         },
@@ -807,8 +787,8 @@ mod tests {
     )]
     #[case::non_ground_bond(
         MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::O)],
-            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::new(ValueAst::Undetermined) }],
+            atoms: vec![atom(Element::C), atom(Element::O)].into(),
+            bonds: vec![BondTuple { source: AtomIdx(0), target: AtomIdx(1), bond: BondAst::new(ValueAst::Undetermined) }],
             ..Default::default()
         },
         0,
@@ -819,6 +799,28 @@ mod tests {
         #[case] atom_index: usize,
         #[case] expected: Option<u8>,
     ) {
-        assert_eq!(bond_order_sum(&ast, atom_index), expected);
+        assert_eq!(ast.bond_order_sum(AtomIdx(atom_index)), expected);
+    }
+
+    #[test]
+    fn test_solver_filter_all_valid() {
+        let solver = Solver {
+            valence: ValenceStrategy::AtomTyping {
+                registry: registry!["H #v"],
+            },
+        };
+        let mut target = h2();
+        solver.resolve(&mut target);
+        let assignments = vec![Assignment(vec![0, 1])];
+        let result = solver.filter(&MoleculeAst::default(), &target, assignments.clone());
+        assert_eq!(result, assignments);
+    }
+
+    #[test]
+    fn test_solver_filter_empty() {
+        let solver = Solver::default();
+        let target = MoleculeAst::default();
+        let result = solver.filter(&MoleculeAst::default(), &target, vec![]);
+        assert_eq!(result, vec![]);
     }
 }

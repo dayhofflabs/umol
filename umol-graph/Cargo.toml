@@ -72,6 +72,7 @@ umol-shared = { path = "../umol-shared", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3", "xxh3"] }
 bimap = "0.6.3"
+index_vec = "0.1.4"
 
 [build-dependencies]
 walkdir = "2.5.0"

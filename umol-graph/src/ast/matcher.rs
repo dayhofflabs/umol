@@ -4,7 +4,9 @@ use petgraph::algo::subgraph_isomorphisms_iter;
 use petgraph::graph::Graph;
 use petgraph::Directed;
 
+use crate::ast::AtomIdx;
 use crate::ast::molecule::{AromaticSystem, BondTuple, MoleculeAst, MulticenterBond};
+use crate::solver::Solver;
 
 /// Query atom index → target atom index mapping.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,8 +28,8 @@ fn build_graph(ast: &MoleculeAst) -> Graph<usize, usize, Directed> {
     let mut graph = Graph::with_capacity(ast.atoms.len(), ast.bonds.len() * 2);
     let nodes: Vec<_> = (0..ast.atoms.len()).map(|i| graph.add_node(i)).collect();
     for (bond_idx, bond) in ast.bonds.iter().enumerate() {
-        graph.add_edge(nodes[bond.source], nodes[bond.target], bond_idx);
-        graph.add_edge(nodes[bond.target], nodes[bond.source], bond_idx);
+        graph.add_edge(nodes[bond.source.0], nodes[bond.target.0], bond_idx);
+        graph.add_edge(nodes[bond.target.0], nodes[bond.source.0], bond_idx);
     }
     graph
 }
@@ -39,6 +41,10 @@ impl<'a> MatchTarget<'a> {
             ast,
         }
     }
+
+    pub fn ast(&self) -> &MoleculeAst {
+        self.ast
+    }
 }
 
 impl<'a> MatchQuery<'a> {
@@ -47,6 +53,10 @@ impl<'a> MatchQuery<'a> {
             graph: build_graph(ast),
             ast,
         }
+    }
+
+    pub fn ast(&self) -> &MoleculeAst {
+        self.ast
     }
 }
 
@@ -86,6 +96,13 @@ pub fn find_matches(query: &MatchQuery, target: &MatchTarget) -> Vec<Assignment>
         .collect()
 }
 
+/// Find all substructure matches of `query` in `target`, then post-filter
+/// through the solver's valence validation.
+pub fn find_matches_with(query: &MatchQuery, target: &MatchTarget, solver: &Solver) -> Vec<Assignment> {
+    let assignments = find_matches(query, target);
+    solver.filter(query.ast, target.ast, assignments)
+}
+
 fn post_filter(query: &MoleculeAst, target: &MoleculeAst, assignment: &[usize]) -> bool {
     check_directed_bonds(&query.dative_bonds, &target.dative_bonds, assignment)
         && check_directed_bonds(&query.noncovalent_bonds, &target.noncovalent_bonds, assignment)
@@ -99,11 +116,11 @@ fn check_directed_bonds(
     assignment: &[usize],
 ) -> bool {
     query_bonds.iter().all(|qb| {
-        let mapped_source = assignment[qb.source];
-        let mapped_target = assignment[qb.target];
+        let mapped_source = assignment[qb.source.0];
+        let mapped_target = assignment[qb.target.0];
         target_bonds.iter().any(|tb| {
-            tb.source == mapped_source
-                && tb.target == mapped_target
+            tb.source.0 == mapped_source
+                && tb.target.0 == mapped_target
                 && qb.bond.matches_ground(&tb.bond)
         })
     })
@@ -115,25 +132,25 @@ fn check_group_subset<T: HasAtoms>(
     assignment: &[usize],
 ) -> bool {
     query_groups.iter().all(|qg| {
-        let mapped: Vec<usize> = qg.atoms().iter().map(|&a| assignment[a]).collect();
+        let mapped: Vec<usize> = qg.atoms().iter().map(|&a| assignment[a.0]).collect();
         target_groups
             .iter()
-            .any(|tg| mapped.iter().all(|m| tg.atoms().contains(m)))
+            .any(|tg| mapped.iter().all(|m| tg.atoms().iter().any(|a| a.0 == *m)))
     })
 }
 
 trait HasAtoms {
-    fn atoms(&self) -> &[usize];
+    fn atoms(&self) -> &[AtomIdx];
 }
 
 impl HasAtoms for AromaticSystem {
-    fn atoms(&self) -> &[usize] {
+    fn atoms(&self) -> &[AtomIdx] {
         &self.atoms
     }
 }
 
 impl HasAtoms for MulticenterBond {
-    fn atoms(&self) -> &[usize] {
+    fn atoms(&self) -> &[AtomIdx] {
         &self.atoms
     }
 }
@@ -156,8 +173,8 @@ mod tests {
 
     fn bond(source: usize, target: usize, order: u8) -> BondTuple {
         BondTuple {
-            source,
-            target,
+            source: AtomIdx(source),
+            target: AtomIdx(target),
             bond: BondAst::from_order(order),
         }
     }
@@ -174,7 +191,7 @@ mod tests {
     #[test]
     fn test_find_matches_single_atom() {
         let mol = MoleculeAst {
-            atoms: vec![atom(Element::C)],
+            atoms: vec![atom(Element::C)].into(),
             ..Default::default()
         };
         assert_eq!(find(&mol, &mol), vec![Assignment(vec![0])]);
@@ -183,7 +200,7 @@ mod tests {
     #[test]
     fn test_find_matches_chain_identity() {
         let mol = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::O)],
+            atoms: vec![atom(Element::C), atom(Element::O)].into(),
             bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
@@ -193,12 +210,12 @@ mod tests {
     #[test]
     fn test_find_matches_substructure() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::C)],
+            atoms: vec![atom(Element::C), atom(Element::C)].into(),
             bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::C), atom(Element::C)],
+            atoms: vec![atom(Element::C), atom(Element::C), atom(Element::C)].into(),
             bonds: vec![bond(0, 1, 1), bond(1, 2, 1)],
             ..Default::default()
         };
@@ -217,11 +234,11 @@ mod tests {
     #[test]
     fn test_find_matches_element_mismatch() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::C)],
+            atoms: vec![atom(Element::C)].into(),
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::N)],
+            atoms: vec![atom(Element::N)].into(),
             ..Default::default()
         };
         assert_eq!(find(&query, &target), vec![]);
@@ -230,12 +247,12 @@ mod tests {
     #[test]
     fn test_find_matches_bond_order_mismatch() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::O)],
+            atoms: vec![atom(Element::C), atom(Element::O)].into(),
             bonds: vec![bond(0, 1, 2)],
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::O)],
+            atoms: vec![atom(Element::C), atom(Element::O)].into(),
             bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
@@ -245,11 +262,11 @@ mod tests {
     #[test]
     fn test_find_matches_wildcard_element() {
         let query = MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Undetermined)],
+            atoms: vec![AtomAst::new(ElementAst::Undetermined)].into(),
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::N)],
+            atoms: vec![atom(Element::C), atom(Element::N)].into(),
             ..Default::default()
         };
         let results = sorted(find(&query, &target));
@@ -262,16 +279,16 @@ mod tests {
     #[test]
     fn test_find_matches_wildcard_bond_order() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::O)],
+            atoms: vec![atom(Element::C), atom(Element::O)].into(),
             bonds: vec![BondTuple {
-                source: 0,
-                target: 1,
+                source: AtomIdx(0),
+                target: AtomIdx(1),
                 bond: BondAst::new(ValueAst::Undetermined),
             }],
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::O)],
+            atoms: vec![atom(Element::C), atom(Element::O)].into(),
             bonds: vec![bond(0, 1, 2)],
             ..Default::default()
         };
@@ -281,14 +298,14 @@ mod tests {
     #[test]
     fn test_find_matches_optional_field_unconstrained() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::C)],
+            atoms: vec![atom(Element::C)].into(),
             ..Default::default()
         };
         let target = MoleculeAst {
             atoms: vec![AtomAst {
                 charge: ValueAst::Lit(-1),
                 ..atom(Element::C)
-            }],
+            }].into(),
             ..Default::default()
         };
         assert_eq!(find(&query, &target), vec![Assignment(vec![0])]);
@@ -300,11 +317,11 @@ mod tests {
             atoms: vec![AtomAst {
                 charge: ValueAst::Lit(-1),
                 ..atom(Element::C)
-            }],
+            }].into(),
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C)],
+            atoms: vec![atom(Element::C)].into(),
             ..Default::default()
         };
         assert_eq!(find(&query, &target), vec![]);
@@ -313,17 +330,17 @@ mod tests {
     #[test]
     fn test_find_matches_dative_bond_direction() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::N), atom(Element::B)],
+            atoms: vec![atom(Element::N), atom(Element::B)].into(),
             dative_bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
         let target_correct = MoleculeAst {
-            atoms: vec![atom(Element::N), atom(Element::B)],
+            atoms: vec![atom(Element::N), atom(Element::B)].into(),
             dative_bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
         let target_reversed = MoleculeAst {
-            atoms: vec![atom(Element::N), atom(Element::B)],
+            atoms: vec![atom(Element::N), atom(Element::B)].into(),
             dative_bonds: vec![bond(1, 0, 1)],
             ..Default::default()
         };
@@ -337,17 +354,17 @@ mod tests {
     #[test]
     fn test_find_matches_noncovalent_bond_direction() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::N), atom(Element::O)],
+            atoms: vec![atom(Element::N), atom(Element::O)].into(),
             noncovalent_bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
         let target_correct = MoleculeAst {
-            atoms: vec![atom(Element::N), atom(Element::O)],
+            atoms: vec![atom(Element::N), atom(Element::O)].into(),
             noncovalent_bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
         let target_reversed = MoleculeAst {
-            atoms: vec![atom(Element::N), atom(Element::O)],
+            atoms: vec![atom(Element::N), atom(Element::O)].into(),
             noncovalent_bonds: vec![bond(1, 0, 1)],
             ..Default::default()
         };
@@ -361,18 +378,18 @@ mod tests {
     #[test]
     fn test_find_matches_aromatic_system_subset() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::C)],
+            atoms: vec![atom(Element::C), atom(Element::C)].into(),
             bonds: vec![bond(0, 1, 1)],
             aromatic_systems: vec![AromaticSystem {
-                atoms: vec![0, 1],
+                atoms: vec![AtomIdx(0), AtomIdx(1)],
             }],
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::C), atom(Element::C)],
+            atoms: vec![atom(Element::C), atom(Element::C), atom(Element::C)].into(),
             bonds: vec![bond(0, 1, 1), bond(1, 2, 1), bond(2, 0, 1)],
             aromatic_systems: vec![AromaticSystem {
-                atoms: vec![0, 1, 2],
+                atoms: vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
             }],
             ..Default::default()
         };
@@ -383,15 +400,15 @@ mod tests {
     #[test]
     fn test_find_matches_aromatic_system_mismatch() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::C)],
+            atoms: vec![atom(Element::C), atom(Element::C)].into(),
             bonds: vec![bond(0, 1, 1)],
             aromatic_systems: vec![AromaticSystem {
-                atoms: vec![0, 1],
+                atoms: vec![AtomIdx(0), AtomIdx(1)],
             }],
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::C)],
+            atoms: vec![atom(Element::C), atom(Element::C)].into(),
             bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
@@ -401,16 +418,16 @@ mod tests {
     #[test]
     fn test_find_matches_multicenter_subset() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::B), atom(Element::H)],
+            atoms: vec![atom(Element::B), atom(Element::H)].into(),
             multicenter_bonds: vec![MulticenterBond {
-                atoms: vec![0, 1],
+                atoms: vec![AtomIdx(0), AtomIdx(1)],
             }],
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::B), atom(Element::H), atom(Element::B)],
+            atoms: vec![atom(Element::B), atom(Element::H), atom(Element::B)].into(),
             multicenter_bonds: vec![MulticenterBond {
-                atoms: vec![0, 1, 2],
+                atoms: vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
             }],
             ..Default::default()
         };
@@ -422,9 +439,9 @@ mod tests {
     fn test_find_matches_multicenter_identity() {
         // B2H6: two 3c-2e bonds sharing the B-B pair
         let query = MoleculeAst {
-            atoms: vec![atom(Element::B), atom(Element::H), atom(Element::B)],
+            atoms: vec![atom(Element::B), atom(Element::H), atom(Element::B)].into(),
             multicenter_bonds: vec![MulticenterBond {
-                atoms: vec![0, 1, 2],
+                atoms: vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
             }],
             ..Default::default()
         };
@@ -434,13 +451,13 @@ mod tests {
                 atom(Element::B), // 1
                 atom(Element::H), // 2 (bridge 1)
                 atom(Element::H), // 3 (bridge 2)
-            ],
+            ].into(),
             multicenter_bonds: vec![
                 MulticenterBond {
-                    atoms: vec![0, 2, 1],
+                    atoms: vec![AtomIdx(0), AtomIdx(2), AtomIdx(1)],
                 },
                 MulticenterBond {
-                    atoms: vec![0, 3, 1],
+                    atoms: vec![AtomIdx(0), AtomIdx(3), AtomIdx(1)],
                 },
             ],
             ..Default::default()
@@ -452,7 +469,7 @@ mod tests {
         for a in &results {
             let mapped: Vec<usize> = vec![a.0[0], a.0[1], a.0[2]];
             let in_single = target.multicenter_bonds.iter().any(|mc| {
-                mapped.iter().all(|m| mc.atoms.contains(m))
+                mapped.iter().all(|m| mc.atoms.iter().any(|a| a.0 == *m))
             });
             assert!(in_single, "assignment {a:?} spans multiple multicenter bonds");
         }
@@ -462,7 +479,7 @@ mod tests {
     fn test_find_matches_empty_query() {
         let query = MoleculeAst::default();
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::N)],
+            atoms: vec![atom(Element::C), atom(Element::N)].into(),
             bonds: vec![bond(0, 1, 1)],
             ..Default::default()
         };
@@ -472,14 +489,32 @@ mod tests {
     #[test]
     fn test_find_matches_no_match() {
         let query = MoleculeAst {
-            atoms: vec![atom(Element::C), atom(Element::C), atom(Element::C)],
+            atoms: vec![atom(Element::C), atom(Element::C), atom(Element::C)].into(),
             bonds: vec![bond(0, 1, 1), bond(1, 2, 1)],
             ..Default::default()
         };
         let target = MoleculeAst {
-            atoms: vec![atom(Element::C)],
+            atoms: vec![atom(Element::C)].into(),
             ..Default::default()
         };
         assert_eq!(find(&query, &target), vec![]);
     }
+
+    #[test]
+    fn test_find_matches_with_identity() {
+        let query = MoleculeAst {
+            atoms: vec![atom(Element::C)].into(),
+            ..Default::default()
+        };
+        let target = MoleculeAst {
+            atoms: vec![atom(Element::C), atom(Element::O)].into(),
+            bonds: vec![bond(0, 1, 2)],
+            ..Default::default()
+        };
+        let solver = Solver::default();
+        let q = MatchQuery::new(&query);
+        let t = MatchTarget::new(&target);
+        assert_eq!(find_matches_with(&q, &t, &solver), find_matches(&q, &t));
+    }
+
 }

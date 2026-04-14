@@ -9,12 +9,14 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
+use umol_graph::ast::AtomIdx;
 use umol_graph::ast::atom::AtomAst;
 use umol_graph::ast::bond::BondAst;
 use umol_graph::ast::config::MoleculeAstConfig;
 use umol_graph::ast::matcher::{find_matches, MatchQuery, MatchTarget};
 use umol_graph::ast::molecule::{BondTuple, MoleculeAst};
 use umol_graph::ast::ToAst;
+use umol_graph::atoms;
 use umol_graph::graph_ir::molecule_builder::MoleculeBuilder;
 use umol_graph::io::smiles::parse_smiles;
 use umol_shared::element::Element;
@@ -71,8 +73,8 @@ fn a(e: Element) -> AtomAst {
 
 fn bt(source: usize, target: usize, bond: BondAst) -> BondTuple {
     BondTuple {
-        source,
-        target,
+        source: AtomIdx(source),
+        target: AtomIdx(target),
         bond,
     }
 }
@@ -80,7 +82,7 @@ fn bt(source: usize, target: usize, bond: BondAst) -> BondTuple {
 // C(C)C(C)N — 5 atoms, 4 single bonds
 fn pattern_branched() -> MoleculeAst {
     MoleculeAst {
-        atoms: vec![a(Element::C), a(Element::C), a(Element::C), a(Element::C), a(Element::N)],
+        atoms: atoms![a(Element::C), a(Element::C), a(Element::C), a(Element::C), a(Element::N)],
         bonds: vec![bt(0, 1, wb()), bt(0, 2, wb()), bt(2, 3, wb()), bt(2, 4, wb())],
         ..Default::default()
     }
@@ -89,7 +91,7 @@ fn pattern_branched() -> MoleculeAst {
 // 6-membered C ring + O, any bonds
 fn pattern_phenol() -> MoleculeAst {
     MoleculeAst {
-        atoms: vec![
+        atoms: atoms![
             a(Element::C), a(Element::C), a(Element::C),
             a(Element::C), a(Element::C), a(Element::C),
             a(Element::O),
@@ -110,7 +112,7 @@ fn pattern_phenol() -> MoleculeAst {
 // Fused edge: 1-5
 fn pattern_bicyclic() -> MoleculeAst {
     MoleculeAst {
-        atoms: (0..9).map(|_| a(Element::C)).collect(),
+        atoms: (0..9).map(|_| a(Element::C)).collect::<Vec<_>>().into(),
         bonds: vec![
             bt(0, 1, wb()), bt(1, 2, wb()), bt(2, 3, wb()),
             bt(3, 4, wb()), bt(4, 5, wb()), bt(1, 5, wb()),

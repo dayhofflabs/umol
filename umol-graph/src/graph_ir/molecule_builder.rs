@@ -29,6 +29,7 @@ use super::molecule::{
 use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSet};
 use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
+use crate::ast::AtomIdx;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::error::LoweringError;
@@ -1297,15 +1298,15 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
         };
 
         for bond in &ast.bonds {
-            let a = resolve(bond.source)?;
-            let b = resolve(bond.target)?;
+            let a = resolve(bond.source.0)?;
+            let b = resolve(bond.target.0)?;
             let pattern = BondPattern::from_ast(&bond.bond, &cfg.bond)?;
             builder.add_bond_unchecked(a, b, pattern);
         }
 
         for db in &ast.dative_bonds {
-            let donor = resolve(db.source)?;
-            let acceptor = resolve(db.target)?;
+            let donor = resolve(db.source.0)?;
+            let acceptor = resolve(db.target.0)?;
             let order = BondPattern::from_ast(&db.bond, &cfg.bond)?.order();
             builder.add_dative_bond(DativeBond::new(donor, acceptor, order));
         }
@@ -1314,7 +1315,7 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
             let atoms: Vec<AtomIndex> = sys
                 .atoms
                 .iter()
-                .map(|i| resolve(*i))
+                .map(|i| resolve(i.0))
                 .collect::<Result<_, _>>()?;
             let contributions: Vec<AromaticContribution> = atoms
                 .into_iter()
@@ -1327,15 +1328,15 @@ impl FromAst<MoleculeAst> for MoleculeBuilder {
             let atoms: Vec<AtomIndex> = mc
                 .atoms
                 .iter()
-                .map(|i| resolve(*i))
+                .map(|i| resolve(i.0))
                 .collect::<Result<_, _>>()?;
             let set = MulticenterSet::topology_only(atoms);
             builder.add_multicenter_bond(MulticenterBond::new(once(set)));
         }
 
         for nc in &ast.noncovalent_bonds {
-            let a = resolve(nc.source)?;
-            let b = resolve(nc.target)?;
+            let a = resolve(nc.source.0)?;
+            let b = resolve(nc.target.0)?;
             builder.add_noncovalent_bond(NoncovalentBond::new(a, b, BondNoncovalent::Hydrogen));
         }
 
@@ -1357,7 +1358,7 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             .map(|&idx| self.atom(idx).unwrap().to_ast(&cfg.atom))
             .collect();
 
-        let pos = |idx: AtomIndex| -> usize { *position_of.get(&idx).unwrap() };
+        let pos = |idx: AtomIndex| -> AtomIdx { AtomIdx(*position_of.get(&idx).unwrap()) };
 
         let bonds: Vec<BondTuple> = self
             .bond_indices()
@@ -1404,7 +1405,7 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
             .collect();
 
         MoleculeAst {
-            atoms,
+            atoms: atoms.into(),
             bonds,
             dative_bonds,
             aromatic_systems,

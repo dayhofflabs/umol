@@ -14,6 +14,7 @@ use umol_shared::value_ast::ValueAst;
 
 use super::atom::parse_atom_dsl;
 use super::error::ParseError;
+use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
@@ -171,11 +172,11 @@ impl RawMoleculeAst {
             atom_aliases.insert(name.clone(), atom_ast);
         }
 
-        let resolve = |r: &AtomRefInput| -> Result<usize, ParseError> {
+        let resolve = |r: &AtomRefInput| -> Result<AtomIdx, ParseError> {
             match r {
                 AtomRefInput::Index(i) => {
                     if *i < atoms.len() {
-                        Ok(*i)
+                        Ok(AtomIdx(*i))
                     } else {
                         Err(ParseError::InvalidAtomIndex(i.to_string()))
                     }
@@ -183,6 +184,7 @@ impl RawMoleculeAst {
                 AtomRefInput::Tag(name) => tag_to_index
                     .get(name)
                     .copied()
+                    .map(AtomIdx)
                     .ok_or_else(|| ParseError::InvalidAtomIndex(name.clone())),
             }
         };
@@ -233,7 +235,7 @@ impl RawMoleculeAst {
         let mut aromatic_systems = Vec::with_capacity(self.aromatic_systems.len());
         let mut aromatic_system_ids = IndexMap::new();
         for (i, sys) in self.aromatic_systems.into_iter().enumerate() {
-            let atom_indices: Vec<usize> =
+            let atom_indices: Vec<AtomIdx> =
                 sys.atoms.iter().map(&resolve).collect::<Result<_, _>>()?;
             if let Some(id) = check_id(sys.id)? {
                 aromatic_system_ids.insert(i, id);
@@ -246,7 +248,7 @@ impl RawMoleculeAst {
         let mut multicenter_bonds = Vec::with_capacity(self.multicenter_bonds.len());
         let mut multicenter_bond_ids = IndexMap::new();
         for (i, mc) in self.multicenter_bonds.into_iter().enumerate() {
-            let atom_indices: Vec<usize> =
+            let atom_indices: Vec<AtomIdx> =
                 mc.atoms.iter().map(&resolve).collect::<Result<_, _>>()?;
             if let Some(id) = check_id(mc.id)? {
                 multicenter_bond_ids.insert(i, id);
@@ -285,7 +287,7 @@ impl RawMoleculeAst {
             });
         }
         let ast = MoleculeAst {
-            atoms,
+            atoms: atoms.into(),
             bonds,
             dative_bonds,
             aromatic_systems,
@@ -778,8 +780,8 @@ fn render_localized(
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
 ) -> Edn<'static> {
-    let a = render_endpoint(b.source);
-    let bb = render_endpoint(b.target);
+    let a = render_endpoint(b.source.0);
+    let bb = render_endpoint(b.target.0);
     let bond = b.bond.to_edn();
     if let Some(id) = ids.get(&i) {
         let mut m = EdnMap::with_capacity(4);
@@ -802,8 +804,8 @@ fn render_dative(
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
 ) -> Edn<'static> {
-    let donor = render_endpoint(b.source);
-    let acceptor = render_endpoint(b.target);
+    let donor = render_endpoint(b.source.0);
+    let acceptor = render_endpoint(b.target.0);
     let bond = b.bond.to_edn();
     let mut m = EdnMap::with_capacity(4);
     if let Some(id) = ids.get(&i) {
@@ -824,8 +826,8 @@ fn render_noncovalent(
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
 ) -> Edn<'static> {
-    let a = render_endpoint(b.source);
-    let bb = render_endpoint(b.target);
+    let a = render_endpoint(b.source.0);
+    let bb = render_endpoint(b.target.0);
     let bond = b.bond.to_edn();
     let mut m = EdnMap::with_capacity(4);
     if let Some(id) = ids.get(&i) {
@@ -841,12 +843,12 @@ fn render_noncovalent(
 }
 
 fn render_atoms_map(
-    atoms: &[usize],
+    atoms: &[AtomIdx],
     i: usize,
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
 ) -> Edn<'static> {
-    let atom_vec: Vec<Edn<'static>> = atoms.iter().map(|&a| render_endpoint(a)).collect();
+    let atom_vec: Vec<Edn<'static>> = atoms.iter().map(|a| render_endpoint(a.0)).collect();
     let mut m = EdnMap::with_capacity(2);
     if let Some(id) = ids.get(&i) {
         m.insert(
@@ -881,7 +883,7 @@ mod tests {
 
     fn atoms(a: Vec<AtomAst>) -> MoleculeAst {
         MoleculeAst {
-            atoms: a,
+            atoms: a.into(),
             ..Default::default()
         }
     }
@@ -908,8 +910,8 @@ mod tests {
     #[case::bond(
         r#"{:atoms ["N" "N"] :bonds [[0 1 :triple]]}"#,
         MoleculeAst {
-            atoms: vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))],
-            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::from_order(3) }],
+            atoms: vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))].into(),
+            bonds: vec![BondTuple { source: AtomIdx(0), target: AtomIdx(1), bond: BondAst::from_order(3) }],
             ..Default::default()
         },
         Metadata::default()
@@ -917,8 +919,8 @@ mod tests {
     #[case::bond_with_tags(
         r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#,
         MoleculeAst {
-            atoms: vec![AtomAst::from_element(e!(C)), AtomAst::from_element(e!(O))],
-            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::from_order(1) }],
+            atoms: vec![AtomAst::from_element(e!(C)), AtomAst::from_element(e!(O))].into(),
+            bonds: vec![BondTuple { source: AtomIdx(0), target: AtomIdx(1), bond: BondAst::from_order(1) }],
             ..Default::default()
         },
         Metadata {
@@ -929,8 +931,8 @@ mod tests {
     #[case::bond_id(
         r#"{:atoms ["H" "F"] :bonds [{:id :b1 :a 0 :b 1 :bond :single}]}"#,
         MoleculeAst {
-            atoms: vec![AtomAst::from_element(e!(H)), AtomAst::from_element(e!(F))],
-            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::from_order(1) }],
+            atoms: vec![AtomAst::from_element(e!(H)), AtomAst::from_element(e!(F))].into(),
+            bonds: vec![BondTuple { source: AtomIdx(0), target: AtomIdx(1), bond: BondAst::from_order(1) }],
             ..Default::default()
         },
         Metadata {
@@ -953,7 +955,7 @@ mod tests {
                 accepted_pairs: ValueAst::Undetermined,
                 aromatic_valence: AromaticValenceAst::Undetermined,
                 multicenter_valence: ValueAst::Undetermined,
-            }],
+            }].into(),
             constraints: vec![MoleculeConstraint::Derived {
                 predicate: DerivedPred::TotalCharge(ValueAst::Lit(-1)),
                 refs: RelationRefs::default(),
@@ -1003,8 +1005,8 @@ mod tests {
     #[case::alias_reused(
         r#"{:atoms [:n :n] :bonds [[0 1 :single]] :aliases [:n "N"]}"#,
         MoleculeAst {
-            atoms: vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))],
-            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::from_order(1) }],
+            atoms: vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))].into(),
+            bonds: vec![BondTuple { source: AtomIdx(0), target: AtomIdx(1), bond: BondAst::from_order(1) }],
             ..Default::default()
         },
         Metadata {
@@ -1031,8 +1033,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(dsl.ast.dative_bonds.len(), 1);
-        assert_eq!(dsl.ast.dative_bonds[0].source, 1);
-        assert_eq!(dsl.ast.dative_bonds[0].target, 0);
+        assert_eq!(dsl.ast.dative_bonds[0].source, AtomIdx(1));
+        assert_eq!(dsl.ast.dative_bonds[0].target, AtomIdx(0));
         assert_eq!(
             dsl.metadata.dative_bond_ids.get(&0),
             Some(&"d1".to_string())
@@ -1053,7 +1055,7 @@ mod tests {
             dsl.metadata.aromatic_system_ids.get(&0),
             Some(&"ar1".to_string())
         );
-        assert_eq!(dsl.ast.aromatic_systems[0].atoms, vec![0, 1, 2, 3, 4, 5]);
+        assert_eq!(dsl.ast.aromatic_systems[0].atoms, vec![AtomIdx(0), AtomIdx(1), AtomIdx(2), AtomIdx(3), AtomIdx(4), AtomIdx(5)]);
     }
 
     #[rstest]
@@ -1115,8 +1117,8 @@ mod tests {
         let builder = MoleculeBuilder::from_ast(&dsl.ast, &cfg).unwrap();
         let ast2 = builder.to_ast(&cfg);
 
-        assert_eq!(ast2.bonds[0].source, 0);
-        assert_eq!(ast2.bonds[0].target, 1);
+        assert_eq!(ast2.bonds[0].source, AtomIdx(0));
+        assert_eq!(ast2.bonds[0].target, AtomIdx(1));
     }
 
     #[test]

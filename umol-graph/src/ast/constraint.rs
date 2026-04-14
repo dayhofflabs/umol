@@ -3,12 +3,13 @@
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
+use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraint {
     SubPattern {
-        anchor: usize,
+        anchor: AtomIdx,
         pattern: Box<MoleculeAst>,
     },
     Derived {
@@ -35,7 +36,7 @@ impl MoleculeConstraint {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RelationRefs {
-    pub atoms: Vec<usize>,
+    pub atoms: Vec<AtomIdx>,
     pub bonds: Vec<usize>,
     pub dative_bonds: Vec<usize>,
     pub aromatic_systems: Vec<usize>,
@@ -53,7 +54,7 @@ impl RelationRefs {
             && self.noncovalent_bonds.is_empty()
     }
 
-    pub fn atoms(atoms: Vec<usize>) -> Self {
+    pub fn atoms(atoms: Vec<AtomIdx>) -> Self {
         Self { atoms, ..Self::default() }
     }
 
@@ -125,6 +126,7 @@ mod tests {
     use umol_shared::value_ast::ValueAst;
 
     use super::*;
+    use crate::ast::AtomIdx;
 
     fn charge(n: i64) -> MoleculeConstraint {
         MoleculeConstraint::Derived {
@@ -136,7 +138,7 @@ mod tests {
     fn in_ring_atom(atom: usize) -> MoleculeConstraint {
         MoleculeConstraint::Derived {
             predicate: DerivedPred::InRing,
-            refs: RelationRefs::atoms(vec![atom]),
+            refs: RelationRefs::atoms(vec![AtomIdx(atom)]),
         }
     }
 

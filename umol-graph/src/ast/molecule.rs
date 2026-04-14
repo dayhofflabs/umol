@@ -1,13 +1,15 @@
 //! Molecule structural AST.
 
+use index_vec::IndexVec;
 use umol_edn::{FromEdn, ToEdn};
+use umol_shared::value_ast::ValueAst;
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::error::GroundError;
-use crate::ast::Ast;
+use crate::ast::{Ast, AtomIdx};
 
 /// Binary relation over two atoms with bond attributes.
 ///
@@ -16,25 +18,25 @@ use crate::ast::Ast;
 /// (localized bonds), the ordering is canonical (`source <= target`).
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct BondTuple {
-    pub source: usize,
-    pub target: usize,
+    pub source: AtomIdx,
+    pub target: AtomIdx,
     pub bond: BondAst,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct AromaticSystem {
-    pub atoms: Vec<usize>,
+    pub atoms: Vec<AtomIdx>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub struct MulticenterBond {
-    pub atoms: Vec<usize>,
+    pub atoms: Vec<AtomIdx>,
 }
 
 /// Molecule AST: structural representation of a molecule (ground or pattern).
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct MoleculeAst {
-    pub atoms: Vec<AtomAst>,
+    pub atoms: IndexVec<AtomIdx, AtomAst>,
     pub bonds: Vec<BondTuple>,
     pub dative_bonds: Vec<BondTuple>,
     pub aromatic_systems: Vec<AromaticSystem>,
@@ -50,6 +52,42 @@ impl MoleculeAst {
             && self.dative_bonds.iter().all(|b| b.bond.is_ground())
             && self.noncovalent_bonds.iter().all(|b| b.bond.is_ground())
             && self.constraints.iter().all(|c| c.is_ground_assertion())
+    }
+
+    pub fn bond_order_sum(&self, atom: AtomIdx) -> Option<u8> {
+        let mut sum: u8 = 0;
+        for bond in &self.bonds {
+            if bond.source == atom || bond.target == atom {
+                match bond.bond.order {
+                    ValueAst::Lit(n) => sum += n as u8,
+                    _ => return None,
+                }
+            }
+        }
+        Some(sum)
+    }
+
+    pub fn dative_bond_order_sums(&self, atom: AtomIdx) -> (u8, u8) {
+        let mut donated: u8 = 0;
+        let mut accepted: u8 = 0;
+        for bond in &self.dative_bonds {
+            let order = match bond.bond.order {
+                ValueAst::Lit(n) => n as u8,
+                _ => continue,
+            };
+            if bond.source == atom {
+                donated += order;
+            } else if bond.target == atom {
+                accepted += order;
+            }
+        }
+        (donated, accepted)
+    }
+
+    pub fn is_in_aromatic_system(&self, atom: AtomIdx) -> bool {
+        self.aromatic_systems
+            .iter()
+            .any(|sys| sys.atoms.contains(&atom))
     }
 }
 
@@ -110,7 +148,7 @@ mod tests {
 
     fn ground_ast() -> MoleculeAst {
         MoleculeAst {
-            atoms: vec![ground_atom()],
+            atoms: vec![ground_atom()].into(),
             bonds: vec![],
             dative_bonds: vec![],
             aromatic_systems: vec![],
@@ -135,7 +173,7 @@ mod tests {
     )]
     #[case::wildcard_element(
         MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Undetermined)],
+            atoms: vec![AtomAst::new(ElementAst::Undetermined)].into(),
             ..MoleculeAst::default()
         },
         false,
@@ -145,8 +183,8 @@ mod tests {
             atoms: vec![
                 AtomAst::from_element(umol_shared::element::Element::C),
                 AtomAst::from_element(umol_shared::element::Element::O),
-            ],
-            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::new(ValueAst::Undetermined) }],
+            ].into(),
+            bonds: vec![BondTuple { source: AtomIdx(0), target: AtomIdx(1), bond: BondAst::new(ValueAst::Undetermined) }],
             ..MoleculeAst::default()
         },
         false,
@@ -164,7 +202,7 @@ mod tests {
     #[case::sub_pattern_constraint(
         MoleculeAst {
             constraints: vec![MoleculeConstraint::SubPattern {
-                anchor: 0,
+                anchor: AtomIdx(0),
                 pattern: Box::new(MoleculeAst::default()),
             }],
             ..ground_ast()
@@ -186,7 +224,7 @@ mod tests {
     #[test]
     fn test_ground_molecule_new_error() {
         let ast = MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Undetermined)],
+            atoms: vec![AtomAst::new(ElementAst::Undetermined)].into(),
             ..MoleculeAst::default()
         };
         assert_eq!(GroundMolecule::new(ast), Err(GroundError));

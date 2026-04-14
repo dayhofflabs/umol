@@ -37,6 +37,7 @@ use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::value_ast::ValueAst;
 
+use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
 
 type XxHashMap<K, V> = HashMap<K, V, Xxh3DefaultBuilder>;
@@ -100,7 +101,8 @@ impl BondSet {
 // Atom invariant extraction from MoleculeAst
 // ---------------------------------------------------------------------------
 
-fn is_heavy(ast: &MoleculeAst, idx: usize) -> bool {
+fn is_heavy(ast: &MoleculeAst, idx: AtomIdx) -> bool {
+    let idx = idx.0;
     !matches!(&ast.atoms[idx].element, ElementAst::Lit(Element::H))
 }
 
@@ -158,16 +160,16 @@ fn compute_atom_invariants(ast: &MoleculeAst) -> Vec<AtomInvariants> {
     for (bi, bond) in ast.bonds.iter().enumerate() {
         let order = bond_order(ast, bi);
         if is_heavy(ast, bond.target) {
-            result[bond.source].heavy_degree += 1;
-            result[bond.source].heavy_valence += order;
+            result[bond.source.0].heavy_degree += 1;
+            result[bond.source.0].heavy_valence += order;
         } else {
-            result[bond.source].h_count += 1;
+            result[bond.source.0].h_count += 1;
         }
         if is_heavy(ast, bond.source) {
-            result[bond.target].heavy_degree += 1;
-            result[bond.target].heavy_valence += order;
+            result[bond.target.0].heavy_degree += 1;
+            result[bond.target.0].heavy_valence += order;
         } else {
-            result[bond.target].h_count += 1;
+            result[bond.target.0].h_count += 1;
         }
     }
 
@@ -184,8 +186,8 @@ fn compute_ring_flags(ast: &MoleculeAst) -> Vec<bool> {
     let n = ast.atoms.len();
     let mut adj: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
     for (bi, bond) in ast.bonds.iter().enumerate() {
-        adj[bond.source].push((bond.target, bi));
-        adj[bond.target].push((bond.source, bi));
+        adj[bond.source.0].push((bond.target.0, bi));
+        adj[bond.target.0].push((bond.source.0, bi));
     }
 
     let mut in_ring = vec![false; n];
@@ -381,8 +383,8 @@ pub fn morgan_direct(ast: &MoleculeAst, radius: usize) -> MorganFingerprint {
     // Build adjacency: (neighbor_atom, bond_vec_index)
     let mut adj_vecs: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
     for (bi, bond) in ast.bonds.iter().enumerate() {
-        adj_vecs[bond.source].push((bond.target, bi));
-        adj_vecs[bond.target].push((bond.source, bi));
+        adj_vecs[bond.source.0].push((bond.target.0, bi));
+        adj_vecs[bond.target.0].push((bond.source.0, bi));
     }
     let adj_slices: Vec<&[(usize, usize)]> = adj_vecs.iter().map(|v| v.as_slice()).collect();
 
@@ -432,8 +434,8 @@ impl MorganTarget {
         // Build CSR adjacency
         let mut adj_lists: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
         for (bi, bond) in ast.bonds.iter().enumerate() {
-            adj_lists[bond.source].push((bond.target, bi));
-            adj_lists[bond.target].push((bond.source, bi));
+            adj_lists[bond.source.0].push((bond.target.0, bi));
+            adj_lists[bond.target.0].push((bond.source.0, bi));
         }
 
         let total: usize = adj_lists.iter().map(|a| a.len()).sum();
@@ -514,8 +516,8 @@ impl MorganTargetPetgraph {
         for (bi, bond) in ast.bonds.iter().enumerate() {
             let _ = bi;
             graph.add_edge(
-                NodeIndex::new(bond.source),
-                NodeIndex::new(bond.target),
+                NodeIndex::new(bond.source.0),
+                NodeIndex::new(bond.target.0),
                 bond_order(ast, bi),
             );
         }
@@ -669,8 +671,8 @@ impl MorganTargetOpt {
         let mut adj_lists: Vec<Vec<(u32, u32, u32)>> = vec![Vec::new(); n];
         for (bi, bond) in ast.bonds.iter().enumerate() {
             let bo = bond_orders[bi];
-            adj_lists[bond.source].push((bond.target as u32, bi as u32, bo));
-            adj_lists[bond.target].push((bond.source as u32, bi as u32, bo));
+            adj_lists[bond.source.0].push((bond.target.0 as u32, bi as u32, bo));
+            adj_lists[bond.target.0].push((bond.source.0 as u32, bi as u32, bo));
         }
         for list in &mut adj_lists {
             list.sort_unstable_by_key(|&(_, _, bo)| bo);
@@ -893,6 +895,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::AtomIdx;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::molecule::BondTuple;
@@ -903,8 +906,8 @@ mod tests {
 
     fn bond_tuple(source: usize, target: usize, order: u8) -> BondTuple {
         BondTuple {
-            source,
-            target,
+            source: AtomIdx(source),
+            target: AtomIdx(target),
             bond: BondAst::from_order(order),
         }
     }
@@ -914,7 +917,7 @@ mod tests {
             atoms: vec![AtomAst {
                 implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
                 ..atom(Element::C)
-            }],
+            }].into(),
             ..Default::default()
         }
     }
@@ -930,7 +933,7 @@ mod tests {
                     implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)),
                     ..atom(Element::C)
                 },
-            ],
+            ].into(),
             bonds: vec![bond_tuple(0, 1, 1)],
             ..Default::default()
         }
@@ -951,7 +954,7 @@ mod tests {
                     implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
                     ..atom(Element::O)
                 },
-            ],
+            ].into(),
             bonds: vec![bond_tuple(0, 1, 1), bond_tuple(1, 2, 1)],
             ..Default::default()
         }
@@ -964,7 +967,7 @@ mod tests {
                     implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(2)),
                     ..atom(Element::C)
                 })
-                .collect(),
+                .collect::<Vec<_>>().into(),
             bonds: (0..6).map(|i| bond_tuple(i, (i + 1) % 6, 1)).collect(),
             ..Default::default()
         }
@@ -978,7 +981,7 @@ mod tests {
                     ..atom(Element::C)
                 },
                 atom(Element::O),
-            ],
+            ].into(),
             bonds: vec![bond_tuple(0, 1, 2)],
             ..Default::default()
         }

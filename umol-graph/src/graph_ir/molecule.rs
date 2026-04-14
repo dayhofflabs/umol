@@ -18,6 +18,7 @@ use super::multicenter::MulticenterBond;
 use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
 use crate::atom::AromaticValence;
+use crate::ast::AtomIdx;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
@@ -497,7 +498,7 @@ impl ToAst<MoleculeAst> for Molecule {
             .map(|&idx| self.atom(idx).unwrap().to_ast(&cfg.atom))
             .collect();
 
-        let pos = |idx: AtomIndex| -> usize { *position_of.get(&idx).unwrap() };
+        let pos = |idx: AtomIndex| -> AtomIdx { AtomIdx(*position_of.get(&idx).unwrap()) };
 
         let bonds: Vec<BondTuple> = self
             .bond_indices()
@@ -555,7 +556,7 @@ impl ToAst<MoleculeAst> for Molecule {
         ];
 
         MoleculeAst {
-            atoms,
+            atoms: atoms.into(),
             bonds,
             dative_bonds,
             aromatic_systems,
