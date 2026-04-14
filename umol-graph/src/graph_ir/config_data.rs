@@ -177,6 +177,12 @@ impl AtomTypeRegistry {
             .map_or(&[], |v| v.as_slice())
     }
 
+    pub fn lookup(&self, element: Element, charge: Option<i8>) -> &[Atom] {
+        self.atom_types
+            .get(&(element, charge))
+            .map_or(&[], |v| v.as_slice())
+    }
+
     pub fn candidates_for(&self, query: &AtomPattern) -> SmallVec<[Atom; 4]> {
         let element = match &query.element {
             ElementPattern::Is(e) => *e,

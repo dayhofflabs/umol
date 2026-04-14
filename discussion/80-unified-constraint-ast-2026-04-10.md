@@ -416,7 +416,28 @@ Ordered steps. Each step leaves the tree green.
    - VF2 via petgraph `subgraph_isomorphisms_iter` over localized bonds only (directed graph with bidirectional edges; graph construction encapsulated so composite topology graph is an internal refactor).
    - Post-filters: dative bonds (directed), noncovalent bonds (directed), aromatic systems (mapped atoms subset of single target system), multicenter bonds (mapped atoms subset of single target bond — handles overlapping membership, e.g. B2H6).
    - Not implemented: constraints vec, variable bindings, `MatcherFlag`, `DerivedPred` evaluation, `SubPattern` recursion (step 9).
-5. **Benchmark checkpoint**: Morgan fingerprints, `MoleculeAst` vs. view vs. RDKit. If within 2×, proceed. If not, design the packed `MoleculeView` escape hatch before continuing. ~3 days.
+5. **Benchmark checkpoint**: Morgan fingerprints, `MoleculeAst` vs. view vs. RDKit. If within 2×, proceed. If not, design the packed `MoleculeView` escape hatch before continuing. ~3 days. *(Done 2026-04-12.)*
+   - ECFP algorithm (Rogers & Hahn 2010): 7 initial Daylight invariants (heavy degree, heavy valence, atomic number, atomic mass, charge, H count, ring flag), iterative hashing with sorted (bond_order, neighbor_id) pairs, duplicate structure removal via bond-set tracking, dead atom pruning.
+   - New module `ast::morgan` with `MorganFingerprint`, `MorganTarget`, `morgan_direct`, `morgan_view`.
+   - Criterion benchmark over 9,120 SMILES from conformance corpus (ECFP4, radius 2):
+
+     | Implementation | Total | Per molecule |
+     |---|---|---|
+     | `morgan_direct` (MoleculeAst) | 126 ms | 13.8 μs |
+     | `morgan_view` (MorganTarget, pre-built) | 97 ms | 10.6 μs |
+     | `morgan_view` (with build) | 128 ms | 14.1 μs |
+     | RDKit (C++, via Python) | 132 ms | 14.7 μs |
+
+   - **Result: proceed.** Direct MoleculeAst access is at parity with RDKit (1.05×); pre-built view is 1.4× faster. No `MoleculeView` escape hatch needed. Unoptimized Rust — constant-factor improvements remain (allocation reuse, inline bitsets, pre-sorted adjacency).
+   - SMILES parsing comparison on the same corpus (not directly related to the AST migration but recorded here for reference):
+
+     | Implementation | Total | Per molecule |
+     |---|---|---|
+     | umol `parse_smiles` (nom) | 6.4 ms | 0.7 μs |
+     | RDKit `MolFromSmiles` (no sanitize) | 85 ms | 9.3 μs |
+     | RDKit `MolFromSmiles` (sanitized) | 446 ms | 49.7 μs |
+
+   - umol SMILES parsing is 13× faster than RDKit's parse-only path.
 6. **Migrate valence resolution and atom typing** to emit constraints; solver runs finite-domain propagation. Delete the old bespoke resolver. ~2 weeks.
 7. **Migrate aromaticity perception** to discover-then-verify. Graph analysis stays; perception output is constraint emissions. ~1 week.
 8. **Delete `graph_ir::Molecule`.** `MoleculeAst` is the only molecule type. ~3 days.

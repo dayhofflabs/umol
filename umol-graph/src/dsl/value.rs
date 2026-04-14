@@ -21,7 +21,7 @@ pub fn value_dsl(i: &str) -> IResult<&str, ValueAst, NomError<&str>> {
             terminated(nom_i64, (multispace0, terminator)),
             ValueAst::Lit,
         ),
-        value(ValueAst::Wildcard, tag("*")),
+        value(ValueAst::Undetermined, tag("*")),
         map(lit_set, ValueAst::LitSet),
         map(bool_expr, ValueAst::Expr),
     ))
@@ -256,7 +256,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::star("*", ValueAst::Wildcard)]
+    #[case::star("*", ValueAst::Undetermined)]
     #[case::num("0", ValueAst::Lit(0))]
     #[case::set("{0,1,2}", ValueAst::LitSet(vec![0, 1, 2]))]
     #[case::set_spaced("{ 0, 1 ,2}", ValueAst::LitSet(vec![0, 1, 2]))]

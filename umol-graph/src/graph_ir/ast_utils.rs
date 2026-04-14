@@ -25,7 +25,7 @@ pub(crate) fn raise_u8_pattern(pattern: Pattern<u8>, mode: &NumericMode) -> Opti
     match (pattern, mode) {
         (Pattern::Is(0), NumericMode::Zero) => None,
         (Pattern::Any, NumericMode::Required) => None,
-        (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Wildcard),
+        (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Undetermined),
         (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
     }
 }
@@ -34,49 +34,38 @@ pub(crate) fn raise_i8_pattern(pattern: Pattern<i8>, mode: &NumericMode) -> Opti
     match (pattern, mode) {
         (Pattern::Is(0), NumericMode::Zero) => None,
         (Pattern::Any, NumericMode::Required) => None,
-        (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Wildcard),
+        (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Undetermined),
         (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
     }
 }
 
 /// Coupled spin-state lowering for unpaired electrons (u) and multiplicity (m).
 ///
-/// Resolution is sequential: u resolves first, m second. Each absent field
+/// Resolution is sequential: u resolves first, m second. Each undetermined field
 /// falls back to its mode:
 ///
-///   u_ast present  → use it directly (Lit → Is, Wildcard → Any)
-///   u_ast absent   → Zero: Is(0), Required: Any, Derived: derive from m_ast (Lit(m) → Is(m-1), else Any)
+///   u_ast Undetermined  → Zero: Is(0), Required: Any, Derived: derive from m_ast
+///   u_ast Lit(n)        → Is(n)
 ///
-///   m_ast present  → use it directly
-///   m_ast absent   → Required: Any, Derived: derive from resolved u (Is(u) → Is(u+1), Any → Any)
+///   m_ast Undetermined  → Required: Any, Derived: derive from resolved u
+///   m_ast Lit(n)        → Is(SpinMultiplicity(n))
 ///
 /// The asymmetry matters: u in Derived mode reads raw m_ast, but m in Derived
 /// mode reads the already-resolved u pattern. This lets `C#s3` (m=3, u absent)
 /// derive u=2, then confirm m=3 matches u+1.
 pub(crate) fn lower_spin(
-    u_ast: Option<ValueAst>,
-    m_ast: Option<ValueAst>,
+    u_ast: ValueAst,
+    m_ast: ValueAst,
     u_mode: &UnpairedElectronsMode,
     m_mode: &MultiplicityMode,
 ) -> Result<(Pattern<u8>, Pattern<SpinMultiplicity>), LoweringError> {
     // Step 1: resolve unpaired electrons
     let unpaired_electrons = match &u_ast {
-        Some(ValueAst::Wildcard) => Pattern::Any,
-        Some(ValueAst::Lit(n)) => {
-            Pattern::Is(u8::try_from(*n).map_err(|_| LoweringError::NonGround {
-                field: "unpaired_electrons",
-            })?)
-        }
-        Some(_) => {
-            return Err(LoweringError::NonGround {
-                field: "unpaired_electrons",
-            })
-        }
-        None => match u_mode {
+        ValueAst::Undetermined => match u_mode {
             UnpairedElectronsMode::Zero => Pattern::Is(0),
             UnpairedElectronsMode::Required => Pattern::Any,
             UnpairedElectronsMode::Derived => match &m_ast {
-                Some(ValueAst::Lit(m)) => {
+                ValueAst::Lit(m) => {
                     let m_val = u8::try_from(*m).map_err(|_| LoweringError::NonGround {
                         field: "multiplicity",
                     })?;
@@ -88,26 +77,21 @@ pub(crate) fn lower_spin(
                 _ => Pattern::Any,
             },
         },
+        ValueAst::Lit(n) => {
+            Pattern::Is(u8::try_from(*n).map_err(|_| LoweringError::NonGround {
+                field: "unpaired_electrons",
+            })?)
+        }
+        _ => {
+            return Err(LoweringError::NonGround {
+                field: "unpaired_electrons",
+            })
+        }
     };
 
     // Step 2: resolve multiplicity (derives from resolved u when mode is Derived)
     let multiplicity = match &m_ast {
-        Some(ValueAst::Wildcard) => Pattern::Any,
-        Some(ValueAst::Lit(n)) => {
-            let m = u8::try_from(*n).map_err(|_| LoweringError::NonGround {
-                field: "multiplicity",
-            })?;
-            Pattern::Is(
-                SpinMultiplicity::from_multiplicity(m)
-                    .ok_or(LoweringError::InvalidMultiplicity(m))?,
-            )
-        }
-        Some(_) => {
-            return Err(LoweringError::NonGround {
-                field: "multiplicity",
-            })
-        }
-        None => match m_mode {
+        ValueAst::Undetermined => match m_mode {
             MultiplicityMode::Required => Pattern::Any,
             MultiplicityMode::Derived => match unpaired_electrons {
                 Pattern::Is(u) => {
@@ -122,6 +106,20 @@ pub(crate) fn lower_spin(
                 Pattern::Any => Pattern::Any,
             },
         },
+        ValueAst::Lit(n) => {
+            let m = u8::try_from(*n).map_err(|_| LoweringError::NonGround {
+                field: "multiplicity",
+            })?;
+            Pattern::Is(
+                SpinMultiplicity::from_multiplicity(m)
+                    .ok_or(LoweringError::InvalidMultiplicity(m))?,
+            )
+        }
+        _ => {
+            return Err(LoweringError::NonGround {
+                field: "multiplicity",
+            })
+        }
     };
 
     Ok((unpaired_electrons, multiplicity))
@@ -133,37 +131,37 @@ pub(crate) fn lower_spin(
 ///
 /// `derived` = m == u + 1 (high-spin / Hund's rule relationship).
 ///
-/// Suppression rules:
+/// Suppression rules (Undetermined = field can be elided):
 ///   u side:
-///     Zero    + u==0                        → None  (default produces 0)
-///     Derived + derived + Required           → None  (m always emitted; u derivable from m)
-///     Derived + derived + Derived + u==0     → None  (both absent → defaults match)
-///     Derived + derived + Derived + u!=0     → Lit(u) (must fix u; m derived from u)
+///     Zero    + u==0                        → Undetermined
+///     Derived + derived + Required           → Undetermined
+///     Derived + derived + Derived + u==0     → Undetermined
+///     Derived + derived + Derived + u!=0     → Lit(u)
 ///     otherwise                              → Lit(u)
 ///   m side:
-///     Derived + derived → None  (derivable from u or default)
+///     Derived + derived → Undetermined
 ///     otherwise         → Lit(m)
 pub(crate) fn raise_spin_ground(
     u_value: u8,
     m_value: SpinMultiplicity,
     u_mode: &UnpairedElectronsMode,
     m_mode: &MultiplicityMode,
-) -> (Option<ValueAst>, Option<ValueAst>) {
+) -> (ValueAst, ValueAst) {
     let derived = m_value.multiplicity() == u_value + 1;
 
     let u_ast = match u_mode {
-        UnpairedElectronsMode::Zero if u_value == 0 => None,
+        UnpairedElectronsMode::Zero if u_value == 0 => ValueAst::Undetermined,
         UnpairedElectronsMode::Derived if derived => match m_mode {
-            MultiplicityMode::Required => None,
-            MultiplicityMode::Derived if u_value == 0 => None,
-            MultiplicityMode::Derived => Some(ValueAst::Lit(u_value as i64)),
+            MultiplicityMode::Required => ValueAst::Undetermined,
+            MultiplicityMode::Derived if u_value == 0 => ValueAst::Undetermined,
+            MultiplicityMode::Derived => ValueAst::Lit(u_value as i64),
         },
-        _ => Some(ValueAst::Lit(u_value as i64)),
+        _ => ValueAst::Lit(u_value as i64),
     };
 
     let m_ast = match m_mode {
-        MultiplicityMode::Derived if derived => None,
-        _ => Some(ValueAst::Lit(m_value.multiplicity() as i64)),
+        MultiplicityMode::Derived if derived => ValueAst::Undetermined,
+        _ => ValueAst::Lit(m_value.multiplicity() as i64),
     };
 
     (u_ast, m_ast)
@@ -173,60 +171,53 @@ pub(crate) fn raise_spin_ground(
 ///
 /// Returns `(u_ast, m_ast)` — the minimal AST fields that roundtrip through `lower_spin`.
 ///
-/// Suppression rules:
+/// Suppression rules (Undetermined = field can be elided):
 ///   u pattern:
-///     Is(0)  + Zero     → None          (default produces Is(0))
-///     Any    + Required → None          (default produces Any)
-///     Any    + Derived  + m=Any → None  (both absent → both Any)
-///     Any    + Zero     → Wildcard      (need explicit marker)
-///     Any    + Derived  + m=Is(_) → Wildcard  (m will be emitted; must mark u as non-ground)
+///     Is(0)  + Zero     → Undetermined
+///     Any    + Required → Undetermined
+///     Any    + Derived  + m=Any → Undetermined
+///     Any    + Zero     → Undetermined
+///     Any    + Derived  + m=Is(_) → Undetermined
 ///     Is(n)  + _        → Lit(n)
 ///   m pattern (given the u_pattern chosen above):
-///     Any    + Required → None          (default produces Any)
-///     Any    + Derived  + effective_u=Any → None   (derived from Any → Any)
-///     Any    + Derived  + effective_u=Is(_) → Wildcard  (derived would give Is, not Any)
-///     Is(m)  + Derived  + effective_u=Is(u) if m==u+1 → None  (derivable)
+///     Any    + Required → Undetermined
+///     Any    + Derived  + effective_u=Any → Undetermined
+///     Any    + Derived  + effective_u=Is(_) → Undetermined
+///     Is(m)  + Derived  + effective_u=Is(u) if m==u+1 → Undetermined
 ///     Is(m)  + _        → Lit(m)
 pub(crate) fn raise_spin_pattern(
     u_pattern: Pattern<u8>,
     m_pattern: Pattern<SpinMultiplicity>,
     u_mode: &UnpairedElectronsMode,
     m_mode: &MultiplicityMode,
-) -> (Option<ValueAst>, Option<ValueAst>) {
+) -> (ValueAst, ValueAst) {
     let u_ast = match (u_pattern, u_mode) {
-        (Pattern::Is(0), UnpairedElectronsMode::Zero) => None,
-        (Pattern::Any, UnpairedElectronsMode::Required) => None,
-        (Pattern::Any, UnpairedElectronsMode::Zero) => Some(ValueAst::Wildcard),
-        (Pattern::Any, UnpairedElectronsMode::Derived) => match m_pattern {
-            Pattern::Any => None,
-            Pattern::Is(_) => Some(ValueAst::Wildcard),
-        },
-        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
+        (Pattern::Is(0), UnpairedElectronsMode::Zero) => ValueAst::Undetermined,
+        (Pattern::Any, UnpairedElectronsMode::Required) => ValueAst::Undetermined,
+        (Pattern::Any, UnpairedElectronsMode::Zero) => ValueAst::Undetermined,
+        (Pattern::Any, UnpairedElectronsMode::Derived) => ValueAst::Undetermined,
+        (Pattern::Is(n), _) => ValueAst::Lit(n as i64),
     };
 
     // Reconstruct what lower_spin will see after processing u_ast
     let effective_u = match &u_ast {
-        None => match u_mode {
+        ValueAst::Undetermined => match u_mode {
             UnpairedElectronsMode::Zero => Pattern::Is(0u8),
             UnpairedElectronsMode::Required | UnpairedElectronsMode::Derived => Pattern::Any,
         },
-        Some(ValueAst::Wildcard) => Pattern::Any,
-        Some(ValueAst::Lit(n)) => Pattern::Is(*n as u8),
+        ValueAst::Lit(n) => Pattern::Is(*n as u8),
         _ => unreachable!(),
     };
 
     let m_ast = match (m_pattern, m_mode) {
-        (Pattern::Any, MultiplicityMode::Required) => None,
-        (Pattern::Any, MultiplicityMode::Derived) => match effective_u {
-            Pattern::Any => None,
-            Pattern::Is(_) => Some(ValueAst::Wildcard),
-        },
+        (Pattern::Any, MultiplicityMode::Required) => ValueAst::Undetermined,
+        (Pattern::Any, MultiplicityMode::Derived) => ValueAst::Undetermined,
         (Pattern::Is(m_val), MultiplicityMode::Derived) => match effective_u {
-            Pattern::Is(u_val) if m_val.multiplicity() == u_val + 1 => None,
-            _ => Some(ValueAst::Lit(m_val.multiplicity() as i64)),
+            Pattern::Is(u_val) if m_val.multiplicity() == u_val + 1 => ValueAst::Undetermined,
+            _ => ValueAst::Lit(m_val.multiplicity() as i64),
         },
         (Pattern::Is(m_val), MultiplicityMode::Required) => {
-            Some(ValueAst::Lit(m_val.multiplicity() as i64))
+            ValueAst::Lit(m_val.multiplicity() as i64)
         }
     };
 

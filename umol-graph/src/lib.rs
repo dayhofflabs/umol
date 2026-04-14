@@ -9,5 +9,6 @@ pub mod dsl;
 pub mod graph_ir;
 pub mod io;
 pub mod position;
+pub mod solver;
 pub mod span;
 pub mod table_ir;

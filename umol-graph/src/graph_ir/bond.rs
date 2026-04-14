@@ -145,9 +145,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::defaults(BondAst { order: ValueAst::Lit(1), charge: None, spin: None }, Bond::new(1))]
-    #[case::charged(BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), spin: Some(SpinStateAst::Pair { unpaired: Some(ValueAst::Lit(1)), multiplicity: None }) },
+    #[case::charged(BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }) },
         Bond::from_parts(2, 1, SpinState::new(1, SpinMultiplicity::Doublet)))]
-    #[case::full(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), spin: Some(SpinStateAst::Pair { unpaired: Some(ValueAst::Lit(2)), multiplicity: Some(ValueAst::Lit(1)) }) },
+    #[case::full(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) }) },
         Bond::from_parts(1, 0, SpinState::new(2, SpinMultiplicity::Singlet)))]
     fn test_bond_from_ast(#[case] ast: BondAst, #[case] expected: Bond) {
         assert_eq!(Bond::from_ast(&ast, &BondAstConfig::zeroed()).unwrap(), expected);
@@ -157,7 +157,7 @@ mod tests {
     #[rstest]
     #[case::single(Bond::new(1), BondAst { order: ValueAst::Lit(1), charge: None, spin: None })]
     #[case::charged_doublet(Bond::from_parts(2, 1, SpinState::new(1, SpinMultiplicity::Doublet)), BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)),
-        spin: Some(SpinStateAst::Pair { unpaired: Some(ValueAst::Lit(1)), multiplicity: None }) })]
+        spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }) })]
     fn test_bond_to_ast(#[case] bond: Bond, #[case] expected: BondAst) {
         assert_eq!(bond.to_ast(&BondAstConfig::zeroed()), expected);
     }

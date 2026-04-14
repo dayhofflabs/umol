@@ -83,3 +83,5 @@
 | [79-pattern-language-design-2026-04-10.md](79-pattern-language-design-2026-04-10.md)                                             | Informational | 2026-04-10   |
 | [80-unified-constraint-ast-2026-04-10.md](80-unified-constraint-ast-2026-04-10.md)                                               | Active        | 2026-04-10   |
 | [81-fix-point-group-impl-2026-04-11.md](81-fix-point-group-impl-2026-04-11.md)                                                   | Completed     | 2026-04-12   |
+| [82-graph-representation-2026-04-13.md](82-graph-representation-2026-04-13.md)                                                   | Informational | 2026-04-13   |
+| [83-constraint-unification-architecture-2026-04-13.md](83-constraint-unification-architecture-2026-04-13.md)                     | Active        | 2026-04-13   |

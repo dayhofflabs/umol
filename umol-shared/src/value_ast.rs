@@ -9,7 +9,7 @@ pub type Bindings = HashMap<String, i64>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ValueAst {
-    Wildcard,
+    Undetermined,
     LitSet(Vec<i64>),
     Lit(i64),
     Expr(Expr),
@@ -73,7 +73,7 @@ impl ValueAst {
     /// result is compared to `value`
     pub fn capture(&self, value: i64) -> Option<Bindings> {
         match self {
-            ValueAst::Wildcard => Some(Bindings::new()),
+            ValueAst::Undetermined => Some(Bindings::new()),
             ValueAst::Lit(n) => {
                 if *n == value {
                     Some(Bindings::new())
@@ -298,7 +298,7 @@ mod tests {
 
     #[rstest]
     #[case::lit(ValueAst::Lit(3), true)]
-    #[case::wildcard(ValueAst::Wildcard, false)]
+    #[case::wildcard(ValueAst::Undetermined, false)]
     #[case::lit_set(ValueAst::LitSet(vec![1, 2]), false)]
     #[case::expr(ValueAst::Expr(Expr::Var("x".to_string())), false)]
     fn test_value_ast_is_ground(#[case] ast: ValueAst, #[case] expected: bool) {
@@ -307,7 +307,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(ValueAst::Wildcard, 3, true)]
+    #[case::wildcard(ValueAst::Undetermined, 3, true)]
     #[case::lit_match(ValueAst::Lit(3), 3,  true)]
     #[case::lit_set_match(ValueAst::LitSet(vec![1, 2, 3]), 2, true)]
     #[case::expr_var(ValueAst::Expr(Expr::Var("h".to_string())), 5, true)]
@@ -323,7 +323,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(ValueAst::Wildcard, 3, Bindings::new())]
+    #[case::wildcard(ValueAst::Undetermined, 3, Bindings::new())]
     #[case::lit_match(ValueAst::Lit(3), 3, Bindings::new())]
     #[case::lit_set_match(ValueAst::LitSet(vec![1, 2, 3]), 2, Bindings::new())]
     #[case::expr_var(ValueAst::Expr(Expr::Var("h".to_string())), 5, Bindings::from([("h".to_string(), 5)]))]

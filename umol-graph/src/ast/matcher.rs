@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn test_find_matches_wildcard_element() {
         let query = MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Wildcard)],
+            atoms: vec![AtomAst::new(ElementAst::Undetermined)],
             ..Default::default()
         };
         let target = MoleculeAst {
@@ -266,7 +266,7 @@ mod tests {
             bonds: vec![BondTuple {
                 source: 0,
                 target: 1,
-                bond: BondAst::new(ValueAst::Wildcard),
+                bond: BondAst::new(ValueAst::Undetermined),
             }],
             ..Default::default()
         };

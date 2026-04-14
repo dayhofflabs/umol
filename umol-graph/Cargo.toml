@@ -50,6 +50,7 @@ bstr = "1.12.0"
 clap = { version = "4", features = ["derive"] }
 umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "indexmap"] }
 fast-float2 = "0.2.3"
+fixedbitset = "0.5.7"
 indexmap = "2.11.1"
 itertools = "0.14.0"
 map-macro = "0.3.0"
@@ -69,7 +70,7 @@ thiserror = "2.0"
 toml = "1.1.0"
 umol-shared = { path = "../umol-shared", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }
-xxhash-rust = { version = "0.8.15", features = ["const_xxh3"] }
+xxhash-rust = { version = "0.8.15", features = ["const_xxh3", "xxh3"] }
 bimap = "0.6.3"
 
 [build-dependencies]
@@ -85,6 +86,8 @@ proptest = "1.7.0"
 rand = "0.10"
 rand_chacha = "0.10"
 rstest = "0.26.1"
+umol-shared = { path = "../umol-shared", version = "0.1.0" }
+walkdir = "2.5.0"
 
 [[bench]]
 name = "mol_parsing"
@@ -96,6 +99,14 @@ harness = false
 
 [[bench]]
 name = "molecule_dsl_parsing"
+harness = false
+
+[[bench]]
+name = "morgan"
+harness = false
+
+[[bench]]
+name = "substructure"
 harness = false
 
 [lints.clippy]

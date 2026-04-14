@@ -118,7 +118,7 @@ mod tests {
     )]
     #[case::wildcard_element(
         MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Wildcard)],
+            atoms: vec![AtomAst::new(ElementAst::Undetermined)],
             ..MoleculeAst::default()
         },
         false,
@@ -129,7 +129,7 @@ mod tests {
                 AtomAst::from_element(umol_shared::element::Element::C),
                 AtomAst::from_element(umol_shared::element::Element::O),
             ],
-            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::new(ValueAst::Wildcard) }],
+            bonds: vec![BondTuple { source: 0, target: 1, bond: BondAst::new(ValueAst::Undetermined) }],
             ..MoleculeAst::default()
         },
         false,
@@ -137,7 +137,7 @@ mod tests {
     #[case::non_ground_constraint(
         MoleculeAst {
             constraints: vec![MoleculeConstraint::Derived {
-                predicate: DerivedPred::TotalSpin(SpinStateAst::Wildcard),
+                predicate: DerivedPred::TotalSpin(SpinStateAst::default()),
                 refs: RelationRefs::default(),
             }],
             ..ground_ast()
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn test_ground_molecule_new_error() {
         let ast = MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Wildcard)],
+            atoms: vec![AtomAst::new(ElementAst::Undetermined)],
             ..MoleculeAst::default()
         };
         assert_eq!(GroundMolecule::new(ast), Err(GroundError));
