@@ -438,11 +438,14 @@ Ordered steps. Each step leaves the tree green.
      | RDKit `MolFromSmiles` (sanitized) | 446 ms | 49.7 μs |
 
    - umol SMILES parsing is 13× faster than RDKit's parse-only path.
-6. **Migrate valence resolution and atom typing** to emit constraints; solver runs finite-domain propagation. Delete the old bespoke resolver. ~2 weeks. *(In progress.)*
+6. **Migrate valence resolution and atom typing** to emit constraints; solver runs finite-domain propagation. Delete the old bespoke resolver. ~2 weeks. *(Done 2026-04-14.)*
    - Prerequisite refactor (doc 83 § "Absent vs undetermined"): rename `Wildcard` → `Undetermined` across all AST types (done 2026-04-13); remove `Option<>` wrappers from `AtomAst` and `BondAst` fields — all fields now carry their `Undetermined` default directly (done 2026-04-14); `is_ground()` returns `false` for undetermined fields (done 2026-04-14); `needs_narrowing` deleted, replaced by `!is_ground()`.
-   - `solver.rs` module exists with `Solution<T>`, `Progress`, `ValenceStrategy` (AtomTyping / Counts), `Solver` with `resolve` and `validate`. 13 tests passing.
+   - `solver.rs` module exists with `Solution<T>`, `Progress`, `ValenceStrategy` (AtomTyping / Counts), `Solver` with `resolve`, `validate`, `filter`. 15 tests passing.
    - `narrow_atom` now also resolves `isotope_mass` and returns `bool` to prevent infinite loops.
-   - Remaining: `Solver::filter`, `find_matches_with` integration, topology helpers as methods on `MoleculeAst`, delete old resolver.
+   - Topology helpers (`bond_order_sum`, `dative_bond_order_sums`, `is_in_aromatic_system`) moved to methods on `MoleculeAst`; `charge_or_zero` on `AtomAst`.
+   - `find_matches_with` in `ast::matcher` composes `find_matches` + `solver.filter` as a post-filter.
+   - Index types: `AtomIdx`, `BondIdx`, etc. as newtypes over `usize` with `index_vec::IndexVec` for ergonomic indexing. `atoms![]` macro for test construction.
+   - Old resolver deleted (done 2026-04-14): `graph_ir::valence` module removed; `ValenceStrategy` enum consolidated in `solver.rs` and re-exported from `graph_ir::config`; `resolve_valence_with` now calls private `valence_candidates` which dispatches on `ValenceStrategy` variants using `AtomPattern`-based candidate generation directly (no AST bridge). 621 conformance tests pass, 3796 lib tests pass.
 7. **Migrate aromaticity perception** to discover-then-verify. Graph analysis stays; perception output is constraint emissions. ~1 week.
 8. **Delete `graph_ir::Molecule`.** `MoleculeAst` is the only molecule type. ~3 days.
 9. **Add `SubPattern` constraint and matcher recursion.** ~1 week.

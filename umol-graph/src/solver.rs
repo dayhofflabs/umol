@@ -80,17 +80,15 @@ impl Solver {
         assignments
             .into_iter()
             .filter(|a| {
-                a.0.iter().all(|&t_idx| {
-                    self.valence
-                        .validate(&target.atoms[AtomIdx(t_idx)], target, t_idx)
-                })
+                a.0.iter()
+                    .all(|&t_idx| self.valence.validate(target, t_idx))
             })
             .collect()
     }
 
     pub fn validate(&self, ast: &MoleculeAst) -> Solution<()> {
-        for (i, atom) in ast.atoms.iter().enumerate() {
-            if !self.valence.validate(atom, ast, i) {
+        for i in 0..ast.atoms.len() {
+            if !self.valence.validate(ast, i) {
                 return Solution::Contradictory;
             }
         }
@@ -103,49 +101,57 @@ impl Solver {
 }
 
 impl ValenceStrategy {
+    pub fn candidates_for(&self, ast: &MoleculeAst, idx: AtomIdx) -> SmallVec<[Atom; 4]> {
+        let element = match ast.atoms[idx].element {
+            ElementAst::Lit(e) => e,
+            _ => return SmallVec::new(),
+        };
+        let Some(valence) = ast.bond_order_sum(idx) else {
+            return SmallVec::new();
+        };
+        let charge = ast.atoms[idx].charge_or_zero();
+        let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(idx);
+        let is_aromatic = ast.is_in_aromatic_system(idx);
+
+        match self {
+            Self::AtomTyping { registry } => atom_typing_candidates(
+                registry,
+                &ast.atoms[idx],
+                element,
+                charge,
+                valence,
+                is_aromatic,
+            ),
+            Self::Counts {
+                table,
+                allow_implicit_hydrogens,
+            } => counts_candidates(
+                table,
+                *allow_implicit_hydrogens,
+                &ast.atoms[idx],
+                element,
+                charge,
+                valence,
+                donated_pairs,
+                accepted_pairs,
+                is_aromatic,
+            ),
+        }
+    }
+
     pub fn refine(&self, ast: &mut MoleculeAst) -> Progress {
         let mut advanced = false;
         for i in 0..ast.atoms.len() {
             if ast.atoms[i].is_ground() {
                 continue;
             }
-            let element = match ast.atoms[i].element {
-                ElementAst::Lit(e) => e,
-                _ => continue,
-            };
-            let atom_idx = AtomIdx(i);
-            let Some(valence) = ast.bond_order_sum(atom_idx) else {
+            if !matches!(ast.atoms[i].element, ElementAst::Lit(_)) {
                 continue;
-            };
-            let charge = ast.atoms[i].charge_or_zero();
-            let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(atom_idx);
-            let is_aromatic = ast.is_in_aromatic_system(atom_idx);
-
-            let candidates = match self {
-                Self::AtomTyping { registry } => atom_typing_candidates(
-                    registry,
-                    &ast.atoms[i],
-                    element,
-                    charge,
-                    valence,
-                    is_aromatic,
-                ),
-                Self::Counts {
-                    table,
-                    allow_implicit_hydrogens,
-                } => counts_candidates(
-                    table,
-                    *allow_implicit_hydrogens,
-                    &ast.atoms[i],
-                    element,
-                    charge,
-                    valence,
-                    donated_pairs,
-                    accepted_pairs,
-                    is_aromatic,
-                ),
-            };
-
+            }
+            if ast.bond_order_sum(AtomIdx(i)).is_none() {
+                continue;
+            }
+            let candidates = self.candidates_for(ast, AtomIdx(i));
             match candidates.len() {
                 0 => return Progress::Contradictory,
                 1 => {
@@ -161,40 +167,15 @@ impl ValenceStrategy {
         }
     }
 
-    pub fn validate(&self, atom: &AtomAst, ast: &MoleculeAst, atom_index: usize) -> bool {
-        let element = match atom.element {
-            ElementAst::Lit(e) => e,
-            _ => return true, // non-ground element: can't validate, pass through
-        };
-        let atom_idx = AtomIdx(atom_index);
-        let Some(valence) = ast.bond_order_sum(atom_idx) else {
+    pub fn validate(&self, ast: &MoleculeAst, atom_index: usize) -> bool {
+        let idx = AtomIdx(atom_index);
+        if !matches!(ast.atoms[idx].element, ElementAst::Lit(_)) {
             return true;
-        };
-        let charge = atom.charge_or_zero();
-        let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(atom_idx);
-        let is_aromatic = ast.is_in_aromatic_system(atom_idx);
-
-        let candidates = match self {
-            Self::AtomTyping { registry } => {
-                atom_typing_candidates(registry, atom, element, charge, valence, is_aromatic)
-            }
-            Self::Counts {
-                table,
-                allow_implicit_hydrogens,
-            } => counts_candidates(
-                table,
-                *allow_implicit_hydrogens,
-                atom,
-                element,
-                charge,
-                valence,
-                donated_pairs,
-                accepted_pairs,
-                is_aromatic,
-            ),
-        };
-
-        !candidates.is_empty()
+        }
+        if ast.bond_order_sum(idx).is_none() {
+            return true;
+        }
+        !self.candidates_for(ast, idx).is_empty()
     }
 }
 

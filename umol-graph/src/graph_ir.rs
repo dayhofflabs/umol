@@ -19,7 +19,6 @@ pub mod resolution;
 pub mod rings;
 pub mod symmetry;
 pub mod transform;
-pub mod valence;
 
 pub use aromaticity::*;
 pub use atom::*;
@@ -38,4 +37,3 @@ pub use resolution::*;
 pub use rings::*;
 pub use symmetry::*;
 pub use transform::*;
-pub use valence::*;

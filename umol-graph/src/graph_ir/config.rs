@@ -3,7 +3,9 @@
 use bitflags::bitflags;
 use umol_shared::element::Element;
 
-use super::config_data::{AtomTypeRegistry, ValenceTable};
+pub use crate::solver::ValenceStrategy;
+
+use super::config_data::AtomTypeRegistry;
 
 bitflags! {
     /// Topology resolution options.
@@ -39,17 +41,6 @@ pub struct ValenceResolveConfig {
     pub strategy: ValenceStrategy,
     pub no_match_policy: ValenceMatchPolicy,
     pub ambiguous_policy: ValenceMatchPolicy,
-}
-
-#[derive(Clone, Debug)]
-pub enum ValenceStrategy {
-    AtomTyping {
-        registry: AtomTypeRegistry,
-    },
-    Counts {
-        table: ValenceTable,
-        allow_implicit_hydrogens: bool,
-    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
