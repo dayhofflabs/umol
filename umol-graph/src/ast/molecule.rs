@@ -84,16 +84,33 @@ impl GroundMolecule {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::atom_ast::ElementAst;
+    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
+    use umol_shared::spin::SpinState;
     use umol_shared::spin_ast::SpinStateAst;
     use umol_shared::value_ast::ValueAst;
 
     use super::*;
     use crate::ast::constraint::{DerivedPred, RelationRefs};
 
+    fn ground_atom() -> AtomAst {
+        AtomAst {
+            element: ElementAst::Lit(umol_shared::element::Element::C),
+            isotope_mass: IsotopeAst::Natural,
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
+            lone_pairs: ValueAst::Lit(0),
+            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            valence: ValueAst::Lit(4),
+            donated_pairs: ValueAst::Lit(0),
+            accepted_pairs: ValueAst::Lit(0),
+            aromatic_valence: AromaticValenceAst::NotAromatic,
+            multicenter_valence: ValueAst::Lit(0),
+        }
+    }
+
     fn ground_ast() -> MoleculeAst {
         MoleculeAst {
-            atoms: vec![AtomAst::from_element(umol_shared::element::Element::C)],
+            atoms: vec![ground_atom()],
             bonds: vec![],
             dative_bonds: vec![],
             aromatic_systems: vec![],

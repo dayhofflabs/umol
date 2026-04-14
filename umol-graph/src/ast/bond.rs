@@ -10,46 +10,40 @@ use crate::ast::Ast;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BondAst {
     pub order: ValueAst,
-    pub charge: Option<ValueAst>,
-    pub spin: Option<SpinStateAst>,
+    pub charge: ValueAst,
+    pub spin: SpinStateAst,
 }
 
 impl BondAst {
     pub fn new(order: ValueAst) -> Self {
         Self {
             order,
-            charge: None,
-            spin: None,
+            charge: ValueAst::default(),
+            spin: SpinStateAst::default(),
         }
     }
 
     pub fn from_order(order: u8) -> Self {
-        Self {
-            order: ValueAst::Lit(order as i64),
-            charge: None,
-            spin: None,
-        }
+        Self::new(ValueAst::Lit(order as i64))
     }
 
     pub fn matches_ground(&self, target: &BondAst) -> bool {
         (match &target.order {
             ValueAst::Lit(n) => self.order.matches(*n),
             _ => false,
-        }) && (match (&self.charge, &target.charge) {
-            (None, _) => true,
-            (Some(pattern), Some(ValueAst::Lit(n))) => pattern.matches(*n),
-            (Some(_), _) => false,
-        }) && (match (&self.spin, &target.spin) {
-            (None, _) => true,
-            (Some(pattern), Some(SpinStateAst::Lit(s))) => pattern.matches(*s),
-            (Some(_), _) => false,
+        }) && (match &target.charge {
+            ValueAst::Lit(n) => self.charge.matches(*n),
+            _ => matches!(self.charge, ValueAst::Undetermined),
+        }) && (match &target.spin {
+            SpinStateAst::Lit(s) => self.spin.matches(*s),
+            _ => matches!(self.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }),
         })
     }
 
     pub fn is_ground(&self) -> bool {
         self.order.is_ground()
-            && self.charge.as_ref().map_or(true, |v| v.is_ground())
-            && self.spin.as_ref().map_or(true, |v| v.is_ground())
+            && self.charge.is_ground()
+            && self.spin.is_ground()
     }
 }
 

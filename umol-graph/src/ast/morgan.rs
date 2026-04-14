@@ -113,21 +113,21 @@ fn ast_atomic_number(ast: &MoleculeAst, idx: usize) -> u32 {
 
 fn ast_atomic_mass(ast: &MoleculeAst, idx: usize) -> u32 {
     match &ast.atoms[idx].isotope_mass {
-        Some(IsotopeAst::Lit(m)) => *m,
+        IsotopeAst::Lit(m) => *m,
         _ => 0,
     }
 }
 
 fn ast_charge(ast: &MoleculeAst, idx: usize) -> i32 {
     match &ast.atoms[idx].charge {
-        Some(ValueAst::Lit(n)) => *n as i32,
+        ValueAst::Lit(n) => *n as i32,
         _ => 0,
     }
 }
 
 fn ast_h_count(ast: &MoleculeAst, idx: usize) -> u32 {
     match &ast.atoms[idx].implicit_hydrogens {
-        Some(HydrogenAst::Value(ValueAst::Lit(n))) => *n as u32,
+        HydrogenAst::Value(ValueAst::Lit(n)) => *n as u32,
         _ => 0,
     }
 }
@@ -912,7 +912,7 @@ mod tests {
     fn methane() -> MoleculeAst {
         MoleculeAst {
             atoms: vec![AtomAst {
-                implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(4))),
+                implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
                 ..atom(Element::C)
             }],
             ..Default::default()
@@ -923,11 +923,11 @@ mod tests {
         MoleculeAst {
             atoms: vec![
                 AtomAst {
-                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(3))),
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)),
                     ..atom(Element::C)
                 },
                 AtomAst {
-                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(3))),
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)),
                     ..atom(Element::C)
                 },
             ],
@@ -940,15 +940,15 @@ mod tests {
         MoleculeAst {
             atoms: vec![
                 AtomAst {
-                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(3))),
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)),
                     ..atom(Element::C)
                 },
                 AtomAst {
-                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(2))),
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(2)),
                     ..atom(Element::C)
                 },
                 AtomAst {
-                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))),
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
                     ..atom(Element::O)
                 },
             ],
@@ -961,7 +961,7 @@ mod tests {
         MoleculeAst {
             atoms: (0..6)
                 .map(|_| AtomAst {
-                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(2))),
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(2)),
                     ..atom(Element::C)
                 })
                 .collect(),
@@ -974,7 +974,7 @@ mod tests {
         MoleculeAst {
             atoms: vec![
                 AtomAst {
-                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(2))),
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(2)),
                     ..atom(Element::C)
                 },
                 atom(Element::O),

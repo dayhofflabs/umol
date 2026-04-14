@@ -8,67 +8,27 @@ use umol_shared::value_ast::ValueAst;
 use crate::ast::config::AtomAstConfig;
 use crate::ast::Ast;
 
-fn match_element(query: &ElementAst, target: &ElementAst) -> bool {
-    match target {
-        ElementAst::Lit(e) => query.matches(e),
-        _ => false,
-    }
-}
-
-fn match_option<Q, T>(query: &Option<Q>, target: &Option<T>, f: impl FnOnce(&Q, &T) -> bool) -> bool {
-    match (query, target) {
-        (None, _) => true,
-        (Some(_), None) => false,
-        (Some(q), Some(t)) => f(q, t),
-    }
-}
-
-fn match_option_value(query: &Option<ValueAst>, target: &Option<ValueAst>) -> bool {
-    match (query, target) {
-        (None, _) => true,
-        (Some(pattern), Some(ValueAst::Lit(n))) => pattern.matches(*n),
-        (Some(_), _) => false,
-    }
-}
-
-fn match_option_spin(query: &Option<SpinStateAst>, target: &Option<SpinStateAst>) -> bool {
-    match (query, target) {
-        (None, _) => true,
-        (Some(pattern), Some(SpinStateAst::Lit(s))) => pattern.matches(*s),
-        (Some(_), _) => false,
-    }
-}
-
 /// Atom AST: structural representation of an atom (ground or pattern).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct AtomAst {
     pub element: ElementAst,
-    pub isotope_mass: Option<IsotopeAst>,
-    pub charge: Option<ValueAst>,
-    pub implicit_hydrogens: Option<HydrogenAst>,
-    pub lone_pairs: Option<ValueAst>,
-    pub spin: Option<SpinStateAst>,
-    pub valence: Option<ValueAst>,
-    pub donated_pairs: Option<ValueAst>,
-    pub accepted_pairs: Option<ValueAst>,
-    pub aromatic_valence: Option<AromaticValenceAst>,
-    pub multicenter_valence: Option<ValueAst>,
+    pub isotope_mass: IsotopeAst,
+    pub charge: ValueAst,
+    pub implicit_hydrogens: HydrogenAst,
+    pub lone_pairs: ValueAst,
+    pub spin: SpinStateAst,
+    pub valence: ValueAst,
+    pub donated_pairs: ValueAst,
+    pub accepted_pairs: ValueAst,
+    pub aromatic_valence: AromaticValenceAst,
+    pub multicenter_valence: ValueAst,
 }
 
 impl AtomAst {
     pub fn new(element: ElementAst) -> Self {
         Self {
             element,
-            isotope_mass: None,
-            charge: None,
-            implicit_hydrogens: None,
-            lone_pairs: None,
-            spin: None,
-            valence: None,
-            donated_pairs: None,
-            accepted_pairs: None,
-            aromatic_valence: None,
-            multicenter_valence: None,
+            ..Default::default()
         }
     }
 
@@ -77,31 +37,54 @@ impl AtomAst {
     }
 
     pub fn matches_ground(&self, target: &AtomAst) -> bool {
-        match_element(&self.element, &target.element)
-            && match_option(&self.isotope_mass, &target.isotope_mass, |q, t| q.matches(t))
-            && match_option_value(&self.charge, &target.charge)
-            && match_option(&self.implicit_hydrogens, &target.implicit_hydrogens, |q, t| q.matches(t))
-            && match_option_value(&self.lone_pairs, &target.lone_pairs)
-            && match_option_spin(&self.spin, &target.spin)
-            && match_option_value(&self.valence, &target.valence)
-            && match_option_value(&self.donated_pairs, &target.donated_pairs)
-            && match_option_value(&self.accepted_pairs, &target.accepted_pairs)
-            && match_option(&self.aromatic_valence, &target.aromatic_valence, |q, t| q.matches(t))
-            && match_option_value(&self.multicenter_valence, &target.multicenter_valence)
+        (match &target.element {
+            ElementAst::Lit(e) => self.element.matches(e),
+            _ => false,
+        }) && self.isotope_mass.matches(&target.isotope_mass)
+            && (match &target.charge {
+                ValueAst::Lit(n) => self.charge.matches(*n),
+                _ => matches!(self.charge, ValueAst::Undetermined),
+            })
+            && self.implicit_hydrogens.matches(&target.implicit_hydrogens)
+            && (match &target.lone_pairs {
+                ValueAst::Lit(n) => self.lone_pairs.matches(*n),
+                _ => matches!(self.lone_pairs, ValueAst::Undetermined),
+            })
+            && (match &target.spin {
+                SpinStateAst::Lit(s) => self.spin.matches(*s),
+                _ => matches!(self.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }),
+            })
+            && (match &target.valence {
+                ValueAst::Lit(n) => self.valence.matches(*n),
+                _ => matches!(self.valence, ValueAst::Undetermined),
+            })
+            && (match &target.donated_pairs {
+                ValueAst::Lit(n) => self.donated_pairs.matches(*n),
+                _ => matches!(self.donated_pairs, ValueAst::Undetermined),
+            })
+            && (match &target.accepted_pairs {
+                ValueAst::Lit(n) => self.accepted_pairs.matches(*n),
+                _ => matches!(self.accepted_pairs, ValueAst::Undetermined),
+            })
+            && self.aromatic_valence.matches(&target.aromatic_valence)
+            && (match &target.multicenter_valence {
+                ValueAst::Lit(n) => self.multicenter_valence.matches(*n),
+                _ => matches!(self.multicenter_valence, ValueAst::Undetermined),
+            })
     }
 
     pub fn is_ground(&self) -> bool {
         self.element.is_ground()
-            && self.isotope_mass.as_ref().map_or(true, |v| v.is_ground())
-            && self.charge.as_ref().map_or(true, |v| v.is_ground())
-            && self.implicit_hydrogens.as_ref().map_or(true, |v| v.is_ground())
-            && self.lone_pairs.as_ref().map_or(true, |v| v.is_ground())
-            && self.spin.as_ref().map_or(true, |v| v.is_ground())
-            && self.valence.as_ref().map_or(true, |v| v.is_ground())
-            && self.donated_pairs.as_ref().map_or(true, |v| v.is_ground())
-            && self.accepted_pairs.as_ref().map_or(true, |v| v.is_ground())
-            && self.aromatic_valence.as_ref().map_or(true, |v| v.is_ground())
-            && self.multicenter_valence.as_ref().map_or(true, |v| v.is_ground())
+            && self.isotope_mass.is_ground()
+            && self.charge.is_ground()
+            && self.implicit_hydrogens.is_ground()
+            && self.lone_pairs.is_ground()
+            && self.spin.is_ground()
+            && self.valence.is_ground()
+            && self.donated_pairs.is_ground()
+            && self.accepted_pairs.is_ground()
+            && self.aromatic_valence.is_ground()
+            && self.multicenter_valence.is_ground()
     }
 }
 

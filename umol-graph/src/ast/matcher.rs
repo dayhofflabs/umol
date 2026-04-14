@@ -286,7 +286,7 @@ mod tests {
         };
         let target = MoleculeAst {
             atoms: vec![AtomAst {
-                charge: Some(ValueAst::Lit(-1)),
+                charge: ValueAst::Lit(-1),
                 ..atom(Element::C)
             }],
             ..Default::default()
@@ -298,7 +298,7 @@ mod tests {
     fn test_find_matches_optional_field_present_vs_absent() {
         let query = MoleculeAst {
             atoms: vec![AtomAst {
-                charge: Some(ValueAst::Lit(-1)),
+                charge: ValueAst::Lit(-1),
                 ..atom(Element::C)
             }],
             ..Default::default()

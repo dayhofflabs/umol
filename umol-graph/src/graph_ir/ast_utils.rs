@@ -7,35 +7,35 @@ use super::atom_pattern::Pattern;
 use crate::ast::config::{MultiplicityMode, NumericMode, UnpairedElectronsMode};
 use crate::ast::error::LoweringError;
 
-pub(crate) fn raise_u8_ground(value: u8, mode: &NumericMode) -> Option<ValueAst> {
+pub(crate) fn raise_u8_ground(value: u8, mode: &NumericMode) -> ValueAst {
     match (value, mode) {
-        (0, NumericMode::Zero) => None,
-        (n, _) => Some(ValueAst::Lit(n as i64)),
+        (0, NumericMode::Zero) => ValueAst::Undetermined,
+        (n, _) => ValueAst::Lit(n as i64),
     }
 }
 
-pub(crate) fn raise_i8_ground(value: i8, mode: &NumericMode) -> Option<ValueAst> {
+pub(crate) fn raise_i8_ground(value: i8, mode: &NumericMode) -> ValueAst {
     match (value, mode) {
-        (0, NumericMode::Zero) => None,
-        (n, _) => Some(ValueAst::Lit(n as i64)),
+        (0, NumericMode::Zero) => ValueAst::Undetermined,
+        (n, _) => ValueAst::Lit(n as i64),
     }
 }
 
-pub(crate) fn raise_u8_pattern(pattern: Pattern<u8>, mode: &NumericMode) -> Option<ValueAst> {
+pub(crate) fn raise_u8_pattern(pattern: Pattern<u8>, mode: &NumericMode) -> ValueAst {
     match (pattern, mode) {
-        (Pattern::Is(0), NumericMode::Zero) => None,
-        (Pattern::Any, NumericMode::Required) => None,
-        (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Undetermined),
-        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
+        (Pattern::Is(0), NumericMode::Zero) => ValueAst::Undetermined,
+        (Pattern::Any, NumericMode::Required) => ValueAst::Undetermined,
+        (Pattern::Any, NumericMode::Zero) => ValueAst::Undetermined,
+        (Pattern::Is(n), _) => ValueAst::Lit(n as i64),
     }
 }
 
-pub(crate) fn raise_i8_pattern(pattern: Pattern<i8>, mode: &NumericMode) -> Option<ValueAst> {
+pub(crate) fn raise_i8_pattern(pattern: Pattern<i8>, mode: &NumericMode) -> ValueAst {
     match (pattern, mode) {
-        (Pattern::Is(0), NumericMode::Zero) => None,
-        (Pattern::Any, NumericMode::Required) => None,
-        (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Undetermined),
-        (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
+        (Pattern::Is(0), NumericMode::Zero) => ValueAst::Undetermined,
+        (Pattern::Any, NumericMode::Required) => ValueAst::Undetermined,
+        (Pattern::Any, NumericMode::Zero) => ValueAst::Undetermined,
+        (Pattern::Is(n), _) => ValueAst::Lit(n as i64),
     }
 }
 

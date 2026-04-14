@@ -868,9 +868,10 @@ impl fmt::Display for MoleculeAstWrapper {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::atom_ast::{ElementAst, HydrogenAst};
+    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
     use umol_shared::e;
     use umol_shared::element::Element;
+    use umol_shared::spin_ast::SpinStateAst;
     use umol_shared::value_ast::ValueAst;
 
     use super::*;
@@ -942,16 +943,16 @@ mod tests {
         MoleculeAst {
             atoms: vec![AtomAst {
                 element: ElementAst::Lit(Element::F),
-                isotope_mass: None,
-                implicit_hydrogens: None,
-                charge: Some(ValueAst::Lit(-1)),
-                lone_pairs: None,
-                spin: None,
-                valence: None,
-                donated_pairs: None,
-                accepted_pairs: None,
-                aromatic_valence: None,
-                multicenter_valence: None,
+                isotope_mass: IsotopeAst::Undetermined,
+                implicit_hydrogens: HydrogenAst::Undetermined,
+                charge: ValueAst::Lit(-1),
+                lone_pairs: ValueAst::Undetermined,
+                spin: SpinStateAst::default(),
+                valence: ValueAst::Undetermined,
+                donated_pairs: ValueAst::Undetermined,
+                accepted_pairs: ValueAst::Undetermined,
+                aromatic_valence: AromaticValenceAst::Undetermined,
+                multicenter_valence: ValueAst::Undetermined,
             }],
             constraints: vec![MoleculeConstraint::Derived {
                 predicate: DerivedPred::TotalCharge(ValueAst::Lit(-1)),
@@ -968,32 +969,32 @@ mod tests {
         r#"{:atoms [:ch] :bonds [] :aliases [:ch "C #h1"]}"#,
         atoms(vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: None,
-            implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))),
-            charge: None,
-            lone_pairs: None,
-            spin: None,
-            valence: None,
-            donated_pairs: None,
-            accepted_pairs: None,
-            aromatic_valence: None,
-            multicenter_valence: None,
+            isotope_mass: IsotopeAst::Undetermined,
+            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
+            charge: ValueAst::Undetermined,
+            lone_pairs: ValueAst::Undetermined,
+            spin: SpinStateAst::default(),
+            valence: ValueAst::Undetermined,
+            donated_pairs: ValueAst::Undetermined,
+            accepted_pairs: ValueAst::Undetermined,
+            aromatic_valence: AromaticValenceAst::Undetermined,
+            multicenter_valence: ValueAst::Undetermined,
         }]),
         Metadata {
             atom_aliases: BiMap::from_iter([(
                 "ch".to_string(),
                 AtomAst {
                     element: ElementAst::Lit(Element::C),
-                    isotope_mass: None,
-                    implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(1))),
-                    charge: None,
-                    lone_pairs: None,
-                    spin: None,
-                    valence: None,
-                    donated_pairs: None,
-                    accepted_pairs: None,
-                    aromatic_valence: None,
-                    multicenter_valence: None,
+                    isotope_mass: IsotopeAst::Undetermined,
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
+                    charge: ValueAst::Undetermined,
+                    lone_pairs: ValueAst::Undetermined,
+                    spin: SpinStateAst::default(),
+                    valence: ValueAst::Undetermined,
+                    donated_pairs: ValueAst::Undetermined,
+                    accepted_pairs: ValueAst::Undetermined,
+                    aromatic_valence: AromaticValenceAst::Undetermined,
+                    multicenter_valence: ValueAst::Undetermined,
                 },
             )]),
             ..Default::default()

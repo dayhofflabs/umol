@@ -47,22 +47,21 @@ impl Display for BondAst {
         }
 
         match &self.charge {
-            None | Some(ValueAst::Lit(0)) => {}
-            Some(ValueAst::Lit(1)) => write!(f, "#c+")?,
-            Some(ValueAst::Lit(-1)) => write!(f, "#c-")?,
-            Some(ValueAst::Lit(n)) if *n > 0 => write!(f, "#c+{}", n)?,
-            Some(ValueAst::Lit(n)) => write!(f, "#c{}", n)?,
-            Some(ValueAst::Undetermined) => write!(f, "#c*")?,
-            Some(v) => {
+            ValueAst::Undetermined | ValueAst::Lit(0) => {}
+            ValueAst::Lit(1) => write!(f, "#c+")?,
+            ValueAst::Lit(-1) => write!(f, "#c-")?,
+            ValueAst::Lit(n) if *n > 0 => write!(f, "#c+{}", n)?,
+            ValueAst::Lit(n) => write!(f, "#c{}", n)?,
+            v => {
                 write!(f, "#c")?;
                 fmt_bond_value(f, v)?;
             }
         }
 
-        let Some(spin) = &self.spin else {
+        let (u_field, m_field) = self.spin.to_pair();
+        if matches!((&u_field, &m_field), (ValueAst::Undetermined, ValueAst::Undetermined)) {
             return Ok(());
-        };
-        let (u_field, m_field) = spin.to_pair();
+        }
 
         match &u_field {
             ValueAst::Undetermined | ValueAst::Lit(0) => {}
@@ -160,11 +159,7 @@ pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, BondDslError> {
     )
     .parse(i)?;
 
-    let mut ast = BondAst {
-        order,
-        charge: None,
-        spin: None,
-    };
+    let mut ast = BondAst::new(order);
     update_bond_ast(&mut ast, preds).map_err(Err::Error)?;
     Ok((remaining, ast))
 }
@@ -174,18 +169,14 @@ fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), B
     for pred in preds {
         match pred {
             BondPredicate::Charge(v) => {
-                if ast.charge.is_some() {
+                if !matches!(ast.charge, ValueAst::Undetermined) {
                     return Err(BondDslError::DuplicateBondPredicate("#c".to_string()));
                 }
-                ast.charge = Some(v);
+                ast.charge = v;
             }
             BondPredicate::UnpairedElectrons(v) => {
-                let pair = ast.spin.get_or_insert(SpinStateAst::Pair {
-                    unpaired: ValueAst::Undetermined,
-                    multiplicity: ValueAst::Undetermined,
-                });
-                let SpinStateAst::Pair { unpaired, .. } = pair else {
-                    unreachable!("parser only constructs Pair")
+                let SpinStateAst::Pair { unpaired, .. } = &mut ast.spin else {
+                    unreachable!("default is Pair")
                 };
                 if !matches!(unpaired, ValueAst::Undetermined) {
                     return Err(BondDslError::DuplicateBondPredicate("#u".to_string()));
@@ -193,12 +184,8 @@ fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), B
                 *unpaired = v;
             }
             BondPredicate::Multiplicity(v) => {
-                let pair = ast.spin.get_or_insert(SpinStateAst::Pair {
-                    unpaired: ValueAst::Undetermined,
-                    multiplicity: ValueAst::Undetermined,
-                });
-                let SpinStateAst::Pair { multiplicity, .. } = pair else {
-                    unreachable!("parser only constructs Pair")
+                let SpinStateAst::Pair { multiplicity, .. } = &mut ast.spin else {
+                    unreachable!("default is Pair")
                 };
                 if !matches!(multiplicity, ValueAst::Undetermined) {
                     return Err(BondDslError::DuplicateBondPredicate("#s".to_string()));
@@ -281,27 +268,27 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::single("1", BondAst { order: ValueAst::Lit(1), charge: None, spin: None })]
-    #[case::double("2", BondAst { order: ValueAst::Lit(2), charge: None, spin: None })]
-    #[case::triple("3", BondAst { order: ValueAst::Lit(3), charge: None, spin: None })]
-    #[case::quadruple("4", BondAst { order: ValueAst::Lit(4), charge: None, spin: None })]
-    #[case::single_whitespace("  1  ", BondAst { order: ValueAst::Lit(1), charge: None, spin: None })]
-    #[case::single_pos_charge("1#c+2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(2)), spin: None })]
-    #[case::single_neg_charge("1#c-2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(-2)), spin: None })]
-    #[case::single_zero_charge("1#c0", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), spin: None })]
-    #[case::single_plus_only("1#c+", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(1)), spin: None })]
-    #[case::single_minus_only("1#c-",  BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(-1)), spin: None })]
-    #[case::single_plus_whitespace("1#c +", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(1)), spin: None })]
-    #[case::single_minus_whitespace("1#c -", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(-1)), spin: None })]
-    #[case::single_pos_charge_whitespace("1#c +2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(2)), spin: None })]
-    #[case::double_unpaired("2#u3", BondAst { order: ValueAst::Lit(2), charge: None, spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(3), multiplicity: ValueAst::Undetermined }) })]
-    #[case::single_u_only("1#u", BondAst { order: ValueAst::Lit(1), charge: None, spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }) })]
-    #[case::single_mult("1#s2", BondAst { order: ValueAst::Lit(1), charge: None, spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }) })]
-    #[case::single_s_only("1#s", BondAst { order: ValueAst::Lit(1), charge: None, spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }) })]
-    #[case::double_charge_unpaired("2#c+#u2", BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }) })]
-    #[case::double_charge_mult("2#c-1#s3", BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(-1)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }) })]
-    #[case::double_charge_unpaired_mult("1#c0#u1#s1", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) }) })]
-    #[case::double_plus_only_unpaired("1 #c+ #u2", BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(1)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }) })]
+    #[case::single("1", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() })]
+    #[case::double("2", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default() })]
+    #[case::triple("3", BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default() })]
+    #[case::quadruple("4", BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default() })]
+    #[case::single_whitespace("  1  ", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() })]
+    #[case::single_pos_charge("1#c+2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(2), spin: SpinStateAst::default() })]
+    #[case::single_neg_charge("1#c-2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-2), spin: SpinStateAst::default() })]
+    #[case::single_zero_charge("1#c0", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default() })]
+    #[case::single_plus_only("1#c+", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default() })]
+    #[case::single_minus_only("1#c-",  BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default() })]
+    #[case::single_plus_whitespace("1#c +", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default() })]
+    #[case::single_minus_whitespace("1#c -", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default() })]
+    #[case::single_pos_charge_whitespace("1#c +2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(2), spin: SpinStateAst::default() })]
+    #[case::double_unpaired("2#u3", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(3), multiplicity: ValueAst::Undetermined } })]
+    #[case::single_u_only("1#u", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined } })]
+    #[case::single_mult("1#s2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) } })]
+    #[case::single_s_only("1#s", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) } })]
+    #[case::double_charge_unpaired("2#c+#u2", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined } })]
+    #[case::double_charge_mult("2#c-1#s3", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(-1), spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) } })]
+    #[case::double_charge_unpaired_mult("1#c0#u1#s1", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) } })]
+    #[case::double_plus_only_unpaired("1 #c+ #u2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined } })]
     fn test_parse_bond_dsl(#[case] input: &str, #[case] expected: BondAst) {
         let result = bond_dsl(input);
         assert!(

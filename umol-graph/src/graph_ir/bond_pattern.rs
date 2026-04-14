@@ -158,23 +158,25 @@ impl FromAst<BondAst> for BondPattern {
             _ => return Err(LoweringError::NonGround { field: "order" }),
         };
 
-        let charge = match ast.charge.clone().or(match cfg.charge_mode {
-            NumericMode::Zero => Some(ValueAst::Lit(0)),
-            NumericMode::Required => None,
-        }) {
-            None => Pattern::Any,
-            Some(ValueAst::Undetermined) => Pattern::Any,
-            Some(ValueAst::Lit(n)) => Pattern::Is(
-                i8::try_from(n).map_err(|_| LoweringError::NonGround { field: "charge" })?,
-            ),
-            Some(_) => return Err(LoweringError::NonGround { field: "charge" }),
+        let charge = {
+            let v = if matches!(ast.charge, ValueAst::Undetermined) {
+                match cfg.charge_mode {
+                    NumericMode::Zero => ValueAst::Lit(0),
+                    NumericMode::Required => ValueAst::Undetermined,
+                }
+            } else {
+                ast.charge.clone()
+            };
+            match v {
+                ValueAst::Undetermined => Pattern::Any,
+                ValueAst::Lit(n) => Pattern::Is(
+                    i8::try_from(n).map_err(|_| LoweringError::NonGround { field: "charge" })?,
+                ),
+                _ => return Err(LoweringError::NonGround { field: "charge" }),
+            }
         };
 
-        let (u_ast, m_ast) = ast
-            .spin
-            .as_ref()
-            .map(SpinStateAst::to_pair)
-            .unwrap_or((ValueAst::Undetermined, ValueAst::Undetermined));
+        let (u_ast, m_ast) = ast.spin.to_pair();
         let (unpaired_electrons, multiplicity) = lower_spin(
             u_ast,
             m_ast,
@@ -205,10 +207,10 @@ impl ToAst<BondAst> for BondPattern {
                 Pattern::Is(n) => ValueAst::Lit(n as i64),
             },
             charge: match (self.charge, &cfg.charge_mode) {
-                (Pattern::Is(0), NumericMode::Zero) => None,
-                (Pattern::Any, NumericMode::Required) => None,
-                (Pattern::Any, NumericMode::Zero) => Some(ValueAst::Undetermined),
-                (Pattern::Is(n), _) => Some(ValueAst::Lit(n as i64)),
+                (Pattern::Is(0), NumericMode::Zero) => ValueAst::Undetermined,
+                (Pattern::Any, NumericMode::Required) => ValueAst::Undetermined,
+                (Pattern::Any, NumericMode::Zero) => ValueAst::Undetermined,
+                (Pattern::Is(n), _) => ValueAst::Lit(n as i64),
             },
             spin: SpinStateAst::from_pair(spin_u, spin_m),
         }
@@ -358,22 +360,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::defaults(BondAst { order: ValueAst::Lit(1), charge: None, spin: None },
+    #[case::defaults(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() },
         BondAstConfig::zeroed(),
         BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
-    #[case::charged(BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }) },
+    #[case::charged(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined } },
         BondAstConfig::zeroed(),
         BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), multiplicity: Pattern::Is(SpinMultiplicity::Doublet), ..BondPattern::new(2) })]
-    #[case::wildcard_charge(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Undetermined), spin: None },
+    #[case::wildcard_charge(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() },
         BondAstConfig::zeroed(),
-        BondPattern { unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
-    #[case::wildcard_order(BondAst { order: ValueAst::Undetermined, charge: None, spin: None },
+        BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
+    #[case::wildcard_order(BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default() },
         BondAstConfig::zeroed(),
         BondPattern { order: Pattern::Any, charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(0), multiplicity: Pattern::Is(SpinMultiplicity::Singlet) })]
-    #[case::full(BondAst { order: ValueAst::Lit(1), charge: Some(ValueAst::Lit(0)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) }) },
+    #[case::full(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) } },
         BondAstConfig::zeroed(),
         BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(1) })]
-    #[case::all_open(BondAst { order: ValueAst::Lit(1), charge: None, spin: None },
+    #[case::all_open(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() },
         BondAstConfig::open(),
         BondPattern::new(1))]
     fn test_bond_pattern_from_ast(#[case] ast: BondAst, #[case] cfg: BondAstConfig, #[case] expected: BondPattern) {
@@ -383,17 +385,17 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::minimal(BondPattern::new(1), BondAstConfig::open(),
-        BondAst { order: ValueAst::Lit(1), charge: None, spin: None })]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() })]
     #[case::charged(BondPattern { charge: Pattern::Is(1), unpaired_electrons: Pattern::Is(1), ..BondPattern::new(2) }, BondAstConfig::open(),
-        BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(1)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }) })]
+        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined } })]
     #[case::wildcard_order(BondPattern { order: Pattern::Any, ..BondPattern::new(1) }, BondAstConfig::open(),
-        BondAst { order: ValueAst::Undetermined, charge: None, spin: None })]
+        BondAst { order: ValueAst::Undetermined, charge: ValueAst::Undetermined, spin: SpinStateAst::default() })]
     #[case::high_spin(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Triplet), ..BondPattern::new(2) }, BondAstConfig::open(),
-        BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(0)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }) })]
+        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(0), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined } })]
     #[case::low_spin(BondPattern { charge: Pattern::Is(0), unpaired_electrons: Pattern::Is(2), multiplicity: Pattern::Is(SpinMultiplicity::Singlet), ..BondPattern::new(2) }, BondAstConfig::open(),
-        BondAst { order: ValueAst::Lit(2), charge: Some(ValueAst::Lit(0)), spin: Some(SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) }) })]
+        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(0), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) } })]
     #[case::zero_config_suppresses(BondPattern { charge: Pattern::Is(0), ..BondPattern::new(1) }, BondAstConfig::zeroed(),
-        BondAst { order: ValueAst::Lit(1), charge: None, spin: None })]
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() })]
     fn test_bond_pattern_to_ast(#[case] pattern: BondPattern, #[case] cfg: BondAstConfig, #[case] expected: BondAst) {
         assert_eq!(pattern.to_ast(&cfg), expected);
     }

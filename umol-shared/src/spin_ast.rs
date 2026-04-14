@@ -18,20 +18,10 @@ impl SpinStateAst {
         matches!(self, Self::Lit(_))
     }
 
-    /// Build a `SpinStateAst` from an `(unpaired, multiplicity)` `ValueAst` pair.
-    /// Build an `Option<SpinStateAst>` from an `(unpaired, multiplicity)` pair.
-    /// Returns `None` when both inputs are `Undetermined`.
-    pub fn from_pair(unpaired: ValueAst, multiplicity: ValueAst) -> Option<Self> {
-        if matches!(
-            (&unpaired, &multiplicity),
-            (ValueAst::Undetermined, ValueAst::Undetermined)
-        ) {
-            None
-        } else {
-            Some(Self::Pair {
-                unpaired,
-                multiplicity,
-            })
+    pub fn from_pair(unpaired: ValueAst, multiplicity: ValueAst) -> Self {
+        Self::Pair {
+            unpaired,
+            multiplicity,
         }
     }
 

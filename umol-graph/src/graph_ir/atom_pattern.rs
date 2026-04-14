@@ -525,83 +525,104 @@ impl FromAst<AtomAst> for AtomPattern {
             }
         };
 
-        let isotope_mass = match ast.isotope_mass.clone().or(match cfg.isotope_mode {
-            IsotopeMode::Natural => Some(IsotopeAst::Natural),
-            IsotopeMode::Required => None,
-        }) {
-            None => IsotopePattern::Any,
-            Some(IsotopeAst::Natural) => IsotopePattern::Natural,
-            Some(IsotopeAst::Undetermined) => IsotopePattern::Any,
-            Some(IsotopeAst::Lit(n)) => IsotopePattern::Is(n),
-            Some(IsotopeAst::Set(s)) => IsotopePattern::OneOf(s),
-            Some(IsotopeAst::Bind { .. }) | Some(IsotopeAst::Ref(_)) => {
-                return Err(LoweringError::NonGround {
-                    field: "isotope_mass",
-                })
+        let isotope_mass = {
+            let v = if matches!(ast.isotope_mass, IsotopeAst::Undetermined) {
+                match cfg.isotope_mode {
+                    IsotopeMode::Natural => IsotopeAst::Natural,
+                    IsotopeMode::Required => IsotopeAst::Undetermined,
+                }
+            } else {
+                ast.isotope_mass.clone()
+            };
+            match v {
+                IsotopeAst::Undetermined => IsotopePattern::Any,
+                IsotopeAst::Natural => IsotopePattern::Natural,
+                IsotopeAst::Lit(n) => IsotopePattern::Is(n),
+                IsotopeAst::Set(s) => IsotopePattern::OneOf(s),
+                IsotopeAst::Bind { .. } | IsotopeAst::Ref(_) => {
+                    return Err(LoweringError::NonGround {
+                        field: "isotope_mass",
+                    })
+                }
             }
         };
 
-        let charge = match ast.charge.clone().or(match cfg.charge_mode {
-            NumericMode::Zero => Some(ValueAst::Lit(0)),
-            NumericMode::Required => None,
-        }) {
-            None => Pattern::Any,
-            Some(ValueAst::Undetermined) => Pattern::Any,
-            Some(ValueAst::Lit(n)) => Pattern::Is(
-                i8::try_from(n).map_err(|_| LoweringError::NonGround { field: "charge" })?,
-            ),
-            Some(_) => return Err(LoweringError::NonGround { field: "charge" }),
-        };
-
-        let implicit_hydrogens = match ast.implicit_hydrogens.clone().or(match cfg.implicit_h_mode {
-            ImplicitHydrogenMode::Normal => Some(HydrogenAst::Normal),
-            ImplicitHydrogenMode::Zero => Some(HydrogenAst::Value(ValueAst::Lit(0))),
-            ImplicitHydrogenMode::Required => None,
-        }) {
-            None | Some(HydrogenAst::Undetermined) => HydrogenPattern::Any,
-            Some(HydrogenAst::Normal) => HydrogenPattern::Normal,
-            Some(HydrogenAst::Value(ValueAst::Undetermined)) => HydrogenPattern::Any,
-            Some(HydrogenAst::Value(ValueAst::Lit(n))) => {
-                HydrogenPattern::Is(u8::try_from(n).map_err(|_| LoweringError::NonGround {
-                    field: "implicit_hydrogens",
-                })?)
-            }
-            Some(HydrogenAst::Value(_)) => {
-                return Err(LoweringError::NonGround {
-                    field: "implicit_hydrogens",
-                })
+        let charge = {
+            let v = if matches!(ast.charge, ValueAst::Undetermined) {
+                match cfg.charge_mode {
+                    NumericMode::Zero => ValueAst::Lit(0),
+                    NumericMode::Required => ValueAst::Undetermined,
+                }
+            } else {
+                ast.charge.clone()
+            };
+            match v {
+                ValueAst::Undetermined => Pattern::Any,
+                ValueAst::Lit(n) => Pattern::Is(
+                    i8::try_from(n).map_err(|_| LoweringError::NonGround { field: "charge" })?,
+                ),
+                _ => return Err(LoweringError::NonGround { field: "charge" }),
             }
         };
 
-        let aromatic_valence = match ast.aromatic_valence.clone().or(match cfg.aromatic_valence_mode {
-            AromaticValenceMode::NotAromatic => Some(AromaticValenceAst::NotAromatic),
-            AromaticValenceMode::Aromatic => Some(AromaticValenceAst::Value(ValueAst::Undetermined)),
-            AromaticValenceMode::Required => None,
-        }) {
-            None => AromaticValencePattern::Any,
-            Some(AromaticValenceAst::Undetermined) => AromaticValencePattern::Any,
-            Some(AromaticValenceAst::NotAromatic) => AromaticValencePattern::NotAromatic,
-            Some(AromaticValenceAst::Value(ValueAst::Undetermined)) => AromaticValencePattern::Aromatic,
-            Some(AromaticValenceAst::Value(ValueAst::Lit(n))) => {
-                AromaticValencePattern::Is(u8::try_from(n).map_err(|_| {
-                    LoweringError::NonGround {
+        let implicit_hydrogens = {
+            let v = if matches!(ast.implicit_hydrogens, HydrogenAst::Undetermined) {
+                match cfg.implicit_h_mode {
+                    ImplicitHydrogenMode::Normal => HydrogenAst::Normal,
+                    ImplicitHydrogenMode::Zero => HydrogenAst::Value(ValueAst::Lit(0)),
+                    ImplicitHydrogenMode::Required => HydrogenAst::Undetermined,
+                }
+            } else {
+                ast.implicit_hydrogens.clone()
+            };
+            match v {
+                HydrogenAst::Undetermined => HydrogenPattern::Any,
+                HydrogenAst::Normal => HydrogenPattern::Normal,
+                HydrogenAst::Value(ValueAst::Undetermined) => HydrogenPattern::Any,
+                HydrogenAst::Value(ValueAst::Lit(n)) => {
+                    HydrogenPattern::Is(u8::try_from(n).map_err(|_| LoweringError::NonGround {
+                        field: "implicit_hydrogens",
+                    })?)
+                }
+                HydrogenAst::Value(_) => {
+                    return Err(LoweringError::NonGround {
+                        field: "implicit_hydrogens",
+                    })
+                }
+            }
+        };
+
+        let aromatic_valence = {
+            let v = if matches!(ast.aromatic_valence, AromaticValenceAst::Undetermined) {
+                match cfg.aromatic_valence_mode {
+                    AromaticValenceMode::NotAromatic => AromaticValenceAst::NotAromatic,
+                    AromaticValenceMode::Aromatic => AromaticValenceAst::Value(ValueAst::Undetermined),
+                    AromaticValenceMode::Required => AromaticValenceAst::Undetermined,
+                }
+            } else {
+                ast.aromatic_valence.clone()
+            };
+            match v {
+                AromaticValenceAst::Undetermined => AromaticValencePattern::Any,
+                AromaticValenceAst::NotAromatic => AromaticValencePattern::NotAromatic,
+                AromaticValenceAst::Value(ValueAst::Undetermined) => AromaticValencePattern::Aromatic,
+                AromaticValenceAst::Value(ValueAst::Lit(n)) => {
+                    AromaticValencePattern::Is(u8::try_from(n).map_err(|_| {
+                        LoweringError::NonGround {
+                            field: "aromatic_valence",
+                        }
+                    })?)
+                }
+                AromaticValenceAst::Value(_) => {
+                    return Err(LoweringError::NonGround {
                         field: "aromatic_valence",
-                    }
-                })?)
-            }
-            Some(AromaticValenceAst::Value(_)) => {
-                return Err(LoweringError::NonGround {
-                    field: "aromatic_valence",
-                })
+                    })
+                }
             }
         };
 
         // Coupled spin resolution: resolve u first (may derive from raw m), then m (may derive from resolved u)
-        let (u_ast, m_ast) = ast
-            .spin
-            .as_ref()
-            .map(SpinStateAst::to_pair)
-            .unwrap_or((ValueAst::Undetermined, ValueAst::Undetermined));
+        let (u_ast, m_ast) = ast.spin.to_pair();
         let (unpaired_electrons, multiplicity) = lower_spin(
             u_ast,
             m_ast,
@@ -609,21 +630,24 @@ impl FromAst<AtomAst> for AtomPattern {
             &cfg.multiplicity_mode,
         )?;
 
-        let lower_u8 = |v: Option<ValueAst>,
+        let lower_u8 = |v: ValueAst,
                         mode: &NumericMode,
                         field: &'static str|
          -> Result<Pattern<u8>, LoweringError> {
-            let v = v.or(match mode {
-                NumericMode::Zero => Some(ValueAst::Lit(0)),
-                NumericMode::Required => None,
-            });
+            let v = if matches!(v, ValueAst::Undetermined) {
+                match mode {
+                    NumericMode::Zero => ValueAst::Lit(0),
+                    NumericMode::Required => ValueAst::Undetermined,
+                }
+            } else {
+                v
+            };
             match v {
-                None => Ok(Pattern::Any),
-                Some(ValueAst::Undetermined) => Ok(Pattern::Any),
-                Some(ValueAst::Lit(n)) => u8::try_from(n)
+                ValueAst::Undetermined => Ok(Pattern::Any),
+                ValueAst::Lit(n) => u8::try_from(n)
                     .map(Pattern::Is)
                     .map_err(|_| LoweringError::NonGround { field }),
-                Some(_) => Err(LoweringError::NonGround { field }),
+                _ => Err(LoweringError::NonGround { field }),
             }
         };
 
@@ -671,21 +695,21 @@ impl ToAst<AtomAst> for AtomPattern {
                 ElementPattern::OneOf(es) => ElementAst::Set(es.clone()),
             },
             isotope_mass: match (&self.isotope_mass, &cfg.isotope_mode) {
-                (IsotopePattern::Natural, IsotopeMode::Natural) => None,
-                (IsotopePattern::Any, IsotopeMode::Required) => None,
-                (IsotopePattern::Any, _) => Some(IsotopeAst::Undetermined),
-                (IsotopePattern::Natural, IsotopeMode::Required) => Some(IsotopeAst::Natural),
-                (IsotopePattern::Is(n), _) => Some(IsotopeAst::Lit(*n)),
-                (IsotopePattern::OneOf(ns), _) => Some(IsotopeAst::Set(ns.clone())),
+                (IsotopePattern::Natural, IsotopeMode::Natural) => IsotopeAst::Undetermined,
+                (IsotopePattern::Any, IsotopeMode::Required) => IsotopeAst::Undetermined,
+                (IsotopePattern::Any, _) => IsotopeAst::Undetermined,
+                (IsotopePattern::Natural, IsotopeMode::Required) => IsotopeAst::Natural,
+                (IsotopePattern::Is(n), _) => IsotopeAst::Lit(*n),
+                (IsotopePattern::OneOf(ns), _) => IsotopeAst::Set(ns.clone()),
             },
             charge: raise_i8_pattern(self.charge, &cfg.charge_mode),
             implicit_hydrogens: match (&self.implicit_hydrogens, &cfg.implicit_h_mode) {
-                (HydrogenPattern::Is(0), ImplicitHydrogenMode::Zero) => None,
-                (HydrogenPattern::Normal, ImplicitHydrogenMode::Normal) => None,
-                (HydrogenPattern::Any, ImplicitHydrogenMode::Required) => None,
-                (HydrogenPattern::Any, _) => Some(HydrogenAst::Value(ValueAst::Undetermined)),
-                (HydrogenPattern::Normal, _) => Some(HydrogenAst::Normal),
-                (HydrogenPattern::Is(n), _) => Some(HydrogenAst::Value(ValueAst::Lit(*n as i64))),
+                (HydrogenPattern::Is(0), ImplicitHydrogenMode::Zero) => HydrogenAst::Undetermined,
+                (HydrogenPattern::Normal, ImplicitHydrogenMode::Normal) => HydrogenAst::Undetermined,
+                (HydrogenPattern::Any, ImplicitHydrogenMode::Required) => HydrogenAst::Undetermined,
+                (HydrogenPattern::Any, _) => HydrogenAst::Value(ValueAst::Undetermined),
+                (HydrogenPattern::Normal, _) => HydrogenAst::Normal,
+                (HydrogenPattern::Is(n), _) => HydrogenAst::Value(ValueAst::Lit(*n as i64)),
             },
             lone_pairs: raise_u8_pattern(self.lone_pairs, &cfg.lone_pairs_mode),
             spin: SpinStateAst::from_pair(spin_u, spin_m),
@@ -693,16 +717,22 @@ impl ToAst<AtomAst> for AtomPattern {
             donated_pairs: raise_u8_pattern(self.donated_pairs, &cfg.donated_pairs_mode),
             accepted_pairs: raise_u8_pattern(self.accepted_pairs, &cfg.accepted_pairs_mode),
             aromatic_valence: match (&self.aromatic_valence, &cfg.aromatic_valence_mode) {
-                (AromaticValencePattern::Any, AromaticValenceMode::Required) => None,
-                (AromaticValencePattern::NotAromatic, AromaticValenceMode::NotAromatic) => None,
-                (AromaticValencePattern::Aromatic, AromaticValenceMode::Aromatic) => None,
-                (AromaticValencePattern::Any, _) => Some(AromaticValenceAst::Undetermined),
-                (AromaticValencePattern::NotAromatic, _) => Some(AromaticValenceAst::NotAromatic),
+                (AromaticValencePattern::Any, AromaticValenceMode::Required) => {
+                    AromaticValenceAst::Undetermined
+                }
+                (AromaticValencePattern::NotAromatic, AromaticValenceMode::NotAromatic) => {
+                    AromaticValenceAst::Undetermined
+                }
+                (AromaticValencePattern::Aromatic, AromaticValenceMode::Aromatic) => {
+                    AromaticValenceAst::Undetermined
+                }
+                (AromaticValencePattern::Any, _) => AromaticValenceAst::Undetermined,
+                (AromaticValencePattern::NotAromatic, _) => AromaticValenceAst::NotAromatic,
                 (AromaticValencePattern::Aromatic, _) => {
-                    Some(AromaticValenceAst::Value(ValueAst::Undetermined))
+                    AromaticValenceAst::Value(ValueAst::Undetermined)
                 }
                 (AromaticValencePattern::Is(n), _) => {
-                    Some(AromaticValenceAst::Value(ValueAst::Lit(*n as i64)))
+                    AromaticValenceAst::Value(ValueAst::Lit(*n as i64))
                 }
             },
             multicenter_valence: raise_u8_pattern(
@@ -805,17 +835,17 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::defaults(AtomAst::from_element(Element::C), AtomAstConfig::zeroed(), zero_c())]
-    #[case::charge_and_hydrogens(AtomAst { charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(3))), ..AtomAst::from_element(Element::C) },
+    #[case::charge_and_hydrogens(AtomAst { charge: ValueAst::Lit(1), implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)), ..AtomAst::from_element(Element::C) },
         AtomAstConfig::zeroed(), AtomPattern { charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), ..zero_c() })]
-    #[case::wildcard_charge(AtomAst { charge: Some(ValueAst::Undetermined), ..AtomAst::from_element(Element::C) },
-        AtomAstConfig::zeroed(), AtomPattern { charge: Pattern::Any, ..zero_c() })]
-    #[case::aromatic_wildcard(AtomAst { aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Undetermined)), ..AtomAst::from_element(Element::C) },
+    #[case::wildcard_charge(AtomAst { charge: ValueAst::Undetermined, ..AtomAst::from_element(Element::C) },
+        AtomAstConfig::zeroed(), AtomPattern { charge: Pattern::Is(0), ..zero_c() })]
+    #[case::aromatic_wildcard(AtomAst { aromatic_valence: AromaticValenceAst::Value(ValueAst::Undetermined), ..AtomAst::from_element(Element::C) },
         AtomAstConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::Aromatic, ..zero_c() })]
-    #[case::aromatic_unspecified(AtomAst { aromatic_valence: Some(AromaticValenceAst::Undetermined), ..AtomAst::from_element(Element::C) },
-        AtomAstConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::Any, ..zero_c() })]
-    #[case::aromatic_not_aromatic(AtomAst { aromatic_valence: Some(AromaticValenceAst::NotAromatic), ..AtomAst::from_element(Element::C) },
+    #[case::aromatic_unspecified(AtomAst { aromatic_valence: AromaticValenceAst::Undetermined, ..AtomAst::from_element(Element::C) },
         AtomAstConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..zero_c() })]
-    #[case::aromatic_specific(AtomAst { aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Lit(2))), ..AtomAst::from_element(Element::C) },
+    #[case::aromatic_not_aromatic(AtomAst { aromatic_valence: AromaticValenceAst::NotAromatic, ..AtomAst::from_element(Element::C) },
+        AtomAstConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::NotAromatic, ..zero_c() })]
+    #[case::aromatic_specific(AtomAst { aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(2)), ..AtomAst::from_element(Element::C) },
         AtomAstConfig::zeroed(), AtomPattern { aromatic_valence: AromaticValencePattern::Is(2), ..zero_c() })]
     #[case::absent_aromatic_mode_required(AtomAst::from_element(Element::C), AtomAstConfig { aromatic_valence_mode: AromaticValenceMode::Required, ..AtomAstConfig::zeroed() },
         AtomPattern { aromatic_valence: AromaticValencePattern::Any, ..zero_c() })]
@@ -834,10 +864,10 @@ mod tests {
     #[rstest]
     #[case::open(AtomPattern::new(Element::C), AtomAstConfig::open(), AtomAst::from_element(Element::C))]
     #[case::open_ground(AtomPattern { isotope_mass: IsotopePattern::Natural, charge: Pattern::Is(1), implicit_hydrogens: HydrogenPattern::Is(3), aromatic_valence: AromaticValencePattern::Is(1), ..AtomPattern::new(Element::C) },
-        AtomAstConfig::open(), AtomAst { isotope_mass: Some(IsotopeAst::Natural), charge: Some(ValueAst::Lit(1)), implicit_hydrogens: Some(HydrogenAst::Value(ValueAst::Lit(3))),
-            aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Lit(1))), ..AtomAst::from_element(Element::C) })]
+        AtomAstConfig::open(), AtomAst { isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(1), implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)),
+            aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(1)), ..AtomAst::from_element(Element::C) })]
     #[case::aromatic_variants(AtomPattern { isotope_mass: IsotopePattern::Natural, aromatic_valence: AromaticValencePattern::Aromatic, ..AtomPattern::new(Element::C) },
-        AtomAstConfig::open(), AtomAst { isotope_mass: Some(IsotopeAst::Natural), aromatic_valence: Some(AromaticValenceAst::Value(ValueAst::Undetermined)), ..AtomAst::from_element(Element::C) })]
+        AtomAstConfig::open(), AtomAst { isotope_mass: IsotopeAst::Natural, aromatic_valence: AromaticValenceAst::Value(ValueAst::Undetermined), ..AtomAst::from_element(Element::C) })]
     #[case::zeroed(zero_c(), AtomAstConfig::zeroed(), AtomAst::from_element(Element::C))]
     fn test_atom_pattern_to_ast(#[case] pattern: AtomPattern, #[case] cfg: AtomAstConfig, #[case] expected: AtomAst) {
         assert_eq!(pattern.to_ast(&cfg), expected);

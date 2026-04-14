@@ -7,8 +7,9 @@ use thiserror::Error;
 /// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`].
 pub type Bindings = HashMap<String, i64>;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ValueAst {
+    #[default]
     Undetermined,
     LitSet(Vec<i64>),
     Lit(i64),

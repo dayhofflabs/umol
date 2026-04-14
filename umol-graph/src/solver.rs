@@ -1,7 +1,7 @@
 //! Constraint solver: resolution, validation, and matching post-filter.
 
 use smallvec::SmallVec;
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst};
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 use umol_shared::spin_ast::SpinStateAst;
@@ -9,7 +9,7 @@ use umol_shared::value_ast::ValueAst;
 
 use crate::ast::atom::AtomAst;
 use crate::ast::molecule::MoleculeAst;
-use crate::atom::AromaticValence;
+use crate::atom::{AromaticValence, IsotopeMass};
 use crate::graph_ir::atom::Atom;
 use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
 
@@ -62,7 +62,7 @@ impl Solver {
                 Progress::Contradictory => return Solution::Contradictory,
             }
         }
-        if ast.atoms.iter().all(|a| !needs_narrowing(a)) {
+        if ast.atoms.iter().all(|a| a.is_ground()) {
             Solution::Determined(())
         } else {
             Solution::Underdetermined(())
@@ -75,7 +75,7 @@ impl Solver {
                 return Solution::Contradictory;
             }
         }
-        if ast.atoms.iter().all(|a| !needs_narrowing(a)) {
+        if ast.atoms.iter().all(|a| a.is_ground()) {
             Solution::Determined(())
         } else {
             Solution::Underdetermined(())
@@ -87,7 +87,7 @@ impl ValenceStrategy {
     pub fn refine(&self, ast: &mut MoleculeAst) -> Progress {
         let mut advanced = false;
         for i in 0..ast.atoms.len() {
-            if !needs_narrowing(&ast.atoms[i]) {
+            if ast.atoms[i].is_ground() {
                 continue;
             }
             let element = match ast.atoms[i].element {
@@ -129,8 +129,7 @@ impl ValenceStrategy {
             match candidates.len() {
                 0 => return Progress::Contradictory,
                 1 => {
-                    narrow_atom(&mut ast.atoms[i], &candidates[0]);
-                    advanced = true;
+                    advanced |= narrow_atom(&mut ast.atoms[i], &candidates[0]);
                 }
                 _ => {}
             }
@@ -216,7 +215,7 @@ fn is_in_aromatic_system(ast: &MoleculeAst, atom_index: usize) -> bool {
 
 fn extract_charge(atom: &AtomAst) -> i8 {
     match &atom.charge {
-        Some(ValueAst::Lit(n)) => *n as i8,
+        ValueAst::Lit(n) => *n as i8,
         _ => 0,
     }
 }
@@ -229,23 +228,23 @@ fn atom_typing_candidates(
     valence: u8,
     is_aromatic: bool,
 ) -> SmallVec<[Atom; 4]> {
-    // Determine implicit hydrogen constraint: Some(n) = must match n, None = unconstrained
     let implicit_h_constraint = match &atom_ast.implicit_hydrogens {
-        Some(HydrogenAst::Value(ValueAst::Lit(n))) => Some(*n as u8),
-        Some(HydrogenAst::Normal) => {
+        HydrogenAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
+        HydrogenAst::Normal => {
             let Some(h) = infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
             else {
                 return SmallVec::new();
             };
             Some(h)
         }
-        // None = field not specified → unconstrained, accept any candidate
-        None => infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic),
+        HydrogenAst::Undetermined => {
+            infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
+        }
         _ => None,
     };
 
     let charge_key = match &atom_ast.charge {
-        Some(ValueAst::Lit(n)) => Some(*n as i8),
+        ValueAst::Lit(n) => Some(*n as i8),
         _ => None,
     };
 
@@ -335,7 +334,7 @@ fn counts_candidates(
     }
 
     let implicit_hydrogens = match &atom_ast.implicit_hydrogens {
-        Some(HydrogenAst::Value(ValueAst::Lit(n))) => *n as u8,
+        HydrogenAst::Value(ValueAst::Lit(n)) => *n as u8,
         _ if allow_implicit_hydrogens => {
             match table.compute_implicit_hydrogens(element, charge, valence) {
                 Some(h) => h,
@@ -375,7 +374,6 @@ fn build_aromatic_candidates(
     }
 
     let effective_electrons = (element.valence_electrons() as i16) - (charge as i16);
-    let has_normal_h = matches!(&atom_ast.implicit_hydrogens, Some(HydrogenAst::Normal));
     let mut candidates = SmallVec::new();
 
     for &a in allowed_aromatic_valences {
@@ -384,8 +382,8 @@ fn build_aromatic_candidates(
             continue;
         }
         let implicit_hydrogens = match &atom_ast.implicit_hydrogens {
-            Some(HydrogenAst::Value(ValueAst::Lit(n))) => *n as u8,
-            Some(HydrogenAst::Normal) => {
+            HydrogenAst::Value(ValueAst::Lit(n)) => *n as u8,
+            HydrogenAst::Normal => {
                 let Some(h) =
                     infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
                 else {
@@ -393,15 +391,7 @@ fn build_aromatic_candidates(
                 };
                 h
             }
-            None if has_normal_h => {
-                let Some(h) =
-                    infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
-                else {
-                    continue;
-                };
-                h
-            }
-            None => {
+            HydrogenAst::Undetermined => {
                 if allow_implicit_hydrogens {
                     (sigma_budget - valence as i16) as u8
                 } else {
@@ -480,16 +470,16 @@ fn try_build_candidate(
     }
 
     let spin = match &atom_ast.spin {
-        Some(SpinStateAst::Lit(s)) => {
+        SpinStateAst::Lit(s) => {
             if s.unpaired_electrons() != unpaired {
                 return None;
             }
             *s
         }
-        Some(SpinStateAst::Pair {
+        SpinStateAst::Pair {
             multiplicity: ValueAst::Lit(m),
             ..
-        }) => {
+        } => {
             let mult = SpinMultiplicity::from_multiplicity(*m as u8)?;
             SpinState::try_new(unpaired, mult).ok()?
         }
@@ -515,16 +505,16 @@ fn try_build_candidate(
 
 fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u8, u8)> {
     let fixed_unpaired = match &atom_ast.spin {
-        Some(SpinStateAst::Lit(s)) => Some(s.unpaired_electrons()),
-        Some(SpinStateAst::Pair {
+        SpinStateAst::Lit(s) => Some(s.unpaired_electrons()),
+        SpinStateAst::Pair {
             unpaired: ValueAst::Lit(u),
             ..
-        }) => Some(*u as u8),
+        } => Some(*u as u8),
         _ => None,
     };
 
     let fixed_lone_pairs = match &atom_ast.lone_pairs {
-        Some(ValueAst::Lit(lp)) => Some(*lp as u8),
+        ValueAst::Lit(lp) => Some(*lp as u8),
         _ => None,
     };
 
@@ -573,81 +563,75 @@ fn atom_matches_constraints(candidate: &Atom, atom_ast: &AtomAst) -> bool {
         && match_aromatic_constraint(&atom_ast.aromatic_valence, candidate.aromatic_valence())
 }
 
-fn match_value_constraint(constraint: &Option<ValueAst>, value: i64) -> bool {
+fn match_value_constraint(constraint: &ValueAst, value: i64) -> bool {
+    constraint.matches(value)
+}
+
+fn match_spin_constraint(constraint: &SpinStateAst, value: SpinState) -> bool {
+    constraint.matches(value)
+}
+
+fn match_aromatic_constraint(constraint: &AromaticValenceAst, value: AromaticValence) -> bool {
     match constraint {
-        None => true,
-        Some(v) => v.matches(value),
+        AromaticValenceAst::Undetermined => true,
+        AromaticValenceAst::NotAromatic => value == AromaticValence::NotAromatic,
+        AromaticValenceAst::Value(v) => v.matches(value.valence() as i64),
     }
 }
 
-fn match_spin_constraint(constraint: &Option<SpinStateAst>, value: SpinState) -> bool {
-    match constraint {
-        None => true,
-        Some(s) => s.matches(value),
-    }
-}
 
-fn match_aromatic_constraint(
-    constraint: &Option<AromaticValenceAst>,
-    value: AromaticValence,
-) -> bool {
-    match constraint {
-        None => true,
-        Some(AromaticValenceAst::Undetermined) => true,
-        Some(AromaticValenceAst::NotAromatic) => value == AromaticValence::NotAromatic,
-        Some(AromaticValenceAst::Value(v)) => v.matches(value.valence() as i64),
+fn narrow_atom(atom_ast: &mut AtomAst, candidate: &Atom) -> bool {
+    let mut changed = false;
+    if matches!(atom_ast.isotope_mass, IsotopeAst::Undetermined) {
+        atom_ast.isotope_mass = match candidate.isotope_mass() {
+            IsotopeMass::Natural => IsotopeAst::Natural,
+            IsotopeMass::MassNumber(n) => IsotopeAst::Lit(n),
+        };
+        changed = true;
     }
-}
-
-/// An atom needs narrowing if any valence-relevant field is absent.
-/// This differs from `!is_ground()` because `is_ground` treats None as
-/// vacuously ground (correct for pattern matching, not for resolution).
-fn needs_narrowing(atom: &AtomAst) -> bool {
-    atom.charge.is_none()
-        || atom.implicit_hydrogens.is_none()
-        || atom.lone_pairs.is_none()
-        || atom.spin.is_none()
-        || atom.valence.is_none()
-        || atom.donated_pairs.is_none()
-        || atom.accepted_pairs.is_none()
-        || atom.aromatic_valence.is_none()
-        || atom.multicenter_valence.is_none()
-}
-
-fn narrow_atom(atom_ast: &mut AtomAst, candidate: &Atom) {
-    if atom_ast.charge.is_none() {
-        atom_ast.charge = Some(ValueAst::Lit(candidate.charge() as i64));
+    if matches!(atom_ast.charge, ValueAst::Undetermined) {
+        atom_ast.charge = ValueAst::Lit(candidate.charge() as i64);
+        changed = true;
     }
-    if atom_ast.implicit_hydrogens.is_none() {
-        atom_ast.implicit_hydrogens = Some(HydrogenAst::Value(ValueAst::Lit(
+    if matches!(atom_ast.implicit_hydrogens, HydrogenAst::Undetermined) {
+        atom_ast.implicit_hydrogens = HydrogenAst::Value(ValueAst::Lit(
             candidate.implicit_hydrogens() as i64,
-        )));
+        ));
+        changed = true;
     }
-    if atom_ast.lone_pairs.is_none() {
-        atom_ast.lone_pairs = Some(ValueAst::Lit(candidate.lone_pairs() as i64));
+    if matches!(atom_ast.lone_pairs, ValueAst::Undetermined) {
+        atom_ast.lone_pairs = ValueAst::Lit(candidate.lone_pairs() as i64);
+        changed = true;
     }
-    if atom_ast.spin.is_none() {
-        atom_ast.spin = Some(SpinStateAst::Lit(candidate.spin()));
+    if matches!(atom_ast.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }) {
+        atom_ast.spin = SpinStateAst::Lit(candidate.spin());
+        changed = true;
     }
-    if atom_ast.valence.is_none() {
-        atom_ast.valence = Some(ValueAst::Lit(candidate.valence() as i64));
+    if matches!(atom_ast.valence, ValueAst::Undetermined) {
+        atom_ast.valence = ValueAst::Lit(candidate.valence() as i64);
+        changed = true;
     }
-    if atom_ast.donated_pairs.is_none() {
-        atom_ast.donated_pairs = Some(ValueAst::Lit(candidate.donated_pairs() as i64));
+    if matches!(atom_ast.donated_pairs, ValueAst::Undetermined) {
+        atom_ast.donated_pairs = ValueAst::Lit(candidate.donated_pairs() as i64);
+        changed = true;
     }
-    if atom_ast.accepted_pairs.is_none() {
-        atom_ast.accepted_pairs = Some(ValueAst::Lit(candidate.accepted_pairs() as i64));
+    if matches!(atom_ast.accepted_pairs, ValueAst::Undetermined) {
+        atom_ast.accepted_pairs = ValueAst::Lit(candidate.accepted_pairs() as i64);
+        changed = true;
     }
-    if atom_ast.aromatic_valence.is_none() {
-        atom_ast.aromatic_valence = Some(match candidate.aromatic_valence() {
+    if matches!(atom_ast.aromatic_valence, AromaticValenceAst::Undetermined) {
+        atom_ast.aromatic_valence = match candidate.aromatic_valence() {
             AromaticValence::NotAromatic => AromaticValenceAst::NotAromatic,
             AromaticValence::Valence(v) => AromaticValenceAst::Value(ValueAst::Lit(v as i64)),
-        });
+        };
+        changed = true;
     }
-    if atom_ast.multicenter_valence.is_none() {
+    if matches!(atom_ast.multicenter_valence, ValueAst::Undetermined) {
         atom_ast.multicenter_valence =
-            Some(ValueAst::Lit(candidate.multicenter_valence() as i64));
+            ValueAst::Lit(candidate.multicenter_valence() as i64);
+        changed = true;
     }
+    changed
 }
 
 #[cfg(test)]
@@ -691,10 +675,10 @@ mod tests {
         let mut ast = h2();
         let result = solver.resolve(&mut ast);
         assert_eq!(result, Solution::Determined(()));
-        assert!(ast.is_ground());
+        assert!(ast.atoms.iter().all(|a| a.is_ground()));
         assert_eq!(
             ast.atoms[0].implicit_hydrogens,
-            Some(HydrogenAst::Value(ValueAst::Lit(0)))
+            HydrogenAst::Value(ValueAst::Lit(0))
         );
     }
 
@@ -743,10 +727,10 @@ mod tests {
         let mut ast = h2();
         let result = solver.resolve(&mut ast);
         assert_eq!(result, Solution::Determined(()));
-        assert!(ast.is_ground());
+        assert!(ast.atoms.iter().all(|a| a.is_ground()));
         assert_eq!(
             ast.atoms[0].implicit_hydrogens,
-            Some(HydrogenAst::Value(ValueAst::Lit(0)))
+            HydrogenAst::Value(ValueAst::Lit(0))
         );
     }
 
@@ -767,7 +751,7 @@ mod tests {
         // C with no bonds → 4 implicit H
         assert_eq!(
             ast.atoms[0].implicit_hydrogens,
-            Some(HydrogenAst::Value(ValueAst::Lit(4)))
+            HydrogenAst::Value(ValueAst::Lit(4))
         );
     }
 

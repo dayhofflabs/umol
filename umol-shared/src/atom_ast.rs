@@ -4,9 +4,10 @@ use crate::element::Element;
 use crate::value_ast::ValueAst;
 
 /// Element expressions
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ElementAst {
     Lit(Element),
+    #[default]
     Undetermined,
     Set(Vec<Element>),
     Bind { id: String, set: Vec<Element> },
@@ -34,10 +35,11 @@ impl ElementAst {
 }
 
 /// Isotope-mass expressions (Natural = #i=)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum IsotopeAst {
     Natural,
     Lit(u32),
+    #[default]
     Undetermined,
     Set(Vec<u32>),
     Bind { id: String, set: Vec<u32> },
@@ -62,8 +64,9 @@ impl IsotopeAst {
 }
 
 /// Implicit hydrogen expressions (Normal = #h=)
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum HydrogenAst {
+    #[default]
     Undetermined,
     Normal,
     Value(ValueAst),
@@ -93,8 +96,9 @@ impl HydrogenAst {
 }
 
 /// Aromatic valence expressions
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum AromaticValenceAst {
+    #[default]
     Undetermined,
     NotAromatic,
     Value(ValueAst),
