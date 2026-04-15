@@ -1,6 +1,6 @@
 ---
 source: umol-graph/tests/resolution/mod.rs
-expression: edn_to_string_pretty(&results).unwrap()
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
   :atom-typing {
@@ -36,9 +36,7 @@ expression: edn_to_string_pretty(&results).unwrap()
         [3 6 :single]
         [3 8 :single]
         [3 9 :single]
-        [3 13 :double]]
-      :charge 0
-      :spin "#u0#s1"}
+        [3 13 :double]]}
     :success true}
   :counts {
     :output {
@@ -73,7 +71,5 @@ expression: edn_to_string_pretty(&results).unwrap()
         [3 6 :single]
         [3 8 :single]
         [3 9 :single]
-        [3 13 :double]]
-      :charge 0
-      :spin "#u0#s1"}
+        [3 13 :double]]}
     :success true}}

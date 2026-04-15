@@ -446,7 +446,15 @@ Ordered steps. Each step leaves the tree green.
    - `find_matches_with` in `ast::matcher` composes `find_matches` + `solver.filter` as a post-filter.
    - Index types: `AtomIdx`, `BondIdx`, etc. as newtypes over `usize` with `index_vec::IndexVec` for ergonomic indexing. `atoms![]` macro for test construction.
    - Old resolver deleted (done 2026-04-14): `graph_ir::valence` module removed; `ValenceStrategy` enum consolidated in `solver.rs` and re-exported from `graph_ir::config`; `resolve_valence_with` now calls private `valence_candidates` which dispatches on `ValenceStrategy` variants using `AtomPattern`-based candidate generation directly (no AST bridge). 621 conformance tests pass, 3796 lib tests pass.
-7. **Migrate aromaticity perception** to discover-then-verify. Graph analysis stays; perception output is constraint emissions. ~1 week.
+7. **Migrate aromaticity perception** to discover-then-verify. Graph analysis stays; perception output is constraint emissions. ~1 week. *(Discovery half done 2026-04-15.)*
+   - `Graph::induced_subgraph` added to umol-graph-core for filtered ring enumeration over atom subsets.
+   - `RingEnumerator::enumerate_ast` added: filters atoms by aromatic valence (optional), builds induced subgraph, runs BCC + cycle enumeration per component, maps back to original indices.
+   - `find_from_ast` on all three perception models (HueckelRule, HMO, Clar) and `AromaticityModel::aromatic_systems_ast` dispatch.
+   - `MoleculeAst::set_aromatic_systems` replaces the `VarRelationSet` wholesale with discovered systems.
+   - `AromaticityConfig` (strategy + ring enumeration) added to `Solver`. Resolve loop: valence→aromaticity→re-valence stratification. `Solver::resolve` returns `Result<Solution<()>, AromaticityError>`.
+   - Temporary index bridge: `Ring`/`RingSet`/`AromaticSystem` still use petgraph `AtomIndex`; AST methods convert via `AtomIndex::new(node_id.index())`. Goes away when GraphIR is removed (step 8).
+   - Not done: constraint emission (`Derived { AromaticElectronCount(n), ring_atoms }`) and verification mode (solver discarding failing proposals). These require `DerivedPred::AromaticElectronCount` and constraint evaluation infrastructure (step 9 scope). Currently all proposed systems are accepted unconditionally.
+   - 621 conformance tests pass, 3796 lib tests pass.
 8. **Delete `graph_ir::Molecule`.** `MoleculeAst` is the only molecule type. ~3 days.
 9. **Add `SubPattern` constraint and matcher recursion.** ~1 week.
 10. **Add DPO rule application**. `ReactionRuleAst` as top-level type, rule-apply as a transform over `MoleculeAst`. ~1–2 weeks.

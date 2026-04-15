@@ -229,7 +229,7 @@ fn valence_candidates(
                 };
                 pattern.implicit_hydrogens = HydrogenPattern::Is(hydrogens);
             }
-            registry.candidates_for(&pattern)
+            todo!("old pipeline: registry.candidates_for removed, use solver.rs")
         }
         ValenceStrategy::Counts {
             table,

@@ -1,4 +1,4 @@
-//! `value-dsl` — `spec/umol-dsl-spec.md` §5
+//! Value DSL: parser, AST, and display
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;

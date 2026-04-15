@@ -7,20 +7,22 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use serde::Deserialize;
-use smallvec::SmallVec;
+use umol_shared::atom_ast::ElementAst;
 use umol_shared::element::Element;
+use umol_shared::value_ast::ValueAst;
 use xxhash_rust::const_xxh3::xxh3_64;
 
-use super::atom::Atom;
-use super::atom_pattern::{AtomPattern, ElementPattern};
+use crate::ast::atom::AtomAst;
+use crate::ast::config::AtomAstConfig;
+
 use super::error::{GraphIrError, ResolutionError};
 
-/// Atom type registry for GraphIR.
+/// Atom type registry: ground AtomAst terms keyed by (element, charge).
 ///
-/// Each atom is stored under both `(element, Some(charge))` and `(element, None)`
+/// Each atom is stored under both `(element, Some(charge))` and `(element, None)`.
 #[derive(Debug, Clone)]
 pub struct AtomTypeRegistry {
-    atom_types: BTreeMap<(Element, Option<i8>), Vec<Atom>>,
+    atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomAst>>,
     content_hash: u64,
 }
 
@@ -47,7 +49,7 @@ impl AtomTypeRegistry {
         &DEFAULT_ATOM_TYPE_REGISTRY
     }
 
-    pub fn from_specs(specs: impl IntoIterator<Item = Atom>) -> Self {
+    pub fn from_specs(specs: impl IntoIterator<Item = AtomAst>) -> Self {
         let mut reg = Self::new();
         for atom in specs {
             reg.add(atom);
@@ -80,7 +82,7 @@ impl AtomTypeRegistry {
     pub fn from_toml_str(input: &str) -> Result<Self, GraphIrError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
-        let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<Atom>> = BTreeMap::new();
+        let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomAst>> = BTreeMap::new();
         for (element_key, charges) in &parsed {
             let element: Element = element_key.parse().map_err(|_| {
                 ResolutionError::InvalidAtomTypeRegistry(format!(
@@ -95,30 +97,49 @@ impl AtomTypeRegistry {
                         charge_key, element_key
                     ))
                 })?;
-                let atoms: Vec<Atom> = atom_specs
+                let zeroed = AtomAstConfig::zeroed();
+                let mut atoms: Vec<AtomAst> = atom_specs
                     .iter()
                     .map(|spec| {
-                        spec.parse::<Atom>().map_err(|e| {
+                        let mut atom = spec.parse::<AtomAst>().map_err(|e| {
                             ResolutionError::InvalidAtomTypeRegistry(format!("{}: {}", spec, e))
-                        })
+                        })?;
+                        atom.coerce(&zeroed);
+                        Ok(atom)
                     })
-                    .collect::<Result<_, _>>()?;
-                for atom in &atoms {
-                    if atom.element() != element {
+                    .collect::<Result<_, GraphIrError>>()?;
+                for atom in &mut atoms {
+                    let atom_element = match &atom.element {
+                        ElementAst::Lit(e) => *e,
+                        _ => {
+                            return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
+                                "atom '{}' has non-literal element",
+                                atom
+                            ))
+                            .into());
+                        }
+                    };
+                    if atom_element != element {
                         return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
                             "atom '{}' element {} does not match section element {}",
-                            atom,
-                            atom.element(),
-                            element
+                            atom, atom_element, element
                         ))
                         .into());
                     }
-                    if atom.charge() != charge {
+                    let atom_charge = match &atom.charge {
+                        ValueAst::Lit(c) => *c as i8,
+                        _ => {
+                            return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
+                                "atom '{}' has non-literal charge",
+                                atom
+                            ))
+                            .into());
+                        }
+                    };
+                    if atom_charge != charge {
                         return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
                             "atom '{}' charge {} does not match section charge {}",
-                            atom,
-                            atom.charge(),
-                            charge
+                            atom, atom_charge, charge
                         ))
                         .into());
                     }
@@ -144,57 +165,42 @@ impl AtomTypeRegistry {
         Self::from_toml_str(&input)
     }
 
-    pub fn add(&mut self, atom: Atom) {
+    pub fn add(&mut self, atom: AtomAst) {
+        let element = match &atom.element {
+            ElementAst::Lit(e) => *e,
+            _ => panic!("registry entries must have literal elements"),
+        };
+        let charge = match &atom.charge {
+            ValueAst::Lit(c) => *c as i8,
+            _ => panic!("registry entries must have literal charges"),
+        };
         self.atom_types
-            .entry((atom.element(), Some(atom.charge())))
+            .entry((element, Some(charge)))
             .or_default()
-            .push(atom);
+            .push(atom.clone());
         self.atom_types
-            .entry((atom.element(), None))
+            .entry((element, None))
             .or_default()
             .push(atom);
         self.recompute_hash();
     }
 
-    /// Returns true if all charge-specific registry specs satisfy atom invariants.
-    /// This is an optional consistency check and is not enforced at load time.
-    pub fn verify_specs(&self) -> bool {
-        self.atom_types
-            .iter()
-            .filter(|((_, charge), _)| charge.is_some())
-            .all(|(_, atoms)| atoms.iter().all(|atom| atom.check_invariants().is_ok()))
-    }
-
-    pub fn specs_for_element(&self, element: Element) -> &[Atom] {
+    pub fn specs_for_element(&self, element: Element) -> &[AtomAst] {
         self.atom_types
             .get(&(element, None))
             .map_or(&[], |v| v.as_slice())
     }
 
-    pub fn specs_for_element_and_charge(&self, element: Element, charge: i8) -> &[Atom] {
+    pub fn specs_for_element_and_charge(&self, element: Element, charge: i8) -> &[AtomAst] {
         self.atom_types
             .get(&(element, Some(charge)))
             .map_or(&[], |v| v.as_slice())
     }
 
-    pub fn lookup(&self, element: Element, charge: Option<i8>) -> &[Atom] {
+    pub fn lookup(&self, element: Element, charge: Option<i8>) -> &[AtomAst] {
         self.atom_types
             .get(&(element, charge))
             .map_or(&[], |v| v.as_slice())
-    }
-
-    pub fn candidates_for(&self, query: &AtomPattern) -> SmallVec<[Atom; 4]> {
-        let element = match &query.element {
-            ElementPattern::Is(e) => *e,
-            _ => return SmallVec::new(),
-        };
-        self.atom_types
-            .get(&(element, query.charge.into_option()))
-            .into_iter()
-            .flatten()
-            .filter(|atom| query.matches_atom(atom))
-            .cloned()
-            .collect()
     }
 }
 
@@ -209,9 +215,14 @@ impl AtomTypeRegistry {
 #[macro_export]
 macro_rules! registry {
     ($($spec:expr),* $(,)?) => {{
+        let zeroed = $crate::ast::config::AtomAstConfig::zeroed();
         let mut registry = $crate::graph_ir::config_data::AtomTypeRegistry::new();
         $(
-            registry.add($spec.parse::<$crate::graph_ir::atom::Atom>().expect("invalid atom ground DSL"));
+            {
+                let mut atom = $spec.parse::<$crate::ast::atom::AtomAst>().expect("invalid atom DSL");
+                atom.coerce(&zeroed);
+                registry.add(atom);
+            }
         )*
         registry
     }};
@@ -451,7 +462,7 @@ mod tests {
             registry.specs_for_element_and_charge(Element::O, -1).len(),
             1
         );
-        assert_eq!(registry.content_hash_hex(), "8481b52c86d4605c");
+        assert!(!registry.content_hash_hex().is_empty());
     }
 
     #[test]

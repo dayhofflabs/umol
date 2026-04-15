@@ -9,13 +9,13 @@ use umol_shared::value_ast::ValueAst;
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
+use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::error::GroundError;
 use crate::ast::{
     AromaticSystemIdx, Ast, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx,
     NoncovalentBondIdx,
 };
-use crate::ast::config::MoleculeAstConfig;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AromaticSystemAst {}
@@ -146,6 +146,18 @@ impl MoleculeAst {
                 .map(|(atoms, d)| (atoms.into_iter().map(NodeId::from).collect(), d))
                 .collect(),
         );
+    }
+
+    pub fn coerce(&mut self, config: &MoleculeAstConfig) {
+        for atom in &mut self.atoms {
+            atom.coerce(&config.atom);
+        }
+    }
+
+    pub fn release(&mut self, config: &MoleculeAstConfig) {
+        for atom in &mut self.atoms {
+            atom.release(&config.atom);
+        }
     }
 
     fn apply_remapping(&mut self, remap: &Remapping) {

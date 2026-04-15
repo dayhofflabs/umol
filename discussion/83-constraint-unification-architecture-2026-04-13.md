@@ -282,24 +282,17 @@ Absent vs undetermined is a schema/serialization concern, not a value-level conc
 6. Wire profile into matcher post-filter chain
 7. Existing optimized implementations do not change; new code is the result type, profile, and dispatch glue
 
-## Step 7 status: suspended
+## Step 7 status: discovery half complete (2026-04-15)
 
-Step 7 (aromaticity perception migration to the solver, operating on `MoleculeAst`) was planned in detail but is suspended pending resolution of the graph representation question.
+Step 7 was previously suspended pending the graph representation question (doc 84). With `umol-graph-core` in place and `MoleculeAst` using CSR `Graph` for topology, the blocker is resolved. All four phases are complete for the discovery half.
 
-### What the plan contained
+### Phases
 
-Four phases:
-- **Phase 0**: `MoleculeAst` relation indexing — `IndexVec` for bond vecs, adjacency/neighbor methods
-- **Phase 1**: Ring enumeration for `MoleculeAst` — `AtomAdjacency::from_ast`, `RingEnumerator::enumerate_ast`
-- **Phase 2**: Perception models on `MoleculeAst` — `AromaticAtomCache`, `find_from_ast` on each model (Hückel, HMO, Clar)
-- **Phase 3**: Solver integration — `AromaticityConfig`, `perceive_aromaticity`, updated resolve loop with valence→aromaticity→re-valence stratification
+- **Phase 0**: `MoleculeAst` relation indexing — resolved by doc 84. `MoleculeAst` has CSR `Graph`, `neighbors()`, `bond_order_sum()`, `is_in_aromatic_system()`.
+- **Phase 1**: `RingEnumerator::enumerate_ast` — uses `Graph::induced_subgraph` for aromatic atom filtering, BCC + cycle enumeration per component, maps back to original indices.
+- **Phase 2**: `find_from_ast` on all three models (Hückel, HMO, Clar). `AromaticityModel::aromatic_systems_ast` dispatch. Temporary petgraph `AtomIndex` bridge via numeric conversion; goes away when GraphIR is removed (step 8).
+- **Phase 3**: `AromaticityConfig` on `Solver`. Resolve loop: valence → aromaticity → re-valence. `Solver::resolve` returns `Result<Solution<()>, AromaticityError>`. `MoleculeAst::set_aromatic_systems` replaces the `VarRelationSet` wholesale.
 
-### Why it's suspended
+### What remains
 
-Phase 0 proposed adding adjacency methods to `MoleculeAst` that generate `HashMap<AtomIdx, Vec<AtomIdx>>` from flat `Vec<BondTuple>` on each call. This fights the data model — every graph algorithm would build its own adjacency from scratch. Analysis (doc 82, "Indirection analysis" section) showed that ring enumeration currently requires 4–5 data structure conversions before the algorithm runs, and the plan would have added another layer.
-
-The underlying problem: `MoleculeAst` has no native graph topology. Flat bond lists require conversion to adjacency representations for every graph operation (ring enumeration, Morgan fingerprints, substructure matching, future DPO reactions).
-
-### Resolution
-
-A new graph data structure crate (`umol-graph-core`, name TBD) will provide `MolGraph<N, E>` with native adjacency, stable indices, and algorithmic primitives. `MoleculeAst` will use this as its topology substrate. Step 7 resumes after the graph library is in place. See doc 84.
+Constraint emission and verification. Doc 80 specifies that perception should emit `Derived { AromaticElectronCount(n), ring_atoms }` per proposed system, and the solver should verify and discard failures. This requires `DerivedPred::AromaticElectronCount` and constraint evaluation infrastructure — both step 9 scope. Currently all proposed systems are accepted unconditionally.

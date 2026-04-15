@@ -1,6 +1,5 @@
 ---
 source: umol-graph/tests/resolution/mod.rs
-assertion_line: 139
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
@@ -33,9 +32,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [9 10 :single]
         [10 11 :single]
         [11 6 :single]
-        [0 6 :single]]
-      :charge 0
-      :spin "#u0#s1"}
+        [0 6 :single]]}
     :success true}
   :counts {
     :output {
@@ -66,7 +63,5 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [9 10 :single]
         [10 11 :single]
         [11 6 :single]
-        [0 6 :single]]
-      :charge 0
-      :spin "#u0#s1"}
+        [0 6 :single]]}
     :success true}}

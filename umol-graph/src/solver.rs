@@ -1,7 +1,6 @@
 //! Constraint solver: resolution, validation, and matching post-filter.
 
-use smallvec::SmallVec;
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst};
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 use umol_shared::spin_ast::SpinStateAst;
@@ -11,9 +10,7 @@ use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
 use crate::ast::matcher::Assignment;
 use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
-use crate::atom::{AromaticValence, IsotopeMass};
 use crate::graph_ir::aromaticity::{AromaticityError, AromaticityModel};
-use crate::graph_ir::atom::Atom;
 use crate::graph_ir::config::{AromaticityStrategy, RingEnumerationStrategy};
 use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
 use crate::graph_ir::rings::{RingEnumerator, RingFamily};
@@ -49,67 +46,28 @@ pub struct AromaticityConfig {
     pub ring_enumeration: RingEnumerationStrategy,
 }
 
-#[derive(Clone, Debug)]
-pub struct Solver {
-    pub valence: ValenceStrategy,
-    pub aromaticity: Option<AromaticityConfig>,
-}
-
-impl Default for Solver {
-    fn default() -> Self {
+impl AromaticityConfig {
+    pub fn daylight() -> Self {
         Self {
-            valence: ValenceStrategy::AtomTyping {
-                registry: AtomTypeRegistry::default_registry().clone(),
-            },
-            aromaticity: Some(AromaticityConfig {
-                strategy: AromaticityStrategy::daylight(),
-                ring_enumeration: RingEnumerationStrategy::default(),
-            }),
+            strategy: AromaticityStrategy::daylight(),
+            ring_enumeration: RingEnumerationStrategy::default(),
         }
     }
-}
 
-impl Solver {
-    pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<Solution<()>, AromaticityError> {
-        loop {
-            match self.valence.refine(ast) {
-                Progress::Advanced => continue,
-                Progress::Fixpoint => break,
-                Progress::Contradictory => return Ok(Solution::Contradictory),
-            }
-        }
-        if let Some(config) = &self.aromaticity {
-            self.resolve_aromaticity(ast, config)?;
-        }
-        loop {
-            match self.valence.refine(ast) {
-                Progress::Advanced => continue,
-                Progress::Fixpoint => break,
-                Progress::Contradictory => return Ok(Solution::Contradictory),
-            }
-        }
-        Ok(if ast.atoms().all(|(_, a)| a.is_ground()) {
-            Solution::Determined(())
-        } else {
-            Solution::Underdetermined(())
-        })
-    }
-
-    fn resolve_aromaticity(
-        &self,
-        ast: &mut MoleculeAst,
-        config: &AromaticityConfig,
-    ) -> Result<(), AromaticityError> {
-        let ring_family = match config.strategy {
+    pub fn refine(&self, ast: &mut MoleculeAst) -> Result<Progress, AromaticityError> {
+        let ring_family = match self.strategy {
             AromaticityStrategy::Clar => RingFamily::InducedBenzenoid,
             AromaticityStrategy::HueckelRule { .. } | AromaticityStrategy::Hmo { .. } => {
                 RingFamily::Simple
             }
         };
-        let enumerator = RingEnumerator::new(ring_family, &config.ring_enumeration);
+        let enumerator = RingEnumerator::new(ring_family, &self.ring_enumeration);
         let rings = enumerator.enumerate_ast(ast);
-        let model = AromaticityModel::new(&config.strategy);
+        let model = AromaticityModel::new(&self.strategy);
         let systems = model.aromatic_systems_ast(ast, &rings)?;
+        if systems.is_empty() {
+            return Ok(Progress::Fixpoint);
+        }
         let entries: Vec<(Vec<AtomIdx>, AromaticSystemAst)> = systems
             .iter()
             .map(|sys| {
@@ -119,7 +77,47 @@ impl Solver {
             })
             .collect();
         ast.set_aromatic_systems(entries);
-        Ok(())
+        Ok(Progress::Advanced)
+    }
+
+    pub fn validate(&self, _ast: &MoleculeAst, _atom_index: usize) -> bool {
+        true
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Solver {
+    pub valence: ValenceStrategy,
+    pub aromaticity: AromaticityConfig,
+}
+
+impl Default for Solver {
+    fn default() -> Self {
+        Self {
+            valence: ValenceStrategy::AtomTyping {
+                registry: AtomTypeRegistry::default_registry().clone(),
+            },
+            aromaticity: AromaticityConfig::daylight(),
+        }
+    }
+}
+
+impl Solver {
+    pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<Solution<()>, AromaticityError> {
+        if let Progress::Contradictory = self.valence.refine(ast) {
+            return Ok(Solution::Contradictory);
+        }
+        if let Progress::Contradictory = self.aromaticity.refine(ast)? {
+            return Ok(Solution::Contradictory);
+        }
+        if let Progress::Contradictory = self.valence.refine(ast) {
+            return Ok(Solution::Contradictory);
+        }
+        Ok(if ast.atoms().all(|(_, a)| a.is_ground()) {
+            Solution::Determined(())
+        } else {
+            Solution::Underdetermined(())
+        })
     }
 
     pub fn filter(
@@ -152,18 +150,19 @@ impl Solver {
 }
 
 impl ValenceStrategy {
-    pub fn candidates_for(&self, ast: &MoleculeAst, idx: AtomIdx) -> SmallVec<[Atom; 4]> {
+    pub fn candidates_for(&self, ast: &MoleculeAst, idx: AtomIdx) -> Vec<AtomAst> {
         let atom = ast.atom(idx);
         let element = match atom.element {
             ElementAst::Lit(e) => e,
-            _ => return SmallVec::new(),
+            _ => return Vec::new(),
         };
         let Some(valence) = ast.bond_order_sum(idx) else {
-            return SmallVec::new();
+            return Vec::new();
         };
         let charge = atom.charge_or_zero();
         let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(idx);
-        let is_aromatic = ast.is_in_aromatic_system(idx);
+        let is_aromatic = ast.is_in_aromatic_system(idx)
+            || matches!(atom.aromatic_valence, AromaticValenceAst::Value(_));
 
         match self {
             Self::AtomTyping { registry } => atom_typing_candidates(
@@ -239,13 +238,13 @@ fn atom_typing_candidates(
     charge: i8,
     valence: u8,
     is_aromatic: bool,
-) -> SmallVec<[Atom; 4]> {
+) -> Vec<AtomAst> {
     let implicit_h_constraint = match &atom_ast.implicit_hydrogens {
         HydrogenAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
         HydrogenAst::Normal => {
             let Some(h) = infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
             else {
-                return SmallVec::new();
+                return Vec::new();
             };
             Some(h)
         }
@@ -265,9 +264,13 @@ fn atom_typing_candidates(
         .iter()
         .filter(|candidate| {
             (match implicit_h_constraint {
-                Some(h) => candidate.implicit_hydrogens() == h,
+                Some(h) => match &candidate.implicit_hydrogens {
+                    HydrogenAst::Value(ValueAst::Lit(n)) => *n as u8 == h,
+                    _ => false,
+                },
                 None => true,
-            }) && atom_matches_constraints(candidate, atom_ast)
+            }) && candidate_matches_valence(candidate, valence)
+                && candidate_matches_constraints(atom_ast, candidate)
         })
         .cloned()
         .collect()
@@ -317,10 +320,10 @@ fn counts_candidates(
     donated_pairs: u8,
     accepted_pairs: u8,
     is_aromatic: bool,
-) -> SmallVec<[Atom; 4]> {
+) -> Vec<AtomAst> {
     let entry = match table.entry(element) {
         Some(e) => e,
-        None => return SmallVec::new(),
+        None => return Vec::new(),
     };
 
     if is_aromatic {
@@ -350,7 +353,7 @@ fn counts_candidates(
         _ if allow_implicit_hydrogens => {
             match table.compute_implicit_hydrogens(element, charge, valence) {
                 Some(h) => h,
-                None => return SmallVec::new(),
+                None => return Vec::new(),
             }
         }
         _ => 0,
@@ -363,11 +366,11 @@ fn counts_candidates(
         valence,
         donated_pairs,
         accepted_pairs,
-        AromaticValence::NotAromatic,
+        AromaticValenceAst::NotAromatic,
         atom_ast,
     )
-    .map(|a| SmallVec::from_elem(a, 1))
-    .unwrap_or_default()
+    .into_iter()
+    .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -380,13 +383,13 @@ fn build_aromatic_candidates(
     donated_pairs: u8,
     accepted_pairs: u8,
     allow_implicit_hydrogens: bool,
-) -> SmallVec<[Atom; 4]> {
+) -> Vec<AtomAst> {
     if allowed_aromatic_valences.is_empty() {
-        return SmallVec::new();
+        return Vec::new();
     }
 
     let effective_electrons = (element.valence_electrons() as i16) - (charge as i16);
-    let mut candidates = SmallVec::new();
+    let mut candidates = Vec::new();
 
     for &a in allowed_aromatic_valences {
         let sigma_budget = effective_electrons - (a as i16);
@@ -420,17 +423,17 @@ fn build_aromatic_candidates(
         if remaining < 0 || remaining % 2 != 0 {
             continue;
         }
-        if let Some(atom) = try_build_candidate(
+        if let Some(candidate) = try_build_candidate(
             element,
             charge,
             implicit_hydrogens,
             valence,
             donated_pairs,
             accepted_pairs,
-            AromaticValence::Valence(a),
+            AromaticValenceAst::Value(ValueAst::Lit(a as i64)),
             atom_ast,
         ) {
-            candidates.push(atom);
+            candidates.push(candidate);
         }
     }
 
@@ -457,6 +460,50 @@ fn infer_normal_aromatic_implicit_hydrogens(
     }
 }
 
+fn candidate_matches_valence(candidate: &AtomAst, valence: u8) -> bool {
+    match &candidate.valence {
+        ValueAst::Lit(v) => *v as u8 == valence,
+        _ => true,
+    }
+}
+
+fn candidate_matches_constraints(query: &AtomAst, candidate: &AtomAst) -> bool {
+    value_matches(&query.charge, &candidate.charge)
+        && value_matches(&query.lone_pairs, &candidate.lone_pairs)
+        && value_matches(&query.donated_pairs, &candidate.donated_pairs)
+        && value_matches(&query.accepted_pairs, &candidate.accepted_pairs)
+        && value_matches(&query.multicenter_valence, &candidate.multicenter_valence)
+        && spin_matches(&query.spin, &candidate.spin)
+        && aromatic_matches(&query.aromatic_valence, &candidate.aromatic_valence)
+}
+
+fn value_matches(query: &ValueAst, candidate: &ValueAst) -> bool {
+    match (query, candidate) {
+        (ValueAst::Undetermined, _) => true,
+        (ValueAst::Lit(q), ValueAst::Lit(c)) => q == c,
+        _ => false,
+    }
+}
+
+fn spin_matches(query: &SpinStateAst, candidate: &SpinStateAst) -> bool {
+    match (query, candidate) {
+        (SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }, _) => true,
+        (SpinStateAst::Lit(q), SpinStateAst::Lit(c)) => q == c,
+        _ => true,
+    }
+}
+
+fn aromatic_matches(query: &AromaticValenceAst, candidate: &AromaticValenceAst) -> bool {
+    match (query, candidate) {
+        (AromaticValenceAst::Undetermined, _) => true,
+        (AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic) => true,
+        (AromaticValenceAst::NotAromatic, _) => false,
+        (AromaticValenceAst::Value(ValueAst::Undetermined), AromaticValenceAst::Value(_)) => true,
+        (AromaticValenceAst::Value(q), AromaticValenceAst::Value(c)) => value_matches(q, c),
+        _ => false,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn try_build_candidate(
     element: Element,
@@ -465,13 +512,18 @@ fn try_build_candidate(
     valence: u8,
     donated_pairs: u8,
     accepted_pairs: u8,
-    aromatic_valence: AromaticValence,
+    aromatic_valence: AromaticValenceAst,
     atom_ast: &AtomAst,
-) -> Option<Atom> {
+) -> Option<AtomAst> {
+    let aromatic_valence_count = match &aromatic_valence {
+        AromaticValenceAst::NotAromatic => 0u8,
+        AromaticValenceAst::Value(ValueAst::Lit(v)) => *v as u8,
+        _ => return None,
+    };
     let total_valence = valence + implicit_hydrogens;
     let num_electrons = (element.valence_electrons() as i16) - (charge as i16);
     let unassigned =
-        num_electrons - (total_valence as i16) - (aromatic_valence.valence() as i16);
+        num_electrons - (total_valence as i16) - (aromatic_valence_count as i16);
     if unassigned < 0 {
         return None;
     }
@@ -498,21 +550,19 @@ fn try_build_candidate(
         _ => SpinState::max_multiplicity(unpaired)?,
     };
 
-    Atom::try_new(
-        element,
-        None,
-        charge,
-        implicit_hydrogens,
-        lone_pairs,
-        unpaired,
-        spin.multiplicity(),
-        valence,
-        donated_pairs,
-        accepted_pairs,
+    Some(AtomAst {
+        element: ElementAst::Lit(element),
+        isotope_mass: atom_ast.isotope_mass.clone(),
+        charge: ValueAst::Lit(charge as i64),
+        implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(implicit_hydrogens as i64)),
+        lone_pairs: ValueAst::Lit(lone_pairs as i64),
+        spin: SpinStateAst::Lit(spin),
+        valence: ValueAst::Lit(valence as i64),
+        donated_pairs: ValueAst::Lit(donated_pairs as i64),
+        accepted_pairs: ValueAst::Lit(accepted_pairs as i64),
         aromatic_valence,
-        0,
-    )
-    .ok()
+        multicenter_valence: ValueAst::Lit(0),
+    })
 }
 
 fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u8, u8)> {
@@ -555,95 +605,51 @@ fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u
     }
 }
 
-fn atom_matches_constraints(candidate: &Atom, atom_ast: &AtomAst) -> bool {
-    match_value_constraint(&atom_ast.charge, candidate.charge() as i64)
-        && match_value_constraint(&atom_ast.lone_pairs, candidate.lone_pairs() as i64)
-        && match_value_constraint(&atom_ast.valence, candidate.valence() as i64)
-        && match_value_constraint(
-            &atom_ast.donated_pairs,
-            candidate.donated_pairs() as i64,
-        )
-        && match_value_constraint(
-            &atom_ast.accepted_pairs,
-            candidate.accepted_pairs() as i64,
-        )
-        && match_value_constraint(
-            &atom_ast.multicenter_valence,
-            candidate.multicenter_valence() as i64,
-        )
-        && match_spin_constraint(&atom_ast.spin, candidate.spin())
-        && match_aromatic_constraint(&atom_ast.aromatic_valence, candidate.aromatic_valence())
-}
-
-fn match_value_constraint(constraint: &ValueAst, value: i64) -> bool {
-    constraint.matches(value)
-}
-
-fn match_spin_constraint(constraint: &SpinStateAst, value: SpinState) -> bool {
-    constraint.matches(value)
-}
-
-fn match_aromatic_constraint(constraint: &AromaticValenceAst, value: AromaticValence) -> bool {
-    match constraint {
-        AromaticValenceAst::Undetermined => true,
-        AromaticValenceAst::NotAromatic => value == AromaticValence::NotAromatic,
-        AromaticValenceAst::Value(v) => v.matches(value.valence() as i64),
-    }
-}
-
-
-fn narrow_atom(atom_ast: &mut AtomAst, candidate: &Atom) -> bool {
+fn narrow_atom(atom_ast: &mut AtomAst, candidate: &AtomAst) -> bool {
     let mut changed = false;
-    if matches!(atom_ast.isotope_mass, IsotopeAst::Undetermined) {
-        atom_ast.isotope_mass = match candidate.isotope_mass() {
-            IsotopeMass::Natural => IsotopeAst::Natural,
-            IsotopeMass::MassNumber(n) => IsotopeAst::Lit(n),
-        };
+    changed |= narrow_value(&mut atom_ast.charge, &candidate.charge);
+    if matches!(
+        atom_ast.implicit_hydrogens,
+        HydrogenAst::Undetermined | HydrogenAst::Normal
+    ) && atom_ast.implicit_hydrogens != candidate.implicit_hydrogens
+    {
+        atom_ast.implicit_hydrogens = candidate.implicit_hydrogens.clone();
         changed = true;
     }
-    if matches!(atom_ast.charge, ValueAst::Undetermined) {
-        atom_ast.charge = ValueAst::Lit(candidate.charge() as i64);
+    changed |= narrow_value(&mut atom_ast.lone_pairs, &candidate.lone_pairs);
+    if !matches!(candidate.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined })
+        && matches!(atom_ast.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined })
+    {
+        atom_ast.spin = candidate.spin.clone();
         changed = true;
     }
-    if matches!(atom_ast.implicit_hydrogens, HydrogenAst::Undetermined) {
-        atom_ast.implicit_hydrogens = HydrogenAst::Value(ValueAst::Lit(
-            candidate.implicit_hydrogens() as i64,
-        ));
-        changed = true;
+    changed |= narrow_value(&mut atom_ast.valence, &candidate.valence);
+    changed |= narrow_value(&mut atom_ast.donated_pairs, &candidate.donated_pairs);
+    changed |= narrow_value(&mut atom_ast.accepted_pairs, &candidate.accepted_pairs);
+    match (&atom_ast.aromatic_valence, &candidate.aromatic_valence) {
+        (AromaticValenceAst::Undetermined, c) if !matches!(c, AromaticValenceAst::Undetermined) => {
+            atom_ast.aromatic_valence = candidate.aromatic_valence.clone();
+            changed = true;
+        }
+        (AromaticValenceAst::Value(ValueAst::Undetermined), c)
+            if !matches!(c, AromaticValenceAst::Value(ValueAst::Undetermined)) =>
+        {
+            atom_ast.aromatic_valence = candidate.aromatic_valence.clone();
+            changed = true;
+        }
+        _ => {}
     }
-    if matches!(atom_ast.lone_pairs, ValueAst::Undetermined) {
-        atom_ast.lone_pairs = ValueAst::Lit(candidate.lone_pairs() as i64);
-        changed = true;
-    }
-    if matches!(atom_ast.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }) {
-        atom_ast.spin = SpinStateAst::Lit(candidate.spin());
-        changed = true;
-    }
-    if matches!(atom_ast.valence, ValueAst::Undetermined) {
-        atom_ast.valence = ValueAst::Lit(candidate.valence() as i64);
-        changed = true;
-    }
-    if matches!(atom_ast.donated_pairs, ValueAst::Undetermined) {
-        atom_ast.donated_pairs = ValueAst::Lit(candidate.donated_pairs() as i64);
-        changed = true;
-    }
-    if matches!(atom_ast.accepted_pairs, ValueAst::Undetermined) {
-        atom_ast.accepted_pairs = ValueAst::Lit(candidate.accepted_pairs() as i64);
-        changed = true;
-    }
-    if matches!(atom_ast.aromatic_valence, AromaticValenceAst::Undetermined) {
-        atom_ast.aromatic_valence = match candidate.aromatic_valence() {
-            AromaticValence::NotAromatic => AromaticValenceAst::NotAromatic,
-            AromaticValence::Valence(v) => AromaticValenceAst::Value(ValueAst::Lit(v as i64)),
-        };
-        changed = true;
-    }
-    if matches!(atom_ast.multicenter_valence, ValueAst::Undetermined) {
-        atom_ast.multicenter_valence =
-            ValueAst::Lit(candidate.multicenter_valence() as i64);
-        changed = true;
-    }
+    changed |= narrow_value(&mut atom_ast.multicenter_valence, &candidate.multicenter_valence);
     changed
+}
+
+fn narrow_value(target: &mut ValueAst, source: &ValueAst) -> bool {
+    if matches!(target, ValueAst::Undetermined) && matches!(source, ValueAst::Lit(_)) {
+        *target = source.clone();
+        true
+    } else {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -652,13 +658,22 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
+    use umol_shared::atom_ast::IsotopeAst;
+
     use crate::ast::bond::BondAst;
+    use crate::ast::config::AtomAstConfig;
+    use crate::ast::matcher::Assignment;
     use crate::registry;
 
-    use crate::ast::matcher::Assignment;
+    fn coerce_zeroed(ast: &mut MoleculeAst) {
+        let cfg = AtomAstConfig::zeroed();
+        for i in 0..ast.atom_count() as u32 {
+            ast.atom_mut(AtomIdx(i)).coerce(&cfg);
+        }
+    }
 
     fn h2() -> MoleculeAst {
-        MoleculeAst::new(
+        let mut ast = MoleculeAst::new(
             vec![
                 AtomAst::from_element(Element::H),
                 AtomAst::from_element(Element::H),
@@ -669,7 +684,9 @@ mod tests {
             vec![],
             vec![],
             vec![],
-        )
+        );
+        coerce_zeroed(&mut ast);
+        ast
     }
 
     #[test]
@@ -678,7 +695,7 @@ mod tests {
             valence: ValenceStrategy::AtomTyping {
                 registry: registry!["H #v"],
             },
-            aromaticity: None,
+            aromaticity: AromaticityConfig::daylight(),
         };
         let mut ast = h2();
         let result = solver.resolve(&mut ast).unwrap();
@@ -696,7 +713,7 @@ mod tests {
             valence: ValenceStrategy::AtomTyping {
                 registry: AtomTypeRegistry::new(),
             },
-            aromaticity: None,
+            aromaticity: AromaticityConfig::daylight(),
         };
         let mut ast = MoleculeAst::new(
             vec![AtomAst::from_element(Element::C)],
@@ -742,7 +759,7 @@ mod tests {
                 table: ValenceTable::default_table().clone(),
                 allow_implicit_hydrogens: true,
             },
-            aromaticity: None,
+            aromaticity: AromaticityConfig::daylight(),
         };
         let mut ast = h2();
         let result = solver.resolve(&mut ast).unwrap();
@@ -761,10 +778,14 @@ mod tests {
                 table: ValenceTable::default_table().clone(),
                 allow_implicit_hydrogens: true,
             },
-            aromaticity: None,
+            aromaticity: AromaticityConfig::daylight(),
         };
         let mut ast = MoleculeAst::new(
-            vec![AtomAst::from_element(Element::C)],
+            vec![AtomAst {
+                element: ElementAst::Lit(Element::C),
+                isotope_mass: IsotopeAst::Natural,
+                ..Default::default()
+            }],
             vec![],
             vec![],
             vec![],
@@ -786,7 +807,7 @@ mod tests {
             valence: ValenceStrategy::AtomTyping {
                 registry: registry!["H #v"],
             },
-            aromaticity: None,
+            aromaticity: AromaticityConfig::daylight(),
         };
         let mut ast = h2();
         solver.resolve(&mut ast).unwrap();
@@ -881,7 +902,7 @@ mod tests {
             valence: ValenceStrategy::AtomTyping {
                 registry: registry!["H #v"],
             },
-            aromaticity: None,
+            aromaticity: AromaticityConfig::daylight(),
         };
         let mut target = h2();
         solver.resolve(&mut target).unwrap();
@@ -897,4 +918,5 @@ mod tests {
         let result = solver.filter(&MoleculeAst::default(), &target, vec![]);
         assert_eq!(result, vec![]);
     }
+
 }

@@ -12,19 +12,15 @@ use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ast::config::{
     ImplicitHydrogenMode, MoleculeAstConfig, MoleculeAstConfigOverrides,
 };
-use umol_graph::ast::{FromAst, ToAst};
 use umol_graph::dsl::molecule::MoleculeAstWrapper;
 use umol_graph::graph_ir::config_data::ValenceTable;
-use umol_graph::graph_ir::molecule_builder::{MoleculeBuilder, ResolutionContext};
-use umol_graph::graph_ir::{resolve_molecule_with, ResolveConfig, ValenceStrategy};
+use umol_graph::solver::{AromaticityConfig, Solution, Solver, ValenceStrategy};
 
 #[derive(FromEdn)]
 struct TestInput {
     input: MoleculeAstWrapper,
     #[edn(default)]
     config_overrides: MoleculeAstConfigOverrides,
-    #[edn(default)]
-    context: ResolutionContext,
 }
 
 #[derive(ToEdn)]
@@ -40,52 +36,50 @@ struct ResolveResult {
     error: Option<String>,
 }
 
-fn resolve_with_config(
+fn resolve_test(
     input: &MoleculeAstWrapper,
-    dsl_config: &MoleculeAstConfig,
-    context: &ResolutionContext,
-    resolve_config: &ResolveConfig,
+    solver: &Solver,
+    config: &MoleculeAstConfig,
 ) -> ResolveResult {
-    let builder = MoleculeBuilder::from_ast(input.ast(), dsl_config);
-    match builder {
+    let mut ast = input.ast().clone();
+    ast.coerce(config);
+    match solver.resolve(&mut ast) {
+        Ok(Solution::Determined(()) | Solution::Underdetermined(())) => {
+            ast.release(config);
+            ResolveResult {
+                success: true,
+                output: Some(MoleculeAstWrapper::new(ast, input.metadata().clone())),
+                error: None,
+            }
+        }
+        Ok(Solution::Contradictory) => ResolveResult {
+            success: false,
+            output: None,
+            error: Some("contradictory".to_string()),
+        },
         Err(e) => ResolveResult {
             success: false,
             output: None,
             error: Some(e.to_string()),
         },
-        Ok(mut builder) => {
-            builder.set_resolution_context(context.clone());
-            let result = resolve_molecule_with(&mut builder, resolve_config)
-                .and_then(|()| builder.build(resolve_config));
-            match result {
-                Ok(mol) => {
-                    let ast = mol.to_ast(&MoleculeAstConfig::zeroed());
-                    ResolveResult {
-                        success: true,
-                        output: Some(MoleculeAstWrapper::new(ast, input.metadata().clone())),
-                        error: None,
-                    }
-                }
-                Err(e) => ResolveResult {
-                    success: false,
-                    output: None,
-                    error: Some(e.to_string()),
-                },
-            }
-        }
     }
 }
 
-fn counts_config(dsl_config: &MoleculeAstConfig) -> ResolveConfig {
-    let mut config = ResolveConfig::default();
-    config.valence.strategy = ValenceStrategy::Counts {
-        table: ValenceTable::default_table().clone(),
-        allow_implicit_hydrogens: !matches!(
-            dsl_config.atom.implicit_h_mode,
-            ImplicitHydrogenMode::Zero
-        ),
-    };
-    config
+fn atom_typing_solver() -> Solver {
+    Solver::default()
+}
+
+fn counts_solver(config: &MoleculeAstConfig) -> Solver {
+    Solver {
+        valence: ValenceStrategy::Counts {
+            table: ValenceTable::default_table().clone(),
+            allow_implicit_hydrogens: !matches!(
+                config.atom.implicit_h_mode,
+                ImplicitHydrogenMode::Zero
+            ),
+        },
+        aromaticity: AromaticityConfig::daylight(),
+    }
 }
 
 fn extract_category(path: &Path) -> String {
@@ -107,17 +101,15 @@ fn run_conformance_test(file_path: &Path) {
     let test_input = TestInput::from_edn_str(&content).expect("failed to parse EDN input");
     let config = MoleculeAstConfig::open().with_overrides(test_input.config_overrides);
 
-    let atom_typing = resolve_with_config(
+    let atom_typing = resolve_test(
         &test_input.input,
+        &atom_typing_solver(),
         &config,
-        &test_input.context,
-        &ResolveConfig::default(),
     );
-    let counts = resolve_with_config(
+    let counts = resolve_test(
         &test_input.input,
+        &counts_solver(&config),
         &config,
-        &test_input.context,
-        &counts_config(&config),
     );
 
     let results = TestResults {

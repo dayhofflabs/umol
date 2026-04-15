@@ -1,19 +1,11 @@
 ---
 source: umol-graph/tests/resolution/mod.rs
-expression: edn_to_string_pretty(&results).unwrap()
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
   :atom-typing {
-    :output {
-      :atoms ["B#u#v2" "F#n3#v" "F#n3#v"]
-      :bonds [[0 1 :single] [0 2 :single]]
-      :charge 0
-      :spin "#u1#s2"}
+    :output {:atoms ["B#u#v2" "F#n3#v" "F#n3#v"] :bonds [[0 1 :single] [0 2 :single]]}
     :success true}
   :counts {
-    :output {
-      :atoms ["B#u#v2" "F#n3#v" "F#n3#v"]
-      :bonds [[0 1 :single] [0 2 :single]]
-      :charge 0
-      :spin "#u1#s2"}
+    :output {:atoms ["B#u#v2" "F#n3#v" "F#n3#v"] :bonds [[0 1 :single] [0 2 :single]]}
     :success true}}

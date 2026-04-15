@@ -339,13 +339,13 @@ mod tests {
     #[case::charge_plus("#c+", BondPredicate::Charge(ValueAst::Lit(1)))]
     #[case::charge_minus("#c-", BondPredicate::Charge(ValueAst::Lit(-1)))]
     #[case::charge_zero("#c0", BondPredicate::Charge(ValueAst::Lit(0)))]
-    #[case::charge_wildcard("#c*", BondPredicate::Charge(ValueAst::Undetermined))]
+    #[case::charge_undetermined("#c*", BondPredicate::Charge(ValueAst::Undetermined))]
     #[case::unpaired("#u2", BondPredicate::UnpairedElectrons(ValueAst::Lit(2)))]
     #[case::unpaired_omit("#u", BondPredicate::UnpairedElectrons(ValueAst::Lit(1)))]
-    #[case::unpaired_wildcard("#u*", BondPredicate::UnpairedElectrons(ValueAst::Undetermined))]
+    #[case::unpaired_undetermined("#u*", BondPredicate::UnpairedElectrons(ValueAst::Undetermined))]
     #[case::multiplicity("#s3", BondPredicate::Multiplicity(ValueAst::Lit(3)))]
     #[case::multiplicity_omit("#s", BondPredicate::Multiplicity(ValueAst::Lit(1)))]
-    #[case::multiplicity_wildcard("#s*", BondPredicate::Multiplicity(ValueAst::Undetermined))]
+    #[case::multiplicity_undetermined("#s*", BondPredicate::Multiplicity(ValueAst::Undetermined))]
     fn test_bond_predicate(#[case] input: &str, #[case] expected: BondPredicate) {
         let result = bond_predicate(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
