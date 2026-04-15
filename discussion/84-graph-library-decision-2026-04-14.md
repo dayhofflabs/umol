@@ -136,6 +136,196 @@ The previous design stored each relation type as a `Vec<BondTuple>` or `Vec<Arom
 - DPO graph rewriting — read from `Graph`, construct output as new `Graph`
 - WL iteration, other graph algorithms — borrow adjacency directly
 
+## VF2 implementation notes
+
+### Current: vanilla VF2 (Cordella et al., 2004)
+
+Implemented in `umol-graph-core/src/algorithms/vf2.rs`. Operates on undirected `Graph` with caller-supplied `node_match` and `edge_match` closures. Same algorithm as petgraph's `subgraph_isomorphisms_iter`, without the directed-graph-with-doubled-edges workaround (native undirected graph halves the per-feasibility-check iteration cost).
+
+### RDKit's VF2 differences
+
+RDKit uses a modified VF2 ("VFLib") with domain-specific optimizations:
+
+- **Fingerprint pre-screening**: Morgan-based quick-reject before entering VF2. Most non-matches never reach the search.
+- **Degree-based candidate ordering**: highest-degree query node first (most constrained), narrowing the search tree. Closer to VF2+ than vanilla.
+- **Chirality and ring membership as first-class feasibility predicates**: checked inside VF2, not as post-filters.
+- **Lazy iteration**: stateful iterator returning one match at a time. Avoids collecting all matches for containment checks.
+
+The reported ~2.7x gap vs petgraph is primarily pre-screening and ordering, not asymptotic.
+
+### VF2+ (Jüttner & Madarasi, 2018)
+
+Three additions over vanilla:
+
+- **Static candidate ordering**: precomputed query node ordering based on domain sizes and connectivity, not dynamic smallest-index selection.
+- **Label-frequency cutting rules**: compare neighbor label histograms at each candidate pair; prune if the target can't satisfy the query's distribution.
+- **Backjumping**: skip backtracking levels that can't affect the current failure.
+
+2-10x over vanilla VF2 on sparse molecular graphs. The current `Vf2State` struct is structured for this: `next_query_node` and the candidate loop are separate concerns that VF2+ would replace.
+
+### Closure architecture: algorithm vs semantics boundary
+
+The `subgraph_isomorphisms` function takes two closure parameters: `node_match` and `edge_match`. These are the stable boundary between topology-level search (inside the algorithm) and chemistry-level semantics (provided by the caller).
+
+VFLib's molecule-specific heuristics split cleanly across this boundary:
+
+**Inside the algorithm** (topology heuristics, modify `Vf2State` internals):
+- Degree-based or domain-size-based candidate ordering (VF2+ `next_query_node`)
+- Label-frequency cutting rules (VF2+ feasibility)
+- Backjumping (VF2+ search control)
+
+**Via the closures** (semantic predicates, caller-supplied):
+- Element, charge, hydrogen matching
+- Ring membership, ring count, ring size (via `DerivedCatalog`)
+- Chirality
+- Any future `DerivedPred`
+
+**Pre-screening** is a third closure, evaluated once before VF2 enters the search tree. It takes the query and target as a whole and returns whether VF2 should run at all. Fingerprint-based quick-reject (Morgan feature subset check) is the primary use case. The signature:
+
+```rust
+pub fn subgraph_isomorphisms(
+    query: &Graph,
+    target: &Graph,
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    pre_screen: Option<&mut impl FnMut(&Graph, &Graph) -> bool>,
+) -> Vec<Vec<usize>>
+```
+
+Or equivalently, the caller checks pre-screening before calling `subgraph_isomorphisms` — the algorithm doesn't need to know about it. Either way, pre-screening is caller logic, not algorithm logic.
+
+The three concerns are orthogonal: vanilla VF2 with rich closures (current state + catalog pushdown), VF2+ with simple closures, VF2+ with rich closures + pre-screening. Any combination works without modifying the others.
+
+### Bounded-treewidth alternatives
+
+Molecular graphs have treewidth ≤ 3 (acyclics) to ≤ 6 (most ring systems). This is exploitable in principle:
+
+- **Tree decomposition + DP**: subgraph iso on treewidth-*k* graphs in O(n^{k+1} · p). For *k* = 3-6, polynomial with manageable exponent. Linear-time decomposition exists (Bodlaender) but the constant is large.
+- **Color-coding** (Alon, Yuster, Zwick): randomized O(2^p · m) for pattern size *p*. Competitive for p ≤ 15 (most SMARTS queries).
+
+For single-molecule, single-query matching (< 200 atoms), VF2+ with pre-screening is hard to beat. Tree decomposition becomes relevant in two scenarios:
+
+- **Many queries against one target**: amortize the decomposition cost. This is the reaction pattern matching case — many rewrite templates applied to the same molecule. Precomputing the target's tree decomposition once and running each pattern query as DP over it can outperform repeated VF2 calls.
+- **Large graphs**: reaction networks (10^6+ nodes), protein interaction graphs.
+
+## Derived property integration with VF2
+
+### Problem
+
+SMARTS predicates like `R3` (in exactly 3 SSSR rings) and `r6` (in a ring of size 6) are derived from topology, not intrinsic atom properties. They should not be materialized on `AtomAst`, which represents intrinsic properties. But they must be evaluated inside VF2's feasibility check for effective pruning — a `[r6]` query atom tried against every non-ring target atom wastes entire subtrees.
+
+### Architecture: predicate pushdown with demand-driven materialization
+
+Three layers, mirroring SQL index scans / Datalog IDB materialization / Cypher property indexes:
+
+**Layer 1 — predicate specification (MoleculeAst)**
+
+`AtomAst` stays clean. Ring constraints live on `MoleculeConstraint` as `DerivedPred` variants, scoped to specific atoms via `RelationRefs`:
+
+```rust
+DerivedPred::RingCount(ValueAst::Lit(3))    // R3
+DerivedPred::InRingOfSize(6)                 // r6
+```
+
+This is the WHERE clause. The AST carries *what* to check, not *how*.
+
+**Layer 2 — materialized indexes (MatchTarget)**
+
+`MatchTarget` precomputes derived properties from graph topology into a catalog:
+
+```rust
+struct MatchTarget<'a> {
+    ast: &'a MoleculeAst,
+    catalog: DerivedCatalog,
+}
+
+struct DerivedCatalog {
+    ring_info: Option<RingInfo>,
+    // future: distance_matrix, bcc, ...
+}
+
+struct RingInfo {
+    ring_count: Vec<u16>,                    // per atom: SSSR ring count
+    ring_sizes: Vec<SmallVec<[u8; 4]>>,      // per atom: sorted ring sizes
+}
+```
+
+Computed **on demand**: if no query references ring membership, `ring_info` stays `None`. This is the database deciding which indexes to build for a given query plan.
+
+**Layer 3 — predicate pushdown (MatchQuery + node_match)**
+
+`MatchQuery` compiles per-atom derived predicates from the query's `MoleculeConstraint` vec. During VF2, `node_match` checks both intrinsic properties and compiled derived predicates:
+
+```
+node_match(q_node, t_node):
+    q_ast.atom(q_node).matches_ground(t_ast.atom(t_node))
+    && query.derived_predicates(q_node)
+           .all(|pred| target.catalog.satisfies(t_node, pred))
+```
+
+### Integration with VF2: no algorithm changes needed
+
+VF2 already takes external `node_match` and `edge_match` closures. The algorithm is topology-only — all semantic matching is delegated to these closures. The current matcher already closes over `q_ast` and `t_ast` to check element/charge/etc. Adding derived predicate checks extends the closure body, not the algorithm:
+
+```rust
+// Current
+let mut node_match = |q: NodeId, t: NodeId| {
+    q_ast.atom(q.into()).matches_ground(t_ast.atom(t.into()))
+};
+
+// With derived predicates
+let mut node_match = |q: NodeId, t: NodeId| {
+    q_ast.atom(q.into()).matches_ground(t_ast.atom(t.into()))
+        && query.check_derived(q, &target.catalog, t)
+};
+```
+
+VF2 calls `node_match` at the top of its feasibility check, before edge consistency and look-ahead. Derived predicates evaluated here prune at the earliest possible point — a rejected candidate at depth 0 eliminates an entire subtree.
+
+The same closure mechanism works for VF2+: the algorithm changes candidate ordering and cutting rules internally, but `node_match` and `edge_match` remain the external predicate interface.
+
+### What pushes down vs what stays as post-filter
+
+| Predicate | Scope | Evaluation |
+|---|---|---|
+| Element, charge, H-count | per atom, intrinsic | `node_match` (current) |
+| Ring count, ring size | per atom, derived | `node_match` via catalog (pushdown) |
+| Bond order | per edge, intrinsic | `edge_match` (current) |
+| Dative/aromatic subset | multi-atom relational | post-filter (current) |
+| Total charge, total spin | whole-match aggregate | post-filter |
+
+Boundary: per-atom predicates (intrinsic or derived) push into `node_match`. Multi-atom relational predicates stay as post-filters on the complete assignment. This matches the database analogy — single-table predicates push into the scan operator, join predicates stay in the join operator.
+
+## Implementation status
+
+### Complete
+
+| Component | Lines | Location |
+|---|---|---|
+| `Graph` struct (CSR, Arc/CoW) | ~330 | `umol-graph-core/src/graph.rs` |
+| Mutations + `Remapping` | ~130 | `umol-graph-core/src/graph.rs` |
+| `FixedRelationSet<R, N>` | ~120 | `umol-graph-core/src/relation.rs` |
+| `VarRelationSet<R>` | ~120 | `umol-graph-core/src/relation.rs` |
+| Connected components | ~35 | `umol-graph-core/src/algorithms/connected.rs` |
+| Biconnected components | ~100 | `umol-graph-core/src/algorithms/bcc.rs` |
+| Cycle enumeration | ~90 | `umol-graph-core/src/algorithms/cycles.rs` |
+| Maximum independent set | ~70 | `umol-graph-core/src/algorithms/mis.rs` |
+| VF2 subgraph isomorphism | ~170 | `umol-graph-core/src/algorithms/vf2.rs` |
+| `UnionFind` | ~35 | `umol-graph-core/src/union_find.rs` |
+| `MoleculeAst` migration | ~400 | `umol-graph/src/ast/molecule.rs` |
+| Matcher on native VF2 | ~100 | `umol-graph/src/ast/matcher.rs` |
+
+### petgraph removal from AST layer
+
+petgraph removed from `matcher.rs` (replaced by native VF2), `morgan.rs` (petgraph benchmark variant deleted), `hueckel_rule.rs` (replaced by `UnionFind`). petgraph remains only in `graph_ir/` (`molecule.rs`, `molecule_builder.rs`), which is being superseded by MoleculeAst + solver.
+
+### Remaining
+
+- VF2+ candidate ordering and cutting rules
+- Fingerprint pre-screening for matcher
+- `graph_ir/` petgraph removal — not planned, GraphIR is going away
+- Old standalone algorithms (`umol-graph/src/algorithms/{bcc,cycles,mis}.rs`) — kept for GraphIR consumers, removed when GraphIR is removed
+
 ## Relationship to other docs
 
 - Doc 80: step 7 suspended pending this work

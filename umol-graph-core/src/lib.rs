@@ -8,6 +8,9 @@
 pub mod algorithms;
 pub mod graph;
 pub mod relation;
+pub mod union_find;
 
-pub use graph::{EdgeId, Graph, Neighbor, NodeId, Remapping};
+pub use algorithms::vf2::subgraph_isomorphisms;
+pub use graph::{EdgeId, Graph, Neighbor, NodeId, Remapping, Subgraph};
 pub use relation::{FixedRelationSet, RelationId, VarRelationSet};
+pub use union_find::UnionFind;

@@ -6,11 +6,17 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use index_vec::Idx;
 use nalgebra::{DMatrix, SymmetricEigen};
 use umol_shared::element::Element;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
+use umol_shared::value_ast::ValueAst;
+
 use super::{AromaticContribution, AromaticSystem, AromaticityError};
+use crate::ast::AtomIdx;
+use crate::ast::molecule::MoleculeAst;
 use crate::graph_ir::config::ElementScope;
 use crate::graph_ir::molecule::AtomIndex;
 use crate::graph_ir::molecule_builder::MoleculeBuilder;
@@ -86,6 +92,167 @@ impl HmoAromaticity {
             ElementScope::Any => has_params,
             ElementScope::AllowList(list) => list.contains(&element) && has_params,
         }
+    }
+
+    pub fn find_from_ast(
+        &self,
+        ast: &MoleculeAst,
+        rings: &RingSet,
+    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
+        let pi_atoms: Vec<AtomIndex> = ast
+            .atoms()
+            .filter_map(|(idx, atom)| {
+                let element = match atom.element {
+                    ElementAst::Lit(e) => e,
+                    _ => return None,
+                };
+                if !self.is_element_supported(element) {
+                    return None;
+                }
+                match atom.aromatic_valence {
+                    AromaticValenceAst::Value(ValueAst::Lit(_)) => {
+                        Some(AtomIndex::new(idx.index()))
+                    }
+                    _ => None,
+                }
+            })
+            .collect();
+
+        if pi_atoms.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let pi_set: HashSet<AtomIndex> = pi_atoms.iter().copied().collect();
+
+        let mut visited: HashSet<AtomIndex> = HashSet::new();
+        let mut components: Vec<Vec<AtomIndex>> = Vec::new();
+        for &atom in &pi_atoms {
+            if visited.contains(&atom) {
+                continue;
+            }
+            let mut component = Vec::new();
+            let mut stack = vec![atom];
+            visited.insert(atom);
+            while let Some(current) = stack.pop() {
+                component.push(current);
+                let idx = AtomIdx(current.index() as u32);
+                for neighbor in ast.neighbors(idx) {
+                    let n = AtomIndex::new(neighbor.node.index());
+                    if pi_set.contains(&n) && visited.insert(n) {
+                        stack.push(n);
+                    }
+                }
+            }
+            component.sort_unstable();
+            components.push(component);
+        }
+
+        let mut candidates = Vec::new();
+        for component in &components {
+            let has_ring_atom = component.iter().any(|a| rings.is_ring_atom(*a));
+            if !has_ring_atom || component.len() < 3 {
+                continue;
+            }
+
+            let result = self.build_calculator_ast(ast, component)?.solve();
+
+            let de_per_electron = if result.electron_count > 0 {
+                result.delocalization_energy / result.electron_count as f64
+            } else {
+                0.0
+            };
+
+            if de_per_electron >= self.stabilization_threshold {
+                let contributions: Vec<AromaticContribution> = result
+                    .atom_indices
+                    .iter()
+                    .map(|&atom| {
+                        let a = ast.atom(AtomIdx(atom.index() as u32));
+                        let valence = match a.aromatic_valence {
+                            AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
+                            _ => 0,
+                        };
+                        AromaticContribution::new(atom, valence)
+                    })
+                    .collect();
+
+                let component_set: HashSet<AtomIndex> = component.iter().copied().collect();
+                let rings: Vec<Ring> = rings
+                    .ring_indices()
+                    .filter_map(|i| rings.ring(i))
+                    .filter(|cycle| cycle.atoms().iter().all(|a| component_set.contains(a)))
+                    .cloned()
+                    .collect();
+
+                candidates.push(AromaticSystem::with_rings(contributions, rings));
+            }
+        }
+
+        Ok(candidates)
+    }
+
+    pub(crate) fn build_calculator_ast(
+        &self,
+        ast: &MoleculeAst,
+        pi_atoms: &[AtomIndex],
+    ) -> Result<HmoCalculator, AromaticityError> {
+        let atom_to_idx: HashMap<AtomIndex, usize> =
+            pi_atoms.iter().enumerate().map(|(i, &a)| (a, i)).collect();
+
+        let mut h_values = Vec::with_capacity(pi_atoms.len());
+        let mut electron_count: u32 = 0;
+        let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(pi_atoms.len());
+        for &atom in pi_atoms {
+            let atom_ast = ast.atom(AtomIdx(atom.index() as u32));
+            let element = match atom_ast.element {
+                ElementAst::Lit(e) => e,
+                _ => {
+                    return Err(AromaticityError::HmoMissingAtom(
+                        "undetermined element".to_string(),
+                    ))
+                }
+            };
+            let valence = match atom_ast.aromatic_valence {
+                AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
+                _ => {
+                    return Err(AromaticityError::HmoMissingAtom(
+                        "undetermined aromatic valence".to_string(),
+                    ))
+                }
+            };
+            let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
+                AromaticityError::HmoMissingParameters(format!(
+                    "no Van-Catledge parameters for {:?} with {} pi-electrons",
+                    element, valence
+                ))
+            })?;
+            h_values.push(hx);
+            atom_types.push((element, valence));
+            electron_count += valence as u32;
+        }
+
+        let mut bonds = Vec::new();
+        for (i, &atom_i) in pi_atoms.iter().enumerate() {
+            let idx = AtomIdx(atom_i.index() as u32);
+            for neighbor in ast.neighbors(idx) {
+                let n = AtomIndex::new(neighbor.node.index());
+                if let Some(&j) = atom_to_idx.get(&n) {
+                    if j > i {
+                        let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(
+                            || {
+                                AromaticityError::HmoMissingParameters(format!(
+                                    "no Van-Catledge k_XY for {:?}-{:?}",
+                                    atom_types[i], atom_types[j]
+                                ))
+                            },
+                        )?;
+                        bonds.push((i, j, k));
+                    }
+                }
+            }
+        }
+
+        HmoCalculator::new(pi_atoms.to_vec(), electron_count, h_values, bonds)
     }
 
     pub fn find_from_rings(

@@ -48,6 +48,12 @@ pub struct Remapping {
     pub removed_edges: Vec<u32>,
 }
 
+pub struct Subgraph {
+    pub graph: Graph,
+    pub node_map: Vec<NodeId>,
+    pub edge_map: Vec<EdgeId>,
+}
+
 impl Remapping {
     pub fn node(&self, old: NodeId) -> Option<NodeId> {
         if self.removed_nodes.binary_search(&old.0).is_ok() {
@@ -268,6 +274,37 @@ impl Graph {
 
     pub fn remove_edge(&mut self, id: EdgeId) -> Remapping {
         self.remove(&[], &[id])
+    }
+
+    /// Build an induced subgraph from a subset of nodes.
+    ///
+    /// Returns the subgraph (with contiguous node/edge IDs starting at 0)
+    /// and mappings from new IDs back to original IDs.
+    pub fn induced_subgraph(&self, nodes: &[NodeId]) -> Subgraph {
+        let mut sorted: Vec<NodeId> = nodes.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+
+        let mut reverse: Vec<Option<u32>> = vec![None; self.node_bound()];
+        for (new_idx, &old) in sorted.iter().enumerate() {
+            reverse[old.index()] = Some(new_idx as u32);
+        }
+
+        let mut edges = Vec::new();
+        let mut edge_map = Vec::new();
+        for eid in self.edge_ids() {
+            let [a, b] = self.edge_endpoints(eid);
+            if let (Some(na), Some(nb)) = (reverse[a.index()], reverse[b.index()]) {
+                edges.push([na, nb]);
+                edge_map.push(eid);
+            }
+        }
+
+        Subgraph {
+            graph: Graph::new(sorted.len(), &edges),
+            node_map: sorted,
+            edge_map,
+        }
     }
 
     fn build_topology(node_count: usize, edges: &[[u32; 2]]) -> Topology {

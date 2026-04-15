@@ -9,8 +9,13 @@ use std::collections::HashSet;
 
 use umol_shared::element::Element;
 
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
+use umol_shared::value_ast::ValueAst;
+
 use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::algorithms::maximum_independent_set;
+use crate::ast::AtomIdx;
+use crate::ast::molecule::MoleculeAst;
 use crate::graph_ir::molecule::AtomIndex;
 use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
@@ -19,6 +24,78 @@ use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
 pub struct ClarAromaticity;
 
 impl ClarAromaticity {
+    pub fn find_from_ast(
+        &self,
+        ast: &MoleculeAst,
+        rings: &RingSet,
+    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
+        let has_non_benzenoid = ast.atoms().any(|(_, atom)| {
+            !matches!(atom.element, ElementAst::Lit(Element::C))
+                && matches!(atom.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
+        });
+        if has_non_benzenoid {
+            return Err(AromaticityError::ClarInputError(
+                "Clar model requires benzenoid input but non-carbon aromatic atoms are present"
+                    .to_string(),
+            ));
+        }
+
+        let sextet_indices: Vec<RingIndex> = rings
+            .ring_indices()
+            .filter(|&i| {
+                let Some(cycle) = rings.ring(i) else {
+                    return false;
+                };
+                cycle.len() == 6
+                    && cycle.atoms().iter().all(|&atom| {
+                        let a = ast.atom(AtomIdx(atom.index() as u32));
+                        matches!(a.element, ElementAst::Lit(Element::C))
+                            && matches!(
+                                a.aromatic_valence,
+                                AromaticValenceAst::Value(ValueAst::Lit(_))
+                            )
+                    })
+            })
+            .collect();
+
+        if sextet_indices.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let best_sextet_indices = select_disjoint_sextets(rings, &sextet_indices);
+        if best_sextet_indices.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let selected_atoms: HashSet<AtomIndex> = best_sextet_indices
+            .iter()
+            .filter_map(|&i| rings.ring(i))
+            .flat_map(|r| r.atoms().iter().copied())
+            .collect();
+
+        let contributions: Vec<AromaticContribution> = selected_atoms
+            .iter()
+            .map(|&atom| {
+                let a = ast.atom(AtomIdx(atom.index() as u32));
+                let valence = match a.aromatic_valence {
+                    AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
+                    _ => 0,
+                };
+                AromaticContribution::new(atom, valence)
+            })
+            .collect();
+
+        let selected_rings: Vec<Ring> = best_sextet_indices
+            .iter()
+            .filter_map(|&ring_idx| rings.ring(ring_idx).cloned())
+            .collect();
+
+        Ok(vec![AromaticSystem::with_rings(
+            contributions,
+            selected_rings,
+        )])
+    }
+
     pub fn find_from_rings(
         &self,
         builder: &MoleculeBuilder,

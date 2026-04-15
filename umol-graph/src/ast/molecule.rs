@@ -139,6 +139,15 @@ impl MoleculeAst {
         remap
     }
 
+    pub fn set_aromatic_systems(&mut self, systems: Vec<(Vec<AtomIdx>, AromaticSystemAst)>) {
+        self.aromatic_systems = VarRelationSet::new(
+            systems
+                .into_iter()
+                .map(|(atoms, d)| (atoms.into_iter().map(NodeId::from).collect(), d))
+                .collect(),
+        );
+    }
+
     fn apply_remapping(&mut self, remap: &Remapping) {
         self.atoms = remap.apply_to_node_vec(&self.atoms);
         self.bonds = remap.apply_to_edge_vec(&self.bonds);

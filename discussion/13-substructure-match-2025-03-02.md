@@ -1,4 +1,4 @@
-# Subststucture mnatching
+# Substructure matching
 
 ## Problems with SMARTS as graph pattern matching language
 

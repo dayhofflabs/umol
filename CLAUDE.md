@@ -7,8 +7,7 @@
 - Structured output only: bullets, tables, code blocks. Prose only when explicitly requested.
 
 ## Token Efficiency
-- Compress responses. Every sentence must earn its place.
-- No redundant context. Do not repeat information already established in the session.
+- Compress responses. Do not repeat information already established in the session.
 - No long intros or transitions between sections.
 - Short responses are correct unless depth is explicitly requested.
 
@@ -25,13 +24,19 @@
 - Never invent file paths, function names, or API signatures.
 - If a user corrects a factual claim: accept it as ground truth for the entire session. Never re-assert the original claim.
 
-## Code Output
-- The simplest working solution is preferred unless it is significantly affects performance. No over-engineering.
-- No abstractions or helpers for single-use operations.
+## Design
+- Consider the trade-off between simplicity, generality, and correctness.
+- For one-off tasks, simplicity always wins. No abstractions or helpers for single-use operations.
+- For load-bearing code, discussion of the trade-offs is always required. Do not implement anything before this step.
+- When unsure if the code is designed for the long term, ask. Do not guess.
 - No speculative features or future-proofing.
-- No docstrings or comments on code that was not changed.
-- Inline comments only where logic is non-obvious.
 - Read the file before modifying it. Never edit blind.
+- Do not ever consider backward compatibility. Breaking changes are fine if technically necessary.
+- Do not base design choices on speculated problem size or scope.
+- Do not rely on existing tests and benchmarks as being representative of real-world uses during the design phase.
+- Avoid stubs, shims, bridges whenever possible. Suggest design improvements instead.
+- Do not create manual implementations, where well-designed and supported external libraries exist.
+- No long comments, no self-talk, no references to previous implementations in comments.
 
 ## Session Memory
 - Learn user corrections and preferences within the session.
@@ -43,14 +48,10 @@
 - Do not refactor surrounding code when fixing a bug.
 - Do not create new files unless strictly necessary.
 
-## Design
-- Do not ever consider backward compatibility. Breaking changes are fine if technically necessary.
-- Avoid stubs, shims, bridges whenever possible. Suggest design improvements instead.
-- Do not create manual implementations, where well-designed and supported external libraries exist.
-
 ## Clichés
 
-- Avoid software development clichés like using number 42 for all integer examples, seeds, and tests.
+- Avoid software development cliches like using number 42 for all integer examples, seeds, and tests.
+- Avoid decorative elements in comments. Do not add lines of dashes or equal signs (comment art).
 
 ### Git
 
@@ -60,7 +61,6 @@
 - Do not use <module>/mod.rs, use <module>.rs instead.
 - Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.
 - Name tests test_<struct>_<method>() and test_<struct>_<method>_error(). Do not include test behavior in the test name.
-- No long comments, no self-talk, no references to previous implementations, no comment art.
 - The symbol names should convey the meaning. Comments only clarify points that are not obvious from names.
 - Do not use fully qualified names in the text. Use bare symbols for structs, enums, traits, and constants, parent module for free functions.
 - Do not place imports inline in code, put them all at the top of the module.

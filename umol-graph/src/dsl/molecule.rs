@@ -22,6 +22,7 @@ use crate::ast::bond::BondAst;
 use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
 use crate::ast::molecule::{AromaticSystemAst, MoleculeAst, MulticenterBondAst};
 
+// TODO: unify tag + id nomenclature
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
     pub atom_tags: IndexMap<usize, String>,
@@ -82,6 +83,7 @@ impl FromStr for MoleculeAstWrapper {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Inline here -- no need for free fn + trait impl
         parse_molecule_dsl(s)
     }
 }

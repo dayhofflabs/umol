@@ -1,10 +1,6 @@
 //! Substructure matcher over MoleculeAst using VF2 subgraph isomorphism.
 
-use petgraph::algo::subgraph_isomorphisms_iter;
-use petgraph::graph::Graph;
-use petgraph::Directed;
-
-use index_vec::Idx;
+use umol_graph_core::{EdgeId, NodeId, subgraph_isomorphisms};
 
 use crate::ast::molecule::MoleculeAst;
 use crate::solver::Solver;
@@ -16,33 +12,16 @@ pub struct Assignment(pub Vec<usize>);
 /// Precomputed graph view of a target molecule for substructure matching.
 pub struct MatchTarget<'a> {
     ast: &'a MoleculeAst,
-    graph: Graph<usize, usize, Directed>,
 }
 
 /// Precomputed graph view of a query pattern for substructure matching.
 pub struct MatchQuery<'a> {
     ast: &'a MoleculeAst,
-    graph: Graph<usize, usize, Directed>,
-}
-
-fn build_graph(ast: &MoleculeAst) -> Graph<usize, usize, Directed> {
-    let mut graph = Graph::with_capacity(ast.atom_count(), ast.bond_count() * 2);
-    let nodes: Vec<_> = (0..ast.atom_count()).map(|i| graph.add_node(i)).collect();
-    for (bond_idx, src, tgt, _) in ast.bonds() {
-        let s = src.index();
-        let t = tgt.index();
-        graph.add_edge(nodes[s], nodes[t], bond_idx.index());
-        graph.add_edge(nodes[t], nodes[s], bond_idx.index());
-    }
-    graph
 }
 
 impl<'a> MatchTarget<'a> {
     pub fn new(ast: &'a MoleculeAst) -> Self {
-        Self {
-            graph: build_graph(ast),
-            ast,
-        }
+        Self { ast }
     }
 
     pub fn ast(&self) -> &MoleculeAst {
@@ -52,10 +31,7 @@ impl<'a> MatchTarget<'a> {
 
 impl<'a> MatchQuery<'a> {
     pub fn new(ast: &'a MoleculeAst) -> Self {
-        Self {
-            graph: build_graph(ast),
-            ast,
-        }
+        Self { ast }
     }
 
     pub fn ast(&self) -> &MoleculeAst {
@@ -76,31 +52,27 @@ pub fn find_matches(query: &MatchQuery, target: &MatchTarget) -> Vec<Assignment>
         };
     }
 
-    let mut node_match = |q_idx: &usize, t_idx: &usize| {
+    let mut node_match = |q: NodeId, t: NodeId| {
         q_ast
-            .atom((*q_idx).into())
-            .matches_ground(t_ast.atom((*t_idx).into()))
+            .atom(q.into())
+            .matches_ground(t_ast.atom(t.into()))
     };
-    let mut edge_match = |q_idx: &usize, t_idx: &usize| {
+    let mut edge_match = |q: EdgeId, t: EdgeId| {
         q_ast
-            .bond((*q_idx).into())
-            .matches_ground(t_ast.bond((*t_idx).into()))
+            .bond(q.into())
+            .matches_ground(t_ast.bond(t.into()))
     };
 
-    let q_ref = &query.graph;
-    let t_ref = &target.graph;
-    let Some(iter) = subgraph_isomorphisms_iter(
-        &q_ref,
-        &t_ref,
+    subgraph_isomorphisms(
+        q_ast.graph(),
+        t_ast.graph(),
         &mut node_match,
         &mut edge_match,
-    ) else {
-        return vec![];
-    };
-
-    iter.filter(|assignment| post_filter(q_ast, t_ast, assignment))
-        .map(Assignment)
-        .collect()
+    )
+    .into_iter()
+    .filter(|assignment| post_filter(q_ast, t_ast, assignment))
+    .map(Assignment)
+    .collect()
 }
 
 /// Find all substructure matches of `query` in `target`, then post-filter

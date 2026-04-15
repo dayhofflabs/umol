@@ -10,10 +10,13 @@ use umol_shared::value_ast::ValueAst;
 use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
 use crate::ast::matcher::Assignment;
-use crate::ast::molecule::MoleculeAst;
+use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
 use crate::atom::{AromaticValence, IsotopeMass};
+use crate::graph_ir::aromaticity::{AromaticityError, AromaticityModel};
 use crate::graph_ir::atom::Atom;
+use crate::graph_ir::config::{AromaticityStrategy, RingEnumerationStrategy};
 use crate::graph_ir::config_data::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
+use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Solution<T> {
@@ -41,8 +44,15 @@ pub enum ValenceStrategy {
 }
 
 #[derive(Clone, Debug)]
+pub struct AromaticityConfig {
+    pub strategy: AromaticityStrategy,
+    pub ring_enumeration: RingEnumerationStrategy,
+}
+
+#[derive(Clone, Debug)]
 pub struct Solver {
     pub valence: ValenceStrategy,
+    pub aromaticity: Option<AromaticityConfig>,
 }
 
 impl Default for Solver {
@@ -51,24 +61,65 @@ impl Default for Solver {
             valence: ValenceStrategy::AtomTyping {
                 registry: AtomTypeRegistry::default_registry().clone(),
             },
+            aromaticity: Some(AromaticityConfig {
+                strategy: AromaticityStrategy::daylight(),
+                ring_enumeration: RingEnumerationStrategy::default(),
+            }),
         }
     }
 }
 
 impl Solver {
-    pub fn resolve(&self, ast: &mut MoleculeAst) -> Solution<()> {
+    pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<Solution<()>, AromaticityError> {
         loop {
             match self.valence.refine(ast) {
                 Progress::Advanced => continue,
                 Progress::Fixpoint => break,
-                Progress::Contradictory => return Solution::Contradictory,
+                Progress::Contradictory => return Ok(Solution::Contradictory),
             }
         }
-        if ast.atoms().all(|(_, a)| a.is_ground()) {
+        if let Some(config) = &self.aromaticity {
+            self.resolve_aromaticity(ast, config)?;
+        }
+        loop {
+            match self.valence.refine(ast) {
+                Progress::Advanced => continue,
+                Progress::Fixpoint => break,
+                Progress::Contradictory => return Ok(Solution::Contradictory),
+            }
+        }
+        Ok(if ast.atoms().all(|(_, a)| a.is_ground()) {
             Solution::Determined(())
         } else {
             Solution::Underdetermined(())
-        }
+        })
+    }
+
+    fn resolve_aromaticity(
+        &self,
+        ast: &mut MoleculeAst,
+        config: &AromaticityConfig,
+    ) -> Result<(), AromaticityError> {
+        let ring_family = match config.strategy {
+            AromaticityStrategy::Clar => RingFamily::InducedBenzenoid,
+            AromaticityStrategy::HueckelRule { .. } | AromaticityStrategy::Hmo { .. } => {
+                RingFamily::Simple
+            }
+        };
+        let enumerator = RingEnumerator::new(ring_family, &config.ring_enumeration);
+        let rings = enumerator.enumerate_ast(ast);
+        let model = AromaticityModel::new(&config.strategy);
+        let systems = model.aromatic_systems_ast(ast, &rings)?;
+        let entries: Vec<(Vec<AtomIdx>, AromaticSystemAst)> = systems
+            .iter()
+            .map(|sys| {
+                let atoms: Vec<AtomIdx> =
+                    sys.atoms().map(|a| AtomIdx(a.index() as u32)).collect();
+                (atoms, AromaticSystemAst {})
+            })
+            .collect();
+        ast.set_aromatic_systems(entries);
+        Ok(())
     }
 
     pub fn filter(
@@ -627,9 +678,10 @@ mod tests {
             valence: ValenceStrategy::AtomTyping {
                 registry: registry!["H #v"],
             },
+            aromaticity: None,
         };
         let mut ast = h2();
-        let result = solver.resolve(&mut ast);
+        let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Determined(()));
         assert!(ast.atoms().all(|(_, a)| a.is_ground()));
         assert_eq!(
@@ -644,6 +696,7 @@ mod tests {
             valence: ValenceStrategy::AtomTyping {
                 registry: AtomTypeRegistry::new(),
             },
+            aromaticity: None,
         };
         let mut ast = MoleculeAst::new(
             vec![AtomAst::from_element(Element::C)],
@@ -654,7 +707,7 @@ mod tests {
             vec![],
             vec![],
         );
-        let result = solver.resolve(&mut ast);
+        let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Contradictory);
     }
 
@@ -662,7 +715,7 @@ mod tests {
     fn test_solver_resolve_already_ground() {
         let solver = Solver::default();
         let mut ast = MoleculeAst::new(vec![], vec![], vec![], vec![], vec![], vec![], vec![]);
-        let result = solver.resolve(&mut ast);
+        let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Determined(()));
     }
 
@@ -678,7 +731,7 @@ mod tests {
             vec![],
             vec![],
         );
-        let result = solver.resolve(&mut ast);
+        let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Underdetermined(()));
     }
 
@@ -689,9 +742,10 @@ mod tests {
                 table: ValenceTable::default_table().clone(),
                 allow_implicit_hydrogens: true,
             },
+            aromaticity: None,
         };
         let mut ast = h2();
-        let result = solver.resolve(&mut ast);
+        let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Determined(()));
         assert!(ast.atoms().all(|(_, a)| a.is_ground()));
         assert_eq!(
@@ -707,6 +761,7 @@ mod tests {
                 table: ValenceTable::default_table().clone(),
                 allow_implicit_hydrogens: true,
             },
+            aromaticity: None,
         };
         let mut ast = MoleculeAst::new(
             vec![AtomAst::from_element(Element::C)],
@@ -717,7 +772,7 @@ mod tests {
             vec![],
             vec![],
         );
-        let result = solver.resolve(&mut ast);
+        let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Determined(()));
         assert_eq!(
             ast.atom(AtomIdx(0)).implicit_hydrogens,
@@ -731,9 +786,10 @@ mod tests {
             valence: ValenceStrategy::AtomTyping {
                 registry: registry!["H #v"],
             },
+            aromaticity: None,
         };
         let mut ast = h2();
-        solver.resolve(&mut ast);
+        solver.resolve(&mut ast).unwrap();
         let result = solver.validate(&ast);
         assert_eq!(result, Solution::Determined(()));
     }
@@ -825,9 +881,10 @@ mod tests {
             valence: ValenceStrategy::AtomTyping {
                 registry: registry!["H #v"],
             },
+            aromaticity: None,
         };
         let mut target = h2();
-        solver.resolve(&mut target);
+        solver.resolve(&mut target).unwrap();
         let assignments = vec![Assignment(vec![0, 1])];
         let result = solver.filter(&MoleculeAst::default(), &target, assignments.clone());
         assert_eq!(result, assignments);

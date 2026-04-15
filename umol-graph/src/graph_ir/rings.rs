@@ -4,12 +4,16 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 
+use umol_graph_core::NodeId;
+use umol_shared::atom_ast::AromaticValenceAst;
 use umol_shared::element::Element;
 
 use super::config::RingEnumerationStrategy;
 use super::molecule::{AtomIndex, BondIndex, Molecule};
 use super::molecule_builder::MoleculeBuilder;
 use crate::algorithms::{biconnected_components, enumerate_simple_cycles};
+use crate::ast::AtomIdx;
+use crate::ast::molecule::MoleculeAst;
 
 #[derive(Debug, Clone)]
 struct AtomAdjacency {
@@ -650,6 +654,110 @@ impl RingEnumerator {
         }
     }
 
+    pub fn enumerate_ast(&self, ast: &MoleculeAst) -> RingSet {
+        let graph = ast.graph();
+
+        let atom_filter: Option<Vec<NodeId>> = match self.family {
+            RingFamily::Simple | RingFamily::Induced if self.aromatic_only => {
+                Some(
+                    graph
+                        .node_ids()
+                        .filter(|&n| {
+                            let atom = ast.atom(AtomIdx(n.0));
+                            !matches!(
+                                atom.aromatic_valence,
+                                AromaticValenceAst::NotAromatic | AromaticValenceAst::Undetermined
+                            )
+                        })
+                        .collect(),
+                )
+            }
+            RingFamily::InducedBenzenoid => {
+                Some(
+                    graph
+                        .node_ids()
+                        .filter(|&n| {
+                            let atom = ast.atom(AtomIdx(n.0));
+                            matches!(atom.element, umol_shared::atom_ast::ElementAst::Lit(Element::C))
+                                && !matches!(
+                                    atom.aromatic_valence,
+                                    AromaticValenceAst::NotAromatic
+                                        | AromaticValenceAst::Undetermined
+                                )
+                        })
+                        .collect(),
+                )
+            }
+            _ => None,
+        };
+
+        let max_cycle = if self.family == RingFamily::InducedBenzenoid {
+            6
+        } else {
+            self.max_ring_size
+        };
+
+        let (sub, node_map, _edge_map) = if let Some(ref nodes) = atom_filter {
+            let sub = graph.induced_subgraph(nodes);
+            (sub.graph, sub.node_map, sub.edge_map)
+        } else {
+            let node_map: Vec<NodeId> = graph.node_ids().collect();
+            let edge_map: Vec<umol_graph_core::EdgeId> = graph.edge_ids().collect();
+            (graph.clone(), node_map, edge_map)
+        };
+
+        let bcc = sub.biconnected_components();
+
+        let mut all_rings: Vec<Ring> = Vec::new();
+        for component in &bcc {
+            let comp_sub = sub.induced_subgraph(component);
+            let raw_cycles = comp_sub.graph.enumerate_simple_cycles(max_cycle);
+
+            let mut component_rings: Vec<Ring> = raw_cycles
+                .into_iter()
+                .filter(|cycle| {
+                    if self.family == RingFamily::Induced {
+                        is_induced_cycle_graph(&comp_sub.graph, cycle)
+                    } else if self.family == RingFamily::InducedBenzenoid {
+                        cycle.len() == 6
+                    } else {
+                        true
+                    }
+                })
+                .filter_map(|cycle| {
+                    let ring_atoms: Vec<AtomIndex> = cycle
+                        .iter()
+                        .map(|&local| {
+                            let sub_node = comp_sub.node_map[local.index()];
+                            let orig_node = node_map[sub_node.index()];
+                            AtomIndex::new(orig_node.index())
+                        })
+                        .collect();
+                    let n = ring_atoms.len();
+                    let mut ring_bonds = Vec::with_capacity(n);
+                    for i in 0..n {
+                        let a_orig = NodeId(ring_atoms[i].index() as u32);
+                        let b_orig = NodeId(ring_atoms[(i + 1) % n].index() as u32);
+                        let edge = graph.find_edge(a_orig, b_orig)?;
+                        ring_bonds.push(BondIndex::new(edge.index()));
+                        }
+                    Ring::new(ring_atoms, ring_bonds).ok()
+                })
+                .collect();
+
+            component_rings.truncate(self.max_rings_per_component);
+            all_rings.extend(component_rings);
+        }
+
+        let scope = if atom_filter.is_some() {
+            RingScope::AromaticSubgraph
+        } else {
+            RingScope::All
+        };
+
+        RingSet::from_rings(self.family, scope, max_cycle, all_rings)
+    }
+
     fn build(
         &self,
         bcc: &[Vec<AtomIndex>],
@@ -751,6 +859,24 @@ impl RingEnumerator {
             rings,
         )
     }
+}
+
+fn is_induced_cycle_graph(graph: &umol_graph_core::Graph, cycle: &[NodeId]) -> bool {
+    let n = cycle.len();
+    if n < 3 {
+        return false;
+    }
+    for i in 0..n {
+        for j in (i + 2)..n {
+            if i == 0 && j == n - 1 {
+                continue;
+            }
+            if graph.find_edge(cycle[i], cycle[j]).is_some() {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 /// Check if a cycle is induced (chordless)

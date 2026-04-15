@@ -72,7 +72,7 @@
 | [68-umol-edn-code-review-2026-04-02.md](68-umol-edn-code-review-2026-04-02.md)                                                   | Completed     | 2026-04-03   |
 | [69-umol-geometric-design-2026-04-04.md](69-umol-geometric-design-2026-04-04.md)                                                 | Completed     | 2026-04-05   |
 | [70-bond-perception-2026-04-04.md](70-bond-perception-2026-04-04.md)                                                             | Completed     | 2026-04-04   |
-| [71-distance-geometry-plan-2026-04-04.md](71-distance-geometry-plan-2026-04-04.md)                                               | Active        | 2026-04-04   |
+| [71-distance-geometry-plan-2026-04-04.md](71-distance-geometry-plan-2026-04-04.md)                                               | Completed     | 2026-04-14   |
 | [72-msym-integration-2026-04-04.md](72-msym-integration-2026-04-04.md)                                                           | Completed     | 2026-04-07   |
 | [73-molecule-symmetry-collection-2026-04-04.md](73-molecule-symmetry-collection-2026-04-04.md)                                   | Active        | 2026-04-04   |
 | [74-symmetry-roadmap-2026-04-06.md](74-symmetry-roadmap-2026-04-06.md)                                                           | Active        | 2026-04-06   |
@@ -86,3 +86,4 @@
 | [82-graph-representation-2026-04-13.md](82-graph-representation-2026-04-13.md)                                                   | Informational | 2026-04-13   |
 | [83-constraint-unification-architecture-2026-04-13.md](83-constraint-unification-architecture-2026-04-13.md)                     | Active        | 2026-04-14   |
 | [84-graph-library-decision-2026-04-14.md](84-graph-library-decision-2026-04-14.md)                                               | Active        | 2026-04-14   |
+| [85-kekulization-algorithms-2026-04-15.md](85-kekulization-algorithms-2026-04-15.md)                                             | Active        | 2026-04-15   |

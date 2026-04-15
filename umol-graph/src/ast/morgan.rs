@@ -30,9 +30,6 @@ use std::mem;
 use fixedbitset::FixedBitSet;
 use xxhash_rust::xxh3::{Xxh3, Xxh3DefaultBuilder};
 
-use petgraph::graph::{Graph, NodeIndex};
-use petgraph::visit::EdgeRef;
-use petgraph::Undirected;
 use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::value_ast::ValueAst;
@@ -487,157 +484,6 @@ pub fn morgan_view(target: &MorganTarget, radius: usize) -> MorganFingerprint {
 }
 
 // ---------------------------------------------------------------------------
-// Implementation D: petgraph Graph
-// ---------------------------------------------------------------------------
-
-/// petgraph-based view for benchmarking graph library overhead.
-pub struct MorganTargetPetgraph {
-    atom_count: usize,
-    initial_ids: Vec<u32>,
-    graph: Graph<(), u32, Undirected>,
-}
-
-impl MorganTargetPetgraph {
-    pub fn new(ast: &MoleculeAst) -> Self {
-        let n = ast.atom_count();
-
-        let ring_flags = compute_ring_flags(ast);
-        let atom_invs = compute_atom_invariants(ast);
-
-        let initial_ids: Vec<u32> = (0..n)
-            .map(|i| {
-                let idx = AtomIdx::from_usize(i);
-                initial_identifier(
-                    ast_atomic_number(ast, idx),
-                    ast_atomic_mass(ast, idx),
-                    ast_charge(ast, idx),
-                    &atom_invs[i],
-                    ring_flags[i],
-                )
-            })
-            .collect();
-
-        let mut graph = Graph::with_capacity(n, ast.bond_count());
-        for _ in 0..n {
-            graph.add_node(());
-        }
-        for (bi, source, target, _) in ast.bonds() {
-            graph.add_edge(
-                NodeIndex::new(source.index()),
-                NodeIndex::new(target.index()),
-                bond_order(ast, bi),
-            );
-        }
-
-        Self {
-            atom_count: n,
-            initial_ids,
-            graph,
-        }
-    }
-}
-
-/// Morgan fingerprint using petgraph neighbor iteration.
-pub fn morgan_view_petgraph(target: &MorganTargetPetgraph, radius: usize) -> MorganFingerprint {
-    let n = target.atom_count;
-    if n == 0 {
-        return MorganFingerprint::new();
-    }
-
-    let m = target.graph.edge_count();
-    let mut fp = MorganFingerprint::new();
-    let mut identifiers = target.initial_ids.clone();
-    let mut dead = vec![false; n];
-
-    let mut atom_envs = vec![0u64; n];
-    let mut round_envs = vec![0u64; n];
-    let mut seen_envs: HashSet<u64> = HashSet::new();
-
-    for &id in &identifiers {
-        *fp.features.entry(id).or_insert(0) += 1;
-    }
-
-    let mut new_ids = vec![0u32; n];
-    let mut neighbor_pairs: Vec<(u32, u32)> = Vec::with_capacity(16);
-    let mut hash_input: Vec<u32> = Vec::with_capacity(2 + 16);
-    let mut round_features: Vec<(usize, u32)> = Vec::with_capacity(n);
-
-    for layer in 0..radius {
-        round_features.clear();
-
-        for i in 0..n {
-            if dead[i] {
-                new_ids[i] = identifiers[i];
-                round_envs[i] = atom_envs[i];
-                continue;
-            }
-
-            let node = NodeIndex::new(i);
-            let degree = target.graph.edges(node).count();
-            if degree == 0 {
-                dead[i] = true;
-                new_ids[i] = identifiers[i];
-                round_envs[i] = atom_envs[i];
-                continue;
-            }
-
-            let mut env = atom_envs[i];
-            neighbor_pairs.clear();
-            for edge in target.graph.edges(node) {
-                let neighbor = if edge.source().index() == i {
-                    edge.target().index()
-                } else {
-                    edge.source().index()
-                };
-                let bond_idx = edge.id().index();
-                let bo = *edge.weight();
-
-                if m <= 64 {
-                    env |= 1u64 << bond_idx;
-                }
-                env |= atom_envs[neighbor];
-                neighbor_pairs.push((bo, identifiers[neighbor]));
-            }
-            round_envs[i] = env;
-
-            neighbor_pairs.sort_unstable();
-
-            hash_input.clear();
-            hash_input.push(layer as u32);
-            hash_input.push(identifiers[i]);
-            for &(bo, nid) in &neighbor_pairs {
-                hash_input.push(bo);
-                hash_input.push(nid);
-            }
-            new_ids[i] = morgan_hash(&hash_input);
-
-            round_features.push((i, new_ids[i]));
-        }
-
-        round_features.sort_unstable_by(|a, b| {
-            round_envs[a.0].cmp(&round_envs[b.0]).then(a.1.cmp(&b.1))
-        });
-
-        for &(atom_idx, id) in &round_features {
-            if dead[atom_idx] {
-                continue;
-            }
-            if seen_envs.contains(&round_envs[atom_idx]) {
-                dead[atom_idx] = true;
-            } else {
-                *fp.features.entry(id).or_insert(0) += 1;
-                seen_envs.insert(round_envs[atom_idx]);
-            }
-        }
-
-        identifiers.copy_from_slice(&new_ids);
-        mem::swap(&mut atom_envs, &mut round_envs);
-    }
-
-    fp
-}
-
-// ---------------------------------------------------------------------------
 // Implementation C: optimized MorganTarget
 // ---------------------------------------------------------------------------
 
@@ -973,21 +819,6 @@ mod tests {
             let target = MorganTarget::new(&ast);
             let view = morgan_view(&target, radius);
             assert_eq!(direct.features, view.features, "radius {radius}");
-        }
-    }
-
-    #[rstest]
-    #[case::methane(methane())]
-    #[case::ethane(ethane())]
-    #[case::ethanol(ethanol())]
-    #[case::cyclohexane(cyclohexane())]
-    #[case::formaldehyde(formaldehyde())]
-    fn test_morgan_direct_eq_view_petgraph(#[case] ast: MoleculeAst) {
-        for radius in 0..=3 {
-            let direct = morgan_direct(&ast, radius);
-            let target = MorganTargetPetgraph::new(&ast);
-            let pg = morgan_view_petgraph(&target, radius);
-            assert_eq!(direct.features, pg.features, "radius {radius}");
         }
     }
 

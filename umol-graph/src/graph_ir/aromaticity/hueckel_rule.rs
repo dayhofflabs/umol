@@ -6,9 +6,14 @@
 
 use std::collections::{HashMap, HashSet};
 
-use petgraph::unionfind::UnionFind;
+use umol_graph_core::UnionFind;
+
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
+use umol_shared::value_ast::ValueAst;
 
 use super::{AromaticContribution, AromaticSystem};
+use crate::ast::AtomIdx;
+use crate::ast::molecule::MoleculeAst;
 use crate::graph_ir::config::{ElementScope, RingLimits};
 use crate::graph_ir::molecule::AtomIndex;
 use crate::graph_ir::molecule_builder::MoleculeBuilder;
@@ -90,6 +95,108 @@ impl HueckelRuleAromaticity {
         }
 
         candidates
+    }
+
+    pub fn find_from_ast(
+        &self,
+        ast: &MoleculeAst,
+        rings: &RingSet,
+    ) -> Vec<AromaticSystem> {
+        let eligible_cycles: Vec<RingIndex> = rings
+            .ring_indices()
+            .filter(|&i| rings.ring(i).is_some_and(|r| self.filter_ring_ast(ast, r)))
+            .collect();
+
+        let mut aromatic_atom_sets: Vec<(HashSet<AtomIndex>, Vec<Ring>)> = Vec::new();
+
+        for &cycle_idx in &eligible_cycles {
+            let Some(ring) = rings.ring(cycle_idx) else {
+                continue;
+            };
+            if let Some(electrons) = self.ring_electron_count_ast(ast, ring.atoms()) {
+                if self.check_4n_plus_2(electrons) {
+                    let atom_set: HashSet<AtomIndex> = ring.atoms().iter().copied().collect();
+                    aromatic_atom_sets.push((atom_set, vec![ring.clone()]));
+                }
+            }
+        }
+
+        if self.ring_limits.include_fused {
+            let fused_systems = self.enumerate_fused_combinations(rings, &eligible_cycles);
+            for (atoms, rings) in fused_systems {
+                let atom_vec: Vec<AtomIndex> = atoms.iter().copied().collect();
+                if let Some(electrons) = self.ring_electron_count_ast(ast, &atom_vec) {
+                    if self.check_4n_plus_2(electrons) {
+                        aromatic_atom_sets.push((atoms, rings));
+                    }
+                }
+            }
+        }
+
+        let merged = merge_overlapping_systems(&aromatic_atom_sets);
+
+        let mut candidates = Vec::new();
+        for (atom_set, rings) in merged {
+            let mut contributions: Vec<AromaticContribution> = Vec::new();
+            let mut valid = true;
+            for &atom in &atom_set {
+                if let Some(e) = self.aromatic_electron_count_ast(ast, atom) {
+                    contributions.push(AromaticContribution::new(atom, e));
+                } else {
+                    valid = false;
+                    break;
+                }
+            }
+            if !valid {
+                continue;
+            }
+            candidates.push(AromaticSystem::with_rings(contributions, rings));
+        }
+
+        candidates
+    }
+
+    fn is_atom_eligible_ast(&self, ast: &MoleculeAst, atom: AtomIndex) -> bool {
+        let atom_ast = ast.atom(AtomIdx(atom.index() as u32));
+        let element = match atom_ast.element {
+            ElementAst::Lit(e) => e,
+            _ => return false,
+        };
+        match &self.element_scope {
+            ElementScope::Any => {}
+            ElementScope::AllowList(allowed) => {
+                if !allowed.contains(&element) {
+                    return false;
+                }
+            }
+        }
+        matches!(atom_ast.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
+    }
+
+    fn aromatic_electron_count_ast(&self, ast: &MoleculeAst, atom: AtomIndex) -> Option<u8> {
+        let atom_ast = ast.atom(AtomIdx(atom.index() as u32));
+        match atom_ast.aromatic_valence {
+            AromaticValenceAst::Value(ValueAst::Lit(n)) => Some(n as u8),
+            _ => None,
+        }
+    }
+
+    fn filter_ring_ast(&self, ast: &MoleculeAst, ring: &Ring) -> bool {
+        let len = ring.len();
+        if len < self.ring_limits.min_ring_size || len > self.ring_limits.max_ring_size {
+            return false;
+        }
+        ring.atoms()
+            .iter()
+            .all(|&a| self.is_atom_eligible_ast(ast, a))
+    }
+
+    fn ring_electron_count_ast(&self, ast: &MoleculeAst, atoms: &[AtomIndex]) -> Option<u32> {
+        let mut total: u32 = 0;
+        for &atom in atoms {
+            total += self.aromatic_electron_count_ast(ast, atom)? as u32;
+        }
+        Some(total)
     }
 
     fn is_atom_eligible(&self, builder: &MoleculeBuilder, atom: AtomIndex) -> bool {
@@ -216,7 +323,7 @@ fn merge_overlapping_systems(
     }
 
     let n = aromatic_systems.len();
-    let mut uf = UnionFind::<usize>::new(n);
+    let mut uf = UnionFind::new(n);
 
     for i in 0..n {
         for j in (i + 1)..n {

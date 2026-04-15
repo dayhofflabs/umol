@@ -15,6 +15,7 @@ pub use hueckel_rule::*;
 use thiserror::Error;
 use umol_shared::spin::SpinState;
 
+use crate::ast::molecule::MoleculeAst;
 use crate::graph_ir::config::AromaticityStrategy;
 use crate::graph_ir::molecule::AtomIndex;
 use crate::graph_ir::molecule_builder::MoleculeBuilder;
@@ -182,6 +183,24 @@ impl AromaticityModel {
             Self::HueckelRule(m) => Ok(m.find_from_rings(builder, rings)),
             Self::Hmo(m) => m.find_from_rings(builder, rings),
             Self::Clar(m) => m.find_from_rings(builder, rings),
+        }?;
+        systems.sort_by(|a, b| {
+            let min_a = a.atoms().min();
+            let min_b = b.atoms().min();
+            min_a.cmp(&min_b)
+        });
+        Ok(systems)
+    }
+
+    pub fn aromatic_systems_ast(
+        &self,
+        ast: &MoleculeAst,
+        rings: &RingSet,
+    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
+        let mut systems = match self {
+            Self::HueckelRule(m) => Ok(m.find_from_ast(ast, rings)),
+            Self::Hmo(m) => m.find_from_ast(ast, rings),
+            Self::Clar(m) => m.find_from_ast(ast, rings),
         }?;
         systems.sort_by(|a, b| {
             let min_a = a.atoms().min();

@@ -11,8 +11,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use umol_graph::ast::config::MoleculeAstConfig;
 use umol_graph::ast::molecule::MoleculeAst;
 use umol_graph::ast::morgan::{
-    morgan_direct, morgan_view, morgan_view_opt, morgan_view_petgraph, MorganTarget,
-    MorganTargetOpt, MorganTargetPetgraph,
+    morgan_direct, morgan_view, morgan_view_opt, MorganTarget, MorganTargetOpt,
 };
 use umol_graph::ast::ToAst;
 use umol_graph::graph_ir::molecule_builder::MoleculeBuilder;
@@ -115,32 +114,6 @@ fn morgan_benchmark(c: &mut Criterion) {
         },
     );
 
-    // petgraph-based view
-    let targets_pg: Vec<MorganTargetPetgraph> = asts.iter().map(MorganTargetPetgraph::new).collect();
-
-    group.bench_function(
-        BenchmarkId::new("petgraph", corpus_size),
-        |b| {
-            b.iter(|| {
-                for target in &targets_pg {
-                    black_box(morgan_view_petgraph(target, 2));
-                }
-            });
-        },
-    );
-
-    group.bench_function(
-        BenchmarkId::new("petgraph_with_build", corpus_size),
-        |b| {
-            b.iter(|| {
-                for ast in &asts {
-                    let target = MorganTargetPetgraph::new(ast);
-                    black_box(morgan_view_petgraph(&target, 2));
-                }
-            });
-        },
-    );
-
     let targets_opt: Vec<MorganTargetOpt> = asts.iter().map(MorganTargetOpt::new).collect();
 
     group.bench_function(
@@ -175,19 +148,6 @@ fn morgan_ecfp6_benchmark(c: &mut Criterion) {
     let corpus_size = asts.len();
 
     let mut group = c.benchmark_group("morgan_ecfp6");
-
-    let targets_pg: Vec<MorganTargetPetgraph> = asts.iter().map(MorganTargetPetgraph::new).collect();
-
-    group.bench_function(
-        BenchmarkId::new("petgraph", corpus_size),
-        |b| {
-            b.iter(|| {
-                for target in &targets_pg {
-                    black_box(morgan_view_petgraph(target, 3));
-                }
-            });
-        },
-    );
 
     let targets_opt: Vec<MorganTargetOpt> = asts.iter().map(MorganTargetOpt::new).collect();
 

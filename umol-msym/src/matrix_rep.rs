@@ -154,7 +154,7 @@ mod tests {
         let g = group!(C1);
         let rep = MatrixRep::identity_only(g);
         assert_eq!(rep.order(), 1);
-        assert!(std::ptr::eq(rep.group(), g));
+        assert!(ptr::eq(rep.group(), g));
         assert_eq!(rep.matrices().len(), 1);
         assert_eq!(rep.axes().len(), 1);
         assert!((rep.matrices()[0] - Matrix3::identity()).norm() < 1e-12);
@@ -233,8 +233,8 @@ mod tests {
         assert_eq!(items.len(), 4);
         for (i, (op, m, a)) in items.iter().enumerate() {
             assert_eq!(op.index(), i);
-            assert!(std::ptr::eq(*m, &rep.matrices()[i]));
-            assert!(std::ptr::eq(*a, &rep.axes()[i]));
+            assert!(ptr::eq(*m, &rep.matrices()[i]));
+            assert!(ptr::eq(*a, &rep.axes()[i]));
         }
     }
 
