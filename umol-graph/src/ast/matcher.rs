@@ -196,13 +196,11 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::molecule::{AromaticSystemAst, MulticenterBondAst};
+    use crate::ast::AtomIdx;
 
     fn mol_with_atoms(elements: &[Element]) -> MoleculeAst {
-        let mut ast = MoleculeAst::default();
-        for &e in elements {
-            ast.add_atom(AtomAst::from_element(e));
-        }
-        ast
+        let atoms = elements.iter().map(|&e| AtomAst::from_element(e)).collect();
+        MoleculeAst::new(atoms, vec![], vec![], vec![], vec![], vec![], vec![])
     }
 
     fn find(query: &MoleculeAst, target: &MoleculeAst) -> Vec<Assignment> {
@@ -216,33 +214,39 @@ mod tests {
 
     #[test]
     fn test_find_matches_single_atom() {
-        let mut mol = MoleculeAst::default();
-        mol.add_atom(AtomAst::from_element(Element::C));
+        let mol = mol_with_atoms(&[Element::C]);
         assert_eq!(find(&mol, &mol), vec![Assignment(vec![0])]);
     }
 
     #[test]
     fn test_find_matches_chain_identity() {
-        let mut mol = MoleculeAst::default();
-        let a = mol.add_atom(AtomAst::from_element(Element::C));
-        let b = mol.add_atom(AtomAst::from_element(Element::O));
-        mol.add_bond(a, b, BondAst::from_order(1));
+        let mol = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
         assert_eq!(find(&mol, &mol), vec![Assignment(vec![0, 1])]);
     }
 
     #[test]
     fn test_find_matches_substructure() {
-        let mut query = MoleculeAst::default();
-        let qa = query.add_atom(AtomAst::from_element(Element::C));
-        let qb = query.add_atom(AtomAst::from_element(Element::C));
-        query.add_bond(qa, qb, BondAst::from_order(1));
-
-        let mut target = MoleculeAst::default();
-        let ta = target.add_atom(AtomAst::from_element(Element::C));
-        let tb = target.add_atom(AtomAst::from_element(Element::C));
-        let tc = target.add_atom(AtomAst::from_element(Element::C));
-        target.add_bond(ta, tb, BondAst::from_order(1));
-        target.add_bond(tb, tc, BondAst::from_order(1));
+        let query = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
+        let target = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![
+                (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+                (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)),
+            ],
+            vec![], vec![], vec![], vec![], vec![],
+        );
 
         let results = sorted(find(&query, &target));
         assert_eq!(
@@ -265,24 +269,25 @@ mod tests {
 
     #[test]
     fn test_find_matches_bond_order_mismatch() {
-        let mut query = MoleculeAst::default();
-        let qa = query.add_atom(AtomAst::from_element(Element::C));
-        let qb = query.add_atom(AtomAst::from_element(Element::O));
-        query.add_bond(qa, qb, BondAst::from_order(2));
-
-        let mut target = MoleculeAst::default();
-        let ta = target.add_atom(AtomAst::from_element(Element::C));
-        let tb = target.add_atom(AtomAst::from_element(Element::O));
-        target.add_bond(ta, tb, BondAst::from_order(1));
-
+        let query = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
+        let target = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
         assert_eq!(find(&query, &target), vec![]);
     }
 
     #[test]
     fn test_find_matches_wildcard_element() {
-        let mut query = MoleculeAst::default();
-        query.add_atom(AtomAst::new(ElementAst::Undetermined));
-
+        let query = MoleculeAst::new(
+            vec![AtomAst::new(ElementAst::Undetermined)],
+            vec![], vec![], vec![], vec![], vec![], vec![],
+        );
         let target = mol_with_atoms(&[Element::C, Element::N]);
         let results = sorted(find(&query, &target));
         assert_eq!(
@@ -293,57 +298,60 @@ mod tests {
 
     #[test]
     fn test_find_matches_wildcard_bond_order() {
-        let mut query = MoleculeAst::default();
-        let qa = query.add_atom(AtomAst::from_element(Element::C));
-        let qb = query.add_atom(AtomAst::from_element(Element::O));
-        query.add_bond(qa, qb, BondAst::new(ValueAst::Undetermined));
-
-        let mut target = MoleculeAst::default();
-        let ta = target.add_atom(AtomAst::from_element(Element::C));
-        let tb = target.add_atom(AtomAst::from_element(Element::O));
-        target.add_bond(ta, tb, BondAst::from_order(2));
-
+        let query = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
+        let target = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
         assert_eq!(find(&query, &target), vec![Assignment(vec![0, 1])]);
     }
 
     #[test]
     fn test_find_matches_optional_field_unconstrained() {
         let query = mol_with_atoms(&[Element::C]);
-        let mut target = MoleculeAst::default();
-        target.add_atom(AtomAst {
-            charge: ValueAst::Lit(-1),
-            ..AtomAst::from_element(Element::C)
-        });
+        let target = MoleculeAst::new(
+            vec![AtomAst { charge: ValueAst::Lit(-1), ..AtomAst::from_element(Element::C) }],
+            vec![], vec![], vec![], vec![], vec![], vec![],
+        );
         assert_eq!(find(&query, &target), vec![Assignment(vec![0])]);
     }
 
     #[test]
     fn test_find_matches_optional_field_present_vs_absent() {
-        let mut query = MoleculeAst::default();
-        query.add_atom(AtomAst {
-            charge: ValueAst::Lit(-1),
-            ..AtomAst::from_element(Element::C)
-        });
+        let query = MoleculeAst::new(
+            vec![AtomAst { charge: ValueAst::Lit(-1), ..AtomAst::from_element(Element::C) }],
+            vec![], vec![], vec![], vec![], vec![], vec![],
+        );
         let target = mol_with_atoms(&[Element::C]);
         assert_eq!(find(&query, &target), vec![]);
     }
 
     #[test]
     fn test_find_matches_dative_bond_direction() {
-        let mut query = MoleculeAst::default();
-        let qn = query.add_atom(AtomAst::from_element(Element::N));
-        let qb = query.add_atom(AtomAst::from_element(Element::B));
-        query.add_dative_bond(qn, qb, BondAst::from_order(1));
-
-        let mut target_correct = MoleculeAst::default();
-        let tn = target_correct.add_atom(AtomAst::from_element(Element::N));
-        let tb = target_correct.add_atom(AtomAst::from_element(Element::B));
-        target_correct.add_dative_bond(tn, tb, BondAst::from_order(1));
-
-        let mut target_reversed = MoleculeAst::default();
-        let tn2 = target_reversed.add_atom(AtomAst::from_element(Element::N));
-        let tb2 = target_reversed.add_atom(AtomAst::from_element(Element::B));
-        target_reversed.add_dative_bond(tb2, tn2, BondAst::from_order(1));
+        let atoms = vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::B)];
+        let query = MoleculeAst::new(
+            atoms.clone(),
+            vec![],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![],
+        );
+        let target_correct = MoleculeAst::new(
+            atoms.clone(),
+            vec![],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![],
+        );
+        let target_reversed = MoleculeAst::new(
+            atoms,
+            vec![],
+            vec![(AtomIdx(1), AtomIdx(0), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![],
+        );
 
         assert_eq!(find(&query, &target_correct), vec![Assignment(vec![0, 1])]);
         assert_eq!(find(&query, &target_reversed), vec![]);
@@ -351,20 +359,25 @@ mod tests {
 
     #[test]
     fn test_find_matches_noncovalent_bond_direction() {
-        let mut query = MoleculeAst::default();
-        let qn = query.add_atom(AtomAst::from_element(Element::N));
-        let qo = query.add_atom(AtomAst::from_element(Element::O));
-        query.add_noncovalent_bond(qn, qo, BondAst::from_order(1));
-
-        let mut target_correct = MoleculeAst::default();
-        let tn = target_correct.add_atom(AtomAst::from_element(Element::N));
-        let to = target_correct.add_atom(AtomAst::from_element(Element::O));
-        target_correct.add_noncovalent_bond(tn, to, BondAst::from_order(1));
-
-        let mut target_reversed = MoleculeAst::default();
-        let tn2 = target_reversed.add_atom(AtomAst::from_element(Element::N));
-        let to2 = target_reversed.add_atom(AtomAst::from_element(Element::O));
-        target_reversed.add_noncovalent_bond(to2, tn2, BondAst::from_order(1));
+        let atoms = vec![AtomAst::from_element(Element::N), AtomAst::from_element(Element::O)];
+        let query = MoleculeAst::new(
+            atoms.clone(),
+            vec![], vec![],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![],
+        );
+        let target_correct = MoleculeAst::new(
+            atoms.clone(),
+            vec![], vec![],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![],
+        );
+        let target_reversed = MoleculeAst::new(
+            atoms,
+            vec![], vec![],
+            vec![(AtomIdx(1), AtomIdx(0), BondAst::from_order(1))],
+            vec![], vec![], vec![],
+        );
 
         assert_eq!(find(&query, &target_correct), vec![Assignment(vec![0, 1])]);
         assert_eq!(find(&query, &target_reversed), vec![]);
@@ -372,71 +385,98 @@ mod tests {
 
     #[test]
     fn test_find_matches_aromatic_system_subset() {
-        let mut query = MoleculeAst::default();
-        let qa = query.add_atom(AtomAst::from_element(Element::C));
-        let qb = query.add_atom(AtomAst::from_element(Element::C));
-        query.add_bond(qa, qb, BondAst::from_order(1));
-        query.add_aromatic_system(vec![qa, qb], AromaticSystemAst {});
-
-        let mut target = MoleculeAst::default();
-        let ta = target.add_atom(AtomAst::from_element(Element::C));
-        let tb = target.add_atom(AtomAst::from_element(Element::C));
-        let tc = target.add_atom(AtomAst::from_element(Element::C));
-        target.add_bond(ta, tb, BondAst::from_order(1));
-        target.add_bond(tb, tc, BondAst::from_order(1));
-        target.add_bond(tc, ta, BondAst::from_order(1));
-        target.add_aromatic_system(vec![ta, tb, tc], AromaticSystemAst {});
+        let query = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![],
+            vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst {})],
+            vec![], vec![],
+        );
+        let target = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![
+                (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+                (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)),
+                (AtomIdx(2), AtomIdx(0), BondAst::from_order(1)),
+            ],
+            vec![], vec![],
+            vec![(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)], AromaticSystemAst {})],
+            vec![], vec![],
+        );
 
         assert!(!find(&query, &target).is_empty());
     }
 
     #[test]
     fn test_find_matches_aromatic_system_mismatch() {
-        let mut query = MoleculeAst::default();
-        let qa = query.add_atom(AtomAst::from_element(Element::C));
-        let qb = query.add_atom(AtomAst::from_element(Element::C));
-        query.add_bond(qa, qb, BondAst::from_order(1));
-        query.add_aromatic_system(vec![qa, qb], AromaticSystemAst {});
-
-        let mut target = MoleculeAst::default();
-        let ta = target.add_atom(AtomAst::from_element(Element::C));
-        let tb = target.add_atom(AtomAst::from_element(Element::C));
-        target.add_bond(ta, tb, BondAst::from_order(1));
+        let query = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![],
+            vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst {})],
+            vec![], vec![],
+        );
+        let target = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
 
         assert_eq!(find(&query, &target), vec![]);
     }
 
     #[test]
     fn test_find_matches_multicenter_subset() {
-        let mut query = MoleculeAst::default();
-        let qb = query.add_atom(AtomAst::from_element(Element::B));
-        let qh = query.add_atom(AtomAst::from_element(Element::H));
-        query.add_multicenter_bond(vec![qb, qh], MulticenterBondAst {});
-
-        let mut target = MoleculeAst::default();
-        let tb = target.add_atom(AtomAst::from_element(Element::B));
-        let th = target.add_atom(AtomAst::from_element(Element::H));
-        let tb2 = target.add_atom(AtomAst::from_element(Element::B));
-        target.add_multicenter_bond(vec![tb, th, tb2], MulticenterBondAst {});
+        let query = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::B), AtomAst::from_element(Element::H)],
+            vec![], vec![], vec![], vec![],
+            vec![(vec![AtomIdx(0), AtomIdx(1)], MulticenterBondAst {})],
+            vec![],
+        );
+        let target = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::H),
+                AtomAst::from_element(Element::B),
+            ],
+            vec![], vec![], vec![], vec![],
+            vec![(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)], MulticenterBondAst {})],
+            vec![],
+        );
 
         assert!(!find(&query, &target).is_empty());
     }
 
     #[test]
     fn test_find_matches_multicenter_identity() {
-        let mut query = MoleculeAst::default();
-        let qb1 = query.add_atom(AtomAst::from_element(Element::B));
-        let qh = query.add_atom(AtomAst::from_element(Element::H));
-        let qb2 = query.add_atom(AtomAst::from_element(Element::B));
-        query.add_multicenter_bond(vec![qb1, qh, qb2], MulticenterBondAst {});
-
-        let mut target = MoleculeAst::default();
-        let tb1 = target.add_atom(AtomAst::from_element(Element::B));
-        let tb2 = target.add_atom(AtomAst::from_element(Element::B));
-        let th1 = target.add_atom(AtomAst::from_element(Element::H));
-        let th2 = target.add_atom(AtomAst::from_element(Element::H));
-        target.add_multicenter_bond(vec![tb1, th1, tb2], MulticenterBondAst {});
-        target.add_multicenter_bond(vec![tb1, th2, tb2], MulticenterBondAst {});
+        let query = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::H),
+                AtomAst::from_element(Element::B),
+            ],
+            vec![], vec![], vec![], vec![],
+            vec![(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)], MulticenterBondAst {})],
+            vec![],
+        );
+        let target = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::H),
+                AtomAst::from_element(Element::H),
+            ],
+            vec![], vec![], vec![], vec![],
+            vec![
+                (vec![AtomIdx(0), AtomIdx(2), AtomIdx(1)], MulticenterBondAst {}),
+                (vec![AtomIdx(0), AtomIdx(3), AtomIdx(1)], MulticenterBondAst {}),
+            ],
+            vec![],
+        );
 
         let results = find(&query, &target);
         assert!(!results.is_empty());
@@ -453,22 +493,28 @@ mod tests {
     #[test]
     fn test_find_matches_empty_query() {
         let query = MoleculeAst::default();
-        let mut target = MoleculeAst::default();
-        let ta = target.add_atom(AtomAst::from_element(Element::C));
-        let tb = target.add_atom(AtomAst::from_element(Element::N));
-        target.add_bond(ta, tb, BondAst::from_order(1));
+        let target = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::N)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
         assert_eq!(find(&query, &target), vec![Assignment(vec![])]);
     }
 
     #[test]
     fn test_find_matches_no_match() {
-        let mut query = MoleculeAst::default();
-        let qa = query.add_atom(AtomAst::from_element(Element::C));
-        let qb = query.add_atom(AtomAst::from_element(Element::C));
-        let qc = query.add_atom(AtomAst::from_element(Element::C));
-        query.add_bond(qa, qb, BondAst::from_order(1));
-        query.add_bond(qb, qc, BondAst::from_order(1));
-
+        let query = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![
+                (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+                (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)),
+            ],
+            vec![], vec![], vec![], vec![], vec![],
+        );
         let target = mol_with_atoms(&[Element::C]);
         assert_eq!(find(&query, &target), vec![]);
     }
@@ -476,10 +522,11 @@ mod tests {
     #[test]
     fn test_find_matches_with_identity() {
         let query = mol_with_atoms(&[Element::C]);
-        let mut target = MoleculeAst::default();
-        let ta = target.add_atom(AtomAst::from_element(Element::C));
-        let tb = target.add_atom(AtomAst::from_element(Element::O));
-        target.add_bond(ta, tb, BondAst::from_order(2));
+        let target = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::O)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))],
+            vec![], vec![], vec![], vec![], vec![],
+        );
 
         let solver = Solver::default();
         let q = MatchQuery::new(&query);

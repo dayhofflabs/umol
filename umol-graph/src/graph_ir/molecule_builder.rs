@@ -30,6 +30,7 @@ use super::multicenter::{MulticenterBond, MulticenterContribution, MulticenterSe
 use super::noncovalent::NoncovalentBond;
 use crate::algorithms::biconnected_components;
 use crate::ast::AtomIdx;
+use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::error::LoweringError;
@@ -1354,36 +1355,40 @@ impl ToAst<MoleculeAst> for MoleculeBuilder {
 
         let pos = |idx: AtomIndex| -> AtomIdx { AtomIdx::from(*position_of.get(&idx).unwrap()) };
 
-        let mut ast = MoleculeAst::default();
+        let atoms: Vec<AtomAst> = atom_indices
+            .iter()
+            .map(|&idx| self.atom(idx).unwrap().to_ast(&cfg.atom))
+            .collect();
 
-        for &idx in &atom_indices {
-            ast.add_atom(self.atom(idx).unwrap().to_ast(&cfg.atom));
-        }
+        let bonds: Vec<(AtomIdx, AtomIdx, BondAst)> = self
+            .bond_indices()
+            .map(|bi| {
+                let (a, b) = self.bond_atom_indices(bi).unwrap();
+                (pos(a), pos(b), self.bond(bi).unwrap().to_ast(&cfg.bond))
+            })
+            .collect();
 
-        for bi in self.bond_indices() {
-            let (a, b) = self.bond_atom_indices(bi).unwrap();
-            ast.add_bond(pos(a), pos(b), self.bond(bi).unwrap().to_ast(&cfg.bond));
-        }
+        let dative: Vec<(AtomIdx, AtomIdx, BondAst)> = self
+            .dative_bonds()
+            .map(|db| (pos(db.donor()), pos(db.acceptor()), BondAst::from_order(db.order())))
+            .collect();
 
-        for db in self.dative_bonds() {
-            ast.add_dative_bond(pos(db.donor()), pos(db.acceptor()), BondAst::from_order(db.order()));
-        }
+        let noncovalent: Vec<(AtomIdx, AtomIdx, BondAst)> = self
+            .noncovalent_bonds()
+            .map(|nc| (pos(nc.a()), pos(nc.b()), BondAst::from_order(1)))
+            .collect();
 
-        for sys in self.aromatic_systems() {
-            let atoms: Vec<AtomIdx> = sys.atoms().map(pos).collect();
-            ast.add_aromatic_system(atoms, AromaticSystemAst {});
-        }
+        let aromatic: Vec<(Vec<AtomIdx>, AromaticSystemAst)> = self
+            .aromatic_systems()
+            .map(|sys| (sys.atoms().map(pos).collect(), AromaticSystemAst {}))
+            .collect();
 
-        for mc in self.multicenter_bonds() {
-            let atoms: Vec<AtomIdx> = mc.all_atoms().into_iter().map(pos).collect();
-            ast.add_multicenter_bond(atoms, MulticenterBondAst {});
-        }
+        let multicenter: Vec<(Vec<AtomIdx>, MulticenterBondAst)> = self
+            .multicenter_bonds()
+            .map(|mc| (mc.all_atoms().into_iter().map(pos).collect(), MulticenterBondAst {}))
+            .collect();
 
-        for nc in self.noncovalent_bonds() {
-            ast.add_noncovalent_bond(pos(nc.a()), pos(nc.b()), BondAst::from_order(1));
-        }
-
-        ast
+        MoleculeAst::new(atoms, bonds, dative, noncovalent, aromatic, multicenter, vec![])
     }
 }
 

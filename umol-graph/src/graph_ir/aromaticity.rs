@@ -178,10 +178,16 @@ impl AromaticityModel {
         builder: &MoleculeBuilder,
         rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, AromaticityError> {
-        match self {
+        let mut systems = match self {
             Self::HueckelRule(m) => Ok(m.find_from_rings(builder, rings)),
             Self::Hmo(m) => m.find_from_rings(builder, rings),
             Self::Clar(m) => m.find_from_rings(builder, rings),
-        }
+        }?;
+        systems.sort_by(|a, b| {
+            let min_a = a.atoms().min();
+            let min_b = b.atoms().min();
+            min_a.cmp(&min_b)
+        });
+        Ok(systems)
     }
 }

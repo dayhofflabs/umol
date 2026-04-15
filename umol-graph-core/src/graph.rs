@@ -1,4 +1,13 @@
-use std::ops::{Index, IndexMut};
+//! CSR graph topology with Arc-based structural sharing.
+//!
+//! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
+//! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
+//! Topology is wrapped in `Arc` for zero-cost cloning; mutations rebuild
+//! the CSR and produce a `Remapping` for reindexing external data.
+
+use std::sync::Arc;
+
+use crate::relation::{FixedRelationSet, RelationId, VarRelationSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NodeId(pub u32);
@@ -10,40 +19,6 @@ pub struct EdgeId(pub u32);
 pub struct Neighbor {
     pub node: NodeId,
     pub edge: EdgeId,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct EdgeData<E> {
-    endpoints: [NodeId; 2],
-    data: E,
-}
-
-impl<N: PartialEq, E: PartialEq> PartialEq for Graph<N, E> {
-    fn eq(&self, other: &Self) -> bool {
-        self.node_count == other.node_count
-            && self.edge_count == other.edge_count
-            && self.nodes == other.nodes
-            && self.edges == other.edges
-    }
-}
-
-impl<N: Eq, E: Eq> Eq for Graph<N, E> {}
-
-/// Undirected property graph with stable indices.
-///
-/// Nodes and edges are stored in slot arrays. Removed slots are recycled
-/// via a free list, so identifiers remain valid across mutations.
-/// Adjacency is per-node `Vec<Neighbor>`, giving cache-friendly iteration
-/// for bounded-degree graphs.
-#[derive(Clone, Debug)]
-pub struct Graph<N, E> {
-    nodes: Vec<Option<N>>,
-    edges: Vec<Option<EdgeData<E>>>,
-    adjacency: Vec<Vec<Neighbor>>,
-    node_count: usize,
-    edge_count: usize,
-    free_nodes: Vec<NodeId>,
-    free_edges: Vec<EdgeId>,
 }
 
 impl NodeId {
@@ -58,144 +33,144 @@ impl EdgeId {
     }
 }
 
-impl<N, E> Graph<N, E> {
-    pub fn new() -> Self {
-        Self {
-            nodes: Vec::new(),
-            edges: Vec::new(),
-            adjacency: Vec::new(),
-            node_count: 0,
-            edge_count: 0,
-            free_nodes: Vec::new(),
-            free_edges: Vec::new(),
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Topology {
+    offsets: Vec<u32>,
+    neighbors: Vec<Neighbor>,
+    endpoints: Vec<[NodeId; 2]>,
+    node_count: usize,
+    edge_count: usize,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Remapping {
+    pub removed_nodes: Vec<u32>,
+    pub removed_edges: Vec<u32>,
+}
+
+impl Remapping {
+    pub fn node(&self, old: NodeId) -> Option<NodeId> {
+        if self.removed_nodes.binary_search(&old.0).is_ok() {
+            return None;
         }
+        let shift = self.removed_nodes.partition_point(|&r| r < old.0);
+        Some(NodeId(old.0 - shift as u32))
     }
 
-    pub fn with_capacity(node_capacity: usize, edge_capacity: usize) -> Self {
-        Self {
-            nodes: Vec::with_capacity(node_capacity),
-            edges: Vec::with_capacity(edge_capacity),
-            adjacency: Vec::with_capacity(node_capacity),
-            node_count: 0,
-            edge_count: 0,
-            free_nodes: Vec::new(),
-            free_edges: Vec::new(),
+    pub fn edge(&self, old: EdgeId) -> Option<EdgeId> {
+        if self.removed_edges.binary_search(&old.0).is_ok() {
+            return None;
         }
+        let shift = self.removed_edges.partition_point(|&r| r < old.0);
+        Some(EdgeId(old.0 - shift as u32))
     }
 
-    pub fn add_node(&mut self, data: N) -> NodeId {
-        if let Some(id) = self.free_nodes.pop() {
-            self.nodes[id.index()] = Some(data);
-            self.node_count += 1;
-            id
-        } else {
-            let id = NodeId(self.nodes.len() as u32);
-            self.nodes.push(Some(data));
-            self.adjacency.push(Vec::new());
-            self.node_count += 1;
-            id
-        }
+    pub fn apply_to_node_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
+        data.iter()
+            .enumerate()
+            .filter(|(i, _)| self.removed_nodes.binary_search(&(*i as u32)).is_err())
+            .map(|(_, v)| v.clone())
+            .collect()
     }
 
-    pub fn add_edge(&mut self, a: NodeId, b: NodeId, data: E) -> EdgeId {
-        debug_assert!(self.contains_node(a), "node {a:?} does not exist");
-        debug_assert!(self.contains_node(b), "node {b:?} does not exist");
-
-        let id = if let Some(id) = self.free_edges.pop() {
-            self.edges[id.index()] = Some(EdgeData {
-                endpoints: [a, b],
-                data,
-            });
-            id
-        } else {
-            let id = EdgeId(self.edges.len() as u32);
-            self.edges.push(Some(EdgeData {
-                endpoints: [a, b],
-                data,
-            }));
-            id
-        };
-
-        self.adjacency[a.index()].push(Neighbor { node: b, edge: id });
-        self.adjacency[b.index()].push(Neighbor { node: a, edge: id });
-        self.edge_count += 1;
-        id
+    pub fn apply_to_edge_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
+        data.iter()
+            .enumerate()
+            .filter(|(i, _)| self.removed_edges.binary_search(&(*i as u32)).is_err())
+            .map(|(_, v)| v.clone())
+            .collect()
     }
 
-    pub fn remove_node(&mut self, id: NodeId) -> Option<N> {
-        let data = self.nodes.get_mut(id.index())?.take()?;
-        let incident: Vec<EdgeId> = self.adjacency[id.index()]
-            .drain(..)
-            .map(|n| n.edge)
-            .collect();
-        for edge_id in incident {
-            if let Some(edge_data) = self.edges[edge_id.index()].take() {
-                let [a, b] = edge_data.endpoints;
-                let other = if a == id { b } else { a };
-                if other != id {
-                    self.adjacency[other.index()].retain(|n| n.edge != edge_id);
+    pub fn apply_to_fixed_relation_set<R: Clone, const N: usize>(
+        &self,
+        rs: &FixedRelationSet<R, N>,
+    ) -> FixedRelationSet<R, N> {
+        let entries: Vec<([NodeId; N], R)> = (0..rs.relation_count())
+            .filter_map(|i| {
+                let rid = RelationId(i as u32);
+                let old = rs.participants(rid);
+                let mut new_parts = [NodeId(0); N];
+                for (j, &p) in old.iter().enumerate() {
+                    new_parts[j] = self.node(p)?;
                 }
-                self.free_edges.push(edge_id);
-                self.edge_count -= 1;
-            }
+                Some((new_parts, rs.data(rid).clone()))
+            })
+            .collect();
+        FixedRelationSet::new(entries)
+    }
+
+    pub fn apply_to_var_relation_set<R: Clone>(
+        &self,
+        rs: &VarRelationSet<R>,
+    ) -> VarRelationSet<R> {
+        let entries: Vec<(Vec<NodeId>, R)> = (0..rs.relation_count())
+            .filter_map(|i| {
+                let rid = RelationId(i as u32);
+                let old = rs.participants(rid);
+                let new_parts: Option<Vec<NodeId>> =
+                    old.iter().map(|&p| self.node(p)).collect();
+                Some((new_parts?, rs.data(rid).clone()))
+            })
+            .collect();
+        VarRelationSet::new(entries)
+    }
+}
+
+/// Undirected graph stored as compressed sparse row (CSR) topology.
+///
+/// Stores only adjacency structure — node and edge data live externally,
+/// indexed by `NodeId` and `EdgeId` positions. Topology is shared via
+/// `Arc`; mutations trigger copy-on-write.
+#[derive(Clone, Debug)]
+pub struct Graph {
+    topology: Arc<Topology>,
+}
+
+impl PartialEq for Graph {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.topology, &other.topology) || self.topology == other.topology
+    }
+}
+
+impl Eq for Graph {}
+
+impl Graph {
+    pub fn new(node_count: usize, edges: &[[u32; 2]]) -> Self {
+        Self {
+            topology: Arc::new(Self::build_topology(node_count, edges)),
         }
-        self.free_nodes.push(id);
-        self.node_count -= 1;
-        Some(data)
     }
 
-    pub fn remove_edge(&mut self, id: EdgeId) -> Option<E> {
-        let edge = self.edges.get_mut(id.index())?.take()?;
-        let [a, b] = edge.endpoints;
-        self.adjacency[a.index()].retain(|n| n.edge != id);
-        if a != b {
-            self.adjacency[b.index()].retain(|n| n.edge != id);
-        }
-        self.free_edges.push(id);
-        self.edge_count -= 1;
-        Some(edge.data)
+    pub fn node_count(&self) -> usize {
+        self.topology.node_count
     }
 
-    pub fn contains_node(&self, id: NodeId) -> bool {
-        self.nodes.get(id.index()).is_some_and(|n| n.is_some())
+    pub fn edge_count(&self) -> usize {
+        self.topology.edge_count
     }
 
-    pub fn contains_edge(&self, id: EdgeId) -> bool {
-        self.edges.get(id.index()).is_some_and(|e| e.is_some())
+    pub fn node_bound(&self) -> usize {
+        self.topology.node_count
     }
 
-    pub fn node(&self, id: NodeId) -> Option<&N> {
-        self.nodes.get(id.index())?.as_ref()
-    }
-
-    pub fn node_mut(&mut self, id: NodeId) -> Option<&mut N> {
-        self.nodes.get_mut(id.index())?.as_mut()
-    }
-
-    pub fn edge(&self, id: EdgeId) -> Option<&E> {
-        self.edges
-            .get(id.index())
-            .and_then(|e| e.as_ref().map(|e| &e.data))
-    }
-
-    pub fn edge_mut(&mut self, id: EdgeId) -> Option<&mut E> {
-        self.edges
-            .get_mut(id.index())
-            .and_then(|e| e.as_mut().map(|e| &mut e.data))
-    }
-
-    pub fn edge_endpoints(&self, id: EdgeId) -> Option<[NodeId; 2]> {
-        self.edges
-            .get(id.index())
-            .and_then(|e| e.as_ref().map(|e| e.endpoints))
+    pub fn edge_bound(&self) -> usize {
+        self.topology.edge_count
     }
 
     pub fn neighbors(&self, id: NodeId) -> &[Neighbor] {
-        &self.adjacency[id.index()]
+        let start = self.topology.offsets[id.index()] as usize;
+        let end = self.topology.offsets[id.index() + 1] as usize;
+        &self.topology.neighbors[start..end]
     }
 
     pub fn degree(&self, id: NodeId) -> usize {
-        self.adjacency[id.index()].len()
+        let start = self.topology.offsets[id.index()] as usize;
+        let end = self.topology.offsets[id.index() + 1] as usize;
+        end - start
+    }
+
+    pub fn edge_endpoints(&self, id: EdgeId) -> [NodeId; 2] {
+        self.topology.endpoints[id.index()]
     }
 
     pub fn find_edge(&self, a: NodeId, b: NodeId) -> Option<EdgeId> {
@@ -205,89 +180,155 @@ impl<N, E> Graph<N, E> {
             .map(|n| n.edge)
     }
 
-    pub fn node_count(&self) -> usize {
-        self.node_count
+    pub fn contains_node(&self, id: NodeId) -> bool {
+        id.index() < self.topology.node_count
     }
 
-    pub fn edge_count(&self) -> usize {
-        self.edge_count
+    pub fn contains_edge(&self, id: EdgeId) -> bool {
+        id.index() < self.topology.edge_count
     }
 
-    /// Upper bound on node indices. All valid NodeId values satisfy
-    /// `id.index() < node_bound()`.
-    pub fn node_bound(&self) -> usize {
-        self.nodes.len()
+    pub fn node_ids(&self) -> impl Iterator<Item = NodeId> {
+        (0..self.topology.node_count as u32).map(NodeId)
     }
 
-    /// Upper bound on edge indices. All valid EdgeId values satisfy
-    /// `id.index() < edge_bound()`.
-    pub fn edge_bound(&self) -> usize {
-        self.edges.len()
+    pub fn edge_ids(&self) -> impl Iterator<Item = EdgeId> {
+        (0..self.topology.edge_count as u32).map(EdgeId)
     }
 
-    pub fn node_ids(&self) -> impl Iterator<Item = NodeId> + '_ {
-        self.nodes
-            .iter()
-            .enumerate()
-            .filter_map(|(i, n)| n.as_ref().map(|_| NodeId(i as u32)))
-    }
-
-    pub fn edge_ids(&self) -> impl Iterator<Item = EdgeId> + '_ {
-        self.edges
-            .iter()
-            .enumerate()
-            .filter_map(|(i, e)| e.as_ref().map(|_| EdgeId(i as u32)))
-    }
-
-    /// True when the node array has no holes (all slots occupied).
-    /// When true, node ids are dense `0..node_count`.
     pub fn is_dense(&self) -> bool {
-        self.node_count == self.nodes.len()
+        true
+    }
+
+    // --- Mutations (rebuild topology, CoW via Arc) ---
+
+    pub fn add_node(&mut self) -> NodeId {
+        let old = &*self.topology;
+        let new_id = NodeId(old.node_count as u32);
+        let edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[a, b]| [a.0, b.0]).collect();
+        self.topology = Arc::new(Self::build_topology(old.node_count + 1, &edges));
+        new_id
+    }
+
+    pub fn add_edge(&mut self, a: NodeId, b: NodeId) -> EdgeId {
+        let old = &*self.topology;
+        let new_id = EdgeId(old.edge_count as u32);
+        let mut edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[s, t]| [s.0, t.0]).collect();
+        edges.push([a.0, b.0]);
+        self.topology = Arc::new(Self::build_topology(old.node_count, &edges));
+        new_id
+    }
+
+    pub fn remove(&mut self, nodes: &[NodeId], edges: &[EdgeId]) -> Remapping {
+        let mut removed_nodes: Vec<u32> = nodes.iter().map(|n| n.0).collect();
+        removed_nodes.sort_unstable();
+        removed_nodes.dedup();
+
+        let mut removed_edge_set: Vec<u32> = edges.iter().map(|e| e.0).collect();
+
+        let old = &*self.topology;
+
+        // Also remove edges incident to removed nodes
+        for (i, &[a, b]) in old.endpoints.iter().enumerate() {
+            if removed_nodes.binary_search(&a.0).is_ok()
+                || removed_nodes.binary_search(&b.0).is_ok()
+            {
+                removed_edge_set.push(i as u32);
+            }
+        }
+        removed_edge_set.sort_unstable();
+        removed_edge_set.dedup();
+
+        let kept_edges: Vec<[u32; 2]> = old
+            .endpoints
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| removed_edge_set.binary_search(&(i as u32)).is_err())
+            .map(|(_, &[a, b])| {
+                let shift_a = removed_nodes.partition_point(|&r| r < a.0) as u32;
+                let shift_b = removed_nodes.partition_point(|&r| r < b.0) as u32;
+                [a.0 - shift_a, b.0 - shift_b]
+            })
+            .collect();
+
+        self.topology = Arc::new(Self::build_topology(
+            old.node_count - removed_nodes.len(),
+            &kept_edges,
+        ));
+
+        Remapping {
+            removed_nodes,
+            removed_edges: removed_edge_set,
+        }
+    }
+
+    pub fn remove_node(&mut self, id: NodeId) -> Remapping {
+        self.remove(&[id], &[])
+    }
+
+    pub fn remove_edge(&mut self, id: EdgeId) -> Remapping {
+        self.remove(&[], &[id])
+    }
+
+    fn build_topology(node_count: usize, edges: &[[u32; 2]]) -> Topology {
+        let edge_count = edges.len();
+
+        let mut degree = vec![0u32; node_count];
+        for &[a, b] in edges {
+            degree[a as usize] += 1;
+            degree[b as usize] += 1;
+        }
+
+        let mut offsets = Vec::with_capacity(node_count + 1);
+        offsets.push(0);
+        for &d in &degree {
+            offsets.push(offsets.last().unwrap() + d);
+        }
+
+        let total = *offsets.last().unwrap() as usize;
+        let mut neighbors = vec![
+            Neighbor {
+                node: NodeId(0),
+                edge: EdgeId(0)
+            };
+            total
+        ];
+        let mut cursor: Vec<u32> = offsets[..node_count].to_vec();
+
+        for (i, &[a, b]) in edges.iter().enumerate() {
+            let eid = EdgeId(i as u32);
+
+            let pos = cursor[a as usize] as usize;
+            neighbors[pos] = Neighbor {
+                node: NodeId(b),
+                edge: eid,
+            };
+            cursor[a as usize] += 1;
+
+            let pos = cursor[b as usize] as usize;
+            neighbors[pos] = Neighbor {
+                node: NodeId(a),
+                edge: eid,
+            };
+            cursor[b as usize] += 1;
+        }
+
+        let endpoints: Vec<[NodeId; 2]> =
+            edges.iter().map(|&[a, b]| [NodeId(a), NodeId(b)]).collect();
+
+        Topology {
+            offsets,
+            neighbors,
+            endpoints,
+            node_count,
+            edge_count,
+        }
     }
 }
 
-impl<N: Default, E> Graph<N, E> {
-    pub fn from_edges(node_count: usize, edges: Vec<(u32, u32, E)>) -> Self {
-        let mut g = Self::with_capacity(node_count, edges.len());
-        for _ in 0..node_count {
-            g.add_node(N::default());
-        }
-        for (a, b, data) in edges {
-            g.add_edge(NodeId(a), NodeId(b), data);
-        }
-        g
-    }
-}
-
-impl<N, E> Default for Graph<N, E> {
+impl Default for Graph {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<N, E> Index<NodeId> for Graph<N, E> {
-    type Output = N;
-    fn index(&self, id: NodeId) -> &N {
-        self.node(id).expect("node does not exist")
-    }
-}
-
-impl<N, E> IndexMut<NodeId> for Graph<N, E> {
-    fn index_mut(&mut self, id: NodeId) -> &mut N {
-        self.node_mut(id).expect("node does not exist")
-    }
-}
-
-impl<N, E> Index<EdgeId> for Graph<N, E> {
-    type Output = E;
-    fn index(&self, id: EdgeId) -> &E {
-        self.edge(id).expect("edge does not exist")
-    }
-}
-
-impl<N, E> IndexMut<EdgeId> for Graph<N, E> {
-    fn index_mut(&mut self, id: EdgeId) -> &mut E {
-        self.edge_mut(id).expect("edge does not exist")
+        Self::new(0, &[])
     }
 }
 
@@ -299,209 +340,240 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_graph_new() {
-        let g = Graph::<i32, ()>::new();
+    fn test_graph_default() {
+        let g = Graph::default();
         assert_eq!(g.node_count(), 0);
         assert_eq!(g.edge_count(), 0);
         assert!(g.is_dense());
-    }
-
-    #[test]
-    fn test_graph_add_node() {
-        let mut g = Graph::<&str, ()>::new();
-        let a = g.add_node("carbon");
-        let b = g.add_node("oxygen");
-        assert_eq!(g.node_count(), 2);
-        assert_eq!(g[a], "carbon");
-        assert_eq!(g[b], "oxygen");
-        assert_eq!(a, NodeId(0));
-        assert_eq!(b, NodeId(1));
-    }
-
-    #[test]
-    fn test_graph_add_edge() {
-        let mut g = Graph::<(), u8>::new();
-        let a = g.add_node(());
-        let b = g.add_node(());
-        let e = g.add_edge(a, b, 2);
-        assert_eq!(g.edge_count(), 1);
-        assert_eq!(g[e], 2);
-        assert_eq!(g.edge_endpoints(e), Some([a, b]));
-        assert_eq!(g.degree(a), 1);
-        assert_eq!(g.degree(b), 1);
-        assert_eq!(g.neighbors(a)[0].node, b);
-        assert_eq!(g.neighbors(b)[0].node, a);
-    }
-
-    #[test]
-    fn test_graph_remove_edge() {
-        let mut g = Graph::<(), ()>::new();
-        let a = g.add_node(());
-        let b = g.add_node(());
-        let e = g.add_edge(a, b, ());
-        assert_eq!(g.remove_edge(e), Some(()));
-        assert_eq!(g.edge_count(), 0);
-        assert_eq!(g.degree(a), 0);
-        assert_eq!(g.degree(b), 0);
-        assert!(!g.contains_edge(e));
-    }
-
-    #[test]
-    fn test_graph_remove_node() {
-        let mut g = Graph::<(), ()>::new();
-        let a = g.add_node(());
-        let b = g.add_node(());
-        let c = g.add_node(());
-        g.add_edge(a, b, ());
-        g.add_edge(b, c, ());
-        g.remove_node(b);
-        assert_eq!(g.node_count(), 2);
-        assert_eq!(g.edge_count(), 0);
-        assert!(g.contains_node(a));
-        assert!(!g.contains_node(b));
-        assert!(g.contains_node(c));
-        assert_eq!(g.degree(a), 0);
-        assert_eq!(g.degree(c), 0);
-    }
-
-    #[test]
-    fn test_graph_free_list_reuse() {
-        let mut g = Graph::<i32, ()>::new();
-        let a = g.add_node(10);
-        let b = g.add_node(20);
-        g.remove_node(a);
-        let c = g.add_node(30);
-        // Reuses slot 0
-        assert_eq!(c, NodeId(0));
-        assert_eq!(g[c], 30);
-        assert_eq!(g.node_count(), 2);
-        assert!(g.is_dense());
-
-        // Edge free list
-        let e1 = g.add_edge(b, c, ());
-        g.remove_edge(e1);
-        let e2 = g.add_edge(c, b, ());
-        assert_eq!(e2, EdgeId(0));
-    }
-
-    #[test]
-    fn test_graph_find_edge() {
-        let mut g = Graph::<(), u8>::new();
-        let a = g.add_node(());
-        let b = g.add_node(());
-        let c = g.add_node(());
-        let e = g.add_edge(a, b, 1);
-        assert_eq!(g.find_edge(a, b), Some(e));
-        assert_eq!(g.find_edge(b, a), Some(e));
-        assert_eq!(g.find_edge(a, c), None);
-    }
-
-    #[test]
-    fn test_graph_self_loop() {
-        let mut g = Graph::<(), ()>::new();
-        let a = g.add_node(());
-        let e = g.add_edge(a, a, ());
-        assert_eq!(g.degree(a), 2);
-        assert_eq!(g.edge_count(), 1);
-        g.remove_edge(e);
-        assert_eq!(g.degree(a), 0);
-        assert_eq!(g.edge_count(), 0);
-    }
-
-    #[test]
-    fn test_graph_remove_node_self_loop() {
-        let mut g = Graph::<(), ()>::new();
-        let a = g.add_node(());
-        g.add_edge(a, a, ());
-        g.remove_node(a);
-        assert_eq!(g.node_count(), 0);
-        assert_eq!(g.edge_count(), 0);
-    }
-
-    #[test]
-    fn test_graph_node_ids() {
-        let mut g = Graph::<(), ()>::new();
-        let a = g.add_node(());
-        let b = g.add_node(());
-        let c = g.add_node(());
-        g.remove_node(b);
-        let ids: Vec<NodeId> = g.node_ids().collect();
-        assert_eq!(ids, vec![a, c]);
-    }
-
-    #[test]
-    fn test_graph_edge_ids() {
-        let mut g = Graph::<(), ()>::new();
-        let a = g.add_node(());
-        let b = g.add_node(());
-        let c = g.add_node(());
-        let e1 = g.add_edge(a, b, ());
-        let e2 = g.add_edge(b, c, ());
-        g.remove_edge(e1);
-        let ids: Vec<EdgeId> = g.edge_ids().collect();
-        assert_eq!(ids, vec![e2]);
-    }
-
-    #[test]
-    fn test_graph_node_mut() {
-        let mut g = Graph::<i32, ()>::new();
-        let a = g.add_node(0);
-        g[a] = 99;
-        assert_eq!(g[a], 99);
-    }
-
-    #[test]
-    fn test_graph_edge_mut() {
-        let mut g = Graph::<(), i32>::new();
-        let a = g.add_node(());
-        let b = g.add_node(());
-        let e = g.add_edge(a, b, 1);
-        g[e] = 3;
-        assert_eq!(g[e], 3);
     }
 
     #[rstest]
     #[case::empty(0, vec![], 0, 0)]
-    #[case::single_node(1, vec![], 1, 0)]
-    #[case::triangle(3, vec![(0, 1, ()), (1, 2, ()), (0, 2, ())], 3, 3)]
-    fn test_graph_from_edges(
+    #[case::isolated_nodes(3, vec![], 3, 0)]
+    #[case::single_edge(2, vec![[0, 1]], 2, 1)]
+    #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], 3, 3)]
+    fn test_graph_new(
         #[case] node_count: usize,
-        #[case] edges: Vec<(u32, u32, ())>,
+        #[case] edges: Vec<[u32; 2]>,
         #[case] expected_nodes: usize,
         #[case] expected_edges: usize,
     ) {
-        let g = Graph::<(), _>::from_edges(node_count, edges);
+        let g = Graph::new(node_count, &edges);
         assert_eq!(g.node_count(), expected_nodes);
         assert_eq!(g.edge_count(), expected_edges);
+        assert!(g.is_dense());
+    }
+
+    #[test]
+    fn test_graph_neighbors() {
+        let g = Graph::new(3, &[[0, 1], [0, 2]]);
+        assert_eq!(g.degree(NodeId(0)), 2);
+        assert_eq!(g.degree(NodeId(1)), 1);
+        assert_eq!(g.degree(NodeId(2)), 1);
+        assert_eq!(g.neighbors(NodeId(0)).len(), 2);
+        assert_eq!(g.neighbors(NodeId(1))[0].node, NodeId(0));
+        assert_eq!(g.neighbors(NodeId(2))[0].node, NodeId(0));
+    }
+
+    #[test]
+    fn test_graph_edge_endpoints() {
+        let g = Graph::new(3, &[[0, 1], [1, 2]]);
+        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
+        assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
+    }
+
+    #[test]
+    fn test_graph_find_edge() {
+        let g = Graph::new(3, &[[0, 1]]);
+        let e = g.find_edge(NodeId(0), NodeId(1));
+        assert_eq!(e, Some(EdgeId(0)));
+        assert_eq!(g.find_edge(NodeId(1), NodeId(0)), Some(EdgeId(0)));
+        assert_eq!(g.find_edge(NodeId(0), NodeId(2)), None);
+    }
+
+    #[test]
+    fn test_graph_self_loop() {
+        let g = Graph::new(1, &[[0, 0]]);
+        assert_eq!(g.degree(NodeId(0)), 2);
+        assert_eq!(g.edge_count(), 1);
     }
 
     #[test]
     fn test_graph_parallel_edges() {
-        let mut g = Graph::<(), u8>::new();
-        let a = g.add_node(());
-        let b = g.add_node(());
-        let e1 = g.add_edge(a, b, 1);
-        let e2 = g.add_edge(a, b, 2);
+        let g = Graph::new(2, &[[0, 1], [0, 1]]);
         assert_eq!(g.edge_count(), 2);
-        assert_eq!(g.degree(a), 2);
-        assert_eq!(g[e1], 1);
-        assert_eq!(g[e2], 2);
+        assert_eq!(g.degree(NodeId(0)), 2);
     }
 
     #[test]
-    fn test_graph_not_dense_after_removal() {
-        let mut g = Graph::<(), ()>::new();
-        g.add_node(());
-        let b = g.add_node(());
-        g.add_node(());
-        g.remove_node(b);
-        assert!(!g.is_dense());
+    fn test_graph_node_ids() {
+        let g = Graph::new(3, &[]);
+        let ids: Vec<NodeId> = g.node_ids().collect();
+        assert_eq!(ids, vec![NodeId(0), NodeId(1), NodeId(2)]);
     }
 
     #[test]
-    fn test_graph_remove_nonexistent() {
-        let mut g = Graph::<(), ()>::new();
-        assert_eq!(g.remove_node(NodeId(0)), None);
-        assert_eq!(g.remove_edge(EdgeId(0)), None);
+    fn test_graph_edge_ids() {
+        let g = Graph::new(3, &[[0, 1], [1, 2]]);
+        let ids: Vec<EdgeId> = g.edge_ids().collect();
+        assert_eq!(ids, vec![EdgeId(0), EdgeId(1)]);
+    }
+
+    #[test]
+    fn test_graph_contains() {
+        let g = Graph::new(2, &[[0, 1]]);
+        assert!(g.contains_node(NodeId(0)));
+        assert!(g.contains_node(NodeId(1)));
+        assert!(!g.contains_node(NodeId(2)));
+        assert!(g.contains_edge(EdgeId(0)));
+        assert!(!g.contains_edge(EdgeId(1)));
+    }
+
+    #[test]
+    fn test_graph_arc_sharing() {
+        let g1 = Graph::new(3, &[[0, 1], [1, 2]]);
+        let g2 = g1.clone();
+        assert_eq!(g1, g2);
+    }
+
+    #[test]
+    fn test_graph_add_node() {
+        let mut g = Graph::new(2, &[[0, 1]]);
+        let n = g.add_node();
+        assert_eq!(n, NodeId(2));
+        assert_eq!(g.node_count(), 3);
+        assert_eq!(g.edge_count(), 1);
+        assert_eq!(g.degree(NodeId(2)), 0);
+        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
+    }
+
+    #[test]
+    fn test_graph_add_edge() {
+        let mut g = Graph::new(3, &[[0, 1]]);
+        let e = g.add_edge(NodeId(1), NodeId(2));
+        assert_eq!(e, EdgeId(1));
+        assert_eq!(g.edge_count(), 2);
+        assert_eq!(g.degree(NodeId(1)), 2);
+        assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(1), NodeId(2)]);
+    }
+
+    #[test]
+    fn test_graph_remove_node() {
+        // 0--1--2, remove node 1
+        let mut g = Graph::new(3, &[[0, 1], [1, 2]]);
+        let remap = g.remove_node(NodeId(1));
+
+        assert_eq!(g.node_count(), 2);
+        assert_eq!(g.edge_count(), 0);
+        assert_eq!(remap.removed_nodes, vec![1]);
+        assert_eq!(remap.removed_edges, vec![0, 1]);
+
+        // node 0 stays 0, node 2 becomes 1
+        assert_eq!(remap.node(NodeId(0)), Some(NodeId(0)));
+        assert_eq!(remap.node(NodeId(1)), None);
+        assert_eq!(remap.node(NodeId(2)), Some(NodeId(1)));
+    }
+
+    #[test]
+    fn test_graph_remove_node_partial() {
+        // triangle 0-1, 1-2, 0-2; remove node 0
+        let mut g = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
+        let remap = g.remove_node(NodeId(0));
+
+        assert_eq!(g.node_count(), 2);
+        assert_eq!(g.edge_count(), 1);
+        assert_eq!(remap.removed_nodes, vec![0]);
+        assert_eq!(remap.removed_edges, vec![0, 2]);
+
+        // surviving edge (old 1) maps to new 0
+        assert_eq!(remap.edge(EdgeId(0)), None);
+        assert_eq!(remap.edge(EdgeId(1)), Some(EdgeId(0)));
+        assert_eq!(remap.edge(EdgeId(2)), None);
+
+        // nodes 1,2 become 0,1
+        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
+    }
+
+    #[test]
+    fn test_graph_remove_edge() {
+        // triangle, remove edge 1 (1-2)
+        let mut g = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
+        let remap = g.remove_edge(EdgeId(1));
+
+        assert_eq!(g.node_count(), 3);
+        assert_eq!(g.edge_count(), 2);
+        assert_eq!(remap.removed_nodes, Vec::<u32>::new());
+        assert_eq!(remap.removed_edges, vec![1]);
+
+        assert_eq!(remap.edge(EdgeId(0)), Some(EdgeId(0)));
+        assert_eq!(remap.edge(EdgeId(1)), None);
+        assert_eq!(remap.edge(EdgeId(2)), Some(EdgeId(1)));
+
+        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
+        assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(0), NodeId(2)]);
+    }
+
+    #[test]
+    fn test_graph_cow_sharing() {
+        let g1 = Graph::new(3, &[[0, 1], [1, 2]]);
+        let mut g2 = g1.clone();
+        g2.add_node();
+
+        // g1 unchanged
+        assert_eq!(g1.node_count(), 3);
+        assert_eq!(g2.node_count(), 4);
+    }
+
+    #[test]
+    fn test_graph_remove_batch() {
+        // 0-1, 1-2, 2-3, 3-4; remove nodes 1 and 3
+        let mut g = Graph::new(5, &[[0, 1], [1, 2], [2, 3], [3, 4]]);
+        let remap = g.remove(&[NodeId(1), NodeId(3)], &[]);
+
+        assert_eq!(g.node_count(), 3);
+        // edges 0(0-1), 1(1-2), 2(2-3), 3(3-4) — all incident to 1 or 3 are removed
+        // only none survive since every edge touches node 1 or 3
+        assert_eq!(g.edge_count(), 0);
+
+        assert_eq!(remap.node(NodeId(0)), Some(NodeId(0)));
+        assert_eq!(remap.node(NodeId(1)), None);
+        assert_eq!(remap.node(NodeId(2)), Some(NodeId(1)));
+        assert_eq!(remap.node(NodeId(3)), None);
+        assert_eq!(remap.node(NodeId(4)), Some(NodeId(2)));
+    }
+
+    #[test]
+    fn test_graph_remove_nodes_and_edges() {
+        // 0-1, 1-2, 2-3, 0-3; remove node 1, edge 3 (0-3)
+        let mut g = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [0, 3]]);
+        let remap = g.remove(&[NodeId(1)], &[EdgeId(3)]);
+
+        assert_eq!(g.node_count(), 3);
+        // edge 0(0-1) removed (incident to 1)
+        // edge 1(1-2) removed (incident to 1)
+        // edge 2(2-3) survives → becomes edge 0 (endpoints: 1-2 after shift)
+        // edge 3(0-3) removed (explicitly)
+        assert_eq!(g.edge_count(), 1);
+        assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(1), NodeId(2)]);
+
+        assert_eq!(remap.edge(EdgeId(2)), Some(EdgeId(0)));
+    }
+
+    #[rstest]
+    #[case::identity(NodeId(0), vec![], Some(NodeId(0)))]
+    #[case::before_removed(NodeId(0), vec![2], Some(NodeId(0)))]
+    #[case::removed(NodeId(2), vec![2], None)]
+    #[case::after_removed(NodeId(3), vec![2], Some(NodeId(2)))]
+    #[case::multi_removed(NodeId(5), vec![1, 3], Some(NodeId(3)))]
+    fn test_remapping_node(
+        #[case] old: NodeId,
+        #[case] removed: Vec<u32>,
+        #[case] expected: Option<NodeId>,
+    ) {
+        let remap = Remapping {
+            removed_nodes: removed,
+            removed_edges: vec![],
+        };
+        assert_eq!(remap.node(old), expected);
     }
 }

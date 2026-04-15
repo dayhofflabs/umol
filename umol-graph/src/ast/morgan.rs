@@ -175,8 +175,8 @@ fn compute_atom_invariants(ast: &MoleculeAst) -> Vec<AtomInvariants> {
     }
 
     // Add implicit H count
-    for i in 0..n {
-        result[i].h_count += ast_h_count(ast, AtomIdx::from_usize(i));
+    for (i, entry) in result.iter_mut().enumerate().take(n) {
+        entry.h_count += ast_h_count(ast, AtomIdx::from_usize(i));
     }
 
     result
@@ -916,47 +916,49 @@ mod tests {
     }
 
     fn methane() -> MoleculeAst {
-        let mut ast = MoleculeAst::default();
-        ast.add_atom(carbon(4));
-        ast
+        MoleculeAst::new(vec![carbon(4)], vec![], vec![], vec![], vec![], vec![], vec![])
     }
 
     fn ethane() -> MoleculeAst {
-        let mut ast = MoleculeAst::default();
-        let a0 = ast.add_atom(carbon(3));
-        let a1 = ast.add_atom(carbon(3));
-        ast.add_bond(a0, a1, BondAst::from_order(1));
-        ast
+        MoleculeAst::new(
+            vec![carbon(3), carbon(3)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![], vec![], vec![], vec![], vec![],
+        )
     }
 
     fn ethanol() -> MoleculeAst {
-        let mut ast = MoleculeAst::default();
-        let a0 = ast.add_atom(carbon(3));
-        let a1 = ast.add_atom(carbon(2));
-        let a2 = ast.add_atom(AtomAst {
-            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
-            ..AtomAst::from_element(Element::O)
-        });
-        ast.add_bond(a0, a1, BondAst::from_order(1));
-        ast.add_bond(a1, a2, BondAst::from_order(1));
-        ast
+        MoleculeAst::new(
+            vec![
+                carbon(3),
+                carbon(2),
+                AtomAst {
+                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
+                    ..AtomAst::from_element(Element::O)
+                },
+            ],
+            vec![
+                (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+                (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)),
+            ],
+            vec![], vec![], vec![], vec![], vec![],
+        )
     }
 
     fn cyclohexane() -> MoleculeAst {
-        let mut ast = MoleculeAst::default();
-        let atoms: Vec<AtomIdx> = (0..6).map(|_| ast.add_atom(carbon(2))).collect();
-        for i in 0..6 {
-            ast.add_bond(atoms[i], atoms[(i + 1) % 6], BondAst::from_order(1));
-        }
-        ast
+        let atoms: Vec<AtomAst> = (0..6).map(|_| carbon(2)).collect();
+        let bonds: Vec<(AtomIdx, AtomIdx, BondAst)> = (0..6)
+            .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(1)))
+            .collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
     }
 
     fn formaldehyde() -> MoleculeAst {
-        let mut ast = MoleculeAst::default();
-        let a0 = ast.add_atom(carbon(2));
-        let a1 = ast.add_atom(AtomAst::from_element(Element::O));
-        ast.add_bond(a0, a1, BondAst::from_order(2));
-        ast
+        MoleculeAst::new(
+            vec![carbon(2), AtomAst::from_element(Element::O)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))],
+            vec![], vec![], vec![], vec![], vec![],
+        )
     }
 
     #[rstest]

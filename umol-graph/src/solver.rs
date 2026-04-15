@@ -607,11 +607,18 @@ mod tests {
     use crate::ast::matcher::Assignment;
 
     fn h2() -> MoleculeAst {
-        let mut ast = MoleculeAst::default();
-        let a = ast.add_atom(AtomAst::from_element(Element::H));
-        let b = ast.add_atom(AtomAst::from_element(Element::H));
-        ast.add_bond(a, b, BondAst::from_order(1));
-        ast
+        MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::H),
+                AtomAst::from_element(Element::H),
+            ],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )
     }
 
     #[test]
@@ -638,8 +645,15 @@ mod tests {
                 registry: AtomTypeRegistry::new(),
             },
         };
-        let mut ast = MoleculeAst::default();
-        ast.add_atom(AtomAst::from_element(Element::C));
+        let mut ast = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
         let result = solver.resolve(&mut ast);
         assert_eq!(result, Solution::Contradictory);
     }
@@ -647,7 +661,7 @@ mod tests {
     #[test]
     fn test_solver_resolve_already_ground() {
         let solver = Solver::default();
-        let mut ast = MoleculeAst::default();
+        let mut ast = MoleculeAst::new(vec![], vec![], vec![], vec![], vec![], vec![], vec![]);
         let result = solver.resolve(&mut ast);
         assert_eq!(result, Solution::Determined(()));
     }
@@ -655,8 +669,15 @@ mod tests {
     #[test]
     fn test_solver_resolve_wildcard_element_underdetermined() {
         let solver = Solver::default();
-        let mut ast = MoleculeAst::default();
-        ast.add_atom(AtomAst::new(ElementAst::Undetermined));
+        let mut ast = MoleculeAst::new(
+            vec![AtomAst::new(ElementAst::Undetermined)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
         let result = solver.resolve(&mut ast);
         assert_eq!(result, Solution::Underdetermined(()));
     }
@@ -687,8 +708,15 @@ mod tests {
                 allow_implicit_hydrogens: true,
             },
         };
-        let mut ast = MoleculeAst::default();
-        ast.add_atom(AtomAst::from_element(Element::C));
+        let mut ast = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
         let result = solver.resolve(&mut ast);
         assert_eq!(result, Solution::Determined(()));
         assert_eq!(
@@ -713,44 +741,82 @@ mod tests {
     #[test]
     fn test_solver_validate_non_ground() {
         let solver = Solver::default();
-        let mut ast = MoleculeAst::default();
-        ast.add_atom(AtomAst::from_element(Element::C));
+        let ast = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
         let result = solver.validate(&ast);
         assert!(matches!(result, Solution::Underdetermined(())));
     }
 
     #[test]
     fn test_bond_order_sum_no_bonds() {
-        let mut ast = MoleculeAst::default();
-        let a = ast.add_atom(AtomAst::from_element(Element::C));
-        assert_eq!(ast.bond_order_sum(a), Some(0));
+        let ast = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(0));
     }
 
     #[test]
     fn test_bond_order_sum_single() {
-        let mut ast = MoleculeAst::default();
-        let a = ast.add_atom(AtomAst::from_element(Element::C));
-        let b = ast.add_atom(AtomAst::from_element(Element::C));
-        ast.add_bond(a, b, BondAst::from_order(1));
-        assert_eq!(ast.bond_order_sum(a), Some(1));
+        let ast = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(1));
     }
 
     #[test]
     fn test_bond_order_sum_double() {
-        let mut ast = MoleculeAst::default();
-        let a = ast.add_atom(AtomAst::from_element(Element::C));
-        let b = ast.add_atom(AtomAst::from_element(Element::O));
-        ast.add_bond(a, b, BondAst::from_order(2));
-        assert_eq!(ast.bond_order_sum(a), Some(2));
+        let ast = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(2));
     }
 
     #[test]
     fn test_bond_order_sum_wildcard() {
-        let mut ast = MoleculeAst::default();
-        let a = ast.add_atom(AtomAst::from_element(Element::C));
-        let b = ast.add_atom(AtomAst::from_element(Element::O));
-        ast.add_bond(a, b, BondAst::new(ValueAst::Undetermined));
-        assert_eq!(ast.bond_order_sum(a), None);
+        let ast = MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        assert_eq!(ast.bond_order_sum(AtomIdx(0)), None);
     }
 
     #[test]

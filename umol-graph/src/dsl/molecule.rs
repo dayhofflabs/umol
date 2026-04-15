@@ -205,11 +205,7 @@ impl RawMoleculeAst {
             }
         };
 
-        let mut ast = MoleculeAst::default();
-        for atom in atoms {
-            ast.add_atom(atom);
-        }
-
+        let mut bond_list = Vec::new();
         let mut bond_ids = IndexMap::new();
         for (i, b) in self.bonds.into_iter().enumerate() {
             let a = resolve(&b.a)?;
@@ -217,9 +213,10 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(b.id)? {
                 bond_ids.insert(i, id);
             }
-            ast.add_bond(a, bb, b.bond);
+            bond_list.push((a, bb, b.bond));
         }
 
+        let mut dative_list = Vec::new();
         let mut dative_bond_ids = IndexMap::new();
         for (i, db) in self.dative_bonds.into_iter().enumerate() {
             let donor = resolve(&db.donor)?;
@@ -227,9 +224,10 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(db.id)? {
                 dative_bond_ids.insert(i, id);
             }
-            ast.add_dative_bond(donor, acceptor, db.bond);
+            dative_list.push((donor, acceptor, db.bond));
         }
 
+        let mut aromatic_list = Vec::new();
         let mut aromatic_system_ids = IndexMap::new();
         for (i, sys) in self.aromatic_systems.into_iter().enumerate() {
             let atom_indices: Vec<AtomIdx> =
@@ -237,9 +235,10 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(sys.id)? {
                 aromatic_system_ids.insert(i, id);
             }
-            ast.add_aromatic_system(atom_indices, AromaticSystemAst {});
+            aromatic_list.push((atom_indices, AromaticSystemAst {}));
         }
 
+        let mut multicenter_list = Vec::new();
         let mut multicenter_bond_ids = IndexMap::new();
         for (i, mc) in self.multicenter_bonds.into_iter().enumerate() {
             let atom_indices: Vec<AtomIdx> =
@@ -247,9 +246,10 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(mc.id)? {
                 multicenter_bond_ids.insert(i, id);
             }
-            ast.add_multicenter_bond(atom_indices, MulticenterBondAst {});
+            multicenter_list.push((atom_indices, MulticenterBondAst {}));
         }
 
+        let mut noncovalent_list = Vec::new();
         let mut noncovalent_bond_ids = IndexMap::new();
         for (i, nc) in self.noncovalent_bonds.into_iter().enumerate() {
             let a = resolve(&nc.a)?;
@@ -257,21 +257,27 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(nc.id)? {
                 noncovalent_bond_ids.insert(i, id);
             }
-            ast.add_noncovalent_bond(a, bb, nc.bond);
+            noncovalent_list.push((a, bb, nc.bond));
         }
 
+        let mut constraints = Vec::new();
         if let Some(charge) = self.charge {
-            ast.constraints.push(MoleculeConstraint::Derived {
+            constraints.push(MoleculeConstraint::Derived {
                 predicate: DerivedPred::TotalCharge(ValueAst::Lit(charge)),
                 refs: RelationRefs::default(),
             });
         }
         if let Some(spin) = self.spin {
-            ast.constraints.push(MoleculeConstraint::Derived {
+            constraints.push(MoleculeConstraint::Derived {
                 predicate: DerivedPred::TotalSpin(SpinStateAst::Lit(spin)),
                 refs: RelationRefs::default(),
             });
         }
+
+        let ast = MoleculeAst::new(
+            atoms, bond_list, dative_list, noncovalent_list,
+            aromatic_list, multicenter_list, constraints,
+        );
         let metadata = Metadata {
             atom_tags,
             atom_aliases,
@@ -859,19 +865,15 @@ mod tests {
     use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
     fn mol_atoms(a: Vec<AtomAst>) -> MoleculeAst {
-        let mut ast = MoleculeAst::default();
-        for atom in a {
-            ast.add_atom(atom);
-        }
-        ast
+        MoleculeAst::new(a, vec![], vec![], vec![], vec![], vec![], vec![])
     }
 
     fn mol_with_bonds(a: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> MoleculeAst {
-        let mut ast = mol_atoms(a);
-        for (s, t, b) in bonds {
-            ast.add_bond(AtomIdx(s as u32), AtomIdx(t as u32), b);
-        }
-        ast
+        let bond_list: Vec<(AtomIdx, AtomIdx, BondAst)> = bonds
+            .into_iter()
+            .map(|(s, t, b)| (AtomIdx(s as u32), AtomIdx(t as u32), b))
+            .collect();
+        MoleculeAst::new(a, bond_list, vec![], vec![], vec![], vec![], vec![])
     }
 
     #[rstest]

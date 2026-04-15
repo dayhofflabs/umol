@@ -1,3 +1,10 @@
+//! Relation sets: N-ary relations over graph nodes with CSR incidence.
+//!
+//! `FixedRelationSet<R, N>` stores relations of compile-time-known arity
+//! (e.g. binary dative bonds). `VarRelationSet<R>` stores variable-arity
+//! relations (e.g. aromatic systems). Both use sorted parallel arrays for
+//! incidence lookup, avoiding per-node offset tables.
+
 use crate::graph::NodeId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -9,173 +16,222 @@ impl RelationId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct RelationData<R> {
-    participants: Vec<NodeId>,
-    data: R,
-}
-
-impl<R: PartialEq> PartialEq for RelationSet<R> {
-    fn eq(&self, other: &Self) -> bool {
-        self.relation_count == other.relation_count && self.relations == other.relations
-    }
-}
-
-impl<R: Eq> Eq for RelationSet<R> {}
-
-/// A typed set of relations (hyperedges) over a shared `NodeId` space.
-///
-/// Each relation connects one or more nodes and carries data of type `R`.
-/// Per-node incidence lists enable O(incident) removal when a node is
-/// deleted from the parent graph.
-#[derive(Clone, Debug)]
-pub struct RelationSet<R> {
-    relations: Vec<Option<RelationData<R>>>,
-    incidence: Vec<Vec<RelationId>>,
+fn build_incidence<'a>(
     relation_count: usize,
-    free: Vec<RelationId>,
+    participants_of: impl Fn(usize) -> &'a [NodeId],
+) -> (Vec<NodeId>, Vec<RelationId>) {
+    let mut entries: Vec<(NodeId, RelationId)> = Vec::new();
+    for i in 0..relation_count {
+        let rid = RelationId(i as u32);
+        for &node in participants_of(i) {
+            entries.push((node, rid));
+        }
+    }
+    entries.sort_by_key(|&(node, _)| node);
+
+    let nodes = entries.iter().map(|&(n, _)| n).collect();
+    let rels = entries.iter().map(|&(_, r)| r).collect();
+    (nodes, rels)
 }
 
-impl<R> RelationSet<R> {
-    pub fn new() -> Self {
+/// Fixed-arity relation set. Each relation connects exactly N nodes.
+///
+/// Flat CSR storage: participants are `Vec<[NodeId; N]>`, incidence is
+/// a flat array with offset table. No heap allocations per node or
+/// per relation.
+#[derive(Clone, Debug)]
+pub struct FixedRelationSet<R, const N: usize> {
+    participants: Vec<[NodeId; N]>,
+    data: Vec<R>,
+    incidence_nodes: Vec<NodeId>,
+    incidence_rels: Vec<RelationId>,
+}
+
+impl<R: PartialEq, const N: usize> PartialEq for FixedRelationSet<R, N> {
+    fn eq(&self, other: &Self) -> bool {
+        self.participants == other.participants && self.data == other.data
+    }
+}
+
+impl<R: Eq, const N: usize> Eq for FixedRelationSet<R, N> {}
+
+impl<R, const N: usize> FixedRelationSet<R, N> {
+    pub fn new(entries: Vec<([NodeId; N], R)>) -> Self {
+        let mut participants = Vec::with_capacity(entries.len());
+        let mut data = Vec::with_capacity(entries.len());
+        for (p, d) in entries {
+            participants.push(p);
+            data.push(d);
+        }
+
+        let (incidence_nodes, incidence_rels) =
+            build_incidence(participants.len(), |i| &participants[i]);
+
         Self {
-            relations: Vec::new(),
-            incidence: Vec::new(),
-            relation_count: 0,
-            free: Vec::new(),
+            participants,
+            data,
+            incidence_nodes,
+            incidence_rels,
         }
-    }
-
-    /// Ensure incidence tracking covers at least `node_bound` node slots.
-    /// Call this when the parent graph grows.
-    pub fn ensure_node_bound(&mut self, node_bound: usize) {
-        if self.incidence.len() < node_bound {
-            self.incidence.resize_with(node_bound, Vec::new);
-        }
-    }
-
-    pub fn add(&mut self, participants: Vec<NodeId>, data: R) -> RelationId {
-        let id = if let Some(id) = self.free.pop() {
-            self.relations[id.index()] = Some(RelationData {
-                participants: participants.clone(),
-                data,
-            });
-            id
-        } else {
-            let id = RelationId(self.relations.len() as u32);
-            self.relations.push(Some(RelationData {
-                participants: participants.clone(),
-                data,
-            }));
-            id
-        };
-
-        for &node in &participants {
-            let idx = node.index();
-            if idx >= self.incidence.len() {
-                self.incidence.resize_with(idx + 1, Vec::new);
-            }
-            self.incidence[idx].push(id);
-        }
-
-        self.relation_count += 1;
-        id
-    }
-
-    pub fn remove(&mut self, id: RelationId) -> Option<R> {
-        let rel = self.relations.get_mut(id.index())?.take()?;
-        for &node in &rel.participants {
-            if node.index() < self.incidence.len() {
-                self.incidence[node.index()].retain(|&r| r != id);
-            }
-        }
-        self.free.push(id);
-        self.relation_count -= 1;
-        Some(rel.data)
-    }
-
-    /// Remove all relations that reference `node`. Returns the count removed.
-    pub fn remove_participant(&mut self, node: NodeId) -> usize {
-        if node.index() >= self.incidence.len() {
-            return 0;
-        }
-        let incident: Vec<RelationId> = self.incidence[node.index()].drain(..).collect();
-        let mut removed = 0;
-        for rel_id in incident {
-            if let Some(rel) = self.relations[rel_id.index()].take() {
-                for &other in &rel.participants {
-                    if other != node && other.index() < self.incidence.len() {
-                        self.incidence[other.index()].retain(|&r| r != rel_id);
-                    }
-                }
-                self.free.push(rel_id);
-                self.relation_count -= 1;
-                removed += 1;
-            }
-        }
-        removed
-    }
-
-    pub fn contains(&self, id: RelationId) -> bool {
-        self.relations
-            .get(id.index())
-            .is_some_and(|r| r.is_some())
-    }
-
-    pub fn data(&self, id: RelationId) -> Option<&R> {
-        self.relations.get(id.index())?.as_ref().map(|r| &r.data)
-    }
-
-    pub fn data_mut(&mut self, id: RelationId) -> Option<&mut R> {
-        self.relations
-            .get_mut(id.index())?
-            .as_mut()
-            .map(|r| &mut r.data)
-    }
-
-    pub fn participants(&self, id: RelationId) -> Option<&[NodeId]> {
-        self.relations
-            .get(id.index())?
-            .as_ref()
-            .map(|r| r.participants.as_slice())
-    }
-
-    /// Relations incident to a node.
-    pub fn incident(&self, node: NodeId) -> &[RelationId] {
-        if node.index() < self.incidence.len() {
-            &self.incidence[node.index()]
-        } else {
-            &[]
-        }
-    }
-
-    /// Whether a node participates in any relation in this set.
-    pub fn has_incident(&self, node: NodeId) -> bool {
-        !self.incident(node).is_empty()
     }
 
     pub fn relation_count(&self) -> usize {
-        self.relation_count
+        self.data.len()
     }
 
-    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> + '_ {
-        self.relations
-            .iter()
-            .enumerate()
-            .filter_map(|(i, r)| r.as_ref().map(|_| RelationId(i as u32)))
+    pub fn data(&self, id: RelationId) -> &R {
+        &self.data[id.index()]
+    }
+
+    pub fn data_mut(&mut self, id: RelationId) -> &mut R {
+        &mut self.data[id.index()]
+    }
+
+    pub fn participants(&self, id: RelationId) -> &[NodeId; N] {
+        &self.participants[id.index()]
+    }
+
+    pub fn incident(&self, node: NodeId) -> &[RelationId] {
+        let start = self.incidence_nodes.partition_point(|n| *n < node);
+        let end = start + self.incidence_nodes[start..].partition_point(|n| *n <= node);
+        &self.incidence_rels[start..end]
+    }
+
+    pub fn has_incident(&self, node: NodeId) -> bool {
+        self.incidence_nodes.binary_search(&node).is_ok()
+    }
+
+    pub fn contains(&self, id: RelationId) -> bool {
+        id.index() < self.data.len()
+    }
+
+    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
+        (0..self.data.len() as u32).map(RelationId)
+    }
+
+}
+
+impl<R, const N: usize> Default for FixedRelationSet<R, N> {
+    fn default() -> Self {
+        Self {
+            participants: Vec::new(),
+            data: Vec::new(),
+            incidence_nodes: Vec::new(),
+            incidence_rels: Vec::new(),
+        }
     }
 }
 
-impl<R> Default for RelationSet<R> {
+/// Variable-arity relation set. Each relation connects an arbitrary
+/// number of nodes.
+///
+/// Flat CSR storage: participant ranges via offset table, incidence
+/// via a second offset table. No heap allocations per node or per
+/// relation.
+#[derive(Clone, Debug)]
+pub struct VarRelationSet<R> {
+    offsets: Vec<u32>,
+    participants: Vec<NodeId>,
+    data: Vec<R>,
+    incidence_nodes: Vec<NodeId>,
+    incidence_rels: Vec<RelationId>,
+}
+
+impl<R: PartialEq> PartialEq for VarRelationSet<R> {
+    fn eq(&self, other: &Self) -> bool {
+        self.offsets == other.offsets
+            && self.participants == other.participants
+            && self.data == other.data
+    }
+}
+
+impl<R: Eq> Eq for VarRelationSet<R> {}
+
+impl<R> VarRelationSet<R> {
+    pub fn new(entries: Vec<(Vec<NodeId>, R)>) -> Self {
+        let relation_count = entries.len();
+        let mut offsets = Vec::with_capacity(relation_count + 1);
+        offsets.push(0);
+
+        let total_participants: usize = entries.iter().map(|(p, _)| p.len()).sum();
+        let mut participants = Vec::with_capacity(total_participants);
+        let mut data = Vec::with_capacity(relation_count);
+
+        for (p, d) in entries {
+            participants.extend_from_slice(&p);
+            offsets.push(participants.len() as u32);
+            data.push(d);
+        }
+
+        let (incidence_nodes, incidence_rels) =
+            build_incidence(relation_count, |i| {
+                let start = offsets[i] as usize;
+                let end = offsets[i + 1] as usize;
+                &participants[start..end]
+            });
+
+        Self {
+            offsets,
+            participants,
+            data,
+            incidence_nodes,
+            incidence_rels,
+        }
+    }
+
+    pub fn relation_count(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn data(&self, id: RelationId) -> &R {
+        &self.data[id.index()]
+    }
+
+    pub fn data_mut(&mut self, id: RelationId) -> &mut R {
+        &mut self.data[id.index()]
+    }
+
+    pub fn participants(&self, id: RelationId) -> &[NodeId] {
+        let start = self.offsets[id.index()] as usize;
+        let end = self.offsets[id.index() + 1] as usize;
+        &self.participants[start..end]
+    }
+
+    pub fn incident(&self, node: NodeId) -> &[RelationId] {
+        let start = self.incidence_nodes.partition_point(|n| *n < node);
+        let end = start + self.incidence_nodes[start..].partition_point(|n| *n <= node);
+        &self.incidence_rels[start..end]
+    }
+
+    pub fn has_incident(&self, node: NodeId) -> bool {
+        self.incidence_nodes.binary_search(&node).is_ok()
+    }
+
+    pub fn contains(&self, id: RelationId) -> bool {
+        id.index() < self.data.len()
+    }
+
+    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
+        (0..self.data.len() as u32).map(RelationId)
+    }
+
+}
+
+impl<R> Default for VarRelationSet<R> {
     fn default() -> Self {
-        Self::new()
+        Self {
+            offsets: vec![0],
+            participants: Vec::new(),
+            data: Vec::new(),
+            incidence_nodes: Vec::new(),
+            incidence_rels: Vec::new(),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-
     use super::*;
 
     fn n(i: u32) -> NodeId {
@@ -183,108 +239,112 @@ mod tests {
     }
 
     #[test]
-    fn test_relation_set_add() {
-        let mut rs = RelationSet::<&str>::new();
-        let r = rs.add(vec![n(0), n(1)], "dative");
-        assert_eq!(rs.relation_count(), 1);
-        assert_eq!(rs.data(r), Some(&"dative"));
-        assert_eq!(rs.participants(r), Some(vec![n(0), n(1)].as_slice()));
+    fn test_fixed_relation_set_new() {
+        let rs: FixedRelationSet<&str, 2> = FixedRelationSet::new(
+            vec![([n(0), n(1)], "dative"), ([n(1), n(2)], "noncov")],
+        );
+        assert_eq!(rs.relation_count(), 2);
+        assert_eq!(rs.data(RelationId(0)), &"dative");
+        assert_eq!(rs.participants(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(rs.participants(RelationId(1)), &[n(1), n(2)]);
     }
 
     #[test]
-    fn test_relation_set_remove() {
-        let mut rs = RelationSet::<()>::new();
-        let r = rs.add(vec![n(0), n(1), n(2)], ());
-        assert_eq!(rs.remove(r), Some(()));
+    fn test_fixed_relation_set_incidence() {
+        let rs: FixedRelationSet<(), 2> = FixedRelationSet::new(vec![
+            ([n(0), n(1)], ()),
+            ([n(0), n(2)], ()),
+            ([n(2), n(3)], ()),
+        ]);
+        assert_eq!(rs.incident(n(0)), &[RelationId(0), RelationId(1)]);
+        assert_eq!(rs.incident(n(1)), &[RelationId(0)]);
+        assert_eq!(rs.incident(n(2)), &[RelationId(1), RelationId(2)]);
+        assert_eq!(rs.incident(n(3)), &[RelationId(2)]);
+        assert!(rs.has_incident(n(0)));
+        assert!(!rs.has_incident(n(5)));
+    }
+
+    #[test]
+    fn test_fixed_relation_set_data_mut() {
+        let mut rs: FixedRelationSet<i32, 2> =
+            FixedRelationSet::new(vec![([n(0), n(1)], 1)]);
+        *rs.data_mut(RelationId(0)) = 99;
+        assert_eq!(rs.data(RelationId(0)), &99);
+    }
+
+    #[test]
+    fn test_fixed_relation_set_default() {
+        let rs = FixedRelationSet::<(), 2>::default();
         assert_eq!(rs.relation_count(), 0);
-        assert!(!rs.contains(r));
         assert!(!rs.has_incident(n(0)));
-        assert!(!rs.has_incident(n(1)));
-        assert!(!rs.has_incident(n(2)));
     }
 
     #[test]
-    fn test_relation_set_remove_participant() {
-        let mut rs = RelationSet::<&str>::new();
-        let r1 = rs.add(vec![n(0), n(1)], "bond_a");
-        let r2 = rs.add(vec![n(1), n(2)], "bond_b");
-        let r3 = rs.add(vec![n(2), n(3)], "bond_c");
-
-        let removed = rs.remove_participant(n(1));
-        assert_eq!(removed, 2);
-        assert_eq!(rs.relation_count(), 1);
-        assert!(!rs.contains(r1));
-        assert!(!rs.contains(r2));
-        assert!(rs.contains(r3));
-        // n(0) was co-participant in r1, should have no incident relations left
-        assert!(!rs.has_incident(n(0)));
-        // n(2) was in r2 (removed) and r3 (kept)
-        assert_eq!(rs.incident(n(2)), &[RelationId(2)]);
-    }
-
-    #[test]
-    fn test_relation_set_nary() {
-        let mut rs = RelationSet::<()>::new();
-        let r = rs.add(vec![n(0), n(1), n(2), n(3), n(4), n(5)], ());
-        assert!(rs.has_incident(n(3)));
-        assert_eq!(rs.participants(r).unwrap().len(), 6);
-
-        rs.remove_participant(n(2));
-        assert_eq!(rs.relation_count(), 0);
-        // All co-participants cleaned
-        for i in 0..6 {
-            assert!(!rs.has_incident(n(i)));
-        }
-    }
-
-    #[test]
-    fn test_relation_set_free_list_reuse() {
-        let mut rs = RelationSet::<i32>::new();
-        let r1 = rs.add(vec![n(0)], 10);
-        rs.remove(r1);
-        let r2 = rs.add(vec![n(1)], 20);
-        assert_eq!(r2, RelationId(0));
-        assert_eq!(rs.data(r2), Some(&20));
-    }
-
-    #[test]
-    fn test_relation_set_incident() {
-        let mut rs = RelationSet::<()>::new();
-        let r1 = rs.add(vec![n(0), n(1)], ());
-        let r2 = rs.add(vec![n(0), n(2)], ());
-        let _r3 = rs.add(vec![n(3), n(4)], ());
-
-        let mut inc: Vec<RelationId> = rs.incident(n(0)).to_vec();
-        inc.sort();
-        assert_eq!(inc, vec![r1, r2]);
-
-        assert!(rs.incident(n(3)).len() == 1);
-        assert!(rs.incident(n(5)).is_empty());
-    }
-
-    #[test]
-    fn test_relation_set_data_mut() {
-        let mut rs = RelationSet::<i32>::new();
-        let r = rs.add(vec![n(0)], 1);
-        *rs.data_mut(r).unwrap() = 99;
-        assert_eq!(rs.data(r), Some(&99));
-    }
-
-    #[test]
-    fn test_relation_set_remove_nonexistent() {
-        let mut rs = RelationSet::<()>::new();
-        assert_eq!(rs.remove(RelationId(0)), None);
-        assert_eq!(rs.remove_participant(n(0)), 0);
-    }
-
-    #[test]
-    fn test_relation_set_relation_ids() {
-        let mut rs = RelationSet::<()>::new();
-        let r1 = rs.add(vec![n(0)], ());
-        let r2 = rs.add(vec![n(1)], ());
-        let r3 = rs.add(vec![n(2)], ());
-        rs.remove(r2);
+    fn test_fixed_relation_set_relation_ids() {
+        let rs: FixedRelationSet<(), 2> = FixedRelationSet::new(
+            vec![([n(0), n(1)], ()), ([n(1), n(2)], ())],
+        );
         let ids: Vec<RelationId> = rs.relation_ids().collect();
-        assert_eq!(ids, vec![r1, r3]);
+        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
+    }
+
+    #[test]
+    fn test_var_relation_set_new() {
+        let rs: VarRelationSet<&str> = VarRelationSet::new(vec![
+            (vec![n(0), n(1), n(2), n(3), n(4), n(5)], "benzene"),
+        ]);
+        assert_eq!(rs.relation_count(), 1);
+        assert_eq!(rs.data(RelationId(0)), &"benzene");
+        assert_eq!(
+            rs.participants(RelationId(0)),
+            &[n(0), n(1), n(2), n(3), n(4), n(5)]
+        );
+    }
+
+    #[test]
+    fn test_var_relation_set_incidence() {
+        let rs: VarRelationSet<()> = VarRelationSet::new(vec![
+            (vec![n(0), n(1), n(2)], ()),
+            (vec![n(2), n(3), n(4)], ()),
+        ]);
+        assert_eq!(rs.incident(n(0)), &[RelationId(0)]);
+        assert_eq!(rs.incident(n(2)), &[RelationId(0), RelationId(1)]);
+        assert_eq!(rs.incident(n(4)), &[RelationId(1)]);
+        assert!(rs.has_incident(n(0)));
+        assert!(!rs.has_incident(n(7)));
+    }
+
+    #[test]
+    fn test_var_relation_set_variable_arity() {
+        let rs: VarRelationSet<&str> = VarRelationSet::new(vec![
+            (vec![n(0), n(1)], "pair"),
+            (vec![n(2), n(3), n(4), n(5)], "quad"),
+        ]);
+        assert_eq!(rs.participants(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(rs.participants(RelationId(1)), &[n(2), n(3), n(4), n(5)]);
+    }
+
+    #[test]
+    fn test_var_relation_set_data_mut() {
+        let mut rs: VarRelationSet<i32> =
+            VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], 1)]);
+        *rs.data_mut(RelationId(0)) = 99;
+        assert_eq!(rs.data(RelationId(0)), &99);
+    }
+
+    #[test]
+    fn test_var_relation_set_default() {
+        let rs = VarRelationSet::<()>::default();
+        assert_eq!(rs.relation_count(), 0);
+        assert!(!rs.has_incident(n(0)));
+    }
+
+    #[test]
+    fn test_var_relation_set_relation_ids() {
+        let rs: VarRelationSet<()> = VarRelationSet::new(
+            vec![(vec![n(0), n(1)], ()), (vec![n(1), n(2)], ())],
+        );
+        let ids: Vec<RelationId> = rs.relation_ids().collect();
+        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
     }
 }

@@ -67,14 +67,11 @@ fn a(e: Element) -> AtomAst {
 }
 
 fn mol(atoms: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> MoleculeAst {
-    let mut ast = MoleculeAst::default();
-    for atom in atoms {
-        ast.add_atom(atom);
-    }
-    for (s, t, b) in bonds {
-        ast.add_bond(AtomIdx(s as u32), AtomIdx(t as u32), b);
-    }
-    ast
+    let bond_list: Vec<(AtomIdx, AtomIdx, BondAst)> = bonds
+        .into_iter()
+        .map(|(s, t, b)| (AtomIdx(s as u32), AtomIdx(t as u32), b))
+        .collect();
+    MoleculeAst::new(atoms, bond_list, vec![], vec![], vec![], vec![], vec![])
 }
 
 // C(C)C(C)N — 5 atoms, 4 single bonds

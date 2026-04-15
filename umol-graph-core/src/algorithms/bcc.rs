@@ -1,8 +1,10 @@
+//! Biconnected components and articulation point detection.
+
 use std::collections::HashSet;
 
 use crate::graph::{Graph, NodeId};
 
-impl<N, E> Graph<N, E> {
+impl Graph {
     /// Biconnected components with at least 3 nodes (ring-containing).
     pub fn biconnected_components(&self) -> Vec<Vec<NodeId>> {
         let bound = self.node_bound();
@@ -115,52 +117,41 @@ mod tests {
 
     #[test]
     fn test_graph_biconnected_components_empty() {
-        let g = Graph::<(), ()>::new();
+        let g = Graph::default();
         assert!(g.biconnected_components().is_empty());
     }
 
     #[test]
     fn test_graph_biconnected_components_chain() {
-        let g = Graph::<(), ()>::from_edges(
-            4,
-            vec![(0, 1, ()), (1, 2, ()), (2, 3, ())],
-        );
+        let g = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
         assert!(g.biconnected_components().is_empty());
     }
 
     #[rstest]
     #[case::single_cycle(
         4,
-        vec![(0, 1, ()), (1, 2, ()), (2, 3, ()), (3, 0, ())],
+        vec![[0, 1], [1, 2], [2, 3], [3, 0]],
         vec![vec![n(0), n(1), n(2), n(3)]]
     )]
     #[case::hexagon(
         6,
-        vec![(0, 1, ()), (1, 2, ()), (2, 3, ()), (3, 4, ()), (4, 5, ()), (5, 0, ())],
+        vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]],
         vec![vec![n(0), n(1), n(2), n(3), n(4), n(5)]]
     )]
     fn test_graph_biconnected_components(
         #[case] node_count: usize,
-        #[case] edges: Vec<(u32, u32, ())>,
+        #[case] edges: Vec<[u32; 2]>,
         #[case] expected: Vec<Vec<NodeId>>,
     ) {
-        let g = Graph::<(), _>::from_edges(node_count, edges);
+        let g = Graph::new(node_count, &edges);
         assert_eq!(g.biconnected_components(), expected);
     }
 
     #[test]
     fn test_graph_biconnected_components_articulation() {
-        // Two triangles sharing node 2
-        let g = Graph::<(), ()>::from_edges(
+        let g = Graph::new(
             5,
-            vec![
-                (0, 1, ()),
-                (1, 2, ()),
-                (0, 2, ()),
-                (2, 3, ()),
-                (3, 4, ()),
-                (2, 4, ()),
-            ],
+            &[[0, 1], [1, 2], [0, 2], [2, 3], [3, 4], [2, 4]],
         );
         let mut bcc = g.biconnected_components();
         bcc.sort();
@@ -169,10 +160,7 @@ mod tests {
 
     #[test]
     fn test_graph_biconnected_components_disconnected() {
-        let g = Graph::<(), ()>::from_edges(
-            5,
-            vec![(0, 1, ()), (1, 2, ()), (0, 2, ()), (3, 4, ())],
-        );
+        let g = Graph::new(5, &[[0, 1], [1, 2], [0, 2], [3, 4]]);
         assert_eq!(
             g.biconnected_components(),
             vec![vec![n(0), n(1), n(2)]]

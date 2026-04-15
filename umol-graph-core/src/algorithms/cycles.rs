@@ -1,8 +1,10 @@
+//! Relevant cycle enumeration via Vismara's algorithm.
+
 use std::collections::HashSet;
 
 use crate::graph::{Graph, NodeId};
 
-impl<N, E> Graph<N, E> {
+impl Graph {
     pub fn enumerate_simple_cycles(&self, max_cycle_size: usize) -> Vec<Vec<NodeId>> {
         if max_cycle_size < 3 || self.node_count() < 3 {
             return Vec::new();
@@ -101,42 +103,33 @@ mod tests {
     #[rstest]
     #[case::hexagon(
         6,
-        vec![(0, 1, ()), (1, 2, ()), (2, 3, ()), (3, 4, ()), (4, 5, ()), (5, 0, ())],
+        vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]],
         6,
         vec![vec![n(0), n(1), n(2), n(3), n(4), n(5)]]
     )]
     #[case::two_fused_triangles(
         5,
-        vec![(0, 1, ()), (1, 2, ()), (0, 2, ()), (2, 3, ()), (3, 4, ()), (2, 4, ())],
+        vec![[0, 1], [1, 2], [0, 2], [2, 3], [3, 4], [2, 4]],
         5,
         vec![vec![n(0), n(1), n(2)], vec![n(2), n(3), n(4)]]
     )]
     fn test_graph_enumerate_simple_cycles(
         #[case] node_count: usize,
-        #[case] edges: Vec<(u32, u32, ())>,
+        #[case] edges: Vec<[u32; 2]>,
         #[case] max_size: usize,
         #[case] expected: Vec<Vec<NodeId>>,
     ) {
-        let g = Graph::<(), _>::from_edges(node_count, edges);
+        let g = Graph::new(node_count, &edges);
         assert_eq!(g.enumerate_simple_cycles(max_size), expected);
     }
 
     #[test]
     fn test_graph_enumerate_simple_cycles_naphthalene() {
-        let g = Graph::<(), ()>::from_edges(
+        let g = Graph::new(
             10,
-            vec![
-                (0, 1, ()),
-                (1, 2, ()),
-                (2, 3, ()),
-                (3, 4, ()),
-                (4, 5, ()),
-                (5, 0, ()),
-                (3, 6, ()),
-                (6, 7, ()),
-                (7, 8, ()),
-                (8, 9, ()),
-                (9, 4, ()),
+            &[
+                [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0],
+                [3, 6], [6, 7], [7, 8], [8, 9], [9, 4],
             ],
         );
         let cycles = g.enumerate_simple_cycles(10);
@@ -145,10 +138,7 @@ mod tests {
 
     #[test]
     fn test_graph_enumerate_simple_cycles_max_size_cutoff() {
-        let g = Graph::<(), ()>::from_edges(
-            5,
-            vec![(0, 1, ()), (1, 2, ()), (2, 3, ()), (3, 4, ()), (4, 0, ())],
-        );
+        let g = Graph::new(5, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]]);
         assert!(g.enumerate_simple_cycles(4).is_empty());
         assert_eq!(
             g.enumerate_simple_cycles(5),
@@ -158,7 +148,7 @@ mod tests {
 
     #[test]
     fn test_graph_enumerate_simple_cycles_empty() {
-        let g = Graph::<(), ()>::from_edges(3, vec![(0, 1, ()), (1, 2, ())]);
+        let g = Graph::new(3, &[[0, 1], [1, 2]]);
         assert!(g.enumerate_simple_cycles(10).is_empty());
     }
 }
