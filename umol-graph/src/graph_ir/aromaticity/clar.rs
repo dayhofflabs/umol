@@ -16,15 +16,13 @@ use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::algorithms::maximum_independent_set;
 use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
-use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
 
 #[derive(Clone, Debug)]
 pub struct ClarAromaticity;
 
 impl ClarAromaticity {
-    pub fn find_from_ast(
+    pub fn find_from_rings(
         &self,
         ast: &MoleculeAst,
         rings: &RingSet,
@@ -48,7 +46,7 @@ impl ClarAromaticity {
                 };
                 cycle.len() == 6
                     && cycle.atoms().iter().all(|&atom| {
-                        let a = ast.atom(AtomIdx(atom.index() as u32));
+                        let a = ast.atom(atom);
                         matches!(a.element, ElementAst::Lit(Element::C))
                             && matches!(
                                 a.aromatic_valence,
@@ -67,7 +65,7 @@ impl ClarAromaticity {
             return Ok(Vec::new());
         }
 
-        let selected_atoms: HashSet<AtomIndex> = best_sextet_indices
+        let selected_atoms: HashSet<AtomIdx> = best_sextet_indices
             .iter()
             .filter_map(|&i| rings.ring(i))
             .flat_map(|r| r.atoms().iter().copied())
@@ -76,80 +74,13 @@ impl ClarAromaticity {
         let contributions: Vec<AromaticContribution> = selected_atoms
             .iter()
             .map(|&atom| {
-                let a = ast.atom(AtomIdx(atom.index() as u32));
+                let a = ast.atom(atom);
                 let valence = match a.aromatic_valence {
                     AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
                     _ => 0,
                 };
                 AromaticContribution::new(atom, valence)
             })
-            .collect();
-
-        let selected_rings: Vec<Ring> = best_sextet_indices
-            .iter()
-            .filter_map(|&ring_idx| rings.ring(ring_idx).cloned())
-            .collect();
-
-        Ok(vec![AromaticSystem::with_rings(
-            contributions,
-            selected_rings,
-        )])
-    }
-
-    pub fn find_from_rings(
-        &self,
-        builder: &MoleculeBuilder,
-        rings: &RingSet,
-    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
-        let has_non_benzenoid_aromatic = builder.atom_indices().any(|atom| {
-            builder.atom(atom).is_some_and(|a| {
-                builder.atom_has_aromatic_candidate(atom) && a.element() != Element::C
-            })
-        });
-        if has_non_benzenoid_aromatic {
-            return Err(AromaticityError::ClarInputError(
-                "Clar model requires benzenoid input but non-carbon aromatic atoms are present"
-                    .to_string(),
-            ));
-        }
-
-        let sextet_indices: Vec<RingIndex> = rings
-            .ring_indices()
-            .filter(|&i| {
-                let Some(cycle) = rings.ring(i) else {
-                    return false;
-                };
-                cycle.len() == 6
-                    && cycle.atoms().iter().all(|&atom| {
-                        builder
-                            .atom(atom)
-                            .map(|a| {
-                                a.element() == Element::C
-                                    && builder.atom_has_aromatic_candidate(atom)
-                            })
-                            .unwrap_or(false)
-                    })
-            })
-            .collect();
-
-        if sextet_indices.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let best_sextet_indices = select_disjoint_sextets(rings, &sextet_indices);
-        if best_sextet_indices.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let selected_atoms: HashSet<AtomIndex> = best_sextet_indices
-            .iter()
-            .filter_map(|&i| rings.ring(i))
-            .flat_map(|r| r.atoms().iter().copied())
-            .collect();
-
-        let contributions: Vec<AromaticContribution> = selected_atoms
-            .iter()
-            .map(|&atom| AromaticContribution::new(atom, builder.atom_aromatic_valence(atom)))
             .collect();
 
         let selected_rings: Vec<Ring> = best_sextet_indices
@@ -169,9 +100,7 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIndex]) -> Vec<Rin
         return Vec::new();
     }
 
-    // Domain adapter invariant: candidates are mapped to contiguous integer
-    // ids in stable input order, then mapped back after MIS selection.
-    let candidate_atoms: Vec<HashSet<AtomIndex>> = candidates
+    let candidate_atoms: Vec<HashSet<AtomIdx>> = candidates
         .iter()
         .map(|&ring_idx| {
             rings
@@ -199,44 +128,67 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIndex]) -> Vec<Rin
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
+    use umol_shared::element::Element;
+    use umol_shared::value_ast::ValueAst;
 
     use super::*;
-    use crate::graph_ir::bond_pattern::BondPattern;
+    use crate::ast::AtomIdx;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::molecule::MoleculeAst;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
-    const C1: &str = "C#h#v2#a";
-    const C0: &str = "C#v4";
 
-    fn make_ring(atom_specs: &[&str]) -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = atom_specs
-            .iter()
-            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
-            .collect();
-        let n = atoms.len();
-        for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
+    fn aromatic_atom(element: Element, pi: i64) -> AtomAst {
+        AtomAst {
+            element: ElementAst::Lit(element),
+            aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(pi)),
+            ..Default::default()
         }
-        builder
     }
 
-    fn make_fused(atom_specs: &[&str], edges: &[(usize, usize)]) -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = atom_specs
-            .iter()
-            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
+    fn make_ring(atoms: Vec<AtomAst>) -> MoleculeAst {
+        let n = atoms.len();
+        let bonds: Vec<_> = (0..n)
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx(((i + 1) % n) as u32),
+                    BondAst::from_order(1),
+                )
+            })
             .collect();
-        for &(a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
-        }
-        builder
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+    }
+
+    fn make_fused(atoms: Vec<AtomAst>, edges: &[(usize, usize)]) -> MoleculeAst {
+        let bonds: Vec<_> = edges
+            .iter()
+            .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
+            .collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+    }
+
+    fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingIndex> {
+        ring_info
+            .ring_indices()
+            .filter(|&i| {
+                ring_info.ring(i).is_some_and(|cycle| {
+                    cycle.len() == 6
+                        && cycle.atoms().iter().all(|&atom| {
+                            matches!(ast.atom(atom).element, ElementAst::Lit(Element::C))
+                        })
+                })
+            })
+            .collect()
     }
 
     #[rustfmt::skip]
     #[fixture]
-    fn naphthalene() -> MoleculeBuilder {
+    fn naphthalene() -> MoleculeAst {
         make_fused(
-            &[C1; 10],
+            vec![aromatic_atom(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
                 (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -246,9 +198,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn phenanthrene() -> MoleculeBuilder {
+    fn phenanthrene() -> MoleculeAst {
         make_fused(
-            &[C1; 14],
+            vec![aromatic_atom(Element::C, 1); 14],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
                 (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -259,13 +211,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn coronene() -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = (0..24)
-            .map(|_| builder.add_resolved_atom(C1.parse().unwrap()))
-            .collect();
+    fn coronene() -> MoleculeAst {
+        let atoms = vec![aromatic_atom(Element::C, 1); 24];
+        let mut edges = Vec::new();
         for i in 0..6 {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % 6], BondPattern::new(1));
+            edges.push((i, (i + 1) % 6));
         }
         for i in 0..6 {
             let a = i;
@@ -273,67 +223,46 @@ mod tests {
             let c = 6 + i * 3;
             let d = 6 + i * 3 + 1;
             let e = 6 + i * 3 + 2;
-            builder.add_bond_unchecked(atoms[a], atoms[c], BondPattern::new(1));
-            builder.add_bond_unchecked(atoms[c], atoms[d], BondPattern::new(1));
-            builder.add_bond_unchecked(atoms[d], atoms[e], BondPattern::new(1));
-            builder.add_bond_unchecked(atoms[e], atoms[b], BondPattern::new(1));
+            edges.push((a, c));
+            edges.push((c, d));
+            edges.push((d, e));
+            edges.push((e, b));
         }
         for i in 0..6 {
             let this_last = 6 + i * 3 + 2;
             let next_first = 6 + ((i + 1) % 6) * 3;
-            builder.add_bond_unchecked(
-                atoms[this_last],
-                atoms[next_first],
-                BondPattern::new(1),
-            );
+            edges.push((this_last, next_first));
         }
-        builder
-    }
-
-    fn hex_ring_indices(builder: &MoleculeBuilder, ring_info: &RingSet) -> Vec<RingIndex> {
-        ring_info
-            .ring_indices()
-            .filter(|&i| {
-                ring_info.ring(i).is_some_and(|cycle| {
-                    cycle.len() == 6
-                        && cycle.atoms().iter().all(|&atom| {
-                            builder
-                                .atom(atom)
-                                .map(|a| a.element() == Element::C)
-                                .unwrap_or(false)
-                        })
-                })
-            })
-            .collect()
+        make_fused(atoms, &edges)
     }
 
     #[rstest]
-    #[case::benzene(make_ring(&[C1; 6]), 1)]
+    #[case::benzene(make_ring(vec![aromatic_atom(Element::C, 1); 6]), 1)]
     #[case::naphthalene(naphthalene(), 1)]
     #[case::phenanthrene(phenanthrene(), 2)]
     #[case::coronene(coronene(), 3)]
-    fn test_clar_model_sextet_count(
-        #[case] builder: MoleculeBuilder,
+    fn test_clar_aromaticity_sextet_count(
+        #[case] ast: MoleculeAst,
         #[case] expected_sextets: usize,
     ) {
         let ring_info = RingEnumerator::new(
             RingFamily::InducedBenzenoid,
             &RingEnumerationStrategy::default(),
         )
-        .enumerate_builder(&builder);
-        let candidates = hex_ring_indices(&builder, &ring_info);
+        .enumerate(&ast);
+        let candidates = hex_ring_indices(&ast, &ring_info);
         let sextets = select_disjoint_sextets(&ring_info, &candidates);
         assert_eq!(sextets.len(), expected_sextets);
     }
 
     #[rstest]
-    #[case::benzene(make_ring(&[C1; 6]), 1, Some(6))]
+    #[case::benzene(make_ring(vec![aromatic_atom(Element::C, 1); 6]), 1, Some(6))]
     #[case::naphthalene(naphthalene(), 1, Some(6))]
     #[case::phenanthrene(phenanthrene(), 1, Some(12))]
     #[case::coronene(coronene(), 1, Some(18))]
-    #[case::cyclohexane(make_ring(&[C0; 6]), 0, None)]
-    fn test_clar_model_find_from_rings(
-        #[case] builder: MoleculeBuilder,
+    #[case::cyclohexane(make_ring(vec![AtomAst::from_element(Element::C); 6]), 0, None)]
+    fn test_clar_aromaticity_find_from_rings(
+        #[case] ast: MoleculeAst,
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
@@ -341,9 +270,9 @@ mod tests {
             RingFamily::InducedBenzenoid,
             &RingEnumerationStrategy::default(),
         )
-        .enumerate_builder(&builder);
+        .enumerate(&ast);
         let model = ClarAromaticity;
-        let systems = model.find_from_rings(&builder, &rings).unwrap();
+        let systems = model.find_from_rings(&ast, &rings).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(
             systems.first().map(|s| s.contributions().len()),
@@ -360,7 +289,7 @@ mod tests {
                 })
                 .collect();
             let expected_selected: HashSet<RingIndex> =
-                select_disjoint_sextets(&rings, &hex_ring_indices(&builder, &rings))
+                select_disjoint_sextets(&rings, &hex_ring_indices(&ast, &rings))
                     .into_iter()
                     .collect();
             assert_eq!(ring_set, expected_selected);
@@ -368,26 +297,45 @@ mod tests {
     }
 
     #[rstest]
-    #[case::pyrrole(make_ring(&["N#h#v2#a2", C1, C1, C1, C1]))]
-    #[case::pyridine(make_ring(&["N#n#v2#a", C1, C1, C1, C1, C1]))]
-    #[case::furan(make_ring(&["O#n#v2#a2", C1, C1, C1, C1]))]
-    fn test_clar_model_find_from_rings_error(#[case] builder: MoleculeBuilder) {
+    #[case::pyrrole(make_ring(vec![
+        aromatic_atom(Element::N, 2),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+    ]))]
+    #[case::pyridine(make_ring(vec![
+        aromatic_atom(Element::N, 1),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+    ]))]
+    #[case::furan(make_ring(vec![
+        aromatic_atom(Element::O, 2),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+        aromatic_atom(Element::C, 1),
+    ]))]
+    fn test_clar_aromaticity_find_from_rings_error(#[case] ast: MoleculeAst) {
         let rings = RingEnumerator::new(
             RingFamily::InducedBenzenoid,
             &RingEnumerationStrategy::default(),
         )
-        .enumerate_builder(&builder);
+        .enumerate(&ast);
         let model = ClarAromaticity;
-        assert!(model.find_from_rings(&builder, &rings).is_err());
+        assert!(model.find_from_rings(&ast, &rings).is_err());
     }
 
     #[rstest]
-    fn test_clar_solver(phenanthrene: MoleculeBuilder) {
+    fn test_clar_aromaticity_solver(phenanthrene: MoleculeAst) {
         let ring_info = RingEnumerator::new(
             RingFamily::InducedBenzenoid,
             &RingEnumerationStrategy::default(),
         )
-        .enumerate_builder(&phenanthrene);
+        .enumerate(&phenanthrene);
         let candidates = hex_ring_indices(&phenanthrene, &ring_info);
         let sextets = select_disjoint_sextets(&ring_info, &candidates);
         assert_eq!(sextets.len(), 2);

@@ -62,17 +62,16 @@ impl AromaticityConfig {
             }
         };
         let enumerator = RingEnumerator::new(ring_family, &self.ring_enumeration);
-        let rings = enumerator.enumerate_ast(ast);
+        let rings = enumerator.enumerate(ast);
         let model = AromaticityModel::new(&self.strategy);
-        let systems = model.aromatic_systems_ast(ast, &rings)?;
+        let systems = model.aromatic_systems(ast, &rings)?;
         if systems.is_empty() {
             return Ok(Progress::Fixpoint);
         }
         let entries: Vec<(Vec<AtomIdx>, AromaticSystemAst)> = systems
             .iter()
             .map(|sys| {
-                let atoms: Vec<AtomIdx> =
-                    sys.atoms().map(|a| AtomIdx(a.index() as u32)).collect();
+                let atoms: Vec<AtomIdx> = sys.atoms().collect();
                 (atoms, AromaticSystemAst {})
             })
             .collect();

@@ -15,10 +15,9 @@ pub use hueckel_rule::*;
 use thiserror::Error;
 use umol_shared::spin::SpinState;
 
+use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
 use crate::graph_ir::config::AromaticityStrategy;
-use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingSet};
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -40,19 +39,19 @@ pub enum AromaticityError {
 /// Per-atom contribution to an aromatic system.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AromaticContribution {
-    atom: AtomIndex,
+    atom: AtomIdx,
     aromatic_valence: u8,
 }
 
 impl AromaticContribution {
-    pub fn new(atom: AtomIndex, aromatic_valence: u8) -> Self {
+    pub fn new(atom: AtomIdx, aromatic_valence: u8) -> Self {
         Self {
             atom,
             aromatic_valence,
         }
     }
 
-    pub fn atom(&self) -> AtomIndex {
+    pub fn atom(&self) -> AtomIdx {
         self.atom
     }
 
@@ -136,13 +135,13 @@ impl AromaticSystem {
         &self.rings
     }
 
-    pub fn contains_atom(&self, atom: AtomIndex) -> bool {
+    pub fn contains_atom(&self, atom: AtomIdx) -> bool {
         self.contributions
             .binary_search_by_key(&atom, |c| c.atom)
             .is_ok()
     }
 
-    pub fn atoms(&self) -> impl Iterator<Item = AtomIndex> + '_ {
+    pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
         self.contributions.iter().map(|c| c.atom)
     }
 }
@@ -176,31 +175,13 @@ impl AromaticityModel {
 
     pub fn aromatic_systems(
         &self,
-        builder: &MoleculeBuilder,
-        rings: &RingSet,
-    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
-        let mut systems = match self {
-            Self::HueckelRule(m) => Ok(m.find_from_rings(builder, rings)),
-            Self::Hmo(m) => m.find_from_rings(builder, rings),
-            Self::Clar(m) => m.find_from_rings(builder, rings),
-        }?;
-        systems.sort_by(|a, b| {
-            let min_a = a.atoms().min();
-            let min_b = b.atoms().min();
-            min_a.cmp(&min_b)
-        });
-        Ok(systems)
-    }
-
-    pub fn aromatic_systems_ast(
-        &self,
         ast: &MoleculeAst,
         rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, AromaticityError> {
         let mut systems = match self {
-            Self::HueckelRule(m) => Ok(m.find_from_ast(ast, rings)),
-            Self::Hmo(m) => m.find_from_ast(ast, rings),
-            Self::Clar(m) => m.find_from_ast(ast, rings),
+            Self::HueckelRule(m) => Ok(m.find_from_rings(ast, rings)),
+            Self::Hmo(m) => m.find_from_rings(ast, rings),
+            Self::Clar(m) => m.find_from_rings(ast, rings),
         }?;
         systems.sort_by(|a, b| {
             let min_a = a.atoms().min();

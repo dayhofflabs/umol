@@ -6,7 +6,6 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use index_vec::Idx;
 use nalgebra::{DMatrix, SymmetricEigen};
 use umol_shared::element::Element;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
@@ -18,8 +17,6 @@ use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
 use crate::graph_ir::config::ElementScope;
-use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingSet};
 
 #[derive(Clone, Debug)]
@@ -36,56 +33,6 @@ impl HmoAromaticity {
         }
     }
 
-    pub(crate) fn build_calculator(
-        &self,
-        builder: &MoleculeBuilder,
-        pi_atoms: &[AtomIndex],
-    ) -> Result<HmoCalculator, AromaticityError> {
-        let atom_to_idx: HashMap<AtomIndex, usize> =
-            pi_atoms.iter().enumerate().map(|(i, &a)| (a, i)).collect();
-
-        let mut h_values = Vec::with_capacity(pi_atoms.len());
-        let mut electron_count: u32 = 0;
-        let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(pi_atoms.len());
-        for &atom in pi_atoms {
-            let atom_data = builder
-                .atom(atom)
-                .ok_or_else(|| AromaticityError::HmoMissingAtom("missing atom".to_string()))?;
-            let element = atom_data.element();
-            let valence = builder.atom_aromatic_valence(atom);
-            let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
-                AromaticityError::HmoMissingParameters(format!(
-                    "no Van-Catledge parameters for {:?} with {} pi-electrons",
-                    element, valence
-                ))
-            })?;
-            h_values.push(hx);
-            atom_types.push((element, valence));
-            electron_count += valence as u32;
-        }
-
-        let mut bonds = Vec::new();
-        for (i, &atom_i) in pi_atoms.iter().enumerate() {
-            for neighbor in builder.atom_neighbor_indices(atom_i) {
-                if let Some(&j) = atom_to_idx.get(&neighbor) {
-                    if j > i {
-                        let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(
-                            || {
-                                AromaticityError::HmoMissingParameters(format!(
-                                    "no Van-Catledge k_XY for {:?}-{:?}",
-                                    atom_types[i], atom_types[j]
-                                ))
-                            },
-                        )?;
-                        bonds.push((i, j, k));
-                    }
-                }
-            }
-        }
-
-        HmoCalculator::new(pi_atoms.to_vec(), electron_count, h_values, bonds)
-    }
-
     fn is_element_supported(&self, element: Element) -> bool {
         let has_params = (0..=2).any(|n| VanCatledgeParams::h_x(element, n).is_some());
         match &self.element_scope {
@@ -94,12 +41,12 @@ impl HmoAromaticity {
         }
     }
 
-    pub fn find_from_ast(
+    pub fn find_from_rings(
         &self,
         ast: &MoleculeAst,
         rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, AromaticityError> {
-        let pi_atoms: Vec<AtomIndex> = ast
+        let pi_atoms: Vec<AtomIdx> = ast
             .atoms()
             .filter_map(|(idx, atom)| {
                 let element = match atom.element {
@@ -110,9 +57,7 @@ impl HmoAromaticity {
                     return None;
                 }
                 match atom.aromatic_valence {
-                    AromaticValenceAst::Value(ValueAst::Lit(_)) => {
-                        Some(AtomIndex::new(idx.index()))
-                    }
+                    AromaticValenceAst::Value(ValueAst::Lit(_)) => Some(idx),
                     _ => None,
                 }
             })
@@ -122,10 +67,10 @@ impl HmoAromaticity {
             return Ok(Vec::new());
         }
 
-        let pi_set: HashSet<AtomIndex> = pi_atoms.iter().copied().collect();
+        let pi_set: HashSet<AtomIdx> = pi_atoms.iter().copied().collect();
 
-        let mut visited: HashSet<AtomIndex> = HashSet::new();
-        let mut components: Vec<Vec<AtomIndex>> = Vec::new();
+        let mut visited: HashSet<AtomIdx> = HashSet::new();
+        let mut components: Vec<Vec<AtomIdx>> = Vec::new();
         for &atom in &pi_atoms {
             if visited.contains(&atom) {
                 continue;
@@ -135,9 +80,8 @@ impl HmoAromaticity {
             visited.insert(atom);
             while let Some(current) = stack.pop() {
                 component.push(current);
-                let idx = AtomIdx(current.index() as u32);
-                for neighbor in ast.neighbors(idx) {
-                    let n = AtomIndex::new(neighbor.node.index());
+                for neighbor in ast.neighbors(current) {
+                    let n = AtomIdx::from(neighbor.node);
                     if pi_set.contains(&n) && visited.insert(n) {
                         stack.push(n);
                     }
@@ -154,7 +98,7 @@ impl HmoAromaticity {
                 continue;
             }
 
-            let result = self.build_calculator_ast(ast, component)?.solve();
+            let result = self.build_calculator(ast, component)?.solve();
 
             let de_per_electron = if result.electron_count > 0 {
                 result.delocalization_energy / result.electron_count as f64
@@ -167,7 +111,7 @@ impl HmoAromaticity {
                     .atom_indices
                     .iter()
                     .map(|&atom| {
-                        let a = ast.atom(AtomIdx(atom.index() as u32));
+                        let a = ast.atom(atom);
                         let valence = match a.aromatic_valence {
                             AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
                             _ => 0,
@@ -176,7 +120,7 @@ impl HmoAromaticity {
                     })
                     .collect();
 
-                let component_set: HashSet<AtomIndex> = component.iter().copied().collect();
+                let component_set: HashSet<AtomIdx> = component.iter().copied().collect();
                 let rings: Vec<Ring> = rings
                     .ring_indices()
                     .filter_map(|i| rings.ring(i))
@@ -191,19 +135,19 @@ impl HmoAromaticity {
         Ok(candidates)
     }
 
-    pub(crate) fn build_calculator_ast(
+    pub(crate) fn build_calculator(
         &self,
         ast: &MoleculeAst,
-        pi_atoms: &[AtomIndex],
+        pi_atoms: &[AtomIdx],
     ) -> Result<HmoCalculator, AromaticityError> {
-        let atom_to_idx: HashMap<AtomIndex, usize> =
+        let atom_to_idx: HashMap<AtomIdx, usize> =
             pi_atoms.iter().enumerate().map(|(i, &a)| (a, i)).collect();
 
         let mut h_values = Vec::with_capacity(pi_atoms.len());
         let mut electron_count: u32 = 0;
         let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(pi_atoms.len());
         for &atom in pi_atoms {
-            let atom_ast = ast.atom(AtomIdx(atom.index() as u32));
+            let atom_ast = ast.atom(atom);
             let element = match atom_ast.element {
                 ElementAst::Lit(e) => e,
                 _ => {
@@ -233,9 +177,8 @@ impl HmoAromaticity {
 
         let mut bonds = Vec::new();
         for (i, &atom_i) in pi_atoms.iter().enumerate() {
-            let idx = AtomIdx(atom_i.index() as u32);
-            for neighbor in ast.neighbors(idx) {
-                let n = AtomIndex::new(neighbor.node.index());
+            for neighbor in ast.neighbors(atom_i) {
+                let n = AtomIdx::from(neighbor.node);
                 if let Some(&j) = atom_to_idx.get(&n) {
                     if j > i {
                         let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(
@@ -254,97 +197,10 @@ impl HmoAromaticity {
 
         HmoCalculator::new(pi_atoms.to_vec(), electron_count, h_values, bonds)
     }
-
-    pub fn find_from_rings(
-        &self,
-        builder: &MoleculeBuilder,
-        rings: &RingSet,
-    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
-        let pi_atoms: Vec<AtomIndex> = builder
-            .atom_indices()
-            .filter(|&atom| {
-                let atom_data = match builder.atom(atom) {
-                    Some(a) => a,
-                    None => return false,
-                };
-                if !self.is_element_supported(atom_data.element()) {
-                    return false;
-                }
-                builder.atom_has_aromatic_candidate(atom)
-            })
-            .collect();
-
-        if pi_atoms.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let pi_set: HashSet<AtomIndex> = pi_atoms.iter().copied().collect();
-
-        let mut visited: HashSet<AtomIndex> = HashSet::new();
-        let mut components: Vec<Vec<AtomIndex>> = Vec::new();
-        for &atom in &pi_atoms {
-            if visited.contains(&atom) {
-                continue;
-            }
-            let mut component = Vec::new();
-            let mut stack = vec![atom];
-            visited.insert(atom);
-            while let Some(current) = stack.pop() {
-                component.push(current);
-                for neighbor in builder.atom_neighbor_indices(current) {
-                    if pi_set.contains(&neighbor) && visited.insert(neighbor) {
-                        stack.push(neighbor);
-                    }
-                }
-            }
-            component.sort_unstable();
-            components.push(component);
-        }
-
-        let mut candidates = Vec::new();
-        for component in &components {
-            let has_ring_atom = component.iter().any(|a| rings.is_ring_atom(*a));
-            if !has_ring_atom || component.len() < 3 {
-                continue;
-            }
-
-            let result = self.build_calculator(builder, component)?.solve();
-
-            let de_per_electron = if result.electron_count > 0 {
-                result.delocalization_energy / result.electron_count as f64
-            } else {
-                0.0
-            };
-
-            if de_per_electron >= self.stabilization_threshold {
-                let contributions: Vec<AromaticContribution> = result
-                    .atom_indices
-                    .iter()
-                    .map(|&atom| {
-                        let valence = builder.atom_aromatic_valence(atom);
-                        AromaticContribution::new(atom, valence)
-                    })
-                    .collect();
-
-                let component_set: HashSet<AtomIndex> = component.iter().copied().collect();
-                let rings: Vec<Ring> = rings
-                    .ring_indices()
-                    .filter_map(|i| rings.ring(i))
-                    .filter(|cycle| cycle.atoms().iter().all(|a| component_set.contains(a)))
-                    .cloned()
-                    .collect();
-
-                candidates.push(AromaticSystem::with_rings(contributions, rings));
-            }
-        }
-
-        Ok(candidates)
-    }
 }
 
-/// HMO calculator: parameter-agnostic Hueckel MO solver.
 pub(crate) struct HmoCalculator {
-    pi_atoms: Vec<AtomIndex>,
+    pi_atoms: Vec<AtomIdx>,
     electron_count: u32,
     h_values: Vec<f64>,
     bonds: Vec<(usize, usize, f64)>,
@@ -352,7 +208,7 @@ pub(crate) struct HmoCalculator {
 
 impl HmoCalculator {
     fn new(
-        pi_atoms: Vec<AtomIndex>,
+        pi_atoms: Vec<AtomIdx>,
         electron_count: u32,
         h_values: Vec<f64>,
         bonds: Vec<(usize, usize, f64)>,
@@ -406,8 +262,6 @@ impl HmoCalculator {
         let eigenvalues = eigen.eigenvalues;
         let eigenvectors = eigen.eigenvectors;
 
-        // Sort by descending eigenvalue (most bonding first in HMO convention
-        // where H is in units of beta with alpha=0).
         let mut sorted_indices: Vec<usize> = (0..n).collect();
         sorted_indices.sort_by(|&a, &b| {
             eigenvalues[b]
@@ -425,7 +279,6 @@ impl HmoCalculator {
         let reference_energy = 2.0 * (self.electron_count / 2) as f64;
         let delocalization_energy = total_pi_energy - reference_energy;
 
-        // Density matrix P_ij = 2 * sum_{occupied k} c_{ik} * c_{jk}.
         let mut density = DMatrix::zeros(n, n);
         for &k in &sorted_indices[..orbital_count] {
             let col = eigenvectors.column(k);
@@ -436,7 +289,7 @@ impl HmoCalculator {
             }
         }
 
-        let mut bond_orders: BTreeMap<(AtomIndex, AtomIndex), f64> = BTreeMap::new();
+        let mut bond_orders: BTreeMap<(AtomIdx, AtomIdx), f64> = BTreeMap::new();
         for &(i, j, _) in &self.bonds {
             let (a, b) = if self.pi_atoms[i] < self.pi_atoms[j] {
                 (self.pi_atoms[i], self.pi_atoms[j])
@@ -455,50 +308,63 @@ impl HmoCalculator {
     }
 }
 
-/// Output of an HMO calculation on a single pi-system.
 #[derive(Debug)]
 pub struct HmoOutput {
-    pub atom_indices: Vec<AtomIndex>,
+    pub atom_indices: Vec<AtomIdx>,
     pub delocalization_energy: f64,
     pub electron_count: u32,
-    pub bond_orders: BTreeMap<(AtomIndex, AtomIndex), f64>,
+    pub bond_orders: BTreeMap<(AtomIdx, AtomIdx), f64>,
 }
 
 #[cfg(test)]
 mod tests {
     use float_cmp::*;
     use rstest::*;
+    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
+    use umol_shared::element::Element;
+    use umol_shared::value_ast::ValueAst;
 
     use super::*;
-    use crate::graph_ir::bond_pattern::BondPattern;
+    use crate::ast::AtomIdx;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::molecule::MoleculeAst;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
 
-    const C1: &str = "C#h#v2#a";
-
-    fn make_ring(atom_specs: &[&str]) -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = atom_specs
-            .iter()
-            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
-            .collect();
-        let n = atoms.len();
-        for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
+    fn aromatic_atom(element: Element, pi: i64) -> AtomAst {
+        AtomAst {
+            element: ElementAst::Lit(element),
+            aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(pi)),
+            ..Default::default()
         }
-        builder
     }
 
-    fn make_fused(atom_specs: &[&str], edges: &[(usize, usize)]) -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = atom_specs
-            .iter()
-            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
+    fn make_ring(atoms: Vec<AtomAst>) -> MoleculeAst {
+        let n = atoms.len();
+        let bonds: Vec<_> = (0..n)
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx(((i + 1) % n) as u32),
+                    BondAst::from_order(1),
+                )
+            })
             .collect();
-        for &(a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
-        }
-        builder
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+    }
+
+    fn make_fused(atoms: Vec<AtomAst>, edges: &[(usize, usize)]) -> MoleculeAst {
+        let bonds: Vec<_> = edges
+            .iter()
+            .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
+            .collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+    }
+
+    fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
+        let atoms: Vec<AtomIdx> = (0..ast.atom_count() as u32).map(AtomIdx).collect();
+        model.build_calculator(ast, &atoms).unwrap().solve()
     }
 
     #[fixture]
@@ -510,15 +376,15 @@ mod tests {
     }
 
     #[fixture]
-    fn benzene() -> MoleculeBuilder {
-        make_ring(&[C1; 6])
+    fn benzene() -> MoleculeAst {
+        make_ring(vec![aromatic_atom(Element::C, 1); 6])
     }
 
     #[rustfmt::skip]
     #[fixture]
-    fn naphthalene() -> MoleculeBuilder {
+    fn naphthalene() -> MoleculeAst {
         make_fused(
-            &[C1; 10],
+            vec![aromatic_atom(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
                 (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -528,9 +394,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn azulene() -> MoleculeBuilder {
+    fn azulene() -> MoleculeAst {
         make_fused(
-            &[C1; 10],
+            vec![aromatic_atom(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 0),
                 (0, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -539,23 +405,31 @@ mod tests {
     }
 
     #[fixture]
-    fn pyridine() -> MoleculeBuilder {
-        make_ring(&["N#n#v2#a", C1, C1, C1, C1, C1])
+    fn pyridine() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::N, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+        ])
     }
 
     #[fixture]
-    fn pyrrole() -> MoleculeBuilder {
-        make_ring(&["N#h#v2#a2", C1, C1, C1, C1])
+    fn pyrrole() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::N, 2),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+        ])
     }
 
     #[fixture]
-    fn cyclobutadiene() -> MoleculeBuilder {
-        make_ring(&[C1; 4])
-    }
-
-    fn solve(model: &HmoAromaticity, builder: &MoleculeBuilder) -> HmoOutput {
-        let atoms: Vec<AtomIndex> = builder.atom_indices().collect();
-        model.build_calculator(builder, &atoms).unwrap().solve()
+    fn cyclobutadiene() -> MoleculeAst {
+        make_ring(vec![aromatic_atom(Element::C, 1); 4])
     }
 
     #[rstest]
@@ -564,12 +438,12 @@ mod tests {
     #[case::azulene(azulene(), 3.364)]
     #[case::pyridine(pyridine(), 2.614)]
     #[case::pyrrole(pyrrole(), 2.200)]
-    fn test_hmo_model_delocalization_energy(
+    fn test_hmo_aromaticity_delocalization_energy(
         hmo_model: HmoAromaticity,
-        #[case] builder: MoleculeBuilder,
+        #[case] ast: MoleculeAst,
         #[case] expected_de: f64,
     ) {
-        let result = solve(&hmo_model, &builder);
+        let result = solve_hmo(&hmo_model, &ast);
         assert!(approx_eq!(
             f64,
             result.delocalization_energy,
@@ -581,14 +455,14 @@ mod tests {
     #[rstest]
     #[case::benzene(benzene(), 6, 0.667, 0.667)]
     #[case::azulene(azulene(), 11, 0.401, 0.664)]
-    fn test_hmo_model_bond_orders(
+    fn test_hmo_aromaticity_bond_orders(
         hmo_model: HmoAromaticity,
-        #[case] builder: MoleculeBuilder,
+        #[case] ast: MoleculeAst,
         #[case] expected_count: usize,
         #[case] expected_min: f64,
         #[case] expected_max: f64,
     ) {
-        let result = solve(&hmo_model, &builder);
+        let result = solve_hmo(&hmo_model, &ast);
         assert_eq!(result.bond_orders.len(), expected_count);
         let min = result
             .bond_orders
@@ -608,16 +482,16 @@ mod tests {
     #[case::benzene(benzene(), 1, Some(6))]
     #[case::naphthalene(naphthalene(), 1, Some(10))]
     #[case::cyclobutadiene(cyclobutadiene(), 0, None)]
-    fn test_hmo_model_find_from_rings(
+    fn test_hmo_aromaticity_find_from_rings(
         hmo_model: HmoAromaticity,
-        #[case] builder: MoleculeBuilder,
+        #[case] ast: MoleculeAst,
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
         let ring_info =
             RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-                .enumerate_builder(&builder);
-        let systems = hmo_model.find_from_rings(&builder, &ring_info).unwrap();
+                .enumerate(&ast);
+        let systems = hmo_model.find_from_rings(&ast, &ring_info).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(
             systems.first().map(|s| s.contributions().len()),
@@ -626,12 +500,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hmo_output(hmo_model: HmoAromaticity, benzene: MoleculeBuilder) {
-        let atoms: Vec<AtomIndex> = benzene.atom_indices().collect();
-        let output = hmo_model
-            .build_calculator(&benzene, &atoms)
-            .unwrap()
-            .solve();
+    fn test_hmo_output(hmo_model: HmoAromaticity, benzene: MoleculeAst) {
+        let output = solve_hmo(&hmo_model, &benzene);
 
         assert_eq!(output.bond_orders.len(), 6);
         let min_bo = output
@@ -656,8 +526,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hmo_model_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeBuilder) {
-        let atoms: Vec<AtomIndex> = pyridine.atom_indices().collect();
+    fn test_hmo_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
+        let atoms: Vec<AtomIdx> = (0..pyridine.atom_count() as u32).map(AtomIdx).collect();
         let calc = hmo_model.build_calculator(&pyridine, &atoms).unwrap();
         let h = calc.hamiltonian();
         assert_eq!(h.nrows(), 6);

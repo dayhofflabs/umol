@@ -37,10 +37,6 @@ bench = false
 name = "classify_smiles_strings"
 bench = false
 
-[[bin]]
-name = "parse_smiles"
-bench = false
-
 [features]
 conformance = []
 

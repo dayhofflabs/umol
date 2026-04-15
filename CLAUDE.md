@@ -36,7 +36,7 @@
 - Do not rely on existing tests and benchmarks as being representative of real-world uses during the design phase.
 - Avoid stubs, shims, bridges whenever possible. Suggest design improvements instead.
 - Do not create manual implementations, where well-designed and supported external libraries exist.
-- No long comments, no self-talk, no references to previous implementations in comments.
+- Do not offer unsolicited recommendations when asked to present options.
 
 ## Session Memory
 - Learn user corrections and preferences within the session.
@@ -57,7 +57,8 @@
 
 - Do not make commits, branches, or other git actions unless explicitly asked to.
 
-## Rust Specific
+## Coding Rules
+- No long comments, no self-talk, no references to previous implementations in comments.
 - Do not use <module>/mod.rs, use <module>.rs instead.
 - Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.
 - Name tests test_<struct>_<method>() and test_<struct>_<method>_error(). Do not include test behavior in the test name.

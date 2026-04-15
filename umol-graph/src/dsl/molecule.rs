@@ -862,9 +862,6 @@ mod tests {
     use umol_shared::value_ast::ValueAst;
 
     use super::*;
-    use crate::ast::config::MoleculeAstConfig;
-    use crate::ast::{FromAst, ToAst};
-    use crate::graph_ir::molecule_builder::MoleculeBuilder;
 
     fn mol_atoms(a: Vec<AtomAst>) -> MoleculeAst {
         MoleculeAst::new(a, vec![], vec![], vec![], vec![], vec![], vec![])
@@ -1077,39 +1074,6 @@ mod tests {
         let dsl2 = parse_molecule_dsl(&edn).unwrap();
         assert_eq!(dsl1.ast, dsl2.ast);
         assert_eq!(dsl1.metadata, dsl2.metadata);
-    }
-
-    #[test]
-    fn test_builder_metadata_roundtrip() {
-        let dsl =
-            parse_molecule_dsl(r#"{:atoms [[:C "C #h3"] [:O "O #h1"]] :bonds [[:C :O :single]]}"#)
-                .unwrap();
-
-        let cfg = MoleculeAstConfig::zeroed();
-        let builder = MoleculeBuilder::from_ast(&dsl.ast, &cfg).unwrap();
-        let dsl2 = MoleculeAstWrapper::new(builder.to_ast(&cfg), dsl.metadata.clone());
-
-        assert_eq!(dsl.ast.atom_count(), dsl2.ast.atom_count());
-        assert!(dsl2.metadata.atom_tags.values().any(|t| t == "C"));
-        assert!(dsl2.metadata.atom_tags.values().any(|t| t == "O"));
-        let edn = dsl2.to_string();
-        assert!(edn.contains(":C"), "serialized form should contain :C tag");
-        assert!(edn.contains(":O"), "serialized form should contain :O tag");
-    }
-
-    #[test]
-    fn test_builder_no_metadata_produces_indexed() {
-        let dsl =
-            parse_molecule_dsl(r#"{:atoms [[:C "C #h3"] [:O "O #h1"]] :bonds [[:C :O :single]]}"#)
-                .unwrap();
-
-        let cfg = MoleculeAstConfig::zeroed();
-        let builder = MoleculeBuilder::from_ast(&dsl.ast, &cfg).unwrap();
-        let ast2 = builder.to_ast(&cfg);
-
-        let (src, tgt) = ast2.bond_endpoints(crate::ast::BondIdx(0));
-        assert_eq!(src, AtomIdx(0));
-        assert_eq!(tgt, AtomIdx(1));
     }
 
     #[test]

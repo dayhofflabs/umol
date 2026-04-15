@@ -6,8 +6,6 @@ use umol_shared::error::SpinStateError;
 use umol_shared::spin::SpinMultiplicity;
 
 use super::aromaticity::AromaticityError;
-use super::kekule::KekulizationError;
-use super::transform::TransformError;
 use crate::diagnostics::Diagnostic;
 use crate::table_ir::bond::BondOrder;
 
@@ -19,10 +17,6 @@ pub enum GraphIrError {
     Resolution(#[from] ResolutionError),
     #[error(transparent)]
     Aromaticity(#[from] AromaticityError),
-    #[error(transparent)]
-    Kekulization(#[from] KekulizationError),
-    #[error(transparent)]
-    Transform(#[from] TransformError),
 }
 
 impl From<ResolutionError> for Diagnostic {

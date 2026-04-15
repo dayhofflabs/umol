@@ -15,11 +15,8 @@ use super::{AromaticContribution, AromaticSystem};
 use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
 use crate::graph_ir::config::{ElementScope, RingLimits};
-use crate::graph_ir::molecule::AtomIndex;
-use crate::graph_ir::molecule_builder::MoleculeBuilder;
 use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
 
-/// HueckelRule aromaticity model. Parameterized by element scope and ring scope.
 #[derive(Clone, Debug)]
 pub struct HueckelRuleAromaticity {
     pub element_scope: ElementScope,
@@ -36,86 +33,23 @@ impl HueckelRuleAromaticity {
 
     pub fn find_from_rings(
         &self,
-        builder: &MoleculeBuilder,
-        rings: &RingSet,
-    ) -> Vec<AromaticSystem> {
-        let eligible_cycles: Vec<RingIndex> = rings
-            .ring_indices()
-            .filter(|&i| rings.ring(i).is_some_and(|r| self.filter_ring(builder, r)))
-            .collect();
-
-        let mut aromatic_atom_sets: Vec<(HashSet<AtomIndex>, Vec<Ring>)> = Vec::new();
-
-        for &cycle_idx in &eligible_cycles {
-            let Some(ring) = rings.ring(cycle_idx) else {
-                continue;
-            };
-            if let Some(electrons) = self.ring_electron_count(builder, ring.atoms()) {
-                if self.check_4n_plus_2(electrons) {
-                    let atom_set: HashSet<AtomIndex> = ring.atoms().iter().copied().collect();
-                    aromatic_atom_sets.push((atom_set, vec![ring.clone()]));
-                }
-            }
-        }
-
-        // Check fused ring combinations if enabled.
-        if self.ring_limits.include_fused {
-            let fused_systems = self.enumerate_fused_combinations(rings, &eligible_cycles);
-            for (atoms, rings) in fused_systems {
-                let atom_vec: Vec<AtomIndex> = atoms.iter().copied().collect();
-                if let Some(electrons) = self.ring_electron_count(builder, &atom_vec) {
-                    if self.check_4n_plus_2(electrons) {
-                        aromatic_atom_sets.push((atoms, rings));
-                    }
-                }
-            }
-        }
-
-        // Merge overlapping aromatic systems: if two systems share atoms,
-        // combine them into a single system.
-        let merged = merge_overlapping_systems(&aromatic_atom_sets);
-
-        // Build candidates from merged systems.
-        let mut candidates = Vec::new();
-        for (atom_set, rings) in merged {
-            let mut contributions: Vec<AromaticContribution> = Vec::new();
-            let mut valid = true;
-            for &atom in &atom_set {
-                if let Some(e) = self.aromatic_electron_count(builder, atom) {
-                    contributions.push(AromaticContribution::new(atom, e));
-                } else {
-                    valid = false;
-                    break;
-                }
-            }
-            if !valid {
-                continue;
-            }
-            candidates.push(AromaticSystem::with_rings(contributions, rings));
-        }
-
-        candidates
-    }
-
-    pub fn find_from_ast(
-        &self,
         ast: &MoleculeAst,
         rings: &RingSet,
     ) -> Vec<AromaticSystem> {
         let eligible_cycles: Vec<RingIndex> = rings
             .ring_indices()
-            .filter(|&i| rings.ring(i).is_some_and(|r| self.filter_ring_ast(ast, r)))
+            .filter(|&i| rings.ring(i).is_some_and(|r| self.filter_ring(ast, r)))
             .collect();
 
-        let mut aromatic_atom_sets: Vec<(HashSet<AtomIndex>, Vec<Ring>)> = Vec::new();
+        let mut aromatic_atom_sets: Vec<(HashSet<AtomIdx>, Vec<Ring>)> = Vec::new();
 
         for &cycle_idx in &eligible_cycles {
             let Some(ring) = rings.ring(cycle_idx) else {
                 continue;
             };
-            if let Some(electrons) = self.ring_electron_count_ast(ast, ring.atoms()) {
+            if let Some(electrons) = self.ring_electron_count(ast, ring.atoms()) {
                 if self.check_4n_plus_2(electrons) {
-                    let atom_set: HashSet<AtomIndex> = ring.atoms().iter().copied().collect();
+                    let atom_set: HashSet<AtomIdx> = ring.atoms().iter().copied().collect();
                     aromatic_atom_sets.push((atom_set, vec![ring.clone()]));
                 }
             }
@@ -124,8 +58,8 @@ impl HueckelRuleAromaticity {
         if self.ring_limits.include_fused {
             let fused_systems = self.enumerate_fused_combinations(rings, &eligible_cycles);
             for (atoms, rings) in fused_systems {
-                let atom_vec: Vec<AtomIndex> = atoms.iter().copied().collect();
-                if let Some(electrons) = self.ring_electron_count_ast(ast, &atom_vec) {
+                let atom_vec: Vec<AtomIdx> = atoms.iter().copied().collect();
+                if let Some(electrons) = self.ring_electron_count(ast, &atom_vec) {
                     if self.check_4n_plus_2(electrons) {
                         aromatic_atom_sets.push((atoms, rings));
                     }
@@ -140,7 +74,7 @@ impl HueckelRuleAromaticity {
             let mut contributions: Vec<AromaticContribution> = Vec::new();
             let mut valid = true;
             for &atom in &atom_set {
-                if let Some(e) = self.aromatic_electron_count_ast(ast, atom) {
+                if let Some(e) = self.aromatic_electron_count(ast, atom) {
                     contributions.push(AromaticContribution::new(atom, e));
                 } else {
                     valid = false;
@@ -156,8 +90,8 @@ impl HueckelRuleAromaticity {
         candidates
     }
 
-    fn is_atom_eligible_ast(&self, ast: &MoleculeAst, atom: AtomIndex) -> bool {
-        let atom_ast = ast.atom(AtomIdx(atom.index() as u32));
+    fn is_atom_eligible(&self, ast: &MoleculeAst, atom: AtomIdx) -> bool {
+        let atom_ast = ast.atom(atom);
         let element = match atom_ast.element {
             ElementAst::Lit(e) => e,
             _ => return false,
@@ -173,61 +107,19 @@ impl HueckelRuleAromaticity {
         matches!(atom_ast.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
     }
 
-    fn aromatic_electron_count_ast(&self, ast: &MoleculeAst, atom: AtomIndex) -> Option<u8> {
-        let atom_ast = ast.atom(AtomIdx(atom.index() as u32));
-        match atom_ast.aromatic_valence {
+    fn aromatic_electron_count(&self, ast: &MoleculeAst, atom: AtomIdx) -> Option<u8> {
+        match ast.atom(atom).aromatic_valence {
             AromaticValenceAst::Value(ValueAst::Lit(n)) => Some(n as u8),
             _ => None,
         }
     }
 
-    fn filter_ring_ast(&self, ast: &MoleculeAst, ring: &Ring) -> bool {
+    fn filter_ring(&self, ast: &MoleculeAst, ring: &Ring) -> bool {
         let len = ring.len();
         if len < self.ring_limits.min_ring_size || len > self.ring_limits.max_ring_size {
             return false;
         }
-        ring.atoms()
-            .iter()
-            .all(|&a| self.is_atom_eligible_ast(ast, a))
-    }
-
-    fn ring_electron_count_ast(&self, ast: &MoleculeAst, atoms: &[AtomIndex]) -> Option<u32> {
-        let mut total: u32 = 0;
-        for &atom in atoms {
-            total += self.aromatic_electron_count_ast(ast, atom)? as u32;
-        }
-        Some(total)
-    }
-
-    fn is_atom_eligible(&self, builder: &MoleculeBuilder, atom: AtomIndex) -> bool {
-        let atom_data = match builder.atom(atom) {
-            Some(a) => a,
-            None => return false,
-        };
-        match &self.element_scope {
-            ElementScope::Any => {}
-            ElementScope::AllowList(allowed) => {
-                if !allowed.contains(&atom_data.element()) {
-                    return false;
-                }
-            }
-        }
-        builder.atom_has_aromatic_candidate(atom)
-    }
-
-    fn aromatic_electron_count(&self, builder: &MoleculeBuilder, atom: AtomIndex) -> Option<u8> {
-        builder.atom(atom)?;
-        Some(builder.atom_aromatic_valence(atom))
-    }
-
-    fn filter_ring(&self, builder: &MoleculeBuilder, ring: &Ring) -> bool {
-        let len = ring.len();
-        if len < self.ring_limits.min_ring_size || len > self.ring_limits.max_ring_size {
-            return false;
-        }
-        ring.atoms()
-            .iter()
-            .all(|&a| self.is_atom_eligible(builder, a))
+        ring.atoms().iter().all(|&a| self.is_atom_eligible(ast, a))
     }
 
     fn check_4n_plus_2(&self, electron_count: u32) -> bool {
@@ -237,37 +129,34 @@ impl HueckelRuleAromaticity {
         (electron_count - 2).is_multiple_of(4)
     }
 
-    fn ring_electron_count(&self, builder: &MoleculeBuilder, atoms: &[AtomIndex]) -> Option<u32> {
+    fn ring_electron_count(&self, ast: &MoleculeAst, atoms: &[AtomIdx]) -> Option<u32> {
         let mut total: u32 = 0;
         for &atom in atoms {
-            total += self.aromatic_electron_count(builder, atom)? as u32;
+            total += self.aromatic_electron_count(ast, atom)? as u32;
         }
         Some(total)
     }
 
-    /// Enumerate fused ring combinations by iteratively merging rings that
-    /// share at least one bond. Uses the `fused_neighbors` relationship from
-    /// `RingSet` and bounds exploration to `max_fused_combination`.
     fn enumerate_fused_combinations(
         &self,
         rings: &RingSet,
         eligible: &[RingIndex],
-    ) -> Vec<(HashSet<AtomIndex>, Vec<Ring>)> {
+    ) -> Vec<(HashSet<AtomIdx>, Vec<Ring>)> {
         let max_combo = self.ring_limits.max_fused_combination;
         if max_combo < 2 {
             return Vec::new();
         }
 
         let eligible_set: HashSet<RingIndex> = eligible.iter().copied().collect();
-        let mut results: Vec<(HashSet<AtomIndex>, Vec<Ring>)> = Vec::new();
+        let mut results: Vec<(HashSet<AtomIdx>, Vec<Ring>)> = Vec::new();
         let mut seen_combos: HashSet<Vec<RingIndex>> = HashSet::new();
 
         'outer: for &start in eligible {
-            let mut stack: Vec<(Vec<RingIndex>, HashSet<AtomIndex>)> = Vec::new();
+            let mut stack: Vec<(Vec<RingIndex>, HashSet<AtomIdx>)> = Vec::new();
             let Some(start_ring) = rings.ring(start) else {
                 continue;
             };
-            let start_atoms: HashSet<AtomIndex> = start_ring.atoms().iter().copied().collect();
+            let start_atoms: HashSet<AtomIdx> = start_ring.atoms().iter().copied().collect();
             stack.push((vec![start], start_atoms));
 
             while let Some((combo, atoms)) = stack.pop() {
@@ -313,11 +202,9 @@ impl HueckelRuleAromaticity {
     }
 }
 
-/// Merge overlapping aromatic systems. Two systems overlap if they share
-/// any atoms. Returns deduplicated, merged results.
 fn merge_overlapping_systems(
-    aromatic_systems: &[(HashSet<AtomIndex>, Vec<Ring>)],
-) -> Vec<(HashSet<AtomIndex>, Vec<Ring>)> {
+    aromatic_systems: &[(HashSet<AtomIdx>, Vec<Ring>)],
+) -> Vec<(HashSet<AtomIdx>, Vec<Ring>)> {
     if aromatic_systems.is_empty() {
         return Vec::new();
     }
@@ -340,9 +227,9 @@ fn merge_overlapping_systems(
 
     let mut result = Vec::new();
     for (_, members) in groups {
-        let mut merged_atoms: HashSet<AtomIndex> = HashSet::new();
+        let mut merged_atoms: HashSet<AtomIdx> = HashSet::new();
         let mut merged_rings: Vec<Ring> = Vec::new();
-        let mut seen_rings: HashSet<Vec<AtomIndex>> = HashSet::new();
+        let mut seen_rings: HashSet<Vec<AtomIdx>> = HashSet::new();
         for &idx in &members {
             merged_atoms.extend(aromatic_systems[idx].0.iter());
             for ring in &aromatic_systems[idx].1 {
@@ -362,12 +249,47 @@ fn merge_overlapping_systems(
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
     use umol_shared::element::Element;
+    use umol_shared::value_ast::ValueAst;
 
     use super::*;
-    use crate::graph_ir::bond_pattern::BondPattern;
+    use crate::ast::AtomIdx;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::molecule::MoleculeAst;
     use crate::graph_ir::config::RingEnumerationStrategy;
     use crate::graph_ir::rings::{RingEnumerator, RingFamily};
+
+    fn aromatic_atom(element: Element, pi: i64) -> AtomAst {
+        AtomAst {
+            element: ElementAst::Lit(element),
+            aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(pi)),
+            ..Default::default()
+        }
+    }
+
+    fn make_ring(atoms: Vec<AtomAst>) -> MoleculeAst {
+        let n = atoms.len();
+        let bonds: Vec<_> = (0..n)
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx(((i + 1) % n) as u32),
+                    BondAst::from_order(1),
+                )
+            })
+            .collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+    }
+
+    fn make_fused(atoms: Vec<AtomAst>, edges: &[(usize, usize)]) -> MoleculeAst {
+        let bonds: Vec<_> = edges
+            .iter()
+            .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
+            .collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+    }
 
     fn daylight_model() -> HueckelRuleAromaticity {
         HueckelRuleAromaticity::new(
@@ -397,80 +319,103 @@ mod tests {
         HueckelRuleAromaticity::new(ElementScope::Any, RingLimits::default())
     }
 
-    fn make_ring(atom_specs: &[&str]) -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = atom_specs
-            .iter()
-            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
-            .collect();
-        let n = atoms.len();
-        for i in 0..n {
-            builder.add_bond_unchecked(atoms[i], atoms[(i + 1) % n], BondPattern::new(1));
-        }
-        builder
-    }
-
-    fn make_fused(atom_specs: &[&str], edges: &[(usize, usize)]) -> MoleculeBuilder {
-        let mut builder = MoleculeBuilder::new();
-        let atoms: Vec<AtomIndex> = atom_specs
-            .iter()
-            .map(|s| builder.add_resolved_atom(s.parse().unwrap()))
-            .collect();
-        for &(a, b) in edges {
-            builder.add_bond_unchecked(atoms[a], atoms[b], BondPattern::new(1));
-        }
-        builder
-    }
-
-    const C1: &str = "C#h#v2#a";
-    const C0: &str = "C#v4";
-
     #[fixture]
-    fn benzene() -> MoleculeBuilder {
-        make_ring(&[C1; 6])
+    fn benzene() -> MoleculeAst {
+        make_ring(vec![aromatic_atom(Element::C, 1); 6])
     }
 
     #[fixture]
-    fn pyridine() -> MoleculeBuilder {
-        make_ring(&["N#n#v2#a", C1, C1, C1, C1, C1])
+    fn pyridine() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::N, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+        ])
     }
 
     #[fixture]
-    fn pyrrole() -> MoleculeBuilder {
-        make_ring(&["N#h#v2#a2", C1, C1, C1, C1])
+    fn pyrrole() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::N, 2),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+        ])
     }
 
     #[fixture]
-    fn furan() -> MoleculeBuilder {
-        make_ring(&["O#n#v2#a2", C1, C1, C1, C1])
+    fn furan() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::O, 2),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+        ])
     }
 
     #[fixture]
-    fn thiophene() -> MoleculeBuilder {
-        make_ring(&["S#n#v2#a2", C1, C1, C1, C1])
+    fn thiophene() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::S, 2),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+        ])
     }
 
     #[fixture]
-    fn imidazole() -> MoleculeBuilder {
-        make_ring(&["N#n#v2#a", C1, C1, "N#h#v2#a2", C1])
+    fn imidazole() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::N, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::N, 2),
+            aromatic_atom(Element::C, 1),
+        ])
     }
 
     #[fixture]
-    // 6 neutral C (a=1) + 1 C+ (a=0), charge-separated representation
-    fn tropylium() -> MoleculeBuilder {
-        make_ring(&[C1, C1, C1, C1, C1, C1, "C#c+#h#v2#a0"])
+    fn tropylium() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            aromatic_atom(Element::C, 1),
+            AtomAst {
+                element: ElementAst::Lit(Element::C),
+                charge: ValueAst::Lit(1),
+                aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(0)),
+                ..Default::default()
+            },
+        ])
     }
 
     #[fixture]
-    fn cyclopentadienyl_anion() -> MoleculeBuilder {
-        make_ring(&["C#c-#h#v2#a2"; 5])
+    fn cyclopentadienyl_anion() -> MoleculeAst {
+        make_ring(vec![
+            AtomAst {
+                element: ElementAst::Lit(Element::C),
+                charge: ValueAst::Lit(-1),
+                aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(2)),
+                ..Default::default()
+            };
+            5
+        ])
     }
 
     #[rustfmt::skip]
     #[fixture]
-    fn naphthalene() -> MoleculeBuilder {
+    fn naphthalene() -> MoleculeAst {
         make_fused(
-            &[C1; 10],
+            vec![aromatic_atom(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
                 (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -480,9 +425,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[fixture]
-    fn azulene() -> MoleculeBuilder {
+    fn azulene() -> MoleculeAst {
         make_fused(
-            &[C1; 10],
+            vec![aromatic_atom(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 0),
                 (0, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -491,9 +436,9 @@ mod tests {
     }
 
     #[rustfmt::skip]
-    fn phenanthrene() -> MoleculeBuilder {
+    fn phenanthrene() -> MoleculeAst {
         make_fused(
-            &[C1; 14],
+            vec![aromatic_atom(Element::C, 1); 14],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0), (3, 6), (6, 7),
                 (7, 8), (8, 9), (9, 4), (8, 10), (10, 11), (11, 12), (12, 13), (13, 9),
@@ -502,20 +447,20 @@ mod tests {
     }
 
     #[fixture]
-    fn cyclobutadiene() -> MoleculeBuilder {
-        make_ring(&[C1; 4])
+    fn cyclobutadiene() -> MoleculeAst {
+        make_ring(vec![aromatic_atom(Element::C, 1); 4])
     }
 
     #[fixture]
-    fn cyclohexane() -> MoleculeBuilder {
-        make_ring(&[C0; 6])
+    fn cyclohexane() -> MoleculeAst {
+        make_ring(vec![AtomAst::from_element(Element::C); 6])
     }
 
     #[rustfmt::skip]
     #[fixture]
-    fn cubane() -> MoleculeBuilder {
+    fn cubane() -> MoleculeAst {
         make_fused(
-            &[C0; 8],
+            vec![AtomAst::from_element(Element::C); 8],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6),
                 (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7),
@@ -524,15 +469,14 @@ mod tests {
     }
 
     #[fixture]
-    fn borazine() -> MoleculeBuilder {
-        // B contributes 0π electrons (empty p orbital); N contributes 2π (lone pair).
-        make_ring(&[
-            "B#h#v2#a0",
-            "N#h#v2#a2",
-            "B#h#v2#a0",
-            "N#h#v2#a2",
-            "B#h#v2#a0",
-            "N#h#v2#a2",
+    fn borazine() -> MoleculeAst {
+        make_ring(vec![
+            aromatic_atom(Element::B, 0),
+            aromatic_atom(Element::N, 2),
+            aromatic_atom(Element::B, 0),
+            aromatic_atom(Element::N, 2),
+            aromatic_atom(Element::B, 0),
+            aromatic_atom(Element::N, 2),
         ])
     }
 
@@ -549,14 +493,14 @@ mod tests {
     #[case::tropylium(tropylium(), 7, 6)]
     #[case::cyclopentadienyl_anion(cyclopentadienyl_anion(), 5, 10)]
     fn test_find_from_rings_aromatic(
-        #[case] builder: MoleculeBuilder,
+        #[case] ast: MoleculeAst,
         #[case] expected_atoms: usize,
         #[case] expected_electrons: u8,
     ) {
         let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-            .enumerate_builder(&builder);
+            .enumerate(&ast);
         let model = daylight_model();
-        let systems = model.find_from_rings(&builder, &rings);
+        let systems = model.find_from_rings(&ast, &rings);
         assert_eq!(systems.len(), 1);
         assert_eq!(systems[0].contributions().len(), expected_atoms);
         assert_eq!(systems[0].electron_count(), expected_electrons);
@@ -569,21 +513,19 @@ mod tests {
     #[case::borazine_daylight(borazine(), daylight_model())]
     #[case::pyrrole_mdl(pyrrole(), mdl_model())]
     fn test_find_from_rings_non_aromatic(
-        #[case] builder: MoleculeBuilder,
+        #[case] ast: MoleculeAst,
         #[case] model: HueckelRuleAromaticity,
     ) {
         let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-            .enumerate_builder(&builder);
-        let systems = model.find_from_rings(&builder, &rings);
+            .enumerate(&ast);
+        let systems = model.find_from_rings(&ast, &rings);
         assert!(systems.is_empty());
     }
 
     #[rstest]
-    fn test_borazine_permissive_aromatic(borazine: MoleculeBuilder) {
-        // B contributes 0π, N contributes 2π: 6 total → Hückel 4(1)+2 aromatic.
-        // The daylight model excludes B, so only the permissive model finds this system.
+    fn test_find_from_rings_borazine_permissive(borazine: MoleculeAst) {
         let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-            .enumerate_builder(&borazine);
+            .enumerate(&borazine);
         let systems = permissive_model().find_from_rings(&borazine, &rings);
         assert_eq!(systems.len(), 1);
         assert_eq!(systems[0].contributions().len(), 6);
