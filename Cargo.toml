@@ -5,6 +5,7 @@ members = [
     "umol-edn-macros",
     "umol-geometric",
     "umol-graph",
+    "umol-graph-core",
     "umol-msym",
     "umol-msym-sys",
     "umol-params",

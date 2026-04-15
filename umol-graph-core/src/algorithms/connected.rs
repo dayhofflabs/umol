@@ -1,0 +1,90 @@
+use crate::graph::{Graph, NodeId};
+
+impl<N, E> Graph<N, E> {
+    pub fn connected_components(&self) -> Vec<Vec<NodeId>> {
+        let mut visited = vec![false; self.node_bound()];
+        let mut components = Vec::new();
+
+        for node in self.node_ids() {
+            if visited[node.index()] {
+                continue;
+            }
+            let mut component = Vec::new();
+            let mut stack = vec![node];
+            visited[node.index()] = true;
+
+            while let Some(current) = stack.pop() {
+                component.push(current);
+                for neighbor in self.neighbors(current) {
+                    if !visited[neighbor.node.index()] {
+                        visited[neighbor.node.index()] = true;
+                        stack.push(neighbor.node);
+                    }
+                }
+            }
+
+            component.sort_unstable();
+            components.push(component);
+        }
+
+        components
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    use crate::graph::{Graph, NodeId};
+
+    fn n(i: u32) -> NodeId {
+        NodeId(i)
+    }
+
+    #[test]
+    fn test_graph_connected_components_empty() {
+        let g = Graph::<(), ()>::new();
+        assert!(g.connected_components().is_empty());
+    }
+
+    #[test]
+    fn test_graph_connected_components_isolated() {
+        let g = Graph::<(), ()>::from_edges(3, vec![]);
+        let cc = g.connected_components();
+        assert_eq!(cc, vec![vec![n(0)], vec![n(1)], vec![n(2)]]);
+    }
+
+    #[rstest]
+    #[case::single_edge(
+        2, vec![(0, 1, ())],
+        vec![vec![n(0), n(1)]]
+    )]
+    #[case::triangle(
+        3, vec![(0, 1, ()), (1, 2, ()), (0, 2, ())],
+        vec![vec![n(0), n(1), n(2)]]
+    )]
+    #[case::two_components(
+        4, vec![(0, 1, ()), (2, 3, ())],
+        vec![vec![n(0), n(1)], vec![n(2), n(3)]]
+    )]
+    fn test_graph_connected_components(
+        #[case] node_count: usize,
+        #[case] edges: Vec<(u32, u32, ())>,
+        #[case] expected: Vec<Vec<NodeId>>,
+    ) {
+        let g = Graph::<(), _>::from_edges(node_count, edges);
+        assert_eq!(g.connected_components(), expected);
+    }
+
+    #[test]
+    fn test_graph_connected_components_after_removal() {
+        let mut g = Graph::<(), ()>::from_edges(
+            4,
+            vec![(0, 1, ()), (1, 2, ()), (2, 3, ())],
+        );
+        g.remove_node(NodeId(1));
+        let cc = g.connected_components();
+        assert_eq!(cc, vec![vec![n(0)], vec![n(2), n(3)]]);
+    }
+}

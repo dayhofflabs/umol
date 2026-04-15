@@ -14,9 +14,8 @@ use umol_graph::ast::atom::AtomAst;
 use umol_graph::ast::bond::BondAst;
 use umol_graph::ast::config::MoleculeAstConfig;
 use umol_graph::ast::matcher::{find_matches, MatchQuery, MatchTarget};
-use umol_graph::ast::molecule::{BondTuple, MoleculeAst};
+use umol_graph::ast::molecule::MoleculeAst;
 use umol_graph::ast::ToAst;
-use umol_graph::atoms;
 use umol_graph::graph_ir::molecule_builder::MoleculeBuilder;
 use umol_graph::io::smiles::parse_smiles;
 use umol_shared::element::Element;
@@ -63,46 +62,43 @@ fn wb() -> BondAst {
     BondAst::new(ValueAst::Undetermined)
 }
 
-fn sb() -> BondAst {
-    BondAst::from_order(1)
-}
-
 fn a(e: Element) -> AtomAst {
     AtomAst::from_element(e)
 }
 
-fn bt(source: usize, target: usize, bond: BondAst) -> BondTuple {
-    BondTuple {
-        source: AtomIdx(source),
-        target: AtomIdx(target),
-        bond,
+fn mol(atoms: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> MoleculeAst {
+    let mut ast = MoleculeAst::default();
+    for atom in atoms {
+        ast.add_atom(atom);
     }
+    for (s, t, b) in bonds {
+        ast.add_bond(AtomIdx(s as u32), AtomIdx(t as u32), b);
+    }
+    ast
 }
 
 // C(C)C(C)N — 5 atoms, 4 single bonds
 fn pattern_branched() -> MoleculeAst {
-    MoleculeAst {
-        atoms: atoms![a(Element::C), a(Element::C), a(Element::C), a(Element::C), a(Element::N)],
-        bonds: vec![bt(0, 1, wb()), bt(0, 2, wb()), bt(2, 3, wb()), bt(2, 4, wb())],
-        ..Default::default()
-    }
+    mol(
+        vec![a(Element::C), a(Element::C), a(Element::C), a(Element::C), a(Element::N)],
+        vec![(0, 1, wb()), (0, 2, wb()), (2, 3, wb()), (2, 4, wb())],
+    )
 }
 
 // 6-membered C ring + O, any bonds
 fn pattern_phenol() -> MoleculeAst {
-    MoleculeAst {
-        atoms: atoms![
+    mol(
+        vec![
             a(Element::C), a(Element::C), a(Element::C),
             a(Element::C), a(Element::C), a(Element::C),
             a(Element::O),
         ],
-        bonds: vec![
-            bt(0, 1, wb()), bt(1, 2, wb()), bt(2, 3, wb()),
-            bt(3, 4, wb()), bt(4, 5, wb()), bt(5, 0, wb()),
-            bt(5, 6, wb()),
+        vec![
+            (0, 1, wb()), (1, 2, wb()), (2, 3, wb()),
+            (3, 4, wb()), (4, 5, wb()), (5, 0, wb()),
+            (5, 6, wb()),
         ],
-        ..Default::default()
-    }
+    )
 }
 
 // Fused 5-6 bicyclic, all C, any bonds
@@ -111,16 +107,15 @@ fn pattern_phenol() -> MoleculeAst {
 // Ring 2: 1-2-3-4-5   (5-membered)
 // Fused edge: 1-5
 fn pattern_bicyclic() -> MoleculeAst {
-    MoleculeAst {
-        atoms: (0..9).map(|_| a(Element::C)).collect::<Vec<_>>().into(),
-        bonds: vec![
-            bt(0, 1, wb()), bt(1, 2, wb()), bt(2, 3, wb()),
-            bt(3, 4, wb()), bt(4, 5, wb()), bt(1, 5, wb()),
-            bt(5, 6, wb()), bt(6, 7, wb()), bt(7, 8, wb()),
-            bt(8, 0, wb()),
+    mol(
+        (0..9).map(|_| a(Element::C)).collect(),
+        vec![
+            (0, 1, wb()), (1, 2, wb()), (2, 3, wb()),
+            (3, 4, wb()), (4, 5, wb()), (1, 5, wb()),
+            (5, 6, wb()), (6, 7, wb()), (7, 8, wb()),
+            (8, 0, wb()),
         ],
-        ..Default::default()
-    }
+    )
 }
 
 fn substructure_benchmark(c: &mut Criterion) {

@@ -14,6 +14,8 @@ pub mod morgan;
 use error::LoweringError;
 use index_vec::Idx;
 use umol_edn::{FromEdn, ToEdn};
+use umol_graph_core::{EdgeId, NodeId};
+use umol_graph_core::relation::RelationId;
 
 macro_rules! define_idx {
     ($($(#[doc = $doc:literal])* $name:ident),+ $(,)?) => {
@@ -21,42 +23,64 @@ macro_rules! define_idx {
             $(#[doc = $doc])*
             #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, FromEdn, ToEdn)]
             #[edn(transparent)]
-            pub struct $name(pub usize);
+            pub struct $name(pub u32);
 
             impl From<usize> for $name {
-                fn from(v: usize) -> Self { Self(v) }
+                fn from(v: usize) -> Self { Self(v as u32) }
             }
 
             impl Idx for $name {
-                fn from_usize(v: usize) -> Self { Self(v) }
-                fn index(self) -> usize { self.0 }
+                fn from_usize(v: usize) -> Self { Self(v as u32) }
+                fn index(self) -> usize { self.0 as usize }
             }
         )+
     };
 }
 
 define_idx!(
-    /// Index into `MoleculeAst::atoms`.
+    /// Atom index — maps directly to `NodeId` in the underlying graph.
     AtomIdx,
-    /// Index into `MoleculeAst::bonds`.
+    /// Bond index — maps directly to `EdgeId` in the underlying graph.
     BondIdx,
-    /// Index into `MoleculeAst::dative_bonds`.
+    /// Dative bond index — maps to `RelationId` in the dative bonds relation set.
     DativeBondIdx,
-    /// Index into `MoleculeAst::aromatic_systems`.
+    /// Aromatic system index — maps to `RelationId` in the aromatic systems relation set.
     AromaticSystemIdx,
-    /// Index into `MoleculeAst::multicenter_bonds`.
+    /// Multicenter bond index — maps to `RelationId` in the multicenter bonds relation set.
     MulticenterBondIdx,
-    /// Index into `MoleculeAst::noncovalent_bonds`.
+    /// Noncovalent bond index — maps to `RelationId` in the noncovalent bonds relation set.
     NoncovalentBondIdx,
 );
 
-/// Construct an `IndexVec<AtomIdx, AtomAst>` from a list of atoms.
-#[macro_export]
-macro_rules! atoms {
-    ($($atom:expr),* $(,)?) => {
-        ::index_vec::IndexVec::<$crate::ast::AtomIdx, _>::from(vec![$($atom),*])
+impl From<NodeId> for AtomIdx {
+    fn from(id: NodeId) -> Self { Self(id.0) }
+}
+impl From<AtomIdx> for NodeId {
+    fn from(idx: AtomIdx) -> Self { Self(idx.0) }
+}
+
+impl From<EdgeId> for BondIdx {
+    fn from(id: EdgeId) -> Self { Self(id.0) }
+}
+impl From<BondIdx> for EdgeId {
+    fn from(idx: BondIdx) -> Self { Self(idx.0) }
+}
+
+macro_rules! relation_idx_from {
+    ($name:ident) => {
+        impl From<RelationId> for $name {
+            fn from(id: RelationId) -> Self { Self(id.0) }
+        }
+        impl From<$name> for RelationId {
+            fn from(idx: $name) -> Self { Self(idx.0) }
+        }
     };
 }
+
+relation_idx_from!(DativeBondIdx);
+relation_idx_from!(AromaticSystemIdx);
+relation_idx_from!(MulticenterBondIdx);
+relation_idx_from!(NoncovalentBondIdx);
 
 /// AST marker trait carrying the lowering/raising config type.
 pub trait Ast {

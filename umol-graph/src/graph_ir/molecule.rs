@@ -23,8 +23,7 @@ use crate::ast::bond::BondAst;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
 use crate::ast::molecule::{
-    AromaticSystem as AromaticSystemAst, BondTuple, GroundMolecule, MoleculeAst,
-    MulticenterBond as MulticenterBondAst,
+    AromaticSystemAst, GroundMolecule, MoleculeAst, MulticenterBondAst,
 };
 use crate::ast::ToAst;
 
@@ -498,53 +497,39 @@ impl ToAst<MoleculeAst> for Molecule {
             .map(|&idx| self.atom(idx).unwrap().to_ast(&cfg.atom))
             .collect();
 
-        let pos = |idx: AtomIndex| -> AtomIdx { AtomIdx(*position_of.get(&idx).unwrap()) };
+        let pos =
+            |idx: AtomIndex| -> AtomIdx { AtomIdx(*position_of.get(&idx).unwrap() as u32) };
 
-        let bonds: Vec<BondTuple> = self
-            .bond_indices()
-            .map(|bi| {
-                let (a, b) = self.bond_atom_indices(bi).unwrap();
-                BondTuple {
-                    source: pos(a),
-                    target: pos(b),
-                    bond: self.bond(bi).unwrap().to_ast(&cfg.bond),
-                }
-            })
-            .collect();
+        let mut ast = MoleculeAst::default();
 
-        let dative_bonds: Vec<BondTuple> = self
-            .dative_bonds()
-            .map(|db| BondTuple {
-                source: pos(db.donor()),
-                target: pos(db.acceptor()),
-                bond: BondAst::from_order(db.order()),
-            })
-            .collect();
+        for atom_ast in &atoms {
+            ast.add_atom(atom_ast.clone());
+        }
 
-        let aromatic_systems: Vec<AromaticSystemAst> = self
-            .aromatic_systems()
-            .map(|sys| AromaticSystemAst {
-                atoms: sys.atoms().map(pos).collect(),
-            })
-            .collect();
+        for bi in self.bond_indices() {
+            let (a, b) = self.bond_atom_indices(bi).unwrap();
+            ast.add_bond(pos(a), pos(b), self.bond(bi).unwrap().to_ast(&cfg.bond));
+        }
 
-        let multicenter_bonds: Vec<MulticenterBondAst> = self
-            .multicenter_bonds()
-            .map(|mc| MulticenterBondAst {
-                atoms: mc.all_atoms().into_iter().map(pos).collect(),
-            })
-            .collect();
+        for db in self.dative_bonds() {
+            ast.add_dative_bond(pos(db.donor()), pos(db.acceptor()), BondAst::from_order(db.order()));
+        }
 
-        let noncovalent_bonds: Vec<BondTuple> = self
-            .noncovalent_bonds()
-            .map(|nc| BondTuple {
-                source: pos(nc.a()),
-                target: pos(nc.b()),
-                bond: BondAst::from_order(1),
-            })
-            .collect();
+        for sys in self.aromatic_systems() {
+            let atoms: Vec<AtomIdx> = sys.atoms().map(pos).collect();
+            ast.add_aromatic_system(atoms, AromaticSystemAst {});
+        }
 
-        let constraints = vec![
+        for mc in self.multicenter_bonds() {
+            let atoms: Vec<AtomIdx> = mc.all_atoms().into_iter().map(pos).collect();
+            ast.add_multicenter_bond(atoms, MulticenterBondAst {});
+        }
+
+        for nc in self.noncovalent_bonds() {
+            ast.add_noncovalent_bond(pos(nc.a()), pos(nc.b()), BondAst::from_order(1));
+        }
+
+        ast.constraints = vec![
             MoleculeConstraint::Derived {
                 predicate: DerivedPred::TotalCharge(ValueAst::Lit(self.charge() as i64)),
                 refs: RelationRefs::default(),
@@ -555,15 +540,7 @@ impl ToAst<MoleculeAst> for Molecule {
             },
         ];
 
-        MoleculeAst {
-            atoms: atoms.into(),
-            bonds,
-            dative_bonds,
-            aromatic_systems,
-            multicenter_bonds,
-            noncovalent_bonds,
-            constraints,
-        }
+        ast
     }
 }
 

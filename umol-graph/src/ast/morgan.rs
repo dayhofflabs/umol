@@ -37,7 +37,9 @@ use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::value_ast::ValueAst;
 
-use crate::ast::AtomIdx;
+use index_vec::Idx;
+
+use crate::ast::{AtomIdx, BondIdx};
 use crate::ast::molecule::MoleculeAst;
 
 type XxHashMap<K, V> = HashMap<K, V, Xxh3DefaultBuilder>;
@@ -102,40 +104,39 @@ impl BondSet {
 // ---------------------------------------------------------------------------
 
 fn is_heavy(ast: &MoleculeAst, idx: AtomIdx) -> bool {
-    let idx = idx.0;
-    !matches!(&ast.atoms[idx].element, ElementAst::Lit(Element::H))
+    !matches!(&ast.atom(idx).element, ElementAst::Lit(Element::H))
 }
 
-fn ast_atomic_number(ast: &MoleculeAst, idx: usize) -> u32 {
-    match &ast.atoms[idx].element {
+fn ast_atomic_number(ast: &MoleculeAst, idx: AtomIdx) -> u32 {
+    match &ast.atom(idx).element {
         ElementAst::Lit(e) => e.atomic_number() as u32,
         _ => 0,
     }
 }
 
-fn ast_atomic_mass(ast: &MoleculeAst, idx: usize) -> u32 {
-    match &ast.atoms[idx].isotope_mass {
+fn ast_atomic_mass(ast: &MoleculeAst, idx: AtomIdx) -> u32 {
+    match &ast.atom(idx).isotope_mass {
         IsotopeAst::Lit(m) => *m,
         _ => 0,
     }
 }
 
-fn ast_charge(ast: &MoleculeAst, idx: usize) -> i32 {
-    match &ast.atoms[idx].charge {
+fn ast_charge(ast: &MoleculeAst, idx: AtomIdx) -> i32 {
+    match &ast.atom(idx).charge {
         ValueAst::Lit(n) => *n as i32,
         _ => 0,
     }
 }
 
-fn ast_h_count(ast: &MoleculeAst, idx: usize) -> u32 {
-    match &ast.atoms[idx].implicit_hydrogens {
+fn ast_h_count(ast: &MoleculeAst, idx: AtomIdx) -> u32 {
+    match &ast.atom(idx).implicit_hydrogens {
         HydrogenAst::Value(ValueAst::Lit(n)) => *n as u32,
         _ => 0,
     }
 }
 
-fn bond_order(ast: &MoleculeAst, bond_idx: usize) -> u32 {
-    match &ast.bonds[bond_idx].bond.order {
+fn bond_order(ast: &MoleculeAst, bond_idx: BondIdx) -> u32 {
+    match &ast.bond(bond_idx).order {
         ValueAst::Lit(n) => *n as u32,
         _ => 1,
     }
@@ -148,7 +149,7 @@ struct AtomInvariants {
 }
 
 fn compute_atom_invariants(ast: &MoleculeAst) -> Vec<AtomInvariants> {
-    let n = ast.atoms.len();
+    let n = ast.atom_count();
     let mut result: Vec<AtomInvariants> = (0..n)
         .map(|_| AtomInvariants {
             heavy_degree: 0,
@@ -157,25 +158,25 @@ fn compute_atom_invariants(ast: &MoleculeAst) -> Vec<AtomInvariants> {
         })
         .collect();
 
-    for (bi, bond) in ast.bonds.iter().enumerate() {
+    for (bi, source, target, _) in ast.bonds() {
         let order = bond_order(ast, bi);
-        if is_heavy(ast, bond.target) {
-            result[bond.source.0].heavy_degree += 1;
-            result[bond.source.0].heavy_valence += order;
+        if is_heavy(ast, target) {
+            result[source.index()].heavy_degree += 1;
+            result[source.index()].heavy_valence += order;
         } else {
-            result[bond.source.0].h_count += 1;
+            result[source.index()].h_count += 1;
         }
-        if is_heavy(ast, bond.source) {
-            result[bond.target.0].heavy_degree += 1;
-            result[bond.target.0].heavy_valence += order;
+        if is_heavy(ast, source) {
+            result[target.index()].heavy_degree += 1;
+            result[target.index()].heavy_valence += order;
         } else {
-            result[bond.target.0].h_count += 1;
+            result[target.index()].h_count += 1;
         }
     }
 
     // Add implicit H count
-    for (i, inv) in result.iter_mut().enumerate() {
-        inv.h_count += ast_h_count(ast, i);
+    for i in 0..n {
+        result[i].h_count += ast_h_count(ast, AtomIdx::from_usize(i));
     }
 
     result
@@ -183,11 +184,11 @@ fn compute_atom_invariants(ast: &MoleculeAst) -> Vec<AtomInvariants> {
 
 /// Compute ring membership flags via DFS cycle detection.
 fn compute_ring_flags(ast: &MoleculeAst) -> Vec<bool> {
-    let n = ast.atoms.len();
+    let n = ast.atom_count();
     let mut adj: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
-    for (bi, bond) in ast.bonds.iter().enumerate() {
-        adj[bond.source.0].push((bond.target.0, bi));
-        adj[bond.target.0].push((bond.source.0, bi));
+    for (bi, source, target, _) in ast.bonds() {
+        adj[source.index()].push((target.index(), bi.index()));
+        adj[target.index()].push((source.index(), bi.index()));
     }
 
     let mut in_ring = vec![false; n];
@@ -360,7 +361,7 @@ fn ecfp_loop(
 
 /// Morgan fingerprint directly over MoleculeAst fields.
 pub fn morgan_direct(ast: &MoleculeAst, radius: usize) -> MorganFingerprint {
-    let n = ast.atoms.len();
+    let n = ast.atom_count();
     if n == 0 {
         return MorganFingerprint::new();
     }
@@ -370,10 +371,11 @@ pub fn morgan_direct(ast: &MoleculeAst, radius: usize) -> MorganFingerprint {
 
     let initial_ids: Vec<u32> = (0..n)
         .map(|i| {
+            let idx = AtomIdx::from_usize(i);
             initial_identifier(
-                ast_atomic_number(ast, i),
-                ast_atomic_mass(ast, i),
-                ast_charge(ast, i),
+                ast_atomic_number(ast, idx),
+                ast_atomic_mass(ast, idx),
+                ast_charge(ast, idx),
                 &atom_invs[i],
                 ring_flags[i],
             )
@@ -382,15 +384,17 @@ pub fn morgan_direct(ast: &MoleculeAst, radius: usize) -> MorganFingerprint {
 
     // Build adjacency: (neighbor_atom, bond_vec_index)
     let mut adj_vecs: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
-    for (bi, bond) in ast.bonds.iter().enumerate() {
-        adj_vecs[bond.source.0].push((bond.target.0, bi));
-        adj_vecs[bond.target.0].push((bond.source.0, bi));
+    for (bi, source, target, _) in ast.bonds() {
+        adj_vecs[source.index()].push((target.index(), bi.index()));
+        adj_vecs[target.index()].push((source.index(), bi.index()));
     }
     let adj_slices: Vec<&[(usize, usize)]> = adj_vecs.iter().map(|v| v.as_slice()).collect();
 
-    let bond_orders: Vec<u32> = (0..ast.bonds.len()).map(|bi| bond_order(ast, bi)).collect();
+    let bond_orders: Vec<u32> = (0..ast.bond_count())
+        .map(|bi| bond_order(ast, BondIdx::from_usize(bi)))
+        .collect();
 
-    ecfp_loop(n, ast.bonds.len(), &initial_ids, &adj_slices, &bond_orders, radius)
+    ecfp_loop(n, ast.bond_count(), &initial_ids, &adj_slices, &bond_orders, radius)
 }
 
 // ---------------------------------------------------------------------------
@@ -411,31 +415,34 @@ pub struct MorganTarget {
 
 impl MorganTarget {
     pub fn new(ast: &MoleculeAst) -> Self {
-        let n = ast.atoms.len();
-        let m = ast.bonds.len();
+        let n = ast.atom_count();
+        let m = ast.bond_count();
 
         let ring_flags = compute_ring_flags(ast);
         let atom_invs = compute_atom_invariants(ast);
 
         let initial_ids: Vec<u32> = (0..n)
             .map(|i| {
+                let idx = AtomIdx::from_usize(i);
                 initial_identifier(
-                    ast_atomic_number(ast, i),
-                    ast_atomic_mass(ast, i),
-                    ast_charge(ast, i),
+                    ast_atomic_number(ast, idx),
+                    ast_atomic_mass(ast, idx),
+                    ast_charge(ast, idx),
                     &atom_invs[i],
                     ring_flags[i],
                 )
             })
             .collect();
 
-        let bond_orders: Vec<u32> = (0..m).map(|bi| bond_order(ast, bi)).collect();
+        let bond_orders: Vec<u32> = (0..m)
+            .map(|bi| bond_order(ast, BondIdx::from_usize(bi)))
+            .collect();
 
         // Build CSR adjacency
         let mut adj_lists: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
-        for (bi, bond) in ast.bonds.iter().enumerate() {
-            adj_lists[bond.source.0].push((bond.target.0, bi));
-            adj_lists[bond.target.0].push((bond.source.0, bi));
+        for (bi, source, target, _) in ast.bonds() {
+            adj_lists[source.index()].push((target.index(), bi.index()));
+            adj_lists[target.index()].push((source.index(), bi.index()));
         }
 
         let total: usize = adj_lists.iter().map(|a| a.len()).sum();
@@ -492,32 +499,32 @@ pub struct MorganTargetPetgraph {
 
 impl MorganTargetPetgraph {
     pub fn new(ast: &MoleculeAst) -> Self {
-        let n = ast.atoms.len();
+        let n = ast.atom_count();
 
         let ring_flags = compute_ring_flags(ast);
         let atom_invs = compute_atom_invariants(ast);
 
         let initial_ids: Vec<u32> = (0..n)
             .map(|i| {
+                let idx = AtomIdx::from_usize(i);
                 initial_identifier(
-                    ast_atomic_number(ast, i),
-                    ast_atomic_mass(ast, i),
-                    ast_charge(ast, i),
+                    ast_atomic_number(ast, idx),
+                    ast_atomic_mass(ast, idx),
+                    ast_charge(ast, idx),
                     &atom_invs[i],
                     ring_flags[i],
                 )
             })
             .collect();
 
-        let mut graph = Graph::with_capacity(n, ast.bonds.len());
+        let mut graph = Graph::with_capacity(n, ast.bond_count());
         for _ in 0..n {
             graph.add_node(());
         }
-        for (bi, bond) in ast.bonds.iter().enumerate() {
-            let _ = bi;
+        for (bi, source, target, _) in ast.bonds() {
             graph.add_edge(
-                NodeIndex::new(bond.source.0),
-                NodeIndex::new(bond.target.0),
+                NodeIndex::new(source.index()),
+                NodeIndex::new(target.index()),
                 bond_order(ast, bi),
             );
         }
@@ -647,32 +654,35 @@ pub struct MorganTargetOpt {
 
 impl MorganTargetOpt {
     pub fn new(ast: &MoleculeAst) -> Self {
-        let n = ast.atoms.len();
-        let m = ast.bonds.len();
+        let n = ast.atom_count();
+        let m = ast.bond_count();
 
         let ring_flags = compute_ring_flags(ast);
         let atom_invs = compute_atom_invariants(ast);
 
         let initial_ids: Vec<u32> = (0..n)
             .map(|i| {
+                let idx = AtomIdx::from_usize(i);
                 initial_identifier(
-                    ast_atomic_number(ast, i),
-                    ast_atomic_mass(ast, i),
-                    ast_charge(ast, i),
+                    ast_atomic_number(ast, idx),
+                    ast_atomic_mass(ast, idx),
+                    ast_charge(ast, idx),
                     &atom_invs[i],
                     ring_flags[i],
                 )
             })
             .collect();
 
-        let bond_orders: Vec<u32> = (0..m).map(|bi| bond_order(ast, bi)).collect();
+        let bond_orders: Vec<u32> = (0..m)
+            .map(|bi| bond_order(ast, BondIdx::from_usize(bi)))
+            .collect();
 
         // Build per-atom adjacency lists, pre-sorted by bond_order
         let mut adj_lists: Vec<Vec<(u32, u32, u32)>> = vec![Vec::new(); n];
-        for (bi, bond) in ast.bonds.iter().enumerate() {
-            let bo = bond_orders[bi];
-            adj_lists[bond.source.0].push((bond.target.0 as u32, bi as u32, bo));
-            adj_lists[bond.target.0].push((bond.source.0 as u32, bi as u32, bo));
+        for (bi, source, target, _) in ast.bonds() {
+            let bo = bond_orders[bi.index()];
+            adj_lists[source.index()].push((target.0, bi.0, bo));
+            adj_lists[target.index()].push((source.0, bi.0, bo));
         }
         for list in &mut adj_lists {
             list.sort_unstable_by_key(|&(_, _, bo)| bo);
@@ -895,96 +905,58 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::AtomIdx;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::molecule::BondTuple;
 
-    fn atom(e: Element) -> AtomAst {
-        AtomAst::from_element(e)
-    }
-
-    fn bond_tuple(source: usize, target: usize, order: u8) -> BondTuple {
-        BondTuple {
-            source: AtomIdx(source),
-            target: AtomIdx(target),
-            bond: BondAst::from_order(order),
+    fn carbon(h: u8) -> AtomAst {
+        AtomAst {
+            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(h as i64)),
+            ..AtomAst::from_element(Element::C)
         }
     }
 
     fn methane() -> MoleculeAst {
-        MoleculeAst {
-            atoms: vec![AtomAst {
-                implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
-                ..atom(Element::C)
-            }].into(),
-            ..Default::default()
-        }
+        let mut ast = MoleculeAst::default();
+        ast.add_atom(carbon(4));
+        ast
     }
 
     fn ethane() -> MoleculeAst {
-        MoleculeAst {
-            atoms: vec![
-                AtomAst {
-                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)),
-                    ..atom(Element::C)
-                },
-                AtomAst {
-                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)),
-                    ..atom(Element::C)
-                },
-            ].into(),
-            bonds: vec![bond_tuple(0, 1, 1)],
-            ..Default::default()
-        }
+        let mut ast = MoleculeAst::default();
+        let a0 = ast.add_atom(carbon(3));
+        let a1 = ast.add_atom(carbon(3));
+        ast.add_bond(a0, a1, BondAst::from_order(1));
+        ast
     }
 
     fn ethanol() -> MoleculeAst {
-        MoleculeAst {
-            atoms: vec![
-                AtomAst {
-                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)),
-                    ..atom(Element::C)
-                },
-                AtomAst {
-                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(2)),
-                    ..atom(Element::C)
-                },
-                AtomAst {
-                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
-                    ..atom(Element::O)
-                },
-            ].into(),
-            bonds: vec![bond_tuple(0, 1, 1), bond_tuple(1, 2, 1)],
-            ..Default::default()
-        }
+        let mut ast = MoleculeAst::default();
+        let a0 = ast.add_atom(carbon(3));
+        let a1 = ast.add_atom(carbon(2));
+        let a2 = ast.add_atom(AtomAst {
+            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
+            ..AtomAst::from_element(Element::O)
+        });
+        ast.add_bond(a0, a1, BondAst::from_order(1));
+        ast.add_bond(a1, a2, BondAst::from_order(1));
+        ast
     }
 
     fn cyclohexane() -> MoleculeAst {
-        MoleculeAst {
-            atoms: (0..6)
-                .map(|_| AtomAst {
-                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(2)),
-                    ..atom(Element::C)
-                })
-                .collect::<Vec<_>>().into(),
-            bonds: (0..6).map(|i| bond_tuple(i, (i + 1) % 6, 1)).collect(),
-            ..Default::default()
+        let mut ast = MoleculeAst::default();
+        let atoms: Vec<AtomIdx> = (0..6).map(|_| ast.add_atom(carbon(2))).collect();
+        for i in 0..6 {
+            ast.add_bond(atoms[i], atoms[(i + 1) % 6], BondAst::from_order(1));
         }
+        ast
     }
 
     fn formaldehyde() -> MoleculeAst {
-        MoleculeAst {
-            atoms: vec![
-                AtomAst {
-                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(2)),
-                    ..atom(Element::C)
-                },
-                atom(Element::O),
-            ].into(),
-            bonds: vec![bond_tuple(0, 1, 2)],
-            ..Default::default()
-        }
+        let mut ast = MoleculeAst::default();
+        let a0 = ast.add_atom(carbon(2));
+        let a1 = ast.add_atom(AtomAst::from_element(Element::O));
+        ast.add_bond(a0, a1, BondAst::from_order(2));
+        ast
     }
 
     #[rstest]

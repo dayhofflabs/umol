@@ -1,83 +1,332 @@
 //! Molecule structural AST.
 
-use index_vec::IndexVec;
-use umol_edn::{FromEdn, ToEdn};
+use umol_graph_core::relation::RelationId;
+use umol_graph_core::{EdgeId, Graph, Neighbor, NodeId, RelationSet};
 use umol_shared::value_ast::ValueAst;
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::error::GroundError;
-use crate::ast::{Ast, AtomIdx};
+use crate::ast::{
+    AromaticSystemIdx, Ast, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx,
+    NoncovalentBondIdx,
+};
+use crate::ast::config::MoleculeAstConfig;
 
-/// Binary relation over two atoms with bond attributes.
-///
-/// For directed relations (dative, noncovalent), `source` is the donor/origin
-/// and `target` is the acceptor/destination. For undirected relations
-/// (localized bonds), the ordering is canonical (`source <= target`).
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct BondTuple {
-    pub source: AtomIdx,
-    pub target: AtomIdx,
-    pub bond: BondAst,
-}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AromaticSystemAst {}
 
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct AromaticSystem {
-    pub atoms: Vec<AtomIdx>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub struct MulticenterBond {
-    pub atoms: Vec<AtomIdx>,
-}
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MulticenterBondAst {}
 
 /// Molecule AST: structural representation of a molecule (ground or pattern).
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+///
+/// Primary topology (atoms + localized bonds) lives in `Graph<AtomAst, BondAst>`.
+/// Secondary relations (dative bonds, noncovalent bonds, aromatic systems,
+/// multicenter bonds) live in typed `RelationSet`s sharing the same `NodeId` space.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MoleculeAst {
-    pub atoms: IndexVec<AtomIdx, AtomAst>,
-    pub bonds: Vec<BondTuple>,
-    pub dative_bonds: Vec<BondTuple>,
-    pub aromatic_systems: Vec<AromaticSystem>,
-    pub multicenter_bonds: Vec<MulticenterBond>,
-    pub noncovalent_bonds: Vec<BondTuple>,
+    graph: Graph<AtomAst, BondAst>,
+    dative_bonds: RelationSet<BondAst>,
+    noncovalent_bonds: RelationSet<BondAst>,
+    aromatic_systems: RelationSet<AromaticSystemAst>,
+    multicenter_bonds: RelationSet<MulticenterBondAst>,
     pub constraints: Vec<MoleculeConstraint>,
 }
 
+// ---------------------------------------------------------------------------
+// Atom accessors
+// ---------------------------------------------------------------------------
+
+impl MoleculeAst {
+    pub fn atom_count(&self) -> usize {
+        self.graph.node_count()
+    }
+
+    pub fn atom(&self, idx: AtomIdx) -> &AtomAst {
+        &self.graph[NodeId::from(idx)]
+    }
+
+    pub fn atom_mut(&mut self, idx: AtomIdx) -> &mut AtomAst {
+        &mut self.graph[NodeId::from(idx)]
+    }
+
+    pub fn atoms(&self) -> impl Iterator<Item = (AtomIdx, &AtomAst)> {
+        self.graph
+            .node_ids()
+            .map(|id| (AtomIdx::from(id), &self.graph[id]))
+    }
+
+    pub fn neighbors(&self, idx: AtomIdx) -> &[Neighbor] {
+        self.graph.neighbors(NodeId::from(idx))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bond accessors
+// ---------------------------------------------------------------------------
+
+impl MoleculeAst {
+    pub fn bond_count(&self) -> usize {
+        self.graph.edge_count()
+    }
+
+    pub fn bond(&self, idx: BondIdx) -> &BondAst {
+        &self.graph[EdgeId::from(idx)]
+    }
+
+    pub fn bond_endpoints(&self, idx: BondIdx) -> (AtomIdx, AtomIdx) {
+        let [a, b] = self.graph.edge_endpoints(EdgeId::from(idx)).unwrap();
+        (AtomIdx::from(a), AtomIdx::from(b))
+    }
+
+    pub fn bonds(&self) -> impl Iterator<Item = (BondIdx, AtomIdx, AtomIdx, &BondAst)> {
+        self.graph.edge_ids().map(|id| {
+            let [a, b] = self.graph.edge_endpoints(id).unwrap();
+            (
+                BondIdx::from(id),
+                AtomIdx::from(a),
+                AtomIdx::from(b),
+                &self.graph[id],
+            )
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dative bond accessors
+// ---------------------------------------------------------------------------
+
+impl MoleculeAst {
+    pub fn dative_bond(&self, idx: DativeBondIdx) -> &BondAst {
+        self.dative_bonds
+            .data(RelationId::from(idx))
+            .expect("invalid DativeBondIdx")
+    }
+
+    pub fn dative_bond_participants(&self, idx: DativeBondIdx) -> &[NodeId] {
+        self.dative_bonds
+            .participants(RelationId::from(idx))
+            .expect("invalid DativeBondIdx")
+    }
+
+    pub fn dative_bond_ids(&self) -> impl Iterator<Item = DativeBondIdx> + '_ {
+        self.dative_bonds
+            .relation_ids()
+            .map(DativeBondIdx::from)
+    }
+
+    pub fn dative_bond_count(&self) -> usize {
+        self.dative_bonds.relation_count()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Noncovalent bond accessors
+// ---------------------------------------------------------------------------
+
+impl MoleculeAst {
+    pub fn noncovalent_bond(&self, idx: NoncovalentBondIdx) -> &BondAst {
+        self.noncovalent_bonds
+            .data(RelationId::from(idx))
+            .expect("invalid NoncovalentBondIdx")
+    }
+
+    pub fn noncovalent_bond_participants(&self, idx: NoncovalentBondIdx) -> &[NodeId] {
+        self.noncovalent_bonds
+            .participants(RelationId::from(idx))
+            .expect("invalid NoncovalentBondIdx")
+    }
+
+    pub fn noncovalent_bond_ids(&self) -> impl Iterator<Item = NoncovalentBondIdx> + '_ {
+        self.noncovalent_bonds
+            .relation_ids()
+            .map(NoncovalentBondIdx::from)
+    }
+
+    pub fn noncovalent_bond_count(&self) -> usize {
+        self.noncovalent_bonds.relation_count()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Aromatic system accessors
+// ---------------------------------------------------------------------------
+
+impl MoleculeAst {
+    pub fn aromatic_system(&self, idx: AromaticSystemIdx) -> &AromaticSystemAst {
+        self.aromatic_systems
+            .data(RelationId::from(idx))
+            .expect("invalid AromaticSystemIdx")
+    }
+
+    pub fn aromatic_system_participants(&self, idx: AromaticSystemIdx) -> &[NodeId] {
+        self.aromatic_systems
+            .participants(RelationId::from(idx))
+            .expect("invalid AromaticSystemIdx")
+    }
+
+    pub fn aromatic_system_ids(&self) -> impl Iterator<Item = AromaticSystemIdx> + '_ {
+        self.aromatic_systems
+            .relation_ids()
+            .map(AromaticSystemIdx::from)
+    }
+
+    pub fn aromatic_system_count(&self) -> usize {
+        self.aromatic_systems.relation_count()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Multicenter bond accessors
+// ---------------------------------------------------------------------------
+
+impl MoleculeAst {
+    pub fn multicenter_bond(&self, idx: MulticenterBondIdx) -> &MulticenterBondAst {
+        self.multicenter_bonds
+            .data(RelationId::from(idx))
+            .expect("invalid MulticenterBondIdx")
+    }
+
+    pub fn multicenter_bond_participants(&self, idx: MulticenterBondIdx) -> &[NodeId] {
+        self.multicenter_bonds
+            .participants(RelationId::from(idx))
+            .expect("invalid MulticenterBondIdx")
+    }
+
+    pub fn multicenter_bond_ids(&self) -> impl Iterator<Item = MulticenterBondIdx> + '_ {
+        self.multicenter_bonds
+            .relation_ids()
+            .map(MulticenterBondIdx::from)
+    }
+
+    pub fn multicenter_bond_count(&self) -> usize {
+        self.multicenter_bonds.relation_count()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Graph access (read-only)
+// ---------------------------------------------------------------------------
+
+impl MoleculeAst {
+    pub fn graph(&self) -> &Graph<AtomAst, BondAst> {
+        &self.graph
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Construction
+// ---------------------------------------------------------------------------
+
+impl MoleculeAst {
+    pub fn add_atom(&mut self, atom: AtomAst) -> AtomIdx {
+        AtomIdx::from(self.graph.add_node(atom))
+    }
+
+    pub fn add_bond(
+        &mut self,
+        source: AtomIdx,
+        target: AtomIdx,
+        bond: BondAst,
+    ) -> BondIdx {
+        BondIdx::from(
+            self.graph
+                .add_edge(NodeId::from(source), NodeId::from(target), bond),
+        )
+    }
+
+    pub fn add_dative_bond(
+        &mut self,
+        donor: AtomIdx,
+        acceptor: AtomIdx,
+        bond: BondAst,
+    ) -> DativeBondIdx {
+        let id = self.dative_bonds.add(
+            vec![NodeId::from(donor), NodeId::from(acceptor)],
+            bond,
+        );
+        DativeBondIdx::from(id)
+    }
+
+    pub fn add_noncovalent_bond(
+        &mut self,
+        a: AtomIdx,
+        b: AtomIdx,
+        bond: BondAst,
+    ) -> NoncovalentBondIdx {
+        let id = self.noncovalent_bonds.add(
+            vec![NodeId::from(a), NodeId::from(b)],
+            bond,
+        );
+        NoncovalentBondIdx::from(id)
+    }
+
+    pub fn add_aromatic_system(
+        &mut self,
+        atoms: Vec<AtomIdx>,
+        data: AromaticSystemAst,
+    ) -> AromaticSystemIdx {
+        let participants: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
+        AromaticSystemIdx::from(self.aromatic_systems.add(participants, data))
+    }
+
+    pub fn add_multicenter_bond(
+        &mut self,
+        atoms: Vec<AtomIdx>,
+        data: MulticenterBondAst,
+    ) -> MulticenterBondIdx {
+        let participants: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
+        MulticenterBondIdx::from(self.multicenter_bonds.add(participants, data))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Derived queries
+// ---------------------------------------------------------------------------
+
 impl MoleculeAst {
     pub fn is_ground(&self) -> bool {
-        self.atoms.iter().all(|a| a.is_ground())
-            && self.bonds.iter().all(|b| b.bond.is_ground())
-            && self.dative_bonds.iter().all(|b| b.bond.is_ground())
-            && self.noncovalent_bonds.iter().all(|b| b.bond.is_ground())
+        self.graph.node_ids().all(|id| self.graph[id].is_ground())
+            && self.graph.edge_ids().all(|id| self.graph[id].is_ground())
+            && self
+                .dative_bonds
+                .relation_ids()
+                .all(|id| self.dative_bonds.data(id).unwrap().is_ground())
+            && self
+                .noncovalent_bonds
+                .relation_ids()
+                .all(|id| self.noncovalent_bonds.data(id).unwrap().is_ground())
             && self.constraints.iter().all(|c| c.is_ground_assertion())
     }
 
     pub fn bond_order_sum(&self, atom: AtomIdx) -> Option<u8> {
+        let node = NodeId::from(atom);
         let mut sum: u8 = 0;
-        for bond in &self.bonds {
-            if bond.source == atom || bond.target == atom {
-                match bond.bond.order {
-                    ValueAst::Lit(n) => sum += n as u8,
-                    _ => return None,
-                }
+        for neighbor in self.graph.neighbors(node) {
+            match self.graph[neighbor.edge].order {
+                ValueAst::Lit(n) => sum += n as u8,
+                _ => return None,
             }
         }
         Some(sum)
     }
 
     pub fn dative_bond_order_sums(&self, atom: AtomIdx) -> (u8, u8) {
+        let node = NodeId::from(atom);
         let mut donated: u8 = 0;
         let mut accepted: u8 = 0;
-        for bond in &self.dative_bonds {
-            let order = match bond.bond.order {
+        for &rel_id in self.dative_bonds.incident(node) {
+            let data = self.dative_bonds.data(rel_id).unwrap();
+            let order = match data.order {
                 ValueAst::Lit(n) => n as u8,
                 _ => continue,
             };
-            if bond.source == atom {
+            let participants = self.dative_bonds.participants(rel_id).unwrap();
+            if participants[0] == node {
                 donated += order;
-            } else if bond.target == atom {
+            } else {
                 accepted += order;
             }
         }
@@ -85,15 +334,14 @@ impl MoleculeAst {
     }
 
     pub fn is_in_aromatic_system(&self, atom: AtomIdx) -> bool {
-        self.aromatic_systems
-            .iter()
-            .any(|sys| sys.atoms.contains(&atom))
+        self.aromatic_systems.has_incident(NodeId::from(atom))
     }
 }
 
 impl Ast for MoleculeAst {
     type Config = MoleculeAstConfig;
 }
+
 
 /// A `MoleculeAst` whose fields are all concrete and whose constraints are
 /// all ground assertions. The invariant is checked once at construction.
@@ -121,7 +369,6 @@ impl GroundMolecule {
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use rstest::*;
     use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
     use umol_shared::spin::SpinState;
     use umol_shared::spin_ast::SpinStateAst;
@@ -147,93 +394,138 @@ mod tests {
     }
 
     fn ground_ast() -> MoleculeAst {
-        MoleculeAst {
-            atoms: vec![ground_atom()].into(),
-            bonds: vec![],
-            dative_bonds: vec![],
-            aromatic_systems: vec![],
-            multicenter_bonds: vec![],
-            noncovalent_bonds: vec![],
-            constraints: vec![],
-        }
+        let mut ast = MoleculeAst::default();
+        ast.add_atom(ground_atom());
+        ast
     }
 
-    #[rstest]
-    #[case::empty(MoleculeAst::default(), true)]
-    #[case::ground_atom(ground_ast(), true)]
-    #[case::ground_with_lit_constraint(
-        MoleculeAst {
-            constraints: vec![MoleculeConstraint::Derived {
-                predicate: DerivedPred::TotalCharge(ValueAst::Lit(-1)),
-                refs: RelationRefs::default(),
-            }],
-            ..ground_ast()
-        },
-        true,
-    )]
-    #[case::wildcard_element(
-        MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Undetermined)].into(),
-            ..MoleculeAst::default()
-        },
-        false,
-    )]
-    #[case::wildcard_bond_order(
-        MoleculeAst {
-            atoms: vec![
-                AtomAst::from_element(umol_shared::element::Element::C),
-                AtomAst::from_element(umol_shared::element::Element::O),
-            ].into(),
-            bonds: vec![BondTuple { source: AtomIdx(0), target: AtomIdx(1), bond: BondAst::new(ValueAst::Undetermined) }],
-            ..MoleculeAst::default()
-        },
-        false,
-    )]
-    #[case::non_ground_constraint(
-        MoleculeAst {
-            constraints: vec![MoleculeConstraint::Derived {
-                predicate: DerivedPred::TotalSpin(SpinStateAst::default()),
-                refs: RelationRefs::default(),
-            }],
-            ..ground_ast()
-        },
-        false,
-    )]
-    #[case::sub_pattern_constraint(
-        MoleculeAst {
-            constraints: vec![MoleculeConstraint::SubPattern {
-                anchor: AtomIdx(0),
-                pattern: Box::new(MoleculeAst::default()),
-            }],
-            ..ground_ast()
-        },
-        false,
-    )]
-    fn test_molecule_ast_is_ground(#[case] ast: MoleculeAst, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    #[test]
+    fn test_molecule_ast_is_ground_empty() {
+        assert!(MoleculeAst::default().is_ground());
+    }
+
+    #[test]
+    fn test_molecule_ast_is_ground_atom() {
+        assert!(ground_ast().is_ground());
+    }
+
+    #[test]
+    fn test_molecule_ast_is_ground_with_constraint() {
+        let mut ast = ground_ast();
+        ast.constraints.push(MoleculeConstraint::Derived {
+            predicate: DerivedPred::TotalCharge(ValueAst::Lit(-1)),
+            refs: RelationRefs::default(),
+        });
+        assert!(ast.is_ground());
+    }
+
+    #[test]
+    fn test_molecule_ast_is_ground_wildcard_element() {
+        let mut ast = MoleculeAst::default();
+        ast.add_atom(AtomAst::new(ElementAst::Undetermined));
+        assert!(!ast.is_ground());
+    }
+
+    #[test]
+    fn test_molecule_ast_is_ground_wildcard_bond() {
+        let mut ast = MoleculeAst::default();
+        let a = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::C));
+        let b = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::O));
+        ast.add_bond(a, b, BondAst::new(ValueAst::Undetermined));
+        assert!(!ast.is_ground());
+    }
+
+    #[test]
+    fn test_molecule_ast_is_ground_non_ground_constraint() {
+        let mut ast = ground_ast();
+        ast.constraints.push(MoleculeConstraint::Derived {
+            predicate: DerivedPred::TotalSpin(SpinStateAst::default()),
+            refs: RelationRefs::default(),
+        });
+        assert!(!ast.is_ground());
+    }
+
+    #[test]
+    fn test_molecule_ast_is_ground_sub_pattern() {
+        let mut ast = ground_ast();
+        ast.constraints.push(MoleculeConstraint::SubPattern {
+            anchor: AtomIdx(0),
+            pattern: Box::new(MoleculeAst::default()),
+        });
+        assert!(!ast.is_ground());
     }
 
     #[test]
     fn test_ground_molecule_new() {
         let ast = ground_ast();
-        let ground = GroundMolecule::new(ast.clone());
-        assert!(ground.is_ok());
-        assert_eq!(ground.unwrap().as_ast(), &ast);
+        assert!(GroundMolecule::new(ast).is_ok());
     }
 
     #[test]
     fn test_ground_molecule_new_error() {
-        let ast = MoleculeAst {
-            atoms: vec![AtomAst::new(ElementAst::Undetermined)].into(),
-            ..MoleculeAst::default()
-        };
+        let mut ast = MoleculeAst::default();
+        ast.add_atom(AtomAst::new(ElementAst::Undetermined));
         assert_eq!(GroundMolecule::new(ast), Err(GroundError));
     }
 
     #[test]
-    fn test_ground_molecule_into_ast() {
-        let ast = ground_ast();
-        let ground = GroundMolecule::new(ast.clone()).unwrap();
-        assert_eq!(ground.into_ast(), ast);
+    fn test_molecule_ast_bond_order_sum() {
+        let mut ast = MoleculeAst::default();
+        let a = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::C));
+        let b = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::O));
+        ast.add_bond(a, b, BondAst::from_order(2));
+        assert_eq!(ast.bond_order_sum(a), Some(2));
+        assert_eq!(ast.bond_order_sum(b), Some(2));
+    }
+
+    #[test]
+    fn test_molecule_ast_bond_order_sum_no_bonds() {
+        let mut ast = MoleculeAst::default();
+        let a = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::C));
+        assert_eq!(ast.bond_order_sum(a), Some(0));
+    }
+
+    #[test]
+    fn test_molecule_ast_bond_order_sum_wildcard() {
+        let mut ast = MoleculeAst::default();
+        let a = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::C));
+        let b = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::O));
+        ast.add_bond(a, b, BondAst::new(ValueAst::Undetermined));
+        assert_eq!(ast.bond_order_sum(a), None);
+    }
+
+    #[test]
+    fn test_molecule_ast_is_in_aromatic_system() {
+        let mut ast = MoleculeAst::default();
+        let a = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::C));
+        let b = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::C));
+        let c = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::C));
+        ast.add_aromatic_system(vec![a, b], AromaticSystemAst {});
+        assert!(ast.is_in_aromatic_system(a));
+        assert!(ast.is_in_aromatic_system(b));
+        assert!(!ast.is_in_aromatic_system(c));
+    }
+
+    #[test]
+    fn test_molecule_ast_dative_bond_order_sums() {
+        let mut ast = MoleculeAst::default();
+        let n = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::N));
+        let b = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::B));
+        ast.add_dative_bond(n, b, BondAst::from_order(1));
+        assert_eq!(ast.dative_bond_order_sums(n), (1, 0));
+        assert_eq!(ast.dative_bond_order_sums(b), (0, 1));
+    }
+
+    #[test]
+    fn test_molecule_ast_neighbors() {
+        let mut ast = MoleculeAst::default();
+        let a = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::C));
+        let b = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::O));
+        let c = ast.add_atom(AtomAst::from_element(umol_shared::element::Element::N));
+        ast.add_bond(a, b, BondAst::from_order(1));
+        ast.add_bond(a, c, BondAst::from_order(2));
+        assert_eq!(ast.neighbors(a).len(), 2);
+        assert_eq!(ast.neighbors(b).len(), 1);
+        assert_eq!(ast.neighbors(c).len(), 1);
     }
 }

@@ -1,0 +1,21 @@
+[package]
+name = "umol-graph-core"
+version = "0.1.0"
+authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rappoport/umol"
+description = "Graph data structures and algorithms for umol."
+
+[lib]
+bench = false
+
+[dependencies]
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+rstest = "0.26.1"
+
+[lints.clippy]
+absolute_paths = "warn"
+mod_module_files = "warn"

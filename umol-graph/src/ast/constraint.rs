@@ -138,7 +138,7 @@ mod tests {
     fn in_ring_atom(atom: usize) -> MoleculeConstraint {
         MoleculeConstraint::Derived {
             predicate: DerivedPred::InRing,
-            refs: RelationRefs::atoms(vec![AtomIdx(atom)]),
+            refs: RelationRefs::atoms(vec![AtomIdx(atom as u32)]),
         }
     }
 

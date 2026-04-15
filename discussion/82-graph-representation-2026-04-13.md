@@ -103,6 +103,120 @@ petgraph is sufficient for molecular graphs but will not scale to reaction netwo
 
 Molecular graphs and reaction networks are fundamentally different workloads. If umol needs reaction network path-finding, it will require a separate graph substrate (CSR at minimum, likely with parallel traversal and compression).
 
+## Indirection analysis: four algorithms over MoleculeAst
+
+### What the algorithms need
+
+All four algorithms operate on the same primitive: "give me the neighbors of atom i". The differences are in metadata carried alongside traversal.
+
+| Algorithm | Core topology query | Per-edge metadata | Per-node metadata |
+|---|---|---|---|
+| Ring enumeration | neighbors(i) → \[j\] | bond index (to build Ring) | aromatic hint (for filtering) |
+| VF2 subgraph iso | neighbors(i) → \[j\] | bond attributes (match predicate) | atom attributes (match predicate) |
+| Morgan/WL | neighbors(i) → \[(j, bond_idx)\] | bond order | atom invariants |
+| DPO reactions | neighbors(i) → \[j\] | bond identity (for deletion) | atom identity (for mapping) |
+
+The topology query is identical. Metadata is always available from parallel arrays indexed by `AtomIdx`/`BondIdx`.
+
+### Current data paths
+
+**Ring enumeration** (from `MoleculeBuilder`):
+
+1. `StableGraph<AtomPattern, BondPattern>` (petgraph, linked-list edges)
+2. → `adjacency_list()` → `HashMap<AtomIndex, Vec<AtomIndex>>`
+3. → `AtomAdjacency::from_map` → `BTreeMap<AtomIndex, Vec<AtomIndex>>`
+4. → optionally `induced()` → new `BTreeMap` (filtered)
+5. → `to_dense()` → `DenseProjection { atoms: Vec<AtomIndex>, adj: Vec<Vec<usize>> }`
+6. → `enumerate_simple_cycles` / `biconnected_components`
+
+4–5 conversions before the algorithm runs. petgraph stores adjacency internally, but its linked-list representation isn't compatible with what cycle enumeration needs (dense contiguous indices), so we extract → hash → sort → reindex every time.
+
+From `MoleculeAst` (not yet implemented), there would be an additional flat `Vec<BondTuple>` → adjacency step at the start.
+
+**VF2** (from `MoleculeAst`):
+
+1. `Vec<BondTuple>` (flat)
+2. → `build_graph()` → `petgraph::Graph<usize, usize, Directed>`
+3. → `subgraph_isomorphisms_iter` (petgraph's VF2)
+
+1 conversion. petgraph is the destination — built because `subgraph_isomorphisms_iter` requires it.
+
+**Morgan direct** (from `MoleculeAst`):
+
+1. `Vec<BondTuple>` (flat)
+2. → build `Vec<Vec<(usize, usize)>>` adjacency (one pass over bonds)
+3. → `ecfp_loop` iterates over slices
+
+1 conversion to dense adjacency, then direct iteration.
+
+**MorganTarget** (from `MoleculeAst`):
+
+1. `Vec<BondTuple>` (flat)
+2. → build CSR: `adj: Vec<(usize, usize)>` + `offsets: Vec<usize>`
+3. → `ecfp_loop` iterates over slices
+
+1 conversion. `MorganTarget` already implements CSR. If the AST had CSR natively, this constructor would be a borrow.
+
+### Where the indirection comes from
+
+The ring enumeration path is the worst case and reveals the structural problem. petgraph stores edges as linked lists indexed by `NodeIndex(u32)` — each node has a "first outgoing edge" pointer, edges form a linked list per node. This gives O(degree) neighbor iteration but with pointer chasing and no contiguous memory layout.
+
+Cycle enumeration (Johnson's) needs dense contiguous indices — atom 0..n-1, each with a contiguous neighbor array. `DenseProjection` exists to renumber atoms and pack adjacency into `Vec<Vec<usize>>`. petgraph can't provide this directly, so we go through `HashMap` → `BTreeMap` → `Vec<Vec<usize>>`.
+
+The `BTreeMap` intermediate (`AtomAdjacency`) exists because the ring enumerator needs `induced()` — filtering to a subset of atoms. This is a legitimate operation (aromatic subgraph extraction), but the data structure choice is incidental. CSR can produce an induced subgraph just as easily, and the output is already dense.
+
+### Per-algorithm evaluation with CSR in AST
+
+**Ring enumeration:**
+
+CSR → (filter to aromatic atoms if needed → build induced CSR) → `enumerate_simple_cycles` / `biconnected_components`
+
+`DenseProjection` becomes unnecessary — CSR is already dense. `AtomAdjacency` intermediate goes away. The only remaining step is optional aromatic filtering, which is inherent to the problem. Eliminates 3 intermediate data structures (HashMap, BTreeMap, DenseProjection).
+
+**VF2:**
+
+Two options:
+
+- (a) Build `petgraph::Graph` from CSR → use `subgraph_isomorphisms_iter`. Same cost as current (iterate neighbors, add edges). Marginal improvement — iterating CSR neighbors is a slice scan vs iterating flat bonds.
+- (b) Implement VF2 directly on CSR. Neighbor queries become slice lookups instead of petgraph iterator traversal. Since petgraph's VF2 is vanilla VF2 (~2.7x slower than RDKit's VF2+), a custom implementation is the long-term path regardless.
+
+Option (a) preserves compatibility. Option (b) is separate work.
+
+**Morgan/WL:**
+
+`morgan_direct` currently builds `Vec<Vec<(usize, usize)>>` from bonds. With CSR in the AST, this is a borrow — no construction. `MorganTarget` already IS a CSR; with CSR in the AST, `MorganTarget::new` copies atom invariants but borrows topology.
+
+WL iteration (same access pattern) would iterate `csr.neighbors(i)` directly.
+
+**DPO reactions:**
+
+DPO = find pattern (VF2 on input graph) → delete matched edges/nodes → add new edges/nodes → output graph.
+
+Input graph is read-only — CSR is ideal for pattern-finding. Output is a new graph constructed from the modified bond list, then CSR-built. Graph surgery works on a mutable intermediate (bond list), not on the source CSR. Natural flow: read from CSR, compute changes, write new CSR.
+
+### Indirection summary
+
+| Algorithm | Current from builder | Current from AST | With CSR in AST |
+|---|---|---|---|
+| Ring enum | 4 conversions | 5 (extra flat→adj) | 0–1 (induced subgraph if filtering) |
+| VF2 | N/A (builder graph) | 1 (build petgraph) | 1 (build petgraph) or 0 (native VF2) |
+| Morgan | N/A | 1 (build dense adj) | 0 (borrow slices) |
+| DPO | N/A | N/A | 0 for reads, new CSR for output |
+
+Every algorithm currently builds its own adjacency representation from scratch. With CSR in the AST, most algorithms borrow directly. The only remaining conversion is VF2 if petgraph's implementation is kept, and optional aromatic-subgraph induction for ring enumeration.
+
+### Structural change to MoleculeAst
+
+`bonds: Vec<BondTuple>` splits into topology (CSR) and bond attributes (`IndexVec<BondIdx, BondAst>`). Source/target are encoded in the CSR; bond attributes live alongside indexed by `BondIdx`.
+
+Flat `Vec<BondTuple>` remains as the parser's intermediate output and the serialization format. CSR is built from it at parse time. Serialization reconstructs the bond list from CSR + attributes.
+
+### Mutation model
+
+`MoleculeAst` is mutable during solving — the solver narrows `Undetermined` fields to `Lit` values. But this is attribute mutation only, never structural mutation. No atoms or bonds are added or removed during solving. CSR is fully compatible with attribute mutation via parallel arrays. Topology is fixed at parse time and never changes.
+
+Construction happens once (parser → build CSR from bond list). The bond list is the parser's natural output; CSR construction is a single O(|bonds|) pass with a sort.
+
 ## Current status
 
-petgraph is confirmed sufficient for molecular workloads and remains the graph substrate for molecule-level operations (VF2 matcher, Morgan fingerprints). No CSR escape hatch needed for molecules. Reaction networks are a separate concern requiring a different solution.
+CSR is the right topology substrate for `MoleculeAst`. Every algorithm either borrows CSR directly or builds a transient petgraph `Graph` for VF2 compatibility. petgraph remains available as a library dependency for its VF2 implementation until a native VF2+ replaces it. Reaction networks are a separate concern requiring a different solution.

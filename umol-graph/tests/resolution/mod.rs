@@ -59,8 +59,7 @@ fn resolve_with_config(
                 .and_then(|()| builder.build(resolve_config));
             match result {
                 Ok(mol) => {
-                    let mut ast = mol.to_ast(&MoleculeAstConfig::zeroed());
-                    ast.aromatic_systems.sort_by(|a, b| a.atoms.cmp(&b.atoms));
+                    let ast = mol.to_ast(&MoleculeAstConfig::zeroed());
                     ResolveResult {
                         success: true,
                         output: Some(MoleculeAstWrapper::new(ast, input.metadata().clone())),
