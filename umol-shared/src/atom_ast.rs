@@ -115,7 +115,7 @@ impl AromaticValenceAst {
 
     pub fn matches(&self, target: &AromaticValenceAst) -> bool {
         match (self, target) {
-            (Self::Undetermined, Self::Undetermined) => true,
+            (Self::Undetermined, _) => true,
             (Self::NotAromatic, Self::NotAromatic) => true,
             (Self::Value(pattern), Self::Value(ValueAst::Lit(n))) => pattern.matches(*n),
             _ => false,
@@ -212,7 +212,8 @@ mod tests {
     #[case::lit_match(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
     #[case::lit_mismatch(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::Value(ValueAst::Lit(3)), false)]
     #[case::wildcard_match(AromaticValenceAst::Value(ValueAst::Undetermined), AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
-    #[case::unspecified_vs_not_aromatic(AromaticValenceAst::Undetermined, AromaticValenceAst::NotAromatic, false)]
+    #[case::unspecified_vs_not_aromatic(AromaticValenceAst::Undetermined, AromaticValenceAst::NotAromatic, true)]
+    #[case::unspecified_vs_value(AromaticValenceAst::Undetermined, AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
     #[case::value_vs_unspecified(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::Undetermined, false)]
     fn test_aromatic_valence_ast_matches(#[case] pattern: AromaticValenceAst, #[case] target: AromaticValenceAst, #[case] expected: bool) {
         assert_eq!(pattern.matches(&target), expected);

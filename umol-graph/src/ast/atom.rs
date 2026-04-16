@@ -11,7 +11,7 @@ use crate::ast::config::{
     AromaticValenceMode, AtomAstConfig, ImplicitHydrogenMode, IsotopeMode, MultiplicityMode,
     NumericMode, UnpairedElectronsMode,
 };
-use crate::ast::Ast;
+use crate::table_ir::atom::{Atom as TableAtom, ImplicitHydrogens};
 
 /// Atom AST: structural representation of an atom (ground or pattern).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -39,6 +39,49 @@ impl AtomAst {
 
     pub fn from_element(element: Element) -> Self {
         Self::new(ElementAst::Lit(element))
+    }
+
+    /// Lift a `table_ir::Atom` to an `AtomAst` field-by-field. Fields absent
+    /// from the table-level atom remain `Undetermined`; callers that need a
+    /// ground AST should apply `coerce` explicitly.
+    pub fn from_table_atom(atom: &TableAtom) -> Self {
+        let mut ast = Self::from_element(atom.element);
+        if let Some(mass) = atom.isotope_mass {
+            ast.isotope_mass = IsotopeAst::Lit(mass);
+        }
+        if let Some(charge) = atom.charge {
+            ast.charge = ValueAst::Lit(charge as i64);
+        }
+        match atom.implicit_hydrogens {
+            Some(ImplicitHydrogens::Hydrogens(h)) => {
+                ast.implicit_hydrogens = HydrogenAst::Value(ValueAst::Lit(h as i64));
+            }
+            Some(ImplicitHydrogens::Normal) => {
+                ast.implicit_hydrogens = HydrogenAst::Normal;
+            }
+            None => {}
+        }
+        if let Some(lp) = atom.lone_pairs {
+            ast.lone_pairs = ValueAst::Lit(lp as i64);
+        }
+        let u = atom
+            .unpaired_electrons
+            .map_or(ValueAst::Undetermined, |u| ValueAst::Lit(u as i64));
+        let m = atom
+            .multiplicity
+            .map_or(ValueAst::Undetermined, |m| ValueAst::Lit(m.multiplicity() as i64));
+        if !matches!(u, ValueAst::Undetermined) || !matches!(m, ValueAst::Undetermined) {
+            ast.spin = SpinStateAst::from_pair(u, m);
+        }
+        if let Some(v) = atom.valence {
+            ast.valence = ValueAst::Lit(v as i64);
+        }
+        if let Some(true) = atom.aromatic {
+            ast.aromatic_valence = AromaticValenceAst::Value(ValueAst::Undetermined);
+        } else if let Some(false) = atom.aromatic {
+            ast.aromatic_valence = AromaticValenceAst::NotAromatic;
+        }
+        ast
     }
 
     pub fn matches_ground(&self, target: &AtomAst) -> bool {
@@ -248,8 +291,4 @@ impl AtomAst {
         release_numeric(&mut self.accepted_pairs, &cfg.accepted_pairs_mode);
         release_numeric(&mut self.multicenter_valence, &cfg.multicenter_valence_mode);
     }
-}
-
-impl Ast for AtomAst {
-    type Config = AtomAstConfig;
 }

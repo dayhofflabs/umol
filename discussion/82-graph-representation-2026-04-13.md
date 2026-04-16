@@ -78,6 +78,20 @@ Hit count differences are from RDKit rejecting ~150 molecules during sanitizatio
 
 petgraph's VF2 is ~2.7x slower than RDKit's C++ VF2. This is within "proceed and optimize later" territory.
 
+### CSR VF2 re-run (2026-04-15)
+
+After the AST migration: bonds moved into a CSR `Graph` in `MoleculeAst`, VF2 switched from petgraph to the native implementation in `umol-graph-core` operating directly on CSR neighbor slices. Same three patterns, same 9,120-molecule corpus.
+
+| Pattern | CSR VF2 (ms) | petgraph VF2 (ms) | Speedup | RDKit (ms) | Hits (CSR) |
+|---|---|---|---|---|---|
+| branched | 108 | 131 | 1.21x | 51 | 4000 |
+| phenol | 194 | 239 | 1.23x | 82 | 2076 |
+| bicyclic | 111 | 137 | 1.23x | 51 | 178 |
+
+~20% uniform speedup from removing the petgraph build step and the `Directed` double-edge overhead. Gap to RDKit narrows from 2.6–2.9x to 2.1–2.4x; the remaining gap is algorithmic (vanilla VF2 vs VF2+).
+
+Hit counts shifted up by 21/5/7. Unrelated to the CSR switch — the `AromaticValenceAst::matches` function previously treated `Undetermined` as exact-match-only instead of a wildcard, inconsistent with the sibling `ElementAst`/`IsotopeAst`/`HydrogenAst`. Fixing that lets element-only patterns correctly match aromatic-ring atoms they always should have matched.
+
 ### Optimization path
 
 **Preprocessing around petgraph (hours, estimated ~30-40% improvement):**

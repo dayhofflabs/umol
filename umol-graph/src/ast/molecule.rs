@@ -13,9 +13,11 @@ use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::error::GroundError;
 use crate::ast::{
-    AromaticSystemIdx, Ast, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx,
+    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx,
     NoncovalentBondIdx,
 };
+use crate::table_ir::bond::BondDonation;
+use crate::table_ir::Molecule as TableMolecule;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AromaticSystemAst {}
@@ -99,6 +101,50 @@ impl MoleculeAst {
             multicenter_bonds,
             constraints,
         }
+    }
+
+    /// Lift a `table_ir::Molecule` to a `MoleculeAst` by lifting atoms and
+    /// bonds individually (`AtomAst::from_table_atom`, `BondAst::from_table_bond`)
+    /// and splitting bonds into regular/dative/noncovalent by their table-level
+    /// tags. Aromatic systems and constraints are not derived here.
+    pub fn from_table_molecule(mol: &TableMolecule) -> Self {
+        let atoms: Vec<AtomAst> = mol.atoms.iter().map(AtomAst::from_table_atom).collect();
+
+        let mut regular = Vec::new();
+        let mut dative = Vec::new();
+        let mut noncovalent = Vec::new();
+        for b in &mol.bonds {
+            let a_idx = AtomIdx(b.atoms.first());
+            let b_idx = AtomIdx(b.atoms.second());
+            let bond_ast = BondAst::from_table_bond(b);
+            if b.noncovalent.is_some() {
+                noncovalent.push((a_idx, b_idx, bond_ast));
+            } else if matches!(
+                b.donation,
+                Some(BondDonation::Donating | BondDonation::Accepting)
+            ) {
+                dative.push((a_idx, b_idx, bond_ast));
+            } else {
+                regular.push((a_idx, b_idx, bond_ast));
+            }
+        }
+
+        let multicenter: Vec<(Vec<AtomIdx>, MulticenterBondAst)> = mol
+            .multicenter_bonds
+            .iter()
+            .map(|mc| {
+                let mut seen = std::collections::HashSet::new();
+                let atoms: Vec<AtomIdx> = mc
+                    .all_atoms()
+                    .into_iter()
+                    .filter(|a| seen.insert(*a))
+                    .map(AtomIdx)
+                    .collect();
+                (atoms, MulticenterBondAst {})
+            })
+            .collect();
+
+        Self::new(atoms, regular, dative, noncovalent, vec![], multicenter, vec![])
     }
 }
 
@@ -391,11 +437,6 @@ impl MoleculeAst {
         self.aromatic_systems.has_incident(NodeId::from(atom))
     }
 }
-
-impl Ast for MoleculeAst {
-    type Config = MoleculeAstConfig;
-}
-
 
 /// A `MoleculeAst` whose fields are all concrete and whose constraints are
 /// all ground assertions. The invariant is checked once at construction.

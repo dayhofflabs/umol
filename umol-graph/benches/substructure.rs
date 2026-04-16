@@ -12,11 +12,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use umol_graph::ast::AtomIdx;
 use umol_graph::ast::atom::AtomAst;
 use umol_graph::ast::bond::BondAst;
-use umol_graph::ast::config::MoleculeAstConfig;
 use umol_graph::ast::matcher::{find_matches, MatchQuery, MatchTarget};
 use umol_graph::ast::molecule::MoleculeAst;
-use umol_graph::ast::ToAst;
-use umol_graph::graph_ir::molecule_builder::MoleculeBuilder;
 use umol_graph::io::smiles::parse_smiles;
 use umol_shared::element::Element;
 use umol_shared::value_ast::ValueAst;
@@ -47,12 +44,10 @@ fn load_smiles() -> Vec<String> {
 }
 
 fn load_corpus(smiles_list: &[String]) -> Vec<MoleculeAst> {
-    let cfg = MoleculeAstConfig::zeroed();
     let mut asts = Vec::new();
     for s in smiles_list {
         if let Ok(table_mol) = parse_smiles(s) {
-            let builder = MoleculeBuilder::from_table_molecule(&table_mol);
-            asts.push(builder.to_ast(&cfg));
+            asts.push(MoleculeAst::from_table_molecule(&table_mol));
         }
     }
     asts

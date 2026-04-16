@@ -13,7 +13,6 @@ pub mod morgan;
 pub mod rings;
 pub mod symmetry;
 
-use error::LoweringError;
 use index_vec::Idx;
 use umol_edn::{FromEdn, ToEdn};
 use umol_graph_core::{EdgeId, NodeId};
@@ -83,18 +82,3 @@ relation_idx_from!(DativeBondIdx);
 relation_idx_from!(AromaticSystemIdx);
 relation_idx_from!(MulticenterBondIdx);
 relation_idx_from!(NoncovalentBondIdx);
-
-/// AST marker trait carrying the lowering/raising config type.
-pub trait Ast {
-    type Config;
-}
-
-/// Lowering targets that can be built from an AST.
-pub trait FromAst<A: Ast>: Sized {
-    fn from_ast(ast: &A, cfg: &A::Config) -> Result<Self, LoweringError>;
-}
-
-/// Raise a ground or pattern type to its AST representation.
-pub trait ToAst<A: Ast> {
-    fn to_ast(&self, cfg: &A::Config) -> A;
-}
