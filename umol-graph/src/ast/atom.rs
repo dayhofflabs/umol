@@ -1,5 +1,7 @@
 //! Atom structural AST.
 
+use std::mem;
+
 use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin_ast::SpinStateAst;
@@ -99,8 +101,6 @@ impl AtomAst {
 }
 
 impl AtomAst {
-    /// Interpret `Undetermined` fields according to the config's interpretation
-    /// modes. Call before solving so the solver sees concrete interpreted values.
     pub fn coerce(&mut self, cfg: &AtomAstConfig) {
         if matches!(self.isotope_mass, IsotopeAst::Undetermined) {
             self.isotope_mass = match cfg.isotope_mode {
@@ -128,7 +128,7 @@ impl AtomAst {
                 AromaticValenceMode::Required => AromaticValenceAst::Undetermined,
             };
         }
-        match std::mem::take(&mut self.spin) {
+        match mem::take(&mut self.spin) {
             SpinStateAst::Pair {
                 unpaired,
                 multiplicity,
@@ -215,7 +215,7 @@ impl AtomAst {
             }
             _ => {}
         }
-        match std::mem::take(&mut self.spin) {
+        match mem::take(&mut self.spin) {
             SpinStateAst::Lit(state) => {
                 let u_value = state.unpaired_electrons();
                 let m_value = state.multiplicity();

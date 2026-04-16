@@ -14,8 +14,8 @@ use umol_shared::value_ast::ValueAst;
 use super::{AromaticContribution, AromaticSystem};
 use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
-use crate::graph_ir::config::{ElementScope, RingLimits};
-use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
+use super::{ElementScope, RingLimits};
+use crate::ast::rings::{Ring, RingIndex, RingSet};
 
 #[derive(Clone, Debug)]
 pub struct HueckelRuleAromaticity {
@@ -258,8 +258,8 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::molecule::MoleculeAst;
-    use crate::graph_ir::config::RingEnumerationStrategy;
-    use crate::graph_ir::rings::{RingEnumerator, RingFamily};
+    use crate::ast::rings::RingEnumerationStrategy;
+    use crate::ast::rings::{RingEnumerator, RingFamily};
 
     fn aromatic_atom(element: Element, pi: i64) -> AtomAst {
         AtomAst {

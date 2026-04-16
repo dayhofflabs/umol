@@ -4,6 +4,8 @@
 //! Tarjan & van Leeuwen (1984). Union-by-rank for O(α(n)) amortized
 //! per operation.
 
+use std::cmp::Ordering;
+
 /// Disjoint-set data structure.
 ///
 /// Elements are integers `0..n`. Initially each element is its own set.
@@ -36,9 +38,9 @@ impl UnionFind {
             return;
         }
         match self.rank[ra].cmp(&self.rank[rb]) {
-            std::cmp::Ordering::Less => self.parent[ra] = rb as u32,
-            std::cmp::Ordering::Greater => self.parent[rb] = ra as u32,
-            std::cmp::Ordering::Equal => {
+            Ordering::Less => self.parent[ra] = rb as u32,
+            Ordering::Greater => self.parent[rb] = ra as u32,
+            Ordering::Equal => {
                 self.parent[ra] = rb as u32;
                 self.rank[rb] += 1;
             }

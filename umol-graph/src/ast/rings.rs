@@ -5,12 +5,28 @@
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use umol_graph_core::NodeId;
-use umol_shared::atom_ast::AromaticValenceAst;
+use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
 use umol_shared::element::Element;
 
-use super::config::RingEnumerationStrategy;
 use crate::ast::{AtomIdx, BondIdx};
 use crate::ast::molecule::MoleculeAst;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RingEnumerationStrategy {
+    pub aromatic_only: bool,
+    pub max_ring_size: usize,
+    pub max_rings_per_component: usize,
+}
+
+impl Default for RingEnumerationStrategy {
+    fn default() -> Self {
+        Self {
+            aromatic_only: false,
+            max_ring_size: 22,
+            max_rings_per_component: 2000,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RingIndex(pub u32);
@@ -432,7 +448,7 @@ impl RingEnumerator {
                         .node_ids()
                         .filter(|&n| {
                             let atom = ast.atom(AtomIdx(n.0));
-                            matches!(atom.element, umol_shared::atom_ast::ElementAst::Lit(Element::C))
+                            matches!(atom.element, ElementAst::Lit(Element::C))
                                 && !matches!(
                                     atom.aromatic_valence,
                                     AromaticValenceAst::NotAromatic
@@ -575,7 +591,6 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::molecule::MoleculeAst;
-    use crate::graph_ir::config::RingEnumerationStrategy;
 
     fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {
         RingEnumerator::new(

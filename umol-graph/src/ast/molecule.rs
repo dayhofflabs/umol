@@ -424,6 +424,7 @@ impl GroundMolecule {
 mod tests {
     use pretty_assertions::assert_eq;
     use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
+    use umol_shared::element::Element;
     use umol_shared::spin::SpinState;
     use umol_shared::spin_ast::SpinStateAst;
     use umol_shared::value_ast::ValueAst;
@@ -433,7 +434,7 @@ mod tests {
 
     fn ground_atom() -> AtomAst {
         AtomAst {
-            element: ElementAst::Lit(umol_shared::element::Element::C),
+            element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeAst::Natural,
             charge: ValueAst::Lit(0),
             implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
@@ -484,8 +485,8 @@ mod tests {
     fn test_molecule_ast_is_ground_wildcard_bond() {
         let ast = MoleculeAst::new(
             vec![
-                AtomAst::from_element(umol_shared::element::Element::C),
-                AtomAst::from_element(umol_shared::element::Element::O),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
             ],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
             vec![], vec![], vec![], vec![], vec![],
@@ -532,8 +533,8 @@ mod tests {
     fn test_molecule_ast_bond_order_sum() {
         let ast = MoleculeAst::new(
             vec![
-                AtomAst::from_element(umol_shared::element::Element::C),
-                AtomAst::from_element(umol_shared::element::Element::O),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
             ],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))],
             vec![], vec![], vec![], vec![], vec![],
@@ -545,7 +546,7 @@ mod tests {
     #[test]
     fn test_molecule_ast_bond_order_sum_no_bonds() {
         let ast = MoleculeAst::new(
-            vec![AtomAst::from_element(umol_shared::element::Element::C)],
+            vec![AtomAst::from_element(Element::C)],
             vec![], vec![], vec![], vec![], vec![], vec![],
         );
         assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(0));
@@ -555,8 +556,8 @@ mod tests {
     fn test_molecule_ast_bond_order_sum_wildcard() {
         let ast = MoleculeAst::new(
             vec![
-                AtomAst::from_element(umol_shared::element::Element::C),
-                AtomAst::from_element(umol_shared::element::Element::O),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
             ],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
             vec![], vec![], vec![], vec![], vec![],
@@ -568,9 +569,9 @@ mod tests {
     fn test_molecule_ast_is_in_aromatic_system() {
         let ast = MoleculeAst::new(
             vec![
-                AtomAst::from_element(umol_shared::element::Element::C),
-                AtomAst::from_element(umol_shared::element::Element::C),
-                AtomAst::from_element(umol_shared::element::Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
             ],
             vec![],
             vec![], vec![],
@@ -586,8 +587,8 @@ mod tests {
     fn test_molecule_ast_dative_bond_order_sums() {
         let ast = MoleculeAst::new(
             vec![
-                AtomAst::from_element(umol_shared::element::Element::N),
-                AtomAst::from_element(umol_shared::element::Element::B),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::B),
             ],
             vec![],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
@@ -601,9 +602,9 @@ mod tests {
     fn test_molecule_ast_neighbors() {
         let ast = MoleculeAst::new(
             vec![
-                AtomAst::from_element(umol_shared::element::Element::C),
-                AtomAst::from_element(umol_shared::element::Element::O),
-                AtomAst::from_element(umol_shared::element::Element::N),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+                AtomAst::from_element(Element::N),
             ],
             vec![
                 (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),

@@ -3,7 +3,7 @@
 use umol_graph_core::{EdgeId, NodeId, subgraph_isomorphisms};
 
 use crate::ast::molecule::MoleculeAst;
-use crate::solver::Solver;
+use crate::solver::propagate::Solver;
 
 /// Query atom index → target atom index mapping.
 #[derive(Clone, Debug, PartialEq, Eq)]

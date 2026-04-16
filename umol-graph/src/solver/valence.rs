@@ -15,7 +15,7 @@ use xxhash_rust::const_xxh3::xxh3_64;
 use crate::ast::atom::AtomAst;
 use crate::ast::config::AtomAstConfig;
 
-use super::error::{GraphIrError, ResolutionError};
+use super::error::ResolutionError;
 
 /// Atom type registry: ground AtomAst terms keyed by (element, charge).
 ///
@@ -79,7 +79,7 @@ impl AtomTypeRegistry {
         self.content_hash = xxh3_64(buf.as_bytes());
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, GraphIrError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
         let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomAst>> = BTreeMap::new();
@@ -107,7 +107,7 @@ impl AtomTypeRegistry {
                         atom.coerce(&zeroed);
                         Ok(atom)
                     })
-                    .collect::<Result<_, GraphIrError>>()?;
+                    .collect::<Result<_, ResolutionError>>()?;
                 for atom in &mut atoms {
                     let atom_element = match &atom.element {
                         ElementAst::Lit(e) => *e,
@@ -115,16 +115,14 @@ impl AtomTypeRegistry {
                             return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
                                 "atom '{}' has non-literal element",
                                 atom
-                            ))
-                            .into());
+                            )));
                         }
                     };
                     if atom_element != element {
                         return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
                             "atom '{}' element {} does not match section element {}",
                             atom, atom_element, element
-                        ))
-                        .into());
+                        )));
                     }
                     let atom_charge = match &atom.charge {
                         ValueAst::Lit(c) => *c as i8,
@@ -132,16 +130,14 @@ impl AtomTypeRegistry {
                             return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
                                 "atom '{}' has non-literal charge",
                                 atom
-                            ))
-                            .into());
+                            )));
                         }
                     };
                     if atom_charge != charge {
                         return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
                             "atom '{}' charge {} does not match section charge {}",
                             atom, atom_charge, charge
-                        ))
-                        .into());
+                        )));
                     }
                 }
                 atom_types
@@ -159,7 +155,7 @@ impl AtomTypeRegistry {
         Ok(reg)
     }
 
-    pub fn from_toml_file(path: &Path) -> Result<Self, GraphIrError> {
+    pub fn from_toml_file(path: &Path) -> Result<Self, ResolutionError> {
         let input = fs::read_to_string(path)
             .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
         Self::from_toml_str(&input)
@@ -216,7 +212,7 @@ impl AtomTypeRegistry {
 macro_rules! registry {
     ($($spec:expr),* $(,)?) => {{
         let zeroed = $crate::ast::config::AtomAstConfig::zeroed();
-        let mut registry = $crate::graph_ir::config_data::AtomTypeRegistry::new();
+        let mut registry = $crate::solver::valence::AtomTypeRegistry::new();
         $(
             {
                 let mut atom = $spec.parse::<$crate::ast::atom::AtomAst>().expect("invalid atom DSL");
@@ -293,7 +289,7 @@ impl ValenceTable {
         &DEFAULT_VALENCE_TABLE
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, GraphIrError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
         let parsed: BTreeMap<String, ValenceEntryToml> = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidValenceTable(e.to_string()))?;
         let mut entries = BTreeMap::new();
@@ -376,12 +372,12 @@ impl ValenceTable {
 #[macro_export]
 macro_rules! valence_table {
     ($($el:ident => [$($v:expr),* $(,)?]),* $(,)?) => {{
-        let mut table = $crate::graph_ir::config_data::ValenceTable::empty();
+        let mut table = $crate::solver::valence::ValenceTable::empty();
         $(
             table.insert(
                 <umol_shared::Element as std::str::FromStr>::from_str(stringify!($el))
                     .expect("invalid element symbol in valence_table!"),
-                $crate::graph_ir::config_data::ValenceEntry {
+                $crate::solver::valence::ValenceEntry {
                     allowed_valences: vec![$($v),*],
                     allowed_aromatic_valences: vec![],
                 },
@@ -407,7 +403,7 @@ impl NormalValenceTable {
         &DEFAULT_NORMAL_VALENCE_TABLE
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, GraphIrError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
         let parsed: BTreeMap<String, u8> = toml::from_str(input)
             .map_err(|e| ResolutionError::InvalidValenceTable(e.to_string()))?;
         let mut neutral = BTreeMap::new();

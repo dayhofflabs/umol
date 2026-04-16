@@ -57,6 +57,7 @@ fn verify_group(pg: &'static PointGroup, name: &str, order: usize) {
 }
 
 /// Parametric group families with order formulas.
+#[allow(clippy::complexity)]
 const FAMILIES: &[(&str, fn(u32) -> (String, usize))] = &[
     ("Cn", |n| (format!("C{n}"), n as usize)),
     ("Cnv", |n| (format!("C{n}v"), 2 * n as usize)),

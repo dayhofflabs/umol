@@ -1,23 +1,12 @@
-//! Error types for graph_ir module.
+//! Error types for the solver.
 
 use thiserror::Error;
 use umol_shared::element::Element;
 use umol_shared::error::SpinStateError;
 use umol_shared::spin::SpinMultiplicity;
 
-use super::aromaticity::AromaticityError;
 use crate::diagnostics::Diagnostic;
 use crate::table_ir::bond::BondOrder;
-
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum GraphIrError {
-    #[error(transparent)]
-    Validation(#[from] ValidationError),
-    #[error(transparent)]
-    Resolution(#[from] ResolutionError),
-    #[error(transparent)]
-    Aromaticity(#[from] AromaticityError),
-}
 
 impl From<ResolutionError> for Diagnostic {
     fn from(_error: ResolutionError) -> Self {

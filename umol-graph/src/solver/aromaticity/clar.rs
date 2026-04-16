@@ -12,11 +12,12 @@ use umol_shared::element::Element;
 use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
 use umol_shared::value_ast::ValueAst;
 
+use umol_graph_core::Graph;
+
 use super::{AromaticContribution, AromaticSystem, AromaticityError};
-use crate::algorithms::maximum_independent_set;
 use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
-use crate::graph_ir::rings::{Ring, RingIndex, RingSet};
+use crate::ast::rings::{Ring, RingIndex, RingSet};
 
 #[derive(Clone, Debug)]
 pub struct ClarAromaticity;
@@ -111,18 +112,21 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIndex]) -> Vec<Rin
         .collect();
 
     let n = candidates.len();
-    let mut conflict_adj: Vec<Vec<usize>> = vec![Vec::new(); n];
+    let mut edges: Vec<[u32; 2]> = Vec::new();
     for i in 0..n {
         for j in (i + 1)..n {
             if !candidate_atoms[i].is_disjoint(&candidate_atoms[j]) {
-                conflict_adj[i].push(j);
-                conflict_adj[j].push(i);
+                edges.push([i as u32, j as u32]);
             }
         }
     }
 
-    let selected = maximum_independent_set(&conflict_adj);
-    selected.into_iter().map(|i| candidates[i]).collect()
+    let conflict_graph = Graph::new(n, &edges);
+    let selected = conflict_graph.maximum_independent_set();
+    selected
+        .into_iter()
+        .map(|node_id| candidates[node_id.index()])
+        .collect()
 }
 
 #[cfg(test)]
@@ -137,8 +141,8 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::molecule::MoleculeAst;
-    use crate::graph_ir::config::RingEnumerationStrategy;
-    use crate::graph_ir::rings::{RingEnumerator, RingFamily};
+    use crate::ast::rings::RingEnumerationStrategy;
+    use crate::ast::rings::{RingEnumerator, RingFamily};
 
     fn aromatic_atom(element: Element, pi: i64) -> AtomAst {
         AtomAst {

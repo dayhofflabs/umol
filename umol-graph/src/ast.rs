@@ -10,6 +10,8 @@ pub mod error;
 pub mod matcher;
 pub mod molecule;
 pub mod morgan;
+pub mod rings;
+pub mod symmetry;
 
 use error::LoweringError;
 use index_vec::Idx;

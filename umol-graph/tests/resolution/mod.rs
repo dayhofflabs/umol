@@ -13,8 +13,8 @@ use umol_graph::ast::config::{
     ImplicitHydrogenMode, MoleculeAstConfig, MoleculeAstConfigOverrides,
 };
 use umol_graph::dsl::molecule::MoleculeAstWrapper;
-use umol_graph::graph_ir::config_data::ValenceTable;
-use umol_graph::solver::{AromaticityConfig, Solution, Solver, ValenceStrategy};
+use umol_graph::solver::propagate::{AromaticityConfig, Solution, Solver, ValenceStrategy};
+use umol_graph::solver::valence::ValenceTable;
 
 #[derive(FromEdn)]
 struct TestInput {

@@ -455,7 +455,7 @@ Ordered steps. Each step leaves the tree green.
    - Temporary index bridge: `Ring`/`RingSet`/`AromaticSystem` still use petgraph `AtomIndex`; AST methods convert via `AtomIndex::new(node_id.index())`. Goes away when GraphIR is removed (step 8).
    - Not done: constraint emission (`Derived { AromaticElectronCount(n), ring_atoms }`) and verification mode (solver discarding failing proposals). These require `DerivedPred::AromaticElectronCount` and constraint evaluation infrastructure (step 9 scope). Currently all proposed systems are accepted unconditionally.
    - 621 conformance tests pass, 3796 lib tests pass.
-8. **Delete `graph_ir::Molecule`.** `MoleculeAst` is the only molecule type. ~3 days.
+8. **Delete `graph_ir::Molecule`.** `MoleculeAst` is the only molecule type. ~3 days. *(Done 2026-04-15.)*
 9. **Add `SubPattern` constraint and matcher recursion.** ~1 week.
 10. **Add DPO rule application**. `ReactionRuleAst` as top-level type, rule-apply as a transform over `MoleculeAst`. ~1–2 weeks.
 

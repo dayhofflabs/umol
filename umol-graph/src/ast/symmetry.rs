@@ -1,10 +1,15 @@
-//! Graph automorphism and canonical labeling via nauty.
+//! Graph automorphism and canonical labeling on molecular ASTs.
+//!
+//! This is a thin adapter over the generic automorphism engine in
+//! `umol_graph_core::algorithms::auto`. It encodes atom attributes as vertex
+//! colors, represents bond types via edge subdivision (each bond becomes an
+//! auxiliary vertex colored by its type), and wraps results with `AtomIdx`
+//! handles.
 
 use std::collections::{BTreeMap, HashSet};
-use std::os::raw::c_int;
 
 use index_vec::Idx;
-use nauty_Traces_sys::*;
+use umol_graph_core::algorithms::auto::Automorphism;
 use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin::SpinMultiplicity;
@@ -15,6 +20,8 @@ use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::molecule::MoleculeAst;
+
+pub use umol_graph_core::algorithms::auto::AutoGroupOrder;
 
 /// Vertex color for nauty partitioning.
 /// Atom and Bond variants are in separate cells, so they can never share an orbit.
@@ -73,51 +80,39 @@ fn bond_color(bond: &BondAst) -> VertexColor {
     }
 }
 
-/// Automorphism group order: exact when it fits in `u32`, else approximate.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum AutoGroupOrder {
-    Exact(u32),
-    Approx(f64),
-}
-
 /// Result of graph automorphism computation on a molecular graph.
 #[derive(Debug, Clone)]
 pub struct GraphSymmetry {
     nauty_to_atom: Vec<AtomIdx>,
     atom_to_nauty: Vec<usize>,
-    orbits: Vec<c_int>,
-    canonical_lab: Vec<c_int>,
     n_atoms: usize,
-    num_orbits: usize,
-    grpsize1: f64,
-    grpsize2: c_int,
+    aut: Automorphism,
 }
 
 impl GraphSymmetry {
     pub fn num_orbits(&self) -> usize {
-        self.num_orbits
+        let mut reps = HashSet::new();
+        for i in 0..self.n_atoms {
+            reps.insert(self.aut.orbit_of(i));
+        }
+        reps.len()
     }
 
     pub fn orbit_representative(&self, atom: AtomIdx) -> AtomIdx {
         let ni = self.atom_to_nauty[atom.index()];
-        debug_assert!(ni < self.n_atoms);
-        debug_assert!((self.orbits[ni] as usize) < self.n_atoms);
-        self.nauty_to_atom[self.orbits[ni] as usize]
+        self.nauty_to_atom[self.aut.orbit_of(ni)]
     }
 
     pub fn same_orbit(&self, a: AtomIdx, b: AtomIdx) -> bool {
-        debug_assert!(a.index() < self.n_atoms);
-        debug_assert!(b.index() < self.n_atoms);
-        debug_assert!(self.atom_to_nauty[a.index()] < self.n_atoms);
-        debug_assert!(self.atom_to_nauty[b.index()] < self.n_atoms);
-        self.orbits[self.atom_to_nauty[a.index()]] == self.orbits[self.atom_to_nauty[b.index()]]
+        self.aut
+            .same_orbit(self.atom_to_nauty[a.index()], self.atom_to_nauty[b.index()])
     }
 
     pub fn orbit_partition(&self) -> Vec<Vec<AtomIdx>> {
-        let mut groups: BTreeMap<c_int, Vec<AtomIdx>> = BTreeMap::new();
+        let mut groups: BTreeMap<usize, Vec<AtomIdx>> = BTreeMap::new();
         for i in 0..self.n_atoms {
             groups
-                .entry(self.orbits[i])
+                .entry(self.aut.orbit_of(i))
                 .or_default()
                 .push(self.nauty_to_atom[i]);
         }
@@ -125,7 +120,8 @@ impl GraphSymmetry {
     }
 
     pub fn canonical_order(&self) -> Vec<AtomIdx> {
-        self.canonical_lab
+        self.aut
+            .canonical_labeling()
             .iter()
             .filter_map(|&v| {
                 let v = v as usize;
@@ -135,18 +131,7 @@ impl GraphSymmetry {
     }
 
     pub fn auto_group_order(&self) -> AutoGroupOrder {
-        if self.grpsize2 == 0 {
-            let g = self.grpsize1;
-            if g >= 0.0 && g <= u32::MAX as f64 && g.fract() == 0.0 {
-                return AutoGroupOrder::Exact(g as u32);
-            }
-        }
-        let approx = if self.grpsize2 == 0 {
-            self.grpsize1
-        } else {
-            self.grpsize1 * 10.0_f64.powi(self.grpsize2)
-        };
-        AutoGroupOrder::Approx(approx)
+        self.aut.auto_group_order()
     }
 
     pub fn auto_group_order_exact(&self) -> Option<u32> {
@@ -164,19 +149,6 @@ impl GraphSymmetry {
 pub fn compute_symmetry(ast: &MoleculeAst) -> GraphSymmetry {
     let n_atoms = ast.atom_count();
 
-    if n_atoms == 0 {
-        return GraphSymmetry {
-            nauty_to_atom: vec![],
-            atom_to_nauty: vec![],
-            orbits: vec![],
-            canonical_lab: vec![],
-            n_atoms: 0,
-            num_orbits: 0,
-            grpsize1: 1.0,
-            grpsize2: 0,
-        };
-    }
-
     let mut atom_to_nauty = vec![usize::MAX; n_atoms];
     let mut nauty_to_atom = Vec::with_capacity(n_atoms);
     for (ni, (idx, _)) in ast.atoms().enumerate() {
@@ -188,105 +160,25 @@ pub fn compute_symmetry(ast: &MoleculeAst) -> GraphSymmetry {
     let n_bonds = bonds.len();
     let n_total = n_atoms + n_bonds;
 
-    let mut colored: Vec<(usize, VertexColor)> = Vec::with_capacity(n_total);
-    for (ni, (_, atom)) in ast.atoms().enumerate() {
-        colored.push((ni, atom_color(atom)));
+    let mut colors: Vec<VertexColor> = Vec::with_capacity(n_total);
+    for (_, atom) in ast.atoms() {
+        colors.push(atom_color(atom));
     }
-
-    let mut bond_endpoints: Vec<(usize, usize, usize)> = Vec::with_capacity(n_bonds);
+    let mut edges: Vec<(usize, usize)> = Vec::with_capacity(2 * n_bonds);
     for (i, (_, src, tgt, bond)) in bonds.iter().enumerate() {
         let aux = n_atoms + i;
-        colored.push((aux, bond_color(bond)));
-        bond_endpoints.push((atom_to_nauty[src.index()], atom_to_nauty[tgt.index()], aux));
+        colors.push(bond_color(bond));
+        edges.push((atom_to_nauty[src.index()], aux));
+        edges.push((atom_to_nauty[tgt.index()], aux));
     }
 
-    colored.sort_by_key(|&(_, c)| c);
-    let mut lab = vec![0 as c_int; n_total];
-    let mut ptn = vec![0 as c_int; n_total];
-    for (pos, &(v, _)) in colored.iter().enumerate() {
-        lab[pos] = v as c_int;
-    }
-    for pos in 0..n_total.saturating_sub(1) {
-        ptn[pos] = if colored[pos].1 == colored[pos + 1].1 {
-            1
-        } else {
-            0
-        };
-    }
-
-    let n_dir_edges = 4 * n_bonds;
-    let mut degree = vec![0usize; n_total];
-    for &(a, b, aux) in &bond_endpoints {
-        degree[a] += 1;
-        degree[b] += 1;
-        degree[aux] = 2;
-    }
-
-    let mut sg = SparseGraph::new(n_total, n_dir_edges);
-    let mut pos = 0usize;
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..n_total {
-        sg.v[i] = pos;
-        sg.d[i] = degree[i] as c_int;
-        pos += degree[i];
-    }
-
-    let mut offset = vec![0usize; n_total];
-    for &(a, b, aux) in &bond_endpoints {
-        sg.e[sg.v[a] + offset[a]] = aux as c_int;
-        offset[a] += 1;
-        sg.e[sg.v[aux] + offset[aux]] = a as c_int;
-        offset[aux] += 1;
-        sg.e[sg.v[b] + offset[b]] = aux as c_int;
-        offset[b] += 1;
-        sg.e[sg.v[aux] + offset[aux]] = b as c_int;
-        offset[aux] += 1;
-    }
-
-    let mut orbits = vec![0 as c_int; n_total];
-    let mut options = optionblk::default_sparse();
-    options.getcanon = TRUE;
-    options.defaultptn = FALSE;
-    let mut stats = statsblk::default();
-    let mut cg = sparsegraph::default();
-
-    let m = SETWORDSNEEDED(n_total);
-    unsafe {
-        nauty_check(
-            WORDSIZE as c_int,
-            m as c_int,
-            n_total as c_int,
-            NAUTYVERSIONID as c_int,
-        );
-        sparsenauty(
-            &mut (&mut sg).into(),
-            lab.as_mut_ptr(),
-            ptn.as_mut_ptr(),
-            orbits.as_mut_ptr(),
-            &mut options,
-            &mut stats,
-            &mut cg,
-        );
-        SG_FREE(&mut cg);
-    }
-
-    let num_orbits = {
-        let mut reps = HashSet::new();
-        for &orbit in &orbits[..n_atoms] {
-            reps.insert(orbit);
-        }
-        reps.len()
-    };
+    let aut = Automorphism::compute(n_total, &edges, &colors);
 
     GraphSymmetry {
         nauty_to_atom,
         atom_to_nauty,
-        orbits,
-        canonical_lab: lab,
         n_atoms,
-        num_orbits,
-        grpsize1: stats.grpsize1,
-        grpsize2: stats.grpsize2,
+        aut,
     }
 }
 
@@ -369,7 +261,7 @@ mod tests {
             vec![atom(Element::C); 4],
             &[(0, 1, 1), (1, 2, 1), (2, 3, 1), (3, 0, 1)],
         );
-        let c: Vec<_> = (0..4).map(|i| AtomIdx(i)).collect();
+        let c: Vec<_> = (0..4).map(AtomIdx).collect();
         let sym = compute_symmetry(&ast);
         assert_eq!(sym.num_orbits(), 1);
         assert!(sym.same_orbit(c[0], c[1]));
@@ -386,7 +278,7 @@ mod tests {
             vec![atom(Element::C); 3],
             &[(0, 1, 2), (1, 2, 1)],
         );
-        let c: Vec<_> = (0..3).map(|i| AtomIdx(i)).collect();
+        let c: Vec<_> = (0..3).map(AtomIdx).collect();
         let sym = compute_symmetry(&ast);
         assert_eq!(sym.num_orbits(), 3);
         assert!(!sym.same_orbit(c[0], c[1]));
@@ -402,7 +294,7 @@ mod tests {
             vec![atom(Element::C); 4],
             &[(0, 1, 2), (1, 2, 1), (2, 3, 2), (3, 0, 1)],
         );
-        let c: Vec<_> = (0..4).map(|i| AtomIdx(i)).collect();
+        let c: Vec<_> = (0..4).map(AtomIdx).collect();
         let sym = compute_symmetry(&ast);
         assert_eq!(sym.num_orbits(), 1);
         assert!(sym.same_orbit(c[0], c[1]));
@@ -436,7 +328,7 @@ mod tests {
             vec![atom(Element::C); 6],
             &[(0, 1, 1), (1, 2, 1), (2, 3, 1), (3, 4, 1), (4, 5, 1), (5, 0, 1)],
         );
-        let c: Vec<_> = (0..6).map(|i| AtomIdx(i)).collect();
+        let c: Vec<_> = (0..6).map(AtomIdx).collect();
         let sym = compute_symmetry(&ast);
         assert_eq!(sym.num_orbits(), 1);
         for i in 0..6 {
