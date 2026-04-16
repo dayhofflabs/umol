@@ -34,8 +34,6 @@ use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::value_ast::ValueAst;
 
-use index_vec::Idx;
-
 use crate::ast::{AtomIdx, BondIdx};
 use crate::ast::molecule::MoleculeAst;
 

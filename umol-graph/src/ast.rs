@@ -13,7 +13,6 @@ pub mod morgan;
 pub mod rings;
 pub mod symmetry;
 
-use index_vec::Idx;
 use umol_edn::{FromEdn, ToEdn};
 use umol_graph_core::{EdgeId, NodeId};
 use umol_graph_core::relation::RelationId;
@@ -30,9 +29,9 @@ macro_rules! define_idx {
                 fn from(v: usize) -> Self { Self(v as u32) }
             }
 
-            impl Idx for $name {
-                fn from_usize(v: usize) -> Self { Self(v as u32) }
-                fn index(self) -> usize { self.0 as usize }
+            impl $name {
+                pub fn from_usize(v: usize) -> Self { Self(v as u32) }
+                pub fn index(self) -> usize { self.0 as usize }
             }
         )+
     };

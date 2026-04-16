@@ -14,7 +14,6 @@ use umol_shared::value_ast::ValueAst;
 
 use super::atom::parse_atom_dsl;
 use super::error::ParseError;
-use index_vec::Idx;
 
 use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;

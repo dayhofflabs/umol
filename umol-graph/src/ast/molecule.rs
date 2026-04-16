@@ -1,6 +1,5 @@
 //! Molecule structural AST.
 
-use index_vec::Idx;
 use umol_graph_core::relation::RelationId;
 use umol_graph_core::{
     EdgeId, FixedRelationSet, Graph, Neighbor, NodeId, Remapping, VarRelationSet,

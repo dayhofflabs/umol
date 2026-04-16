@@ -8,7 +8,6 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use index_vec::Idx;
 use umol_graph_core::algorithms::auto::Automorphism;
 use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
