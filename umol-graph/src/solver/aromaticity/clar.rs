@@ -28,9 +28,9 @@ impl ClarAromaticity {
         ast: &MoleculeAst,
         rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, AromaticityError> {
-        let has_non_benzenoid = ast.atoms().any(|(_, atom)| {
-            !matches!(atom.element, ElementAst::Lit(Element::C))
-                && matches!(atom.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
+        let has_non_benzenoid = ast.atoms().iter().any(|view| {
+            !matches!(view.data.element, ElementAst::Lit(Element::C))
+                && matches!(view.data.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
         });
         if has_non_benzenoid {
             return Err(AromaticityError::ClarInputError(
@@ -48,9 +48,9 @@ impl ClarAromaticity {
                 cycle.len() == 6
                     && cycle.atoms().iter().all(|&atom| {
                         let a = ast.atom(atom);
-                        matches!(a.element, ElementAst::Lit(Element::C))
+                        matches!(a.data.element, ElementAst::Lit(Element::C))
                             && matches!(
-                                a.aromatic_valence,
+                                a.data.aromatic_valence,
                                 AromaticValenceAst::Value(ValueAst::Lit(_))
                             )
                     })
@@ -76,7 +76,7 @@ impl ClarAromaticity {
             .iter()
             .map(|&atom| {
                 let a = ast.atom(atom);
-                let valence = match a.aromatic_valence {
+                let valence = match a.data.aromatic_valence {
                     AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
                     _ => 0,
                 };
@@ -181,7 +181,7 @@ mod tests {
                 ring_info.ring(i).is_some_and(|cycle| {
                     cycle.len() == 6
                         && cycle.atoms().iter().all(|&atom| {
-                            matches!(ast.atom(atom).element, ElementAst::Lit(Element::C))
+                            matches!(ast.atom(atom).data.element, ElementAst::Lit(Element::C))
                         })
                 })
             })

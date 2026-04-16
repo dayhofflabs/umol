@@ -44,7 +44,7 @@ pub fn find_matches(query: &MatchQuery, target: &MatchTarget) -> Vec<Assignment>
     let q_ast = query.ast;
     let t_ast = target.ast;
 
-    if q_ast.atom_count() == 0 {
+    if q_ast.atoms().count() == 0 {
         return if post_filter(q_ast, t_ast, &[]) {
             vec![Assignment(vec![])]
         } else {
@@ -53,14 +53,10 @@ pub fn find_matches(query: &MatchQuery, target: &MatchTarget) -> Vec<Assignment>
     }
 
     let mut node_match = |q: NodeId, t: NodeId| {
-        q_ast
-            .atom(q.into())
-            .matches_ground(t_ast.atom(t.into()))
+        q_ast.atom(q.into()).data.matches_ground(t_ast.atom(t.into()).data)
     };
     let mut edge_match = |q: EdgeId, t: EdgeId| {
-        q_ast
-            .bond(q.into())
-            .matches_ground(t_ast.bond(t.into()))
+        q_ast.bond(q.into()).data.matches_ground(t_ast.bond(t.into()).data)
     };
 
     subgraph_isomorphisms(
@@ -94,16 +90,13 @@ fn check_dative_bonds(
     target: &MoleculeAst,
     assignment: &[usize],
 ) -> bool {
-    query.dative_bond_ids().all(|qid| {
-        let q_parts = query.dative_bond_participants(qid);
-        let q_data = query.dative_bond(qid);
-        let mapped_source = assignment[q_parts[0].index()];
-        let mapped_target = assignment[q_parts[1].index()];
-        target.dative_bond_ids().any(|tid| {
-            let t_parts = target.dative_bond_participants(tid);
-            t_parts[0].index() == mapped_source
-                && t_parts[1].index() == mapped_target
-                && q_data.matches_ground(target.dative_bond(tid))
+    query.dative_bonds().iter().all(|q| {
+        let mapped_donor = assignment[q.donor.index()];
+        let mapped_acceptor = assignment[q.acceptor.index()];
+        target.dative_bonds().iter().any(|t| {
+            t.donor.index() == mapped_donor
+                && t.acceptor.index() == mapped_acceptor
+                && q.data.matches_ground(t.data)
         })
     })
 }
@@ -113,16 +106,13 @@ fn check_noncovalent_bonds(
     target: &MoleculeAst,
     assignment: &[usize],
 ) -> bool {
-    query.noncovalent_bond_ids().all(|qid| {
-        let q_parts = query.noncovalent_bond_participants(qid);
-        let q_data = query.noncovalent_bond(qid);
-        let mapped_source = assignment[q_parts[0].index()];
-        let mapped_target = assignment[q_parts[1].index()];
-        target.noncovalent_bond_ids().any(|tid| {
-            let t_parts = target.noncovalent_bond_participants(tid);
-            t_parts[0].index() == mapped_source
-                && t_parts[1].index() == mapped_target
-                && q_data.matches_ground(target.noncovalent_bond(tid))
+    query.noncovalent_bonds().iter().all(|q| {
+        let mapped_a = assignment[q.atoms[0].index()];
+        let mapped_b = assignment[q.atoms[1].index()];
+        target.noncovalent_bonds().iter().any(|t| {
+            t.atoms[0].index() == mapped_a
+                && t.atoms[1].index() == mapped_b
+                && q.data.matches_ground(t.data)
         })
     })
 }
@@ -132,12 +122,11 @@ fn check_aromatic_systems(
     target: &MoleculeAst,
     assignment: &[usize],
 ) -> bool {
-    query.aromatic_system_ids().all(|qid| {
-        let q_atoms = query.aromatic_system_participants(qid);
-        let mapped: Vec<usize> = q_atoms.iter().map(|a| assignment[a.index()]).collect();
-        target.aromatic_system_ids().any(|tid| {
-            let t_atoms = target.aromatic_system_participants(tid);
-            mapped.iter().all(|m| t_atoms.iter().any(|a| a.index() == *m))
+    query.aromatic_systems().iter().all(|q| {
+        let mapped: Vec<usize> = q.atoms().map(|a| assignment[a.index()]).collect();
+        target.aromatic_systems().iter().any(|t| {
+            let t_atoms: Vec<usize> = t.atoms().map(|a| a.index()).collect();
+            mapped.iter().all(|m| t_atoms.contains(m))
         })
     })
 }
@@ -147,12 +136,11 @@ fn check_multicenter_bonds(
     target: &MoleculeAst,
     assignment: &[usize],
 ) -> bool {
-    query.multicenter_bond_ids().all(|qid| {
-        let q_atoms = query.multicenter_bond_participants(qid);
-        let mapped: Vec<usize> = q_atoms.iter().map(|a| assignment[a.index()]).collect();
-        target.multicenter_bond_ids().any(|tid| {
-            let t_atoms = target.multicenter_bond_participants(tid);
-            mapped.iter().all(|m| t_atoms.iter().any(|a| a.index() == *m))
+    query.multicenter_bonds().iter().all(|q| {
+        let mapped: Vec<usize> = q.atoms().map(|a| assignment[a.index()]).collect();
+        target.multicenter_bonds().iter().any(|t| {
+            let t_atoms: Vec<usize> = t.atoms().map(|a| a.index()).collect();
+            mapped.iter().all(|m| t_atoms.contains(m))
         })
     })
 }
@@ -454,9 +442,9 @@ mod tests {
         assert!(!results.is_empty());
         for a in &results {
             let mapped: Vec<usize> = vec![a.0[0], a.0[1], a.0[2]];
-            let in_single = target.multicenter_bond_ids().any(|tid| {
-                let t_atoms = target.multicenter_bond_participants(tid);
-                mapped.iter().all(|m| t_atoms.iter().any(|a| a.index() == *m))
+            let in_single = target.multicenter_bonds().iter().any(|t| {
+                let t_atoms: Vec<usize> = t.atoms().map(|a| a.index()).collect();
+                mapped.iter().all(|m| t_atoms.contains(m))
             });
             assert!(in_single, "assignment {a:?} spans multiple multicenter bonds");
         }

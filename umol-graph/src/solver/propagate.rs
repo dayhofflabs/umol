@@ -67,14 +67,12 @@ impl AromaticityConfig {
         if systems.is_empty() {
             return Ok(Progress::Fixpoint);
         }
-        let entries: Vec<(Vec<AtomIdx>, AromaticSystemAst)> = systems
-            .iter()
-            .map(|sys| {
-                let atoms: Vec<AtomIdx> = sys.atoms().collect();
-                (atoms, AromaticSystemAst {})
-            })
-            .collect();
-        ast.set_aromatic_systems(entries);
+        let mut builder = ast.edit();
+        for sys in &systems {
+            let atoms: Vec<AtomIdx> = sys.atoms().collect();
+            builder.add_aromatic_system(atoms, AromaticSystemAst {});
+        }
+        *ast = builder.build();
         Ok(Progress::Advanced)
     }
 
@@ -111,7 +109,7 @@ impl Solver {
         if let Progress::Contradictory = self.valence.refine(ast) {
             return Ok(Solution::Contradictory);
         }
-        Ok(if ast.atoms().all(|(_, a)| a.is_ground()) {
+        Ok(if ast.atoms().iter().all(|v| v.data.is_ground()) {
             Solution::Determined(())
         } else {
             Solution::Underdetermined(())
@@ -134,12 +132,12 @@ impl Solver {
     }
 
     pub fn validate(&self, ast: &MoleculeAst) -> Solution<()> {
-        for i in 0..ast.atom_count() {
+        for i in 0..ast.atoms().count() {
             if !self.valence.validate(ast, i) {
                 return Solution::Contradictory;
             }
         }
-        if ast.atoms().all(|(_, a)| a.is_ground()) {
+        if ast.atoms().iter().all(|v| v.data.is_ground()) {
             Solution::Determined(())
         } else {
             Solution::Underdetermined(())
@@ -149,7 +147,7 @@ impl Solver {
 
 impl ValenceStrategy {
     pub fn candidates_for(&self, ast: &MoleculeAst, idx: AtomIdx) -> Vec<AtomAst> {
-        let atom = ast.atom(idx);
+        let atom = ast.atom(idx).data;
         let element = match atom.element {
             ElementAst::Lit(e) => e,
             _ => return Vec::new(),
@@ -190,12 +188,12 @@ impl ValenceStrategy {
 
     pub fn refine(&self, ast: &mut MoleculeAst) -> Progress {
         let mut advanced = false;
-        for i in 0..ast.atom_count() as u32 {
+        for i in 0..ast.atoms().count() as u32 {
             let idx = AtomIdx(i);
-            if ast.atom(idx).is_ground() {
+            if ast.atom(idx).data.is_ground() {
                 continue;
             }
-            if !matches!(ast.atom(idx).element, ElementAst::Lit(_)) {
+            if !matches!(ast.atom(idx).data.element, ElementAst::Lit(_)) {
                 continue;
             }
             if ast.bond_order_sum(idx).is_none() {
@@ -205,7 +203,7 @@ impl ValenceStrategy {
             match candidates.len() {
                 0 => return Progress::Contradictory,
                 1 => {
-                    advanced |= narrow_atom(ast.atom_mut(idx), &candidates[0]);
+                    advanced |= narrow_atom(ast.atom_mut(idx).data, &candidates[0]);
                 }
                 _ => {}
             }
@@ -219,7 +217,7 @@ impl ValenceStrategy {
 
     pub fn validate(&self, ast: &MoleculeAst, atom_index: usize) -> bool {
         let idx = AtomIdx(atom_index as u32);
-        if !matches!(ast.atom(idx).element, ElementAst::Lit(_)) {
+        if !matches!(ast.atom(idx).data.element, ElementAst::Lit(_)) {
             return true;
         }
         if ast.bond_order_sum(idx).is_none() {
@@ -665,8 +663,8 @@ mod tests {
 
     fn coerce_zeroed(ast: &mut MoleculeAst) {
         let cfg = AtomAstConfig::zeroed();
-        for i in 0..ast.atom_count() as u32 {
-            ast.atom_mut(AtomIdx(i)).coerce(&cfg);
+        for i in 0..ast.atoms().count() as u32 {
+            ast.atom_mut(AtomIdx(i)).data.coerce(&cfg);
         }
     }
 
@@ -698,9 +696,9 @@ mod tests {
         let mut ast = h2();
         let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Determined(()));
-        assert!(ast.atoms().all(|(_, a)| a.is_ground()));
+        assert!(ast.atoms().iter().all(|v| v.data.is_ground()));
         assert_eq!(
-            ast.atom(AtomIdx(0)).implicit_hydrogens,
+            ast.atom(AtomIdx(0)).data.implicit_hydrogens,
             HydrogenAst::Value(ValueAst::Lit(0))
         );
     }
@@ -762,9 +760,9 @@ mod tests {
         let mut ast = h2();
         let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Determined(()));
-        assert!(ast.atoms().all(|(_, a)| a.is_ground()));
+        assert!(ast.atoms().iter().all(|v| v.data.is_ground()));
         assert_eq!(
-            ast.atom(AtomIdx(0)).implicit_hydrogens,
+            ast.atom(AtomIdx(0)).data.implicit_hydrogens,
             HydrogenAst::Value(ValueAst::Lit(0))
         );
     }
@@ -794,7 +792,7 @@ mod tests {
         let result = solver.resolve(&mut ast).unwrap();
         assert_eq!(result, Solution::Determined(()));
         assert_eq!(
-            ast.atom(AtomIdx(0)).implicit_hydrogens,
+            ast.atom(AtomIdx(0)).data.implicit_hydrogens,
             HydrogenAst::Value(ValueAst::Lit(4))
         );
     }

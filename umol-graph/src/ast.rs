@@ -4,6 +4,7 @@
 
 pub mod atom;
 pub mod bond;
+pub mod builder;
 pub mod config;
 pub mod constraint;
 pub mod error;
@@ -12,6 +13,7 @@ pub mod molecule;
 pub mod morgan;
 pub mod rings;
 pub mod symmetry;
+pub mod views;
 
 use umol_edn::{FromEdn, ToEdn};
 use umol_graph_core::{EdgeId, NodeId};

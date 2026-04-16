@@ -146,29 +146,29 @@ impl GraphSymmetry {
 /// Bond types are encoded via edge subdivision: each bond becomes an auxiliary
 /// vertex (colored by bond order and donation) connecting its two endpoints.
 pub fn compute_symmetry(ast: &MoleculeAst) -> GraphSymmetry {
-    let n_atoms = ast.atom_count();
+    let n_atoms = ast.atoms().count();
 
     let mut atom_to_nauty = vec![usize::MAX; n_atoms];
     let mut nauty_to_atom = Vec::with_capacity(n_atoms);
-    for (ni, (idx, _)) in ast.atoms().enumerate() {
-        atom_to_nauty[idx.index()] = ni;
-        nauty_to_atom.push(idx);
+    for (ni, view) in ast.atoms().iter().enumerate() {
+        atom_to_nauty[view.idx.index()] = ni;
+        nauty_to_atom.push(view.idx);
     }
 
-    let bonds: Vec<_> = ast.bonds().collect();
+    let bonds: Vec<_> = ast.bonds().iter().collect();
     let n_bonds = bonds.len();
     let n_total = n_atoms + n_bonds;
 
     let mut colors: Vec<VertexColor> = Vec::with_capacity(n_total);
-    for (_, atom) in ast.atoms() {
-        colors.push(atom_color(atom));
+    for view in ast.atoms().iter() {
+        colors.push(atom_color(view.data));
     }
     let mut edges: Vec<(usize, usize)> = Vec::with_capacity(2 * n_bonds);
-    for (i, (_, src, tgt, bond)) in bonds.iter().enumerate() {
+    for (i, b) in bonds.iter().enumerate() {
         let aux = n_atoms + i;
-        colors.push(bond_color(bond));
-        edges.push((atom_to_nauty[src.index()], aux));
-        edges.push((atom_to_nauty[tgt.index()], aux));
+        colors.push(bond_color(b.data));
+        edges.push((atom_to_nauty[b.src.index()], aux));
+        edges.push((atom_to_nauty[b.tgt.index()], aux));
     }
 
     let aut = Automorphism::compute(n_total, &edges, &colors);

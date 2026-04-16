@@ -435,7 +435,7 @@ impl RingEnumerator {
                         .filter(|&n| {
                             let atom = ast.atom(AtomIdx(n.0));
                             !matches!(
-                                atom.aromatic_valence,
+                                atom.data.aromatic_valence,
                                 AromaticValenceAst::NotAromatic | AromaticValenceAst::Undetermined
                             )
                         })
@@ -448,9 +448,9 @@ impl RingEnumerator {
                         .node_ids()
                         .filter(|&n| {
                             let atom = ast.atom(AtomIdx(n.0));
-                            matches!(atom.element, ElementAst::Lit(Element::C))
+                            matches!(atom.data.element, ElementAst::Lit(Element::C))
                                 && !matches!(
-                                    atom.aromatic_valence,
+                                    atom.data.aromatic_valence,
                                     AromaticValenceAst::NotAromatic
                                         | AromaticValenceAst::Undetermined
                                 )

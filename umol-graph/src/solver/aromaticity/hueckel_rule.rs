@@ -92,7 +92,7 @@ impl HueckelRuleAromaticity {
 
     fn is_atom_eligible(&self, ast: &MoleculeAst, atom: AtomIdx) -> bool {
         let atom_ast = ast.atom(atom);
-        let element = match atom_ast.element {
+        let element = match atom_ast.data.element {
             ElementAst::Lit(e) => e,
             _ => return false,
         };
@@ -104,11 +104,11 @@ impl HueckelRuleAromaticity {
                 }
             }
         }
-        matches!(atom_ast.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
+        matches!(atom_ast.data.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
     }
 
     fn aromatic_electron_count(&self, ast: &MoleculeAst, atom: AtomIdx) -> Option<u8> {
-        match ast.atom(atom).aromatic_valence {
+        match ast.atom(atom).data.aromatic_valence {
             AromaticValenceAst::Value(ValueAst::Lit(n)) => Some(n as u8),
             _ => None,
         }

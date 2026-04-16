@@ -621,15 +621,15 @@ impl<'de> FromEdn<'de> for MoleculeAstWrapper {
 
 impl ToEdn for MoleculeAstWrapper {
     fn to_edn(&self) -> Edn<'static> {
-        let mut atom_elems = Vec::with_capacity(self.ast.atom_count());
-        for (idx, atom) in self.ast.atoms() {
-            let i = idx.index();
-            let alias_name = self.metadata.atom_aliases.get_by_right(atom);
+        let mut atom_elems = Vec::with_capacity(self.ast.atoms().count());
+        for view in self.ast.atoms().iter() {
+            let i = view.idx.index();
+            let alias_name = self.metadata.atom_aliases.get_by_right(view.data);
             let tag = self.metadata.atom_tags.get(&i);
             let atom_edn = if let Some(alias) = alias_name {
                 Edn::Keyword(EdnKeyword::owned(alias.clone()))
             } else {
-                atom.to_edn()
+                view.data.to_edn()
             };
             let entry = if let Some(tag_name) = tag {
                 Edn::Vector(
@@ -652,49 +652,50 @@ impl ToEdn for MoleculeAstWrapper {
         let bonds_edn: Vec<Edn<'static>> = self
             .ast
             .bonds()
+            .iter()
             .enumerate()
-            .map(|(i, (_, src, tgt, bond))| {
-                render_localized(src.index(), tgt.index(), bond, i, &self.metadata.bond_ids, &render_endpoint)
+            .map(|(i, b)| {
+                render_localized(b.src.index(), b.tgt.index(), b.data, i, &self.metadata.bond_ids, &render_endpoint)
             })
             .collect();
 
         let dative_edn: Vec<Edn<'static>> = self
             .ast
-            .dative_bond_ids()
+            .dative_bonds()
+            .iter()
             .enumerate()
-            .map(|(i, idx)| {
-                let p = self.ast.dative_bond_participants(idx);
-                render_dative(p[0].index(), p[1].index(), self.ast.dative_bond(idx), i, &self.metadata.dative_bond_ids, &render_endpoint)
+            .map(|(i, v)| {
+                render_dative(v.donor.index(), v.acceptor.index(), v.data, i, &self.metadata.dative_bond_ids, &render_endpoint)
             })
             .collect();
 
         let aromatic_edn: Vec<Edn<'static>> = self
             .ast
-            .aromatic_system_ids()
+            .aromatic_systems()
+            .iter()
             .enumerate()
-            .map(|(i, idx)| {
-                let p = self.ast.aromatic_system_participants(idx);
-                render_atoms_map(p, i, &self.metadata.aromatic_system_ids, &render_endpoint)
+            .map(|(i, v)| {
+                render_atoms_map(v.atoms(), i, &self.metadata.aromatic_system_ids, &render_endpoint)
             })
             .collect();
 
         let multicenter_edn: Vec<Edn<'static>> = self
             .ast
-            .multicenter_bond_ids()
+            .multicenter_bonds()
+            .iter()
             .enumerate()
-            .map(|(i, idx)| {
-                let p = self.ast.multicenter_bond_participants(idx);
-                render_atoms_map(p, i, &self.metadata.multicenter_bond_ids, &render_endpoint)
+            .map(|(i, v)| {
+                render_atoms_map(v.atoms(), i, &self.metadata.multicenter_bond_ids, &render_endpoint)
             })
             .collect();
 
         let noncovalent_edn: Vec<Edn<'static>> = self
             .ast
-            .noncovalent_bond_ids()
+            .noncovalent_bonds()
+            .iter()
             .enumerate()
-            .map(|(i, idx)| {
-                let p = self.ast.noncovalent_bond_participants(idx);
-                render_noncovalent(p[0].index(), p[1].index(), self.ast.noncovalent_bond(idx), i, &self.metadata.noncovalent_bond_ids, &render_endpoint)
+            .map(|(i, v)| {
+                render_noncovalent(v.atoms[0].index(), v.atoms[1].index(), v.data, i, &self.metadata.noncovalent_bond_ids, &render_endpoint)
             })
             .collect();
 
@@ -702,19 +703,19 @@ impl ToEdn for MoleculeAstWrapper {
         let mut m = EdnMap::with_capacity(10);
         m.insert(Edn::keyword("atoms"), Edn::Vector(atom_elems.into()));
         m.insert(Edn::keyword("bonds"), Edn::Vector(bonds_edn.into()));
-        if self.ast.dative_bond_count() > 0 {
+        if self.ast.dative_bonds().count() > 0 {
             m.insert(Edn::keyword("dative"), Edn::Vector(dative_edn.into()));
         }
-        if self.ast.aromatic_system_count() > 0 {
+        if self.ast.aromatic_systems().count() > 0 {
             m.insert(Edn::keyword("aromatic"), Edn::Vector(aromatic_edn.into()));
         }
-        if self.ast.multicenter_bond_count() > 0 {
+        if self.ast.multicenter_bonds().count() > 0 {
             m.insert(
                 Edn::keyword("multicenter"),
                 Edn::Vector(multicenter_edn.into()),
             );
         }
-        if self.ast.noncovalent_bond_count() > 0 {
+        if self.ast.noncovalent_bonds().count() > 0 {
             m.insert(
                 Edn::keyword("noncovalent"),
                 Edn::Vector(noncovalent_edn.into()),
@@ -827,12 +828,12 @@ fn render_noncovalent(
 }
 
 fn render_atoms_map(
-    participants: &[umol_graph_core::NodeId],
+    participants: impl Iterator<Item = AtomIdx>,
     i: usize,
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
 ) -> Edn<'static> {
-    let atom_vec: Vec<Edn<'static>> = participants.iter().map(|nid| render_endpoint(nid.index())).collect();
+    let atom_vec: Vec<Edn<'static>> = participants.map(|a| render_endpoint(a.index())).collect();
     let mut m = EdnMap::with_capacity(2);
     if let Some(id) = ids.get(&i) {
         m.insert(
@@ -1014,11 +1015,10 @@ mod tests {
                 :dative [{:id :d1 :donor :N :acceptor :B :bond :single}]}"#,
         )
         .unwrap();
-        assert_eq!(dsl.ast.dative_bond_count(), 1);
-        let idx = dsl.ast.dative_bond_ids().next().unwrap();
-        let p = dsl.ast.dative_bond_participants(idx);
-        assert_eq!(AtomIdx::from(p[0]), AtomIdx(1)); // donor = N
-        assert_eq!(AtomIdx::from(p[1]), AtomIdx(0)); // acceptor = B
+        assert_eq!(dsl.ast.dative_bonds().count(), 1);
+        let view = dsl.ast.dative_bonds().iter().next().unwrap();
+        assert_eq!(view.donor, AtomIdx(1)); // donor = N
+        assert_eq!(view.acceptor, AtomIdx(0)); // acceptor = B
         assert_eq!(
             dsl.metadata.dative_bond_ids.get(&0),
             Some(&"d1".to_string())
@@ -1034,13 +1034,13 @@ mod tests {
                 :aliases [:ch "C #h1 #v2 #a1"]}"#,
         )
         .unwrap();
-        assert_eq!(dsl.ast.aromatic_system_count(), 1);
+        assert_eq!(dsl.ast.aromatic_systems().count(), 1);
         assert_eq!(
             dsl.metadata.aromatic_system_ids.get(&0),
             Some(&"ar1".to_string())
         );
-        let idx = dsl.ast.aromatic_system_ids().next().unwrap();
-        let p: Vec<AtomIdx> = dsl.ast.aromatic_system_participants(idx).iter().map(|&nid| AtomIdx::from(nid)).collect();
+        let view = dsl.ast.aromatic_systems().iter().next().unwrap();
+        let p: Vec<AtomIdx> = view.atoms().collect();
         assert_eq!(p, vec![AtomIdx(0), AtomIdx(1), AtomIdx(2), AtomIdx(3), AtomIdx(4), AtomIdx(5)]);
     }
 

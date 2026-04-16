@@ -48,16 +48,17 @@ impl HmoAromaticity {
     ) -> Result<Vec<AromaticSystem>, AromaticityError> {
         let pi_atoms: Vec<AtomIdx> = ast
             .atoms()
-            .filter_map(|(idx, atom)| {
-                let element = match atom.element {
+            .iter()
+            .filter_map(|view| {
+                let element = match view.data.element {
                     ElementAst::Lit(e) => e,
                     _ => return None,
                 };
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                match atom.aromatic_valence {
-                    AromaticValenceAst::Value(ValueAst::Lit(_)) => Some(idx),
+                match view.data.aromatic_valence {
+                    AromaticValenceAst::Value(ValueAst::Lit(_)) => Some(view.idx),
                     _ => None,
                 }
             })
@@ -81,7 +82,7 @@ impl HmoAromaticity {
             while let Some(current) = stack.pop() {
                 component.push(current);
                 for neighbor in ast.neighbors(current) {
-                    let n = AtomIdx::from(neighbor.node);
+                    let n = neighbor.atom;
                     if pi_set.contains(&n) && visited.insert(n) {
                         stack.push(n);
                     }
@@ -112,7 +113,7 @@ impl HmoAromaticity {
                     .iter()
                     .map(|&atom| {
                         let a = ast.atom(atom);
-                        let valence = match a.aromatic_valence {
+                        let valence = match a.data.aromatic_valence {
                             AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
                             _ => 0,
                         };
@@ -148,7 +149,7 @@ impl HmoAromaticity {
         let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(pi_atoms.len());
         for &atom in pi_atoms {
             let atom_ast = ast.atom(atom);
-            let element = match atom_ast.element {
+            let element = match atom_ast.data.element {
                 ElementAst::Lit(e) => e,
                 _ => {
                     return Err(AromaticityError::HmoMissingAtom(
@@ -156,7 +157,7 @@ impl HmoAromaticity {
                     ))
                 }
             };
-            let valence = match atom_ast.aromatic_valence {
+            let valence = match atom_ast.data.aromatic_valence {
                 AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
                 _ => {
                     return Err(AromaticityError::HmoMissingAtom(
@@ -178,7 +179,7 @@ impl HmoAromaticity {
         let mut bonds = Vec::new();
         for (i, &atom_i) in pi_atoms.iter().enumerate() {
             for neighbor in ast.neighbors(atom_i) {
-                let n = AtomIdx::from(neighbor.node);
+                let n = neighbor.atom;
                 if let Some(&j) = atom_to_idx.get(&n) {
                     if j > i {
                         let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(
@@ -363,7 +364,7 @@ mod tests {
     }
 
     fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
-        let atoms: Vec<AtomIdx> = (0..ast.atom_count() as u32).map(AtomIdx).collect();
+        let atoms: Vec<AtomIdx> = (0..ast.atoms().count() as u32).map(AtomIdx).collect();
         model.build_calculator(ast, &atoms).unwrap().solve()
     }
 
@@ -527,7 +528,7 @@ mod tests {
 
     #[rstest]
     fn test_hmo_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
-        let atoms: Vec<AtomIdx> = (0..pyridine.atom_count() as u32).map(AtomIdx).collect();
+        let atoms: Vec<AtomIdx> = (0..pyridine.atoms().count() as u32).map(AtomIdx).collect();
         let calc = hmo_model.build_calculator(&pyridine, &atoms).unwrap();
         let h = calc.hamiltonian();
         assert_eq!(h.nrows(), 6);
