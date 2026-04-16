@@ -29,22 +29,22 @@ impl Default for RingEnumerationStrategy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct RingIndex(pub u32);
+pub struct RingIdx(pub u32);
 
-impl RingIndex {
+impl RingIdx {
     pub fn index(self) -> usize {
         self.0 as usize
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Ring {
+struct Ring {
     atoms: Vec<AtomIdx>,
     bonds: Vec<BondIdx>,
 }
 
 impl Ring {
-    pub fn new(atoms: Vec<AtomIdx>, bonds: Vec<BondIdx>) -> Result<Self, String> {
+    fn new(atoms: Vec<AtomIdx>, bonds: Vec<BondIdx>) -> Result<Self, String> {
         if atoms.len() < 3 {
             return Err("ring must contain at least 3 atoms".to_string());
         }
@@ -53,13 +53,27 @@ impl Ring {
         }
         Ok(Self { atoms, bonds })
     }
+}
 
-    pub fn atoms(&self) -> &[AtomIdx] {
-        &self.atoms
+fn intersection<T: Copy + Eq>(a: &[T], b: &[T]) -> Vec<T> {
+    let (small, large) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    small.iter().copied().filter(|x| large.contains(x)).collect()
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RingView<'a> {
+    pub idx: RingIdx,
+    atoms: &'a [AtomIdx],
+    bonds: &'a [BondIdx],
+}
+
+impl<'a> RingView<'a> {
+    pub fn atoms(&self) -> &'a [AtomIdx] {
+        self.atoms
     }
 
-    pub fn bonds(&self) -> &[BondIdx] {
-        &self.bonds
+    pub fn bonds(&self) -> &'a [BondIdx] {
+        self.bonds
     }
 
     pub fn len(&self) -> usize {
@@ -70,30 +84,12 @@ impl Ring {
         self.atoms.is_empty()
     }
 
-    pub fn shared_atoms(&self, other: &Ring) -> Vec<AtomIdx> {
-        let (small, large) = if self.atoms.len() <= other.atoms.len() {
-            (&self.atoms, &other.atoms)
-        } else {
-            (&other.atoms, &self.atoms)
-        };
-        small
-            .iter()
-            .copied()
-            .filter(|atom| large.contains(atom))
-            .collect()
+    pub fn shared_atoms(&self, other: &RingView<'_>) -> Vec<AtomIdx> {
+        intersection(self.atoms, other.atoms)
     }
 
-    pub fn shared_bonds(&self, other: &Ring) -> Vec<BondIdx> {
-        let (small, large) = if self.bonds.len() <= other.bonds.len() {
-            (&self.bonds, &other.bonds)
-        } else {
-            (&other.bonds, &self.bonds)
-        };
-        small
-            .iter()
-            .copied()
-            .filter(|bond| large.contains(bond))
-            .collect()
+    pub fn shared_bonds(&self, other: &RingView<'_>) -> Vec<BondIdx> {
+        intersection(self.bonds, other.bonds)
     }
 }
 
@@ -127,12 +123,12 @@ pub enum RingScope {
 
 #[derive(Debug, Clone)]
 pub struct RingSet {
-    pub family: RingFamily,
-    pub scope: RingScope,
-    pub max_ring_size: usize,
-    pub rings: Vec<Ring>,
-    pub atom_to_rings: BTreeMap<AtomIdx, Vec<RingIndex>>,
-    pub bond_to_rings: BTreeMap<BondIdx, Vec<RingIndex>>,
+    family: RingFamily,
+    scope: RingScope,
+    max_ring_size: usize,
+    rings: Vec<Ring>,
+    atom_to_rings: BTreeMap<AtomIdx, Vec<RingIdx>>,
+    bond_to_rings: BTreeMap<BondIdx, Vec<RingIdx>>,
     ring_graph: RingGraph,
 }
 
@@ -156,7 +152,7 @@ impl RingSet {
         Self::empty_with(RingFamily::Simple, RingScope::All)
     }
 
-    pub fn from_rings(
+    fn from_rings(
         family: RingFamily,
         scope: RingScope,
         max_ring_size: usize,
@@ -168,14 +164,14 @@ impl RingSet {
             return empty;
         }
 
-        let mut atom_to_rings: BTreeMap<AtomIdx, Vec<RingIndex>> = BTreeMap::new();
-        let mut bond_to_rings: BTreeMap<BondIdx, Vec<RingIndex>> = BTreeMap::new();
+        let mut atom_to_rings: BTreeMap<AtomIdx, Vec<RingIdx>> = BTreeMap::new();
+        let mut bond_to_rings: BTreeMap<BondIdx, Vec<RingIdx>> = BTreeMap::new();
         for (idx, ring) in rings.iter().enumerate() {
-            let ring_idx = RingIndex(idx as u32);
-            for &atom in ring.atoms() {
+            let ring_idx = RingIdx(idx as u32);
+            for &atom in &ring.atoms {
                 atom_to_rings.entry(atom).or_default().push(ring_idx);
             }
-            for &bond in ring.bonds() {
+            for &bond in &ring.bonds {
                 bond_to_rings.entry(bond).or_default().push(ring_idx);
             }
         }
@@ -193,54 +189,75 @@ impl RingSet {
         }
     }
 
-    pub fn ring_count(&self) -> usize {
+    pub fn family(&self) -> RingFamily {
+        self.family
+    }
+
+    pub fn scope(&self) -> RingScope {
+        self.scope
+    }
+
+    pub fn max_ring_size(&self) -> usize {
+        self.max_ring_size
+    }
+
+    pub fn count(&self) -> usize {
         self.rings.len()
     }
 
-    pub fn ring_indices(&self) -> impl Iterator<Item = RingIndex> {
-        (0..self.rings.len()).map(|i| RingIndex(i as u32))
+    pub fn ids(&self) -> impl Iterator<Item = RingIdx> {
+        (0..self.rings.len()).map(|i| RingIdx(i as u32))
     }
 
-    pub fn rings(&self) -> &[Ring] {
-        &self.rings
+    pub fn iter(&self) -> impl Iterator<Item = RingView<'_>> {
+        self.rings.iter().enumerate().map(|(i, r)| RingView {
+            idx: RingIdx(i as u32),
+            atoms: &r.atoms,
+            bonds: &r.bonds,
+        })
     }
 
-    pub fn ring(&self, idx: RingIndex) -> Option<&Ring> {
-        self.rings.get(idx.index())
+    pub fn get(&self, idx: RingIdx) -> Option<RingView<'_>> {
+        let r = self.rings.get(idx.index())?;
+        Some(RingView {
+            idx,
+            atoms: &r.atoms,
+            bonds: &r.bonds,
+        })
     }
 
-    pub fn shared_atoms(&self, a: RingIndex, b: RingIndex) -> Vec<AtomIdx> {
-        let (Some(ra), Some(rb)) = (self.ring(a), self.ring(b)) else {
+    pub fn shared_atoms(&self, a: RingIdx, b: RingIdx) -> Vec<AtomIdx> {
+        let (Some(ra), Some(rb)) = (self.rings.get(a.index()), self.rings.get(b.index())) else {
             return Vec::new();
         };
-        ra.shared_atoms(rb)
+        intersection(&ra.atoms, &rb.atoms)
     }
 
-    pub fn shared_bonds(&self, a: RingIndex, b: RingIndex) -> Vec<BondIdx> {
-        let (Some(ra), Some(rb)) = (self.ring(a), self.ring(b)) else {
+    pub fn shared_bonds(&self, a: RingIdx, b: RingIdx) -> Vec<BondIdx> {
+        let (Some(ra), Some(rb)) = (self.rings.get(a.index()), self.rings.get(b.index())) else {
             return Vec::new();
         };
-        ra.shared_bonds(rb)
+        intersection(&ra.bonds, &rb.bonds)
     }
 
-    pub fn ring_relation(&self, a: RingIndex, b: RingIndex) -> RingRelation {
+    pub fn relation(&self, a: RingIdx, b: RingIdx) -> RingRelation {
         self.ring_graph.relation(a, b)
     }
 
-    pub fn are_spiro(&self, a: RingIndex, b: RingIndex) -> bool {
-        self.ring_relation(a, b) == RingRelation::Spiro
+    pub fn are_spiro(&self, a: RingIdx, b: RingIdx) -> bool {
+        self.relation(a, b) == RingRelation::Spiro
     }
 
-    pub fn are_fused(&self, a: RingIndex, b: RingIndex) -> bool {
-        self.ring_relation(a, b) == RingRelation::Fused
+    pub fn are_fused(&self, a: RingIdx, b: RingIdx) -> bool {
+        self.relation(a, b) == RingRelation::Fused
     }
 
-    pub fn are_bridged(&self, a: RingIndex, b: RingIndex) -> bool {
-        self.ring_relation(a, b) == RingRelation::Bridged
+    pub fn are_bridged(&self, a: RingIdx, b: RingIdx) -> bool {
+        self.relation(a, b) == RingRelation::Bridged
     }
 
-    pub fn ring_spiro_neighbors(&self, i: RingIndex) -> Vec<RingIndex> {
-        let mut result: Vec<RingIndex> = self
+    pub fn spiro_neighbors(&self, i: RingIdx) -> Vec<RingIdx> {
+        let mut result: Vec<RingIdx> = self
             .ring_graph
             .neighbors(i)
             .into_iter()
@@ -250,8 +267,8 @@ impl RingSet {
         result
     }
 
-    pub fn ring_fused_neighbors(&self, i: RingIndex) -> Vec<RingIndex> {
-        let mut result: Vec<RingIndex> = self
+    pub fn fused_neighbors(&self, i: RingIdx) -> Vec<RingIdx> {
+        let mut result: Vec<RingIdx> = self
             .ring_graph
             .neighbors(i)
             .into_iter()
@@ -261,8 +278,8 @@ impl RingSet {
         result
     }
 
-    pub fn ring_bridged_neighbors(&self, i: RingIndex) -> Vec<RingIndex> {
-        let mut result: Vec<RingIndex> = self
+    pub fn bridged_neighbors(&self, i: RingIdx) -> Vec<RingIdx> {
+        let mut result: Vec<RingIdx> = self
             .ring_graph
             .neighbors(i)
             .into_iter()
@@ -272,45 +289,45 @@ impl RingSet {
         result
     }
 
-    pub fn fused_components(&self) -> Vec<Vec<RingIndex>> {
-        let mut visited: HashSet<RingIndex> = HashSet::new();
-        let mut components: Vec<Vec<RingIndex>> = Vec::new();
+    pub fn fused_components(&self) -> Vec<Vec<RingIdx>> {
+        let mut visited: HashSet<RingIdx> = HashSet::new();
+        let mut components: Vec<Vec<RingIdx>> = Vec::new();
 
-        for ring in self.ring_indices() {
+        for ring in self.ids() {
             if visited.contains(&ring) {
                 continue;
             }
-            let component = self.ring_fused_component(ring);
+            let component = self.fused_component(ring);
             for &r in &component {
                 visited.insert(r);
             }
             components.push(component);
         }
 
-        components.sort_by_key(|component| component.first().copied().map(RingIndex::index));
+        components.sort_by_key(|component| component.first().copied().map(RingIdx::index));
         components
     }
 
-    pub fn ring_fused_component(&self, root: RingIndex) -> Vec<RingIndex> {
-        let mut visited: HashSet<RingIndex> = HashSet::new();
-        let mut queue: VecDeque<RingIndex> = VecDeque::new();
+    pub fn fused_component(&self, root: RingIdx) -> Vec<RingIdx> {
+        let mut visited: HashSet<RingIdx> = HashSet::new();
+        let mut queue: VecDeque<RingIdx> = VecDeque::new();
         queue.push_back(root);
         visited.insert(root);
 
         while let Some(current) = queue.pop_front() {
-            for neighbor in self.ring_fused_neighbors(current) {
+            for neighbor in self.fused_neighbors(current) {
                 if visited.insert(neighbor) {
                     queue.push_back(neighbor);
                 }
             }
         }
 
-        let mut result: Vec<RingIndex> = visited.into_iter().collect();
+        let mut result: Vec<RingIdx> = visited.into_iter().collect();
         result.sort_unstable();
         result
     }
 
-    pub fn is_ring_atom(&self, atom: AtomIdx) -> bool {
+    pub fn contains_atom(&self, atom: AtomIdx) -> bool {
         self.atom_to_rings.contains_key(&atom)
     }
 
@@ -318,12 +335,12 @@ impl RingSet {
         self.atom_to_rings.get(&atom).and_then(|ring_indices| {
             ring_indices
                 .iter()
-                .map(|i| self.rings[i.index()].len())
+                .map(|i| self.rings[i.index()].atoms.len())
                 .min()
         })
     }
 
-    pub fn is_ring_bond(&self, bond: BondIdx) -> bool {
+    pub fn contains_bond(&self, bond: BondIdx) -> bool {
         self.bond_to_rings.contains_key(&bond)
     }
 
@@ -331,34 +348,34 @@ impl RingSet {
         self.bond_to_rings.get(&bond).and_then(|ring_indices| {
             ring_indices
                 .iter()
-                .map(|i| self.rings[i.index()].len())
+                .map(|i| self.rings[i.index()].atoms.len())
                 .min()
         })
     }
 
-    pub fn ring_graph(&self) -> RingGraph {
+    pub fn graph(&self) -> RingGraph {
         self.ring_graph.clone()
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RingGraphEdge {
-    pub source: RingIndex,
-    pub target: RingIndex,
+    pub source: RingIdx,
+    pub target: RingIdx,
     pub relation: RingRelation,
 }
 
 #[derive(Debug, Clone)]
 pub struct RingGraph {
     edges: Vec<RingGraphEdge>,
-    neighbors: Vec<Vec<(RingIndex, RingRelation)>>,
+    neighbors: Vec<Vec<(RingIdx, RingRelation)>>,
 }
 
 impl RingGraph {
-    pub fn from_ring_list(rings: &[Ring]) -> Self {
+    fn from_ring_list(rings: &[Ring]) -> Self {
         let mut edges = Vec::new();
         let mut neighbors = vec![Vec::new(); rings.len()];
-        let indices: Vec<RingIndex> = (0..rings.len()).map(|i| RingIndex(i as u32)).collect();
+        let indices: Vec<RingIdx> = (0..rings.len()).map(|i| RingIdx(i as u32)).collect();
         for (i, &a) in indices.iter().enumerate() {
             for &b in &indices[i + 1..] {
                 let relation = classify_ring_relation(&rings[a.index()], &rings[b.index()]);
@@ -385,14 +402,14 @@ impl RingGraph {
         &self.edges
     }
 
-    pub fn neighbors(&self, ring: RingIndex) -> Vec<(RingIndex, RingRelation)> {
+    pub fn neighbors(&self, ring: RingIdx) -> Vec<(RingIdx, RingRelation)> {
         self.neighbors
             .get(ring.index())
             .cloned()
             .unwrap_or_default()
     }
 
-    pub fn relation(&self, a: RingIndex, b: RingIndex) -> RingRelation {
+    pub fn relation(&self, a: RingIdx, b: RingIdx) -> RingRelation {
         if a == b {
             return RingRelation::Identical;
         }
@@ -548,9 +565,9 @@ fn is_induced_cycle_graph(graph: &umol_graph_core::Graph, cycle: &[NodeId]) -> b
 }
 
 fn classify_ring_relation(a: &Ring, b: &Ring) -> RingRelation {
-    let shared_bonds = a.shared_bonds(b);
+    let shared_bonds = intersection(&a.bonds, &b.bonds);
     if shared_bonds.is_empty() {
-        return match a.shared_atoms(b).len() {
+        return match intersection(&a.atoms, &b.atoms).len() {
             0 => RingRelation::Disjoint,
             1 => RingRelation::Spiro,
             _ => RingRelation::MultiSpiro,
@@ -561,7 +578,7 @@ fn classify_ring_relation(a: &Ring, b: &Ring) -> RingRelation {
         return RingRelation::Fused;
     }
 
-    let bonds_a = a.bonds();
+    let bonds_a = &a.bonds;
     let n = bonds_a.len();
     let mut runs = 0usize;
     for i in 0..n {
@@ -808,7 +825,7 @@ mod tests {
         #[case] expected: usize,
     ) {
         let rings = enumerate_simple(&ast, max_ring_size);
-        assert_eq!(rings.ring_count(), expected);
+        assert_eq!(rings.count(), expected);
     }
 
     #[rstest]
@@ -824,7 +841,7 @@ mod tests {
             },
         )
         .enumerate(&ast);
-        assert_eq!(rings.ring_count(), expected);
+        assert_eq!(rings.count(), expected);
     }
 
     #[rstest]
@@ -845,59 +862,59 @@ mod tests {
             },
         )
         .enumerate(&cubane);
-        assert_eq!(rings.ring_count(), expected);
+        assert_eq!(rings.count(), expected);
     }
 
     #[rstest]
-    #[case::ring(ring_rings(6), vec![RingIndex(0)])]
-    #[case::fused(fused_rings(), vec![RingIndex(0), RingIndex(1), RingIndex(2)])]
-    fn test_ring_set_ring_indices(#[case] rings: RingSet, #[case] expected: Vec<RingIndex>) {
-        let indices: Vec<RingIndex> = rings.ring_indices().collect();
+    #[case::ring(ring_rings(6), vec![RingIdx(0)])]
+    #[case::fused(fused_rings(), vec![RingIdx(0), RingIdx(1), RingIdx(2)])]
+    fn test_ring_set_ring_indices(#[case] rings: RingSet, #[case] expected: Vec<RingIdx>) {
+        let indices: Vec<RingIdx> = rings.ids().collect();
         assert_eq!(indices, expected);
     }
 
     #[rstest]
-    #[case::ring(ring_rings(6), RingIndex(0), Some(6))]
-    #[case::non_existent(ring_rings(6), RingIndex(1), None)]
+    #[case::ring(ring_rings(6), RingIdx(0), Some(6))]
+    #[case::non_existent(ring_rings(6), RingIdx(1), None)]
     fn test_ring_set_ring(
         #[case] rings: RingSet,
-        #[case] idx: RingIndex,
+        #[case] idx: RingIdx,
         #[case] expected_len: Option<usize>,
     ) {
-        assert_eq!(rings.ring(idx).map(|r| r.len()), expected_len);
+        assert_eq!(rings.get(idx).map(|r| r.len()), expected_len);
     }
 
     #[rstest]
-    #[case::identical(ring_rings(6), RingIndex(0), RingIndex(0), 6)]
-    #[case::disjoint(disjoint_rings(), RingIndex(0), RingIndex(1), 0)]
-    #[case::spiro(spiro_rings(), RingIndex(0), RingIndex(1), 1)]
-    #[case::fused(fused_rings(), RingIndex(0), RingIndex(1), 2)]
-    #[case::bridged(bridged_rings(), RingIndex(0), RingIndex(1), 3)]
-    #[case::multi_spiro(multi_spiro_rings(), RingIndex(0), RingIndex(5), 2)]
-    #[case::cubane(cubane_rings(), RingIndex(0), RingIndex(25), 4)]
-    #[case::non_existent(ring_rings(6), RingIndex(0), RingIndex(2), 0)]
+    #[case::identical(ring_rings(6), RingIdx(0), RingIdx(0), 6)]
+    #[case::disjoint(disjoint_rings(), RingIdx(0), RingIdx(1), 0)]
+    #[case::spiro(spiro_rings(), RingIdx(0), RingIdx(1), 1)]
+    #[case::fused(fused_rings(), RingIdx(0), RingIdx(1), 2)]
+    #[case::bridged(bridged_rings(), RingIdx(0), RingIdx(1), 3)]
+    #[case::multi_spiro(multi_spiro_rings(), RingIdx(0), RingIdx(5), 2)]
+    #[case::cubane(cubane_rings(), RingIdx(0), RingIdx(25), 4)]
+    #[case::non_existent(ring_rings(6), RingIdx(0), RingIdx(2), 0)]
     fn test_ring_set_shared_atoms(
         #[case] rings: RingSet,
-        #[case] a: RingIndex,
-        #[case] b: RingIndex,
+        #[case] a: RingIdx,
+        #[case] b: RingIdx,
         #[case] expected: usize,
     ) {
         assert_eq!(rings.shared_atoms(a, b).len(), expected);
     }
 
     #[rstest]
-    #[case::identical(ring_rings(6), RingIndex(0), RingIndex(0), 6)]
-    #[case::disjoint(disjoint_rings(), RingIndex(0), RingIndex(1), 0)]
-    #[case::spiro(spiro_rings(), RingIndex(0), RingIndex(1), 0)]
-    #[case::fused(fused_rings(), RingIndex(0), RingIndex(1), 1)]
-    #[case::bridged(bridged_rings(), RingIndex(0), RingIndex(1), 2)]
-    #[case::multi_spiro(multi_spiro_rings(), RingIndex(0), RingIndex(5), 0)]
-    #[case::cubane(cubane_rings(), RingIndex(0), RingIndex(25), 2)]
-    #[case::non_existent(ring_rings(6), RingIndex(0), RingIndex(2), 0)]
+    #[case::identical(ring_rings(6), RingIdx(0), RingIdx(0), 6)]
+    #[case::disjoint(disjoint_rings(), RingIdx(0), RingIdx(1), 0)]
+    #[case::spiro(spiro_rings(), RingIdx(0), RingIdx(1), 0)]
+    #[case::fused(fused_rings(), RingIdx(0), RingIdx(1), 1)]
+    #[case::bridged(bridged_rings(), RingIdx(0), RingIdx(1), 2)]
+    #[case::multi_spiro(multi_spiro_rings(), RingIdx(0), RingIdx(5), 0)]
+    #[case::cubane(cubane_rings(), RingIdx(0), RingIdx(25), 2)]
+    #[case::non_existent(ring_rings(6), RingIdx(0), RingIdx(2), 0)]
     fn test_ring_set_shared_bonds(
         #[case] rings: RingSet,
-        #[case] a: RingIndex,
-        #[case] b: RingIndex,
+        #[case] a: RingIdx,
+        #[case] b: RingIdx,
         #[case] expected: usize,
     ) {
         assert_eq!(rings.shared_bonds(a, b).len(), expected);
@@ -905,68 +922,68 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::identical(ring_rings(6), RingIndex(0), RingIndex(0), RingRelation::Identical)]
-    #[case::disjoint(disjoint_rings(), RingIndex(0), RingIndex(1), RingRelation::Disjoint)]
-    #[case::spiro(spiro_rings(), RingIndex(0), RingIndex(1), RingRelation::Spiro)]
-    #[case::fused(fused_rings(), RingIndex(0), RingIndex(1), RingRelation::Fused)]
-    #[case::bridged(bridged_rings(), RingIndex(0), RingIndex(1), RingRelation::Bridged)]
-    #[case::multi_spiro(multi_spiro_rings(), RingIndex(0), RingIndex(5), RingRelation::MultiSpiro)]
-    #[case::cubane(cubane_rings(), RingIndex(0), RingIndex(25), RingRelation::Noncontiguous)]
-    #[case::non_existent(ring_rings(6), RingIndex(0), RingIndex(2), RingRelation::Disjoint)]
+    #[case::identical(ring_rings(6), RingIdx(0), RingIdx(0), RingRelation::Identical)]
+    #[case::disjoint(disjoint_rings(), RingIdx(0), RingIdx(1), RingRelation::Disjoint)]
+    #[case::spiro(spiro_rings(), RingIdx(0), RingIdx(1), RingRelation::Spiro)]
+    #[case::fused(fused_rings(), RingIdx(0), RingIdx(1), RingRelation::Fused)]
+    #[case::bridged(bridged_rings(), RingIdx(0), RingIdx(1), RingRelation::Bridged)]
+    #[case::multi_spiro(multi_spiro_rings(), RingIdx(0), RingIdx(5), RingRelation::MultiSpiro)]
+    #[case::cubane(cubane_rings(), RingIdx(0), RingIdx(25), RingRelation::Noncontiguous)]
+    #[case::non_existent(ring_rings(6), RingIdx(0), RingIdx(2), RingRelation::Disjoint)]
     fn test_ring_set_ring_relation(
         #[case] rings: RingSet,
-        #[case] a: RingIndex,
-        #[case] b: RingIndex,
+        #[case] a: RingIdx,
+        #[case] b: RingIdx,
         #[case] expected: RingRelation,
     ) {
-        assert_eq!(rings.ring_relation(a, b), expected);
+        assert_eq!(rings.relation(a, b), expected);
     }
 
     #[rstest]
-    #[case::single_ring(ring_rings(6), RingIndex(0), 0)]
-    #[case::spiro_0(spiro_rings(), RingIndex(0), 1)]
-    #[case::spiro_1(spiro_rings(), RingIndex(1), 1)]
-    #[case::fused_0(fused_rings(), RingIndex(0), 0)]
-    #[case::fused_1(fused_rings(), RingIndex(1), 0)]
-    #[case::cubane_0(cubane_rings(), RingIndex(0), 0)]
+    #[case::single_ring(ring_rings(6), RingIdx(0), 0)]
+    #[case::spiro_0(spiro_rings(), RingIdx(0), 1)]
+    #[case::spiro_1(spiro_rings(), RingIdx(1), 1)]
+    #[case::fused_0(fused_rings(), RingIdx(0), 0)]
+    #[case::fused_1(fused_rings(), RingIdx(1), 0)]
+    #[case::cubane_0(cubane_rings(), RingIdx(0), 0)]
     fn test_ring_set_spiro_neighbors(
         #[case] rings: RingSet,
-        #[case] idx: RingIndex,
+        #[case] idx: RingIdx,
         #[case] expected: usize,
     ) {
-        assert_eq!(rings.ring_spiro_neighbors(idx).len(), expected);
+        assert_eq!(rings.spiro_neighbors(idx).len(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single_ring(ring_rings(6), RingIndex(0), 0)]
-    #[case::spiro_0(spiro_rings(), RingIndex(0), 0)]
-    #[case::spiro_1(spiro_rings(), RingIndex(1), 0)]
-    #[case::fused_0(fused_rings(), RingIndex(0), 1)]
-    #[case::fused_1(fused_rings(), RingIndex(1), 1)]
-    #[case::cubane_0(cubane_rings(), RingIndex(0), 8)]
+    #[case::single_ring(ring_rings(6), RingIdx(0), 0)]
+    #[case::spiro_0(spiro_rings(), RingIdx(0), 0)]
+    #[case::spiro_1(spiro_rings(), RingIdx(1), 0)]
+    #[case::fused_0(fused_rings(), RingIdx(0), 1)]
+    #[case::fused_1(fused_rings(), RingIdx(1), 1)]
+    #[case::cubane_0(cubane_rings(), RingIdx(0), 8)]
     fn test_ring_set_fused_neighbors(
         #[case] rings: RingSet,
-        #[case] idx: RingIndex,
+        #[case] idx: RingIdx,
         #[case] expected: usize,
     ) {
-        assert_eq!(rings.ring_fused_neighbors(idx).len(), expected);
+        assert_eq!(rings.fused_neighbors(idx).len(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single_ring(ring_rings(6), RingIndex(0), 0)]
-    #[case::fused_0(fused_rings(), RingIndex(0), 1)]
-    #[case::fused_1(fused_rings(), RingIndex(1), 1)]
-    #[case::bridged_0(bridged_rings(), RingIndex(0), 2)]
-    #[case::bridged_1(bridged_rings(), RingIndex(1), 2)]
-    #[case::cubane_0(cubane_rings(), RingIndex(0), 16)]
+    #[case::single_ring(ring_rings(6), RingIdx(0), 0)]
+    #[case::fused_0(fused_rings(), RingIdx(0), 1)]
+    #[case::fused_1(fused_rings(), RingIdx(1), 1)]
+    #[case::bridged_0(bridged_rings(), RingIdx(0), 2)]
+    #[case::bridged_1(bridged_rings(), RingIdx(1), 2)]
+    #[case::cubane_0(cubane_rings(), RingIdx(0), 16)]
     fn test_ring_set_bridged_neighbors(
         #[case] rings: RingSet,
-        #[case] idx: RingIndex,
+        #[case] idx: RingIdx,
         #[case] expected: usize,
     ) {
-        assert_eq!(rings.ring_bridged_neighbors(idx).len(), expected);
+        assert_eq!(rings.bridged_neighbors(idx).len(), expected);
     }
 
     #[rstest]
@@ -984,16 +1001,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::cyclohexane(ring_rings(6), RingIndex(0), 1)]
-    #[case::naphthalene_0(fused_rings(), RingIndex(0), 2)]
-    #[case::naphthalene_1(fused_rings(), RingIndex(1), 2)]
-    #[case::cubane_0(cubane_rings(), RingIndex(0), 18)]
+    #[case::cyclohexane(ring_rings(6), RingIdx(0), 1)]
+    #[case::naphthalene_0(fused_rings(), RingIdx(0), 2)]
+    #[case::naphthalene_1(fused_rings(), RingIdx(1), 2)]
+    #[case::cubane_0(cubane_rings(), RingIdx(0), 18)]
     fn test_ring_set_ring_fused_component(
         #[case] rings: RingSet,
-        #[case] idx: RingIndex,
+        #[case] idx: RingIdx,
         #[case] expected_size: usize,
     ) {
-        let component = rings.ring_fused_component(idx);
+        let component = rings.fused_component(idx);
         assert!(component.contains(&idx));
         assert_eq!(component.len(), expected_size);
     }
@@ -1014,16 +1031,16 @@ mod tests {
         #[case] expected: bool,
     ) {
         let rings = enumerate_simple(&ast, 10);
-        assert_eq!(rings.is_ring_atom(AtomIdx(atom_index)), expected);
+        assert_eq!(rings.contains_atom(AtomIdx(atom_index)), expected);
     }
 
     #[rstest]
     fn test_ring_set_is_ring_atom_substituted(substituted: MoleculeAst) {
         let rings = enumerate_simple(&substituted, 10);
         for i in 0..6 {
-            assert!(rings.is_ring_atom(AtomIdx(i)));
+            assert!(rings.contains_atom(AtomIdx(i)));
         }
-        assert!(!rings.is_ring_atom(AtomIdx(6)));
+        assert!(!rings.contains_atom(AtomIdx(6)));
     }
 
     #[rstest]
@@ -1058,14 +1075,14 @@ mod tests {
         #[case] expected: bool,
     ) {
         let rings = enumerate_simple(&ast, 10);
-        assert_eq!(rings.is_ring_bond(BondIdx(bond_index)), expected);
+        assert_eq!(rings.contains_bond(BondIdx(bond_index)), expected);
     }
 
     #[rstest]
     fn test_ring_set_is_ring_bond_naphthalene(naphthalene: MoleculeAst) {
         let rings = enumerate_simple(&naphthalene, 10);
         for i in 0..11 {
-            assert!(rings.is_ring_bond(BondIdx(i)));
+            assert!(rings.contains_bond(BondIdx(i)));
         }
     }
 
@@ -1073,9 +1090,9 @@ mod tests {
     fn test_ring_set_is_ring_bond_substituted(substituted: MoleculeAst) {
         let rings = enumerate_simple(&substituted, 10);
         for i in 0..6 {
-            assert!(rings.is_ring_bond(BondIdx(i)));
+            assert!(rings.contains_bond(BondIdx(i)));
         }
-        assert!(!rings.is_ring_bond(BondIdx(6)));
+        assert!(!rings.contains_bond(BondIdx(6)));
     }
 
     #[rstest]
@@ -1099,7 +1116,7 @@ mod tests {
 
     #[rstest]
     fn test_ring_set_ring_graph(fused_rings: RingSet) {
-        let ring_graph = fused_rings.ring_graph();
+        let ring_graph = fused_rings.graph();
         assert!(!ring_graph.edges().is_empty());
         assert!(ring_graph
             .edges()

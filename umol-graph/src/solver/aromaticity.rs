@@ -18,7 +18,7 @@ use umol_shared::spin::SpinState;
 
 use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
-use crate::ast::rings::{Ring, RingSet};
+use crate::ast::rings::RingSet;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AromaticityError {
@@ -156,37 +156,20 @@ pub struct AromaticSystem {
     contributions: Vec<AromaticContribution>,
     charge: i8,
     spin: SpinState,
-    // TODO: Check if this computed property should be removed.
-    rings: Vec<Ring>,
 }
 
 impl AromaticSystem {
-    fn normalized_contributions<I>(contributions: I) -> Vec<AromaticContribution>
+    pub fn new<I>(contributions: I) -> Self
     where
         I: IntoIterator<Item = AromaticContribution>,
     {
         let mut contributions: Vec<AromaticContribution> = contributions.into_iter().collect();
         contributions.sort_unstable();
         contributions.dedup_by_key(|c| c.atom);
-        contributions
-    }
-
-    pub fn new<I>(contributions: I) -> Self
-    where
-        I: IntoIterator<Item = AromaticContribution>,
-    {
-        Self::with_rings(contributions, Vec::new())
-    }
-
-    pub fn with_rings<I>(contributions: I, rings: Vec<Ring>) -> Self
-    where
-        I: IntoIterator<Item = AromaticContribution>,
-    {
         Self {
-            contributions: Self::normalized_contributions(contributions),
+            contributions,
             charge: 0,
             spin: SpinState::closed_shell(),
-            rings,
         }
     }
 
@@ -216,10 +199,6 @@ impl AromaticSystem {
 
     pub fn set_spin(&mut self, spin: SpinState) {
         self.spin = spin;
-    }
-
-    pub fn rings(&self) -> &[Ring] {
-        &self.rings
     }
 
     pub fn contains_atom(&self, atom: AtomIdx) -> bool {

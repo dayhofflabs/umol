@@ -17,7 +17,7 @@ use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
 use super::ElementScope;
-use crate::ast::rings::{Ring, RingSet};
+use crate::ast::rings::RingSet;
 
 #[derive(Clone, Debug)]
 pub struct HmoAromaticity {
@@ -94,7 +94,7 @@ impl HmoAromaticity {
 
         let mut candidates = Vec::new();
         for component in &components {
-            let has_ring_atom = component.iter().any(|a| rings.is_ring_atom(*a));
+            let has_ring_atom = component.iter().any(|a| rings.contains_atom(*a));
             if !has_ring_atom || component.len() < 3 {
                 continue;
             }
@@ -121,15 +121,7 @@ impl HmoAromaticity {
                     })
                     .collect();
 
-                let component_set: HashSet<AtomIdx> = component.iter().copied().collect();
-                let rings: Vec<Ring> = rings
-                    .ring_indices()
-                    .filter_map(|i| rings.ring(i))
-                    .filter(|cycle| cycle.atoms().iter().all(|a| component_set.contains(a)))
-                    .cloned()
-                    .collect();
-
-                candidates.push(AromaticSystem::with_rings(contributions, rings));
+                candidates.push(AromaticSystem::new(contributions));
             }
         }
 

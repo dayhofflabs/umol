@@ -17,7 +17,7 @@ use umol_graph_core::Graph;
 use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
-use crate::ast::rings::{Ring, RingIndex, RingSet};
+use crate::ast::rings::{RingIdx, RingSet};
 
 #[derive(Clone, Debug)]
 pub struct ClarAromaticity;
@@ -39,10 +39,10 @@ impl ClarAromaticity {
             ));
         }
 
-        let sextet_indices: Vec<RingIndex> = rings
-            .ring_indices()
+        let sextet_indices: Vec<RingIdx> = rings
+            .ids()
             .filter(|&i| {
-                let Some(cycle) = rings.ring(i) else {
+                let Some(cycle) = rings.get(i) else {
                     return false;
                 };
                 cycle.len() == 6
@@ -68,7 +68,7 @@ impl ClarAromaticity {
 
         let selected_atoms: HashSet<AtomIdx> = best_sextet_indices
             .iter()
-            .filter_map(|&i| rings.ring(i))
+            .filter_map(|&i| rings.get(i))
             .flat_map(|r| r.atoms().iter().copied())
             .collect();
 
@@ -84,19 +84,11 @@ impl ClarAromaticity {
             })
             .collect();
 
-        let selected_rings: Vec<Ring> = best_sextet_indices
-            .iter()
-            .filter_map(|&ring_idx| rings.ring(ring_idx).cloned())
-            .collect();
-
-        Ok(vec![AromaticSystem::with_rings(
-            contributions,
-            selected_rings,
-        )])
+        Ok(vec![AromaticSystem::new(contributions)])
     }
 }
 
-fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIndex]) -> Vec<RingIndex> {
+fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIdx]) -> Vec<RingIdx> {
     if candidates.is_empty() {
         return Vec::new();
     }
@@ -105,7 +97,7 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIndex]) -> Vec<Rin
         .iter()
         .map(|&ring_idx| {
             rings
-                .ring(ring_idx)
+                .get(ring_idx)
                 .map(|ring| ring.atoms().iter().copied().collect())
                 .unwrap_or_default()
         })
@@ -174,11 +166,11 @@ mod tests {
         MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
     }
 
-    fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingIndex> {
+    fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingIdx> {
         ring_info
-            .ring_indices()
+            .ids()
             .filter(|&i| {
-                ring_info.ring(i).is_some_and(|cycle| {
+                ring_info.get(i).is_some_and(|cycle| {
                     cycle.len() == 6
                         && cycle.atoms().iter().all(|&atom| {
                             matches!(ast.atom(atom).data.element, ElementAst::Lit(Element::C))
@@ -283,20 +275,14 @@ mod tests {
             expected_atoms
         );
         if let Some(system) = systems.first() {
-            let ring_set: HashSet<RingIndex> = system
-                .rings()
-                .iter()
-                .filter_map(|ring| {
-                    rings
-                        .ring_indices()
-                        .find(|&idx| rings.ring(idx) == Some(ring))
-                })
-                .collect();
-            let expected_selected: HashSet<RingIndex> =
+            let system_atoms: HashSet<AtomIdx> = system.atoms().collect();
+            let expected_atoms: HashSet<AtomIdx> =
                 select_disjoint_sextets(&rings, &hex_ring_indices(&ast, &rings))
                     .into_iter()
+                    .filter_map(|idx| rings.get(idx))
+                    .flat_map(|r| r.atoms().iter().copied())
                     .collect();
-            assert_eq!(ring_set, expected_selected);
+            assert_eq!(system_atoms, expected_atoms);
         }
     }
 
@@ -344,7 +330,7 @@ mod tests {
         let sextets = select_disjoint_sextets(&ring_info, &candidates);
         assert_eq!(sextets.len(), 2);
         for &sextet_idx in &sextets {
-            let ring = ring_info.ring(sextet_idx).unwrap();
+            let ring = ring_info.get(sextet_idx).unwrap();
             assert_eq!(ring.len(), 6);
         }
     }
