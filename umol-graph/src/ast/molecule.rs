@@ -221,6 +221,10 @@ impl MoleculeAst {
         AtomViewMut { idx, data }
     }
 
+    pub fn atoms_mut(&mut self) -> impl Iterator<Item = &mut AtomAst> {
+        Arc::make_mut(&mut self.atoms).iter_mut()
+    }
+
     pub fn bond(&self, idx: BondIdx) -> BondView<'_> {
         self.bonds().get(idx)
     }
@@ -234,6 +238,10 @@ impl MoleculeAst {
             tgt: AtomIdx::from(t),
             data,
         }
+    }
+
+    pub fn bonds_mut(&mut self) -> impl Iterator<Item = &mut BondAst> {
+        Arc::make_mut(&mut self.bonds).iter_mut()
     }
 
     pub fn neighbors(&self, atom: AtomIdx) -> impl Iterator<Item = NeighborView<'_>> {

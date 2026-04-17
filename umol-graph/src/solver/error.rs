@@ -6,7 +6,7 @@ use umol_shared::error::SpinStateError;
 use umol_shared::spin::SpinMultiplicity;
 
 use crate::diagnostics::Diagnostic;
-use crate::table_ir::bond::BondOrder;
+use crate::solver::aromaticity::AromaticityError;
 
 impl From<ResolutionError> for Diagnostic {
     fn from(_error: ResolutionError) -> Self {
@@ -90,40 +90,19 @@ impl From<SpinStateError> for ValidationError {
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]
-pub enum ResolutionError {
-    #[error("Invalid bond order: {0}")]
-    InvalidBondOrder(BondOrder),
-    #[error("Atom index out of range: {0}")]
-    AtomIndexOutOfRange(u32),
-    #[error("Invalid atom: {0}")]
-    InvalidAtom(String),
-    #[error("Invalid bond: {0}")]
-    InvalidBond(String),
+pub enum ConfigError {
     #[error("Invalid atom type registry: {0}")]
     InvalidAtomTypeRegistry(String),
     #[error("Invalid valence table: {0}")]
     InvalidValenceTable(String),
-    #[error("Molecule has more than one connected component")]
-    TopologyDisconnected,
-    #[error("Self-loop on bond {0}")]
-    TopologySelfLoop(u32),
-    #[error("Parallel bonds {0} and {1}")]
-    TopologyParallelEdges(u32, u32),
-    #[error("Valence violation for element {0:?}: {1}")]
-    ValenceViolation(Element, String),
-    #[error("Bond invariant violation: {0}")]
-    BondInvariantViolation(String),
-    #[error("No valence match for {0}")]
-    ValenceNoMatch(String),
-    #[error("Valence ambiguous for {0}")]
-    ValenceAmbiguous(String),
-    #[error("Aromaticity inconsistent: {0}")]
-    AromaticityInconsistent(String),
-    #[error(
-        "Molecular spin incomplete: explicit multiplicity is required (compatible multiplicities: {compatible_multiplicities:?}, total unpaired: {atom_unpaired_sum})"
-    )]
-    MolecularSpinIncomplete {
-        atom_unpaired_sum: u16,
-        compatible_multiplicities: Vec<u8>,
-    },
+}
+
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum ResolutionError {
+    #[error("resolution underdetermined")]
+    Underdetermined,
+    #[error("resolution contradictory")]
+    Contradictory,
+    #[error(transparent)]
+    Aromaticity(#[from] AromaticityError),
 }

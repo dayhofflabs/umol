@@ -3,5 +3,5 @@ source: umol-graph/tests/resolution/mod.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
-  :atom-typing {:output {:atoms ["Rn"] :bonds []} :success true}
+  :atom-typing {:error "resolution underdetermined" :success false}
   :counts {:output {:atoms ["Rn#n4"] :bonds []} :success true}}

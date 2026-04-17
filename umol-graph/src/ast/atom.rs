@@ -227,7 +227,7 @@ impl AtomAst {
     pub fn release(&mut self, cfg: &AtomAstConfig) {
         if matches!(
             (&cfg.isotope_mode, &self.isotope_mass),
-            (IsotopeMode::Natural, IsotopeAst::Natural)
+            (IsotopeMode::Natural | IsotopeMode::Required, IsotopeAst::Natural)
         ) {
             self.isotope_mass = IsotopeAst::Undetermined;
         }

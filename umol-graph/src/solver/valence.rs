@@ -15,7 +15,7 @@ use xxhash_rust::const_xxh3::xxh3_64;
 use crate::ast::atom::AtomAst;
 use crate::ast::config::AtomAstConfig;
 
-use super::error::ResolutionError;
+use super::error::ConfigError;
 
 /// Atom type registry: ground AtomAst terms keyed by (element, charge).
 ///
@@ -79,20 +79,20 @@ impl AtomTypeRegistry {
         self.content_hash = xxh3_64(buf.as_bytes());
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
         let parsed: AtomTypeRegistryToml = toml::from_str(input)
-            .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
+            .map_err(|e| ConfigError::InvalidAtomTypeRegistry(e.to_string()))?;
         let mut atom_types: BTreeMap<(Element, Option<i8>), Vec<AtomAst>> = BTreeMap::new();
         for (element_key, charges) in &parsed {
             let element: Element = element_key.parse().map_err(|_| {
-                ResolutionError::InvalidAtomTypeRegistry(format!(
+                ConfigError::InvalidAtomTypeRegistry(format!(
                     "unknown element: {}",
                     element_key
                 ))
             })?;
             for (charge_key, atom_specs) in charges {
                 let charge: i8 = charge_key.parse().map_err(|_| {
-                    ResolutionError::InvalidAtomTypeRegistry(format!(
+                    ConfigError::InvalidAtomTypeRegistry(format!(
                         "invalid charge '{}' for element {}",
                         charge_key, element_key
                     ))
@@ -102,24 +102,24 @@ impl AtomTypeRegistry {
                     .iter()
                     .map(|spec| {
                         let mut atom = spec.parse::<AtomAst>().map_err(|e| {
-                            ResolutionError::InvalidAtomTypeRegistry(format!("{}: {}", spec, e))
+                            ConfigError::InvalidAtomTypeRegistry(format!("{}: {}", spec, e))
                         })?;
                         atom.coerce(&zeroed);
                         Ok(atom)
                     })
-                    .collect::<Result<_, ResolutionError>>()?;
+                    .collect::<Result<_, ConfigError>>()?;
                 for atom in &mut atoms {
                     let atom_element = match &atom.element {
                         ElementAst::Lit(e) => *e,
                         _ => {
-                            return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
+                            return Err(ConfigError::InvalidAtomTypeRegistry(format!(
                                 "atom '{}' has non-literal element",
                                 atom
                             )));
                         }
                     };
                     if atom_element != element {
-                        return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
+                        return Err(ConfigError::InvalidAtomTypeRegistry(format!(
                             "atom '{}' element {} does not match section element {}",
                             atom, atom_element, element
                         )));
@@ -127,14 +127,14 @@ impl AtomTypeRegistry {
                     let atom_charge = match &atom.charge {
                         ValueAst::Lit(c) => *c as i8,
                         _ => {
-                            return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
+                            return Err(ConfigError::InvalidAtomTypeRegistry(format!(
                                 "atom '{}' has non-literal charge",
                                 atom
                             )));
                         }
                     };
                     if atom_charge != charge {
-                        return Err(ResolutionError::InvalidAtomTypeRegistry(format!(
+                        return Err(ConfigError::InvalidAtomTypeRegistry(format!(
                             "atom '{}' charge {} does not match section charge {}",
                             atom, atom_charge, charge
                         )));
@@ -155,9 +155,9 @@ impl AtomTypeRegistry {
         Ok(reg)
     }
 
-    pub fn from_toml_file(path: &Path) -> Result<Self, ResolutionError> {
+    pub fn from_toml_file(path: &Path) -> Result<Self, ConfigError> {
         let input = fs::read_to_string(path)
-            .map_err(|e| ResolutionError::InvalidAtomTypeRegistry(e.to_string()))?;
+            .map_err(|e| ConfigError::InvalidAtomTypeRegistry(e.to_string()))?;
         Self::from_toml_str(&input)
     }
 
@@ -289,13 +289,13 @@ impl ValenceTable {
         &DEFAULT_VALENCE_TABLE
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
         let parsed: BTreeMap<String, ValenceEntryToml> = toml::from_str(input)
-            .map_err(|e| ResolutionError::InvalidValenceTable(e.to_string()))?;
+            .map_err(|e| ConfigError::InvalidValenceTable(e.to_string()))?;
         let mut entries = BTreeMap::new();
         for (symbol, entry) in parsed {
             let element: Element = symbol.parse().map_err(|_| {
-                ResolutionError::InvalidValenceTable(format!("unknown element: {}", symbol))
+                ConfigError::InvalidValenceTable(format!("unknown element: {}", symbol))
             })?;
             entries.insert(
                 element,
@@ -403,13 +403,13 @@ impl NormalValenceTable {
         &DEFAULT_NORMAL_VALENCE_TABLE
     }
 
-    pub fn from_toml_str(input: &str) -> Result<Self, ResolutionError> {
+    pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
         let parsed: BTreeMap<String, u8> = toml::from_str(input)
-            .map_err(|e| ResolutionError::InvalidValenceTable(e.to_string()))?;
+            .map_err(|e| ConfigError::InvalidValenceTable(e.to_string()))?;
         let mut neutral = BTreeMap::new();
         for (symbol, valence) in parsed {
             let element: Element = symbol.parse().map_err(|_| {
-                ResolutionError::InvalidValenceTable(format!("unknown element: {}", symbol))
+                ConfigError::InvalidValenceTable(format!("unknown element: {}", symbol))
             })?;
             neutral.insert(element, valence);
         }

@@ -12,6 +12,7 @@ use nom::multi::many0;
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
 use umol_edn::{DeError, Edn, EdnKeyword, FromEdn, ToEdn};
+use umol_shared::spin::SpinState;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
@@ -99,12 +100,18 @@ impl Display for BondAst {
 }
 
 /// Built-in bond keyword aliases (:single, :double, :triple, :quadruple).
+/// Aliases are grounded: charge=0, spin=closed-shell.
 pub fn builtin_bond_aliases() -> bimap::BiMap<String, BondAst> {
+    let ground = |order: i64| BondAst {
+        order: ValueAst::Lit(order),
+        charge: ValueAst::Lit(0),
+        spin: SpinStateAst::Lit(SpinState::closed_shell()),
+    };
     bimap::BiMap::from_iter([
-        ("single".into(), BondAst::from_order(1)),
-        ("double".into(), BondAst::from_order(2)),
-        ("triple".into(), BondAst::from_order(3)),
-        ("quadruple".into(), BondAst::from_order(4)),
+        ("single".into(), ground(1)),
+        ("double".into(), ground(2)),
+        ("triple".into(), ground(3)),
+        ("quadruple".into(), ground(4)),
     ])
 }
 

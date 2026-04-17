@@ -13,7 +13,7 @@ use umol_graph::ast::config::{
     ImplicitHydrogenMode, MoleculeAstConfig, MoleculeAstConfigOverrides,
 };
 use umol_graph::dsl::molecule::MoleculeAstWrapper;
-use umol_graph::solver::propagate::{AromaticityConfig, Solution, Solver, ValenceStrategy};
+use umol_graph::solver::propagate::{AromaticityConfig, Solver, ValenceStrategy};
 use umol_graph::solver::valence::ValenceTable;
 
 #[derive(FromEdn)]
@@ -43,8 +43,9 @@ fn resolve_test(
 ) -> ResolveResult {
     let mut ast = input.ast().clone();
     ast.coerce(config);
-    match solver.resolve(&mut ast) {
-        Ok(Solution::Determined(()) | Solution::Underdetermined(())) => {
+    match solver.resolve(ast) {
+        Ok(mol) => {
+            let mut ast = mol.into_ast();
             ast.release(config);
             ResolveResult {
                 success: true,
@@ -52,11 +53,6 @@ fn resolve_test(
                 error: None,
             }
         }
-        Ok(Solution::Contradictory) => ResolveResult {
-            success: false,
-            output: None,
-            error: Some("contradictory".to_string()),
-        },
         Err(e) => ResolveResult {
             success: false,
             output: None,

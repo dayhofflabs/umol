@@ -858,6 +858,7 @@ mod tests {
     use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
     use umol_shared::e;
     use umol_shared::element::Element;
+    use umol_shared::spin::SpinState;
     use umol_shared::spin_ast::SpinStateAst;
     use umol_shared::value_ast::ValueAst;
 
@@ -898,7 +899,11 @@ mod tests {
         r#"{:atoms ["N" "N"] :bonds [[0 1 :triple]]}"#,
         mol_with_bonds(
             vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))],
-            vec![(0, 1, BondAst::from_order(3))],
+            vec![(0, 1, BondAst {
+                order: ValueAst::Lit(3),
+                charge: ValueAst::Lit(0),
+                spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            })],
         ),
         Metadata::default()
     )]
@@ -906,7 +911,11 @@ mod tests {
         r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#,
         mol_with_bonds(
             vec![AtomAst::from_element(e!(C)), AtomAst::from_element(e!(O))],
-            vec![(0, 1, BondAst::from_order(1))],
+            vec![(0, 1, BondAst {
+                order: ValueAst::Lit(1),
+                charge: ValueAst::Lit(0),
+                spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            })],
         ),
         Metadata {
             atom_tags: IndexMap::from([(0, "C".to_string()), (1, "O".to_string())]),
@@ -917,7 +926,11 @@ mod tests {
         r#"{:atoms ["H" "F"] :bonds [{:id :b1 :a 0 :b 1 :bond :single}]}"#,
         mol_with_bonds(
             vec![AtomAst::from_element(e!(H)), AtomAst::from_element(e!(F))],
-            vec![(0, 1, BondAst::from_order(1))],
+            vec![(0, 1, BondAst {
+                order: ValueAst::Lit(1),
+                charge: ValueAst::Lit(0),
+                spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            })],
         ),
         Metadata {
             bond_ids: IndexMap::from([(0, "b1".to_string())]),
@@ -990,7 +1003,11 @@ mod tests {
         r#"{:atoms [:n :n] :bonds [[0 1 :single]] :aliases [:n "N"]}"#,
         mol_with_bonds(
             vec![AtomAst::from_element(e!(N)), AtomAst::from_element(e!(N))],
-            vec![(0, 1, BondAst::from_order(1))],
+            vec![(0, 1, BondAst {
+                order: ValueAst::Lit(1),
+                charge: ValueAst::Lit(0),
+                spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            })],
         ),
         Metadata {
             atom_aliases: BiMap::from_iter([("n".to_string(), AtomAst::from_element(e!(N)))]),

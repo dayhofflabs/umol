@@ -24,6 +24,14 @@ impl Pattern {
     }
 }
 
+impl PartialEq for Pattern {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ast == other.0.ast
+    }
+}
+
+impl Eq for Pattern {}
+
 #[cfg(test)]
 mod tests {
     use umol_shared::atom_ast::ElementAst;
