@@ -6,6 +6,7 @@ pub mod bond;
 pub mod diagnostics;
 pub mod dsl;
 pub mod io;
+pub mod model;
 pub mod position;
 pub mod solver;
 pub mod span;

@@ -14,7 +14,6 @@ use crate::ast::bond::BondAst;
 use crate::ast::builder::MoleculeBuilder;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::MoleculeConstraint;
-use crate::ast::error::GroundError;
 use crate::ast::views::{
     AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView, BondViewMut, BondViews,
     DativeBondViews, MulticenterBondViews, NeighborView, NoncovalentBondViews,
@@ -369,29 +368,6 @@ impl MoleculeAst {
     }
 }
 
-/// A `MoleculeAst` whose fields are all concrete and whose constraints are
-/// all ground assertions. The invariant is checked once at construction.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GroundMolecule(MoleculeAst);
-
-impl GroundMolecule {
-    pub fn new(ast: MoleculeAst) -> Result<Self, GroundError> {
-        if ast.is_ground() {
-            Ok(Self(ast))
-        } else {
-            Err(GroundError)
-        }
-    }
-
-    pub fn as_ast(&self) -> &MoleculeAst {
-        &self.0
-    }
-
-    pub fn into_ast(self) -> MoleculeAst {
-        self.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -484,21 +460,6 @@ mod tests {
             pattern: Box::new(MoleculeAst::default()),
         });
         assert!(!ast.is_ground());
-    }
-
-    #[test]
-    fn test_ground_molecule_new() {
-        let ast = ground_ast();
-        assert!(GroundMolecule::new(ast).is_ok());
-    }
-
-    #[test]
-    fn test_ground_molecule_new_error() {
-        let ast = MoleculeAst::new(
-            vec![AtomAst::new(ElementAst::Undetermined)],
-            vec![], vec![], vec![], vec![], vec![], vec![],
-        );
-        assert_eq!(GroundMolecule::new(ast), Err(GroundError));
     }
 
     #[test]

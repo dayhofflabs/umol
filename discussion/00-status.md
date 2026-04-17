@@ -87,3 +87,4 @@
 | [83-constraint-unification-architecture-2026-04-13.md](83-constraint-unification-architecture-2026-04-13.md)                     | Active        | 2026-04-15   |
 | [84-graph-library-decision-2026-04-14.md](84-graph-library-decision-2026-04-14.md)                                               | Active        | 2026-04-14   |
 | [85-kekulization-algorithms-2026-04-15.md](85-kekulization-algorithms-2026-04-15.md)                                             | Active        | 2026-04-15   |
+| [86-molecule-ast-api-2026-04-16.md](86-molecule-ast-api-2026-04-16.md)                                                           | Active        | 2026-04-16   |
