@@ -8,7 +8,6 @@ pub mod builder;
 pub mod config;
 pub mod constraint;
 pub mod error;
-pub mod matcher;
 pub mod molecule;
 pub mod morgan;
 pub mod rings;

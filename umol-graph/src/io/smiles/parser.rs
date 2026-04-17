@@ -23,8 +23,9 @@ use self::utils::{
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::{ParseError, SmilesError};
 use crate::ast::molecule::MoleculeAst;
-use crate::model;
-use crate::solver::propagate::Solver;
+use crate::api;
+use crate::unify::chemistry::Chemistry;
+use crate::unify::resolve::Resolver;
 use crate::span::Span;
 use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
@@ -32,34 +33,34 @@ use crate::table_ir::{
     SourceFormat, WildcardAtom,
 };
 
-/// Parse SMILES to [`model::Molecule`] using default IO config and [`Solver::default`].
-pub fn parse_smiles(input: &str) -> Result<model::Molecule, SmilesError> {
+/// Parse SMILES to [`api::Molecule`] using default IO config and [`Chemistry::default`].
+pub fn parse_smiles(input: &str) -> Result<api::Molecule, SmilesError> {
     parse_smiles_bytes(input.as_bytes())
 }
 
-/// Parse SMILES bytes to [`model::Molecule`] using default IO config and [`Solver::default`].
-pub fn parse_smiles_bytes(input: &[u8]) -> Result<model::Molecule, SmilesError> {
-    parse_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles(), &Solver::default())
+/// Parse SMILES bytes to [`api::Molecule`] using default IO config and [`Chemistry::default`].
+pub fn parse_smiles_bytes(input: &[u8]) -> Result<api::Molecule, SmilesError> {
+    parse_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles(), &Chemistry::default())
 }
 
-/// Parse SMILES to [`model::Molecule`] with explicit IO config and solver.
+/// Parse SMILES to [`api::Molecule`] with explicit IO config and chemistry.
 pub fn parse_smiles_with(
     input: &str,
     io_config: &SmilesIoConfig,
-    solver: &Solver,
-) -> Result<model::Molecule, SmilesError> {
-    parse_smiles_bytes_with(input.as_bytes(), io_config, solver)
+    chemistry: &Chemistry,
+) -> Result<api::Molecule, SmilesError> {
+    parse_smiles_bytes_with(input.as_bytes(), io_config, chemistry)
 }
 
-/// Parse SMILES bytes to [`model::Molecule`] with explicit IO config and solver.
+/// Parse SMILES bytes to [`api::Molecule`] with explicit IO config and chemistry.
 pub fn parse_smiles_bytes_with(
     input: &[u8],
     io_config: &SmilesIoConfig,
-    solver: &Solver,
-) -> Result<model::Molecule, SmilesError> {
+    chemistry: &Chemistry,
+) -> Result<api::Molecule, SmilesError> {
     let table_mol = parse_smiles_bytes_to_table_ir_with(input, io_config)?;
     let ast = MoleculeAst::from_table_molecule(&table_mol);
-    Ok(solver.resolve(ast)?)
+    Ok(Resolver::new(chemistry).resolve(ast)?)
 }
 
 /// Parse SMILES to [`MoleculeAst`] without running the solver.

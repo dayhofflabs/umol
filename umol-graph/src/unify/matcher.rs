@@ -3,7 +3,7 @@
 use umol_graph_core::{EdgeId, NodeId, subgraph_isomorphisms};
 
 use crate::ast::molecule::MoleculeAst;
-use crate::solver::propagate::Solver;
+use crate::unify::chemistry::Chemistry;
 
 /// Query atom index → target atom index mapping.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -72,10 +72,15 @@ pub fn find_matches(query: &MatchQuery, target: &MatchTarget) -> Vec<Assignment>
 }
 
 /// Find all substructure matches of `query` in `target`, then post-filter
-/// through the solver's valence validation.
-pub fn find_matches_with(query: &MatchQuery, target: &MatchTarget, solver: &Solver) -> Vec<Assignment> {
-    let assignments = find_matches(query, target);
-    solver.filter(query.ast, target.ast, assignments)
+/// through the chemistry's valence validation.
+pub fn find_matches_with(query: &MatchQuery, target: &MatchTarget, chemistry: &Chemistry) -> Vec<Assignment> {
+    find_matches(query, target)
+        .into_iter()
+        .filter(|a| {
+            a.0.iter()
+                .all(|&t_idx| chemistry.valence.validate(target.ast, t_idx))
+        })
+        .collect()
 }
 
 fn post_filter(query: &MoleculeAst, target: &MoleculeAst, assignment: &[usize]) -> bool {
@@ -488,9 +493,9 @@ mod tests {
             vec![], vec![], vec![], vec![], vec![],
         );
 
-        let solver = Solver::default();
+        let chemistry = Chemistry::default();
         let q = MatchQuery::new(&query);
         let t = MatchTarget::new(&target);
-        assert_eq!(find_matches_with(&q, &t, &solver), find_matches(&q, &t));
+        assert_eq!(find_matches_with(&q, &t, &chemistry), find_matches(&q, &t));
     }
 }

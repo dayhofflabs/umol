@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use crate::solver::error::ResolutionError;
+use crate::unify::error::ResolutionError;
 use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Error)]

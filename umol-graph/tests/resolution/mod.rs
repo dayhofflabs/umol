@@ -13,8 +13,11 @@ use umol_graph::ast::config::{
     ImplicitHydrogenMode, MoleculeAstConfig, MoleculeAstConfigOverrides,
 };
 use umol_graph::dsl::molecule::MoleculeAstWrapper;
-use umol_graph::solver::propagate::{AromaticityConfig, Solver, ValenceStrategy};
-use umol_graph::solver::valence::ValenceTable;
+use umol_graph::unify::aromaticity::AromaticityTheory;
+use umol_graph::unify::chemistry::Chemistry;
+use umol_graph::unify::propagate::ValenceTheory;
+use umol_graph::unify::resolve::Resolver;
+use umol_graph::unify::valence::ValenceTable;
 
 #[derive(FromEdn)]
 struct TestInput {
@@ -38,12 +41,12 @@ struct ResolveResult {
 
 fn resolve_test(
     input: &MoleculeAstWrapper,
-    solver: &Solver,
+    chemistry: &Chemistry,
     config: &MoleculeAstConfig,
 ) -> ResolveResult {
     let mut ast = input.ast().clone();
     ast.coerce(config);
-    match solver.resolve(ast) {
+    match Resolver::new(chemistry).resolve(ast) {
         Ok(mol) => {
             let mut ast = mol.into_ast();
             ast.release(config);
@@ -61,20 +64,20 @@ fn resolve_test(
     }
 }
 
-fn atom_typing_solver() -> Solver {
-    Solver::default()
+fn atom_typing_chemistry() -> Chemistry {
+    Chemistry::default()
 }
 
-fn counts_solver(config: &MoleculeAstConfig) -> Solver {
-    Solver {
-        valence: ValenceStrategy::Counts {
+fn counts_chemistry(config: &MoleculeAstConfig) -> Chemistry {
+    Chemistry {
+        valence: ValenceTheory::Counts {
             table: ValenceTable::default_table().clone(),
             allow_implicit_hydrogens: !matches!(
                 config.atom.implicit_h_mode,
                 ImplicitHydrogenMode::Zero
             ),
         },
-        aromaticity: AromaticityConfig::daylight(),
+        aromaticity: AromaticityTheory::daylight(),
     }
 }
 
@@ -99,12 +102,12 @@ fn run_conformance_test(file_path: &Path) {
 
     let atom_typing = resolve_test(
         &test_input.input,
-        &atom_typing_solver(),
+        &atom_typing_chemistry(),
         &config,
     );
     let counts = resolve_test(
         &test_input.input,
-        &counts_solver(&config),
+        &counts_chemistry(&config),
         &config,
     );
 

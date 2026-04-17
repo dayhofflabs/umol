@@ -6,7 +6,7 @@ use thiserror::Error;
 use umol_shared::element::Element;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use crate::solver::error::ResolutionError;
+use crate::unify::error::ResolutionError;
 use crate::span::Span;
 use crate::table_ir::SGroupType;
 

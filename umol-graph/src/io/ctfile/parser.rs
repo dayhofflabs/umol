@@ -26,9 +26,10 @@ use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::{CtfileError, ParseError};
 use crate::ast::molecule::MoleculeAst;
 use crate::io::utils::normalize_whitespace;
-use crate::model;
+use crate::api;
 use crate::position::Point3D;
-use crate::solver::propagate::Solver;
+use crate::unify::chemistry::Chemistry;
+use crate::unify::resolve::Resolver;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
 use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
@@ -250,34 +251,34 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     false
 }
 
-/// Parse MOL to [`model::Molecule`] using default IO config and [`Solver::default`].
-pub fn parse_mol(input: &str) -> Result<model::Molecule, CtfileError> {
+/// Parse MOL to [`api::Molecule`] using default IO config and [`Chemistry::default`].
+pub fn parse_mol(input: &str) -> Result<api::Molecule, CtfileError> {
     parse_mol_bytes(input.as_bytes())
 }
 
-/// Parse MOL bytes to [`model::Molecule`] using default IO config and [`Solver::default`].
-pub fn parse_mol_bytes(input: &[u8]) -> Result<model::Molecule, CtfileError> {
-    parse_mol_bytes_with(input, &CtfileIoConfig::basic(), &Solver::default())
+/// Parse MOL bytes to [`api::Molecule`] using default IO config and [`Chemistry::default`].
+pub fn parse_mol_bytes(input: &[u8]) -> Result<api::Molecule, CtfileError> {
+    parse_mol_bytes_with(input, &CtfileIoConfig::basic(), &Chemistry::default())
 }
 
-/// Parse MOL to [`model::Molecule`] with explicit IO config and solver.
+/// Parse MOL to [`api::Molecule`] with explicit IO config and chemistry.
 pub fn parse_mol_with(
     input: &str,
     io_config: &CtfileIoConfig,
-    solver: &Solver,
-) -> Result<model::Molecule, CtfileError> {
-    parse_mol_bytes_with(input.as_bytes(), io_config, solver)
+    chemistry: &Chemistry,
+) -> Result<api::Molecule, CtfileError> {
+    parse_mol_bytes_with(input.as_bytes(), io_config, chemistry)
 }
 
-/// Parse MOL bytes to [`model::Molecule`] with explicit IO config and solver.
+/// Parse MOL bytes to [`api::Molecule`] with explicit IO config and chemistry.
 pub fn parse_mol_bytes_with(
     input: &[u8],
     io_config: &CtfileIoConfig,
-    solver: &Solver,
-) -> Result<model::Molecule, CtfileError> {
+    chemistry: &Chemistry,
+) -> Result<api::Molecule, CtfileError> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
     let ast = MoleculeAst::from_table_molecule(&table_mol);
-    Ok(solver.resolve(ast)?)
+    Ok(Resolver::new(chemistry).resolve(ast)?)
 }
 
 /// Parse MOL to [`MoleculeAst`] without running the solver.

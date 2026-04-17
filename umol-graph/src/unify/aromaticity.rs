@@ -1,9 +1,9 @@
-//! Aromaticity types, perception models, and configuration.
+//! Aromaticity types, perception theories, and configuration.
 //!
 //! Core types (`AromaticSystem`, `AromaticContribution`) describe delocalized
-//! π systems. Perception models (`hueckel_rule`, `hmo`, `clar`) detect aromatic
-//! systems from ring topology and atom properties. `AromaticityModel` dispatches
-//! to the configured model.
+//! π systems. Perception implementations (`hueckel_rule`, `hmo`, `clar`) detect
+//! aromatic systems from ring topology and atom properties. `AromaticityTheory`
+//! dispatches to the configured perception.
 
 pub mod clar;
 pub mod hmo;
@@ -17,8 +17,9 @@ use umol_shared::element::Element;
 use umol_shared::spin::SpinState;
 
 use crate::ast::AtomIdx;
-use crate::ast::molecule::MoleculeAst;
-use crate::ast::rings::RingSet;
+use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
+use crate::ast::rings::{RingEnumerationStrategy, RingEnumerator, RingFamily, RingSet};
+use crate::unify::resolve::Progress;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AromaticityError {
@@ -65,62 +66,11 @@ impl Default for RingLimits {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum AromaticityStrategy {
-    HueckelRule {
-        element_scope: ElementScope,
-        ring_limits: RingLimits,
-    },
-    Hmo {
-        element_scope: ElementScope,
-        /// Delocalization energy per pi-electron (in units of |beta|) required
-        /// for classification as aromatic. Benzene: dE/n ~ 0.33|beta|.
-        stabilization_threshold: f64,
-    },
-    Clar,
-}
-
 /// Policy for mismatches between aromatic hints and detected aromatic systems.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AromaticityHintPolicy {
     Strict,
     Ignore,
-}
-
-impl AromaticityStrategy {
-    /// Daylight (SMILES) aromaticity: C, N, O, S, Se, As.
-    pub fn daylight() -> Self {
-        Self::HueckelRule {
-            element_scope: ElementScope::AllowList(vec![
-                Element::C,
-                Element::N,
-                Element::O,
-                Element::S,
-                Element::Se,
-                Element::As,
-            ]),
-            ring_limits: RingLimits::default(),
-        }
-    }
-
-    /// MDL (MOL/SDF) aromaticity: C and N only. Minimum ring size 6.
-    pub fn mdl() -> Self {
-        Self::HueckelRule {
-            element_scope: ElementScope::AllowList(vec![Element::C, Element::N]),
-            ring_limits: RingLimits {
-                min_ring_size: 6,
-                ..RingLimits::default()
-            },
-        }
-    }
-
-    /// Permissive aromaticity: any element with aromatic valence states.
-    pub fn permissive() -> Self {
-        Self::HueckelRule {
-            element_scope: ElementScope::Any,
-            ring_limits: RingLimits::default(),
-        }
-    }
 }
 
 /// Per-atom contribution to an aromatic system.
@@ -212,30 +162,60 @@ impl AromaticSystem {
     }
 }
 
-pub enum AromaticityModel {
+#[derive(Clone, Debug)]
+pub struct AromaticityTheory {
+    pub kind: AromaticityKind,
+    pub ring_enumeration: RingEnumerationStrategy,
+}
+
+#[derive(Clone, Debug)]
+pub enum AromaticityKind {
     HueckelRule(HueckelRuleAromaticity),
     Hmo(HmoAromaticity),
     Clar(ClarAromaticity),
 }
 
-impl AromaticityModel {
-    pub fn new(strategy: &AromaticityStrategy) -> Self {
-        match strategy {
-            AromaticityStrategy::HueckelRule {
-                element_scope,
-                ring_limits,
-            } => Self::HueckelRule(HueckelRuleAromaticity::new(
-                element_scope.clone(),
-                ring_limits.clone(),
+impl AromaticityTheory {
+    /// Daylight (SMILES) aromaticity: C, N, O, S, Se, As.
+    pub fn daylight() -> Self {
+        Self {
+            kind: AromaticityKind::HueckelRule(HueckelRuleAromaticity::new(
+                ElementScope::AllowList(vec![
+                    Element::C,
+                    Element::N,
+                    Element::O,
+                    Element::S,
+                    Element::Se,
+                    Element::As,
+                ]),
+                RingLimits::default(),
             )),
-            AromaticityStrategy::Hmo {
-                element_scope,
-                stabilization_threshold,
-            } => Self::Hmo(HmoAromaticity::new(
-                element_scope.clone(),
-                *stabilization_threshold,
+            ring_enumeration: RingEnumerationStrategy::default(),
+        }
+    }
+
+    /// MDL (MOL/SDF) aromaticity: C and N only. Minimum ring size 6.
+    pub fn mdl() -> Self {
+        Self {
+            kind: AromaticityKind::HueckelRule(HueckelRuleAromaticity::new(
+                ElementScope::AllowList(vec![Element::C, Element::N]),
+                RingLimits {
+                    min_ring_size: 6,
+                    ..RingLimits::default()
+                },
             )),
-            AromaticityStrategy::Clar => Self::Clar(ClarAromaticity),
+            ring_enumeration: RingEnumerationStrategy::default(),
+        }
+    }
+
+    /// Permissive aromaticity: any element with aromatic valence states.
+    pub fn permissive() -> Self {
+        Self {
+            kind: AromaticityKind::HueckelRule(HueckelRuleAromaticity::new(
+                ElementScope::Any,
+                RingLimits::default(),
+            )),
+            ring_enumeration: RingEnumerationStrategy::default(),
         }
     }
 
@@ -244,10 +224,10 @@ impl AromaticityModel {
         ast: &MoleculeAst,
         rings: &RingSet,
     ) -> Result<Vec<AromaticSystem>, AromaticityError> {
-        let mut systems = match self {
-            Self::HueckelRule(m) => Ok(m.find_from_rings(ast, rings)),
-            Self::Hmo(m) => m.find_from_rings(ast, rings),
-            Self::Clar(m) => m.find_from_rings(ast, rings),
+        let mut systems = match &self.kind {
+            AromaticityKind::HueckelRule(m) => Ok(m.find_from_rings(ast, rings)),
+            AromaticityKind::Hmo(m) => m.find_from_rings(ast, rings),
+            AromaticityKind::Clar(m) => m.find_from_rings(ast, rings),
         }?;
         systems.sort_by(|a, b| {
             let min_a = a.atoms().min();
@@ -255,5 +235,25 @@ impl AromaticityModel {
             min_a.cmp(&min_b)
         });
         Ok(systems)
+    }
+
+    pub fn refine(&self, ast: &mut MoleculeAst) -> Result<Progress, AromaticityError> {
+        let ring_family = match &self.kind {
+            AromaticityKind::Clar(_) => RingFamily::InducedBenzenoid,
+            AromaticityKind::HueckelRule(_) | AromaticityKind::Hmo(_) => RingFamily::Simple,
+        };
+        let enumerator = RingEnumerator::new(ring_family, &self.ring_enumeration);
+        let rings = enumerator.enumerate(ast);
+        let systems = self.aromatic_systems(ast, &rings)?;
+        if systems.is_empty() {
+            return Ok(Progress::Fixpoint);
+        }
+        let mut builder = ast.edit();
+        for sys in &systems {
+            let atoms: Vec<AtomIdx> = sys.atoms().collect();
+            builder.add_aromatic_system(atoms, AromaticSystemAst {});
+        }
+        *ast = builder.build();
+        Ok(Progress::Advanced)
     }
 }

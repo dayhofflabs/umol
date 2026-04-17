@@ -12,7 +12,7 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use umol_graph::ast::AtomIdx;
 use umol_graph::ast::atom::AtomAst;
 use umol_graph::ast::bond::BondAst;
-use umol_graph::ast::matcher::{find_matches, MatchQuery, MatchTarget};
+use umol_graph::unify::matcher::{find_matches, MatchQuery, MatchTarget};
 use umol_graph::ast::molecule::MoleculeAst;
 use umol_graph::io::smiles::parse_smiles_to_ast;
 use umol_shared::element::Element;
