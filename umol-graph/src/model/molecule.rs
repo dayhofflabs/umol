@@ -3,6 +3,8 @@
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
+use thiserror::Error;
+use umol_edn::ToEdn;
 use umol_graph_core::Graph;
 
 use crate::ast::atom::AtomAst;
@@ -17,6 +19,16 @@ use crate::ast::views::{
 use crate::ast::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
+use crate::dsl::error::ParseError as DslParseError;
+use crate::dsl::molecule::{parse_molecule_dsl, MoleculeAstWrapper};
+
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum MoleculeEdnError {
+    #[error(transparent)]
+    Parse(#[from] DslParseError),
+    #[error(transparent)]
+    NotGround(#[from] GroundError),
+}
 
 #[derive(Debug)]
 struct MoleculeInner {
@@ -110,6 +122,17 @@ impl Molecule {
 
     pub fn is_in_aromatic_system(&self, atom: AtomIdx) -> bool {
         self.0.ast.is_in_aromatic_system(atom)
+    }
+
+    pub fn to_edn_str(&self) -> String {
+        MoleculeAstWrapper::from_ast(self.0.ast.clone())
+            .to_edn()
+            .to_string()
+    }
+
+    pub fn from_edn_str(input: &str) -> Result<Self, MoleculeEdnError> {
+        let (ast, _) = parse_molecule_dsl(input)?.into_parts();
+        Ok(Self::new(ast)?)
     }
 }
 
@@ -253,5 +276,25 @@ mod tests {
         let m1 = Molecule::new(ast1).unwrap();
         let m2 = Molecule::new(ast2).unwrap();
         assert_eq!(m1, m2);
+    }
+
+    #[test]
+    fn test_molecule_to_edn_str() {
+        let ast = MoleculeAst::new(
+            vec![ground_atom()],
+            vec![], vec![], vec![], vec![], vec![], vec![],
+        );
+        let mol = Molecule::new(ast).unwrap();
+        let text = mol.to_edn_str();
+        assert!(!text.is_empty());
+        assert!(text.contains("atoms"));
+    }
+
+    #[test]
+    fn test_molecule_from_edn_str_parse_error() {
+        assert!(matches!(
+            Molecule::from_edn_str("not valid edn"),
+            Err(MoleculeEdnError::Parse(_))
+        ));
     }
 }

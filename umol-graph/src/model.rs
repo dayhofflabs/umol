@@ -10,5 +10,5 @@
 pub mod molecule;
 pub mod pattern;
 
-pub use molecule::Molecule;
+pub use molecule::{Molecule, MoleculeEdnError};
 pub use pattern::Pattern;

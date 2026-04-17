@@ -100,7 +100,6 @@ impl Solver {
         let mut cell = ResolverCell::new(ast);
         cell.refine_valence(&self.valence)?;
         cell.refine_aromaticity(&self.aromaticity)?;
-        cell.refine_valence(&self.valence)?;
         cell.finalize()
     }
 
@@ -217,8 +216,7 @@ impl ValenceStrategy {
         };
         let charge = atom.charge_or_zero();
         let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(idx);
-        let is_aromatic = ast.is_in_aromatic_system(idx)
-            || matches!(atom.aromatic_valence, AromaticValenceAst::Value(_));
+        let is_aromatic = matches!(atom.aromatic_valence, AromaticValenceAst::Value(_));
 
         match self {
             Self::AtomTyping { registry } => atom_typing_candidates(
