@@ -4,7 +4,8 @@ use rstest::*;
 use crate::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
 use crate::io::ctfile::parser::{
     has_extended_features, parse_extended_mol, parse_extended_mol_bytes, parse_extended_mol_with,
-    parse_mol, parse_mol_bytes, parse_mol_bytes_with, parse_mol_with,
+    parse_mol_bytes_to_table_ir, parse_mol_bytes_to_table_ir_with, parse_mol_to_table_ir,
+    parse_mol_to_table_ir_with,
 };
 use crate::table_ir::StereoInterpretation;
 
@@ -44,8 +45,8 @@ fn water_unicode_whitespace_mol() -> &'static [u8] {
 }
 
 #[rstest]
-fn test_parse_mol(ethane_mol: &[u8]) {
-    let result = parse_mol_bytes(ethane_mol);
+fn test_parse_mol_to_table_ir(ethane_mol: &[u8]) {
+    let result = parse_mol_bytes_to_table_ir(ethane_mol);
     assert!(result.is_ok(), "should have succeeded: {:?}", result.err());
 
     let molecule = result.unwrap();
@@ -55,7 +56,7 @@ fn test_parse_mol(ethane_mol: &[u8]) {
 
 #[rstest]
 fn test_parse_trailing_data_fields(ethane_mol_with_data: &[u8]) {
-    let result = parse_mol_bytes(ethane_mol_with_data);
+    let result = parse_mol_bytes_to_table_ir(ethane_mol_with_data);
     assert!(result.is_ok(), "Molecule parser should parse SDF files");
     let molecule = result.unwrap();
     assert_eq!(molecule.atom_count(), 2, "Should parse 2 atoms");
@@ -64,7 +65,7 @@ fn test_parse_trailing_data_fields(ethane_mol_with_data: &[u8]) {
 
 #[rstest]
 fn test_parse_mol_chiral_flag(chiral_mol: &str) {
-    let result = parse_mol(chiral_mol);
+    let result = parse_mol_to_table_ir(chiral_mol);
     assert!(result.is_ok(), "Should parse: {:?}", result.err());
     let molecule = result.unwrap();
     assert_eq!(
@@ -76,7 +77,7 @@ fn test_parse_mol_chiral_flag(chiral_mol: &str) {
 
 #[rstest]
 fn test_parse_mol_str(methane_mol: &str) {
-    let result = parse_mol(methane_mol);
+    let result = parse_mol_to_table_ir(methane_mol);
     assert!(
         result.is_ok(),
         "parse_mol should succeed: {:?}",
@@ -91,7 +92,7 @@ fn test_parse_mol_str(methane_mol: &str) {
 #[rstest]
 fn test_parse_mol_with_config(methane_mol: &str) {
     let config = CtfileIoConfig::basic_max();
-    let result = parse_mol_with(methane_mol, &config);
+    let result = parse_mol_to_table_ir_with(methane_mol, &config);
     assert!(
         result.is_ok(),
         "parse_mol_with should succeed: {:?}",
@@ -103,7 +104,7 @@ fn test_parse_mol_with_config(methane_mol: &str) {
 
 #[rstest]
 fn test_parse_mol_header_in_comments(methane_mol: &str) {
-    let result = parse_mol(methane_mol).unwrap();
+    let result = parse_mol_to_table_ir(methane_mol).unwrap();
     assert_eq!(
         result.comments[0], "Methane",
         "First comment should be molecule name"
@@ -120,7 +121,7 @@ fn test_parse_mol_header_in_comments(methane_mol: &str) {
 
 #[rstest]
 fn test_parse_mol_empty_header(empty_header_mol: &str) {
-    let result = parse_mol(empty_header_mol);
+    let result = parse_mol_to_table_ir(empty_header_mol);
     assert!(
         result.is_ok(),
         "Should parse MOL with empty header: {:?}",
@@ -134,7 +135,7 @@ fn test_parse_mol_empty_header(empty_header_mol: &str) {
 
 #[rstest]
 fn test_parse_mol_invalid_query_features(query_mol: &[u8]) {
-    let result = parse_mol_bytes(query_mol);
+    let result = parse_mol_bytes_to_table_ir(query_mol);
     assert!(
         result.is_err(),
         "Molecule parser should fail on query atoms"
@@ -153,7 +154,7 @@ fn test_parse_mol_invalid_query_features(query_mol: &[u8]) {
 
 #[rstest]
 fn test_parse_mol_invalid_unicode(water_unicode_whitespace_mol: &[u8]) {
-    let result = parse_mol_bytes(water_unicode_whitespace_mol);
+    let result = parse_mol_bytes_to_table_ir(water_unicode_whitespace_mol);
     assert!(
         result.is_err(),
         "Should fail parsing MOL with unicode whitespace without UNICODE flag"
@@ -162,7 +163,7 @@ fn test_parse_mol_invalid_unicode(water_unicode_whitespace_mol: &[u8]) {
 
 #[rstest]
 fn test_parse_mol_lenient(water_unicode_whitespace_mol: &[u8]) {
-    let result = parse_mol_bytes_with(
+    let result = parse_mol_bytes_to_table_ir_with(
         water_unicode_whitespace_mol,
         &CtfileIoConfig::with_parse_flags(CtabParseFlags::BASIC_MAX & CtabParseFlags::LENIENT),
     );

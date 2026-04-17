@@ -23,9 +23,12 @@ use self::properties::{extended_properties_block, properties_block, PropertyEntr
 pub use self::properties::{extended_property_input, property_input}; // NOTE: Re-exported for benchmarks
 use self::sdf_data::sdf_data_block;
 use super::config::{CtabParseFlags, CtfileIoConfig};
-use super::error::ParseError;
+use super::error::{CtfileError, ParseError};
+use crate::ast::molecule::MoleculeAst;
 use crate::io::utils::normalize_whitespace;
+use crate::model;
 use crate::position::Point3D;
+use crate::solver::propagate::Solver;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
 use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
@@ -247,8 +250,52 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     false
 }
 
-/// Parse MOL bytes into a Molecule with options (optimized, basic molecules only)
-pub fn parse_mol_bytes_with(input: &[u8], config: &CtfileIoConfig) -> Result<Molecule, ParseError> {
+/// Parse MOL to [`model::Molecule`] using default IO config and [`Solver::default`].
+pub fn parse_mol(input: &str) -> Result<model::Molecule, CtfileError> {
+    parse_mol_bytes(input.as_bytes())
+}
+
+/// Parse MOL bytes to [`model::Molecule`] using default IO config and [`Solver::default`].
+pub fn parse_mol_bytes(input: &[u8]) -> Result<model::Molecule, CtfileError> {
+    parse_mol_bytes_with(input, &CtfileIoConfig::basic(), &Solver::default())
+}
+
+/// Parse MOL to [`model::Molecule`] with explicit IO config and solver.
+pub fn parse_mol_with(
+    input: &str,
+    io_config: &CtfileIoConfig,
+    solver: &Solver,
+) -> Result<model::Molecule, CtfileError> {
+    parse_mol_bytes_with(input.as_bytes(), io_config, solver)
+}
+
+/// Parse MOL bytes to [`model::Molecule`] with explicit IO config and solver.
+pub fn parse_mol_bytes_with(
+    input: &[u8],
+    io_config: &CtfileIoConfig,
+    solver: &Solver,
+) -> Result<model::Molecule, CtfileError> {
+    let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
+    let ast = MoleculeAst::from_table_molecule(&table_mol);
+    Ok(solver.resolve(ast)?)
+}
+
+/// Parse MOL to [`MoleculeAst`] without running the solver.
+pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, CtfileError> {
+    parse_mol_bytes_to_ast(input.as_bytes())
+}
+
+/// Parse MOL bytes to [`MoleculeAst`] without running the solver.
+pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, CtfileError> {
+    let table_mol = parse_mol_bytes_to_table_ir(input)?;
+    Ok(MoleculeAst::from_table_molecule(&table_mol))
+}
+
+/// Parse MOL bytes to `table_ir::Molecule` with options (optimized, basic molecules only)
+pub fn parse_mol_bytes_to_table_ir_with(
+    input: &[u8],
+    config: &CtfileIoConfig,
+) -> Result<Molecule, ParseError> {
     let flags = config.parse_flags;
 
     let data: Cow<'_, [u8]> = if flags.contains(CtabParseFlags::UNICODE) {
@@ -267,26 +314,23 @@ pub fn parse_mol_bytes_with(input: &[u8], config: &CtfileIoConfig) -> Result<Mol
     Ok(molecule)
 }
 
-/// Parse MOL bytes into a Molecule
-///
-/// Parses MOL file with basic flags. For extended molecules, use parse_extended_mol_bytes.
-///
-pub fn parse_mol_bytes(input: &[u8]) -> Result<Molecule, ParseError> {
+/// Parse MOL bytes to `table_ir::Molecule` with basic flags.
+pub fn parse_mol_bytes_to_table_ir(input: &[u8]) -> Result<Molecule, ParseError> {
     let config = CtfileIoConfig::basic();
-    parse_mol_bytes_with(input, &config)
+    parse_mol_bytes_to_table_ir_with(input, &config)
 }
 
-/// Parse MOL string into a Molecule with options (optimized, basic molecules only)
-pub fn parse_mol_with(input: &str, config: &CtfileIoConfig) -> Result<Molecule, ParseError> {
-    parse_mol_bytes_with(input.as_bytes(), config)
+/// Parse MOL string to `table_ir::Molecule` with options.
+pub fn parse_mol_to_table_ir_with(
+    input: &str,
+    config: &CtfileIoConfig,
+) -> Result<Molecule, ParseError> {
+    parse_mol_bytes_to_table_ir_with(input.as_bytes(), config)
 }
 
-/// Parse MOL string into a Molecule (optimized, basic molecules only)
-///
-/// Optimized parsing function for basic molecules.
-/// Fails if the MOL file contains extended features.
-pub fn parse_mol(input: &str) -> Result<Molecule, ParseError> {
-    parse_mol_bytes(input.as_bytes())
+/// Parse MOL string to `table_ir::Molecule` (optimized, basic molecules only).
+pub fn parse_mol_to_table_ir(input: &str) -> Result<Molecule, ParseError> {
+    parse_mol_bytes_to_table_ir(input.as_bytes())
 }
 
 /// Parse MOL bytes into an ExtendedMolecule with options

@@ -7,8 +7,8 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
 use umol_graph::io::smiles::config::SmilesIoConfig;
-use umol_graph::io::smiles::parser::parse_smiles_bytes_with;
-use umol_graph::io::smiles::{parse_smiles_bytes, ParseError};
+use umol_graph::io::smiles::parser::{parse_smiles_bytes_to_table_ir, parse_smiles_bytes_to_table_ir_with};
+use umol_graph::io::smiles::ParseError;
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".
@@ -46,14 +46,14 @@ proptest! {
     fn never_panics_on_ascii(input in smilesish()) {
         let config = SmilesIoConfig::basic_opensmiles();
         catch_unwind(|| {
-            let _ = parse_smiles_bytes_with(&input, &config);
+            let _ = parse_smiles_bytes_to_table_ir_with(&input, &config);
         }).expect("parse_smiles panicked");
     }
 
     // Error spans must point within the input bounds
     #[test]
     fn error_positions_within_bounds(input in smilesish()) {
-        let res = parse_smiles_bytes(&input);
+        let res = parse_smiles_bytes_to_table_ir(&input);
         if let Err(err) = res {
             let len = input.len();
             let ok = match err {
@@ -103,7 +103,7 @@ proptest! {
     // Note: self-loop bonds (e.g., C11) are syntactically valid and checked during topology validation
     #[test]
     fn bonds_well_formed_on_success(input in smilesish()) {
-        if let Ok(mol) = parse_smiles_bytes(&input) {
+        if let Ok(mol) = parse_smiles_bytes_to_table_ir(&input) {
             let n = mol.atoms.len() as u32;
             for b in &mol.bonds {
                 let sa = b.start_atom();

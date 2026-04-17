@@ -13,7 +13,7 @@ use crate::table_ir::{
 };
 
 fn parse_basic_cxsmiles(input: &[u8]) -> Result<Molecule, ParseError> {
-    parse_smiles_bytes_with(input, &SmilesIoConfig::basic_chemaxon())
+    parse_smiles_bytes_to_table_ir_with(input, &SmilesIoConfig::basic_chemaxon())
 }
 
 fn parse_extended_cxsmiles(input: &[u8]) -> Result<ExtendedMolecule, ParseError> {

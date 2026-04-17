@@ -16,7 +16,9 @@ use rstest::*;
 use serde::Serialize;
 use umol_graph::io::ctfile::config::CtfileIoConfig;
 use umol_graph::io::ctfile::error::ParseError;
-use umol_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
+use umol_graph::io::ctfile::parser::{
+    parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir_with,
+};
 use umol_graph::table_ir::{ExtendedMolecule, Molecule};
 
 /// Category based on which parsers succeed
@@ -148,7 +150,7 @@ fn error_type_name(e: &ParseError) -> String {
 
 fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
     let config = CtfileIoConfig::basic();
-    match parse_mol_bytes_with(bytes, &config) {
+    match parse_mol_bytes_to_table_ir_with(bytes, &config) {
         Ok(mol) => ParseResult {
             success: true,
             summary: Some(MoleculeSummary::from(&mol)),
@@ -169,7 +171,7 @@ fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
 
 fn parse_with_lenient_flags(bytes: &[u8]) -> ParseResult {
     let config = CtfileIoConfig::basic_lenient();
-    match parse_mol_bytes_with(bytes, &config) {
+    match parse_mol_bytes_to_table_ir_with(bytes, &config) {
         Ok(mol) => ParseResult {
             success: true,
             summary: Some(MoleculeSummary::from(&mol)),

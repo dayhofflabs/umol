@@ -12,7 +12,7 @@ use umol_graph::ast::molecule::MoleculeAst;
 use umol_graph::ast::morgan::{
     morgan_direct, morgan_view, morgan_view_opt, MorganTarget, MorganTargetOpt,
 };
-use umol_graph::io::smiles::parse_smiles;
+use umol_graph::io::smiles::parse_smiles_to_ast;
 
 fn load_smiles() -> Vec<String> {
     let data_dir = concat!(
@@ -42,8 +42,8 @@ fn load_smiles() -> Vec<String> {
 fn load_corpus(smiles_list: &[String]) -> Vec<MoleculeAst> {
     let mut asts = Vec::new();
     for s in smiles_list {
-        if let Ok(table_mol) = parse_smiles(s) {
-            asts.push(MoleculeAst::from_table_molecule(&table_mol));
+        if let Ok(ast) = parse_smiles_to_ast(s) {
+            asts.push(ast);
         }
     }
     asts
@@ -58,7 +58,7 @@ fn smiles_parsing_benchmark(c: &mut Criterion) {
         |b| {
             b.iter(|| {
                 for s in &smiles_list {
-                    black_box(parse_smiles(s));
+                    let _ = black_box(parse_smiles_to_ast(s));
                 }
             });
         },

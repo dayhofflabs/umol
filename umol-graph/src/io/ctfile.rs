@@ -7,11 +7,11 @@ pub mod error;
 pub mod parser;
 
 pub use config::CtabParseFlags;
-pub use error::ParseError;
+pub use error::{CtfileError, ParseError};
 pub use parser::{
     parse_extended_mol, parse_extended_mol_bytes, parse_extended_mol_bytes_with,
     parse_extended_mol_with, parse_extended_sdf, parse_extended_sdf_bytes,
     parse_extended_sdf_bytes_with, parse_extended_sdf_with, parse_mol, parse_mol_bytes,
-    parse_mol_bytes_with, parse_mol_with, parse_sdf, parse_sdf_bytes, parse_sdf_bytes_with,
-    parse_sdf_with,
+    parse_mol_bytes_to_ast, parse_mol_bytes_with, parse_mol_to_ast, parse_mol_with, parse_sdf,
+    parse_sdf_bytes, parse_sdf_bytes_with, parse_sdf_with,
 };

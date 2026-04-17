@@ -14,7 +14,7 @@ use umol_graph::ast::atom::AtomAst;
 use umol_graph::ast::bond::BondAst;
 use umol_graph::ast::matcher::{find_matches, MatchQuery, MatchTarget};
 use umol_graph::ast::molecule::MoleculeAst;
-use umol_graph::io::smiles::parse_smiles;
+use umol_graph::io::smiles::parse_smiles_to_ast;
 use umol_shared::element::Element;
 use umol_shared::value_ast::ValueAst;
 
@@ -46,8 +46,8 @@ fn load_smiles() -> Vec<String> {
 fn load_corpus(smiles_list: &[String]) -> Vec<MoleculeAst> {
     let mut asts = Vec::new();
     for s in smiles_list {
-        if let Ok(table_mol) = parse_smiles(s) {
-            asts.push(MoleculeAst::from_table_molecule(&table_mol));
+        if let Ok(ast) = parse_smiles_to_ast(s) {
+            asts.push(ast);
         }
     }
     asts

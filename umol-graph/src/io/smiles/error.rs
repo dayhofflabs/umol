@@ -1,7 +1,16 @@
 use thiserror::Error;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
+use crate::solver::error::ResolutionError;
 use crate::span::Span;
+
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum SmilesError {
+    #[error(transparent)]
+    Parse(#[from] ParseError),
+    #[error(transparent)]
+    Resolve(#[from] ResolutionError),
+}
 
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {

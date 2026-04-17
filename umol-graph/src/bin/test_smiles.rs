@@ -4,7 +4,8 @@ use std::process;
 
 use clap::{Parser, ValueEnum};
 use umol_graph::io::smiles::config::{SmilesIoConfig, SmilesParseFlags};
-use umol_graph::io::smiles::{parse_extended_smiles_bytes_with, parse_smiles_bytes_with};
+use umol_graph::io::smiles::parse_extended_smiles_bytes_with;
+use umol_graph::io::smiles::parser::parse_smiles_bytes_to_table_ir_with;
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum ParserType {
@@ -100,7 +101,7 @@ fn main() {
         let success = if use_extended {
             parse_extended_smiles_bytes_with(smiles.as_bytes(), &config).is_ok()
         } else {
-            parse_smiles_bytes_with(smiles.as_bytes(), &config).is_ok()
+            parse_smiles_bytes_to_table_ir_with(smiles.as_bytes(), &config).is_ok()
         };
         if success {
             ok += 1;

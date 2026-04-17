@@ -1,8 +1,9 @@
 use std::{env, fs, process};
 
 use umol_graph::io::ctfile::config::CtfileIoConfig;
-use umol_graph::io::ctfile::{
-    parse_extended_mol_bytes, parse_extended_mol_bytes_with, parse_mol_bytes, parse_mol_bytes_with,
+use umol_graph::io::ctfile::parser::{
+    parse_extended_mol_bytes, parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir,
+    parse_mol_bytes_to_table_ir_with,
 };
 
 fn main() {
@@ -32,9 +33,9 @@ fn main() {
     println!("Size: {} bytes", mol_bytes.len());
     println!();
 
-    // Test with basic parser (parse_mol_bytes)
-    println!("=== BASIC PARSER (parse_mol_bytes) ===");
-    let basic_parsed = parse_mol_bytes(&mol_bytes);
+    // Test with basic parser (parse_mol_bytes_to_table_ir)
+    println!("=== BASIC PARSER (parse_mol_bytes_to_table_ir) ===");
+    let basic_parsed = parse_mol_bytes_to_table_ir(&mol_bytes);
     let basic_ok = basic_parsed.is_ok();
     match basic_parsed {
         Ok(molecule) => {
@@ -50,9 +51,10 @@ fn main() {
 
     println!();
 
-    // Test with basic lenient parser (parse_mol_bytes_with)
-    println!("=== BASIC LENIENT PARSER (parse_mol_bytes_with) ===");
-    let basic_lenient_parsed = parse_mol_bytes_with(&mol_bytes, &CtfileIoConfig::basic_lenient());
+    // Test with basic lenient parser (parse_mol_bytes_to_table_ir_with)
+    println!("=== BASIC LENIENT PARSER (parse_mol_bytes_to_table_ir_with) ===");
+    let basic_lenient_parsed =
+        parse_mol_bytes_to_table_ir_with(&mol_bytes, &CtfileIoConfig::basic_lenient());
     let basic_lenient_ok = basic_lenient_parsed.is_ok();
     match basic_lenient_parsed {
         Ok(molecule) => {

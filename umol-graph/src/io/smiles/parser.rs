@@ -21,7 +21,10 @@ use self::utils::{
     process_ring_closure, Frame, OpenRing,
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
-use super::error::ParseError;
+use super::error::{ParseError, SmilesError};
+use crate::ast::molecule::MoleculeAst;
+use crate::model;
+use crate::solver::propagate::Solver;
 use crate::span::Span;
 use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
@@ -29,23 +32,67 @@ use crate::table_ir::{
     SourceFormat, WildcardAtom,
 };
 
-/// Parse SMILES string with basic OpenSMILES configuration
-pub fn parse_smiles(input: &str) -> Result<Molecule, ParseError> {
+/// Parse SMILES to [`model::Molecule`] using default IO config and [`Solver::default`].
+pub fn parse_smiles(input: &str) -> Result<model::Molecule, SmilesError> {
     parse_smiles_bytes(input.as_bytes())
 }
 
-/// Parse SMILES string with configuration
-pub fn parse_smiles_with(input: &str, config: &SmilesIoConfig) -> Result<Molecule, ParseError> {
-    parse_smiles_bytes_with(input.as_bytes(), config)
+/// Parse SMILES bytes to [`model::Molecule`] using default IO config and [`Solver::default`].
+pub fn parse_smiles_bytes(input: &[u8]) -> Result<model::Molecule, SmilesError> {
+    parse_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles(), &Solver::default())
 }
 
-/// Parse SMILES bytes with basic OpenSMILES rules
-pub fn parse_smiles_bytes(input: &[u8]) -> Result<Molecule, ParseError> {
-    parse_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles())
+/// Parse SMILES to [`model::Molecule`] with explicit IO config and solver.
+pub fn parse_smiles_with(
+    input: &str,
+    io_config: &SmilesIoConfig,
+    solver: &Solver,
+) -> Result<model::Molecule, SmilesError> {
+    parse_smiles_bytes_with(input.as_bytes(), io_config, solver)
 }
 
-/// Parse SMILES bytes with configuration
+/// Parse SMILES bytes to [`model::Molecule`] with explicit IO config and solver.
 pub fn parse_smiles_bytes_with(
+    input: &[u8],
+    io_config: &SmilesIoConfig,
+    solver: &Solver,
+) -> Result<model::Molecule, SmilesError> {
+    let table_mol = parse_smiles_bytes_to_table_ir_with(input, io_config)?;
+    let ast = MoleculeAst::from_table_molecule(&table_mol);
+    Ok(solver.resolve(ast)?)
+}
+
+/// Parse SMILES to [`MoleculeAst`] without running the solver.
+pub fn parse_smiles_to_ast(input: &str) -> Result<MoleculeAst, SmilesError> {
+    parse_smiles_bytes_to_ast(input.as_bytes())
+}
+
+/// Parse SMILES bytes to [`MoleculeAst`] without running the solver.
+pub fn parse_smiles_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, SmilesError> {
+    let table_mol = parse_smiles_bytes_to_table_ir(input)?;
+    Ok(MoleculeAst::from_table_molecule(&table_mol))
+}
+
+/// Parse SMILES string to `table_ir::Molecule` with basic OpenSMILES configuration.
+pub fn parse_smiles_to_table_ir(input: &str) -> Result<Molecule, ParseError> {
+    parse_smiles_bytes_to_table_ir(input.as_bytes())
+}
+
+/// Parse SMILES string to `table_ir::Molecule` with configuration.
+pub fn parse_smiles_to_table_ir_with(
+    input: &str,
+    config: &SmilesIoConfig,
+) -> Result<Molecule, ParseError> {
+    parse_smiles_bytes_to_table_ir_with(input.as_bytes(), config)
+}
+
+/// Parse SMILES bytes to `table_ir::Molecule` with basic OpenSMILES rules.
+pub fn parse_smiles_bytes_to_table_ir(input: &[u8]) -> Result<Molecule, ParseError> {
+    parse_smiles_bytes_to_table_ir_with(input, &SmilesIoConfig::basic_opensmiles())
+}
+
+/// Parse SMILES bytes to `table_ir::Molecule` with configuration.
+pub fn parse_smiles_bytes_to_table_ir_with(
     input: &[u8],
     config: &SmilesIoConfig,
 ) -> Result<Molecule, ParseError> {

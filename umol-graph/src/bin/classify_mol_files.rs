@@ -19,7 +19,9 @@ use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
 use umol_graph::io::ctfile::config::CtfileIoConfig;
-use umol_graph::io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_with};
+use umol_graph::io::ctfile::parser::{
+    parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir_with,
+};
 
 /// Results from running all 4 parsers on a file
 #[derive(Debug, Clone, Copy)]
@@ -196,8 +198,8 @@ fn classify_mol_file(file_path: &Path) -> Result<(Category, ParseResults), Box<d
     let ext_lenient_config = CtfileIoConfig::extended_lenient();
 
     let results = ParseResults {
-        mol_basic: parse_mol_bytes_with(&mol_bytes, &mol_basic_config).is_ok(),
-        mol_lenient: parse_mol_bytes_with(&mol_bytes, &mol_lenient_config).is_ok(),
+        mol_basic: parse_mol_bytes_to_table_ir_with(&mol_bytes, &mol_basic_config).is_ok(),
+        mol_lenient: parse_mol_bytes_to_table_ir_with(&mol_bytes, &mol_lenient_config).is_ok(),
         ext_extended: parse_extended_mol_bytes_with(&mol_bytes, &ext_extended_config).is_ok(),
         ext_lenient: parse_extended_mol_bytes_with(&mol_bytes, &ext_lenient_config).is_ok(),
     };

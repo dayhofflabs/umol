@@ -3,7 +3,8 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use umol_graph::io::smiles::{parse_extended_smiles_bytes, parse_smiles_bytes};
+use umol_graph::io::smiles::parse_extended_smiles_bytes;
+use umol_graph::io::smiles::parser::parse_smiles_bytes_to_table_ir;
 
 // Chain-only corpus, bare atoms (organic-only mix omitting bare H)
 fn chain_inputs() -> Vec<(&'static str, &'static [u8])> {
@@ -212,7 +213,7 @@ fn smiles_parsing(c: &mut Criterion) {
     for (name, s) in chain_inputs().iter() {
         group_chain.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
-                let result = parse_smiles_bytes(black_box(input));
+                let result = parse_smiles_bytes_to_table_ir(black_box(input));
                 assert!(result.is_ok());
             })
         });
@@ -224,7 +225,7 @@ fn smiles_parsing(c: &mut Criterion) {
     for (name, s) in tree_inputs().iter() {
         group_tree.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
-                let result = parse_smiles_bytes(black_box(input));
+                let result = parse_smiles_bytes_to_table_ir(black_box(input));
                 assert!(result.is_ok());
             })
         });
@@ -236,7 +237,7 @@ fn smiles_parsing(c: &mut Criterion) {
     for (name, s) in chain_bonds_inputs().iter() {
         group_chain_bonds.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
-                let result = parse_smiles_bytes(black_box(input));
+                let result = parse_smiles_bytes_to_table_ir(black_box(input));
                 assert!(result.is_ok());
             })
         });
@@ -248,7 +249,7 @@ fn smiles_parsing(c: &mut Criterion) {
     for (name, s) in tree_bonds_inputs().iter() {
         group_tree_bonds.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
-                let result = parse_smiles_bytes(black_box(input));
+                let result = parse_smiles_bytes_to_table_ir(black_box(input));
                 assert!(result.is_ok());
             })
         });
@@ -260,7 +261,7 @@ fn smiles_parsing(c: &mut Criterion) {
     for (name, s) in ring_inputs().iter() {
         group_rings.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
-                let result = parse_smiles_bytes(black_box(input));
+                let result = parse_smiles_bytes_to_table_ir(black_box(input));
                 assert!(result.is_ok());
             })
         });
@@ -273,7 +274,7 @@ fn smiles_parsing(c: &mut Criterion) {
         group_fused.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles_bytes(input);
+                let result = parse_smiles_bytes_to_table_ir(input);
                 assert!(result.is_ok());
             })
         });
@@ -286,7 +287,7 @@ fn smiles_parsing(c: &mut Criterion) {
         group_ring_stereo.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles_bytes(input);
+                let result = parse_smiles_bytes_to_table_ir(input);
                 assert!(result.is_ok());
             })
         });
@@ -299,7 +300,7 @@ fn smiles_parsing(c: &mut Criterion) {
         group_complex_rings.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles_bytes(input);
+                let result = parse_smiles_bytes_to_table_ir(input);
                 assert!(result.is_ok());
             })
         });
@@ -312,7 +313,7 @@ fn smiles_parsing(c: &mut Criterion) {
         group_components.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles_bytes(input);
+                let result = parse_smiles_bytes_to_table_ir(input);
                 assert!(result.is_ok());
             })
         });
@@ -325,7 +326,7 @@ fn smiles_parsing(c: &mut Criterion) {
         group_brackets.bench_with_input(BenchmarkId::from_parameter(name), bytes, |b, input| {
             b.iter(|| {
                 let input = black_box(input);
-                let result = parse_smiles_bytes(input);
+                let result = parse_smiles_bytes_to_table_ir(input);
                 assert!(result.is_ok());
             })
         });
@@ -337,7 +338,7 @@ fn smiles_parsing(c: &mut Criterion) {
     for (name, s) in whitespace_inputs().iter() {
         group_whitespace.bench_with_input(BenchmarkId::from_parameter(name), s, |b, &input| {
             b.iter(|| {
-                let result = parse_smiles_bytes(black_box(input));
+                let result = parse_smiles_bytes_to_table_ir(black_box(input));
                 assert!(result.is_ok());
             })
         });

@@ -6,8 +6,17 @@ use thiserror::Error;
 use umol_shared::element::Element;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
+use crate::solver::error::ResolutionError;
 use crate::span::Span;
 use crate::table_ir::SGroupType;
+
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum CtfileError {
+    #[error(transparent)]
+    Parse(#[from] ParseError),
+    #[error(transparent)]
+    Resolve(#[from] ResolutionError),
+}
 
 // TODO: Fix error hierarchy:
 // - Remove Incomplete variant -> we never used streaming parsing
