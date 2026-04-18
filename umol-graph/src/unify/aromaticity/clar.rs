@@ -16,9 +16,10 @@ use umol_graph_core::Graph;
 
 use super::AromaticityError;
 use crate::ast::AtomIdx;
-use crate::ast::aromatic::{AromaticSystem, induced_bonds};
+use crate::ast::aromatic::AromaticSystem;
 use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
-use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
+use crate::ast::aromatic::AromaticSystemAst;
+use crate::ast::molecule::MoleculeAst;
 use crate::ast::rings::{RingIdx, RingSet};
 
 #[derive(Clone, Debug)]
@@ -84,7 +85,7 @@ impl ClarAromaticity {
             })
             .collect();
 
-        let bonds = induced_bonds(ast, &atoms);
+        let bonds = ast.induced_bonds(&atoms);
         let bond_constraints = vec![BondConstraint::Aromatic; bonds.len()];
 
         Ok(vec![AromaticSystem::new(

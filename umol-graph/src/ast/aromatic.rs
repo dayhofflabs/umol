@@ -1,19 +1,24 @@
-//! Aromatic system AST container.
-//!
-//! `AromaticSystem` packages a perceived delocalized π system for lifting into
-//! a `MoleculeAst`: the participant indices, the per-system base attributes
-//! (`AromaticSystemAst`), and the per-participant constraints (typically
-//! `AromaticValence` for atoms and `Aromatic` for bonds).
+//! Aromatic system AST types.
 
-use std::collections::HashSet;
+use umol_shared::spin_ast::SpinStateAst;
+use umol_shared::value_ast::ValueAst;
 
-use umol_graph_core::NodeId;
-
-use crate::ast::constraint::{AtomConstraint, BondConstraint};
-use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
+use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
 use crate::ast::{AtomIdx, BondIdx};
 
-/// A perceived delocalized π system.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AromaticSystemAst {
+    pub charge: ValueAst,
+    pub spin: SpinStateAst,
+}
+
+impl AromaticSystemAst {
+    pub fn is_ground(&self) -> bool {
+        self.charge.is_ground() && self.spin.is_ground()
+    }
+}
+
+/// Aromatic system ground term
 ///
 /// Container for the per-system base attributes (charge, spin) plus the
 /// per-participant constraints that lift into the molecule. `atom_constraints`
@@ -82,11 +87,9 @@ impl AromaticSystem {
         self.atom_constraints
             .iter()
             .map(|c| match c {
-                AtomConstraint::AromaticValence(
-                    crate::ast::constraint::AromaticValenceConstraint::Value(
-                        umol_shared::value_ast::ValueAst::Lit(n),
-                    ),
-                ) => *n as u8,
+                AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                    ValueAst::Lit(n),
+                )) => *n as u8,
                 _ => 0,
             })
             .sum()
@@ -95,26 +98,8 @@ impl AromaticSystem {
     pub fn contains_atom(&self, atom: AtomIdx) -> bool {
         self.atoms.binary_search(&atom).is_ok()
     }
-}
 
-/// Bonds of the induced subgraph over `atoms`: edges whose both endpoints
-/// are in the set. Result is sorted by `BondIdx`.
-pub fn induced_bonds(ast: &MoleculeAst, atoms: &[AtomIdx]) -> Vec<BondIdx> {
-    let set: HashSet<AtomIdx> = atoms.iter().copied().collect();
-    let graph = ast.graph();
-    let mut seen: HashSet<BondIdx> = HashSet::new();
-    let mut bonds: Vec<BondIdx> = Vec::new();
-    for &a in atoms {
-        for n in graph.neighbors(NodeId::from(a)) {
-            let other = AtomIdx::from(n.node);
-            if set.contains(&other) {
-                let bond = BondIdx::from(n.edge);
-                if seen.insert(bond) {
-                    bonds.push(bond);
-                }
-            }
-        }
+    pub fn contains_bond(&self, bond: BondIdx) -> bool {
+        self.bonds.binary_search(&bond).is_ok()
     }
-    bonds.sort_unstable();
-    bonds
 }

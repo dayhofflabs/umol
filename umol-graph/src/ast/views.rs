@@ -12,7 +12,8 @@ use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet};
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::molecule::{AromaticSystemAst, MulticenterBondAst};
+use crate::ast::aromatic::AromaticSystemAst;
+use crate::ast::molecule::MulticenterBondAst;
 use crate::ast::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };

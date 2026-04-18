@@ -38,8 +38,10 @@ impl AtomPattern {
     }
 }
 
+type NumericDefault<'a> = (fn(&AtomConstraint) -> bool, AtomConstraint, &'a NumericMode);
+
 pub(crate) fn coerce_atom_constraints(constraints: &mut Vec<AtomConstraint>, cfg: &AtomAstConfig) {
-    let numeric_defaults: &[(fn(&AtomConstraint) -> bool, AtomConstraint, &NumericMode)] = &[
+    let numeric_defaults: &[NumericDefault] = &[
         (
             |c| matches!(c, AtomConstraint::ValenceSum(_)),
             AtomConstraint::ValenceSum(ValueAst::Lit(0)),
@@ -65,7 +67,7 @@ pub(crate) fn coerce_atom_constraints(constraints: &mut Vec<AtomConstraint>, cfg
         if !matches!(mode, NumericMode::Zero) {
             continue;
         }
-        if constraints.iter().any(|c| pred(c)) {
+        if constraints.iter().any(pred) {
             continue;
         }
         constraints.push(default.clone());

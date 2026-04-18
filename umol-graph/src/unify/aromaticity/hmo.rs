@@ -16,9 +16,10 @@ use umol_shared::atom_ast::ElementAst;
 use super::AromaticityError;
 use super::ElementScope;
 use crate::ast::AtomIdx;
-use crate::ast::aromatic::{AromaticSystem, induced_bonds};
+use crate::ast::aromatic::AromaticSystem;
 use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
-use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
+use crate::ast::aromatic::AromaticSystemAst;
+use crate::ast::molecule::MoleculeAst;
 use crate::ast::rings::RingSet;
 
 #[derive(Clone, Debug)]
@@ -120,7 +121,7 @@ impl HmoAromaticity {
                     })
                     .collect();
 
-                let bonds = induced_bonds(ast, &atoms);
+                let bonds = ast.induced_bonds(&atoms);
                 let bond_constraints = vec![BondConstraint::Aromatic; bonds.len()];
 
                 candidates.push(AromaticSystem::new(

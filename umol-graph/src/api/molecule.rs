@@ -8,7 +8,8 @@ use umol_graph_core::Graph;
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::molecule::{AromaticSystemAst, MoleculeAst, MulticenterBondAst};
+use crate::ast::aromatic::AromaticSystemAst;
+use crate::ast::molecule::{MoleculeAst, MulticenterBondAst};
 use crate::ast::rings::{RingCache, RingEnumerationStrategy, RingFamily, RingSet};
 use crate::ast::views::{
     AromaticSystemViews, AtomView, AtomViews, BondView, BondViews, DativeBondViews,

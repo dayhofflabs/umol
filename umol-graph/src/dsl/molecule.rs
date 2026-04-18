@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::fmt;
+use std::mem;
 use std::str::FromStr;
 
 use bimap::BiMap;
@@ -20,7 +21,8 @@ use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{AtomConstraint, MoleculeConstraint};
-use crate::ast::molecule::{AromaticSystemAst, MoleculeAst, MulticenterBondAst};
+use crate::ast::aromatic::AromaticSystemAst;
+use crate::ast::molecule::{MoleculeAst, MulticenterBondAst};
 
 // TODO: unify tag + id nomenclature
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -651,7 +653,7 @@ impl ToEdn for MoleculeAstWrapper {
         let mut atom_elems = Vec::with_capacity(self.ast.atoms().count());
         for view in self.ast.atoms().iter() {
             let i = view.idx.index();
-            let mut derived = std::mem::take(&mut per_atom_derived[i]);
+            let mut derived = mem::take(&mut per_atom_derived[i]);
             derived.sort_by_key(constraint_sort_key);
             let pattern = AtomPattern::with_constraints(view.data.clone(), derived);
             let alias_name = self.metadata.atom_aliases.get_by_right(&pattern);

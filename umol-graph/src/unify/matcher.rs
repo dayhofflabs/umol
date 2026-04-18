@@ -163,7 +163,8 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::molecule::{AromaticSystemAst, MulticenterBondAst};
+    use crate::ast::aromatic::AromaticSystemAst;
+    use crate::ast::molecule::MulticenterBondAst;
     use crate::ast::AtomIdx;
 
     fn mol_with_atoms(elements: &[Element]) -> MoleculeAst {

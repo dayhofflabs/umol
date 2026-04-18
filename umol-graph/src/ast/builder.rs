@@ -6,6 +6,7 @@
 //! write, at which point only that field decomposes to a mutable form.
 //! `build` re-wraps everything in `Arc`, reusing untouched shared data.
 
+use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::relation::RelationId;
@@ -16,7 +17,8 @@ use umol_graph_core::{
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{MoleculeConstraint, MoleculeConstraints};
-use crate::ast::molecule::{AromaticSystemAst, MoleculeAst, MulticenterBondAst};
+use crate::ast::aromatic::AromaticSystemAst;
+use crate::ast::molecule::{MoleculeAst, MulticenterBondAst};
 use crate::ast::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -143,6 +145,7 @@ pub struct MoleculeBuilder {
 }
 
 impl MoleculeBuilder {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_parts(
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
@@ -234,25 +237,25 @@ impl MoleculeBuilder {
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
-        let dative = std::mem::replace(
+        let dative = mem::replace(
             &mut self.dative_bonds,
             FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
         );
         self.dative_bonds = dative.apply_remapping(&remap);
 
-        let noncovalent = std::mem::replace(
+        let noncovalent = mem::replace(
             &mut self.noncovalent_bonds,
             FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
         );
         self.noncovalent_bonds = noncovalent.apply_remapping(&remap);
 
-        let aromatic = std::mem::replace(
+        let aromatic = mem::replace(
             &mut self.aromatic_systems,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
         self.aromatic_systems = aromatic.apply_remapping(&remap);
 
-        let multicenter = std::mem::replace(
+        let multicenter = mem::replace(
             &mut self.multicenter_bonds,
             VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );

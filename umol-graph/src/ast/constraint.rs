@@ -1,5 +1,7 @@
 //! Constraint AST: declarative facts over MoleculeAst consumed by the matcher and resolver.
 
+use std::mem;
+
 use indexmap::IndexMap;
 use strum::EnumDiscriminants;
 use umol_shared::spin_ast::SpinStateAst;
@@ -139,7 +141,7 @@ impl AtomConstraintSet {
     pub fn insert(&mut self, c: AtomConstraint) -> Option<AtomConstraint> {
         let kind = c.kind();
         match self.items.iter().position(|e| e.kind() == kind) {
-            Some(pos) => Some(std::mem::replace(&mut self.items[pos], c)),
+            Some(pos) => Some(mem::replace(&mut self.items[pos], c)),
             None => {
                 self.items.push(c);
                 None
@@ -197,7 +199,7 @@ impl BondConstraintSet {
     pub fn insert(&mut self, c: BondConstraint) -> Option<BondConstraint> {
         let kind = c.kind();
         match self.items.iter().position(|e| e.kind() == kind) {
-            Some(pos) => Some(std::mem::replace(&mut self.items[pos], c)),
+            Some(pos) => Some(mem::replace(&mut self.items[pos], c)),
             None => {
                 self.items.push(c);
                 None

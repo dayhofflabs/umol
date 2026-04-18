@@ -617,14 +617,25 @@ fn narrow_atom_constraint(
 fn narrowable(existing: &AtomConstraint, new_c: &AtomConstraint) -> bool {
     use AromaticValenceConstraint as A;
     use AtomConstraint as C;
-    match (existing, new_c) {
-        (C::AromaticValence(A::Value(ValueAst::Undetermined)), C::AromaticValence(A::Value(ValueAst::Lit(_)))) => true,
-        (C::ValenceSum(ValueAst::Undetermined), C::ValenceSum(ValueAst::Lit(_))) => true,
-        (C::DonatedPairs(ValueAst::Undetermined), C::DonatedPairs(ValueAst::Lit(_))) => true,
-        (C::AcceptedPairs(ValueAst::Undetermined), C::AcceptedPairs(ValueAst::Lit(_))) => true,
-        (C::MulticenterValence(ValueAst::Undetermined), C::MulticenterValence(ValueAst::Lit(_))) => true,
-        _ => false,
-    }
+    matches!(
+        (existing, new_c),
+        (
+            C::AromaticValence(A::Value(ValueAst::Undetermined)),
+            C::AromaticValence(A::Value(ValueAst::Lit(_)))
+        ) | (
+            C::ValenceSum(ValueAst::Undetermined),
+            C::ValenceSum(ValueAst::Lit(_))
+        ) | (
+            C::DonatedPairs(ValueAst::Undetermined),
+            C::DonatedPairs(ValueAst::Lit(_))
+        ) | (
+            C::AcceptedPairs(ValueAst::Undetermined),
+            C::AcceptedPairs(ValueAst::Lit(_))
+        ) | (
+            C::MulticenterValence(ValueAst::Undetermined),
+            C::MulticenterValence(ValueAst::Lit(_))
+        )
+    )
 }
 
 fn narrow_atom(atom_ast: &mut AtomAst, candidate: &AtomAst) -> bool {

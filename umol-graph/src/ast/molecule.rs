@@ -1,5 +1,6 @@
 //! Molecule structural AST.
 
+use std::collections::HashSet;
 use std::ops::Index;
 use std::sync::Arc;
 
@@ -7,10 +8,10 @@ use umol_graph_core::relation::RelationId;
 use umol_graph_core::{
     EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet,
 };
-use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
 use crate::api::pattern::{coerce_atom_constraints, release_atom_constraints};
+use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::builder::MoleculeBuilder;
@@ -31,13 +32,13 @@ use crate::table_ir::Molecule as TableMolecule;
 use crate::table_ir::bond::BondDonation;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AromaticSystemAst {
-    pub charge: ValueAst,
-    pub spin: SpinStateAst,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MulticenterBondAst {}
+
+impl MulticenterBondAst {
+    pub fn is_ground(&self) -> bool {
+        true
+    }
+}
 
 /// Molecule AST: structural representation of a molecule (ground or pattern).
 ///
@@ -128,6 +129,7 @@ impl MoleculeAst {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_arcs(
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
@@ -200,7 +202,7 @@ impl MoleculeAst {
             .multicenter_bonds
             .iter()
             .map(|mc| {
-                let mut seen = std::collections::HashSet::new();
+                let mut seen = HashSet::new();
                 let atoms: Vec<AtomIdx> = mc
                     .all_atoms()
                     .into_iter()
@@ -421,6 +423,14 @@ impl MoleculeAst {
                 .noncovalent_bonds
                 .relation_ids()
                 .all(|id| self.noncovalent_bonds.data(id).is_ground())
+            && self
+                .aromatic_systems
+                .relation_ids()
+                .all(|id| self.aromatic_systems.data(id).is_ground())
+            && self
+                .multicenter_bonds
+                .relation_ids()
+                .all(|id| self.multicenter_bonds.data(id).is_ground())
             && self.constraints.iter().all(|c| c.is_ground_assertion())
     }
 
@@ -457,6 +467,27 @@ impl MoleculeAst {
 
     pub fn is_in_aromatic_system(&self, atom: AtomIdx) -> bool {
         self.aromatic_systems.has_incident(NodeId::from(atom))
+    }
+
+    /// Bonds of the induced subgraph over `atoms`: edges whose both endpoints
+    /// are in the set. Result is sorted by `BondIdx`.
+    pub fn induced_bonds(&self, atoms: &[AtomIdx]) -> Vec<BondIdx> {
+        let set: HashSet<AtomIdx> = atoms.iter().copied().collect();
+        let mut seen: HashSet<BondIdx> = HashSet::new();
+        let mut bonds: Vec<BondIdx> = Vec::new();
+        for &a in atoms {
+            for n in self.graph.neighbors(NodeId::from(a)) {
+                let other = AtomIdx::from(n.node);
+                if set.contains(&other) {
+                    let bond = BondIdx::from(n.edge);
+                    if seen.insert(bond) {
+                        bonds.push(bond);
+                    }
+                }
+            }
+        }
+        bonds.sort_unstable();
+        bonds
     }
 }
 
