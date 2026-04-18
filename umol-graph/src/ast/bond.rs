@@ -1,4 +1,4 @@
-//! Bond structural AST.
+//! Bond AST data structures.
 
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;

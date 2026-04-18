@@ -11,6 +11,7 @@ pub mod constraint;
 pub mod error;
 pub mod molecule;
 pub mod morgan;
+pub mod multicenter;
 pub mod rings;
 pub mod symmetry;
 pub mod views;

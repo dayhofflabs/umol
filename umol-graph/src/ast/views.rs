@@ -10,11 +10,11 @@ use std::ops::Index;
 use umol_graph_core::relation::RelationId;
 use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet};
 
-use crate::ast::atom::AtomAst;
-use crate::ast::bond::BondAst;
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::molecule::MulticenterBondAst;
-use crate::ast::{
+use super::aromatic::AromaticSystemAst;
+use super::atom::AtomAst;
+use super::bond::BondAst;
+use super::multicenter::MulticenterBondAst;
+use super::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
 
@@ -109,14 +109,17 @@ impl<'a> AtomViews<'a> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> {
-        self.atoms
-            .iter()
-            .enumerate()
-            .map(|(i, data)| AtomView { idx: AtomIdx(i as u32), data })
+        self.atoms.iter().enumerate().map(|(i, data)| AtomView {
+            idx: AtomIdx(i as u32),
+            data,
+        })
     }
 
     pub fn get(&self, idx: AtomIdx) -> AtomView<'a> {
-        AtomView { idx, data: &self.atoms[idx.index()] }
+        AtomView {
+            idx,
+            data: &self.atoms[idx.index()],
+        }
     }
 }
 

@@ -1,10 +1,10 @@
-//! Aromatic system AST types.
+//! Aromatic system AST structures.
 
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
-use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
-use crate::ast::{AtomIdx, BondIdx};
+use super::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
+use super::{AtomIdx, BondIdx};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AromaticSystemAst {

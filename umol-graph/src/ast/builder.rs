@@ -1,25 +1,23 @@
-//! Structural editing for `MoleculeAst`. The AST itself only allows
-//! attribute mutation; structural change (add atoms/bonds/relations,
-//! remove anything) goes through `MoleculeBuilder`.
+//! Structural editing for `MoleculeAst`. The AST itself only allows attribute mutation;
+//! structural change (add atoms/bonds/relations, remove anything) goes through `MoleculeBuilder`.
 //!
-//! Storage is lazy: each Arc-shared field stays shared until first
-//! write, at which point only that field decomposes to a mutable form.
-//! `build` re-wraps everything in `Arc`, reusing untouched shared data.
+//! Storage is lazy: each Arc-shared field stays shared until first write, at which point
+//! only that field decomposes to a mutable form. `build` re-wraps everything in `Arc`,
+//! reusing untouched shared data.
 
 use std::mem;
 use std::sync::Arc;
 
 use umol_graph_core::relation::RelationId;
-use umol_graph_core::{
-    EdgeId, FixedRelationSet, Graph, NodeId, Remapping, VarRelationSet,
-};
+use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, Remapping, VarRelationSet};
 
-use crate::ast::atom::AtomAst;
-use crate::ast::bond::BondAst;
-use crate::ast::constraint::{MoleculeConstraint, MoleculeConstraints};
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::molecule::{MoleculeAst, MulticenterBondAst};
-use crate::ast::{
+use super::aromatic::AromaticSystemAst;
+use super::atom::AtomAst;
+use super::bond::BondAst;
+use super::constraint::{MoleculeConstraint, MoleculeConstraints};
+use super::molecule::MoleculeAst;
+use super::multicenter::MulticenterBondAst;
+use super::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
 
@@ -31,7 +29,9 @@ enum FixedSetStorage<R, const N: usize> {
 impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
     fn push(&mut self, parts: [NodeId; N], data: R) -> u32 {
         self.materialize();
-        let FixedSetStorage::Mutable(vec) = self else { unreachable!() };
+        let FixedSetStorage::Mutable(vec) = self else {
+            unreachable!()
+        };
         let idx = vec.len() as u32;
         vec.push((parts, data));
         idx
@@ -65,7 +65,9 @@ enum VarSetStorage<R> {
 impl<R: Clone> VarSetStorage<R> {
     fn push(&mut self, atoms: Vec<NodeId>, data: R) -> u32 {
         self.materialize();
-        let VarSetStorage::Mutable(vec) = self else { unreachable!() };
+        let VarSetStorage::Mutable(vec) = self else {
+            unreachable!()
+        };
         let idx = vec.len() as u32;
         vec.push((atoms, data));
         idx

@@ -9,8 +9,8 @@ use umol_graph_core::NodeId;
 use umol_shared::atom_ast::ElementAst;
 use umol_shared::element::Element;
 
-use crate::ast::{AtomIdx, BondIdx};
-use crate::ast::molecule::MoleculeAst;
+use super::molecule::MoleculeAst;
+use super::{AtomIdx, BondIdx};
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct RingEnumerationStrategy {
@@ -58,7 +58,11 @@ impl Ring {
 
 fn intersection<T: Copy + Eq>(a: &[T], b: &[T]) -> Vec<T> {
     let (small, large) = if a.len() <= b.len() { (a, b) } else { (b, a) };
-    small.iter().copied().filter(|x| large.contains(x)).collect()
+    small
+        .iter()
+        .copied()
+        .filter(|x| large.contains(x))
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -637,13 +641,11 @@ mod tests {
     use umol_shared::element::Element;
     use umol_shared::value_ast::ValueAst;
 
+    use super::super::atom::AtomAst;
+    use super::super::bond::BondAst;
+    use super::super::constraint::{AromaticValenceConstraint, AtomConstraint, MoleculeConstraint};
+    use super::super::molecule::MoleculeAst;
     use super::*;
-    use crate::ast::atom::AtomAst;
-    use crate::ast::bond::BondAst;
-    use crate::ast::constraint::{
-        AromaticValenceConstraint, AtomConstraint, MoleculeConstraint,
-    };
-    use crate::ast::molecule::MoleculeAst;
 
     fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {
         RingEnumerator::new(

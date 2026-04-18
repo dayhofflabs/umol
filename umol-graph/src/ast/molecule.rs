@@ -5,47 +5,35 @@ use std::ops::Index;
 use std::sync::Arc;
 
 use umol_graph_core::relation::RelationId;
-use umol_graph_core::{
-    EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet,
-};
+use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet};
 use umol_shared::value_ast::ValueAst;
 
-use crate::api::pattern::{coerce_atom_constraints, release_atom_constraints};
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::atom::AtomAst;
-use crate::ast::bond::BondAst;
-use crate::ast::builder::MoleculeBuilder;
-use crate::ast::config::MoleculeAstConfig;
-use crate::ast::constraint::{
+use super::aromatic::AromaticSystemAst;
+use super::atom::AtomAst;
+use super::bond::BondAst;
+use super::builder::MoleculeBuilder;
+use super::config::MoleculeAstConfig;
+use super::constraint::{
     AromaticValenceConstraint, AtomConstraint, AtomConstraintKind, MoleculeConstraint,
     MoleculeConstraints,
 };
-use crate::ast::views::{
+use super::multicenter::MulticenterBondAst;
+use super::views::{
     AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView, BondViewMut, BondViews,
     DativeBondViews, MulticenterBondViews, NeighborView, NoncovalentBondViews,
 };
-use crate::ast::{
-    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx,
-    NoncovalentBondIdx,
+use super::{
+    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
-use crate::table_ir::Molecule as TableMolecule;
+use crate::api::pattern::{coerce_atom_constraints, release_atom_constraints};
 use crate::table_ir::bond::BondDonation;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct MulticenterBondAst {}
-
-impl MulticenterBondAst {
-    pub fn is_ground(&self) -> bool {
-        true
-    }
-}
+use crate::table_ir::Molecule as TableMolecule;
 
 /// Molecule AST: structural representation of a molecule (ground or pattern).
 ///
-/// Topology and per-atom/bond data are `Arc`-shared (copy-on-write) so
-/// derived molecules in a reaction network share storage. The AST itself
-/// only allows attribute mutation (`atom_mut`, `bond_mut`); structural
-/// edits go through `MoleculeBuilder` via [`MoleculeAst::edit`].
+/// Topology and per-atom/bond data are `Arc`-shared (copy-on-write).
+/// AST itself only allows attribute mutation (`atom_mut`, `bond_mut`);
+/// structural edits go through `MoleculeBuilder` via [`MoleculeAst::edit`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeAst {
     graph: Graph,
@@ -213,7 +201,15 @@ impl MoleculeAst {
             })
             .collect();
 
-        Self::new(atoms, regular, dative, noncovalent, vec![], multicenter, constraints)
+        Self::new(
+            atoms,
+            regular,
+            dative,
+            noncovalent,
+            vec![],
+            multicenter,
+            constraints,
+        )
     }
 }
 
@@ -223,23 +219,34 @@ impl MoleculeAst {
     }
 
     pub fn bonds(&self) -> BondViews<'_> {
-        BondViews { bonds: &self.bonds, graph: &self.graph }
+        BondViews {
+            bonds: &self.bonds,
+            graph: &self.graph,
+        }
     }
 
     pub fn dative_bonds(&self) -> DativeBondViews<'_> {
-        DativeBondViews { set: &self.dative_bonds }
+        DativeBondViews {
+            set: &self.dative_bonds,
+        }
     }
 
     pub fn noncovalent_bonds(&self) -> NoncovalentBondViews<'_> {
-        NoncovalentBondViews { set: &self.noncovalent_bonds }
+        NoncovalentBondViews {
+            set: &self.noncovalent_bonds,
+        }
     }
 
     pub fn aromatic_systems(&self) -> AromaticSystemViews<'_> {
-        AromaticSystemViews { set: &self.aromatic_systems }
+        AromaticSystemViews {
+            set: &self.aromatic_systems,
+        }
     }
 
     pub fn multicenter_bonds(&self) -> MulticenterBondViews<'_> {
-        MulticenterBondViews { set: &self.multicenter_bonds }
+        MulticenterBondViews {
+            set: &self.multicenter_bonds,
+        }
     }
 
     pub fn atom(&self, idx: AtomIdx) -> AtomView<'_> {
@@ -276,11 +283,14 @@ impl MoleculeAst {
 
     pub fn neighbors(&self, atom: AtomIdx) -> impl Iterator<Item = NeighborView<'_>> {
         let bonds = &self.bonds;
-        self.graph.neighbors(NodeId::from(atom)).iter().map(move |n| NeighborView {
-            atom: AtomIdx::from(n.node),
-            bond: BondIdx::from(n.edge),
-            data: &bonds[n.edge.index()],
-        })
+        self.graph
+            .neighbors(NodeId::from(atom))
+            .iter()
+            .map(move |n| NeighborView {
+                atom: AtomIdx::from(n.node),
+                bond: BondIdx::from(n.edge),
+                data: &bonds[n.edge.index()],
+            })
     }
 
     pub fn graph(&self) -> &Graph {
@@ -514,7 +524,15 @@ mod tests {
     }
 
     fn ground_ast() -> MoleculeAst {
-        MoleculeAst::new(vec![ground_atom()], vec![], vec![], vec![], vec![], vec![], vec![])
+        MoleculeAst::new(
+            vec![ground_atom()],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )
     }
 
     #[test]
@@ -530,7 +548,8 @@ mod tests {
     #[test]
     fn test_molecule_ast_is_ground_with_constraint() {
         let mut ast = ground_ast();
-        ast.constraints.insert(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
+        ast.constraints
+            .insert(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
         assert!(ast.is_ground());
     }
 
@@ -538,7 +557,12 @@ mod tests {
     fn test_molecule_ast_is_ground_wildcard_element() {
         let ast = MoleculeAst::new(
             vec![AtomAst::new(ElementAst::Undetermined)],
-            vec![], vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
         );
         assert!(!ast.is_ground());
     }
@@ -551,7 +575,11 @@ mod tests {
                 AtomAst::from_element(Element::O),
             ],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
-            vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
         );
         assert!(!ast.is_ground());
     }
@@ -559,7 +587,8 @@ mod tests {
     #[test]
     fn test_molecule_ast_is_ground_non_ground_constraint() {
         let mut ast = ground_ast();
-        ast.constraints.insert(MoleculeConstraint::TotalSpin(SpinStateAst::default()));
+        ast.constraints
+            .insert(MoleculeConstraint::TotalSpin(SpinStateAst::default()));
         assert!(!ast.is_ground());
     }
 
@@ -581,7 +610,11 @@ mod tests {
                 AtomAst::from_element(Element::O),
             ],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))],
-            vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
         );
         assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(2));
         assert_eq!(ast.bond_order_sum(AtomIdx(1)), Some(2));
@@ -591,7 +624,12 @@ mod tests {
     fn test_molecule_ast_bond_order_sum_no_bonds() {
         let ast = MoleculeAst::new(
             vec![AtomAst::from_element(Element::C)],
-            vec![], vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
         );
         assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(0));
     }
@@ -604,7 +642,11 @@ mod tests {
                 AtomAst::from_element(Element::O),
             ],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
-            vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
         );
         assert_eq!(ast.bond_order_sum(AtomIdx(0)), None);
     }
@@ -618,9 +660,11 @@ mod tests {
                 AtomAst::from_element(Element::C),
             ],
             vec![],
-            vec![], vec![],
+            vec![],
+            vec![],
             vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())],
-            vec![], vec![],
+            vec![],
+            vec![],
         );
         assert!(ast.is_in_aromatic_system(AtomIdx(0)));
         assert!(ast.is_in_aromatic_system(AtomIdx(1)));
@@ -636,7 +680,10 @@ mod tests {
             ],
             vec![],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
-            vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
         );
         assert_eq!(ast.dative_bond_order_sums(AtomIdx(0)), (1, 0));
         assert_eq!(ast.dative_bond_order_sums(AtomIdx(1)), (0, 1));
@@ -654,7 +701,11 @@ mod tests {
                 (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
                 (AtomIdx(0), AtomIdx(2), BondAst::from_order(2)),
             ],
-            vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
         );
         assert_eq!(ast.neighbors(AtomIdx(0)).count(), 2);
         assert_eq!(ast.neighbors(AtomIdx(1)).count(), 1);
@@ -669,7 +720,11 @@ mod tests {
                 AtomAst::from_element(Element::C),
             ],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
-            vec![], vec![], vec![], vec![], vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
         );
         let mut b = ast.edit();
         let id = b.add_aromatic_system(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default());

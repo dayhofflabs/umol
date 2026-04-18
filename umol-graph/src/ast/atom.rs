@@ -1,4 +1,4 @@
-//! Atom structural AST.
+//! Atom AST data structures.
 
 use std::mem;
 
@@ -7,7 +7,7 @@ use umol_shared::element::Element;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
-use crate::ast::config::{
+use super::config::{
     AtomAstConfig, ImplicitHydrogenMode, IsotopeMode, MultiplicityMode, NumericMode,
     UnpairedElectronsMode,
 };

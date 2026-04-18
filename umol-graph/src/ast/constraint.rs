@@ -7,8 +7,8 @@ use strum::EnumDiscriminants;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
-use crate::ast::molecule::MoleculeAst;
-use crate::ast::{AromaticSystemIdx, AtomIdx, BondIdx, MulticenterBondIdx};
+use super::molecule::MoleculeAst;
+use super::{AromaticSystemIdx, AtomIdx, BondIdx, MulticenterBondIdx};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraint {
@@ -373,7 +373,7 @@ mod tests {
     use umol_shared::value_ast::ValueAst;
 
     use super::*;
-    use crate::ast::AtomIdx;
+    use super::AtomIdx;
 
     #[rstest]
     #[case::and_pair(

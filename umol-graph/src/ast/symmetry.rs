@@ -15,10 +15,10 @@ use umol_shared::spin::SpinMultiplicity;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
-use crate::ast::AtomIdx;
-use crate::ast::atom::AtomAst;
-use crate::ast::bond::BondAst;
-use crate::ast::molecule::MoleculeAst;
+use super::AtomIdx;
+use super::atom::AtomAst;
+use super::bond::BondAst;
+use super::molecule::MoleculeAst;
 
 pub use umol_graph_core::algorithms::auto::AutoGroupOrder;
 
@@ -186,8 +186,8 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ast::AtomIdx;
-    use crate::ast::bond::BondAst;
+    use super::AtomIdx;
+    use super::super::bond::BondAst;
 
     fn atom(element: Element) -> AtomAst {
         AtomAst::from_element(element)

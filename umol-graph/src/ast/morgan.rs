@@ -34,8 +34,8 @@ use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::value_ast::ValueAst;
 
-use crate::ast::{AtomIdx, BondIdx};
-use crate::ast::molecule::MoleculeAst;
+use super::{AtomIdx, BondIdx};
+use super::molecule::MoleculeAst;
 
 type XxHashMap<K, V> = HashMap<K, V, Xxh3DefaultBuilder>;
 
@@ -749,8 +749,8 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::atom::AtomAst;
-    use crate::ast::bond::BondAst;
+    use super::super::atom::AtomAst;
+    use super::super::bond::BondAst;
 
     fn carbon(h: u8) -> AtomAst {
         AtomAst {

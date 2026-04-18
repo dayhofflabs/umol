@@ -2,9 +2,8 @@
 
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::fmt;
-use std::mem;
 use std::str::FromStr;
+use std::{fmt, mem};
 
 use bimap::BiMap;
 use indexmap::IndexMap;
@@ -15,14 +14,14 @@ use umol_shared::value_ast::ValueAst;
 
 use super::atom::parse_atom_dsl;
 use super::error::ParseError;
-
 use crate::api::pattern::AtomPattern;
-use crate::ast::AtomIdx;
+use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{AtomConstraint, MoleculeConstraint};
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::molecule::{MoleculeAst, MulticenterBondAst};
+use crate::ast::molecule::MoleculeAst;
+use crate::ast::multicenter::MulticenterBondAst;
+use crate::ast::AtomIdx;
 
 // TODO: unify tag + id nomenclature
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -172,10 +171,7 @@ impl RawMoleculeAst {
                 atom_tags.insert(pos, tag_name);
             }
             for c in atom_pattern.constraints {
-                lifted_constraints.push(MoleculeConstraint::AtomPred(
-                    AtomIdx(pos as u32),
-                    c,
-                ));
+                lifted_constraints.push(MoleculeConstraint::AtomPred(AtomIdx(pos as u32), c));
             }
             atoms.push(atom_pattern.ast);
         }
@@ -280,8 +276,13 @@ impl RawMoleculeAst {
         }
 
         let ast = MoleculeAst::new(
-            atoms, bond_list, dative_list, noncovalent_list,
-            aromatic_list, multicenter_list, constraints,
+            atoms,
+            bond_list,
+            dative_list,
+            noncovalent_list,
+            aromatic_list,
+            multicenter_list,
+            constraints,
         );
         let metadata = Metadata {
             atom_tags,
@@ -687,7 +688,14 @@ impl ToEdn for MoleculeAstWrapper {
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                render_localized(b.src.index(), b.tgt.index(), b.data, i, &self.metadata.bond_ids, &render_endpoint)
+                render_localized(
+                    b.src.index(),
+                    b.tgt.index(),
+                    b.data,
+                    i,
+                    &self.metadata.bond_ids,
+                    &render_endpoint,
+                )
             })
             .collect();
 
@@ -697,7 +705,14 @@ impl ToEdn for MoleculeAstWrapper {
             .iter()
             .enumerate()
             .map(|(i, v)| {
-                render_dative(v.donor.index(), v.acceptor.index(), v.data, i, &self.metadata.dative_bond_ids, &render_endpoint)
+                render_dative(
+                    v.donor.index(),
+                    v.acceptor.index(),
+                    v.data,
+                    i,
+                    &self.metadata.dative_bond_ids,
+                    &render_endpoint,
+                )
             })
             .collect();
 
@@ -707,7 +722,12 @@ impl ToEdn for MoleculeAstWrapper {
             .iter()
             .enumerate()
             .map(|(i, v)| {
-                render_atoms_map(v.atoms(), i, &self.metadata.aromatic_system_ids, &render_endpoint)
+                render_atoms_map(
+                    v.atoms(),
+                    i,
+                    &self.metadata.aromatic_system_ids,
+                    &render_endpoint,
+                )
             })
             .collect();
 
@@ -717,7 +737,12 @@ impl ToEdn for MoleculeAstWrapper {
             .iter()
             .enumerate()
             .map(|(i, v)| {
-                render_atoms_map(v.atoms(), i, &self.metadata.multicenter_bond_ids, &render_endpoint)
+                render_atoms_map(
+                    v.atoms(),
+                    i,
+                    &self.metadata.multicenter_bond_ids,
+                    &render_endpoint,
+                )
             })
             .collect();
 
@@ -727,7 +752,14 @@ impl ToEdn for MoleculeAstWrapper {
             .iter()
             .enumerate()
             .map(|(i, v)| {
-                render_noncovalent(v.atoms[0].index(), v.atoms[1].index(), v.data, i, &self.metadata.noncovalent_bond_ids, &render_endpoint)
+                render_noncovalent(
+                    v.atoms[0].index(),
+                    v.atoms[1].index(),
+                    v.data,
+                    i,
+                    &self.metadata.noncovalent_bond_ids,
+                    &render_endpoint,
+                )
             })
             .collect();
 
@@ -1069,7 +1101,17 @@ mod tests {
         );
         let view = dsl.ast.aromatic_systems().iter().next().unwrap();
         let p: Vec<AtomIdx> = view.atoms().collect();
-        assert_eq!(p, vec![AtomIdx(0), AtomIdx(1), AtomIdx(2), AtomIdx(3), AtomIdx(4), AtomIdx(5)]);
+        assert_eq!(
+            p,
+            vec![
+                AtomIdx(0),
+                AtomIdx(1),
+                AtomIdx(2),
+                AtomIdx(3),
+                AtomIdx(4),
+                AtomIdx(5)
+            ]
+        );
     }
 
     #[rstest]
