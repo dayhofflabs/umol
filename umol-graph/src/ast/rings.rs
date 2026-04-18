@@ -780,9 +780,9 @@ mod tests {
             ));
         }
         edges.push((AtomIdx(0), AtomIdx(6), BondAst::from_order(1)));
-        let constraints = (0..6u32)
+        let constraints: Vec<MoleculeConstraint> = (0..6u32)
             .map(|i| {
-                MoleculeConstraint::AtomDerived(
+                MoleculeConstraint::AtomPred(
                     AtomIdx(i),
                     AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
                         ValueAst::Lit(1),

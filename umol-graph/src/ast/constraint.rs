@@ -1,5 +1,7 @@
 //! Constraint AST: declarative facts over MoleculeAst consumed by the matcher and resolver.
 
+use indexmap::IndexMap;
+use strum::EnumDiscriminants;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
@@ -8,8 +10,8 @@ use crate::ast::{AromaticSystemIdx, AtomIdx, BondIdx, MulticenterBondIdx};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraint {
-    AtomDerived(AtomIdx, AtomConstraint),
-    BondDerived(BondIdx, BondConstraint),
+    AtomPred(AtomIdx, AtomConstraint),
+    BondPred(BondIdx, BondConstraint),
     TotalCharge(ValueAst),
     TotalSpin(SpinStateAst),
     AromaticElectronCount(AromaticSystemIdx, ValueAst),
@@ -31,8 +33,8 @@ impl MoleculeConstraint {
     /// resolved molecule.
     pub fn is_ground_assertion(&self) -> bool {
         match self {
-            Self::AtomDerived(_, c) => c.is_ground(),
-            Self::BondDerived(_, c) => c.is_ground(),
+            Self::AtomPred(_, c) => c.is_ground(),
+            Self::BondPred(_, c) => c.is_ground(),
             Self::TotalCharge(v)
             | Self::AromaticElectronCount(_, v)
             | Self::MulticenterElectronCount(_, v)
@@ -59,7 +61,8 @@ impl AromaticValenceConstraint {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[strum_discriminants(name(AtomConstraintKind), derive(Hash))]
 pub enum AtomConstraint {
     ValenceSum(ValueAst),
     AromaticValence(AromaticValenceConstraint),
@@ -90,9 +93,14 @@ impl AtomConstraint {
             Self::InRing => true,
         }
     }
+
+    pub fn kind(&self) -> AtomConstraintKind {
+        self.into()
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[strum_discriminants(name(BondConstraintKind), derive(Hash))]
 pub enum BondConstraint {
     RingBond,
     Aromatic,
@@ -103,6 +111,256 @@ impl BondConstraint {
         match self {
             Self::RingBond | Self::Aromatic => true,
         }
+    }
+
+    pub fn kind(&self) -> BondConstraintKind {
+        self.into()
+    }
+}
+
+/// Set of `AtomConstraint`s attached to a single atom.
+///
+/// Uniqueness invariant: at most one constraint per `AtomConstraintKind`. Inserting
+/// a constraint of a kind already present replaces the prior entry and returns it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AtomConstraintSet {
+    items: Vec<AtomConstraint>,
+}
+
+impl AtomConstraintSet {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get(&self, kind: AtomConstraintKind) -> Option<&AtomConstraint> {
+        self.items.iter().find(|c| c.kind() == kind)
+    }
+
+    pub fn insert(&mut self, c: AtomConstraint) -> Option<AtomConstraint> {
+        let kind = c.kind();
+        match self.items.iter().position(|e| e.kind() == kind) {
+            Some(pos) => Some(std::mem::replace(&mut self.items[pos], c)),
+            None => {
+                self.items.push(c);
+                None
+            }
+        }
+    }
+
+    pub fn remove(&mut self, kind: AtomConstraintKind) -> Option<AtomConstraint> {
+        let pos = self.items.iter().position(|c| c.kind() == kind)?;
+        Some(self.items.remove(pos))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &AtomConstraint> {
+        self.items.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    pub fn retain(&mut self, mut f: impl FnMut(&AtomConstraint) -> bool) {
+        self.items.retain(|c| f(c));
+    }
+}
+
+impl FromIterator<AtomConstraint> for AtomConstraintSet {
+    fn from_iter<I: IntoIterator<Item = AtomConstraint>>(iter: I) -> Self {
+        let mut set = Self::new();
+        for c in iter {
+            set.insert(c);
+        }
+        set
+    }
+}
+
+/// Set of `BondConstraint`s attached to a single bond. Uniqueness is per `BondConstraintKind`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BondConstraintSet {
+    items: Vec<BondConstraint>,
+}
+
+impl BondConstraintSet {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get(&self, kind: BondConstraintKind) -> Option<&BondConstraint> {
+        self.items.iter().find(|c| c.kind() == kind)
+    }
+
+    pub fn insert(&mut self, c: BondConstraint) -> Option<BondConstraint> {
+        let kind = c.kind();
+        match self.items.iter().position(|e| e.kind() == kind) {
+            Some(pos) => Some(std::mem::replace(&mut self.items[pos], c)),
+            None => {
+                self.items.push(c);
+                None
+            }
+        }
+    }
+
+    pub fn remove(&mut self, kind: BondConstraintKind) -> Option<BondConstraint> {
+        let pos = self.items.iter().position(|c| c.kind() == kind)?;
+        Some(self.items.remove(pos))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &BondConstraint> {
+        self.items.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+
+    pub fn retain(&mut self, mut f: impl FnMut(&BondConstraint) -> bool) {
+        self.items.retain(|c| f(c));
+    }
+}
+
+impl FromIterator<BondConstraint> for BondConstraintSet {
+    fn from_iter<I: IntoIterator<Item = BondConstraint>>(iter: I) -> Self {
+        let mut set = Self::new();
+        for c in iter {
+            set.insert(c);
+        }
+        set
+    }
+}
+
+/// Partitioned constraint storage for `MoleculeAst`.
+///
+/// Per-target constraints are keyed by their participant index. Combinators,
+/// global predicates, and structural queries live in `global`. Insertion
+/// dispatches on the `MoleculeConstraint` variant; conflicting inserts on a
+/// per-target slot replace the prior entry (the displaced value is dropped).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MoleculeConstraints {
+    atoms: IndexMap<AtomIdx, AtomConstraintSet>,
+    bonds: IndexMap<BondIdx, BondConstraintSet>,
+    aromatic_systems: IndexMap<AromaticSystemIdx, ValueAst>,
+    multicenter_bonds: IndexMap<MulticenterBondIdx, ValueAst>,
+    global: Vec<MoleculeConstraint>,
+}
+
+impl MoleculeConstraints {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert(&mut self, c: MoleculeConstraint) {
+        match c {
+            MoleculeConstraint::AtomPred(idx, inner) => {
+                self.atoms.entry(idx).or_default().insert(inner);
+            }
+            MoleculeConstraint::BondPred(idx, inner) => {
+                self.bonds.entry(idx).or_default().insert(inner);
+            }
+            MoleculeConstraint::AromaticElectronCount(idx, v) => {
+                self.aromatic_systems.insert(idx, v);
+            }
+            MoleculeConstraint::MulticenterElectronCount(idx, v) => {
+                self.multicenter_bonds.insert(idx, v);
+            }
+            other => self.global.push(other),
+        }
+    }
+
+    pub fn atoms(&self) -> &IndexMap<AtomIdx, AtomConstraintSet> {
+        &self.atoms
+    }
+
+    pub fn atoms_mut(&mut self) -> &mut IndexMap<AtomIdx, AtomConstraintSet> {
+        &mut self.atoms
+    }
+
+    pub fn bonds(&self) -> &IndexMap<BondIdx, BondConstraintSet> {
+        &self.bonds
+    }
+
+    pub fn bonds_mut(&mut self) -> &mut IndexMap<BondIdx, BondConstraintSet> {
+        &mut self.bonds
+    }
+
+    pub fn aromatic_systems(&self) -> &IndexMap<AromaticSystemIdx, ValueAst> {
+        &self.aromatic_systems
+    }
+
+    pub fn multicenter_bonds(&self) -> &IndexMap<MulticenterBondIdx, ValueAst> {
+        &self.multicenter_bonds
+    }
+
+    pub fn global(&self) -> &[MoleculeConstraint] {
+        &self.global
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.atoms.is_empty()
+            && self.bonds.is_empty()
+            && self.aromatic_systems.is_empty()
+            && self.multicenter_bonds.is_empty()
+            && self.global.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.atoms.values().map(|s| s.len()).sum::<usize>()
+            + self.bonds.values().map(|s| s.len()).sum::<usize>()
+            + self.aromatic_systems.len()
+            + self.multicenter_bonds.len()
+            + self.global.len()
+    }
+
+    /// Reconstitute a flat iterator of `MoleculeConstraint`s from the partitioned
+    /// storage. Order: atom predicates, bond predicates, aromatic-system
+    /// predicates, multicenter-bond predicates, global constraints.
+    pub fn iter(&self) -> impl Iterator<Item = MoleculeConstraint> + '_ {
+        let atom_iter = self.atoms.iter().flat_map(|(idx, set)| {
+            set.iter()
+                .map(move |c| MoleculeConstraint::AtomPred(*idx, c.clone()))
+        });
+        let bond_iter = self.bonds.iter().flat_map(|(idx, set)| {
+            set.iter()
+                .map(move |c| MoleculeConstraint::BondPred(*idx, c.clone()))
+        });
+        let aromatic_iter = self
+            .aromatic_systems
+            .iter()
+            .map(|(idx, v)| MoleculeConstraint::AromaticElectronCount(*idx, v.clone()));
+        let multicenter_iter = self
+            .multicenter_bonds
+            .iter()
+            .map(|(idx, v)| MoleculeConstraint::MulticenterElectronCount(*idx, v.clone()));
+        let global_iter = self.global.iter().cloned();
+        atom_iter
+            .chain(bond_iter)
+            .chain(aromatic_iter)
+            .chain(multicenter_iter)
+            .chain(global_iter)
+    }
+}
+
+impl FromIterator<MoleculeConstraint> for MoleculeConstraints {
+    fn from_iter<I: IntoIterator<Item = MoleculeConstraint>>(iter: I) -> Self {
+        let mut s = Self::new();
+        for c in iter {
+            s.insert(c);
+        }
+        s
+    }
+}
+
+impl From<Vec<MoleculeConstraint>> for MoleculeConstraints {
+    fn from(v: Vec<MoleculeConstraint>) -> Self {
+        v.into_iter().collect()
     }
 }
 
@@ -119,21 +377,21 @@ mod tests {
     #[case::and_pair(
         MoleculeConstraint::And(vec![
             MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
-            MoleculeConstraint::AtomDerived(AtomIdx(1), AtomConstraint::InRing),
+            MoleculeConstraint::AtomPred(AtomIdx(1), AtomConstraint::InRing),
         ]),
         MoleculeConstraint::And(vec![
             MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
-            MoleculeConstraint::AtomDerived(AtomIdx(1), AtomConstraint::InRing),
+            MoleculeConstraint::AtomPred(AtomIdx(1), AtomConstraint::InRing),
         ]),
         true,
     )]
     #[case::and_order_matters(
         MoleculeConstraint::And(vec![
             MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
-            MoleculeConstraint::AtomDerived(AtomIdx(1), AtomConstraint::InRing),
+            MoleculeConstraint::AtomPred(AtomIdx(1), AtomConstraint::InRing),
         ]),
         MoleculeConstraint::And(vec![
-            MoleculeConstraint::AtomDerived(AtomIdx(1), AtomConstraint::InRing),
+            MoleculeConstraint::AtomPred(AtomIdx(1), AtomConstraint::InRing),
             MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
         ]),
         false,
@@ -171,7 +429,7 @@ mod tests {
     fn test_molecule_constraint_combinators_nested() {
         let inner = MoleculeConstraint::Or(vec![
             MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)),
-            MoleculeConstraint::Not(Box::new(MoleculeConstraint::AtomDerived(
+            MoleculeConstraint::Not(Box::new(MoleculeConstraint::AtomPred(
                 AtomIdx(0),
                 AtomConstraint::InRing,
             ))),
@@ -192,15 +450,15 @@ mod tests {
     #[case::total_charge_lit(MoleculeConstraint::TotalCharge(ValueAst::Lit(0)), true)]
     #[case::total_charge_undetermined(MoleculeConstraint::TotalCharge(ValueAst::Undetermined), false)]
     #[case::atom_derived_ground(
-        MoleculeConstraint::AtomDerived(AtomIdx(0), AtomConstraint::ValenceSum(ValueAst::Lit(4))),
+        MoleculeConstraint::AtomPred(AtomIdx(0), AtomConstraint::ValenceSum(ValueAst::Lit(4))),
         true,
     )]
     #[case::atom_derived_undetermined(
-        MoleculeConstraint::AtomDerived(AtomIdx(0), AtomConstraint::ValenceSum(ValueAst::Undetermined)),
+        MoleculeConstraint::AtomPred(AtomIdx(0), AtomConstraint::ValenceSum(ValueAst::Undetermined)),
         false,
     )]
     #[case::bond_derived_ring(
-        MoleculeConstraint::BondDerived(BondIdx(0), BondConstraint::RingBond),
+        MoleculeConstraint::BondPred(BondIdx(0), BondConstraint::RingBond),
         true,
     )]
     #[case::connected(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)]), true)]

@@ -142,10 +142,10 @@ impl AromaticityTheory {
         for sys in &systems {
             builder.add_aromatic_system(sys.atoms().to_vec(), sys.ast().clone());
             for (idx, c) in sys.atoms().iter().zip(sys.atom_constraints()) {
-                builder.push_constraint(MoleculeConstraint::AtomDerived(*idx, c.clone()));
+                builder.push_constraint(MoleculeConstraint::AtomPred(*idx, c.clone()));
             }
             for (idx, c) in sys.bonds().iter().zip(sys.bond_constraints()) {
-                builder.push_constraint(MoleculeConstraint::BondDerived(*idx, c.clone()));
+                builder.push_constraint(MoleculeConstraint::BondPred(*idx, c.clone()));
             }
         }
         *ast = builder.build();

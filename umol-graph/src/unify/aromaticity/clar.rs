@@ -160,7 +160,7 @@ mod tests {
             .enumerate()
             .filter_map(|(i, (_, pi))| {
                 pi.map(|n| {
-                    MoleculeConstraint::AtomDerived(
+                    MoleculeConstraint::AtomPred(
                         AtomIdx(i as u32),
                         AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
                             ValueAst::Lit(n),

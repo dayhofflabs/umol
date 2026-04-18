@@ -15,7 +15,7 @@ use umol_graph_core::{
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::constraint::MoleculeConstraint;
+use crate::ast::constraint::{MoleculeConstraint, MoleculeConstraints};
 use crate::ast::molecule::{AromaticSystemAst, MoleculeAst, MulticenterBondAst};
 use crate::ast::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
@@ -139,7 +139,7 @@ pub struct MoleculeBuilder {
     noncovalent_bonds: FixedSetStorage<BondAst, 2>,
     aromatic_systems: VarSetStorage<AromaticSystemAst>,
     multicenter_bonds: VarSetStorage<MulticenterBondAst>,
-    constraints: Vec<MoleculeConstraint>,
+    constraints: MoleculeConstraints,
 }
 
 impl MoleculeBuilder {
@@ -151,7 +151,7 @@ impl MoleculeBuilder {
         noncovalent_bonds: Arc<FixedRelationSet<BondAst, 2>>,
         aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
         multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
-        constraints: Vec<MoleculeConstraint>,
+        constraints: MoleculeConstraints,
     ) -> Self {
         Self {
             graph,
@@ -221,7 +221,7 @@ impl MoleculeBuilder {
     }
 
     pub fn push_constraint(&mut self, c: MoleculeConstraint) {
-        self.constraints.push(c);
+        self.constraints.insert(c);
     }
 
     pub fn remove(&mut self, atoms: &[AtomIdx], bonds: &[BondIdx]) -> Remapping {

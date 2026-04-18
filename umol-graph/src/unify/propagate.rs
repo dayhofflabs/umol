@@ -600,32 +600,12 @@ fn narrow_atom_constraint(
     idx: AtomIdx,
     new_constraint: &AtomConstraint,
 ) -> bool {
-    use std::mem::discriminant;
-    let target_kind = discriminant(new_constraint);
-    let mut found_pos: Option<usize> = None;
-    for (i, c) in ast.constraints.iter().enumerate() {
-        if let MoleculeConstraint::AtomDerived(j, existing) = c {
-            if *j == idx && discriminant(existing) == target_kind {
-                found_pos = Some(i);
-                break;
-            }
-        }
-    }
-    match found_pos {
-        Some(pos) => {
-            let MoleculeConstraint::AtomDerived(_, existing) = &ast.constraints[pos] else {
-                return false;
-            };
-            if narrowable(existing, new_constraint) {
-                ast.constraints[pos] =
-                    MoleculeConstraint::AtomDerived(idx, new_constraint.clone());
-                true
-            } else {
-                false
-            }
-        }
-        None => {
-            ast.constraints.push(MoleculeConstraint::AtomDerived(
+    let kind = new_constraint.kind();
+    let existing = ast.constraints().atoms().get(&idx).and_then(|s| s.get(kind));
+    match existing {
+        Some(e) if !narrowable(e, new_constraint) => false,
+        _ => {
+            ast.constraints_mut().insert(MoleculeConstraint::AtomPred(
                 idx,
                 new_constraint.clone(),
             ));

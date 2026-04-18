@@ -16,7 +16,8 @@ use crate::ast::bond::BondAst;
 use crate::ast::builder::MoleculeBuilder;
 use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::{
-    AromaticValenceConstraint, AtomConstraint, MoleculeConstraint,
+    AromaticValenceConstraint, AtomConstraint, AtomConstraintKind, MoleculeConstraint,
+    MoleculeConstraints,
 };
 use crate::ast::views::{
     AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView, BondViewMut, BondViews,
@@ -53,7 +54,7 @@ pub struct MoleculeAst {
     noncovalent_bonds: Arc<FixedRelationSet<BondAst, 2>>,
     aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
     multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
-    pub constraints: Vec<MoleculeConstraint>,
+    constraints: MoleculeConstraints,
 }
 
 impl Default for MoleculeAst {
@@ -66,7 +67,7 @@ impl Default for MoleculeAst {
             noncovalent_bonds: Arc::new(FixedRelationSet::default()),
             aromatic_systems: Arc::new(VarRelationSet::default()),
             multicenter_bonds: Arc::new(VarRelationSet::default()),
-            constraints: Vec::new(),
+            constraints: MoleculeConstraints::new(),
         }
     }
 }
@@ -79,7 +80,7 @@ impl MoleculeAst {
         noncovalent: Vec<(AtomIdx, AtomIdx, BondAst)>,
         aromatic: Vec<(Vec<AtomIdx>, AromaticSystemAst)>,
         multicenter: Vec<(Vec<AtomIdx>, MulticenterBondAst)>,
-        constraints: Vec<MoleculeConstraint>,
+        constraints: impl Into<MoleculeConstraints>,
     ) -> Self {
         let node_count = atoms.len();
 
@@ -123,7 +124,7 @@ impl MoleculeAst {
             noncovalent_bonds: Arc::new(noncovalent_bonds),
             aromatic_systems: Arc::new(aromatic_systems),
             multicenter_bonds: Arc::new(multicenter_bonds),
-            constraints,
+            constraints: constraints.into(),
         }
     }
 
@@ -135,7 +136,7 @@ impl MoleculeAst {
         noncovalent_bonds: Arc<FixedRelationSet<BondAst, 2>>,
         aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
         multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
-        constraints: Vec<MoleculeConstraint>,
+        constraints: MoleculeConstraints,
     ) -> Self {
         Self {
             graph,
@@ -157,11 +158,11 @@ impl MoleculeAst {
     pub fn from_table_molecule(mol: &TableMolecule) -> Self {
         let atoms: Vec<AtomAst> = mol.atoms.iter().map(AtomAst::from_table_atom).collect();
 
-        let mut constraints: Vec<MoleculeConstraint> = Vec::new();
+        let mut constraints: MoleculeConstraints = MoleculeConstraints::new();
         for (i, atom) in mol.atoms.iter().enumerate() {
-            let idx = AtomIdx::from_usize(i);
+            let idx = AtomIdx::from(i);
             if atom.aromatic == Some(true) {
-                constraints.push(MoleculeConstraint::AtomDerived(
+                constraints.insert(MoleculeConstraint::AtomPred(
                     idx,
                     AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
                         ValueAst::Undetermined,
@@ -169,7 +170,7 @@ impl MoleculeAst {
                 ));
             }
             if let Some(v) = atom.valence {
-                constraints.push(MoleculeConstraint::AtomDerived(
+                constraints.insert(MoleculeConstraint::AtomPred(
                     idx,
                     AtomConstraint::ValenceSum(ValueAst::Lit(v as i64)),
                 ));
@@ -284,15 +285,26 @@ impl MoleculeAst {
         &self.graph
     }
 
+    pub fn constraints(&self) -> &MoleculeConstraints {
+        &self.constraints
+    }
+
+    pub fn constraints_mut(&mut self) -> &mut MoleculeConstraints {
+        &mut self.constraints
+    }
+
     /// Per-atom aromatic-valence constraint hint, if any. Returns `None` when no
-    /// `AtomDerived(_, AromaticValence(_))` entry is attached to this atom.
+    /// `AtomPred(_, AromaticValence(_))` entry is attached to this atom.
     pub fn atom_aromatic_hint(&self, idx: AtomIdx) -> Option<&AromaticValenceConstraint> {
-        self.constraints.iter().find_map(|c| match c {
-            MoleculeConstraint::AtomDerived(i, AtomConstraint::AromaticValence(c)) if *i == idx => {
-                Some(c)
-            }
+        match self
+            .constraints
+            .atoms()
+            .get(&idx)?
+            .get(AtomConstraintKind::AromaticValence)?
+        {
+            AtomConstraint::AromaticValence(c) => Some(c),
             _ => None,
-        })
+        }
     }
 
     /// True if the atom is hinted aromatic via constraint or already placed in an aromatic system.
@@ -377,21 +389,11 @@ impl MoleculeAst {
             atom.coerce(&config.atom);
         }
         for i in 0..self.atoms.len() {
-            let idx = AtomIdx::from_usize(i);
-            let mut bucket: Vec<AtomConstraint> = self
-                .constraints
-                .iter()
-                .filter_map(|c| match c {
-                    MoleculeConstraint::AtomDerived(j, ac) if *j == idx => Some(ac.clone()),
-                    _ => None,
-                })
-                .collect();
-            let len_before = bucket.len();
+            let idx = AtomIdx::from(i);
+            let set = self.constraints.atoms_mut().entry(idx).or_default();
+            let mut bucket: Vec<AtomConstraint> = set.iter().cloned().collect();
             coerce_atom_constraints(&mut bucket, &config.atom);
-            for new_ac in bucket.into_iter().skip(len_before) {
-                self.constraints
-                    .push(MoleculeConstraint::AtomDerived(idx, new_ac));
-            }
+            *set = bucket.into_iter().collect();
         }
     }
 
@@ -399,14 +401,13 @@ impl MoleculeAst {
         for atom in Arc::make_mut(&mut self.atoms) {
             atom.release(&config.atom);
         }
-        self.constraints.retain(|c| {
-            let MoleculeConstraint::AtomDerived(_, atom_c) = c else {
-                return true;
-            };
-            let mut tmp = vec![atom_c.clone()];
-            release_atom_constraints(&mut tmp, &config.atom);
-            !tmp.is_empty()
-        });
+        for set in self.constraints.atoms_mut().values_mut() {
+            set.retain(|ac| {
+                let mut tmp = vec![ac.clone()];
+                release_atom_constraints(&mut tmp, &config.atom);
+                !tmp.is_empty()
+            });
+        }
     }
 
     pub fn is_ground(&self) -> bool {
@@ -498,7 +499,7 @@ mod tests {
     #[test]
     fn test_molecule_ast_is_ground_with_constraint() {
         let mut ast = ground_ast();
-        ast.constraints.push(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
+        ast.constraints.insert(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
         assert!(ast.is_ground());
     }
 
@@ -527,14 +528,14 @@ mod tests {
     #[test]
     fn test_molecule_ast_is_ground_non_ground_constraint() {
         let mut ast = ground_ast();
-        ast.constraints.push(MoleculeConstraint::TotalSpin(SpinStateAst::default()));
+        ast.constraints.insert(MoleculeConstraint::TotalSpin(SpinStateAst::default()));
         assert!(!ast.is_ground());
     }
 
     #[test]
     fn test_molecule_ast_is_ground_sub_pattern() {
         let mut ast = ground_ast();
-        ast.constraints.push(MoleculeConstraint::SubPattern {
+        ast.constraints.insert(MoleculeConstraint::SubPattern {
             anchor: AtomIdx(0),
             pattern: Box::new(MoleculeAst::default()),
         });

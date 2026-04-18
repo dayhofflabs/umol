@@ -170,7 +170,7 @@ impl RawMoleculeAst {
                 atom_tags.insert(pos, tag_name);
             }
             for c in atom_pattern.constraints {
-                lifted_constraints.push(MoleculeConstraint::AtomDerived(
+                lifted_constraints.push(MoleculeConstraint::AtomPred(
                     AtomIdx(pos as u32),
                     c,
                 ));
@@ -641,12 +641,10 @@ impl ToEdn for MoleculeAstWrapper {
     fn to_edn(&self) -> Edn<'static> {
         let mut per_atom_derived: Vec<Vec<AtomConstraint>> =
             vec![Vec::new(); self.ast.atoms().count()];
-        for constraint in &self.ast.constraints {
-            if let MoleculeConstraint::AtomDerived(idx, c) = constraint {
-                let i = idx.index();
-                if i < per_atom_derived.len() {
-                    per_atom_derived[i].push(c.clone());
-                }
+        for (idx, set) in self.ast.constraints().atoms() {
+            let i = idx.index();
+            if i < per_atom_derived.len() {
+                per_atom_derived[i].extend(set.iter().cloned());
             }
         }
 
@@ -753,7 +751,7 @@ impl ToEdn for MoleculeAstWrapper {
                 Edn::Vector(noncovalent_edn.into()),
             );
         }
-        for constraint in &self.ast.constraints {
+        for constraint in self.ast.constraints().global() {
             match constraint {
                 MoleculeConstraint::TotalCharge(ValueAst::Lit(n)) => {
                     m.insert(Edn::keyword("charge"), Edn::Int(*n));
@@ -974,7 +972,7 @@ mod tests {
                 lone_pairs: ValueAst::Undetermined,
                 spin: SpinStateAst::default(),
             }]);
-            ast.constraints.push(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
+            ast.constraints_mut().insert(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
             ast
         },
         Metadata {

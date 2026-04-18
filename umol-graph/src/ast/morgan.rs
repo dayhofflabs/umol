@@ -171,7 +171,7 @@ fn compute_atom_invariants(ast: &MoleculeAst) -> Vec<AtomInvariants> {
 
     // Add implicit H count
     for (i, entry) in result.iter_mut().enumerate().take(n) {
-        entry.h_count += ast_h_count(ast, AtomIdx::from_usize(i));
+        entry.h_count += ast_h_count(ast, AtomIdx::from(i));
     }
 
     result
@@ -366,7 +366,7 @@ pub fn morgan_direct(ast: &MoleculeAst, radius: usize) -> MorganFingerprint {
 
     let initial_ids: Vec<u32> = (0..n)
         .map(|i| {
-            let idx = AtomIdx::from_usize(i);
+            let idx = AtomIdx::from(i);
             initial_identifier(
                 ast_atomic_number(ast, idx),
                 ast_atomic_mass(ast, idx),
@@ -386,7 +386,7 @@ pub fn morgan_direct(ast: &MoleculeAst, radius: usize) -> MorganFingerprint {
     let adj_slices: Vec<&[(usize, usize)]> = adj_vecs.iter().map(|v| v.as_slice()).collect();
 
     let bond_orders: Vec<u32> = (0..ast.bonds().count())
-        .map(|bi| bond_order(ast, BondIdx::from_usize(bi)))
+        .map(|bi| bond_order(ast, BondIdx::from(bi)))
         .collect();
 
     ecfp_loop(n, ast.bonds().count(), &initial_ids, &adj_slices, &bond_orders, radius)
@@ -418,7 +418,7 @@ impl MorganTarget {
 
         let initial_ids: Vec<u32> = (0..n)
             .map(|i| {
-                let idx = AtomIdx::from_usize(i);
+                let idx = AtomIdx::from(i);
                 initial_identifier(
                     ast_atomic_number(ast, idx),
                     ast_atomic_mass(ast, idx),
@@ -430,7 +430,7 @@ impl MorganTarget {
             .collect();
 
         let bond_orders: Vec<u32> = (0..m)
-            .map(|bi| bond_order(ast, BondIdx::from_usize(bi)))
+            .map(|bi| bond_order(ast, BondIdx::from(bi)))
             .collect();
 
         // Build CSR adjacency
@@ -506,7 +506,7 @@ impl MorganTargetOpt {
 
         let initial_ids: Vec<u32> = (0..n)
             .map(|i| {
-                let idx = AtomIdx::from_usize(i);
+                let idx = AtomIdx::from(i);
                 initial_identifier(
                     ast_atomic_number(ast, idx),
                     ast_atomic_mass(ast, idx),
@@ -518,7 +518,7 @@ impl MorganTargetOpt {
             .collect();
 
         let bond_orders: Vec<u32> = (0..m)
-            .map(|bi| bond_order(ast, BondIdx::from_usize(bi)))
+            .map(|bi| bond_order(ast, BondIdx::from(bi)))
             .collect();
 
         // Build per-atom adjacency lists, pre-sorted by bond_order

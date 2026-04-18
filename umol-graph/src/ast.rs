@@ -32,7 +32,6 @@ macro_rules! define_idx {
             }
 
             impl $name {
-                pub fn from_usize(v: usize) -> Self { Self(v as u32) }
                 pub fn index(self) -> usize { self.0 as usize }
             }
         )+
