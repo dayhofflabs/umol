@@ -119,6 +119,52 @@ pub enum RelationSym {
     NoncovalentBonds,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AtomConstraint {
+    ValenceSum(ValueAst),
+    AromaticValence(ValueAst),
+    MulticenterValence(ValueAst),
+    DonatedPairs(ValueAst),
+    AcceptedPairs(ValueAst),
+    Degree(ValueAst),
+    Connectivity(ValueAst),
+    TotalHCount(ValueAst),
+    InRing,
+    RingCount(ValueAst),
+    RingSize(ValueAst),
+}
+
+impl AtomConstraint {
+    pub fn is_ground(&self) -> bool {
+        match self {
+            Self::ValenceSum(v)
+            | Self::AromaticValence(v)
+            | Self::MulticenterValence(v)
+            | Self::DonatedPairs(v)
+            | Self::AcceptedPairs(v)
+            | Self::Degree(v)
+            | Self::Connectivity(v)
+            | Self::TotalHCount(v)
+            | Self::RingCount(v)
+            | Self::RingSize(v) => v.is_ground(),
+            Self::InRing => true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BondConstraint {
+    RingBond,
+}
+
+impl BondConstraint {
+    pub fn is_ground(&self) -> bool {
+        match self {
+            Self::RingBond => true,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -189,5 +235,74 @@ mod tests {
         };
         assert_eq!(children.len(), 2);
         assert_eq!(children[1], inner);
+    }
+
+    #[rstest]
+    #[case::valence_sum_lit(AtomConstraint::ValenceSum(ValueAst::Lit(4)), true)]
+    #[case::valence_sum_undetermined(AtomConstraint::ValenceSum(ValueAst::Undetermined), false)]
+    #[case::aromatic_valence_lit(AtomConstraint::AromaticValence(ValueAst::Lit(3)), true)]
+    #[case::aromatic_valence_set(AtomConstraint::AromaticValence(ValueAst::LitSet(vec![2, 3])), false)]
+    #[case::multicenter_valence_lit(AtomConstraint::MulticenterValence(ValueAst::Lit(1)), true)]
+    #[case::donated_pairs_lit(AtomConstraint::DonatedPairs(ValueAst::Lit(0)), true)]
+    #[case::accepted_pairs_undetermined(AtomConstraint::AcceptedPairs(ValueAst::Undetermined), false)]
+    #[case::degree_lit(AtomConstraint::Degree(ValueAst::Lit(3)), true)]
+    #[case::connectivity_lit(AtomConstraint::Connectivity(ValueAst::Lit(4)), true)]
+    #[case::total_h_count_lit(AtomConstraint::TotalHCount(ValueAst::Lit(2)), true)]
+    #[case::in_ring(AtomConstraint::InRing, true)]
+    #[case::ring_count_lit(AtomConstraint::RingCount(ValueAst::Lit(1)), true)]
+    #[case::ring_size_lit(AtomConstraint::RingSize(ValueAst::Lit(6)), true)]
+    #[case::ring_size_undetermined(AtomConstraint::RingSize(ValueAst::Undetermined), false)]
+    fn test_atom_constraint_is_ground(#[case] constraint: AtomConstraint, #[case] expected: bool) {
+        assert_eq!(constraint.is_ground(), expected);
+    }
+
+    #[rstest]
+    #[case::valence_sum_eq(
+        AtomConstraint::ValenceSum(ValueAst::Lit(4)),
+        AtomConstraint::ValenceSum(ValueAst::Lit(4)),
+        true,
+    )]
+    #[case::valence_sum_payload_diff(
+        AtomConstraint::ValenceSum(ValueAst::Lit(4)),
+        AtomConstraint::ValenceSum(ValueAst::Lit(3)),
+        false,
+    )]
+    #[case::variant_diff(
+        AtomConstraint::ValenceSum(ValueAst::Lit(4)),
+        AtomConstraint::AromaticValence(ValueAst::Lit(4)),
+        false,
+    )]
+    #[case::in_ring_eq(AtomConstraint::InRing, AtomConstraint::InRing, true)]
+    #[case::in_ring_vs_ring_count(
+        AtomConstraint::InRing,
+        AtomConstraint::RingCount(ValueAst::Lit(1)),
+        false,
+    )]
+    fn test_atom_constraint_eq(
+        #[case] left: AtomConstraint,
+        #[case] right: AtomConstraint,
+        #[case] equal: bool,
+    ) {
+        assert_eq!(left == right, equal);
+    }
+
+    #[test]
+    fn test_atom_constraint_clone() {
+        let original = AtomConstraint::RingSize(ValueAst::Lit(6));
+        let cloned = original.clone();
+        assert_eq!(original, cloned);
+    }
+
+    #[rstest]
+    #[case::ring_bond(BondConstraint::RingBond, true)]
+    fn test_bond_constraint_is_ground(#[case] constraint: BondConstraint, #[case] expected: bool) {
+        assert_eq!(constraint.is_ground(), expected);
+    }
+
+    #[test]
+    fn test_bond_constraint_clone() {
+        let original = BondConstraint::RingBond;
+        let cloned = original.clone();
+        assert_eq!(original, cloned);
     }
 }

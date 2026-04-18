@@ -11,4 +11,4 @@ pub mod molecule;
 pub mod pattern;
 
 pub use molecule::{Molecule, MoleculeEdnError};
-pub use pattern::MoleculePattern;
+pub use pattern::{AtomPattern, BondPattern, MoleculePattern};
