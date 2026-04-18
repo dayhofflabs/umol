@@ -108,7 +108,11 @@ impl ValenceTheory {
         }
     }
 
-    pub fn validate(&self, ast: &MoleculeAst, atom_index: usize) -> bool {
+    /// Per-atom electron-invariant check. Invoked implicitly on every atom by
+    /// `Resolver` and `Validator`; not a `MoleculeConstraint` variant. Returns
+    /// true when at least one valence/spin configuration exists for the atom
+    /// under its current bonds, charge, hydrogen count, and aromatic state.
+    pub fn valence_balance(&self, ast: &MoleculeAst, atom_index: usize) -> bool {
         let idx = AtomIdx(atom_index as u32);
         if !matches!(ast.atom(idx).data.element, ElementAst::Lit(_)) {
             return true;

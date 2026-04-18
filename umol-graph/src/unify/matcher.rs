@@ -78,7 +78,7 @@ pub fn find_matches_with(query: &MatchQuery, target: &MatchTarget, chemistry: &C
         .into_iter()
         .filter(|a| {
             a.0.iter()
-                .all(|&t_idx| chemistry.valence.validate(target.ast, t_idx))
+                .all(|&t_idx| chemistry.valence.valence_balance(target.ast, t_idx))
         })
         .collect()
 }

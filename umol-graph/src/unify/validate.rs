@@ -15,7 +15,7 @@ impl<'s> Validator<'s> {
 
     pub fn validate(&self, ast: &MoleculeAst) -> Result<(), ValidationError> {
         for i in 0..ast.atoms().count() {
-            if !self.chemistry.valence.validate(ast, i) {
+            if !self.chemistry.valence.valence_balance(ast, i) {
                 return Err(ValidationError::Contradictory);
             }
         }
