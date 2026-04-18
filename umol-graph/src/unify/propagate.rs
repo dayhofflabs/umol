@@ -108,11 +108,11 @@ impl ValenceTheory {
         }
     }
 
-    /// Per-atom electron-invariant check. Invoked implicitly on every atom by
-    /// `Resolver` and `Validator`; not a `MoleculeConstraint` variant. Returns
-    /// true when at least one valence/spin configuration exists for the atom
-    /// under its current bonds, charge, hydrogen count, and aromatic state.
-    pub fn valence_balance(&self, ast: &MoleculeAst, atom_index: usize) -> bool {
+    /// Theory-driven per-atom feasibility check: `true` iff at least one
+    /// candidate exists under this theory's matching rules (atom-typing
+    /// registry or counts table) for the atom in its current environment.
+    /// Not universal; depends on the chosen theory.
+    pub fn validate(&self, ast: &MoleculeAst, atom_index: usize) -> bool {
         let idx = AtomIdx(atom_index as u32);
         if !matches!(ast.atom(idx).data.element, ElementAst::Lit(_)) {
             return true;
@@ -121,6 +121,60 @@ impl ValenceTheory {
             return true;
         }
         !self.candidates_for(ast, idx).is_empty()
+    }
+}
+
+/// Per-atom electron-conservation invariant. Theory-independent: orbital-side
+/// occupancy must equal source-side electron count. Propagator invoked
+/// implicitly on every atom by `Resolver` and `Validator`; not a
+/// `MoleculeConstraint` variant. Returns true for non-ground atoms (not yet
+/// evaluable).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ElectronInvariant;
+
+impl ElectronInvariant {
+    pub fn validate(&self, ast: &MoleculeAst, atom_index: usize) -> bool {
+        let idx = AtomIdx(atom_index as u32);
+        let atom = ast.atom(idx).data;
+        let ElementAst::Lit(element) = atom.element else {
+            return true;
+        };
+        let ValueAst::Lit(charge) = atom.charge else {
+            return true;
+        };
+        let HydrogenAst::Value(ValueAst::Lit(implicit_h)) = atom.implicit_hydrogens else {
+            return true;
+        };
+        let ValueAst::Lit(lone_pairs) = atom.lone_pairs else {
+            return true;
+        };
+        let SpinStateAst::Lit(spin) = atom.spin else {
+            return true;
+        };
+        let Some(valence) = ast.bond_order_sum(idx) else {
+            return true;
+        };
+        let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(idx);
+        let aromatic_valence = ast.atom_aromatic_pi_electrons(idx).unwrap_or(0) as i32;
+        let aromatic_increment: i32 = if aromatic_valence == 1 { 1 } else { 0 };
+        let unpaired = spin.unpaired_electrons() as i32;
+
+        let total_orbital = unpaired
+            + 2 * lone_pairs as i32
+            + 2 * donated_pairs as i32
+            + 2 * accepted_pairs as i32
+            + 2 * implicit_h as i32
+            + 2 * valence as i32
+            + aromatic_valence
+            + aromatic_increment;
+
+        let total_source = (element.valence_electrons() as i32) - (charge as i32)
+            + implicit_h as i32
+            + valence as i32
+            + aromatic_increment
+            + 2 * accepted_pairs as i32;
+
+        total_orbital == total_source
     }
 }
 

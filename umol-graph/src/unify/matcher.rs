@@ -4,6 +4,7 @@ use umol_graph_core::{EdgeId, NodeId, subgraph_isomorphisms};
 
 use crate::ast::molecule::MoleculeAst;
 use crate::unify::chemistry::Chemistry;
+use crate::unify::propagate::ElectronInvariant;
 
 /// Query atom index → target atom index mapping.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,8 +78,10 @@ pub fn find_matches_with(query: &MatchQuery, target: &MatchTarget, chemistry: &C
     find_matches(query, target)
         .into_iter()
         .filter(|a| {
-            a.0.iter()
-                .all(|&t_idx| chemistry.valence.valence_balance(target.ast, t_idx))
+            a.0.iter().all(|&t_idx| {
+                ElectronInvariant.validate(target.ast, t_idx)
+                    && chemistry.valence.validate(target.ast, t_idx)
+            })
         })
         .collect()
 }
