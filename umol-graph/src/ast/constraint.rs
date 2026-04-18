@@ -3,120 +3,45 @@
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
-use crate::ast::AtomIdx;
 use crate::ast::molecule::MoleculeAst;
+use crate::ast::{AromaticSystemIdx, AtomIdx, BondIdx, MulticenterBondIdx};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraint {
+    AtomDerived(AtomIdx, AtomConstraint),
+    BondDerived(BondIdx, BondConstraint),
+    TotalCharge(ValueAst),
+    TotalSpin(SpinStateAst),
+    AromaticElectronCount(AromaticSystemIdx, ValueAst),
+    MulticenterElectronCount(MulticenterBondIdx, ValueAst),
+    BondOrderSum(Vec<BondIdx>, ValueAst),
+    Connected(Vec<AtomIdx>),
     SubPattern {
         anchor: AtomIdx,
         pattern: Box<MoleculeAst>,
     },
-    Derived {
-        predicate: DerivedPred,
-        refs: RelationRefs,
-    },
-    Matcher(MatcherFlag),
     And(Vec<MoleculeConstraint>),
     Or(Vec<MoleculeConstraint>),
     Not(Box<MoleculeConstraint>),
 }
 
 impl MoleculeConstraint {
-    /// A ground assertion is a `Derived` constraint whose predicate carries only
-    /// literal values (no wildcards, variables, or expressions). These are facts
-    /// about a resolved molecule, not queries.
+    /// A ground assertion carries only literal values (no wildcards, variables,
+    /// or expressions) and is not a query combinator. These are facts about a
+    /// resolved molecule.
     pub fn is_ground_assertion(&self) -> bool {
         match self {
-            Self::Derived { predicate, .. } => predicate.is_ground(),
-            _ => false,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct RelationRefs {
-    pub atoms: Vec<AtomIdx>,
-    pub bonds: Vec<usize>,
-    pub dative_bonds: Vec<usize>,
-    pub aromatic_systems: Vec<usize>,
-    pub multicenter_bonds: Vec<usize>,
-    pub noncovalent_bonds: Vec<usize>,
-}
-
-impl RelationRefs {
-    pub fn is_empty(&self) -> bool {
-        self.atoms.is_empty()
-            && self.bonds.is_empty()
-            && self.dative_bonds.is_empty()
-            && self.aromatic_systems.is_empty()
-            && self.multicenter_bonds.is_empty()
-            && self.noncovalent_bonds.is_empty()
-    }
-
-    pub fn atoms(atoms: Vec<AtomIdx>) -> Self {
-        Self { atoms, ..Self::default() }
-    }
-
-    pub fn bonds(bonds: Vec<usize>) -> Self {
-        Self { bonds, ..Self::default() }
-    }
-
-    pub fn dative_bonds(dative_bonds: Vec<usize>) -> Self {
-        Self { dative_bonds, ..Self::default() }
-    }
-
-    pub fn aromatic_systems(aromatic_systems: Vec<usize>) -> Self {
-        Self { aromatic_systems, ..Self::default() }
-    }
-
-    pub fn multicenter_bonds(multicenter_bonds: Vec<usize>) -> Self {
-        Self { multicenter_bonds, ..Self::default() }
-    }
-
-    pub fn noncovalent_bonds(noncovalent_bonds: Vec<usize>) -> Self {
-        Self { noncovalent_bonds, ..Self::default() }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum DerivedPred {
-    TotalCharge(ValueAst),
-    TotalSpin(SpinStateAst),
-    ValenceSum(ValueAst),
-    AromaticElectronCount(ValueAst),
-    RingSize(ValueAst),
-    InRing,
-    NotInRing,
-    InRelation(RelationSym),
-    NotInRelation(RelationSym),
-}
-
-impl DerivedPred {
-    pub fn is_ground(&self) -> bool {
-        match self {
-            Self::TotalCharge(v) | Self::ValenceSum(v) | Self::AromaticElectronCount(v) | Self::RingSize(v) => v.is_ground(),
+            Self::AtomDerived(_, c) => c.is_ground(),
+            Self::BondDerived(_, c) => c.is_ground(),
+            Self::TotalCharge(v)
+            | Self::AromaticElectronCount(_, v)
+            | Self::MulticenterElectronCount(_, v)
+            | Self::BondOrderSum(_, v) => v.is_ground(),
             Self::TotalSpin(s) => s.is_ground(),
-            Self::InRing | Self::NotInRing | Self::InRelation(_) | Self::NotInRelation(_) => true,
+            Self::Connected(_) => true,
+            Self::SubPattern { .. } | Self::And(_) | Self::Or(_) | Self::Not(_) => false,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum MatcherFlag {
-    Injective,
-    NonInjective,
-    Induced,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum RelationSym {
-    Atoms,
-    Bonds,
-    DativeBonds,
-    AromaticSystems,
-    MulticenterBonds,
-    NoncovalentBonds,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,44 +99,48 @@ mod tests {
     use super::*;
     use crate::ast::AtomIdx;
 
-    fn charge(n: i64) -> MoleculeConstraint {
-        MoleculeConstraint::Derived {
-            predicate: DerivedPred::TotalCharge(ValueAst::Lit(n)),
-            refs: RelationRefs::default(),
-        }
-    }
-
-    fn in_ring_atom(atom: usize) -> MoleculeConstraint {
-        MoleculeConstraint::Derived {
-            predicate: DerivedPred::InRing,
-            refs: RelationRefs::atoms(vec![AtomIdx(atom as u32)]),
-        }
-    }
-
     #[rstest]
     #[case::and_pair(
-        MoleculeConstraint::And(vec![charge(0), in_ring_atom(1)]),
-        MoleculeConstraint::And(vec![charge(0), in_ring_atom(1)]),
+        MoleculeConstraint::And(vec![
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
+            MoleculeConstraint::AtomDerived(AtomIdx(1), AtomConstraint::InRing),
+        ]),
+        MoleculeConstraint::And(vec![
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
+            MoleculeConstraint::AtomDerived(AtomIdx(1), AtomConstraint::InRing),
+        ]),
         true,
     )]
     #[case::and_order_matters(
-        MoleculeConstraint::And(vec![charge(0), in_ring_atom(1)]),
-        MoleculeConstraint::And(vec![in_ring_atom(1), charge(0)]),
+        MoleculeConstraint::And(vec![
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
+            MoleculeConstraint::AtomDerived(AtomIdx(1), AtomConstraint::InRing),
+        ]),
+        MoleculeConstraint::And(vec![
+            MoleculeConstraint::AtomDerived(AtomIdx(1), AtomConstraint::InRing),
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
+        ]),
         false,
     )]
     #[case::or_distinct_payload(
-        MoleculeConstraint::Or(vec![charge(0), charge(1)]),
-        MoleculeConstraint::Or(vec![charge(0), charge(2)]),
+        MoleculeConstraint::Or(vec![
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(1)),
+        ]),
+        MoleculeConstraint::Or(vec![
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(2)),
+        ]),
         false,
     )]
     #[case::not_idempotent_eq(
-        MoleculeConstraint::Not(Box::new(charge(-1))),
-        MoleculeConstraint::Not(Box::new(charge(-1))),
+        MoleculeConstraint::Not(Box::new(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)))),
+        MoleculeConstraint::Not(Box::new(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)))),
         true,
     )]
     #[case::and_or_distinct(
-        MoleculeConstraint::And(vec![charge(0)]),
-        MoleculeConstraint::Or(vec![charge(0)]),
+        MoleculeConstraint::And(vec![MoleculeConstraint::TotalCharge(ValueAst::Lit(0))]),
+        MoleculeConstraint::Or(vec![MoleculeConstraint::TotalCharge(ValueAst::Lit(0))]),
         false,
     )]
     fn test_molecule_constraint_combinators_eq(
@@ -225,16 +154,56 @@ mod tests {
     #[test]
     fn test_molecule_constraint_combinators_nested() {
         let inner = MoleculeConstraint::Or(vec![
-            charge(-1),
-            MoleculeConstraint::Not(Box::new(in_ring_atom(0))),
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)),
+            MoleculeConstraint::Not(Box::new(MoleculeConstraint::AtomDerived(
+                AtomIdx(0),
+                AtomConstraint::InRing,
+            ))),
         ]);
-        let outer = MoleculeConstraint::And(vec![charge(0), inner.clone()]);
+        let outer = MoleculeConstraint::And(vec![
+            MoleculeConstraint::TotalCharge(ValueAst::Lit(0)),
+            inner.clone(),
+        ]);
 
         let MoleculeConstraint::And(children) = &outer else {
             panic!("expected And");
         };
         assert_eq!(children.len(), 2);
         assert_eq!(children[1], inner);
+    }
+
+    #[rstest]
+    #[case::total_charge_lit(MoleculeConstraint::TotalCharge(ValueAst::Lit(0)), true)]
+    #[case::total_charge_undetermined(MoleculeConstraint::TotalCharge(ValueAst::Undetermined), false)]
+    #[case::atom_derived_ground(
+        MoleculeConstraint::AtomDerived(AtomIdx(0), AtomConstraint::ValenceSum(ValueAst::Lit(4))),
+        true,
+    )]
+    #[case::atom_derived_undetermined(
+        MoleculeConstraint::AtomDerived(AtomIdx(0), AtomConstraint::ValenceSum(ValueAst::Undetermined)),
+        false,
+    )]
+    #[case::bond_derived_ring(
+        MoleculeConstraint::BondDerived(BondIdx(0), BondConstraint::RingBond),
+        true,
+    )]
+    #[case::connected(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)]), true)]
+    #[case::sub_pattern(
+        MoleculeConstraint::SubPattern {
+            anchor: AtomIdx(0),
+            pattern: Box::new(MoleculeAst::default()),
+        },
+        false,
+    )]
+    #[case::and_combinator(
+        MoleculeConstraint::And(vec![MoleculeConstraint::TotalCharge(ValueAst::Lit(0))]),
+        false,
+    )]
+    fn test_molecule_constraint_is_ground_assertion(
+        #[case] constraint: MoleculeConstraint,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(constraint.is_ground_assertion(), expected);
     }
 
     #[rstest]

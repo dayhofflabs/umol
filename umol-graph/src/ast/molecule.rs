@@ -386,7 +386,6 @@ mod tests {
     use umol_shared::value_ast::ValueAst;
 
     use super::*;
-    use crate::ast::constraint::{DerivedPred, RelationRefs};
 
     fn ground_atom() -> AtomAst {
         AtomAst {
@@ -421,10 +420,7 @@ mod tests {
     #[test]
     fn test_molecule_ast_is_ground_with_constraint() {
         let mut ast = ground_ast();
-        ast.constraints.push(MoleculeConstraint::Derived {
-            predicate: DerivedPred::TotalCharge(ValueAst::Lit(-1)),
-            refs: RelationRefs::default(),
-        });
+        ast.constraints.push(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
         assert!(ast.is_ground());
     }
 
@@ -453,10 +449,7 @@ mod tests {
     #[test]
     fn test_molecule_ast_is_ground_non_ground_constraint() {
         let mut ast = ground_ast();
-        ast.constraints.push(MoleculeConstraint::Derived {
-            predicate: DerivedPred::TotalSpin(SpinStateAst::default()),
-            refs: RelationRefs::default(),
-        });
+        ast.constraints.push(MoleculeConstraint::TotalSpin(SpinStateAst::default()));
         assert!(!ast.is_ground());
     }
 

@@ -18,7 +18,7 @@ use super::error::ParseError;
 use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::constraint::{DerivedPred, MoleculeConstraint, RelationRefs};
+use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::molecule::{AromaticSystemAst, MoleculeAst, MulticenterBondAst};
 
 // TODO: unify tag + id nomenclature
@@ -263,16 +263,10 @@ impl RawMoleculeAst {
 
         let mut constraints = Vec::new();
         if let Some(charge) = self.charge {
-            constraints.push(MoleculeConstraint::Derived {
-                predicate: DerivedPred::TotalCharge(ValueAst::Lit(charge)),
-                refs: RelationRefs::default(),
-            });
+            constraints.push(MoleculeConstraint::TotalCharge(ValueAst::Lit(charge)));
         }
         if let Some(spin) = self.spin {
-            constraints.push(MoleculeConstraint::Derived {
-                predicate: DerivedPred::TotalSpin(SpinStateAst::Lit(spin)),
-                refs: RelationRefs::default(),
-            });
+            constraints.push(MoleculeConstraint::TotalSpin(SpinStateAst::Lit(spin)));
         }
 
         let ast = MoleculeAst::new(
@@ -722,17 +716,11 @@ impl ToEdn for MoleculeAstWrapper {
             );
         }
         for constraint in &self.ast.constraints {
-            let MoleculeConstraint::Derived { predicate, refs } = constraint else {
-                continue;
-            };
-            if !refs.is_empty() {
-                continue;
-            }
-            match predicate {
-                DerivedPred::TotalCharge(ValueAst::Lit(n)) => {
+            match constraint {
+                MoleculeConstraint::TotalCharge(ValueAst::Lit(n)) => {
                     m.insert(Edn::keyword("charge"), Edn::Int(*n));
                 }
-                DerivedPred::TotalSpin(SpinStateAst::Lit(s)) => {
+                MoleculeConstraint::TotalSpin(SpinStateAst::Lit(s)) => {
                     m.insert(Edn::keyword("spin"), Edn::Str(Cow::Owned(s.to_string())));
                 }
                 _ => {}
@@ -953,10 +941,7 @@ mod tests {
                 aromatic_valence: AromaticValenceAst::Undetermined,
                 multicenter_valence: ValueAst::Undetermined,
             }]);
-            ast.constraints.push(MoleculeConstraint::Derived {
-                predicate: DerivedPred::TotalCharge(ValueAst::Lit(-1)),
-                refs: RelationRefs::default(),
-            });
+            ast.constraints.push(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
             ast
         },
         Metadata {
