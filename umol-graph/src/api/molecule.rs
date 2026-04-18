@@ -188,7 +188,7 @@ impl Index<MulticenterBondIdx> for Molecule {
 
 #[cfg(test)]
 mod tests {
-    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
+    use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
     use umol_shared::element::Element;
     use umol_shared::spin::SpinState;
     use umol_shared::spin_ast::SpinStateAst;
@@ -206,11 +206,6 @@ mod tests {
             implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
             lone_pairs: ValueAst::Lit(0),
             spin: SpinStateAst::Lit(SpinState::closed_shell()),
-            valence: ValueAst::Lit(4),
-            donated_pairs: ValueAst::Lit(0),
-            accepted_pairs: ValueAst::Lit(0),
-            aromatic_valence: AromaticValenceAst::NotAromatic,
-            multicenter_valence: ValueAst::Lit(0),
         }
     }
 

@@ -10,8 +10,7 @@ use nalgebra::{DMatrix, SymmetricEigen};
 use umol_shared::element::Element;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
-use umol_shared::value_ast::ValueAst;
+use umol_shared::atom_ast::ElementAst;
 
 use super::{AromaticContribution, AromaticSystem, AromaticityError};
 use crate::ast::AtomIdx;
@@ -57,10 +56,7 @@ impl HmoAromaticity {
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                match view.data.aromatic_valence {
-                    AromaticValenceAst::Value(ValueAst::Lit(_)) => Some(view.idx),
-                    _ => None,
-                }
+                ast.atom_aromatic_pi_electrons(view.idx).map(|_| view.idx)
             })
             .collect();
 
@@ -112,11 +108,7 @@ impl HmoAromaticity {
                     .atom_indices
                     .iter()
                     .map(|&atom| {
-                        let a = ast.atom(atom);
-                        let valence = match a.data.aromatic_valence {
-                            AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
-                            _ => 0,
-                        };
+                        let valence = ast.atom_aromatic_pi_electrons(atom).unwrap_or(0);
                         AromaticContribution::new(atom, valence)
                     })
                     .collect();
@@ -149,14 +141,9 @@ impl HmoAromaticity {
                     ))
                 }
             };
-            let valence = match atom_ast.data.aromatic_valence {
-                AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
-                _ => {
-                    return Err(AromaticityError::HmoMissingAtom(
-                        "undetermined aromatic valence".to_string(),
-                    ))
-                }
-            };
+            let valence = ast.atom_aromatic_pi_electrons(atom).ok_or_else(|| {
+                AromaticityError::HmoMissingAtom("undetermined aromatic valence".to_string())
+            })?;
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
                 AromaticityError::HmoMissingParameters(format!(
                     "no Van-Catledge parameters for {:?} with {} pi-electrons",
@@ -313,7 +300,6 @@ pub struct HmoOutput {
 mod tests {
     use float_cmp::*;
     use rstest::*;
-    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
     use umol_shared::element::Element;
     use umol_shared::value_ast::ValueAst;
 
@@ -321,20 +307,36 @@ mod tests {
     use crate::ast::AtomIdx;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
+    use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, MoleculeConstraint};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::rings::RingEnumerationStrategy;
     use crate::ast::rings::{RingEnumerator, RingFamily};
 
-    fn aromatic_atom(element: Element, pi: i64) -> AtomAst {
-        AtomAst {
-            element: ElementAst::Lit(element),
-            aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(pi)),
-            ..Default::default()
-        }
+    fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
+        (AtomAst::from_element(element), Some(pi))
     }
 
-    fn make_ring(atoms: Vec<AtomAst>) -> MoleculeAst {
-        let n = atoms.len();
+    fn pi_constraints(specs: &[(AtomAst, Option<i64>)]) -> Vec<MoleculeConstraint> {
+        specs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (_, pi))| {
+                pi.map(|n| {
+                    MoleculeConstraint::AtomDerived(
+                        AtomIdx(i as u32),
+                        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                            ValueAst::Lit(n),
+                        )),
+                    )
+                })
+            })
+            .collect()
+    }
+
+    fn make_ring(specs: Vec<(AtomAst, Option<i64>)>) -> MoleculeAst {
+        let n = specs.len();
+        let constraints = pi_constraints(&specs);
+        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
@@ -344,15 +346,17 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
     }
 
-    fn make_fused(atoms: Vec<AtomAst>, edges: &[(usize, usize)]) -> MoleculeAst {
+    fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
+        let constraints = pi_constraints(&specs);
+        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
         let bonds: Vec<_> = edges
             .iter()
             .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
     }
 
     fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
@@ -370,14 +374,14 @@ mod tests {
 
     #[fixture]
     fn benzene() -> MoleculeAst {
-        make_ring(vec![aromatic_atom(Element::C, 1); 6])
+        make_ring(vec![aromatic(Element::C, 1); 6])
     }
 
     #[rustfmt::skip]
     #[fixture]
     fn naphthalene() -> MoleculeAst {
         make_fused(
-            vec![aromatic_atom(Element::C, 1); 10],
+            vec![aromatic(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
                 (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -389,7 +393,7 @@ mod tests {
     #[fixture]
     fn azulene() -> MoleculeAst {
         make_fused(
-            vec![aromatic_atom(Element::C, 1); 10],
+            vec![aromatic(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 0),
                 (0, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -400,29 +404,29 @@ mod tests {
     #[fixture]
     fn pyridine() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::N, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
+            aromatic(Element::N, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
         ])
     }
 
     #[fixture]
     fn pyrrole() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::N, 2),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
+            aromatic(Element::N, 2),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
         ])
     }
 
     #[fixture]
     fn cyclobutadiene() -> MoleculeAst {
-        make_ring(vec![aromatic_atom(Element::C, 1); 4])
+        make_ring(vec![aromatic(Element::C, 1); 4])
     }
 
     #[rstest]

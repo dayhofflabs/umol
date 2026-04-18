@@ -7,13 +7,17 @@ use umol_graph_core::relation::RelationId;
 use umol_graph_core::{
     EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet,
 };
+use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
+use crate::api::pattern::{coerce_atom_constraints, release_atom_constraints};
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::builder::MoleculeBuilder;
 use crate::ast::config::MoleculeAstConfig;
-use crate::ast::constraint::MoleculeConstraint;
+use crate::ast::constraint::{
+    AromaticValenceConstraint, AtomConstraint, MoleculeConstraint,
+};
 use crate::ast::views::{
     AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView, BondViewMut, BondViews,
     DativeBondViews, MulticenterBondViews, NeighborView, NoncovalentBondViews,
@@ -26,7 +30,10 @@ use crate::table_ir::Molecule as TableMolecule;
 use crate::table_ir::bond::BondDonation;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AromaticSystemAst {}
+pub struct AromaticSystemAst {
+    pub charge: ValueAst,
+    pub spin: SpinStateAst,
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MulticenterBondAst {}
@@ -145,9 +152,29 @@ impl MoleculeAst {
     /// Lift a `table_ir::Molecule` to a `MoleculeAst` by lifting atoms and
     /// bonds individually (`AtomAst::from_table_atom`, `BondAst::from_table_bond`)
     /// and splitting bonds into regular/dative/noncovalent by their table-level
-    /// tags. Aromatic systems and constraints are not derived here.
+    /// tags. Per-atom aromatic hints and CTAB valence overrides lift to the
+    /// molecule constraint vec.
     pub fn from_table_molecule(mol: &TableMolecule) -> Self {
         let atoms: Vec<AtomAst> = mol.atoms.iter().map(AtomAst::from_table_atom).collect();
+
+        let mut constraints: Vec<MoleculeConstraint> = Vec::new();
+        for (i, atom) in mol.atoms.iter().enumerate() {
+            let idx = AtomIdx::from_usize(i);
+            if atom.aromatic == Some(true) {
+                constraints.push(MoleculeConstraint::AtomDerived(
+                    idx,
+                    AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                        ValueAst::Undetermined,
+                    )),
+                ));
+            }
+            if let Some(v) = atom.valence {
+                constraints.push(MoleculeConstraint::AtomDerived(
+                    idx,
+                    AtomConstraint::ValenceSum(ValueAst::Lit(v as i64)),
+                ));
+            }
+        }
 
         let mut regular = Vec::new();
         let mut dative = Vec::new();
@@ -183,7 +210,7 @@ impl MoleculeAst {
             })
             .collect();
 
-        Self::new(atoms, regular, dative, noncovalent, vec![], multicenter, vec![])
+        Self::new(atoms, regular, dative, noncovalent, vec![], multicenter, constraints)
     }
 }
 
@@ -257,6 +284,37 @@ impl MoleculeAst {
         &self.graph
     }
 
+    /// Per-atom aromatic-valence constraint hint, if any. Returns `None` when no
+    /// `AtomDerived(_, AromaticValence(_))` entry is attached to this atom.
+    pub fn atom_aromatic_hint(&self, idx: AtomIdx) -> Option<&AromaticValenceConstraint> {
+        self.constraints.iter().find_map(|c| match c {
+            MoleculeConstraint::AtomDerived(i, AtomConstraint::AromaticValence(c)) if *i == idx => {
+                Some(c)
+            }
+            _ => None,
+        })
+    }
+
+    /// True if the atom is hinted aromatic via constraint or already placed in an aromatic system.
+    pub fn atom_is_aromatic(&self, idx: AtomIdx) -> bool {
+        if self.is_in_aromatic_system(idx) {
+            return true;
+        }
+        matches!(
+            self.atom_aromatic_hint(idx),
+            Some(AromaticValenceConstraint::Value(_))
+        )
+    }
+
+    /// Aromatic pi-electron count for this atom, if pinned to a literal in the
+    /// constraint vec. `None` when absent, set to `Undetermined`, or `NotAromatic`.
+    pub fn atom_aromatic_pi_electrons(&self, idx: AtomIdx) -> Option<u8> {
+        match self.atom_aromatic_hint(idx)? {
+            AromaticValenceConstraint::Value(ValueAst::Lit(n)) => Some(*n as u8),
+            _ => None,
+        }
+    }
+
     pub fn edit(&self) -> MoleculeBuilder {
         MoleculeBuilder::from_parts(
             self.graph.clone(),
@@ -318,12 +376,37 @@ impl MoleculeAst {
         for atom in Arc::make_mut(&mut self.atoms) {
             atom.coerce(&config.atom);
         }
+        for i in 0..self.atoms.len() {
+            let idx = AtomIdx::from_usize(i);
+            let mut bucket: Vec<AtomConstraint> = self
+                .constraints
+                .iter()
+                .filter_map(|c| match c {
+                    MoleculeConstraint::AtomDerived(j, ac) if *j == idx => Some(ac.clone()),
+                    _ => None,
+                })
+                .collect();
+            let len_before = bucket.len();
+            coerce_atom_constraints(&mut bucket, &config.atom);
+            for new_ac in bucket.into_iter().skip(len_before) {
+                self.constraints
+                    .push(MoleculeConstraint::AtomDerived(idx, new_ac));
+            }
+        }
     }
 
     pub fn release(&mut self, config: &MoleculeAstConfig) {
         for atom in Arc::make_mut(&mut self.atoms) {
             atom.release(&config.atom);
         }
+        self.constraints.retain(|c| {
+            let MoleculeConstraint::AtomDerived(_, atom_c) = c else {
+                return true;
+            };
+            let mut tmp = vec![atom_c.clone()];
+            release_atom_constraints(&mut tmp, &config.atom);
+            !tmp.is_empty()
+        });
     }
 
     pub fn is_ground(&self) -> bool {
@@ -379,7 +462,7 @@ impl MoleculeAst {
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
+    use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
     use umol_shared::element::Element;
     use umol_shared::spin::SpinState;
     use umol_shared::spin_ast::SpinStateAst;
@@ -395,11 +478,6 @@ mod tests {
             implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
             lone_pairs: ValueAst::Lit(0),
             spin: SpinStateAst::Lit(SpinState::closed_shell()),
-            valence: ValueAst::Lit(4),
-            donated_pairs: ValueAst::Lit(0),
-            accepted_pairs: ValueAst::Lit(0),
-            aromatic_valence: AromaticValenceAst::NotAromatic,
-            multicenter_valence: ValueAst::Lit(0),
         }
     }
 
@@ -509,7 +587,7 @@ mod tests {
             ],
             vec![],
             vec![], vec![],
-            vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst {})],
+            vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())],
             vec![], vec![],
         );
         assert!(ast.is_in_aromatic_system(AtomIdx(0)));
@@ -562,7 +640,7 @@ mod tests {
             vec![], vec![], vec![], vec![], vec![],
         );
         let mut b = ast.edit();
-        let id = b.add_aromatic_system(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst {});
+        let id = b.add_aromatic_system(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default());
         let new_ast = b.build();
         assert_eq!(id, AromaticSystemIdx(0));
         assert_eq!(new_ast.aromatic_systems().count(), 1);

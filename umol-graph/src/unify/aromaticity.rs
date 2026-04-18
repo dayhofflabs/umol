@@ -195,6 +195,7 @@ impl AromaticityTheory {
     }
 
     /// MDL (MOL/SDF) aromaticity: C and N only. Minimum ring size 6.
+    /// TODO: Verify
     pub fn mdl() -> Self {
         Self {
             kind: AromaticityKind::HueckelRule(HueckelRuleAromaticity::new(
@@ -251,7 +252,7 @@ impl AromaticityTheory {
         let mut builder = ast.edit();
         for sys in &systems {
             let atoms: Vec<AtomIdx> = sys.atoms().collect();
-            builder.add_aromatic_system(atoms, AromaticSystemAst {});
+            builder.add_aromatic_system(atoms, AromaticSystemAst::default());
         }
         *ast = builder.build();
         Ok(Progress::Advanced)

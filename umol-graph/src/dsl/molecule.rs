@@ -15,17 +15,18 @@ use umol_shared::value_ast::ValueAst;
 use super::atom::parse_atom_dsl;
 use super::error::ParseError;
 
+use crate::api::pattern::AtomPattern;
 use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::constraint::MoleculeConstraint;
+use crate::ast::constraint::{AtomConstraint, MoleculeConstraint};
 use crate::ast::molecule::{AromaticSystemAst, MoleculeAst, MulticenterBondAst};
 
 // TODO: unify tag + id nomenclature
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
     pub atom_tags: IndexMap<usize, String>,
-    pub atom_aliases: BiMap<String, AtomAst>,
+    pub atom_aliases: BiMap<String, AtomPattern>,
     pub bond_ids: IndexMap<usize, String>,
     pub dative_bond_ids: IndexMap<usize, String>,
     pub aromatic_system_ids: IndexMap<usize, String>,
@@ -152,14 +153,15 @@ impl RawMoleculeAst {
         let alias_table = Self::build_alias_table(&self.atom_aliases)?;
 
         let mut atoms: Vec<AtomAst> = Vec::with_capacity(self.atoms.len());
+        let mut lifted_constraints: Vec<MoleculeConstraint> = Vec::new();
         let mut atom_tags: IndexMap<usize, String> = IndexMap::new();
         let mut tag_to_index: IndexMap<String, usize> = IndexMap::new();
-        let mut atom_aliases: BiMap<String, AtomAst> = BiMap::new();
+        let mut atom_aliases: BiMap<String, AtomPattern> = BiMap::new();
 
         for entry in self.atoms {
             let pos = atoms.len();
             let (tag, atom_str) = Self::resolve_entry(entry, &alias_table)?;
-            let atom_ast = parse_atom_dsl(&atom_str)?;
+            let atom_pattern = parse_atom_dsl(&atom_str)?;
             if let Some(tag_name) = tag {
                 if tag_to_index.contains_key(&tag_name) || alias_table.contains_key(&tag_name) {
                     return Err(ParseError::DuplicateId(tag_name));
@@ -167,12 +169,18 @@ impl RawMoleculeAst {
                 tag_to_index.insert(tag_name.clone(), pos);
                 atom_tags.insert(pos, tag_name);
             }
-            atoms.push(atom_ast);
+            for c in atom_pattern.constraints {
+                lifted_constraints.push(MoleculeConstraint::AtomDerived(
+                    AtomIdx(pos as u32),
+                    c,
+                ));
+            }
+            atoms.push(atom_pattern.ast);
         }
 
         for (name, def) in &alias_table {
-            let atom_ast = parse_atom_dsl(def)?;
-            atom_aliases.insert(name.clone(), atom_ast);
+            let atom_pattern = parse_atom_dsl(def)?;
+            atom_aliases.insert(name.clone(), atom_pattern);
         }
 
         let atom_count = atoms.len();
@@ -236,7 +244,7 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(sys.id)? {
                 aromatic_system_ids.insert(i, id);
             }
-            aromatic_list.push((atom_indices, AromaticSystemAst {}));
+            aromatic_list.push((atom_indices, AromaticSystemAst::default()));
         }
 
         let mut multicenter_list = Vec::new();
@@ -261,7 +269,7 @@ impl RawMoleculeAst {
             noncovalent_list.push((a, bb, nc.bond));
         }
 
-        let mut constraints = Vec::new();
+        let mut constraints = lifted_constraints;
         if let Some(charge) = self.charge {
             constraints.push(MoleculeConstraint::TotalCharge(ValueAst::Lit(charge)));
         }
@@ -613,17 +621,47 @@ impl<'de> FromEdn<'de> for MoleculeAstWrapper {
     }
 }
 
+fn constraint_sort_key(c: &AtomConstraint) -> u8 {
+    match c {
+        AtomConstraint::ValenceSum(_) => 0,
+        AtomConstraint::AromaticValence(_) => 1,
+        AtomConstraint::DonatedPairs(_) => 2,
+        AtomConstraint::AcceptedPairs(_) => 3,
+        AtomConstraint::MulticenterValence(_) => 4,
+        AtomConstraint::Degree(_) => 5,
+        AtomConstraint::Connectivity(_) => 6,
+        AtomConstraint::TotalHCount(_) => 7,
+        AtomConstraint::InRing => 8,
+        AtomConstraint::RingCount(_) => 9,
+        AtomConstraint::RingSize(_) => 10,
+    }
+}
+
 impl ToEdn for MoleculeAstWrapper {
     fn to_edn(&self) -> Edn<'static> {
+        let mut per_atom_derived: Vec<Vec<AtomConstraint>> =
+            vec![Vec::new(); self.ast.atoms().count()];
+        for constraint in &self.ast.constraints {
+            if let MoleculeConstraint::AtomDerived(idx, c) = constraint {
+                let i = idx.index();
+                if i < per_atom_derived.len() {
+                    per_atom_derived[i].push(c.clone());
+                }
+            }
+        }
+
         let mut atom_elems = Vec::with_capacity(self.ast.atoms().count());
         for view in self.ast.atoms().iter() {
             let i = view.idx.index();
-            let alias_name = self.metadata.atom_aliases.get_by_right(view.data);
+            let mut derived = std::mem::take(&mut per_atom_derived[i]);
+            derived.sort_by_key(constraint_sort_key);
+            let pattern = AtomPattern::with_constraints(view.data.clone(), derived);
+            let alias_name = self.metadata.atom_aliases.get_by_right(&pattern);
             let tag = self.metadata.atom_tags.get(&i);
             let atom_edn = if let Some(alias) = alias_name {
                 Edn::Keyword(EdnKeyword::owned(alias.clone()))
             } else {
-                view.data.to_edn()
+                pattern.to_edn()
             };
             let entry = if let Some(tag_name) = tag {
                 Edn::Vector(
@@ -843,7 +881,7 @@ impl fmt::Display for MoleculeAstWrapper {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
+    use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
     use umol_shared::e;
     use umol_shared::element::Element;
     use umol_shared::spin::SpinState;
@@ -935,11 +973,6 @@ mod tests {
                 charge: ValueAst::Lit(-1),
                 lone_pairs: ValueAst::Undetermined,
                 spin: SpinStateAst::default(),
-                valence: ValueAst::Undetermined,
-                donated_pairs: ValueAst::Undetermined,
-                accepted_pairs: ValueAst::Undetermined,
-                aromatic_valence: AromaticValenceAst::Undetermined,
-                multicenter_valence: ValueAst::Undetermined,
             }]);
             ast.constraints.push(MoleculeConstraint::TotalCharge(ValueAst::Lit(-1)));
             ast
@@ -958,28 +991,18 @@ mod tests {
             charge: ValueAst::Undetermined,
             lone_pairs: ValueAst::Undetermined,
             spin: SpinStateAst::default(),
-            valence: ValueAst::Undetermined,
-            donated_pairs: ValueAst::Undetermined,
-            accepted_pairs: ValueAst::Undetermined,
-            aromatic_valence: AromaticValenceAst::Undetermined,
-            multicenter_valence: ValueAst::Undetermined,
         }]),
         Metadata {
             atom_aliases: BiMap::from_iter([(
                 "ch".to_string(),
-                AtomAst {
+                AtomPattern::new(AtomAst {
                     element: ElementAst::Lit(Element::C),
                     isotope_mass: IsotopeAst::Undetermined,
                     implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
                     charge: ValueAst::Undetermined,
                     lone_pairs: ValueAst::Undetermined,
                     spin: SpinStateAst::default(),
-                    valence: ValueAst::Undetermined,
-                    donated_pairs: ValueAst::Undetermined,
-                    accepted_pairs: ValueAst::Undetermined,
-                    aromatic_valence: AromaticValenceAst::Undetermined,
-                    multicenter_valence: ValueAst::Undetermined,
-                },
+                }),
             )]),
             ..Default::default()
         }
@@ -995,7 +1018,10 @@ mod tests {
             })],
         ),
         Metadata {
-            atom_aliases: BiMap::from_iter([("n".to_string(), AtomAst::from_element(e!(N)))]),
+            atom_aliases: BiMap::from_iter([(
+                "n".to_string(),
+                AtomPattern::new(AtomAst::from_element(e!(N))),
+            )]),
             ..Default::default()
         }
     )]

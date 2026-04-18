@@ -12,7 +12,7 @@ use nom::error::{Error as NomError, ErrorKind};
 use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
@@ -20,13 +20,27 @@ use umol_edn::{DeError, Edn, FromEdn, ToEdn};
 
 use super::error::AtomDslError;
 use super::value::{op_char, parse_id, value_dsl};
+use crate::api::pattern::AtomPattern;
 use crate::ast::atom::AtomAst;
+use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint};
+
+impl FromStr for AtomPattern {
+    type Err = AtomDslError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_atom_dsl(s)
+    }
+}
 
 impl FromStr for AtomAst {
     type Err = AtomDslError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_atom_dsl(s)
+        let pat = parse_atom_dsl(s)?;
+        if !pat.constraints.is_empty() {
+            return Err(AtomDslError::ConstraintsNotAllowed);
+        }
+        Ok(pat.ast)
     }
 }
 
@@ -89,31 +103,47 @@ impl Display for AtomAst {
         let (u_field, m_field) = self.spin.to_pair();
         fmt_value_field(f, "#u", &u_field)?;
         fmt_multiplicity(f, &m_field, &u_field)?;
-        fmt_value_field(f, "#v", &self.valence)?;
-        fmt_value_field(f, "#d", &self.donated_pairs)?;
-        fmt_value_field(f, "#r", &self.accepted_pairs)?;
-
-        match &self.aromatic_valence {
-            AromaticValenceAst::Undetermined => {}
-            AromaticValenceAst::NotAromatic => write!(f, "#a!")?,
-            AromaticValenceAst::Value(ValueAst::Lit(1)) => write!(f, "#a")?,
-            AromaticValenceAst::Value(ValueAst::Lit(n)) => write!(f, "#a{}", n)?,
-            AromaticValenceAst::Value(v) => {
-                write!(f, "#a")?;
-                fmt_value(f, v)?;
-            }
-        }
-
-        fmt_value_field(f, "#m", &self.multicenter_valence)?;
 
         Ok(())
+    }
+}
+
+impl Display for AtomPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.ast, f)?;
+        for c in &self.constraints {
+            fmt_constraint(f, c)?;
+        }
+        Ok(())
+    }
+}
+
+fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result {
+    match c {
+        AtomConstraint::ValenceSum(v) => fmt_value_field_required(f, "#v", v),
+        AtomConstraint::DonatedPairs(v) => fmt_value_field_required(f, "#d", v),
+        AtomConstraint::AcceptedPairs(v) => fmt_value_field_required(f, "#r", v),
+        AtomConstraint::MulticenterValence(v) => fmt_value_field_required(f, "#m", v),
+        AtomConstraint::AromaticValence(c) => match c {
+            AromaticValenceConstraint::NotAromatic => write!(f, "#a!"),
+            AromaticValenceConstraint::Value(ValueAst::Lit(1)) => write!(f, "#a"),
+            AromaticValenceConstraint::Value(ValueAst::Lit(n)) => write!(f, "#a{}", n),
+            AromaticValenceConstraint::Value(v) => {
+                write!(f, "#a")?;
+                fmt_value(f, v)
+            }
+        },
+        // Other AtomConstraint variants (Degree, Connectivity, TotalHCount, InRing,
+        // RingCount, RingSize) have no packed-atom-string sugar. They serialize
+        // through the molecule-level :constraints block instead.
+        _ => Ok(()),
     }
 }
 
 impl<'de> FromEdn<'de> for AtomAst {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
-            Edn::Str(s) => parse_atom_dsl(s).map_err(|e| DeError::subgrammar("atom", e)),
+            Edn::Str(s) => AtomAst::from_str(s).map_err(|e| DeError::subgrammar("atom", e)),
             other => Err(DeError::TypeMismatch {
                 expected: "string",
                 got: other.kind(),
@@ -129,8 +159,27 @@ impl ToEdn for AtomAst {
     }
 }
 
-/// Parse a complete atom-string
-pub fn parse_atom_dsl(input: &str) -> Result<AtomAst, AtomDslError> {
+impl<'de> FromEdn<'de> for AtomPattern {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Str(s) => parse_atom_dsl(s).map_err(|e| DeError::subgrammar("atom", e)),
+            other => Err(DeError::TypeMismatch {
+                expected: "string",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for AtomPattern {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.to_string()))
+    }
+}
+
+/// Parse a complete atom-string into an `AtomPattern` (base AST + lifted constraints).
+pub fn parse_atom_dsl(input: &str) -> Result<AtomPattern, AtomDslError> {
     all_consuming(atom_dsl)
         .parse(input)
         .map(|(_, r)| r)
@@ -141,23 +190,27 @@ pub fn parse_atom_dsl(input: &str) -> Result<AtomAst, AtomDslError> {
 }
 
 /// Atom-string parser (does not require consuming all input)
-pub fn atom_dsl(i: &str) -> IResult<&str, AtomAst, AtomDslError> {
+pub fn atom_dsl(i: &str) -> IResult<&str, AtomPattern, AtomDslError> {
     let (remaining, (element, preds)) = pair(
         delimited(multispace0, element_expr, multispace0),
         many0(terminated(atom_predicate, multispace0)),
     )
     .parse(i)?;
 
-    let mut ast = AtomAst::new(element);
-    update_atom_ast(&mut ast, preds).map_err(Err::Error)?;
-    Ok((remaining, ast))
+    let mut pattern = AtomPattern::new(AtomAst::new(element));
+    apply_predicates(&mut pattern, preds).map_err(Err::Error)?;
+    Ok((remaining, pattern))
 }
 
 fn is_set(v: &ValueAst) -> bool {
     !matches!(v, ValueAst::Undetermined)
 }
 
-fn update_atom_ast(ast: &mut AtomAst, preds: Vec<AtomPredicate>) -> Result<(), AtomDslError> {
+fn apply_predicates(
+    pattern: &mut AtomPattern,
+    preds: Vec<AtomPredicate>,
+) -> Result<(), AtomDslError> {
+    let ast = &mut pattern.ast;
     for pred in preds {
         match pred {
             AtomPredicate::IsotopeMass(v) => {
@@ -202,39 +255,32 @@ fn update_atom_ast(ast: &mut AtomAst, preds: Vec<AtomPredicate>) -> Result<(), A
                 }
                 *multiplicity = v;
             }
-            AtomPredicate::Valence(v) => {
-                if is_set(&ast.valence) {
-                    return Err(AtomDslError::DuplicateAtomPredicate("#v".to_string()));
+            AtomPredicate::Constraint(c) => {
+                let tag = constraint_tag(&c);
+                if pattern.constraints.iter().any(|existing| constraint_tag(existing) == tag) {
+                    return Err(AtomDslError::DuplicateAtomPredicate(tag.to_string()));
                 }
-                ast.valence = v;
-            }
-            AtomPredicate::DonatedPairs(v) => {
-                if is_set(&ast.donated_pairs) {
-                    return Err(AtomDslError::DuplicateAtomPredicate("#d".to_string()));
-                }
-                ast.donated_pairs = v;
-            }
-            AtomPredicate::AcceptedPairs(v) => {
-                if is_set(&ast.accepted_pairs) {
-                    return Err(AtomDslError::DuplicateAtomPredicate("#r".to_string()));
-                }
-                ast.accepted_pairs = v;
-            }
-            AtomPredicate::AromaticValence(v) => {
-                if !matches!(ast.aromatic_valence, AromaticValenceAst::Undetermined) {
-                    return Err(AtomDslError::DuplicateAtomPredicate("#a".to_string()));
-                }
-                ast.aromatic_valence = v;
-            }
-            AtomPredicate::MulticenterValence(v) => {
-                if is_set(&ast.multicenter_valence) {
-                    return Err(AtomDslError::DuplicateAtomPredicate("#m".to_string()));
-                }
-                ast.multicenter_valence = v;
+                pattern.constraints.push(c);
             }
         }
     }
     Ok(())
+}
+
+fn constraint_tag(c: &AtomConstraint) -> &'static str {
+    match c {
+        AtomConstraint::ValenceSum(_) => "#v",
+        AtomConstraint::DonatedPairs(_) => "#d",
+        AtomConstraint::AcceptedPairs(_) => "#r",
+        AtomConstraint::AromaticValence(_) => "#a",
+        AtomConstraint::MulticenterValence(_) => "#m",
+        AtomConstraint::Degree(_) => "#deg",
+        AtomConstraint::Connectivity(_) => "#con",
+        AtomConstraint::TotalHCount(_) => "#th",
+        AtomConstraint::InRing => "#ring",
+        AtomConstraint::RingCount(_) => "#rc",
+        AtomConstraint::RingSize(_) => "#rs",
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -245,11 +291,7 @@ pub enum AtomPredicate {
     LonePairs(ValueAst),
     UnpairedElectrons(ValueAst),
     Multiplicity(ValueAst),
-    Valence(ValueAst),
-    DonatedPairs(ValueAst),
-    AcceptedPairs(ValueAst),
-    AromaticValence(AromaticValenceAst),
-    MulticenterValence(ValueAst),
+    Constraint(AtomConstraint),
 }
 
 fn atom_predicate(i: &str) -> IResult<&str, AtomPredicate, AtomDslError> {
@@ -261,11 +303,30 @@ fn atom_predicate(i: &str) -> IResult<&str, AtomPredicate, AtomDslError> {
         "#n" => map(optional_value, AtomPredicate::LonePairs).parse(remaining),
         "#u" => map(optional_value, AtomPredicate::UnpairedElectrons).parse(remaining),
         "#s" => map(optional_value, AtomPredicate::Multiplicity).parse(remaining),
-        "#v" => map(optional_value, AtomPredicate::Valence).parse(remaining),
-        "#d" => map(optional_value, AtomPredicate::DonatedPairs).parse(remaining),
-        "#r" => map(optional_value, AtomPredicate::AcceptedPairs).parse(remaining),
-        "#a" => map(aromatic_valence_expr, AtomPredicate::AromaticValence).parse(remaining),
-        "#m" => map(optional_value, AtomPredicate::MulticenterValence).parse(remaining),
+        "#v" => map(
+            optional_value,
+            |v| AtomPredicate::Constraint(AtomConstraint::ValenceSum(v)),
+        )
+        .parse(remaining),
+        "#d" => map(
+            optional_value,
+            |v| AtomPredicate::Constraint(AtomConstraint::DonatedPairs(v)),
+        )
+        .parse(remaining),
+        "#r" => map(
+            optional_value,
+            |v| AtomPredicate::Constraint(AtomConstraint::AcceptedPairs(v)),
+        )
+        .parse(remaining),
+        "#a" => map(aromatic_valence_expr, |c| {
+            AtomPredicate::Constraint(AtomConstraint::AromaticValence(c))
+        })
+        .parse(remaining),
+        "#m" => map(
+            optional_value,
+            |v| AtomPredicate::Constraint(AtomConstraint::MulticenterValence(v)),
+        )
+        .parse(remaining),
         p if p.starts_with("#") => Err(Err::Failure(AtomDslError::UnknownAtomPredicate(
             p.to_string(),
         ))),
@@ -413,14 +474,17 @@ fn hydrogen_expr(i: &str) -> IResult<&str, HydrogenAst, AtomDslError> {
     .map_err(|_| Err::Error(AtomDslError::InvalidImplicitHydrogens(i.to_string())))
 }
 
-fn aromatic_valence_expr(i: &str) -> IResult<&str, AromaticValenceAst, AtomDslError> {
+fn aromatic_valence_expr(i: &str) -> IResult<&str, AromaticValenceConstraint, AtomDslError> {
     preceded(
         multispace0,
         alt((
-            value(AromaticValenceAst::NotAromatic, tag("!")),
-            value(AromaticValenceAst::Undetermined, tag("?")),
-            map(value_dsl, AromaticValenceAst::Value),
-            success(AromaticValenceAst::Value(ValueAst::Lit(1))),
+            value(AromaticValenceConstraint::NotAromatic, tag("!")),
+            value(
+                AromaticValenceConstraint::Value(ValueAst::Undetermined),
+                tag("?"),
+            ),
+            map(value_dsl, AromaticValenceConstraint::Value),
+            success(AromaticValenceConstraint::Value(ValueAst::Lit(1))),
         )),
     )
     .parse(i)
@@ -461,13 +525,24 @@ fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
     }
 }
 
-fn fmt_value_field(
-    f: &mut fmt::Formatter<'_>,
-    prefix: &str,
-    v: &ValueAst,
-) -> fmt::Result {
+/// Format a value field that suppresses zero (DSL convention for AST fields with
+/// implicit-zero defaults like lone_pairs).
+fn fmt_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fmt::Result {
     match v {
         ValueAst::Undetermined | ValueAst::Lit(0) => Ok(()),
+        ValueAst::Lit(1) => write!(f, "{}", prefix),
+        ValueAst::Lit(n) => write!(f, "{}{}", prefix, n),
+        v => {
+            write!(f, "{}", prefix)?;
+            fmt_value(f, v)
+        }
+    }
+}
+
+/// Format a value field that always emits (constraint sugar — zero is meaningful).
+fn fmt_value_field_required(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fmt::Result {
+    match v {
+        ValueAst::Undetermined => write!(f, "{}*", prefix),
         ValueAst::Lit(1) => write!(f, "{}", prefix),
         ValueAst::Lit(n) => write!(f, "{}{}", prefix, n),
         v => {
@@ -494,10 +569,10 @@ fn fmt_multiplicity(
     let u: i64 = match unpaired {
         ValueAst::Lit(u) => *u,
         ValueAst::Undetermined => 0,
-        _ => -1, // non-literal: can't determine derivability, always print
+        _ => -1,
     };
     if m == u + 1 {
-        Ok(()) // derivable from unpaired, suppress
+        Ok(())
     } else if m == 1 {
         write!(f, "#s")
     } else {
@@ -533,47 +608,54 @@ mod tests {
 
     use super::*;
 
+    fn pat(ast: AtomAst) -> AtomPattern {
+        AtomPattern::new(ast)
+    }
+
+    fn pat_with(ast: AtomAst, constraints: Vec<AtomConstraint>) -> AtomPattern {
+        AtomPattern::with_constraints(ast, constraints)
+    }
+
     #[rustfmt::skip]
     #[rstest]
-    #[case::carbon("C", AtomAst::new(ElementAst::Lit(Element::C)))]
-    #[case::iron("Fe", AtomAst::new(ElementAst::Lit(Element::Fe)))]
-    #[case::chlorine("Cl", AtomAst::new(ElementAst::Lit(Element::Cl)))]
-    #[case::whitespace("  C  ", AtomAst::new(ElementAst::Lit(Element::C)))]
-    #[case::undetermined("*", AtomAst::new(ElementAst::Undetermined))]
-    #[case::element_set("{C,N,O}", AtomAst::new(ElementAst::Set(vec![Element::C, Element::N, Element::O])))]
-    #[case::element_bind("(?e :: {C,N})", AtomAst::new(ElementAst::Bind { id: "e".to_string(), set: vec![Element::C, Element::N] }))]
-    #[case::element_ref("(?e)", AtomAst::new(ElementAst::Ref("e".to_string())))]
-    #[case::isotope("C#i12", AtomAst { isotope_mass: IsotopeAst::Lit(12), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::isotope_natural("C#i=", AtomAst { isotope_mass: IsotopeAst::Natural, ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::charge_pos("C#c+2", AtomAst { charge: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::charge_neg("C#c-2", AtomAst { charge: ValueAst::Lit(-2), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::charge_plus("C#c+", AtomAst { charge: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::charge_minus("C#c-", AtomAst { charge: ValueAst::Lit(-1), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::charge_zero("C#c0", AtomAst { charge: ValueAst::Lit(0), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::h_count("C#h3", AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::h_normal("C#h=", AtomAst { implicit_hydrogens: HydrogenAst::Normal, ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::h_undetermined("C#h*", AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Undetermined), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::h_bind("C#h(?h)", AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Expr(Expr::Var("h".to_string()))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::h_set("N#h?h :: {2,3}", AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) })]
-    #[case::h_expr("C#h?h >= 1", AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::h_omit("C#h", AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::lone_pairs("O#n2", AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) })]
-    #[case::lone_pairs_omit("O#n", AtomAst { lone_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) })]
-    #[case::unpaired("C#u2", AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::unpaired_omit("C#u", AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::multiplicity("C#s3", AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::multiplicity_omit("C#s", AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::valence("C#v4", AtomAst { valence: ValueAst::Lit(4), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::donated_pairs("N#d1", AtomAst { donated_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::N)) })]
-    #[case::accepted_pairs("B#r1", AtomAst { accepted_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::B)) })]
-    #[case::arom_unspecified("C#a?", AtomAst { aromatic_valence: AromaticValenceAst::Undetermined, ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_not_aromatic("C#a!", AtomAst { aromatic_valence: AromaticValenceAst::NotAromatic, ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_aromatic("C#a*", AtomAst { aromatic_valence: AromaticValenceAst::Value(ValueAst::Undetermined), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_zero("C#a0", AtomAst { aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(0)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_one("C#a1", AtomAst { aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::arom_omit("C#a", AtomAst { aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    #[case::multicenter("C#m2", AtomAst { multicenter_valence: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::C)) })]
-    fn test_parse_atom_dsl(#[case] input: &str, #[case] expected: AtomAst) {
+    #[case::carbon("C", pat(AtomAst::new(ElementAst::Lit(Element::C))))]
+    #[case::iron("Fe", pat(AtomAst::new(ElementAst::Lit(Element::Fe))))]
+    #[case::chlorine("Cl", pat(AtomAst::new(ElementAst::Lit(Element::Cl))))]
+    #[case::whitespace("  C  ", pat(AtomAst::new(ElementAst::Lit(Element::C))))]
+    #[case::undetermined("*", pat(AtomAst::new(ElementAst::Undetermined)))]
+    #[case::element_set("{C,N,O}", pat(AtomAst::new(ElementAst::Set(vec![Element::C, Element::N, Element::O]))))]
+    #[case::element_bind("(?e :: {C,N})", pat(AtomAst::new(ElementAst::Bind { id: "e".to_string(), set: vec![Element::C, Element::N] })))]
+    #[case::element_ref("(?e)", pat(AtomAst::new(ElementAst::Ref("e".to_string()))))]
+    #[case::isotope("C#i12", pat(AtomAst { isotope_mass: IsotopeAst::Lit(12), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::isotope_natural("C#i=", pat(AtomAst { isotope_mass: IsotopeAst::Natural, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::charge_pos("C#c+2", pat(AtomAst { charge: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::charge_neg("C#c-2", pat(AtomAst { charge: ValueAst::Lit(-2), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::charge_plus("C#c+", pat(AtomAst { charge: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::charge_minus("C#c-", pat(AtomAst { charge: ValueAst::Lit(-1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::charge_zero("C#c0", pat(AtomAst { charge: ValueAst::Lit(0), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_count("C#h3", pat(AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(3)), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_normal("C#h=", pat(AtomAst { implicit_hydrogens: HydrogenAst::Normal, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_undetermined("C#h*", pat(AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Undetermined), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_bind("C#h(?h)", pat(AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Expr(Expr::Var("h".to_string()))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_set("N#h?h :: {2,3}", pat(AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
+    #[case::h_expr("C#h?h >= 1", pat(AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_omit("C#h", pat(AtomAst { implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::lone_pairs("O#n2", pat(AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
+    #[case::lone_pairs_omit("O#n", pat(AtomAst { lone_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
+    #[case::unpaired("C#u2", pat(AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::unpaired_omit("C#u", pat(AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::multiplicity("C#s3", pat(AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::multiplicity_omit("C#s", pat(AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::valence("C#v4", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::ValenceSum(ValueAst::Lit(4))]))]
+    #[case::donated_pairs("N#d1", pat_with(AtomAst::new(ElementAst::Lit(Element::N)), vec![AtomConstraint::DonatedPairs(ValueAst::Lit(1))]))]
+    #[case::accepted_pairs("B#r1", pat_with(AtomAst::new(ElementAst::Lit(Element::B)), vec![AtomConstraint::AcceptedPairs(ValueAst::Lit(1))]))]
+    #[case::arom_not_aromatic("C#a!", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::AromaticValence(AromaticValenceConstraint::NotAromatic)]))]
+    #[case::arom_undetermined("C#a*", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Undetermined))]))]
+    #[case::arom_zero("C#a0", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(0)))]))]
+    #[case::arom_one("C#a1", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(1)))]))]
+    #[case::arom_omit("C#a", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(1)))]))]
+    #[case::multicenter("C#m2", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::MulticenterValence(ValueAst::Lit(2))]))]
+    fn test_parse_atom_dsl(#[case] input: &str, #[case] expected: AtomPattern) {
         let result = atom_dsl(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.unwrap_err());
         let (remaining, ast) = result.unwrap();
@@ -677,15 +759,14 @@ mod tests {
     #[case::unpaired_omit("#u", AtomPredicate::UnpairedElectrons(ValueAst::Lit(1)))]
     #[case::multiplicity("#s3", AtomPredicate::Multiplicity(ValueAst::Lit(3)))]
     #[case::multiplicity_omit("#s", AtomPredicate::Multiplicity(ValueAst::Lit(1)))]
-    #[case::valence("#v4", AtomPredicate::Valence(ValueAst::Lit(4)))]
-    #[case::donated_pairs("#d1", AtomPredicate::DonatedPairs(ValueAst::Lit(1)))]
-    #[case::accepted_pairs("#r1", AtomPredicate::AcceptedPairs(ValueAst::Lit(1)))]
-    #[case::arom_unspecified("#a?", AtomPredicate::AromaticValence(AromaticValenceAst::Undetermined))]
-    #[case::arom_not_aromatic("#a!", AtomPredicate::AromaticValence(AromaticValenceAst::NotAromatic))]
-    #[case::arom_undetermined("#a*", AtomPredicate::AromaticValence(AromaticValenceAst::Value(ValueAst::Undetermined)))]
-    #[case::arom_lit("#a2", AtomPredicate::AromaticValence(AromaticValenceAst::Value(ValueAst::Lit(2))))]
-    #[case::arom_omit("#a", AtomPredicate::AromaticValence(AromaticValenceAst::Value(ValueAst::Lit(1))))]
-    #[case::multicenter("#m2", AtomPredicate::MulticenterValence(ValueAst::Lit(2)))]
+    #[case::valence("#v4", AtomPredicate::Constraint(AtomConstraint::ValenceSum(ValueAst::Lit(4))))]
+    #[case::donated_pairs("#d1", AtomPredicate::Constraint(AtomConstraint::DonatedPairs(ValueAst::Lit(1))))]
+    #[case::accepted_pairs("#r1", AtomPredicate::Constraint(AtomConstraint::AcceptedPairs(ValueAst::Lit(1))))]
+    #[case::arom_not_aromatic("#a!", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceConstraint::NotAromatic)))]
+    #[case::arom_undetermined("#a*", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Undetermined))))]
+    #[case::arom_lit("#a2", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(2)))))]
+    #[case::arom_omit("#a", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(1)))))]
+    #[case::multicenter("#m2", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(ValueAst::Lit(2))))]
     fn test_atom_predicate(#[case] input: &str, #[case] expected: AtomPredicate) {
         let result = atom_predicate(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());

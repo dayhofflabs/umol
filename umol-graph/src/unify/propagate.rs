@@ -1,6 +1,6 @@
 //! Valence theory and candidate enumeration shared by resolver, validator, and matcher.
 
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst};
+use umol_shared::atom_ast::{ElementAst, HydrogenAst};
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 use umol_shared::spin_ast::SpinStateAst;
@@ -8,6 +8,7 @@ use umol_shared::value_ast::ValueAst;
 
 use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
+use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, MoleculeConstraint};
 use crate::ast::molecule::MoleculeAst;
 use crate::unify::resolve::Progress;
 use crate::unify::valence::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
@@ -23,8 +24,17 @@ pub enum ValenceTheory {
     },
 }
 
+/// One concrete result for narrowing: the resolved base atom and the per-atom
+/// constraints (e.g. `AromaticValence(Lit(n))`) that should be lifted into the
+/// molecule's constraint vec to pin the chosen interpretation.
+#[derive(Clone, Debug)]
+pub struct AtomCandidate {
+    pub ast: AtomAst,
+    pub lifted: Vec<AtomConstraint>,
+}
+
 impl ValenceTheory {
-    pub fn candidates_for(&self, ast: &MoleculeAst, idx: AtomIdx) -> Vec<AtomAst> {
+    pub fn candidates_for(&self, ast: &MoleculeAst, idx: AtomIdx) -> Vec<AtomCandidate> {
         let atom = ast.atom(idx).data;
         let element = match atom.element {
             ElementAst::Lit(e) => e,
@@ -35,15 +45,20 @@ impl ValenceTheory {
         };
         let charge = atom.charge_or_zero();
         let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(idx);
-        let is_aromatic = matches!(atom.aromatic_valence, AromaticValenceAst::Value(_));
+        let is_aromatic = ast.atom_is_aromatic(idx);
+        let aromatic_pi_pinned = ast.atom_aromatic_pi_electrons(idx);
 
         match self {
             Self::AtomTyping { registry } => atom_typing_candidates(
                 registry,
+                ast,
+                idx,
                 atom,
                 element,
                 charge,
                 valence,
+                donated_pairs,
+                accepted_pairs,
                 is_aromatic,
             ),
             Self::Counts {
@@ -56,9 +71,8 @@ impl ValenceTheory {
                 element,
                 charge,
                 valence,
-                donated_pairs,
-                accepted_pairs,
                 is_aromatic,
+                aromatic_pi_pinned,
             ),
         }
     }
@@ -80,7 +94,9 @@ impl ValenceTheory {
             match candidates.len() {
                 0 => return Progress::Contradictory,
                 1 => {
-                    advanced |= narrow_atom(ast.atom_mut(idx).data, &candidates[0]);
+                    let cand = &candidates[0];
+                    advanced |= narrow_atom(ast.atom_mut(idx).data, &cand.ast);
+                    advanced |= lift_constraints(ast, idx, &cand.lifted);
                 }
                 _ => {}
             }
@@ -104,14 +120,19 @@ impl ValenceTheory {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn atom_typing_candidates(
     registry: &AtomTypeRegistry,
+    ast: &MoleculeAst,
+    idx: AtomIdx,
     atom_ast: &AtomAst,
     element: Element,
     charge: i8,
     valence: u8,
+    donated_pairs: u8,
+    accepted_pairs: u8,
     is_aromatic: bool,
-) -> Vec<AtomAst> {
+) -> Vec<AtomCandidate> {
     let implicit_h_constraint = match &atom_ast.implicit_hydrogens {
         HydrogenAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
         HydrogenAst::Normal => {
@@ -135,17 +156,26 @@ fn atom_typing_candidates(
     registry
         .lookup(element, charge_key)
         .iter()
-        .filter(|candidate| {
+        .filter(|pattern| {
             (match implicit_h_constraint {
-                Some(h) => match &candidate.implicit_hydrogens {
+                Some(h) => match &pattern.ast.implicit_hydrogens {
                     HydrogenAst::Value(ValueAst::Lit(n)) => *n as u8 == h,
                     _ => false,
                 },
                 None => true,
-            }) && candidate_matches_valence(candidate, valence)
-                && candidate_matches_constraints(atom_ast, candidate)
+            }) && pattern_constraints_compatible(
+                ast,
+                idx,
+                &pattern.constraints,
+                valence,
+                donated_pairs,
+                accepted_pairs,
+            ) && base_atom_compatible(atom_ast, &pattern.ast)
         })
-        .cloned()
+        .map(|pattern| AtomCandidate {
+            ast: pattern.ast.clone(),
+            lifted: pattern.constraints.clone(),
+        })
         .collect()
 }
 
@@ -190,10 +220,9 @@ fn counts_candidates(
     element: Element,
     charge: i8,
     valence: u8,
-    donated_pairs: u8,
-    accepted_pairs: u8,
     is_aromatic: bool,
-) -> Vec<AtomAst> {
+    aromatic_pi_pinned: Option<u8>,
+) -> Vec<AtomCandidate> {
     let entry = match table.entry(element) {
         Some(e) => e,
         None => return Vec::new(),
@@ -215,9 +244,8 @@ fn counts_candidates(
             element,
             charge,
             valence,
-            donated_pairs,
-            accepted_pairs,
             allow_implicit_hydrogens,
+            aromatic_pi_pinned,
         );
     }
 
@@ -232,18 +260,13 @@ fn counts_candidates(
         _ => 0,
     };
 
-    try_build_candidate(
-        element,
-        charge,
-        implicit_hydrogens,
-        valence,
-        donated_pairs,
-        accepted_pairs,
-        AromaticValenceAst::NotAromatic,
-        atom_ast,
-    )
-    .into_iter()
-    .collect()
+    try_build_candidate(element, charge, implicit_hydrogens, valence, 0, atom_ast)
+        .into_iter()
+        .map(|ast| AtomCandidate {
+            ast,
+            lifted: vec![AtomConstraint::ValenceSum(ValueAst::Lit(valence as i64))],
+        })
+        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -253,10 +276,9 @@ fn build_aromatic_candidates(
     element: Element,
     charge: i8,
     valence: u8,
-    donated_pairs: u8,
-    accepted_pairs: u8,
     allow_implicit_hydrogens: bool,
-) -> Vec<AtomAst> {
+    aromatic_pi_pinned: Option<u8>,
+) -> Vec<AtomCandidate> {
     if allowed_aromatic_valences.is_empty() {
         return Vec::new();
     }
@@ -265,6 +287,11 @@ fn build_aromatic_candidates(
     let mut candidates = Vec::new();
 
     for &a in allowed_aromatic_valences {
+        if let Some(pinned) = aromatic_pi_pinned {
+            if a != pinned {
+                continue;
+            }
+        }
         let sigma_budget = effective_electrons - (a as i16);
         if sigma_budget < valence as i16 {
             continue;
@@ -296,17 +323,18 @@ fn build_aromatic_candidates(
         if remaining < 0 || remaining % 2 != 0 {
             continue;
         }
-        if let Some(candidate) = try_build_candidate(
-            element,
-            charge,
-            implicit_hydrogens,
-            valence,
-            donated_pairs,
-            accepted_pairs,
-            AromaticValenceAst::Value(ValueAst::Lit(a as i64)),
-            atom_ast,
-        ) {
-            candidates.push(candidate);
+        if let Some(candidate) =
+            try_build_candidate(element, charge, implicit_hydrogens, valence, a, atom_ast)
+        {
+            candidates.push(AtomCandidate {
+                ast: candidate,
+                lifted: vec![
+                    AtomConstraint::ValenceSum(ValueAst::Lit(valence as i64)),
+                    AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                        ValueAst::Lit(a as i64),
+                    )),
+                ],
+            });
         }
     }
 
@@ -333,21 +361,64 @@ fn infer_normal_aromatic_implicit_hydrogens(
     }
 }
 
-fn candidate_matches_valence(candidate: &AtomAst, valence: u8) -> bool {
-    match &candidate.valence {
-        ValueAst::Lit(v) => *v as u8 == valence,
-        _ => true,
-    }
-}
-
-fn candidate_matches_constraints(query: &AtomAst, candidate: &AtomAst) -> bool {
+fn base_atom_compatible(query: &AtomAst, candidate: &AtomAst) -> bool {
     value_matches(&query.charge, &candidate.charge)
         && value_matches(&query.lone_pairs, &candidate.lone_pairs)
-        && value_matches(&query.donated_pairs, &candidate.donated_pairs)
-        && value_matches(&query.accepted_pairs, &candidate.accepted_pairs)
-        && value_matches(&query.multicenter_valence, &candidate.multicenter_valence)
         && spin_matches(&query.spin, &candidate.spin)
-        && aromatic_matches(&query.aromatic_valence, &candidate.aromatic_valence)
+}
+
+fn pattern_constraints_compatible(
+    ast: &MoleculeAst,
+    idx: AtomIdx,
+    constraints: &[AtomConstraint],
+    valence: u8,
+    donated_pairs: u8,
+    accepted_pairs: u8,
+) -> bool {
+    constraints
+        .iter()
+        .all(|c| atom_constraint_holds(ast, idx, c, valence, donated_pairs, accepted_pairs))
+}
+
+fn atom_constraint_holds(
+    ast: &MoleculeAst,
+    idx: AtomIdx,
+    constraint: &AtomConstraint,
+    valence: u8,
+    donated_pairs: u8,
+    accepted_pairs: u8,
+) -> bool {
+    match constraint {
+        AtomConstraint::ValenceSum(query) => match query {
+            ValueAst::Undetermined => true,
+            ValueAst::Lit(q) => *q as u8 == valence,
+            _ => false,
+        },
+        AtomConstraint::DonatedPairs(query) => match query {
+            ValueAst::Undetermined => true,
+            ValueAst::Lit(q) => *q as u8 == donated_pairs,
+            _ => false,
+        },
+        AtomConstraint::AcceptedPairs(query) => match query {
+            ValueAst::Undetermined => true,
+            ValueAst::Lit(q) => *q as u8 == accepted_pairs,
+            _ => false,
+        },
+        AtomConstraint::AromaticValence(query) => {
+            let actual_pi = ast.atom_aromatic_pi_electrons(idx);
+            let actual_is_aromatic = ast.atom_is_aromatic(idx);
+            match query {
+                AromaticValenceConstraint::NotAromatic => !actual_is_aromatic,
+                AromaticValenceConstraint::Value(ValueAst::Undetermined) => actual_is_aromatic,
+                AromaticValenceConstraint::Value(ValueAst::Lit(q)) => match actual_pi {
+                    Some(actual) => actual == *q as u8,
+                    None => actual_is_aromatic,
+                },
+                _ => false,
+            }
+        }
+        _ => true,
+    }
 }
 
 fn value_matches(query: &ValueAst, candidate: &ValueAst) -> bool {
@@ -366,37 +437,17 @@ fn spin_matches(query: &SpinStateAst, candidate: &SpinStateAst) -> bool {
     }
 }
 
-fn aromatic_matches(query: &AromaticValenceAst, candidate: &AromaticValenceAst) -> bool {
-    match (query, candidate) {
-        (AromaticValenceAst::Undetermined, _) => true,
-        (AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic) => true,
-        (AromaticValenceAst::NotAromatic, _) => false,
-        (AromaticValenceAst::Value(ValueAst::Undetermined), AromaticValenceAst::Value(_)) => true,
-        (AromaticValenceAst::Value(q), AromaticValenceAst::Value(c)) => value_matches(q, c),
-        _ => false,
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
 fn try_build_candidate(
     element: Element,
     charge: i8,
     implicit_hydrogens: u8,
     valence: u8,
-    donated_pairs: u8,
-    accepted_pairs: u8,
-    aromatic_valence: AromaticValenceAst,
+    aromatic_pi: u8,
     atom_ast: &AtomAst,
 ) -> Option<AtomAst> {
-    let aromatic_valence_count = match &aromatic_valence {
-        AromaticValenceAst::NotAromatic => 0u8,
-        AromaticValenceAst::Value(ValueAst::Lit(v)) => *v as u8,
-        _ => return None,
-    };
     let total_valence = valence + implicit_hydrogens;
     let num_electrons = (element.valence_electrons() as i16) - (charge as i16);
-    let unassigned =
-        num_electrons - (total_valence as i16) - (aromatic_valence_count as i16);
+    let unassigned = num_electrons - (total_valence as i16) - (aromatic_pi as i16);
     if unassigned < 0 {
         return None;
     }
@@ -430,11 +481,6 @@ fn try_build_candidate(
         implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(implicit_hydrogens as i64)),
         lone_pairs: ValueAst::Lit(lone_pairs as i64),
         spin: SpinStateAst::Lit(spin),
-        valence: ValueAst::Lit(valence as i64),
-        donated_pairs: ValueAst::Lit(donated_pairs as i64),
-        accepted_pairs: ValueAst::Lit(accepted_pairs as i64),
-        aromatic_valence,
-        multicenter_valence: ValueAst::Lit(0),
     })
 }
 
@@ -478,6 +524,71 @@ fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u
     }
 }
 
+fn lift_constraints(ast: &mut MoleculeAst, idx: AtomIdx, lifted: &[AtomConstraint]) -> bool {
+    if lifted.is_empty() {
+        return false;
+    }
+    let mut changed = false;
+    for c in lifted {
+        if narrow_atom_constraint(ast, idx, c) {
+            changed = true;
+        }
+    }
+    changed
+}
+
+fn narrow_atom_constraint(
+    ast: &mut MoleculeAst,
+    idx: AtomIdx,
+    new_constraint: &AtomConstraint,
+) -> bool {
+    use std::mem::discriminant;
+    let target_kind = discriminant(new_constraint);
+    let mut found_pos: Option<usize> = None;
+    for (i, c) in ast.constraints.iter().enumerate() {
+        if let MoleculeConstraint::AtomDerived(j, existing) = c {
+            if *j == idx && discriminant(existing) == target_kind {
+                found_pos = Some(i);
+                break;
+            }
+        }
+    }
+    match found_pos {
+        Some(pos) => {
+            let MoleculeConstraint::AtomDerived(_, existing) = &ast.constraints[pos] else {
+                return false;
+            };
+            if narrowable(existing, new_constraint) {
+                ast.constraints[pos] =
+                    MoleculeConstraint::AtomDerived(idx, new_constraint.clone());
+                true
+            } else {
+                false
+            }
+        }
+        None => {
+            ast.constraints.push(MoleculeConstraint::AtomDerived(
+                idx,
+                new_constraint.clone(),
+            ));
+            true
+        }
+    }
+}
+
+fn narrowable(existing: &AtomConstraint, new_c: &AtomConstraint) -> bool {
+    use AromaticValenceConstraint as A;
+    use AtomConstraint as C;
+    match (existing, new_c) {
+        (C::AromaticValence(A::Value(ValueAst::Undetermined)), C::AromaticValence(A::Value(ValueAst::Lit(_)))) => true,
+        (C::ValenceSum(ValueAst::Undetermined), C::ValenceSum(ValueAst::Lit(_))) => true,
+        (C::DonatedPairs(ValueAst::Undetermined), C::DonatedPairs(ValueAst::Lit(_))) => true,
+        (C::AcceptedPairs(ValueAst::Undetermined), C::AcceptedPairs(ValueAst::Lit(_))) => true,
+        (C::MulticenterValence(ValueAst::Undetermined), C::MulticenterValence(ValueAst::Lit(_))) => true,
+        _ => false,
+    }
+}
+
 fn narrow_atom(atom_ast: &mut AtomAst, candidate: &AtomAst) -> bool {
     let mut changed = false;
     changed |= narrow_value(&mut atom_ast.charge, &candidate.charge);
@@ -496,23 +607,6 @@ fn narrow_atom(atom_ast: &mut AtomAst, candidate: &AtomAst) -> bool {
         atom_ast.spin = candidate.spin.clone();
         changed = true;
     }
-    changed |= narrow_value(&mut atom_ast.valence, &candidate.valence);
-    changed |= narrow_value(&mut atom_ast.donated_pairs, &candidate.donated_pairs);
-    changed |= narrow_value(&mut atom_ast.accepted_pairs, &candidate.accepted_pairs);
-    match (&atom_ast.aromatic_valence, &candidate.aromatic_valence) {
-        (AromaticValenceAst::Undetermined, c) if !matches!(c, AromaticValenceAst::Undetermined) => {
-            atom_ast.aromatic_valence = candidate.aromatic_valence.clone();
-            changed = true;
-        }
-        (AromaticValenceAst::Value(ValueAst::Undetermined), c)
-            if !matches!(c, AromaticValenceAst::Value(ValueAst::Undetermined)) =>
-        {
-            atom_ast.aromatic_valence = candidate.aromatic_valence.clone();
-            changed = true;
-        }
-        _ => {}
-    }
-    changed |= narrow_value(&mut atom_ast.multicenter_valence, &candidate.multicenter_valence);
     changed
 }
 

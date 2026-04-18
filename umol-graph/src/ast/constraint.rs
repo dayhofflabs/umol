@@ -44,10 +44,25 @@ impl MoleculeConstraint {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AromaticValenceConstraint {
+    NotAromatic,
+    Value(ValueAst),
+}
+
+impl AromaticValenceConstraint {
+    pub fn is_ground(&self) -> bool {
+        match self {
+            Self::NotAromatic => true,
+            Self::Value(v) => v.is_ground(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AtomConstraint {
     ValenceSum(ValueAst),
-    AromaticValence(ValueAst),
+    AromaticValence(AromaticValenceConstraint),
     MulticenterValence(ValueAst),
     DonatedPairs(ValueAst),
     AcceptedPairs(ValueAst),
@@ -63,7 +78,6 @@ impl AtomConstraint {
     pub fn is_ground(&self) -> bool {
         match self {
             Self::ValenceSum(v)
-            | Self::AromaticValence(v)
             | Self::MulticenterValence(v)
             | Self::DonatedPairs(v)
             | Self::AcceptedPairs(v)
@@ -72,12 +86,13 @@ impl AtomConstraint {
             | Self::TotalHCount(v)
             | Self::RingCount(v)
             | Self::RingSize(v) => v.is_ground(),
+            Self::AromaticValence(c) => c.is_ground(),
             Self::InRing => true,
         }
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BondConstraint {
     RingBond,
 }
@@ -209,8 +224,18 @@ mod tests {
     #[rstest]
     #[case::valence_sum_lit(AtomConstraint::ValenceSum(ValueAst::Lit(4)), true)]
     #[case::valence_sum_undetermined(AtomConstraint::ValenceSum(ValueAst::Undetermined), false)]
-    #[case::aromatic_valence_lit(AtomConstraint::AromaticValence(ValueAst::Lit(3)), true)]
-    #[case::aromatic_valence_set(AtomConstraint::AromaticValence(ValueAst::LitSet(vec![2, 3])), false)]
+    #[case::aromatic_valence_lit(
+        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(3))),
+        true,
+    )]
+    #[case::aromatic_valence_set(
+        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::LitSet(vec![2, 3]))),
+        false,
+    )]
+    #[case::aromatic_not_aromatic(
+        AtomConstraint::AromaticValence(AromaticValenceConstraint::NotAromatic),
+        true,
+    )]
     #[case::multicenter_valence_lit(AtomConstraint::MulticenterValence(ValueAst::Lit(1)), true)]
     #[case::donated_pairs_lit(AtomConstraint::DonatedPairs(ValueAst::Lit(0)), true)]
     #[case::accepted_pairs_undetermined(AtomConstraint::AcceptedPairs(ValueAst::Undetermined), false)]
@@ -238,7 +263,7 @@ mod tests {
     )]
     #[case::variant_diff(
         AtomConstraint::ValenceSum(ValueAst::Lit(4)),
-        AtomConstraint::AromaticValence(ValueAst::Lit(4)),
+        AtomConstraint::MulticenterValence(ValueAst::Lit(4)),
         false,
     )]
     #[case::in_ring_eq(AtomConstraint::InRing, AtomConstraint::InRing, true)]

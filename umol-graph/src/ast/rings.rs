@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use umol_graph_core::NodeId;
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
+use umol_shared::atom_ast::ElementAst;
 use umol_shared::element::Element;
 
 use crate::ast::{AtomIdx, BondIdx};
@@ -445,36 +445,22 @@ impl RingEnumerator {
         let graph = ast.graph();
 
         let atom_filter: Option<Vec<NodeId>> = match self.family {
-            RingFamily::Simple | RingFamily::Induced if self.aromatic_only => {
-                Some(
-                    graph
-                        .node_ids()
-                        .filter(|&n| {
-                            let atom = ast.atom(AtomIdx(n.0));
-                            !matches!(
-                                atom.data.aromatic_valence,
-                                AromaticValenceAst::NotAromatic | AromaticValenceAst::Undetermined
-                            )
-                        })
-                        .collect(),
-                )
-            }
-            RingFamily::InducedBenzenoid => {
-                Some(
-                    graph
-                        .node_ids()
-                        .filter(|&n| {
-                            let atom = ast.atom(AtomIdx(n.0));
-                            matches!(atom.data.element, ElementAst::Lit(Element::C))
-                                && !matches!(
-                                    atom.data.aromatic_valence,
-                                    AromaticValenceAst::NotAromatic
-                                        | AromaticValenceAst::Undetermined
-                                )
-                        })
-                        .collect(),
-                )
-            }
+            RingFamily::Simple | RingFamily::Induced if self.aromatic_only => Some(
+                graph
+                    .node_ids()
+                    .filter(|&n| ast.atom_is_aromatic(AtomIdx(n.0)))
+                    .collect(),
+            ),
+            RingFamily::InducedBenzenoid => Some(
+                graph
+                    .node_ids()
+                    .filter(|&n| {
+                        let idx = AtomIdx(n.0);
+                        matches!(ast.atom(idx).data.element, ElementAst::Lit(Element::C))
+                            && ast.atom_is_aromatic(idx)
+                    })
+                    .collect(),
+            ),
             _ => None,
         };
 
@@ -600,13 +586,15 @@ fn classify_ring_relation(a: &Ring, b: &Ring) -> RingRelation {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
     use umol_shared::element::Element;
     use umol_shared::value_ast::ValueAst;
 
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
+    use crate::ast::constraint::{
+        AromaticValenceConstraint, AtomConstraint, MoleculeConstraint,
+    };
     use crate::ast::molecule::MoleculeAst;
 
     fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {
@@ -731,14 +719,7 @@ mod tests {
 
     #[fixture]
     fn aromatic_plus_saturated() -> MoleculeAst {
-        let mut atoms: Vec<AtomAst> = (0..6)
-            .map(|_| AtomAst {
-                element: ElementAst::Lit(Element::C),
-                aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(1)),
-                ..Default::default()
-            })
-            .collect();
-        atoms.extend((0..6).map(|_| AtomAst::from_element(Element::C)));
+        let atoms: Vec<AtomAst> = (0..12).map(|_| AtomAst::from_element(Element::C)).collect();
         let mut edges = Vec::new();
         for i in 0..6u32 {
             edges.push((AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(1)));
@@ -751,7 +732,17 @@ mod tests {
             ));
         }
         edges.push((AtomIdx(0), AtomIdx(6), BondAst::from_order(1)));
-        MoleculeAst::new(atoms, edges, vec![], vec![], vec![], vec![], vec![])
+        let constraints = (0..6u32)
+            .map(|i| {
+                MoleculeConstraint::AtomDerived(
+                    AtomIdx(i),
+                    AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                        ValueAst::Lit(1),
+                    )),
+                )
+            })
+            .collect();
+        MoleculeAst::new(atoms, edges, vec![], vec![], vec![], vec![], constraints)
     }
 
     #[fixture]

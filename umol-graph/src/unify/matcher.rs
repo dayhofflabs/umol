@@ -354,7 +354,7 @@ mod tests {
             vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
             vec![], vec![],
-            vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst {})],
+            vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())],
             vec![], vec![],
         );
         let target = MoleculeAst::new(
@@ -369,7 +369,7 @@ mod tests {
                 (AtomIdx(2), AtomIdx(0), BondAst::from_order(1)),
             ],
             vec![], vec![],
-            vec![(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)], AromaticSystemAst {})],
+            vec![(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)], AromaticSystemAst::default())],
             vec![], vec![],
         );
 
@@ -382,7 +382,7 @@ mod tests {
             vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
             vec![], vec![],
-            vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst {})],
+            vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())],
             vec![], vec![],
         );
         let target = MoleculeAst::new(

@@ -39,7 +39,8 @@ pub enum MultiplicityMode {
     Required,
 }
 
-/// Aromatic interpretation mode
+/// Aromatic interpretation mode (molecule-level: applied to atoms via
+/// `MoleculeAst::coerce` by injecting `AromaticValence` constraints).
 #[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum AromaticValenceMode {
     NotAromatic,
@@ -59,8 +60,8 @@ pub struct AtomAstConfig {
     pub valence_mode: NumericMode,
     pub donated_pairs_mode: NumericMode,
     pub accepted_pairs_mode: NumericMode,
-    pub aromatic_valence_mode: AromaticValenceMode,
     pub multicenter_valence_mode: NumericMode,
+    pub aromatic_valence_mode: AromaticValenceMode,
 }
 
 impl AtomAstConfig {
@@ -76,8 +77,8 @@ impl AtomAstConfig {
             valence_mode: NumericMode::Zero,
             donated_pairs_mode: NumericMode::Zero,
             accepted_pairs_mode: NumericMode::Zero,
-            aromatic_valence_mode: AromaticValenceMode::NotAromatic,
             multicenter_valence_mode: NumericMode::Zero,
+            aromatic_valence_mode: AromaticValenceMode::NotAromatic,
         }
     }
 
@@ -93,8 +94,8 @@ impl AtomAstConfig {
             valence_mode: NumericMode::Required,
             donated_pairs_mode: NumericMode::Required,
             accepted_pairs_mode: NumericMode::Required,
-            aromatic_valence_mode: AromaticValenceMode::Required,
             multicenter_valence_mode: NumericMode::Required,
+            aromatic_valence_mode: AromaticValenceMode::Required,
         }
     }
 }
@@ -111,8 +112,8 @@ pub struct AtomAstConfigOverrides {
     pub valence_mode: Option<NumericMode>,
     pub donated_pairs_mode: Option<NumericMode>,
     pub accepted_pairs_mode: Option<NumericMode>,
-    pub aromatic_valence_mode: Option<AromaticValenceMode>,
     pub multicenter_valence_mode: Option<NumericMode>,
+    pub aromatic_valence_mode: Option<AromaticValenceMode>,
 }
 
 impl AtomAstConfig {
@@ -144,11 +145,11 @@ impl AtomAstConfig {
         if let Some(v) = ov.accepted_pairs_mode {
             self.accepted_pairs_mode = v;
         }
-        if let Some(v) = ov.aromatic_valence_mode {
-            self.aromatic_valence_mode = v;
-        }
         if let Some(v) = ov.multicenter_valence_mode {
             self.multicenter_valence_mode = v;
+        }
+        if let Some(v) = ov.aromatic_valence_mode {
+            self.aromatic_valence_mode = v;
         }
         self
     }
@@ -259,17 +260,30 @@ mod tests {
         let back = MoleculeAstConfig::from_edn(&edn).unwrap();
         assert_eq!(cfg.atom.charge_mode, back.atom.charge_mode);
         assert_eq!(cfg.atom.implicit_h_mode, back.atom.implicit_h_mode);
-        assert_eq!(cfg.atom.aromatic_valence_mode, back.atom.aromatic_valence_mode);
         assert_eq!(cfg.bond.charge_mode, back.bond.charge_mode);
     }
 
     #[rstest]
-    #[case::zeroed(concat!("{:atom {:isotope-mode :natural :charge-mode :zero :implicit-h-mode :zero :lone-pairs-mode :zero :unpaired-electrons-mode :zero :multiplicity-mode :derived :valence-mode :zero :donated-pairs-mode :zero ",
-                           ":accepted-pairs-mode :zero :aromatic-valence-mode :not-aromatic :multicenter-valence-mode :zero} :bond {:charge-mode :zero :unpaired-electrons-mode :zero :multiplicity-mode :derived}}"),
-        NumericMode::Zero, ImplicitHydrogenMode::Zero, AromaticValenceMode::NotAromatic)]
-    #[case::open(concat!("{:atom {:isotope-mode :required :charge-mode :required :implicit-h-mode :required :lone-pairs-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived :valence-mode :required ",
-                         ":donated-pairs-mode :required :accepted-pairs-mode :required :aromatic-valence-mode :required :multicenter-valence-mode :required} :bond {:charge-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived}}"),
-        NumericMode::Required, ImplicitHydrogenMode::Required, AromaticValenceMode::Required)]
+    #[case::zeroed(
+        concat!(
+            "{:atom {:isotope-mode :natural :charge-mode :zero :implicit-h-mode :zero",
+            " :lone-pairs-mode :zero :unpaired-electrons-mode :zero :multiplicity-mode :derived",
+            " :valence-mode :zero :donated-pairs-mode :zero :accepted-pairs-mode :zero",
+            " :multicenter-valence-mode :zero :aromatic-valence-mode :not-aromatic}",
+            " :bond {:charge-mode :zero :unpaired-electrons-mode :zero :multiplicity-mode :derived}}",
+        ),
+        NumericMode::Zero, ImplicitHydrogenMode::Zero, AromaticValenceMode::NotAromatic,
+    )]
+    #[case::open(
+        concat!(
+            "{:atom {:isotope-mode :required :charge-mode :required :implicit-h-mode :required",
+            " :lone-pairs-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived",
+            " :valence-mode :required :donated-pairs-mode :required :accepted-pairs-mode :required",
+            " :multicenter-valence-mode :required :aromatic-valence-mode :required}",
+            " :bond {:charge-mode :required :unpaired-electrons-mode :derived :multiplicity-mode :derived}}",
+        ),
+        NumericMode::Required, ImplicitHydrogenMode::Required, AromaticValenceMode::Required,
+    )]
     fn test_molecule_ast_config_from_edn(
         #[case] edn: &str,
         #[case] expected_charge: NumericMode,

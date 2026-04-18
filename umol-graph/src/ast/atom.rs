@@ -2,14 +2,14 @@
 
 use std::mem;
 
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst, HydrogenAst, IsotopeAst};
+use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
 use crate::ast::config::{
-    AromaticValenceMode, AtomAstConfig, ImplicitHydrogenMode, IsotopeMode, MultiplicityMode,
-    NumericMode, UnpairedElectronsMode,
+    AtomAstConfig, ImplicitHydrogenMode, IsotopeMode, MultiplicityMode, NumericMode,
+    UnpairedElectronsMode,
 };
 use crate::table_ir::atom::{Atom as TableAtom, ImplicitHydrogens};
 
@@ -22,11 +22,6 @@ pub struct AtomAst {
     pub implicit_hydrogens: HydrogenAst,
     pub lone_pairs: ValueAst,
     pub spin: SpinStateAst,
-    pub valence: ValueAst,
-    pub donated_pairs: ValueAst,
-    pub accepted_pairs: ValueAst,
-    pub aromatic_valence: AromaticValenceAst,
-    pub multicenter_valence: ValueAst,
 }
 
 impl AtomAst {
@@ -41,9 +36,9 @@ impl AtomAst {
         Self::new(ElementAst::Lit(element))
     }
 
-    /// Lift a `table_ir::Atom` to an `AtomAst` field-by-field. Fields absent
-    /// from the table-level atom remain `Undetermined`; callers that need a
-    /// ground AST should apply `coerce` explicitly.
+    /// Lift the base fields of a `table_ir::Atom` to an `AtomAst`. Topology- and
+    /// chemistry-derived fields (`valence`, `aromatic`) are lifted at the
+    /// `AtomPattern` level so they land in the molecule constraint vec.
     pub fn from_table_atom(atom: &TableAtom) -> Self {
         let mut ast = Self::from_element(atom.element);
         if let Some(mass) = atom.isotope_mass {
@@ -73,14 +68,6 @@ impl AtomAst {
         if !matches!(u, ValueAst::Undetermined) || !matches!(m, ValueAst::Undetermined) {
             ast.spin = SpinStateAst::from_pair(u, m);
         }
-        if let Some(v) = atom.valence {
-            ast.valence = ValueAst::Lit(v as i64);
-        }
-        if let Some(true) = atom.aromatic {
-            ast.aromatic_valence = AromaticValenceAst::Value(ValueAst::Undetermined);
-        } else if let Some(false) = atom.aromatic {
-            ast.aromatic_valence = AromaticValenceAst::NotAromatic;
-        }
         ast
     }
 
@@ -102,23 +89,6 @@ impl AtomAst {
                 SpinStateAst::Lit(s) => self.spin.matches(*s),
                 _ => matches!(self.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }),
             })
-            && (match &target.valence {
-                ValueAst::Lit(n) => self.valence.matches(*n),
-                _ => matches!(self.valence, ValueAst::Undetermined),
-            })
-            && (match &target.donated_pairs {
-                ValueAst::Lit(n) => self.donated_pairs.matches(*n),
-                _ => matches!(self.donated_pairs, ValueAst::Undetermined),
-            })
-            && (match &target.accepted_pairs {
-                ValueAst::Lit(n) => self.accepted_pairs.matches(*n),
-                _ => matches!(self.accepted_pairs, ValueAst::Undetermined),
-            })
-            && self.aromatic_valence.matches(&target.aromatic_valence)
-            && (match &target.multicenter_valence {
-                ValueAst::Lit(n) => self.multicenter_valence.matches(*n),
-                _ => matches!(self.multicenter_valence, ValueAst::Undetermined),
-            })
     }
 
     pub fn is_ground(&self) -> bool {
@@ -128,11 +98,6 @@ impl AtomAst {
             && self.implicit_hydrogens.is_ground()
             && self.lone_pairs.is_ground()
             && self.spin.is_ground()
-            && self.valence.is_ground()
-            && self.donated_pairs.is_ground()
-            && self.accepted_pairs.is_ground()
-            && self.aromatic_valence.is_ground()
-            && self.multicenter_valence.is_ground()
     }
 
     pub fn charge_or_zero(&self) -> i8 {
@@ -144,6 +109,7 @@ impl AtomAst {
 }
 
 impl AtomAst {
+    // TODO: Verify Aromatic valence mode: Aromatic
     pub fn coerce(&mut self, cfg: &AtomAstConfig) {
         if matches!(self.isotope_mass, IsotopeAst::Undetermined) {
             self.isotope_mass = match cfg.isotope_mode {
@@ -162,13 +128,6 @@ impl AtomAst {
                 ImplicitHydrogenMode::Normal => HydrogenAst::Normal,
                 ImplicitHydrogenMode::Zero => HydrogenAst::Value(ValueAst::Lit(0)),
                 ImplicitHydrogenMode::Required => HydrogenAst::Undetermined,
-            };
-        }
-        if matches!(self.aromatic_valence, AromaticValenceAst::Undetermined) {
-            self.aromatic_valence = match cfg.aromatic_valence_mode {
-                AromaticValenceMode::NotAromatic => AromaticValenceAst::NotAromatic,
-                AromaticValenceMode::Aromatic => AromaticValenceAst::Value(ValueAst::Undetermined),
-                AromaticValenceMode::Required => AromaticValenceAst::Undetermined,
             };
         }
         match mem::take(&mut self.spin) {
@@ -215,10 +174,6 @@ impl AtomAst {
             }
         };
         coerce_numeric(&mut self.lone_pairs, &cfg.lone_pairs_mode);
-        coerce_numeric(&mut self.valence, &cfg.valence_mode);
-        coerce_numeric(&mut self.donated_pairs, &cfg.donated_pairs_mode);
-        coerce_numeric(&mut self.accepted_pairs, &cfg.accepted_pairs_mode);
-        coerce_numeric(&mut self.multicenter_valence, &cfg.multicenter_valence_mode);
     }
 
     /// Collapse fields back to `Undetermined` where the current value is what
@@ -243,18 +198,6 @@ impl AtomAst {
             }
             (ImplicitHydrogenMode::Zero, HydrogenAst::Value(ValueAst::Lit(0))) => {
                 self.implicit_hydrogens = HydrogenAst::Undetermined;
-            }
-            _ => {}
-        }
-        match (&cfg.aromatic_valence_mode, &self.aromatic_valence) {
-            (
-                AromaticValenceMode::NotAromatic | AromaticValenceMode::Required,
-                AromaticValenceAst::NotAromatic,
-            ) => {
-                self.aromatic_valence = AromaticValenceAst::Undetermined;
-            }
-            (AromaticValenceMode::Aromatic, AromaticValenceAst::Value(ValueAst::Undetermined)) => {
-                self.aromatic_valence = AromaticValenceAst::Undetermined;
             }
             _ => {}
         }
@@ -286,9 +229,5 @@ impl AtomAst {
             }
         };
         release_numeric(&mut self.lone_pairs, &cfg.lone_pairs_mode);
-        release_numeric(&mut self.valence, &cfg.valence_mode);
-        release_numeric(&mut self.donated_pairs, &cfg.donated_pairs_mode);
-        release_numeric(&mut self.accepted_pairs, &cfg.accepted_pairs_mode);
-        release_numeric(&mut self.multicenter_valence, &cfg.multicenter_valence_mode);
     }
 }

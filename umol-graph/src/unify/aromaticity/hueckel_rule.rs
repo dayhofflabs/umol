@@ -8,8 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use umol_graph_core::UnionFind;
 
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
-use umol_shared::value_ast::ValueAst;
+use umol_shared::atom_ast::ElementAst;
 
 use super::{AromaticContribution, AromaticSystem};
 use crate::ast::AtomIdx;
@@ -104,14 +103,11 @@ impl HueckelRuleAromaticity {
                 }
             }
         }
-        matches!(atom_ast.data.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
+        ast.atom_aromatic_pi_electrons(atom).is_some()
     }
 
     fn aromatic_electron_count(&self, ast: &MoleculeAst, atom: AtomIdx) -> Option<u8> {
-        match ast.atom(atom).data.aromatic_valence {
-            AromaticValenceAst::Value(ValueAst::Lit(n)) => Some(n as u8),
-            _ => None,
-        }
+        ast.atom_aromatic_pi_electrons(atom)
     }
 
     fn filter_ring(&self, ast: &MoleculeAst, ring: RingView<'_>) -> bool {
@@ -236,7 +232,7 @@ fn merge_overlapping_systems(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
+    use umol_shared::atom_ast::ElementAst;
     use umol_shared::element::Element;
     use umol_shared::value_ast::ValueAst;
 
@@ -244,20 +240,51 @@ mod tests {
     use crate::ast::AtomIdx;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
+    use crate::ast::constraint::{
+        AromaticValenceConstraint, AtomConstraint, MoleculeConstraint,
+    };
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::rings::RingEnumerationStrategy;
     use crate::ast::rings::{RingEnumerator, RingFamily};
 
-    fn aromatic_atom(element: Element, pi: i64) -> AtomAst {
-        AtomAst {
-            element: ElementAst::Lit(element),
-            aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(pi)),
-            ..Default::default()
-        }
+    fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
+        (AtomAst::from_element(element), Some(pi))
     }
 
-    fn make_ring(atoms: Vec<AtomAst>) -> MoleculeAst {
-        let n = atoms.len();
+    fn aromatic_charged(element: Element, charge: i64, pi: i64) -> (AtomAst, Option<i64>) {
+        (
+            AtomAst {
+                element: ElementAst::Lit(element),
+                charge: ValueAst::Lit(charge),
+                ..Default::default()
+            },
+            Some(pi),
+        )
+    }
+
+    fn plain(element: Element) -> (AtomAst, Option<i64>) {
+        (AtomAst::from_element(element), None)
+    }
+
+    fn pi_constraints(specs: &[(AtomAst, Option<i64>)]) -> Vec<MoleculeConstraint> {
+        specs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (_, pi))| {
+                pi.map(|n| {
+                    MoleculeConstraint::AtomDerived(
+                        AtomIdx(i as u32),
+                        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                            ValueAst::Lit(n),
+                        )),
+                    )
+                })
+            })
+            .collect()
+    }
+
+    fn make_ring(specs: Vec<(AtomAst, Option<i64>)>) -> MoleculeAst {
+        let n = specs.len();
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
@@ -267,15 +294,19 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+        let constraints = pi_constraints(&specs);
+        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
     }
 
-    fn make_fused(atoms: Vec<AtomAst>, edges: &[(usize, usize)]) -> MoleculeAst {
+    fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
         let bonds: Vec<_> = edges
             .iter()
             .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+        let constraints = pi_constraints(&specs);
+        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
     }
 
     fn daylight_model() -> HueckelRuleAromaticity {
@@ -308,101 +339,88 @@ mod tests {
 
     #[fixture]
     fn benzene() -> MoleculeAst {
-        make_ring(vec![aromatic_atom(Element::C, 1); 6])
+        make_ring(vec![aromatic(Element::C, 1); 6])
     }
 
     #[fixture]
     fn pyridine() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::N, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
+            aromatic(Element::N, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
         ])
     }
 
     #[fixture]
     fn pyrrole() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::N, 2),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
+            aromatic(Element::N, 2),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
         ])
     }
 
     #[fixture]
     fn furan() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::O, 2),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
+            aromatic(Element::O, 2),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
         ])
     }
 
     #[fixture]
     fn thiophene() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::S, 2),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
+            aromatic(Element::S, 2),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
         ])
     }
 
     #[fixture]
     fn imidazole() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::N, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::N, 2),
-            aromatic_atom(Element::C, 1),
+            aromatic(Element::N, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::N, 2),
+            aromatic(Element::C, 1),
         ])
     }
 
     #[fixture]
     fn tropylium() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            aromatic_atom(Element::C, 1),
-            AtomAst {
-                element: ElementAst::Lit(Element::C),
-                charge: ValueAst::Lit(1),
-                aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(0)),
-                ..Default::default()
-            },
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic_charged(Element::C, 1, 0),
         ])
     }
 
     #[fixture]
     fn cyclopentadienyl_anion() -> MoleculeAst {
-        make_ring(vec![
-            AtomAst {
-                element: ElementAst::Lit(Element::C),
-                charge: ValueAst::Lit(-1),
-                aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(2)),
-                ..Default::default()
-            };
-            5
-        ])
+        make_ring(vec![aromatic_charged(Element::C, -1, 2); 5])
     }
 
     #[rustfmt::skip]
     #[fixture]
     fn naphthalene() -> MoleculeAst {
         make_fused(
-            vec![aromatic_atom(Element::C, 1); 10],
+            vec![aromatic(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
                 (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -414,7 +432,7 @@ mod tests {
     #[fixture]
     fn azulene() -> MoleculeAst {
         make_fused(
-            vec![aromatic_atom(Element::C, 1); 10],
+            vec![aromatic(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 0),
                 (0, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -425,7 +443,7 @@ mod tests {
     #[rustfmt::skip]
     fn phenanthrene() -> MoleculeAst {
         make_fused(
-            vec![aromatic_atom(Element::C, 1); 14],
+            vec![aromatic(Element::C, 1); 14],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0), (3, 6), (6, 7),
                 (7, 8), (8, 9), (9, 4), (8, 10), (10, 11), (11, 12), (12, 13), (13, 9),
@@ -435,19 +453,19 @@ mod tests {
 
     #[fixture]
     fn cyclobutadiene() -> MoleculeAst {
-        make_ring(vec![aromatic_atom(Element::C, 1); 4])
+        make_ring(vec![aromatic(Element::C, 1); 4])
     }
 
     #[fixture]
     fn cyclohexane() -> MoleculeAst {
-        make_ring(vec![AtomAst::from_element(Element::C); 6])
+        make_ring(vec![plain(Element::C); 6])
     }
 
     #[rustfmt::skip]
     #[fixture]
     fn cubane() -> MoleculeAst {
         make_fused(
-            vec![AtomAst::from_element(Element::C); 8],
+            vec![plain(Element::C); 8],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6),
                 (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7),
@@ -458,12 +476,12 @@ mod tests {
     #[fixture]
     fn borazine() -> MoleculeAst {
         make_ring(vec![
-            aromatic_atom(Element::B, 0),
-            aromatic_atom(Element::N, 2),
-            aromatic_atom(Element::B, 0),
-            aromatic_atom(Element::N, 2),
-            aromatic_atom(Element::B, 0),
-            aromatic_atom(Element::N, 2),
+            aromatic(Element::B, 0),
+            aromatic(Element::N, 2),
+            aromatic(Element::B, 0),
+            aromatic(Element::N, 2),
+            aromatic(Element::B, 0),
+            aromatic(Element::N, 2),
         ])
     }
 

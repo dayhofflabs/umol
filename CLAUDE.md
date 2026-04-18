@@ -48,20 +48,19 @@
 - Do not refactor surrounding code when fixing a bug.
 - Do not create new files unless strictly necessary.
 
-## Clichés
-
+## Cliches
 - Avoid software development cliches like using number 42 for all integer examples, seeds, and tests.
+- Do not write "smoke" tests. If tests are needed, write proper test for functions or methods.
 - Avoid decorative elements in comments. Do not add lines of dashes or equal signs (comment art).
 
 ### Git
-
-- Do not make commits, branches, or other git actions unless explicitly asked to.
+- Never make commits, branches, or perform other mutating git actions unless explicitly asked.
 
 ## Coding Rules
 - No long comments, no self-talk, no references to previous implementations in comments.
 - Do not use <module>/mod.rs, use <module>.rs instead.
 - Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.
-- Name tests test_<struct>_<method>() and test_<struct>_<method>_error(). Do not include test behavior in the test name.
+- Name tests test_<function>(), test_<struct>_<method>() and test_<struct>_<method>_error(). Do not include test behavior in the test name.
 - The symbol names should convey the meaning. Comments only clarify points that are not obvious from names.
 - Do not use fully qualified names in the text. Use bare symbols for structs, enums, traits, and constants, parent module for free functions.
 - Do not place imports inline in code, put them all at the top of the module.

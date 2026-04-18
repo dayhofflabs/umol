@@ -9,8 +9,7 @@ use std::collections::HashSet;
 
 use umol_shared::element::Element;
 
-use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
-use umol_shared::value_ast::ValueAst;
+use umol_shared::atom_ast::ElementAst;
 
 use umol_graph_core::Graph;
 
@@ -30,7 +29,7 @@ impl ClarAromaticity {
     ) -> Result<Vec<AromaticSystem>, AromaticityError> {
         let has_non_benzenoid = ast.atoms().iter().any(|view| {
             !matches!(view.data.element, ElementAst::Lit(Element::C))
-                && matches!(view.data.aromatic_valence, AromaticValenceAst::Value(ValueAst::Lit(_)))
+                && ast.atom_aromatic_pi_electrons(view.idx).is_some()
         });
         if has_non_benzenoid {
             return Err(AromaticityError::ClarInputError(
@@ -49,10 +48,7 @@ impl ClarAromaticity {
                     && cycle.atoms().iter().all(|&atom| {
                         let a = ast.atom(atom);
                         matches!(a.data.element, ElementAst::Lit(Element::C))
-                            && matches!(
-                                a.data.aromatic_valence,
-                                AromaticValenceAst::Value(ValueAst::Lit(_))
-                            )
+                            && ast.atom_aromatic_pi_electrons(atom).is_some()
                     })
             })
             .collect();
@@ -75,11 +71,7 @@ impl ClarAromaticity {
         let contributions: Vec<AromaticContribution> = selected_atoms
             .iter()
             .map(|&atom| {
-                let a = ast.atom(atom);
-                let valence = match a.data.aromatic_valence {
-                    AromaticValenceAst::Value(ValueAst::Lit(n)) => n as u8,
-                    _ => 0,
-                };
+                let valence = ast.atom_aromatic_pi_electrons(atom).unwrap_or(0);
                 AromaticContribution::new(atom, valence)
             })
             .collect();
@@ -124,7 +116,7 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIdx]) -> Vec<RingI
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::atom_ast::{AromaticValenceAst, ElementAst};
+    use umol_shared::atom_ast::ElementAst;
     use umol_shared::element::Element;
     use umol_shared::value_ast::ValueAst;
 
@@ -132,20 +124,40 @@ mod tests {
     use crate::ast::AtomIdx;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
+    use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, MoleculeConstraint};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::rings::RingEnumerationStrategy;
     use crate::ast::rings::{RingEnumerator, RingFamily};
 
-    fn aromatic_atom(element: Element, pi: i64) -> AtomAst {
-        AtomAst {
-            element: ElementAst::Lit(element),
-            aromatic_valence: AromaticValenceAst::Value(ValueAst::Lit(pi)),
-            ..Default::default()
-        }
+    fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
+        (AtomAst::from_element(element), Some(pi))
     }
 
-    fn make_ring(atoms: Vec<AtomAst>) -> MoleculeAst {
-        let n = atoms.len();
+    fn plain(element: Element) -> (AtomAst, Option<i64>) {
+        (AtomAst::from_element(element), None)
+    }
+
+    fn pi_constraints(specs: &[(AtomAst, Option<i64>)]) -> Vec<MoleculeConstraint> {
+        specs
+            .iter()
+            .enumerate()
+            .filter_map(|(i, (_, pi))| {
+                pi.map(|n| {
+                    MoleculeConstraint::AtomDerived(
+                        AtomIdx(i as u32),
+                        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                            ValueAst::Lit(n),
+                        )),
+                    )
+                })
+            })
+            .collect()
+    }
+
+    fn make_ring(specs: Vec<(AtomAst, Option<i64>)>) -> MoleculeAst {
+        let n = specs.len();
+        let constraints = pi_constraints(&specs);
+        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
@@ -155,15 +167,17 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
     }
 
-    fn make_fused(atoms: Vec<AtomAst>, edges: &[(usize, usize)]) -> MoleculeAst {
+    fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
+        let constraints = pi_constraints(&specs);
+        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
         let bonds: Vec<_> = edges
             .iter()
             .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], vec![])
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
     }
 
     fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingIdx> {
@@ -184,7 +198,7 @@ mod tests {
     #[fixture]
     fn naphthalene() -> MoleculeAst {
         make_fused(
-            vec![aromatic_atom(Element::C, 1); 10],
+            vec![aromatic(Element::C, 1); 10],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
                 (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -196,7 +210,7 @@ mod tests {
     #[fixture]
     fn phenanthrene() -> MoleculeAst {
         make_fused(
-            vec![aromatic_atom(Element::C, 1); 14],
+            vec![aromatic(Element::C, 1); 14],
             &[
                 (0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 0),
                 (3, 6), (6, 7), (7, 8), (8, 9), (9, 4),
@@ -208,7 +222,7 @@ mod tests {
     #[rustfmt::skip]
     #[fixture]
     fn coronene() -> MoleculeAst {
-        let atoms = vec![aromatic_atom(Element::C, 1); 24];
+        let atoms = vec![aromatic(Element::C, 1); 24];
         let mut edges = Vec::new();
         for i in 0..6 {
             edges.push((i, (i + 1) % 6));
@@ -233,7 +247,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::benzene(make_ring(vec![aromatic_atom(Element::C, 1); 6]), 1)]
+    #[case::benzene(make_ring(vec![aromatic(Element::C, 1); 6]), 1)]
     #[case::naphthalene(naphthalene(), 1)]
     #[case::phenanthrene(phenanthrene(), 2)]
     #[case::coronene(coronene(), 3)]
@@ -252,11 +266,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::benzene(make_ring(vec![aromatic_atom(Element::C, 1); 6]), 1, Some(6))]
+    #[case::benzene(make_ring(vec![aromatic(Element::C, 1); 6]), 1, Some(6))]
     #[case::naphthalene(naphthalene(), 1, Some(6))]
     #[case::phenanthrene(phenanthrene(), 1, Some(12))]
     #[case::coronene(coronene(), 1, Some(18))]
-    #[case::cyclohexane(make_ring(vec![AtomAst::from_element(Element::C); 6]), 0, None)]
+    #[case::cyclohexane(make_ring(vec![plain(Element::C); 6]), 0, None)]
     fn test_clar_aromaticity_find_from_rings(
         #[case] ast: MoleculeAst,
         #[case] expected_systems: usize,
@@ -288,26 +302,26 @@ mod tests {
 
     #[rstest]
     #[case::pyrrole(make_ring(vec![
-        aromatic_atom(Element::N, 2),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
+        aromatic(Element::N, 2),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
     ]))]
     #[case::pyridine(make_ring(vec![
-        aromatic_atom(Element::N, 1),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
+        aromatic(Element::N, 1),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
     ]))]
     #[case::furan(make_ring(vec![
-        aromatic_atom(Element::O, 2),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
-        aromatic_atom(Element::C, 1),
+        aromatic(Element::O, 2),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
+        aromatic(Element::C, 1),
     ]))]
     fn test_clar_aromaticity_find_from_rings_error(#[case] ast: MoleculeAst) {
         let rings = RingEnumerator::new(

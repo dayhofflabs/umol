@@ -23,6 +23,8 @@ pub enum AtomDslError {
     UnknownAtomPredicate(String),
     #[error("Duplicate {0} atom predicate")]
     DuplicateAtomPredicate(String),
+    #[error("derived predicates not allowed in this context (use AtomPattern)")]
+    ConstraintsNotAllowed,
     #[error("Trailing input: {0:?}")]
     TrailingInput(String),
     #[error("Incomplete input")]

@@ -4,12 +4,15 @@
 
 use std::sync::Arc;
 
+use umol_shared::value_ast::ValueAst;
+
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::constraint::{AtomConstraint, BondConstraint};
+use crate::ast::config::{AromaticValenceMode, AtomAstConfig, NumericMode};
+use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
 use crate::ast::molecule::MoleculeAst;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct AtomPattern {
     pub ast: AtomAst,
     pub constraints: Vec<AtomConstraint>,
@@ -23,6 +26,104 @@ impl AtomPattern {
     pub fn with_constraints(ast: AtomAst, constraints: Vec<AtomConstraint>) -> Self {
         Self { ast, constraints }
     }
+
+    pub fn coerce(&mut self, cfg: &AtomAstConfig) {
+        self.ast.coerce(cfg);
+        coerce_atom_constraints(&mut self.constraints, cfg);
+    }
+
+    pub fn release(&mut self, cfg: &AtomAstConfig) {
+        self.ast.release(cfg);
+        release_atom_constraints(&mut self.constraints, cfg);
+    }
+}
+
+pub(crate) fn coerce_atom_constraints(constraints: &mut Vec<AtomConstraint>, cfg: &AtomAstConfig) {
+    let numeric_defaults: &[(fn(&AtomConstraint) -> bool, AtomConstraint, &NumericMode)] = &[
+        (
+            |c| matches!(c, AtomConstraint::ValenceSum(_)),
+            AtomConstraint::ValenceSum(ValueAst::Lit(0)),
+            &cfg.valence_mode,
+        ),
+        (
+            |c| matches!(c, AtomConstraint::DonatedPairs(_)),
+            AtomConstraint::DonatedPairs(ValueAst::Lit(0)),
+            &cfg.donated_pairs_mode,
+        ),
+        (
+            |c| matches!(c, AtomConstraint::AcceptedPairs(_)),
+            AtomConstraint::AcceptedPairs(ValueAst::Lit(0)),
+            &cfg.accepted_pairs_mode,
+        ),
+        (
+            |c| matches!(c, AtomConstraint::MulticenterValence(_)),
+            AtomConstraint::MulticenterValence(ValueAst::Lit(0)),
+            &cfg.multicenter_valence_mode,
+        ),
+    ];
+    for (pred, default, mode) in numeric_defaults {
+        if !matches!(mode, NumericMode::Zero) {
+            continue;
+        }
+        if constraints.iter().any(|c| pred(c)) {
+            continue;
+        }
+        constraints.push(default.clone());
+    }
+    let aromatic_default = match cfg.aromatic_valence_mode {
+        AromaticValenceMode::NotAromatic => Some(AromaticValenceConstraint::NotAromatic),
+        AromaticValenceMode::Aromatic => {
+            Some(AromaticValenceConstraint::Value(ValueAst::Undetermined))
+        }
+        AromaticValenceMode::Required => None,
+    };
+    if let Some(default) = aromatic_default {
+        if !constraints.iter().any(|c| matches!(c, AtomConstraint::AromaticValence(_))) {
+            constraints.push(AtomConstraint::AromaticValence(default));
+        }
+    }
+}
+
+pub(crate) fn release_atom_constraints(constraints: &mut Vec<AtomConstraint>, cfg: &AtomAstConfig) {
+    let strip_aromatic_undetermined =
+        matches!(cfg.aromatic_valence_mode, AromaticValenceMode::Aromatic);
+    let strip_zero_valence = matches!(cfg.valence_mode, NumericMode::Zero);
+    let strip_zero_donated = matches!(cfg.donated_pairs_mode, NumericMode::Zero);
+    let strip_zero_accepted = matches!(cfg.accepted_pairs_mode, NumericMode::Zero);
+    let strip_zero_multicenter = matches!(cfg.multicenter_valence_mode, NumericMode::Zero);
+    constraints.retain(|c| {
+        if is_undetermined_numeric(c) {
+            return false;
+        }
+        match c {
+            AtomConstraint::ValenceSum(ValueAst::Lit(0)) if strip_zero_valence => false,
+            AtomConstraint::DonatedPairs(ValueAst::Lit(0)) if strip_zero_donated => false,
+            AtomConstraint::AcceptedPairs(ValueAst::Lit(0)) if strip_zero_accepted => false,
+            AtomConstraint::MulticenterValence(ValueAst::Lit(0)) if strip_zero_multicenter => {
+                false
+            }
+            AtomConstraint::AromaticValence(AromaticValenceConstraint::NotAromatic) => false,
+            AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                ValueAst::Undetermined,
+            )) if strip_aromatic_undetermined => false,
+            _ => true,
+        }
+    });
+}
+
+fn is_undetermined_numeric(c: &AtomConstraint) -> bool {
+    matches!(
+        c,
+        AtomConstraint::ValenceSum(ValueAst::Undetermined)
+            | AtomConstraint::DonatedPairs(ValueAst::Undetermined)
+            | AtomConstraint::AcceptedPairs(ValueAst::Undetermined)
+            | AtomConstraint::MulticenterValence(ValueAst::Undetermined)
+            | AtomConstraint::Degree(ValueAst::Undetermined)
+            | AtomConstraint::Connectivity(ValueAst::Undetermined)
+            | AtomConstraint::TotalHCount(ValueAst::Undetermined)
+            | AtomConstraint::RingCount(ValueAst::Undetermined)
+            | AtomConstraint::RingSize(ValueAst::Undetermined)
+    )
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

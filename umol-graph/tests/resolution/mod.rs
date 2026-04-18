@@ -49,7 +49,7 @@ fn resolve_test(
     match Resolver::new(chemistry).resolve(ast) {
         Ok(mol) => {
             let mut ast = mol.into_ast();
-            ast.release(config);
+            ast.release(&MoleculeAstConfig::zeroed());
             ResolveResult {
                 success: true,
                 output: Some(MoleculeAstWrapper::new(ast, input.metadata().clone())),
