@@ -403,3 +403,29 @@ Bold single-concept naming; may collide with future broader uses of the word. Re
 ## Open points
 
 - **`Chemistry` naming.** Provisional — may rename if usage becomes awkward.
+
+## Implementation status (2026-04-17)
+
+Structural refactor landed in phases P1–P5 of plan `sunny-seeking-fiddle`.
+
+- [x] `AtomConstraint` and `BondConstraint` enums (`ast/constraint.rs`) — all 11 `AtomConstraint` variants and `BondConstraint::RingBond`.
+- [x] `AtomPattern` and `BondPattern` containers (`api/pattern.rs`), with `coerce`/`release` helpers.
+- [x] `MoleculeConstraint` reshape — flat enum with `AtomDerived` / `BondDerived`, cross-feature propagators, `SubPattern`, and `And`/`Or`/`Not` combinators.
+- [x] `AtomAst` reduced to six base fields (element, isotope\_mass, charge, implicit\_hydrogens, lone\_pairs, spin). Five derived fields removed.
+- [x] `AtomAstConfig` modes pruned; packed atom/bond DSL lifts constraints; serialization unlifts bare `AtomDerived` / `BondDerived` back into atom/bond sugar.
+- [x] Registry accepts `AtomPattern` (sugar and explicit form). `ValenceTheory::AtomTyping` filter uses lifted constraints.
+- [x] Solver writes lifted constraints during narrowing (`AromaticValence`, `ValenceSum`). Aromaticity stratum stores per-atom pi contribution on the constraint vec, not an atom field.
+- [x] `ElectronInvariant` propagator (`unify/propagate.rs`): theory-independent per-atom electron-conservation check. Invoked by `Validator` and matcher post-filter. `ValenceTheory::validate` is the theory-specific feasibility check, kept separate.
+- [x] Module layout, `Chemistry` container, engines `Resolver` / `Validator` / `Matcher`, theories `ValenceTheory` / `AromaticityTheory`.
+- [x] 617 conformance tests + 3645 lib tests pass.
+
+## Outstanding
+
+- [ ] **Evaluators for SMARTS-parity `AtomConstraint` variants.** `Degree`, `Connectivity`, `TotalHCount`, `InRing`, `RingCount`, `RingSize`, and `BondConstraint::RingBond` — variants exist, no consumer. Requires a matcher-side evaluator that reads cached derived views (ring set, biconnected components, distance matrix) on the target.
+- [ ] **Evaluators for cross-feature propagators.** `AromaticElectronCount`, `MulticenterElectronCount`, `TotalCharge`, `TotalSpin`, `BondOrderSum`, `Connected` — variants exist in `MoleculeConstraint`, no evaluator. Blocks tier-2 invariant verification in doc 86.
+- [ ] **`SubPattern` matcher recursion.** Variant exists with (de)serialization; no matcher descends into a nested `MoleculeAst` anchored at a parent assignment. This is doc 80 step 9.
+- [ ] **Combinator evaluation.** `And` / `Or` / `Not` have no dispatch. Required once any of the above evaluators land.
+- [ ] **Derived view caches on `Molecule` / `ResolverCell`.** `OnceLock<RingSet>` is present; distance matrix, biconnected components, per-atom constraint index, packed pattern adjacency land when the first consumer arrives — "gated on actually needing them".
+- [ ] **EDN DSL keys for cross-feature propagators** (`:total-charge`, `:total-spin`, `:bond-order-sum`, `:connected`, `:aromatic-electron-count`, `:multicenter-electron-count`). Parser currently emits `None` / ignores; programmatic construction works.
+- [ ] **`Chemistry` naming.** Provisional.
+- [ ] **Multicenter term in `ElectronInvariant`.** Omitted pending a `MoleculeAst` helper for per-atom multicenter-valence contribution. Covered separately by the `MulticenterElectronCount` propagator.

@@ -876,8 +876,8 @@ Ambiguities and gaps in the informal spec that need explicit decisions:
 
 - [x] llvm-cov
 - [x] clippy
-- [ ] fuzz
-- [ ] property testing — generator for Edn objects -> test roundtripping
+- [x] fuzz
+- [x] property testing — generator for Edn objects -> test roundtripping
 
 ### Misc
 
@@ -1060,9 +1060,4 @@ Found 4 outliers among 100 measurements (4.00%)
   1 (1.00%) high mild
   3 (3.00%) high severe
 
-### Not yet implemented
-
-- Fuzz target
-- llvm-cov integration
-- Property-based roundtrip testing
 

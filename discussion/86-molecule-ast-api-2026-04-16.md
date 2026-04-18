@@ -455,3 +455,24 @@ Default both to tier 3 unless a use case forces stricter checks.
 ## Open questions
 
 (To be filled in as the rest of this discussion progresses.)
+
+## Implementation status (2026-04-17)
+
+- [x] **`MoleculeAst`** (`ast/molecule.rs`) — algebraic, immutable, `Arc`-wrapped per-relation storage; ground or partial; no caches.
+- [x] **`Molecule`** (`api/molecule.rs`) — `Arc<MoleculeInner>`; ground invariant enforced at `Molecule::new`; `OnceLock<RingSet>` cache; view API mirroring `MoleculeAst` (atoms, bonds, dative/noncovalent/aromatic/multicenter relations, neighbors, graph, `bond_order_sum`, `dative_bond_order_sums`, `is_in_aromatic_system`); EDN roundtrip via `to_edn_str` / `from_edn_str`.
+- [x] **`ResolverCell` cache transfer.** Topology cache (`OnceLock<RingSet>`) transfers from `ResolverCell` into the resulting `Molecule` on finalize.
+- [x] **Tier-1 structural invariants** enforced at `MoleculeAst::new` (index validity, relation arity, element/isotope existence, bond order ≥ 0).
+- [x] **Per-atom electron-count tier-2 invariant.** `ElectronInvariant` propagator (`unify/propagate.rs`) runs on every atom in `Validator::validate` and the matcher post-filter. Theory-independent; equation per the orbital-side / source-side balance.
+
+## Outstanding
+
+- [ ] **`Pattern` type with matcher caches.** Today `MoleculePattern` (`api/pattern.rs`) is a thin `Arc`-wrapped AST. Doc 86 calls for a long-lived `Pattern` carrying matcher-side scaffolding (per-atom constraint index, sub-pattern dependency graph, recursion order, packed pattern adjacency) and `Pattern::new` well-formedness checks. Lands with doc 80 step 9.
+- [ ] **Tier-1 parser entry-points.** `parse_smiles → Molecule`, `parse_smarts → Pattern`, `parse_smirks → ReactionRule`, plus tier-2 `*_to_ast` and configurable `parse_*_with` variants. Current parsers return `MoleculeAst`.
+- [ ] **Remaining tier-2 invariants.** `TotalCharge`, `TotalSpin`, and `AromaticElectronCount` exist as `MoleculeConstraint` variants but have no evaluator. Once doc 87's propagator evaluators land, wire them into `Validator::validate`.
+- [ ] **Additional `Molecule` cache slots.** `DistanceMatrix`, `BiconnectedComponents`, `MatchTarget`, `MorganTarget` — add as their first consumer arrives, not speculatively.
+- [ ] **`Pattern` cache slots.** Per-atom constraint index, sub-pattern dependency graph, packed pattern adjacency. Land with step 9.
+- [ ] **`ReactionRule` / `ReactionRuleAst`.** Mirror of the `Molecule` / `MoleculeAst` split for reactions. Doc 80 step 10.
+- [ ] **Coordinate annotations on `Molecule`.** Optional per-atom `Coordinate` payload propagated through MOL / CXSMILES roundtrip; `Molecule` stores but never recomputes.
+- [ ] **Transformations as ops** — `kekulize`, `aromatize`, `tautomers`, `to_canonical_smiles`, `apply_reaction` — with the signatures and result types from §"Transformation ops" and §"Result types". `kekulize_all` and `tautomers` return `Vec<Molecule>`; `apply_reaction` returns `Vec<ReactionResult>`.
+- [ ] **Tier-3 model-dependent validators** (octet, normal-valence tables, drug-like charge bounds, connectedness). Opt-in `validator` modules; never gate `Molecule::new`.
+- [ ] **Builder API** producing `MoleculeAst` then resolving to `Molecule` (tier-1 surface example in §"Where AST surfaces even at tier 1").
