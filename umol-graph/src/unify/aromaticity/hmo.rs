@@ -8,14 +8,17 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use nalgebra::{DMatrix, SymmetricEigen};
 use umol_shared::element::Element;
+use umol_shared::value_ast::ValueAst;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
 use umol_shared::atom_ast::ElementAst;
 
-use super::{AromaticContribution, AromaticSystem, AromaticityError};
-use crate::ast::AtomIdx;
-use crate::ast::molecule::MoleculeAst;
+use super::AromaticityError;
 use super::ElementScope;
+use crate::ast::AtomIdx;
+use crate::ast::aromatic::{AromaticSystem, induced_bonds};
+use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
+use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
 use crate::ast::rings::RingSet;
 
 #[derive(Clone, Debug)]
@@ -104,16 +107,29 @@ impl HmoAromaticity {
             };
 
             if de_per_electron >= self.stabilization_threshold {
-                let contributions: Vec<AromaticContribution> = result
-                    .atom_indices
+                let mut atoms = result.atom_indices.clone();
+                atoms.sort_unstable();
+
+                let atom_constraints: Vec<AtomConstraint> = atoms
                     .iter()
                     .map(|&atom| {
-                        let valence = ast.atom_aromatic_pi_electrons(atom).unwrap_or(0);
-                        AromaticContribution::new(atom, valence)
+                        let pi = ast.atom_aromatic_pi_electrons(atom).unwrap_or(0);
+                        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+                            ValueAst::Lit(pi as i64),
+                        ))
                     })
                     .collect();
 
-                candidates.push(AromaticSystem::new(contributions));
+                let bonds = induced_bonds(ast, &atoms);
+                let bond_constraints = vec![BondConstraint::Aromatic; bonds.len()];
+
+                candidates.push(AromaticSystem::new(
+                    atoms,
+                    bonds,
+                    AromaticSystemAst::default(),
+                    atom_constraints,
+                    bond_constraints,
+                ));
             }
         }
 
@@ -491,7 +507,7 @@ mod tests {
         let systems = hmo_model.find_from_rings(&ast, &ring_info).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(
-            systems.first().map(|s| s.contributions().len()),
+            systems.first().map(|s| s.atom_count()),
             expected_atoms
         );
     }

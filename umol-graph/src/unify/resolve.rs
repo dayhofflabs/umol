@@ -1,15 +1,13 @@
 //! Resolution engine: refines a non-ground `MoleculeAst` to a ground `Molecule`.
 
-use std::sync::OnceLock;
-
 use umol_shared::atom_ast::IsotopeAst;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
 use crate::ast::molecule::MoleculeAst;
-use crate::ast::rings::RingSet;
+use crate::ast::rings::{RingCache, RingFamily};
 use crate::api::Molecule;
-use crate::unify::aromaticity::AromaticityTheory;
+use crate::unify::aromaticity::{AromaticityStrategy, AromaticityTheory};
 use crate::unify::chemistry::Chemistry;
 use crate::unify::error::ResolutionError;
 use crate::unify::propagate::ValenceTheory;
@@ -45,14 +43,14 @@ impl<'s> Resolver<'s> {
 /// the populated cache slots into the resulting `Molecule`.
 struct ResolverCell {
     ast: MoleculeAst,
-    rings: OnceLock<RingSet>,
+    rings: RingCache,
 }
 
 impl ResolverCell {
     fn new(ast: MoleculeAst) -> Self {
         Self {
             ast,
-            rings: OnceLock::new(),
+            rings: RingCache::new(),
         }
     }
 
@@ -67,7 +65,14 @@ impl ResolverCell {
         &mut self,
         aromaticity: &AromaticityTheory,
     ) -> Result<(), ResolutionError> {
-        match aromaticity.refine(&mut self.ast)? {
+        let family = match &aromaticity.strategy {
+            AromaticityStrategy::Clar(_) => RingFamily::InducedBenzenoid,
+            AromaticityStrategy::HueckelRule(_) | AromaticityStrategy::Hmo(_) => {
+                RingFamily::Simple
+            }
+        };
+        let rings = self.rings.get(&self.ast, family, &aromaticity.ring_enumeration);
+        match aromaticity.refine(&mut self.ast, &rings)? {
             Progress::Contradictory => Err(ResolutionError::Contradictory),
             Progress::Advanced | Progress::Fixpoint => Ok(()),
         }

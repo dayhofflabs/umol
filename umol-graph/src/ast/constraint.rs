@@ -95,12 +95,13 @@ impl AtomConstraint {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BondConstraint {
     RingBond,
+    Aromatic,
 }
 
 impl BondConstraint {
     pub fn is_ground(&self) -> bool {
         match self {
-            Self::RingBond => true,
+            Self::RingBond | Self::Aromatic => true,
         }
     }
 }
@@ -289,6 +290,7 @@ mod tests {
 
     #[rstest]
     #[case::ring_bond(BondConstraint::RingBond, true)]
+    #[case::aromatic(BondConstraint::Aromatic, true)]
     fn test_bond_constraint_is_ground(#[case] constraint: BondConstraint, #[case] expected: bool) {
         assert_eq!(constraint.is_ground(), expected);
     }

@@ -1,17 +1,15 @@
 //! Ground-invariant molecule with cached derived views.
 
 use std::ops::Index;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
-use thiserror::Error;
 use umol_edn::ToEdn;
 use umol_graph_core::Graph;
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::error::GroundError;
 use crate::ast::molecule::{AromaticSystemAst, MoleculeAst, MulticenterBondAst};
-use crate::ast::rings::{RingEnumerationStrategy, RingEnumerator, RingFamily, RingSet};
+use crate::ast::rings::{RingCache, RingEnumerationStrategy, RingFamily, RingSet};
 use crate::ast::views::{
     AromaticSystemViews, AtomView, AtomViews, BondView, BondViews, DativeBondViews,
     MulticenterBondViews, NeighborView, NoncovalentBondViews,
@@ -19,21 +17,15 @@ use crate::ast::views::{
 use crate::ast::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
-use crate::dsl::error::ParseError as DslParseError;
 use crate::dsl::molecule::{parse_molecule_dsl, MoleculeAstWrapper};
 
-#[derive(Clone, Debug, PartialEq, Error)]
-pub enum MoleculeEdnError {
-    #[error(transparent)]
-    Parse(#[from] DslParseError),
-    #[error(transparent)]
-    NotGround(#[from] GroundError),
-}
+use super::error::MoleculeEdnError;
+use crate::ast::error::GroundError;
 
 #[derive(Debug)]
 struct MoleculeInner {
     ast: MoleculeAst,
-    rings: OnceLock<RingSet>,
+    rings: RingCache,
 }
 
 #[derive(Clone, Debug)]
@@ -41,12 +33,12 @@ pub struct Molecule(Arc<MoleculeInner>);
 
 impl Molecule {
     pub fn new(ast: MoleculeAst) -> Result<Self, GroundError> {
-        Self::from_parts(ast, OnceLock::new())
+        Self::from_parts(ast, RingCache::new())
     }
 
     pub(crate) fn from_parts(
         ast: MoleculeAst,
-        rings: OnceLock<RingSet>,
+        rings: RingCache,
     ) -> Result<Self, GroundError> {
         if !ast.is_ground() {
             return Err(GroundError);
@@ -65,11 +57,16 @@ impl Molecule {
         }
     }
 
-    pub fn rings(&self) -> &RingSet {
-        self.0.rings.get_or_init(|| {
-            RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-                .enumerate(&self.0.ast)
-        })
+    pub fn rings(&self) -> Arc<RingSet> {
+        self.rings_with(RingFamily::Simple, &RingEnumerationStrategy::default())
+    }
+
+    pub fn rings_with(
+        &self,
+        family: RingFamily,
+        strategy: &RingEnumerationStrategy,
+    ) -> Arc<RingSet> {
+        self.0.rings.get(&self.0.ast, family, strategy)
     }
 
     pub fn atoms(&self) -> AtomViews<'_> {
@@ -242,9 +239,9 @@ mod tests {
             vec![], vec![], vec![], vec![], vec![], vec![],
         );
         let mol = Molecule::new(ast).unwrap();
-        let r1 = mol.rings() as *const RingSet;
-        let r2 = mol.rings() as *const RingSet;
-        assert_eq!(r1, r2);
+        let r1 = mol.rings();
+        let r2 = mol.rings();
+        assert!(Arc::ptr_eq(&r1, &r2));
     }
 
     #[test]

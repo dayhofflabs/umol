@@ -2,6 +2,7 @@
 //! pattern queries. AST types are independent of any particular text format;
 //! the [`crate::dsl`] module provides one EDN-based serialization.
 
+pub mod aromatic;
 pub mod atom;
 pub mod bond;
 pub mod builder;

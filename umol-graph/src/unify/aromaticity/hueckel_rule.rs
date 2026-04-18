@@ -9,11 +9,13 @@ use std::collections::{HashMap, HashSet};
 use umol_graph_core::UnionFind;
 
 use umol_shared::atom_ast::ElementAst;
+use umol_shared::value_ast::ValueAst;
 
-use super::{AromaticContribution, AromaticSystem};
-use crate::ast::AtomIdx;
-use crate::ast::molecule::MoleculeAst;
 use super::{ElementScope, RingLimits};
+use crate::ast::AtomIdx;
+use crate::ast::aromatic::{AromaticSystem, induced_bonds};
+use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
+use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
 use crate::ast::rings::{RingIdx, RingSet, RingView};
 
 #[derive(Clone, Debug)]
@@ -70,11 +72,16 @@ impl HueckelRuleAromaticity {
 
         let mut candidates = Vec::new();
         for atom_set in merged {
-            let mut contributions: Vec<AromaticContribution> = Vec::new();
+            let mut atoms: Vec<AtomIdx> = atom_set.into_iter().collect();
+            atoms.sort_unstable();
+
+            let mut atom_constraints: Vec<AtomConstraint> = Vec::with_capacity(atoms.len());
             let mut valid = true;
-            for &atom in &atom_set {
+            for &atom in &atoms {
                 if let Some(e) = self.aromatic_electron_count(ast, atom) {
-                    contributions.push(AromaticContribution::new(atom, e));
+                    atom_constraints.push(AtomConstraint::AromaticValence(
+                        AromaticValenceConstraint::Value(ValueAst::Lit(e as i64)),
+                    ));
                 } else {
                     valid = false;
                     break;
@@ -83,7 +90,17 @@ impl HueckelRuleAromaticity {
             if !valid {
                 continue;
             }
-            candidates.push(AromaticSystem::new(contributions));
+
+            let bonds = induced_bonds(ast, &atoms);
+            let bond_constraints = vec![BondConstraint::Aromatic; bonds.len()];
+
+            candidates.push(AromaticSystem::new(
+                atoms,
+                bonds,
+                AromaticSystemAst::default(),
+                atom_constraints,
+                bond_constraints,
+            ));
         }
 
         candidates
@@ -507,7 +524,7 @@ mod tests {
         let model = daylight_model();
         let systems = model.find_from_rings(&ast, &rings);
         assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].contributions().len(), expected_atoms);
+        assert_eq!(systems[0].atom_count(), expected_atoms);
         assert_eq!(systems[0].electron_count(), expected_electrons);
     }
 
@@ -533,7 +550,7 @@ mod tests {
             .enumerate(&borazine);
         let systems = permissive_model().find_from_rings(&borazine, &rings);
         assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].contributions().len(), 6);
+        assert_eq!(systems[0].atom_count(), 6);
         assert_eq!(systems[0].electron_count(), 6);
     }
 }

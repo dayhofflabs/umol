@@ -8,14 +8,17 @@
 use std::collections::HashSet;
 
 use umol_shared::element::Element;
+use umol_shared::value_ast::ValueAst;
 
 use umol_shared::atom_ast::ElementAst;
 
 use umol_graph_core::Graph;
 
-use super::{AromaticContribution, AromaticSystem, AromaticityError};
+use super::AromaticityError;
 use crate::ast::AtomIdx;
-use crate::ast::molecule::MoleculeAst;
+use crate::ast::aromatic::{AromaticSystem, induced_bonds};
+use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
+use crate::ast::molecule::{AromaticSystemAst, MoleculeAst};
 use crate::ast::rings::{RingIdx, RingSet};
 
 #[derive(Clone, Debug)]
@@ -68,15 +71,29 @@ impl ClarAromaticity {
             .flat_map(|r| r.atoms().iter().copied())
             .collect();
 
-        let contributions: Vec<AromaticContribution> = selected_atoms
+        let mut atoms: Vec<AtomIdx> = selected_atoms.into_iter().collect();
+        atoms.sort_unstable();
+
+        let atom_constraints: Vec<AtomConstraint> = atoms
             .iter()
             .map(|&atom| {
-                let valence = ast.atom_aromatic_pi_electrons(atom).unwrap_or(0);
-                AromaticContribution::new(atom, valence)
+                let pi = ast.atom_aromatic_pi_electrons(atom).unwrap_or(0);
+                AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(
+                    pi as i64,
+                )))
             })
             .collect();
 
-        Ok(vec![AromaticSystem::new(contributions)])
+        let bonds = induced_bonds(ast, &atoms);
+        let bond_constraints = vec![BondConstraint::Aromatic; bonds.len()];
+
+        Ok(vec![AromaticSystem::new(
+            atoms,
+            bonds,
+            AromaticSystemAst::default(),
+            atom_constraints,
+            bond_constraints,
+        )])
     }
 }
 
@@ -285,11 +302,11 @@ mod tests {
         let systems = model.find_from_rings(&ast, &rings).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(
-            systems.first().map(|s| s.contributions().len()),
+            systems.first().map(|s| s.atom_count()),
             expected_atoms
         );
         if let Some(system) = systems.first() {
-            let system_atoms: HashSet<AtomIdx> = system.atoms().collect();
+            let system_atoms: HashSet<AtomIdx> = system.atoms().iter().copied().collect();
             let expected_atoms: HashSet<AtomIdx> =
                 select_disjoint_sextets(&rings, &hex_ring_indices(&ast, &rings))
                     .into_iter()

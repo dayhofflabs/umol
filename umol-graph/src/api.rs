@@ -7,8 +7,10 @@
 //!
 //! [`MoleculeAst`]: crate::ast::molecule::MoleculeAst
 
+pub mod error;
 pub mod molecule;
 pub mod pattern;
 
-pub use molecule::{Molecule, MoleculeEdnError};
+pub use error::MoleculeEdnError;
+pub use molecule::Molecule;
 pub use pattern::{AtomPattern, BondPattern, MoleculePattern};

@@ -3,6 +3,7 @@
 //! Used for ring size queries and bounded ring enumeration.
 
 use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::sync::{Arc, RwLock};
 
 use umol_graph_core::NodeId;
 use umol_shared::atom_ast::ElementAst;
@@ -11,7 +12,7 @@ use umol_shared::element::Element;
 use crate::ast::{AtomIdx, BondIdx};
 use crate::ast::molecule::MoleculeAst;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct RingEnumerationStrategy {
     pub aromatic_only: bool,
     pub max_ring_size: usize,
@@ -579,6 +580,53 @@ fn classify_ring_relation(a: &Ring, b: &Ring) -> RingRelation {
         RingRelation::Bridged
     } else {
         RingRelation::Noncontiguous
+    }
+}
+
+/// Single-slot cache of the most recently requested `RingSet`.
+///
+/// Replaces its slot when called with a different `(family, strategy)`
+/// pair. The caller receives a shared `Arc<RingSet>`; a subsequent call
+/// with the same key returns the same underlying allocation.
+#[derive(Debug, Default)]
+pub struct RingCache {
+    slot: RwLock<Option<CachedRings>>,
+}
+
+#[derive(Debug)]
+struct CachedRings {
+    family: RingFamily,
+    strategy: RingEnumerationStrategy,
+    rings: Arc<RingSet>,
+}
+
+impl RingCache {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get(
+        &self,
+        ast: &MoleculeAst,
+        family: RingFamily,
+        strategy: &RingEnumerationStrategy,
+    ) -> Arc<RingSet> {
+        {
+            let slot = self.slot.read().unwrap();
+            if let Some(cached) = slot.as_ref() {
+                if cached.family == family && cached.strategy == *strategy {
+                    return Arc::clone(&cached.rings);
+                }
+            }
+        }
+        let rings = Arc::new(RingEnumerator::new(family, strategy).enumerate(ast));
+        let mut slot = self.slot.write().unwrap();
+        *slot = Some(CachedRings {
+            family,
+            strategy: strategy.clone(),
+            rings: Arc::clone(&rings),
+        });
+        rings
     }
 }
 
