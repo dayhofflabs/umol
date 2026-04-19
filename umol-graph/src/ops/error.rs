@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 use crate::diagnostics::Diagnostic;
-use crate::unify::aromaticity::AromaticityError;
+use crate::ops::aromaticity::AromaticityError;
 
 impl From<ResolutionError> for Diagnostic {
     fn from(_error: ResolutionError) -> Self {

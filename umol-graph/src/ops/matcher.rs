@@ -1,110 +1,150 @@
-//! Substructure matcher over MoleculeAst using VF2 subgraph isomorphism.
+//! Substructure matcher over `MoleculePattern` / `Molecule`.
 
 use umol_graph_core::{subgraph_isomorphisms, EdgeId, NodeId};
 
+use crate::api::molecule::Molecule;
+use crate::api::pattern::MoleculePattern;
+use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::molecule::MoleculeAst;
-use crate::unify::chemistry::Chemistry;
-use crate::unify::propagate::ElectronInvariant;
+use crate::ast::{AtomIdx, BondIdx};
 
 /// Query atom index → target atom index mapping.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assignment(pub Vec<usize>);
 
-/// Precomputed graph view of a target molecule for substructure matching.
-pub struct MatchTarget<'a> {
-    ast: &'a MoleculeAst,
-}
+/// Substructure matcher.
+pub struct Matcher;
 
-/// Precomputed graph view of a query pattern for substructure matching.
-pub struct MatchQuery<'a> {
-    ast: &'a MoleculeAst,
-}
-
-impl<'a> MatchTarget<'a> {
-    pub fn new(ast: &'a MoleculeAst) -> Self {
-        Self { ast }
+impl Matcher {
+    pub fn new() -> Self {
+        Self
     }
 
-    pub fn ast(&self) -> &MoleculeAst {
-        self.ast
-    }
-}
+    /// All substructure matches of `pattern` in `target`.
+    pub fn find(&self, pattern: &MoleculePattern, target: &Molecule) -> Vec<Assignment> {
+        let pattern_ast = pattern.ast();
+        let target_ast = target.ast();
 
-impl<'a> MatchQuery<'a> {
-    pub fn new(ast: &'a MoleculeAst) -> Self {
-        Self { ast }
-    }
+        if pattern_ast.atoms().count() == 0 {
+            return if post_filter(pattern_ast, target, &[]) {
+                vec![Assignment(vec![])]
+            } else {
+                vec![]
+            };
+        }
 
-    pub fn ast(&self) -> &MoleculeAst {
-        self.ast
-    }
-}
-
-/// Find all substructure matches of `query` in `target`.
-pub fn find_matches(query: &MatchQuery, target: &MatchTarget) -> Vec<Assignment> {
-    let q_ast = query.ast;
-    let t_ast = target.ast;
-
-    if q_ast.atoms().count() == 0 {
-        return if post_filter(q_ast, t_ast, &[]) {
-            vec![Assignment(vec![])]
-        } else {
-            vec![]
+        let mut node_match = |q: NodeId, t: NodeId| {
+            pattern_ast
+                .atom(q.into())
+                .data
+                .matches_ground(target_ast.atom(t.into()).data)
         };
-    }
+        let mut edge_match = |q: EdgeId, t: EdgeId| {
+            pattern_ast
+                .bond(q.into())
+                .data
+                .matches_ground(target_ast.bond(t.into()).data)
+        };
 
-    let mut node_match = |q: NodeId, t: NodeId| {
-        q_ast
-            .atom(q.into())
-            .data
-            .matches_ground(t_ast.atom(t.into()).data)
-    };
-    let mut edge_match = |q: EdgeId, t: EdgeId| {
-        q_ast
-            .bond(q.into())
-            .data
-            .matches_ground(t_ast.bond(t.into()).data)
-    };
-
-    subgraph_isomorphisms(
-        q_ast.graph(),
-        t_ast.graph(),
-        &mut node_match,
-        &mut edge_match,
-    )
-    .into_iter()
-    .filter(|assignment| post_filter(q_ast, t_ast, assignment))
-    .map(Assignment)
-    .collect()
-}
-
-/// Find all substructure matches of `query` in `target`, then post-filter
-/// through the chemistry's valence validation.
-pub fn find_matches_with(
-    query: &MatchQuery,
-    target: &MatchTarget,
-    chemistry: &Chemistry,
-) -> Vec<Assignment> {
-    find_matches(query, target)
+        subgraph_isomorphisms(
+            pattern_ast.graph(),
+            target_ast.graph(),
+            &mut node_match,
+            &mut edge_match,
+        )
         .into_iter()
-        .filter(|a| {
-            a.0.iter().all(|&t_idx| {
-                ElectronInvariant.validate(target.ast, t_idx)
-                    && chemistry.valence.validate(target.ast, t_idx)
-            })
-        })
+        .filter(|a| post_filter(pattern_ast, target, a))
+        .map(Assignment)
         .collect()
+    }
 }
 
-fn post_filter(query: &MoleculeAst, target: &MoleculeAst, assignment: &[usize]) -> bool {
-    check_dative_bonds(query, target, assignment)
-        && check_noncovalent_bonds(query, target, assignment)
-        && check_aromatic_systems(query, target, assignment)
-        && check_multicenter_bonds(query, target, assignment)
+impl Default for Matcher {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-fn check_dative_bonds(query: &MoleculeAst, target: &MoleculeAst, assignment: &[usize]) -> bool {
-    query.dative_bonds().iter().all(|q| {
+fn post_filter(pattern: &MoleculeAst, target: &Molecule, assignment: &[usize]) -> bool {
+    let target_ast = target.ast();
+    check_dative_bonds(pattern, target_ast, assignment)
+        && check_noncovalent_bonds(pattern, target_ast, assignment)
+        && check_aromatic_systems(pattern, target_ast, assignment)
+        && check_multicenter_bonds(pattern, target_ast, assignment)
+        && check_constraints(pattern, target, assignment)
+}
+
+fn check_constraints(pattern: &MoleculeAst, target: &Molecule, assignment: &[usize]) -> bool {
+    pattern
+        .constraints()
+        .iter()
+        .all(|c| evaluate_remapped(&c, pattern, target, assignment))
+}
+
+fn evaluate_remapped(
+    constraint: &MoleculeConstraint,
+    pattern: &MoleculeAst,
+    target: &Molecule,
+    assignment: &[usize],
+) -> bool {
+    match constraint {
+        MoleculeConstraint::AtomPred(idx, c) => {
+            let mapped = AtomIdx(assignment[idx.index()] as u32);
+            c.evaluate(target, mapped)
+        }
+        MoleculeConstraint::BondPred(idx, c) => {
+            let Some(mapped) = remap_bond(pattern, target, *idx, assignment) else {
+                return false;
+            };
+            c.evaluate(target, mapped)
+        }
+        MoleculeConstraint::Connected(atoms) => {
+            let mapped: Vec<AtomIdx> = atoms
+                .iter()
+                .map(|a| AtomIdx(assignment[a.index()] as u32))
+                .collect();
+            MoleculeConstraint::Connected(mapped).evaluate(target)
+        }
+        MoleculeConstraint::BondOrderSum(bonds, v) => {
+            let mapped: Option<Vec<BondIdx>> = bonds
+                .iter()
+                .map(|b| remap_bond(pattern, target, *b, assignment))
+                .collect();
+            match mapped {
+                Some(mb) => MoleculeConstraint::BondOrderSum(mb, v.clone()).evaluate(target),
+                None => false,
+            }
+        }
+        MoleculeConstraint::TotalCharge(_) | MoleculeConstraint::TotalSpin(_) => {
+            constraint.evaluate(target)
+        }
+        MoleculeConstraint::AromaticElectronCount(_, _)
+        | MoleculeConstraint::MulticenterElectronCount(_, _) => true,
+        MoleculeConstraint::SubPattern { .. } => false,
+        MoleculeConstraint::And(xs) => xs
+            .iter()
+            .all(|x| evaluate_remapped(x, pattern, target, assignment)),
+        MoleculeConstraint::Or(xs) => xs
+            .iter()
+            .any(|x| evaluate_remapped(x, pattern, target, assignment)),
+        MoleculeConstraint::Not(inner) => !evaluate_remapped(inner, pattern, target, assignment),
+    }
+}
+
+fn remap_bond(
+    pattern: &MoleculeAst,
+    target: &Molecule,
+    bond: BondIdx,
+    assignment: &[usize],
+) -> Option<BondIdx> {
+    let view = pattern.bond(bond);
+    let src: NodeId = AtomIdx(assignment[view.src.index()] as u32).into();
+    let tgt: NodeId = AtomIdx(assignment[view.tgt.index()] as u32).into();
+    target.graph().find_edge(src, tgt).map(Into::into)
+}
+
+fn check_dative_bonds(pattern: &MoleculeAst, target: &MoleculeAst, assignment: &[usize]) -> bool {
+    pattern.dative_bonds().iter().all(|q| {
         let mapped_donor = assignment[q.donor.index()];
         let mapped_acceptor = assignment[q.acceptor.index()];
         target.dative_bonds().iter().any(|t| {
@@ -116,11 +156,11 @@ fn check_dative_bonds(query: &MoleculeAst, target: &MoleculeAst, assignment: &[u
 }
 
 fn check_noncovalent_bonds(
-    query: &MoleculeAst,
+    pattern: &MoleculeAst,
     target: &MoleculeAst,
     assignment: &[usize],
 ) -> bool {
-    query.noncovalent_bonds().iter().all(|q| {
+    pattern.noncovalent_bonds().iter().all(|q| {
         let mapped_a = assignment[q.atoms[0].index()];
         let mapped_b = assignment[q.atoms[1].index()];
         target.noncovalent_bonds().iter().any(|t| {
@@ -131,8 +171,12 @@ fn check_noncovalent_bonds(
     })
 }
 
-fn check_aromatic_systems(query: &MoleculeAst, target: &MoleculeAst, assignment: &[usize]) -> bool {
-    query.aromatic_systems().iter().all(|q| {
+fn check_aromatic_systems(
+    pattern: &MoleculeAst,
+    target: &MoleculeAst,
+    assignment: &[usize],
+) -> bool {
+    pattern.aromatic_systems().iter().all(|q| {
         let mapped: Vec<usize> = q.atoms().map(|a| assignment[a.index()]).collect();
         target.aromatic_systems().iter().any(|t| {
             let t_atoms: Vec<usize> = t.atoms().map(|a| a.index()).collect();
@@ -142,11 +186,11 @@ fn check_aromatic_systems(query: &MoleculeAst, target: &MoleculeAst, assignment:
 }
 
 fn check_multicenter_bonds(
-    query: &MoleculeAst,
+    pattern: &MoleculeAst,
     target: &MoleculeAst,
     assignment: &[usize],
 ) -> bool {
-    query.multicenter_bonds().iter().all(|q| {
+    pattern.multicenter_bonds().iter().all(|q| {
         let mapped: Vec<usize> = q.atoms().map(|a| assignment[a.index()]).collect();
         target.multicenter_bonds().iter().any(|t| {
             let t_atoms: Vec<usize> = t.atoms().map(|a| a.index()).collect();
@@ -163,9 +207,11 @@ mod tests {
     use umol_shared::value_ast::ValueAst;
 
     use super::*;
+    use crate::api::pattern::MoleculePattern;
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
+    use crate::ast::config::MoleculeAstConfig;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::AtomIdx;
 
@@ -174,8 +220,12 @@ mod tests {
         MoleculeAst::new(atoms, vec![], vec![], vec![], vec![], vec![], vec![])
     }
 
-    fn find(query: &MoleculeAst, target: &MoleculeAst) -> Vec<Assignment> {
-        find_matches(&MatchQuery::new(query), &MatchTarget::new(target))
+    fn find(pattern: &MoleculeAst, target: &MoleculeAst) -> Vec<Assignment> {
+        let pattern = MoleculePattern::new(pattern.clone());
+        let mut grounded = target.clone();
+        grounded.coerce(&MoleculeAstConfig::zeroed());
+        let target = Molecule::new(grounded).unwrap();
+        Matcher::new().find(&pattern, &target)
     }
 
     fn sorted(mut assignments: Vec<Assignment>) -> Vec<Assignment> {
@@ -641,25 +691,166 @@ mod tests {
         assert_eq!(find(&query, &target), vec![]);
     }
 
-    #[test]
-    fn test_find_matches_with_identity() {
-        let query = mol_with_atoms(&[Element::C]);
-        let target = MoleculeAst::new(
-            vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::O),
-            ],
-            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-        );
+    mod constraint_eval {
+        use pretty_assertions::assert_eq;
+        use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
+        use umol_shared::element::Element;
+        use umol_shared::spin::SpinState;
+        use umol_shared::spin_ast::SpinStateAst;
+        use umol_shared::value_ast::ValueAst;
 
-        let chemistry = Chemistry::default();
-        let q = MatchQuery::new(&query);
-        let t = MatchTarget::new(&target);
-        assert_eq!(find_matches_with(&q, &t, &chemistry), find_matches(&q, &t));
+        use super::super::*;
+        use crate::api::molecule::Molecule;
+        use crate::api::pattern::MoleculePattern;
+        use crate::ast::atom::AtomAst;
+        use crate::ast::bond::BondAst;
+        use crate::ast::constraint::{AtomConstraint, BondConstraint, MoleculeConstraint};
+        use crate::ast::{AtomIdx, BondIdx};
+
+        fn ground_c(h: i64) -> AtomAst {
+            AtomAst {
+                element: ElementAst::Lit(Element::C),
+                isotope_mass: IsotopeAst::Natural,
+                charge: ValueAst::Lit(0),
+                implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(h)),
+                lone_pairs: ValueAst::Lit(0),
+                spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            }
+        }
+
+        fn ground_bond(order: i64) -> BondAst {
+            BondAst {
+                order: ValueAst::Lit(order),
+                charge: ValueAst::Lit(0),
+                spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            }
+        }
+
+        fn propane() -> Molecule {
+            let ast = MoleculeAst::new(
+                vec![ground_c(3), ground_c(2), ground_c(3)],
+                vec![
+                    (AtomIdx(0), AtomIdx(1), ground_bond(1)),
+                    (AtomIdx(1), AtomIdx(2), ground_bond(1)),
+                ],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            Molecule::new(ast).unwrap()
+        }
+
+        #[test]
+        fn test_find_matches_atom_predicate_filters() {
+            let target = propane();
+            let mut ast = MoleculeAst::new(
+                vec![AtomAst::new(ElementAst::Undetermined)],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            ast.constraints_mut().insert(MoleculeConstraint::AtomPred(
+                AtomIdx(0),
+                AtomConstraint::Degree(ValueAst::Lit(2)),
+            ));
+            let pattern = MoleculePattern::new(ast);
+            let matches = Matcher::new().find(&pattern, &target);
+            assert_eq!(matches, vec![Assignment(vec![1])]);
+        }
+
+        #[test]
+        fn test_find_matches_bond_predicate_filters() {
+            let cyclopropane = {
+                let ast = MoleculeAst::new(
+                    vec![ground_c(2), ground_c(2), ground_c(2)],
+                    vec![
+                        (AtomIdx(0), AtomIdx(1), ground_bond(1)),
+                        (AtomIdx(1), AtomIdx(2), ground_bond(1)),
+                        (AtomIdx(2), AtomIdx(0), ground_bond(1)),
+                    ],
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                    vec![],
+                );
+                Molecule::new(ast).unwrap()
+            };
+            let mut ast = MoleculeAst::new(
+                vec![
+                    AtomAst::new(ElementAst::Undetermined),
+                    AtomAst::new(ElementAst::Undetermined),
+                ],
+                vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            ast.constraints_mut().insert(MoleculeConstraint::BondPred(
+                BondIdx(0),
+                BondConstraint::RingBond,
+            ));
+            let pattern = MoleculePattern::new(ast);
+            let matches = Matcher::new().find(&pattern, &cyclopropane);
+            assert!(!matches.is_empty());
+            assert!(matches.iter().all(|a| a.0.len() == 2));
+        }
+
+        #[test]
+        fn test_find_matches_atom_predicate_no_match() {
+            let target = propane();
+            let mut ast = MoleculeAst::new(
+                vec![AtomAst::new(ElementAst::Undetermined)],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            ast.constraints_mut().insert(MoleculeConstraint::AtomPred(
+                AtomIdx(0),
+                AtomConstraint::Degree(ValueAst::Lit(5)),
+            ));
+            let pattern = MoleculePattern::new(ast);
+            assert_eq!(Matcher::new().find(&pattern, &target), vec![]);
+        }
+
+        #[test]
+        fn test_find_matches_and_combinator() {
+            let target = propane();
+            let mut ast = MoleculeAst::new(
+                vec![AtomAst::new(ElementAst::Undetermined)],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            ast.constraints_mut()
+                .insert(MoleculeConstraint::And(vec![
+                    MoleculeConstraint::AtomPred(
+                        AtomIdx(0),
+                        AtomConstraint::Degree(ValueAst::Lit(1)),
+                    ),
+                    MoleculeConstraint::AtomPred(
+                        AtomIdx(0),
+                        AtomConstraint::TotalHCount(ValueAst::Lit(3)),
+                    ),
+                ]));
+            let pattern = MoleculePattern::new(ast);
+            let matches = Matcher::new().find(&pattern, &target);
+            let mut idx: Vec<usize> = matches.iter().map(|a| a.0[0]).collect();
+            idx.sort();
+            assert_eq!(idx, vec![0, 2]);
+        }
     }
 }

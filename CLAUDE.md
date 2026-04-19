@@ -28,7 +28,9 @@
 - Consider the trade-off between simplicity, generality, and correctness.
 - For one-off tasks, simplicity always wins. No abstractions or helpers for single-use operations.
 - For load-bearing code, discussion of the trade-offs is always required. Do not implement anything before this step.
-- When unsure if the code is designed for the long term, ask. Do not guess.
+- Always look for a principled solution to the coding tasks, do not apply narrow fixes.
+- If a principled approach requires refactoring, point that out. Do not hide structural, logical, ergonomic problems behind shims and helpers.
+- When unsure if the code is designed for the long term or what a principled solution looks like, ask. Do not guess.
 - No speculative features or future-proofing.
 - Read the file before modifying it. Never edit blind.
 - Do not ever consider backward compatibility. Breaking changes are fine if technically necessary.

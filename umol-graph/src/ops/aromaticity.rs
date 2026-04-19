@@ -18,7 +18,7 @@ use umol_shared::element::Element;
 use crate::ast::constraint::MoleculeConstraint;
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::rings::{RingEnumerationStrategy, RingSet};
-use crate::unify::resolve::Progress;
+use crate::ops::resolve::Progress;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AromaticityError {

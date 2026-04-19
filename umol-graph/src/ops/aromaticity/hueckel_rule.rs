@@ -121,11 +121,11 @@ impl HueckelRuleAromaticity {
                 }
             }
         }
-        ast.atom_aromatic_pi_electrons(atom).is_some()
+        ast.atom_aromatic_valence(atom).is_some()
     }
 
     fn aromatic_electron_count(&self, ast: &MoleculeAst, atom: AtomIdx) -> Option<u8> {
-        ast.atom_aromatic_pi_electrons(atom)
+        ast.atom_aromatic_valence(atom)
     }
 
     fn filter_ring(&self, ast: &MoleculeAst, ring: RingView<'_>) -> bool {

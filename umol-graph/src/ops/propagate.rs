@@ -10,8 +10,8 @@ use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
 use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, MoleculeConstraint};
 use crate::ast::molecule::MoleculeAst;
-use crate::unify::resolve::Progress;
-use crate::unify::valence::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
+use crate::ops::resolve::Progress;
+use crate::ops::valence::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
 
 #[derive(Clone, Debug)]
 pub enum ValenceTheory {
@@ -46,7 +46,7 @@ impl ValenceTheory {
         let charge = atom.charge_or_zero();
         let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(idx);
         let is_aromatic = ast.atom_is_aromatic(idx);
-        let aromatic_pi_pinned = ast.atom_aromatic_pi_electrons(idx);
+        let aromatic_pi_pinned = ast.atom_aromatic_valence(idx);
 
         match self {
             Self::AtomTyping { registry } => atom_typing_candidates(
@@ -155,8 +155,9 @@ impl ElectronInvariant {
             return true;
         };
         let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(idx);
-        let aromatic_valence = ast.atom_aromatic_pi_electrons(idx).unwrap_or(0) as i32;
+        let aromatic_valence = ast.atom_aromatic_valence(idx).unwrap_or(0) as i32;
         let aromatic_increment: i32 = if aromatic_valence == 1 { 1 } else { 0 };
+        let multicenter_valence = ast.atom_multicenter_valence(idx).unwrap_or(0) as i32;
         let unpaired = spin.unpaired_electrons() as i32;
 
         let total_orbital = unpaired
@@ -166,7 +167,8 @@ impl ElectronInvariant {
             + 2 * implicit_h as i32
             + 2 * valence as i32
             + aromatic_valence
-            + aromatic_increment;
+            + aromatic_increment
+            + multicenter_valence;
 
         let total_source = (element.valence_electrons() as i32) - (charge as i32)
             + implicit_h as i32
@@ -463,7 +465,7 @@ fn atom_constraint_holds(
             _ => false,
         },
         AtomConstraint::AromaticValence(query) => {
-            let actual_pi = ast.atom_aromatic_pi_electrons(idx);
+            let actual_pi = ast.atom_aromatic_valence(idx);
             let actual_is_aromatic = ast.atom_is_aromatic(idx);
             match query {
                 AromaticValenceConstraint::NotAromatic => !actual_is_aromatic,
@@ -679,11 +681,11 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::config::AtomAstConfig;
     use crate::registry;
-    use crate::unify::aromaticity::AromaticityTheory;
-    use crate::unify::chemistry::Chemistry;
-    use crate::unify::error::{ResolutionError, ValidationError};
-    use crate::unify::resolve::Resolver;
-    use crate::unify::validate::Validator;
+    use crate::ops::aromaticity::AromaticityTheory;
+    use crate::ops::chemistry::Chemistry;
+    use crate::ops::error::{ResolutionError, ValidationError};
+    use crate::ops::resolve::Resolver;
+    use crate::ops::validate::Validator;
 
     fn coerce_zeroed(ast: &mut MoleculeAst) {
         let cfg = AtomAstConfig::zeroed();
@@ -914,4 +916,30 @@ mod tests {
         assert_eq!(ast.valence(AtomIdx(0)), None);
     }
 
+    #[test]
+    fn test_electron_invariant_multicenter_term() {
+        let atom = AtomAst {
+            element: ElementAst::Lit(Element::H),
+            isotope_mass: IsotopeAst::Natural,
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(0)),
+            lone_pairs: ValueAst::Lit(0),
+            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+        };
+        let mut ast = MoleculeAst::new(
+            vec![atom],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        assert!(!ElectronInvariant.validate(&ast, 0));
+        ast.constraints_mut().insert(MoleculeConstraint::AtomPred(
+            AtomIdx(0),
+            AtomConstraint::MulticenterValence(ValueAst::Lit(1)),
+        ));
+        assert!(ElectronInvariant.validate(&ast, 0));
+    }
 }

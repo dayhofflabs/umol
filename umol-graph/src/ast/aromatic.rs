@@ -3,6 +3,8 @@
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
+use super::bond::{coerce_spin, release_spin};
+use super::config::{BondAstConfig, NumericMode};
 use super::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
 use super::{AtomIdx, BondIdx};
 
@@ -15,6 +17,26 @@ pub struct AromaticSystemAst {
 impl AromaticSystemAst {
     pub fn is_ground(&self) -> bool {
         self.charge.is_ground() && self.spin.is_ground()
+    }
+
+    pub fn coerce(&mut self, cfg: &BondAstConfig) {
+        if matches!(self.charge, ValueAst::Undetermined) {
+            self.charge = match cfg.charge_mode {
+                NumericMode::Zero => ValueAst::Lit(0),
+                NumericMode::Required => ValueAst::Undetermined,
+            };
+        }
+        coerce_spin(&mut self.spin, cfg);
+    }
+
+    pub fn release(&mut self, cfg: &BondAstConfig) {
+        if matches!(
+            (&cfg.charge_mode, &self.charge),
+            (NumericMode::Zero, ValueAst::Lit(0))
+        ) {
+            self.charge = ValueAst::Undetermined;
+        }
+        release_spin(&mut self.spin, cfg);
     }
 }
 

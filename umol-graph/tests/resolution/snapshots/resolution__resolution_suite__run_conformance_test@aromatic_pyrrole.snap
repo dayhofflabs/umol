@@ -7,23 +7,11 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :output {
       :aromatic [{:atoms [0 1 2 3 4]}]
       :atoms ["N#h#v2#a2" "C#h#v2#a" "C#h#v2#a" "C#h#v2#a" "C#h#v2#a"]
-      :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 4 :single] [4 0 :single]]
-      :constraints [
-        {:bond-pred [0 :aromatic]}
-        {:bond-pred [1 :aromatic]}
-        {:bond-pred [2 :aromatic]}
-        {:bond-pred [3 :aromatic]}
-        {:bond-pred [4 :aromatic]}]}
+      :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]}
     :success true}
   :counts {
     :output {
       :aromatic [{:atoms [0 1 2 3 4]}]
       :atoms ["N#h#v2#a2" "C#h#v2#a" "C#h#v2#a" "C#h#v2#a" "C#h#v2#a"]
-      :bonds [[0 1 :single] [1 2 :single] [2 3 :single] [3 4 :single] [4 0 :single]]
-      :constraints [
-        {:bond-pred [0 :aromatic]}
-        {:bond-pred [1 :aromatic]}
-        {:bond-pred [2 :aromatic]}
-        {:bond-pred [3 :aromatic]}
-        {:bond-pred [4 :aromatic]}]}
+      :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 0 "1#a"]]}
     :success true}}

@@ -8,6 +8,6 @@ pub mod dsl;
 pub mod io;
 pub mod api;
 pub mod position;
-pub mod unify;
+pub mod ops;
 pub mod span;
 pub mod table_ir;

@@ -336,9 +336,23 @@ impl MoleculeAst {
 
     /// Aromatic pi-electron count for this atom, if pinned to a literal in the
     /// constraint vec. `None` when absent, set to `Undetermined`, or `NotAromatic`.
-    pub fn atom_aromatic_pi_electrons(&self, idx: AtomIdx) -> Option<u8> {
+    pub fn atom_aromatic_valence(&self, idx: AtomIdx) -> Option<u8> {
         match self.atom_aromatic_hint(idx)? {
             AromaticValenceConstraint::Value(ValueAst::Lit(n)) => Some(*n as u8),
+            _ => None,
+        }
+    }
+
+    /// Multicenter-bond electron contribution for this atom, if pinned to a
+    /// literal in the constraint vec. `None` when absent or non-literal.
+    pub fn atom_multicenter_valence(&self, idx: AtomIdx) -> Option<u8> {
+        match self
+            .constraints
+            .atoms()
+            .get(&idx)?
+            .get(AtomConstraintKind::MulticenterValence)?
+        {
+            AtomConstraint::MulticenterValence(ValueAst::Lit(n)) => Some(*n as u8),
             _ => None,
         }
     }
@@ -404,6 +418,21 @@ impl MoleculeAst {
         for atom in Arc::make_mut(&mut self.atoms) {
             atom.coerce(&config.atom);
         }
+        for bond in Arc::make_mut(&mut self.bonds) {
+            bond.coerce(&config.bond);
+        }
+        let dative = Arc::make_mut(&mut self.dative_bonds);
+        for rid in dative.relation_ids().collect::<Vec<_>>() {
+            dative.data_mut(rid).coerce(&config.bond);
+        }
+        let noncov = Arc::make_mut(&mut self.noncovalent_bonds);
+        for rid in noncov.relation_ids().collect::<Vec<_>>() {
+            noncov.data_mut(rid).coerce(&config.bond);
+        }
+        let aromatic = Arc::make_mut(&mut self.aromatic_systems);
+        for rid in aromatic.relation_ids().collect::<Vec<_>>() {
+            aromatic.data_mut(rid).coerce(&config.bond);
+        }
         for i in 0..self.atoms.len() {
             let idx = AtomIdx::from(i);
             let set = self.constraints.atoms_mut().entry(idx).or_default();
@@ -416,6 +445,21 @@ impl MoleculeAst {
     pub fn release(&mut self, config: &MoleculeAstConfig) {
         for atom in Arc::make_mut(&mut self.atoms) {
             atom.release(&config.atom);
+        }
+        for bond in Arc::make_mut(&mut self.bonds) {
+            bond.release(&config.bond);
+        }
+        let dative = Arc::make_mut(&mut self.dative_bonds);
+        for rid in dative.relation_ids().collect::<Vec<_>>() {
+            dative.data_mut(rid).release(&config.bond);
+        }
+        let noncov = Arc::make_mut(&mut self.noncovalent_bonds);
+        for rid in noncov.relation_ids().collect::<Vec<_>>() {
+            noncov.data_mut(rid).release(&config.bond);
+        }
+        let aromatic = Arc::make_mut(&mut self.aromatic_systems);
+        for rid in aromatic.relation_ids().collect::<Vec<_>>() {
+            aromatic.data_mut(rid).release(&config.bond);
         }
         for set in self.constraints.atoms_mut().values_mut() {
             set.retain(|ac| {

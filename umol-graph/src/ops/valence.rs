@@ -216,7 +216,7 @@ impl AtomTypeRegistry {
 #[macro_export]
 macro_rules! registry {
     ($($pattern:expr),* $(,)?) => {{
-        let mut registry = $crate::unify::valence::AtomTypeRegistry::new();
+        let mut registry = $crate::ops::valence::AtomTypeRegistry::new();
         $(
             registry.add(
                 $pattern
@@ -376,12 +376,12 @@ impl ValenceTable {
 #[macro_export]
 macro_rules! valence_table {
     ($($el:ident => [$($v:expr),* $(,)?]),* $(,)?) => {{
-        let mut table = $crate::unify::valence::ValenceTable::empty();
+        let mut table = $crate::ops::valence::ValenceTable::empty();
         $(
             table.insert(
                 <umol_shared::Element as std::str::FromStr>::from_str(stringify!($el))
                     .expect("invalid element symbol in valence_table!"),
-                $crate::unify::valence::ValenceEntry {
+                $crate::ops::valence::ValenceEntry {
                     allowed_valences: vec![$($v),*],
                     allowed_aromatic_valences: vec![],
                 },

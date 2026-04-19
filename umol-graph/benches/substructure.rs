@@ -1,4 +1,4 @@
-//! VF2 substructure matching benchmark against 9k SMILES corpus.
+//! Substructure matching benchmark against 9k SMILES corpus.
 //!
 //! Three query patterns of increasing complexity:
 //! 1. Branched: C(C)C(C)N  — 5 atoms, 4 single bonds
@@ -9,12 +9,14 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
-use umol_graph::ast::AtomIdx;
+use umol_graph::api::molecule::Molecule;
+use umol_graph::api::pattern::MoleculePattern;
 use umol_graph::ast::atom::AtomAst;
 use umol_graph::ast::bond::BondAst;
-use umol_graph::unify::matcher::{find_matches, MatchQuery, MatchTarget};
 use umol_graph::ast::molecule::MoleculeAst;
-use umol_graph::io::smiles::parse_smiles_to_ast;
+use umol_graph::ast::AtomIdx;
+use umol_graph::io::smiles::parse_smiles;
+use umol_graph::ops::matcher::Matcher;
 use umol_shared::element::Element;
 use umol_shared::value_ast::ValueAst;
 
@@ -43,14 +45,14 @@ fn load_smiles() -> Vec<String> {
     smiles_list
 }
 
-fn load_corpus(smiles_list: &[String]) -> Vec<MoleculeAst> {
-    let mut asts = Vec::new();
+fn load_corpus(smiles_list: &[String]) -> Vec<Molecule> {
+    let mut mols = Vec::new();
     for s in smiles_list {
-        if let Ok(ast) = parse_smiles_to_ast(s) {
-            asts.push(ast);
+        if let Ok(mol) = parse_smiles(s) {
+            mols.push(mol);
         }
     }
-    asts
+    mols
 }
 
 fn wb() -> BondAst {
@@ -61,25 +63,24 @@ fn a(e: Element) -> AtomAst {
     AtomAst::from_element(e)
 }
 
-fn mol(atoms: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> MoleculeAst {
+fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> MoleculePattern {
     let bond_list: Vec<(AtomIdx, AtomIdx, BondAst)> = bonds
         .into_iter()
         .map(|(s, t, b)| (AtomIdx(s as u32), AtomIdx(t as u32), b))
         .collect();
-    MoleculeAst::new(atoms, bond_list, vec![], vec![], vec![], vec![], vec![])
+    let ast = MoleculeAst::new(atoms, bond_list, vec![], vec![], vec![], vec![], vec![]);
+    MoleculePattern::new(ast)
 }
 
-// C(C)C(C)N — 5 atoms, 4 single bonds
-fn pattern_branched() -> MoleculeAst {
-    mol(
+fn pattern_branched() -> MoleculePattern {
+    pattern(
         vec![a(Element::C), a(Element::C), a(Element::C), a(Element::C), a(Element::N)],
         vec![(0, 1, wb()), (0, 2, wb()), (2, 3, wb()), (2, 4, wb())],
     )
 }
 
-// 6-membered C ring + O, any bonds
-fn pattern_phenol() -> MoleculeAst {
-    mol(
+fn pattern_phenol() -> MoleculePattern {
+    pattern(
         vec![
             a(Element::C), a(Element::C), a(Element::C),
             a(Element::C), a(Element::C), a(Element::C),
@@ -93,13 +94,11 @@ fn pattern_phenol() -> MoleculeAst {
     )
 }
 
-// Fused 5-6 bicyclic, all C, any bonds
-// C1~C(~C~C~C2)~C2~C~C~C1
 // Ring 1: 0-1-5-6-7-8 (6-membered)
 // Ring 2: 1-2-3-4-5   (5-membered)
 // Fused edge: 1-5
-fn pattern_bicyclic() -> MoleculeAst {
-    mol(
+fn pattern_bicyclic() -> MoleculePattern {
+    pattern(
         (0..9).map(|_| a(Element::C)).collect(),
         vec![
             (0, 1, wb()), (1, 2, wb()), (2, 3, wb()),
@@ -112,33 +111,30 @@ fn pattern_bicyclic() -> MoleculeAst {
 
 fn substructure_benchmark(c: &mut Criterion) {
     let smiles_list = load_smiles();
-    let asts = load_corpus(&smiles_list);
-    let corpus_size = asts.len();
+    let corpus = load_corpus(&smiles_list);
+    let corpus_size = corpus.len();
 
-    let targets: Vec<MatchTarget> = asts.iter().map(MatchTarget::new).collect();
-
-    let patterns: Vec<(&str, MoleculeAst)> = vec![
+    let patterns: Vec<(&str, MoleculePattern)> = vec![
         ("branched", pattern_branched()),
         ("phenol", pattern_phenol()),
         ("bicyclic", pattern_bicyclic()),
     ];
 
-    let mut group = c.benchmark_group("substructure_vf2");
+    let matcher = Matcher::new();
+    let mut group = c.benchmark_group("substructure");
 
-    for (name, pattern) in &patterns {
-        let query = MatchQuery::new(pattern);
-
-        let match_count = targets
+    for (name, pat) in &patterns {
+        let match_count = corpus
             .iter()
-            .filter(|t| !find_matches(&query, t).is_empty())
+            .filter(|t| !matcher.find(pat, t).is_empty())
             .count();
 
         group.bench_function(
             BenchmarkId::new(*name, format!("{corpus_size}_hits_{match_count}")),
             |b| {
                 b.iter(|| {
-                    for target in &targets {
-                        black_box(find_matches(&query, target));
+                    for target in &corpus {
+                        black_box(matcher.find(pat, target));
                     }
                 });
             },

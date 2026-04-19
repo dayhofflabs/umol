@@ -7,10 +7,10 @@ use umol_shared::value_ast::ValueAst;
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::rings::{RingCache, RingFamily};
 use crate::api::Molecule;
-use crate::unify::aromaticity::{AromaticityStrategy, AromaticityTheory};
-use crate::unify::chemistry::Chemistry;
-use crate::unify::error::ResolutionError;
-use crate::unify::propagate::ValenceTheory;
+use crate::ops::aromaticity::{AromaticityStrategy, AromaticityTheory};
+use crate::ops::chemistry::Chemistry;
+use crate::ops::error::ResolutionError;
+use crate::ops::propagate::ValenceTheory;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Progress {

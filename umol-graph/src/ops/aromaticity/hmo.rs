@@ -60,7 +60,7 @@ impl HmoAromaticity {
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                ast.atom_aromatic_pi_electrons(view.idx).map(|_| view.idx)
+                ast.atom_aromatic_valence(view.idx).map(|_| view.idx)
             })
             .collect();
 
@@ -114,7 +114,7 @@ impl HmoAromaticity {
                 let atom_constraints: Vec<AtomConstraint> = atoms
                     .iter()
                     .map(|&atom| {
-                        let pi = ast.atom_aromatic_pi_electrons(atom).unwrap_or(0);
+                        let pi = ast.atom_aromatic_valence(atom).unwrap_or(0);
                         AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
                             ValueAst::Lit(pi as i64),
                         ))
@@ -158,7 +158,7 @@ impl HmoAromaticity {
                     ))
                 }
             };
-            let valence = ast.atom_aromatic_pi_electrons(atom).ok_or_else(|| {
+            let valence = ast.atom_aromatic_valence(atom).ok_or_else(|| {
                 AromaticityError::HmoMissingAtom("undetermined aromatic valence".to_string())
             })?;
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {

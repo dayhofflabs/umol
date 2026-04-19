@@ -13,11 +13,11 @@ use umol_graph::ast::config::{
     ImplicitHydrogenMode, MoleculeAstConfig, MoleculeAstConfigOverrides,
 };
 use umol_graph::dsl::molecule::MoleculeAstWrapper;
-use umol_graph::unify::aromaticity::AromaticityTheory;
-use umol_graph::unify::chemistry::Chemistry;
-use umol_graph::unify::propagate::ValenceTheory;
-use umol_graph::unify::resolve::Resolver;
-use umol_graph::unify::valence::ValenceTable;
+use umol_graph::ops::aromaticity::AromaticityTheory;
+use umol_graph::ops::chemistry::Chemistry;
+use umol_graph::ops::propagate::ValenceTheory;
+use umol_graph::ops::resolve::Resolver;
+use umol_graph::ops::valence::ValenceTable;
 
 #[derive(FromEdn)]
 struct TestInput {

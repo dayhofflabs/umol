@@ -33,7 +33,7 @@ impl ClarAromaticity {
     ) -> Result<Vec<AromaticSystem>, AromaticityError> {
         let has_non_benzenoid = ast.atoms().iter().any(|view| {
             !matches!(view.data.element, ElementAst::Lit(Element::C))
-                && ast.atom_aromatic_pi_electrons(view.idx).is_some()
+                && ast.atom_aromatic_valence(view.idx).is_some()
         });
         if has_non_benzenoid {
             return Err(AromaticityError::ClarInputError(
@@ -52,7 +52,7 @@ impl ClarAromaticity {
                     && cycle.atoms().iter().all(|&atom| {
                         let a = ast.atom(atom);
                         matches!(a.data.element, ElementAst::Lit(Element::C))
-                            && ast.atom_aromatic_pi_electrons(atom).is_some()
+                            && ast.atom_aromatic_valence(atom).is_some()
                     })
             })
             .collect();
@@ -78,7 +78,7 @@ impl ClarAromaticity {
         let atom_constraints: Vec<AtomConstraint> = atoms
             .iter()
             .map(|&atom| {
-                let pi = ast.atom_aromatic_pi_electrons(atom).unwrap_or(0);
+                let pi = ast.atom_aromatic_valence(atom).unwrap_or(0);
                 AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(
                     pi as i64,
                 )))

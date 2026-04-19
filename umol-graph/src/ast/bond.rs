@@ -1,8 +1,11 @@
 //! Bond AST data structures.
 
+use std::mem;
+
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
+use super::config::{BondAstConfig, MultiplicityMode, NumericMode, UnpairedElectronsMode};
 use crate::table_ir::bond::{Bond as TableBond, BondOrder};
 
 /// Bond AST: structural representation of a bond (ground or pattern).
@@ -74,5 +77,88 @@ impl BondAst {
         self.order.is_ground()
             && self.charge.is_ground()
             && self.spin.is_ground()
+    }
+
+    pub fn coerce(&mut self, cfg: &BondAstConfig) {
+        if matches!(self.charge, ValueAst::Undetermined) {
+            self.charge = match cfg.charge_mode {
+                NumericMode::Zero => ValueAst::Lit(0),
+                NumericMode::Required => ValueAst::Undetermined,
+            };
+        }
+        coerce_spin(&mut self.spin, cfg);
+    }
+
+    pub fn release(&mut self, cfg: &BondAstConfig) {
+        if matches!(
+            (&cfg.charge_mode, &self.charge),
+            (NumericMode::Zero, ValueAst::Lit(0))
+        ) {
+            self.charge = ValueAst::Undetermined;
+        }
+        release_spin(&mut self.spin, cfg);
+    }
+}
+
+pub(super) fn coerce_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
+    match mem::take(spin) {
+        SpinStateAst::Pair {
+            unpaired,
+            multiplicity,
+        } => {
+            let resolved_u = if matches!(unpaired, ValueAst::Undetermined) {
+                match cfg.unpaired_electrons_mode {
+                    UnpairedElectronsMode::Zero => ValueAst::Lit(0),
+                    UnpairedElectronsMode::Required => ValueAst::Undetermined,
+                    UnpairedElectronsMode::Derived => match &multiplicity {
+                        ValueAst::Lit(m) => ValueAst::Lit(m - 1),
+                        _ => ValueAst::Undetermined,
+                    },
+                }
+            } else {
+                unpaired
+            };
+            let resolved_m = if matches!(multiplicity, ValueAst::Undetermined) {
+                match cfg.multiplicity_mode {
+                    MultiplicityMode::Required => ValueAst::Undetermined,
+                    MultiplicityMode::Derived => match &resolved_u {
+                        ValueAst::Lit(u) => ValueAst::Lit(u + 1),
+                        _ => ValueAst::Undetermined,
+                    },
+                }
+            } else {
+                multiplicity
+            };
+            *spin = SpinStateAst::from_pair(resolved_u, resolved_m);
+            if let Ok(Some(state)) = spin.try_into_ground() {
+                *spin = SpinStateAst::Lit(state);
+            }
+        }
+        lit => *spin = lit,
+    }
+}
+
+pub(super) fn release_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
+    match mem::take(spin) {
+        SpinStateAst::Lit(state) => {
+            let u_value = state.unpaired_electrons();
+            let m_value = state.multiplicity();
+            let derived = m_value.multiplicity() == u_value + 1;
+            let u_ast = match cfg.unpaired_electrons_mode {
+                UnpairedElectronsMode::Zero if u_value == 0 => ValueAst::Undetermined,
+                UnpairedElectronsMode::Derived if derived => match cfg.multiplicity_mode {
+                    MultiplicityMode::Required => ValueAst::Undetermined,
+                    MultiplicityMode::Derived if u_value == 0 => ValueAst::Undetermined,
+                    MultiplicityMode::Derived => ValueAst::Lit(u_value as i64),
+                },
+                _ => ValueAst::Lit(u_value as i64),
+            };
+            let m_ast = match cfg.multiplicity_mode {
+                MultiplicityMode::Derived if derived => ValueAst::Undetermined,
+                _ => ValueAst::Lit(m_value.multiplicity() as i64),
+            };
+            *spin = SpinStateAst::from_pair(u_ast, m_ast);
+        }
+        pair => *spin = pair,
     }
 }

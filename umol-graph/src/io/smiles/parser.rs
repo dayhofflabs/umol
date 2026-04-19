@@ -24,8 +24,8 @@ use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::{ParseError, SmilesError};
 use crate::ast::molecule::MoleculeAst;
 use crate::api;
-use crate::unify::chemistry::Chemistry;
-use crate::unify::resolve::Resolver;
+use crate::ops::chemistry::Chemistry;
+use crate::ops::resolve::Resolver;
 use crate::span::Span;
 use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
