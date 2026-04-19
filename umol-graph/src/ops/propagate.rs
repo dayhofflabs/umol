@@ -683,8 +683,8 @@ mod tests {
     use crate::registry;
     use crate::ops::aromaticity::AromaticityTheory;
     use crate::ops::chemistry::Chemistry;
-    use crate::ops::error::{ResolutionError, ValidationError};
     use crate::ops::resolve::Resolver;
+    use crate::ops::solution::Solution;
     use crate::ops::validate::Validator;
 
     fn coerce_zeroed(ast: &mut MoleculeAst) {
@@ -719,6 +719,16 @@ mod tests {
         ast
     }
 
+    fn determined_ast(
+        solver: &Chemistry,
+        ast: MoleculeAst,
+    ) -> MoleculeAst {
+        match Resolver::new(solver).resolve(ast).unwrap() {
+            Solution::Determined(a) => a,
+            other => panic!("expected Determined, got {:?}", other),
+        }
+    }
+
     #[test]
     fn test_solver_resolve_h2_atom_typing() {
         let solver = Chemistry {
@@ -727,9 +737,9 @@ mod tests {
             },
             aromaticity: AromaticityTheory::daylight(),
         };
-        let mol = Resolver::new(&solver).resolve(h2()).unwrap();
+        let ast = determined_ast(&solver, h2());
         assert_eq!(
-            mol.atom(AtomIdx(0)).data.implicit_hydrogens,
+            ast.atom(AtomIdx(0)).data.implicit_hydrogens,
             HydrogenAst::Value(ValueAst::Lit(0))
         );
     }
@@ -751,17 +761,22 @@ mod tests {
             vec![],
             vec![],
         );
-        assert!(matches!(
-            Resolver::new(&solver).resolve(ast),
-            Err(ResolutionError::Contradictory) | Err(ResolutionError::Underdetermined)
-        ));
+        let outcome = Resolver::new(&solver).resolve(ast).unwrap();
+        assert!(
+            matches!(outcome, Solution::Contradictory | Solution::Underdetermined(_)),
+            "got {:?}",
+            outcome
+        );
     }
 
     #[test]
     fn test_solver_resolve_already_ground() {
         let solver = Chemistry::default();
         let ast = MoleculeAst::new(vec![], vec![], vec![], vec![], vec![], vec![], vec![]);
-        assert!(Resolver::new(&solver).resolve(ast).is_ok());
+        assert!(matches!(
+            Resolver::new(&solver).resolve(ast).unwrap(),
+            Solution::Determined(_)
+        ));
     }
 
     #[test]
@@ -776,7 +791,10 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(Resolver::new(&solver).resolve(ast), Err(ResolutionError::Underdetermined));
+        assert!(matches!(
+            Resolver::new(&solver).resolve(ast).unwrap(),
+            Solution::Underdetermined(_)
+        ));
     }
 
     #[test]
@@ -788,9 +806,9 @@ mod tests {
             },
             aromaticity: AromaticityTheory::daylight(),
         };
-        let mol = Resolver::new(&solver).resolve(h2()).unwrap();
+        let ast = determined_ast(&solver, h2());
         assert_eq!(
-            mol.atom(AtomIdx(0)).data.implicit_hydrogens,
+            ast.atom(AtomIdx(0)).data.implicit_hydrogens,
             HydrogenAst::Value(ValueAst::Lit(0))
         );
     }
@@ -817,9 +835,9 @@ mod tests {
             vec![],
             vec![],
         );
-        let mol = Resolver::new(&solver).resolve(ast).unwrap();
+        let ast = determined_ast(&solver, ast);
         assert_eq!(
-            mol.atom(AtomIdx(0)).data.implicit_hydrogens,
+            ast.atom(AtomIdx(0)).data.implicit_hydrogens,
             HydrogenAst::Value(ValueAst::Lit(4))
         );
     }
@@ -832,8 +850,8 @@ mod tests {
             },
             aromaticity: AromaticityTheory::daylight(),
         };
-        let mol = Resolver::new(&solver).resolve(h2()).unwrap();
-        assert!(Validator::new(&solver).validate(mol.ast()).is_ok());
+        let ast = determined_ast(&solver, h2());
+        assert!(Validator::new(&solver).validate(&ast).is_determined());
     }
 
     #[test]
@@ -848,7 +866,10 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(Validator::new(&solver).validate(&ast), Err(ValidationError::Underdetermined));
+        assert!(matches!(
+            Validator::new(&solver).validate(&ast),
+            Solution::Underdetermined(())
+        ));
     }
 
     #[test]

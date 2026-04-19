@@ -1,4 +1,4 @@
-//! Resolution engine: refines a non-ground `MoleculeAst` to a ground `Molecule`.
+//! Resolution engine: refines a non-ground `MoleculeAst` toward a ground term.
 
 use umol_shared::atom_ast::IsotopeAst;
 use umol_shared::spin_ast::SpinStateAst;
@@ -6,11 +6,11 @@ use umol_shared::value_ast::ValueAst;
 
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::rings::{RingCache, RingFamily};
-use crate::api::Molecule;
 use crate::ops::aromaticity::{AromaticityStrategy, AromaticityTheory};
 use crate::ops::chemistry::Chemistry;
 use crate::ops::error::ResolutionError;
 use crate::ops::propagate::ValenceTheory;
+use crate::ops::solution::Solution;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Progress {
@@ -28,11 +28,20 @@ impl<'s> Resolver<'s> {
         Self { chemistry }
     }
 
-    pub fn resolve(self, ast: MoleculeAst) -> Result<Molecule, ResolutionError> {
+    pub fn resolve(
+        self,
+        ast: MoleculeAst,
+    ) -> Result<Solution<MoleculeAst>, ResolutionError> {
         let mut cell = ResolverCell::new(ast);
-        cell.refine_valence(&self.chemistry.valence)?;
-        cell.refine_aromaticity(&self.chemistry.aromaticity)?;
-        cell.finalize()
+        match cell.refine_valence(&self.chemistry.valence) {
+            Progress::Contradictory => return Ok(Solution::Contradictory),
+            Progress::Advanced | Progress::Fixpoint => {}
+        }
+        match cell.refine_aromaticity(&self.chemistry.aromaticity)? {
+            Progress::Contradictory => return Ok(Solution::Contradictory),
+            Progress::Advanced | Progress::Fixpoint => {}
+        }
+        Ok(cell.finalize())
     }
 }
 
@@ -54,17 +63,14 @@ impl ResolverCell {
         }
     }
 
-    fn refine_valence(&mut self, valence: &ValenceTheory) -> Result<(), ResolutionError> {
-        match valence.refine(&mut self.ast) {
-            Progress::Contradictory => Err(ResolutionError::Contradictory),
-            Progress::Advanced | Progress::Fixpoint => Ok(()),
-        }
+    fn refine_valence(&mut self, valence: &ValenceTheory) -> Progress {
+        valence.refine(&mut self.ast)
     }
 
     fn refine_aromaticity(
         &mut self,
         aromaticity: &AromaticityTheory,
-    ) -> Result<(), ResolutionError> {
+    ) -> Result<Progress, ResolutionError> {
         let family = match &aromaticity.strategy {
             AromaticityStrategy::Clar(_) => RingFamily::InducedBenzenoid,
             AromaticityStrategy::HueckelRule(_) | AromaticityStrategy::Hmo(_) => {
@@ -72,13 +78,10 @@ impl ResolverCell {
             }
         };
         let rings = self.rings.get(&self.ast, family, &aromaticity.ring_enumeration);
-        match aromaticity.refine(&mut self.ast, &rings)? {
-            Progress::Contradictory => Err(ResolutionError::Contradictory),
-            Progress::Advanced | Progress::Fixpoint => Ok(()),
-        }
+        Ok(aromaticity.refine(&mut self.ast, &rings)?)
     }
 
-    fn finalize(mut self) -> Result<Molecule, ResolutionError> {
+    fn finalize(mut self) -> Solution<MoleculeAst> {
         // TODO: resolve correctly. Stopgap: ground the fields the resolver
         // currently leaves wildcard. Atoms get isotope=Natural, bonds get
         // charge=0 and spin=closed-shell.
@@ -133,6 +136,10 @@ impl ResolverCell {
                 sys.spin = SpinStateAst::Lit(state);
             }
         }
-        Molecule::from_parts(self.ast, self.rings).map_err(|_| ResolutionError::Underdetermined)
+        if self.ast.atoms().iter().all(|v| v.data.is_ground()) {
+            Solution::Determined(self.ast)
+        } else {
+            Solution::Underdetermined(self.ast)
+        }
     }
 }

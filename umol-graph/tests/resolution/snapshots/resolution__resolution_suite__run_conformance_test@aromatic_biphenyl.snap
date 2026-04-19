@@ -32,7 +32,8 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [9 10 "1#a"]
         [10 11 "1#a"]
         [11 6 "1#a"]
-        [0 6 "1"]]}
+        [0 6 "1"]]
+      :constraints [{:aromatic-electron-count [0 6]} {:aromatic-electron-count [1 6]}]}
     :success true}
   :counts {
     :output {
@@ -63,5 +64,6 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [9 10 "1#a"]
         [10 11 "1#a"]
         [11 6 "1#a"]
-        [0 6 "1"]]}
+        [0 6 "1"]]
+      :constraints [{:aromatic-electron-count [0 6]} {:aromatic-electron-count [1 6]}]}
     :success true}}

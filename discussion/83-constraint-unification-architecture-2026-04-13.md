@@ -228,10 +228,12 @@ Status: not yet needed. Currently resolution is one-directional (partial molecul
 | Resolution | SMT model completion, Datalog fixpoint | `Ast × Profile → UnificationResult<Ast>` | Step 6 |
 | Validation | SMT satisfiability, Datalog integrity | `Ast × Profile → UnificationResult<()>` | Step 6 |
 | Matching | Cypher pattern query, Datalog query eval | `Ast × Ast × Profile → Vec<Assignment>` | Done (step 4) |
-| Subsumption | SMT entailment, Datalog containment | `Ast × Ast → bool` | Useful, not urgent |
-| Enumeration | SMT all-SAT | `Ast × Profile → Iterator<Ast>` | Deferred |
-| Projection | Relational π, logical forgetting | `Ast × Mask → Ast` | Implicit in views |
-| Bidirectional unification | Term unification | `Ast × Ast → UnificationResult<Ast>` | Not yet needed |
+| Subsumption | SMT entailment, Datalog containment | `Ast × Ast → bool` | Outstanding |
+| Enumeration | SMT all-SAT | `Ast × Profile → Iterator<Ast>` | Outstanding |
+| Projection | Relational π, logical forgetting | `Ast × Mask → Ast` | Outstanding |
+| Bidirectional unification | Term unification | `Ast × Ast → UnificationResult<Ast>` | Outstanding |
+
+Note: UnificationResult -> Solution, Profile -> Chemistry
 
 ## Absent vs undetermined: removing Option from AST fields
 
@@ -293,6 +295,3 @@ Step 7 was previously suspended pending the graph representation question (doc 8
 - **Phase 2**: `find_from_ast` on all three models (Hückel, HMO, Clar). `AromaticityModel::aromatic_systems_ast` dispatch. Temporary petgraph `AtomIndex` bridge via numeric conversion; goes away when GraphIR is removed (step 8).
 - **Phase 3**: `AromaticityConfig` on `Solver`. Resolve loop: valence → aromaticity → re-valence. `Solver::resolve` returns `Result<Solution<()>, AromaticityError>`. `MoleculeAst::set_aromatic_systems` replaces the `VarRelationSet` wholesale.
 
-### What remains
-
-Constraint emission and verification. Doc 80 specifies that perception should emit `Derived { AromaticElectronCount(n), ring_atoms }` per proposed system, and the solver should verify and discard failures. This requires `DerivedPred::AromaticElectronCount` and constraint evaluation infrastructure — both step 9 scope. Currently all proposed systems are accepted unconditionally.

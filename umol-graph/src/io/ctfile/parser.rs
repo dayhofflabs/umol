@@ -278,7 +278,15 @@ pub fn parse_mol_bytes_with(
 ) -> Result<api::Molecule, CtfileError> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
     let ast = MoleculeAst::from_table_molecule(&table_mol);
-    Ok(Resolver::new(chemistry).resolve(ast)?)
+    match Resolver::new(chemistry).resolve(ast)? {
+        crate::ops::solution::Solution::Determined(ast) => {
+            api::Molecule::new(ast).map_err(|_| CtfileError::ResolveUnderdetermined)
+        }
+        crate::ops::solution::Solution::Underdetermined(_) => {
+            Err(CtfileError::ResolveUnderdetermined)
+        }
+        crate::ops::solution::Solution::Contradictory => Err(CtfileError::ResolveContradictory),
+    }
 }
 
 /// Parse MOL to [`MoleculeAst`] without running the solver.

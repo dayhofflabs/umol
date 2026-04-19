@@ -8,5 +8,6 @@ pub mod evaluate;
 pub mod matcher;
 pub mod propagate;
 pub mod resolve;
+pub mod solution;
 pub mod validate;
 pub mod valence;

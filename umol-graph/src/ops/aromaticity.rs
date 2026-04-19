@@ -140,13 +140,17 @@ impl AromaticityTheory {
 
         let mut builder = ast.edit();
         for sys in &systems {
-            builder.add_aromatic_system(sys.atoms().to_vec(), sys.ast().clone());
+            let sys_idx = builder.add_aromatic_system(sys.atoms().to_vec(), sys.ast().clone());
             for (idx, c) in sys.atoms().iter().zip(sys.atom_constraints()) {
                 builder.push_constraint(MoleculeConstraint::AtomPred(*idx, c.clone()));
             }
             for (idx, c) in sys.bonds().iter().zip(sys.bond_constraints()) {
                 builder.push_constraint(MoleculeConstraint::BondPred(*idx, c.clone()));
             }
+            builder.push_constraint(MoleculeConstraint::AromaticElectronCount(
+                sys_idx,
+                umol_shared::value_ast::ValueAst::Lit(sys.electron_count() as i64),
+            ));
         }
         *ast = builder.build();
         Ok(Progress::Advanced)

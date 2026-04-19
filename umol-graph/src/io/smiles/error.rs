@@ -10,6 +10,10 @@ pub enum SmilesError {
     Parse(#[from] ParseError),
     #[error(transparent)]
     Resolve(#[from] ResolutionError),
+    #[error("resolution contradictory")]
+    ResolveContradictory,
+    #[error("resolution underdetermined")]
+    ResolveUnderdetermined,
 }
 
 #[derive(Debug, Clone, PartialEq, Error)]

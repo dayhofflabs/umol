@@ -17,6 +17,7 @@ use umol_graph::ops::aromaticity::AromaticityTheory;
 use umol_graph::ops::chemistry::Chemistry;
 use umol_graph::ops::propagate::ValenceTheory;
 use umol_graph::ops::resolve::Resolver;
+use umol_graph::ops::solution::Solution;
 use umol_graph::ops::valence::ValenceTable;
 
 #[derive(FromEdn)]
@@ -47,8 +48,7 @@ fn resolve_test(
     let mut ast = input.ast().clone();
     ast.coerce(config);
     match Resolver::new(chemistry).resolve(ast) {
-        Ok(mol) => {
-            let mut ast = mol.into_ast();
+        Ok(Solution::Determined(mut ast)) => {
             ast.release(&MoleculeAstConfig::zeroed());
             ResolveResult {
                 success: true,
@@ -56,6 +56,16 @@ fn resolve_test(
                 error: None,
             }
         }
+        Ok(Solution::Underdetermined(_)) => ResolveResult {
+            success: false,
+            output: None,
+            error: Some("resolution underdetermined".to_string()),
+        },
+        Ok(Solution::Contradictory) => ResolveResult {
+            success: false,
+            output: None,
+            error: Some("resolution contradictory".to_string()),
+        },
         Err(e) => ResolveResult {
             success: false,
             output: None,

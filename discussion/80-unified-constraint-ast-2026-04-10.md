@@ -456,7 +456,11 @@ Ordered steps. Each step leaves the tree green.
    - Not done: constraint emission (`Derived { AromaticElectronCount(n), ring_atoms }`) and verification mode (solver discarding failing proposals). These require `DerivedPred::AromaticElectronCount` and constraint evaluation infrastructure (step 9 scope). Currently all proposed systems are accepted unconditionally.
    - 621 conformance tests pass, 3796 lib tests pass.
 8. **Delete `graph_ir::Molecule`.** `MoleculeAst` is the only molecule type. ~3 days. *(Done 2026-04-15.)*
-9. **Add `SubPattern` constraint and matcher recursion.** ~1 week.
+9. **Add `SubPattern` constraint and matcher recursion.** ~1 week. *(Done 2026-04-19.)*
+   - `umol-graph-core::subgraph_isomorphisms_at` in `algorithms/subiso.rs` seeds VF2 state with a forced `(query, target)` pair; the pairwise and anchored entries share a private VF2 core.
+   - `Matcher::find_at(pattern, target, pattern_anchor, target_anchor)` in `ops/matcher.rs` is the matching-side entry.
+   - `SubPattern` AST variant carries explicit `target_anchor: AtomIdx` and `pattern_anchor: AtomIdx` fields (no implicit atom-0 convention). DSL keys: `:target-anchor`, `:pattern-anchor`, `:pattern`.
+   - Evaluator dispatches through `ops/evaluate.rs`; empty patterns are rejected at the call site.
 10. **Add DPO rule application**. `ReactionRuleAst` as top-level type, rule-apply as a transform over `MoleculeAst`. ~1–2 weeks.
 
 Total: ~8–10 weeks. Fits inside the three-month window with buffer.

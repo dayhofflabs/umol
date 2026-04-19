@@ -60,7 +60,15 @@ pub fn parse_smiles_bytes_with(
 ) -> Result<api::Molecule, SmilesError> {
     let table_mol = parse_smiles_bytes_to_table_ir_with(input, io_config)?;
     let ast = MoleculeAst::from_table_molecule(&table_mol);
-    Ok(Resolver::new(chemistry).resolve(ast)?)
+    match Resolver::new(chemistry).resolve(ast)? {
+        crate::ops::solution::Solution::Determined(ast) => {
+            api::Molecule::new(ast).map_err(|_| SmilesError::ResolveUnderdetermined)
+        }
+        crate::ops::solution::Solution::Underdetermined(_) => {
+            Err(SmilesError::ResolveUnderdetermined)
+        }
+        crate::ops::solution::Solution::Contradictory => Err(SmilesError::ResolveContradictory),
+    }
 }
 
 /// Parse SMILES to [`MoleculeAst`] without running the solver.

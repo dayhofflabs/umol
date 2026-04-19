@@ -13,20 +13,8 @@ impl From<ResolutionError> for Diagnostic {
 
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum ResolutionError {
-    #[error("resolution underdetermined")]
-    Underdetermined,
-    #[error("resolution contradictory")]
-    Contradictory,
     #[error(transparent)]
     Aromaticity(#[from] AromaticityError),
-}
-
-#[derive(Debug, Error, Clone, PartialEq)]
-pub enum ValidationError {
-    #[error("validation underdetermined")]
-    Underdetermined,
-    #[error("validation contradictory")]
-    Contradictory,
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]
