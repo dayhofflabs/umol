@@ -530,18 +530,29 @@ fn parse_molecule_constraint(
         }
         "sub-pattern" => {
             let m = expect_map(value, "sub-pattern")?;
-            let anchor_edn = m
-                .get_keyword("anchor")
-                .ok_or_else(|| ParseError::MissingKey(":anchor".to_string()))?;
+            let target_anchor_edn = m
+                .get_keyword("target-anchor")
+                .ok_or_else(|| ParseError::MissingKey(":target-anchor".to_string()))?;
+            let pattern_anchor_edn = m
+                .get_keyword("pattern-anchor")
+                .ok_or_else(|| ParseError::MissingKey(":pattern-anchor".to_string()))?;
             let pattern_edn = m
                 .get_keyword("pattern")
                 .ok_or_else(|| ParseError::MissingKey(":pattern".to_string()))?;
-            let anchor: AtomIdx = resolve_ref(anchor_edn, r.atom_count, r.atom_ids, "atom")?;
+            let target_anchor: AtomIdx =
+                resolve_ref(target_anchor_edn, r.atom_count, r.atom_ids, "atom")?;
             let wrapper = MoleculeAstWrapper::from_edn(pattern_edn)
                 .map_err(|e| ParseError::InvalidValue(format!("sub-pattern: {e}")))?;
+            let pattern_anchor: AtomIdx = resolve_ref(
+                pattern_anchor_edn,
+                wrapper.ast().atoms().count(),
+                &wrapper.metadata().atom_ids,
+                "atom",
+            )?;
             Ok(MoleculeConstraint::SubPattern {
-                anchor,
-                pattern: Box::new(wrapper.ast),
+                target_anchor,
+                pattern_anchor,
+                pattern: Box::new(wrapper.into_parts().0),
             })
         }
         "and" | "or" => {
@@ -1404,12 +1415,20 @@ fn render_molecule_constraint(
                 .collect();
             single_key_map("connected", Edn::Vector(v.into()))
         }
-        MoleculeConstraint::SubPattern { anchor, pattern } => {
+        MoleculeConstraint::SubPattern {
+            target_anchor,
+            pattern_anchor,
+            pattern,
+        } => {
             let wrapper = MoleculeAstWrapper::from_ast((**pattern).clone());
-            let mut inner = EdnMap::with_capacity(2);
+            let mut inner = EdnMap::with_capacity(3);
             inner.insert(
-                Edn::keyword("anchor"),
-                render_id_or_int(&metadata.atom_ids, anchor.index()),
+                Edn::keyword("target-anchor"),
+                render_id_or_int(&metadata.atom_ids, target_anchor.index()),
+            );
+            inner.insert(
+                Edn::keyword("pattern-anchor"),
+                render_id_or_int(&wrapper.metadata().atom_ids, pattern_anchor.index()),
             );
             inner.insert(Edn::keyword("pattern"), wrapper.to_edn());
             single_key_map("sub-pattern", Edn::Map(inner))
@@ -1806,7 +1825,7 @@ mod tests {
         r#"{:atoms [[:a1 "C"] [:a2 "C"]] :bonds [[0 1 :single]] :constraints [{:connected [:a1 :a2]}]}"#
     )]
     #[case::sub_pattern(
-        r#"{:atoms [[:a "C"]] :bonds [] :constraints [{:sub-pattern {:anchor :a :pattern {:atoms ["C"] :bonds []}}}]}"#
+        r#"{:atoms [[:a "C"]] :bonds [] :constraints [{:sub-pattern {:target-anchor :a :pattern-anchor 0 :pattern {:atoms ["C"] :bonds []}}}]}"#
     )]
     #[case::and_combinator(
         r#"{:atoms ["C"] :bonds [] :constraints [{:and [{:total-charge 0} {:atom-pred [0 :in-ring]}]}]}"#

@@ -428,4 +428,3 @@ Structural refactor landed in phases P1–P5 of plan `sunny-seeking-fiddle`.
 - [ ] **Derived view caches on `Molecule` / `ResolverCell`.** `OnceLock<RingSet>` is present; distance matrix, biconnected components, per-atom constraint index, packed pattern adjacency land when the first consumer arrives — "gated on actually needing them".
 - [ ] **EDN DSL keys for cross-feature propagators** (`:total-charge`, `:total-spin`, `:bond-order-sum`, `:connected`, `:aromatic-electron-count`, `:multicenter-electron-count`). Parser currently emits `None` / ignores; programmatic construction works.
 - [ ] **`Chemistry` naming.** Provisional.
-- [ ] **Multicenter term in `ElectronInvariant`.** Omitted pending a `MoleculeAst` helper for per-atom multicenter-valence contribution. Covered separately by the `MulticenterElectronCount` propagator.

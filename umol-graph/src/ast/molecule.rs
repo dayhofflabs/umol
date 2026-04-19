@@ -644,7 +644,8 @@ mod tests {
     fn test_molecule_ast_is_ground_sub_pattern() {
         let mut ast = ground_ast();
         ast.constraints.insert(MoleculeConstraint::SubPattern {
-            anchor: AtomIdx(0),
+            target_anchor: AtomIdx(0),
+            pattern_anchor: AtomIdx(0),
             pattern: Box::new(MoleculeAst::default()),
         });
         assert!(!ast.is_ground());

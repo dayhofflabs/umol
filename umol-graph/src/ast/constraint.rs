@@ -21,7 +21,8 @@ pub enum MoleculeConstraint {
     BondOrderSum(Vec<BondIdx>, ValueAst),
     Connected(Vec<AtomIdx>),
     SubPattern {
-        anchor: AtomIdx,
+        target_anchor: AtomIdx,
+        pattern_anchor: AtomIdx,
         pattern: Box<MoleculeAst>,
     },
     And(Vec<MoleculeConstraint>),
@@ -466,7 +467,8 @@ mod tests {
     #[case::connected(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)]), true)]
     #[case::sub_pattern(
         MoleculeConstraint::SubPattern {
-            anchor: AtomIdx(0),
+            target_anchor: AtomIdx(0),
+            pattern_anchor: AtomIdx(0),
             pattern: Box::new(MoleculeAst::default()),
         },
         false,

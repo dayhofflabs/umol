@@ -1,8 +1,7 @@
-//! VF2 subgraph isomorphism (Cordella et al., 2004).
-//!
-//! Finds all injective node mappings from a query graph into a target graph
-//! that preserve adjacency. Node and edge compatibility is caller-defined
-//! via match closures.
+//! Subgraph isomorphism: find all injective node mappings from a query graph
+//! into a target graph that preserve adjacency. Node and edge compatibility is
+//! caller-defined via match closures. Implemented with VF2 (Cordella et al.,
+//! 2004).
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
@@ -26,6 +25,38 @@ pub fn subgraph_isomorphisms(
     }
 
     let mut state = Vf2State::new(query, target);
+    state.search(node_match, edge_match);
+    state.results
+}
+
+/// Find all subgraph isomorphisms from `query` into `target` where `anchor.0`
+/// (a query node) must map to `anchor.1` (a target node). Results have the
+/// same shape as [`subgraph_isomorphisms`], with `result[i][anchor.0] ==
+/// anchor.1.index()` in every returned assignment. Returns empty when query
+/// is empty, when either anchor endpoint is out of bounds, or when
+/// `node_match(anchor.0, anchor.1)` is false.
+pub fn subgraph_isomorphisms_at(
+    query: &Graph,
+    target: &Graph,
+    anchor: (NodeId, NodeId),
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+) -> Vec<Vec<usize>> {
+    if query.node_count() > target.node_count() {
+        return Vec::new();
+    }
+    if query.node_count() == 0 {
+        return Vec::new();
+    }
+    if anchor.0.index() >= query.node_count() || anchor.1.index() >= target.node_count() {
+        return Vec::new();
+    }
+    if !node_match(anchor.0, anchor.1) {
+        return Vec::new();
+    }
+
+    let mut state = Vf2State::new(query, target);
+    state.seed_anchor(anchor);
     state.search(node_match, edge_match);
     state.results
 }
@@ -55,6 +86,30 @@ impl<'g> Vf2State<'g> {
             terminal_target: vec![0; target.node_count()],
             depth: 0,
             results: Vec::new(),
+        }
+    }
+
+    /// Seed state with a forced pair before search. Equivalent to one level of
+    /// recursion already done: pair mapped, terminal sets populated from the
+    /// pair's neighbors.
+    fn seed_anchor(&mut self, anchor: (NodeId, NodeId)) {
+        let (q_node, t_node) = anchor;
+        let q_idx = q_node.index();
+        let t_idx = t_node.index();
+        self.depth = 1;
+        self.mapping[q_idx] = Some(t_idx as u32);
+        self.reverse[t_idx] = true;
+        for qn in self.query.neighbors(q_node) {
+            let ni = qn.node.index();
+            if self.terminal_query[ni] == 0 && self.mapping[ni].is_none() {
+                self.terminal_query[ni] = self.depth;
+            }
+        }
+        for tn in self.target.neighbors(t_node) {
+            let ni = tn.node.index();
+            if self.terminal_target[ni] == 0 && !self.reverse[ni] {
+                self.terminal_target[ni] = self.depth;
+            }
         }
     }
 
@@ -381,6 +436,96 @@ mod tests {
         );
         // Center must map to center (0→0). Leaves: P(4,3) = 24.
         assert_eq!(r.len(), 24);
+    }
+
+    #[test]
+    fn test_subgraph_isomorphisms_at_fixes_anchor() {
+        // Query edge 0-1 into 3-cycle target. Anchor q0→t1.
+        let q = Graph::new(2, &[[0, 1]]);
+        let t = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
+        let r = sorted(subgraph_isomorphisms_at(
+            &q,
+            &t,
+            (NodeId(0), NodeId(1)),
+            &mut accept_all_nodes,
+            &mut accept_all_edges,
+        ));
+        // q0 must be t1, so q1 can be t0 or t2.
+        assert_eq!(r, vec![vec![1, 0], vec![1, 2]]);
+    }
+
+    #[test]
+    fn test_subgraph_isomorphisms_at_anchor_rejects_when_adjacency_fails() {
+        // Query is edge 0-1, anchor q0→t0 in a graph where t0 has no neighbors.
+        let q = Graph::new(2, &[[0, 1]]);
+        let t = Graph::new(3, &[[1, 2]]);
+        let r = subgraph_isomorphisms_at(
+            &q,
+            &t,
+            (NodeId(0), NodeId(0)),
+            &mut accept_all_nodes,
+            &mut accept_all_edges,
+        );
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn test_subgraph_isomorphisms_at_empty_query() {
+        let q = Graph::default();
+        let t = Graph::new(3, &[[0, 1], [1, 2]]);
+        let r = subgraph_isomorphisms_at(
+            &q,
+            &t,
+            (NodeId(0), NodeId(0)),
+            &mut accept_all_nodes,
+            &mut accept_all_edges,
+        );
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn test_subgraph_isomorphisms_at_out_of_bounds() {
+        let q = Graph::new(2, &[[0, 1]]);
+        let t = Graph::new(3, &[[0, 1], [1, 2]]);
+        let r = subgraph_isomorphisms_at(
+            &q,
+            &t,
+            (NodeId(5), NodeId(0)),
+            &mut accept_all_nodes,
+            &mut accept_all_edges,
+        );
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn test_subgraph_isomorphisms_at_node_match_gates_anchor() {
+        let q = Graph::new(2, &[[0, 1]]);
+        let t = Graph::new(3, &[[0, 1], [1, 2]]);
+        let mut nm = |q: NodeId, t: NodeId| !(q.0 == 0 && t.0 == 1);
+        let r = subgraph_isomorphisms_at(
+            &q,
+            &t,
+            (NodeId(0), NodeId(1)),
+            &mut nm,
+            &mut accept_all_edges,
+        );
+        assert!(r.is_empty());
+    }
+
+    #[test]
+    fn test_subgraph_isomorphisms_at_path_anchored_at_center() {
+        // Path 0-1-2 into 5-path. Anchor q1→t2 (center to center).
+        let q = Graph::new(3, &[[0, 1], [1, 2]]);
+        let t = Graph::new(5, &[[0, 1], [1, 2], [2, 3], [3, 4]]);
+        let r = sorted(subgraph_isomorphisms_at(
+            &q,
+            &t,
+            (NodeId(1), NodeId(2)),
+            &mut accept_all_nodes,
+            &mut accept_all_edges,
+        ));
+        // q1=t2. Neighbors of t2 are {1,3}. Two orderings: (q0=1,q2=3), (q0=3,q2=1).
+        assert_eq!(r, vec![vec![1, 2, 3], vec![3, 2, 1]]);
     }
 
     #[rstest]

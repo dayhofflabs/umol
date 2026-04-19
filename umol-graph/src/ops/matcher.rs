@@ -1,6 +1,6 @@
 //! Substructure matcher over `MoleculePattern` / `Molecule`.
 
-use umol_graph_core::{subgraph_isomorphisms, EdgeId, NodeId};
+use umol_graph_core::{subgraph_isomorphisms, subgraph_isomorphisms_at, EdgeId, NodeId};
 
 use crate::api::molecule::Molecule;
 use crate::api::pattern::MoleculePattern;
@@ -49,6 +49,49 @@ impl Matcher {
         subgraph_isomorphisms(
             pattern_ast.graph(),
             target_ast.graph(),
+            &mut node_match,
+            &mut edge_match,
+        )
+        .into_iter()
+        .filter(|a| post_filter(pattern_ast, target, a))
+        .map(Assignment)
+        .collect()
+    }
+
+    /// All substructure matches of `pattern` in `target` where `pattern_anchor`
+    /// (a pattern atom) is forced to map to `target_anchor` (a target atom).
+    /// Rejects empty patterns.
+    pub fn find_at(
+        &self,
+        pattern: &MoleculePattern,
+        target: &Molecule,
+        pattern_anchor: AtomIdx,
+        target_anchor: AtomIdx,
+    ) -> Vec<Assignment> {
+        let pattern_ast = pattern.ast();
+        let target_ast = target.ast();
+
+        if pattern_ast.atoms().count() == 0 {
+            return vec![];
+        }
+
+        let mut node_match = |q: NodeId, t: NodeId| {
+            pattern_ast
+                .atom(q.into())
+                .data
+                .matches_ground(target_ast.atom(t.into()).data)
+        };
+        let mut edge_match = |q: EdgeId, t: EdgeId| {
+            pattern_ast
+                .bond(q.into())
+                .data
+                .matches_ground(target_ast.bond(t.into()).data)
+        };
+
+        subgraph_isomorphisms_at(
+            pattern_ast.graph(),
+            target_ast.graph(),
+            (pattern_anchor.into(), target_anchor.into()),
             &mut node_match,
             &mut edge_match,
         )
@@ -120,7 +163,20 @@ fn evaluate_remapped(
         }
         MoleculeConstraint::AromaticElectronCount(_, _)
         | MoleculeConstraint::MulticenterElectronCount(_, _) => true,
-        MoleculeConstraint::SubPattern { .. } => false,
+        MoleculeConstraint::SubPattern {
+            target_anchor,
+            pattern_anchor,
+            pattern,
+        } => {
+            if pattern.atoms().count() == 0 {
+                return false;
+            }
+            let mapped_target = AtomIdx(assignment[target_anchor.index()] as u32);
+            let query = MoleculePattern::new((**pattern).clone());
+            !Matcher::new()
+                .find_at(&query, target, *pattern_anchor, mapped_target)
+                .is_empty()
+        }
         MoleculeConstraint::And(xs) => xs
             .iter()
             .all(|x| evaluate_remapped(x, pattern, target, assignment)),
@@ -821,6 +877,78 @@ mod tests {
             ));
             let pattern = MoleculePattern::new(ast);
             assert_eq!(Matcher::new().find(&pattern, &target), vec![]);
+        }
+
+        #[test]
+        fn test_find_matches_sub_pattern() {
+            // Target: propane C-C-C. Outer query: single wildcard atom with a
+            // SubPattern constraint that pins the outer atom to a middle-carbon
+            // pattern (C with 2 implicit H). Only propane atom 1 qualifies.
+            let target = propane();
+            let sub = MoleculeAst::new(
+                vec![ground_c(2), ground_c(3)],
+                vec![(AtomIdx(0), AtomIdx(1), ground_bond(1))],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            let mut ast = MoleculeAst::new(
+                vec![AtomAst::new(ElementAst::Undetermined)],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            ast.constraints_mut().insert(MoleculeConstraint::SubPattern {
+                target_anchor: AtomIdx(0),
+                pattern_anchor: AtomIdx(0),
+                pattern: Box::new(sub),
+            });
+            let pattern = MoleculePattern::new(ast);
+            let matches: Vec<usize> = Matcher::new()
+                .find(&pattern, &target)
+                .into_iter()
+                .map(|a| a.0[0])
+                .collect();
+            assert_eq!(matches, vec![1]);
+        }
+
+        #[test]
+        fn test_find_matches_sub_pattern_no_match() {
+            // SubPattern looks for N-C bond; target is pure carbon, so nothing qualifies.
+            let target = propane();
+            let sub = MoleculeAst::new(
+                vec![
+                    AtomAst::from_element(Element::N),
+                    AtomAst::from_element(Element::C),
+                ],
+                vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            let mut ast = MoleculeAst::new(
+                vec![AtomAst::new(ElementAst::Undetermined)],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+                vec![],
+            );
+            ast.constraints_mut().insert(MoleculeConstraint::SubPattern {
+                target_anchor: AtomIdx(0),
+                pattern_anchor: AtomIdx(0),
+                pattern: Box::new(sub),
+            });
+            let pattern = MoleculePattern::new(ast);
+            assert!(Matcher::new().find(&pattern, &target).is_empty());
         }
 
         #[test]

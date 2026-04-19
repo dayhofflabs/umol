@@ -10,7 +10,7 @@ pub mod graph;
 pub mod relation;
 pub mod union_find;
 
-pub use algorithms::vf2::subgraph_isomorphisms;
+pub use algorithms::subiso::{subgraph_isomorphisms, subgraph_isomorphisms_at};
 pub use graph::{EdgeId, Graph, Neighbor, NodeId, Remapping, Subgraph};
 pub use relation::{FixedRelationSet, RelationId, VarRelationSet};
 pub use union_find::UnionFind;

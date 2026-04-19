@@ -119,7 +119,19 @@ impl MoleculeConstraint {
                 None => false,
             },
             Self::Connected(atoms) => all_in_same_component(target, atoms),
-            Self::SubPattern { .. } => false,
+            Self::SubPattern {
+                target_anchor,
+                pattern_anchor,
+                pattern,
+            } => {
+                if pattern.atoms().count() == 0 {
+                    return false;
+                }
+                let query = crate::api::pattern::MoleculePattern::new((**pattern).clone());
+                !crate::ops::matcher::Matcher::new()
+                    .find_at(&query, target, *pattern_anchor, *target_anchor)
+                    .is_empty()
+            }
             Self::And(xs) => xs.iter().all(|c| c.evaluate(target)),
             Self::Or(xs) => xs.iter().any(|c| c.evaluate(target)),
             Self::Not(inner) => !inner.evaluate(target),
@@ -392,10 +404,63 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_constraint_evaluate_sub_pattern(methane: Molecule) {
+    fn test_molecule_constraint_evaluate_sub_pattern_empty_pattern(methane: Molecule) {
         let c = MoleculeConstraint::SubPattern {
-            anchor: AtomIdx(0),
+            target_anchor: AtomIdx(0),
+            pattern_anchor: AtomIdx(0),
             pattern: Box::new(MoleculeAst::default()),
+        };
+        assert!(!c.evaluate(&methane));
+    }
+
+    #[rstest]
+    fn test_molecule_constraint_evaluate_sub_pattern_single_atom_matches(methane: Molecule) {
+        let pattern = MoleculeAst::new(
+            vec![AtomAst {
+                element: ElementAst::Lit(Element::C),
+                isotope_mass: IsotopeAst::Natural,
+                charge: ValueAst::Undetermined,
+                implicit_hydrogens: HydrogenAst::Value(ValueAst::Undetermined),
+                lone_pairs: ValueAst::Undetermined,
+                spin: SpinStateAst::default(),
+            }],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let c = MoleculeConstraint::SubPattern {
+            target_anchor: AtomIdx(0),
+            pattern_anchor: AtomIdx(0),
+            pattern: Box::new(pattern),
+        };
+        assert!(c.evaluate(&methane));
+    }
+
+    #[rstest]
+    fn test_molecule_constraint_evaluate_sub_pattern_element_mismatch(methane: Molecule) {
+        let pattern = MoleculeAst::new(
+            vec![AtomAst {
+                element: ElementAst::Lit(Element::N),
+                isotope_mass: IsotopeAst::Natural,
+                charge: ValueAst::Undetermined,
+                implicit_hydrogens: HydrogenAst::Value(ValueAst::Undetermined),
+                lone_pairs: ValueAst::Undetermined,
+                spin: SpinStateAst::default(),
+            }],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        );
+        let c = MoleculeConstraint::SubPattern {
+            target_anchor: AtomIdx(0),
+            pattern_anchor: AtomIdx(0),
+            pattern: Box::new(pattern),
         };
         assert!(!c.evaluate(&methane));
     }
