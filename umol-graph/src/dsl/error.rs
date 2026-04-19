@@ -59,6 +59,8 @@ pub enum BondDslError {
     TrailingInput(String),
     #[error("Incomplete input")]
     Incomplete,
+    #[error("derived predicates not allowed in this context (use BondPattern)")]
+    ConstraintsNotAllowed,
     #[error("Nom error: {0:?}")]
     NomError(NomErrorKind),
 }

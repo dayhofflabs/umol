@@ -133,10 +133,12 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
                 fmt_value(f, v)
             }
         },
-        // Other AtomConstraint variants (Degree, Connectivity, TotalHCount, InRing,
-        // RingCount, RingSize) have no packed-atom-string sugar. They serialize
-        // through the molecule-level :constraints block instead.
-        _ => Ok(()),
+        AtomConstraint::Degree(v) => fmt_value_field_required(f, "#D", v),
+        AtomConstraint::Connectivity(v) => fmt_value_field_required(f, "#X", v),
+        AtomConstraint::TotalHCount(v) => fmt_value_field_required(f, "#H", v),
+        AtomConstraint::InRing => write!(f, "#R"),
+        AtomConstraint::RingCount(v) => fmt_ring_count(f, v),
+        AtomConstraint::RingSize(_) => Ok(()),
     }
 }
 
@@ -274,11 +276,11 @@ fn constraint_tag(c: &AtomConstraint) -> &'static str {
         AtomConstraint::AcceptedPairs(_) => "#r",
         AtomConstraint::AromaticValence(_) => "#a",
         AtomConstraint::MulticenterValence(_) => "#m",
-        AtomConstraint::Degree(_) => "#deg",
-        AtomConstraint::Connectivity(_) => "#con",
-        AtomConstraint::TotalHCount(_) => "#th",
-        AtomConstraint::InRing => "#ring",
-        AtomConstraint::RingCount(_) => "#rc",
+        AtomConstraint::Degree(_) => "#D",
+        AtomConstraint::Connectivity(_) => "#X",
+        AtomConstraint::TotalHCount(_) => "#H",
+        AtomConstraint::InRing => "#R",
+        AtomConstraint::RingCount(_) => "#R",
         AtomConstraint::RingSize(_) => "#rs",
     }
 }
@@ -327,11 +329,41 @@ fn atom_predicate(i: &str) -> IResult<&str, AtomPredicate, AtomDslError> {
             |v| AtomPredicate::Constraint(AtomConstraint::MulticenterValence(v)),
         )
         .parse(remaining),
+        "#D" => map(
+            optional_value,
+            |v| AtomPredicate::Constraint(AtomConstraint::Degree(v)),
+        )
+        .parse(remaining),
+        "#X" => map(
+            optional_value,
+            |v| AtomPredicate::Constraint(AtomConstraint::Connectivity(v)),
+        )
+        .parse(remaining),
+        "#H" => map(
+            optional_value,
+            |v| AtomPredicate::Constraint(AtomConstraint::TotalHCount(v)),
+        )
+        .parse(remaining),
+        "#R" => ring_predicate(remaining),
         p if p.starts_with("#") => Err(Err::Failure(AtomDslError::UnknownAtomPredicate(
             p.to_string(),
         ))),
         _ => Err(Err::Failure(AtomDslError::TrailingInput(i.to_string()))),
     }
+}
+
+fn ring_predicate(i: &str) -> IResult<&str, AtomPredicate, AtomDslError> {
+    preceded(
+        multispace0,
+        alt((
+            map(value_dsl, |v| {
+                AtomPredicate::Constraint(AtomConstraint::RingCount(v))
+            }),
+            success(AtomPredicate::Constraint(AtomConstraint::InRing)),
+        )),
+    )
+    .parse(i)
+    .map_err(|_| Err::Error(AtomDslError::InvalidValue(i.to_string())))
 }
 
 fn element_expr(i: &str) -> IResult<&str, ElementAst, AtomDslError> {
@@ -539,6 +571,18 @@ fn fmt_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fm
     }
 }
 
+/// Format RingCount: always emits the digit, since bare `#R` parses as `InRing`.
+fn fmt_ring_count(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
+    match v {
+        ValueAst::Undetermined => write!(f, "#R*"),
+        ValueAst::Lit(n) => write!(f, "#R{}", n),
+        v => {
+            write!(f, "#R")?;
+            fmt_value(f, v)
+        }
+    }
+}
+
 /// Format a value field that always emits (constraint sugar — zero is meaningful).
 fn fmt_value_field_required(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fmt::Result {
     match v {
@@ -655,6 +699,11 @@ mod tests {
     #[case::arom_one("C#a1", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(1)))]))]
     #[case::arom_omit("C#a", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(1)))]))]
     #[case::multicenter("C#m2", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::MulticenterValence(ValueAst::Lit(2))]))]
+    #[case::degree("C#D2", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::Degree(ValueAst::Lit(2))]))]
+    #[case::connectivity("C#X3", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::Connectivity(ValueAst::Lit(3))]))]
+    #[case::total_h_count("C#H1", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::TotalHCount(ValueAst::Lit(1))]))]
+    #[case::in_ring_bare("C#R", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::InRing]))]
+    #[case::ring_count("C#R2", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::RingCount(ValueAst::Lit(2))]))]
     fn test_parse_atom_dsl(#[case] input: &str, #[case] expected: AtomPattern) {
         let result = atom_dsl(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.unwrap_err());
@@ -767,6 +816,12 @@ mod tests {
     #[case::arom_lit("#a2", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(2)))))]
     #[case::arom_omit("#a", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(1)))))]
     #[case::multicenter("#m2", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(ValueAst::Lit(2))))]
+    #[case::degree("#D2", AtomPredicate::Constraint(AtomConstraint::Degree(ValueAst::Lit(2))))]
+    #[case::degree_omit("#D", AtomPredicate::Constraint(AtomConstraint::Degree(ValueAst::Lit(1))))]
+    #[case::connectivity("#X3", AtomPredicate::Constraint(AtomConstraint::Connectivity(ValueAst::Lit(3))))]
+    #[case::total_h_count("#H1", AtomPredicate::Constraint(AtomConstraint::TotalHCount(ValueAst::Lit(1))))]
+    #[case::in_ring_bare("#R", AtomPredicate::Constraint(AtomConstraint::InRing))]
+    #[case::ring_count("#R2", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Lit(2))))]
     fn test_atom_predicate(#[case] input: &str, #[case] expected: AtomPredicate) {
         let result = atom_predicate(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());

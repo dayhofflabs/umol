@@ -80,8 +80,7 @@ molecule-map ::=
     [:multicenter  multicenter-list]
     [:noncovalent  noncovalent-list]
     [:atom-aliases alias-list]
-    [:charge       int | nil]
-    [:spin         spin-literal | nil]
+    [:constraints  constraint-list]
     [:expect   { :charge int :multiplicity keyword }]
     [:guards   [ logic-expr* ]]
   }
@@ -121,6 +120,8 @@ noncovalent-spec ::= bond-spec
 **Keyword namespace disjointness.** All keyword-shaped identifiers within a single molecule definition — atom ids, atom alias names, structural entry **`:id`** values, and future keyword namespaces (bond alias names) — **MUST** be drawn from **mutually disjoint** namespaces. No two identifier kinds **MAY** share a keyword name within the same molecule map. Alias names **MUST NOT** be valid element symbols (**§7.4**).
 
 **`:atom-aliases`**. The **`alias-list`** defines named atom shorthands scoped to the enclosing molecule map. It is a flat vector of alternating keyword/atom-spec pairs. Each value **MUST** be a **`#atom`** tagged literal. An **`atom-entry`** that is a bare **keyword** (not a **`#atom`** tagged literal and not in a **`[id entry]`** position) is an alias reference and **MUST** resolve to a key in **`:atom-aliases`**. Aliases are resolved at parse time; the resolved **`atom-string`** is substituted as if written inline. A reference to an undefined alias is an error. Alias definitions **MUST** be bijective: no two alias names **MAY** map to the same atom definition.
+
+**`:constraints`**. Molecule-wide derived predicates — total charge, total spin, per-atom topology, bond-order sums, connectivity, sub-pattern anchors, boolean combinators — live here. The canonical grammar appears in **§7.9**. Molecule-wide charge and spin assertions are written as **`{:total-charge n}`** and **`{:total-spin spin-literal}`** entries within this list; there is no top-level **`:charge`** or **`:spin`** key on the molecule map.
 
 **Inline ids.** An **`atom-entry`** of the form **`[`** *keyword* *atom-entry* **`]`** assigns the keyword as an **id** to the atom at that position. Ids enable symbolic reference from bond endpoints (instead of positional index). Entries with and without ids **MAY** be freely mixed within the same **`:atoms`** vector.
 
@@ -342,7 +343,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 **Chemical elements.** Any **`element-literal`**, any entry in an **`element-set`**, and any **nominal** binding or reference (**`element-bind`**, **`element-ref`**) **MUST** refer only to elements from **hydrogen** (**H**) through **oganesson** (**Og**). Implementations **MUST** reject symbols outside that range in **Ground**; **Query** / **Rule** **SHOULD** use the same restriction unless explicitly documented otherwise.
 
-**Charges.** **Formal charge** on atoms (**`#c`**), **formal bond charge** (**`#c`** on **bond-string**), and molecule-map **`:charge`** where integral **MUST** fit a **signed 8-bit** integer (**−128…127**). The **`#c`** payload is a **`value-expr`** (or **Ground** subset) that evaluates to the signed charge, including the **special** forms **`+`** / **`-`** for **±1** (**§7.3**), e.g. **`#c2`**, **`#c-2`**, **`#c+`**, **`#c-`**.
+**Charges.** **Formal charge** on atoms (**`#c`**), **formal bond charge** (**`#c`** on **bond-string**), and molecule-wide **`{:total-charge n}`** (**§7.9**) where integral **MUST** fit a **signed 8-bit** integer (**−128…127**). The **`#c`** payload is a **`value-expr`** (or **Ground** subset) that evaluates to the signed charge, including the **special** forms **`+`** / **`-`** for **±1** (**§7.3**), e.g. **`#c2`**, **`#c-2`**, **`#c+`**, **`#c-`**.
 
 **Isotope mass number.** The numeric value carried by **`#i`** in **Ground** **MUST** fit an **unsigned 32-bit** integer.
 
@@ -381,7 +382,7 @@ tag ::= [A-Za-z_]
 - **`element`** is first (**§7.4**).
 - **Zero or more** **`atom-predicate`** units follow. **Optional** ASCII whitespace **MAY** appear **between** **`element`** and the first **`#`**, and **between** successive predicates.
 - **At most one** predicate per **tag letter** per **`atom-string`** (each row of the table below is a **kind**).
-- **Canonical order** of predicates after **`element`** (stable serialized form): **`#i`**, **`#c`**, **`#h`**, **`#n`**, **`#u`**, **`#s`**, **`#v`**, **`#d`**, **`#r`**, **`#a`**, **`#m`**. Implementations **MAY** specify further ordering for fields not listed here.
+- **Canonical order** of predicates after **`element`** (stable serialized form): **`#i`**, **`#c`**, **`#h`**, **`#n`**, **`#u`**, **`#s`**, **`#v`**, **`#d`**, **`#r`**, **`#a`**, **`#m`**, then the uppercase derived predicates **`#D`**, **`#X`**, **`#H`**, **`#R`**. Implementations **MAY** specify further ordering for fields not listed here.
 
 **`payload` parsing.** After trimming leading / trailing whitespace on the **payload** substring, parse as follows:
 
@@ -415,8 +416,12 @@ Other **`#h`** / **`#a`** payloads use the usual **`value-expr`** / **`decimal-t
 | **`#r`** | Dative **accepted** pair count (“received”; electrons accepted **by** this atom) |
 | **`#a`** | Aromatic π contribution; **special** **`#a*`**, **`#a!`** (**§7.3**) |
 | **`#m`** | Multicenter valence |
+| **`#D`** | **Degree**: number of neighbors in the molecular graph (SMARTS `D`). Derived predicate evaluated against the target; **not** a ground atom field. |
+| **`#X`** | **Connectivity**: degree plus implicit-H count (SMARTS `X`). Derived. |
+| **`#H`** | **Total H count**: implicit H count plus explicit H neighbors (SMARTS `H`). Derived. |
+| **`#R`** | **Ring membership**. Bare **`#R`** (no payload) means the atom is in some ring (SMARTS bare `R`); **`#R<n>`** means the atom is in exactly **n** rings (SMARTS numbered `R`). Disambiguated by payload presence. Derived. |
 
-**Convention:** use **lowercase** ASCII for **`tag`** letters in authoring.
+**Case convention.** **Lowercase** tag letters denote the atom's own state fields (isotope, charge, spin, implicit H, localized valence, π contribution, …). **Uppercase** tag letters denote **derived predicates** (topology queries over the surrounding graph) in the SMARTS-parity set. The two namespaces are **disjoint**: **`#h`** (implicit H slot) and **`#H`** (total H count) coexist, and **`#r`** (dative accepted pairs) and **`#R`** (ring membership) coexist, without collision.
 
 ### 7.4 Element and bond **`order`** (via **`value-expr`**)
 
@@ -452,7 +457,7 @@ order ::= value-expr
 
 **Segmentation.** Let **`order-text`** be the substring of the **`bond-string`** from the first character after any leading whitespace up to (but not including) the first **`#`** that starts a **`bond-predicate`** (**`#`** immediately followed by a **tag** letter, with **no** whitespace between **`#`** and the tag), or the whole **trimmed** string if there is no such **`#`**. **`order-text`** **MUST** be parsed as **`value-expr`** (**§5**).
 
-**Bond predicates.** **Zero or more** **`bond-predicate`** units follow **`order`**. **At most one** predicate per **tag** letter among **`c`**, **`u`**, **`s`**. **Canonical** predicate order (stable serialization): **`#c`**, **`#u`**, **`#s`**. No other **`#tag`** letters are defined in **bond-string** in this revision.
+**Bond predicates.** **Zero or more** **`bond-predicate`** units follow **`order`**. **At most one** predicate per **tag** letter among **`c`**, **`u`**, **`s`**, **`a`**. **Canonical** predicate order (stable serialization): **`#c`**, **`#u`**, **`#s`**, **`#a`**.
 
 **Whitespace** between **`#`** and the **tag** letter is **invalid** (**§7.1**).
 
@@ -465,6 +470,7 @@ order ::= value-expr
 | **`#c`** | Bond formal charge (**`i8`**, **§7.2**) |
 | **`#u`** | Unpaired electrons (bond centered); **`u8`** |
 | **`#s`** | Spin multiplicity (2S+1) (bond centered); **`u8`** |
+| **`#a`** | Bond is a member of some aromatic system declared under **`:aromatic`**. Derived predicate; no payload. Canonical form is **`{:bond-pred [i :aromatic]}`** under **`:constraints`**. |
 
 **Bond order values** in **`#bond`** **MUST NOT** be **fractional** after evaluation (**§7.6**). **Aromatic** bond **order** as a distinct category **MUST NOT** be used in **`order`**; use **§4** instead.
 
@@ -511,6 +517,54 @@ base-arith ::= nat | '?' id | '(' arith-expr ')'
 Precedence of **`mult-op`** over **`add-op`** unchanged. **Membership** **`::`**, **relations** (**`==`**, **`<`**, …), and **logic** (**§5.1**) would still apply **outside** this **`arith-expr`** layer as today. **`sign`*** prefixes (**§5**) would extend to **`arith-expr`** leaves as needed.
 
 **Other** (non-normative placeholders): functions (**`min`**, **`abs`**, …), typed variables, cross-atom **`id`** scope, **chained** relations **`a < b < c`**, etc.
+
+### 7.9 Constraint grammar
+
+Molecule-wide derived predicates live under the **`:constraints`** key on a **molecule-map** (**§4**). Each entry is a **single-key map** whose key names the constraint kind; some entries are bare keywords (no payload).
+
+```
+constraint-list ::= [ constraint-entry* ]
+
+constraint-entry ::=
+    { :atom-pred                [atom-ref atom-constraint-form] }
+  | { :bond-pred                [bond-ref bond-constraint-form] }
+  | { :total-charge             int }
+  | { :total-spin               spin-literal }
+  | { :aromatic-electron-count  [arom-sys-ref int] }
+  | { :multicenter-electron-count [mc-bond-ref int] }
+  | { :bond-order-sum           { :bonds [bond-ref+] :equals int } }
+  | { :connected                [atom-ref+] }
+  | { :sub-pattern              { :anchor atom-ref :pattern molecule-map } }
+  | { :and                      [constraint-entry+] }
+  | { :or                       [constraint-entry+] }
+  | { :not                      constraint-entry }
+
+atom-constraint-form ::=
+    { :valence             value-expr }
+  | { :aromatic-valence    ( value-expr | :not-aromatic ) }
+  | { :multicenter-valence value-expr }
+  | { :donated-pairs       value-expr }
+  | { :accepted-pairs      value-expr }
+  | { :degree              value-expr }
+  | { :connectivity        value-expr }
+  | { :total-h-count       value-expr }
+  | :in-ring
+  | { :ring-count          value-expr }
+  | { :ring-size           value-expr }
+
+bond-constraint-form ::= :ring-bond | :aromatic
+
+atom-ref     ::= int | keyword
+bond-ref     ::= int | keyword
+arom-sys-ref ::= int | keyword
+mc-bond-ref  ::= int | keyword
+```
+
+**Ref resolution.** Integer refs are **positional**: for **`atom-ref`**, the index into **`:atoms`**; for **`bond-ref`**, the index into **`:bonds`**; for **`arom-sys-ref`** and **`mc-bond-ref`**, the index into **`:aromatic`** and **`:multicenter`** respectively. A keyword ref resolves against the **`:id`** declared on the corresponding structural entry (**§4**). On **serialization**, implementations **MUST** prefer the **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer otherwise.
+
+**Sugar and canonical forms.** A subset of **`atom-constraint-form`** entries (**`:valence`**, **`:aromatic-valence`**, **`:multicenter-valence`**, **`:donated-pairs`**, **`:accepted-pairs`**, **`:degree`**, **`:connectivity`**, **`:total-h-count`**, **`:in-ring`**, **`:ring-count`**) and all **`bond-constraint-form`** entries (**`:ring-bond`** — canonical only; **`:aromatic`**) have equivalent **packed-string** sugar in the atom (**§7.3**) and bond (**§7.5**) subgrammars. When the constraint is a **bare per-atom** or **per-bond** predicate (not nested under **`:and`** / **`:or`** / **`:not`** / **`:sub-pattern`**), implementations **MAY** emit the sugared form on the atom or bond string; nested constraints **MUST** be emitted in canonical form inside **`:constraints`**. Parsers **MUST** accept both forms and merge them into a single structural representation.
+
+**Multiple constraints per entity.** Each per-atom or per-bond constraint serializes as its **own** **`{:atom-pred …}`** or **`{:bond-pred …}`** entry; implementations **MUST NOT** bundle multiple constraints on the same atom or bond into a single map.
 
 ---
 

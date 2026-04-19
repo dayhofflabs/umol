@@ -13,8 +13,9 @@ use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
 use super::atom::parse_atom_dsl;
+use super::bond::parse_bond_pattern;
 use super::error::ParseError;
-use crate::api::pattern::AtomPattern;
+use crate::api::pattern::{AtomPattern, BondPattern};
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
@@ -24,6 +25,7 @@ use crate::ast::constraint::{
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::{AromaticSystemIdx, AtomIdx, BondIdx, MulticenterBondIdx};
+use crate::dsl::error::BondDslError;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
@@ -107,7 +109,7 @@ struct LocalizedBondInput {
     id: Option<String>,
     a: AtomRefInput,
     b: AtomRefInput,
-    bond: BondAst,
+    bond: BondPattern,
 }
 
 #[derive(Clone, Debug)]
@@ -146,8 +148,6 @@ struct RawMoleculeAst {
     multicenter_bonds: Vec<MulticenterBondInput>,
     noncovalent_bonds: Vec<NoncovalentBondInput>,
     atom_aliases: Vec<String>,
-    charge: Option<i64>,
-    spin: Option<SpinState>,
     constraints: Vec<Edn<'static>>,
 }
 
@@ -222,7 +222,10 @@ impl RawMoleculeAst {
             if let Some(id) = check_id(b.id)? {
                 bond_ids.insert(i, id);
             }
-            bond_list.push((a, bb, b.bond));
+            for c in b.bond.constraints {
+                lifted_constraints.push(MoleculeConstraint::BondPred(BondIdx(i as u32), c));
+            }
+            bond_list.push((a, bb, b.bond.ast));
         }
 
         let mut dative_list = Vec::new();
@@ -270,12 +273,6 @@ impl RawMoleculeAst {
         }
 
         let mut constraints = lifted_constraints;
-        if let Some(charge) = self.charge {
-            constraints.push(MoleculeConstraint::TotalCharge(ValueAst::Lit(charge)));
-        }
-        if let Some(spin) = self.spin {
-            constraints.push(MoleculeConstraint::TotalSpin(SpinStateAst::Lit(spin)));
-        }
         if !self.constraints.is_empty() {
             let resolver = ConstraintResolver {
                 atom_count,
@@ -673,8 +670,6 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<RawMolecule
     let mut aromatic_systems: Vec<AromaticSystemInput> = Vec::new();
     let mut multicenter_bonds: Vec<MulticenterBondInput> = Vec::new();
     let mut noncovalent_bonds: Vec<NoncovalentBondInput> = Vec::new();
-    let mut charge: Option<i64> = None;
-    let mut spin: Option<SpinState> = None;
     let mut atom_aliases: Vec<String> = Vec::new();
     let mut constraints: Vec<Edn<'static>> = Vec::new();
 
@@ -690,13 +685,6 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<RawMolecule
             "aromatic" => aromatic_systems = read_seq(de, read_aromatic_system)?,
             "multicenter" => multicenter_bonds = read_seq(de, read_multicenter_bond)?,
             "noncovalent" => noncovalent_bonds = read_seq(de, read_noncovalent_bond)?,
-            "charge" => charge = Some(de.read_i64()?),
-            "spin" => {
-                let s = de.read_string_or_keyword()?;
-                spin = Some(
-                    SpinState::from_str(s.as_ref()).map_err(|e| DeError::subgrammar("spin", e))?,
-                );
-            }
             "atom-aliases" | "aliases" => {
                 atom_aliases = read_seq(de, |d| {
                     d.read_string_or_keyword()
@@ -726,8 +714,6 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<RawMolecule
         multicenter_bonds,
         noncovalent_bonds,
         atom_aliases,
-        charge,
-        spin,
         constraints,
     })
 }
@@ -785,13 +771,20 @@ fn read_atom_ref(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomRefInput, Edn
     }
 }
 
-fn read_bond_spec(de: &mut EdnStreamDeserializer<'_>) -> Result<BondAst, EdnError> {
+fn read_bond_spec(de: &mut EdnStreamDeserializer<'_>) -> Result<BondPattern, EdnError> {
     let s = de.read_string_or_keyword()?;
     let aliases = super::bond::builtin_bond_aliases();
     if let Some(ast) = aliases.get_by_left(s.as_ref()) {
-        return Ok(ast.clone());
+        return Ok(BondPattern::new(ast.clone()));
     }
-    BondAst::from_str(s.as_ref()).map_err(|e| DeError::subgrammar("bond", e).into())
+    parse_bond_pattern(s.as_ref()).map_err(|e| DeError::subgrammar("bond", e).into())
+}
+
+fn bare_bond_ast(pattern: BondPattern) -> Result<BondAst, EdnError> {
+    if !pattern.constraints.is_empty() {
+        return Err(DeError::subgrammar("bond", BondDslError::ConstraintsNotAllowed).into());
+    }
+    Ok(pattern.ast)
 }
 
 fn read_localized_bond(de: &mut EdnStreamDeserializer<'_>) -> Result<LocalizedBondInput, EdnError> {
@@ -823,7 +816,7 @@ fn read_dative_bond(de: &mut EdnStreamDeserializer<'_>) -> Result<DativeBondInpu
         id,
         donor,
         acceptor,
-        bond,
+        bond: bare_bond_ast(bond)?,
     })
 }
 
@@ -831,7 +824,12 @@ fn read_noncovalent_bond(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<NoncovalentBondInput, EdnError> {
     let (id, a, b, bond) = read_endpoint_bond_map(de, EndpointBondKind::Noncovalent)?;
-    Ok(NoncovalentBondInput { id, a, b, bond })
+    Ok(NoncovalentBondInput {
+        id,
+        a,
+        b,
+        bond: bare_bond_ast(bond)?,
+    })
 }
 
 fn read_aromatic_system(
@@ -873,12 +871,12 @@ impl EndpointBondKind {
 fn read_endpoint_bond_map(
     de: &mut EdnStreamDeserializer<'_>,
     kind: EndpointBondKind,
-) -> Result<(Option<String>, AtomRefInput, AtomRefInput, BondAst), EdnError> {
+) -> Result<(Option<String>, AtomRefInput, AtomRefInput, BondPattern), EdnError> {
     de.consume_byte(b'{')?;
     let mut id: Option<String> = None;
     let mut a: Option<AtomRefInput> = None;
     let mut b: Option<AtomRefInput> = None;
-    let mut bond: Option<BondAst> = None;
+    let mut bond: Option<BondPattern> = None;
     let first_key = kind.first_key();
     let second_key = kind.second_key();
 
@@ -988,6 +986,15 @@ impl ToEdn for MoleculeAstWrapper {
             }
         }
 
+        let mut per_bond_derived: Vec<Vec<BondConstraint>> =
+            vec![Vec::new(); self.ast.bonds().count()];
+        for (idx, set) in self.ast.constraints().bonds() {
+            let i = idx.index();
+            if i < per_bond_derived.len() {
+                per_bond_derived[i].extend(set.iter().cloned());
+            }
+        }
+
         let mut atom_elems = Vec::with_capacity(self.ast.atoms().count());
         for view in self.ast.atoms().iter() {
             let i = view.idx.index();
@@ -1019,16 +1026,23 @@ impl ToEdn for MoleculeAstWrapper {
             }
         };
 
+        let bond_aliases = super::bond::builtin_bond_aliases();
         let bonds_edn: Vec<Edn<'static>> = self
             .ast
             .bonds()
             .iter()
             .enumerate()
             .map(|(i, b)| {
+                let derived = mem::take(&mut per_bond_derived[i]);
+                let pattern = if bond_aliases.get_by_right(b.data).is_some() {
+                    BondPattern::new(b.data.clone())
+                } else {
+                    BondPattern::with_constraints(b.data.clone(), derived)
+                };
                 render_localized(
                     b.src.index(),
                     b.tgt.index(),
-                    b.data,
+                    &pattern,
                     i,
                     &self.metadata.bond_ids,
                     &render_endpoint,
@@ -1122,17 +1136,6 @@ impl ToEdn for MoleculeAstWrapper {
                 Edn::Vector(noncovalent_edn.into()),
             );
         }
-        for constraint in self.ast.constraints().global() {
-            match constraint {
-                MoleculeConstraint::TotalCharge(ValueAst::Lit(n)) => {
-                    m.insert(Edn::keyword("charge"), Edn::Int(*n));
-                }
-                MoleculeConstraint::TotalSpin(SpinStateAst::Lit(s)) => {
-                    m.insert(Edn::keyword("spin"), Edn::Str(Cow::Owned(s.to_string())));
-                }
-                _ => {}
-            }
-        }
         let constraint_entries = render_constraint_list(&self.ast, &self.metadata);
         if !constraint_entries.is_empty() {
             m.insert(
@@ -1158,7 +1161,7 @@ impl ToEdn for MoleculeAstWrapper {
 fn render_localized(
     source: usize,
     target: usize,
-    bond: &BondAst,
+    bond: &BondPattern,
     i: usize,
     ids: &IndexMap<usize, String>,
     render_endpoint: &impl Fn(usize) -> Edn<'static>,
@@ -1274,7 +1277,16 @@ fn atom_constraint_has_packed_sugar(c: &AtomConstraint) -> bool {
             | AtomConstraint::AcceptedPairs(_)
             | AtomConstraint::MulticenterValence(_)
             | AtomConstraint::AromaticValence(_)
+            | AtomConstraint::Degree(_)
+            | AtomConstraint::Connectivity(_)
+            | AtomConstraint::TotalHCount(_)
+            | AtomConstraint::InRing
+            | AtomConstraint::RingCount(_)
     )
+}
+
+fn bond_constraint_has_packed_sugar(c: &BondConstraint) -> bool {
+    matches!(c, BondConstraint::Aromatic)
 }
 
 fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
@@ -1438,9 +1450,13 @@ fn render_constraint_list(ast: &MoleculeAst, metadata: &Metadata) -> Vec<Edn<'st
         }
     }
 
+    let bond_aliases = super::bond::builtin_bond_aliases();
     for (idx, set) in constraints.bonds() {
+        let bond_has_alias = bond_aliases.get_by_right(&ast[*idx]).is_some();
         for c in set.iter() {
-            out.push(render_bond_pred(*idx, c, &metadata.bond_ids));
+            if bond_has_alias || !bond_constraint_has_packed_sugar(c) {
+                out.push(render_bond_pred(*idx, c, &metadata.bond_ids));
+            }
         }
     }
 
@@ -1471,12 +1487,6 @@ fn render_constraint_list(ast: &MoleculeAst, metadata: &Metadata) -> Vec<Edn<'st
     }
 
     for c in constraints.global() {
-        if matches!(
-            c,
-            MoleculeConstraint::TotalCharge(_) | MoleculeConstraint::TotalSpin(_)
-        ) {
-            continue;
-        }
         out.push(render_molecule_constraint(c, metadata));
     }
 
@@ -1576,7 +1586,7 @@ mod tests {
         }
     )]
     #[case::charge(
-        r#"{:atoms [[:F "F#c-"]] :bonds [] :charge -1}"#,
+        r#"{:atoms [[:F "F#c-"]] :bonds [] :constraints [{:total-charge -1}]}"#,
         {
             let mut ast = mol_atoms(vec![AtomAst {
                 element: ElementAst::Lit(Element::F),
@@ -1735,7 +1745,7 @@ mod tests {
     #[case::plain(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
     #[case::with_id(r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#)]
     #[case::aliased(r#"{:atoms [:ch :ch "O"] :bonds [[0 2 :single]] :aliases [:ch "C #h1"]}"#)]
-    #[case::charge_spin(r##"{:atoms ["C"] :bonds [] :charge -1 :spin "#u1"}"##)]
+    #[case::charge_spin(r##"{:atoms ["C"] :bonds [] :constraints [{:total-charge -1} {:total-spin "#u1"}]}"##)]
     #[case::dative(
         r#"{:atoms [[:N "N"] [:B "B"]] :bonds [[:N :B :single]] :dative [{:donor :N :acceptor :B :bond :single}]}"#
     )]

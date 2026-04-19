@@ -16,7 +16,9 @@ use umol_shared::spin::SpinState;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
 
+use crate::api::pattern::BondPattern;
 use crate::ast::bond::BondAst;
+use crate::ast::constraint::BondConstraint;
 use crate::dsl::error::BondDslError;
 use crate::dsl::value::value_dsl;
 
@@ -25,6 +27,38 @@ impl FromStr for BondAst {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_bond_dsl(s)
+    }
+}
+
+impl FromStr for BondPattern {
+    type Err = BondDslError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_bond_pattern(s)
+    }
+}
+
+impl Display for BondPattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.ast, f)?;
+        for c in &self.constraints {
+            fmt_bond_constraint(f, c)?;
+        }
+        Ok(())
+    }
+}
+
+fn fmt_bond_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result {
+    match c {
+        BondConstraint::Aromatic => write!(f, "#a"),
+        BondConstraint::RingBond => Ok(()),
+    }
+}
+
+fn bond_constraint_tag(c: &BondConstraint) -> &'static str {
+    match c {
+        BondConstraint::Aromatic => "#a",
+        BondConstraint::RingBond => "#ring-bond",
     }
 }
 
@@ -132,7 +166,38 @@ impl<'de> FromEdn<'de> for BondAst {
         if let Some(ast) = aliases.get_by_left(s) {
             return Ok(ast.clone());
         }
-        parse_bond_dsl(s).map_err(|e| umol_edn::DeError::subgrammar("bond", e))
+        BondAst::from_str(s).map_err(|e| umol_edn::DeError::subgrammar("bond", e))
+    }
+}
+
+impl<'de> FromEdn<'de> for BondPattern {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let s: &str = match edn {
+            Edn::Str(s) => s,
+            Edn::Keyword(k) => k.as_str(),
+            other => {
+                return Err(DeError::TypeMismatch {
+                    expected: "string or keyword",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        let aliases = builtin_bond_aliases();
+        if let Some(ast) = aliases.get_by_left(s) {
+            return Ok(BondPattern::new(ast.clone()));
+        }
+        parse_bond_pattern(s).map_err(|e| umol_edn::DeError::subgrammar("bond", e))
+    }
+}
+
+impl ToEdn for BondPattern {
+    fn to_edn(&self) -> Edn<'static> {
+        if self.constraints.is_empty() {
+            self.ast.to_edn()
+        } else {
+            Edn::Str(Cow::Owned(self.to_string()))
+        }
     }
 }
 
@@ -147,7 +212,7 @@ impl ToEdn for BondAst {
     }
 }
 
-/// Parse a bond subgrammar string
+/// Parse a bond subgrammar string into a `BondAst`.
 pub fn parse_bond_dsl(input: &str) -> Result<BondAst, BondDslError> {
     all_consuming(bond_dsl)
         .parse(input)
@@ -171,7 +236,31 @@ pub fn bond_dsl(i: &str) -> IResult<&str, BondAst, BondDslError> {
     Ok((remaining, ast))
 }
 
-/// Merge a list of bond predicates into a `BondAst`
+/// Parse a bond subgrammar string into a `BondPattern` (base AST + constraints).
+pub fn parse_bond_pattern(input: &str) -> Result<BondPattern, BondDslError> {
+    all_consuming(bond_pattern_dsl)
+        .parse(input)
+        .map(|(_, result)| result)
+        .map_err(|e| match e {
+            Err::Error(e) | Err::Failure(e) => e,
+            Err::Incomplete(_) => BondDslError::Incomplete,
+        })
+}
+
+/// Bond pattern subgrammar parser (base AST + constraints).
+pub fn bond_pattern_dsl(i: &str) -> IResult<&str, BondPattern, BondDslError> {
+    let (remaining, (order, preds)) = pair(
+        delimited(multispace0, bond_order, multispace0),
+        many0(terminated(bond_predicate, multispace0)),
+    )
+    .parse(i)?;
+
+    let mut pattern = BondPattern::new(BondAst::new(order));
+    update_bond_pattern(&mut pattern, preds).map_err(Err::Error)?;
+    Ok((remaining, pattern))
+}
+
+/// Merge a list of bond predicates into a `BondAst`; rejects derived predicates.
 fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), BondDslError> {
     for pred in preds {
         match pred {
@@ -199,6 +288,57 @@ fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), B
                 }
                 *multiplicity = v;
             }
+            BondPredicate::Constraint(_) => {
+                return Err(BondDslError::ConstraintsNotAllowed);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Merge a list of bond predicates into a `BondPattern`
+fn update_bond_pattern(
+    pattern: &mut BondPattern,
+    preds: Vec<BondPredicate>,
+) -> Result<(), BondDslError> {
+    let ast = &mut pattern.ast;
+    for pred in preds {
+        match pred {
+            BondPredicate::Charge(v) => {
+                if !matches!(ast.charge, ValueAst::Undetermined) {
+                    return Err(BondDslError::DuplicateBondPredicate("#c".to_string()));
+                }
+                ast.charge = v;
+            }
+            BondPredicate::UnpairedElectrons(v) => {
+                let SpinStateAst::Pair { unpaired, .. } = &mut ast.spin else {
+                    unreachable!("default is Pair")
+                };
+                if !matches!(unpaired, ValueAst::Undetermined) {
+                    return Err(BondDslError::DuplicateBondPredicate("#u".to_string()));
+                }
+                *unpaired = v;
+            }
+            BondPredicate::Multiplicity(v) => {
+                let SpinStateAst::Pair { multiplicity, .. } = &mut ast.spin else {
+                    unreachable!("default is Pair")
+                };
+                if !matches!(multiplicity, ValueAst::Undetermined) {
+                    return Err(BondDslError::DuplicateBondPredicate("#s".to_string()));
+                }
+                *multiplicity = v;
+            }
+            BondPredicate::Constraint(c) => {
+                let tag = bond_constraint_tag(&c);
+                if pattern
+                    .constraints
+                    .iter()
+                    .any(|existing| bond_constraint_tag(existing) == tag)
+                {
+                    return Err(BondDslError::DuplicateBondPredicate(tag.to_string()));
+                }
+                pattern.constraints.push(c);
+            }
         }
     }
     Ok(())
@@ -209,6 +349,7 @@ pub enum BondPredicate {
     Charge(ValueAst),
     UnpairedElectrons(ValueAst),
     Multiplicity(ValueAst),
+    Constraint(BondConstraint),
 }
 
 fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, BondDslError> {
@@ -217,6 +358,10 @@ fn bond_predicate(i: &str) -> IResult<&str, BondPredicate, BondDslError> {
         "#c" => map(charge_value, BondPredicate::Charge).parse(remaining),
         "#u" => map(optional_value, BondPredicate::UnpairedElectrons).parse(remaining),
         "#s" => map(optional_value, BondPredicate::Multiplicity).parse(remaining),
+        "#a" => Ok((
+            remaining,
+            BondPredicate::Constraint(BondConstraint::Aromatic),
+        )),
         p if p.starts_with("#") => Err(Err::Failure(BondDslError::UnknownBondPredicate(
             p.to_string(),
         ))),
@@ -310,6 +455,21 @@ mod tests {
             "{input:?} should have consumed all input, remaining: {remaining:?}"
         );
         assert_eq!(ast, expected);
+    }
+
+    #[rstest]
+    #[case::aromatic("1#a", BondPattern::with_constraints(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() }, vec![BondConstraint::Aromatic]))]
+    #[case::single_plain("1", BondPattern::new(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default() }))]
+    #[case::charged_aromatic("1#c+#a", BondPattern::with_constraints(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default() }, vec![BondConstraint::Aromatic]))]
+    fn test_parse_bond_pattern(#[case] input: &str, #[case] expected: BondPattern) {
+        let result = parse_bond_pattern(input);
+        assert!(
+            result.is_ok(),
+            "{:?} should succeed, got {:?}",
+            input,
+            result.as_ref().unwrap_err()
+        );
+        assert_eq!(result.unwrap(), expected);
     }
 
     #[rstest]

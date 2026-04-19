@@ -57,6 +57,7 @@
 - Never make commits, branches, or perform other mutating git actions unless explicitly asked.
 
 ## Coding Rules
+- Avoid creating many "helper" methods or free functions for single-use operations.
 - No long comments, no self-talk, no references to previous implementations in comments.
 - Do not use <module>/mod.rs, use <module>.rs instead.
 - Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.
