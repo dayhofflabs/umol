@@ -18,10 +18,12 @@ use crate::api::pattern::AtomPattern;
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::constraint::{AtomConstraint, MoleculeConstraint};
+use crate::ast::constraint::{
+    AromaticValenceConstraint, AtomConstraint, BondConstraint, MoleculeConstraint,
+};
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
-use crate::ast::AtomIdx;
+use crate::ast::{AromaticSystemIdx, AtomIdx, BondIdx, MulticenterBondIdx};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
@@ -146,6 +148,7 @@ struct RawMoleculeAst {
     atom_aliases: Vec<String>,
     charge: Option<i64>,
     spin: Option<SpinState>,
+    constraints: Vec<Edn<'static>>,
 }
 
 impl RawMoleculeAst {
@@ -273,6 +276,21 @@ impl RawMoleculeAst {
         if let Some(spin) = self.spin {
             constraints.push(MoleculeConstraint::TotalSpin(SpinStateAst::Lit(spin)));
         }
+        if !self.constraints.is_empty() {
+            let resolver = ConstraintResolver {
+                atom_count,
+                atom_ids: &atom_ids,
+                bond_count: bond_list.len(),
+                bond_ids: &bond_ids,
+                aromatic_count: aromatic_list.len(),
+                aromatic_ids: &aromatic_system_ids,
+                multicenter_count: multicenter_list.len(),
+                multicenter_ids: &multicenter_bond_ids,
+            };
+            for entry in &self.constraints {
+                constraints.push(parse_molecule_constraint(entry, &resolver)?);
+            }
+        }
 
         let ast = MoleculeAst::new(
             atoms,
@@ -334,6 +352,318 @@ impl RawMoleculeAst {
     }
 }
 
+struct ConstraintResolver<'a> {
+    atom_count: usize,
+    atom_ids: &'a IndexMap<usize, String>,
+    bond_count: usize,
+    bond_ids: &'a IndexMap<usize, String>,
+    aromatic_count: usize,
+    aromatic_ids: &'a IndexMap<usize, String>,
+    multicenter_count: usize,
+    multicenter_ids: &'a IndexMap<usize, String>,
+}
+
+fn reverse_lookup_id(ids: &IndexMap<usize, String>, name: &str) -> Option<usize> {
+    ids.iter()
+        .find(|(_, n)| n.as_str() == name)
+        .map(|(i, _)| *i)
+}
+
+fn resolve_ref<T: From<usize>>(
+    edn: &Edn<'_>,
+    count: usize,
+    ids: &IndexMap<usize, String>,
+    kind: &'static str,
+) -> Result<T, ParseError> {
+    let i = match edn {
+        Edn::Int(n) => {
+            let i = usize::try_from(*n)
+                .map_err(|_| ParseError::InvalidValue(format!("{kind} index {n}")))?;
+            if i >= count {
+                return Err(ParseError::InvalidValue(format!(
+                    "{kind} index {i} out of range"
+                )));
+            }
+            i
+        }
+        Edn::Keyword(k) => reverse_lookup_id(ids, k.name()).ok_or_else(|| {
+            ParseError::InvalidValue(format!("unknown {kind} id :{}", k.name()))
+        })?,
+        other => {
+            return Err(ParseError::InvalidValue(format!(
+                "{kind} ref: {other}"
+            )));
+        }
+    };
+    Ok(T::from(i))
+}
+
+fn parse_value_ast(edn: &Edn<'_>) -> Result<ValueAst, ParseError> {
+    match edn {
+        Edn::Int(n) => Ok(ValueAst::Lit(*n)),
+        Edn::Nil => Ok(ValueAst::Undetermined),
+        Edn::Keyword(k) if k.name() == "undetermined" => Ok(ValueAst::Undetermined),
+        Edn::Vector(v) => {
+            let mut out = Vec::with_capacity(v.len());
+            for e in v.iter() {
+                let Edn::Int(n) = e else {
+                    return Err(ParseError::InvalidValue(format!("value-set entry: {e}")));
+                };
+                out.push(*n);
+            }
+            Ok(ValueAst::LitSet(out))
+        }
+        other => Err(ParseError::InvalidValue(format!("value: {other}"))),
+    }
+}
+
+fn parse_molecule_constraint(
+    entry: &Edn<'_>,
+    r: &ConstraintResolver<'_>,
+) -> Result<MoleculeConstraint, ParseError> {
+    let map = match entry {
+        Edn::Map(m) => m,
+        other => {
+            return Err(ParseError::InvalidValue(format!(
+                "constraint entry must be a map, got: {other}"
+            )));
+        }
+    };
+    if map.len() != 1 {
+        return Err(ParseError::InvalidValue(
+            "constraint entry must have exactly one key".to_string(),
+        ));
+    }
+    let (key, value) = map.iter().next().unwrap();
+    let key_name = match key {
+        Edn::Keyword(k) => k.name(),
+        other => {
+            return Err(ParseError::InvalidValue(format!(
+                "constraint key must be a keyword, got: {other}"
+            )));
+        }
+    };
+    match key_name {
+        "atom-pred" => {
+            let (atom_ref, form) = expect_pair(value, "atom-pred")?;
+            let idx: AtomIdx = resolve_ref(atom_ref, r.atom_count, r.atom_ids, "atom")?;
+            let c = parse_atom_constraint_form(form)?;
+            Ok(MoleculeConstraint::AtomPred(idx, c))
+        }
+        "bond-pred" => {
+            let (bond_ref, form) = expect_pair(value, "bond-pred")?;
+            let idx: BondIdx = resolve_ref(bond_ref, r.bond_count, r.bond_ids, "bond")?;
+            let c = parse_bond_constraint_form(form)?;
+            Ok(MoleculeConstraint::BondPred(idx, c))
+        }
+        "total-charge" => Ok(MoleculeConstraint::TotalCharge(parse_value_ast(value)?)),
+        "total-spin" => {
+            let s = match value {
+                Edn::Str(s) => SpinState::from_str(s.as_ref())?,
+                Edn::Keyword(k) => SpinState::from_str(k.name())?,
+                other => {
+                    return Err(ParseError::InvalidValue(format!("total-spin: {other}")));
+                }
+            };
+            Ok(MoleculeConstraint::TotalSpin(SpinStateAst::Lit(s)))
+        }
+        "aromatic-electron-count" => {
+            let (sys_ref, val) = expect_pair(value, "aromatic-electron-count")?;
+            let idx: AromaticSystemIdx =
+                resolve_ref(sys_ref, r.aromatic_count, r.aromatic_ids, "aromatic system")?;
+            Ok(MoleculeConstraint::AromaticElectronCount(
+                idx,
+                parse_value_ast(val)?,
+            ))
+        }
+        "multicenter-electron-count" => {
+            let (mc_ref, val) = expect_pair(value, "multicenter-electron-count")?;
+            let idx: MulticenterBondIdx = resolve_ref(
+                mc_ref,
+                r.multicenter_count,
+                r.multicenter_ids,
+                "multicenter bond",
+            )?;
+            Ok(MoleculeConstraint::MulticenterElectronCount(
+                idx,
+                parse_value_ast(val)?,
+            ))
+        }
+        "bond-order-sum" => {
+            let m = expect_map(value, "bond-order-sum")?;
+            let bonds_edn = m
+                .get_keyword("bonds")
+                .ok_or_else(|| ParseError::MissingKey(":bonds".to_string()))?;
+            let equals_edn = m
+                .get_keyword("equals")
+                .ok_or_else(|| ParseError::MissingKey(":equals".to_string()))?;
+            let bonds = match bonds_edn {
+                Edn::Vector(v) => {
+                    let mut out = Vec::with_capacity(v.len());
+                    for e in v.iter() {
+                        out.push(resolve_ref::<BondIdx>(e, r.bond_count, r.bond_ids, "bond")?);
+                    }
+                    out
+                }
+                other => {
+                    return Err(ParseError::InvalidValue(format!(
+                        "bond-order-sum :bonds must be a vector, got {other}"
+                    )));
+                }
+            };
+            Ok(MoleculeConstraint::BondOrderSum(
+                bonds,
+                parse_value_ast(equals_edn)?,
+            ))
+        }
+        "connected" => {
+            let v = match value {
+                Edn::Vector(v) => v,
+                other => {
+                    return Err(ParseError::InvalidValue(format!(
+                        "connected: expected vector, got {other}"
+                    )));
+                }
+            };
+            let mut atoms = Vec::with_capacity(v.len());
+            for e in v.iter() {
+                atoms.push(resolve_ref::<AtomIdx>(e, r.atom_count, r.atom_ids, "atom")?);
+            }
+            Ok(MoleculeConstraint::Connected(atoms))
+        }
+        "sub-pattern" => {
+            let m = expect_map(value, "sub-pattern")?;
+            let anchor_edn = m
+                .get_keyword("anchor")
+                .ok_or_else(|| ParseError::MissingKey(":anchor".to_string()))?;
+            let pattern_edn = m
+                .get_keyword("pattern")
+                .ok_or_else(|| ParseError::MissingKey(":pattern".to_string()))?;
+            let anchor: AtomIdx = resolve_ref(anchor_edn, r.atom_count, r.atom_ids, "atom")?;
+            let wrapper = MoleculeAstWrapper::from_edn(pattern_edn)
+                .map_err(|e| ParseError::InvalidValue(format!("sub-pattern: {e}")))?;
+            Ok(MoleculeConstraint::SubPattern {
+                anchor,
+                pattern: Box::new(wrapper.ast),
+            })
+        }
+        "and" | "or" => {
+            let v = match value {
+                Edn::Vector(v) => v,
+                other => {
+                    return Err(ParseError::InvalidValue(format!(
+                        "{key_name}: expected vector, got {other}"
+                    )));
+                }
+            };
+            let mut children = Vec::with_capacity(v.len());
+            for e in v.iter() {
+                children.push(parse_molecule_constraint(e, r)?);
+            }
+            Ok(if key_name == "and" {
+                MoleculeConstraint::And(children)
+            } else {
+                MoleculeConstraint::Or(children)
+            })
+        }
+        "not" => Ok(MoleculeConstraint::Not(Box::new(parse_molecule_constraint(
+            value, r,
+        )?))),
+        other => Err(ParseError::InvalidValue(format!(
+            "unknown constraint key :{other}"
+        ))),
+    }
+}
+
+fn expect_pair<'e>(
+    edn: &'e Edn<'e>,
+    context: &'static str,
+) -> Result<(&'e Edn<'e>, &'e Edn<'e>), ParseError> {
+    match edn {
+        Edn::Vector(v) if v.len() == 2 => Ok((&v[0], &v[1])),
+        other => Err(ParseError::InvalidValue(format!(
+            "{context}: expected [ref form] pair, got {other}"
+        ))),
+    }
+}
+
+fn expect_map<'e>(
+    edn: &'e Edn<'e>,
+    context: &'static str,
+) -> Result<&'e EdnMap<'e>, ParseError> {
+    match edn {
+        Edn::Map(m) => Ok(m),
+        other => Err(ParseError::InvalidValue(format!(
+            "{context}: expected map, got {other}"
+        ))),
+    }
+}
+
+fn parse_atom_constraint_form(edn: &Edn<'_>) -> Result<AtomConstraint, ParseError> {
+    match edn {
+        Edn::Keyword(k) if k.name() == "in-ring" => Ok(AtomConstraint::InRing),
+        Edn::Map(m) if m.len() == 1 => {
+            let (key, value) = m.iter().next().unwrap();
+            let key_name = match key {
+                Edn::Keyword(k) => k.name(),
+                other => {
+                    return Err(ParseError::InvalidValue(format!(
+                        "atom-constraint key: {other}"
+                    )));
+                }
+            };
+            match key_name {
+                "valence" => Ok(AtomConstraint::Valence(parse_value_ast(value)?)),
+                "aromatic-valence" => Ok(AtomConstraint::AromaticValence(
+                    parse_aromatic_valence_form(value)?,
+                )),
+                "multicenter-valence" => {
+                    Ok(AtomConstraint::MulticenterValence(parse_value_ast(value)?))
+                }
+                "donated-pairs" => Ok(AtomConstraint::DonatedPairs(parse_value_ast(value)?)),
+                "accepted-pairs" => Ok(AtomConstraint::AcceptedPairs(parse_value_ast(value)?)),
+                "degree" => Ok(AtomConstraint::Degree(parse_value_ast(value)?)),
+                "connectivity" => Ok(AtomConstraint::Connectivity(parse_value_ast(value)?)),
+                "total-h-count" => Ok(AtomConstraint::TotalHCount(parse_value_ast(value)?)),
+                "ring-count" => Ok(AtomConstraint::RingCount(parse_value_ast(value)?)),
+                "ring-size" => Ok(AtomConstraint::RingSize(parse_value_ast(value)?)),
+                other => Err(ParseError::InvalidValue(format!(
+                    "unknown atom-constraint key :{other}"
+                ))),
+            }
+        }
+        other => Err(ParseError::InvalidValue(format!(
+            "atom-constraint form: {other}"
+        ))),
+    }
+}
+
+fn parse_aromatic_valence_form(
+    edn: &Edn<'_>,
+) -> Result<AromaticValenceConstraint, ParseError> {
+    match edn {
+        Edn::Keyword(k) if k.name() == "not-aromatic" => {
+            Ok(AromaticValenceConstraint::NotAromatic)
+        }
+        _ => Ok(AromaticValenceConstraint::Value(parse_value_ast(edn)?)),
+    }
+}
+
+fn parse_bond_constraint_form(edn: &Edn<'_>) -> Result<BondConstraint, ParseError> {
+    match edn {
+        Edn::Keyword(k) => match k.name() {
+            "ring-bond" => Ok(BondConstraint::RingBond),
+            "aromatic" => Ok(BondConstraint::Aromatic),
+            other => Err(ParseError::InvalidValue(format!(
+                "unknown bond-constraint :{other}"
+            ))),
+        },
+        other => Err(ParseError::InvalidValue(format!(
+            "bond-constraint form: {other}"
+        ))),
+    }
+}
+
 fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<RawMoleculeAst, EdnError> {
     de.consume_byte(b'{')?;
 
@@ -346,6 +676,7 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<RawMolecule
     let mut charge: Option<i64> = None;
     let mut spin: Option<SpinState> = None;
     let mut atom_aliases: Vec<String> = Vec::new();
+    let mut constraints: Vec<Edn<'static>> = Vec::new();
 
     loop {
         if de.try_consume_byte(b'}')? {
@@ -373,6 +704,7 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<RawMolecule
                         .map_err(Into::into)
                 })?;
             }
+            "constraints" => constraints = read_seq(de, read_constraint_entry)?,
             _ => de.read_skip_value()?,
         }
     }
@@ -396,7 +728,13 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<RawMolecule
         atom_aliases,
         charge,
         spin,
+        constraints,
     })
+}
+
+fn read_constraint_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<Edn<'static>, EdnError> {
+    let slice = de.read_value_slice()?;
+    Edn::from_str(slice).map_err(Into::into)
 }
 
 fn read_seq<T, F>(de: &mut EdnStreamDeserializer<'_>, mut element: F) -> Result<Vec<T>, EdnError>
@@ -795,6 +1133,13 @@ impl ToEdn for MoleculeAstWrapper {
                 _ => {}
             }
         }
+        let constraint_entries = render_constraint_list(&self.ast, &self.metadata);
+        if !constraint_entries.is_empty() {
+            m.insert(
+                Edn::keyword("constraints"),
+                Edn::Vector(constraint_entries.into()),
+            );
+        }
         if has_aliases {
             let mut alias_elems = Vec::with_capacity(self.metadata.atom_aliases.len() * 2);
             for (name, atom) in self.metadata.atom_aliases.iter() {
@@ -900,6 +1245,242 @@ fn render_atoms_map(
     }
     m.insert(Edn::keyword("atoms"), Edn::Vector(atom_vec.into()));
     Edn::Map(m)
+}
+
+fn render_id_or_int(ids: &IndexMap<usize, String>, i: usize) -> Edn<'static> {
+    match ids.get(&i) {
+        Some(name) => Edn::Keyword(EdnKeyword::owned(name.clone())),
+        None => Edn::Int(i as i64),
+    }
+}
+
+fn render_value_ast(v: &ValueAst) -> Edn<'static> {
+    match v {
+        ValueAst::Lit(n) => Edn::Int(*n),
+        ValueAst::Undetermined => Edn::Keyword(EdnKeyword::owned("undetermined".to_string())),
+        ValueAst::LitSet(s) => {
+            let elems: Vec<Edn<'static>> = s.iter().map(|n| Edn::Int(*n)).collect();
+            Edn::Vector(elems.into())
+        }
+        ValueAst::Expr(_) => Edn::Nil,
+    }
+}
+
+fn atom_constraint_has_packed_sugar(c: &AtomConstraint) -> bool {
+    matches!(
+        c,
+        AtomConstraint::Valence(_)
+            | AtomConstraint::DonatedPairs(_)
+            | AtomConstraint::AcceptedPairs(_)
+            | AtomConstraint::MulticenterValence(_)
+            | AtomConstraint::AromaticValence(_)
+    )
+}
+
+fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(1);
+    m.insert(Edn::Keyword(EdnKeyword::owned(key.to_string())), value);
+    Edn::Map(m)
+}
+
+fn render_atom_constraint_form(c: &AtomConstraint) -> Edn<'static> {
+    match c {
+        AtomConstraint::Valence(v) => single_key_map("valence", render_value_ast(v)),
+        AtomConstraint::AromaticValence(c) => {
+            single_key_map("aromatic-valence", render_aromatic_valence_form(c))
+        }
+        AtomConstraint::MulticenterValence(v) => {
+            single_key_map("multicenter-valence", render_value_ast(v))
+        }
+        AtomConstraint::DonatedPairs(v) => single_key_map("donated-pairs", render_value_ast(v)),
+        AtomConstraint::AcceptedPairs(v) => single_key_map("accepted-pairs", render_value_ast(v)),
+        AtomConstraint::Degree(v) => single_key_map("degree", render_value_ast(v)),
+        AtomConstraint::Connectivity(v) => single_key_map("connectivity", render_value_ast(v)),
+        AtomConstraint::TotalHCount(v) => single_key_map("total-h-count", render_value_ast(v)),
+        AtomConstraint::InRing => Edn::Keyword(EdnKeyword::owned("in-ring".to_string())),
+        AtomConstraint::RingCount(v) => single_key_map("ring-count", render_value_ast(v)),
+        AtomConstraint::RingSize(v) => single_key_map("ring-size", render_value_ast(v)),
+    }
+}
+
+fn render_aromatic_valence_form(c: &AromaticValenceConstraint) -> Edn<'static> {
+    match c {
+        AromaticValenceConstraint::NotAromatic => {
+            Edn::Keyword(EdnKeyword::owned("not-aromatic".to_string()))
+        }
+        AromaticValenceConstraint::Value(v) => render_value_ast(v),
+    }
+}
+
+fn render_bond_constraint_form(c: &BondConstraint) -> Edn<'static> {
+    match c {
+        BondConstraint::RingBond => Edn::Keyword(EdnKeyword::owned("ring-bond".to_string())),
+        BondConstraint::Aromatic => Edn::Keyword(EdnKeyword::owned("aromatic".to_string())),
+    }
+}
+
+fn render_atom_pred(
+    idx: AtomIdx,
+    c: &AtomConstraint,
+    atom_ids: &IndexMap<usize, String>,
+) -> Edn<'static> {
+    let atom_ref = render_id_or_int(atom_ids, idx.index());
+    let form = render_atom_constraint_form(c);
+    single_key_map("atom-pred", Edn::Vector(vec![atom_ref, form].into()))
+}
+
+fn render_bond_pred(
+    idx: BondIdx,
+    c: &BondConstraint,
+    bond_ids: &IndexMap<usize, String>,
+) -> Edn<'static> {
+    let bond_ref = render_id_or_int(bond_ids, idx.index());
+    let form = render_bond_constraint_form(c);
+    single_key_map("bond-pred", Edn::Vector(vec![bond_ref, form].into()))
+}
+
+fn render_molecule_constraint(
+    c: &MoleculeConstraint,
+    metadata: &Metadata,
+) -> Edn<'static> {
+    match c {
+        MoleculeConstraint::AtomPred(idx, inner) => {
+            render_atom_pred(*idx, inner, &metadata.atom_ids)
+        }
+        MoleculeConstraint::BondPred(idx, inner) => {
+            render_bond_pred(*idx, inner, &metadata.bond_ids)
+        }
+        MoleculeConstraint::TotalCharge(v) => single_key_map("total-charge", render_value_ast(v)),
+        MoleculeConstraint::TotalSpin(SpinStateAst::Lit(s)) => {
+            single_key_map("total-spin", Edn::Str(Cow::Owned(s.to_string())))
+        }
+        MoleculeConstraint::TotalSpin(_) => single_key_map("total-spin", Edn::Nil),
+        MoleculeConstraint::AromaticElectronCount(idx, v) => single_key_map(
+            "aromatic-electron-count",
+            Edn::Vector(
+                vec![
+                    render_id_or_int(&metadata.aromatic_system_ids, idx.index()),
+                    render_value_ast(v),
+                ]
+                .into(),
+            ),
+        ),
+        MoleculeConstraint::MulticenterElectronCount(idx, v) => single_key_map(
+            "multicenter-electron-count",
+            Edn::Vector(
+                vec![
+                    render_id_or_int(&metadata.multicenter_bond_ids, idx.index()),
+                    render_value_ast(v),
+                ]
+                .into(),
+            ),
+        ),
+        MoleculeConstraint::BondOrderSum(bonds, v) => {
+            let bonds_edn: Vec<Edn<'static>> = bonds
+                .iter()
+                .map(|b| render_id_or_int(&metadata.bond_ids, b.index()))
+                .collect();
+            let mut inner = EdnMap::with_capacity(2);
+            inner.insert(Edn::keyword("bonds"), Edn::Vector(bonds_edn.into()));
+            inner.insert(Edn::keyword("equals"), render_value_ast(v));
+            single_key_map("bond-order-sum", Edn::Map(inner))
+        }
+        MoleculeConstraint::Connected(atoms) => {
+            let v: Vec<Edn<'static>> = atoms
+                .iter()
+                .map(|a| render_id_or_int(&metadata.atom_ids, a.index()))
+                .collect();
+            single_key_map("connected", Edn::Vector(v.into()))
+        }
+        MoleculeConstraint::SubPattern { anchor, pattern } => {
+            let wrapper = MoleculeAstWrapper::from_ast((**pattern).clone());
+            let mut inner = EdnMap::with_capacity(2);
+            inner.insert(
+                Edn::keyword("anchor"),
+                render_id_or_int(&metadata.atom_ids, anchor.index()),
+            );
+            inner.insert(Edn::keyword("pattern"), wrapper.to_edn());
+            single_key_map("sub-pattern", Edn::Map(inner))
+        }
+        MoleculeConstraint::And(xs) => single_key_map(
+            "and",
+            Edn::Vector(
+                xs.iter()
+                    .map(|c| render_molecule_constraint(c, metadata))
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+        ),
+        MoleculeConstraint::Or(xs) => single_key_map(
+            "or",
+            Edn::Vector(
+                xs.iter()
+                    .map(|c| render_molecule_constraint(c, metadata))
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+        ),
+        MoleculeConstraint::Not(inner) => {
+            single_key_map("not", render_molecule_constraint(inner, metadata))
+        }
+    }
+}
+
+fn render_constraint_list(ast: &MoleculeAst, metadata: &Metadata) -> Vec<Edn<'static>> {
+    let mut out = Vec::new();
+    let constraints = ast.constraints();
+
+    for (idx, set) in constraints.atoms() {
+        for c in set.iter() {
+            if !atom_constraint_has_packed_sugar(c) {
+                out.push(render_atom_pred(*idx, c, &metadata.atom_ids));
+            }
+        }
+    }
+
+    for (idx, set) in constraints.bonds() {
+        for c in set.iter() {
+            out.push(render_bond_pred(*idx, c, &metadata.bond_ids));
+        }
+    }
+
+    for (idx, v) in constraints.aromatic_systems() {
+        out.push(single_key_map(
+            "aromatic-electron-count",
+            Edn::Vector(
+                vec![
+                    render_id_or_int(&metadata.aromatic_system_ids, idx.index()),
+                    render_value_ast(v),
+                ]
+                .into(),
+            ),
+        ));
+    }
+
+    for (idx, v) in constraints.multicenter_bonds() {
+        out.push(single_key_map(
+            "multicenter-electron-count",
+            Edn::Vector(
+                vec![
+                    render_id_or_int(&metadata.multicenter_bond_ids, idx.index()),
+                    render_value_ast(v),
+                ]
+                .into(),
+            ),
+        ));
+    }
+
+    for c in constraints.global() {
+        if matches!(
+            c,
+            MoleculeConstraint::TotalCharge(_) | MoleculeConstraint::TotalSpin(_)
+        ) {
+            continue;
+        }
+        out.push(render_molecule_constraint(c, metadata));
+    }
+
+    out
 }
 
 impl fmt::Display for MoleculeAstWrapper {
@@ -1166,5 +1747,70 @@ mod tests {
         let edn = dsl.to_edn();
         let back = MoleculeAstWrapper::from_edn(&edn).unwrap();
         assert_eq!(dsl, back);
+    }
+
+    #[rstest]
+    #[case::total_charge(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:total-charge 0}]}"#
+    )]
+    #[case::total_spin(
+        r##"{:atoms ["C"] :bonds [] :constraints [{:total-spin "#u1"}]}"##
+    )]
+    #[case::atom_pred_degree(
+        r#"{:atoms ["C" "C"] :bonds [[0 1 :single]] :constraints [{:atom-pred [0 {:degree 3}]}]}"#
+    )]
+    #[case::atom_pred_degree_by_id(
+        r#"{:atoms [[:c1 "C"] "C"] :bonds [[0 1 :single]] :constraints [{:atom-pred [:c1 {:degree 3}]}]}"#
+    )]
+    #[case::atom_pred_connectivity(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:atom-pred [0 {:connectivity 4}]}]}"#
+    )]
+    #[case::atom_pred_total_h_count(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:atom-pred [0 {:total-h-count 2}]}]}"#
+    )]
+    #[case::atom_pred_in_ring(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:atom-pred [0 :in-ring]}]}"#
+    )]
+    #[case::atom_pred_ring_count(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:atom-pred [0 {:ring-count 1}]}]}"#
+    )]
+    #[case::atom_pred_ring_size(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:atom-pred [0 {:ring-size 6}]}]}"#
+    )]
+    #[case::bond_pred_ring(
+        r#"{:atoms ["C" "C"] :bonds [[0 1 :single]] :constraints [{:bond-pred [0 :ring-bond]}]}"#
+    )]
+    #[case::bond_pred_aromatic(
+        r#"{:atoms ["C" "C"] :bonds [[0 1 :single]] :constraints [{:bond-pred [0 :aromatic]}]}"#
+    )]
+    #[case::aromatic_electron_count(
+        r#"{:atoms ["C" "C"] :bonds [[0 1 :single]] :aromatic [{:id :ar1 :atoms [0 1]}] :constraints [{:aromatic-electron-count [:ar1 6]}]}"#
+    )]
+    #[case::multicenter_electron_count(
+        r#"{:atoms ["C" "C"] :bonds [] :multicenter [{:id :mc1 :atoms [0 1]}] :constraints [{:multicenter-electron-count [:mc1 2]}]}"#
+    )]
+    #[case::bond_order_sum(
+        r#"{:atoms ["C" "C" "C"] :bonds [[0 1 :single] [1 2 :single]] :constraints [{:bond-order-sum {:bonds [0 1] :equals 2}}]}"#
+    )]
+    #[case::connected(
+        r#"{:atoms [[:a1 "C"] [:a2 "C"]] :bonds [[0 1 :single]] :constraints [{:connected [:a1 :a2]}]}"#
+    )]
+    #[case::sub_pattern(
+        r#"{:atoms [[:a "C"]] :bonds [] :constraints [{:sub-pattern {:anchor :a :pattern {:atoms ["C"] :bonds []}}}]}"#
+    )]
+    #[case::and_combinator(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:and [{:total-charge 0} {:atom-pred [0 :in-ring]}]}]}"#
+    )]
+    #[case::or_combinator(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:or [{:atom-pred [0 {:degree 3}]} {:atom-pred [0 {:degree 4}]}]}]}"#
+    )]
+    #[case::not_combinator(
+        r#"{:atoms ["C"] :bonds [] :constraints [{:not {:atom-pred [0 :in-ring]}}]}"#
+    )]
+    fn test_constraints_canonical_roundtrip(#[case] input: &str) {
+        let dsl1 = parse_molecule_dsl(input).unwrap();
+        let edn = dsl1.to_string();
+        let dsl2 = parse_molecule_dsl(&edn).unwrap();
+        assert_eq!(dsl1, dsl2);
     }
 }

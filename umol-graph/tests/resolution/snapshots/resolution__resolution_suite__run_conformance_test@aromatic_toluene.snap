@@ -1,6 +1,5 @@
 ---
 source: umol-graph/tests/resolution/mod.rs
-assertion_line: 130
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
@@ -15,7 +14,14 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [3 4 :single]
         [4 5 :single]
         [5 0 :single]
-        [0 6 :single]]}
+        [0 6 :single]]
+      :constraints [
+        {:bond-pred [0 :aromatic]}
+        {:bond-pred [1 :aromatic]}
+        {:bond-pred [2 :aromatic]}
+        {:bond-pred [3 :aromatic]}
+        {:bond-pred [4 :aromatic]}
+        {:bond-pred [5 :aromatic]}]}
     :success true}
   :counts {
     :output {
@@ -28,5 +34,12 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         [3 4 :single]
         [4 5 :single]
         [5 0 :single]
-        [0 6 :single]]}
+        [0 6 :single]]
+      :constraints [
+        {:bond-pred [0 :aromatic]}
+        {:bond-pred [1 :aromatic]}
+        {:bond-pred [2 :aromatic]}
+        {:bond-pred [3 :aromatic]}
+        {:bond-pred [4 :aromatic]}
+        {:bond-pred [5 :aromatic]}]}
     :success true}}
