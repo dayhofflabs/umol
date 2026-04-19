@@ -162,7 +162,7 @@ impl MoleculeAst {
             if let Some(v) = atom.valence {
                 constraints.insert(MoleculeConstraint::AtomPred(
                     idx,
-                    AtomConstraint::ValenceSum(ValueAst::Lit(v as i64)),
+                    AtomConstraint::Valence(ValueAst::Lit(v as i64)),
                 ));
             }
         }
@@ -279,6 +279,10 @@ impl MoleculeAst {
 
     pub fn bonds_mut(&mut self) -> impl Iterator<Item = &mut BondAst> {
         Arc::make_mut(&mut self.bonds).iter_mut()
+    }
+
+    pub fn aromatic_systems_mut(&mut self) -> impl Iterator<Item = &mut AromaticSystemAst> {
+        Arc::make_mut(&mut self.aromatic_systems).data_iter_mut()
     }
 
     pub fn neighbors(&self, atom: AtomIdx) -> impl Iterator<Item = NeighborView<'_>> {
@@ -444,7 +448,7 @@ impl MoleculeAst {
             && self.constraints.iter().all(|c| c.is_ground_assertion())
     }
 
-    pub fn bond_order_sum(&self, atom: AtomIdx) -> Option<u8> {
+    pub fn valence(&self, atom: AtomIdx) -> Option<u8> {
         let mut sum: u8 = 0;
         for n in self.graph.neighbors(NodeId::from(atom)) {
             match self.bonds[n.edge.index()].order {
@@ -603,7 +607,7 @@ mod tests {
     }
 
     #[test]
-    fn test_molecule_ast_bond_order_sum() {
+    fn test_molecule_ast_valence() {
         let ast = MoleculeAst::new(
             vec![
                 AtomAst::from_element(Element::C),
@@ -616,12 +620,12 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(2));
-        assert_eq!(ast.bond_order_sum(AtomIdx(1)), Some(2));
+        assert_eq!(ast.valence(AtomIdx(0)), Some(2));
+        assert_eq!(ast.valence(AtomIdx(1)), Some(2));
     }
 
     #[test]
-    fn test_molecule_ast_bond_order_sum_no_bonds() {
+    fn test_molecule_ast_valence_no_bonds() {
         let ast = MoleculeAst::new(
             vec![AtomAst::from_element(Element::C)],
             vec![],
@@ -631,11 +635,11 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(0));
+        assert_eq!(ast.valence(AtomIdx(0)), Some(0));
     }
 
     #[test]
-    fn test_molecule_ast_bond_order_sum_wildcard() {
+    fn test_molecule_ast_valence_wildcard() {
         let ast = MoleculeAst::new(
             vec![
                 AtomAst::from_element(Element::C),
@@ -648,7 +652,7 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(ast.bond_order_sum(AtomIdx(0)), None);
+        assert_eq!(ast.valence(AtomIdx(0)), None);
     }
 
     #[test]

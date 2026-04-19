@@ -66,7 +66,7 @@ impl AromaticValenceConstraint {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(AtomConstraintKind), derive(Hash))]
 pub enum AtomConstraint {
-    ValenceSum(ValueAst),
+    Valence(ValueAst),
     AromaticValence(AromaticValenceConstraint),
     MulticenterValence(ValueAst),
     DonatedPairs(ValueAst),
@@ -82,7 +82,7 @@ pub enum AtomConstraint {
 impl AtomConstraint {
     pub fn is_ground(&self) -> bool {
         match self {
-            Self::ValenceSum(v)
+            Self::Valence(v)
             | Self::MulticenterValence(v)
             | Self::DonatedPairs(v)
             | Self::AcceptedPairs(v)
@@ -452,11 +452,11 @@ mod tests {
     #[case::total_charge_lit(MoleculeConstraint::TotalCharge(ValueAst::Lit(0)), true)]
     #[case::total_charge_undetermined(MoleculeConstraint::TotalCharge(ValueAst::Undetermined), false)]
     #[case::atom_derived_ground(
-        MoleculeConstraint::AtomPred(AtomIdx(0), AtomConstraint::ValenceSum(ValueAst::Lit(4))),
+        MoleculeConstraint::AtomPred(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
         true,
     )]
     #[case::atom_derived_undetermined(
-        MoleculeConstraint::AtomPred(AtomIdx(0), AtomConstraint::ValenceSum(ValueAst::Undetermined)),
+        MoleculeConstraint::AtomPred(AtomIdx(0), AtomConstraint::Valence(ValueAst::Undetermined)),
         false,
     )]
     #[case::bond_derived_ring(
@@ -483,8 +483,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::valence_sum_lit(AtomConstraint::ValenceSum(ValueAst::Lit(4)), true)]
-    #[case::valence_sum_undetermined(AtomConstraint::ValenceSum(ValueAst::Undetermined), false)]
+    #[case::valence_lit(AtomConstraint::Valence(ValueAst::Lit(4)), true)]
+    #[case::valence_undetermined(AtomConstraint::Valence(ValueAst::Undetermined), false)]
     #[case::aromatic_valence_lit(
         AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(ValueAst::Lit(3))),
         true,
@@ -512,18 +512,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::valence_sum_eq(
-        AtomConstraint::ValenceSum(ValueAst::Lit(4)),
-        AtomConstraint::ValenceSum(ValueAst::Lit(4)),
+    #[case::valence_eq(
+        AtomConstraint::Valence(ValueAst::Lit(4)),
+        AtomConstraint::Valence(ValueAst::Lit(4)),
         true,
     )]
-    #[case::valence_sum_payload_diff(
-        AtomConstraint::ValenceSum(ValueAst::Lit(4)),
-        AtomConstraint::ValenceSum(ValueAst::Lit(3)),
+    #[case::valence_payload_diff(
+        AtomConstraint::Valence(ValueAst::Lit(4)),
+        AtomConstraint::Valence(ValueAst::Lit(3)),
         false,
     )]
     #[case::variant_diff(
-        AtomConstraint::ValenceSum(ValueAst::Lit(4)),
+        AtomConstraint::Valence(ValueAst::Lit(4)),
         AtomConstraint::MulticenterValence(ValueAst::Lit(4)),
         false,
     )]

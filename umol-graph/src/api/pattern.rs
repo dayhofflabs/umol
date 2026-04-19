@@ -43,8 +43,8 @@ type NumericDefault<'a> = (fn(&AtomConstraint) -> bool, AtomConstraint, &'a Nume
 pub(crate) fn coerce_atom_constraints(constraints: &mut Vec<AtomConstraint>, cfg: &AtomAstConfig) {
     let numeric_defaults: &[NumericDefault] = &[
         (
-            |c| matches!(c, AtomConstraint::ValenceSum(_)),
-            AtomConstraint::ValenceSum(ValueAst::Lit(0)),
+            |c| matches!(c, AtomConstraint::Valence(_)),
+            AtomConstraint::Valence(ValueAst::Lit(0)),
             &cfg.valence_mode,
         ),
         (
@@ -98,7 +98,7 @@ pub(crate) fn release_atom_constraints(constraints: &mut Vec<AtomConstraint>, cf
             return false;
         }
         match c {
-            AtomConstraint::ValenceSum(ValueAst::Lit(0)) if strip_zero_valence => false,
+            AtomConstraint::Valence(ValueAst::Lit(0)) if strip_zero_valence => false,
             AtomConstraint::DonatedPairs(ValueAst::Lit(0)) if strip_zero_donated => false,
             AtomConstraint::AcceptedPairs(ValueAst::Lit(0)) if strip_zero_accepted => false,
             AtomConstraint::MulticenterValence(ValueAst::Lit(0)) if strip_zero_multicenter => {
@@ -116,7 +116,7 @@ pub(crate) fn release_atom_constraints(constraints: &mut Vec<AtomConstraint>, cf
 fn is_undetermined_numeric(c: &AtomConstraint) -> bool {
     matches!(
         c,
-        AtomConstraint::ValenceSum(ValueAst::Undetermined)
+        AtomConstraint::Valence(ValueAst::Undetermined)
             | AtomConstraint::DonatedPairs(ValueAst::Undetermined)
             | AtomConstraint::AcceptedPairs(ValueAst::Undetermined)
             | AtomConstraint::MulticenterValence(ValueAst::Undetermined)
@@ -199,12 +199,12 @@ mod tests {
     fn test_atom_pattern_with_constraints() {
         let pattern = AtomPattern::with_constraints(
             AtomAst::from_element(Element::C),
-            vec![AtomConstraint::ValenceSum(ValueAst::Lit(4))],
+            vec![AtomConstraint::Valence(ValueAst::Lit(4))],
         );
         assert_eq!(pattern.constraints.len(), 1);
         assert_eq!(
             pattern.constraints[0],
-            AtomConstraint::ValenceSum(ValueAst::Lit(4)),
+            AtomConstraint::Valence(ValueAst::Lit(4)),
         );
     }
 

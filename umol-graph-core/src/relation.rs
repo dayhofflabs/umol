@@ -191,6 +191,10 @@ impl<R> VarRelationSet<R> {
         &mut self.data[id.index()]
     }
 
+    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut R> {
+        self.data.iter_mut()
+    }
+
     pub fn participants(&self, id: RelationId) -> &[NodeId] {
         let start = self.offsets[id.index()] as usize;
         let end = self.offsets[id.index() + 1] as usize;

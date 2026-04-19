@@ -110,6 +110,29 @@ impl ResolverCell {
                 bond.spin = SpinStateAst::Lit(state);
             }
         }
+        for sys in self.ast.aromatic_systems_mut() {
+            if matches!(sys.charge, ValueAst::Undetermined) {
+                sys.charge = ValueAst::Lit(0);
+            }
+            if let SpinStateAst::Pair { unpaired, multiplicity } = &mut sys.spin {
+                match (&*unpaired, &*multiplicity) {
+                    (ValueAst::Undetermined, ValueAst::Undetermined) => {
+                        *unpaired = ValueAst::Lit(0);
+                        *multiplicity = ValueAst::Lit(1);
+                    }
+                    (ValueAst::Undetermined, ValueAst::Lit(m)) => {
+                        *unpaired = ValueAst::Lit((m - 1).max(0));
+                    }
+                    (ValueAst::Lit(u), ValueAst::Undetermined) => {
+                        *multiplicity = ValueAst::Lit(u + 1);
+                    }
+                    _ => {}
+                }
+            }
+            if let Ok(Some(state)) = sys.spin.try_into_ground() {
+                sys.spin = SpinStateAst::Lit(state);
+            }
+        }
         Molecule::from_parts(self.ast, self.rings).map_err(|_| ResolutionError::Underdetermined)
     }
 }

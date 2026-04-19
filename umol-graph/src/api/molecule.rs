@@ -67,8 +67,8 @@ impl Molecule {
         self.0.ast.neighbors(atom)
     }
 
-    pub fn atom_bond_order_sum(&self, atom: AtomIdx) -> Option<u8> {
-        self.0.ast.bond_order_sum(atom)
+    pub fn atom_valence(&self, atom: AtomIdx) -> Option<u8> {
+        self.0.ast.valence(atom)
     }
 
     pub fn atom_dative_bond_order_sums(&self, atom: AtomIdx) -> (u8, u8) {
@@ -272,7 +272,7 @@ mod tests {
         assert_eq!(mol.atoms().count(), 2);
         assert_eq!(mol.bonds().count(), 1);
         assert_eq!(mol.atom_neighbors(AtomIdx(0)).count(), 1);
-        assert_eq!(mol.atom_bond_order_sum(AtomIdx(0)), Some(1));
+        assert_eq!(mol.atom_valence(AtomIdx(0)), Some(1));
     }
 
     #[test]

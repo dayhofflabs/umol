@@ -40,7 +40,7 @@ impl ValenceTheory {
             ElementAst::Lit(e) => e,
             _ => return Vec::new(),
         };
-        let Some(valence) = ast.bond_order_sum(idx) else {
+        let Some(valence) = ast.valence(idx) else {
             return Vec::new();
         };
         let charge = atom.charge_or_zero();
@@ -87,7 +87,7 @@ impl ValenceTheory {
             if !matches!(ast.atom(idx).data.element, ElementAst::Lit(_)) {
                 continue;
             }
-            if ast.bond_order_sum(idx).is_none() {
+            if ast.valence(idx).is_none() {
                 continue;
             }
             let candidates = self.candidates_for(ast, idx);
@@ -117,7 +117,7 @@ impl ValenceTheory {
         if !matches!(ast.atom(idx).data.element, ElementAst::Lit(_)) {
             return true;
         }
-        if ast.bond_order_sum(idx).is_none() {
+        if ast.valence(idx).is_none() {
             return true;
         }
         !self.candidates_for(ast, idx).is_empty()
@@ -151,7 +151,7 @@ impl ElectronInvariant {
         let SpinStateAst::Lit(spin) = atom.spin else {
             return true;
         };
-        let Some(valence) = ast.bond_order_sum(idx) else {
+        let Some(valence) = ast.valence(idx) else {
             return true;
         };
         let (donated_pairs, accepted_pairs) = ast.dative_bond_order_sums(idx);
@@ -322,7 +322,7 @@ fn counts_candidates(
         .into_iter()
         .map(|ast| AtomCandidate {
             ast,
-            lifted: vec![AtomConstraint::ValenceSum(ValueAst::Lit(valence as i64))],
+            lifted: vec![AtomConstraint::Valence(ValueAst::Lit(valence as i64))],
         })
         .collect()
 }
@@ -387,7 +387,7 @@ fn build_aromatic_candidates(
             candidates.push(AtomCandidate {
                 ast: candidate,
                 lifted: vec![
-                    AtomConstraint::ValenceSum(ValueAst::Lit(valence as i64)),
+                    AtomConstraint::Valence(ValueAst::Lit(valence as i64)),
                     AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
                         ValueAst::Lit(a as i64),
                     )),
@@ -447,7 +447,7 @@ fn atom_constraint_holds(
     accepted_pairs: u8,
 ) -> bool {
     match constraint {
-        AtomConstraint::ValenceSum(query) => match query {
+        AtomConstraint::Valence(query) => match query {
             ValueAst::Undetermined => true,
             ValueAst::Lit(q) => *q as u8 == valence,
             _ => false,
@@ -623,8 +623,8 @@ fn narrowable(existing: &AtomConstraint, new_c: &AtomConstraint) -> bool {
             C::AromaticValence(A::Value(ValueAst::Undetermined)),
             C::AromaticValence(A::Value(ValueAst::Lit(_)))
         ) | (
-            C::ValenceSum(ValueAst::Undetermined),
-            C::ValenceSum(ValueAst::Lit(_))
+            C::Valence(ValueAst::Undetermined),
+            C::Valence(ValueAst::Lit(_))
         ) | (
             C::DonatedPairs(ValueAst::Undetermined),
             C::DonatedPairs(ValueAst::Lit(_))
@@ -850,7 +850,7 @@ mod tests {
     }
 
     #[test]
-    fn test_bond_order_sum_no_bonds() {
+    fn test_valence_no_bonds() {
         let ast = MoleculeAst::new(
             vec![AtomAst::from_element(Element::C)],
             vec![],
@@ -860,11 +860,11 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(0));
+        assert_eq!(ast.valence(AtomIdx(0)), Some(0));
     }
 
     #[test]
-    fn test_bond_order_sum_single() {
+    fn test_valence_single() {
         let ast = MoleculeAst::new(
             vec![
                 AtomAst::from_element(Element::C),
@@ -877,11 +877,11 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(1));
+        assert_eq!(ast.valence(AtomIdx(0)), Some(1));
     }
 
     #[test]
-    fn test_bond_order_sum_double() {
+    fn test_valence_double() {
         let ast = MoleculeAst::new(
             vec![
                 AtomAst::from_element(Element::C),
@@ -894,11 +894,11 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(ast.bond_order_sum(AtomIdx(0)), Some(2));
+        assert_eq!(ast.valence(AtomIdx(0)), Some(2));
     }
 
     #[test]
-    fn test_bond_order_sum_wildcard() {
+    fn test_valence_wildcard() {
         let ast = MoleculeAst::new(
             vec![
                 AtomAst::from_element(Element::C),
@@ -911,7 +911,7 @@ mod tests {
             vec![],
             vec![],
         );
-        assert_eq!(ast.bond_order_sum(AtomIdx(0)), None);
+        assert_eq!(ast.valence(AtomIdx(0)), None);
     }
 
 }

@@ -120,7 +120,7 @@ impl Display for AtomPattern {
 
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result {
     match c {
-        AtomConstraint::ValenceSum(v) => fmt_value_field_required(f, "#v", v),
+        AtomConstraint::Valence(v) => fmt_value_field_required(f, "#v", v),
         AtomConstraint::DonatedPairs(v) => fmt_value_field_required(f, "#d", v),
         AtomConstraint::AcceptedPairs(v) => fmt_value_field_required(f, "#r", v),
         AtomConstraint::MulticenterValence(v) => fmt_value_field_required(f, "#m", v),
@@ -269,7 +269,7 @@ fn apply_predicates(
 
 fn constraint_tag(c: &AtomConstraint) -> &'static str {
     match c {
-        AtomConstraint::ValenceSum(_) => "#v",
+        AtomConstraint::Valence(_) => "#v",
         AtomConstraint::DonatedPairs(_) => "#d",
         AtomConstraint::AcceptedPairs(_) => "#r",
         AtomConstraint::AromaticValence(_) => "#a",
@@ -305,7 +305,7 @@ fn atom_predicate(i: &str) -> IResult<&str, AtomPredicate, AtomDslError> {
         "#s" => map(optional_value, AtomPredicate::Multiplicity).parse(remaining),
         "#v" => map(
             optional_value,
-            |v| AtomPredicate::Constraint(AtomConstraint::ValenceSum(v)),
+            |v| AtomPredicate::Constraint(AtomConstraint::Valence(v)),
         )
         .parse(remaining),
         "#d" => map(
@@ -646,7 +646,7 @@ mod tests {
     #[case::unpaired_omit("C#u", pat(AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multiplicity("C#s3", pat(AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multiplicity_omit("C#s", pat(AtomAst { spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::valence("C#v4", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::ValenceSum(ValueAst::Lit(4))]))]
+    #[case::valence("C#v4", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::Valence(ValueAst::Lit(4))]))]
     #[case::donated_pairs("N#d1", pat_with(AtomAst::new(ElementAst::Lit(Element::N)), vec![AtomConstraint::DonatedPairs(ValueAst::Lit(1))]))]
     #[case::accepted_pairs("B#r1", pat_with(AtomAst::new(ElementAst::Lit(Element::B)), vec![AtomConstraint::AcceptedPairs(ValueAst::Lit(1))]))]
     #[case::arom_not_aromatic("C#a!", pat_with(AtomAst::new(ElementAst::Lit(Element::C)), vec![AtomConstraint::AromaticValence(AromaticValenceConstraint::NotAromatic)]))]
@@ -759,7 +759,7 @@ mod tests {
     #[case::unpaired_omit("#u", AtomPredicate::UnpairedElectrons(ValueAst::Lit(1)))]
     #[case::multiplicity("#s3", AtomPredicate::Multiplicity(ValueAst::Lit(3)))]
     #[case::multiplicity_omit("#s", AtomPredicate::Multiplicity(ValueAst::Lit(1)))]
-    #[case::valence("#v4", AtomPredicate::Constraint(AtomConstraint::ValenceSum(ValueAst::Lit(4))))]
+    #[case::valence("#v4", AtomPredicate::Constraint(AtomConstraint::Valence(ValueAst::Lit(4))))]
     #[case::donated_pairs("#d1", AtomPredicate::Constraint(AtomConstraint::DonatedPairs(ValueAst::Lit(1))))]
     #[case::accepted_pairs("#r1", AtomPredicate::Constraint(AtomConstraint::AcceptedPairs(ValueAst::Lit(1))))]
     #[case::arom_not_aromatic("#a!", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceConstraint::NotAromatic)))]

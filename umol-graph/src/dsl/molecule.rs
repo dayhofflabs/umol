@@ -23,10 +23,9 @@ use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::AtomIdx;
 
-// TODO: unify tag + id nomenclature
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
-    pub atom_tags: IndexMap<usize, String>,
+    pub atom_ids: IndexMap<usize, String>,
     pub atom_aliases: BiMap<String, AtomPattern>,
     pub bond_ids: IndexMap<usize, String>,
     pub dative_bond_ids: IndexMap<usize, String>,
@@ -92,13 +91,13 @@ impl FromStr for MoleculeAstWrapper {
 #[derive(Clone, Debug)]
 enum AtomEntryInput {
     Str(String),
-    Tagged(String, Box<AtomEntryInput>),
+    WithId(String, Box<AtomEntryInput>),
 }
 
 #[derive(Clone, Debug)]
 enum AtomRefInput {
     Index(usize),
-    Tag(String),
+    Id(String),
 }
 
 #[derive(Clone, Debug)]
@@ -155,20 +154,20 @@ impl RawMoleculeAst {
 
         let mut atoms: Vec<AtomAst> = Vec::with_capacity(self.atoms.len());
         let mut lifted_constraints: Vec<MoleculeConstraint> = Vec::new();
-        let mut atom_tags: IndexMap<usize, String> = IndexMap::new();
-        let mut tag_to_index: IndexMap<String, usize> = IndexMap::new();
+        let mut atom_ids: IndexMap<usize, String> = IndexMap::new();
+        let mut id_to_index: IndexMap<String, usize> = IndexMap::new();
         let mut atom_aliases: BiMap<String, AtomPattern> = BiMap::new();
 
         for entry in self.atoms {
             let pos = atoms.len();
-            let (tag, atom_str) = Self::resolve_entry(entry, &alias_table)?;
+            let (id, atom_str) = Self::resolve_entry(entry, &alias_table)?;
             let atom_pattern = parse_atom_dsl(&atom_str)?;
-            if let Some(tag_name) = tag {
-                if tag_to_index.contains_key(&tag_name) || alias_table.contains_key(&tag_name) {
-                    return Err(ParseError::DuplicateId(tag_name));
+            if let Some(id_name) = id {
+                if id_to_index.contains_key(&id_name) || alias_table.contains_key(&id_name) {
+                    return Err(ParseError::DuplicateId(id_name));
                 }
-                tag_to_index.insert(tag_name.clone(), pos);
-                atom_tags.insert(pos, tag_name);
+                id_to_index.insert(id_name.clone(), pos);
+                atom_ids.insert(pos, id_name);
             }
             for c in atom_pattern.constraints {
                 lifted_constraints.push(MoleculeConstraint::AtomPred(AtomIdx(pos as u32), c));
@@ -191,7 +190,7 @@ impl RawMoleculeAst {
                         Err(ParseError::InvalidAtomIndex(i.to_string()))
                     }
                 }
-                AtomRefInput::Tag(name) => tag_to_index
+                AtomRefInput::Id(name) => id_to_index
                     .get(name)
                     .copied()
                     .map(|i| AtomIdx(i as u32))
@@ -285,7 +284,7 @@ impl RawMoleculeAst {
             constraints,
         );
         let metadata = Metadata {
-            atom_tags,
+            atom_ids,
             atom_aliases,
             bond_ids,
             dative_bond_ids,
@@ -327,9 +326,9 @@ impl RawMoleculeAst {
                     Ok((None, s))
                 }
             }
-            AtomEntryInput::Tagged(tag, inner) => {
+            AtomEntryInput::WithId(id, inner) => {
                 let (_, atom_str) = Self::resolve_entry(*inner, alias_table)?;
-                Ok((Some(tag), atom_str))
+                Ok((Some(id), atom_str))
             }
         }
     }
@@ -422,10 +421,10 @@ fn read_atom_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomEntryInput,
         }
         Some(b'[') => {
             de.consume_byte(b'[')?;
-            let tag = de.read_string_or_keyword()?.into_owned();
+            let id = de.read_string_or_keyword()?.into_owned();
             let inner = read_atom_entry(de)?;
             de.consume_byte(b']')?;
-            Ok(AtomEntryInput::Tagged(tag, Box::new(inner)))
+            Ok(AtomEntryInput::WithId(id, Box::new(inner)))
         }
         other => Err(unexpected(de.position(), other)),
     }
@@ -433,8 +432,8 @@ fn read_atom_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomEntryInput,
 
 fn read_atom_ref(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomRefInput, EdnError> {
     match de.peek_byte()? {
-        Some(b':') => Ok(AtomRefInput::Tag(de.read_keyword_name()?.into_owned())),
-        Some(b'"') => Ok(AtomRefInput::Tag(de.read_string()?.into_owned())),
+        Some(b':') => Ok(AtomRefInput::Id(de.read_keyword_name()?.into_owned())),
+        Some(b'"') => Ok(AtomRefInput::Id(de.read_string()?.into_owned())),
         Some(b) if b.is_ascii_digit() || b == b'-' || b == b'+' => {
             let n = de.read_i64()?;
             let idx = usize::try_from(n).map_err(|_| DeError::OutOfRange {
@@ -626,7 +625,7 @@ impl<'de> FromEdn<'de> for MoleculeAstWrapper {
 
 fn constraint_sort_key(c: &AtomConstraint) -> u8 {
     match c {
-        AtomConstraint::ValenceSum(_) => 0,
+        AtomConstraint::Valence(_) => 0,
         AtomConstraint::AromaticValence(_) => 1,
         AtomConstraint::DonatedPairs(_) => 2,
         AtomConstraint::AcceptedPairs(_) => 3,
@@ -658,15 +657,15 @@ impl ToEdn for MoleculeAstWrapper {
             derived.sort_by_key(constraint_sort_key);
             let pattern = AtomPattern::with_constraints(view.data.clone(), derived);
             let alias_name = self.metadata.atom_aliases.get_by_right(&pattern);
-            let tag = self.metadata.atom_tags.get(&i);
+            let id = self.metadata.atom_ids.get(&i);
             let atom_edn = if let Some(alias) = alias_name {
                 Edn::Keyword(EdnKeyword::owned(alias.clone()))
             } else {
                 pattern.to_edn()
             };
-            let entry = if let Some(tag_name) = tag {
+            let entry = if let Some(id_name) = id {
                 Edn::Vector(
-                    vec![Edn::Keyword(EdnKeyword::owned(tag_name.clone())), atom_edn].into(),
+                    vec![Edn::Keyword(EdnKeyword::owned(id_name.clone())), atom_edn].into(),
                 )
             } else {
                 atom_edn
@@ -675,8 +674,8 @@ impl ToEdn for MoleculeAstWrapper {
         }
 
         let render_endpoint = |idx: usize| -> Edn<'static> {
-            if let Some(tag) = self.metadata.atom_tags.get(&idx) {
-                Edn::Keyword(EdnKeyword::owned(tag.clone()))
+            if let Some(id) = self.metadata.atom_ids.get(&idx) {
+                Edn::Keyword(EdnKeyword::owned(id.clone()))
             } else {
                 Edn::Int(idx as i64)
             }
@@ -945,11 +944,11 @@ mod tests {
         mol_atoms(vec![AtomAst::from_element(e!(C))]),
         Metadata::default()
     )]
-    #[case::atom_tagged(
+    #[case::atom_with_id(
         r#"{:atoms [[:C "C"]] :bonds []}"#,
         mol_atoms(vec![AtomAst::from_element(e!(C))]),
         Metadata {
-            atom_tags: IndexMap::from([(0, "C".to_string())]),
+            atom_ids: IndexMap::from([(0, "C".to_string())]),
             ..Default::default()
         }
     )]
@@ -965,7 +964,7 @@ mod tests {
         ),
         Metadata::default()
     )]
-    #[case::bond_with_tags(
+    #[case::bond_with_ids(
         r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#,
         mol_with_bonds(
             vec![AtomAst::from_element(e!(C)), AtomAst::from_element(e!(O))],
@@ -976,7 +975,7 @@ mod tests {
             })],
         ),
         Metadata {
-            atom_tags: IndexMap::from([(0, "C".to_string()), (1, "O".to_string())]),
+            atom_ids: IndexMap::from([(0, "C".to_string()), (1, "O".to_string())]),
             ..Default::default()
         }
     )]
@@ -1010,7 +1009,7 @@ mod tests {
             ast
         },
         Metadata {
-            atom_tags: IndexMap::from([(0, "F".to_string())]),
+            atom_ids: IndexMap::from([(0, "F".to_string())]),
             ..Default::default()
         }
     )]
@@ -1121,7 +1120,7 @@ mod tests {
     #[case::unknown_endpoint(r#"{:atoms [[:C "C"]] :bonds [{:id :b1 :a :C :b :X :bond :single}]}"#)]
     #[case::bad_atom_string(r##"{:atoms ["#h3"] :bonds []}"##)]
     #[case::trailing_content(r#"{:atoms ["C"] :bonds []} :extra :junk"#)]
-    #[case::duplicate_tag(r#"{:atoms [[:C "C"] [:C "O"]] :bonds []}"#)]
+    #[case::duplicate_id(r#"{:atoms [[:C "C"] [:C "O"]] :bonds []}"#)]
     #[case::duplicate_alias(r#"{:aliases [:ch "C #h1" :ch "C #h2"] :atoms [] :bonds []}"#)]
     fn test_parse_molecule_dsl_invalid(#[case] input: &str) {
         assert!(
@@ -1132,7 +1131,7 @@ mod tests {
 
     #[rstest]
     #[case::plain_vector(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
-    #[case::tagged_vector(r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#)]
+    #[case::with_id_vector(r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#)]
     #[case::alias_vector(r#"{:atoms [:ch :ch "O"] :bonds [[0 2 :single]] :aliases [:ch "C #h1"]}"#)]
     #[case::mixed(
         r#"{:atoms [:ch [:ring-O :ch] "O"] :bonds [[0 :ring-O :single]] :aliases [:ch "C #h1"]}"#
@@ -1146,14 +1145,14 @@ mod tests {
     }
 
     #[test]
-    fn test_alias_tag_disjointness_error() {
+    fn test_alias_id_disjointness_error() {
         let result = parse_molecule_dsl(r#"{:atoms [[:ch "C"]] :bonds [] :aliases [:ch "C #h1"]}"#);
-        assert!(result.is_err(), "alias and tag with same name should fail");
+        assert!(result.is_err(), "alias and id with same name should fail");
     }
 
     #[rstest]
     #[case::plain(r#"{:atoms ["C" "O"] :bonds [[0 1 :single]]}"#)]
-    #[case::tagged(r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#)]
+    #[case::with_id(r#"{:atoms [[:C "C"] [:O "O"]] :bonds [[:C :O :single]]}"#)]
     #[case::aliased(r#"{:atoms [:ch :ch "O"] :bonds [[0 2 :single]] :aliases [:ch "C #h1"]}"#)]
     #[case::charge_spin(r##"{:atoms ["C"] :bonds [] :charge -1 :spin "#u1"}"##)]
     #[case::dative(
