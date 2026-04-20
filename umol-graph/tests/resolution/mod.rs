@@ -12,7 +12,7 @@ use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ast::config::{
     ImplicitHydrogenMode, MoleculeAstConfig, MoleculeAstConfigOverrides,
 };
-use umol_graph::dsl::molecule::MoleculeAstWrapper;
+use umol_graph::dsl::molecule::MoleculeDsl;
 use umol_graph::ops::aromaticity::AromaticityTheory;
 use umol_graph::ops::chemistry::Chemistry;
 use umol_graph::ops::propagate::ValenceTheory;
@@ -22,7 +22,7 @@ use umol_graph::ops::valence::ValenceTable;
 
 #[derive(FromEdn)]
 struct TestInput {
-    input: MoleculeAstWrapper,
+    input: MoleculeDsl,
     #[edn(default)]
     config_overrides: MoleculeAstConfigOverrides,
 }
@@ -36,12 +36,12 @@ struct TestResults {
 #[derive(ToEdn)]
 struct ResolveResult {
     success: bool,
-    output: Option<MoleculeAstWrapper>,
+    output: Option<MoleculeDsl>,
     error: Option<String>,
 }
 
 fn resolve_test(
-    input: &MoleculeAstWrapper,
+    input: &MoleculeDsl,
     chemistry: &Chemistry,
     config: &MoleculeAstConfig,
 ) -> ResolveResult {
@@ -52,7 +52,7 @@ fn resolve_test(
             ast.release(&MoleculeAstConfig::zeroed());
             ResolveResult {
                 success: true,
-                output: Some(MoleculeAstWrapper::new(ast, input.metadata().clone())),
+                output: Some(MoleculeDsl::new(ast, input.metadata().clone())),
                 error: None,
             }
         }

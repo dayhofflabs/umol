@@ -89,3 +89,4 @@
 | [85-kekulization-algorithms-2026-04-15.md](85-kekulization-algorithms-2026-04-15.md)                                             | Active        | 2026-04-15   |
 | [86-molecule-ast-api-2026-04-16.md](86-molecule-ast-api-2026-04-16.md)                                                           | Active        | 2026-04-17   |
 | [87-constraint-taxonomy-2026-04-17.md](87-constraint-taxonomy-2026-04-17.md)                                                     | Completed     | 2026-04-19   |
+| [88-fix-dsl-parsing-2026-04-19.md](88-fix-dsl-parsing-2026-04-19.md)                                                             | Active        | 2026-04-19   |

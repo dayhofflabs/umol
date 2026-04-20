@@ -7,7 +7,10 @@ use std::{fmt, mem};
 
 use bimap::BiMap;
 use indexmap::IndexMap;
-use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{
+    DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, FromEdnMap,
+    ToEdn, ToEdnMap,
+};
 use umol_shared::spin::SpinState;
 use umol_shared::spin_ast::SpinStateAst;
 use umol_shared::value_ast::ValueAst;
@@ -22,9 +25,11 @@ use crate::ast::bond::BondAst;
 use crate::ast::constraint::{
     AromaticValenceConstraint, AtomConstraint, BondConstraint, MoleculeConstraint,
 };
+use crate::ast::config::MoleculeAstConfig;
+use crate::ast::error::LoweringError;
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
-use crate::ast::{AromaticSystemIdx, AtomIdx, BondIdx, MulticenterBondIdx};
+use crate::ast::{AromaticSystemIdx, AtomIdx, BondIdx, FromAst, MulticenterBondIdx, ToAst};
 use crate::dsl::error::BondDslError;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -43,12 +48,12 @@ pub struct Metadata {
 /// the pair is either rewrapped atomically or taken apart via `into_parts`.
 /// This is the only type with `FromEdn`/`ToEdn` impls for the molecule DSL.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct MoleculeAstWrapper {
+pub struct MoleculeDsl {
     ast: MoleculeAst,
     metadata: Metadata,
 }
 
-impl MoleculeAstWrapper {
+impl MoleculeDsl {
     pub fn new(ast: MoleculeAst, metadata: Metadata) -> Self {
         Self { ast, metadata }
     }
@@ -73,8 +78,20 @@ impl MoleculeAstWrapper {
     }
 }
 
+impl FromAst<MoleculeAst> for MoleculeDsl {
+    fn from_ast(ast: &MoleculeAst, _cfg: &MoleculeAstConfig) -> Result<Self, LoweringError> {
+        Ok(Self::from_ast(ast.clone()))
+    }
+}
+
+impl ToAst<MoleculeAst> for MoleculeDsl {
+    fn to_ast(&self, _cfg: &MoleculeAstConfig) -> Result<MoleculeAst, LoweringError> {
+        Ok(self.ast.clone())
+    }
+}
+
 /// Parse a molecule DSL EDN string via the fused single-pass parser.
-pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAstWrapper, ParseError> {
+pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeDsl, ParseError> {
     let mut de = EdnStreamDeserializer::new(input);
     let mol_input =
         read_molecule_input(&mut de).map_err(|e| ParseError::EdnParse(e.to_string()))?;
@@ -83,7 +100,7 @@ pub fn parse_molecule_dsl(input: &str) -> Result<MoleculeAstWrapper, ParseError>
     mol_input.into_dsl()
 }
 
-impl FromStr for MoleculeAstWrapper {
+impl FromStr for MoleculeDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -152,7 +169,7 @@ struct RawMoleculeAst {
 }
 
 impl RawMoleculeAst {
-    fn into_dsl(self) -> Result<MoleculeAstWrapper, ParseError> {
+    fn into_dsl(self) -> Result<MoleculeDsl, ParseError> {
         let alias_table = Self::build_alias_table(&self.atom_aliases)?;
 
         let mut atoms: Vec<AtomAst> = Vec::with_capacity(self.atoms.len());
@@ -307,7 +324,7 @@ impl RawMoleculeAst {
             multicenter_bond_ids,
             noncovalent_bond_ids,
         };
-        Ok(MoleculeAstWrapper { ast, metadata })
+        Ok(MoleculeDsl { ast, metadata })
     }
 
     fn build_alias_table(raw: &[String]) -> Result<IndexMap<String, String>, ParseError> {
@@ -347,6 +364,261 @@ impl RawMoleculeAst {
             }
         }
     }
+}
+
+fn parse_keyword_or_string(edn: &Edn<'_>, context: &'static str) -> Result<String, ParseError> {
+    match edn {
+        Edn::Keyword(k) => Ok(k.name().to_string()),
+        Edn::Str(s) => Ok(s.to_string()),
+        other => Err(ParseError::InvalidValue(format!(
+            "{context}: expected keyword or string, got {other}"
+        ))),
+    }
+}
+
+fn parse_keyword_id(edn: &Edn<'_>, context: &'static str) -> Result<String, ParseError> {
+    match edn {
+        Edn::Keyword(k) => Ok(k.name().to_string()),
+        other => Err(ParseError::InvalidValue(format!(
+            "{context}: expected keyword id, got {other}"
+        ))),
+    }
+}
+
+fn parse_vector<'e, T, F>(
+    edn: &'e Edn<'e>,
+    context: &'static str,
+    mut element: F,
+) -> Result<Vec<T>, ParseError>
+where
+    F: FnMut(&'e Edn<'e>) -> Result<T, ParseError>,
+{
+    let Edn::Vector(v) = edn else {
+        return Err(ParseError::InvalidValue(format!(
+            "{context}: expected vector, got {edn}"
+        )));
+    };
+    v.iter().map(&mut element).collect()
+}
+
+fn parse_atom_entry_edn(edn: &Edn<'_>) -> Result<AtomEntryInput, ParseError> {
+    match edn {
+        Edn::Str(_) | Edn::Keyword(_) => Ok(AtomEntryInput::Str(parse_keyword_or_string(
+            edn,
+            "atom entry",
+        )?)),
+        Edn::Vector(v) if v.len() == 2 => Ok(AtomEntryInput::WithId(
+            parse_keyword_or_string(&v[0], "atom entry id")?,
+            Box::new(parse_atom_entry_edn(&v[1])?),
+        )),
+        other => Err(ParseError::InvalidValue(format!("atom entry: {other}"))),
+    }
+}
+
+fn parse_atom_ref_edn(edn: &Edn<'_>) -> Result<AtomRefInput, ParseError> {
+    match edn {
+        Edn::Keyword(k) => Ok(AtomRefInput::Id(k.name().to_string())),
+        Edn::Str(s) => Ok(AtomRefInput::Id(s.to_string())),
+        Edn::Int(n) => {
+            let idx = usize::try_from(*n).map_err(|_| ParseError::InvalidValue(format!(
+                "atom ref index {n} out of range"
+            )))?;
+            Ok(AtomRefInput::Index(idx))
+        }
+        other => Err(ParseError::InvalidValue(format!("atom ref: {other}"))),
+    }
+}
+
+fn parse_bond_spec_edn(edn: &Edn<'_>) -> Result<BondPattern, ParseError> {
+    match edn {
+        Edn::Keyword(_) | Edn::Str(_) => BondPattern::from_edn(edn).map_err(|e| match e {
+            DeError::Subgrammar { message, .. } => ParseError::InvalidBondSpec(message),
+            other => ParseError::InvalidValue(format!("bond spec: {other}")),
+        }),
+        other => Err(ParseError::InvalidValue(format!("bond spec: {other}"))),
+    }
+}
+
+fn bare_bond_ast_edn(pattern: BondPattern) -> Result<BondAst, ParseError> {
+    if !pattern.constraints.is_empty() {
+        return Err(ParseError::InvalidBondSpec(
+            BondDslError::ConstraintsNotAllowed.to_string(),
+        ));
+    }
+    Ok(pattern.ast)
+}
+
+fn parse_endpoint_bond_map_edn(
+    map: &EdnMap<'_>,
+    kind: EndpointBondKind,
+) -> Result<(Option<String>, AtomRefInput, AtomRefInput, BondPattern), ParseError> {
+    let first_key = kind.first_key();
+    let second_key = kind.second_key();
+    let mut id = None;
+    let mut a = None;
+    let mut b = None;
+    let mut bond = None;
+
+    for (key, value) in map.iter() {
+        let Edn::Keyword(k) = key else {
+            return Err(ParseError::InvalidValue(format!(
+                "bond entry key must be keyword, got {key}"
+            )));
+        };
+        match k.name() {
+            "id" => id = Some(parse_keyword_id(value, "bond entry :id")?),
+            name if name == first_key => a = Some(parse_atom_ref_edn(value)?),
+            name if name == second_key => b = Some(parse_atom_ref_edn(value)?),
+            "bond" => bond = Some(parse_bond_spec_edn(value)?),
+            _ => {}
+        }
+    }
+
+    let a = a.ok_or_else(|| ParseError::MissingKey(format!(":{first_key}")))?;
+    let b = b.ok_or_else(|| ParseError::MissingKey(format!(":{second_key}")))?;
+    let bond = bond.ok_or_else(|| ParseError::MissingKey(":bond".to_string()))?;
+    Ok((id, a, b, bond))
+}
+
+fn parse_atoms_map_edn(map: &EdnMap<'_>) -> Result<(Option<String>, Vec<AtomRefInput>), ParseError> {
+    let mut id = None;
+    let mut atoms = None;
+
+    for (key, value) in map.iter() {
+        let Edn::Keyword(k) = key else {
+            return Err(ParseError::InvalidValue(format!(
+                "relation entry key must be keyword, got {key}"
+            )));
+        };
+        match k.name() {
+            "id" => id = Some(parse_keyword_id(value, "relation entry :id")?),
+            "atoms" => atoms = Some(parse_vector(value, "relation entry :atoms", parse_atom_ref_edn)?),
+            _ => {}
+        }
+    }
+
+    let atoms = atoms.ok_or_else(|| ParseError::MissingKey(":atoms".to_string()))?;
+    Ok((id, atoms))
+}
+
+fn parse_constraint_entry_edn(edn: &Edn<'_>) -> Edn<'static> {
+    edn.to_edn()
+}
+
+fn parse_molecule_map_edn(map: &EdnMap<'_>) -> Result<RawMoleculeAst, ParseError> {
+    let mut atoms: Option<Vec<AtomEntryInput>> = None;
+    let mut bonds: Option<Vec<LocalizedBondInput>> = None;
+    let mut dative_bonds: Vec<DativeBondInput> = Vec::new();
+    let mut aromatic_systems: Vec<AromaticSystemInput> = Vec::new();
+    let mut multicenter_bonds: Vec<MulticenterBondInput> = Vec::new();
+    let mut noncovalent_bonds: Vec<NoncovalentBondInput> = Vec::new();
+    let mut atom_aliases: Vec<String> = Vec::new();
+    let mut constraints: Vec<Edn<'static>> = Vec::new();
+
+    for (key, value) in map.iter() {
+        let Edn::Keyword(k) = key else {
+            return Err(ParseError::InvalidValue(format!(
+                "molecule key must be keyword, got {key}"
+            )));
+        };
+        match k.name() {
+            "atoms" => atoms = Some(parse_vector(value, "atoms", parse_atom_entry_edn)?),
+            "bonds" => {
+                bonds = Some(parse_vector(value, "bonds", |entry| match entry {
+                    Edn::Vector(v) if v.len() == 3 => Ok(LocalizedBondInput {
+                        id: None,
+                        a: parse_atom_ref_edn(&v[0])?,
+                        b: parse_atom_ref_edn(&v[1])?,
+                        bond: parse_bond_spec_edn(&v[2])?,
+                    }),
+                    Edn::Map(m) => {
+                        let (id, a, b, bond) =
+                            parse_endpoint_bond_map_edn(m, EndpointBondKind::Localized)?;
+                        Ok(LocalizedBondInput { id, a, b, bond })
+                    }
+                    other => Err(ParseError::InvalidValue(format!("bond entry: {other}"))),
+                })?)
+            }
+            "dative" => {
+                dative_bonds = parse_vector(value, "dative", |entry| {
+                    let Edn::Map(m) = entry else {
+                        return Err(ParseError::InvalidValue(format!(
+                            "dative bond entry: {entry}"
+                        )));
+                    };
+                    let (id, donor, acceptor, bond) =
+                        parse_endpoint_bond_map_edn(m, EndpointBondKind::Dative)?;
+                    Ok(DativeBondInput {
+                        id,
+                        donor,
+                        acceptor,
+                        bond: bare_bond_ast_edn(bond)?,
+                    })
+                })?
+            }
+            "aromatic" => {
+                aromatic_systems = parse_vector(value, "aromatic", |entry| {
+                    let Edn::Map(m) = entry else {
+                        return Err(ParseError::InvalidValue(format!("aromatic entry: {entry}")));
+                    };
+                    let (id, atoms) = parse_atoms_map_edn(m)?;
+                    Ok(AromaticSystemInput { id, atoms })
+                })?
+            }
+            "multicenter" => {
+                multicenter_bonds = parse_vector(value, "multicenter", |entry| {
+                    let Edn::Map(m) = entry else {
+                        return Err(ParseError::InvalidValue(format!(
+                            "multicenter entry: {entry}"
+                        )));
+                    };
+                    let (id, atoms) = parse_atoms_map_edn(m)?;
+                    Ok(MulticenterBondInput { id, atoms })
+                })?
+            }
+            "noncovalent" => {
+                noncovalent_bonds = parse_vector(value, "noncovalent", |entry| {
+                    let Edn::Map(m) = entry else {
+                        return Err(ParseError::InvalidValue(format!(
+                            "noncovalent bond entry: {entry}"
+                        )));
+                    };
+                    let (id, a, b, bond) =
+                        parse_endpoint_bond_map_edn(m, EndpointBondKind::Noncovalent)?;
+                    Ok(NoncovalentBondInput {
+                        id,
+                        a,
+                        b,
+                        bond: bare_bond_ast_edn(bond)?,
+                    })
+                })?
+            }
+            "atom-aliases" | "aliases" => {
+                atom_aliases = parse_vector(value, "atom-aliases", |entry| {
+                    parse_keyword_or_string(entry, "atom-aliases entry")
+                })?
+            }
+            "constraints" => {
+                constraints =
+                    parse_vector(value, "constraints", |entry| Ok(parse_constraint_entry_edn(entry)))?
+            }
+            _ => {}
+        }
+    }
+
+    let atoms = atoms.ok_or_else(|| ParseError::MissingKey(":atoms".to_string()))?;
+    let bonds = bonds.ok_or_else(|| ParseError::MissingKey(":bonds".to_string()))?;
+
+    Ok(RawMoleculeAst {
+        atoms,
+        bonds,
+        dative_bonds,
+        aromatic_systems,
+        multicenter_bonds,
+        noncovalent_bonds,
+        atom_aliases,
+        constraints,
+    })
 }
 
 struct ConstraintResolver<'a> {
@@ -541,7 +813,7 @@ fn parse_molecule_constraint(
                 .ok_or_else(|| ParseError::MissingKey(":pattern".to_string()))?;
             let target_anchor: AtomIdx =
                 resolve_ref(target_anchor_edn, r.atom_count, r.atom_ids, "atom")?;
-            let wrapper = MoleculeAstWrapper::from_edn(pattern_edn)
+            let wrapper = MoleculeDsl::from_edn(pattern_edn)
                 .map_err(|e| ParseError::InvalidValue(format!("sub-pattern: {e}")))?;
             let pattern_anchor: AtomIdx = resolve_ref(
                 pattern_anchor_edn,
@@ -960,13 +1232,36 @@ fn unexpected(offset: usize, b: Option<u8>) -> EdnError {
     }
 }
 
-impl<'de> FromEdn<'de> for MoleculeAstWrapper {
+impl<'de> FromEdnMap<'de> for MoleculeDsl {
+    fn from_edn_map(map: &EdnMap<'de>) -> Result<Self, DeError> {
+        let raw = parse_molecule_map_edn(map).map_err(|e| DeError::subgrammar("molecule", e))?;
+        raw.into_dsl().map_err(|e| DeError::subgrammar("molecule", e))
+    }
+}
+
+impl<'de> FromEdn<'de> for MoleculeDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Self::from_edn_str(&edn.to_string()).map_err(|e| DeError::subgrammar("molecule", e))
+        let Edn::Map(map) = edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "map",
+                got: edn.kind(),
+                path: Vec::new(),
+            });
+        };
+        Self::from_edn_map(map)
     }
 
     fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
         parse_molecule_dsl(input).map_err(|e| DeError::subgrammar("molecule", e).into())
+    }
+}
+
+impl ToEdnMap for MoleculeDsl {
+    fn to_edn_map(&self) -> EdnMap<'static> {
+        let Edn::Map(map) = self.to_edn() else {
+            unreachable!("MoleculeDsl::to_edn always returns a map")
+        };
+        map
     }
 }
 
@@ -986,7 +1281,7 @@ fn constraint_sort_key(c: &AtomConstraint) -> u8 {
     }
 }
 
-impl ToEdn for MoleculeAstWrapper {
+impl ToEdn for MoleculeDsl {
     fn to_edn(&self) -> Edn<'static> {
         let mut per_atom_derived: Vec<Vec<AtomConstraint>> =
             vec![Vec::new(); self.ast.atoms().count()];
@@ -1420,7 +1715,7 @@ fn render_molecule_constraint(
             pattern_anchor,
             pattern,
         } => {
-            let wrapper = MoleculeAstWrapper::from_ast((**pattern).clone());
+            let wrapper = MoleculeDsl::from_ast((**pattern).clone());
             let mut inner = EdnMap::with_capacity(3);
             inner.insert(
                 Edn::keyword("target-anchor"),
@@ -1512,7 +1807,7 @@ fn render_constraint_list(ast: &MoleculeAst, metadata: &Metadata) -> Vec<Edn<'st
     out
 }
 
-impl fmt::Display for MoleculeAstWrapper {
+impl fmt::Display for MoleculeDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_edn())
     }
@@ -1774,7 +2069,7 @@ mod tests {
     fn test_molecule_dsl_to_edn_roundtrip(#[case] input: &str) {
         let dsl = parse_molecule_dsl(input).unwrap();
         let edn = dsl.to_edn();
-        let back = MoleculeAstWrapper::from_edn(&edn).unwrap();
+        let back = MoleculeDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl, back);
     }
 

@@ -77,14 +77,8 @@ impl<I> NomParseError<I> for BondDslError {
 
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ParseError {
-    #[error("Invalid number")]
-    InvalidNumber,
-    #[error("Trailing input: {0:?}")]
-    TrailingInput(String),
     #[error("Invalid value: {0}")]
     InvalidValue(String),
-    #[error("Nom error: {0:?}")]
-    NomError(NomErrorKind),
     #[error("EDN parse error: {0}")]
     EdnParse(String),
     #[error("Missing required key: {0}")]
@@ -95,16 +89,15 @@ pub enum ParseError {
     InvalidAtomSpec(String),
     #[error("invalid bond DSL: {0}")]
     InvalidBondSpec(String),
-    #[error("invalid bond entry: expected map-based {{[:id keyword] :a :b :bond}} or vector-based [a b bond-spec]")]
-    InvalidBond,
     #[error("Duplicate structural id: {0}")]
     DuplicateId(String),
     #[error("Unknown atom endpoint: {0}")]
     InvalidAtomIndex(String),
     #[error("Unknown alias: {0}")]
     UnknownAlias(String),
+    // TODO: Remove
     #[error("Invalid spin state: {0}")]
-    InvalidSpinState(#[from] SpinStateError),
+    InvalidSpinState(#[from] SpinStateError), 
     #[error("Incomplete input")]
     Incomplete,
 }

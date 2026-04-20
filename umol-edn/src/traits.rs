@@ -116,6 +116,24 @@ pub trait ToEdn {
     fn to_edn(&self) -> Edn<'static>;
 }
 
+/// Build `Self` from a keyword-keyed EDN map.
+///
+/// This trait is in support of deserializing document-shaped types whose EDN
+/// representation is always a map. Types can supply a custom `from_edn_str` fast path
+/// while delegating their tree-based `from_edn` implementation through this
+/// trait.
+pub trait FromEdnMap<'de>: Sized {
+    fn from_edn_map(map: &EdnMap<'de>) -> Result<Self, DeError>;
+}
+
+/// Convert `&self` into an owned keyword-keyed EDN map.
+///
+/// This is the map-shaped counterpart to [`ToEdn`]. Types typically delegate
+/// `to_edn` by wrapping the returned map in `Edn::Map`.
+pub trait ToEdnMap {
+    fn to_edn_map(&self) -> EdnMap<'static>;
+}
+
 impl<'de> FromEdn<'de> for bool {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
@@ -745,6 +763,60 @@ mod tests {
 
     use super::*;
 
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct MapShaped {
+        name: String,
+        count: i32,
+    }
+
+    impl<'de> FromEdnMap<'de> for MapShaped {
+        fn from_edn_map(map: &EdnMap<'de>) -> Result<Self, DeError> {
+            let name = map
+                .get_keyword("name")
+                .ok_or_else(|| DeError::MissingField {
+                    key: "name".to_string(),
+                    path: Vec::new(),
+                })
+                .and_then(String::from_edn)?;
+            let count = map
+                .get_keyword("count")
+                .ok_or_else(|| DeError::MissingField {
+                    key: "count".to_string(),
+                    path: Vec::new(),
+                })
+                .and_then(i32::from_edn)?;
+            Ok(Self { name, count })
+        }
+    }
+
+    impl ToEdnMap for MapShaped {
+        fn to_edn_map(&self) -> EdnMap<'static> {
+            let mut map = EdnMap::with_capacity(2);
+            map.insert(Edn::keyword("name"), self.name.to_edn());
+            map.insert(Edn::keyword("count"), self.count.to_edn());
+            map
+        }
+    }
+
+    impl<'de> FromEdn<'de> for MapShaped {
+        fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+            let Edn::Map(map) = edn else {
+                return Err(DeError::TypeMismatch {
+                    expected: "map",
+                    got: edn.kind(),
+                    path: Vec::new(),
+                });
+            };
+            Self::from_edn_map(map)
+        }
+    }
+
+    impl ToEdn for MapShaped {
+        fn to_edn(&self) -> Edn<'static> {
+            Edn::Map(self.to_edn_map())
+        }
+    }
+
     #[rstest]
     #[case::bool_true(true)]
     #[case::bool_false(false)]
@@ -1194,5 +1266,38 @@ mod tests {
         s.insert(3i32);
         let e = s.to_edn();
         assert!(matches!(e, Edn::Set(_)));
+    }
+
+    #[test]
+    fn test_from_edn_map_delegation() {
+        let mut map = EdnMap::with_capacity(2);
+        map.insert(Edn::keyword("name"), "salt".to_edn());
+        map.insert(Edn::keyword("count"), 2i32.to_edn());
+        let edn = Edn::Map(map);
+        let parsed = MapShaped::from_edn(&edn).unwrap();
+        assert_eq!(
+            parsed,
+            MapShaped {
+                name: "salt".to_string(),
+                count: 2,
+            }
+        );
+    }
+
+    #[test]
+    fn test_to_edn_map_delegation() {
+        let value = MapShaped {
+            name: "water".to_string(),
+            count: 3,
+        };
+        let edn = value.to_edn();
+        let Edn::Map(map) = edn else {
+            panic!("expected map");
+        };
+        assert_eq!(
+            map.get_keyword("name"),
+            Some(&Edn::Str(Cow::Owned("water".to_string())))
+        );
+        assert_eq!(map.get_keyword("count"), Some(&Edn::Int(3)));
     }
 }

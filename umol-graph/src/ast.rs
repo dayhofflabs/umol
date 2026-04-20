@@ -16,9 +16,41 @@ pub mod rings;
 pub mod symmetry;
 pub mod views;
 
+use self::atom::AtomAst;
+use self::bond::BondAst;
+use self::config::{AtomAstConfig, BondAstConfig, MoleculeAstConfig};
+use self::error::LoweringError;
+use self::molecule::MoleculeAst;
 use umol_edn::{FromEdn, ToEdn};
-use umol_graph_core::{EdgeId, NodeId};
 use umol_graph_core::relation::RelationId;
+use umol_graph_core::{EdgeId, NodeId};
+
+/// AST marker trait carrying the lowering/raising config type.
+pub trait Ast {
+    type Config;
+}
+
+/// Lowering targets that can be built from an AST representation.
+pub trait FromAst<A: Ast>: Sized {
+    fn from_ast(ast: &A, cfg: &A::Config) -> Result<Self, LoweringError>;
+}
+
+/// Raise external representation into its AST counterpart.
+pub trait ToAst<A: Ast> {
+    fn to_ast(&self, cfg: &A::Config) -> Result<A, LoweringError>;
+}
+
+impl Ast for AtomAst {
+    type Config = AtomAstConfig;
+}
+
+impl Ast for BondAst {
+    type Config = BondAstConfig;
+}
+
+impl Ast for MoleculeAst {
+    type Config = MoleculeAstConfig;
+}
 
 macro_rules! define_idx {
     ($($(#[doc = $doc:literal])* $name:ident),+ $(,)?) => {

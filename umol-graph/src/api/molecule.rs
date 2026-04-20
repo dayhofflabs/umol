@@ -21,7 +21,7 @@ use crate::ast::views::{
 use crate::ast::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
-use crate::dsl::molecule::{parse_molecule_dsl, MoleculeAstWrapper};
+use crate::dsl::molecule::{parse_molecule_dsl, MoleculeDsl};
 
 #[derive(Debug)]
 struct MoleculeInner {
@@ -120,7 +120,7 @@ impl Molecule {
     }
 
     pub fn to_edn_str(&self) -> String {
-        MoleculeAstWrapper::from_ast(self.0.ast.clone())
+        MoleculeDsl::from_ast(self.0.ast.clone())
             .to_edn()
             .to_string()
     }
