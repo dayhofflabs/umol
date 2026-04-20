@@ -22,7 +22,110 @@ use super::error::AtomDslError;
 use super::value::{op_char, parse_id, value_dsl};
 use crate::api::pattern::AtomPattern;
 use crate::ast::atom::AtomAst;
+use crate::ast::config::AtomAstConfig;
 use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint};
+use crate::ast::error::LoweringError;
+use crate::ast::{FromAst, ToAst};
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct AtomDsl(String);
+
+impl AtomDsl {
+    pub fn from_pattern(pattern: AtomPattern) -> Self {
+        Self(pattern.to_string())
+    }
+
+    pub fn from_parts(ast: AtomAst, constraints: Vec<AtomConstraint>) -> Self {
+        Self(AtomPattern::with_constraints(ast, constraints).to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    pub fn into_pattern(self) -> Result<AtomPattern, AtomDslError> {
+        parse_atom_dsl(&self.0)
+    }
+
+    pub fn lower_parts(self) -> Result<(AtomAst, Vec<AtomConstraint>), AtomDslError> {
+        let pattern = self.into_pattern()?;
+        Ok((pattern.ast, pattern.constraints))
+    }
+
+    pub fn into_ast(self) -> Result<AtomAst, AtomDslError> {
+        let (ast, constraints) = self.lower_parts()?;
+        if !constraints.is_empty() {
+            return Err(AtomDslError::ConstraintsNotAllowed);
+        }
+        Ok(ast)
+    }
+
+    pub fn packs_constraint(constraint: &AtomConstraint) -> bool {
+        matches!(
+            constraint,
+            AtomConstraint::Valence(_)
+                | AtomConstraint::DonatedPairs(_)
+                | AtomConstraint::AcceptedPairs(_)
+                | AtomConstraint::MulticenterValence(_)
+                | AtomConstraint::AromaticValence(_)
+                | AtomConstraint::Degree(_)
+                | AtomConstraint::Connectivity(_)
+                | AtomConstraint::TotalHCount(_)
+                | AtomConstraint::InRing
+                | AtomConstraint::RingCount(_)
+        )
+    }
+}
+
+impl Display for AtomDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl FromStr for AtomDsl {
+    type Err = AtomDslError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_atom_dsl(s)?;
+        Ok(Self(s.to_string()))
+    }
+}
+
+impl<'de> FromEdn<'de> for AtomDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("atom", e)),
+            other => Err(DeError::TypeMismatch {
+                expected: "string",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for AtomDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Str(Cow::Owned(self.0.clone()))
+    }
+}
+
+impl FromAst<AtomAst> for AtomDsl {
+    fn from_ast(ast: &AtomAst, cfg: &AtomAstConfig) -> Result<Self, LoweringError> {
+        let mut ast = ast.clone();
+        ast.release(cfg);
+        Ok(Self(ast.to_string()))
+    }
+}
+
+impl ToAst<AtomAst> for AtomDsl {
+    fn to_ast(&self, _cfg: &AtomAstConfig) -> Result<AtomAst, LoweringError> {
+        self.clone()
+            .into_ast()
+            .map_err(|e| LoweringError::Custom(e.to_string()))
+    }
+}
 
 impl FromStr for AtomPattern {
     type Err = AtomDslError;

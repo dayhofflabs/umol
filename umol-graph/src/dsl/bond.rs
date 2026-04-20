@@ -18,9 +18,145 @@ use umol_shared::value_ast::ValueAst;
 
 use crate::api::pattern::BondPattern;
 use crate::ast::bond::BondAst;
+use crate::ast::config::BondAstConfig;
 use crate::ast::constraint::BondConstraint;
+use crate::ast::error::LoweringError;
+use crate::ast::{FromAst, ToAst};
 use crate::dsl::error::BondDslError;
 use crate::dsl::value::value_dsl;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BondDsl {
+    Alias(String),
+    Pattern(String),
+}
+
+impl BondDsl {
+    pub fn from_pattern(pattern: BondPattern) -> Self {
+        let aliases = builtin_bond_aliases();
+        if pattern.constraints.is_empty() {
+            if let Some(name) = aliases.get_by_right(&pattern.ast) {
+                return Self::Alias(name.clone());
+            }
+        }
+        Self::Pattern(pattern.to_string())
+    }
+
+    pub fn from_parts(ast: BondAst, constraints: Vec<BondConstraint>) -> Self {
+        Self::from_pattern(BondPattern::with_constraints(ast, constraints))
+    }
+
+    pub fn into_pattern(self) -> Result<BondPattern, BondDslError> {
+        match self {
+            Self::Alias(name) => builtin_bond_aliases()
+                .get_by_left(&name)
+                .cloned()
+                .map(BondPattern::new)
+                .ok_or(BondDslError::UnknownBondPredicate(name)),
+            Self::Pattern(text) => parse_bond_pattern(&text),
+        }
+    }
+
+    pub fn lower_parts(self) -> Result<(BondAst, Vec<BondConstraint>), BondDslError> {
+        let pattern = self.into_pattern()?;
+        Ok((pattern.ast, pattern.constraints))
+    }
+
+    pub fn into_ast(self) -> Result<BondAst, BondDslError> {
+        let (ast, constraints) = self.lower_parts()?;
+        if !constraints.is_empty() {
+            return Err(BondDslError::ConstraintsNotAllowed);
+        }
+        Ok(ast)
+    }
+
+    pub fn packs_constraint(constraint: &BondConstraint) -> bool {
+        matches!(constraint, BondConstraint::Aromatic)
+    }
+}
+
+impl Display for BondDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Alias(name) | Self::Pattern(name) => f.write_str(name),
+        }
+    }
+}
+
+impl FromStr for BondDsl {
+    type Err = BondDslError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if builtin_bond_aliases().contains_left(s) {
+            return Ok(Self::Alias(s.to_string()));
+        }
+        parse_bond_pattern(s)?;
+        Ok(Self::Pattern(s.to_string()))
+    }
+}
+
+impl<'de> FromEdn<'de> for BondDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Keyword(k) => {
+                let name = k.name();
+                if builtin_bond_aliases().contains_left(name) {
+                    Ok(Self::Alias(name.to_string()))
+                } else {
+                    Err(DeError::subgrammar(
+                        "bond",
+                        BondDslError::UnknownBondPredicate(name.to_string()),
+                    ))
+                }
+            }
+            Edn::Str(s) => {
+                let text = s.to_string();
+                if builtin_bond_aliases().contains_left(text.as_str()) {
+                    Ok(Self::Pattern(text))
+                } else {
+                    parse_bond_pattern(&text)
+                        .map(|_| Self::Pattern(text))
+                        .map_err(|e| DeError::subgrammar("bond", e))
+                }
+            }
+            other => Err(DeError::TypeMismatch {
+                expected: "string or keyword",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for BondDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        match self {
+            Self::Alias(name) => Edn::Keyword(EdnKeyword::owned(name.clone())),
+            Self::Pattern(text) => Edn::Str(Cow::Owned(text.clone())),
+        }
+    }
+}
+
+impl FromAst<BondAst> for BondDsl {
+    fn from_ast(ast: &BondAst, cfg: &BondAstConfig) -> Result<Self, LoweringError> {
+        let mut ast = ast.clone();
+        ast.release(cfg);
+        let aliases = builtin_bond_aliases();
+        if let Some(name) = aliases.get_by_right(&ast) {
+            Ok(Self::Alias(name.clone()))
+        } else {
+            Ok(Self::Pattern(ast.to_string()))
+        }
+    }
+}
+
+impl ToAst<BondAst> for BondDsl {
+    fn to_ast(&self, _cfg: &BondAstConfig) -> Result<BondAst, LoweringError> {
+        self.clone()
+            .into_ast()
+            .map_err(|e| LoweringError::Custom(e.to_string()))
+    }
+}
 
 impl FromStr for BondAst {
     type Err = BondDslError;

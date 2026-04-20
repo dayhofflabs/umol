@@ -45,14 +45,14 @@ fn resolve_test(
     chemistry: &Chemistry,
     config: &MoleculeAstConfig,
 ) -> ResolveResult {
-    let mut ast = input.ast().clone();
+    let (mut ast, metadata) = input.lower_parts().unwrap();
     ast.coerce(config);
     match Resolver::new(chemistry).resolve(ast) {
         Ok(Solution::Determined(mut ast)) => {
             ast.release(&MoleculeAstConfig::zeroed());
             ResolveResult {
                 success: true,
-                output: Some(MoleculeDsl::new(ast, input.metadata().clone())),
+                output: Some(MoleculeDsl::new(ast, metadata)),
                 error: None,
             }
         }

@@ -10,6 +10,7 @@ use super::error::MoleculeEdnError;
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
+use crate::ast::config::MoleculeAstConfig;
 use crate::ast::error::GroundError;
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
@@ -19,7 +20,8 @@ use crate::ast::views::{
     MulticenterBondViews, NeighborView, NoncovalentBondViews,
 };
 use crate::ast::{
-    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
+    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, FromAst, MulticenterBondIdx,
+    NoncovalentBondIdx, ToAst,
 };
 use crate::dsl::molecule::{parse_molecule_dsl, MoleculeDsl};
 
@@ -120,13 +122,15 @@ impl Molecule {
     }
 
     pub fn to_edn_str(&self) -> String {
-        MoleculeDsl::from_ast(self.0.ast.clone())
+        <MoleculeDsl as FromAst<MoleculeAst>>::from_ast(&self.0.ast, &MoleculeAstConfig::zeroed())
+            .expect("ground MoleculeAst should always raise to MoleculeDsl")
             .to_edn()
             .to_string()
     }
 
     pub fn from_edn_str(input: &str) -> Result<Self, MoleculeEdnError> {
-        let (ast, _) = parse_molecule_dsl(input)?.into_parts();
+        let ast =
+            <MoleculeDsl as ToAst<MoleculeAst>>::to_ast(&parse_molecule_dsl(input)?, &MoleculeAstConfig::zeroed())?;
         Ok(Self::new(ast)?)
     }
 }
