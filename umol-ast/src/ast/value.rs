@@ -1,4 +1,4 @@
-//! Value AST: integer literals, sets, and arithmetic/boolean expressions.
+//! Value AST.
 
 use std::collections::HashMap;
 
@@ -58,12 +58,30 @@ pub enum EvaluationError {
 }
 
 impl ValueAst {
+    pub fn new(value: i64) -> Self {
+        Self::Lit(value)
+    }
+
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Lit(_))
     }
 
-    /// Match a concrete integer value against this pattern
-    pub fn matches(&self, value: i64) -> bool {
+    /// Pattern matches target iff every integer target admits is also
+    /// admitted by pattern (superset semantics). `Expr` targets cannot
+    /// be certified generically and are rejected here; pattern `Expr`
+    /// is evaluated pointwise on ground / set targets.
+    pub fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (_, Self::Expr(_)) => false,
+            (pattern, Self::Lit(n)) => pattern.matches_value(*n),
+            (pattern, Self::LitSet(ns)) => ns.iter().all(|n| pattern.matches_value(*n)),
+        }
+    }
+
+    /// Match a concrete integer value against this pattern.
+    pub fn matches_value(&self, value: i64) -> bool {
         self.capture(value).is_some()
     }
 
@@ -299,7 +317,7 @@ mod tests {
 
     #[rstest]
     #[case::lit(ValueAst::Lit(3), true)]
-    #[case::wildcard(ValueAst::Undetermined, false)]
+    #[case::undetermined(ValueAst::Undetermined, false)]
     #[case::lit_set(ValueAst::LitSet(vec![1, 2]), false)]
     #[case::expr(ValueAst::Expr(Expr::Var("x".to_string())), false)]
     fn test_value_ast_is_ground(#[case] ast: ValueAst, #[case] expected: bool) {
@@ -308,7 +326,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(ValueAst::Undetermined, 3, true)]
+    #[case::undetermined(ValueAst::Undetermined, 3, true)]
     #[case::lit_match(ValueAst::Lit(3), 3,  true)]
     #[case::lit_set_match(ValueAst::LitSet(vec![1, 2, 3]), 2, true)]
     #[case::expr_var(ValueAst::Expr(Expr::Var("h".to_string())), 5, true)]
@@ -318,13 +336,13 @@ mod tests {
     #[case::lit_no_match(ValueAst::Lit(3), 4, false)]
     #[case::expr_lit_no_match(ValueAst::Expr(Expr::Lit(3)), 4, false)]
     #[case::expr_rel_no_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 0, false)]
-    fn test_matches(#[case] pattern: ValueAst, #[case] value: i64, #[case] expected: bool) {
-        assert_eq!(pattern.matches(value), expected);
+    fn test_matches_value(#[case] pattern: ValueAst, #[case] value: i64, #[case] expected: bool) {
+        assert_eq!(pattern.matches_value(value), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(ValueAst::Undetermined, 3, Bindings::new())]
+    #[case::undetermined(ValueAst::Undetermined, 3, Bindings::new())]
     #[case::lit_match(ValueAst::Lit(3), 3, Bindings::new())]
     #[case::lit_set_match(ValueAst::LitSet(vec![1, 2, 3]), 2, Bindings::new())]
     #[case::expr_var(ValueAst::Expr(Expr::Var("h".to_string())), 5, Bindings::from([("h".to_string(), 5)]))]

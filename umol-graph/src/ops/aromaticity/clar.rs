@@ -8,9 +8,9 @@
 use std::collections::HashSet;
 
 use umol_shared::element::Element;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::value::ValueAst;
 
-use umol_shared::atom_ast::ElementAst;
+use umol_ast::ast::atom::ElementAst;
 
 use umol_graph_core::Graph;
 
@@ -134,9 +134,9 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIdx]) -> Vec<RingI
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::atom_ast::ElementAst;
+    use umol_ast::ast::atom::ElementAst;
     use umol_shared::element::Element;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
     use crate::ast::AtomIdx;

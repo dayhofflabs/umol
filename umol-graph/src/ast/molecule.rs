@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use umol_graph_core::relation::RelationId;
 use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet};
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::aromatic::AromaticSystemAst;
+use umol_ast::ast::value::ValueAst;
 
-use super::aromatic::AromaticSystemAst;
+use super::aromatic::{coerce_aromatic_system, release_aromatic_system};
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::builder::MoleculeBuilder;
@@ -431,7 +432,7 @@ impl MoleculeAst {
         }
         let aromatic = Arc::make_mut(&mut self.aromatic_systems);
         for rid in aromatic.relation_ids().collect::<Vec<_>>() {
-            aromatic.data_mut(rid).coerce(&config.bond);
+            coerce_aromatic_system(aromatic.data_mut(rid), &config.bond);
         }
         for i in 0..self.atoms.len() {
             let idx = AtomIdx::from(i);
@@ -459,7 +460,7 @@ impl MoleculeAst {
         }
         let aromatic = Arc::make_mut(&mut self.aromatic_systems);
         for rid in aromatic.relation_ids().collect::<Vec<_>>() {
-            aromatic.data_mut(rid).release(&config.bond);
+            release_aromatic_system(aromatic.data_mut(rid), &config.bond);
         }
         for set in self.constraints.atoms_mut().values_mut() {
             set.retain(|ac| {
@@ -552,11 +553,11 @@ impl MoleculeAst {
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
+    use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst, IsotopeAst};
     use umol_shared::element::Element;
     use umol_shared::spin::SpinState;
-    use umol_shared::spin_ast::SpinStateAst;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::spin::SpinStateAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
 
@@ -565,9 +566,9 @@ mod tests {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeAst::Natural,
             charge: ValueAst::Lit(0),
-            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
+            implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(4)),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            spin: SpinStateAst::from_state(SpinState::closed_shell()),
         }
     }
 

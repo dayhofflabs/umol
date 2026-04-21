@@ -30,9 +30,9 @@ use std::mem;
 use fixedbitset::FixedBitSet;
 use xxhash_rust::xxh3::{Xxh3, Xxh3DefaultBuilder};
 
-use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
+use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use umol_shared::element::Element;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::value::ValueAst;
 
 use super::{AtomIdx, BondIdx};
 use super::molecule::MoleculeAst;
@@ -125,7 +125,7 @@ fn ast_charge(ast: &MoleculeAst, idx: AtomIdx) -> i32 {
 
 fn ast_h_count(ast: &MoleculeAst, idx: AtomIdx) -> u32 {
     match &ast.atom(idx).data.implicit_hydrogens {
-        HydrogenAst::Value(ValueAst::Lit(n)) => *n as u32,
+        ImplicitHydrogensAst::Value(ValueAst::Lit(n)) => *n as u32,
         _ => 0,
     }
 }
@@ -754,7 +754,7 @@ mod tests {
 
     fn carbon(h: u8) -> AtomAst {
         AtomAst {
-            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(h as i64)),
+            implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(h as i64)),
             ..AtomAst::from_element(Element::C)
         }
     }
@@ -777,7 +777,7 @@ mod tests {
                 carbon(3),
                 carbon(2),
                 AtomAst {
-                    implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(1)),
+                    implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(1)),
                     ..AtomAst::from_element(Element::O)
                 },
             ],

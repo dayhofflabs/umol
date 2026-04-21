@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "umol-ast",
     "umol-shared",
     "umol-edn",
     "umol-edn-macros",

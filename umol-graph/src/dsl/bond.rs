@@ -13,8 +13,8 @@ use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
 use umol_edn::{DeError, Edn, EdnKeyword, FromEdn, ToEdn};
 use umol_shared::spin::SpinState;
-use umol_shared::spin_ast::SpinStateAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::spin::SpinStateAst;
+use umol_ast::ast::value::ValueAst;
 
 use crate::api::pattern::BondPattern;
 use crate::ast::bond::BondAst;
@@ -70,7 +70,7 @@ impl BondDsl {
         Ok(ast)
     }
 
-    pub fn packs_constraint(constraint: &BondConstraint) -> bool {
+    pub fn is_inline_constraint(constraint: &BondConstraint) -> bool {
         matches!(constraint, BondConstraint::Aromatic)
     }
 }
@@ -275,7 +275,7 @@ pub fn builtin_bond_aliases() -> bimap::BiMap<String, BondAst> {
     let ground = |order: i64| BondAst {
         order: ValueAst::Lit(order),
         charge: ValueAst::Lit(0),
-        spin: SpinStateAst::Lit(SpinState::closed_shell()),
+        spin: SpinStateAst::from_state(SpinState::closed_shell()),
     };
     bimap::BiMap::from_iter([
         ("single".into(), ground(1)),
@@ -407,7 +407,7 @@ fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), B
                 ast.charge = v;
             }
             BondPredicate::UnpairedElectrons(v) => {
-                let SpinStateAst::Pair { unpaired, .. } = &mut ast.spin else {
+                let SpinStateAst { unpaired, .. } = &mut ast.spin else {
                     unreachable!("default is Pair")
                 };
                 if !matches!(unpaired, ValueAst::Undetermined) {
@@ -416,7 +416,7 @@ fn update_bond_ast(ast: &mut BondAst, preds: Vec<BondPredicate>) -> Result<(), B
                 *unpaired = v;
             }
             BondPredicate::Multiplicity(v) => {
-                let SpinStateAst::Pair { multiplicity, .. } = &mut ast.spin else {
+                let SpinStateAst { multiplicity, .. } = &mut ast.spin else {
                     unreachable!("default is Pair")
                 };
                 if !matches!(multiplicity, ValueAst::Undetermined) {
@@ -447,7 +447,7 @@ fn update_bond_pattern(
                 ast.charge = v;
             }
             BondPredicate::UnpairedElectrons(v) => {
-                let SpinStateAst::Pair { unpaired, .. } = &mut ast.spin else {
+                let SpinStateAst { unpaired, .. } = &mut ast.spin else {
                     unreachable!("default is Pair")
                 };
                 if !matches!(unpaired, ValueAst::Undetermined) {
@@ -456,7 +456,7 @@ fn update_bond_pattern(
                 *unpaired = v;
             }
             BondPredicate::Multiplicity(v) => {
-                let SpinStateAst::Pair { multiplicity, .. } = &mut ast.spin else {
+                let SpinStateAst { multiplicity, .. } = &mut ast.spin else {
                     unreachable!("default is Pair")
                 };
                 if !matches!(multiplicity, ValueAst::Undetermined) {
@@ -569,14 +569,14 @@ mod tests {
     #[case::single_plus_whitespace("1#c +", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default() })]
     #[case::single_minus_whitespace("1#c -", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default() })]
     #[case::single_pos_charge_whitespace("1#c +2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(2), spin: SpinStateAst::default() })]
-    #[case::double_unpaired("2#u3", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(3), multiplicity: ValueAst::Undetermined } })]
-    #[case::single_u_only("1#u", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined } })]
-    #[case::single_mult("1#s2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) } })]
-    #[case::single_s_only("1#s", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) } })]
-    #[case::double_charge_unpaired("2#c+#u2", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined } })]
-    #[case::double_charge_mult("2#c-1#s3", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(-1), spin: SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) } })]
-    #[case::double_charge_unpaired_mult("1#c0#u1#s1", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) } })]
-    #[case::double_plus_only_unpaired("1 #c+ #u2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::Pair { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined } })]
+    #[case::double_unpaired("2#u3", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(3), multiplicity: ValueAst::Undetermined } })]
+    #[case::single_u_only("1#u", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined } })]
+    #[case::single_mult("1#s2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) } })]
+    #[case::single_s_only("1#s", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) } })]
+    #[case::double_charge_unpaired("2#c+#u2", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined } })]
+    #[case::double_charge_mult("2#c-1#s3", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(-1), spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) } })]
+    #[case::double_charge_unpaired_mult("1#c0#u1#s1", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) } })]
+    #[case::double_plus_only_unpaired("1 #c+ #u2", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined } })]
     fn test_parse_bond_dsl(#[case] input: &str, #[case] expected: BondAst) {
         let result = bond_dsl(input);
         assert!(

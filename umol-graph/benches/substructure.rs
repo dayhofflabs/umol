@@ -18,7 +18,7 @@ use umol_graph::ast::AtomIdx;
 use umol_graph::io::smiles::parse_smiles;
 use umol_graph::ops::matcher::Matcher;
 use umol_shared::element::Element;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::value::ValueAst;
 
 fn load_smiles() -> Vec<String> {
     let data_dir = concat!(

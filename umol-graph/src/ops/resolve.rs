@@ -1,8 +1,8 @@
 //! Resolution engine: refines a non-ground `MoleculeAst` toward a ground term.
 
-use umol_shared::atom_ast::IsotopeAst;
-use umol_shared::spin_ast::SpinStateAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::atom::IsotopeAst;
+use umol_ast::ast::spin::SpinStateAst;
+use umol_ast::ast::value::ValueAst;
 
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::rings::{RingCache, RingFamily};
@@ -94,7 +94,7 @@ impl ResolverCell {
             if matches!(bond.charge, ValueAst::Undetermined) {
                 bond.charge = ValueAst::Lit(0);
             }
-            if let SpinStateAst::Pair { unpaired, multiplicity } = &mut bond.spin {
+            if let SpinStateAst { unpaired, multiplicity } = &mut bond.spin {
                 match (&*unpaired, &*multiplicity) {
                     (ValueAst::Undetermined, ValueAst::Undetermined) => {
                         *unpaired = ValueAst::Lit(0);
@@ -110,14 +110,14 @@ impl ResolverCell {
                 }
             }
             if let Ok(Some(state)) = bond.spin.try_into_ground() {
-                bond.spin = SpinStateAst::Lit(state);
+                bond.spin = SpinStateAst::from_state(state);
             }
         }
         for sys in self.ast.aromatic_systems_mut() {
             if matches!(sys.charge, ValueAst::Undetermined) {
                 sys.charge = ValueAst::Lit(0);
             }
-            if let SpinStateAst::Pair { unpaired, multiplicity } = &mut sys.spin {
+            if let SpinStateAst { unpaired, multiplicity } = &mut sys.spin {
                 match (&*unpaired, &*multiplicity) {
                     (ValueAst::Undetermined, ValueAst::Undetermined) => {
                         *unpaired = ValueAst::Lit(0);
@@ -133,7 +133,7 @@ impl ResolverCell {
                 }
             }
             if let Ok(Some(state)) = sys.spin.try_into_ground() {
-                sys.spin = SpinStateAst::Lit(state);
+                sys.spin = SpinStateAst::from_state(state);
             }
         }
         if self.ast.atoms().iter().all(|v| v.data.is_ground()) {

@@ -1,0 +1,36 @@
+[package]
+name = "umol-ast"
+version = "0.1.0"
+authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rappoport/umol"
+keywords = [
+    "chemistry",
+    "cheminformatics",
+    "computational chemistry",
+    "molecular modeling",
+    "molecular representation",
+]
+description = "DSL and AST layers for umol molecular representation."
+
+[lib]
+bench = false
+
+[dependencies]
+bimap = "0.6.3"
+phf = { version = "0.13.1", features = ["macros"] }
+strum = { version = "0.28.0", features = ["derive"] }
+thiserror = "2.0"
+umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "indexmap"] }
+umol-graph-core = { path = "../umol-graph-core", version = "0.1.0" }
+umol-shared = { path = "../umol-shared", version = "0.1.0" }
+winnow = "1.0"
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+rstest = "0.26.1"
+
+[lints.clippy]
+absolute_paths = "warn"
+mod_module_files = "warn"

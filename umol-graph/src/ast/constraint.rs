@@ -4,8 +4,8 @@ use std::mem;
 
 use indexmap::IndexMap;
 use strum::EnumDiscriminants;
-use umol_shared::spin_ast::SpinStateAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::spin::SpinStateAst;
+use umol_ast::ast::value::ValueAst;
 
 use super::molecule::MoleculeAst;
 use super::{AromaticSystemIdx, AtomIdx, BondIdx, MulticenterBondIdx};
@@ -371,7 +371,7 @@ impl From<Vec<MoleculeConstraint>> for MoleculeConstraints {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
     use super::AtomIdx;

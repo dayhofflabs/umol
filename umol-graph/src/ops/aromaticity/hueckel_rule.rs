@@ -8,8 +8,8 @@ use std::collections::{HashMap, HashSet};
 
 use umol_graph_core::UnionFind;
 
-use umol_shared::atom_ast::ElementAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::atom::ElementAst;
+use umol_ast::ast::value::ValueAst;
 
 use super::{ElementScope, RingLimits};
 use crate::ast::AtomIdx;
@@ -250,9 +250,9 @@ fn merge_overlapping_systems(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_shared::atom_ast::ElementAst;
+    use umol_ast::ast::atom::ElementAst;
     use umol_shared::element::Element;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
     use crate::ast::AtomIdx;

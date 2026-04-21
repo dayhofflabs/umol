@@ -149,7 +149,7 @@ impl AromaticityTheory {
             }
             builder.push_constraint(MoleculeConstraint::AromaticElectronCount(
                 sys_idx,
-                umol_shared::value_ast::ValueAst::Lit(sys.electron_count() as i64),
+                umol_ast::ast::value::ValueAst::Lit(sys.electron_count() as i64),
             ));
         }
         *ast = builder.build();

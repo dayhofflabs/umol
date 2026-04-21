@@ -1,49 +1,37 @@
-//! Aromatic system AST structures.
+//! Aromatic system graph container.
 
-use umol_shared::spin_ast::SpinStateAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::aromatic::AromaticSystemAst;
+use umol_ast::ast::value::ValueAst;
 
 use super::bond::{coerce_spin, release_spin};
 use super::config::{BondAstConfig, NumericMode};
 use super::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
 use super::{AtomIdx, BondIdx};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AromaticSystemAst {
-    pub charge: ValueAst,
-    pub spin: SpinStateAst,
+pub fn coerce_aromatic_system(ast: &mut AromaticSystemAst, cfg: &BondAstConfig) {
+    if matches!(ast.charge, ValueAst::Undetermined) {
+        ast.charge = match cfg.charge_mode {
+            NumericMode::Zero => ValueAst::Lit(0),
+            NumericMode::Required => ValueAst::Undetermined,
+        };
+    }
+    coerce_spin(&mut ast.spin, cfg);
 }
 
-impl AromaticSystemAst {
-    pub fn is_ground(&self) -> bool {
-        self.charge.is_ground() && self.spin.is_ground()
+pub fn release_aromatic_system(ast: &mut AromaticSystemAst, cfg: &BondAstConfig) {
+    if matches!(
+        (&cfg.charge_mode, &ast.charge),
+        (NumericMode::Zero, ValueAst::Lit(0))
+    ) {
+        ast.charge = ValueAst::Undetermined;
     }
-
-    pub fn coerce(&mut self, cfg: &BondAstConfig) {
-        if matches!(self.charge, ValueAst::Undetermined) {
-            self.charge = match cfg.charge_mode {
-                NumericMode::Zero => ValueAst::Lit(0),
-                NumericMode::Required => ValueAst::Undetermined,
-            };
-        }
-        coerce_spin(&mut self.spin, cfg);
-    }
-
-    pub fn release(&mut self, cfg: &BondAstConfig) {
-        if matches!(
-            (&cfg.charge_mode, &self.charge),
-            (NumericMode::Zero, ValueAst::Lit(0))
-        ) {
-            self.charge = ValueAst::Undetermined;
-        }
-        release_spin(&mut self.spin, cfg);
-    }
+    release_spin(&mut ast.spin, cfg);
 }
 
 /// Aromatic system ground term
 ///
-/// Container for the per-system base attributes (charge, spin) plus the
-/// per-participant constraints that lift into the molecule. `atom_constraints`
+/// Container for the per-system base attributes (charge, spin, electrons) plus
+/// the per-participant constraints that lift into the molecule. `atom_constraints`
 /// is parallel to `atoms` (one constraint per participant, typically
 /// `AromaticValence`); `bond_constraints` is parallel to `bonds` (typically
 /// `Aromatic`). Atoms are stored sorted and deduplicated.

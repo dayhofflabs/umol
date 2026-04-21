@@ -37,13 +37,13 @@ impl Matcher {
             pattern_ast
                 .atom(q.into())
                 .data
-                .matches_ground(target_ast.atom(t.into()).data)
+                .matches(target_ast.atom(t.into()).data)
         };
         let mut edge_match = |q: EdgeId, t: EdgeId| {
             pattern_ast
                 .bond(q.into())
                 .data
-                .matches_ground(target_ast.bond(t.into()).data)
+                .matches(target_ast.bond(t.into()).data)
         };
 
         subgraph_isomorphisms(
@@ -79,13 +79,13 @@ impl Matcher {
             pattern_ast
                 .atom(q.into())
                 .data
-                .matches_ground(target_ast.atom(t.into()).data)
+                .matches(target_ast.atom(t.into()).data)
         };
         let mut edge_match = |q: EdgeId, t: EdgeId| {
             pattern_ast
                 .bond(q.into())
                 .data
-                .matches_ground(target_ast.bond(t.into()).data)
+                .matches(target_ast.bond(t.into()).data)
         };
 
         subgraph_isomorphisms_at(
@@ -206,7 +206,7 @@ fn check_dative_bonds(pattern: &MoleculeAst, target: &MoleculeAst, assignment: &
         target.dative_bonds().iter().any(|t| {
             t.donor.index() == mapped_donor
                 && t.acceptor.index() == mapped_acceptor
-                && q.data.matches_ground(t.data)
+                && q.data.matches(t.data)
         })
     })
 }
@@ -222,7 +222,7 @@ fn check_noncovalent_bonds(
         target.noncovalent_bonds().iter().any(|t| {
             t.atoms[0].index() == mapped_a
                 && t.atoms[1].index() == mapped_b
-                && q.data.matches_ground(t.data)
+                && q.data.matches(t.data)
         })
     })
 }
@@ -258,9 +258,9 @@ fn check_multicenter_bonds(
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use umol_shared::atom_ast::ElementAst;
+    use umol_ast::ast::atom::ElementAst;
     use umol_shared::element::Element;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
     use crate::api::pattern::MoleculePattern;
@@ -749,11 +749,11 @@ mod tests {
 
     mod constraint_eval {
         use pretty_assertions::assert_eq;
-        use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
+        use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst, IsotopeAst};
         use umol_shared::element::Element;
         use umol_shared::spin::SpinState;
-        use umol_shared::spin_ast::SpinStateAst;
-        use umol_shared::value_ast::ValueAst;
+        use umol_ast::ast::spin::SpinStateAst;
+        use umol_ast::ast::value::ValueAst;
 
         use super::super::*;
         use crate::api::molecule::Molecule;
@@ -768,9 +768,9 @@ mod tests {
                 element: ElementAst::Lit(Element::C),
                 isotope_mass: IsotopeAst::Natural,
                 charge: ValueAst::Lit(0),
-                implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(h)),
+                implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(h)),
                 lone_pairs: ValueAst::Lit(0),
-                spin: SpinStateAst::Lit(SpinState::closed_shell()),
+                spin: SpinStateAst::from_state(SpinState::closed_shell()),
             }
         }
 
@@ -778,7 +778,7 @@ mod tests {
             BondAst {
                 order: ValueAst::Lit(order),
                 charge: ValueAst::Lit(0),
-                spin: SpinStateAst::Lit(SpinState::closed_shell()),
+                spin: SpinStateAst::from_state(SpinState::closed_shell()),
             }
         }
 

@@ -182,7 +182,7 @@ pub use streaming::EdnStreamDeserializer;
 pub use tags::inst_to_edn;
 #[cfg(feature = "uuid")]
 pub use tags::uuid_to_edn;
-pub use traits::{FromEdn, FromEdnMap, ToEdn, ToEdnMap};
+pub use traits::{FromEdn, ToEdn};
 #[cfg(feature = "macros")]
 pub use umol_edn_macros::{edn, FromEdn, ToEdn};
 

@@ -2,8 +2,8 @@
 
 use std::mem;
 
-use umol_shared::spin_ast::SpinStateAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::spin::SpinStateAst;
+use umol_ast::ast::value::ValueAst;
 
 use super::config::{BondAstConfig, MultiplicityMode, NumericMode, UnpairedElectronsMode};
 use crate::table_ir::bond::{Bond as TableBond, BondOrder};
@@ -52,10 +52,10 @@ impl BondAst {
         let mut bond_ast = Self {
             order,
             charge,
-            spin: SpinStateAst::from_pair(u, m),
+            spin: SpinStateAst::from_values(u, m),
         };
         if let Ok(Some(state)) = bond_ast.spin.try_into_ground() {
-            bond_ast.spin = SpinStateAst::Lit(state);
+            bond_ast.spin = SpinStateAst::from_state(state);
         }
         bond_ast
     }
@@ -67,9 +67,10 @@ impl BondAst {
         }) && (match &target.charge {
             ValueAst::Lit(n) => self.charge.matches(*n),
             _ => matches!(self.charge, ValueAst::Undetermined),
-        }) && (match &target.spin {
-            SpinStateAst::Lit(s) => self.spin.matches(*s),
-            _ => matches!(self.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }),
+        }) && (match target.spin.try_into_ground() {
+            Ok(Some(s)) => self.spin.matches(s),
+            _ => matches!(self.spin.unpaired, ValueAst::Undetermined)
+                && matches!(self.spin.multiplicity, ValueAst::Undetermined),
         })
     }
 
@@ -102,7 +103,7 @@ impl BondAst {
 
 pub(super) fn coerce_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
     match mem::take(spin) {
-        SpinStateAst::Pair {
+        SpinStateAst {
             unpaired,
             multiplicity,
         } => {
@@ -129,9 +130,9 @@ pub(super) fn coerce_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
             } else {
                 multiplicity
             };
-            *spin = SpinStateAst::from_pair(resolved_u, resolved_m);
+            *spin = SpinStateAst::from_values(resolved_u, resolved_m);
             if let Ok(Some(state)) = spin.try_into_ground() {
-                *spin = SpinStateAst::Lit(state);
+                *spin = SpinStateAst::from_state(state);
             }
         }
         lit => *spin = lit,
@@ -140,7 +141,7 @@ pub(super) fn coerce_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
 
 pub(super) fn release_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
     match mem::take(spin) {
-        SpinStateAst::Lit(state) => {
+        SpinStateAst::from_state(state) => {
             let u_value = state.unpaired_electrons();
             let m_value = state.multiplicity();
             let derived = m_value.multiplicity() == u_value + 1;
@@ -157,7 +158,7 @@ pub(super) fn release_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
                 MultiplicityMode::Derived if derived => ValueAst::Undetermined,
                 _ => ValueAst::Lit(m_value.multiplicity() as i64),
             };
-            *spin = SpinStateAst::from_pair(u_ast, m_ast);
+            *spin = SpinStateAst::from_values(u_ast, m_ast);
         }
         pair => *spin = pair,
     }

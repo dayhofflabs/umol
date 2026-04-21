@@ -8,10 +8,10 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use nalgebra::{DMatrix, SymmetricEigen};
 use umol_shared::element::Element;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::value::ValueAst;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 
-use umol_shared::atom_ast::ElementAst;
+use umol_ast::ast::atom::ElementAst;
 
 use super::AromaticityError;
 use super::ElementScope;
@@ -318,7 +318,7 @@ mod tests {
     use float_cmp::*;
     use rstest::*;
     use umol_shared::element::Element;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
     use crate::ast::AtomIdx;

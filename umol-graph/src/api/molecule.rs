@@ -187,11 +187,11 @@ impl Index<NoncovalentBondIdx> for Molecule {
 
 #[cfg(test)]
 mod tests {
-    use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
+    use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst, IsotopeAst};
     use umol_shared::element::Element;
     use umol_shared::spin::SpinState;
-    use umol_shared::spin_ast::SpinStateAst;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::spin::SpinStateAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
     use crate::ast::atom::AtomAst;
@@ -202,9 +202,9 @@ mod tests {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeAst::Natural,
             charge: ValueAst::Lit(0),
-            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
+            implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(4)),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            spin: SpinStateAst::from_state(SpinState::closed_shell()),
         }
     }
 
@@ -212,7 +212,7 @@ mod tests {
         BondAst {
             order: ValueAst::Lit(order),
             charge: ValueAst::Lit(0),
-            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            spin: SpinStateAst::from_state(SpinState::closed_shell()),
         }
     }
 

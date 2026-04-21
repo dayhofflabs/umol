@@ -9,11 +9,11 @@
 use std::collections::{BTreeMap, HashSet};
 
 use umol_graph_core::algorithms::auto::Automorphism;
-use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
+use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin::SpinMultiplicity;
-use umol_shared::spin_ast::SpinStateAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::spin::SpinStateAst;
+use umol_ast::ast::value::ValueAst;
 
 use super::AtomIdx;
 use super::atom::AtomAst;
@@ -55,17 +55,21 @@ fn atom_color(atom: &AtomAst) -> VertexColor {
             _ => None,
         },
         hydrogens: match &atom.implicit_hydrogens {
-            HydrogenAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
+            ImplicitHydrogensAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
             _ => None,
         },
-        unpaired_electrons: match &atom.spin {
-            SpinStateAst::Lit(s) => Some(s.unpaired_electrons()),
-            _ => None,
-        },
-        multiplicity: match &atom.spin {
-            SpinStateAst::Lit(s) => Some(s.multiplicity()),
-            _ => None,
-        },
+        unpaired_electrons: atom
+            .spin
+            .try_into_ground()
+            .ok()
+            .flatten()
+            .map(|s| s.unpaired_electrons()),
+        multiplicity: atom
+            .spin
+            .try_into_ground()
+            .ok()
+            .flatten()
+            .map(|s| s.multiplicity()),
     }
 }
 

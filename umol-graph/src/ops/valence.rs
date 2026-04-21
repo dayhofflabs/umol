@@ -7,9 +7,9 @@ use std::path::Path;
 use std::sync::LazyLock;
 
 use serde::Deserialize;
-use umol_shared::atom_ast::ElementAst;
+use umol_ast::ast::atom::ElementAst;
 use umol_shared::element::Element;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::value::ValueAst;
 use xxhash_rust::const_xxh3::xxh3_64;
 
 use crate::api::pattern::AtomPattern;

@@ -9,7 +9,7 @@ use nom::multi::{many0, separated_list1};
 use nom::sequence::{delimited, pair, preceded, terminated};
 use nom::{Err, IResult, Parser};
 
-use umol_shared::value_ast::{ArithOp, Expr, RelOp, ValueAst};
+use umol_ast::ast::value::{ArithOp, Expr, RelOp, ValueAst};
 
 pub fn parse_value_dsl(input: &str) -> Result<ValueAst, Err<NomError<&str>>> {
     all_consuming(value_dsl).parse(input).map(|(_, v)| v)

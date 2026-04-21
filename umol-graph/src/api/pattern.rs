@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::value::ValueAst;
 
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
@@ -172,9 +172,9 @@ impl Eq for MoleculePattern {}
 
 #[cfg(test)]
 mod tests {
-    use umol_shared::atom_ast::ElementAst;
+    use umol_ast::ast::atom::ElementAst;
     use umol_shared::element::Element;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
 

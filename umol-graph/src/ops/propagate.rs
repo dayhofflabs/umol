@@ -1,10 +1,10 @@
 //! Valence theory and candidate enumeration shared by resolver, validator, and matcher.
 
-use umol_shared::atom_ast::{ElementAst, HydrogenAst};
+use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst};
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
-use umol_shared::spin_ast::SpinStateAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::spin::SpinStateAst;
+use umol_ast::ast::value::ValueAst;
 
 use crate::ast::AtomIdx;
 use crate::ast::atom::AtomAst;
@@ -142,13 +142,13 @@ impl ElectronInvariant {
         let ValueAst::Lit(charge) = atom.charge else {
             return true;
         };
-        let HydrogenAst::Value(ValueAst::Lit(implicit_h)) = atom.implicit_hydrogens else {
+        let ImplicitHydrogensAst::Value(ValueAst::Lit(implicit_h)) = atom.implicit_hydrogens else {
             return true;
         };
         let ValueAst::Lit(lone_pairs) = atom.lone_pairs else {
             return true;
         };
-        let SpinStateAst::Lit(spin) = atom.spin else {
+        let SpinStateAst::from_state(spin) = atom.spin else {
             return true;
         };
         let Some(valence) = ast.valence(idx) else {
@@ -194,15 +194,15 @@ fn atom_typing_candidates(
     is_aromatic: bool,
 ) -> Vec<AtomCandidate> {
     let implicit_h_constraint = match &atom_ast.implicit_hydrogens {
-        HydrogenAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
-        HydrogenAst::Normal => {
+        ImplicitHydrogensAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
+        ImplicitHydrogensAst::Normal => {
             let Some(h) = infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
             else {
                 return Vec::new();
             };
             Some(h)
         }
-        HydrogenAst::Undetermined => {
+        ImplicitHydrogensAst::Undetermined => {
             infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
         }
         _ => None,
@@ -219,7 +219,7 @@ fn atom_typing_candidates(
         .filter(|pattern| {
             (match implicit_h_constraint {
                 Some(h) => match &pattern.ast.implicit_hydrogens {
-                    HydrogenAst::Value(ValueAst::Lit(n)) => *n as u8 == h,
+                    ImplicitHydrogensAst::Value(ValueAst::Lit(n)) => *n as u8 == h,
                     _ => false,
                 },
                 None => true,
@@ -310,7 +310,7 @@ fn counts_candidates(
     }
 
     let implicit_hydrogens = match &atom_ast.implicit_hydrogens {
-        HydrogenAst::Value(ValueAst::Lit(n)) => *n as u8,
+        ImplicitHydrogensAst::Value(ValueAst::Lit(n)) => *n as u8,
         _ if allow_implicit_hydrogens => {
             match table.compute_implicit_hydrogens(element, charge, valence) {
                 Some(h) => h,
@@ -357,8 +357,8 @@ fn build_aromatic_candidates(
             continue;
         }
         let implicit_hydrogens = match &atom_ast.implicit_hydrogens {
-            HydrogenAst::Value(ValueAst::Lit(n)) => *n as u8,
-            HydrogenAst::Normal => {
+            ImplicitHydrogensAst::Value(ValueAst::Lit(n)) => *n as u8,
+            ImplicitHydrogensAst::Normal => {
                 let Some(h) =
                     infer_normal_aromatic_implicit_hydrogens(element, charge, valence)
                 else {
@@ -366,7 +366,7 @@ fn build_aromatic_candidates(
                 };
                 h
             }
-            HydrogenAst::Undetermined => {
+            ImplicitHydrogensAst::Undetermined => {
                 if allow_implicit_hydrogens {
                     (sigma_budget - valence as i16) as u8
                 } else {
@@ -491,8 +491,8 @@ fn value_matches(query: &ValueAst, candidate: &ValueAst) -> bool {
 
 fn spin_matches(query: &SpinStateAst, candidate: &SpinStateAst) -> bool {
     match (query, candidate) {
-        (SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }, _) => true,
-        (SpinStateAst::Lit(q), SpinStateAst::Lit(c)) => q == c,
+        (SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined }, _) => true,
+        (SpinStateAst::from_state(q), SpinStateAst::from_state(c)) => q == c,
         _ => true,
     }
 }
@@ -518,13 +518,13 @@ fn try_build_candidate(
     }
 
     let spin = match &atom_ast.spin {
-        SpinStateAst::Lit(s) => {
+        SpinStateAst::from_state(s) => {
             if s.unpaired_electrons() != unpaired {
                 return None;
             }
             *s
         }
-        SpinStateAst::Pair {
+        SpinStateAst {
             multiplicity: ValueAst::Lit(m),
             ..
         } => {
@@ -538,16 +538,16 @@ fn try_build_candidate(
         element: ElementAst::Lit(element),
         isotope_mass: atom_ast.isotope_mass.clone(),
         charge: ValueAst::Lit(charge as i64),
-        implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(implicit_hydrogens as i64)),
+        implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(implicit_hydrogens as i64)),
         lone_pairs: ValueAst::Lit(lone_pairs as i64),
-        spin: SpinStateAst::Lit(spin),
+        spin: SpinStateAst::from_state(spin),
     })
 }
 
 fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u8, u8)> {
     let fixed_unpaired = match &atom_ast.spin {
-        SpinStateAst::Lit(s) => Some(s.unpaired_electrons()),
-        SpinStateAst::Pair {
+        SpinStateAst::from_state(s) => Some(s.unpaired_electrons()),
+        SpinStateAst {
             unpaired: ValueAst::Lit(u),
             ..
         } => Some(*u as u8),
@@ -645,15 +645,15 @@ fn narrow_atom(atom_ast: &mut AtomAst, candidate: &AtomAst) -> bool {
     changed |= narrow_value(&mut atom_ast.charge, &candidate.charge);
     if matches!(
         atom_ast.implicit_hydrogens,
-        HydrogenAst::Undetermined | HydrogenAst::Normal
+        ImplicitHydrogensAst::Undetermined | ImplicitHydrogensAst::Normal
     ) && atom_ast.implicit_hydrogens != candidate.implicit_hydrogens
     {
         atom_ast.implicit_hydrogens = candidate.implicit_hydrogens.clone();
         changed = true;
     }
     changed |= narrow_value(&mut atom_ast.lone_pairs, &candidate.lone_pairs);
-    if !matches!(candidate.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined })
-        && matches!(atom_ast.spin, SpinStateAst::Pair { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined })
+    if !matches!(candidate.spin, SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined })
+        && matches!(atom_ast.spin, SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Undetermined })
     {
         atom_ast.spin = candidate.spin.clone();
         changed = true;
@@ -676,7 +676,7 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use umol_shared::atom_ast::IsotopeAst;
+    use umol_ast::ast::atom::IsotopeAst;
 
     use crate::ast::bond::BondAst;
     use crate::ast::config::AtomAstConfig;
@@ -698,7 +698,7 @@ mod tests {
         BondAst {
             order: ValueAst::Lit(order),
             charge: ValueAst::Lit(0),
-            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            spin: SpinStateAst::from_state(SpinState::closed_shell()),
         }
     }
 
@@ -740,7 +740,7 @@ mod tests {
         let ast = determined_ast(&solver, h2());
         assert_eq!(
             ast.atom(AtomIdx(0)).data.implicit_hydrogens,
-            HydrogenAst::Value(ValueAst::Lit(0))
+            ImplicitHydrogensAst::Value(ValueAst::Lit(0))
         );
     }
 
@@ -809,7 +809,7 @@ mod tests {
         let ast = determined_ast(&solver, h2());
         assert_eq!(
             ast.atom(AtomIdx(0)).data.implicit_hydrogens,
-            HydrogenAst::Value(ValueAst::Lit(0))
+            ImplicitHydrogensAst::Value(ValueAst::Lit(0))
         );
     }
 
@@ -838,7 +838,7 @@ mod tests {
         let ast = determined_ast(&solver, ast);
         assert_eq!(
             ast.atom(AtomIdx(0)).data.implicit_hydrogens,
-            HydrogenAst::Value(ValueAst::Lit(4))
+            ImplicitHydrogensAst::Value(ValueAst::Lit(4))
         );
     }
 
@@ -943,9 +943,9 @@ mod tests {
             element: ElementAst::Lit(Element::H),
             isotope_mass: IsotopeAst::Natural,
             charge: ValueAst::Lit(0),
-            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(0)),
+            implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(0)),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            spin: SpinStateAst::from_state(SpinState::closed_shell()),
         };
         let mut ast = MoleculeAst::new(
             vec![atom],

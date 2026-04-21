@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
 
 use umol_graph_core::NodeId;
-use umol_shared::atom_ast::ElementAst;
+use umol_ast::ast::atom::ElementAst;
 use umol_shared::element::Element;
 
 use super::molecule::MoleculeAst;
@@ -639,7 +639,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_shared::element::Element;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::super::atom::AtomAst;
     use super::super::bond::BondAst;

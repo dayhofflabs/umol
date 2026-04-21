@@ -7,11 +7,11 @@
 //! rather than returning a three-valued outcome.
 
 use umol_graph_core::NodeId;
-use umol_shared::atom_ast::{ElementAst, HydrogenAst};
+use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst};
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
-use umol_shared::spin_ast::SpinStateAst;
-use umol_shared::value_ast::ValueAst;
+use umol_ast::ast::spin::SpinStateAst;
+use umol_ast::ast::value::ValueAst;
 
 use crate::api::molecule::Molecule;
 use crate::ast::constraint::{
@@ -23,39 +23,39 @@ impl AtomConstraint {
     pub fn evaluate(&self, target: &Molecule, atom: AtomIdx) -> bool {
         match self {
             Self::Valence(v) => match target.atom_valence(atom) {
-                Some(n) => v.matches(n as i64),
+                Some(n) => v.matches_value(n as i64),
                 None => false,
             },
             Self::AromaticValence(c) => match c {
                 AromaticValenceConstraint::NotAromatic => !target.atom_in_aromatic_system(atom),
                 AromaticValenceConstraint::Value(v) => match target.ast().atom_aromatic_valence(atom)
                 {
-                    Some(n) => v.matches(n as i64),
+                    Some(n) => v.matches_value(n as i64),
                     None => false,
                 },
             },
             Self::MulticenterValence(v) => match target.ast().atom_multicenter_valence(atom) {
-                Some(n) => v.matches(n as i64),
+                Some(n) => v.matches_value(n as i64),
                 None => false,
             },
             Self::DonatedPairs(v) => {
                 let (donated, _) = target.atom_dative_bond_order_sums(atom);
-                v.matches(donated as i64)
+                v.matches_value(donated as i64)
             }
             Self::AcceptedPairs(v) => {
                 let (_, accepted) = target.atom_dative_bond_order_sums(atom);
-                v.matches(accepted as i64)
+                v.matches_value(accepted as i64)
             }
-            Self::Degree(v) => v.matches(target.graph().degree(NodeId(atom.0)) as i64),
+            Self::Degree(v) => v.matches_value(target.graph().degree(NodeId(atom.0)) as i64),
             Self::Connectivity(v) => match implicit_h(target, atom) {
                 Some(h) => {
                     let d = target.graph().degree(NodeId(atom.0));
-                    v.matches((d + h as usize) as i64)
+                    v.matches_value((d + h as usize) as i64)
                 }
                 None => false,
             },
             Self::TotalHCount(v) => match total_h(target, atom) {
-                Some(h) => v.matches(h as i64),
+                Some(h) => v.matches_value(h as i64),
                 None => false,
             },
             Self::InRing => target.rings().contains_atom(atom),
@@ -65,10 +65,10 @@ impl AtomConstraint {
                     .iter()
                     .filter(|r| r.atoms().contains(&atom))
                     .count();
-                v.matches(n as i64)
+                v.matches_value(n as i64)
             }
             Self::RingSize(v) => match target.rings().atom_smallest_ring_size(atom) {
-                Some(size) => v.matches(size as i64),
+                Some(size) => v.matches_value(size as i64),
                 None => false,
             },
         }
@@ -97,25 +97,25 @@ impl MoleculeConstraint {
             Self::AtomPred(atom, c) => c.evaluate(target, *atom),
             Self::BondPred(bond, c) => c.evaluate(target, *bond),
             Self::TotalCharge(v) => match total_charge(target) {
-                Some(q) => v.matches(q),
+                Some(q) => v.matches_value(q),
                 None => false,
             },
             Self::TotalSpin(expected) => match total_spin(target) {
-                Some(state) => expected.matches(state),
+                Some(state) => expected.matches_state(state),
                 None => false,
             },
             Self::AromaticElectronCount(idx, v) => match aromatic_electron_count(target, *idx) {
-                Some(n) => v.matches(n as i64),
+                Some(n) => v.matches_value(n as i64),
                 None => false,
             },
             Self::MulticenterElectronCount(idx, v) => {
                 match multicenter_electron_count(target, *idx) {
-                    Some(n) => v.matches(n as i64),
+                    Some(n) => v.matches_value(n as i64),
                     None => false,
                 }
             }
             Self::BondOrderSum(bonds, v) => match bond_order_sum(target, bonds) {
-                Some(sum) => v.matches(sum),
+                Some(sum) => v.matches_value(sum),
                 None => false,
             },
             Self::Connected(atoms) => all_in_same_component(target, atoms),
@@ -141,7 +141,7 @@ impl MoleculeConstraint {
 
 fn implicit_h(target: &Molecule, atom: AtomIdx) -> Option<u8> {
     match &target.ast()[atom].implicit_hydrogens {
-        HydrogenAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
+        ImplicitHydrogensAst::Value(ValueAst::Lit(n)) => Some(*n as u8),
         _ => None,
     }
 }
@@ -175,7 +175,7 @@ fn total_spin(target: &Molecule) -> Option<SpinState> {
     let mut unpaired = 0u32;
     for atom in target.atoms().iter() {
         match &atom.data.spin {
-            SpinStateAst::Lit(s) => unpaired += s.unpaired_electrons() as u32,
+            SpinStateAst::from_state(s) => unpaired += s.unpaired_electrons() as u32,
             _ => return None,
         }
     }
@@ -237,11 +237,11 @@ fn all_in_same_component(target: &Molecule, atoms: &[AtomIdx]) -> bool {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::atom_ast::{ElementAst, HydrogenAst, IsotopeAst};
+    use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst, IsotopeAst};
     use umol_shared::element::Element;
     use umol_shared::spin::SpinState;
-    use umol_shared::spin_ast::SpinStateAst;
-    use umol_shared::value_ast::ValueAst;
+    use umol_ast::ast::spin::SpinStateAst;
+    use umol_ast::ast::value::ValueAst;
 
     use super::*;
     use crate::ast::atom::AtomAst;
@@ -254,9 +254,9 @@ mod tests {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeAst::Natural,
             charge: ValueAst::Lit(0),
-            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(4)),
+            implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(4)),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            spin: SpinStateAst::from_state(SpinState::closed_shell()),
         };
         let ast = MoleculeAst::new(
             vec![atom],
@@ -276,14 +276,14 @@ mod tests {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeAst::Natural,
             charge: ValueAst::Lit(0),
-            implicit_hydrogens: HydrogenAst::Value(ValueAst::Lit(2)),
+            implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Lit(2)),
             lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            spin: SpinStateAst::from_state(SpinState::closed_shell()),
         };
         let b = BondAst {
             order: ValueAst::Lit(1),
             charge: ValueAst::Lit(0),
-            spin: SpinStateAst::Lit(SpinState::closed_shell()),
+            spin: SpinStateAst::from_state(SpinState::closed_shell()),
         };
         let ast = MoleculeAst::new(
             vec![c.clone(), c.clone(), c.clone()],
@@ -355,7 +355,7 @@ mod tests {
     #[case::total_charge_zero(MoleculeConstraint::TotalCharge(ValueAst::Lit(0)), true)]
     #[case::total_charge_one(MoleculeConstraint::TotalCharge(ValueAst::Lit(1)), false)]
     #[case::total_spin_singlet(
-        MoleculeConstraint::TotalSpin(SpinStateAst::Lit(SpinState::closed_shell())),
+        MoleculeConstraint::TotalSpin(SpinStateAst::from_state(SpinState::closed_shell())),
         true,
     )]
     #[case::connected_single(MoleculeConstraint::Connected(vec![AtomIdx(0)]), true)]
@@ -420,7 +420,7 @@ mod tests {
                 element: ElementAst::Lit(Element::C),
                 isotope_mass: IsotopeAst::Natural,
                 charge: ValueAst::Undetermined,
-                implicit_hydrogens: HydrogenAst::Value(ValueAst::Undetermined),
+                implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Undetermined),
                 lone_pairs: ValueAst::Undetermined,
                 spin: SpinStateAst::default(),
             }],
@@ -446,7 +446,7 @@ mod tests {
                 element: ElementAst::Lit(Element::N),
                 isotope_mass: IsotopeAst::Natural,
                 charge: ValueAst::Undetermined,
-                implicit_hydrogens: HydrogenAst::Value(ValueAst::Undetermined),
+                implicit_hydrogens: ImplicitHydrogensAst::Value(ValueAst::Undetermined),
                 lone_pairs: ValueAst::Undetermined,
                 spin: SpinStateAst::default(),
             }],
