@@ -105,16 +105,12 @@ impl Remapping {
         FixedRelationSet::new(entries)
     }
 
-    pub fn apply_to_var_relation_set<R: Clone>(
-        &self,
-        rs: &VarRelationSet<R>,
-    ) -> VarRelationSet<R> {
+    pub fn apply_to_var_relation_set<R: Clone>(&self, rs: &VarRelationSet<R>) -> VarRelationSet<R> {
         let entries: Vec<(Vec<NodeId>, R)> = (0..rs.relation_count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let old = rs.participants(rid);
-                let new_parts: Option<Vec<NodeId>> =
-                    old.iter().map(|&p| self.node(p)).collect();
+                let new_parts: Option<Vec<NodeId>> = old.iter().map(|&p| self.node(p)).collect();
                 Some((new_parts?, rs.data(rid).clone()))
             })
             .collect();
@@ -180,10 +176,23 @@ impl Graph {
     }
 
     pub fn find_edge(&self, a: NodeId, b: NodeId) -> Option<EdgeId> {
-        self.neighbors(a)
-            .iter()
-            .find(|n| n.node == b)
-            .map(|n| n.edge)
+        let nbrs = self.neighbors(a);
+        nbrs.binary_search_by_key(&b, |n| n.node)
+            .ok()
+            .map(|i| nbrs[i].edge)
+    }
+
+    /// Edges whose both endpoints are in `nodes`. The slice must be sorted.
+    pub fn induced_edges<'a>(&'a self, nodes: &'a [NodeId]) -> impl Iterator<Item = EdgeId> + 'a {
+        nodes.iter().flat_map(move |&node| {
+            self.neighbors(node).iter().filter_map(move |n| {
+                if nodes.binary_search(&n.node).is_ok() && self.edge_endpoints(n.edge)[0] == node {
+                    Some(n.edge)
+                } else {
+                    None
+                }
+            })
+        })
     }
 
     pub fn contains_node(&self, id: NodeId) -> bool {
@@ -350,6 +359,12 @@ impl Graph {
             cursor[b as usize] += 1;
         }
 
+        for i in 0..node_count {
+            let start = offsets[i] as usize;
+            let end = offsets[i + 1] as usize;
+            neighbors[start..end].sort_unstable_by_key(|n| n.node);
+        }
+
         let endpoints: Vec<[NodeId; 2]> =
             edges.iter().map(|&[a, b]| [NodeId(a), NodeId(b)]).collect();
 
@@ -410,6 +425,25 @@ mod tests {
         assert_eq!(g.neighbors(NodeId(0)).len(), 2);
         assert_eq!(g.neighbors(NodeId(1))[0].node, NodeId(0));
         assert_eq!(g.neighbors(NodeId(2))[0].node, NodeId(0));
+    }
+
+    #[rstest]
+    #[case::star_reverse(&[[0, 3], [0, 2], [0, 1]])]
+    #[case::triangle(&[[2, 0], [1, 2], [0, 1]])]
+    #[case::path_reverse(&[[3, 2], [2, 1], [1, 0]])]
+    fn test_graph_neighbors_sorted(#[case] edges: &[[u32; 2]]) {
+        let node_count = edges.iter().flat_map(|e| e.iter()).max().unwrap() + 1;
+        let g = Graph::new(node_count as usize, edges);
+        for nid in 0..g.node_count() {
+            let nbrs = g.neighbors(NodeId(nid as u32));
+            for w in nbrs.windows(2) {
+                assert!(
+                    w[0].node < w[1].node,
+                    "neighbors of node {nid} not sorted: {:?}",
+                    nbrs
+                );
+            }
+        }
     }
 
     #[test]
