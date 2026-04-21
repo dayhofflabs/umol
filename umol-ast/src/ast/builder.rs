@@ -15,7 +15,10 @@ use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, Remapping, VarRel
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
-use super::constraint::{Constraint, Constraints};
+use super::constraint::{
+    AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, Constraints,
+    DativeBondConstraint, MulticenterBondConstraint, NoncovalentBondConstraint,
+};
 use super::dative::DativeBondAst;
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
@@ -23,6 +26,7 @@ use super::idx::{
 use super::molecule::MoleculeAst;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
+use super::remap::IdxRemapping;
 
 enum FixedSetStorage<R, const N: usize> {
     Shared(Arc<FixedRelationSet<R, N>>),
@@ -56,6 +60,20 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
         match self {
             FixedSetStorage::Shared(arc) => arc,
             FixedSetStorage::Mutable(vec) => Arc::new(FixedRelationSet::new(vec)),
+        }
+    }
+
+    fn relation_count(&self) -> usize {
+        match self {
+            FixedSetStorage::Shared(arc) => arc.relation_count(),
+            FixedSetStorage::Mutable(vec) => vec.len(),
+        }
+    }
+
+    fn participants(&self, i: usize) -> [NodeId; N] {
+        match self {
+            FixedSetStorage::Shared(arc) => *arc.participants(RelationId(i as u32)),
+            FixedSetStorage::Mutable(vec) => vec[i].0,
         }
     }
 
@@ -116,6 +134,20 @@ impl<R: Clone> VarSetStorage<R> {
         }
     }
 
+    fn relation_count(&self) -> usize {
+        match self {
+            VarSetStorage::Shared(arc) => arc.relation_count(),
+            VarSetStorage::Mutable(vec) => vec.len(),
+        }
+    }
+
+    fn participants(&self, i: usize) -> Vec<NodeId> {
+        match self {
+            VarSetStorage::Shared(arc) => arc.participants(RelationId(i as u32)).to_vec(),
+            VarSetStorage::Mutable(vec) => vec[i].0.clone(),
+        }
+    }
+
     fn apply_remapping(self, remap: &Remapping) -> Self {
         match self {
             VarSetStorage::Shared(arc) => {
@@ -134,6 +166,31 @@ impl<R: Clone> VarSetStorage<R> {
             }
         }
     }
+}
+
+fn fixed_relation_removed<R: Clone, const N: usize>(
+    storage: &FixedSetStorage<R, N>,
+    remap: &Remapping,
+) -> Vec<u32> {
+    let mut removed = Vec::new();
+    for i in 0..storage.relation_count() {
+        let parts = storage.participants(i);
+        if parts.iter().any(|&p| remap.node(p).is_none()) {
+            removed.push(i as u32);
+        }
+    }
+    removed
+}
+
+fn var_relation_removed<R: Clone>(storage: &VarSetStorage<R>, remap: &Remapping) -> Vec<u32> {
+    let mut removed = Vec::new();
+    for i in 0..storage.relation_count() {
+        let parts = storage.participants(i);
+        if parts.iter().any(|&p| remap.node(p).is_none()) {
+            removed.push(i as u32);
+        }
+    }
+    removed
 }
 
 pub struct MoleculeBuilder {
@@ -226,11 +283,47 @@ impl MoleculeBuilder {
         NoncovalentBondIdx(i)
     }
 
-    pub fn push_constraint(&mut self, c: Constraint) {
-        self.constraints.push(c);
+    pub fn push_atom_constraint(&mut self, idx: AtomIdx, c: AtomConstraint) {
+        self.constraints.push_atom(idx, c);
     }
 
-    pub fn remove(&mut self, atoms: &[AtomIdx], bonds: &[BondIdx]) -> Remapping {
+    pub fn push_bond_constraint(&mut self, idx: BondIdx, c: BondConstraint) {
+        self.constraints.push_bond(idx, c);
+    }
+
+    pub fn push_dative_bond_constraint(&mut self, idx: DativeBondIdx, c: DativeBondConstraint) {
+        self.constraints.push_dative_bond(idx, c);
+    }
+
+    pub fn push_aromatic_system_constraint(
+        &mut self,
+        idx: AromaticSystemIdx,
+        c: AromaticSystemConstraint,
+    ) {
+        self.constraints.push_aromatic_system(idx, c);
+    }
+
+    pub fn push_multicenter_bond_constraint(
+        &mut self,
+        idx: MulticenterBondIdx,
+        c: MulticenterBondConstraint,
+    ) {
+        self.constraints.push_multicenter_bond(idx, c);
+    }
+
+    pub fn push_noncovalent_bond_constraint(
+        &mut self,
+        idx: NoncovalentBondIdx,
+        c: NoncovalentBondConstraint,
+    ) {
+        self.constraints.push_noncovalent_bond(idx, c);
+    }
+
+    pub fn push_molecule_constraint(&mut self, c: Constraint) {
+        self.constraints.push_molecule(c);
+    }
+
+    pub fn remove(&mut self, atoms: &[AtomIdx], bonds: &[BondIdx]) -> IdxRemapping {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
         let remap = self.graph.remove(&nodes, &edges);
@@ -239,6 +332,11 @@ impl MoleculeBuilder {
         let new_bonds = remap.apply_to_edge_vec(&self.bonds);
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
+
+        let removed_dative = fixed_relation_removed(&self.dative_bonds, &remap);
+        let removed_aromatic = var_relation_removed(&self.aromatic_systems, &remap);
+        let removed_multicenter = var_relation_removed(&self.multicenter_bonds, &remap);
+        let removed_noncovalent = fixed_relation_removed(&self.noncovalent_bonds, &remap);
 
         let dative = mem::replace(
             &mut self.dative_bonds,
@@ -264,7 +362,15 @@ impl MoleculeBuilder {
         );
         self.noncovalent_bonds = noncovalent.apply_remapping(&remap);
 
-        remap
+        let idx_remap = IdxRemapping::new(
+            remap,
+            removed_dative,
+            removed_aromatic,
+            removed_multicenter,
+            removed_noncovalent,
+        );
+        self.constraints.remap(&idx_remap);
+        idx_remap
     }
 
     pub fn build(self) -> MoleculeAst {

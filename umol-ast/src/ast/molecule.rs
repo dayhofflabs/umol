@@ -63,7 +63,7 @@ impl MoleculeAst {
         aromatic: Vec<(Vec<AtomIdx>, AromaticSystemAst)>,
         multicenter: Vec<(Vec<AtomIdx>, MulticenterBondAst)>,
         noncovalent: Vec<(AtomIdx, AtomIdx, NoncovalentBondAst)>,
-        constraints: impl Into<Constraints>,
+        constraints: Constraints,
     ) -> Self {
         let node_count = atoms.len();
         let edges: Vec<[u32; 2]> = bonds.iter().map(|(s, t, _)| [s.0, t.0]).collect();
@@ -106,7 +106,7 @@ impl MoleculeAst {
             aromatic_systems: Arc::new(aromatic_systems),
             multicenter_bonds: Arc::new(multicenter_bonds),
             noncovalent_bonds: Arc::new(noncovalent_bonds),
-            constraints: constraints.into(),
+            constraints,
         }
     }
 
@@ -324,7 +324,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            vec![],
+            Constraints::default(),
         );
         assert!(ast.is_ground());
     }
@@ -338,7 +338,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            vec![],
+            Constraints::default(),
         );
         assert!(!ast.is_ground());
     }
@@ -359,7 +359,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            vec![],
+            Constraints::default(),
         );
         assert!(!ast.is_ground());
     }
@@ -373,11 +373,13 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            vec![],
+            Constraints::default(),
         );
-        ast.constraints.push(Constraint::Molecule(
-            MoleculeConstraint::ChargeSum(ValueAst::Undetermined),
-        ));
+        ast.constraints
+            .push_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                atoms: vec![],
+                sum: ValueAst::Undetermined,
+            }));
         assert!(ast.is_ground());
     }
 
@@ -397,7 +399,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            vec![],
+            Constraints::default(),
         );
         assert_eq!(ast.neighbors(AtomIdx(0)).count(), 2);
         assert_eq!(ast.neighbors(AtomIdx(1)).count(), 1);
@@ -416,7 +418,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            vec![],
+            Constraints::default(),
         );
         let mut b = ast.edit();
         let id =
