@@ -108,7 +108,6 @@ impl<R, const N: usize> FixedRelationSet<R, N> {
     pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
-
 }
 
 impl<R, const N: usize> Default for FixedRelationSet<R, N> {
@@ -123,7 +122,7 @@ impl<R, const N: usize> Default for FixedRelationSet<R, N> {
 }
 
 /// Variable-arity relation set. Each relation connects an arbitrary
-/// number of nodes.
+/// number of nodes. Participants are sorted by `NodeId` on construction.
 ///
 /// Flat CSR storage: participant ranges via offset table, incidence
 /// via a second offset table. No heap allocations per node or per
@@ -157,18 +156,18 @@ impl<R> VarRelationSet<R> {
         let mut participants = Vec::with_capacity(total_participants);
         let mut data = Vec::with_capacity(relation_count);
 
-        for (p, d) in entries {
+        for (mut p, d) in entries {
+            p.sort_unstable();
             participants.extend_from_slice(&p);
             offsets.push(participants.len() as u32);
             data.push(d);
         }
 
-        let (incidence_nodes, incidence_rels) =
-            build_incidence(relation_count, |i| {
-                let start = offsets[i] as usize;
-                let end = offsets[i + 1] as usize;
-                &participants[start..end]
-            });
+        let (incidence_nodes, incidence_rels) = build_incidence(relation_count, |i| {
+            let start = offsets[i] as usize;
+            let end = offsets[i + 1] as usize;
+            &participants[start..end]
+        });
 
         Self {
             offsets,
@@ -218,7 +217,6 @@ impl<R> VarRelationSet<R> {
     pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
-
 }
 
 impl<R> Default for VarRelationSet<R> {
@@ -236,6 +234,7 @@ impl<R> Default for VarRelationSet<R> {
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
+
     use super::*;
 
     fn n(i: u32) -> NodeId {
@@ -244,9 +243,8 @@ mod tests {
 
     #[test]
     fn test_fixed_relation_set_new() {
-        let rs: FixedRelationSet<&str, 2> = FixedRelationSet::new(
-            vec![([n(0), n(1)], "dative"), ([n(1), n(2)], "noncov")],
-        );
+        let rs: FixedRelationSet<&str, 2> =
+            FixedRelationSet::new(vec![([n(0), n(1)], "dative"), ([n(1), n(2)], "noncov")]);
         assert_eq!(rs.relation_count(), 2);
         assert_eq!(rs.data(RelationId(0)), &"dative");
         assert_eq!(rs.participants(RelationId(0)), &[n(0), n(1)]);
@@ -270,8 +268,7 @@ mod tests {
 
     #[test]
     fn test_fixed_relation_set_data_mut() {
-        let mut rs: FixedRelationSet<i32, 2> =
-            FixedRelationSet::new(vec![([n(0), n(1)], 1)]);
+        let mut rs: FixedRelationSet<i32, 2> = FixedRelationSet::new(vec![([n(0), n(1)], 1)]);
         *rs.data_mut(RelationId(0)) = 99;
         assert_eq!(rs.data(RelationId(0)), &99);
     }
@@ -285,24 +282,32 @@ mod tests {
 
     #[test]
     fn test_fixed_relation_set_relation_ids() {
-        let rs: FixedRelationSet<(), 2> = FixedRelationSet::new(
-            vec![([n(0), n(1)], ()), ([n(1), n(2)], ())],
-        );
+        let rs: FixedRelationSet<(), 2> =
+            FixedRelationSet::new(vec![([n(0), n(1)], ()), ([n(1), n(2)], ())]);
         let ids: Vec<RelationId> = rs.relation_ids().collect();
         assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
     }
 
     #[test]
     fn test_var_relation_set_new() {
-        let rs: VarRelationSet<&str> = VarRelationSet::new(vec![
-            (vec![n(0), n(1), n(2), n(3), n(4), n(5)], "benzene"),
-        ]);
+        let rs: VarRelationSet<&str> =
+            VarRelationSet::new(vec![(vec![n(0), n(1), n(2), n(3), n(4), n(5)], "benzene")]);
         assert_eq!(rs.relation_count(), 1);
         assert_eq!(rs.data(RelationId(0)), &"benzene");
         assert_eq!(
             rs.participants(RelationId(0)),
             &[n(0), n(1), n(2), n(3), n(4), n(5)]
         );
+    }
+
+    #[test]
+    fn test_var_relation_set_participants_sorted() {
+        let rs: VarRelationSet<()> = VarRelationSet::new(vec![
+            (vec![n(5), n(2), n(0), n(3)], ()),
+            (vec![n(4), n(1)], ()),
+        ]);
+        assert_eq!(rs.participants(RelationId(0)), &[n(0), n(2), n(3), n(5)]);
+        assert_eq!(rs.participants(RelationId(1)), &[n(1), n(4)]);
     }
 
     #[test]
@@ -330,8 +335,7 @@ mod tests {
 
     #[test]
     fn test_var_relation_set_data_mut() {
-        let mut rs: VarRelationSet<i32> =
-            VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], 1)]);
+        let mut rs: VarRelationSet<i32> = VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], 1)]);
         *rs.data_mut(RelationId(0)) = 99;
         assert_eq!(rs.data(RelationId(0)), &99);
     }
@@ -345,9 +349,8 @@ mod tests {
 
     #[test]
     fn test_var_relation_set_relation_ids() {
-        let rs: VarRelationSet<()> = VarRelationSet::new(
-            vec![(vec![n(0), n(1)], ()), (vec![n(1), n(2)], ())],
-        );
+        let rs: VarRelationSet<()> =
+            VarRelationSet::new(vec![(vec![n(0), n(1)], ()), (vec![n(1), n(2)], ())]);
         let ids: Vec<RelationId> = rs.relation_ids().collect();
         assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
     }

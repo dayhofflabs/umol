@@ -159,6 +159,8 @@ impl Graph {
         self.topology.edge_count
     }
 
+    /// Neighbors sorted by `NodeId`. Enables binary search in `find_edge`
+    /// and set-intersection in `induced_edges`.
     pub fn neighbors(&self, id: NodeId) -> &[Neighbor] {
         let start = self.topology.offsets[id.index()] as usize;
         let end = self.topology.offsets[id.index() + 1] as usize;
@@ -183,6 +185,7 @@ impl Graph {
     }
 
     /// Edges whose both endpoints are in `nodes`. The slice must be sorted.
+    /// Yields each edge exactly once; iteration order is unspecified.
     pub fn induced_edges<'a>(&'a self, nodes: &'a [NodeId]) -> impl Iterator<Item = EdgeId> + 'a {
         nodes.iter().flat_map(move |&node| {
             self.neighbors(node).iter().filter_map(move |n| {
@@ -444,6 +447,25 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[rstest]
+    #[case::single_edge(&[[0, 1]], &[0, 1], vec![EdgeId(0)])]
+    #[case::triangle_pair(&[[0, 1], [1, 2], [0, 2]], &[0, 1], vec![EdgeId(0)])]
+    #[case::triangle_all(&[[0, 1], [1, 2], [0, 2]], &[0, 1, 2], vec![EdgeId(0), EdgeId(1), EdgeId(2)])]
+    #[case::no_internal_edges(&[[0, 1], [1, 2]], &[0, 2], vec![])]
+    #[case::empty_nodes(&[[0, 1]], &[], vec![])]
+    fn test_graph_induced_edges(
+        #[case] edges: &[[u32; 2]],
+        #[case] nodes: &[u32],
+        #[case] expected: Vec<EdgeId>,
+    ) {
+        let node_count = edges.iter().flat_map(|e| e.iter()).max().unwrap() + 1;
+        let g = Graph::new(node_count as usize, edges);
+        let sorted_nodes: Vec<NodeId> = nodes.iter().map(|&n| NodeId(n)).collect();
+        let mut result: Vec<EdgeId> = g.induced_edges(&sorted_nodes).collect();
+        result.sort_unstable();
+        assert_eq!(result, expected);
     }
 
     #[test]
