@@ -4,9 +4,20 @@ use std::collections::HashSet;
 
 use crate::graph::{Graph, NodeId};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BiconnectedComponentsAlgorithm {
+    Tarjan,
+}
+
 impl Graph {
-    /// Biconnected components with at least 3 nodes (ring-containing).
-    pub fn biconnected_components(&self) -> Vec<Vec<NodeId>> {
+    pub fn biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<NodeId>> {
+        match alg {
+            BiconnectedComponentsAlgorithm::Tarjan => self.biconnected_components_tarjan(),
+        }
+    }
+
+    // Tarjan's BCC via DFS. O(V+E). Tarjan 1972 "Depth-first search and linear graph algorithms".
+    fn biconnected_components_tarjan(&self) -> Vec<Vec<NodeId>> {
         let bound = self.node_bound();
         let mut disc: Vec<Option<u32>> = vec![None; bound];
         let mut low: Vec<u32> = vec![0; bound];
@@ -109,61 +120,31 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::BiconnectedComponentsAlgorithm::Tarjan;
     use crate::graph::{Graph, NodeId};
 
     fn n(i: u32) -> NodeId {
         NodeId(i)
     }
 
-    #[test]
-    fn test_graph_biconnected_components_empty() {
-        let g = Graph::default();
-        assert!(g.biconnected_components().is_empty());
-    }
-
-    #[test]
-    fn test_graph_biconnected_components_chain() {
-        let g = Graph::new(4, &[[0, 1], [1, 2], [2, 3]]);
-        assert!(g.biconnected_components().is_empty());
-    }
-
     #[rstest]
-    #[case::single_cycle(
-        4,
-        vec![[0, 1], [1, 2], [2, 3], [3, 0]],
-        vec![vec![n(0), n(1), n(2), n(3)]]
-    )]
-    #[case::hexagon(
-        6,
-        vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]],
-        vec![vec![n(0), n(1), n(2), n(3), n(4), n(5)]]
-    )]
+    #[case::empty(0, vec![], vec![])]
+    #[case::chain(4, vec![[0, 1], [1, 2], [2, 3]], vec![])]
+    #[case::single_cycle(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], vec![vec![n(0), n(1), n(2), n(3)]])]
+    #[case::hexagon(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]],
+        vec![vec![n(0), n(1), n(2), n(3), n(4), n(5)]])]
+    #[case::articulation(5, vec![[0, 1], [1, 2], [0, 2], [2, 3], [3, 4], [2, 4]],
+        vec![vec![n(0), n(1), n(2)], vec![n(2), n(3), n(4)]])]
+    #[case::disconnected(5, vec![[0, 1], [1, 2], [0, 2], [3, 4]],
+        vec![vec![n(0), n(1), n(2)]])]
     fn test_graph_biconnected_components(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
         #[case] expected: Vec<Vec<NodeId>>,
     ) {
         let g = Graph::new(node_count, &edges);
-        assert_eq!(g.biconnected_components(), expected);
-    }
-
-    #[test]
-    fn test_graph_biconnected_components_articulation() {
-        let g = Graph::new(
-            5,
-            &[[0, 1], [1, 2], [0, 2], [2, 3], [3, 4], [2, 4]],
-        );
-        let mut bcc = g.biconnected_components();
+        let mut bcc = g.biconnected_components(Tarjan);
         bcc.sort();
-        assert_eq!(bcc, vec![vec![n(0), n(1), n(2)], vec![n(2), n(3), n(4)]]);
-    }
-
-    #[test]
-    fn test_graph_biconnected_components_disconnected() {
-        let g = Graph::new(5, &[[0, 1], [1, 2], [0, 2], [3, 4]]);
-        assert_eq!(
-            g.biconnected_components(),
-            vec![vec![n(0), n(1), n(2)]]
-        );
+        assert_eq!(bcc, expected);
     }
 }

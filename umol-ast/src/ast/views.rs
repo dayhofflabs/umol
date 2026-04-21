@@ -75,11 +75,16 @@ pub struct AromaticSystemView<'a> {
     pub idx: AromaticSystemIdx,
     pub data: &'a AromaticSystemAst,
     atoms: &'a [NodeId],
+    graph: &'a Graph,
 }
 
 impl<'a> AromaticSystemView<'a> {
     pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
         self.atoms.iter().map(|&n| AtomIdx::from(n))
+    }
+
+    pub fn bonds(&self) -> impl Iterator<Item = BondIdx> + '_ {
+        self.graph.induced_edges(self.atoms).map(BondIdx::from)
     }
 }
 
@@ -288,11 +293,12 @@ impl<'a> Index<NoncovalentBondIdx> for NoncovalentBondViews<'a> {
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
     set: &'a VarRelationSet<AromaticSystemAst>,
+    graph: &'a Graph,
 }
 
 impl<'a> AromaticSystemViews<'a> {
-    pub(super) fn new(set: &'a VarRelationSet<AromaticSystemAst>) -> Self {
-        Self { set }
+    pub(super) fn new(set: &'a VarRelationSet<AromaticSystemAst>, graph: &'a Graph) -> Self {
+        Self { set, graph }
     }
 
     pub fn count(&self) -> usize {
@@ -305,10 +311,12 @@ impl<'a> AromaticSystemViews<'a> {
 
     pub fn iter(&self) -> impl Iterator<Item = AromaticSystemView<'a>> {
         let set = self.set;
+        let graph = self.graph;
         set.relation_ids().map(move |rid| AromaticSystemView {
             idx: AromaticSystemIdx::from(rid),
             data: set.data(rid),
             atoms: set.participants(rid),
+            graph,
         })
     }
 
@@ -318,6 +326,7 @@ impl<'a> AromaticSystemViews<'a> {
             idx,
             data: self.set.data(rid),
             atoms: self.set.participants(rid),
+            graph: self.graph,
         }
     }
 }

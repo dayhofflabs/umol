@@ -1,6 +1,6 @@
 //! Substructure matcher over `MoleculePattern` / `Molecule`.
 
-use umol_graph_core::{subgraph_isomorphisms, subgraph_isomorphisms_at, EdgeId, NodeId};
+use umol_graph_core::{EdgeId, NodeId, SubgraphIsomorphismAlgorithm};
 
 use crate::api::molecule::Molecule;
 use crate::api::pattern::MoleculePattern;
@@ -46,11 +46,11 @@ impl Matcher {
                 .matches(target_ast.bond(t.into()).data)
         };
 
-        subgraph_isomorphisms(
+        target_ast.graph().subgraph_isomorphisms(
             pattern_ast.graph(),
-            target_ast.graph(),
             &mut node_match,
             &mut edge_match,
+            SubgraphIsomorphismAlgorithm::Vf2,
         )
         .into_iter()
         .filter(|a| post_filter(pattern_ast, target, a))
@@ -88,12 +88,12 @@ impl Matcher {
                 .matches(target_ast.bond(t.into()).data)
         };
 
-        subgraph_isomorphisms_at(
+        target_ast.graph().subgraph_isomorphisms_at(
             pattern_ast.graph(),
-            target_ast.graph(),
             (pattern_anchor.into(), target_anchor.into()),
             &mut node_match,
             &mut edge_match,
+            SubgraphIsomorphismAlgorithm::Vf2,
         )
         .into_iter()
         .filter(|a| post_filter(pattern_ast, target, a))

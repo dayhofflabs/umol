@@ -10,7 +10,13 @@ pub mod graph;
 pub mod relation;
 pub mod union_find;
 
-pub use algorithms::subiso::{subgraph_isomorphisms, subgraph_isomorphisms_at};
+pub use algorithms::auto::{AutoGroupOrder, Automorphism, AutomorphismAlgorithm};
+pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
+pub use algorithms::connected::ConnectedComponentsAlgorithm;
+pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
+pub use algorithms::matching::{MatchingEnumerationAlgorithm, MaxMatchingAlgorithm, Matching};
+pub use algorithms::mis::MaxIndependentSetAlgorithm;
+pub use algorithms::subiso::SubgraphIsomorphismAlgorithm;
 pub use graph::{EdgeId, Graph, Neighbor, NodeId, Remapping, Subgraph};
 pub use relation::{FixedRelationSet, RelationId, VarRelationSet};
 pub use union_find::UnionFind;

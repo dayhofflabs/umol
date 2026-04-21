@@ -166,9 +166,15 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     }
 }
 
-fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AromaticSystemConstraint) -> fmt::Result {
+fn fmt_constraint(_f: &mut fmt::Formatter<'_>, c: &AromaticSystemConstraint) -> fmt::Result {
     match c {
-        AromaticSystemConstraint::Electrons(v) => fmt_electrons(f, v),
+        AromaticSystemConstraint::Atoms(_)
+        | AromaticSystemConstraint::Contains(_)
+        | AromaticSystemConstraint::ContainsAll(_)
+        | AromaticSystemConstraint::AllAtoms(_)
+        | AromaticSystemConstraint::AnyAtom(_) => {
+            unreachable!("molecule-scope aromatic constraint in aromatic-system DSL")
+        }
     }
 }
 

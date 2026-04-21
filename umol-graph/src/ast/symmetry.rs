@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use umol_graph_core::algorithms::auto::Automorphism;
+use umol_graph_core::{AutomorphismAlgorithm, Graph, NodeId};
 use umol_ast::ast::atom::{ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use umol_shared::element::Element;
 use umol_shared::spin::SpinMultiplicity;
@@ -20,7 +20,7 @@ use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::molecule::MoleculeAst;
 
-pub use umol_graph_core::algorithms::auto::AutoGroupOrder;
+pub use umol_graph_core::{AutoGroupOrder, Automorphism};
 
 /// Vertex color for nauty partitioning.
 /// Atom and Bond variants are in separate cells, so they can never share an orbit.
@@ -89,35 +89,35 @@ pub struct GraphSymmetry {
     nauty_to_atom: Vec<AtomIdx>,
     atom_to_nauty: Vec<usize>,
     n_atoms: usize,
-    aut: Automorphism,
+    aut: umol_graph_core::Automorphism,
 }
 
 impl GraphSymmetry {
     pub fn num_orbits(&self) -> usize {
         let mut reps = HashSet::new();
         for i in 0..self.n_atoms {
-            reps.insert(self.aut.orbit_of(i));
+            reps.insert(self.aut.orbit_of(NodeId(i as u32)));
         }
         reps.len()
     }
 
     pub fn orbit_representative(&self, atom: AtomIdx) -> AtomIdx {
-        let ni = self.atom_to_nauty[atom.index()];
-        self.nauty_to_atom[self.aut.orbit_of(ni)]
+        let ni = NodeId(self.atom_to_nauty[atom.index()] as u32);
+        let orbit = self.aut.orbit_of(ni);
+        self.nauty_to_atom[orbit.index()]
     }
 
     pub fn same_orbit(&self, a: AtomIdx, b: AtomIdx) -> bool {
-        self.aut
-            .same_orbit(self.atom_to_nauty[a.index()], self.atom_to_nauty[b.index()])
+        let na = NodeId(self.atom_to_nauty[a.index()] as u32);
+        let nb = NodeId(self.atom_to_nauty[b.index()] as u32);
+        self.aut.same_orbit(na, nb)
     }
 
     pub fn orbit_partition(&self) -> Vec<Vec<AtomIdx>> {
-        let mut groups: BTreeMap<usize, Vec<AtomIdx>> = BTreeMap::new();
+        let mut groups: BTreeMap<NodeId, Vec<AtomIdx>> = BTreeMap::new();
         for i in 0..self.n_atoms {
-            groups
-                .entry(self.aut.orbit_of(i))
-                .or_default()
-                .push(self.nauty_to_atom[i]);
+            let orbit = self.aut.orbit_of(NodeId(i as u32));
+            groups.entry(orbit).or_default().push(self.nauty_to_atom[i]);
         }
         groups.into_values().collect()
     }
@@ -127,8 +127,7 @@ impl GraphSymmetry {
             .canonical_labeling()
             .iter()
             .filter_map(|&v| {
-                let v = v as usize;
-                (v < self.n_atoms).then(|| self.nauty_to_atom[v])
+                (v.index() < self.n_atoms).then(|| self.nauty_to_atom[v.index()])
             })
             .collect()
     }
@@ -167,15 +166,19 @@ pub fn compute_symmetry(ast: &MoleculeAst) -> GraphSymmetry {
     for view in ast.atoms().iter() {
         colors.push(atom_color(view.data));
     }
-    let mut edges: Vec<(usize, usize)> = Vec::with_capacity(2 * n_bonds);
+    let mut edges: Vec<[u32; 2]> = Vec::with_capacity(2 * n_bonds);
     for (i, b) in bonds.iter().enumerate() {
-        let aux = n_atoms + i;
+        let aux = (n_atoms + i) as u32;
         colors.push(bond_color(b.data));
-        edges.push((atom_to_nauty[b.src.index()], aux));
-        edges.push((atom_to_nauty[b.tgt.index()], aux));
+        edges.push([atom_to_nauty[b.src.index()] as u32, aux]);
+        edges.push([atom_to_nauty[b.tgt.index()] as u32, aux]);
     }
 
-    let aut = Automorphism::compute(n_total, &edges, &colors);
+    let g = Graph::new(n_total, &edges);
+    let aut = g.automorphisms(
+        |n: NodeId| colors[n.index()],
+        AutomorphismAlgorithm::Nauty,
+    );
 
     GraphSymmetry {
         nauty_to_atom,

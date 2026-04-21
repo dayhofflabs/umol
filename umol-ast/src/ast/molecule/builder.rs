@@ -12,21 +12,22 @@ use std::sync::Arc;
 use umol_graph_core::relation::RelationId;
 use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, Remapping, VarRelationSet};
 
-use super::aromatic::AromaticSystemAst;
-use super::atom::AtomAst;
-use super::bond::BondAst;
-use super::constraint::{
+use crate::ast::aromatic::AromaticSystemAst;
+use crate::ast::atom::AtomAst;
+use crate::ast::bond::BondAst;
+use crate::ast::constraint::{
     AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, Constraints,
     DativeBondConstraint, MulticenterBondConstraint, NoncovalentBondConstraint,
 };
-use super::dative::DativeBondAst;
-use super::idx::{
+use crate::ast::dative::DativeBondAst;
+use crate::ast::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
-use super::molecule::MoleculeAst;
-use super::multicenter::MulticenterBondAst;
-use super::noncovalent::NoncovalentBondAst;
-use super::remap::IdxRemapping;
+use crate::ast::multicenter::MulticenterBondAst;
+use crate::ast::noncovalent::NoncovalentBondAst;
+use crate::ast::remap::IdxRemapping;
+
+use super::MoleculeAst;
 
 enum FixedSetStorage<R, const N: usize> {
     Shared(Arc<FixedRelationSet<R, N>>),

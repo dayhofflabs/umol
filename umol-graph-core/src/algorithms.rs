@@ -5,4 +5,5 @@ pub mod connected;
 pub mod cycles;
 pub mod mis;
 pub mod auto;
+pub mod matching;
 pub mod subiso;

@@ -1,9 +1,23 @@
-//! Maximum independent set enumeration.
+//! Maximum independent set.
 
 use crate::graph::{Graph, NodeId};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaxIndependentSetAlgorithm {
+    BranchAndBound,
+}
+
 impl Graph {
-    pub fn maximum_independent_set(&self) -> Vec<NodeId> {
+    pub fn maximum_independent_set(&self, alg: MaxIndependentSetAlgorithm) -> Vec<NodeId> {
+        match alg {
+            MaxIndependentSetAlgorithm::BranchAndBound => {
+                self.maximum_independent_set_branch_and_bound()
+            }
+        }
+    }
+
+    // Branch-and-bound with greedy upper bound.
+    fn maximum_independent_set_branch_and_bound(&self) -> Vec<NodeId> {
         let bound = self.node_bound();
         if bound == 0 {
             return Vec::new();
@@ -26,10 +40,7 @@ impl Graph {
         current: &mut Vec<NodeId>,
         best: &mut Vec<NodeId>,
     ) {
-        let remaining = node_ids
-            .iter()
-            .filter(|id| available[id.index()])
-            .count();
+        let remaining = node_ids.iter().filter(|id| available[id.index()]).count();
         if current.len() + remaining <= best.len() {
             return;
         }
@@ -37,8 +48,7 @@ impl Graph {
         let Some(&node) = node_ids.iter().find(|id| available[id.index()]) else {
             let mut candidate = current.clone();
             candidate.sort_unstable();
-            if candidate.len() > best.len()
-                || (candidate.len() == best.len() && candidate < *best)
+            if candidate.len() > best.len() || (candidate.len() == best.len() && candidate < *best)
             {
                 *best = candidate;
             }
@@ -76,45 +86,25 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::MaxIndependentSetAlgorithm::BranchAndBound;
     use crate::graph::{Graph, NodeId};
 
     fn n(i: u32) -> NodeId {
         NodeId(i)
     }
 
-    #[test]
-    fn test_graph_maximum_independent_set_empty() {
-        let g = Graph::default();
-        assert!(g.maximum_independent_set().is_empty());
-    }
-
     #[rstest]
-    #[case::clique(
-        3,
-        vec![[0, 1], [1, 2], [0, 2]],
-        vec![n(0)]
-    )]
-    #[case::path(
-        4,
-        vec![[0, 1], [1, 2], [2, 3]],
-        vec![n(0), n(2)]
-    )]
-    #[case::cycle(
-        4,
-        vec![[0, 1], [1, 2], [2, 3], [3, 0]],
-        vec![n(0), n(2)]
-    )]
-    #[case::disconnected(
-        4,
-        vec![[0, 1], [1, 2]],
-        vec![n(0), n(2), n(3)]
-    )]
+    #[case::empty(0, vec![], vec![])]
+    #[case::clique(3, vec![[0, 1], [1, 2], [0, 2]], vec![n(0)])]
+    #[case::path(4, vec![[0, 1], [1, 2], [2, 3]], vec![n(0), n(2)])]
+    #[case::cycle(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], vec![n(0), n(2)])]
+    #[case::disconnected(4, vec![[0, 1], [1, 2]], vec![n(0), n(2), n(3)])]
     fn test_graph_maximum_independent_set(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
         #[case] expected: Vec<NodeId>,
     ) {
         let g = Graph::new(node_count, &edges);
-        assert_eq!(g.maximum_independent_set(), expected);
+        assert_eq!(g.maximum_independent_set(BranchAndBound), expected);
     }
 }

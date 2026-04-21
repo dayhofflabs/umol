@@ -1,9 +1,21 @@
-//! Connected component labeling via BFS.
+//! Connected component labeling.
 
 use crate::graph::{Graph, NodeId};
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectedComponentsAlgorithm {
+    Bfs,
+}
+
 impl Graph {
-    pub fn connected_components(&self) -> Vec<Vec<NodeId>> {
+    pub fn connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<NodeId>> {
+        match alg {
+            ConnectedComponentsAlgorithm::Bfs => self.connected_components_bfs(),
+        }
+    }
+
+    // BFS flood fill. O(V+E).
+    fn connected_components_bfs(&self) -> Vec<Vec<NodeId>> {
         let mut visited = vec![false; self.node_bound()];
         let mut components = Vec::new();
 
@@ -38,44 +50,25 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::ConnectedComponentsAlgorithm::Bfs;
     use crate::graph::{Graph, NodeId};
 
     fn n(i: u32) -> NodeId {
         NodeId(i)
     }
 
-    #[test]
-    fn test_graph_connected_components_empty() {
-        let g = Graph::default();
-        assert!(g.connected_components().is_empty());
-    }
-
-    #[test]
-    fn test_graph_connected_components_isolated() {
-        let g = Graph::new(3, &[]);
-        let cc = g.connected_components();
-        assert_eq!(cc, vec![vec![n(0)], vec![n(1)], vec![n(2)]]);
-    }
-
     #[rstest]
-    #[case::single_edge(
-        2, vec![[0, 1]],
-        vec![vec![n(0), n(1)]]
-    )]
-    #[case::triangle(
-        3, vec![[0, 1], [1, 2], [0, 2]],
-        vec![vec![n(0), n(1), n(2)]]
-    )]
-    #[case::two_components(
-        4, vec![[0, 1], [2, 3]],
-        vec![vec![n(0), n(1)], vec![n(2), n(3)]]
-    )]
+    #[case::empty(0, vec![], vec![])]
+    #[case::isolated(3, vec![], vec![vec![n(0)], vec![n(1)], vec![n(2)]])]
+    #[case::single_edge(2, vec![[0, 1]], vec![vec![n(0), n(1)]])]
+    #[case::triangle(3, vec![[0, 1], [1, 2], [0, 2]], vec![vec![n(0), n(1), n(2)]])]
+    #[case::two_components(4, vec![[0, 1], [2, 3]], vec![vec![n(0), n(1)], vec![n(2), n(3)]])]
     fn test_graph_connected_components(
         #[case] node_count: usize,
         #[case] edges: Vec<[u32; 2]>,
         #[case] expected: Vec<Vec<NodeId>>,
     ) {
         let g = Graph::new(node_count, &edges);
-        assert_eq!(g.connected_components(), expected);
+        assert_eq!(g.connected_components(Bfs), expected);
     }
 }

@@ -484,12 +484,17 @@ impl RingEnumerator {
             (graph.clone(), node_map, edge_map)
         };
 
-        let bcc = sub.biconnected_components();
+        let bcc = sub.biconnected_components(
+            umol_graph_core::BiconnectedComponentsAlgorithm::Tarjan,
+        );
 
         let mut all_rings: Vec<Ring> = Vec::new();
         for component in &bcc {
             let comp_sub = sub.induced_subgraph(component);
-            let raw_cycles = comp_sub.graph.enumerate_simple_cycles(max_cycle);
+            let raw_cycles = comp_sub.graph.enumerate_cycles(
+                max_cycle,
+                umol_graph_core::CycleEnumerationAlgorithm::Vismara,
+            );
 
             let mut component_rings: Vec<Ring> = raw_cycles
                 .into_iter()

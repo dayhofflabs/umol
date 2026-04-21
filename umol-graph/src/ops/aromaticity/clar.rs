@@ -124,7 +124,8 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIdx]) -> Vec<RingI
     }
 
     let conflict_graph = Graph::new(n, &edges);
-    let selected = conflict_graph.maximum_independent_set();
+    let selected = conflict_graph
+        .maximum_independent_set(umol_graph_core::MaxIndependentSetAlgorithm::BranchAndBound);
     selected
         .into_iter()
         .map(|node_id| candidates[node_id.index()])

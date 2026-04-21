@@ -94,6 +94,40 @@ Limited. Likely need to implement Hopf fibration sampling from the Yershova
 2010 paper if and when needed. Quaternion uniform random is in `nalgebra` /
 `rand_distr`.
 
+## Graph algorithms
+
+Algorithms operating on the molecular graph. Live in `umol-graph-core`.
+
+### Cycle enumeration
+
+| Algorithm | Output | Complexity | Use case |
+|---|---|---|---|
+| Vismara relevant cycles | All cycles not decomposable as XOR of shorter cycles | O(V·E·C) where C = relevant cycle count | SMARTS `R` (ring count), ring-system classification, aromaticity |
+| BFS shortest cycle through edge | Smallest ring containing a given edge | O(V+E) per query | SMARTS `r` (smallest ring size), ring membership bit |
+
+Decision: implement both in `umol-graph-core`. Removes the naive DFS `enumerate_simple_cycles`
+currently there. SSSR/MCB not implemented — relevant cycles subsume them without the
+non-uniqueness problem (see discussion/57).
+
+- Essential cycles (subset of relevant that appear in every MCB) — not needed; relevant cycles
+  are cheap enough and essential is too sparse for symmetric-equivalent rings.
+- All simple cycles — exponential, not needed for any current use case.
+
+### Matching
+
+| Algorithm | Output | Complexity | Use case |
+|---|---|---|---|
+| Edmonds' blossom | Maximum matching in general graphs | O(V³) | Kekulization (single), radical detection (unmatched = radical) |
+| Uno's enumeration | All perfect/maximum matchings | O(V·E) per matching, Edmonds as subroutine | Kekulization (all representations), tautomer enumeration |
+
+Decision: implement both in `umol-graph-core`.
+
+- Kekulization: run Edmonds on the π-subgraph. Perfect matching → Kekulizable;
+  unmatched vertices → radical centers.
+- Tautomer enumeration: Uno enumeration on the mobile-H subgraph where vertices are
+  mobile-H sites and edges are allowed H-shifts. Each matching assigns double-bond
+  positions; unmatched vertices receive the mobile proton.
+
 ## Other potentially relevant primitives
 
 Tracked here for completeness, not yet needed:
@@ -117,14 +151,3 @@ Tracked here for completeness, not yet needed:
   `kdtree`. Already needed for non-bonded interaction lists, equivalence set
   detection at scale.
 
-## Where these live in umol
-
-Currently undecided. Options:
-
-1. **Inline in consumer modules** — start here, extract on second use (YAGNI)
-2. **New crate `umol-numerics`** — central home for shared numerical utilities
-3. **Add to `umol-msym/src/linear.rs`** — currently has linalg helpers, but
-   misnamed for general purpose
-
-Recommendation: start inline. Move to a shared crate when a primitive has
-≥2 distinct consumers across the workspace.

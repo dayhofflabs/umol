@@ -222,7 +222,9 @@ fn all_in_same_component(target: &Molecule, atoms: &[AtomIdx]) -> bool {
     if atoms.len() <= 1 {
         return true;
     }
-    let components = target.graph().connected_components();
+    let components = target
+        .graph()
+        .connected_components(umol_graph_core::ConnectedComponentsAlgorithm::Bfs);
     let mut owner = vec![usize::MAX; target.graph().node_count()];
     for (i, comp) in components.iter().enumerate() {
         for n in comp {
