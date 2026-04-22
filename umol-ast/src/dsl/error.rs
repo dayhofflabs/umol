@@ -6,8 +6,7 @@ use umol_shared::spin::SpinMultiplicity;
 use winnow::error::{ErrMode, ParserError};
 use winnow::stream::Stream;
 
-pub type WinnowErrorMode = ErrMode<ParseError>;
-pub type PResult<T> = Result<T, WinnowErrorMode>;
+pub(crate) type PResult<T> = Result<T, ErrMode<ParseError>>;
 
 
 #[rustfmt::skip]
@@ -29,6 +28,16 @@ pub enum ParseError {
     UnknownAromaticPredicate(String),
     #[error("duplicate aromatic predicate: {0}")]
     DuplicateAromaticPredicate(String),
+    #[error("unknown multicenter predicate: {0}")]
+    UnknownMulticenterPredicate(String),
+    #[error("duplicate multicenter predicate: {0}")]
+    DuplicateMulticenterPredicate(String),
+    #[error("unknown dative predicate: {0}")]
+    UnknownDativePredicate(String),
+    #[error("duplicate dative predicate: {0}")]
+    DuplicateDativePredicate(String),
+    #[error("expected noncovalent kind")]
+    ExpectedNoncovalentKind,
     #[error("trailing input: {0:?}")]
     TrailingInput(String),
     #[error("unpaired electrons {unpaired} out of range")]
@@ -37,6 +46,10 @@ pub enum ParseError {
     MultiplicityOutOfRange { multiplicity: u8 },
     #[error("{unpaired} unpaired electrons, {multiplicity} multiplicity incompatible")]
     IncompatibleSpin { unpaired: u8, multiplicity: SpinMultiplicity },
+    #[error("raising error: {0}")]
+    RaisingError(String),
+    #[error("lowering error: {0}")]
+    LoweringError(String),
     #[error("syntax error")]
     Syntax,
 }

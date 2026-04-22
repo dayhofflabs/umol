@@ -59,7 +59,8 @@ impl<R, const N: usize> FixedRelationSet<R, N> {
     pub fn new(entries: Vec<([NodeId; N], R)>) -> Self {
         let mut participants = Vec::with_capacity(entries.len());
         let mut data = Vec::with_capacity(entries.len());
-        for (p, d) in entries {
+        for (mut p, d) in entries {
+            p.sort_unstable();
             participants.push(p);
             data.push(d);
         }
@@ -249,6 +250,14 @@ mod tests {
         assert_eq!(rs.data(RelationId(0)), &"dative");
         assert_eq!(rs.participants(RelationId(0)), &[n(0), n(1)]);
         assert_eq!(rs.participants(RelationId(1)), &[n(1), n(2)]);
+    }
+
+    #[test]
+    fn test_fixed_relation_set_participants_sorted() {
+        let rs: FixedRelationSet<&str, 2> =
+            FixedRelationSet::new(vec![([n(2), n(0)], "a"), ([n(3), n(1)], "b")]);
+        assert_eq!(rs.participants(RelationId(0)), &[n(0), n(2)]);
+        assert_eq!(rs.participants(RelationId(1)), &[n(1), n(3)]);
     }
 
     #[test]

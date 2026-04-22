@@ -64,6 +64,7 @@
 - Do not use <module>/mod.rs, use <module>.rs instead.
 - Use #[rstest] throughout. Use table tests with #[case] instead of individual tests. Use #[fixture] instead of manual construction.
 - Name tests test_<function>(), test_<struct>_<method>() and test_<struct>_<method>_error(). Do not include test behavior in the test name.
+- Tests should assert specific return values or error types, not only summary statistics like lengths or presence of error conditions.
 - The symbol names should convey the meaning. Comments only clarify points that are not obvious from names.
 - Do not use fully qualified names in the text. Use bare symbols for structs, enums, traits, and constants, parent module for free functions.
 - Do not place imports inline in code, put them all at the top of the module.

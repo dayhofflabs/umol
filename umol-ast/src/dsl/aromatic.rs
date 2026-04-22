@@ -2,6 +2,7 @@
 
 use std::borrow::Cow;
 use std::fmt::{self, Display};
+use std::mem;
 use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
@@ -16,34 +17,20 @@ use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_spin_pair, fmt_value, optional_value, SpinPredicate,
 };
 use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::constraint::AromaticSystemConstraint;
+use crate::ast::config::{
+    AromaticSystemAstConfig, MultiplicityMode, NumericMode, UnpairedElectronsMode,
+};
+use crate::ast::spin::SpinStateAst;
+use crate::ast::traits::{FromAst, ToAst};
 use crate::ast::value::ValueAst;
 
-/// AST-layer bundle pairing an `AromaticSystemAst` with the system-level
-/// constraints that round-trip through the aromatic-string DSL.
+/// Surface DSL wrapper around `AromaticSystemAst`. Parses and renders the
+/// aromatic-system-string form. All `AromaticSystemConstraint` variants are
+/// molecule-scope, so nothing from the constraint vec serializes inline.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct AromaticSystemTypeAst {
-    pub ast: AromaticSystemAst,
-    pub constraints: Vec<AromaticSystemConstraint>,
-}
+pub struct AromaticSystemDsl(pub AromaticSystemAst);
 
-impl AromaticSystemTypeAst {
-    pub fn new(ast: AromaticSystemAst) -> Self {
-        Self {
-            ast,
-            constraints: Vec::new(),
-        }
-    }
-
-    pub fn with_constraints(
-        ast: AromaticSystemAst,
-        constraints: Vec<AromaticSystemConstraint>,
-    ) -> Self {
-        Self { ast, constraints }
-    }
-}
-
-impl FromStr for AromaticSystemTypeAst {
+impl FromStr for AromaticSystemDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -51,17 +38,13 @@ impl FromStr for AromaticSystemTypeAst {
     }
 }
 
-impl Display for AromaticSystemTypeAst {
+impl Display for AromaticSystemDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_aromatic_ast(f, &self.ast)?;
-        for c in &self.constraints {
-            fmt_constraint(f, c)?;
-        }
-        Ok(())
+        fmt_aromatic_ast(f, &self.0)
     }
 }
 
-impl<'de> FromEdn<'de> for AromaticSystemTypeAst {
+impl<'de> FromEdn<'de> for AromaticSystemDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("aromatic", e)),
@@ -74,30 +57,135 @@ impl<'de> FromEdn<'de> for AromaticSystemTypeAst {
     }
 }
 
-impl ToEdn for AromaticSystemTypeAst {
+impl ToEdn for AromaticSystemDsl {
     fn to_edn(&self) -> Edn<'static> {
         Edn::Str(Cow::Owned(self.to_string()))
     }
 }
 
-pub fn parse_aromatic(input: &str) -> Result<AromaticSystemTypeAst, ParseError> {
+impl FromAst<AromaticSystemAst> for AromaticSystemDsl {
+    type Error = ParseError;
+
+    fn from_ast(
+        ast: &AromaticSystemAst,
+        cfg: &AromaticSystemAstConfig,
+    ) -> Result<Self, ParseError> {
+        let mut out = ast.clone();
+        lower_aromatic(&mut out, cfg);
+        Ok(AromaticSystemDsl(out))
+    }
+}
+
+impl ToAst<AromaticSystemAst> for AromaticSystemDsl {
+    type Error = ParseError;
+
+    fn to_ast(&self, cfg: &AromaticSystemAstConfig) -> Result<AromaticSystemAst, ParseError> {
+        let mut out = self.0.clone();
+        raise_aromatic(&mut out, cfg);
+        Ok(out)
+    }
+}
+
+fn raise_aromatic(ast: &mut AromaticSystemAst, cfg: &AromaticSystemAstConfig) {
+    if matches!(ast.charge, ValueAst::Undetermined) {
+        ast.charge = match cfg.charge_mode {
+            NumericMode::Zero => ValueAst::Lit(0),
+            NumericMode::Required => ValueAst::Undetermined,
+        };
+    }
+    if matches!(ast.electrons, ValueAst::Undetermined) {
+        ast.electrons = match cfg.electrons_mode {
+            NumericMode::Zero => ValueAst::Lit(0),
+            NumericMode::Required => ValueAst::Undetermined,
+        };
+    }
+    raise_spin(&mut ast.spin, cfg);
+}
+
+fn raise_spin(spin: &mut SpinStateAst, cfg: &AromaticSystemAstConfig) {
+    let u = mem::replace(&mut spin.unpaired, ValueAst::Undetermined);
+    let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
+    let resolved_u = if matches!(u, ValueAst::Undetermined) {
+        match cfg.unpaired_electrons_mode {
+            UnpairedElectronsMode::Zero => ValueAst::Lit(0),
+            UnpairedElectronsMode::Required => ValueAst::Undetermined,
+            UnpairedElectronsMode::Derived => match &m {
+                ValueAst::Lit(mm) => ValueAst::Lit(mm - 1),
+                _ => ValueAst::Undetermined,
+            },
+        }
+    } else {
+        u
+    };
+    let resolved_m = if matches!(m, ValueAst::Undetermined) {
+        match cfg.multiplicity_mode {
+            MultiplicityMode::Required => ValueAst::Undetermined,
+            MultiplicityMode::Derived => match &resolved_u {
+                ValueAst::Lit(uu) => ValueAst::Lit(uu + 1),
+                _ => ValueAst::Undetermined,
+            },
+        }
+    } else {
+        m
+    };
+    spin.unpaired = resolved_u;
+    spin.multiplicity = resolved_m;
+}
+
+fn lower_aromatic(ast: &mut AromaticSystemAst, cfg: &AromaticSystemAstConfig) {
+    if matches!(
+        (&cfg.charge_mode, &ast.charge),
+        (NumericMode::Zero, ValueAst::Lit(0))
+    ) {
+        ast.charge = ValueAst::Undetermined;
+    }
+    if matches!(
+        (&cfg.electrons_mode, &ast.electrons),
+        (NumericMode::Zero, ValueAst::Lit(0))
+    ) {
+        ast.electrons = ValueAst::Undetermined;
+    }
+    lower_spin(&mut ast.spin, cfg);
+}
+
+fn lower_spin(spin: &mut SpinStateAst, cfg: &AromaticSystemAstConfig) {
+    if let (ValueAst::Lit(uu), ValueAst::Lit(mm)) = (&spin.unpaired, &spin.multiplicity) {
+        let derived = *mm == uu + 1;
+        let strip_u = match cfg.unpaired_electrons_mode {
+            UnpairedElectronsMode::Zero => *uu == 0,
+            UnpairedElectronsMode::Derived => {
+                derived && matches!(cfg.multiplicity_mode, MultiplicityMode::Derived)
+            }
+            UnpairedElectronsMode::Required => false,
+        };
+        let strip_m = matches!(cfg.multiplicity_mode, MultiplicityMode::Derived) && derived;
+        if strip_u {
+            spin.unpaired = ValueAst::Undetermined;
+        }
+        if strip_m {
+            spin.multiplicity = ValueAst::Undetermined;
+        }
+    }
+}
+
+pub fn parse_aromatic(input: &str) -> Result<AromaticSystemDsl, ParseError> {
     aromatic.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn aromatic(i: &mut &str) -> PResult<AromaticSystemTypeAst> {
+pub(crate) fn aromatic(i: &mut &str) -> PResult<AromaticSystemDsl> {
     multispace0.parse_next(i)?;
     let preds: Vec<AromaticPredicate> =
         repeat(0.., terminated(aromatic_predicate, multispace0)).parse_next(i)?;
-    let mut form = AromaticSystemTypeAst::default();
+    let mut form = AromaticSystemDsl::default();
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
 }
 
 fn apply_predicates(
-    form: &mut AromaticSystemTypeAst,
+    form: &mut AromaticSystemDsl,
     preds: Vec<AromaticPredicate>,
 ) -> Result<(), ParseError> {
-    let ast = &mut form.ast;
+    let ast = &mut form.0;
     for pred in preds {
         match pred {
             AromaticPredicate::Charge(v) => {
@@ -166,18 +254,6 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     }
 }
 
-fn fmt_constraint(_f: &mut fmt::Formatter<'_>, c: &AromaticSystemConstraint) -> fmt::Result {
-    match c {
-        AromaticSystemConstraint::Atoms(_)
-        | AromaticSystemConstraint::Contains(_)
-        | AromaticSystemConstraint::ContainsAll(_)
-        | AromaticSystemConstraint::AllAtoms(_)
-        | AromaticSystemConstraint::AnyAtom(_) => {
-            unreachable!("molecule-scope aromatic constraint in aromatic-system DSL")
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -188,20 +264,20 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty("", AromaticSystemTypeAst::new(AromaticSystemAst::default()))]
-    #[case::whitespace("   ", AromaticSystemTypeAst::new(AromaticSystemAst::default()))]
-    #[case::charge_pos("#c+1", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::charge_neg("#c-2", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::charge_plus_only("#c+", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::charge_minus_only("#c-", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::electrons("#e6", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: Vec::new() }))]
-    #[case::electrons_bare("#e", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(1), constraints: Vec::new() }))]
-    #[case::electrons_wild("#e*", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::unpaired("#u1", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::mult("#s2", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::charge_electrons("#c+#e6", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: Vec::new() }))]
-    #[case::full("#c0#u0#s1#e6", AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(6), constraints: Vec::new() }))]
-    fn test_parse_aromatic(#[case] input: &str, #[case] expected: AromaticSystemTypeAst) {
+    #[case::empty("", AromaticSystemDsl(AromaticSystemAst::default()))]
+    #[case::whitespace("   ", AromaticSystemDsl(AromaticSystemAst::default()))]
+    #[case::charge_pos("#c+1", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
+    #[case::charge_neg("#c-2", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
+    #[case::charge_plus_only("#c+", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
+    #[case::charge_minus_only("#c-", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
+    #[case::electrons("#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: Vec::new() }))]
+    #[case::electrons_bare("#e", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(1), constraints: Vec::new() }))]
+    #[case::electrons_wild("#e*", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
+    #[case::unpaired("#u1", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
+    #[case::mult("#s2", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
+    #[case::charge_electrons("#c+#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: Vec::new() }))]
+    #[case::full("#c0#u0#s1#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(6), constraints: Vec::new() }))]
+    fn test_parse_aromatic(#[case] input: &str, #[case] expected: AromaticSystemDsl) {
         let result = aromatic.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
         let form = result.unwrap();
@@ -230,13 +306,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty(AromaticSystemTypeAst::default(), "")]
-    #[case::charge_one(AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }), "#c+")]
-    #[case::charge_neg_two(AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }), "#c-2")]
-    #[case::electrons_six(AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: Vec::new() }), "#e6")]
-    #[case::electrons_one(AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(1), constraints: Vec::new() }), "#e")]
-    #[case::full(AromaticSystemTypeAst::new(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(6), constraints: Vec::new() }), "#e6")]
-    fn test_display_aromatic(#[case] form: AromaticSystemTypeAst, #[case] expected: &str) {
+    #[case::empty(AromaticSystemDsl::default(), "")]
+    #[case::charge_one(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }), "#c+")]
+    #[case::charge_neg_two(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }), "#c-2")]
+    #[case::electrons_six(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: Vec::new() }), "#e6")]
+    #[case::electrons_one(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(1), constraints: Vec::new() }), "#e")]
+    #[case::full(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(6), constraints: Vec::new() }), "#e6")]
+    fn test_display_aromatic(#[case] form: AromaticSystemDsl, #[case] expected: &str) {
         assert_eq!(form.to_string(), expected);
     }
 
@@ -247,9 +323,43 @@ mod tests {
     #[case::unpaired("#u2")]
     #[case::explicit_mult("#s2")]
     fn test_aromatic_roundtrip(#[case] input: &str) {
-        let form: AromaticSystemTypeAst = input.parse().unwrap();
+        let form: AromaticSystemDsl = input.parse().unwrap();
         let rendered = form.to_string();
-        let reparsed: AromaticSystemTypeAst = rendered.parse().unwrap();
+        let reparsed: AromaticSystemDsl = rendered.parse().unwrap();
         assert_eq!(form, reparsed);
+    }
+
+    #[rstest]
+    fn test_aromatic_dsl_to_ast_fills_zero_defaults() {
+        let dsl = AromaticSystemDsl::default();
+        let cfg = AromaticSystemAstConfig::zeroed();
+        let ast = dsl.to_ast(&cfg).unwrap();
+        assert_eq!(ast.charge, ValueAst::Lit(0));
+        assert_eq!(ast.electrons, ValueAst::Lit(0));
+        assert_eq!(ast.spin, SpinStateAst::new(0, 1));
+    }
+
+    #[rstest]
+    fn test_aromatic_dsl_from_ast_strips_zero_defaults() {
+        let ast = AromaticSystemAst {
+            charge: ValueAst::Lit(0),
+            spin: SpinStateAst::new(0, 1),
+            electrons: ValueAst::Lit(0),
+            constraints: Vec::new(),
+        };
+        let cfg = AromaticSystemAstConfig::zeroed();
+        let dsl = AromaticSystemDsl::from_ast(&ast, &cfg).unwrap();
+        assert_eq!(dsl.0.charge, ValueAst::Undetermined);
+        assert_eq!(dsl.0.electrons, ValueAst::Undetermined);
+        assert_eq!(dsl.0.spin, SpinStateAst::default());
+    }
+
+    #[rstest]
+    fn test_aromatic_dsl_roundtrip_zeroed() {
+        let input = AromaticSystemDsl::default();
+        let cfg = AromaticSystemAstConfig::zeroed();
+        let raised = input.to_ast(&cfg).unwrap();
+        let lowered = AromaticSystemDsl::from_ast(&raised, &cfg).unwrap();
+        assert_eq!(input, lowered);
     }
 }

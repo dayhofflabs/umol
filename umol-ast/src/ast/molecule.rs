@@ -18,7 +18,7 @@ use super::atom::AtomAst;
 use super::automorphism::AtomAutomorphism;
 use super::bond::BondAst;
 use super::constraint::Constraints;
-use super::dative::DativeBondAst;
+use super::dative::{DativeBondAst, DativeDirection};
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -87,7 +87,14 @@ impl MoleculeAst {
         let dative_bonds = FixedRelationSet::new(
             dative
                 .into_iter()
-                .map(|(a, b, d)| ([NodeId::from(a), NodeId::from(b)], d))
+                .map(|(donor, acceptor, mut d)| {
+                    d.direction = if donor.0 <= acceptor.0 {
+                        DativeDirection::Forward
+                    } else {
+                        DativeDirection::Reverse
+                    };
+                    ([NodeId::from(donor), NodeId::from(acceptor)], d)
+                })
                 .collect(),
         );
 

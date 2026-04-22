@@ -314,12 +314,40 @@ impl MulticenterBondAstConfig {
     }
 }
 
+#[derive(Clone, Debug, Default, FromEdn, ToEdn)]
+pub struct DativeBondAstConfig {}
+
+impl DativeBondAstConfig {
+    pub fn zeroed() -> Self {
+        Self {}
+    }
+
+    pub fn open() -> Self {
+        Self {}
+    }
+}
+
+#[derive(Clone, Debug, Default, FromEdn, ToEdn)]
+pub struct NoncovalentBondAstConfig {}
+
+impl NoncovalentBondAstConfig {
+    pub fn zeroed() -> Self {
+        Self {}
+    }
+
+    pub fn open() -> Self {
+        Self {}
+    }
+}
+
 #[derive(Debug, Clone, FromEdn, ToEdn)]
 pub struct MoleculeAstConfig {
     pub atom: AtomAstConfig,
     pub bond: BondAstConfig,
     pub aromatic_system: AromaticSystemAstConfig,
     pub multicenter_bond: MulticenterBondAstConfig,
+    pub dative_bond: DativeBondAstConfig,
+    pub noncovalent_bond: NoncovalentBondAstConfig,
 }
 
 impl MoleculeAstConfig {
@@ -329,6 +357,8 @@ impl MoleculeAstConfig {
             bond: BondAstConfig::zeroed(),
             aromatic_system: AromaticSystemAstConfig::zeroed(),
             multicenter_bond: MulticenterBondAstConfig::zeroed(),
+            dative_bond: DativeBondAstConfig::zeroed(),
+            noncovalent_bond: NoncovalentBondAstConfig::zeroed(),
         }
     }
 
@@ -338,7 +368,27 @@ impl MoleculeAstConfig {
             bond: BondAstConfig::open(),
             aromatic_system: AromaticSystemAstConfig::open(),
             multicenter_bond: MulticenterBondAstConfig::open(),
+            dative_bond: DativeBondAstConfig::open(),
+            noncovalent_bond: NoncovalentBondAstConfig::open(),
         }
+    }
+}
+
+#[derive(Clone, Debug, Default, FromEdn)]
+pub struct DativeBondAstConfigOverrides {}
+
+impl DativeBondAstConfig {
+    pub fn with_overrides(self, _ov: DativeBondAstConfigOverrides) -> Self {
+        self
+    }
+}
+
+#[derive(Clone, Debug, Default, FromEdn)]
+pub struct NoncovalentBondAstConfigOverrides {}
+
+impl NoncovalentBondAstConfig {
+    pub fn with_overrides(self, _ov: NoncovalentBondAstConfigOverrides) -> Self {
+        self
     }
 }
 
@@ -352,6 +402,10 @@ pub struct MoleculeAstConfigOverrides {
     pub aromatic_system: AromaticSystemAstConfigOverrides,
     #[edn(default)]
     pub multicenter_bond: MulticenterBondAstConfigOverrides,
+    #[edn(default)]
+    pub dative_bond: DativeBondAstConfigOverrides,
+    #[edn(default)]
+    pub noncovalent_bond: NoncovalentBondAstConfigOverrides,
 }
 
 impl MoleculeAstConfig {
@@ -361,6 +415,8 @@ impl MoleculeAstConfig {
             bond: self.bond.with_overrides(ov.bond),
             aromatic_system: self.aromatic_system.with_overrides(ov.aromatic_system),
             multicenter_bond: self.multicenter_bond.with_overrides(ov.multicenter_bond),
+            dative_bond: self.dative_bond.with_overrides(ov.dative_bond),
+            noncovalent_bond: self.noncovalent_bond.with_overrides(ov.noncovalent_bond),
         }
     }
 }

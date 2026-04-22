@@ -13,7 +13,7 @@ use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet};
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
-use super::dative::DativeBondAst;
+use super::dative::{DativeBondAst, DativeDirection};
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -214,11 +214,13 @@ impl<'a> DativeBondViews<'a> {
         let set = self.set;
         set.relation_ids().map(move |rid| {
             let parts = set.participants(rid);
+            let data = set.data(rid);
+            let (donor, acceptor) = directed_endpoints(parts, data.direction);
             DativeBondView {
                 idx: DativeBondIdx::from(rid),
-                donor: AtomIdx::from(parts[0]),
-                acceptor: AtomIdx::from(parts[1]),
-                data: set.data(rid),
+                donor,
+                acceptor,
+                data,
             }
         })
     }
@@ -226,12 +228,21 @@ impl<'a> DativeBondViews<'a> {
     pub fn get(&self, idx: DativeBondIdx) -> DativeBondView<'a> {
         let rid = RelationId::from(idx);
         let parts = self.set.participants(rid);
+        let data = self.set.data(rid);
+        let (donor, acceptor) = directed_endpoints(parts, data.direction);
         DativeBondView {
             idx,
-            donor: AtomIdx::from(parts[0]),
-            acceptor: AtomIdx::from(parts[1]),
-            data: self.set.data(rid),
+            donor,
+            acceptor,
+            data,
         }
+    }
+}
+
+fn directed_endpoints(parts: &[NodeId; 2], direction: DativeDirection) -> (AtomIdx, AtomIdx) {
+    match direction {
+        DativeDirection::Forward => (AtomIdx::from(parts[0]), AtomIdx::from(parts[1])),
+        DativeDirection::Reverse => (AtomIdx::from(parts[1]), AtomIdx::from(parts[0])),
     }
 }
 

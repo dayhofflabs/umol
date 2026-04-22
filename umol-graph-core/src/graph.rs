@@ -42,81 +42,6 @@ struct Topology {
     edge_count: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Remapping {
-    pub removed_nodes: Vec<u32>,
-    pub removed_edges: Vec<u32>,
-}
-
-pub struct Subgraph {
-    pub graph: Graph,
-    pub node_map: Vec<NodeId>,
-    pub edge_map: Vec<EdgeId>,
-}
-
-impl Remapping {
-    pub fn node(&self, old: NodeId) -> Option<NodeId> {
-        if self.removed_nodes.binary_search(&old.0).is_ok() {
-            return None;
-        }
-        let shift = self.removed_nodes.partition_point(|&r| r < old.0);
-        Some(NodeId(old.0 - shift as u32))
-    }
-
-    pub fn edge(&self, old: EdgeId) -> Option<EdgeId> {
-        if self.removed_edges.binary_search(&old.0).is_ok() {
-            return None;
-        }
-        let shift = self.removed_edges.partition_point(|&r| r < old.0);
-        Some(EdgeId(old.0 - shift as u32))
-    }
-
-    pub fn apply_to_node_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
-        data.iter()
-            .enumerate()
-            .filter(|(i, _)| self.removed_nodes.binary_search(&(*i as u32)).is_err())
-            .map(|(_, v)| v.clone())
-            .collect()
-    }
-
-    pub fn apply_to_edge_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
-        data.iter()
-            .enumerate()
-            .filter(|(i, _)| self.removed_edges.binary_search(&(*i as u32)).is_err())
-            .map(|(_, v)| v.clone())
-            .collect()
-    }
-
-    pub fn apply_to_fixed_relation_set<R: Clone, const N: usize>(
-        &self,
-        rs: &FixedRelationSet<R, N>,
-    ) -> FixedRelationSet<R, N> {
-        let entries: Vec<([NodeId; N], R)> = (0..rs.relation_count())
-            .filter_map(|i| {
-                let rid = RelationId(i as u32);
-                let old = rs.participants(rid);
-                let mut new_parts = [NodeId(0); N];
-                for (j, &p) in old.iter().enumerate() {
-                    new_parts[j] = self.node(p)?;
-                }
-                Some((new_parts, rs.data(rid).clone()))
-            })
-            .collect();
-        FixedRelationSet::new(entries)
-    }
-
-    pub fn apply_to_var_relation_set<R: Clone>(&self, rs: &VarRelationSet<R>) -> VarRelationSet<R> {
-        let entries: Vec<(Vec<NodeId>, R)> = (0..rs.relation_count())
-            .filter_map(|i| {
-                let rid = RelationId(i as u32);
-                let old = rs.participants(rid);
-                let new_parts: Option<Vec<NodeId>> = old.iter().map(|&p| self.node(p)).collect();
-                Some((new_parts?, rs.data(rid).clone()))
-            })
-            .collect();
-        VarRelationSet::new(entries)
-    }
-}
 
 /// Undirected graph stored as compressed sparse row (CSR) topology.
 ///
@@ -368,8 +293,13 @@ impl Graph {
             neighbors[start..end].sort_unstable_by_key(|n| n.node);
         }
 
-        let endpoints: Vec<[NodeId; 2]> =
-            edges.iter().map(|&[a, b]| [NodeId(a), NodeId(b)]).collect();
+        let endpoints: Vec<[NodeId; 2]> = edges
+            .iter()
+            .map(|&[a, b]| {
+                let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                [NodeId(lo), NodeId(hi)]
+            })
+            .collect();
 
         Topology {
             offsets,
@@ -386,6 +316,85 @@ impl Default for Graph {
         Self::new(0, &[])
     }
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Remapping {
+    pub removed_nodes: Vec<u32>,
+    pub removed_edges: Vec<u32>,
+}
+
+impl Remapping {
+    pub fn node(&self, old: NodeId) -> Option<NodeId> {
+        if self.removed_nodes.binary_search(&old.0).is_ok() {
+            return None;
+        }
+        let shift = self.removed_nodes.partition_point(|&r| r < old.0);
+        Some(NodeId(old.0 - shift as u32))
+    }
+
+    pub fn edge(&self, old: EdgeId) -> Option<EdgeId> {
+        if self.removed_edges.binary_search(&old.0).is_ok() {
+            return None;
+        }
+        let shift = self.removed_edges.partition_point(|&r| r < old.0);
+        Some(EdgeId(old.0 - shift as u32))
+    }
+
+    pub fn apply_to_node_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
+        data.iter()
+            .enumerate()
+            .filter(|(i, _)| self.removed_nodes.binary_search(&(*i as u32)).is_err())
+            .map(|(_, v)| v.clone())
+            .collect()
+    }
+
+    pub fn apply_to_edge_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
+        data.iter()
+            .enumerate()
+            .filter(|(i, _)| self.removed_edges.binary_search(&(*i as u32)).is_err())
+            .map(|(_, v)| v.clone())
+            .collect()
+    }
+
+    pub fn apply_to_fixed_relation_set<R: Clone, const N: usize>(
+        &self,
+        rs: &FixedRelationSet<R, N>,
+    ) -> FixedRelationSet<R, N> {
+        let entries: Vec<([NodeId; N], R)> = (0..rs.relation_count())
+            .filter_map(|i| {
+                let rid = RelationId(i as u32);
+                let old = rs.participants(rid);
+                let mut new_parts = [NodeId(0); N];
+                for (j, &p) in old.iter().enumerate() {
+                    new_parts[j] = self.node(p)?;
+                }
+                Some((new_parts, rs.data(rid).clone()))
+            })
+            .collect();
+        FixedRelationSet::new(entries)
+    }
+
+    pub fn apply_to_var_relation_set<R: Clone>(&self, rs: &VarRelationSet<R>) -> VarRelationSet<R> {
+        let entries: Vec<(Vec<NodeId>, R)> = (0..rs.relation_count())
+            .filter_map(|i| {
+                let rid = RelationId(i as u32);
+                let old = rs.participants(rid);
+                let new_parts: Option<Vec<NodeId>> = old.iter().map(|&p| self.node(p)).collect();
+                Some((new_parts?, rs.data(rid).clone()))
+            })
+            .collect();
+        VarRelationSet::new(entries)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Subgraph {
+    pub graph: Graph,
+    pub node_map: Vec<NodeId>,
+    pub edge_map: Vec<EdgeId>,
+}
+
+
 
 #[cfg(test)]
 mod tests {

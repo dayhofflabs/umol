@@ -20,7 +20,7 @@ use crate::ast::constraint::{
     AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, Constraints,
     DativeBondConstraint, MulticenterBondConstraint, NoncovalentBondConstraint,
 };
-use crate::ast::dative::DativeBondAst;
+use crate::ast::dative::{DativeBondAst, DativeDirection};
 use crate::ast::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -284,8 +284,13 @@ impl MoleculeBuilder {
         &mut self,
         donor: AtomIdx,
         acceptor: AtomIdx,
-        bond: DativeBondAst,
+        mut bond: DativeBondAst,
     ) -> DativeBondIdx {
+        bond.direction = if donor.0 <= acceptor.0 {
+            DativeDirection::Forward
+        } else {
+            DativeDirection::Reverse
+        };
         let i = self
             .dative_bonds
             .push([NodeId::from(donor), NodeId::from(acceptor)], bond);

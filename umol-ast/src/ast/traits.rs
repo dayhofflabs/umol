@@ -8,9 +8,12 @@ use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::config::{
-    AromaticSystemAstConfig, AtomAstConfig, BondAstConfig, MulticenterBondAstConfig,
+    AromaticSystemAstConfig, AtomAstConfig, BondAstConfig, DativeBondAstConfig,
+    MulticenterBondAstConfig, NoncovalentBondAstConfig,
 };
+use super::dative::DativeBondAst;
 use super::multicenter::MulticenterBondAst;
+use super::noncovalent::NoncovalentBondAst;
 
 pub trait Ast {
     type Config;
@@ -40,4 +43,12 @@ impl Ast for AromaticSystemAst {
 
 impl Ast for MulticenterBondAst {
     type Config = MulticenterBondAstConfig;
+}
+
+impl Ast for DativeBondAst {
+    type Config = DativeBondAstConfig;
+}
+
+impl Ast for NoncovalentBondAst {
+    type Config = NoncovalentBondAstConfig;
 }
