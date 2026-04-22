@@ -260,7 +260,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
         BondConstraint::Aromatic => write!(f, "#a"),
         BondConstraint::RingCount(v) => fmt_ring_count(f, v),
         BondConstraint::RingSize(v) => match v {
-            ValueAst::Undetermined => write!(f, "#r*"),
+            ValueAst::Undetermined => Ok(()),
             ValueAst::Lit(1) => write!(f, "#r"),
             ValueAst::Lit(n) => write!(f, "#r{}", n),
             v => {

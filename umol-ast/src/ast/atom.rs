@@ -2,9 +2,9 @@
 
 use umol_shared::element::Element;
 
-use super::constraint::AtomConstraint;
+use super::constraint::AtomConstraints;
 use super::spin::SpinStateAst;
-use super::value::ValueAst;
+use super::value::{Expr, ValueAst};
 
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
@@ -17,7 +17,7 @@ pub struct AtomAst {
     pub implicit_hydrogens: ImplicitHydrogensAst,
     pub lone_pairs: ValueAst,
     pub spin: SpinStateAst,
-    pub constraints: Vec<AtomConstraint>,
+    pub constraints: AtomConstraints,
 }
 
 impl AtomAst {
@@ -95,30 +95,26 @@ impl ElementAst {
     }
 }
 
-/// Isotope-mass expressions (Natural = #i=)
+/// Isotope-mass expressions. `Natural` denotes the naturally most abundant
+/// isotope (`#i=`); numeric variants mirror `ValueAst` and are flattened here
+/// to keep `Undetermined` as a single top-level state.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum IsotopeAst {
     #[default]
     Undetermined,
     Natural,
-    Value(ValueAst),
+    Lit(i64),
+    LitSet(Vec<i64>),
+    Expr(Expr),
 }
 
 impl IsotopeAst {
     pub fn new(mass: u32) -> Self {
-        Self::Value(ValueAst::Lit(mass as i64))
-    }
-
-    pub fn from_value(value: ValueAst) -> Self {
-        Self::Value(value)
+        Self::Lit(mass as i64)
     }
 
     pub fn is_ground(&self) -> bool {
-        match self {
-            Self::Undetermined => false,
-            Self::Natural => true,
-            Self::Value(v) => v.is_ground(),
-        }
+        matches!(self, Self::Natural | Self::Lit(_))
     }
 
     pub fn matches(&self, target: &Self) -> bool {
@@ -126,36 +122,53 @@ impl IsotopeAst {
             (Self::Undetermined, _) => true,
             (_, Self::Undetermined) => false,
             (Self::Natural, Self::Natural) => true,
-            (Self::Value(p), Self::Value(t)) => p.matches(t),
-            _ => false,
+            (Self::Natural, _) | (_, Self::Natural) => false,
+            (p, t) => p.as_value().matches(&t.as_value()),
+        }
+    }
+
+    fn as_value(&self) -> ValueAst {
+        match self {
+            Self::Undetermined => ValueAst::Undetermined,
+            Self::Lit(n) => ValueAst::Lit(*n),
+            Self::LitSet(s) => ValueAst::LitSet(s.clone()),
+            Self::Expr(e) => ValueAst::Expr(e.clone()),
+            Self::Natural => unreachable!("Natural handled before as_value"),
         }
     }
 }
 
-/// Implicit hydrogen expressions (Normal = #h=)
+impl From<ValueAst> for IsotopeAst {
+    fn from(v: ValueAst) -> Self {
+        match v {
+            ValueAst::Undetermined => Self::Undetermined,
+            ValueAst::Lit(n) => Self::Lit(n),
+            ValueAst::LitSet(s) => Self::LitSet(s),
+            ValueAst::Expr(e) => Self::Expr(e),
+        }
+    }
+}
+
+/// Implicit hydrogen expressions. `Normal` denotes the valence-model default
+/// (`#h=`); numeric variants mirror `ValueAst` and are flattened here to keep
+/// `Undetermined` as a single top-level state.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ImplicitHydrogensAst {
     #[default]
     Undetermined,
     Normal,
-    Value(ValueAst),
+    Lit(i64),
+    LitSet(Vec<i64>),
+    Expr(Expr),
 }
 
 impl ImplicitHydrogensAst {
     pub fn new(count: u8) -> Self {
-        Self::Value(ValueAst::Lit(count as i64))
-    }
-
-    pub fn from_value(value: ValueAst) -> Self {
-        Self::Value(value)
+        Self::Lit(count as i64)
     }
 
     pub fn is_ground(&self) -> bool {
-        match self {
-            Self::Undetermined => false,
-            Self::Normal => true,
-            Self::Value(v) => v.is_ground(),
-        }
+        matches!(self, Self::Normal | Self::Lit(_))
     }
 
     pub fn matches(&self, target: &Self) -> bool {
@@ -163,45 +176,29 @@ impl ImplicitHydrogensAst {
             (Self::Undetermined, _) => true,
             (_, Self::Undetermined) => false,
             (Self::Normal, Self::Normal) => true,
-            (Self::Value(p), Self::Value(t)) => p.matches(t),
-            _ => false,
+            (Self::Normal, _) | (_, Self::Normal) => false,
+            (p, t) => p.as_value().matches(&t.as_value()),
         }
     }
-}
 
-/// Aromatic valence expressions
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub enum AromaticValenceAst {
-    #[default]
-    Undetermined,
-    NotAromatic,
-    Value(ValueAst),
-}
-
-impl AromaticValenceAst {
-    pub fn new(valence: u8) -> Self {
-        Self::Value(ValueAst::Lit(valence as i64))
-    }
-
-    pub fn from_value(value: ValueAst) -> Self {
-        Self::Value(value)
-    }
-
-    pub fn is_ground(&self) -> bool {
+    fn as_value(&self) -> ValueAst {
         match self {
-            Self::Undetermined => false,
-            Self::NotAromatic => true,
-            Self::Value(v) => v.is_ground(),
+            Self::Undetermined => ValueAst::Undetermined,
+            Self::Lit(n) => ValueAst::Lit(*n),
+            Self::LitSet(s) => ValueAst::LitSet(s.clone()),
+            Self::Expr(e) => ValueAst::Expr(e.clone()),
+            Self::Normal => unreachable!("Normal handled before as_value"),
         }
     }
+}
 
-    pub fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::NotAromatic, Self::NotAromatic) => true,
-            (Self::Value(p), Self::Value(t)) => p.matches(t),
-            _ => false,
+impl From<ValueAst> for ImplicitHydrogensAst {
+    fn from(v: ValueAst) -> Self {
+        match v {
+            ValueAst::Undetermined => Self::Undetermined,
+            ValueAst::Lit(n) => Self::Lit(n),
+            ValueAst::LitSet(s) => Self::LitSet(s),
+            ValueAst::Expr(e) => Self::Expr(e),
         }
     }
 }
@@ -221,31 +218,20 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::new(IsotopeAst::new(12), IsotopeAst::Value(ValueAst::Lit(12)))]
-    #[case::from_value_lit(IsotopeAst::from_value(ValueAst::Lit(13)), IsotopeAst::Value(ValueAst::Lit(13)))]
-    #[case::from_value_undetermined(IsotopeAst::from_value(ValueAst::Undetermined), IsotopeAst::Value(ValueAst::Undetermined))]
+    #[case::new(IsotopeAst::new(12), IsotopeAst::Lit(12))]
+    #[case::from_lit(IsotopeAst::from(ValueAst::Lit(13)), IsotopeAst::Lit(13))]
+    #[case::from_undetermined(IsotopeAst::from(ValueAst::Undetermined), IsotopeAst::Undetermined)]
     fn test_isotope_ast_new(#[case] actual: IsotopeAst, #[case] expected: IsotopeAst) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::new(ImplicitHydrogensAst::new(3), ImplicitHydrogensAst::Value(ValueAst::Lit(3)))]
-    #[case::from_value(ImplicitHydrogensAst::from_value(ValueAst::LitSet(vec![0, 1])), ImplicitHydrogensAst::Value(ValueAst::LitSet(vec![0, 1])))]
+    #[case::new(ImplicitHydrogensAst::new(3), ImplicitHydrogensAst::Lit(3))]
+    #[case::from_lit_set(ImplicitHydrogensAst::from(ValueAst::LitSet(vec![0, 1])), ImplicitHydrogensAst::LitSet(vec![0, 1]))]
     fn test_implicit_hydrogens_ast_new(
         #[case] actual: ImplicitHydrogensAst,
         #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::new(AromaticValenceAst::new(2), AromaticValenceAst::Value(ValueAst::Lit(2)))]
-    #[case::from_value(AromaticValenceAst::from_value(ValueAst::Undetermined), AromaticValenceAst::Value(ValueAst::Undetermined))]
-    fn test_aromatic_valence_ast_new(
-        #[case] actual: AromaticValenceAst,
-        #[case] expected: AromaticValenceAst,
     ) {
         assert_eq!(actual, expected);
     }
@@ -262,32 +248,20 @@ mod tests {
 
     #[rstest]
     #[case::natural(IsotopeAst::Natural, true)]
-    #[case::lit(IsotopeAst::Value(ValueAst::Lit(12)), true)]
+    #[case::lit(IsotopeAst::Lit(12), true)]
     #[case::wildcard(IsotopeAst::Undetermined, false)]
-    #[case::value_wildcard(IsotopeAst::Value(ValueAst::Undetermined), false)]
-    #[case::set(IsotopeAst::Value(ValueAst::LitSet(vec![12, 13])), false)]
+    #[case::value_wildcard(IsotopeAst::Undetermined, false)]
+    #[case::set(IsotopeAst::LitSet(vec![12, 13]), false)]
     fn test_isotope_ast_is_ground(#[case] ast: IsotopeAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
 
     #[rstest]
     #[case::normal(ImplicitHydrogensAst::Normal, true)]
-    #[case::lit(ImplicitHydrogensAst::Value(ValueAst::Lit(2)), true)]
-    #[case::wildcard(ImplicitHydrogensAst::Value(ValueAst::Undetermined), false)]
+    #[case::lit(ImplicitHydrogensAst::Lit(2), true)]
+    #[case::wildcard(ImplicitHydrogensAst::Undetermined, false)]
     fn test_implicit_hydrogens_ast_is_ground(
         #[case] ast: ImplicitHydrogensAst,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.is_ground(), expected);
-    }
-
-    #[rstest]
-    #[case::undetermined(AromaticValenceAst::Undetermined, false)]
-    #[case::not_aromatic(AromaticValenceAst::NotAromatic, true)]
-    #[case::lit(AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
-    #[case::wildcard(AromaticValenceAst::Value(ValueAst::Undetermined), false)]
-    fn test_aromatic_valence_ast_is_ground(
-        #[case] ast: AromaticValenceAst,
         #[case] expected: bool,
     ) {
         assert_eq!(ast.is_ground(), expected);
@@ -325,21 +299,21 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined_natural(IsotopeAst::Undetermined, IsotopeAst::Natural, true)]
-    #[case::undetermined_value(IsotopeAst::Undetermined, IsotopeAst::Value(ValueAst::Lit(12)), true)]
+    #[case::undetermined_value(IsotopeAst::Undetermined, IsotopeAst::Lit(12), true)]
     #[case::undetermined_undetermined(IsotopeAst::Undetermined, IsotopeAst::Undetermined, true)]
     #[case::natural_undetermined(IsotopeAst::Natural, IsotopeAst::Undetermined, false)]
-    #[case::value_undetermined(IsotopeAst::Value(ValueAst::Lit(12)), IsotopeAst::Undetermined, false)]
+    #[case::value_undetermined(IsotopeAst::Lit(12), IsotopeAst::Undetermined, false)]
     #[case::natural_natural(IsotopeAst::Natural, IsotopeAst::Natural, true)]
-    #[case::natural_value(IsotopeAst::Natural, IsotopeAst::Value(ValueAst::Lit(12)), false)]
-    #[case::value_natural(IsotopeAst::Value(ValueAst::Lit(12)), IsotopeAst::Natural, false)]
-    #[case::value_lit_match(IsotopeAst::Value(ValueAst::Lit(12)), IsotopeAst::Value(ValueAst::Lit(12)), true)]
-    #[case::value_lit_mismatch(IsotopeAst::Value(ValueAst::Lit(12)), IsotopeAst::Value(ValueAst::Lit(13)), false)]
-    #[case::value_wildcard_lit(IsotopeAst::Value(ValueAst::Undetermined), IsotopeAst::Value(ValueAst::Lit(12)), true)]
-    #[case::value_set_lit_in(IsotopeAst::Value(ValueAst::LitSet(vec![12, 13])), IsotopeAst::Value(ValueAst::Lit(13)), true)]
-    #[case::value_set_lit_out(IsotopeAst::Value(ValueAst::LitSet(vec![12, 13])), IsotopeAst::Value(ValueAst::Lit(14)), false)]
-    #[case::value_set_set_subset(IsotopeAst::Value(ValueAst::LitSet(vec![12, 13, 14])), IsotopeAst::Value(ValueAst::LitSet(vec![12, 13])), true)]
-    #[case::value_set_set_superset(IsotopeAst::Value(ValueAst::LitSet(vec![12])), IsotopeAst::Value(ValueAst::LitSet(vec![12, 13])), false)]
-    #[case::value_lit_wildcard(IsotopeAst::Value(ValueAst::Lit(12)), IsotopeAst::Value(ValueAst::Undetermined), false)]
+    #[case::natural_value(IsotopeAst::Natural, IsotopeAst::Lit(12), false)]
+    #[case::value_natural(IsotopeAst::Lit(12), IsotopeAst::Natural, false)]
+    #[case::value_lit_match(IsotopeAst::Lit(12), IsotopeAst::Lit(12), true)]
+    #[case::value_lit_mismatch(IsotopeAst::Lit(12), IsotopeAst::Lit(13), false)]
+    #[case::value_wildcard_lit(IsotopeAst::Undetermined, IsotopeAst::Lit(12), true)]
+    #[case::value_set_lit_in(IsotopeAst::LitSet(vec![12, 13]), IsotopeAst::Lit(13), true)]
+    #[case::value_set_lit_out(IsotopeAst::LitSet(vec![12, 13]), IsotopeAst::Lit(14), false)]
+    #[case::value_set_set_subset(IsotopeAst::LitSet(vec![12, 13, 14]), IsotopeAst::LitSet(vec![12, 13]), true)]
+    #[case::value_set_set_superset(IsotopeAst::LitSet(vec![12]), IsotopeAst::LitSet(vec![12, 13]), false)]
+    #[case::value_lit_wildcard(IsotopeAst::Lit(12), IsotopeAst::Undetermined, false)]
     fn test_isotope_ast_matches(
         #[case] pattern: IsotopeAst,
         #[case] target: IsotopeAst,
@@ -351,38 +325,18 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined_normal(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Normal, true)]
-    #[case::undetermined_value(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Value(ValueAst::Lit(3)), true)]
+    #[case::undetermined_value(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Lit(3), true)]
     #[case::normal_undetermined(ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Undetermined, false)]
     #[case::normal_normal(ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Normal, true)]
-    #[case::normal_value(ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Value(ValueAst::Lit(0)), false)]
-    #[case::value_normal(ImplicitHydrogensAst::Value(ValueAst::Lit(0)), ImplicitHydrogensAst::Normal, false)]
-    #[case::value_lit_match(ImplicitHydrogensAst::Value(ValueAst::Lit(2)), ImplicitHydrogensAst::Value(ValueAst::Lit(2)), true)]
-    #[case::value_lit_mismatch(ImplicitHydrogensAst::Value(ValueAst::Lit(2)), ImplicitHydrogensAst::Value(ValueAst::Lit(3)), false)]
-    #[case::value_wildcard(ImplicitHydrogensAst::Value(ValueAst::Undetermined), ImplicitHydrogensAst::Value(ValueAst::Lit(2)), true)]
-    #[case::value_set_subset(ImplicitHydrogensAst::Value(ValueAst::LitSet(vec![1, 2])), ImplicitHydrogensAst::Value(ValueAst::LitSet(vec![1])), true)]
+    #[case::normal_value(ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Lit(0), false)]
+    #[case::value_normal(ImplicitHydrogensAst::Lit(0), ImplicitHydrogensAst::Normal, false)]
+    #[case::value_lit_match(ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Lit(2), true)]
+    #[case::value_lit_mismatch(ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Lit(3), false)]
+    #[case::value_wildcard(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Lit(2), true)]
+    #[case::value_set_subset(ImplicitHydrogensAst::LitSet(vec![1, 2]), ImplicitHydrogensAst::LitSet(vec![1]), true)]
     fn test_implicit_hydrogens_ast_matches(
         #[case] pattern: ImplicitHydrogensAst,
         #[case] target: ImplicitHydrogensAst,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined_undetermined(AromaticValenceAst::Undetermined, AromaticValenceAst::Undetermined, true)]
-    #[case::undetermined_not_aromatic(AromaticValenceAst::Undetermined, AromaticValenceAst::NotAromatic, true)]
-    #[case::undetermined_value(AromaticValenceAst::Undetermined, AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
-    #[case::not_aromatic_undetermined(AromaticValenceAst::NotAromatic, AromaticValenceAst::Undetermined, false)]
-    #[case::not_aromatic_not_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic, true)]
-    #[case::not_aromatic_value(AromaticValenceAst::NotAromatic, AromaticValenceAst::Value(ValueAst::Lit(2)), false)]
-    #[case::value_not_aromatic(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::NotAromatic, false)]
-    #[case::value_lit_match(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
-    #[case::value_lit_mismatch(AromaticValenceAst::Value(ValueAst::Lit(2)), AromaticValenceAst::Value(ValueAst::Lit(3)), false)]
-    #[case::value_wildcard(AromaticValenceAst::Value(ValueAst::Undetermined), AromaticValenceAst::Value(ValueAst::Lit(2)), true)]
-    fn test_aromatic_valence_ast_matches(
-        #[case] pattern: AromaticValenceAst,
-        #[case] target: AromaticValenceAst,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);

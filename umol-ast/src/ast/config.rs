@@ -3,21 +3,21 @@
 use umol_edn::{FromEdn, ToEdn};
 
 /// Isotope interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum IsotopeMode {
     Natural,
     Required,
 }
 
 /// Numeric field interpretation mode.
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum NumericMode {
     Zero,
     Required,
 }
 
 /// Implicit hydrogen interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum ImplicitHydrogenMode {
     Zero,
     Normal,
@@ -25,7 +25,7 @@ pub enum ImplicitHydrogenMode {
 }
 
 /// Unpaired electrons interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum UnpairedElectronsMode {
     Zero,
     Required,
@@ -33,7 +33,7 @@ pub enum UnpairedElectronsMode {
 }
 
 /// Multiplicity interpretation mode
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum MultiplicityMode {
     Derived,
     Required,
@@ -41,7 +41,7 @@ pub enum MultiplicityMode {
 
 /// Aromatic interpretation mode (molecule-level: applied to atoms by injecting
 /// `AromaticValence` constraints).
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum AromaticValenceMode {
     NotAromatic,
     Aromatic,
@@ -49,7 +49,7 @@ pub enum AromaticValenceMode {
 }
 
 /// Multicenter valence interpretation mode.
-#[derive(Clone, Debug, PartialEq, Eq, FromEdn, ToEdn)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum MulticenterValenceMode {
     NotMulticenter,
     Multicenter,
@@ -94,8 +94,8 @@ impl AtomAstConfig {
             charge_mode: NumericMode::Required,
             implicit_h_mode: ImplicitHydrogenMode::Required,
             lone_pairs_mode: NumericMode::Required,
-            unpaired_electrons_mode: UnpairedElectronsMode::Derived,
-            multiplicity_mode: MultiplicityMode::Derived,
+            unpaired_electrons_mode: UnpairedElectronsMode::Required,
+            multiplicity_mode: MultiplicityMode::Required,
             valence_mode: NumericMode::Required,
             donated_pairs_mode: NumericMode::Required,
             accepted_pairs_mode: NumericMode::Required,

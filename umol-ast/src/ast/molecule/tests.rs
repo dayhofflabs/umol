@@ -31,7 +31,7 @@ fn ground_atom() -> AtomAst {
     let mut a = AtomAst::from_element(Element::C);
     a.isotope_mass = IsotopeAst::Natural;
     a.charge = ValueAst::Lit(0);
-    a.implicit_hydrogens = ImplicitHydrogensAst::Value(ValueAst::Lit(4));
+    a.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
     a.lone_pairs = ValueAst::Lit(0);
     a.spin = SpinStateAst::new(0, 1);
     a

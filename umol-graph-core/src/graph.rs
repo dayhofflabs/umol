@@ -42,7 +42,6 @@ struct Topology {
     edge_count: usize,
 }
 
-
 /// Undirected graph stored as compressed sparse row (CSR) topology.
 ///
 /// Stores only adjacency structure — node and edge data live externally,
@@ -393,8 +392,6 @@ pub struct Subgraph {
     pub node_map: Vec<NodeId>,
     pub edge_map: Vec<EdgeId>,
 }
-
-
 
 #[cfg(test)]
 mod tests {

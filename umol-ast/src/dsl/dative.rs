@@ -150,7 +150,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraint) -> fmt::
     match c {
         DativeBondConstraint::RingCount(v) => fmt_ring_count(f, v),
         DativeBondConstraint::RingSize(v) => match v {
-            ValueAst::Undetermined => write!(f, "#r*"),
+            ValueAst::Undetermined => Ok(()),
             ValueAst::Lit(1) => write!(f, "#r"),
             ValueAst::Lit(n) => write!(f, "#r{}", n),
             v => {

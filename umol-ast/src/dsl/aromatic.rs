@@ -311,7 +311,7 @@ mod tests {
     #[case::charge_neg_two(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }), "#c-2")]
     #[case::electrons_six(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: Vec::new() }), "#e6")]
     #[case::electrons_one(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(1), constraints: Vec::new() }), "#e")]
-    #[case::full(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(6), constraints: Vec::new() }), "#e6")]
+    #[case::full(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(6), constraints: Vec::new() }), "#c0#u0#s#e6")]
     fn test_display_aromatic(#[case] form: AromaticSystemDsl, #[case] expected: &str) {
         assert_eq!(form.to_string(), expected);
     }
