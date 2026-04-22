@@ -8,18 +8,28 @@ use std::sync::Arc;
 
 pub use builder::MoleculeBuilder;
 use umol_graph_core::relation::RelationId;
-use umol_graph_core::{FixedRelationSet, Graph, NodeId, VarRelationSet};
+use umol_graph_core::{
+    AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
+    CycleEnumerationAlgorithm, EdgeId, FixedRelationSet, Graph, MaxIndependentSetAlgorithm,
+    MaxMatchingAlgorithm, MatchingEnumerationAlgorithm, NodeId, ShortestCycleAlgorithm,
+    SubgraphIsomorphismAlgorithm, VarRelationSet,
+};
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
+use super::automorphism::AtomAutomorphism;
 use super::bond::BondAst;
 use super::constraint::Constraints;
 use super::dative::DativeBondAst;
+use super::error::RewriteError;
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
+use super::matching::BondMatching;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
+use super::rings::{self, RingFamily, RingSet};
+use super::subgraph::MoleculeSubgraph;
 use super::views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,
@@ -287,7 +297,210 @@ impl MoleculeAst {
             .map(|&rid| NoncovalentBondIdx::from(rid))
     }
 
+    // -- Ring enumeration -----------------------------------------------------
+
+    pub fn rings(
+        &self,
+        family: RingFamily,
+        max_ring_size: usize,
+        atom_filter: impl Fn(AtomIdx) -> bool,
+    ) -> RingSet {
+        rings::enumerate_rings(&self.graph, family, max_ring_size, atom_filter)
+    }
+
     // -- Read: induced subsets ----------------------------------------------
+
+    pub fn degree(&self, atom: AtomIdx) -> usize {
+        self.graph.degree(NodeId::from(atom))
+    }
+
+    pub fn connected_components(
+        &self,
+        alg: ConnectedComponentsAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .connected_components(alg)
+            .into_iter()
+            .map(|c| c.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    pub fn biconnected_components(
+        &self,
+        alg: BiconnectedComponentsAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .biconnected_components(alg)
+            .into_iter()
+            .map(|c| c.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    pub fn shortest_cycle_through_bond(
+        &self,
+        bond: BondIdx,
+        alg: ShortestCycleAlgorithm,
+    ) -> Option<usize> {
+        self.graph
+            .shortest_cycle_through_edge(EdgeId::from(bond), alg)
+    }
+
+    pub fn shortest_cycle_through_atom(
+        &self,
+        atom: AtomIdx,
+        alg: ShortestCycleAlgorithm,
+    ) -> Option<usize> {
+        self.graph
+            .shortest_cycle_through_node(NodeId::from(atom), alg)
+    }
+
+    pub fn enumerate_cycles(
+        &self,
+        max_size: usize,
+        alg: CycleEnumerationAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .enumerate_cycles(max_size, alg)
+            .into_iter()
+            .map(|c| c.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    pub fn maximum_independent_set(&self, alg: MaxIndependentSetAlgorithm) -> Vec<AtomIdx> {
+        self.graph
+            .maximum_independent_set(alg)
+            .into_iter()
+            .map(AtomIdx::from)
+            .collect()
+    }
+
+    pub fn maximum_matching(&self, alg: MaxMatchingAlgorithm) -> BondMatching {
+        BondMatching(self.graph.maximum_matching(alg))
+    }
+
+    pub fn enumerate_perfect_matchings(
+        &self,
+        alg: MatchingEnumerationAlgorithm,
+    ) -> Vec<BondMatching> {
+        self.graph
+            .enumerate_perfect_matchings(alg)
+            .into_iter()
+            .map(BondMatching)
+            .collect()
+    }
+
+    pub fn enumerate_maximum_matchings(
+        &self,
+        alg: MatchingEnumerationAlgorithm,
+    ) -> Vec<BondMatching> {
+        self.graph
+            .enumerate_maximum_matchings(alg)
+            .into_iter()
+            .map(BondMatching)
+            .collect()
+    }
+
+    pub fn automorphisms<C: Ord + Copy>(
+        &self,
+        atom_color: impl Fn(AtomIdx) -> C,
+        alg: AutomorphismAlgorithm,
+    ) -> AtomAutomorphism {
+        AtomAutomorphism(self.graph.automorphisms(|n| atom_color(AtomIdx::from(n)), alg))
+    }
+
+    pub fn subgraph_isomorphisms(
+        &self,
+        query: &MoleculeAst,
+        atom_match: &mut impl FnMut(AtomIdx, AtomIdx) -> bool,
+        bond_match: &mut impl FnMut(BondIdx, BondIdx) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .subgraph_isomorphisms(
+                &query.graph,
+                &mut |tn, qn| atom_match(AtomIdx::from(tn), AtomIdx::from(qn)),
+                &mut |te, qe| bond_match(BondIdx::from(te), BondIdx::from(qe)),
+                alg,
+            )
+            .into_iter()
+            .map(|m| m.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    pub fn subgraph_isomorphisms_at(
+        &self,
+        query: &MoleculeAst,
+        anchor: (AtomIdx, AtomIdx),
+        atom_match: &mut impl FnMut(AtomIdx, AtomIdx) -> bool,
+        bond_match: &mut impl FnMut(BondIdx, BondIdx) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .subgraph_isomorphisms_at(
+                &query.graph,
+                (NodeId::from(anchor.0), NodeId::from(anchor.1)),
+                &mut |tn, qn| atom_match(AtomIdx::from(tn), AtomIdx::from(qn)),
+                &mut |te, qe| bond_match(BondIdx::from(te), BondIdx::from(qe)),
+                alg,
+            )
+            .into_iter()
+            .map(|m| m.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    // -- Read: induced subsets (bond/relation) --------------------------------
+
+    pub fn induced_subgraph(&self, atoms: &[AtomIdx]) -> MoleculeSubgraph {
+        let keep: HashSet<AtomIdx> = atoms.iter().copied().collect();
+        let remove_atoms: Vec<AtomIdx> = (0..self.atom_count())
+            .map(AtomIdx::from)
+            .filter(|a| !keep.contains(a))
+            .collect();
+        let remove_bonds: Vec<BondIdx> = self
+            .bonds()
+            .iter()
+            .filter(|b| !keep.contains(&b.src) || !keep.contains(&b.tgt))
+            .map(|b| b.idx)
+            .collect();
+        let mut builder = self.edit();
+        let remap = builder.remove(&remove_atoms, &remove_bonds);
+        let ast = builder.build();
+
+        let atom_map: Vec<AtomIdx> = (0..self.atom_count())
+            .map(AtomIdx::from)
+            .filter(|&a| remap.atom(a).is_some())
+            .collect();
+        let bond_map: Vec<BondIdx> = (0..self.bond_count())
+            .map(BondIdx::from)
+            .filter(|&b| remap.bond(b).is_some())
+            .collect();
+        let dative_bond_map: Vec<DativeBondIdx> = (0..self.dative_bond_count())
+            .map(DativeBondIdx::from)
+            .filter(|&d| remap.dative_bond(d).is_some())
+            .collect();
+        let aromatic_system_map: Vec<AromaticSystemIdx> = (0..self.aromatic_system_count())
+            .map(AromaticSystemIdx::from)
+            .filter(|&a| remap.aromatic_system(a).is_some())
+            .collect();
+        let multicenter_bond_map: Vec<MulticenterBondIdx> = (0..self.multicenter_bond_count())
+            .map(MulticenterBondIdx::from)
+            .filter(|&m| remap.multicenter_bond(m).is_some())
+            .collect();
+        let noncovalent_bond_map: Vec<NoncovalentBondIdx> = (0..self.noncovalent_bond_count())
+            .map(NoncovalentBondIdx::from)
+            .filter(|&n| remap.noncovalent_bond(n).is_some())
+            .collect();
+
+        MoleculeSubgraph {
+            ast,
+            atom_map,
+            bond_map,
+            dative_bond_map,
+            aromatic_system_map,
+            multicenter_bond_map,
+            noncovalent_bond_map,
+        }
+    }
 
     pub fn induced_bonds(&self, atoms: &[AtomIdx]) -> Vec<BondIdx> {
         let mut nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
@@ -458,6 +671,23 @@ impl MoleculeAst {
     }
 }
 
+// -- DPO rewriting -----------------------------------------------------------
+
+impl MoleculeAst {
+    /// Apply a DPO reaction rule to this molecule given a match assignment.
+    ///
+    /// Phases: (1) add R\K entities, (2) modify K attributes, (3) remove
+    /// L\K overlay relations, (4) remove L\K atoms/bonds. See discussion
+    /// doc 90 for the full case analysis.
+    pub fn apply_rule(
+        &self,
+        _rule: &super::reaction::ReactionRuleAst,
+        _assignment: &super::reaction::Assignment,
+    ) -> Result<MoleculeAst, RewriteError> {
+        todo!("DPO rewrite implementation — see discussion/90-reactions-relation-mutation-2026-04-21.md")
+    }
+}
+
 impl Index<AtomIdx> for MoleculeAst {
     type Output = AtomAst;
     fn index(&self, idx: AtomIdx) -> &AtomAst {
@@ -503,6 +733,12 @@ impl Index<NoncovalentBondIdx> for MoleculeAst {
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_graph_core::{
+        BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
+        CycleEnumerationAlgorithm, MaxIndependentSetAlgorithm, MaxMatchingAlgorithm,
+        MatchingEnumerationAlgorithm, ShortestCycleAlgorithm,
+    };
     use umol_shared::element::Element;
 
     use super::super::atom::ElementAst;
@@ -510,6 +746,7 @@ mod tests {
     use super::super::dative::DativeBondAst;
     use super::super::multicenter::MulticenterBondAst;
     use super::super::noncovalent::{NoncovalentBondAst, NoncovalentKind};
+    use super::super::rings::RingFamily;
     use super::super::value::ValueAst;
     use super::*;
 
@@ -934,5 +1171,400 @@ mod tests {
         let mut all = ast.induced_bonds(&[AtomIdx(0), AtomIdx(1), AtomIdx(2)]);
         all.sort_unstable();
         assert_eq!(all, vec![BondIdx(0), BondIdx(1), BondIdx(2)]);
+    }
+
+    fn chain(n: usize) -> MoleculeAst {
+        let atoms = vec![AtomAst::from_element(Element::C); n];
+        let bonds: Vec<_> = (0..n.saturating_sub(1))
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx((i + 1) as u32),
+                    BondAst::from_order(1),
+                )
+            })
+            .collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default())
+    }
+
+    fn ring(n: usize) -> MoleculeAst {
+        let atoms = vec![AtomAst::from_element(Element::C); n];
+        let bonds: Vec<_> = (0..n)
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx(((i + 1) % n) as u32),
+                    BondAst::from_order(1),
+                )
+            })
+            .collect();
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default())
+    }
+
+    fn two_components() -> MoleculeAst {
+        let atoms = vec![AtomAst::from_element(Element::C); 4];
+        let bonds = vec![
+            (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+            (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
+        ];
+        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default())
+    }
+
+    #[rstest]
+    #[case::isolated(chain(1), AtomIdx(0), 0)]
+    #[case::chain_end(chain(3), AtomIdx(0), 1)]
+    #[case::chain_mid(chain(3), AtomIdx(1), 2)]
+    #[case::ring_vertex(ring(6), AtomIdx(0), 2)]
+    fn test_molecule_ast_degree(
+        #[case] ast: MoleculeAst,
+        #[case] atom: AtomIdx,
+        #[case] expected: usize,
+    ) {
+        assert_eq!(ast.degree(atom), expected);
+    }
+
+    #[rstest]
+    #[case::single(chain(3), 1)]
+    #[case::two(two_components(), 2)]
+    #[case::empty(MoleculeAst::default(), 0)]
+    fn test_molecule_ast_connected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
+        let cc = ast.connected_components(ConnectedComponentsAlgorithm::Bfs);
+        assert_eq!(cc.len(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_6(ring(6), 1)]
+    #[case::chain(chain(5), 0)]
+    fn test_molecule_ast_biconnected_components(
+        #[case] ast: MoleculeAst,
+        #[case] expected: usize,
+    ) {
+        let bcc = ast.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
+        assert_eq!(bcc.len(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_bond(ring(6), BondIdx(0), Some(6))]
+    #[case::chain_bond(chain(3), BondIdx(0), None)]
+    fn test_molecule_ast_shortest_cycle_through_bond(
+        #[case] ast: MoleculeAst,
+        #[case] bond: BondIdx,
+        #[case] expected: Option<usize>,
+    ) {
+        assert_eq!(
+            ast.shortest_cycle_through_bond(bond, ShortestCycleAlgorithm::Bfs),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::ring_atom(ring(6), AtomIdx(0), Some(6))]
+    #[case::chain_atom(chain(3), AtomIdx(1), None)]
+    fn test_molecule_ast_shortest_cycle_through_atom(
+        #[case] ast: MoleculeAst,
+        #[case] atom: AtomIdx,
+        #[case] expected: Option<usize>,
+    ) {
+        assert_eq!(
+            ast.shortest_cycle_through_atom(atom, ShortestCycleAlgorithm::Bfs),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::hexagon(ring(6), 6, 1)]
+    #[case::hexagon_cutoff(ring(6), 5, 0)]
+    #[case::chain(chain(5), 10, 0)]
+    #[case::empty(MoleculeAst::default(), 10, 0)]
+    fn test_molecule_ast_enumerate_cycles(
+        #[case] ast: MoleculeAst,
+        #[case] max_size: usize,
+        #[case] expected: usize,
+    ) {
+        let cycles = ast.enumerate_cycles(max_size, CycleEnumerationAlgorithm::Vismara);
+        assert_eq!(cycles.len(), expected);
+    }
+
+    #[rstest]
+    #[case::triangle(ring(3), 1)]
+    #[case::chain_3(chain(3), 2)]
+    fn test_molecule_ast_maximum_independent_set(
+        #[case] ast: MoleculeAst,
+        #[case] expected: usize,
+    ) {
+        let mis = ast.maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound);
+        assert_eq!(mis.len(), expected);
+    }
+
+    #[rstest]
+    #[case::chain_4(chain(4), 2)]
+    #[case::ring_6(ring(6), 3)]
+    #[case::single(chain(1), 0)]
+    fn test_molecule_ast_maximum_matching(
+        #[case] ast: MoleculeAst,
+        #[case] expected_size: usize,
+    ) {
+        let m = ast.maximum_matching(MaxMatchingAlgorithm::Edmonds);
+        assert_eq!(m.size(), expected_size);
+    }
+
+    #[test]
+    fn test_bond_matching_mate() {
+        let ast = chain(4);
+        let m = ast.maximum_matching(MaxMatchingAlgorithm::Edmonds);
+        assert!(m.is_matched(AtomIdx(0)));
+        let mate = m.mate(AtomIdx(0));
+        assert!(mate.is_some());
+    }
+
+    #[rstest]
+    #[case::ring_6(ring(6), 2)]
+    fn test_molecule_ast_enumerate_perfect_matchings(
+        #[case] ast: MoleculeAst,
+        #[case] expected: usize,
+    ) {
+        let ms = ast.enumerate_perfect_matchings(MatchingEnumerationAlgorithm::BranchAndBound);
+        assert_eq!(ms.len(), expected);
+        for m in &ms {
+            assert!(m.is_perfect(ast.atom_count()));
+        }
+    }
+
+    #[rstest]
+    #[case::ring_6(ring(6), 1)]
+    #[case::chain_3(chain(3), 2)]
+    fn test_molecule_ast_automorphisms(
+        #[case] ast: MoleculeAst,
+        #[case] expected_orbits: usize,
+    ) {
+        let auto = ast.automorphisms(
+            |_| 0u8,
+            umol_graph_core::AutomorphismAlgorithm::Nauty,
+        );
+        assert_eq!(auto.num_orbits(), expected_orbits);
+        assert_eq!(auto.atom_count(), ast.atom_count());
+    }
+
+    #[test]
+    fn test_atom_automorphism_same_orbit() {
+        let ast = ring(6);
+        let auto = ast.automorphisms(
+            |_| 0u8,
+            umol_graph_core::AutomorphismAlgorithm::Nauty,
+        );
+        assert!(auto.same_orbit(AtomIdx(0), AtomIdx(3)));
+    }
+
+    #[test]
+    fn test_molecule_ast_subgraph_isomorphisms() {
+        let target = ring(6);
+        let query = chain(2);
+        let matches = target.subgraph_isomorphisms(
+            &query,
+            &mut |_, _| true,
+            &mut |_, _| true,
+            umol_graph_core::SubgraphIsomorphismAlgorithm::Vf2,
+        );
+        assert_eq!(matches.len(), 12);
+    }
+
+    #[test]
+    fn test_molecule_ast_subgraph_isomorphisms_at() {
+        let target = ring(6);
+        let query = chain(2);
+        let matches = target.subgraph_isomorphisms_at(
+            &query,
+            (AtomIdx(0), AtomIdx(0)),
+            &mut |_, _| true,
+            &mut |_, _| true,
+            umol_graph_core::SubgraphIsomorphismAlgorithm::Vf2,
+        );
+        assert_eq!(matches.len(), 2);
+    }
+
+    #[test]
+    fn test_molecule_ast_induced_subgraph() {
+        let ast = rich_molecule();
+        let sub = ast.induced_subgraph(&[AtomIdx(0), AtomIdx(1), AtomIdx(2)]);
+        assert_eq!(sub.ast.atom_count(), 3);
+        assert_eq!(sub.ast.bond_count(), 2);
+        assert_eq!(sub.atom_map, vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)]);
+        assert_eq!(sub.bond_map, vec![BondIdx(0), BondIdx(1)]);
+        assert_eq!(sub.ast.aromatic_system_count(), 1);
+        assert_eq!(sub.aromatic_system_map, vec![AromaticSystemIdx(0)]);
+        assert_eq!(sub.ast.multicenter_bond_count(), 1);
+        assert_eq!(sub.multicenter_bond_map, vec![MulticenterBondIdx(0)]);
+        assert_eq!(sub.ast.dative_bond_count(), 0);
+        assert!(sub.dative_bond_map.is_empty());
+        assert_eq!(sub.ast.noncovalent_bond_count(), 0);
+        assert!(sub.noncovalent_bond_map.is_empty());
+    }
+
+    #[test]
+    fn test_molecule_ast_induced_subgraph_preserves_dative() {
+        let ast = rich_molecule();
+        let sub = ast.induced_subgraph(&[AtomIdx(2), AtomIdx(3)]);
+        assert_eq!(sub.ast.atom_count(), 2);
+        assert_eq!(sub.ast.dative_bond_count(), 1);
+        assert_eq!(sub.dative_bond_map, vec![DativeBondIdx(0)]);
+    }
+
+    #[test]
+    fn test_builder_remove_aromatic_systems() {
+        let ast = rich_molecule();
+        let mut b = ast.edit();
+        b.remove_aromatic_systems(&[AromaticSystemIdx(0)]);
+        let result = b.build();
+        assert_eq!(result.aromatic_system_count(), 0);
+        assert_eq!(result.atom_count(), 4);
+        assert_eq!(result.bond_count(), 3);
+    }
+
+    #[test]
+    fn test_builder_remove_dative_bonds() {
+        let ast = rich_molecule();
+        let mut b = ast.edit();
+        b.remove_dative_bonds(&[DativeBondIdx(0)]);
+        let result = b.build();
+        assert_eq!(result.dative_bond_count(), 0);
+        assert_eq!(result.atom_count(), 4);
+    }
+
+    #[test]
+    fn test_builder_remove_multicenter_bonds() {
+        let ast = rich_molecule();
+        let mut b = ast.edit();
+        b.remove_multicenter_bonds(&[MulticenterBondIdx(0)]);
+        let result = b.build();
+        assert_eq!(result.multicenter_bond_count(), 0);
+    }
+
+    #[test]
+    fn test_builder_remove_noncovalent_bonds() {
+        let ast = rich_molecule();
+        let mut b = ast.edit();
+        b.remove_noncovalent_bonds(&[NoncovalentBondIdx(0)]);
+        let result = b.build();
+        assert_eq!(result.noncovalent_bond_count(), 0);
+    }
+
+    #[test]
+    fn test_builder_atom_mut() {
+        let ast = rich_molecule();
+        let mut b = ast.edit();
+        b.atom_mut(AtomIdx(0)).element = ElementAst::Lit(Element::N);
+        let result = b.build();
+        assert_eq!(result[AtomIdx(0)].element, ElementAst::Lit(Element::N));
+        assert_eq!(ast[AtomIdx(0)].element, ElementAst::Lit(Element::C));
+    }
+
+    #[test]
+    fn test_builder_bond_mut() {
+        let ast = rich_molecule();
+        let mut b = ast.edit();
+        b.bond_mut(BondIdx(0)).order = ValueAst::Lit(3);
+        let result = b.build();
+        assert_eq!(result[BondIdx(0)].order, ValueAst::Lit(3));
+        assert_eq!(ast[BondIdx(0)].order, ValueAst::Lit(1));
+    }
+
+    #[test]
+    fn test_builder_constraints_mut() {
+        let ast = rich_molecule();
+        let mut b = ast.edit();
+        b.constraints_mut().push_atom(AtomIdx(0), super::super::constraint::AtomConstraint::Degree(ValueAst::Lit(2)));
+        let result = b.build();
+        assert_eq!(result.constraints().atom(AtomIdx(0)).len(), 1);
+        assert!(ast.constraints().atom(AtomIdx(0)).is_empty());
+    }
+
+    #[rstest]
+    #[case::hexagon(ring(6), 6, 1)]
+    #[case::hexagon_cutoff(ring(6), 5, 0)]
+    #[case::chain(chain(5), 10, 0)]
+    #[case::empty(MoleculeAst::default(), 10, 0)]
+    fn test_molecule_ast_rings(
+        #[case] ast: MoleculeAst,
+        #[case] max_ring_size: usize,
+        #[case] expected: usize,
+    ) {
+        let rs = ast.rings(RingFamily::Simple, max_ring_size, |_| true);
+        assert_eq!(rs.count(), expected);
+    }
+
+    #[test]
+    fn test_molecule_ast_rings_atom_filter() {
+        let ast = ring(6);
+        let rs = ast.rings(RingFamily::Simple, 10, |a| a.0 < 3);
+        assert_eq!(rs.count(), 0);
+    }
+
+    #[test]
+    fn test_molecule_ast_rings_induced() {
+        // K4 = complete graph on 4 nodes (6 edges, all pairs connected)
+        let atoms = vec![AtomAst::from_element(Element::C); 4];
+        let bonds = vec![
+            (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+            (AtomIdx(0), AtomIdx(2), BondAst::from_order(1)),
+            (AtomIdx(0), AtomIdx(3), BondAst::from_order(1)),
+            (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)),
+            (AtomIdx(1), AtomIdx(3), BondAst::from_order(1)),
+            (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
+        ];
+        let ast = MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default());
+        let simple = ast.rings(RingFamily::Simple, 4, |_| true);
+        let induced = ast.rings(RingFamily::Induced, 4, |_| true);
+        // K4 has 4 relevant triangles; all are induced (no chords in a triangle)
+        assert_eq!(simple.count(), 4);
+        assert_eq!(induced.count(), 4);
+    }
+
+    #[test]
+    fn test_molecule_ast_rings_induced_naphthalene() {
+        let atoms = vec![AtomAst::from_element(Element::C); 10];
+        #[rustfmt::skip]
+        let bonds = vec![
+            (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+            (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)),
+            (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
+            (AtomIdx(3), AtomIdx(4), BondAst::from_order(1)),
+            (AtomIdx(4), AtomIdx(5), BondAst::from_order(1)),
+            (AtomIdx(5), AtomIdx(0), BondAst::from_order(1)),
+            (AtomIdx(3), AtomIdx(6), BondAst::from_order(1)),
+            (AtomIdx(6), AtomIdx(7), BondAst::from_order(1)),
+            (AtomIdx(7), AtomIdx(8), BondAst::from_order(1)),
+            (AtomIdx(8), AtomIdx(9), BondAst::from_order(1)),
+            (AtomIdx(9), AtomIdx(4), BondAst::from_order(1)),
+        ];
+        let ast = MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default());
+        let simple = ast.rings(RingFamily::Simple, 10, |_| true);
+        assert_eq!(simple.count(), 2);
+        let induced = ast.rings(RingFamily::Induced, 10, |_| true);
+        assert_eq!(induced.count(), 2);
+    }
+
+    #[test]
+    fn test_rings_membership() {
+        let ast = ring(6);
+        let rs = ast.rings(RingFamily::Simple, 6, |_| true);
+        assert!(rs.contains_atom(AtomIdx(0)));
+        assert!(rs.contains_bond(BondIdx(0)));
+        assert_eq!(rs.atom_smallest_ring_size(AtomIdx(0)), Some(6));
+    }
+
+    #[test]
+    fn test_dpo_add_then_remove() {
+        let ast = rich_molecule();
+        let mut b = ast.edit();
+        let new_a = b.add_atom(AtomAst::from_element(Element::Br));
+        b.add_bond(AtomIdx(0), new_a, BondAst::from_order(1));
+        b.remove_aromatic_systems(&[AromaticSystemIdx(0)]);
+        let _remap = b.remove(&[AtomIdx(3)], &[BondIdx(2)]);
+        let result = b.build();
+        assert_eq!(result.atom_count(), 4);
+        assert_eq!(result.bond_count(), 3);
+        assert_eq!(result.aromatic_system_count(), 0);
+        assert_eq!(result.dative_bond_count(), 0);
+        assert_eq!(result.noncovalent_bond_count(), 0);
     }
 }

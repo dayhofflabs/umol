@@ -6,6 +6,7 @@
 //! at which point only that field decomposes to a mutable form. `build`
 //! re-wraps everything in `Arc`, reusing untouched shared data.
 
+use std::collections::HashSet;
 use std::mem;
 use std::sync::Arc;
 
@@ -98,6 +99,25 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
             }
         }
     }
+
+    fn remove_indices(&mut self, indices: &[u32]) {
+        if indices.is_empty() {
+            return;
+        }
+        self.materialize();
+        let FixedSetStorage::Mutable(vec) = self else {
+            unreachable!()
+        };
+        let remove: HashSet<u32> = indices.iter().copied().collect();
+        let mut dst = 0usize;
+        for src in 0..vec.len() {
+            if !remove.contains(&(src as u32)) {
+                vec.swap(dst, src);
+                dst += 1;
+            }
+        }
+        vec.truncate(dst);
+    }
 }
 
 enum VarSetStorage<R> {
@@ -166,6 +186,25 @@ impl<R: Clone> VarSetStorage<R> {
                 VarSetStorage::Mutable(remapped)
             }
         }
+    }
+
+    fn remove_indices(&mut self, indices: &[u32]) {
+        if indices.is_empty() {
+            return;
+        }
+        self.materialize();
+        let VarSetStorage::Mutable(vec) = self else {
+            unreachable!()
+        };
+        let remove: HashSet<u32> = indices.iter().copied().collect();
+        let mut dst = 0usize;
+        for src in 0..vec.len() {
+            if !remove.contains(&(src as u32)) {
+                vec.swap(dst, src);
+                dst += 1;
+            }
+        }
+        vec.truncate(dst);
     }
 }
 
@@ -323,6 +362,120 @@ impl MoleculeBuilder {
     pub fn push_molecule_constraint(&mut self, c: Constraint) {
         self.constraints.push_molecule(c);
     }
+
+    // -- Attribute mutation ---------------------------------------------------
+
+    pub fn atom_mut(&mut self, idx: AtomIdx) -> &mut AtomAst {
+        &mut Arc::make_mut(&mut self.atoms)[idx.index()]
+    }
+
+    pub fn bond_mut(&mut self, idx: BondIdx) -> &mut BondAst {
+        &mut Arc::make_mut(&mut self.bonds)[idx.index()]
+    }
+
+    pub fn dative_bond_mut(&mut self, idx: DativeBondIdx) -> &mut DativeBondAst {
+        self.dative_bonds.materialize();
+        let FixedSetStorage::Mutable(vec) = &mut self.dative_bonds else {
+            unreachable!()
+        };
+        &mut vec[idx.index()].1
+    }
+
+    pub fn aromatic_system_mut(&mut self, idx: AromaticSystemIdx) -> &mut AromaticSystemAst {
+        self.aromatic_systems.materialize();
+        let VarSetStorage::Mutable(vec) = &mut self.aromatic_systems else {
+            unreachable!()
+        };
+        &mut vec[idx.index()].1
+    }
+
+    pub fn multicenter_bond_mut(&mut self, idx: MulticenterBondIdx) -> &mut MulticenterBondAst {
+        self.multicenter_bonds.materialize();
+        let VarSetStorage::Mutable(vec) = &mut self.multicenter_bonds else {
+            unreachable!()
+        };
+        &mut vec[idx.index()].1
+    }
+
+    pub fn noncovalent_bond_mut(&mut self, idx: NoncovalentBondIdx) -> &mut NoncovalentBondAst {
+        self.noncovalent_bonds.materialize();
+        let FixedSetStorage::Mutable(vec) = &mut self.noncovalent_bonds else {
+            unreachable!()
+        };
+        &mut vec[idx.index()].1
+    }
+
+    pub fn constraints_mut(&mut self) -> &mut Constraints {
+        &mut self.constraints
+    }
+
+    // -- Relation removal -----------------------------------------------------
+
+    pub fn remove_dative_bonds(&mut self, indices: &[DativeBondIdx]) {
+        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
+        self.dative_bonds.remove_indices(&raw);
+        let idx_remap = IdxRemapping::new(
+            Remapping {
+                removed_nodes: Vec::new(),
+                removed_edges: Vec::new(),
+            },
+            raw,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        self.constraints.remap(&idx_remap);
+    }
+
+    pub fn remove_aromatic_systems(&mut self, indices: &[AromaticSystemIdx]) {
+        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
+        self.aromatic_systems.remove_indices(&raw);
+        let idx_remap = IdxRemapping::new(
+            Remapping {
+                removed_nodes: Vec::new(),
+                removed_edges: Vec::new(),
+            },
+            Vec::new(),
+            raw,
+            Vec::new(),
+            Vec::new(),
+        );
+        self.constraints.remap(&idx_remap);
+    }
+
+    pub fn remove_multicenter_bonds(&mut self, indices: &[MulticenterBondIdx]) {
+        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
+        self.multicenter_bonds.remove_indices(&raw);
+        let idx_remap = IdxRemapping::new(
+            Remapping {
+                removed_nodes: Vec::new(),
+                removed_edges: Vec::new(),
+            },
+            Vec::new(),
+            Vec::new(),
+            raw,
+            Vec::new(),
+        );
+        self.constraints.remap(&idx_remap);
+    }
+
+    pub fn remove_noncovalent_bonds(&mut self, indices: &[NoncovalentBondIdx]) {
+        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
+        self.noncovalent_bonds.remove_indices(&raw);
+        let idx_remap = IdxRemapping::new(
+            Remapping {
+                removed_nodes: Vec::new(),
+                removed_edges: Vec::new(),
+            },
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            raw,
+        );
+        self.constraints.remap(&idx_remap);
+    }
+
+    // -- Topological removal --------------------------------------------------
 
     pub fn remove(&mut self, atoms: &[AtomIdx], bonds: &[BondIdx]) -> IdxRemapping {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();

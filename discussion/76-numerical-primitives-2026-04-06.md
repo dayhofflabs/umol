@@ -96,7 +96,24 @@ Limited. Likely need to implement Hopf fibration sampling from the Yershova
 
 ## Graph algorithms
 
-Algorithms operating on the molecular graph. Live in `umol-graph-core`.
+Algorithms operating on the molecular graph. Live in `umol-graph-core`. All dispatch through
+enum arguments (`Graph::method(&self, ..., alg: AlgorithmEnum)`).
+
+### Connected components
+
+| Algorithm | Complexity | Reference |
+|---|---|---|
+| BFS flood fill | O(V+E) | Standard BFS traversal |
+
+Implemented: `Graph::connected_components(alg: ConnectedComponentsAlgorithm)`.
+
+### Biconnected components
+
+| Algorithm | Complexity | Reference |
+|---|---|---|
+| Tarjan DFS | O(V+E) | Tarjan 1972 "Depth-first search and linear graph algorithms" |
+
+Implemented: `Graph::biconnected_components(alg: BiconnectedComponentsAlgorithm)`.
 
 ### Cycle enumeration
 
@@ -104,10 +121,14 @@ Algorithms operating on the molecular graph. Live in `umol-graph-core`.
 |---|---|---|---|
 | Vismara relevant cycles | All cycles not decomposable as XOR of shorter cycles | O(V·E·C) where C = relevant cycle count | SMARTS `R` (ring count), ring-system classification, aromaticity |
 | BFS shortest cycle through edge | Smallest ring containing a given edge | O(V+E) per query | SMARTS `r` (smallest ring size), ring membership bit |
+| BFS shortest cycle through node | Min over incident edges | O(V+E) per query | SMARTS `r` per atom |
 
-Decision: implement both in `umol-graph-core`. Removes the naive DFS `enumerate_simple_cycles`
-currently there. SSSR/MCB not implemented — relevant cycles subsume them without the
-non-uniqueness problem (see discussion/57).
+Implemented: `Graph::enumerate_cycles(max_cycle_size, alg: CycleEnumerationAlgorithm)`,
+`Graph::shortest_cycle_through_edge(edge, alg: ShortestCycleAlgorithm)`,
+`Graph::shortest_cycle_through_node(node, alg: ShortestCycleAlgorithm)`.
+
+SSSR/MCB not implemented — relevant cycles subsume them without the non-uniqueness problem
+(see discussion/57).
 
 - Essential cycles (subset of relevant that appear in every MCB) — not needed; relevant cycles
   are cheap enough and essential is too sparse for symmetric-equivalent rings.
@@ -117,16 +138,48 @@ non-uniqueness problem (see discussion/57).
 
 | Algorithm | Output | Complexity | Use case |
 |---|---|---|---|
-| Edmonds' blossom | Maximum matching in general graphs | O(V³) | Kekulization (single), radical detection (unmatched = radical) |
-| Uno's enumeration | All perfect/maximum matchings | O(V·E) per matching, Edmonds as subroutine | Kekulization (all representations), tautomer enumeration |
+| Edmonds' blossom (Gabow simplification) | Maximum matching | O(V³) | Kekulization (single), radical detection (unmatched = radical) |
+| Branch-and-bound with Edmonds oracle | All perfect/maximum matchings | Exponential worst-case | Kekulization (all representations), tautomer enumeration |
 
-Decision: implement both in `umol-graph-core`.
+Implemented: `Graph::maximum_matching(alg: MaxMatchingAlgorithm)`,
+`Graph::enumerate_perfect_matchings(alg: MatchingEnumerationAlgorithm)`,
+`Graph::enumerate_maximum_matchings(alg: MatchingEnumerationAlgorithm)`.
 
-- Kekulization: run Edmonds on the π-subgraph. Perfect matching → Kekulizable;
-  unmatched vertices → radical centers.
-- Tautomer enumeration: Uno enumeration on the mobile-H subgraph where vertices are
-  mobile-H sites and edges are allowed H-shifts. Each matching assigns double-bond
-  positions; unmatched vertices receive the mobile proton.
+References: Edmonds 1965, Gabow 1976 simplification. Ref impl: cp-algorithms.com.
+
+### Maximum independent set
+
+| Algorithm | Complexity | Use case |
+|---|---|---|
+| Branch-and-bound with greedy upper bound | Exponential worst-case | Clar's rule (maximum number of disjoint aromatic sextets) |
+
+Implemented: `Graph::maximum_independent_set(alg: MaxIndependentSetAlgorithm)`.
+
+### Subgraph isomorphism
+
+| Algorithm | Complexity | Use case |
+|---|---|---|
+| VF2 | O(V!·V) worst-case, fast on sparse molecular graphs | SMARTS matching, substructure search |
+
+Implemented: `Graph::subgraph_isomorphisms(query, node_match, edge_match, alg: SubgraphIsomorphismAlgorithm)`,
+`Graph::subgraph_isomorphisms_at(query, anchor, node_match, edge_match, alg: SubgraphIsomorphismAlgorithm)`.
+Target graph is the receiver; query is the argument. Match predicates are pairwise closures
+(lazy evaluation — most candidate pairs never tested).
+
+Reference: Cordella et al. 2004 "A (sub)graph isomorphism algorithm for matching large graphs".
+
+### Automorphism and canonical labeling
+
+| Algorithm | Output | Use case |
+|---|---|---|
+| nauty (sparse) | Orbit partition, canonical labeling, group order | Symmetry-equivalent atom detection, canonical SMILES |
+
+Implemented: `Graph::automorphisms(node_color, alg: AutomorphismAlgorithm)`.
+Coloring function `Fn(NodeId) -> C where C: Ord + Copy` encodes vertex partition (nauty
+requires a total ordering). Returns `Automorphism` with orbit queries, canonical labeling,
+and `AutoGroupOrder` (exact u32 or approximate f64).
+
+Reference: McKay & Piperno 2014 "Practical graph isomorphism, II". Impl: `nauty-Traces-sys` FFI.
 
 ## Other potentially relevant primitives
 
