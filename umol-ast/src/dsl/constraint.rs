@@ -5,17 +5,17 @@
 //! from the `AtomIdx` / `BondIdx` / ... on the AST is a separate fallible
 //! step that consults the surrounding `Metadata`.
 
-use umol_edn::{DeError, Edn, EdnKeyword, EdnMap, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
 use super::aromatic::AromaticSystemConstraintDsl;
-use super::atom::AtomConstraintDsl;
+use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
 use super::bond::BondConstraintDsl;
 use super::dative::DativeBondConstraintDsl;
 use super::error::ParseError;
 use super::molecule::{Metadata, MoleculeDsl};
 use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
-use super::value::ValueDsl;
+use super::value::{parse_value, ValueDsl};
 use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
 use crate::ast::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
@@ -56,8 +56,90 @@ impl<'a> ResolveContext<'a> {
     }
 }
 
+// -- Streaming-parser helpers ------------------
+//
+// Shared across the constraint-tree readers here and the molecule-map reader
+// in `super::molecule`.
+
+pub(super) fn eof_err() -> EdnError {
+    DeError::Custom("unexpected end of input".into()).into()
+}
+
+pub(super) fn missing(key: &str, context: &'static str) -> EdnError {
+    DeError::MissingField {
+        key: key.to_string(),
+        path: vec![context.into()],
+    }
+    .into()
+}
+
+pub(super) fn unexpected_byte_kind(b: u8) -> &'static str {
+    match b {
+        b'"' => "string",
+        b':' => "keyword",
+        b'[' => "vector",
+        b'{' => "map",
+        b'0'..=b'9' | b'-' | b'+' => "number",
+        _ => "token",
+    }
+}
+
+pub(super) fn read_vec<T>(
+    de: &mut EdnStreamDeserializer<'_>,
+    mut read_element: impl FnMut(&mut EdnStreamDeserializer<'_>) -> Result<T, EdnError>,
+) -> Result<Vec<T>, EdnError> {
+    de.consume_byte(b'[')?;
+    let mut out = Vec::new();
+    loop {
+        if de.try_consume_byte(b']')? {
+            break;
+        }
+        out.push(read_element(de)?);
+    }
+    Ok(out)
+}
+
+pub(super) fn read_map(
+    de: &mut EdnStreamDeserializer<'_>,
+    mut on_entry: impl FnMut(&mut EdnStreamDeserializer<'_>, &str) -> Result<(), EdnError>,
+) -> Result<(), EdnError> {
+    de.consume_byte(b'{')?;
+    loop {
+        if de.try_consume_byte(b'}')? {
+            break;
+        }
+        let key = de.read_keyword_name()?.into_owned();
+        on_entry(de, key.as_str())?;
+    }
+    Ok(())
+}
+
+/// Consume `{:key value}` as a single-key map, returning the key and
+/// leaving the stream positioned at the opening-map byte (caller has already
+/// read the value). Errors if the map contains more than one key.
+pub(super) fn read_single_key_map_header(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<String, EdnError> {
+    de.consume_byte(b'{')?;
+    Ok(de.read_keyword_name()?.into_owned())
+}
+
+pub(super) fn consume_single_key_map_close(
+    de: &mut EdnStreamDeserializer<'_>,
+    context: &'static str,
+) -> Result<(), EdnError> {
+    if !de.try_consume_byte(b'}')? {
+        return Err(DeError::Custom(format!(
+            "{} must have exactly one key",
+            context
+        ))
+        .into());
+    }
+    Ok(())
+}
+
 macro_rules! define_ref {
-    ($name:ident, $idx:ident, $field:ident, $kind:literal) => {
+    ($name:ident, $idx:ident, $field:ident, $kind:literal, $reader:ident) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub enum $name {
             Index(usize),
@@ -131,30 +213,635 @@ macro_rules! define_ref {
                 }
             }
         }
+
+        pub(super) fn $reader(
+            de: &mut EdnStreamDeserializer<'_>,
+        ) -> Result<$name, EdnError> {
+            match de.peek_byte()?.ok_or_else(eof_err)? {
+                b':' => Ok($name::Id(de.read_keyword_name()?.into_owned())),
+                _ => {
+                    let n = de.read_i64()?;
+                    let i = usize::try_from(n).map_err(|_| DeError::OutOfRange {
+                        value: n.to_string(),
+                        target: "usize",
+                        path: Vec::new(),
+                    })?;
+                    Ok($name::Index(i))
+                }
+            }
+        }
     };
 }
 
-define_ref!(AtomRef, AtomIdx, atom_ids, "atom");
-define_ref!(BondRef, BondIdx, bond_ids, "bond");
-define_ref!(DativeBondRef, DativeBondIdx, dative_bond_ids, "dative-bond");
+define_ref!(AtomRef, AtomIdx, atom_ids, "atom", read_atom_ref);
+define_ref!(BondRef, BondIdx, bond_ids, "bond", read_bond_ref);
+define_ref!(
+    DativeBondRef,
+    DativeBondIdx,
+    dative_bond_ids,
+    "dative-bond",
+    read_dative_bond_ref
+);
 define_ref!(
     AromaticSystemRef,
     AromaticSystemIdx,
     aromatic_system_ids,
-    "aromatic-system"
+    "aromatic-system",
+    read_aromatic_system_ref
 );
 define_ref!(
     MulticenterBondRef,
     MulticenterBondIdx,
     multicenter_bond_ids,
-    "multicenter-bond"
+    "multicenter-bond",
+    read_multicenter_bond_ref
 );
 define_ref!(
     NoncovalentBondRef,
     NoncovalentBondIdx,
     noncovalent_bond_ids,
-    "noncovalent-bond"
+    "noncovalent-bond",
+    read_noncovalent_bond_ref
 );
+
+// -- Streaming constraint readers ------------------
+
+use crate::ast::constraint::{
+    AromaticValenceAst, AtomConstraint, BondConstraint, MulticenterValenceAst,
+};
+use crate::ast::value::ValueAst;
+
+pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
+    match de.peek_byte()?.ok_or_else(eof_err)? {
+        b'"' => {
+            let s = de.read_string()?;
+            let v: ValueAst =
+                parse_value(s.as_ref()).map_err(|e| DeError::subgrammar("value", e))?;
+            Ok(ValueDsl(v))
+        }
+        b'[' => {
+            let items = read_vec(de, |d| Ok(d.read_i64()?))?;
+            Ok(ValueDsl(ValueAst::LitSet(items)))
+        }
+        b':' => {
+            let name = de.read_keyword_name()?;
+            if name.as_ref() == "undetermined" {
+                Ok(ValueDsl(ValueAst::Undetermined))
+            } else {
+                Err(DeError::Custom(format!(
+                    "unexpected keyword :{} in value position",
+                    name
+                ))
+                .into())
+            }
+        }
+        _ => Ok(ValueDsl(ValueAst::Lit(de.read_i64()?))),
+    }
+}
+
+pub(super) fn read_spin_state(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<SpinStateAst, EdnError> {
+    let mut unpaired = None;
+    let mut multiplicity = None;
+    read_map(de, |d, key| {
+        match key {
+            "unpaired" => unpaired = Some(read_value_dsl(d)?.into_ast(&()).unwrap()),
+            "multiplicity" => multiplicity = Some(read_value_dsl(d)?.into_ast(&()).unwrap()),
+            _ => d.read_skip_value()?,
+        }
+        Ok(())
+    })?;
+    Ok(SpinStateAst::from_values(
+        unpaired.ok_or_else(|| missing("unpaired", "spin"))?,
+        multiplicity.ok_or_else(|| missing("multiplicity", "spin"))?,
+    ))
+}
+
+pub(super) fn read_aromatic_valence_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<AromaticValenceDsl, EdnError> {
+    match de.peek_byte()?.ok_or_else(eof_err)? {
+        b':' => {
+            let name = de.read_keyword_name()?;
+            match name.as_ref() {
+                "undetermined" => Ok(AromaticValenceDsl(AromaticValenceAst::Undetermined)),
+                "not-aromatic" => Ok(AromaticValenceDsl(AromaticValenceAst::NotAromatic)),
+                other => Err(DeError::Custom(format!(
+                    "unknown aromatic-valence keyword :{}",
+                    other
+                ))
+                .into()),
+            }
+        }
+        b'{' => {
+            let key = read_single_key_map_header(de)?;
+            match key.as_str() {
+                "aromatic" => {
+                    let v = read_value_dsl(de)?.into_ast(&()).unwrap();
+                    consume_single_key_map_close(de, "aromatic-valence")?;
+                    Ok(AromaticValenceDsl(AromaticValenceAst::Aromatic(v)))
+                }
+                other => Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["aromatic-valence".into()],
+                }
+                .into()),
+            }
+        }
+        b => Err(DeError::TypeMismatch {
+            expected: ":undetermined / :not-aromatic / {:aromatic <value>}",
+            got: unexpected_byte_kind(b),
+            path: vec!["aromatic-valence".into()],
+        }
+        .into()),
+    }
+}
+
+pub(super) fn read_multicenter_valence_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<MulticenterValenceDsl, EdnError> {
+    match de.peek_byte()?.ok_or_else(eof_err)? {
+        b':' => {
+            let name = de.read_keyword_name()?;
+            match name.as_ref() {
+                "undetermined" => Ok(MulticenterValenceDsl(MulticenterValenceAst::Undetermined)),
+                "not-multicenter" => {
+                    Ok(MulticenterValenceDsl(MulticenterValenceAst::NotMulticenter))
+                }
+                other => Err(DeError::Custom(format!(
+                    "unknown multicenter-valence keyword :{}",
+                    other
+                ))
+                .into()),
+            }
+        }
+        b'{' => {
+            let key = read_single_key_map_header(de)?;
+            match key.as_str() {
+                "multicenter" => {
+                    let v = read_value_dsl(de)?.into_ast(&()).unwrap();
+                    consume_single_key_map_close(de, "multicenter-valence")?;
+                    Ok(MulticenterValenceDsl(MulticenterValenceAst::Multicenter(v)))
+                }
+                other => Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["multicenter-valence".into()],
+                }
+                .into()),
+            }
+        }
+        b => Err(DeError::TypeMismatch {
+            expected: ":undetermined / :not-multicenter / {:multicenter <value>}",
+            got: unexpected_byte_kind(b),
+            path: vec!["multicenter-valence".into()],
+        }
+        .into()),
+    }
+}
+
+pub(super) fn read_atom_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<AtomConstraintDsl, EdnError> {
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "valence" => AtomConstraint::Valence(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "aromatic-valence" => AtomConstraint::AromaticValence(
+            read_aromatic_valence_dsl(de)?.into_ast(&()).unwrap(),
+        ),
+        "multicenter-valence" => AtomConstraint::MulticenterValence(
+            read_multicenter_valence_dsl(de)?.into_ast(&()).unwrap(),
+        ),
+        "donated-pairs" => AtomConstraint::DonatedPairs(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "accepted-pairs" => {
+            AtomConstraint::AcceptedPairs(read_value_dsl(de)?.into_ast(&()).unwrap())
+        }
+        "degree" => AtomConstraint::Degree(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "connectivity" => {
+            AtomConstraint::Connectivity(read_value_dsl(de)?.into_ast(&()).unwrap())
+        }
+        "ring-connectivity" => {
+            AtomConstraint::RingConnectivity(read_value_dsl(de)?.into_ast(&()).unwrap())
+        }
+        "total-hydrogens" => {
+            AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&()).unwrap())
+        }
+        "ring-count" => AtomConstraint::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "ring-size" => AtomConstraint::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["atom-constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "atom-constraint")?;
+    Ok(AtomConstraintDsl(c))
+}
+
+pub(super) fn read_bond_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<BondConstraintDsl, EdnError> {
+    match de.peek_byte()?.ok_or_else(eof_err)? {
+        b':' => {
+            let name = de.read_keyword_name()?;
+            match name.as_ref() {
+                "aromatic" => Ok(BondConstraintDsl(BondConstraint::Aromatic)),
+                other => Err(DeError::Custom(format!(
+                    "unknown bond-constraint keyword :{}",
+                    other
+                ))
+                .into()),
+            }
+        }
+        b'{' => {
+            let key = read_single_key_map_header(de)?;
+            let c = match key.as_str() {
+                "ring-count" => {
+                    BondConstraint::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap())
+                }
+                "ring-size" => {
+                    BondConstraint::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap())
+                }
+                other => {
+                    return Err(DeError::UnknownField {
+                        key: other.to_string(),
+                        path: vec!["bond-constraint".into()],
+                    }
+                    .into());
+                }
+            };
+            consume_single_key_map_close(de, "bond-constraint")?;
+            Ok(BondConstraintDsl(c))
+        }
+        b => Err(DeError::TypeMismatch {
+            expected: ":aromatic / {:ring-count …} / {:ring-size …}",
+            got: unexpected_byte_kind(b),
+            path: vec!["bond-constraint".into()],
+        }
+        .into()),
+    }
+}
+
+pub(super) fn read_dative_bond_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<DativeBondConstraintDsl, EdnError> {
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "ring-count" => DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "ring-size" => DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "donor" => DativeBondConstraintDsl::Donor(read_atom_ref(de)?),
+        "acceptor" => DativeBondConstraintDsl::Acceptor(read_atom_ref(de)?),
+        "donor-satisfies" => {
+            DativeBondConstraintDsl::DonorSatisfies(Box::new(read_atom_constraint_dsl(de)?))
+        }
+        "acceptor-satisfies" => {
+            DativeBondConstraintDsl::AcceptorSatisfies(Box::new(read_atom_constraint_dsl(de)?))
+        }
+        "parallels" => DativeBondConstraintDsl::Parallels(read_bond_ref(de)?),
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["dative-bond-constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "dative-bond-constraint")?;
+    Ok(c)
+}
+
+pub(super) fn read_aromatic_system_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<AromaticSystemConstraintDsl, EdnError> {
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "atoms" => AromaticSystemConstraintDsl::Atoms(read_vec(de, read_atom_ref)?),
+        "contains" => AromaticSystemConstraintDsl::Contains(read_atom_ref(de)?),
+        "contains-all" => AromaticSystemConstraintDsl::ContainsAll(read_vec(de, read_atom_ref)?),
+        "all-atoms" => {
+            AromaticSystemConstraintDsl::AllAtoms(Box::new(read_atom_constraint_dsl(de)?))
+        }
+        "any-atom" => {
+            AromaticSystemConstraintDsl::AnyAtom(Box::new(read_atom_constraint_dsl(de)?))
+        }
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["aromatic-system-constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "aromatic-system-constraint")?;
+    Ok(c)
+}
+
+pub(super) fn read_multicenter_bond_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<MulticenterBondConstraintDsl, EdnError> {
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "atoms" => MulticenterBondConstraintDsl::Atoms(read_vec(de, read_atom_ref)?),
+        "contains" => MulticenterBondConstraintDsl::Contains(read_atom_ref(de)?),
+        "contains-all" => {
+            MulticenterBondConstraintDsl::ContainsAll(read_vec(de, read_atom_ref)?)
+        }
+        "all-atoms" => {
+            MulticenterBondConstraintDsl::AllAtoms(Box::new(read_atom_constraint_dsl(de)?))
+        }
+        "any-atom" => {
+            MulticenterBondConstraintDsl::AnyAtom(Box::new(read_atom_constraint_dsl(de)?))
+        }
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["multicenter-bond-constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "multicenter-bond-constraint")?;
+    Ok(c)
+}
+
+pub(super) fn read_noncovalent_bond_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<NoncovalentBondConstraintDsl, EdnError> {
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "ends" => NoncovalentBondConstraintDsl::Ends(read_atom_ref_pair(de, "ends")?),
+        "contains" => NoncovalentBondConstraintDsl::Contains(read_atom_ref(de)?),
+        "ends-satisfy" => {
+            let [a, b] = read_atom_constraint_pair(de, "ends-satisfy")?;
+            NoncovalentBondConstraintDsl::EndsSatisfy([Box::new(a), Box::new(b)])
+        }
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["noncovalent-bond-constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "noncovalent-bond-constraint")?;
+    Ok(c)
+}
+
+fn read_atom_ref_pair(
+    de: &mut EdnStreamDeserializer<'_>,
+    context: &'static str,
+) -> Result<[AtomRef; 2], EdnError> {
+    de.consume_byte(b'[')?;
+    let a = read_atom_ref(de)?;
+    let b = read_atom_ref(de)?;
+    if !de.try_consume_byte(b']')? {
+        return Err(DeError::Custom(format!("{}: expected 2 elements", context)).into());
+    }
+    Ok([a, b])
+}
+
+fn read_atom_constraint_pair(
+    de: &mut EdnStreamDeserializer<'_>,
+    context: &'static str,
+) -> Result<[AtomConstraintDsl; 2], EdnError> {
+    de.consume_byte(b'[')?;
+    let a = read_atom_constraint_dsl(de)?;
+    let b = read_atom_constraint_dsl(de)?;
+    if !de.try_consume_byte(b']')? {
+        return Err(DeError::Custom(format!("{}: expected 2 elements", context)).into());
+    }
+    Ok([a, b])
+}
+
+pub(super) fn read_sub_pattern_anchor_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<SubPatternAnchorDsl, EdnError> {
+    let mut out = SubPatternAnchorDsl::default();
+    read_map(de, |d, key| {
+        match key {
+            "atoms" => out.atoms = read_vec(d, |d| read_ref_pair(d, read_atom_ref, read_atom_ref))?,
+            "bonds" => out.bonds = read_vec(d, |d| read_ref_pair(d, read_bond_ref, read_bond_ref))?,
+            "dative-bonds" => {
+                out.dative_bonds =
+                    read_vec(d, |d| read_ref_pair(d, read_dative_bond_ref, read_dative_bond_ref))?
+            }
+            "aromatic-systems" => {
+                out.aromatic_systems = read_vec(d, |d| {
+                    read_ref_pair(d, read_aromatic_system_ref, read_aromatic_system_ref)
+                })?
+            }
+            "multicenter-bonds" => {
+                out.multicenter_bonds = read_vec(d, |d| {
+                    read_ref_pair(d, read_multicenter_bond_ref, read_multicenter_bond_ref)
+                })?
+            }
+            "noncovalent-bonds" => {
+                out.noncovalent_bonds = read_vec(d, |d| {
+                    read_ref_pair(d, read_noncovalent_bond_ref, read_noncovalent_bond_ref)
+                })?
+            }
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["sub-pattern-anchor".into()],
+                }
+                .into());
+            }
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+fn read_ref_pair<A, B>(
+    de: &mut EdnStreamDeserializer<'_>,
+    read_a: fn(&mut EdnStreamDeserializer<'_>) -> Result<A, EdnError>,
+    read_b: fn(&mut EdnStreamDeserializer<'_>) -> Result<B, EdnError>,
+) -> Result<(A, B), EdnError> {
+    de.consume_byte(b'[')?;
+    let a = read_a(de)?;
+    let b = read_b(de)?;
+    if !de.try_consume_byte(b']')? {
+        return Err(DeError::Custom("anchor pair must have 2 elements".into()).into());
+    }
+    Ok((a, b))
+}
+
+pub(super) fn read_molecule_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+    key: &str,
+) -> Result<MoleculeConstraintDsl, EdnError> {
+    // Caller has already consumed the outer `{` and the dispatch key.
+    let c = match key {
+        "charge-sum" => {
+            let mut atoms = None;
+            let mut sum = None;
+            read_map(de, |d, k| {
+                match k {
+                    "atoms" => atoms = Some(read_vec(d, read_atom_ref)?),
+                    "sum" => sum = Some(read_value_dsl(d)?),
+                    _ => d.read_skip_value()?,
+                }
+                Ok(())
+            })?;
+            MoleculeConstraintDsl::ChargeSum {
+                atoms: atoms.ok_or_else(|| missing("atoms", "charge-sum"))?,
+                sum: sum.ok_or_else(|| missing("sum", "charge-sum"))?,
+            }
+        }
+        "spin-sum" => {
+            let mut atoms = None;
+            let mut spin = None;
+            read_map(de, |d, k| {
+                match k {
+                    "atoms" => atoms = Some(read_vec(d, read_atom_ref)?),
+                    "spin" => spin = Some(read_spin_state(d)?),
+                    _ => d.read_skip_value()?,
+                }
+                Ok(())
+            })?;
+            MoleculeConstraintDsl::SpinSum {
+                atoms: atoms.ok_or_else(|| missing("atoms", "spin-sum"))?,
+                spin: spin.ok_or_else(|| missing("spin", "spin-sum"))?,
+            }
+        }
+        "bond-order-sum" => {
+            let mut bonds = None;
+            let mut sum = None;
+            read_map(de, |d, k| {
+                match k {
+                    "bonds" => bonds = Some(read_vec(d, read_bond_ref)?),
+                    "sum" => sum = Some(read_value_dsl(d)?),
+                    _ => d.read_skip_value()?,
+                }
+                Ok(())
+            })?;
+            MoleculeConstraintDsl::BondOrderSum {
+                bonds: bonds.ok_or_else(|| missing("bonds", "bond-order-sum"))?,
+                sum: sum.ok_or_else(|| missing("sum", "bond-order-sum"))?,
+            }
+        }
+        "connected" => MoleculeConstraintDsl::Connected(read_vec(de, read_atom_ref)?),
+        "sub-pattern" => {
+            let mut anchor = None;
+            let mut pattern = None;
+            read_map(de, |d, k| {
+                match k {
+                    "anchor" => anchor = Some(read_sub_pattern_anchor_dsl(d)?),
+                    "pattern" => {
+                        let input = super::molecule::read_molecule_input(d)?;
+                        let (ast, metadata) = input
+                            .into_ast()
+                            .map_err(|e| DeError::Custom(e.to_string()))?;
+                        pattern = Some(Box::new(MoleculeDsl::from_parts(ast, metadata)));
+                    }
+                    _ => d.read_skip_value()?,
+                }
+                Ok(())
+            })?;
+            MoleculeConstraintDsl::SubPattern {
+                anchor: anchor.ok_or_else(|| missing("anchor", "sub-pattern"))?,
+                pattern: pattern.ok_or_else(|| missing("pattern", "sub-pattern"))?,
+            }
+        }
+        other => unreachable!("read_molecule_constraint_dsl called with non-molecule key {other}"),
+    };
+    Ok(c)
+}
+
+pub(super) fn read_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<ConstraintDsl, EdnError> {
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "atom" => {
+            let (r, inner) = read_entity_leaf(de, read_atom_ref, read_atom_constraint_dsl, "atom")?;
+            ConstraintDsl::Atom(r, inner)
+        }
+        "bond" => {
+            let (r, inner) = read_entity_leaf(de, read_bond_ref, read_bond_constraint_dsl, "bond")?;
+            ConstraintDsl::Bond(r, inner)
+        }
+        "dative-bond" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_dative_bond_ref,
+                read_dative_bond_constraint_dsl,
+                "dative-bond",
+            )?;
+            ConstraintDsl::DativeBond(r, inner)
+        }
+        "aromatic-system" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_aromatic_system_ref,
+                read_aromatic_system_constraint_dsl,
+                "aromatic-system",
+            )?;
+            ConstraintDsl::AromaticSystem(r, inner)
+        }
+        "multicenter-bond" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_multicenter_bond_ref,
+                read_multicenter_bond_constraint_dsl,
+                "multicenter-bond",
+            )?;
+            ConstraintDsl::MulticenterBond(r, inner)
+        }
+        "noncovalent-bond" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_noncovalent_bond_ref,
+                read_noncovalent_bond_constraint_dsl,
+                "noncovalent-bond",
+            )?;
+            ConstraintDsl::NoncovalentBond(r, inner)
+        }
+        "and" => ConstraintDsl::And(read_vec(de, read_constraint_dsl)?),
+        "or" => ConstraintDsl::Or(read_vec(de, read_constraint_dsl)?),
+        "not" => ConstraintDsl::Not(Box::new(read_constraint_dsl(de)?)),
+        "charge-sum" | "spin-sum" | "bond-order-sum" | "connected" | "sub-pattern" => {
+            ConstraintDsl::Molecule(read_molecule_constraint_dsl(de, key.as_str())?)
+        }
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "constraint")?;
+    Ok(c)
+}
+
+fn read_entity_leaf<R, C>(
+    de: &mut EdnStreamDeserializer<'_>,
+    read_ref: fn(&mut EdnStreamDeserializer<'_>) -> Result<R, EdnError>,
+    read_inner: fn(&mut EdnStreamDeserializer<'_>) -> Result<C, EdnError>,
+    context: &'static str,
+) -> Result<(R, C), EdnError> {
+    de.consume_byte(b'[')?;
+    let r = read_ref(de)?;
+    let c = read_inner(de)?;
+    if !de.try_consume_byte(b']')? {
+        return Err(DeError::Custom(format!(
+            "{} entity leaf must have 2 elements",
+            context
+        ))
+        .into());
+    }
+    Ok((r, c))
+}
+
+pub(super) fn read_constraints_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<Vec<ConstraintDsl>, EdnError> {
+    read_vec(de, read_constraint_dsl)
+}
 
 // -- MoleculeConstraintDsl -------------------
 

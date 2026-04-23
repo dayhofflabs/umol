@@ -25,7 +25,10 @@ use umol_edn::{
 use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
 use super::bond::BondDsl;
-use super::constraint::{AtomRef, ConstraintDsl, ConstraintsDsl, ResolveContext};
+use super::constraint::{
+    eof_err, missing, read_atom_ref, read_constraints_dsl, read_map, read_vec,
+    unexpected_byte_kind, AtomRef, ConstraintDsl, ConstraintsDsl, ResolveContext,
+};
 use super::dative::DativeBondDsl;
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
@@ -132,7 +135,9 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
 // non-terminal in the grammar has one `read_*` function; no detour through
 // an intermediate `Edn` tree.
 
-fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<MoleculeInput, EdnError> {
+pub(super) fn read_molecule_input(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<MoleculeInput, EdnError> {
     de.consume_byte(b'{')?;
     let mut mi = MoleculeInput::default();
     loop {
@@ -148,7 +153,7 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<MoleculeInp
             "multicenter" => mi.multicenter_bonds = read_vec(de, read_multicenter_bond_entry)?,
             "noncovalent" => mi.noncovalent_bonds = read_vec(de, read_noncovalent_bond_entry)?,
             "atom-aliases" => mi.atom_aliases = read_atom_aliases(de)?,
-            "constraints" => mi.constraints = read_constraints(de)?,
+            "constraints" => mi.constraints = read_constraints_dsl(de)?,
             "guards" => {
                 de.read_skip_value()?;
             }
@@ -162,21 +167,6 @@ fn read_molecule_input(de: &mut EdnStreamDeserializer<'_>) -> Result<MoleculeInp
         }
     }
     Ok(mi)
-}
-
-fn read_vec<T>(
-    de: &mut EdnStreamDeserializer<'_>,
-    mut read_element: impl FnMut(&mut EdnStreamDeserializer<'_>) -> Result<T, EdnError>,
-) -> Result<Vec<T>, EdnError> {
-    de.consume_byte(b'[')?;
-    let mut out = Vec::new();
-    loop {
-        if de.try_consume_byte(b']')? {
-            break;
-        }
-        out.push(read_element(de)?);
-    }
-    Ok(out)
 }
 
 fn read_atom_entry(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomEntryInput, EdnError> {
@@ -218,21 +208,6 @@ fn read_atom_spec(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomSpecInput, E
             path: vec!["atom-spec".into()],
         }
         .into()),
-    }
-}
-
-fn read_atom_ref(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomRef, EdnError> {
-    match de.peek_byte()?.ok_or_else(eof_err)? {
-        b':' => Ok(AtomRef::Id(de.read_keyword_name()?.into_owned())),
-        _ => {
-            let n = de.read_i64()?;
-            let i = usize::try_from(n).map_err(|_| DeError::OutOfRange {
-                value: n.to_string(),
-                target: "usize",
-                path: Vec::new(),
-            })?;
-            Ok(AtomRef::Index(i))
-        }
     }
 }
 
@@ -437,54 +412,6 @@ fn read_atom_aliases(
     Ok(out)
 }
 
-fn read_constraints(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<Vec<ConstraintDsl>, EdnError> {
-    // Constraints are an arbitrary typed tree with recursive variants; the
-    // streaming primitives don't yet have a typed-tree reader for them, so
-    // bridge through the `Edn` parser on just this vector's source span.
-    let slice = de.read_value_slice()?;
-    let edn = umol_edn::read_string(slice)?;
-    Ok(parse_vec(&edn, ":constraints", |e| ConstraintDsl::from_edn(e))?)
-}
-
-fn read_map(
-    de: &mut EdnStreamDeserializer<'_>,
-    mut on_entry: impl FnMut(&mut EdnStreamDeserializer<'_>, &str) -> Result<(), EdnError>,
-) -> Result<(), EdnError> {
-    de.consume_byte(b'{')?;
-    loop {
-        if de.try_consume_byte(b'}')? {
-            break;
-        }
-        let key = de.read_keyword_name()?.into_owned();
-        on_entry(de, key.as_str())?;
-    }
-    Ok(())
-}
-
-fn eof_err() -> EdnError {
-    DeError::Custom("unexpected end of input".into()).into()
-}
-
-fn missing(key: &str, context: &'static str) -> EdnError {
-    DeError::MissingField {
-        key: key.to_string(),
-        path: vec![context.into()],
-    }
-    .into()
-}
-
-fn unexpected_byte_kind(b: u8) -> &'static str {
-    match b {
-        b'"' => "string",
-        b':' => "keyword",
-        b'[' => "vector",
-        b'{' => "map",
-        b'0'..=b'9' | b'-' | b'+' => "number",
-        _ => "token",
-    }
-}
 
 impl ToEdn for MoleculeDsl {
     fn to_edn(&self) -> Edn<'static> {
