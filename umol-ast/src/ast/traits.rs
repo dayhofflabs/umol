@@ -9,9 +9,10 @@ use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::config::{
     AromaticSystemAstConfig, AtomAstConfig, BondAstConfig, DativeBondAstConfig,
-    MulticenterBondAstConfig, NoncovalentBondAstConfig,
+    MoleculeAstConfig, MulticenterBondAstConfig, NoncovalentBondAstConfig,
 };
 use super::dative::DativeBondAst;
+use super::molecule::MoleculeAst;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 
@@ -51,4 +52,8 @@ impl Ast for DativeBondAst {
 
 impl Ast for NoncovalentBondAst {
     type Config = NoncovalentBondAstConfig;
+}
+
+impl Ast for MoleculeAst {
+    type Config = MoleculeAstConfig;
 }

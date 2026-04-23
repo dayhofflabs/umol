@@ -33,7 +33,7 @@ use crate::ast::value::{Expr, RelOp, ValueAst};
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in
 /// `self.0.constraints`.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct AtomDsl(pub AtomAst);
 
 impl FromStr for AtomDsl {

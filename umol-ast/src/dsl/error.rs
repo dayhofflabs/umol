@@ -52,6 +52,18 @@ pub enum ParseError {
     LoweringError(String),
     #[error("syntax error")]
     Syntax,
+    #[error("EDN parse: {0}")]
+    EdnParse(String),
+    #[error("missing key: {0}")]
+    MissingKey(String),
+    #[error("duplicate id: {0}")]
+    DuplicateId(String),
+    #[error("invalid value: {0}")]
+    InvalidValue(String),
+    #[error("invalid atom index: {0}")]
+    InvalidAtomIndex(String),
+    #[error("{field}: expected {expected}")]
+    WrongFieldType { field: String, expected: String },
 }
 
 impl ParseError {
