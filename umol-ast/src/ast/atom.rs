@@ -77,6 +77,10 @@ impl ElementAst {
         matches!(self, Self::Lit(_))
     }
 
+    pub fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
+    }
+
     /// Pattern matches target iff every element the target admits is also
     /// admitted by the pattern (superset semantics).
     pub fn matches(&self, target: &Self) -> bool {
@@ -115,6 +119,10 @@ impl IsotopeAst {
 
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Natural | Self::Lit(_))
+    }
+
+    pub fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
     }
 
     pub fn matches(&self, target: &Self) -> bool {
@@ -169,6 +177,10 @@ impl ImplicitHydrogensAst {
 
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Normal | Self::Lit(_))
+    }
+
+    pub fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
     }
 
     pub fn matches(&self, target: &Self) -> bool {
@@ -247,6 +259,16 @@ mod tests {
     }
 
     #[rstest]
+    #[case::lit(ElementAst::Lit(Element::C), false)]
+    #[case::wildcard(ElementAst::Undetermined, true)]
+    #[case::set(ElementAst::Set(vec![Element::C, Element::N]), false)]
+    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, false)]
+    #[case::reference(ElementAst::Ref("e".into()), false)]
+    fn test_element_ast_is_undetermined(#[case] ast: ElementAst, #[case] expected: bool) {
+        assert_eq!(ast.is_undetermined(), expected);
+    }
+
+    #[rstest]
     #[case::natural(IsotopeAst::Natural, true)]
     #[case::lit(IsotopeAst::Lit(12), true)]
     #[case::wildcard(IsotopeAst::Undetermined, false)]
@@ -266,7 +288,6 @@ mod tests {
     ) {
         assert_eq!(ast.is_ground(), expected);
     }
-
 
     #[rustfmt::skip]
     #[rstest]

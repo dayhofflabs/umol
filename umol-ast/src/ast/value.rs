@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use thiserror::Error;
+use super::error::EvaluationError;
 
 /// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`].
 pub type Bindings = HashMap<String, i64>;
@@ -16,47 +16,6 @@ pub enum ValueAst {
     Expr(Expr),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum Expr {
-    Lit(i64),
-    Var(String),
-    Neg(Box<Expr>),
-    BinOp(Box<Expr>, ArithOp, Box<Expr>),
-    Mem(Box<Expr>, Vec<i64>),
-    Rel(Box<Expr>, RelOp, Box<Expr>),
-    Not(Box<Expr>),
-    And(Vec<Expr>),
-    Or(Vec<Expr>),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ArithOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum RelOp {
-    Le,
-    Ge,
-    Eq,
-    Lt,
-    Gt,
-}
-
-#[derive(Clone, Debug, PartialEq, Error)]
-pub enum EvaluationError {
-    #[error("Unbound variable: {0}")]
-    UnboundVariable(String),
-    #[error("Division by zero")]
-    DivisionByZero,
-    #[error("Type mismatch")]
-    TypeMismatch,
-}
-
 impl ValueAst {
     pub fn new(value: i64) -> Self {
         Self::Lit(value)
@@ -64,6 +23,10 @@ impl ValueAst {
 
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Lit(_))
+    }
+
+    pub fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
     }
 
     /// Pattern matches target iff every integer target admits is also
@@ -126,30 +89,17 @@ impl ValueAst {
     }
 }
 
-/// Recursively bind every variable in `expr` to `value`
-fn collect_bindings(expr: &Expr, value: i64, bindings: &mut Bindings) {
-    match expr {
-        Expr::Var(name) => {
-            bindings.insert(name.clone(), value);
-        }
-        Expr::Neg(e) => collect_bindings(e, value, bindings),
-        Expr::BinOp(l, _, r) => {
-            collect_bindings(l, value, bindings);
-            collect_bindings(r, value, bindings);
-        }
-        Expr::Mem(e, _) => collect_bindings(e, value, bindings),
-        Expr::Rel(l, _, r) => {
-            collect_bindings(l, value, bindings);
-            collect_bindings(r, value, bindings);
-        }
-        Expr::Not(e) => collect_bindings(e, value, bindings),
-        Expr::And(exprs) | Expr::Or(exprs) => {
-            for e in exprs {
-                collect_bindings(e, value, bindings);
-            }
-        }
-        Expr::Lit(_) => {}
-    }
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Expr {
+    Lit(i64),
+    Var(String),
+    Neg(Box<Expr>),
+    BinOp(Box<Expr>, ArithOp, Box<Expr>),
+    Mem(Box<Expr>, Vec<i64>),
+    Rel(Box<Expr>, RelOp, Box<Expr>),
+    Not(Box<Expr>),
+    And(Vec<Expr>),
+    Or(Vec<Expr>),
 }
 
 impl Expr {
@@ -241,6 +191,50 @@ impl Expr {
             }
         }
     }
+}
+
+/// Recursively bind every variable in `expr` to `value`
+fn collect_bindings(expr: &Expr, value: i64, bindings: &mut Bindings) {
+    match expr {
+        Expr::Var(name) => {
+            bindings.insert(name.clone(), value);
+        }
+        Expr::Neg(e) => collect_bindings(e, value, bindings),
+        Expr::BinOp(l, _, r) => {
+            collect_bindings(l, value, bindings);
+            collect_bindings(r, value, bindings);
+        }
+        Expr::Mem(e, _) => collect_bindings(e, value, bindings),
+        Expr::Rel(l, _, r) => {
+            collect_bindings(l, value, bindings);
+            collect_bindings(r, value, bindings);
+        }
+        Expr::Not(e) => collect_bindings(e, value, bindings),
+        Expr::And(exprs) | Expr::Or(exprs) => {
+            for e in exprs {
+                collect_bindings(e, value, bindings);
+            }
+        }
+        Expr::Lit(_) => {}
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RelOp {
+    Le,
+    Ge,
+    Eq,
+    Lt,
+    Gt,
 }
 
 #[cfg(test)]

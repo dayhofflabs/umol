@@ -95,282 +95,7 @@ impl ToAst<AtomAst> for AtomDsl {
     }
 }
 
-fn raise_atom(ast: &mut AtomAst, cfg: &AtomAstConfig) {
-    if matches!(ast.isotope_mass, IsotopeAst::Undetermined) {
-        ast.isotope_mass = match cfg.isotope_mode {
-            IsotopeMode::Natural => IsotopeAst::Natural,
-            IsotopeMode::Required => IsotopeAst::Undetermined,
-        };
-    }
-    if matches!(ast.charge, ValueAst::Undetermined) {
-        ast.charge = match cfg.charge_mode {
-            NumericMode::Zero => ValueAst::Lit(0),
-            NumericMode::Required => ValueAst::Undetermined,
-        };
-    }
-    if matches!(ast.implicit_hydrogens, ImplicitHydrogensAst::Undetermined) {
-        ast.implicit_hydrogens = match cfg.implicit_h_mode {
-            ImplicitHydrogenMode::Normal => ImplicitHydrogensAst::Normal,
-            ImplicitHydrogenMode::Zero => ImplicitHydrogensAst::Lit(0),
-            ImplicitHydrogenMode::Required => ImplicitHydrogensAst::Undetermined,
-        };
-    }
-    if matches!(ast.lone_pairs, ValueAst::Undetermined) {
-        ast.lone_pairs = match cfg.lone_pairs_mode {
-            NumericMode::Zero => ValueAst::Lit(0),
-            NumericMode::Required => ValueAst::Undetermined,
-        };
-    }
-    raise_spin(&mut ast.spin, cfg);
-    raise_atom_constraints(&mut ast.constraints, cfg);
-}
-
-fn raise_spin(spin: &mut SpinStateAst, cfg: &AtomAstConfig) {
-    let u = mem::replace(&mut spin.unpaired, ValueAst::Undetermined);
-    let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
-    let resolved_u = if matches!(u, ValueAst::Undetermined) {
-        match cfg.unpaired_electrons_mode {
-            UnpairedElectronsMode::Zero => ValueAst::Lit(0),
-            UnpairedElectronsMode::Required => ValueAst::Undetermined,
-            UnpairedElectronsMode::Derived => match &m {
-                ValueAst::Lit(mm) => ValueAst::Lit(mm - 1),
-                _ => ValueAst::Undetermined,
-            },
-        }
-    } else {
-        u
-    };
-    let resolved_m = if matches!(m, ValueAst::Undetermined) {
-        match cfg.multiplicity_mode {
-            MultiplicityMode::Required => ValueAst::Undetermined,
-            MultiplicityMode::Derived => match &resolved_u {
-                ValueAst::Lit(uu) => ValueAst::Lit(uu + 1),
-                _ => ValueAst::Undetermined,
-            },
-        }
-    } else {
-        m
-    };
-    spin.unpaired = resolved_u;
-    spin.multiplicity = resolved_m;
-}
-
-fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomAstConfig) {
-    strip_undetermined(constraints);
-
-    if matches!(cfg.valence_mode, NumericMode::Zero)
-        && !constraints.contains(AtomConstraintKind::Valence)
-    {
-        constraints.set(AtomConstraint::Valence(ValueAst::Lit(0)));
-    }
-    if matches!(cfg.donated_pairs_mode, NumericMode::Zero)
-        && !constraints.contains(AtomConstraintKind::DonatedPairs)
-    {
-        constraints.set(AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
-    }
-    if matches!(cfg.accepted_pairs_mode, NumericMode::Zero)
-        && !constraints.contains(AtomConstraintKind::AcceptedPairs)
-    {
-        constraints.set(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
-    }
-    if !constraints.contains(AtomConstraintKind::MulticenterValence) {
-        match cfg.multicenter_valence_mode {
-            MulticenterValenceMode::NotMulticenter => {
-                constraints.set(AtomConstraint::MulticenterValence(
-                    MulticenterValenceConstraint::NotMulticenter,
-                ));
-            }
-            MulticenterValenceMode::Multicenter => {
-                constraints.set(AtomConstraint::MulticenterValence(
-                    MulticenterValenceConstraint::Multicenter(multicenter_plus_sugar()),
-                ));
-            }
-            MulticenterValenceMode::Required => {}
-        }
-    }
-    if !constraints.contains(AtomConstraintKind::AromaticValence) {
-        match cfg.aromatic_valence_mode {
-            AromaticValenceMode::NotAromatic => {
-                constraints.set(AtomConstraint::AromaticValence(
-                    AromaticValenceConstraint::NotAromatic,
-                ));
-            }
-            AromaticValenceMode::Aromatic => {
-                constraints.set(AtomConstraint::AromaticValence(
-                    AromaticValenceConstraint::Aromatic(aromatic_plus_sugar()),
-                ));
-            }
-            AromaticValenceMode::Required => {}
-        }
-    }
-}
-
-fn aromatic_plus_sugar() -> ValueAst {
-    ValueAst::Expr(Expr::Rel(
-        Box::new(Expr::Var("a".to_string())),
-        RelOp::Ge,
-        Box::new(Expr::Lit(0)),
-    ))
-}
-
-fn multicenter_plus_sugar() -> ValueAst {
-    ValueAst::Expr(Expr::Rel(
-        Box::new(Expr::Var("m".to_string())),
-        RelOp::Ge,
-        Box::new(Expr::Lit(0)),
-    ))
-}
-
-fn strip_undetermined(constraints: &mut AtomConstraints) {
-    let kinds_to_strip: Vec<AtomConstraintKind> = constraints
-        .iter()
-        .filter(|c| is_undetermined(c))
-        .map(|c| c.kind())
-        .collect();
-    for k in kinds_to_strip {
-        constraints.remove(k);
-    }
-}
-
-fn is_undetermined(c: &AtomConstraint) -> bool {
-    matches!(
-        c,
-        AtomConstraint::Valence(ValueAst::Undetermined)
-            | AtomConstraint::DonatedPairs(ValueAst::Undetermined)
-            | AtomConstraint::AcceptedPairs(ValueAst::Undetermined)
-            | AtomConstraint::Degree(ValueAst::Undetermined)
-            | AtomConstraint::Connectivity(ValueAst::Undetermined)
-            | AtomConstraint::RingConnectivity(ValueAst::Undetermined)
-            | AtomConstraint::TotalHydrogens(ValueAst::Undetermined)
-            | AtomConstraint::RingCount(ValueAst::Undetermined)
-            | AtomConstraint::RingSize(ValueAst::Undetermined)
-            | AtomConstraint::AromaticValence(AromaticValenceConstraint::Undetermined)
-            | AtomConstraint::MulticenterValence(MulticenterValenceConstraint::Undetermined)
-    )
-}
-
-fn lower_atom(ast: &mut AtomAst, cfg: &AtomAstConfig) {
-    if matches!(
-        (&cfg.isotope_mode, &ast.isotope_mass),
-        (IsotopeMode::Natural, IsotopeAst::Natural)
-    ) {
-        ast.isotope_mass = IsotopeAst::Undetermined;
-    }
-    if matches!(
-        (&cfg.charge_mode, &ast.charge),
-        (NumericMode::Zero, ValueAst::Lit(0))
-    ) {
-        ast.charge = ValueAst::Undetermined;
-    }
-    match (&cfg.implicit_h_mode, &ast.implicit_hydrogens) {
-        (ImplicitHydrogenMode::Normal, ImplicitHydrogensAst::Normal) => {
-            ast.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
-        }
-        (ImplicitHydrogenMode::Zero, ImplicitHydrogensAst::Lit(0)) => {
-            ast.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
-        }
-        _ => {}
-    }
-    if matches!(
-        (&cfg.lone_pairs_mode, &ast.lone_pairs),
-        (NumericMode::Zero, ValueAst::Lit(0))
-    ) {
-        ast.lone_pairs = ValueAst::Undetermined;
-    }
-    lower_spin(&mut ast.spin, cfg);
-    lower_atom_constraints(&mut ast.constraints, cfg);
-}
-
-fn lower_spin(spin: &mut SpinStateAst, cfg: &AtomAstConfig) {
-    if let (ValueAst::Lit(uu), ValueAst::Lit(mm)) = (&spin.unpaired, &spin.multiplicity) {
-        let derived = *mm == uu + 1;
-        let strip_u = match cfg.unpaired_electrons_mode {
-            UnpairedElectronsMode::Zero => *uu == 0,
-            UnpairedElectronsMode::Derived => {
-                derived && matches!(cfg.multiplicity_mode, MultiplicityMode::Derived)
-            }
-            UnpairedElectronsMode::Required => false,
-        };
-        let strip_m = matches!(cfg.multiplicity_mode, MultiplicityMode::Derived) && derived;
-        if strip_u {
-            spin.unpaired = ValueAst::Undetermined;
-        }
-        if strip_m {
-            spin.multiplicity = ValueAst::Undetermined;
-        }
-    }
-}
-
-fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomAstConfig) {
-    if matches!(cfg.valence_mode, NumericMode::Zero)
-        && matches!(
-            constraints.get(AtomConstraintKind::Valence),
-            Some(AtomConstraint::Valence(ValueAst::Lit(0)))
-        )
-    {
-        constraints.remove(AtomConstraintKind::Valence);
-    }
-    if matches!(cfg.donated_pairs_mode, NumericMode::Zero)
-        && matches!(
-            constraints.get(AtomConstraintKind::DonatedPairs),
-            Some(AtomConstraint::DonatedPairs(ValueAst::Lit(0)))
-        )
-    {
-        constraints.remove(AtomConstraintKind::DonatedPairs);
-    }
-    if matches!(cfg.accepted_pairs_mode, NumericMode::Zero)
-        && matches!(
-            constraints.get(AtomConstraintKind::AcceptedPairs),
-            Some(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)))
-        )
-    {
-        constraints.remove(AtomConstraintKind::AcceptedPairs);
-    }
-    match cfg.multicenter_valence_mode {
-        MulticenterValenceMode::NotMulticenter => {
-            if matches!(
-                constraints.get(AtomConstraintKind::MulticenterValence),
-                Some(AtomConstraint::MulticenterValence(
-                    MulticenterValenceConstraint::NotMulticenter
-                ))
-            ) {
-                constraints.remove(AtomConstraintKind::MulticenterValence);
-            }
-        }
-        MulticenterValenceMode::Multicenter => {
-            if let Some(AtomConstraint::MulticenterValence(MulticenterValenceConstraint::Multicenter(v))) =
-                constraints.get(AtomConstraintKind::MulticenterValence)
-            {
-                if is_plus_sugar(v, "m", 0) {
-                    constraints.remove(AtomConstraintKind::MulticenterValence);
-                }
-            }
-        }
-        MulticenterValenceMode::Required => {}
-    }
-    match cfg.aromatic_valence_mode {
-        AromaticValenceMode::NotAromatic => {
-            if matches!(
-                constraints.get(AtomConstraintKind::AromaticValence),
-                Some(AtomConstraint::AromaticValence(
-                    AromaticValenceConstraint::NotAromatic
-                ))
-            ) {
-                constraints.remove(AtomConstraintKind::AromaticValence);
-            }
-        }
-        AromaticValenceMode::Aromatic => {
-            if let Some(AtomConstraint::AromaticValence(AromaticValenceConstraint::Aromatic(v))) =
-                constraints.get(AtomConstraintKind::AromaticValence)
-            {
-                if is_plus_sugar(v, "a", 0) {
-                    constraints.remove(AtomConstraintKind::AromaticValence);
-                }
-            }
-        }
-        AromaticValenceMode::Required => {}
-    }
-}
+// -- Parse -------------------------------------------------------
 
 /// Parse a complete atom-string into an `AtomDsl`.
 pub fn parse_atom(input: &str) -> Result<AtomDsl, ParseError> {
@@ -385,10 +110,6 @@ pub(crate) fn atom(i: &mut &str) -> PResult<AtomDsl> {
     let mut form = AtomDsl(AtomAst::new(el));
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
-}
-
-fn is_set(v: &ValueAst) -> bool {
-    !matches!(v, ValueAst::Undetermined)
 }
 
 fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(), ParseError> {
@@ -434,6 +155,10 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
         }
     }
     Ok(())
+}
+
+fn is_set(v: &ValueAst) -> bool {
+    !matches!(v, ValueAst::Undetermined)
 }
 
 fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
@@ -609,11 +334,13 @@ fn aromatic_valence(i: &mut &str) -> PResult<AromaticValenceConstraint> {
         alt((
             "*".value(AromaticValenceConstraint::Undetermined),
             "!".value(AromaticValenceConstraint::NotAromatic),
-            "+".value(AromaticValenceConstraint::Aromatic(ValueAst::Expr(Expr::Rel(
-                Box::new(Expr::Var("a".to_string())),
-                RelOp::Ge,
-                Box::new(Expr::Lit(0)),
-            )))),
+            "+".value(AromaticValenceConstraint::Aromatic(ValueAst::Expr(
+                Expr::Rel(
+                    Box::new(Expr::Var("a".to_string())),
+                    RelOp::Ge,
+                    Box::new(Expr::Lit(0)),
+                ),
+            ))),
             value.map(AromaticValenceConstraint::Aromatic),
             empty.value(AromaticValenceConstraint::Aromatic(ValueAst::Lit(1))),
         )),
@@ -642,6 +369,8 @@ fn multicenter_valence(i: &mut &str) -> PResult<MulticenterValenceConstraint> {
     .parse_next(i)
     .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))
 }
+
+// -- Format -------------------------------------------------------
 
 fn fmt_atom_ast(f: &mut fmt::Formatter<'_>, ast: &AtomAst) -> fmt::Result {
     fmt_element(f, &ast.element)?;
@@ -776,6 +505,250 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
     }
 }
 
+// -- Raise -------------------------------------------------------
+
+fn raise_atom(ast: &mut AtomAst, cfg: &AtomAstConfig) {
+    if matches!(ast.isotope_mass, IsotopeAst::Undetermined) {
+        ast.isotope_mass = match cfg.isotope_mode {
+            IsotopeMode::Natural => IsotopeAst::Natural,
+            IsotopeMode::Required => IsotopeAst::Undetermined,
+        };
+    }
+    if matches!(ast.charge, ValueAst::Undetermined) {
+        ast.charge = match cfg.charge_mode {
+            NumericMode::Zero => ValueAst::Lit(0),
+            NumericMode::Required => ValueAst::Undetermined,
+        };
+    }
+    if matches!(ast.implicit_hydrogens, ImplicitHydrogensAst::Undetermined) {
+        ast.implicit_hydrogens = match cfg.implicit_h_mode {
+            ImplicitHydrogenMode::Normal => ImplicitHydrogensAst::Normal,
+            ImplicitHydrogenMode::Zero => ImplicitHydrogensAst::Lit(0),
+            ImplicitHydrogenMode::Required => ImplicitHydrogensAst::Undetermined,
+        };
+    }
+    if matches!(ast.lone_pairs, ValueAst::Undetermined) {
+        ast.lone_pairs = match cfg.lone_pairs_mode {
+            NumericMode::Zero => ValueAst::Lit(0),
+            NumericMode::Required => ValueAst::Undetermined,
+        };
+    }
+    raise_spin(&mut ast.spin, cfg);
+    raise_atom_constraints(&mut ast.constraints, cfg);
+}
+
+fn raise_spin(spin: &mut SpinStateAst, cfg: &AtomAstConfig) {
+    let u = mem::replace(&mut spin.unpaired, ValueAst::Undetermined);
+    let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
+    let resolved_u = if matches!(u, ValueAst::Undetermined) {
+        match cfg.unpaired_electrons_mode {
+            UnpairedElectronsMode::Zero => ValueAst::Lit(0),
+            UnpairedElectronsMode::Required => ValueAst::Undetermined,
+            UnpairedElectronsMode::Derived => match &m {
+                ValueAst::Lit(mm) => ValueAst::Lit(mm - 1),
+                _ => ValueAst::Undetermined,
+            },
+        }
+    } else {
+        u
+    };
+    let resolved_m = if matches!(m, ValueAst::Undetermined) {
+        match cfg.multiplicity_mode {
+            MultiplicityMode::Required => ValueAst::Undetermined,
+            MultiplicityMode::Derived => match &resolved_u {
+                ValueAst::Lit(uu) => ValueAst::Lit(uu + 1),
+                _ => ValueAst::Undetermined,
+            },
+        }
+    } else {
+        m
+    };
+    spin.unpaired = resolved_u;
+    spin.multiplicity = resolved_m;
+}
+
+fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomAstConfig) {
+    constraints.remove_undetermined();
+
+    if matches!(cfg.valence_mode, NumericMode::Zero)
+        && !constraints.contains(AtomConstraintKind::Valence)
+    {
+        constraints.set(AtomConstraint::Valence(ValueAst::Lit(0)));
+    }
+    if matches!(cfg.donated_pairs_mode, NumericMode::Zero)
+        && !constraints.contains(AtomConstraintKind::DonatedPairs)
+    {
+        constraints.set(AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
+    }
+    if matches!(cfg.accepted_pairs_mode, NumericMode::Zero)
+        && !constraints.contains(AtomConstraintKind::AcceptedPairs)
+    {
+        constraints.set(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
+    }
+    if !constraints.contains(AtomConstraintKind::AromaticValence) {
+        match cfg.aromatic_valence_mode {
+            AromaticValenceMode::NotAromatic => {
+                constraints.set(AtomConstraint::AromaticValence(
+                    AromaticValenceConstraint::NotAromatic,
+                ));
+            }
+            AromaticValenceMode::Aromatic => {
+                constraints.set(AtomConstraint::AromaticValence(
+                    AromaticValenceConstraint::Aromatic(ValueAst::Undetermined),
+                ));
+            }
+            AromaticValenceMode::Required => {}
+        }
+    }
+    if !constraints.contains(AtomConstraintKind::MulticenterValence) {
+        match cfg.multicenter_valence_mode {
+            MulticenterValenceMode::NotMulticenter => {
+                constraints.set(AtomConstraint::MulticenterValence(
+                    MulticenterValenceConstraint::NotMulticenter,
+                ));
+            }
+            MulticenterValenceMode::Multicenter => {
+                constraints.set(AtomConstraint::MulticenterValence(
+                    MulticenterValenceConstraint::Multicenter(ValueAst::Undetermined),
+                ));
+            }
+            MulticenterValenceMode::Required => {}
+        }
+    }
+}
+
+// -- Lower -------------------------------------------------------
+
+fn lower_atom(ast: &mut AtomAst, cfg: &AtomAstConfig) {
+    if matches!(
+        (&cfg.isotope_mode, &ast.isotope_mass),
+        (IsotopeMode::Natural, IsotopeAst::Natural)
+    ) {
+        ast.isotope_mass = IsotopeAst::Undetermined;
+    }
+    if matches!(
+        (&cfg.charge_mode, &ast.charge),
+        (NumericMode::Zero, ValueAst::Lit(0))
+    ) {
+        ast.charge = ValueAst::Undetermined;
+    }
+    match (&cfg.implicit_h_mode, &ast.implicit_hydrogens) {
+        (ImplicitHydrogenMode::Normal, ImplicitHydrogensAst::Normal) => {
+            ast.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
+        }
+        (ImplicitHydrogenMode::Zero, ImplicitHydrogensAst::Lit(0)) => {
+            ast.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
+        }
+        _ => {}
+    }
+    if matches!(
+        (&cfg.lone_pairs_mode, &ast.lone_pairs),
+        (NumericMode::Zero, ValueAst::Lit(0))
+    ) {
+        ast.lone_pairs = ValueAst::Undetermined;
+    }
+    lower_spin(&mut ast.spin, cfg);
+    lower_atom_constraints(&mut ast.constraints, cfg);
+}
+
+fn lower_spin(spin: &mut SpinStateAst, cfg: &AtomAstConfig) {
+    let uu = if let ValueAst::Lit(n) = spin.unpaired {
+        Some(n)
+    } else {
+        None
+    };
+    let mm = if let ValueAst::Lit(n) = spin.multiplicity {
+        Some(n)
+    } else {
+        None
+    };
+    let derived = matches!((uu, mm), (Some(u), Some(m)) if m == u + 1);
+
+    let strip_m = matches!(cfg.multiplicity_mode, MultiplicityMode::Derived) && derived;
+    let strip_u = match cfg.unpaired_electrons_mode {
+        UnpairedElectronsMode::Zero => uu == Some(0),
+        UnpairedElectronsMode::Derived => derived && mm.is_some() && !strip_m,
+        UnpairedElectronsMode::Required => false,
+    };
+    if strip_u {
+        spin.unpaired = ValueAst::Undetermined;
+    }
+    if strip_m {
+        spin.multiplicity = ValueAst::Undetermined;
+    }
+}
+
+fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomAstConfig) {
+    if matches!(cfg.valence_mode, NumericMode::Zero)
+        && matches!(
+            constraints.get(AtomConstraintKind::Valence),
+            Some(AtomConstraint::Valence(ValueAst::Lit(0)))
+        )
+    {
+        constraints.remove(AtomConstraintKind::Valence);
+    }
+    if matches!(cfg.donated_pairs_mode, NumericMode::Zero)
+        && matches!(
+            constraints.get(AtomConstraintKind::DonatedPairs),
+            Some(AtomConstraint::DonatedPairs(ValueAst::Lit(0)))
+        )
+    {
+        constraints.remove(AtomConstraintKind::DonatedPairs);
+    }
+    if matches!(cfg.accepted_pairs_mode, NumericMode::Zero)
+        && matches!(
+            constraints.get(AtomConstraintKind::AcceptedPairs),
+            Some(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)))
+        )
+    {
+        constraints.remove(AtomConstraintKind::AcceptedPairs);
+    }
+    match cfg.multicenter_valence_mode {
+        MulticenterValenceMode::NotMulticenter => {
+            if matches!(
+                constraints.get(AtomConstraintKind::MulticenterValence),
+                Some(AtomConstraint::MulticenterValence(
+                    MulticenterValenceConstraint::NotMulticenter
+                ))
+            ) {
+                constraints.remove(AtomConstraintKind::MulticenterValence);
+            }
+        }
+        MulticenterValenceMode::Multicenter => {
+            if let Some(AtomConstraint::MulticenterValence(
+                MulticenterValenceConstraint::Multicenter(v),
+            )) = constraints.get(AtomConstraintKind::MulticenterValence)
+            {
+                if is_plus_sugar(v, "m", 0) {
+                    constraints.remove(AtomConstraintKind::MulticenterValence);
+                }
+            }
+        }
+        MulticenterValenceMode::Required => {}
+    }
+    match cfg.aromatic_valence_mode {
+        AromaticValenceMode::NotAromatic => {
+            if matches!(
+                constraints.get(AtomConstraintKind::AromaticValence),
+                Some(AtomConstraint::AromaticValence(
+                    AromaticValenceConstraint::NotAromatic
+                ))
+            ) {
+                constraints.remove(AtomConstraintKind::AromaticValence);
+            }
+        }
+        AromaticValenceMode::Aromatic => {
+            if let Some(AtomConstraint::AromaticValence(AromaticValenceConstraint::Aromatic(v))) =
+                constraints.get(AtomConstraintKind::AromaticValence)
+            {
+                if is_plus_sugar(v, "a", 0) {
+                    constraints.remove(AtomConstraintKind::AromaticValence);
+                }
+            }
+        }
+        AromaticValenceMode::Required => {}
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -992,7 +965,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::unknown("#y", ParseError::UnknownAtomPredicate("#y".to_string()))]
     #[case::unknown_tag("#z", ParseError::UnknownAtomPredicate("#z".to_string()))]
     #[case::trailing_no_hash("fo", ParseError::TrailingInput("fo".to_string()))]
     fn test_atom_predicate_error(#[case] input: &str, #[case] expected: ParseError) {
@@ -1058,5 +1030,192 @@ mod tests {
         let raised = input.to_ast(&cfg).unwrap();
         let lowered = AtomDsl::from_ast(&raised, &cfg).unwrap();
         assert_eq!(input, lowered);
+    }
+
+    fn spin_cfg(u_mode: UnpairedElectronsMode, m_mode: MultiplicityMode) -> AtomAstConfig {
+        AtomAstConfig {
+            unpaired_electrons_mode: u_mode,
+            multiplicity_mode: m_mode,
+            ..AtomAstConfig::open()
+        }
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    // u: Zero, m: Derived
+    #[case::zd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::zd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::zd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::zd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::zd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(2))]
+    #[case::zd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::zd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    // u: Zero, m: Required
+    #[case::zr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::zr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::zr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::zr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::zr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Lit(2))]
+    #[case::zr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::zr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    // u: Required, m: Derived
+    #[case::rd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::rd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::rd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::rd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::rd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::rd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::rd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    // u: Required, m: Required
+    #[case::rr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::rr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::rr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::rr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::rr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::rr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::rr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    // u: Derived, m: Required
+    #[case::dr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::dr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::dr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::dr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::dr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::dr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::dr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    // u: Derived, m: Derived
+    #[case::dd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::dd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::dd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::dd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::dd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::dd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::dd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    fn test_raise_spin(
+        #[case] init_u: ValueAst,
+        #[case] init_m: ValueAst,
+        #[case] u_mode: UnpairedElectronsMode,
+        #[case] m_mode: MultiplicityMode,
+        #[case] expected_u: ValueAst,
+        #[case] expected_m: ValueAst,
+    ) {
+        let mut spin = SpinStateAst::from_values(init_u, init_m);
+        let cfg = spin_cfg(u_mode, m_mode);
+        raise_spin(&mut spin, &cfg);
+        assert_eq!(spin.unpaired, expected_u);
+        assert_eq!(spin.multiplicity, expected_m);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    // u: Zero, m: Derived
+    #[case::zd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::zd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::zd_zero_nonderived(ValueAst::Lit(0), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::zd_nonzero_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    // u: Zero, m: Required
+    #[case::zr_zero_mundef(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::zr_nonzero_mundef(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::zr_zero_derived(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::zr_zero_doublet(ValueAst::Lit(0), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::zr_nonzero_singlet(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::zr_nonzero_doublet(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    // u: Required, m: Derived
+    #[case::rd_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::rd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::rd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::rd_uundef_msinglet(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::rd_uundef_mdoublet(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::rd_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    // u: Required, m: Required — nothing strips.
+    #[case::rr_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::rr_full(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
+    // u: Derived, m: Required
+    #[case::dr_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::dr_zero_mundef(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::dr_nonzero_mundef(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::dr_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::dr_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::dr_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    // u: Derived, m: Derived — tie-break keeps u explicit.
+    #[case::dd_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::dd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::dd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::dd_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    fn test_lower_spin(
+        #[case] init_u: ValueAst,
+        #[case] init_m: ValueAst,
+        #[case] u_mode: UnpairedElectronsMode,
+        #[case] m_mode: MultiplicityMode,
+        #[case] expected_u: ValueAst,
+        #[case] expected_m: ValueAst,
+    ) {
+        let mut spin = SpinStateAst::from_values(init_u, init_m);
+        let cfg = spin_cfg(u_mode, m_mode);
+        lower_spin(&mut spin, &cfg);
+        assert_eq!(spin.unpaired, expected_u);
+        assert_eq!(spin.multiplicity, expected_m);
+    }
+
+    /// AST preservation: the raised AST is a fixed point of `lower → raise`.
+    /// Lowering strips default content; re-raising the result must recover the same AST.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::zd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
+    #[case::zd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
+    #[case::zd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
+    #[case::zd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
+    #[case::zd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
+    #[case::zd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
+    #[case::zd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
+    #[case::zr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
+    #[case::zr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
+    #[case::zr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
+    #[case::zr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
+    #[case::zr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
+    #[case::zr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
+    #[case::zr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
+    #[case::rd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
+    #[case::rd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
+    #[case::rd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
+    #[case::rd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
+    #[case::rd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
+    #[case::rd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
+    #[case::rd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
+    #[case::rr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required)]
+    #[case::rr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required)]
+    #[case::rr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required)]
+    #[case::rr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required)]
+    #[case::rr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Required)]
+    #[case::rr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required)]
+    #[case::rr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Required)]
+    #[case::dr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
+    #[case::dr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
+    #[case::dr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
+    #[case::dr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
+    #[case::dr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
+    #[case::dr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
+    #[case::dr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
+    #[case::dd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
+    #[case::dd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
+    #[case::dd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
+    #[case::dd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
+    #[case::dd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
+    #[case::dd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
+    #[case::dd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
+    fn test_spin_roundtrip_preserves_ast(
+        #[case] init_u: ValueAst,
+        #[case] init_m: ValueAst,
+        #[case] u_mode: UnpairedElectronsMode,
+        #[case] m_mode: MultiplicityMode,
+    ) {
+        let cfg = spin_cfg(u_mode, m_mode);
+        let mut raised = SpinStateAst::from_values(init_u, init_m);
+        raise_spin(&mut raised, &cfg);
+
+        let mut lowered_then_raised = raised.clone();
+        lower_spin(&mut lowered_then_raised, &cfg);
+        raise_spin(&mut lowered_then_raised, &cfg);
+
+        assert_eq!(lowered_then_raised, raised);
     }
 }

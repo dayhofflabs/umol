@@ -1,11 +1,11 @@
 //! Error types for molecule AST operations.
 
-use std::error::Error;
+use thiserror::Error;
 use std::fmt;
 
 use super::idx::AtomIdx;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Error)]
 pub enum RewriteError {
     DanglingEdge { atom: AtomIdx, neighbor: AtomIdx },
     DanglingRelation { atom: AtomIdx },
@@ -34,4 +34,13 @@ impl fmt::Display for RewriteError {
     }
 }
 
-impl Error for RewriteError {}
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum EvaluationError {
+    #[error("Unbound variable: {0}")]
+    UnboundVariable(String),
+    #[error("Division by zero")]
+    DivisionByZero,
+    #[error("Type mismatch")]
+    TypeMismatch,
+}
+
