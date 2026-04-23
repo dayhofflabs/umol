@@ -480,6 +480,24 @@ impl<'de> EdnStreamDeserializer<'de> {
         })
     }
 
+    /// Like [`read_subgrammar`], but requires the string to be the only
+    /// value in the input: reads the string token, parses its contents via
+    /// `FromStr`, and then requires EOF. Use this to implement
+    /// `FromEdn::from_edn_str` on a wrapper type whose EDN form is a single
+    /// string literal handed to another grammar.
+    ///
+    /// [`read_subgrammar`]: Self::read_subgrammar
+    pub fn read_subgrammar_all<T: FromStr>(
+        &mut self,
+        grammar: &'static str,
+    ) -> Result<T, EdnError>
+    where
+        T::Err: fmt::Display,
+    {
+        let out = self.read_subgrammar::<T>(grammar)?;
+        self.expect_eof()?;
+        Ok(out)
+    }
 }
 
 #[inline]
@@ -698,6 +716,37 @@ mod tests {
         let mut d = EdnStreamDeserializer::new(r#""not_a_number""#);
         let err = d.read_subgrammar::<i64>("test").unwrap_err();
         assert!(matches!(err, EdnError::De(DeError::Subgrammar { grammar: "test", .. })));
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_read_subgrammar_all() {
+        let mut d = EdnStreamDeserializer::new(r#""42""#);
+        let v: i64 = d.read_subgrammar_all("test").unwrap();
+        assert_eq!(v, 42);
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_read_subgrammar_all_trailing_content() {
+        // Trailing content after the string literal must be rejected (expect_eof).
+        let mut d = EdnStreamDeserializer::new(r#""42" extra"#);
+        let err = d.read_subgrammar_all::<i64>("test").unwrap_err();
+        assert!(matches!(
+            err,
+            EdnError::Parse(ParseError::TrailingContent { .. })
+        ));
+    }
+
+    #[test]
+    fn test_edn_stream_deserializer_read_subgrammar_all_subgrammar_error() {
+        let mut d = EdnStreamDeserializer::new(r#""nope""#);
+        let err = d.read_subgrammar_all::<i64>("test").unwrap_err();
+        assert!(matches!(
+            err,
+            EdnError::De(DeError::Subgrammar {
+                grammar: "test",
+                ..
+            })
+        ));
     }
 
     #[test]
