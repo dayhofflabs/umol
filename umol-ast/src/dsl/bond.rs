@@ -13,10 +13,10 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, fmt_value, lower_spin,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin,
     optional_value, raise_spin, ring_count, SpinPredicate,
 };
-use super::value::value;
+use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
 use crate::ast::config::{BondAstConfig, NumericMode};
 use crate::ast::constraint::BondConstraint;
@@ -247,6 +247,83 @@ fn raise_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
     raise_spin(spin, cfg.unpaired_electrons_mode, cfg.multiplicity_mode);
 }
 
+// -- Constraint DSL -------------------
+
+/// Surface DSL wrapper around `BondConstraint`. EDN form: the keyword
+/// `:aromatic` (flag variant, no value) or a single-key map
+/// `{:ring-count <value>}` / `{:ring-size <value>}`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct BondConstraintDsl(pub BondConstraint);
+
+impl BondConstraintDsl {
+    pub fn from_ast(c: &BondConstraint) -> Self {
+        Self(c.clone())
+    }
+
+    pub fn into_ast(self) -> BondConstraint {
+        self.0
+    }
+}
+
+impl<'de> FromEdn<'de> for BondConstraintDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Keyword(k) if k.name() == "aromatic" => Ok(Self(BondConstraint::Aromatic)),
+            Edn::Map(m) if m.len() == 1 => {
+                let (k, v) = m.iter().next().unwrap();
+                let Edn::Keyword(key) = k else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "keyword key",
+                        got: k.kind(),
+                        path: vec!["bond-constraint".into()],
+                    });
+                };
+                let c = match key.name() {
+                    "ring-count" => BondConstraint::RingCount(
+                        super::value::ValueDsl::from_edn(v)?.into_ast(),
+                    ),
+                    "ring-size" => BondConstraint::RingSize(
+                        super::value::ValueDsl::from_edn(v)?.into_ast(),
+                    ),
+                    other => {
+                        return Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["bond-constraint".into()],
+                        });
+                    }
+                };
+                Ok(Self(c))
+            }
+            other => Err(DeError::TypeMismatch {
+                expected: ":aromatic / {:ring-count <value>} / {:ring-size <value>}",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for BondConstraintDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        match &self.0 {
+            BondConstraint::Aromatic => {
+                Edn::Keyword(umol_edn::EdnKeyword::owned("aromatic".into()))
+            }
+            BondConstraint::RingCount(v) => bond_constraint_single_key("ring-count", v),
+            BondConstraint::RingSize(v) => bond_constraint_single_key("ring-size", v),
+        }
+    }
+}
+
+fn bond_constraint_single_key(key: &str, v: &ValueAst) -> Edn<'static> {
+    let mut m = umol_edn::EdnMap::with_capacity(1);
+    m.insert(
+        Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())),
+        super::value::ValueDsl::from_ast(v).to_edn(),
+    );
+    Edn::Map(m)
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -388,5 +465,52 @@ mod tests {
         let tree = umol_edn::read_string(input).unwrap();
         let via_tree = BondDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
+    }
+
+    // -- BondConstraintDsl ----------------
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(BondConstraint::Aromatic, ":aromatic")]
+    #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
+    #[case::ring_count_undetermined(BondConstraint::RingCount(ValueAst::Undetermined), "{:ring-count :undetermined}")]
+    #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
+    #[case::ring_size_set(BondConstraint::RingSize(ValueAst::LitSet(vec![5, 6])), "{:ring-size [5 6]}")]
+    fn test_bond_constraint_dsl_roundtrip(
+        #[case] input: BondConstraint,
+        #[case] edn_source: &str,
+    ) {
+        let dsl = BondConstraintDsl::from_ast(&input);
+        let edn = dsl.to_edn();
+        let expected = umol_edn::read_string(edn_source).unwrap();
+        assert_eq!(edn, expected, "render mismatch");
+        let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
+        assert_eq!(parsed.into_ast(), input, "parse-back mismatch");
+    }
+
+    #[rstest]
+    fn test_bond_constraint_dsl_rejects_wrong_shape() {
+        let err = BondConstraintDsl::from_edn(&Edn::Int(3)).unwrap_err();
+        assert!(matches!(err, DeError::TypeMismatch { .. }));
+    }
+
+    #[rstest]
+    fn test_bond_constraint_dsl_rejects_unknown_key() {
+        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+        let err = BondConstraintDsl::from_edn(&edn).unwrap_err();
+        assert!(matches!(err, DeError::UnknownField { .. }));
+    }
+
+    #[rstest]
+    fn test_bond_constraint_dsl_accepts_value_as_string_subgrammar() {
+        let edn = umol_edn::read_string(r##"{:ring-size "?n :: {5,6}"}"##).unwrap();
+        let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
+        assert_eq!(
+            parsed.into_ast(),
+            BondConstraint::RingSize(ValueAst::Expr(Expr::Mem(
+                Box::new(Expr::Var("n".into())),
+                vec![5, 6],
+            )))
+        );
     }
 }

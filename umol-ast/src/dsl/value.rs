@@ -1,5 +1,11 @@
-//! Value DSL: parser and display helpers.
+//! Value DSL: parser, `Display`, EDN boundary. The string and EDN forms of a
+//! `ValueAst` are DSL concerns, so they all live on `ValueDsl` here. The AST
+//! type itself has no `Display` impl.
 
+use std::borrow::Cow;
+use std::fmt::{self, Display, Write};
+
+use umol_edn::{DeError, Edn, EdnKeyword, FromEdn, ToEdn};
 use winnow::ascii::{dec_int, multispace0};
 use winnow::combinator::{alt, delimited, opt, preceded, repeat, separated, terminated};
 use winnow::error::ErrMode;
@@ -8,6 +14,205 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use crate::ast::value::{ArithOp, Expr, RelOp, ValueAst};
+
+/// Surface DSL wrapper around `ValueAst`. EDN form is hybrid: `Lit` → `Int`,
+/// `Undetermined` → `:undetermined`, `LitSet` → vector of ints, `Expr` →
+/// string via the value subgrammar. `Expr` is string-encoded because EDN has
+/// no native representation for the boolean/arithmetic grammar and round-trip
+/// fidelity is mandatory.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct ValueDsl(pub ValueAst);
+
+impl ValueDsl {
+    pub fn from_ast(v: &ValueAst) -> Self {
+        Self(v.clone())
+    }
+
+    pub fn into_ast(self) -> ValueAst {
+        self.0
+    }
+}
+
+impl Display for ValueDsl {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_value(f, &self.0)
+    }
+}
+
+impl<'de> FromEdn<'de> for ValueDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let v = match edn {
+            Edn::Int(n) => ValueAst::Lit(*n),
+            Edn::Keyword(k) if k.name() == "undetermined" => ValueAst::Undetermined,
+            Edn::Vector(xs) => {
+                let mut out = Vec::with_capacity(xs.len());
+                for e in xs.iter() {
+                    let Edn::Int(n) = e else {
+                        return Err(DeError::TypeMismatch {
+                            expected: "int (value-set element)",
+                            got: e.kind(),
+                            path: Vec::new(),
+                        });
+                    };
+                    out.push(*n);
+                }
+                ValueAst::LitSet(out)
+            }
+            Edn::Str(s) => parse_value(s).map_err(|e| DeError::subgrammar("value", e))?,
+            other => {
+                return Err(DeError::TypeMismatch {
+                    expected: "value (int, :undetermined, vector, or string)",
+                    got: other.kind(),
+                    path: Vec::new(),
+                });
+            }
+        };
+        Ok(Self(v))
+    }
+}
+
+impl ToEdn for ValueDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        match &self.0 {
+            ValueAst::Lit(n) => Edn::Int(*n),
+            ValueAst::Undetermined => Edn::Keyword(EdnKeyword::owned("undetermined".to_string())),
+            ValueAst::LitSet(xs) => {
+                Edn::Vector(xs.iter().map(|n| Edn::Int(*n)).collect::<Vec<_>>().into())
+            }
+            ValueAst::Expr(_) => Edn::Str(Cow::Owned(self.to_string())),
+        }
+    }
+}
+
+// -- Format -------------------
+//
+// `Display for ValueDsl` delegates to the helpers below, which know how to
+// render any `ValueAst` or `Expr` node in the surface subgrammar. They are
+// module-private: DSL callers go through `ValueDsl`; predicates/atom/bond
+// strings use `fmt_value` directly (same input type, same output form).
+
+pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
+    match v {
+        ValueAst::Undetermined => f.write_char('*'),
+        ValueAst::Lit(n) => write!(f, "{}", n),
+        ValueAst::LitSet(s) => {
+            f.write_char('{')?;
+            for (i, n) in s.iter().enumerate() {
+                if i > 0 {
+                    f.write_char(',')?;
+                }
+                write!(f, "{}", n)?;
+            }
+            f.write_char('}')
+        }
+        ValueAst::Expr(e) => fmt_expr(f, e),
+    }
+}
+
+fn arith_op_str(op: ArithOp) -> &'static str {
+    match op {
+        ArithOp::Add => "+",
+        ArithOp::Sub => "-",
+        ArithOp::Mul => "*",
+        ArithOp::Div => "/",
+        ArithOp::Rem => "%",
+    }
+}
+
+fn rel_op_str(op: RelOp) -> &'static str {
+    match op {
+        RelOp::Le => "<=",
+        RelOp::Ge => ">=",
+        RelOp::Eq => "==",
+        RelOp::Lt => "<",
+        RelOp::Gt => ">",
+    }
+}
+
+/// Precedence level for the `Expr` grammar: lowest-binding (`Or`) to
+/// highest-binding (atom). Matches the parser's recursive-descent layering.
+/// Used to decide where `fmt_expr` wraps a child in parens to reparse to the
+/// same tree.
+fn expr_prec(e: &Expr) -> u8 {
+    match e {
+        Expr::Or(_) => 0,
+        Expr::And(_) => 1,
+        Expr::Not(_) => 2,
+        Expr::Rel(..) => 3,
+        Expr::Mem(..) => 4,
+        Expr::BinOp(_, ArithOp::Add | ArithOp::Sub, _) => 5,
+        Expr::BinOp(_, ArithOp::Mul | ArithOp::Div | ArithOp::Rem, _) => 6,
+        Expr::Neg(_) => 7,
+        Expr::Lit(_) | Expr::Var(_) => 8,
+    }
+}
+
+fn fmt_paren(f: &mut fmt::Formatter<'_>, e: &Expr, paren: bool) -> fmt::Result {
+    if paren {
+        f.write_char('(')?;
+        fmt_expr(f, e)?;
+        f.write_char(')')
+    } else {
+        fmt_expr(f, e)
+    }
+}
+
+fn fmt_expr(f: &mut fmt::Formatter<'_>, e: &Expr) -> fmt::Result {
+    let parent = expr_prec(e);
+    match e {
+        Expr::Or(xs) => {
+            for (i, x) in xs.iter().enumerate() {
+                if i > 0 {
+                    f.write_str(" | ")?;
+                }
+                fmt_paren(f, x, expr_prec(x) < parent)?;
+            }
+            Ok(())
+        }
+        Expr::And(xs) => {
+            for (i, x) in xs.iter().enumerate() {
+                if i > 0 {
+                    f.write_str(" & ")?;
+                }
+                fmt_paren(f, x, expr_prec(x) < parent)?;
+            }
+            Ok(())
+        }
+        Expr::Not(x) => {
+            f.write_char('!')?;
+            fmt_paren(f, x, expr_prec(x) < parent)
+        }
+        Expr::Rel(l, op, r) => {
+            fmt_paren(f, l, expr_prec(l) <= parent)?;
+            write!(f, " {} ", rel_op_str(*op))?;
+            fmt_paren(f, r, expr_prec(r) <= parent)
+        }
+        Expr::Mem(inner, set) => {
+            fmt_paren(f, inner, expr_prec(inner) < parent)?;
+            f.write_str(" :: {")?;
+            for (i, n) in set.iter().enumerate() {
+                if i > 0 {
+                    f.write_char(',')?;
+                }
+                write!(f, "{}", n)?;
+            }
+            f.write_char('}')
+        }
+        Expr::BinOp(l, op, r) => {
+            fmt_paren(f, l, expr_prec(l) < parent)?;
+            write!(f, " {} ", arith_op_str(*op))?;
+            fmt_paren(f, r, expr_prec(r) <= parent)
+        }
+        Expr::Neg(x) => {
+            f.write_char('-')?;
+            fmt_paren(f, x, expr_prec(x) < parent)
+        }
+        Expr::Lit(n) => write!(f, "{}", n),
+        Expr::Var(name) => write!(f, "?{}", name),
+    }
+}
+
+// -- Parse -------------------
 
 pub fn parse_value(input: &str) -> Result<ValueAst, ParseError> {
     value.parse(input).map_err(|e| e.into_inner())
@@ -258,5 +463,146 @@ mod tests {
             "{input:?} should fail, got {:?}",
             res.unwrap()
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(ValueAst::Undetermined, "*")]
+    #[case::lit_zero(ValueAst::Lit(0), "0")]
+    #[case::lit_neg(ValueAst::Lit(-3), "-3")]
+    #[case::set(ValueAst::LitSet(vec![0, 1, 2]), "{0,1,2}")]
+    #[case::set_single(ValueAst::LitSet(vec![5]), "{5}")]
+    #[case::expr_lit(ValueAst::Expr(Expr::Lit(7)), "7")]
+    #[case::expr_var(ValueAst::Expr(Expr::Var("h".into())), "?h")]
+    #[case::expr_neg(ValueAst::Expr(Expr::Neg(Box::new(Expr::Var("x".into())))), "-?x")]
+    #[case::expr_add(ValueAst::Expr(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Add, Box::new(Expr::Lit(2)))), "1 + 2")]
+    #[case::expr_mul(ValueAst::Expr(Expr::BinOp(Box::new(Expr::Lit(3)), ArithOp::Mul, Box::new(Expr::Var("h".into())))), "3 * ?h")]
+    #[case::expr_rel(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0)))), "?h == 0")]
+    #[case::expr_mem(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".into())), vec![0, 1, 2])), "?h :: {0,1,2}")]
+    #[case::expr_not(ValueAst::Expr(Expr::Not(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0)))))), "!?h == 0")]
+    #[case::expr_and(ValueAst::Expr(Expr::And(vec![
+        Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))),
+        Expr::Rel(Box::new(Expr::Var("v".into())), RelOp::Eq, Box::new(Expr::Lit(1))),
+    ])), "?h == 0 & ?v == 1")]
+    #[case::expr_or(ValueAst::Expr(Expr::Or(vec![
+        Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))),
+        Expr::Rel(Box::new(Expr::Var("v".into())), RelOp::Eq, Box::new(Expr::Lit(1))),
+    ])), "?h == 0 | ?v == 1")]
+    // And of Or: Or children need parens because And binds tighter.
+    #[case::and_of_or(ValueAst::Expr(Expr::And(vec![
+        Expr::Or(vec![Expr::Var("a".into()), Expr::Var("b".into())]),
+        Expr::Var("c".into()),
+    ])), "(?a | ?b) & ?c")]
+    // Subtraction is non-right-associative at same precedence.
+    #[case::sub_right_nests(ValueAst::Expr(Expr::BinOp(
+        Box::new(Expr::Lit(1)),
+        ArithOp::Sub,
+        Box::new(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Sub, Box::new(Expr::Lit(3)))),
+    )), "1 - (2 - 3)")]
+    // (0 + 1) * 1 — left child of Mul is Add (lower prec) → parens needed.
+    #[case::mul_of_add(ValueAst::Expr(Expr::BinOp(
+        Box::new(Expr::BinOp(Box::new(Expr::Lit(0)), ArithOp::Add, Box::new(Expr::Lit(1)))),
+        ArithOp::Mul,
+        Box::new(Expr::Lit(1)),
+    )), "(0 + 1) * 1")]
+    fn test_value_display(#[case] input: ValueAst, #[case] expected: &str) {
+        assert_eq!(ValueDsl::from_ast(&input).to_string(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined("*")]
+    #[case::lit("2")]
+    #[case::lit_neg("-3")]
+    #[case::set("{0,1,2}")]
+    #[case::var("?h")]
+    #[case::add("1 + 2")]
+    #[case::mul_of_add("(0 + 1) * 1")]
+    #[case::sub_right("1 - (2 - 3)")]
+    #[case::rel("?h == 0")]
+    #[case::not("!?h == 0")]
+    #[case::and("?h == 0 & ?v == 1")]
+    #[case::or("?h == 0 | ?v == 1")]
+    #[case::and_of_or("(?a | ?b) & ?c")]
+    #[case::mem("?h :: {0,1,2}")]
+    #[case::chained_and_or("?a & ?b | ?c & ?d")]
+    fn test_value_display_roundtrip(#[case] input: &str) {
+        let parsed = value.parse(input).unwrap();
+        let rendered = ValueDsl::from_ast(&parsed).to_string();
+        let reparsed = value.parse(&rendered).unwrap();
+        assert_eq!(parsed, reparsed, "input={input:?} rendered={rendered:?}");
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(ValueAst::Lit(4), Edn::Int(4))]
+    #[case::lit_neg(ValueAst::Lit(-2), Edn::Int(-2))]
+    #[case::undetermined(ValueAst::Undetermined, Edn::Keyword(EdnKeyword::owned("undetermined".into())))]
+    #[case::set(ValueAst::LitSet(vec![1, 2, 3]), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+    #[case::expr_var(ValueAst::Expr(Expr::Var("h".into())), Edn::Str(Cow::Borrowed("?h")))]
+    #[case::expr_rel(
+        ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0)))),
+        Edn::Str(Cow::Borrowed("?h == 0")),
+    )]
+    fn test_value_dsl_to_edn(#[case] v: ValueAst, #[case] expected: Edn<'static>) {
+        use umol_edn::ToEdn;
+        assert_eq!(ValueDsl::from_ast(&v).to_edn(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::int(Edn::Int(5), ValueAst::Lit(5))]
+    #[case::keyword(Edn::Keyword(EdnKeyword::owned("undetermined".into())), ValueAst::Undetermined)]
+    #[case::vector(Edn::Vector(vec![Edn::Int(0), Edn::Int(2)].into()), ValueAst::LitSet(vec![0, 2]))]
+    #[case::str_int(Edn::Str(Cow::Borrowed("4")), ValueAst::Lit(4))]
+    #[case::str_undetermined(Edn::Str(Cow::Borrowed("*")), ValueAst::Undetermined)]
+    #[case::str_set(Edn::Str(Cow::Borrowed("{1,2}")), ValueAst::LitSet(vec![1, 2]))]
+    #[case::str_expr(
+        Edn::Str(Cow::Borrowed("?h == 0")),
+        ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0)))),
+    )]
+    fn test_value_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: ValueAst) {
+        use umol_edn::FromEdn;
+        assert_eq!(ValueDsl::from_edn(&input).unwrap().into_ast(), expected);
+    }
+
+    #[rstest]
+    fn test_value_dsl_from_edn_rejects_wrong_kind() {
+        use umol_edn::FromEdn;
+        let err = ValueDsl::from_edn(&Edn::Nil).unwrap_err();
+        assert!(matches!(err, DeError::TypeMismatch { .. }));
+    }
+
+    #[rstest]
+    fn test_value_dsl_from_edn_rejects_non_int_in_vector() {
+        use umol_edn::FromEdn;
+        let err = ValueDsl::from_edn(&Edn::Vector(vec![Edn::Int(1), Edn::Nil].into())).unwrap_err();
+        assert!(matches!(err, DeError::TypeMismatch { .. }));
+    }
+
+    #[rstest]
+    fn test_value_dsl_from_edn_rejects_invalid_string() {
+        use umol_edn::FromEdn;
+        let err = ValueDsl::from_edn(&Edn::Str(Cow::Borrowed("???"))).unwrap_err();
+        assert!(matches!(
+            err,
+            DeError::Subgrammar {
+                grammar: "value",
+                ..
+            }
+        ));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(ValueAst::Lit(3))]
+    #[case::undetermined(ValueAst::Undetermined)]
+    #[case::set(ValueAst::LitSet(vec![1, 2, 3]))]
+    #[case::expr(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1)))))]
+    fn test_value_dsl_edn_roundtrip(#[case] v: ValueAst) {
+        use umol_edn::{FromEdn, ToEdn};
+        let edn = ValueDsl::from_ast(&v).to_edn();
+        let back = ValueDsl::from_edn(&edn).unwrap().into_ast();
+        assert_eq!(back, v);
     }
 }

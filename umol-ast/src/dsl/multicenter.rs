@@ -13,9 +13,10 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_spin_pair, fmt_value, lower_spin, optional_value,
+    apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value,
     raise_spin, SpinPredicate,
 };
+use super::value::fmt_value;
 use crate::ast::config::{MulticenterBondAstConfig, NumericMode};
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::traits::{FromAst, ToAst};

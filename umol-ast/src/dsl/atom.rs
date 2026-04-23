@@ -15,10 +15,10 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, fmt_value, is_plus_sugar,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, is_plus_sugar,
     lower_spin, optional_value, raise_spin, ring_count, SpinPredicate,
 };
-use super::value::{id, value};
+use super::value::{fmt_value, id, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use crate::ast::config::{
     AromaticValenceMode, AtomAstConfig, ImplicitHydrogenMode, IsotopeMode, MulticenterValenceMode,
@@ -759,6 +759,245 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomAstConfig
     }
 }
 
+// -- Constraint DSLs -------------------
+
+/// Surface DSL wrapper around `AromaticValenceAst`. EDN form: `:undetermined`,
+/// `:not-aromatic`, or `{:aromatic <value>}`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct AromaticValenceDsl(pub AromaticValenceAst);
+
+impl AromaticValenceDsl {
+    pub fn from_ast(c: &AromaticValenceAst) -> Self {
+        Self(c.clone())
+    }
+
+    pub fn into_ast(self) -> AromaticValenceAst {
+        self.0
+    }
+}
+
+impl<'de> FromEdn<'de> for AromaticValenceDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Keyword(k) if k.name() == "undetermined" => {
+                Ok(Self(AromaticValenceAst::Undetermined))
+            }
+            Edn::Keyword(k) if k.name() == "not-aromatic" => {
+                Ok(Self(AromaticValenceAst::NotAromatic))
+            }
+            Edn::Map(m) if m.len() == 1 => {
+                let (k, v) = m.iter().next().unwrap();
+                let Edn::Keyword(key) = k else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "keyword key",
+                        got: k.kind(),
+                        path: Vec::new(),
+                    });
+                };
+                match key.name() {
+                    "aromatic" => Ok(Self(AromaticValenceAst::Aromatic(ValueDsl::from_edn(v)?.into_ast()))),
+                    other => Err(DeError::UnknownField {
+                        key: other.to_string(),
+                        path: vec!["aromatic-valence".into()],
+                    }),
+                }
+            }
+            other => Err(DeError::TypeMismatch {
+                expected: ":undetermined / :not-aromatic / {:aromatic <value>}",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for AromaticValenceDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        match &self.0 {
+            AromaticValenceAst::Undetermined => {
+                Edn::Keyword(umol_edn::EdnKeyword::owned("undetermined".into()))
+            }
+            AromaticValenceAst::NotAromatic => {
+                Edn::Keyword(umol_edn::EdnKeyword::owned("not-aromatic".into()))
+            }
+            AromaticValenceAst::Aromatic(v) => single_key_map("aromatic", ValueDsl::from_ast(v).to_edn()),
+        }
+    }
+}
+
+/// Surface DSL wrapper around `MulticenterValenceAst`. EDN form:
+/// `:undetermined`, `:not-multicenter`, or `{:multicenter <value>}`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct MulticenterValenceDsl(pub MulticenterValenceAst);
+
+impl MulticenterValenceDsl {
+    pub fn from_ast(c: &MulticenterValenceAst) -> Self {
+        Self(c.clone())
+    }
+
+    pub fn into_ast(self) -> MulticenterValenceAst {
+        self.0
+    }
+}
+
+impl<'de> FromEdn<'de> for MulticenterValenceDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        match edn {
+            Edn::Keyword(k) if k.name() == "undetermined" => {
+                Ok(Self(MulticenterValenceAst::Undetermined))
+            }
+            Edn::Keyword(k) if k.name() == "not-multicenter" => {
+                Ok(Self(MulticenterValenceAst::NotMulticenter))
+            }
+            Edn::Map(m) if m.len() == 1 => {
+                let (k, v) = m.iter().next().unwrap();
+                let Edn::Keyword(key) = k else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "keyword key",
+                        got: k.kind(),
+                        path: Vec::new(),
+                    });
+                };
+                match key.name() {
+                    "multicenter" => Ok(Self(MulticenterValenceAst::Multicenter(
+                        ValueDsl::from_edn(v)?.into_ast(),
+                    ))),
+                    other => Err(DeError::UnknownField {
+                        key: other.to_string(),
+                        path: vec!["multicenter-valence".into()],
+                    }),
+                }
+            }
+            other => Err(DeError::TypeMismatch {
+                expected: ":undetermined / :not-multicenter / {:multicenter <value>}",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
+    }
+}
+
+impl ToEdn for MulticenterValenceDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        match &self.0 {
+            MulticenterValenceAst::Undetermined => {
+                Edn::Keyword(umol_edn::EdnKeyword::owned("undetermined".into()))
+            }
+            MulticenterValenceAst::NotMulticenter => {
+                Edn::Keyword(umol_edn::EdnKeyword::owned("not-multicenter".into()))
+            }
+            MulticenterValenceAst::Multicenter(v) => {
+                single_key_map("multicenter", ValueDsl::from_ast(v).to_edn())
+            }
+        }
+    }
+}
+
+/// Surface DSL wrapper around `AtomConstraint`. EDN form is a single-key map
+/// keyed by the constraint kind: e.g. `{:valence 4}`, `{:degree *}`,
+/// `{:aromatic-valence :not-aromatic}`, `{:total-hydrogens {?h :: {0,1,2}}}`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct AtomConstraintDsl(pub AtomConstraint);
+
+impl AtomConstraintDsl {
+    pub fn from_ast(c: &AtomConstraint) -> Self {
+        Self(c.clone())
+    }
+
+    pub fn into_ast(self) -> AtomConstraint {
+        self.0
+    }
+}
+
+impl<'de> FromEdn<'de> for AtomConstraintDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let Edn::Map(m) = edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "atom-constraint single-key map",
+                got: edn.kind(),
+                path: Vec::new(),
+            });
+        };
+        if m.len() != 1 {
+            return Err(DeError::Custom(format!(
+                "atom-constraint must have exactly one key, got {}",
+                m.len()
+            )));
+        }
+        let (k, v) = m.iter().next().unwrap();
+        let Edn::Keyword(key) = k else {
+            return Err(DeError::TypeMismatch {
+                expected: "keyword key",
+                got: k.kind(),
+                path: vec!["atom-constraint".into()],
+            });
+        };
+        let c = match key.name() {
+            "valence" => AtomConstraint::Valence(ValueDsl::from_edn(v)?.into_ast()),
+            "aromatic-valence" => AtomConstraint::AromaticValence(
+                AromaticValenceDsl::from_edn(v)?.into_ast(),
+            ),
+            "multicenter-valence" => AtomConstraint::MulticenterValence(
+                MulticenterValenceDsl::from_edn(v)?.into_ast(),
+            ),
+            "donated-pairs" => AtomConstraint::DonatedPairs(ValueDsl::from_edn(v)?.into_ast()),
+            "accepted-pairs" => AtomConstraint::AcceptedPairs(ValueDsl::from_edn(v)?.into_ast()),
+            "degree" => AtomConstraint::Degree(ValueDsl::from_edn(v)?.into_ast()),
+            "connectivity" => AtomConstraint::Connectivity(ValueDsl::from_edn(v)?.into_ast()),
+            "ring-connectivity" => AtomConstraint::RingConnectivity(ValueDsl::from_edn(v)?.into_ast()),
+            "total-hydrogens" => AtomConstraint::TotalHydrogens(ValueDsl::from_edn(v)?.into_ast()),
+            "ring-count" => AtomConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast()),
+            "ring-size" => AtomConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast()),
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["atom-constraint".into()],
+                });
+            }
+        };
+        Ok(Self(c))
+    }
+}
+
+impl ToEdn for AtomConstraintDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        match &self.0 {
+            AtomConstraint::Valence(v) => single_key_map("valence", ValueDsl::from_ast(v).to_edn()),
+            AtomConstraint::AromaticValence(c) => {
+                single_key_map("aromatic-valence", AromaticValenceDsl(c.clone()).to_edn())
+            }
+            AtomConstraint::MulticenterValence(c) => single_key_map(
+                "multicenter-valence",
+                MulticenterValenceDsl(c.clone()).to_edn(),
+            ),
+            AtomConstraint::DonatedPairs(v) => {
+                single_key_map("donated-pairs", ValueDsl::from_ast(v).to_edn())
+            }
+            AtomConstraint::AcceptedPairs(v) => {
+                single_key_map("accepted-pairs", ValueDsl::from_ast(v).to_edn())
+            }
+            AtomConstraint::Degree(v) => single_key_map("degree", ValueDsl::from_ast(v).to_edn()),
+            AtomConstraint::Connectivity(v) => {
+                single_key_map("connectivity", ValueDsl::from_ast(v).to_edn())
+            }
+            AtomConstraint::RingConnectivity(v) => {
+                single_key_map("ring-connectivity", ValueDsl::from_ast(v).to_edn())
+            }
+            AtomConstraint::TotalHydrogens(v) => {
+                single_key_map("total-hydrogens", ValueDsl::from_ast(v).to_edn())
+            }
+            AtomConstraint::RingCount(v) => single_key_map("ring-count", ValueDsl::from_ast(v).to_edn()),
+            AtomConstraint::RingSize(v) => single_key_map("ring-size", ValueDsl::from_ast(v).to_edn()),
+        }
+    }
+}
+
+fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
+    let mut m = umol_edn::EdnMap::with_capacity(1);
+    m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
+    Edn::Map(m)
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -1050,5 +1289,118 @@ mod tests {
         let tree = umol_edn::read_string(input).unwrap();
         let via_tree = AtomDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
+    }
+
+    // -- AromaticValenceDsl / MulticenterValenceDsl ----------------
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(AromaticValenceAst::Undetermined, ":undetermined")]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, ":not-aromatic")]
+    #[case::aromatic_lit(AromaticValenceAst::Aromatic(ValueAst::Lit(6)), "{:aromatic 6}")]
+    #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), "{:aromatic :undetermined}")]
+    fn test_aromatic_valence_dsl_roundtrip(
+        #[case] input: AromaticValenceAst,
+        #[case] edn_source: &str,
+    ) {
+        let dsl = AromaticValenceDsl::from_ast(&input);
+        let edn = dsl.to_edn();
+        let expected = umol_edn::read_string(edn_source).unwrap();
+        assert_eq!(edn, expected);
+        let parsed = AromaticValenceDsl::from_edn(&edn).unwrap();
+        assert_eq!(parsed.into_ast(), input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(MulticenterValenceAst::Undetermined, ":undetermined")]
+    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, ":not-multicenter")]
+    #[case::multicenter_lit(MulticenterValenceAst::Multicenter(ValueAst::Lit(3)), "{:multicenter 3}")]
+    fn test_multicenter_valence_dsl_roundtrip(
+        #[case] input: MulticenterValenceAst,
+        #[case] edn_source: &str,
+    ) {
+        let dsl = MulticenterValenceDsl::from_ast(&input);
+        let edn = dsl.to_edn();
+        let expected = umol_edn::read_string(edn_source).unwrap();
+        assert_eq!(edn, expected);
+        let parsed = MulticenterValenceDsl::from_edn(&edn).unwrap();
+        assert_eq!(parsed.into_ast(), input);
+    }
+
+    #[rstest]
+    fn test_aromatic_valence_dsl_rejects_unknown_key() {
+        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+        let err = AromaticValenceDsl::from_edn(&edn).unwrap_err();
+        assert!(matches!(err, DeError::UnknownField { .. }));
+    }
+
+    #[rstest]
+    fn test_multicenter_valence_dsl_rejects_wrong_shape() {
+        let err = MulticenterValenceDsl::from_edn(&Edn::Int(3)).unwrap_err();
+        assert!(matches!(err, DeError::TypeMismatch { .. }));
+    }
+
+    // -- AtomConstraintDsl ----------------
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::valence(AtomConstraint::Valence(ValueAst::Lit(4)), "{:valence 4}")]
+    #[case::valence_undetermined(AtomConstraint::Valence(ValueAst::Undetermined), "{:valence :undetermined}")]
+    #[case::valence_set(AtomConstraint::Valence(ValueAst::LitSet(vec![3, 4])), "{:valence [3 4]}")]
+    #[case::degree(AtomConstraint::Degree(ValueAst::Lit(3)), "{:degree 3}")]
+    #[case::connectivity(AtomConstraint::Connectivity(ValueAst::Lit(4)), "{:connectivity 4}")]
+    #[case::ring_connectivity(AtomConstraint::RingConnectivity(ValueAst::Lit(2)), "{:ring-connectivity 2}")]
+    #[case::total_h(AtomConstraint::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
+    #[case::ring_count(AtomConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
+    #[case::ring_size(AtomConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
+    #[case::donated(AtomConstraint::DonatedPairs(ValueAst::Lit(1)), "{:donated-pairs 1}")]
+    #[case::accepted(AtomConstraint::AcceptedPairs(ValueAst::Lit(2)), "{:accepted-pairs 2}")]
+    #[case::aromatic_not(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic), "{:aromatic-valence :not-aromatic}")]
+    #[case::aromatic_value(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
+    #[case::multicenter_not(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
+    #[case::multicenter_value(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
+    #[case::valence_expr(AtomConstraint::Valence(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))))), "{:valence \"?h >= 1\"}")]
+    fn test_atom_constraint_dsl_roundtrip(#[case] input: AtomConstraint, #[case] edn_source: &str) {
+        let dsl = AtomConstraintDsl::from_ast(&input);
+        let edn = dsl.to_edn();
+        let expected = umol_edn::read_string(edn_source).unwrap();
+        assert_eq!(edn, expected, "render mismatch");
+        let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
+        assert_eq!(parsed.into_ast(), input, "parse-back mismatch");
+    }
+
+    #[rstest]
+    fn test_atom_constraint_dsl_rejects_non_map() {
+        let err = AtomConstraintDsl::from_edn(&Edn::Int(3)).unwrap_err();
+        assert!(matches!(err, DeError::TypeMismatch { .. }));
+    }
+
+    #[rstest]
+    fn test_atom_constraint_dsl_rejects_multiple_keys() {
+        let edn = umol_edn::read_string("{:valence 4 :degree 3}").unwrap();
+        let err = AtomConstraintDsl::from_edn(&edn).unwrap_err();
+        assert!(matches!(err, DeError::Custom(_)));
+    }
+
+    #[rstest]
+    fn test_atom_constraint_dsl_rejects_unknown_key() {
+        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+        let err = AtomConstraintDsl::from_edn(&edn).unwrap_err();
+        assert!(matches!(err, DeError::UnknownField { .. }));
+    }
+
+    #[rstest]
+    fn test_atom_constraint_dsl_accepts_value_as_string_subgrammar() {
+        let edn = umol_edn::read_string(r##"{:valence "?h + 1"}"##).unwrap();
+        let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
+        assert_eq!(
+            parsed.into_ast(),
+            AtomConstraint::Valence(ValueAst::Expr(Expr::BinOp(
+                Box::new(Expr::Var("h".into())),
+                crate::ast::value::ArithOp::Add,
+                Box::new(Expr::Lit(1)),
+            )))
+        );
     }
 }

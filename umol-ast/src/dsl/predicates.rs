@@ -8,7 +8,7 @@ use winnow::error::ErrMode;
 use winnow::Parser;
 
 use super::error::{PResult, ParseError};
-use super::value::value;
+use super::value::{fmt_value, value};
 use crate::ast::config::{MultiplicityMode, UnpairedElectronsMode};
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::{Expr, RelOp, ValueAst};
@@ -90,24 +90,6 @@ pub(crate) fn is_plus_sugar(v: &ValueAst, name: &str, threshold: i64) -> bool {
                 && matches!(r.as_ref(), Expr::Lit(n) if *n == threshold)
         }
         _ => false,
-    }
-}
-
-pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
-    match v {
-        ValueAst::Undetermined => write!(f, "*"),
-        ValueAst::Lit(n) => write!(f, "{}", n),
-        ValueAst::LitSet(s) => {
-            write!(f, "{{")?;
-            for (i, n) in s.iter().enumerate() {
-                if i > 0 {
-                    write!(f, ",")?;
-                }
-                write!(f, "{}", n)?;
-            }
-            write!(f, "}}")
-        }
-        ValueAst::Expr(_) => write!(f, "<expr>"),
     }
 }
 

@@ -16,6 +16,9 @@ use umol_edn::{DeError, Edn, EdnError, FromEdn, ToEdn};
 
 use super::atom::AtomDsl;
 use super::bond::BondDsl;
+use super::constraint::{
+    AromaticSystemRef, AtomRef, BondRef, DativeBondRef, MulticenterBondRef, NoncovalentBondRef,
+};
 use super::dative::DativeBondDsl;
 use super::error::ParseError;
 use super::noncovalent::NoncovalentBondDsl;
@@ -208,48 +211,6 @@ pub(crate) struct NoncovalentBondEntryInput {
     pub(crate) a: AtomRef,
     pub(crate) b: AtomRef,
     pub(crate) bond: NoncovalentBondDsl,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum AtomRef {
-    Index(usize),
-    Id(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum BondRef {
-    Index(usize),
-    Id(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum DativeBondRef {
-    Index(usize),
-    Id(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum AromaticSystemRef {
-    Index(usize),
-    Id(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum MulticenterBondRef {
-    Index(usize),
-    Id(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-pub(crate) enum NoncovalentBondRef {
-    Index(usize),
-    Id(String),
 }
 
 /// Pre-resolution mirror of `Constraint`. Entity leaves carry the unresolved

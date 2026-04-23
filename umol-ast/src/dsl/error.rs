@@ -60,8 +60,8 @@ pub enum ParseError {
     DuplicateId(String),
     #[error("invalid value: {0}")]
     InvalidValue(String),
-    #[error("invalid atom index: {0}")]
-    InvalidAtomIndex(String),
+    #[error("invalid {kind} ref: {value}")]
+    InvalidRef { kind: &'static str, value: String },
     #[error("{field}: expected {expected}")]
     WrongFieldType { field: String, expected: String },
 }
