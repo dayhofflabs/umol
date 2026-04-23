@@ -720,15 +720,15 @@ mod tests {
 
     #[test]
     fn test_edn_stream_deserializer_read_subgrammar_all() {
-        let mut d = EdnStreamDeserializer::new(r#""42""#);
+        let mut d = EdnStreamDeserializer::new(r#""3""#);
         let v: i64 = d.read_subgrammar_all("test").unwrap();
-        assert_eq!(v, 42);
+        assert_eq!(v, 3);
     }
 
     #[test]
     fn test_edn_stream_deserializer_read_subgrammar_all_trailing_content() {
         // Trailing content after the string literal must be rejected (expect_eof).
-        let mut d = EdnStreamDeserializer::new(r#""42" extra"#);
+        let mut d = EdnStreamDeserializer::new(r#""5" extra"#);
         let err = d.read_subgrammar_all::<i64>("test").unwrap_err();
         assert!(matches!(
             err,
