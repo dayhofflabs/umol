@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 use std::fmt::{self, Display};
-use std::mem;
 use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
@@ -14,16 +13,13 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, fmt_value, optional_value,
-    ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, fmt_value, lower_spin,
+    optional_value, raise_spin, ring_count, SpinPredicate,
 };
 use super::value::value;
 use crate::ast::bond::BondAst;
-use crate::ast::config::{
-    BondAstConfig, MultiplicityMode, NumericMode, UnpairedElectronsMode,
-};
+use crate::ast::config::{BondAstConfig, NumericMode};
 use crate::ast::constraint::BondConstraint;
-use crate::ast::spin::SpinStateAst;
 use crate::ast::traits::{FromAst, ToAst};
 use crate::ast::value::ValueAst;
 
@@ -44,7 +40,7 @@ impl FromStr for BondDsl {
 impl Display for BondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt_bond_ast(f, &self.0)?;
-        for c in &self.0.constraints {
+        for c in self.0.constraints.iter() {
             fmt_constraint(f, c)?;
         }
         Ok(())
@@ -90,75 +86,7 @@ impl ToAst<BondAst> for BondDsl {
     }
 }
 
-fn raise_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
-    if matches!(ast.charge, ValueAst::Undetermined) {
-        ast.charge = match cfg.charge_mode {
-            NumericMode::Zero => ValueAst::Lit(0),
-            NumericMode::Required => ValueAst::Undetermined,
-        };
-    }
-    raise_spin(&mut ast.spin, cfg);
-}
-
-fn raise_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
-    let u = mem::replace(&mut spin.unpaired, ValueAst::Undetermined);
-    let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
-    let resolved_u = if matches!(u, ValueAst::Undetermined) {
-        match cfg.unpaired_electrons_mode {
-            UnpairedElectronsMode::Zero => ValueAst::Lit(0),
-            UnpairedElectronsMode::Required => ValueAst::Undetermined,
-            UnpairedElectronsMode::Derived => match &m {
-                ValueAst::Lit(mm) => ValueAst::Lit(mm - 1),
-                _ => ValueAst::Undetermined,
-            },
-        }
-    } else {
-        u
-    };
-    let resolved_m = if matches!(m, ValueAst::Undetermined) {
-        match cfg.multiplicity_mode {
-            MultiplicityMode::Required => ValueAst::Undetermined,
-            MultiplicityMode::Derived => match &resolved_u {
-                ValueAst::Lit(uu) => ValueAst::Lit(uu + 1),
-                _ => ValueAst::Undetermined,
-            },
-        }
-    } else {
-        m
-    };
-    spin.unpaired = resolved_u;
-    spin.multiplicity = resolved_m;
-}
-
-fn lower_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
-    if matches!(
-        (&cfg.charge_mode, &ast.charge),
-        (NumericMode::Zero, ValueAst::Lit(0))
-    ) {
-        ast.charge = ValueAst::Undetermined;
-    }
-    lower_spin(&mut ast.spin, cfg);
-}
-
-fn lower_spin(spin: &mut SpinStateAst, cfg: &BondAstConfig) {
-    if let (ValueAst::Lit(uu), ValueAst::Lit(mm)) = (&spin.unpaired, &spin.multiplicity) {
-        let derived = *mm == uu + 1;
-        let strip_u = match cfg.unpaired_electrons_mode {
-            UnpairedElectronsMode::Zero => *uu == 0,
-            UnpairedElectronsMode::Derived => {
-                derived && matches!(cfg.multiplicity_mode, MultiplicityMode::Derived)
-            }
-            UnpairedElectronsMode::Required => false,
-        };
-        let strip_m = matches!(cfg.multiplicity_mode, MultiplicityMode::Derived) && derived;
-        if strip_u {
-            spin.unpaired = ValueAst::Undetermined;
-        }
-        if strip_m {
-            spin.multiplicity = ValueAst::Undetermined;
-        }
-    }
-}
+// -- Parse --------------------
 
 /// Parse a complete bond-string into a `BondDsl`.
 pub fn parse_bond(input: &str) -> Result<BondDsl, ParseError> {
@@ -173,35 +101,6 @@ pub(crate) fn bond(i: &mut &str) -> PResult<BondDsl> {
     let mut form = BondDsl(BondAst::new(order));
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
-}
-
-fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(), ParseError> {
-    let ast = &mut form.0;
-    for pred in preds {
-        match pred {
-            BondPredicate::Charge(v) => {
-                if !matches!(ast.charge, ValueAst::Undetermined) {
-                    return Err(ParseError::DuplicateBondPredicate("#c".to_string()));
-                }
-                ast.charge = v;
-            }
-            BondPredicate::Spin(sp) => {
-                apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateBondPredicate)?;
-            }
-            BondPredicate::Constraint(c) => {
-                let tag = constraint_tag(&c);
-                if ast
-                    .constraints
-                    .iter()
-                    .any(|existing| constraint_tag(existing) == tag)
-                {
-                    return Err(ParseError::DuplicateBondPredicate(tag.to_string()));
-                }
-                ast.constraints.push(c);
-            }
-        }
-    }
-    Ok(())
 }
 
 fn constraint_tag(c: &BondConstraint) -> &'static str {
@@ -244,6 +143,37 @@ fn bond_predicate(i: &mut &str) -> PResult<BondPredicate> {
     }
 }
 
+fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(), ParseError> {
+    let ast = &mut form.0;
+    for pred in preds {
+        match pred {
+            BondPredicate::Charge(v) => {
+                if !matches!(ast.charge, ValueAst::Undetermined) {
+                    return Err(ParseError::DuplicateBondPredicate("#c".to_string()));
+                }
+                ast.charge = v;
+            }
+            BondPredicate::Spin(sp) => {
+                apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateBondPredicate)?;
+            }
+            BondPredicate::Constraint(c) => {
+                let tag = constraint_tag(&c);
+                if ast
+                    .constraints
+                    .iter()
+                    .any(|existing| constraint_tag(existing) == tag)
+                {
+                    return Err(ParseError::DuplicateBondPredicate(tag.to_string()));
+                }
+                ast.constraints.add(c);
+            }
+        }
+    }
+    Ok(())
+}
+
+// -- Format --------------------
+
 fn fmt_bond_ast(f: &mut fmt::Formatter<'_>, ast: &BondAst) -> fmt::Result {
     match &ast.order {
         ValueAst::Lit(n) => write!(f, "{}", n)?,
@@ -271,39 +201,83 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
     }
 }
 
+// -- Lower --------------------
+
+fn lower_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
+    // Exhaustive destructure: adding a new BondAst field is a compile error
+    // here, forcing the author to decide how lowering should handle it.
+    let BondAst {
+        order: _,
+        charge,
+        spin,
+        constraints: _,
+    } = ast;
+
+    if matches!(
+        (&cfg.charge_mode, &*charge),
+        (NumericMode::Zero, ValueAst::Lit(0))
+    ) {
+        *charge = ValueAst::Undetermined;
+    }
+    lower_spin(spin, cfg.unpaired_electrons_mode, cfg.multiplicity_mode);
+}
+
+// -- Raise --------------------
+
+fn raise_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
+    // Exhaustive destructure: adding a new BondAst field is a compile error
+    // here, forcing the author to decide how raising should handle it.
+    let BondAst {
+        order: _,
+        charge,
+        spin,
+        constraints: _,
+    } = ast;
+
+    if matches!(*charge, ValueAst::Undetermined) {
+        *charge = match cfg.charge_mode {
+            NumericMode::Zero => ValueAst::Lit(0),
+            NumericMode::Required => ValueAst::Undetermined,
+        };
+    }
+    raise_spin(spin, cfg.unpaired_electrons_mode, cfg.multiplicity_mode);
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
-    use crate::ast::{spin::SpinStateAst, value::{Expr, RelOp}};
+    use crate::ast::constraint::BondConstraints;
+    use crate::ast::spin::SpinStateAst;
+    use crate::ast::value::{Expr, RelOp};
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single("1", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::double("2", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::triple("3", BondDsl(BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::quadruple("4", BondDsl(BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::single_whitespace("  1  ", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::single_pos_charge("1#c+2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(2), spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::single_neg_charge("1#c-2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::single_zero_charge("1#c0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::single_plus_only("1#c+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::single_minus_only("1#c-", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: Vec::new() }))]
-    #[case::double_unpaired("2#u3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(3), multiplicity: ValueAst::Undetermined }, constraints: Vec::new() }))]
-    #[case::single_u_only("1#u", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: Vec::new() }))]
-    #[case::single_mult("1#s2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, constraints: Vec::new() }))]
-    #[case::single_s_only("1#s", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, constraints: Vec::new() }))]
-    #[case::double_charge_unpaired("2#c+#u2", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, constraints: Vec::new() }))]
-    #[case::double_charge_mult("2#c-1#s3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(-1), spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, constraints: Vec::new() }))]
-    #[case::aromatic("1#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: vec![BondConstraint::Aromatic] }))]
-    #[case::charged_aromatic("1#c+#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: vec![BondConstraint::Aromatic] }))]
-    #[case::ring_count("1#R2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: vec![BondConstraint::RingCount(ValueAst::Lit(2))] }))]
-    #[case::ring_bare("1#R", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: vec![BondConstraint::RingCount(ValueAst::Lit(1))] }))]
-    #[case::ring_plus("1#R+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: vec![BondConstraint::RingCount(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))] }))]
-    #[case::ring_undetermined("1#R*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: vec![BondConstraint::RingCount(ValueAst::Undetermined)] }))]
-    #[case::ring_size("1#r6", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: vec![BondConstraint::RingSize(ValueAst::Lit(6))] }))]
+    #[case::single("1", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::double("2", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::triple("3", BondDsl(BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::quadruple("4", BondDsl(BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::single_whitespace("  1  ", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::single_pos_charge("1#c+2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(2), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::single_neg_charge("1#c-2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::single_zero_charge("1#c0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::single_plus_only("1#c+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::single_minus_only("1#c-", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }))]
+    #[case::double_unpaired("2#u3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(3), multiplicity: ValueAst::Undetermined }, constraints: BondConstraints::new() }))]
+    #[case::single_u_only("1#u", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, constraints: BondConstraints::new() }))]
+    #[case::single_mult("1#s2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, constraints: BondConstraints::new() }))]
+    #[case::single_s_only("1#s", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, constraints: BondConstraints::new() }))]
+    #[case::double_charge_unpaired("2#c+#u2", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, constraints: BondConstraints::new() }))]
+    #[case::double_charge_mult("2#c-1#s3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(-1), spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, constraints: BondConstraints::new() }))]
+    #[case::aromatic("1#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) }))]
+    #[case::charged_aromatic("1#c+#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) }))]
+    #[case::ring_count("1#R2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(2))]) }))]
+    #[case::ring_bare("1#R", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(1))]) }))]
+    #[case::ring_plus("1#R+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))]) }))]
+    #[case::ring_undetermined("1#R*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Undetermined)]) }))]
+    #[case::ring_size("1#r6", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingSize(ValueAst::Lit(6))]) }))]
     fn test_parse_bond(#[case] input: &str, #[case] expected: BondDsl) {
         let result = bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());

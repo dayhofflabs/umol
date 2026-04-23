@@ -37,7 +37,7 @@ impl FromStr for DativeBondDsl {
 
 impl Display for DativeBondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for c in &self.0.constraints {
+        for c in self.0.constraints.iter() {
             fmt_constraint(f, c)?;
         }
         Ok(())
@@ -79,6 +79,8 @@ impl ToAst<DativeBondAst> for DativeBondDsl {
     }
 }
 
+// -- Parse --------------------
+
 pub fn parse_dative(input: &str) -> Result<DativeBondDsl, ParseError> {
     dative.parse(input).map_err(|e| e.into_inner())
 }
@@ -90,26 +92,6 @@ pub(crate) fn dative(i: &mut &str) -> PResult<DativeBondDsl> {
     let mut form = DativeBondDsl::default();
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
-}
-
-fn apply_predicates(
-    form: &mut DativeBondDsl,
-    preds: Vec<DativePredicate>,
-) -> Result<(), ParseError> {
-    let ast = &mut form.0;
-    for pred in preds {
-        let DativePredicate::Constraint(c) = pred;
-        let tag = constraint_tag(&c);
-        if ast
-            .constraints
-            .iter()
-            .any(|existing| inline_constraint_tag(existing) == Some(tag))
-        {
-            return Err(ParseError::DuplicateDativePredicate(tag.to_string()));
-        }
-        ast.constraints.push(c);
-    }
-    Ok(())
 }
 
 fn inline_constraint_tag(c: &DativeBondConstraint) -> Option<&'static str> {
@@ -146,6 +128,28 @@ fn dative_predicate(i: &mut &str) -> PResult<DativePredicate> {
     }
 }
 
+fn apply_predicates(
+    form: &mut DativeBondDsl,
+    preds: Vec<DativePredicate>,
+) -> Result<(), ParseError> {
+    let ast = &mut form.0;
+    for pred in preds {
+        let DativePredicate::Constraint(c) = pred;
+        let tag = constraint_tag(&c);
+        if ast
+            .constraints
+            .iter()
+            .any(|existing| inline_constraint_tag(existing) == Some(tag))
+        {
+            return Err(ParseError::DuplicateDativePredicate(tag.to_string()));
+        }
+        ast.constraints.add(c);
+    }
+    Ok(())
+}
+
+// -- Format --------------------
+
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraint) -> fmt::Result {
     match c {
         DativeBondConstraint::RingCount(v) => fmt_ring_count(f, v),
@@ -168,6 +172,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::constraint::DativeBondConstraints;
     use crate::ast::dative::DativeDirection;
     use crate::ast::value::{Expr, RelOp};
 
@@ -175,13 +180,13 @@ mod tests {
     #[rstest]
     #[case::empty("", DativeBondDsl(DativeBondAst::default()))]
     #[case::whitespace("   ", DativeBondDsl(DativeBondAst::default()))]
-    #[case::ring_count("#R2", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints:vec![DativeBondConstraint::RingCount(ValueAst::Lit(2))] }))]
-    #[case::ring_bare("#R", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints:vec![DativeBondConstraint::RingCount(ValueAst::Lit(1))] }))]
-    #[case::ring_plus("#R+", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints:vec![DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))] }))]
-    #[case::ring_undetermined("#R*", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints:vec![DativeBondConstraint::RingCount(ValueAst::Undetermined)] }))]
-    #[case::ring_size("#r6", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints:vec![DativeBondConstraint::RingSize(ValueAst::Lit(6))] }))]
-    #[case::ring_size_bare("#r", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints:vec![DativeBondConstraint::RingSize(ValueAst::Lit(1))] }))]
-    #[case::ring_count_and_size("#R2#r6", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints:vec![DativeBondConstraint::RingCount(ValueAst::Lit(2)), DativeBondConstraint::RingSize(ValueAst::Lit(6))] }))]
+    #[case::ring_count("#R2", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2))]) }))]
+    #[case::ring_bare("#R", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(1))]) }))]
+    #[case::ring_plus("#R+", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))]) }))]
+    #[case::ring_undetermined("#R*", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Undetermined)]) }))]
+    #[case::ring_size("#r6", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(6))]) }))]
+    #[case::ring_size_bare("#r", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(1))]) }))]
+    #[case::ring_count_and_size("#R2#r6", DativeBondDsl(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2)), DativeBondConstraint::RingSize(ValueAst::Lit(6))]) }))]
     fn test_parse_dative(#[case] input: &str, #[case] expected: DativeBondDsl) {
         let result = dative.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -218,13 +223,15 @@ mod tests {
     fn test_dative_dsl_to_ast_passthrough() {
         let dsl = DativeBondDsl(DativeBondAst {
             direction: DativeDirection::Forward,
-            constraints: vec![DativeBondConstraint::RingCount(ValueAst::Lit(2))],
+            constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(
+                ValueAst::Lit(2),
+            )]),
         });
         let cfg = DativeBondAstConfig::zeroed();
         let ast = dsl.to_ast(&cfg).unwrap();
         assert_eq!(
             ast.constraints,
-            vec![DativeBondConstraint::RingCount(ValueAst::Lit(2))]
+            DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2))])
         );
     }
 }

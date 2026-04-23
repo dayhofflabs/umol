@@ -1,4 +1,4 @@
-//! AST constraints: per-scope predicates and their routing.
+//! AST constraints: per-scope predicates and their containers.
 //!
 //! Per-scope enums (`AtomConstraint`, `BondConstraint`, `DativeBondConstraint`,
 //! `AromaticSystemConstraint`, `MulticenterBondConstraint`,
@@ -6,12 +6,14 @@
 //! admissible at that scope. `Constraint` is the tree node type admitting
 //! per-entity leaves, a molecule-scope leaf, and `And`/`Or`/`Not` combinators.
 //!
-//! Storage is dual. Each atom carries an `AtomConstraints` slotmap keyed by
-//! `AtomConstraintKind`; other entity ASTs carry per-kind inline vecs. The
-//! molecule-level `Constraints` (under `molecule`) carries per-scope
-//! `IndexMap` buckets plus a flat `molecule` vec for molecule-scope and
-//! combinator forms. Consumers read the union of inline and molecule-level
-//! entries for any given idx; there is no invariant between the two stores.
+//! Per-entity constraints live inline on the entity AST via the typed
+//! containers (`AtomConstraints`, `BondConstraints`, `DativeBondConstraints`,
+//! `AromaticSystemConstraints`, `MulticenterBondConstraints`,
+//! `NoncovalentBondConstraints`). Each exposes a uniform `new`/`len`/`iter`/
+//! `add`/`retain`/`clear` surface; `add` enforces per-variant cardinality
+//! (last-wins for unique-kind variants, append for multi-kind variants).
+//! The molecule-level `Constraints` (under `molecule`) is a flat
+//! `Vec<Constraint>` for molecule-scope predicates and combinator forms.
 
 pub mod aromatic;
 pub mod atom;
@@ -21,13 +23,12 @@ pub mod molecule;
 pub mod multicenter;
 pub mod noncovalent;
 
-pub use aromatic::AromaticSystemConstraint;
+pub use aromatic::{AromaticSystemConstraint, AromaticSystemConstraints};
 pub use atom::{
-    AromaticValenceConstraint, AtomConstraint, AtomConstraintKind, AtomConstraints,
-    MulticenterValenceConstraint,
+    AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
-pub use bond::{BondConstraint, BondConstraintKind};
-pub use dative::{DativeBondConstraint, DativeBondConstraintKind};
+pub use bond::{BondConstraint, BondConstraintKind, BondConstraints};
+pub use dative::{DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints};
 pub use molecule::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
-pub use multicenter::MulticenterBondConstraint;
-pub use noncovalent::NoncovalentBondConstraint;
+pub use multicenter::{MulticenterBondConstraint, MulticenterBondConstraints};
+pub use noncovalent::{NoncovalentBondConstraint, NoncovalentBondConstraints};

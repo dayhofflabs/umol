@@ -13,7 +13,8 @@ use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{
-    AtomConstraint, Constraint, Constraints, DativeBondConstraint, MoleculeConstraint,
+    AtomConstraint, AtomConstraints, BondConstraints, Constraint, Constraints, DativeBondConstraint,
+    DativeBondConstraints, MoleculeConstraint,
 };
 use crate::ast::dative::{DativeBondAst, DativeDirection};
 use crate::ast::idx::{
@@ -39,7 +40,7 @@ fn ground_atom() -> AtomAst {
 
 fn constraints_with_molecule(c: Constraint) -> Constraints {
     let mut out = Constraints::new();
-    out.push_molecule(c);
+    out.push(c);
     out
 }
 
@@ -885,20 +886,18 @@ fn test_molecule_builder_bond_mut() {
 }
 
 #[rstest]
-fn test_molecule_builder_constraints_mut() {
+fn test_molecule_builder_atom_constraint_mut() {
     let ast = rich_molecule();
     let mut b = ast.edit();
-    b.constraints_mut()
-        .push_atom(AtomIdx(0), AtomConstraint::Degree(ValueAst::Lit(2)));
+    b.atom_mut(AtomIdx(0))
+        .constraints
+        .add(AtomConstraint::Degree(ValueAst::Lit(2)));
     let result = b.build();
     assert_eq!(
-        result.constraints().atom(AtomIdx(0)),
-        &[AtomConstraint::Degree(ValueAst::Lit(2))]
+        result[AtomIdx(0)].constraints,
+        AtomConstraints::from_iter([AtomConstraint::Degree(ValueAst::Lit(2))])
     );
-    assert_eq!(
-        ast.constraints().atom(AtomIdx(0)),
-        &[] as &[AtomConstraint]
-    );
+    assert!(ast[AtomIdx(0)].constraints.is_empty());
 }
 
 #[rstest]
@@ -1050,7 +1049,7 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
         order: ValueAst::Lit(1),
         charge: ValueAst::Lit(0),
         spin: SpinStateAst::closed_shell(),
-        constraints: Vec::new(),
+        constraints: BondConstraints::new(),
     };
     let forward = MoleculeAst::new(
         atoms_a,
@@ -1251,14 +1250,10 @@ fn test_molecule_ast_dative_bond_mut() {
     let mut ast = rich_molecule();
     ast.dative_bond_mut(DativeBondIdx(0))
         .constraints
-        .push(DativeBondConstraint::RingSize(
-            ValueAst::Lit(6),
-        ));
+        .add(DativeBondConstraint::RingSize(ValueAst::Lit(6)));
     assert_eq!(
         ast[DativeBondIdx(0)].constraints,
-        vec![DativeBondConstraint::RingSize(
-            ValueAst::Lit(6)
-        )]
+        DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(6))])
     );
 }
 

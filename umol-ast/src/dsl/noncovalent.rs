@@ -70,13 +70,12 @@ impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
 impl ToAst<NoncovalentBondAst> for NoncovalentBondDsl {
     type Error = ParseError;
 
-    fn to_ast(
-        &self,
-        _cfg: &NoncovalentBondAstConfig,
-    ) -> Result<NoncovalentBondAst, ParseError> {
+    fn to_ast(&self, _cfg: &NoncovalentBondAstConfig) -> Result<NoncovalentBondAst, ParseError> {
         Ok(self.0.clone())
     }
 }
+
+// -- Parse --------------------
 
 pub fn parse_noncovalent(input: &str) -> Result<NoncovalentBondDsl, ParseError> {
     noncovalent.parse(input).map_err(|e| e.into_inner())
@@ -118,11 +117,7 @@ fn kind_set(i: &mut &str) -> PResult<Vec<NoncovalentKind>> {
         '{',
         delimited(
             multispace0,
-            separated(
-                1..,
-                kind_literal,
-                delimited(multispace0, ',', multispace0),
-            ),
+            separated(1.., kind_literal, delimited(multispace0, ',', multispace0)),
             multispace0,
         ),
         '}',
@@ -171,6 +166,8 @@ fn kind_symbol(k: NoncovalentKind) -> &'static str {
         NoncovalentKind::VanDerWaals => "Vdw",
     }
 }
+
+// -- Format --------------------
 
 fn fmt_noncovalent_ast(f: &mut fmt::Formatter<'_>, ast: &NoncovalentBondAst) -> fmt::Result {
     fmt_kind(f, &ast.kind)
@@ -260,6 +257,9 @@ mod tests {
         let dsl = NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond));
         let cfg = NoncovalentBondAstConfig::zeroed();
         let ast = dsl.to_ast(&cfg).unwrap();
-        assert_eq!(ast.kind, NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond));
+        assert_eq!(
+            ast.kind,
+            NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond)
+        );
     }
 }

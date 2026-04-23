@@ -1,6 +1,6 @@
 //! Dative bond AST.
 
-use super::constraint::DativeBondConstraint;
+use super::constraint::DativeBondConstraints;
 
 /// Direction of a dative bond relative to its `FixedRelationSet` participants
 /// array (sorted ascending by `NodeId`). `Forward` means the donor is
@@ -28,7 +28,7 @@ impl DativeDirection {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DativeBondAst {
     pub direction: DativeDirection,
-    pub constraints: Vec<DativeBondConstraint>,
+    pub constraints: DativeBondConstraints,
 }
 
 impl DativeBondAst {
@@ -53,15 +53,17 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use crate::ast::constraint::DativeBondConstraint;
+
     use super::super::value::ValueAst;
     use super::*;
 
     #[rustfmt::skip]
     #[rstest]
     #[case::default_(DativeBondAst::default(), true)]
-    #[case::with_ground_constraint(DativeBondAst { direction: DativeDirection::Forward, constraints: vec![DativeBondConstraint::RingSize(ValueAst::Lit(6))] }, true)]
-    #[case::with_undetermined_constraint(DativeBondAst { direction: DativeDirection::Forward, constraints: vec![DativeBondConstraint::RingSize(ValueAst::Undetermined)] }, true)]
-    #[case::reverse(DativeBondAst { direction: DativeDirection::Reverse, constraints: Vec::new() }, true)]
+    #[case::with_ground_constraint(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(6))]) }, true)]
+    #[case::with_undetermined_constraint(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Undetermined)]) }, true)]
+    #[case::reverse(DativeBondAst { direction: DativeDirection::Reverse, constraints: DativeBondConstraints::new() }, true)]
     fn test_dative_bond_ast_is_ground(#[case] ast: DativeBondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -69,13 +71,13 @@ mod tests {
     #[rstest]
     #[case::same_forward(DativeBondAst::default(), DativeBondAst::default(), true)]
     #[case::both_reverse(
-        DativeBondAst { direction: DativeDirection::Reverse, constraints: Vec::new() },
-        DativeBondAst { direction: DativeDirection::Reverse, constraints: Vec::new() },
+        DativeBondAst { direction: DativeDirection::Reverse, constraints: DativeBondConstraints::new() },
+        DativeBondAst { direction: DativeDirection::Reverse, constraints: DativeBondConstraints::new() },
         true
     )]
     #[case::mismatch(
         DativeBondAst::default(),
-        DativeBondAst { direction: DativeDirection::Reverse, constraints: Vec::new() },
+        DativeBondAst { direction: DativeDirection::Reverse, constraints: DativeBondConstraints::new() },
         false
     )]
     fn test_dative_bond_ast_matches(

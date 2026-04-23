@@ -1,10 +1,8 @@
 //! Molecule-scope constraints, the `Constraint` combinator tree, and the
 //! molecule-level `Constraints` store.
 
-use std::hash::Hash;
 use std::mem;
-
-use indexmap::IndexMap;
+use std::slice::Iter;
 
 use super::aromatic::AromaticSystemConstraint;
 use super::atom::AtomConstraint;
@@ -19,6 +17,116 @@ use crate::ast::molecule::MoleculeAst;
 use crate::ast::remap::IdxRemapping;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::ValueAst;
+
+/// Tree node type: per-entity leaf, molecule-scope leaf, or combinator. The
+/// bare entity-leaf forms appear only inside a combinator (e.g.
+/// `And(Atom(..), Bond(..))`) or a molecule-scope predicate; unconditional
+/// per-entity constraints live inline on the entity AST and are lifted there
+/// at DSL → AST conversion time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Constraint {
+    Atom(AtomIdx, AtomConstraint),
+    Bond(BondIdx, BondConstraint),
+    DativeBond(DativeBondIdx, DativeBondConstraint),
+    AromaticSystem(AromaticSystemIdx, AromaticSystemConstraint),
+    MulticenterBond(MulticenterBondIdx, MulticenterBondConstraint),
+    NoncovalentBond(NoncovalentBondIdx, NoncovalentBondConstraint),
+    Molecule(MoleculeConstraint),
+    And(Vec<Constraint>),
+    Or(Vec<Constraint>),
+    Not(Box<Constraint>),
+}
+
+impl Constraint {
+    pub fn remap(self, remap: &IdxRemapping) -> Option<Self> {
+        match self {
+            Constraint::Atom(idx, c) => remap.atom(idx).map(|i| Constraint::Atom(i, c)),
+            Constraint::Bond(idx, c) => remap.bond(idx).map(|i| Constraint::Bond(i, c)),
+            Constraint::DativeBond(idx, c) => {
+                let i = remap.dative_bond(idx)?;
+                c.remap(remap).map(|c| Constraint::DativeBond(i, c))
+            }
+            Constraint::AromaticSystem(idx, c) => {
+                let i = remap.aromatic_system(idx)?;
+                c.remap(remap).map(|c| Constraint::AromaticSystem(i, c))
+            }
+            Constraint::MulticenterBond(idx, c) => {
+                let i = remap.multicenter_bond(idx)?;
+                c.remap(remap).map(|c| Constraint::MulticenterBond(i, c))
+            }
+            Constraint::NoncovalentBond(idx, c) => {
+                let i = remap.noncovalent_bond(idx)?;
+                c.remap(remap).map(|c| Constraint::NoncovalentBond(i, c))
+            }
+            Constraint::Molecule(m) => m.remap(remap).map(Constraint::Molecule),
+            Constraint::And(xs) => xs
+                .into_iter()
+                .map(|c| c.remap(remap))
+                .collect::<Option<Vec<_>>>()
+                .map(Constraint::And),
+            Constraint::Or(xs) => xs
+                .into_iter()
+                .map(|c| c.remap(remap))
+                .collect::<Option<Vec<_>>>()
+                .map(Constraint::Or),
+            Constraint::Not(x) => x.remap(remap).map(|c| Constraint::Not(Box::new(c))),
+        }
+    }
+}
+
+/// Molecule-level constraint store: a flat list of `Constraint` tree nodes
+/// (molecule-scope predicates, combinators, and entity-leaves that appear
+/// inside combinators). Unconditional per-entity constraints live on the
+/// entity AST's own `constraints` field; the DSL parser lifts them there.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Constraints(Vec<Constraint>);
+
+impl Constraints {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn as_slice(&self) -> &[Constraint] {
+        &self.0
+    }
+
+    pub fn iter(&self) -> Iter<'_, Constraint> {
+        self.0.iter()
+    }
+
+    pub fn push(&mut self, c: Constraint) {
+        self.0.push(c);
+    }
+
+    pub fn retain(&mut self, mut f: impl FnMut(&Constraint) -> bool) {
+        self.0.retain(|c| f(c));
+    }
+
+    pub fn take(&mut self) -> Vec<Constraint> {
+        mem::take(&mut self.0)
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    /// Remap entity indices. Entries that reference a removed entity (directly
+    /// or via a combinator subtree) are dropped.
+    pub fn remap(&mut self, remap: &IdxRemapping) {
+        self.0 = mem::take(&mut self.0)
+            .into_iter()
+            .filter_map(|c| c.remap(remap))
+            .collect();
+    }
+}
 
 /// Molecule-scope predicates: non-logical, unanchored assertions whose scope
 /// is the molecule as a whole or a declared subset of entities.
@@ -133,11 +241,7 @@ impl SubPatternAnchor {
         self.dative_bonds.push((target, pattern));
     }
 
-    pub fn push_aromatic_system(
-        &mut self,
-        target: AromaticSystemIdx,
-        pattern: AromaticSystemIdx,
-    ) {
+    pub fn push_aromatic_system(&mut self, target: AromaticSystemIdx, pattern: AromaticSystemIdx) {
         self.aromatic_systems.push((target, pattern));
     }
 
@@ -201,500 +305,21 @@ impl SubPatternAnchor {
     }
 }
 
-/// Tree node type: per-entity leaf, molecule-scope leaf, or combinator. Used
-/// inside `Constraints::molecule`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Constraint {
-    Atom(AtomIdx, AtomConstraint),
-    Bond(BondIdx, BondConstraint),
-    DativeBond(DativeBondIdx, DativeBondConstraint),
-    AromaticSystem(AromaticSystemIdx, AromaticSystemConstraint),
-    MulticenterBond(MulticenterBondIdx, MulticenterBondConstraint),
-    NoncovalentBond(NoncovalentBondIdx, NoncovalentBondConstraint),
-    Molecule(MoleculeConstraint),
-    And(Vec<Constraint>),
-    Or(Vec<Constraint>),
-    Not(Box<Constraint>),
-}
-
-impl Constraint {
-    pub fn remap(self, remap: &IdxRemapping) -> Option<Self> {
-        match self {
-            Constraint::Atom(idx, c) => remap.atom(idx).map(|i| Constraint::Atom(i, c)),
-            Constraint::Bond(idx, c) => remap.bond(idx).map(|i| Constraint::Bond(i, c)),
-            Constraint::DativeBond(idx, c) => {
-                let i = remap.dative_bond(idx)?;
-                c.remap(remap).map(|c| Constraint::DativeBond(i, c))
-            }
-            Constraint::AromaticSystem(idx, c) => {
-                let i = remap.aromatic_system(idx)?;
-                c.remap(remap).map(|c| Constraint::AromaticSystem(i, c))
-            }
-            Constraint::MulticenterBond(idx, c) => {
-                let i = remap.multicenter_bond(idx)?;
-                c.remap(remap).map(|c| Constraint::MulticenterBond(i, c))
-            }
-            Constraint::NoncovalentBond(idx, c) => {
-                let i = remap.noncovalent_bond(idx)?;
-                c.remap(remap).map(|c| Constraint::NoncovalentBond(i, c))
-            }
-            Constraint::Molecule(m) => m.remap(remap).map(Constraint::Molecule),
-            Constraint::And(xs) => xs
-                .into_iter()
-                .map(|c| c.remap(remap))
-                .collect::<Option<Vec<_>>>()
-                .map(Constraint::And),
-            Constraint::Or(xs) => xs
-                .into_iter()
-                .map(|c| c.remap(remap))
-                .collect::<Option<Vec<_>>>()
-                .map(Constraint::Or),
-            Constraint::Not(x) => x.remap(remap).map(|c| Constraint::Not(Box::new(c))),
-        }
-    }
-}
-
-/// Molecule-level constraint storage. Independent of entity-inline
-/// `constraints` stores; consumers must read both.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Constraints {
-    atom: IndexMap<AtomIdx, Vec<AtomConstraint>>,
-    bond: IndexMap<BondIdx, Vec<BondConstraint>>,
-    dative_bond: IndexMap<DativeBondIdx, Vec<DativeBondConstraint>>,
-    aromatic_system: IndexMap<AromaticSystemIdx, Vec<AromaticSystemConstraint>>,
-    multicenter_bond: IndexMap<MulticenterBondIdx, Vec<MulticenterBondConstraint>>,
-    noncovalent_bond: IndexMap<NoncovalentBondIdx, Vec<NoncovalentBondConstraint>>,
-    molecule: Vec<Constraint>,
-}
-
-impl Constraints {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.atom.is_empty()
-            && self.bond.is_empty()
-            && self.dative_bond.is_empty()
-            && self.aromatic_system.is_empty()
-            && self.multicenter_bond.is_empty()
-            && self.noncovalent_bond.is_empty()
-            && self.molecule.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.atom.values().map(Vec::len).sum::<usize>()
-            + self.bond.values().map(Vec::len).sum::<usize>()
-            + self.dative_bond.values().map(Vec::len).sum::<usize>()
-            + self.aromatic_system.values().map(Vec::len).sum::<usize>()
-            + self.multicenter_bond.values().map(Vec::len).sum::<usize>()
-            + self.noncovalent_bond.values().map(Vec::len).sum::<usize>()
-            + self.molecule.len()
-    }
-
-    pub fn atom(&self, idx: AtomIdx) -> &[AtomConstraint] {
-        self.atom.get(&idx).map(Vec::as_slice).unwrap_or(&[])
-    }
-
-    pub fn bond(&self, idx: BondIdx) -> &[BondConstraint] {
-        self.bond.get(&idx).map(Vec::as_slice).unwrap_or(&[])
-    }
-
-    pub fn dative_bond(&self, idx: DativeBondIdx) -> &[DativeBondConstraint] {
-        self.dative_bond.get(&idx).map(Vec::as_slice).unwrap_or(&[])
-    }
-
-    pub fn aromatic_system(&self, idx: AromaticSystemIdx) -> &[AromaticSystemConstraint] {
-        self.aromatic_system
-            .get(&idx)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    pub fn multicenter_bond(&self, idx: MulticenterBondIdx) -> &[MulticenterBondConstraint] {
-        self.multicenter_bond
-            .get(&idx)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    pub fn noncovalent_bond(&self, idx: NoncovalentBondIdx) -> &[NoncovalentBondConstraint] {
-        self.noncovalent_bond
-            .get(&idx)
-            .map(Vec::as_slice)
-            .unwrap_or(&[])
-    }
-
-    pub fn molecule(&self) -> &[Constraint] {
-        &self.molecule
-    }
-
-    pub fn push_atom(&mut self, idx: AtomIdx, c: AtomConstraint) {
-        self.atom.entry(idx).or_default().push(c);
-    }
-
-    pub fn push_bond(&mut self, idx: BondIdx, c: BondConstraint) {
-        self.bond.entry(idx).or_default().push(c);
-    }
-
-    pub fn push_dative_bond(&mut self, idx: DativeBondIdx, c: DativeBondConstraint) {
-        self.dative_bond.entry(idx).or_default().push(c);
-    }
-
-    pub fn push_aromatic_system(&mut self, idx: AromaticSystemIdx, c: AromaticSystemConstraint) {
-        self.aromatic_system.entry(idx).or_default().push(c);
-    }
-
-    pub fn push_multicenter_bond(&mut self, idx: MulticenterBondIdx, c: MulticenterBondConstraint) {
-        self.multicenter_bond.entry(idx).or_default().push(c);
-    }
-
-    pub fn push_noncovalent_bond(&mut self, idx: NoncovalentBondIdx, c: NoncovalentBondConstraint) {
-        self.noncovalent_bond.entry(idx).or_default().push(c);
-    }
-
-    pub fn push_molecule(&mut self, c: Constraint) {
-        self.molecule.push(c);
-    }
-
-    pub fn remove_atom(&mut self, idx: AtomIdx) -> Vec<AtomConstraint> {
-        self.atom.shift_remove(&idx).unwrap_or_default()
-    }
-
-    pub fn remove_bond(&mut self, idx: BondIdx) -> Vec<BondConstraint> {
-        self.bond.shift_remove(&idx).unwrap_or_default()
-    }
-
-    pub fn remove_dative_bond(&mut self, idx: DativeBondIdx) -> Vec<DativeBondConstraint> {
-        self.dative_bond.shift_remove(&idx).unwrap_or_default()
-    }
-
-    pub fn remove_aromatic_system(
-        &mut self,
-        idx: AromaticSystemIdx,
-    ) -> Vec<AromaticSystemConstraint> {
-        self.aromatic_system.shift_remove(&idx).unwrap_or_default()
-    }
-
-    pub fn remove_multicenter_bond(
-        &mut self,
-        idx: MulticenterBondIdx,
-    ) -> Vec<MulticenterBondConstraint> {
-        self.multicenter_bond.shift_remove(&idx).unwrap_or_default()
-    }
-
-    pub fn remove_noncovalent_bond(
-        &mut self,
-        idx: NoncovalentBondIdx,
-    ) -> Vec<NoncovalentBondConstraint> {
-        self.noncovalent_bond.shift_remove(&idx).unwrap_or_default()
-    }
-
-    pub fn retain_atom(&mut self, idx: AtomIdx, mut f: impl FnMut(&AtomConstraint) -> bool) {
-        if let Some(v) = self.atom.get_mut(&idx) {
-            v.retain(|c| f(c));
-            if v.is_empty() {
-                self.atom.shift_remove(&idx);
-            }
-        }
-    }
-
-    pub fn retain_bond(&mut self, idx: BondIdx, mut f: impl FnMut(&BondConstraint) -> bool) {
-        if let Some(v) = self.bond.get_mut(&idx) {
-            v.retain(|c| f(c));
-            if v.is_empty() {
-                self.bond.shift_remove(&idx);
-            }
-        }
-    }
-
-    pub fn retain_dative_bond(
-        &mut self,
-        idx: DativeBondIdx,
-        mut f: impl FnMut(&DativeBondConstraint) -> bool,
-    ) {
-        if let Some(v) = self.dative_bond.get_mut(&idx) {
-            v.retain(|c| f(c));
-            if v.is_empty() {
-                self.dative_bond.shift_remove(&idx);
-            }
-        }
-    }
-
-    pub fn retain_aromatic_system(
-        &mut self,
-        idx: AromaticSystemIdx,
-        mut f: impl FnMut(&AromaticSystemConstraint) -> bool,
-    ) {
-        if let Some(v) = self.aromatic_system.get_mut(&idx) {
-            v.retain(|c| f(c));
-            if v.is_empty() {
-                self.aromatic_system.shift_remove(&idx);
-            }
-        }
-    }
-
-    pub fn retain_multicenter_bond(
-        &mut self,
-        idx: MulticenterBondIdx,
-        mut f: impl FnMut(&MulticenterBondConstraint) -> bool,
-    ) {
-        if let Some(v) = self.multicenter_bond.get_mut(&idx) {
-            v.retain(|c| f(c));
-            if v.is_empty() {
-                self.multicenter_bond.shift_remove(&idx);
-            }
-        }
-    }
-
-    pub fn retain_noncovalent_bond(
-        &mut self,
-        idx: NoncovalentBondIdx,
-        mut f: impl FnMut(&NoncovalentBondConstraint) -> bool,
-    ) {
-        if let Some(v) = self.noncovalent_bond.get_mut(&idx) {
-            v.retain(|c| f(c));
-            if v.is_empty() {
-                self.noncovalent_bond.shift_remove(&idx);
-            }
-        }
-    }
-
-    pub fn remove_molecule(&mut self) -> Vec<Constraint> {
-        mem::take(&mut self.molecule)
-    }
-
-    pub fn retain_molecule(&mut self, mut f: impl FnMut(&Constraint) -> bool) {
-        self.molecule.retain(|c| f(c));
-    }
-
-    pub fn clear(&mut self) {
-        self.atom.clear();
-        self.bond.clear();
-        self.dative_bond.clear();
-        self.aromatic_system.clear();
-        self.multicenter_bond.clear();
-        self.noncovalent_bond.clear();
-        self.molecule.clear();
-    }
-
-    pub fn remap(&mut self, remap: &IdxRemapping) {
-        self.atom = remap_keys(mem::take(&mut self.atom), |k| remap.atom(k));
-        self.bond = remap_keys(mem::take(&mut self.bond), |k| remap.bond(k));
-        self.dative_bond = remap_entries(
-            mem::take(&mut self.dative_bond),
-            |k| remap.dative_bond(k),
-            |c| c.remap(remap),
-        );
-        self.aromatic_system = remap_entries(
-            mem::take(&mut self.aromatic_system),
-            |k| remap.aromatic_system(k),
-            |c| c.remap(remap),
-        );
-        self.multicenter_bond = remap_entries(
-            mem::take(&mut self.multicenter_bond),
-            |k| remap.multicenter_bond(k),
-            |c| c.remap(remap),
-        );
-        self.noncovalent_bond = remap_entries(
-            mem::take(&mut self.noncovalent_bond),
-            |k| remap.noncovalent_bond(k),
-            |c| c.remap(remap),
-        );
-        self.molecule = mem::take(&mut self.molecule)
-            .into_iter()
-            .filter_map(|c| c.remap(remap))
-            .collect();
-    }
-}
-
-fn remap_keys<K: Hash + Eq + Copy, V>(
-    map: IndexMap<K, V>,
-    f: impl Fn(K) -> Option<K>,
-) -> IndexMap<K, V> {
-    map.into_iter()
-        .filter_map(|(k, v)| f(k).map(|nk| (nk, v)))
-        .collect()
-}
-
-fn remap_entries<K: Hash + Eq + Copy, V>(
-    map: IndexMap<K, Vec<V>>,
-    key: impl Fn(K) -> Option<K>,
-    val: impl Fn(V) -> Option<V>,
-) -> IndexMap<K, Vec<V>> {
-    map.into_iter()
-        .filter_map(|(k, vs)| {
-            let nk = key(k)?;
-            let nvs: Vec<V> = vs.into_iter().filter_map(&val).collect();
-            if nvs.is_empty() {
-                None
-            } else {
-                Some((nk, nvs))
-            }
-        })
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::idx::{AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx};
+    use crate::ast::idx::{AromaticSystemIdx, AtomIdx, BondIdx};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::value::ValueAst;
 
-    #[test]
-    fn test_constraints_push_per_scope() {
-        let mut cs = Constraints::new();
-        cs.push_atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4)));
-        cs.push_atom(AtomIdx(0), AtomConstraint::Degree(ValueAst::Lit(3)));
-        cs.push_bond(BondIdx(0), BondConstraint::Aromatic);
-
-        assert_eq!(cs.atom(AtomIdx(0)).len(), 2);
-        assert_eq!(cs.bond(BondIdx(0)).len(), 1);
-        assert_eq!(cs.dative_bond(DativeBondIdx(0)).len(), 0);
-        assert_eq!(cs.len(), 3);
-    }
-
-    #[test]
-    fn test_constraints_push_molecule() {
-        let mut cs = Constraints::new();
-        cs.push_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: vec![AtomIdx(0), AtomIdx(1)],
-            sum: ValueAst::Lit(0),
-        }));
-        cs.push_molecule(Constraint::Molecule(MoleculeConstraint::SpinSum {
-            atoms: vec![AtomIdx(0)],
-            spin: SpinStateAst::new(0, 1),
-        }));
-        assert_eq!(cs.molecule().len(), 2);
-    }
-
-    #[test]
-    fn test_constraints_push_molecule_combinator() {
-        let mut cs = Constraints::new();
-        cs.push_molecule(Constraint::And(vec![
-            Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
-            Constraint::Bond(BondIdx(0), BondConstraint::Aromatic),
-        ]));
-        assert_eq!(cs.molecule().len(), 1);
-    }
-
-    #[test]
-    fn test_constraints_is_empty() {
-        let mut cs = Constraints::new();
-        assert!(cs.is_empty());
-        cs.push_atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4)));
-        assert!(!cs.is_empty());
-    }
-
-    #[test]
-    fn test_constraints_remove_atom() {
-        let mut cs = Constraints::new();
-        cs.push_atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4)));
-        cs.push_atom(AtomIdx(0), AtomConstraint::Degree(ValueAst::Lit(3)));
-        cs.push_atom(AtomIdx(1), AtomConstraint::Valence(ValueAst::Lit(2)));
-
-        let removed = cs.remove_atom(AtomIdx(0));
-        assert_eq!(
-            removed,
-            vec![
-                AtomConstraint::Valence(ValueAst::Lit(4)),
-                AtomConstraint::Degree(ValueAst::Lit(3)),
-            ]
-        );
-        assert_eq!(cs.atom(AtomIdx(0)).len(), 0);
-        assert_eq!(cs.atom(AtomIdx(1)).len(), 1);
-    }
-
-    #[test]
-    fn test_constraints_remove_atom_missing() {
-        let mut cs = Constraints::new();
-        assert_eq!(cs.remove_atom(AtomIdx(0)), Vec::<AtomConstraint>::new());
-    }
-
-    #[test]
-    fn test_constraints_remove_bond() {
-        let mut cs = Constraints::new();
-        cs.push_bond(BondIdx(0), BondConstraint::Aromatic);
-        cs.push_bond(BondIdx(1), BondConstraint::RingCount(ValueAst::Lit(1)));
-
-        let removed = cs.remove_bond(BondIdx(0));
-        assert_eq!(removed, vec![BondConstraint::Aromatic]);
-        assert_eq!(cs.bond(BondIdx(0)).len(), 0);
-        assert_eq!(cs.bond(BondIdx(1)).len(), 1);
-    }
-
-    #[test]
-    fn test_constraints_remove_molecule() {
-        let mut cs = Constraints::new();
-        cs.push_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: vec![AtomIdx(0)],
-            sum: ValueAst::Lit(0),
-        }));
-        cs.push_molecule(Constraint::Molecule(MoleculeConstraint::Connected(vec![
-            AtomIdx(0),
-            AtomIdx(1),
-        ])));
-
-        let removed = cs.remove_molecule();
-        assert_eq!(removed.len(), 2);
-        assert_eq!(cs.molecule().len(), 0);
-    }
-
-    #[test]
-    fn test_constraints_retain_atom() {
-        let mut cs = Constraints::new();
-        cs.push_atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4)));
-        cs.push_atom(AtomIdx(0), AtomConstraint::Degree(ValueAst::Lit(3)));
-
-        cs.retain_atom(AtomIdx(0), |c| matches!(c, AtomConstraint::Valence(_)));
-        assert_eq!(
-            cs.atom(AtomIdx(0)),
-            &[AtomConstraint::Valence(ValueAst::Lit(4))]
-        );
-    }
-
-    #[test]
-    fn test_constraints_retain_atom_empties_bucket() {
-        let mut cs = Constraints::new();
-        cs.push_atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4)));
-
-        cs.retain_atom(AtomIdx(0), |_| false);
-        assert!(cs.is_empty());
-    }
-
-    #[test]
-    fn test_constraints_retain_molecule() {
-        let mut cs = Constraints::new();
-        cs.push_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: vec![AtomIdx(0)],
-            sum: ValueAst::Lit(0),
-        }));
-        cs.push_molecule(Constraint::And(vec![]));
-
-        cs.retain_molecule(|c| matches!(c, Constraint::Molecule(_)));
-        assert_eq!(cs.molecule().len(), 1);
-    }
-
-    #[test]
-    fn test_constraints_clear() {
-        let mut cs = Constraints::new();
-        cs.push_atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4)));
-        cs.push_bond(BondIdx(0), BondConstraint::Aromatic);
-        cs.push_molecule(Constraint::Molecule(MoleculeConstraint::Connected(vec![
-            AtomIdx(0),
-        ])));
-
-        cs.clear();
-        assert!(cs.is_empty());
-    }
-
-    fn mk_remap(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdxRemapping {
+    fn idx_remapping(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdxRemapping {
         IdxRemapping::new(
-            umol_graph_core::Remapping {
+            Remapping {
                 removed_nodes,
                 removed_edges,
             },
@@ -705,7 +330,94 @@ mod tests {
         )
     }
 
-    #[test]
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(vec![], 0)]
+    #[case::molecule_leaves(vec![Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: vec![AtomIdx(0), AtomIdx(1)], sum: ValueAst::Lit(0) }),
+            Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: vec![AtomIdx(0)], spin: SpinStateAst::new(0, 1) })], 2)]
+    #[case::combinator(vec![Constraint::And(vec![Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
+            Constraint::Bond(BondIdx(0), BondConstraint::Aromatic)])], 1)]
+    fn test_constraints_push(
+        #[case] items: Vec<Constraint>,
+        #[case] expected_len: usize,
+    ) {
+        let mut cs = Constraints::new();
+        for c in items {
+            cs.push(c);
+        }
+        assert_eq!(cs.len(), expected_len);
+        assert_eq!(cs.is_empty(), expected_len == 0);
+    }
+
+    #[rstest]
+    fn test_constraints_retain() {
+        let mut cs = Constraints::new();
+        cs.push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: vec![AtomIdx(0)],
+            sum: ValueAst::Lit(0),
+        }));
+        cs.push(Constraint::And(vec![]));
+
+        cs.retain(|c| matches!(c, Constraint::Molecule(_)));
+        assert_eq!(cs.len(), 1);
+    }
+
+    #[rstest]
+    fn test_constraints_take_drains() {
+        let mut cs = Constraints::new();
+        cs.push(Constraint::Molecule(MoleculeConstraint::Connected(vec![
+            AtomIdx(0),
+            AtomIdx(1),
+        ])));
+        cs.push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: vec![AtomIdx(0)],
+            sum: ValueAst::Lit(0),
+        }));
+
+        let taken = cs.take();
+        assert_eq!(taken.len(), 2);
+        assert!(cs.is_empty());
+    }
+
+    #[rstest]
+    fn test_constraints_clear() {
+        let mut cs = Constraints::new();
+        cs.push(Constraint::Molecule(MoleculeConstraint::Connected(vec![
+            AtomIdx(0),
+        ])));
+        cs.clear();
+        assert!(cs.is_empty());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::drops_entity_leaf_on_removed_atom(vec![Constraint::Atom(AtomIdx(1), AtomConstraint::Valence(ValueAst::Lit(4))),
+        Constraint::Atom(AtomIdx(2), AtomConstraint::Valence(ValueAst::Lit(3)))],
+        idx_remapping(vec![1], vec![]), vec![Constraint::Atom(AtomIdx(1), AtomConstraint::Valence(ValueAst::Lit(3)))])]
+    #[case::shifts_remaining_leaves(vec![Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
+        Constraint::Atom(AtomIdx(2), AtomConstraint::Degree(ValueAst::Lit(3)))],
+        idx_remapping(vec![1], vec![]), vec![Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
+        Constraint::Atom(AtomIdx(1), AtomConstraint::Degree(ValueAst::Lit(3)))])]
+    #[case::drops_combinator_if_any_leaf_dropped(vec![Constraint::And(vec![Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
+        Constraint::Atom(AtomIdx(1), AtomConstraint::Degree(ValueAst::Lit(3)))])], idx_remapping(vec![1], vec![]), vec![])]
+    #[case::subpattern_shifts_anchor_atoms(vec![Constraint::Molecule(MoleculeConstraint::SubPattern {
+        anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomIdx(3), AtomIdx(0)); a }, pattern: Box::new(MoleculeAst::default()) })],
+        idx_remapping(vec![1], vec![]), vec![Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomIdx(2), AtomIdx(0)); a },
+        pattern: Box::new(MoleculeAst::default()) })])]
+    fn test_constraints_remap(
+        #[case] items: Vec<Constraint>,
+        #[case] remap: IdxRemapping,
+        #[case] expected: Vec<Constraint>,
+    ) {
+        let mut cs = Constraints::new();
+        for c in items {
+            cs.push(c);
+        }
+        cs.remap(&remap);
+        assert_eq!(cs.as_slice(), expected.as_slice());
+    }
+
+    #[rstest]
     fn test_sub_pattern_anchor_default_is_empty() {
         let a = SubPatternAnchor::default();
         assert!(a.is_empty());
@@ -714,7 +426,7 @@ mod tests {
         assert!(a.dative_bonds().is_empty());
     }
 
-    #[test]
+    #[rstest]
     fn test_sub_pattern_anchor_push_and_accessors() {
         let mut a = SubPatternAnchor::new();
         a.push_atom(AtomIdx(3), AtomIdx(0));
@@ -730,76 +442,16 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_sub_pattern_anchor_remap_shifts_target() {
-        let mut a = SubPatternAnchor::new();
-        a.push_atom(AtomIdx(3), AtomIdx(0));
-        a.push_bond(BondIdx(5), BondIdx(1));
-
-        let remap = mk_remap(vec![1], vec![2]);
-        let a = a.remap(&remap).unwrap();
-        assert_eq!(a.atoms(), &[(AtomIdx(2), AtomIdx(0))]);
-        assert_eq!(a.bonds(), &[(BondIdx(4), BondIdx(1))]);
-    }
-
-    #[test]
-    fn test_sub_pattern_anchor_remap_drops_on_removed_target_atom() {
-        let mut a = SubPatternAnchor::new();
-        a.push_atom(AtomIdx(2), AtomIdx(0));
-
-        let remap = mk_remap(vec![2], vec![]);
-        assert_eq!(a.remap(&remap), None);
-    }
-
-    #[test]
-    fn test_constraints_remap_drops_per_scope_entry_on_removed_ref() {
-        let mut cs = Constraints::new();
-        cs.push_dative_bond(DativeBondIdx(0), DativeBondConstraint::Donor(AtomIdx(1)));
-        cs.push_dative_bond(
-            DativeBondIdx(0),
-            DativeBondConstraint::RingCount(ValueAst::Lit(2)),
-        );
-
-        let remap = mk_remap(vec![1], vec![]);
-        cs.remap(&remap);
-
-        assert_eq!(
-            cs.dative_bond(DativeBondIdx(0)),
-            &[DativeBondConstraint::RingCount(ValueAst::Lit(2))],
-        );
-    }
-
-    #[test]
-    fn test_constraints_remap_drops_per_scope_bucket_when_all_entries_dropped() {
-        let mut cs = Constraints::new();
-        cs.push_dative_bond(DativeBondIdx(0), DativeBondConstraint::Donor(AtomIdx(1)));
-
-        let remap = mk_remap(vec![1], vec![]);
-        cs.remap(&remap);
-
-        assert!(cs.is_empty());
-    }
-
-    #[test]
-    fn test_constraints_remap_subpattern_shifts_anchor_atoms() {
-        let mut anchor = SubPatternAnchor::new();
-        anchor.push_atom(AtomIdx(3), AtomIdx(0));
-        let pattern = Box::new(MoleculeAst::default());
-
-        let mut cs = Constraints::new();
-        cs.push_molecule(Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor,
-            pattern,
-        }));
-
-        let remap = mk_remap(vec![1], vec![]);
-        cs.remap(&remap);
-
-        match &cs.molecule()[0] {
-            Constraint::Molecule(MoleculeConstraint::SubPattern { anchor, .. }) => {
-                assert_eq!(anchor.atoms(), &[(AtomIdx(2), AtomIdx(0))]);
-            }
-            other => panic!("expected SubPattern, got {:?}", other),
-        }
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::shifts_target({ let mut a = SubPatternAnchor::new(); a.push_atom(AtomIdx(3), AtomIdx(0)); a.push_bond(BondIdx(5), BondIdx(1)); a },
+        idx_remapping(vec![1], vec![2]), Some({ let mut a = SubPatternAnchor::new(); a.push_atom(AtomIdx(2), AtomIdx(0)); a.push_bond(BondIdx(4), BondIdx(1)); a }))]
+    #[case::drops_on_removed_target_atom({ let mut a = SubPatternAnchor::new(); a.push_atom(AtomIdx(2), AtomIdx(0)); a }, idx_remapping(vec![2], vec![]), None)]
+    fn test_sub_pattern_anchor_remap(
+        #[case] anchor: SubPatternAnchor,
+        #[case] remap: IdxRemapping,
+        #[case] expected: Option<SubPatternAnchor>,
+    ) {
+        assert_eq!(anchor.remap(&remap), expected);
     }
 }

@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 use std::fmt::{self, Display};
-use std::mem;
 use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, FromEdn, ToEdn};
@@ -14,13 +13,11 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_spin_pair, fmt_value, optional_value, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_spin_pair, fmt_value, lower_spin, optional_value,
+    raise_spin, SpinPredicate,
 };
-use crate::ast::config::{
-    MulticenterBondAstConfig, MultiplicityMode, NumericMode, UnpairedElectronsMode,
-};
+use crate::ast::config::{MulticenterBondAstConfig, NumericMode};
 use crate::ast::multicenter::MulticenterBondAst;
-use crate::ast::spin::SpinStateAst;
 use crate::ast::traits::{FromAst, ToAst};
 use crate::ast::value::ValueAst;
 
@@ -86,87 +83,7 @@ impl ToAst<MulticenterBondAst> for MulticenterBondDsl {
     }
 }
 
-fn raise_multicenter(ast: &mut MulticenterBondAst, cfg: &MulticenterBondAstConfig) {
-    if matches!(ast.charge, ValueAst::Undetermined) {
-        ast.charge = match cfg.charge_mode {
-            NumericMode::Zero => ValueAst::Lit(0),
-            NumericMode::Required => ValueAst::Undetermined,
-        };
-    }
-    if matches!(ast.electrons, ValueAst::Undetermined) {
-        ast.electrons = match cfg.electrons_mode {
-            NumericMode::Zero => ValueAst::Lit(0),
-            NumericMode::Required => ValueAst::Undetermined,
-        };
-    }
-    raise_spin(&mut ast.spin, cfg);
-}
-
-fn raise_spin(spin: &mut SpinStateAst, cfg: &MulticenterBondAstConfig) {
-    let u = mem::replace(&mut spin.unpaired, ValueAst::Undetermined);
-    let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
-    let resolved_u = if matches!(u, ValueAst::Undetermined) {
-        match cfg.unpaired_electrons_mode {
-            UnpairedElectronsMode::Zero => ValueAst::Lit(0),
-            UnpairedElectronsMode::Required => ValueAst::Undetermined,
-            UnpairedElectronsMode::Derived => match &m {
-                ValueAst::Lit(mm) => ValueAst::Lit(mm - 1),
-                _ => ValueAst::Undetermined,
-            },
-        }
-    } else {
-        u
-    };
-    let resolved_m = if matches!(m, ValueAst::Undetermined) {
-        match cfg.multiplicity_mode {
-            MultiplicityMode::Required => ValueAst::Undetermined,
-            MultiplicityMode::Derived => match &resolved_u {
-                ValueAst::Lit(uu) => ValueAst::Lit(uu + 1),
-                _ => ValueAst::Undetermined,
-            },
-        }
-    } else {
-        m
-    };
-    spin.unpaired = resolved_u;
-    spin.multiplicity = resolved_m;
-}
-
-fn lower_multicenter(ast: &mut MulticenterBondAst, cfg: &MulticenterBondAstConfig) {
-    if matches!(
-        (&cfg.charge_mode, &ast.charge),
-        (NumericMode::Zero, ValueAst::Lit(0))
-    ) {
-        ast.charge = ValueAst::Undetermined;
-    }
-    if matches!(
-        (&cfg.electrons_mode, &ast.electrons),
-        (NumericMode::Zero, ValueAst::Lit(0))
-    ) {
-        ast.electrons = ValueAst::Undetermined;
-    }
-    lower_spin(&mut ast.spin, cfg);
-}
-
-fn lower_spin(spin: &mut SpinStateAst, cfg: &MulticenterBondAstConfig) {
-    if let (ValueAst::Lit(uu), ValueAst::Lit(mm)) = (&spin.unpaired, &spin.multiplicity) {
-        let derived = *mm == uu + 1;
-        let strip_u = match cfg.unpaired_electrons_mode {
-            UnpairedElectronsMode::Zero => *uu == 0,
-            UnpairedElectronsMode::Derived => {
-                derived && matches!(cfg.multiplicity_mode, MultiplicityMode::Derived)
-            }
-            UnpairedElectronsMode::Required => false,
-        };
-        let strip_m = matches!(cfg.multiplicity_mode, MultiplicityMode::Derived) && derived;
-        if strip_u {
-            spin.unpaired = ValueAst::Undetermined;
-        }
-        if strip_m {
-            spin.multiplicity = ValueAst::Undetermined;
-        }
-    }
-}
+// -- Parse --------------------
 
 pub fn parse_multicenter(input: &str) -> Result<MulticenterBondDsl, ParseError> {
     multicenter.parse(input).map_err(|e| e.into_inner())
@@ -179,33 +96,6 @@ pub(crate) fn multicenter(i: &mut &str) -> PResult<MulticenterBondDsl> {
     let mut form = MulticenterBondDsl::default();
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
-}
-
-fn apply_predicates(
-    form: &mut MulticenterBondDsl,
-    preds: Vec<MulticenterPredicate>,
-) -> Result<(), ParseError> {
-    let ast = &mut form.0;
-    for pred in preds {
-        match pred {
-            MulticenterPredicate::Charge(v) => {
-                if !matches!(ast.charge, ValueAst::Undetermined) {
-                    return Err(ParseError::DuplicateMulticenterPredicate("#c".to_string()));
-                }
-                ast.charge = v;
-            }
-            MulticenterPredicate::Spin(sp) => {
-                apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateMulticenterPredicate)?;
-            }
-            MulticenterPredicate::Electrons(v) => {
-                if !matches!(ast.electrons, ValueAst::Undetermined) {
-                    return Err(ParseError::DuplicateMulticenterPredicate("#e".to_string()));
-                }
-                ast.electrons = v;
-            }
-        }
-    }
-    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -236,6 +126,35 @@ fn multicenter_predicate(i: &mut &str) -> PResult<MulticenterPredicate> {
     }
 }
 
+fn apply_predicates(
+    form: &mut MulticenterBondDsl,
+    preds: Vec<MulticenterPredicate>,
+) -> Result<(), ParseError> {
+    let ast = &mut form.0;
+    for pred in preds {
+        match pred {
+            MulticenterPredicate::Charge(v) => {
+                if !matches!(ast.charge, ValueAst::Undetermined) {
+                    return Err(ParseError::DuplicateMulticenterPredicate("#c".to_string()));
+                }
+                ast.charge = v;
+            }
+            MulticenterPredicate::Spin(sp) => {
+                apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateMulticenterPredicate)?;
+            }
+            MulticenterPredicate::Electrons(v) => {
+                if !matches!(ast.electrons, ValueAst::Undetermined) {
+                    return Err(ParseError::DuplicateMulticenterPredicate("#e".to_string()));
+                }
+                ast.electrons = v;
+            }
+        }
+    }
+    Ok(())
+}
+
+// -- Format --------------------
+
 fn fmt_multicenter_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
     fmt_spin_pair(f, &ast.spin)?;
@@ -254,26 +173,83 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     }
 }
 
+// -- Raise --------------------
+
+fn raise_multicenter(ast: &mut MulticenterBondAst, cfg: &MulticenterBondAstConfig) {
+    // Exhaustive destructure: adding a new MulticenterBondAst field is a
+    // compile error here, forcing the author to decide how raising should
+    // handle it.
+    let MulticenterBondAst {
+        charge,
+        spin,
+        electrons,
+        constraints: _,
+    } = ast;
+
+    if matches!(*charge, ValueAst::Undetermined) {
+        *charge = match cfg.charge_mode {
+            NumericMode::Zero => ValueAst::Lit(0),
+            NumericMode::Required => ValueAst::Undetermined,
+        };
+    }
+    if matches!(*electrons, ValueAst::Undetermined) {
+        *electrons = match cfg.electrons_mode {
+            NumericMode::Zero => ValueAst::Lit(0),
+            NumericMode::Required => ValueAst::Undetermined,
+        };
+    }
+    raise_spin(spin, cfg.unpaired_electrons_mode, cfg.multiplicity_mode);
+}
+
+// -- Format --------------------
+
+fn lower_multicenter(ast: &mut MulticenterBondAst, cfg: &MulticenterBondAstConfig) {
+    // Exhaustive destructure: adding a new MulticenterBondAst field is a
+    // compile error here, forcing the author to decide how lowering should
+    // handle it.
+    let MulticenterBondAst {
+        charge,
+        spin,
+        electrons,
+        constraints: _,
+    } = ast;
+
+    if matches!(
+        (&cfg.charge_mode, &*charge),
+        (NumericMode::Zero, ValueAst::Lit(0))
+    ) {
+        *charge = ValueAst::Undetermined;
+    }
+    if matches!(
+        (&cfg.electrons_mode, &*electrons),
+        (NumericMode::Zero, ValueAst::Lit(0))
+    ) {
+        *electrons = ValueAst::Undetermined;
+    }
+    lower_spin(spin, cfg.unpaired_electrons_mode, cfg.multiplicity_mode);
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
+    use crate::ast::constraint::MulticenterBondConstraints;
     use crate::ast::spin::SpinStateAst;
 
     #[rustfmt::skip]
     #[rstest]
     #[case::empty("", MulticenterBondDsl(MulticenterBondAst::default()))]
     #[case::whitespace("   ", MulticenterBondDsl(MulticenterBondAst::default()))]
-    #[case::charge_pos("#c+1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::charge_neg("#c-2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::electrons("#e6", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: Vec::new() }))]
-    #[case::electrons_bare("#e", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(1), constraints: Vec::new() }))]
-    #[case::unpaired("#u1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::mult("#s2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: ValueAst::Undetermined, constraints: Vec::new() }))]
-    #[case::charge_electrons("#c+#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Lit(2), constraints: Vec::new() }))]
-    #[case::full("#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(2), constraints: Vec::new() }))]
+    #[case::charge_pos("#c+1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
+    #[case::charge_neg("#c-2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
+    #[case::electrons("#e6", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: MulticenterBondConstraints::new() }))]
+    #[case::electrons_bare("#e", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(1), constraints: MulticenterBondConstraints::new() }))]
+    #[case::unpaired("#u1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: ValueAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
+    #[case::mult("#s2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: ValueAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
+    #[case::charge_electrons("#c+#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Lit(2), constraints: MulticenterBondConstraints::new() }))]
+    #[case::full("#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(2), constraints: MulticenterBondConstraints::new() }))]
     fn test_parse_multicenter(#[case] input: &str, #[case] expected: MulticenterBondDsl) {
         let result = multicenter.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -325,7 +301,7 @@ mod tests {
             charge: ValueAst::Lit(0),
             spin: SpinStateAst::new(0, 1),
             electrons: ValueAst::Lit(0),
-            constraints: Vec::new(),
+            constraints: MulticenterBondConstraints::new(),
         };
         let cfg = MulticenterBondAstConfig::zeroed();
         let dsl = MulticenterBondDsl::from_ast(&ast, &cfg).unwrap();

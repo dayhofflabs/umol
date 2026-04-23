@@ -1,6 +1,6 @@
 //! Multicenter bond AST.
 
-use super::constraint::MulticenterBondConstraint;
+use super::constraint::MulticenterBondConstraints;
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
@@ -12,7 +12,7 @@ pub struct MulticenterBondAst {
     pub charge: ValueAst,
     pub spin: SpinStateAst,
     pub electrons: ValueAst,
-    pub constraints: Vec<MulticenterBondConstraint>,
+    pub constraints: MulticenterBondConstraints,
 }
 
 impl MulticenterBondAst {
@@ -21,7 +21,7 @@ impl MulticenterBondAst {
             charge,
             spin,
             electrons,
-            constraints: Vec::new(),
+            constraints: MulticenterBondConstraints::new(),
         }
     }
 
@@ -49,7 +49,7 @@ mod tests {
     #[rstest]
     #[case::default_all_undetermined(MulticenterBondAst::default(), false)]
     #[case::ground(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1),
-        electrons: ValueAst::Lit(2), constraints: Vec::new() }, true)]
+        electrons: ValueAst::Lit(2), constraints: MulticenterBondConstraints::new() }, true)]
     fn test_multicenter_bond_ast_is_ground(
         #[case] ast: MulticenterBondAst,
         #[case] expected: bool,

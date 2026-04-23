@@ -1,6 +1,6 @@
 //! Noncovalent bond AST.
 
-use super::constraint::NoncovalentBondConstraint;
+use super::constraint::NoncovalentBondConstraints;
 
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
 /// interaction kind. No bond order, no charge or spin — these do not apply
@@ -8,14 +8,14 @@ use super::constraint::NoncovalentBondConstraint;
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct NoncovalentBondAst {
     pub kind: NoncovalentKindAst,
-    pub constraints: Vec<NoncovalentBondConstraint>,
+    pub constraints: NoncovalentBondConstraints,
 }
 
 impl NoncovalentBondAst {
     pub fn new(kind: NoncovalentKindAst) -> Self {
         Self {
             kind,
-            constraints: Vec::new(),
+            constraints: NoncovalentBondConstraints::new(),
         }
     }
 

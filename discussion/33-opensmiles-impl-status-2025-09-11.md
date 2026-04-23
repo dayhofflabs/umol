@@ -21,7 +21,7 @@
   - Recommended order (optimize for implementation clarity and stable performance):
     1) Bracket atoms (non-organic elements, isotope, charge, H-count, atom class; capture chiral flags but defer final interpretation)
        - Independent of rings/aromaticity; ubiquitous. Good ROI early.
-       - Parse bracket payload with a small, tight sub-parser over bytes (no allocation), then call `ParseState.add_atom_with_props(...)`. This aligns with your zero-copy preference [[memory:7124069]].
+       - Parse bracket payload with a small, tight sub-parser over bytes (no allocation), then call `ParseState.add_atom_with_props(...)`. This aligns with your zero-copy preference.
     2) Bond stereo markers `/` and `\` on double bonds (acyclic first)
        - Only record markers and adjacency; leave E/Z resolution for after the connectivity is fully known.
     3) Ring closures
@@ -44,7 +44,7 @@
     - If you prefer minimal coupling during development, you can do i → iii → ii → iv. That slightly delays testing of stereo markers, but simplifies mental model: add edges (rings) before interpreting stereo. Either sequence is fine; I prefer i → ii (record-only) → iii → ii (resolve) → iv for earlier feedback on stereo token handling.
 
 - Tooling choice for these steps
-  - Keep LALRPOP + logos for the top-level grammar; push new semantics into `ParseState`. This fits your zero-copy, no-allocation parsing approach [[memory:7124069]] and preserves deterministic performance.
+  - Keep LALRPOP + logos for the top-level grammar; push new semantics into `ParseState`. This fits your zero-copy, no-allocation parsing approach and preserves deterministic performance.
   - Use tiny helper parsers for bracket payloads (inside actions). Combinators (nom) or small handwritten routines are both viable for this micro-grammar; choose whichever is more direct to read. For the top-level, LR remains a better fit than PEG/combinators.
   - No need to change parser technology now; the current setup will scale through rings and stereo.
 

@@ -1,6 +1,6 @@
 //! Aromatic system AST.
 
-use super::constraint::AromaticSystemConstraint;
+use super::constraint::AromaticSystemConstraints;
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
@@ -9,7 +9,7 @@ pub struct AromaticSystemAst {
     pub charge: ValueAst,
     pub spin: SpinStateAst,
     pub electrons: ValueAst,
-    pub constraints: Vec<AromaticSystemConstraint>,
+    pub constraints: AromaticSystemConstraints,
 }
 
 impl AromaticSystemAst {
@@ -18,7 +18,7 @@ impl AromaticSystemAst {
             charge,
             spin,
             electrons,
-            constraints: Vec::new(),
+            constraints: AromaticSystemConstraints::new(),
         }
     }
 

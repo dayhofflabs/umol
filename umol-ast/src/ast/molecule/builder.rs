@@ -16,10 +16,7 @@ use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, Remapping, VarRel
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
-use crate::ast::constraint::{
-    AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, Constraints,
-    DativeBondConstraint, MulticenterBondConstraint, NoncovalentBondConstraint,
-};
+use crate::ast::constraint::{Constraint, Constraints};
 use crate::ast::dative::{DativeBondAst, DativeDirection};
 use crate::ast::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
@@ -328,44 +325,11 @@ impl MoleculeBuilder {
         NoncovalentBondIdx(i)
     }
 
-    pub fn push_atom_constraint(&mut self, idx: AtomIdx, c: AtomConstraint) {
-        self.constraints.push_atom(idx, c);
-    }
-
-    pub fn push_bond_constraint(&mut self, idx: BondIdx, c: BondConstraint) {
-        self.constraints.push_bond(idx, c);
-    }
-
-    pub fn push_dative_bond_constraint(&mut self, idx: DativeBondIdx, c: DativeBondConstraint) {
-        self.constraints.push_dative_bond(idx, c);
-    }
-
-    pub fn push_aromatic_system_constraint(
-        &mut self,
-        idx: AromaticSystemIdx,
-        c: AromaticSystemConstraint,
-    ) {
-        self.constraints.push_aromatic_system(idx, c);
-    }
-
-    pub fn push_multicenter_bond_constraint(
-        &mut self,
-        idx: MulticenterBondIdx,
-        c: MulticenterBondConstraint,
-    ) {
-        self.constraints.push_multicenter_bond(idx, c);
-    }
-
-    pub fn push_noncovalent_bond_constraint(
-        &mut self,
-        idx: NoncovalentBondIdx,
-        c: NoncovalentBondConstraint,
-    ) {
-        self.constraints.push_noncovalent_bond(idx, c);
-    }
-
-    pub fn push_molecule_constraint(&mut self, c: Constraint) {
-        self.constraints.push_molecule(c);
+    /// Add a molecule-level constraint (molecule-scope predicate or
+    /// combinator). Unconditional per-entity constraints belong inline on the
+    /// entity — use `atom_mut(idx).constraints.set(c)` etc.
+    pub fn push_constraint(&mut self, c: Constraint) {
+        self.constraints.push(c);
     }
 
     // -- Attribute mutation ---------------------------------------------------
