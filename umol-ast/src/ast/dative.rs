@@ -53,16 +53,17 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use crate::ast::constraint::DativeBondConstraint;
-
     use super::super::value::ValueAst;
     use super::*;
+    use crate::ast::constraint::DativeBondConstraint;
 
     #[rustfmt::skip]
     #[rstest]
     #[case::default_(DativeBondAst::default(), true)]
-    #[case::with_ground_constraint(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(6))]) }, true)]
-    #[case::with_undetermined_constraint(DativeBondAst { direction: DativeDirection::Forward, constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Undetermined)]) }, true)]
+    #[case::with_ground_constraint(DativeBondAst { direction: DativeDirection::Forward,
+        constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(6))]) }, true)]
+    #[case::with_undetermined_constraint(DativeBondAst { direction: DativeDirection::Forward,
+        constraints: DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Undetermined)]) }, true)]
     #[case::reverse(DativeBondAst { direction: DativeDirection::Reverse, constraints: DativeBondConstraints::new() }, true)]
     fn test_dative_bond_ast_is_ground(#[case] ast: DativeBondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
@@ -91,7 +92,10 @@ mod tests {
     #[rstest]
     #[case(DativeDirection::Forward, DativeDirection::Reverse)]
     #[case(DativeDirection::Reverse, DativeDirection::Forward)]
-    fn test_dative_direction_flip(#[case] input: DativeDirection, #[case] expected: DativeDirection) {
+    fn test_dative_direction_flip(
+        #[case] input: DativeDirection,
+        #[case] expected: DativeDirection,
+    ) {
         assert_eq!(input.flip(), expected);
     }
 }
