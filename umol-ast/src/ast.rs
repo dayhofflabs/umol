@@ -4,7 +4,6 @@ pub mod aromatic;
 pub mod atom;
 pub mod automorphism;
 pub mod bond;
-pub mod config;
 pub mod constraint;
 pub mod dative;
 pub mod error;

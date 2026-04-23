@@ -1,6 +1,7 @@
 //! Noncovalent-bond-string DSL.
 
 use std::borrow::Cow;
+use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -11,11 +12,14 @@ use winnow::error::{ErrMode, ParserError};
 use winnow::token::one_of;
 use winnow::Parser;
 
+use super::atom::AtomConstraintDsl;
+use super::constraint::{AtomRef, ResolveContext};
 use super::error::{PResult, ParseError};
 use super::value::id;
-use crate::ast::config::NoncovalentBondAstConfig;
+use crate::ast::constraint::NoncovalentBondConstraint;
 use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentKind, NoncovalentKindAst};
-use crate::ast::traits::{FromAst, ToAst};
+use crate::ast::traits::{FromAst, IntoAst};
+use crate::dsl::config::NoncovalentBondDefaults;
 
 /// Surface DSL wrapper around `NoncovalentBondAst`. String form is the
 /// noncovalent-kind expression (three-letter literal, set, bind, ref, or `*`).
@@ -61,21 +65,23 @@ impl ToEdn for NoncovalentBondDsl {
 }
 
 impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
+    type Ctx<'a> = NoncovalentBondDefaults;
     type Error = ParseError;
 
-    fn from_ast(
+    fn from_ast<'a>(
         ast: &NoncovalentBondAst,
-        _cfg: &NoncovalentBondAstConfig,
+        _cfg: &Self::Ctx<'a>,
     ) -> Result<Self, ParseError> {
         Ok(NoncovalentBondDsl(ast.clone()))
     }
 }
 
-impl ToAst<NoncovalentBondAst> for NoncovalentBondDsl {
+impl IntoAst<NoncovalentBondAst> for NoncovalentBondDsl {
+    type Ctx<'a> = NoncovalentBondDefaults;
     type Error = ParseError;
 
-    fn to_ast(&self, _cfg: &NoncovalentBondAstConfig) -> Result<NoncovalentBondAst, ParseError> {
-        Ok(self.0.clone())
+    fn into_ast<'a>(self, _cfg: &Self::Ctx<'a>) -> Result<NoncovalentBondAst, ParseError> {
+        Ok(self.0)
     }
 }
 
@@ -205,6 +211,157 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentKindAst) -> fmt::Resul
     }
 }
 
+// -- Constraint DSL -------------------
+
+/// Surface DSL wrapper around `NoncovalentBondConstraint`. Mirrors the AST
+/// enum with atom refs in place of `AtomIdx`. EDN form is a single-key map:
+/// `{:ends [a b]}`, `{:contains ref}`, or `{:ends-satisfy [<atom-constraint>
+/// <atom-constraint>]}`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum NoncovalentBondConstraintDsl {
+    Ends([AtomRef; 2]),
+    Contains(AtomRef),
+    EndsSatisfy([Box<AtomConstraintDsl>; 2]),
+}
+
+impl FromAst<NoncovalentBondConstraint> for NoncovalentBondConstraintDsl {
+    type Ctx<'a> = ResolveContext<'a>;
+    type Error = Infallible;
+
+    fn from_ast<'a>(
+        c: &NoncovalentBondConstraint,
+        ctx: &Self::Ctx<'a>,
+    ) -> Result<Self, Infallible> {
+        let meta = ctx.metadata;
+        Ok(match c {
+            NoncovalentBondConstraint::Ends([a, b]) => Self::Ends([
+                AtomRef::from_ast(*a, meta),
+                AtomRef::from_ast(*b, meta),
+            ]),
+            NoncovalentBondConstraint::Contains(a) => {
+                Self::Contains(AtomRef::from_ast(*a, meta))
+            }
+            NoncovalentBondConstraint::EndsSatisfy([a, b]) => Self::EndsSatisfy([
+                Box::new(AtomConstraintDsl::from_ast(a, &()).unwrap()),
+                Box::new(AtomConstraintDsl::from_ast(b, &()).unwrap()),
+            ]),
+        })
+    }
+}
+
+impl IntoAst<NoncovalentBondConstraint> for NoncovalentBondConstraintDsl {
+    type Ctx<'a> = ResolveContext<'a>;
+    type Error = ParseError;
+
+    fn into_ast<'a>(
+        self,
+        ctx: &Self::Ctx<'a>,
+    ) -> Result<NoncovalentBondConstraint, ParseError> {
+        let meta = ctx.metadata;
+        Ok(match self {
+            Self::Ends([a, b]) => NoncovalentBondConstraint::Ends([
+                a.into_ast(ctx.atom_count, meta)?,
+                b.into_ast(ctx.atom_count, meta)?,
+            ]),
+            Self::Contains(r) => {
+                NoncovalentBondConstraint::Contains(r.into_ast(ctx.atom_count, meta)?)
+            }
+            Self::EndsSatisfy([a, b]) => NoncovalentBondConstraint::EndsSatisfy([
+                Box::new(a.into_ast(&()).unwrap()),
+                Box::new(b.into_ast(&()).unwrap()),
+            ]),
+        })
+    }
+}
+
+impl<'de> FromEdn<'de> for NoncovalentBondConstraintDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let Edn::Map(m) = edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "noncovalent-bond-constraint single-key map",
+                got: edn.kind(),
+                path: Vec::new(),
+            });
+        };
+        if m.len() != 1 {
+            return Err(DeError::Custom(format!(
+                "noncovalent-bond-constraint must have exactly one key, got {}",
+                m.len()
+            )));
+        }
+        let (k, v) = m.iter().next().unwrap();
+        let Edn::Keyword(key) = k else {
+            return Err(DeError::TypeMismatch {
+                expected: "keyword key",
+                got: k.kind(),
+                path: vec!["noncovalent-bond-constraint".into()],
+            });
+        };
+        Ok(match key.name() {
+            "ends" => Self::Ends(parse_pair::<AtomRef>(v, "ends")?),
+            "contains" => Self::Contains(AtomRef::from_edn(v)?),
+            "ends-satisfy" => Self::EndsSatisfy(parse_pair_boxed::<AtomConstraintDsl>(
+                v,
+                "ends-satisfy",
+            )?),
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["noncovalent-bond-constraint".into()],
+                });
+            }
+        })
+    }
+}
+
+impl ToEdn for NoncovalentBondConstraintDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        let (key, value) = match self {
+            Self::Ends([a, b]) => (
+                "ends",
+                Edn::Vector(vec![a.to_edn(), b.to_edn()].into()),
+            ),
+            Self::Contains(r) => ("contains", r.to_edn()),
+            Self::EndsSatisfy([a, b]) => (
+                "ends-satisfy",
+                Edn::Vector(vec![a.to_edn(), b.to_edn()].into()),
+            ),
+        };
+        let mut m = umol_edn::EdnMap::with_capacity(1);
+        m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
+        Edn::Map(m)
+    }
+}
+
+fn parse_pair<T>(edn: &Edn<'_>, context: &'static str) -> Result<[T; 2], DeError>
+where
+    T: for<'de> FromEdn<'de>,
+{
+    let Edn::Vector(v) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "2-element vector",
+            got: edn.kind(),
+            path: vec![context.into()],
+        });
+    };
+    if v.len() != 2 {
+        return Err(DeError::Custom(format!(
+            "{}: expected 2 elements, got {}",
+            context,
+            v.len()
+        )));
+    }
+    Ok([T::from_edn(&v[0])?, T::from_edn(&v[1])?])
+}
+
+fn parse_pair_boxed<T>(edn: &Edn<'_>, context: &'static str) -> Result<[Box<T>; 2], DeError>
+where
+    T: for<'de> FromEdn<'de>,
+{
+    let [a, b] = parse_pair::<T>(edn, context)?;
+    Ok([Box::new(a), Box::new(b)])
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -259,8 +416,8 @@ mod tests {
     #[rstest]
     fn test_noncovalent_dsl_to_ast_passthrough() {
         let dsl = NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond));
-        let cfg = NoncovalentBondAstConfig::zeroed();
-        let ast = dsl.to_ast(&cfg).unwrap();
+        let cfg = NoncovalentBondDefaults::zeroed();
+        let ast = dsl.into_ast(&cfg).unwrap();
         assert_eq!(
             ast.kind,
             NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond)
@@ -276,5 +433,90 @@ mod tests {
         let tree = umol_edn::read_string(input).unwrap();
         let via_tree = NoncovalentBondDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
+    }
+
+    // -- NoncovalentBondConstraintDsl ----------------
+
+    use super::super::molecule::Metadata;
+    use crate::ast::constraint::{AtomConstraint, NoncovalentBondConstraint};
+    use crate::ast::idx::AtomIdx;
+    use crate::ast::value::ValueAst;
+    use bimap::BiMap;
+    use indexmap::IndexMap;
+
+    fn empty_metadata() -> Metadata {
+        Metadata {
+            atom_ids: IndexMap::new(),
+            atom_aliases: BiMap::new(),
+            bond_ids: IndexMap::new(),
+            dative_bond_ids: IndexMap::new(),
+            aromatic_system_ids: IndexMap::new(),
+            multicenter_bond_ids: IndexMap::new(),
+            noncovalent_bond_ids: IndexMap::new(),
+        }
+    }
+
+    fn ctx_with_atoms(atom_count: usize, meta: &Metadata) -> ResolveContext<'_> {
+        ResolveContext {
+            atom_count,
+            bond_count: 0,
+            dative_bond_count: 0,
+            aromatic_system_count: 0,
+            multicenter_bond_count: 0,
+            noncovalent_bond_count: 0,
+            metadata: meta,
+        }
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ends(NoncovalentBondConstraint::Ends([AtomIdx(0), AtomIdx(1)]), "{:ends [0 1]}")]
+    #[case::contains(NoncovalentBondConstraint::Contains(AtomIdx(3)), "{:contains 3}")]
+    #[case::ends_satisfy(NoncovalentBondConstraint::EndsSatisfy([
+        Box::new(AtomConstraint::Valence(ValueAst::Lit(4))),
+        Box::new(AtomConstraint::Degree(ValueAst::Lit(3))),
+    ]), "{:ends-satisfy [{:valence 4} {:degree 3}]}")]
+    fn test_noncovalent_bond_constraint_dsl_roundtrip(
+        #[case] input: NoncovalentBondConstraint,
+        #[case] edn_source: &str,
+    ) {
+        let meta = empty_metadata();
+        let render_ctx = ResolveContext::for_rendering(&meta);
+        let dsl = NoncovalentBondConstraintDsl::from_ast(&input, &render_ctx).unwrap();
+        let edn = dsl.clone().to_edn();
+        let expected = umol_edn::read_string(edn_source).unwrap();
+        assert_eq!(edn, expected, "render mismatch");
+        let parsed = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap();
+        let back = parsed.into_ast(&ctx_with_atoms(10, &meta)).unwrap();
+        assert_eq!(back, input, "parse-back mismatch");
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraint_dsl_rejects_out_of_range_atom() {
+        let meta = empty_metadata();
+        let edn = umol_edn::read_string("{:contains 99}").unwrap();
+        let dsl = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap();
+        let err = dsl.into_ast(&ctx_with_atoms(5, &meta)).unwrap_err();
+        assert_eq!(
+            err,
+            ParseError::InvalidRef {
+                kind: "atom",
+                value: "99".into()
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraint_dsl_rejects_unknown_key() {
+        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+        let err = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap_err();
+        assert!(matches!(err, DeError::UnknownField { .. }));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraint_dsl_rejects_wrong_pair_length() {
+        let edn = umol_edn::read_string("{:ends [0]}").unwrap();
+        let err = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap_err();
+        assert!(matches!(err, DeError::Custom(_)));
     }
 }

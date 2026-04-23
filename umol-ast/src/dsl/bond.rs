@@ -1,6 +1,7 @@
 //! Bond-string DSL.
 
 use std::borrow::Cow;
+use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -18,9 +19,9 @@ use super::predicates::{
 };
 use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
-use crate::ast::config::{BondAstConfig, NumericMode};
+use crate::dsl::config::{BondDefaults, NumericDefault};
 use crate::ast::constraint::BondConstraint;
-use crate::ast::traits::{FromAst, ToAst};
+use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
 /// Surface DSL wrapper around `BondAst`. Parses and renders the bond-string
@@ -71,22 +72,23 @@ impl ToEdn for BondDsl {
 }
 
 impl FromAst<BondAst> for BondDsl {
+    type Ctx<'a> = BondDefaults;
     type Error = ParseError;
 
-    fn from_ast(ast: &BondAst, cfg: &BondAstConfig) -> Result<Self, ParseError> {
+    fn from_ast<'a>(ast: &BondAst, cfg: &Self::Ctx<'a>) -> Result<Self, ParseError> {
         let mut out = ast.clone();
         lower_bond(&mut out, cfg);
         Ok(BondDsl(out))
     }
 }
 
-impl ToAst<BondAst> for BondDsl {
+impl IntoAst<BondAst> for BondDsl {
+    type Ctx<'a> = BondDefaults;
     type Error = ParseError;
 
-    fn to_ast(&self, cfg: &BondAstConfig) -> Result<BondAst, ParseError> {
-        let mut out = self.0.clone();
-        raise_bond(&mut out, cfg);
-        Ok(out)
+    fn into_ast<'a>(mut self, cfg: &Self::Ctx<'a>) -> Result<BondAst, ParseError> {
+        raise_bond(&mut self.0, cfg);
+        Ok(self.0)
     }
 }
 
@@ -207,7 +209,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
 
 // -- Lower --------------------
 
-fn lower_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
+fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondAst field is a compile error
     // here, forcing the author to decide how lowering should handle it.
     let BondAst {
@@ -218,17 +220,17 @@ fn lower_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
     } = ast;
 
     if matches!(
-        (&cfg.charge_mode, &*charge),
-        (NumericMode::Zero, ValueAst::Lit(0))
+        (&cfg.charge, &*charge),
+        (NumericDefault::Zero, ValueAst::Lit(0))
     ) {
         *charge = ValueAst::Undetermined;
     }
-    lower_spin(spin, cfg.unpaired_electrons_mode, cfg.multiplicity_mode);
+    lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
 // -- Raise --------------------
 
-fn raise_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
+fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondAst field is a compile error
     // here, forcing the author to decide how raising should handle it.
     let BondAst {
@@ -239,12 +241,12 @@ fn raise_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
     } = ast;
 
     if matches!(*charge, ValueAst::Undetermined) {
-        *charge = match cfg.charge_mode {
-            NumericMode::Zero => ValueAst::Lit(0),
-            NumericMode::Required => ValueAst::Undetermined,
+        *charge = match cfg.charge {
+            NumericDefault::Zero => ValueAst::Lit(0),
+            NumericDefault::Required => ValueAst::Undetermined,
         };
     }
-    raise_spin(spin, cfg.unpaired_electrons_mode, cfg.multiplicity_mode);
+    raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
 // -- Constraint DSL -------------------
@@ -255,13 +257,21 @@ fn raise_bond(ast: &mut BondAst, cfg: &BondAstConfig) {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BondConstraintDsl(pub BondConstraint);
 
-impl BondConstraintDsl {
-    pub fn from_ast(c: &BondConstraint) -> Self {
-        Self(c.clone())
-    }
+impl FromAst<BondConstraint> for BondConstraintDsl {
+    type Ctx<'a> = ();
+    type Error = Infallible;
 
-    pub fn into_ast(self) -> BondConstraint {
-        self.0
+    fn from_ast<'a>(ast: &BondConstraint, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+        Ok(Self(ast.clone()))
+    }
+}
+
+impl IntoAst<BondConstraint> for BondConstraintDsl {
+    type Ctx<'a> = ();
+    type Error = Infallible;
+
+    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<BondConstraint, Infallible> {
+        Ok(self.0)
     }
 }
 
@@ -280,10 +290,10 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                 };
                 let c = match key.name() {
                     "ring-count" => BondConstraint::RingCount(
-                        super::value::ValueDsl::from_edn(v)?.into_ast(),
+                        super::value::ValueDsl::from_edn(v)?.into_ast(&()).unwrap(),
                     ),
                     "ring-size" => BondConstraint::RingSize(
-                        super::value::ValueDsl::from_edn(v)?.into_ast(),
+                        super::value::ValueDsl::from_edn(v)?.into_ast(&()).unwrap(),
                     ),
                     other => {
                         return Err(DeError::UnknownField {
@@ -319,7 +329,7 @@ fn bond_constraint_single_key(key: &str, v: &ValueAst) -> Edn<'static> {
     let mut m = umol_edn::EdnMap::with_capacity(1);
     m.insert(
         Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())),
-        super::value::ValueDsl::from_ast(v).to_edn(),
+        super::value::ValueDsl::from_ast(v, &()).unwrap().to_edn(),
     );
     Edn::Map(m)
 }
@@ -430,8 +440,8 @@ mod tests {
     #[rstest]
     fn test_bond_dsl_to_ast_fills_zero_defaults() {
         let dsl = BondDsl(BondAst::new(ValueAst::Lit(1)));
-        let cfg = BondAstConfig::zeroed();
-        let ast = dsl.to_ast(&cfg).unwrap();
+        let cfg = BondDefaults::zeroed();
+        let ast = dsl.into_ast(&cfg).unwrap();
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(ast.spin, SpinStateAst::new(0, 1));
     }
@@ -441,7 +451,7 @@ mod tests {
         let mut ast = BondAst::new(ValueAst::Lit(1));
         ast.charge = ValueAst::Lit(0);
         ast.spin = SpinStateAst::new(0, 1);
-        let cfg = BondAstConfig::zeroed();
+        let cfg = BondDefaults::zeroed();
         let dsl = BondDsl::from_ast(&ast, &cfg).unwrap();
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
@@ -450,8 +460,8 @@ mod tests {
     #[rstest]
     fn test_bond_dsl_roundtrip_zeroed() {
         let input = BondDsl(BondAst::new(ValueAst::Lit(2)));
-        let cfg = BondAstConfig::zeroed();
-        let raised = input.to_ast(&cfg).unwrap();
+        let cfg = BondDefaults::zeroed();
+        let raised = input.clone().into_ast(&cfg).unwrap();
         let lowered = BondDsl::from_ast(&raised, &cfg).unwrap();
         assert_eq!(input, lowered);
     }
@@ -480,12 +490,12 @@ mod tests {
         #[case] input: BondConstraint,
         #[case] edn_source: &str,
     ) {
-        let dsl = BondConstraintDsl::from_ast(&input);
+        let dsl = BondConstraintDsl::from_ast(&input, &()).unwrap();
         let edn = dsl.to_edn();
         let expected = umol_edn::read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
-        assert_eq!(parsed.into_ast(), input, "parse-back mismatch");
+        assert_eq!(parsed.into_ast(&()).unwrap(), input, "parse-back mismatch");
     }
 
     #[rstest]
@@ -506,7 +516,7 @@ mod tests {
         let edn = umol_edn::read_string(r##"{:ring-size "?n :: {5,6}"}"##).unwrap();
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
-            parsed.into_ast(),
+            parsed.into_ast(&()).unwrap(),
             BondConstraint::RingSize(ValueAst::Expr(Expr::Mem(
                 Box::new(Expr::Var("n".into())),
                 vec![5, 6],

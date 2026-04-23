@@ -43,7 +43,7 @@ A **bond literal** in **full** form is an **EDN string** whose contents are a *b
 
 - an atom literal (an EDN string carrying an **atom-string** payload),
 - an alias reference (keyword matching a key in **`:atom-aliases`**), or
-- an inline-id entry **`[`** *keyword* *atom-entry* **`]`** — a 2-element vector where the first element is a keyword id and the second is an atom literal or alias reference.
+- an inline-id entry **`[`** *keyword* *atom-spec* **`]`** — a 2-element vector where the first element is a keyword id and the second is an atom literal or alias reference.
 
 **`:bonds`** is a **vector** of bond entries (**§4**). Other optional keys are listed in **§4**.
 
@@ -88,9 +88,10 @@ alias-list      ::= [ keyword "atom-string" ]*
 
 atom-collection ::= [ atom-entry* ]
 
-atom-entry ::= "atom-string"
-             | keyword
-             | [ keyword atom-entry ]
+atom-entry ::= atom-spec
+             | [ keyword atom-spec ]
+
+atom-spec  ::= "atom-string" | keyword
 
 localized-bond-list ::= [ localized-bond-entry* ]
 dative-bond-list   ::= [ dative-bond-entry* ]
@@ -130,7 +131,7 @@ noncovalent-keyword ::= :h-bond | :halogen-bond | :chalcogen-bond | :ionic | :va
 
 **`:constraints`**. Molecule-wide derived predicates — total charge, total spin, per-atom topology, bond-order sums, connectivity, sub-pattern anchors, boolean combinators — live here. The canonical grammar appears in **§7.9**. Molecule-wide charge and spin assertions are written as **`{:total-charge n}`** and **`{:total-spin spin-literal}`** entries within this list; there is no top-level **`:charge`** or **`:spin`** key on the molecule map.
 
-**Inline ids.** An **`atom-entry`** of the form **`[`** *keyword* *atom-entry* **`]`** assigns the keyword as an **id** to the atom at that position. Ids enable symbolic reference from bond endpoints (instead of positional index). Entries with and without ids **MAY** be freely mixed within the same **`:atoms`** vector.
+**Inline ids.** An **`atom-entry`** of the form **`[`** *keyword* *atom-spec* **`]`** assigns the keyword as an **id** to the atom at that position. Ids enable symbolic reference from bond endpoints (instead of positional index). Entries with and without ids **MAY** be freely mixed within the same **`:atoms`** vector.
 
 **Endpoints.** Every atom site referenced from a structural relation **MUST** exist under **`:atoms`**, either by positional index (integer) or by id keyword:
 

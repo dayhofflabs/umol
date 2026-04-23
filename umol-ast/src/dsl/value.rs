@@ -3,6 +3,7 @@
 //! type itself has no `Display` impl.
 
 use std::borrow::Cow;
+use std::convert::Infallible;
 use std::fmt::{self, Display, Write};
 
 use umol_edn::{DeError, Edn, EdnKeyword, FromEdn, ToEdn};
@@ -13,6 +14,7 @@ use winnow::token::one_of;
 use winnow::Parser;
 
 use super::error::{PResult, ParseError};
+use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::{ArithOp, Expr, RelOp, ValueAst};
 
 /// Surface DSL wrapper around `ValueAst`. EDN form is hybrid: `Lit` → `Int`,
@@ -23,13 +25,21 @@ use crate::ast::value::{ArithOp, Expr, RelOp, ValueAst};
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ValueDsl(pub ValueAst);
 
-impl ValueDsl {
-    pub fn from_ast(v: &ValueAst) -> Self {
-        Self(v.clone())
-    }
+impl FromAst<ValueAst> for ValueDsl {
+    type Ctx<'a> = ();
+    type Error = Infallible;
 
-    pub fn into_ast(self) -> ValueAst {
-        self.0
+    fn from_ast<'a>(ast: &ValueAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+        Ok(Self(ast.clone()))
+    }
+}
+
+impl IntoAst<ValueAst> for ValueDsl {
+    type Ctx<'a> = ();
+    type Error = Infallible;
+
+    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<ValueAst, Infallible> {
+        Ok(self.0)
     }
 }
 
@@ -506,7 +516,7 @@ mod tests {
         Box::new(Expr::Lit(1)),
     )), "(0 + 1) * 1")]
     fn test_value_display(#[case] input: ValueAst, #[case] expected: &str) {
-        assert_eq!(ValueDsl::from_ast(&input).to_string(), expected);
+        assert_eq!(ValueDsl::from_ast(&input, &()).unwrap().to_string(), expected);
     }
 
     #[rustfmt::skip]
@@ -528,7 +538,7 @@ mod tests {
     #[case::chained_and_or("?a & ?b | ?c & ?d")]
     fn test_value_display_roundtrip(#[case] input: &str) {
         let parsed = value.parse(input).unwrap();
-        let rendered = ValueDsl::from_ast(&parsed).to_string();
+        let rendered = ValueDsl::from_ast(&parsed, &()).unwrap().to_string();
         let reparsed = value.parse(&rendered).unwrap();
         assert_eq!(parsed, reparsed, "input={input:?} rendered={rendered:?}");
     }
@@ -546,7 +556,7 @@ mod tests {
     )]
     fn test_value_dsl_to_edn(#[case] v: ValueAst, #[case] expected: Edn<'static>) {
         use umol_edn::ToEdn;
-        assert_eq!(ValueDsl::from_ast(&v).to_edn(), expected);
+        assert_eq!(ValueDsl::from_ast(&v, &()).unwrap().to_edn(), expected);
     }
 
     #[rustfmt::skip]
@@ -563,7 +573,7 @@ mod tests {
     )]
     fn test_value_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: ValueAst) {
         use umol_edn::FromEdn;
-        assert_eq!(ValueDsl::from_edn(&input).unwrap().into_ast(), expected);
+        assert_eq!(ValueDsl::from_edn(&input).unwrap().into_ast(&()).unwrap(), expected);
     }
 
     #[rstest]
@@ -601,8 +611,8 @@ mod tests {
     #[case::expr(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1)))))]
     fn test_value_dsl_edn_roundtrip(#[case] v: ValueAst) {
         use umol_edn::{FromEdn, ToEdn};
-        let edn = ValueDsl::from_ast(&v).to_edn();
-        let back = ValueDsl::from_edn(&edn).unwrap().into_ast();
+        let edn = ValueDsl::from_ast(&v, &()).unwrap().to_edn();
+        let back = ValueDsl::from_edn(&edn).unwrap().into_ast(&()).unwrap();
         assert_eq!(back, v);
     }
 }

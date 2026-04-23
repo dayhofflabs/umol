@@ -9,7 +9,7 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
-use crate::ast::config::{MultiplicityMode, UnpairedElectronsMode};
+use crate::dsl::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::{Expr, RelOp, ValueAst};
 
@@ -152,16 +152,16 @@ pub(crate) fn fmt_ring_count(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::R
 /// carry a spin state except `NoncovalentBond`).
 pub(crate) fn raise_spin(
     spin: &mut SpinStateAst,
-    u_mode: UnpairedElectronsMode,
-    m_mode: MultiplicityMode,
+    u_mode: UnpairedElectronsDefault,
+    m_mode: MultiplicityDefault,
 ) {
     let u = mem::replace(&mut spin.unpaired, ValueAst::Undetermined);
     let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
     let resolved_u = if matches!(u, ValueAst::Undetermined) {
         match u_mode {
-            UnpairedElectronsMode::Zero => ValueAst::Lit(0),
-            UnpairedElectronsMode::Required => ValueAst::Undetermined,
-            UnpairedElectronsMode::Derived => match &m {
+            UnpairedElectronsDefault::Zero => ValueAst::Lit(0),
+            UnpairedElectronsDefault::Required => ValueAst::Undetermined,
+            UnpairedElectronsDefault::Derived => match &m {
                 ValueAst::Lit(mm) => ValueAst::Lit(mm - 1),
                 _ => ValueAst::Undetermined,
             },
@@ -171,8 +171,8 @@ pub(crate) fn raise_spin(
     };
     let resolved_m = if matches!(m, ValueAst::Undetermined) {
         match m_mode {
-            MultiplicityMode::Required => ValueAst::Undetermined,
-            MultiplicityMode::Derived => match &resolved_u {
+            MultiplicityDefault::Required => ValueAst::Undetermined,
+            MultiplicityDefault::Derived => match &resolved_u {
                 ValueAst::Lit(uu) => ValueAst::Lit(uu + 1),
                 _ => ValueAst::Undetermined,
             },
@@ -192,8 +192,8 @@ pub(crate) fn raise_spin(
 /// most one of the two is stripped and re-raising recovers the original AST.
 pub(crate) fn lower_spin(
     spin: &mut SpinStateAst,
-    u_mode: UnpairedElectronsMode,
-    m_mode: MultiplicityMode,
+    u_mode: UnpairedElectronsDefault,
+    m_mode: MultiplicityDefault,
 ) {
     let uu = if let ValueAst::Lit(n) = spin.unpaired {
         Some(n)
@@ -207,11 +207,11 @@ pub(crate) fn lower_spin(
     };
     let derived = matches!((uu, mm), (Some(u), Some(m)) if m == u + 1);
 
-    let strip_m = matches!(m_mode, MultiplicityMode::Derived) && derived;
+    let strip_m = matches!(m_mode, MultiplicityDefault::Derived) && derived;
     let strip_u = match u_mode {
-        UnpairedElectronsMode::Zero => uu == Some(0),
-        UnpairedElectronsMode::Derived => derived && mm.is_some() && !strip_m,
-        UnpairedElectronsMode::Required => false,
+        UnpairedElectronsDefault::Zero => uu == Some(0),
+        UnpairedElectronsDefault::Derived => derived && mm.is_some() && !strip_m,
+        UnpairedElectronsDefault::Required => false,
     };
     if strip_u {
         spin.unpaired = ValueAst::Undetermined;
@@ -345,58 +345,58 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     // u: Zero, m: Derived
-    #[case::zd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
-    #[case::zd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
-    #[case::zd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
-    #[case::zd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
-    #[case::zd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(2))]
-    #[case::zd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
-    #[case::zd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::zd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::zd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::zd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::zd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::zd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Lit(2))]
+    #[case::zd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::zd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
     // u: Zero, m: Required
-    #[case::zr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
-    #[case::zr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
-    #[case::zr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::zr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
-    #[case::zr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Lit(2))]
-    #[case::zr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
-    #[case::zr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::zr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::zr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::zr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::zr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::zr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Lit(2))]
+    #[case::zr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::zr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
     // u: Required, m: Derived
-    #[case::rd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::rd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
-    #[case::rd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
-    #[case::rd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(1))]
-    #[case::rd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
-    #[case::rd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
-    #[case::rd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::rd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::rd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::rd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::rd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::rd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::rd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::rd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
     // u: Required, m: Required
-    #[case::rr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::rr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
-    #[case::rr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::rr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
-    #[case::rr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
-    #[case::rr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
-    #[case::rr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::rr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::rr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::rr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::rr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::rr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::rr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::rr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
     // u: Derived, m: Required
-    #[case::dr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::dr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
-    #[case::dr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::dr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
-    #[case::dr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
-    #[case::dr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
-    #[case::dr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::dr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::dr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::dr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::dr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::dr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::dr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::dr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
     // u: Derived, m: Derived
-    #[case::dd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::dd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
-    #[case::dd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
-    #[case::dd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
-    #[case::dd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
-    #[case::dd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
-    #[case::dd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::dd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::dd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::dd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::dd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::dd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::dd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::dd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(2))]
     fn test_raise_spin(
         #[case] init_u: ValueAst,
         #[case] init_m: ValueAst,
-        #[case] u_mode: UnpairedElectronsMode,
-        #[case] m_mode: MultiplicityMode,
+        #[case] u_mode: UnpairedElectronsDefault,
+        #[case] m_mode: MultiplicityDefault,
         #[case] expected_u: ValueAst,
         #[case] expected_m: ValueAst,
     ) {
@@ -410,44 +410,44 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     // u: Zero, m: Derived
-    #[case::zd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::zd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::zd_zero_nonderived(ValueAst::Lit(0), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
-    #[case::zd_nonzero_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::zd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::zd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::zd_zero_nonderived(ValueAst::Lit(0), ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::zd_nonzero_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
     // u: Zero, m: Required
-    #[case::zr_zero_mundef(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::zr_nonzero_mundef(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::zr_zero_derived(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
-    #[case::zr_zero_doublet(ValueAst::Lit(0), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
-    #[case::zr_nonzero_singlet(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
-    #[case::zr_nonzero_doublet(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
+    #[case::zr_zero_mundef(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::zr_nonzero_mundef(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::zr_zero_derived(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::zr_zero_doublet(ValueAst::Lit(0), ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::zr_nonzero_singlet(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::zr_nonzero_doublet(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(2))]
     // u: Required, m: Derived
-    #[case::rd_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::rd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Undetermined)]
-    #[case::rd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::rd_uundef_msinglet(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(1))]
-    #[case::rd_uundef_mdoublet(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
-    #[case::rd_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::rd_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::rd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::rd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::rd_uundef_msinglet(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::rd_uundef_mdoublet(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::rd_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
     // u: Required, m: Required — nothing strips.
-    #[case::rr_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::rr_full(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
+    #[case::rr_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::rr_full(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Lit(1))]
     // u: Derived, m: Required
-    #[case::dr_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::dr_zero_mundef(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
-    #[case::dr_nonzero_mundef(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::dr_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
-    #[case::dr_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
-    #[case::dr_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::dr_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::dr_zero_mundef(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::dr_nonzero_mundef(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::dr_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Lit(1))]
+    #[case::dr_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Undetermined, ValueAst::Lit(2))]
+    #[case::dr_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required, ValueAst::Lit(1), ValueAst::Lit(1))]
     // u: Derived, m: Derived — tie-break keeps u explicit.
-    #[case::dd_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::dd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(0), ValueAst::Undetermined)]
-    #[case::dd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::dd_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
+    #[case::dd_both_undef(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::dd_derived_zero(ValueAst::Lit(0), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(0), ValueAst::Undetermined)]
+    #[case::dd_derived_nonzero(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Undetermined)]
+    #[case::dd_nonderived(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived, ValueAst::Lit(1), ValueAst::Lit(1))]
     fn test_lower_spin(
         #[case] init_u: ValueAst,
         #[case] init_m: ValueAst,
-        #[case] u_mode: UnpairedElectronsMode,
-        #[case] m_mode: MultiplicityMode,
+        #[case] u_mode: UnpairedElectronsDefault,
+        #[case] m_mode: MultiplicityDefault,
         #[case] expected_u: ValueAst,
         #[case] expected_m: ValueAst,
     ) {
@@ -460,53 +460,53 @@ mod tests {
     /// AST preservation: the raised AST is a fixed point of `lower → raise`. Lowering strips default content; re-raising the result must recover the same AST.
     #[rustfmt::skip]
     #[rstest]
-    #[case::zd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
-    #[case::zd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
-    #[case::zd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
-    #[case::zd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
-    #[case::zd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
-    #[case::zd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
-    #[case::zd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Derived)]
-    #[case::zr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
-    #[case::zr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
-    #[case::zr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
-    #[case::zr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
-    #[case::zr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
-    #[case::zr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
-    #[case::zr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Zero, MultiplicityMode::Required)]
-    #[case::rd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
-    #[case::rd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
-    #[case::rd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
-    #[case::rd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
-    #[case::rd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
-    #[case::rd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
-    #[case::rd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Derived)]
-    #[case::rr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required)]
-    #[case::rr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required)]
-    #[case::rr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Required, MultiplicityMode::Required)]
-    #[case::rr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required)]
-    #[case::rr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Required)]
-    #[case::rr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Required, MultiplicityMode::Required)]
-    #[case::rr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Required, MultiplicityMode::Required)]
-    #[case::dr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
-    #[case::dr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
-    #[case::dr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
-    #[case::dr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
-    #[case::dr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
-    #[case::dr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
-    #[case::dr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Required)]
-    #[case::dd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
-    #[case::dd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
-    #[case::dd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
-    #[case::dd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
-    #[case::dd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
-    #[case::dd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
-    #[case::dd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsMode::Derived, MultiplicityMode::Derived)]
+    #[case::zd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived)]
+    #[case::zd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived)]
+    #[case::zd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived)]
+    #[case::zd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived)]
+    #[case::zd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived)]
+    #[case::zd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived)]
+    #[case::zd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Derived)]
+    #[case::zr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Required)]
+    #[case::zr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Required)]
+    #[case::zr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Zero, MultiplicityDefault::Required)]
+    #[case::zr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required)]
+    #[case::zr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required)]
+    #[case::zr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required)]
+    #[case::zr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Zero, MultiplicityDefault::Required)]
+    #[case::rd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Derived)]
+    #[case::rd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Derived)]
+    #[case::rd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Derived)]
+    #[case::rd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived)]
+    #[case::rd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived)]
+    #[case::rd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived)]
+    #[case::rd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Derived)]
+    #[case::rr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Required)]
+    #[case::rr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Required)]
+    #[case::rr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Required, MultiplicityDefault::Required)]
+    #[case::rr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Required)]
+    #[case::rr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Required)]
+    #[case::rr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Required, MultiplicityDefault::Required)]
+    #[case::rr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Required, MultiplicityDefault::Required)]
+    #[case::dr_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required)]
+    #[case::dr_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required)]
+    #[case::dr_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Required)]
+    #[case::dr_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required)]
+    #[case::dr_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required)]
+    #[case::dr_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required)]
+    #[case::dr_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Required)]
+    #[case::dd_empty(ValueAst::Undetermined, ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
+    #[case::dd_u0(ValueAst::Lit(0), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
+    #[case::dd_u1(ValueAst::Lit(1), ValueAst::Undetermined, UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
+    #[case::dd_m1(ValueAst::Undetermined, ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
+    #[case::dd_m2(ValueAst::Undetermined, ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
+    #[case::dd_u1m1(ValueAst::Lit(1), ValueAst::Lit(1), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
+    #[case::dd_u1m2(ValueAst::Lit(1), ValueAst::Lit(2), UnpairedElectronsDefault::Derived, MultiplicityDefault::Derived)]
     fn test_spin_roundtrip_preserves_ast(
         #[case] init_u: ValueAst,
         #[case] init_m: ValueAst,
-        #[case] u_mode: UnpairedElectronsMode,
-        #[case] m_mode: MultiplicityMode,
+        #[case] u_mode: UnpairedElectronsDefault,
+        #[case] m_mode: MultiplicityDefault,
     ) {
         let mut raised = SpinStateAst::from_values(init_u, init_m);
         raise_spin(&mut raised, u_mode, m_mode);

@@ -14,6 +14,7 @@ use bimap::BiMap;
 use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, FromEdn, ToEdn};
 
+use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
 use super::bond::BondDsl;
 use super::constraint::{
@@ -21,9 +22,8 @@ use super::constraint::{
 };
 use super::dative::DativeBondDsl;
 use super::error::ParseError;
+use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::config::MoleculeAstConfig;
 use crate::ast::constraint::{
     AromaticSystemConstraint, AtomConstraint, BondConstraint, DativeBondConstraint,
     MulticenterBondConstraint, NoncovalentBondConstraint,
@@ -32,10 +32,10 @@ use crate::ast::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
 use crate::ast::molecule::MoleculeAst;
-use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::spin::SpinStateAst;
-use crate::ast::traits::{FromAst, ToAst};
+use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
+use crate::dsl::config::MoleculeDefaults;
 
 /// Surface-form metadata paired with a `MoleculeAst`. Records atom ids,
 /// per-entity ids, and the atom-alias table. Never drifts: rewrapped
@@ -62,13 +62,6 @@ pub struct MoleculeDsl {
 impl MoleculeDsl {
     pub fn from_parts(ast: MoleculeAst, metadata: Metadata) -> Self {
         Self { ast, metadata }
-    }
-
-    pub fn from_ast(ast: MoleculeAst) -> Self {
-        Self {
-            ast,
-            metadata: Metadata::default(),
-        }
     }
 
     pub fn ast(&self) -> &MoleculeAst {
@@ -123,17 +116,22 @@ impl ToEdn for MoleculeDsl {
 }
 
 impl FromAst<MoleculeAst> for MoleculeDsl {
+    type Ctx<'a> = MoleculeDefaults;
     type Error = ParseError;
 
-    fn from_ast(_ast: &MoleculeAst, _cfg: &MoleculeAstConfig) -> Result<Self, ParseError> {
+    fn from_ast<'a>(
+        _ast: &MoleculeAst,
+        _cfg: &Self::Ctx<'a>,
+    ) -> Result<Self, ParseError> {
         todo!("MoleculeDsl::from_ast (Phase 5)")
     }
 }
 
-impl ToAst<MoleculeAst> for MoleculeDsl {
+impl IntoAst<MoleculeAst> for MoleculeDsl {
+    type Ctx<'a> = MoleculeDefaults;
     type Error = ParseError;
 
-    fn to_ast(&self, _cfg: &MoleculeAstConfig) -> Result<MoleculeAst, ParseError> {
+    fn into_ast<'a>(self, _cfg: &Self::Ctx<'a>) -> Result<MoleculeAst, ParseError> {
         todo!("MoleculeDsl::to_ast (Phase 5)")
     }
 }
@@ -159,15 +157,20 @@ pub(crate) struct MoleculeInput {
     pub(crate) constraints: Vec<ConstraintInput>,
 }
 
+/// Atom entry in a parsed molecule map. Mirrors the DSL spec §4 grammar
+/// `atom-entry ::= atom-spec | [ keyword atom-spec ]`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[allow(dead_code)]
-pub(crate) enum AtomEntryInput {
-    Bare(AtomDsl),
+pub(crate) struct AtomEntryInput {
+    pub(crate) id: Option<String>,
+    pub(crate) spec: AtomSpecInput,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[allow(dead_code)]
+pub(crate) enum AtomSpecInput {
+    Bare(Box<AtomDsl>),
     Alias(String),
-    WithId {
-        id: String,
-        inner: Box<AtomEntryInput>,
-    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -193,7 +196,7 @@ pub(crate) struct DativeBondEntryInput {
 pub(crate) struct AromaticSystemEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) atoms: Vec<AtomRef>,
-    pub(crate) system: AromaticSystemAst,
+    pub(crate) system: AromaticSystemDsl,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -201,7 +204,7 @@ pub(crate) struct AromaticSystemEntryInput {
 pub(crate) struct MulticenterBondEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) atoms: Vec<AtomRef>,
-    pub(crate) bond: MulticenterBondAst,
+    pub(crate) bond: MulticenterBondDsl,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -274,7 +277,7 @@ impl MoleculeInput {
     #[allow(dead_code)]
     pub(crate) fn into_ast(
         self,
-        _cfg: &MoleculeAstConfig,
+        _cfg: &MoleculeDefaults,
     ) -> Result<(MoleculeAst, Metadata), ParseError> {
         todo!("MoleculeInput::into_ast (Phase 3)")
     }
