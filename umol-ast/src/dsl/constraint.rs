@@ -1988,6 +1988,7 @@ mod tests {
     // -- ConstraintDsl ----------------
 
     use crate::ast::constraint::{AtomConstraint, BondConstraint};
+    use crate::ast::molecule::MoleculeAst;
 
     #[rustfmt::skip]
     #[rstest]
@@ -2002,6 +2003,34 @@ mod tests {
     #[case::molecule_connected(
         Constraint::Molecule(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)])),
         "{:connected [0 1]}"
+    )]
+    #[case::molecule_charge_sum(
+        Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: vec![AtomIdx(0), AtomIdx(1)],
+            sum: ValueAst::Lit(0),
+        }),
+        "{:charge-sum {:atoms [0 1] :sum 0}}"
+    )]
+    #[case::molecule_spin_sum(
+        Constraint::Molecule(MoleculeConstraint::SpinSum {
+            atoms: vec![AtomIdx(0)],
+            spin: SpinStateAst::new(1, 2),
+        }),
+        "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}"
+    )]
+    #[case::molecule_bond_order_sum(
+        Constraint::Molecule(MoleculeConstraint::BondOrderSum {
+            bonds: vec![BondIdx(0), BondIdx(1)],
+            sum: ValueAst::Lit(4),
+        }),
+        "{:bond-order-sum {:bonds [0 1] :sum 4}}"
+    )]
+    #[case::molecule_sub_pattern(
+        Constraint::Molecule(MoleculeConstraint::SubPattern {
+            anchor: SubPatternAnchor::new(),
+            pattern: Box::new(MoleculeAst::default()),
+        }),
+        "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}"
     )]
     #[case::not(
         Constraint::Not(Box::new(Constraint::Atom(
