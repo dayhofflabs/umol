@@ -16,20 +16,20 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, is_plus_sugar,
-    lower_spin, optional_value, raise_spin, ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, is_plus_sugar, lower_spin,
+    optional_value, raise_spin, ring_count, SpinPredicate,
 };
 use super::value::{fmt_value, id, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
-use crate::dsl::config::{
-    AromaticValenceDefault, AtomDefaults, ImplicitDefault, IsotopeDefault, MulticenterValenceDefault,
-    NumericDefault,
-};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::{Expr, RelOp, ValueAst};
+use crate::dsl::config::{
+    AromaticValenceDefault, AtomDefaults, ImplicitDefault, IsotopeDefault,
+    MulticenterValenceDefault, NumericDefault,
+};
 
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in
@@ -564,15 +564,13 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                 }
             }
             AtomConstraintKind::DonatedPairs => {
-                if matches!(cfg.donated_pairs, NumericDefault::Zero)
-                    && !constraints.contains(kind)
+                if matches!(cfg.donated_pairs, NumericDefault::Zero) && !constraints.contains(kind)
                 {
                     constraints.add(AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
                 }
             }
             AtomConstraintKind::AcceptedPairs => {
-                if matches!(cfg.accepted_pairs, NumericDefault::Zero)
-                    && !constraints.contains(kind)
+                if matches!(cfg.accepted_pairs, NumericDefault::Zero) && !constraints.contains(kind)
                 {
                     constraints.add(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
                 }
@@ -772,10 +770,7 @@ impl FromAst<AromaticValenceAst> for AromaticValenceDsl {
     type Ctx<'a> = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(
-        ast: &AromaticValenceAst,
-        _ctx: &Self::Ctx<'a>,
-    ) -> Result<Self, Infallible> {
+    fn from_ast<'a>(ast: &AromaticValenceAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
@@ -808,7 +803,9 @@ impl<'de> FromEdn<'de> for AromaticValenceDsl {
                     });
                 };
                 match key.name() {
-                    "aromatic" => Ok(Self(AromaticValenceAst::Aromatic(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()))),
+                    "aromatic" => Ok(Self(AromaticValenceAst::Aromatic(
+                        ValueDsl::from_edn(v)?.into_ast(&()).unwrap(),
+                    ))),
                     other => Err(DeError::UnknownField {
                         key: other.to_string(),
                         path: vec!["aromatic-valence".into()],
@@ -833,7 +830,9 @@ impl ToEdn for AromaticValenceDsl {
             AromaticValenceAst::NotAromatic => {
                 Edn::Keyword(umol_edn::EdnKeyword::owned("not-aromatic".into()))
             }
-            AromaticValenceAst::Aromatic(v) => single_key_map("aromatic", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
+            AromaticValenceAst::Aromatic(v) => {
+                single_key_map("aromatic", ValueDsl::from_ast(v, &()).unwrap().to_edn())
+            }
         }
     }
 }
@@ -847,10 +846,7 @@ impl FromAst<MulticenterValenceAst> for MulticenterValenceDsl {
     type Ctx<'a> = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(
-        ast: &MulticenterValenceAst,
-        _ctx: &Self::Ctx<'a>,
-    ) -> Result<Self, Infallible> {
+    fn from_ast<'a>(ast: &MulticenterValenceAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
@@ -927,10 +923,7 @@ impl FromAst<AtomConstraint> for AtomConstraintDsl {
     type Ctx<'a> = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(
-        ast: &AtomConstraint,
-        _ctx: &Self::Ctx<'a>,
-    ) -> Result<Self, Infallible> {
+    fn from_ast<'a>(ast: &AtomConstraint, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
@@ -975,13 +968,25 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             "multicenter-valence" => AtomConstraint::MulticenterValence(
                 MulticenterValenceDsl::from_edn(v)?.into_ast(&()).unwrap(),
             ),
-            "donated-pairs" => AtomConstraint::DonatedPairs(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
-            "accepted-pairs" => AtomConstraint::AcceptedPairs(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
+            "donated-pairs" => {
+                AtomConstraint::DonatedPairs(ValueDsl::from_edn(v)?.into_ast(&()).unwrap())
+            }
+            "accepted-pairs" => {
+                AtomConstraint::AcceptedPairs(ValueDsl::from_edn(v)?.into_ast(&()).unwrap())
+            }
             "degree" => AtomConstraint::Degree(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
-            "connectivity" => AtomConstraint::Connectivity(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
-            "ring-connectivity" => AtomConstraint::RingConnectivity(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
-            "total-hydrogens" => AtomConstraint::TotalHydrogens(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
-            "ring-count" => AtomConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
+            "connectivity" => {
+                AtomConstraint::Connectivity(ValueDsl::from_edn(v)?.into_ast(&()).unwrap())
+            }
+            "ring-connectivity" => {
+                AtomConstraint::RingConnectivity(ValueDsl::from_edn(v)?.into_ast(&()).unwrap())
+            }
+            "total-hydrogens" => {
+                AtomConstraint::TotalHydrogens(ValueDsl::from_edn(v)?.into_ast(&()).unwrap())
+            }
+            "ring-count" => {
+                AtomConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&()).unwrap())
+            }
             "ring-size" => AtomConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
             other => {
                 return Err(DeError::UnknownField {
@@ -997,32 +1002,45 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
 impl ToEdn for AtomConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
-            AtomConstraint::Valence(v) => single_key_map("valence", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
-            AtomConstraint::AromaticValence(c) => {
-                single_key_map("aromatic-valence", AromaticValenceDsl::from_ast(c, &()).unwrap().to_edn())
+            AtomConstraint::Valence(v) => {
+                single_key_map("valence", ValueDsl::from_ast(v, &()).unwrap().to_edn())
             }
+            AtomConstraint::AromaticValence(c) => single_key_map(
+                "aromatic-valence",
+                AromaticValenceDsl::from_ast(c, &()).unwrap().to_edn(),
+            ),
             AtomConstraint::MulticenterValence(c) => single_key_map(
                 "multicenter-valence",
                 MulticenterValenceDsl::from_ast(c, &()).unwrap().to_edn(),
             ),
-            AtomConstraint::DonatedPairs(v) => {
-                single_key_map("donated-pairs", ValueDsl::from_ast(v, &()).unwrap().to_edn())
+            AtomConstraint::DonatedPairs(v) => single_key_map(
+                "donated-pairs",
+                ValueDsl::from_ast(v, &()).unwrap().to_edn(),
+            ),
+            AtomConstraint::AcceptedPairs(v) => single_key_map(
+                "accepted-pairs",
+                ValueDsl::from_ast(v, &()).unwrap().to_edn(),
+            ),
+            AtomConstraint::Degree(v) => {
+                single_key_map("degree", ValueDsl::from_ast(v, &()).unwrap().to_edn())
             }
-            AtomConstraint::AcceptedPairs(v) => {
-                single_key_map("accepted-pairs", ValueDsl::from_ast(v, &()).unwrap().to_edn())
-            }
-            AtomConstraint::Degree(v) => single_key_map("degree", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
             AtomConstraint::Connectivity(v) => {
                 single_key_map("connectivity", ValueDsl::from_ast(v, &()).unwrap().to_edn())
             }
-            AtomConstraint::RingConnectivity(v) => {
-                single_key_map("ring-connectivity", ValueDsl::from_ast(v, &()).unwrap().to_edn())
+            AtomConstraint::RingConnectivity(v) => single_key_map(
+                "ring-connectivity",
+                ValueDsl::from_ast(v, &()).unwrap().to_edn(),
+            ),
+            AtomConstraint::TotalHydrogens(v) => single_key_map(
+                "total-hydrogens",
+                ValueDsl::from_ast(v, &()).unwrap().to_edn(),
+            ),
+            AtomConstraint::RingCount(v) => {
+                single_key_map("ring-count", ValueDsl::from_ast(v, &()).unwrap().to_edn())
             }
-            AtomConstraint::TotalHydrogens(v) => {
-                single_key_map("total-hydrogens", ValueDsl::from_ast(v, &()).unwrap().to_edn())
+            AtomConstraint::RingSize(v) => {
+                single_key_map("ring-size", ValueDsl::from_ast(v, &()).unwrap().to_edn())
             }
-            AtomConstraint::RingCount(v) => single_key_map("ring-count", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
-            AtomConstraint::RingSize(v) => single_key_map("ring-size", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
         }
     }
 }
@@ -1041,7 +1059,7 @@ mod tests {
 
     use super::*;
     use crate::ast::spin::SpinStateAst;
-    use crate::ast::value::{Expr, RelOp};
+    use crate::ast::value::{ArithOp, Expr, RelOp};
 
     #[rustfmt::skip]
     #[rstest]
@@ -1433,7 +1451,7 @@ mod tests {
             parsed.into_ast(&()).unwrap(),
             AtomConstraint::Valence(ValueAst::Expr(Expr::BinOp(
                 Box::new(Expr::Var("h".into())),
-                crate::ast::value::ArithOp::Add,
+                ArithOp::Add,
                 Box::new(Expr::Lit(1)),
             )))
         );
