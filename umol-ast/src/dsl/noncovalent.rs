@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{alt, delimited, preceded, separated, terminated};
 use winnow::error::{ErrMode, ParserError};
@@ -47,6 +47,10 @@ impl<'de> FromEdn<'de> for NoncovalentBondDsl {
                 path: Vec::new(),
             }),
         }
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        EdnStreamDeserializer::new(input).read_subgrammar_all("noncovalent")
     }
 }
 
@@ -261,5 +265,16 @@ mod tests {
             ast.kind,
             NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond)
         );
+    }
+
+    #[rstest]
+    #[case::single(r##""Hbd""##)]
+    #[case::set(r##""{Hbd,Ion}""##)]
+    #[case::undetermined(r##""*""##)]
+    fn test_noncovalent_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
+        let via_stream = NoncovalentBondDsl::from_edn_str(input).unwrap();
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = NoncovalentBondDsl::from_edn(&tree).unwrap();
+        assert_eq!(via_stream, via_tree);
     }
 }

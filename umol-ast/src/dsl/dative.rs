@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{repeat, terminated};
 use winnow::error::ErrMode;
@@ -54,6 +54,10 @@ impl<'de> FromEdn<'de> for DativeBondDsl {
                 path: Vec::new(),
             }),
         }
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        EdnStreamDeserializer::new(input).read_subgrammar_all("dative")
     }
 }
 
@@ -233,5 +237,16 @@ mod tests {
             ast.constraints,
             DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2))])
         );
+    }
+
+    #[rstest]
+    #[case::empty(r##""""##)]
+    #[case::ring_count(r##""#R2""##)]
+    #[case::ring_count_and_size(r##""#R2#r6""##)]
+    fn test_dative_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
+        let via_stream = DativeBondDsl::from_edn_str(input).unwrap();
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = DativeBondDsl::from_edn(&tree).unwrap();
+        assert_eq!(via_stream, via_tree);
     }
 }

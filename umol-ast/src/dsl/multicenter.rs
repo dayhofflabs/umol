@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{repeat, terminated};
 use winnow::error::ErrMode;
@@ -51,6 +51,10 @@ impl<'de> FromEdn<'de> for MulticenterBondDsl {
                 path: Vec::new(),
             }),
         }
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        EdnStreamDeserializer::new(input).read_subgrammar_all("multicenter")
     }
 }
 
@@ -308,5 +312,16 @@ mod tests {
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.electrons, ValueAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
+    }
+
+    #[rstest]
+    #[case::empty(r##""""##)]
+    #[case::charge(r##""#c+""##)]
+    #[case::full(r##""#c0#u0#s1#e2""##)]
+    fn test_multicenter_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
+        let via_stream = MulticenterBondDsl::from_edn_str(input).unwrap();
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = MulticenterBondDsl::from_edn(&tree).unwrap();
+        assert_eq!(via_stream, via_tree);
     }
 }

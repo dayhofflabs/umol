@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{repeat, terminated};
 use winnow::error::ErrMode;
@@ -51,6 +51,10 @@ impl<'de> FromEdn<'de> for AromaticSystemDsl {
                 path: Vec::new(),
             }),
         }
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        EdnStreamDeserializer::new(input).read_subgrammar_all("aromatic")
     }
 }
 
@@ -337,5 +341,16 @@ mod tests {
         let raised = input.to_ast(&cfg).unwrap();
         let lowered = AromaticSystemDsl::from_ast(&raised, &cfg).unwrap();
         assert_eq!(input, lowered);
+    }
+
+    #[rstest]
+    #[case::empty(r##""""##)]
+    #[case::charge(r##""#c+""##)]
+    #[case::full(r##""#c0#u0#s1#e6""##)]
+    fn test_aromatic_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
+        let via_stream = AromaticSystemDsl::from_edn_str(input).unwrap();
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = AromaticSystemDsl::from_edn(&tree).unwrap();
+        assert_eq!(via_stream, via_tree);
     }
 }

@@ -5,7 +5,7 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use strum::IntoEnumIterator;
-use umol_edn::{DeError, Edn, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use umol_shared::element::Element;
 use winnow::ascii::multispace0;
 use winnow::combinator::{alt, delimited, empty, preceded, repeat, separated, terminated};
@@ -64,6 +64,10 @@ impl<'de> FromEdn<'de> for AtomDsl {
                 path: Vec::new(),
             }),
         }
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        EdnStreamDeserializer::new(input).read_subgrammar_all("atom")
     }
 }
 
@@ -1035,5 +1039,16 @@ mod tests {
         let raised = input.to_ast(&cfg).unwrap();
         let lowered = AtomDsl::from_ast(&raised, &cfg).unwrap();
         assert_eq!(input, lowered);
+    }
+
+    #[rstest]
+    #[case::simple(r##""C""##)]
+    #[case::with_charge(r##""C#c+""##)]
+    #[case::with_constraint(r##""N#v3#a""##)]
+    fn test_atom_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
+        let via_stream = AtomDsl::from_edn_str(input).unwrap();
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = AtomDsl::from_edn(&tree).unwrap();
+        assert_eq!(via_stream, via_tree);
     }
 }

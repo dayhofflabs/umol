@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{preceded, repeat, terminated};
 use winnow::error::ErrMode;
@@ -57,6 +57,10 @@ impl<'de> FromEdn<'de> for BondDsl {
                 path: Vec::new(),
             }),
         }
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        EdnStreamDeserializer::new(input).read_subgrammar_all("bond")
     }
 }
 
@@ -373,5 +377,16 @@ mod tests {
         let raised = input.to_ast(&cfg).unwrap();
         let lowered = BondDsl::from_ast(&raised, &cfg).unwrap();
         assert_eq!(input, lowered);
+    }
+
+    #[rstest]
+    #[case::single(r##""1""##)]
+    #[case::aromatic(r##""1#a""##)]
+    #[case::ring_count(r##""2#R+""##)]
+    fn test_bond_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
+        let via_stream = BondDsl::from_edn_str(input).unwrap();
+        let tree = umol_edn::read_string(input).unwrap();
+        let via_tree = BondDsl::from_edn(&tree).unwrap();
+        assert_eq!(via_stream, via_tree);
     }
 }
