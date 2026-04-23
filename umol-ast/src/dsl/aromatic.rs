@@ -16,15 +16,15 @@ use super::atom::AtomConstraintDsl;
 use super::constraint::{AtomRef, ResolveContext};
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value,
-    raise_spin, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
+    SpinPredicate,
 };
 use super::value::fmt_value;
 use crate::ast::aromatic::AromaticSystemAst;
-use crate::dsl::config::{AromaticSystemDefaults, NumericDefault};
 use crate::ast::constraint::AromaticSystemConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
+use crate::dsl::config::{AromaticSystemDefaults, NumericDefault};
 
 /// Surface DSL wrapper around `AromaticSystemAst`. Parses and renders the
 /// aromatic-system-string form. All `AromaticSystemConstraint` variants are
@@ -73,10 +73,7 @@ impl FromAst<AromaticSystemAst> for AromaticSystemDsl {
     type Ctx<'a> = AromaticSystemDefaults;
     type Error = ParseError;
 
-    fn from_ast<'a>(
-        ast: &AromaticSystemAst,
-        cfg: &Self::Ctx<'a>,
-    ) -> Result<Self, ParseError> {
+    fn from_ast<'a>(ast: &AromaticSystemAst, cfg: &Self::Ctx<'a>) -> Result<Self, ParseError> {
         let mut out = ast.clone();
         lower_aromatic(&mut out, cfg);
         Ok(AromaticSystemDsl(out))
@@ -87,10 +84,7 @@ impl IntoAst<AromaticSystemAst> for AromaticSystemDsl {
     type Ctx<'a> = AromaticSystemDefaults;
     type Error = ParseError;
 
-    fn into_ast<'a>(
-        mut self,
-        cfg: &Self::Ctx<'a>,
-    ) -> Result<AromaticSystemAst, ParseError> {
+    fn into_ast<'a>(mut self, cfg: &Self::Ctx<'a>) -> Result<AromaticSystemAst, ParseError> {
         raise_aromatic(&mut self.0, cfg);
         Ok(self.0)
     }
@@ -200,13 +194,13 @@ fn raise_aromatic(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
     } = ast;
 
     if matches!(*charge, ValueAst::Undetermined) {
-        *charge = match cfg.charge{
+        *charge = match cfg.charge {
             NumericDefault::Zero => ValueAst::Lit(0),
             NumericDefault::Required => ValueAst::Undetermined,
         };
     }
     if matches!(*electrons, ValueAst::Undetermined) {
-        *electrons = match cfg.electrons{
+        *electrons = match cfg.electrons {
             NumericDefault::Zero => ValueAst::Lit(0),
             NumericDefault::Required => ValueAst::Undetermined,
         };
@@ -255,67 +249,6 @@ pub enum AromaticSystemConstraintDsl {
     ContainsAll(Vec<AtomRef>),
     AllAtoms(Box<AtomConstraintDsl>),
     AnyAtom(Box<AtomConstraintDsl>),
-}
-
-impl FromAst<AromaticSystemConstraint> for AromaticSystemConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = Infallible;
-
-    fn from_ast<'a>(
-        c: &AromaticSystemConstraint,
-        ctx: &Self::Ctx<'a>,
-    ) -> Result<Self, Infallible> {
-        let meta = ctx.metadata;
-        Ok(match c {
-            AromaticSystemConstraint::Atoms(atoms) => {
-                Self::Atoms(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
-            }
-            AromaticSystemConstraint::Contains(a) => {
-                Self::Contains(AtomRef::from_ast(*a, meta))
-            }
-            AromaticSystemConstraint::ContainsAll(atoms) => Self::ContainsAll(
-                atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
-            ),
-            AromaticSystemConstraint::AllAtoms(c) => {
-                Self::AllAtoms(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
-            }
-            AromaticSystemConstraint::AnyAtom(c) => {
-                Self::AnyAtom(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
-            }
-        })
-    }
-}
-
-impl IntoAst<AromaticSystemConstraint> for AromaticSystemConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn into_ast<'a>(
-        self,
-        ctx: &Self::Ctx<'a>,
-    ) -> Result<AromaticSystemConstraint, ParseError> {
-        let meta = ctx.metadata;
-        let resolve_atoms = |refs: Vec<AtomRef>| -> Result<Vec<_>, ParseError> {
-            refs.into_iter()
-                .map(|r| r.into_ast(ctx.atom_count, meta))
-                .collect()
-        };
-        Ok(match self {
-            Self::Atoms(refs) => AromaticSystemConstraint::Atoms(resolve_atoms(refs)?),
-            Self::Contains(r) => {
-                AromaticSystemConstraint::Contains(r.into_ast(ctx.atom_count, meta)?)
-            }
-            Self::ContainsAll(refs) => {
-                AromaticSystemConstraint::ContainsAll(resolve_atoms(refs)?)
-            }
-            Self::AllAtoms(c) => {
-                AromaticSystemConstraint::AllAtoms(Box::new(c.into_ast(&()).unwrap()))
-            }
-            Self::AnyAtom(c) => {
-                AromaticSystemConstraint::AnyAtom(Box::new(c.into_ast(&()).unwrap()))
-            }
-        })
-    }
 }
 
 impl<'de> FromEdn<'de> for AromaticSystemConstraintDsl {
@@ -369,6 +302,57 @@ impl ToEdn for AromaticSystemConstraintDsl {
         let mut m = umol_edn::EdnMap::with_capacity(1);
         m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
         Edn::Map(m)
+    }
+}
+
+impl FromAst<AromaticSystemConstraint> for AromaticSystemConstraintDsl {
+    type Ctx<'a> = ResolveContext<'a>;
+    type Error = Infallible;
+
+    fn from_ast<'a>(c: &AromaticSystemConstraint, ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+        let meta = ctx.metadata;
+        Ok(match c {
+            AromaticSystemConstraint::Atoms(atoms) => {
+                Self::Atoms(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
+            }
+            AromaticSystemConstraint::Contains(a) => Self::Contains(AtomRef::from_ast(*a, meta)),
+            AromaticSystemConstraint::ContainsAll(atoms) => {
+                Self::ContainsAll(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
+            }
+            AromaticSystemConstraint::AllAtoms(c) => {
+                Self::AllAtoms(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
+            }
+            AromaticSystemConstraint::AnyAtom(c) => {
+                Self::AnyAtom(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
+            }
+        })
+    }
+}
+
+impl IntoAst<AromaticSystemConstraint> for AromaticSystemConstraintDsl {
+    type Ctx<'a> = ResolveContext<'a>;
+    type Error = ParseError;
+
+    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<AromaticSystemConstraint, ParseError> {
+        let meta = ctx.metadata;
+        let resolve_atoms = |refs: Vec<AtomRef>| -> Result<Vec<_>, ParseError> {
+            refs.into_iter()
+                .map(|r| r.into_ast(ctx.atom_count, meta))
+                .collect()
+        };
+        Ok(match self {
+            Self::Atoms(refs) => AromaticSystemConstraint::Atoms(resolve_atoms(refs)?),
+            Self::Contains(r) => {
+                AromaticSystemConstraint::Contains(r.into_ast(ctx.atom_count, meta)?)
+            }
+            Self::ContainsAll(refs) => AromaticSystemConstraint::ContainsAll(resolve_atoms(refs)?),
+            Self::AllAtoms(c) => {
+                AromaticSystemConstraint::AllAtoms(Box::new(c.into_ast(&()).unwrap()))
+            }
+            Self::AnyAtom(c) => {
+                AromaticSystemConstraint::AnyAtom(Box::new(c.into_ast(&()).unwrap()))
+            }
+        })
     }
 }
 
@@ -510,11 +494,12 @@ mod tests {
 
     // -- AromaticSystemConstraintDsl ----------------
 
+    use bimap::BiMap;
+    use indexmap::IndexMap;
+
     use super::super::molecule::Metadata;
     use crate::ast::constraint::{AromaticSystemConstraint, AtomConstraint};
     use crate::ast::idx::AtomIdx;
-    use bimap::BiMap;
-    use indexmap::IndexMap;
 
     fn empty_metadata() -> Metadata {
         Metadata {

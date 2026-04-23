@@ -127,9 +127,7 @@ macro_rules! define_ref {
             fn to_edn(&self) -> Edn<'static> {
                 match self {
                     Self::Index(i) => Edn::Int(*i as i64),
-                    Self::Id(name) => {
-                        Edn::Keyword(umol_edn::EdnKeyword::owned(name.clone()))
-                    }
+                    Self::Id(name) => Edn::Keyword(umol_edn::EdnKeyword::owned(name.clone())),
                 }
             }
         }
@@ -188,10 +186,7 @@ impl FromAst<MoleculeConstraint> for MoleculeConstraintDsl {
     type Ctx<'a> = ResolveContext<'a>;
     type Error = ParseError;
 
-    fn from_ast<'a>(
-        c: &MoleculeConstraint,
-        ctx: &Self::Ctx<'a>,
-    ) -> Result<Self, ParseError> {
+    fn from_ast<'a>(c: &MoleculeConstraint, ctx: &Self::Ctx<'a>) -> Result<Self, ParseError> {
         let meta = ctx.metadata;
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
@@ -210,15 +205,10 @@ impl FromAst<MoleculeConstraint> for MoleculeConstraintDsl {
                 Self::Connected(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
             }
             MoleculeConstraint::SubPattern { anchor, pattern } => {
-                let pattern_dsl = MoleculeDsl::from_ast(
-                    pattern.as_ref(),
-                    &MoleculeDefaults::zeroed(),
-                )?;
-                let anchor_dsl = SubPatternAnchorDsl::from_ast_pair(
-                    anchor,
-                    meta,
-                    pattern_dsl.metadata(),
-                );
+                let pattern_dsl =
+                    MoleculeDsl::from_ast(pattern.as_ref(), &MoleculeDefaults::zeroed())?;
+                let anchor_dsl =
+                    SubPatternAnchorDsl::from_ast_pair(anchor, meta, pattern_dsl.metadata());
                 Self::SubPattern {
                     anchor: anchor_dsl,
                     pattern: Box::new(pattern_dsl),
@@ -232,10 +222,7 @@ impl IntoAst<MoleculeConstraint> for MoleculeConstraintDsl {
     type Ctx<'a> = ResolveContext<'a>;
     type Error = ParseError;
 
-    fn into_ast<'a>(
-        self,
-        ctx: &Self::Ctx<'a>,
-    ) -> Result<MoleculeConstraint, ParseError> {
+    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<MoleculeConstraint, ParseError> {
         let meta = ctx.metadata;
         Ok(match self {
             Self::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
@@ -322,12 +309,10 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
                         key: "atoms".into(),
                         path: vec!["spin-sum".into()],
                     })?;
-                let spin_edn = m
-                    .get_keyword("spin")
-                    .ok_or_else(|| DeError::MissingField {
-                        key: "spin".into(),
-                        path: vec!["spin-sum".into()],
-                    })?;
+                let spin_edn = m.get_keyword("spin").ok_or_else(|| DeError::MissingField {
+                    key: "spin".into(),
+                    path: vec!["spin-sum".into()],
+                })?;
                 Self::SpinSum {
                     atoms: parse_refs::<AtomRef>(atoms_edn)?,
                     spin: parse_spin(spin_edn)?,
@@ -346,12 +331,12 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
                         key: "anchor".into(),
                         path: vec!["sub-pattern".into()],
                     })?;
-                let pattern_edn = m
-                    .get_keyword("pattern")
-                    .ok_or_else(|| DeError::MissingField {
-                        key: "pattern".into(),
-                        path: vec!["sub-pattern".into()],
-                    })?;
+                let pattern_edn =
+                    m.get_keyword("pattern")
+                        .ok_or_else(|| DeError::MissingField {
+                            key: "pattern".into(),
+                            path: vec!["sub-pattern".into()],
+                        })?;
                 Self::SubPattern {
                     anchor: SubPatternAnchorDsl::from_edn(anchor_edn)?,
                     pattern: Box::new(MoleculeDsl::from_edn(pattern_edn)?),
@@ -370,20 +355,16 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
 impl ToEdn for MoleculeConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         let (key, value) = match self {
-            Self::ChargeSum { atoms, sum } => (
-                "charge-sum",
-                render_sum_map("atoms", atoms, sum),
-            ),
+            Self::ChargeSum { atoms, sum } => ("charge-sum", render_sum_map("atoms", atoms, sum)),
             Self::SpinSum { atoms, spin } => {
                 let mut m = EdnMap::with_capacity(2);
                 m.insert(Edn::keyword("atoms"), render_refs(atoms));
                 m.insert(Edn::keyword("spin"), render_spin(spin));
                 ("spin-sum", Edn::Map(m))
             }
-            Self::BondOrderSum { bonds, sum } => (
-                "bond-order-sum",
-                render_sum_map("bonds", bonds, sum),
-            ),
+            Self::BondOrderSum { bonds, sum } => {
+                ("bond-order-sum", render_sum_map("bonds", bonds, sum))
+            }
             Self::Connected(atoms) => ("connected", render_refs(atoms)),
             Self::SubPattern { anchor, pattern } => {
                 let mut m = EdnMap::with_capacity(2);
@@ -710,7 +691,10 @@ where
 
 fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &[R], sum: &ValueDsl) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
-    m.insert(Edn::Keyword(EdnKeyword::owned(refs_key.into())), render_refs(refs));
+    m.insert(
+        Edn::Keyword(EdnKeyword::owned(refs_key.into())),
+        render_refs(refs),
+    );
     m.insert(Edn::keyword("sum"), sum.to_edn());
     Edn::Map(m)
 }
@@ -743,7 +727,9 @@ fn render_spin(spin: &SpinStateAst) -> Edn<'static> {
     );
     m.insert(
         Edn::keyword("multiplicity"),
-        ValueDsl::from_ast(&spin.multiplicity, &()).unwrap().to_edn(),
+        ValueDsl::from_ast(&spin.multiplicity, &())
+            .unwrap()
+            .to_edn(),
     );
     Edn::Map(m)
 }
@@ -767,102 +753,6 @@ pub enum ConstraintDsl {
     And(Vec<ConstraintDsl>),
     Or(Vec<ConstraintDsl>),
     Not(Box<ConstraintDsl>),
-}
-
-impl FromAst<Constraint> for ConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn from_ast<'a>(c: &Constraint, ctx: &Self::Ctx<'a>) -> Result<Self, ParseError> {
-        let meta = ctx.metadata;
-        Ok(match c {
-            Constraint::Atom(idx, c) => Self::Atom(
-                AtomRef::from_ast(*idx, meta),
-                AtomConstraintDsl::from_ast(c, &()).unwrap(),
-            ),
-            Constraint::Bond(idx, c) => Self::Bond(
-                BondRef::from_ast(*idx, meta),
-                BondConstraintDsl::from_ast(c, &()).unwrap(),
-            ),
-            Constraint::DativeBond(idx, c) => Self::DativeBond(
-                DativeBondRef::from_ast(*idx, meta),
-                DativeBondConstraintDsl::from_ast(c, ctx).unwrap(),
-            ),
-            Constraint::AromaticSystem(idx, c) => Self::AromaticSystem(
-                AromaticSystemRef::from_ast(*idx, meta),
-                AromaticSystemConstraintDsl::from_ast(c, ctx).unwrap(),
-            ),
-            Constraint::MulticenterBond(idx, c) => Self::MulticenterBond(
-                MulticenterBondRef::from_ast(*idx, meta),
-                MulticenterBondConstraintDsl::from_ast(c, ctx).unwrap(),
-            ),
-            Constraint::NoncovalentBond(idx, c) => Self::NoncovalentBond(
-                NoncovalentBondRef::from_ast(*idx, meta),
-                NoncovalentBondConstraintDsl::from_ast(c, ctx).unwrap(),
-            ),
-            Constraint::Molecule(m) => {
-                Self::Molecule(MoleculeConstraintDsl::from_ast(m, ctx)?)
-            }
-            Constraint::And(xs) => Self::And(
-                xs.iter()
-                    .map(|c| ConstraintDsl::from_ast(c, ctx))
-                    .collect::<Result<_, _>>()?,
-            ),
-            Constraint::Or(xs) => Self::Or(
-                xs.iter()
-                    .map(|c| ConstraintDsl::from_ast(c, ctx))
-                    .collect::<Result<_, _>>()?,
-            ),
-            Constraint::Not(c) => {
-                Self::Not(Box::new(ConstraintDsl::from_ast(c, ctx)?))
-            }
-        })
-    }
-}
-
-impl IntoAst<Constraint> for ConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<Constraint, ParseError> {
-        let meta = ctx.metadata;
-        Ok(match self {
-            Self::Atom(r, c) => {
-                Constraint::Atom(r.into_ast(ctx.atom_count, meta)?, c.into_ast(&()).unwrap())
-            }
-            Self::Bond(r, c) => {
-                Constraint::Bond(r.into_ast(ctx.bond_count, meta)?, c.into_ast(&()).unwrap())
-            }
-            Self::DativeBond(r, c) => Constraint::DativeBond(
-                r.into_ast(ctx.dative_bond_count, meta)?,
-                c.into_ast(ctx)?,
-            ),
-            Self::AromaticSystem(r, c) => Constraint::AromaticSystem(
-                r.into_ast(ctx.aromatic_system_count, meta)?,
-                c.into_ast(ctx)?,
-            ),
-            Self::MulticenterBond(r, c) => Constraint::MulticenterBond(
-                r.into_ast(ctx.multicenter_bond_count, meta)?,
-                c.into_ast(ctx)?,
-            ),
-            Self::NoncovalentBond(r, c) => Constraint::NoncovalentBond(
-                r.into_ast(ctx.noncovalent_bond_count, meta)?,
-                c.into_ast(ctx)?,
-            ),
-            Self::Molecule(m) => Constraint::Molecule(m.into_ast(ctx)?),
-            Self::And(xs) => Constraint::And(
-                xs.into_iter()
-                    .map(|c| c.into_ast(ctx))
-                    .collect::<Result<_, _>>()?,
-            ),
-            Self::Or(xs) => Constraint::Or(
-                xs.into_iter()
-                    .map(|c| c.into_ast(ctx))
-                    .collect::<Result<_, _>>()?,
-            ),
-            Self::Not(c) => Constraint::Not(Box::new(c.into_ast(ctx)?)),
-        })
-    }
 }
 
 impl<'de> FromEdn<'de> for ConstraintDsl {
@@ -955,6 +845,97 @@ impl ToEdn for ConstraintDsl {
     }
 }
 
+impl FromAst<Constraint> for ConstraintDsl {
+    type Ctx<'a> = ResolveContext<'a>;
+    type Error = ParseError;
+
+    fn from_ast<'a>(c: &Constraint, ctx: &Self::Ctx<'a>) -> Result<Self, ParseError> {
+        let meta = ctx.metadata;
+        Ok(match c {
+            Constraint::Atom(idx, c) => Self::Atom(
+                AtomRef::from_ast(*idx, meta),
+                AtomConstraintDsl::from_ast(c, &()).unwrap(),
+            ),
+            Constraint::Bond(idx, c) => Self::Bond(
+                BondRef::from_ast(*idx, meta),
+                BondConstraintDsl::from_ast(c, &()).unwrap(),
+            ),
+            Constraint::DativeBond(idx, c) => Self::DativeBond(
+                DativeBondRef::from_ast(*idx, meta),
+                DativeBondConstraintDsl::from_ast(c, ctx).unwrap(),
+            ),
+            Constraint::AromaticSystem(idx, c) => Self::AromaticSystem(
+                AromaticSystemRef::from_ast(*idx, meta),
+                AromaticSystemConstraintDsl::from_ast(c, ctx).unwrap(),
+            ),
+            Constraint::MulticenterBond(idx, c) => Self::MulticenterBond(
+                MulticenterBondRef::from_ast(*idx, meta),
+                MulticenterBondConstraintDsl::from_ast(c, ctx).unwrap(),
+            ),
+            Constraint::NoncovalentBond(idx, c) => Self::NoncovalentBond(
+                NoncovalentBondRef::from_ast(*idx, meta),
+                NoncovalentBondConstraintDsl::from_ast(c, ctx).unwrap(),
+            ),
+            Constraint::Molecule(m) => Self::Molecule(MoleculeConstraintDsl::from_ast(m, ctx)?),
+            Constraint::And(xs) => Self::And(
+                xs.iter()
+                    .map(|c| ConstraintDsl::from_ast(c, ctx))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Constraint::Or(xs) => Self::Or(
+                xs.iter()
+                    .map(|c| ConstraintDsl::from_ast(c, ctx))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Constraint::Not(c) => Self::Not(Box::new(ConstraintDsl::from_ast(c, ctx)?)),
+        })
+    }
+}
+
+impl IntoAst<Constraint> for ConstraintDsl {
+    type Ctx<'a> = ResolveContext<'a>;
+    type Error = ParseError;
+
+    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<Constraint, ParseError> {
+        let meta = ctx.metadata;
+        Ok(match self {
+            Self::Atom(r, c) => {
+                Constraint::Atom(r.into_ast(ctx.atom_count, meta)?, c.into_ast(&()).unwrap())
+            }
+            Self::Bond(r, c) => {
+                Constraint::Bond(r.into_ast(ctx.bond_count, meta)?, c.into_ast(&()).unwrap())
+            }
+            Self::DativeBond(r, c) => {
+                Constraint::DativeBond(r.into_ast(ctx.dative_bond_count, meta)?, c.into_ast(ctx)?)
+            }
+            Self::AromaticSystem(r, c) => Constraint::AromaticSystem(
+                r.into_ast(ctx.aromatic_system_count, meta)?,
+                c.into_ast(ctx)?,
+            ),
+            Self::MulticenterBond(r, c) => Constraint::MulticenterBond(
+                r.into_ast(ctx.multicenter_bond_count, meta)?,
+                c.into_ast(ctx)?,
+            ),
+            Self::NoncovalentBond(r, c) => Constraint::NoncovalentBond(
+                r.into_ast(ctx.noncovalent_bond_count, meta)?,
+                c.into_ast(ctx)?,
+            ),
+            Self::Molecule(m) => Constraint::Molecule(m.into_ast(ctx)?),
+            Self::And(xs) => Constraint::And(
+                xs.into_iter()
+                    .map(|c| c.into_ast(ctx))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Self::Or(xs) => Constraint::Or(
+                xs.into_iter()
+                    .map(|c| c.into_ast(ctx))
+                    .collect::<Result<_, _>>()?,
+            ),
+            Self::Not(c) => Constraint::Not(Box::new(c.into_ast(ctx)?)),
+        })
+    }
+}
+
 // -- ConstraintsDsl ------------------
 
 /// Surface DSL wrapper around `Constraints` (a flat vec of `Constraint`).
@@ -962,14 +943,34 @@ impl ToEdn for ConstraintDsl {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ConstraintsDsl(pub Vec<ConstraintDsl>);
 
+impl<'de> FromEdn<'de> for ConstraintsDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let Edn::Vector(v) = edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "vector of constraints",
+                got: edn.kind(),
+                path: Vec::new(),
+            });
+        };
+        Ok(Self(
+            v.iter()
+                .map(ConstraintDsl::from_edn)
+                .collect::<Result<_, _>>()?,
+        ))
+    }
+}
+
+impl ToEdn for ConstraintsDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        Edn::Vector(self.0.iter().map(|c| c.to_edn()).collect::<Vec<_>>().into())
+    }
+}
+
 impl FromAst<Constraints> for ConstraintsDsl {
     type Ctx<'a> = ResolveContext<'a>;
     type Error = ParseError;
 
-    fn from_ast<'a>(
-        cs: &Constraints,
-        ctx: &Self::Ctx<'a>,
-    ) -> Result<Self, ParseError> {
+    fn from_ast<'a>(cs: &Constraints, ctx: &Self::Ctx<'a>) -> Result<Self, ParseError> {
         Ok(Self(
             cs.iter()
                 .map(|c| ConstraintDsl::from_ast(c, ctx))
@@ -988,27 +989,6 @@ impl IntoAst<Constraints> for ConstraintsDsl {
             out.push(c.into_ast(ctx)?);
         }
         Ok(out)
-    }
-}
-
-impl<'de> FromEdn<'de> for ConstraintsDsl {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        let Edn::Vector(v) = edn else {
-            return Err(DeError::TypeMismatch {
-                expected: "vector of constraints",
-                got: edn.kind(),
-                path: Vec::new(),
-            });
-        };
-        Ok(Self(
-            v.iter().map(ConstraintDsl::from_edn).collect::<Result<_, _>>()?,
-        ))
-    }
-}
-
-impl ToEdn for ConstraintsDsl {
-    fn to_edn(&self) -> Edn<'static> {
-        Edn::Vector(self.0.iter().map(|c| c.to_edn()).collect::<Vec<_>>().into())
     }
 }
 
@@ -1043,7 +1023,10 @@ fn entity_leaf_edn<R: ToEdn, C: ToEdn>(key: &str, r: &R, c: &C) -> Edn<'static> 
     Edn::Map(m)
 }
 
-fn parse_constraint_vec(edn: &Edn<'_>, context: &'static str) -> Result<Vec<ConstraintDsl>, DeError> {
+fn parse_constraint_vec(
+    edn: &Edn<'_>,
+    context: &'static str,
+) -> Result<Vec<ConstraintDsl>, DeError> {
     let Edn::Vector(v) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "vector of constraints",
@@ -1098,7 +1081,13 @@ mod tests {
     #[rstest]
     fn test_atom_ref_from_edn_rejects_other_kinds() {
         let err = AtomRef::from_edn(&Edn::Str("x".into())).unwrap_err();
-        assert!(matches!(err, DeError::TypeMismatch { expected: "atom ref (int or keyword)", .. }));
+        assert!(matches!(
+            err,
+            DeError::TypeMismatch {
+                expected: "atom ref (int or keyword)",
+                ..
+            }
+        ));
     }
 
     #[rstest]
@@ -1142,9 +1131,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_ref_into_ast_resolves_index(meta_with_atom_id: Metadata) {
-        let idx = AtomRef::Index(3)
-            .into_ast(5, &meta_with_atom_id)
-            .unwrap();
+        let idx = AtomRef::Index(3).into_ast(5, &meta_with_atom_id).unwrap();
         assert_eq!(idx, AtomIdx(3));
     }
 

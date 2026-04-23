@@ -766,24 +766,6 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct AromaticValenceDsl(pub AromaticValenceAst);
 
-impl FromAst<AromaticValenceAst> for AromaticValenceDsl {
-    type Ctx<'a> = ();
-    type Error = Infallible;
-
-    fn from_ast<'a>(ast: &AromaticValenceAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
-        Ok(Self(ast.clone()))
-    }
-}
-
-impl IntoAst<AromaticValenceAst> for AromaticValenceDsl {
-    type Ctx<'a> = ();
-    type Error = Infallible;
-
-    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<AromaticValenceAst, Infallible> {
-        Ok(self.0)
-    }
-}
-
 impl<'de> FromEdn<'de> for AromaticValenceDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
@@ -837,28 +819,28 @@ impl ToEdn for AromaticValenceDsl {
     }
 }
 
-/// Surface DSL wrapper around `MulticenterValenceAst`. EDN form:
-/// `:undetermined`, `:not-multicenter`, or `{:multicenter <value>}`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct MulticenterValenceDsl(pub MulticenterValenceAst);
-
-impl FromAst<MulticenterValenceAst> for MulticenterValenceDsl {
+impl FromAst<AromaticValenceAst> for AromaticValenceDsl {
     type Ctx<'a> = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(ast: &MulticenterValenceAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+    fn from_ast<'a>(ast: &AromaticValenceAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
 
-impl IntoAst<MulticenterValenceAst> for MulticenterValenceDsl {
+impl IntoAst<AromaticValenceAst> for AromaticValenceDsl {
     type Ctx<'a> = ();
     type Error = Infallible;
 
-    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<MulticenterValenceAst, Infallible> {
+    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<AromaticValenceAst, Infallible> {
         Ok(self.0)
     }
 }
+
+/// Surface DSL wrapper around `MulticenterValenceAst`. EDN form:
+/// `:undetermined`, `:not-multicenter`, or `{:multicenter <value>}`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct MulticenterValenceDsl(pub MulticenterValenceAst);
 
 impl<'de> FromEdn<'de> for MulticenterValenceDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
@@ -913,29 +895,29 @@ impl ToEdn for MulticenterValenceDsl {
     }
 }
 
+impl FromAst<MulticenterValenceAst> for MulticenterValenceDsl {
+    type Ctx<'a> = ();
+    type Error = Infallible;
+
+    fn from_ast<'a>(ast: &MulticenterValenceAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+        Ok(Self(ast.clone()))
+    }
+}
+
+impl IntoAst<MulticenterValenceAst> for MulticenterValenceDsl {
+    type Ctx<'a> = ();
+    type Error = Infallible;
+
+    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<MulticenterValenceAst, Infallible> {
+        Ok(self.0)
+    }
+}
+
 /// Surface DSL wrapper around `AtomConstraint`. EDN form is a single-key map
 /// keyed by the constraint kind: e.g. `{:valence 4}`, `{:degree *}`,
 /// `{:aromatic-valence :not-aromatic}`, `{:total-hydrogens {?h :: {0,1,2}}}`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AtomConstraintDsl(pub AtomConstraint);
-
-impl FromAst<AtomConstraint> for AtomConstraintDsl {
-    type Ctx<'a> = ();
-    type Error = Infallible;
-
-    fn from_ast<'a>(ast: &AtomConstraint, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
-        Ok(Self(ast.clone()))
-    }
-}
-
-impl IntoAst<AtomConstraint> for AtomConstraintDsl {
-    type Ctx<'a> = ();
-    type Error = Infallible;
-
-    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<AtomConstraint, Infallible> {
-        Ok(self.0)
-    }
-}
 
 impl<'de> FromEdn<'de> for AtomConstraintDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
@@ -1042,6 +1024,24 @@ impl ToEdn for AtomConstraintDsl {
                 single_key_map("ring-size", ValueDsl::from_ast(v, &()).unwrap().to_edn())
             }
         }
+    }
+}
+
+impl FromAst<AtomConstraint> for AtomConstraintDsl {
+    type Ctx<'a> = ();
+    type Error = Infallible;
+
+    fn from_ast<'a>(ast: &AtomConstraint, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+        Ok(Self(ast.clone()))
+    }
+}
+
+impl IntoAst<AtomConstraint> for AtomConstraintDsl {
+    type Ctx<'a> = ();
+    type Error = Infallible;
+
+    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<AtomConstraint, Infallible> {
+        Ok(self.0)
     }
 }
 

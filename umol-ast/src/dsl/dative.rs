@@ -1,6 +1,7 @@
 //! Dative-bond-string DSL.
 
 use std::borrow::Cow;
+use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -11,18 +12,16 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use std::convert::Infallible;
-
 use super::atom::AtomConstraintDsl;
 use super::constraint::{AtomRef, BondRef, ResolveContext};
 use super::error::{PResult, ParseError};
 use super::predicates::{fmt_ring_count, optional_value, ring_count};
 use super::value::{fmt_value, ValueDsl};
-use crate::dsl::config::DativeBondDefaults;
 use crate::ast::constraint::DativeBondConstraint;
 use crate::ast::dative::DativeBondAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
+use crate::dsl::config::DativeBondDefaults;
 
 /// Surface DSL wrapper around `DativeBondAst`. No leading token; the string
 /// form is a sequence of `#…` predicates. Inline-capable constraints from
@@ -76,10 +75,7 @@ impl FromAst<DativeBondAst> for DativeBondDsl {
     type Ctx<'a> = DativeBondDefaults;
     type Error = ParseError;
 
-    fn from_ast<'a>(
-        ast: &DativeBondAst,
-        _cfg: &Self::Ctx<'a>,
-    ) -> Result<Self, ParseError> {
+    fn from_ast<'a>(ast: &DativeBondAst, _cfg: &Self::Ctx<'a>) -> Result<Self, ParseError> {
         Ok(DativeBondDsl(ast.clone()))
     }
 }
@@ -197,60 +193,6 @@ pub enum DativeBondConstraintDsl {
     Parallels(BondRef),
 }
 
-impl FromAst<DativeBondConstraint> for DativeBondConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = Infallible;
-
-    fn from_ast<'a>(
-        c: &DativeBondConstraint,
-        ctx: &Self::Ctx<'a>,
-    ) -> Result<Self, Infallible> {
-        let meta = ctx.metadata;
-        Ok(match c {
-            DativeBondConstraint::RingCount(v) => Self::RingCount(v.clone()),
-            DativeBondConstraint::RingSize(v) => Self::RingSize(v.clone()),
-            DativeBondConstraint::Donor(a) => Self::Donor(AtomRef::from_ast(*a, meta)),
-            DativeBondConstraint::Acceptor(a) => Self::Acceptor(AtomRef::from_ast(*a, meta)),
-            DativeBondConstraint::DonorSatisfies(c) => Self::DonorSatisfies(Box::new(
-                AtomConstraintDsl::from_ast(c, &()).unwrap(),
-            )),
-            DativeBondConstraint::AcceptorSatisfies(c) => Self::AcceptorSatisfies(Box::new(
-                AtomConstraintDsl::from_ast(c, &()).unwrap(),
-            )),
-            DativeBondConstraint::Parallels(b) => Self::Parallels(BondRef::from_ast(*b, meta)),
-        })
-    }
-}
-
-impl IntoAst<DativeBondConstraint> for DativeBondConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn into_ast<'a>(
-        self,
-        ctx: &Self::Ctx<'a>,
-    ) -> Result<DativeBondConstraint, ParseError> {
-        let meta = ctx.metadata;
-        Ok(match self {
-            Self::RingCount(v) => DativeBondConstraint::RingCount(v),
-            Self::RingSize(v) => DativeBondConstraint::RingSize(v),
-            Self::Donor(r) => DativeBondConstraint::Donor(r.into_ast(ctx.atom_count, meta)?),
-            Self::Acceptor(r) => {
-                DativeBondConstraint::Acceptor(r.into_ast(ctx.atom_count, meta)?)
-            }
-            Self::DonorSatisfies(c) => {
-                DativeBondConstraint::DonorSatisfies(Box::new(c.into_ast(&()).unwrap()))
-            }
-            Self::AcceptorSatisfies(c) => {
-                DativeBondConstraint::AcceptorSatisfies(Box::new(c.into_ast(&()).unwrap()))
-            }
-            Self::Parallels(r) => {
-                DativeBondConstraint::Parallels(r.into_ast(ctx.bond_count, meta)?)
-            }
-        })
-    }
-}
-
 impl<'de> FromEdn<'de> for DativeBondConstraintDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         let Edn::Map(m) = edn else {
@@ -308,6 +250,52 @@ impl ToEdn for DativeBondConstraintDsl {
         let mut m = umol_edn::EdnMap::with_capacity(1);
         m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
         Edn::Map(m)
+    }
+}
+
+impl FromAst<DativeBondConstraint> for DativeBondConstraintDsl {
+    type Ctx<'a> = ResolveContext<'a>;
+    type Error = Infallible;
+
+    fn from_ast<'a>(c: &DativeBondConstraint, ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+        let meta = ctx.metadata;
+        Ok(match c {
+            DativeBondConstraint::RingCount(v) => Self::RingCount(v.clone()),
+            DativeBondConstraint::RingSize(v) => Self::RingSize(v.clone()),
+            DativeBondConstraint::Donor(a) => Self::Donor(AtomRef::from_ast(*a, meta)),
+            DativeBondConstraint::Acceptor(a) => Self::Acceptor(AtomRef::from_ast(*a, meta)),
+            DativeBondConstraint::DonorSatisfies(c) => {
+                Self::DonorSatisfies(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
+            }
+            DativeBondConstraint::AcceptorSatisfies(c) => {
+                Self::AcceptorSatisfies(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
+            }
+            DativeBondConstraint::Parallels(b) => Self::Parallels(BondRef::from_ast(*b, meta)),
+        })
+    }
+}
+
+impl IntoAst<DativeBondConstraint> for DativeBondConstraintDsl {
+    type Ctx<'a> = ResolveContext<'a>;
+    type Error = ParseError;
+
+    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<DativeBondConstraint, ParseError> {
+        let meta = ctx.metadata;
+        Ok(match self {
+            Self::RingCount(v) => DativeBondConstraint::RingCount(v),
+            Self::RingSize(v) => DativeBondConstraint::RingSize(v),
+            Self::Donor(r) => DativeBondConstraint::Donor(r.into_ast(ctx.atom_count, meta)?),
+            Self::Acceptor(r) => DativeBondConstraint::Acceptor(r.into_ast(ctx.atom_count, meta)?),
+            Self::DonorSatisfies(c) => {
+                DativeBondConstraint::DonorSatisfies(Box::new(c.into_ast(&()).unwrap()))
+            }
+            Self::AcceptorSatisfies(c) => {
+                DativeBondConstraint::AcceptorSatisfies(Box::new(c.into_ast(&()).unwrap()))
+            }
+            Self::Parallels(r) => {
+                DativeBondConstraint::Parallels(r.into_ast(ctx.bond_count, meta)?)
+            }
+        })
     }
 }
 
@@ -393,11 +381,12 @@ mod tests {
 
     // -- DativeBondConstraintDsl ----------------
 
+    use bimap::BiMap;
+    use indexmap::IndexMap;
+
     use super::super::molecule::Metadata;
     use crate::ast::constraint::AtomConstraint;
     use crate::ast::idx::{AtomIdx, BondIdx};
-    use bimap::BiMap;
-    use indexmap::IndexMap;
 
     fn empty_metadata() -> Metadata {
         Metadata {
