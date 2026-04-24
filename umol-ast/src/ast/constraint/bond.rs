@@ -5,8 +5,8 @@ use std::slice::Iter;
 
 use strum::EnumDiscriminants;
 
-use crate::ast::remap::IdxRemapping;
-use crate::ast::value::ValueAst;
+use super::super::remap::IdxRemapping;
+use super::super::value::ValueAst;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(BondConstraintKind), derive(Hash))]

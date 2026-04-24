@@ -2,12 +2,11 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::error::RewriteError;
-use crate::ast::idx::{
+use super::super::error::RewriteError;
+use super::super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
-use crate::ast::reaction::{Assignment, ReactionRuleAst};
-
+use super::super::reaction::{Assignment, ReactionRuleAst};
 use super::MoleculeAst;
 
 fn map_participants(
@@ -93,13 +92,11 @@ impl MoleculeAst {
         for dv in rhs.dative_bonds().iter() {
             let in_k = r_to_l.contains_key(&dv.donor)
                 && r_to_l.contains_key(&dv.acceptor)
-                && lhs.connecting_dative_bond(r_to_l[&dv.donor], r_to_l[&dv.acceptor]).is_some();
+                && lhs
+                    .connecting_dative_bond(r_to_l[&dv.donor], r_to_l[&dv.acceptor])
+                    .is_some();
             if !in_k {
-                builder.add_dative_bond(
-                    r_to_g[&dv.donor],
-                    r_to_g[&dv.acceptor],
-                    dv.data.clone(),
-                );
+                builder.add_dative_bond(r_to_g[&dv.donor], r_to_g[&dv.acceptor], dv.data.clone());
             }
         }
 
@@ -176,9 +173,7 @@ impl MoleculeAst {
                     .connecting_dative_bond(l_to_r[&dv.donor], l_to_r[&dv.acceptor])
                     .is_some();
             if !in_k {
-                if let (Some(&gd), Some(&ga)) =
-                    (l_to_g.get(&dv.donor), l_to_g.get(&dv.acceptor))
-                {
+                if let (Some(&gd), Some(&ga)) = (l_to_g.get(&dv.donor), l_to_g.get(&dv.acceptor)) {
                     if let Some(g_idx) = self.connecting_dative_bond(gd, ga) {
                         remove_dative.push(g_idx);
                     }
@@ -196,8 +191,7 @@ impl MoleculeAst {
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts = map_participants(l_parts.iter().copied(), &l_to_r);
-                r_parts
-                    .is_some_and(|rp| rhs.connecting_aromatic_system(&rp).is_some())
+                r_parts.is_some_and(|rp| rhs.connecting_aromatic_system(&rp).is_some())
             };
             if !in_k {
                 let g_parts = map_participants(l_parts.iter().copied(), &l_to_g);
@@ -219,8 +213,7 @@ impl MoleculeAst {
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts = map_participants(l_parts.iter().copied(), &l_to_r);
-                r_parts
-                    .is_some_and(|rp| rhs.connecting_multicenter_bond(&rp).is_some())
+                r_parts.is_some_and(|rp| rhs.connecting_multicenter_bond(&rp).is_some())
             };
             if !in_k {
                 let g_parts = map_participants(l_parts.iter().copied(), &l_to_g);
@@ -244,8 +237,7 @@ impl MoleculeAst {
                     .connecting_noncovalent_bond(l_to_r[&nv.atoms[0]], l_to_r[&nv.atoms[1]])
                     .is_some();
             if !in_k {
-                if let (Some(&ga), Some(&gb)) =
-                    (l_to_g.get(&nv.atoms[0]), l_to_g.get(&nv.atoms[1]))
+                if let (Some(&ga), Some(&gb)) = (l_to_g.get(&nv.atoms[0]), l_to_g.get(&nv.atoms[1]))
                 {
                     if let Some(g_idx) = self.connecting_noncovalent_bond(ga, gb) {
                         remove_noncovalent.push(g_idx);

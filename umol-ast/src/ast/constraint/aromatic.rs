@@ -3,9 +3,9 @@
 use std::mem;
 use std::slice::Iter;
 
+use super::super::idx::AtomIdx;
+use super::super::remap::IdxRemapping;
 use super::atom::AtomConstraint;
-use crate::ast::idx::AtomIdx;
-use crate::ast::remap::IdxRemapping;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AromaticSystemConstraint {
@@ -119,8 +119,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::super::super::value::ValueAst;
     use super::*;
-    use crate::ast::value::ValueAst;
 
     fn idx_remapping(removed_nodes: Vec<u32>) -> IdxRemapping {
         IdxRemapping::new(

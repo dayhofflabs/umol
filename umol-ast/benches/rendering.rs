@@ -8,7 +8,7 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use umol_ast::dsl::molecule::MoleculeDsl;
+use umol_ast::dsl::MoleculeDsl;
 use umol_edn::{FromEdn, ToEdn};
 
 #[path = "fixtures.rs"]

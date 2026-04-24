@@ -10,7 +10,7 @@
 
 use std::hint::black_box;
 
-use umol_ast::dsl::molecule::MoleculeDsl;
+use umol_ast::dsl::MoleculeDsl;
 use umol_edn::FromEdn;
 
 const MOL_INDOLE: &str = r##"{:atoms [[:n "N"] [:c2 "C"] [:c3 "C"] [:c3a "C"] [:c4 "C"] [:c5 "C"] [:c6 "C"] [:c7 "C"] [:c7a "C"]]

@@ -24,6 +24,7 @@ use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer
 use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
 use super::bond::BondDsl;
+use super::config::MoleculeDefaults;
 use super::constraint::{
     eof_err, missing, read_atom_ref, read_constraints_dsl, read_map, read_vec,
     unexpected_byte_kind, AtomRef, ConstraintDsl, ConstraintsDsl, EntityCounts,
@@ -43,7 +44,6 @@ use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::noncovalent::NoncovalentBondAst;
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::dsl::config::MoleculeDefaults;
 
 /// Surface-form metadata paired with a `MoleculeAst`. Records atom ids,
 /// per-entity ids, and the atom-alias table. Never drifts: rewrapped
@@ -1391,7 +1391,8 @@ mod tests {
     #[rstest]
     fn test_molecule_dsl_to_edn_atom_alias_substituted() {
         let mut b = MetadataBuilder::default();
-        b.add_atom_alias("x".into(), Box::new(AtomDsl(c_atom()))).unwrap();
+        b.add_atom_alias("x".into(), Box::new(AtomDsl(c_atom())))
+            .unwrap();
         let meta = b.build();
         let ast = MoleculeAst::new(
             vec![c_atom(), c_atom()],

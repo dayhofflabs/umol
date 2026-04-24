@@ -12,14 +12,10 @@ use std::hint::black_box;
 
 use criterion::measurement::WallTime;
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use umol_ast::dsl::aromatic::AromaticSystemDsl;
-use umol_ast::dsl::atom::AtomDsl;
-use umol_ast::dsl::bond::BondDsl;
-use umol_ast::dsl::constraint::{ConstraintDsl, ConstraintsDsl};
-use umol_ast::dsl::dative::DativeBondDsl;
-use umol_ast::dsl::molecule::MoleculeDsl;
-use umol_ast::dsl::multicenter::MulticenterBondDsl;
-use umol_ast::dsl::noncovalent::NoncovalentBondDsl;
+use umol_ast::dsl::{
+    AromaticSystemDsl, AtomDsl, BondDsl, ConstraintDsl, ConstraintsDsl, DativeBondDsl, MoleculeDsl,
+    MulticenterBondDsl, NoncovalentBondDsl,
+};
 use umol_edn::{read_string, FromEdn};
 
 #[path = "fixtures.rs"]

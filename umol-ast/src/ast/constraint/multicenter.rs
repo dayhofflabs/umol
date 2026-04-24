@@ -4,8 +4,8 @@ use std::mem;
 use std::slice::Iter;
 
 use super::atom::AtomConstraint;
-use crate::ast::idx::AtomIdx;
-use crate::ast::remap::IdxRemapping;
+use super::super::idx::AtomIdx;
+use super::super::remap::IdxRemapping;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MulticenterBondConstraint {
@@ -120,7 +120,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::value::ValueAst;
+    use super::super::super::value::ValueAst;
 
     fn idx_remapping(removed_nodes: Vec<u32>) -> IdxRemapping {
         IdxRemapping::new(

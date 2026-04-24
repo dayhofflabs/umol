@@ -10,13 +10,13 @@ use super::bond::BondConstraint;
 use super::dative::DativeBondConstraint;
 use super::multicenter::MulticenterBondConstraint;
 use super::noncovalent::NoncovalentBondConstraint;
-use crate::ast::idx::{
+use super::super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
-use crate::ast::molecule::MoleculeAst;
-use crate::ast::remap::IdxRemapping;
-use crate::ast::spin::SpinStateAst;
-use crate::ast::value::ValueAst;
+use super::super::molecule::MoleculeAst;
+use super::super::remap::IdxRemapping;
+use super::super::spin::SpinStateAst;
+use super::super::value::ValueAst;
 
 /// Tree node type: per-entity leaf, molecule-scope leaf, or combinator. The
 /// bare entity-leaf forms appear only inside a combinator (e.g.
@@ -312,10 +312,10 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::idx::{AromaticSystemIdx, AtomIdx, BondIdx};
-    use crate::ast::molecule::MoleculeAst;
-    use crate::ast::spin::SpinStateAst;
-    use crate::ast::value::ValueAst;
+    use super::super::super::idx::{AromaticSystemIdx, AtomIdx, BondIdx};
+    use super::super::super::molecule::MoleculeAst;
+    use super::super::super::spin::SpinStateAst;
+    use super::super::super::value::ValueAst;
 
     fn idx_remapping(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdxRemapping {
         IdxRemapping::new(

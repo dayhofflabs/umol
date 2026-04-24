@@ -1,5 +1,7 @@
 //! AST indices into atom, bond, and relation tables.
 
+use std::fmt;
+
 use umol_edn::{FromEdn, ToEdn};
 use umol_graph_core::relation::RelationId;
 use umol_graph_core::{EdgeId, NodeId};
@@ -18,6 +20,12 @@ macro_rules! define_idx {
 
             impl $name {
                 pub fn index(self) -> usize { self.0 as usize }
+            }
+
+            impl fmt::Display for $name {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(f, "{}", self.0)
+                }
             }
         )+
     };

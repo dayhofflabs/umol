@@ -7,9 +7,9 @@ use winnow::combinator::{alt, empty, preceded};
 use winnow::error::ErrMode;
 use winnow::Parser;
 
+use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
-use crate::dsl::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::{Expr, RelOp, ValueAst};
 

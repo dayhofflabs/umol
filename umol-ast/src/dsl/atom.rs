@@ -26,7 +26,7 @@ use crate::ast::constraint::{
 };
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::{Expr, RelOp, ValueAst};
-use crate::dsl::config::{
+use super::config::{
     AromaticValenceDefault, AtomDefaults, ImplicitDefault, IsotopeDefault,
     MulticenterValenceDefault, NumericDefault,
 };

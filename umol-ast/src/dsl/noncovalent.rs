@@ -13,14 +13,14 @@ use winnow::token::one_of;
 use winnow::Parser;
 
 use super::atom::AtomConstraintDsl;
+use super::config::NoncovalentBondDefaults;
 use super::constraint::{AtomRef, EntityCounts};
-use super::molecule::Metadata;
 use super::error::{PResult, ParseError};
+use super::molecule::Metadata;
 use super::value::id;
 use crate::ast::constraint::NoncovalentBondConstraint;
 use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentKind, NoncovalentKindAst};
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::dsl::config::NoncovalentBondDefaults;
 
 /// Surface DSL wrapper around `NoncovalentBondAst`. String form is the
 /// noncovalent-kind expression (three-letter literal, set, bind, ref, or `*`).
@@ -78,10 +78,7 @@ impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
     type Error = ParseError;
 
-    fn from_ast(
-        ast: &NoncovalentBondAst,
-        _cfg: &Self::Ctx,
-    ) -> Result<Self, ParseError> {
+    fn from_ast(ast: &NoncovalentBondAst, _cfg: &Self::Ctx) -> Result<Self, ParseError> {
         Ok(NoncovalentBondDsl(ast.clone()))
     }
 }
@@ -240,13 +237,10 @@ impl NoncovalentBondConstraintDsl {
         meta: &Metadata,
     ) -> Result<Self, Infallible> {
         Ok(match c {
-            NoncovalentBondConstraint::Ends([a, b]) => Self::Ends([
-                AtomRef::from_ast(*a, meta),
-                AtomRef::from_ast(*b, meta),
-            ]),
-            NoncovalentBondConstraint::Contains(a) => {
-                Self::Contains(AtomRef::from_ast(*a, meta))
+            NoncovalentBondConstraint::Ends([a, b]) => {
+                Self::Ends([AtomRef::from_ast(*a, meta), AtomRef::from_ast(*b, meta)])
             }
+            NoncovalentBondConstraint::Contains(a) => Self::Contains(AtomRef::from_ast(*a, meta)),
             NoncovalentBondConstraint::EndsSatisfy([a, b]) => Self::EndsSatisfy([
                 Box::new(AtomConstraintDsl::from_ast(a, &()).unwrap()),
                 Box::new(AtomConstraintDsl::from_ast(b, &()).unwrap()),
@@ -301,10 +295,9 @@ impl<'de> FromEdn<'de> for NoncovalentBondConstraintDsl {
         Ok(match key.name() {
             "ends" => Self::Ends(parse_pair::<AtomRef>(v, "ends")?),
             "contains" => Self::Contains(AtomRef::from_edn(v)?),
-            "ends-satisfy" => Self::EndsSatisfy(parse_pair_boxed::<AtomConstraintDsl>(
-                v,
-                "ends-satisfy",
-            )?),
+            "ends-satisfy" => {
+                Self::EndsSatisfy(parse_pair_boxed::<AtomConstraintDsl>(v, "ends-satisfy")?)
+            }
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -318,10 +311,7 @@ impl<'de> FromEdn<'de> for NoncovalentBondConstraintDsl {
 impl ToEdn for NoncovalentBondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         let (key, value) = match self {
-            Self::Ends([a, b]) => (
-                "ends",
-                Edn::Vector(vec![a.to_edn(), b.to_edn()].into()),
-            ),
+            Self::Ends([a, b]) => ("ends", Edn::Vector(vec![a.to_edn(), b.to_edn()].into())),
             Self::Contains(r) => ("contains", r.to_edn()),
             Self::EndsSatisfy([a, b]) => (
                 "ends-satisfy",

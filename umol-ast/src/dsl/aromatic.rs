@@ -12,10 +12,11 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
+use super::config::{AromaticSystemDefaults, NumericDefault};
 use super::atom::AtomConstraintDsl;
 use super::constraint::{AtomRef, EntityCounts};
-use super::molecule::Metadata;
 use super::error::{PResult, ParseError};
+use super::molecule::Metadata;
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
     SpinPredicate,
@@ -25,7 +26,6 @@ use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::constraint::AromaticSystemConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
-use crate::dsl::config::{AromaticSystemDefaults, NumericDefault};
 
 /// Surface DSL wrapper around `AromaticSystemAst`. Parses and renders the
 /// aromatic-system-string form. All `AromaticSystemConstraint` variants are
@@ -385,7 +385,9 @@ mod tests {
 
     use super::super::molecule::Metadata;
     use super::*;
-    use crate::ast::constraint::{AromaticSystemConstraint, AromaticSystemConstraints, AtomConstraint};
+    use crate::ast::constraint::{
+        AromaticSystemConstraint, AromaticSystemConstraints, AtomConstraint,
+    };
     use crate::ast::idx::AtomIdx;
     use crate::ast::spin::SpinStateAst;
 

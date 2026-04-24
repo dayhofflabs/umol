@@ -12,14 +12,14 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
+use super::config::{BondDefaults, NumericDefault};
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin,
-    optional_value, raise_spin, ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
+    raise_spin, ring_count, SpinPredicate,
 };
 use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
-use crate::dsl::config::{BondDefaults, NumericDefault};
 use crate::ast::constraint::BondConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;

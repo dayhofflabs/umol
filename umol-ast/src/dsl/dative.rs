@@ -22,7 +22,7 @@ use crate::ast::constraint::DativeBondConstraint;
 use crate::ast::dative::DativeBondAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
-use crate::dsl::config::DativeBondDefaults;
+use super::config::DativeBondDefaults;
 
 /// Surface DSL wrapper around `DativeBondAst`. No leading token; the string
 /// form is a sequence of `#…` predicates. Inline-capable constraints from

@@ -7,9 +7,8 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughput};
-use umol_ast::ast::traits::{FromAst, IntoAst};
-use umol_ast::dsl::config::MoleculeDefaults;
-use umol_ast::dsl::molecule::MoleculeDsl;
+use umol_ast::ast::{FromAst, IntoAst};
+use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_edn::FromEdn;
 
 #[path = "fixtures.rs"]

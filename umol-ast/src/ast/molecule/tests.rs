@@ -9,22 +9,22 @@ use umol_graph_core::{
 };
 use umol_shared::element::Element;
 
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
-use crate::ast::bond::BondAst;
-use crate::ast::constraint::{
+use super::super::aromatic::AromaticSystemAst;
+use super::super::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
+use super::super::bond::BondAst;
+use super::super::constraint::{
     AtomConstraint, AtomConstraints, BondConstraints, Constraint, Constraints, DativeBondConstraint,
     DativeBondConstraints, MoleculeConstraint,
 };
-use crate::ast::dative::{DativeBondAst, DativeDirection};
-use crate::ast::idx::{
+use super::super::dative::{DativeBondAst, DativeDirection};
+use super::super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
-use crate::ast::multicenter::MulticenterBondAst;
-use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentKind, NoncovalentKindAst};
-use crate::ast::rings::RingFamily;
-use crate::ast::spin::SpinStateAst;
-use crate::ast::value::ValueAst;
+use super::super::multicenter::MulticenterBondAst;
+use super::super::noncovalent::{NoncovalentBondAst, NoncovalentKind, NoncovalentKindAst};
+use super::super::rings::RingFamily;
+use super::super::spin::SpinStateAst;
+use super::super::value::ValueAst;
 
 use super::MoleculeAst;
 

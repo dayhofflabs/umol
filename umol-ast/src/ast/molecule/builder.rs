@@ -13,18 +13,17 @@ use std::sync::Arc;
 use umol_graph_core::relation::RelationId;
 use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, Remapping, VarRelationSet};
 
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::atom::AtomAst;
-use crate::ast::bond::BondAst;
-use crate::ast::constraint::{Constraint, Constraints};
-use crate::ast::dative::{DativeBondAst, DativeDirection};
-use crate::ast::idx::{
+use super::super::aromatic::AromaticSystemAst;
+use super::super::atom::AtomAst;
+use super::super::bond::BondAst;
+use super::super::constraint::{Constraint, Constraints};
+use super::super::dative::{DativeBondAst, DativeDirection};
+use super::super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
-use crate::ast::multicenter::MulticenterBondAst;
-use crate::ast::noncovalent::NoncovalentBondAst;
-use crate::ast::remap::IdxRemapping;
-
+use super::super::multicenter::MulticenterBondAst;
+use super::super::noncovalent::NoncovalentBondAst;
+use super::super::remap::IdxRemapping;
 use super::MoleculeAst;
 
 enum FixedSetStorage<R, const N: usize> {

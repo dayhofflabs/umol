@@ -24,7 +24,7 @@ use crate::ast::idx::{
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::dsl::config::MoleculeDefaults;
+use super::config::MoleculeDefaults;
 
 /// Per-entity counts for numeric-index bounds checking during constraint
 /// resolution (DSL → AST). `from_ast` (AST → DSL) does not read counts.

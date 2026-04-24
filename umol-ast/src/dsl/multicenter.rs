@@ -13,9 +13,10 @@ use winnow::token::take;
 use winnow::Parser;
 
 use super::atom::AtomConstraintDsl;
+use super::config::{MulticenterBondDefaults, NumericDefault};
 use super::constraint::{AtomRef, EntityCounts};
-use super::molecule::Metadata;
 use super::error::{PResult, ParseError};
+use super::molecule::Metadata;
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
     SpinPredicate,
@@ -25,7 +26,6 @@ use crate::ast::constraint::MulticenterBondConstraint;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
-use crate::dsl::config::{MulticenterBondDefaults, NumericDefault};
 
 /// Surface DSL wrapper around `MulticenterBondAst`. Parses and renders the
 /// multicenter-bond-string form. All `MulticenterBondConstraint` variants are
