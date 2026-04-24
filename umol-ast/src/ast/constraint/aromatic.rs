@@ -7,6 +7,8 @@ use super::super::idx::AtomIdx;
 use super::super::remap::IdxRemapping;
 use super::atom::AtomConstraint;
 
+/// Aromatic-system-scope constraint. Held inline on `AromaticSystemAst`
+/// via `AromaticSystemConstraints`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AromaticSystemConstraint {
     Atoms(Vec<AtomIdx>),

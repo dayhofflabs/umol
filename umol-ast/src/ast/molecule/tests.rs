@@ -13,19 +13,18 @@ use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use super::super::bond::BondAst;
 use super::super::constraint::{
-    AtomConstraint, AtomConstraints, BondConstraints, Constraint, Constraints, DativeBondConstraint,
-    DativeBondConstraints, MoleculeConstraint,
+    AtomConstraint, AtomConstraints, BondConstraints, Constraint, Constraints,
+    DativeBondConstraint, DativeBondConstraints, MoleculeConstraint,
 };
-use super::super::dative::{DativeBondAst, DativeDirection};
+use super::super::dative::{DativeBondAst, DativeBondDirection};
 use super::super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
 use super::super::multicenter::MulticenterBondAst;
-use super::super::noncovalent::{NoncovalentBondAst, NoncovalentKind, NoncovalentKindAst};
+use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use super::super::rings::RingFamily;
 use super::super::spin::SpinStateAst;
 use super::super::value::ValueAst;
-
 use super::MoleculeAst;
 
 fn ground_atom() -> AtomAst {
@@ -93,10 +92,7 @@ fn test_molecule_ast_is_ground(#[case] ast: MoleculeAst, #[case] expected: bool)
 #[case::hub(AtomIdx(0), vec![(AtomIdx(1), BondIdx(0)), (AtomIdx(2), BondIdx(1))])]
 #[case::leaf_o(AtomIdx(1), vec![(AtomIdx(0), BondIdx(0))])]
 #[case::leaf_n(AtomIdx(2), vec![(AtomIdx(0), BondIdx(1))])]
-fn test_molecule_ast_neighbors(
-    #[case] atom: AtomIdx,
-    #[case] expected: Vec<(AtomIdx, BondIdx)>,
-) {
+fn test_molecule_ast_neighbors(#[case] atom: AtomIdx, #[case] expected: Vec<(AtomIdx, BondIdx)>) {
     let ast = MoleculeAst::new(
         vec![
             AtomAst::from_element(Element::C),
@@ -113,8 +109,7 @@ fn test_molecule_ast_neighbors(
         vec![],
         Constraints::default(),
     );
-    let nbrs: Vec<(AtomIdx, BondIdx)> =
-        ast.neighbors(atom).map(|n| (n.atom, n.bond)).collect();
+    let nbrs: Vec<(AtomIdx, BondIdx)> = ast.neighbors(atom).map(|n| (n.atom, n.bond)).collect();
     assert_eq!(nbrs, expected);
 }
 
@@ -142,10 +137,7 @@ fn test_molecule_builder_add_aromatic_system() {
         .collect();
     assert_eq!(new_atoms, vec![AtomIdx(0), AtomIdx(1)]);
     assert_eq!(
-        new_ast
-            .aromatic_systems()
-            .ids()
-            .collect::<Vec<_>>(),
+        new_ast.aromatic_systems().ids().collect::<Vec<_>>(),
         vec![AromaticSystemIdx(0)]
     );
     assert_eq!(
@@ -179,7 +171,7 @@ fn rich_molecule() -> MoleculeAst {
         vec![(
             AtomIdx(0),
             AtomIdx(3),
-            NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond),
+            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
         Constraints::default(),
     )
@@ -228,13 +220,13 @@ fn test_molecule_ast_dative_bond() {
     assert_eq!(dv.idx, DativeBondIdx(0));
     assert_eq!(dv.donor, AtomIdx(2));
     assert_eq!(dv.acceptor, AtomIdx(3));
-    assert_eq!(dv.data.direction, DativeDirection::Forward);
+    assert_eq!(dv.data.direction, DativeBondDirection::Forward);
 }
 
 #[rstest]
 fn test_molecule_ast_dative_bonds() {
     let ast = rich_molecule();
-    let projected: Vec<(DativeBondIdx, AtomIdx, AtomIdx, DativeDirection)> = ast
+    let projected: Vec<(DativeBondIdx, AtomIdx, AtomIdx, DativeBondDirection)> = ast
         .dative_bonds()
         .iter()
         .map(|v| (v.idx, v.donor, v.acceptor, v.data.direction))
@@ -245,7 +237,7 @@ fn test_molecule_ast_dative_bonds() {
             DativeBondIdx(0),
             AtomIdx(2),
             AtomIdx(3),
-            DativeDirection::Forward,
+            DativeBondDirection::Forward,
         )]
     );
 }
@@ -259,10 +251,7 @@ fn test_molecule_ast_aromatic_system() {
         av.atoms().collect::<Vec<_>>(),
         vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)]
     );
-    assert_eq!(
-        av.bonds().collect::<Vec<_>>(),
-        vec![BondIdx(0), BondIdx(1)]
-    );
+    assert_eq!(av.bonds().collect::<Vec<_>>(), vec![BondIdx(0), BondIdx(1)]);
 }
 
 #[rstest]
@@ -539,7 +528,15 @@ fn chain(n: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default())
+    MoleculeAst::new(
+        atoms,
+        bonds,
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        Constraints::default(),
+    )
 }
 
 fn ring(n: usize) -> MoleculeAst {
@@ -553,7 +550,15 @@ fn ring(n: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default())
+    MoleculeAst::new(
+        atoms,
+        bonds,
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        Constraints::default(),
+    )
 }
 
 fn two_components() -> MoleculeAst {
@@ -562,7 +567,15 @@ fn two_components() -> MoleculeAst {
         (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
         (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
     ];
-    MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default())
+    MoleculeAst::new(
+        atoms,
+        bonds,
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        Constraints::default(),
+    )
 }
 
 #[rstest]
@@ -590,10 +603,7 @@ fn test_molecule_ast_connected_components(#[case] ast: MoleculeAst, #[case] expe
 #[rstest]
 #[case::ring_6(ring(6), 1)]
 #[case::chain(chain(5), 0)]
-fn test_molecule_ast_biconnected_components(
-    #[case] ast: MoleculeAst,
-    #[case] expected: usize,
-) {
+fn test_molecule_ast_biconnected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
     let bcc = ast.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
     assert_eq!(bcc.len(), expected);
 }
@@ -643,10 +653,7 @@ fn test_molecule_ast_enumerate_cycles(
 #[rstest]
 #[case::triangle(ring(3), 1)]
 #[case::chain_3(chain(3), 2)]
-fn test_molecule_ast_maximum_independent_set(
-    #[case] ast: MoleculeAst,
-    #[case] expected: usize,
-) {
+fn test_molecule_ast_maximum_independent_set(#[case] ast: MoleculeAst, #[case] expected: usize) {
     let mis = ast.maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound);
     assert_eq!(mis.len(), expected);
 }
@@ -655,10 +662,7 @@ fn test_molecule_ast_maximum_independent_set(
 #[case::chain_4(chain(4), 2)]
 #[case::ring_6(ring(6), 3)]
 #[case::single(chain(1), 0)]
-fn test_molecule_ast_maximum_matching(
-    #[case] ast: MoleculeAst,
-    #[case] expected_size: usize,
-) {
+fn test_molecule_ast_maximum_matching(#[case] ast: MoleculeAst, #[case] expected_size: usize) {
     let m = ast.maximum_matching(MaxMatchingAlgorithm::Edmonds);
     assert_eq!(m.size(), expected_size);
 }
@@ -688,10 +692,7 @@ fn test_molecule_ast_enumerate_perfect_matchings(
 #[rstest]
 #[case::ring_6(ring(6), 1)]
 #[case::chain_3(chain(3), 2)]
-fn test_molecule_ast_automorphisms(
-    #[case] ast: MoleculeAst,
-    #[case] expected_orbits: usize,
-) {
+fn test_molecule_ast_automorphisms(#[case] ast: MoleculeAst, #[case] expected_orbits: usize) {
     let auto = ast.automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
     assert_eq!(auto.num_orbits(), expected_orbits);
     assert_eq!(auto.atom_count(), ast.atom_count());
@@ -748,10 +749,7 @@ fn test_molecule_ast_subgraph_isomorphisms_at() {
     matches.sort_unstable();
     assert_eq!(
         matches,
-        vec![
-            vec![AtomIdx(0), AtomIdx(1)],
-            vec![AtomIdx(0), AtomIdx(5)],
-        ]
+        vec![vec![AtomIdx(0), AtomIdx(1)], vec![AtomIdx(0), AtomIdx(5)],]
     );
 }
 
@@ -803,7 +801,7 @@ fn test_molecule_ast_induced_subgraph_preserves_dative() {
     let dv = sub.ast.dative_bond(DativeBondIdx(0));
     assert_eq!(dv.donor, AtomIdx(0));
     assert_eq!(dv.acceptor, AtomIdx(1));
-    assert_eq!(dv.data.direction, DativeDirection::Forward);
+    assert_eq!(dv.data.direction, DativeBondDirection::Forward);
 }
 
 #[rstest]
@@ -813,10 +811,7 @@ fn test_molecule_builder_remove_aromatic_systems() {
     b.remove_aromatic_systems(&[AromaticSystemIdx(0)]);
     let result = b.build();
     assert_eq!(
-        result
-            .aromatic_systems()
-            .ids()
-            .collect::<Vec<_>>(),
+        result.aromatic_systems().ids().collect::<Vec<_>>(),
         Vec::<AromaticSystemIdx>::new()
     );
     assert_eq!(
@@ -932,7 +927,15 @@ fn test_molecule_ast_rings_induced() {
         (AtomIdx(1), AtomIdx(3), BondAst::from_order(1)),
         (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
     ];
-    let ast = MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default());
+    let ast = MoleculeAst::new(
+        atoms,
+        bonds,
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        Constraints::default(),
+    );
     let simple = ast.rings(RingFamily::Simple, 4, |_| true);
     let induced = ast.rings(RingFamily::Induced, 4, |_| true);
     assert_eq!(simple.count(), 4);
@@ -956,7 +959,15 @@ fn test_molecule_ast_rings_induced_naphthalene() {
         (AtomIdx(8), AtomIdx(9), BondAst::from_order(1)),
         (AtomIdx(9), AtomIdx(4), BondAst::from_order(1)),
     ];
-    let ast = MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], Constraints::default());
+    let ast = MoleculeAst::new(
+        atoms,
+        bonds,
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        Constraints::default(),
+    );
     let simple = ast.rings(RingFamily::Simple, 10, |_| true);
     assert_eq!(simple.count(), 2);
     let induced = ast.rings(RingFamily::Induced, 10, |_| true);
@@ -1018,12 +1029,12 @@ fn test_molecule_builder_add_and_remove() {
 }
 
 #[rstest]
-#[case::forward_order(AtomIdx(0), AtomIdx(1), DativeDirection::Forward)]
-#[case::reverse_order(AtomIdx(1), AtomIdx(0), DativeDirection::Reverse)]
+#[case::forward_order(AtomIdx(0), AtomIdx(1), DativeBondDirection::Forward)]
+#[case::reverse_order(AtomIdx(1), AtomIdx(0), DativeBondDirection::Reverse)]
 fn test_molecule_ast_dative_direction_normalization(
     #[case] donor: AtomIdx,
     #[case] acceptor: AtomIdx,
-    #[case] expected_direction: DativeDirection,
+    #[case] expected_direction: DativeBondDirection,
 ) {
     let atoms = vec![ground_atom(), ground_atom()];
     let ast = MoleculeAst::new(
@@ -1106,10 +1117,7 @@ fn test_molecule_ast_graph() {
     let g = ast.graph();
     assert_eq!(g.node_count(), 4);
     assert_eq!(g.edge_count(), 3);
-    assert_eq!(
-        g.edge_endpoints(EdgeId(0)),
-        [NodeId(0), NodeId(1)]
-    );
+    assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
 }
 
 #[rstest]
@@ -1190,7 +1198,10 @@ fn test_molecule_ast_index_bond() {
 #[rstest]
 fn test_molecule_ast_index_dative_bond() {
     let ast = rich_molecule();
-    assert_eq!(ast[DativeBondIdx(0)].direction, DativeDirection::Forward);
+    assert_eq!(
+        ast[DativeBondIdx(0)].direction,
+        DativeBondDirection::Forward
+    );
 }
 
 #[rstest]
@@ -1210,7 +1221,7 @@ fn test_molecule_ast_index_noncovalent_bond() {
     let ast = rich_molecule();
     assert_eq!(
         ast[NoncovalentBondIdx(0)].kind,
-        NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond)
+        NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)
     );
 }
 
@@ -1303,9 +1314,9 @@ fn test_molecule_ast_multicenter_bonds_mut() {
 fn test_molecule_ast_noncovalent_bond_mut() {
     let mut ast = rich_molecule();
     ast.noncovalent_bond_mut(NoncovalentBondIdx(0)).kind =
-        NoncovalentKindAst::Lit(NoncovalentKind::Ionic);
+        NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
     assert_eq!(
         ast[NoncovalentBondIdx(0)].kind,
-        NoncovalentKindAst::Lit(NoncovalentKind::Ionic)
+        NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)
     );
 }

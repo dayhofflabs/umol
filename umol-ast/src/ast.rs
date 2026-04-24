@@ -1,8 +1,4 @@
 //! Semantic AST layer.
-//!
-//! `umol_ast::ast` is the canonical import location for every AST type.
-//! Sub-modules are `pub(crate)` implementation detail; external users access
-//! everything through this facade.
 
 pub(crate) mod aromatic;
 pub(crate) mod atom;
@@ -36,7 +32,7 @@ pub use constraint::{
     MoleculeConstraint, MulticenterBondConstraint, MulticenterBondConstraints,
     MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraints, SubPatternAnchor,
 };
-pub use dative::{DativeBondAst, DativeDirection};
+pub use dative::{DativeBondAst, DativeBondDirection};
 pub use error::{EvaluationError, RewriteError};
 pub use idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
@@ -44,7 +40,7 @@ pub use idx::{
 pub use matching::BondMatching;
 pub use molecule::{MoleculeAst, MoleculeBuilder};
 pub use multicenter::MulticenterBondAst;
-pub use noncovalent::{NoncovalentBondAst, NoncovalentKind, NoncovalentKindAst};
+pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use reaction::{Assignment, ReactionRuleAst};
 pub use remap::IdxRemapping;
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingIdx, RingRelation, RingSet, RingView};

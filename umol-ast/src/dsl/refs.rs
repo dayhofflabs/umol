@@ -15,13 +15,15 @@ macro_rules! define_ref_dsl {
         impl<'de> FromEdn<'de> for $name {
             fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
                 match edn {
-                    Edn::Int(n) => usize::try_from(*n)
-                        .map(Self::Index)
-                        .map_err(|_| DeError::OutOfRange {
-                            value: n.to_string(),
-                            target: "usize",
-                            path: Vec::new(),
-                        }),
+                    Edn::Int(n) => {
+                        usize::try_from(*n)
+                            .map(Self::Index)
+                            .map_err(|_| DeError::OutOfRange {
+                                value: n.to_string(),
+                                target: "usize",
+                                path: Vec::new(),
+                            })
+                    }
                     Edn::Symbol(s) => Ok(Self::Id(s.as_str().to_string())),
                     other => Err(DeError::TypeMismatch {
                         expected: concat!($kind, "-ref (int or symbol)"),

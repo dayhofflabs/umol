@@ -13,25 +13,28 @@ use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet};
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
-use super::dative::{DativeBondAst, DativeDirection};
+use super::dative::{DativeBondAst, DativeBondDirection};
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 
+/// Borrowed view of an atom: its index and the underlying `AtomAst`.
 #[derive(Clone, Copy, Debug)]
 pub struct AtomView<'a> {
     pub idx: AtomIdx,
     pub data: &'a AtomAst,
 }
 
+/// Mutable borrowed view of an atom.
 #[derive(Debug)]
 pub struct AtomViewMut<'a> {
     pub idx: AtomIdx,
     pub data: &'a mut AtomAst,
 }
 
+/// Borrowed view of a bond: its index, endpoints (`src`, `tgt`), and data.
 #[derive(Clone, Copy, Debug)]
 pub struct BondView<'a> {
     pub idx: BondIdx,
@@ -40,6 +43,7 @@ pub struct BondView<'a> {
     pub data: &'a BondAst,
 }
 
+/// Mutable borrowed view of a bond.
 #[derive(Debug)]
 pub struct BondViewMut<'a> {
     pub idx: BondIdx,
@@ -48,6 +52,8 @@ pub struct BondViewMut<'a> {
     pub data: &'a mut BondAst,
 }
 
+/// Neighbor-side view of a bond: the atom on the other end (`atom`), the
+/// bond index, and the bond data. Yielded by `MoleculeAst::neighbors`.
 #[derive(Clone, Copy, Debug)]
 pub struct NeighborView<'a> {
     pub atom: AtomIdx,
@@ -55,6 +61,7 @@ pub struct NeighborView<'a> {
     pub data: &'a BondAst,
 }
 
+/// Borrowed view of a dative bond: donor and acceptor atom indices plus data.
 #[derive(Clone, Copy, Debug)]
 pub struct DativeBondView<'a> {
     pub idx: DativeBondIdx,
@@ -63,6 +70,7 @@ pub struct DativeBondView<'a> {
     pub data: &'a DativeBondAst,
 }
 
+/// Borrowed view of a noncovalent bond: the two participating atoms plus data.
 #[derive(Clone, Copy, Debug)]
 pub struct NoncovalentBondView<'a> {
     pub idx: NoncovalentBondIdx,
@@ -70,6 +78,9 @@ pub struct NoncovalentBondView<'a> {
     pub data: &'a NoncovalentBondAst,
 }
 
+/// Borrowed view of an aromatic system: its index, the `AromaticSystemAst`,
+/// and accessors for member atoms and induced ring bonds via `atoms()` and
+/// `bonds()`.
 #[derive(Clone, Copy, Debug)]
 pub struct AromaticSystemView<'a> {
     pub idx: AromaticSystemIdx,
@@ -88,6 +99,8 @@ impl<'a> AromaticSystemView<'a> {
     }
 }
 
+/// Borrowed view of a multicenter bond: its index, data, and member atoms
+/// via `atoms()`.
 #[derive(Clone, Copy, Debug)]
 pub struct MulticenterBondView<'a> {
     pub idx: MulticenterBondIdx,
@@ -101,6 +114,8 @@ impl<'a> MulticenterBondView<'a> {
     }
 }
 
+/// Namespace accessor for atom views on a `MoleculeAst`. Provides `count`,
+/// `ids`, `iter`, `get`, and `Index` without burying them on `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct AtomViews<'a> {
     atoms: &'a [AtomAst],
@@ -141,6 +156,7 @@ impl<'a> Index<AtomIdx> for AtomViews<'a> {
     }
 }
 
+/// Namespace accessor for bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct BondViews<'a> {
     bonds: &'a [BondAst],
@@ -192,6 +208,7 @@ impl<'a> Index<BondIdx> for BondViews<'a> {
     }
 }
 
+/// Namespace accessor for dative-bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
     set: &'a FixedRelationSet<DativeBondAst, 2>,
@@ -239,10 +256,10 @@ impl<'a> DativeBondViews<'a> {
     }
 }
 
-fn directed_endpoints(parts: &[NodeId; 2], direction: DativeDirection) -> (AtomIdx, AtomIdx) {
+fn directed_endpoints(parts: &[NodeId; 2], direction: DativeBondDirection) -> (AtomIdx, AtomIdx) {
     match direction {
-        DativeDirection::Forward => (AtomIdx::from(parts[0]), AtomIdx::from(parts[1])),
-        DativeDirection::Reverse => (AtomIdx::from(parts[1]), AtomIdx::from(parts[0])),
+        DativeBondDirection::Forward => (AtomIdx::from(parts[0]), AtomIdx::from(parts[1])),
+        DativeBondDirection::Reverse => (AtomIdx::from(parts[1]), AtomIdx::from(parts[0])),
     }
 }
 
@@ -253,6 +270,7 @@ impl<'a> Index<DativeBondIdx> for DativeBondViews<'a> {
     }
 }
 
+/// Namespace accessor for noncovalent-bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct NoncovalentBondViews<'a> {
     set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
@@ -301,6 +319,7 @@ impl<'a> Index<NoncovalentBondIdx> for NoncovalentBondViews<'a> {
     }
 }
 
+/// Namespace accessor for aromatic-system views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
     set: &'a VarRelationSet<AromaticSystemAst>,
@@ -349,6 +368,7 @@ impl<'a> Index<AromaticSystemIdx> for AromaticSystemViews<'a> {
     }
 }
 
+/// Namespace accessor for multicenter-bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct MulticenterBondViews<'a> {
     set: &'a VarRelationSet<MulticenterBondAst>,

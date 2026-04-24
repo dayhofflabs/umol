@@ -4,6 +4,8 @@ use umol_graph_core::{AutoGroupOrder, Automorphism, NodeId};
 
 use super::idx::AtomIdx;
 
+/// Atom-level wrapper over `umol_graph_core::Automorphism`. Indexes the
+/// permutation in terms of `AtomIdx` rather than raw `NodeId`.
 #[derive(Clone, Debug)]
 pub struct AtomAutomorphism(pub(crate) Automorphism);
 

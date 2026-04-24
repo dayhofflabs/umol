@@ -1,8 +1,4 @@
-//! Surface DSL layer.
-//!
-//! `umol_ast::dsl` is the canonical import location for every DSL type.
-//! Sub-modules are `pub(crate)` implementation detail; external users access
-//! everything through this facade.
+//! Molecule DSL implementation.
 
 pub(crate) mod aromatic;
 pub(crate) mod atom;
@@ -18,32 +14,36 @@ mod predicates;
 pub(crate) mod refs;
 pub(crate) mod value;
 
-pub use aromatic::{AromaticPredicate, AromaticSystemConstraintDsl, AromaticSystemDsl, parse_aromatic};
-pub use atom::{
-    AromaticValenceDsl, AtomConstraintDsl, AtomDsl, AtomPredicate, MulticenterValenceDsl,
-    parse_atom,
+pub use aromatic::{
+    parse_aromatic_system, AromaticSystemConstraintDsl, AromaticSystemDsl, AromaticSystemPredicate,
 };
-pub use bond::{BondConstraintDsl, BondDsl, BondPredicate, parse_bond};
+pub use atom::{
+    parse_atom, AromaticValenceDsl, AtomConstraintDsl, AtomDsl, AtomPredicate,
+    MulticenterValenceDsl,
+};
+pub use bond::{parse_bond, BondConstraintDsl, BondDsl, BondPredicate};
 pub use config::{
     AromaticSystemDefaults, AromaticSystemOverrides, AromaticValenceDefault, AtomDefaults,
     AtomOverrides, BondDefaults, BondOverrides, DativeBondDefaults, DativeBondOverrides,
-    ImplicitDefault, IsotopeDefault, MoleculeDefaults, MoleculeOverrides, MulticenterBondDefaults,
-    MulticenterBondOverrides, MulticenterValenceDefault, MultiplicityDefault,
-    NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, UnpairedElectronsDefault,
+    ImplicitHydrogensDefault, IsotopeDefault, MoleculeDefaults, MoleculeOverrides,
+    MulticenterBondDefaults, MulticenterBondOverrides, MulticenterValenceDefault,
+    MultiplicityDefault, NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault,
+    UnpairedElectronsDefault,
 };
 pub use constraint::{
     AromaticSystemRef, AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, DativeBondRef,
     MoleculeConstraintDsl, MulticenterBondRef, NoncovalentBondRef, SubPatternAnchorDsl,
 };
-pub use dative::{DativeBondConstraintDsl, DativeBondDsl, DativePredicate, parse_dative};
+pub use dative::{parse_dative_bond, DativeBondConstraintDsl, DativeBondDsl, DativeBondPredicate};
 pub use error::ParseError;
 pub use molecule::{Metadata, MoleculeDsl};
 pub use multicenter::{
-    MulticenterBondConstraintDsl, MulticenterBondDsl, MulticenterPredicate, parse_multicenter,
+    parse_multicenter_bond, MulticenterBondConstraintDsl, MulticenterBondDsl,
+    MulticenterBondPredicate,
 };
-pub use noncovalent::{NoncovalentBondConstraintDsl, NoncovalentBondDsl, parse_noncovalent};
+pub use noncovalent::{parse_noncovalent_bond, NoncovalentBondConstraintDsl, NoncovalentBondDsl};
 pub use refs::{
     AromaticSystemRefDsl, AtomRefDsl, BondRefDsl, DativeBondRefDsl, MulticenterBondRefDsl,
     NoncovalentBondRefDsl,
 };
-pub use value::{ValueDsl, parse_value};
+pub use value::{parse_value, ValueDsl};

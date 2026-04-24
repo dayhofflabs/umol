@@ -25,8 +25,11 @@ use fixtures::{
     MOL_WITH_CONSTRAINTS,
 };
 
-fn bench_pair<T>(group: &mut criterion::BenchmarkGroup<'_, WallTime>, label: &str, source: &'static str)
-where
+fn bench_pair<T>(
+    group: &mut criterion::BenchmarkGroup<'_, WallTime>,
+    label: &str,
+    source: &'static str,
+) where
     T: for<'de> FromEdn<'de>,
 {
     group.throughput(Throughput::Bytes(source.len() as u64));

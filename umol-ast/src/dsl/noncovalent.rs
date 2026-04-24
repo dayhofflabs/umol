@@ -19,7 +19,7 @@ use super::error::{PResult, ParseError};
 use super::molecule::Metadata;
 use super::value::id;
 use crate::ast::constraint::NoncovalentBondConstraint;
-use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentKind, NoncovalentKindAst};
+use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use crate::ast::traits::{FromAst, IntoAst};
 
 /// Surface DSL wrapper around `NoncovalentBondAst`. String form is the
@@ -41,13 +41,13 @@ impl FromStr for NoncovalentBondDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_noncovalent(s)
+        parse_noncovalent_bond(s)
     }
 }
 
 impl Display for NoncovalentBondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_noncovalent_ast(f, &self.0)
+        fmt_noncovalent_bond_ast(f, &self.0)
     }
 }
 
@@ -94,28 +94,29 @@ impl IntoAst<NoncovalentBondAst> for NoncovalentBondDsl {
 
 // -- Parse --------------------
 
-pub fn parse_noncovalent(input: &str) -> Result<NoncovalentBondDsl, ParseError> {
-    noncovalent.parse(input).map_err(|e| e.into_inner())
+/// Parse a complete noncovalent-bond-string into a `NoncovalentBondDsl`.
+pub fn parse_noncovalent_bond(input: &str) -> Result<NoncovalentBondDsl, ParseError> {
+    noncovalent_bond.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn noncovalent(i: &mut &str) -> PResult<NoncovalentBondDsl> {
+pub(crate) fn noncovalent_bond(i: &mut &str) -> PResult<NoncovalentBondDsl> {
     let kind = delimited(multispace0, kind_expr, multispace0).parse_next(i)?;
     Ok(NoncovalentBondDsl(NoncovalentBondAst::new(kind)))
 }
 
-fn kind_expr(i: &mut &str) -> PResult<NoncovalentKindAst> {
+fn kind_expr(i: &mut &str) -> PResult<NoncovalentBondKindAst> {
     alt((
-        '*'.value(NoncovalentKindAst::Undetermined),
-        kind_set.map(NoncovalentKindAst::Set),
-        kind_bind.map(|(id, set)| NoncovalentKindAst::Bind { id, set }),
-        kind_ref.map(NoncovalentKindAst::Ref),
-        kind_literal.map(NoncovalentKindAst::Lit),
+        '*'.value(NoncovalentBondKindAst::Undetermined),
+        kind_set.map(NoncovalentBondKindAst::Set),
+        kind_bind.map(|(id, set)| NoncovalentBondKindAst::Bind { id, set }),
+        kind_ref.map(NoncovalentBondKindAst::Ref),
+        kind_literal.map(NoncovalentBondKindAst::Lit),
     ))
     .parse_next(i)
-    .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedNoncovalentKind))
+    .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedNoncovalentBondKind))
 }
 
-fn kind_literal(i: &mut &str) -> PResult<NoncovalentKind> {
+fn kind_literal(i: &mut &str) -> PResult<NoncovalentBondKind> {
     let sym: &str = (
         one_of(|c: char| c.is_ascii_uppercase()),
         one_of(|c: char| c.is_ascii_lowercase()),
@@ -129,7 +130,7 @@ fn kind_literal(i: &mut &str) -> PResult<NoncovalentKind> {
     }
 }
 
-fn kind_set(i: &mut &str) -> PResult<Vec<NoncovalentKind>> {
+fn kind_set(i: &mut &str) -> PResult<Vec<NoncovalentBondKind>> {
     delimited(
         '{',
         delimited(
@@ -142,7 +143,7 @@ fn kind_set(i: &mut &str) -> PResult<Vec<NoncovalentKind>> {
     .parse_next(i)
 }
 
-fn kind_bind(i: &mut &str) -> PResult<(String, Vec<NoncovalentKind>)> {
+fn kind_bind(i: &mut &str) -> PResult<(String, Vec<NoncovalentBondKind>)> {
     delimited(
         '(',
         (
@@ -163,38 +164,38 @@ fn kind_ref(i: &mut &str) -> PResult<String> {
     .parse_next(i)
 }
 
-fn kind_from_symbol(sym: &str) -> Option<NoncovalentKind> {
+fn kind_from_symbol(sym: &str) -> Option<NoncovalentBondKind> {
     match sym {
-        "Hbd" => Some(NoncovalentKind::HydrogenBond),
-        "Xbd" => Some(NoncovalentKind::HalogenBond),
-        "Ybd" => Some(NoncovalentKind::ChalcogenBond),
-        "Ion" => Some(NoncovalentKind::Ionic),
-        "Vdw" => Some(NoncovalentKind::VanDerWaals),
+        "Hbd" => Some(NoncovalentBondKind::HydrogenBond),
+        "Xbd" => Some(NoncovalentBondKind::HalogenBond),
+        "Ybd" => Some(NoncovalentBondKind::ChalcogenBond),
+        "Ion" => Some(NoncovalentBondKind::Ionic),
+        "Vdw" => Some(NoncovalentBondKind::VanDerWaals),
         _ => None,
     }
 }
 
-fn kind_symbol(k: NoncovalentKind) -> &'static str {
+fn kind_symbol(k: NoncovalentBondKind) -> &'static str {
     match k {
-        NoncovalentKind::HydrogenBond => "Hbd",
-        NoncovalentKind::HalogenBond => "Xbd",
-        NoncovalentKind::ChalcogenBond => "Ybd",
-        NoncovalentKind::Ionic => "Ion",
-        NoncovalentKind::VanDerWaals => "Vdw",
+        NoncovalentBondKind::HydrogenBond => "Hbd",
+        NoncovalentBondKind::HalogenBond => "Xbd",
+        NoncovalentBondKind::ChalcogenBond => "Ybd",
+        NoncovalentBondKind::Ionic => "Ion",
+        NoncovalentBondKind::VanDerWaals => "Vdw",
     }
 }
 
 // -- Format --------------------
 
-fn fmt_noncovalent_ast(f: &mut fmt::Formatter<'_>, ast: &NoncovalentBondAst) -> fmt::Result {
+fn fmt_noncovalent_bond_ast(f: &mut fmt::Formatter<'_>, ast: &NoncovalentBondAst) -> fmt::Result {
     fmt_kind(f, &ast.kind)
 }
 
-fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentKindAst) -> fmt::Result {
+fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::Result {
     match kind {
-        NoncovalentKindAst::Lit(k) => write!(f, "{}", kind_symbol(*k)),
-        NoncovalentKindAst::Undetermined => write!(f, "*"),
-        NoncovalentKindAst::Set(ks) => {
+        NoncovalentBondKindAst::Lit(k) => write!(f, "{}", kind_symbol(*k)),
+        NoncovalentBondKindAst::Undetermined => write!(f, "*"),
+        NoncovalentBondKindAst::Set(ks) => {
             write!(f, "{{")?;
             for (i, k) in ks.iter().enumerate() {
                 if i > 0 {
@@ -204,7 +205,7 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentKindAst) -> fmt::Resul
             }
             write!(f, "}}")
         }
-        NoncovalentKindAst::Bind { id, set } => {
+        NoncovalentBondKindAst::Bind { id, set } => {
             write!(f, "(?{} :: {{", id)?;
             for (i, k) in set.iter().enumerate() {
                 if i > 0 {
@@ -214,7 +215,7 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentKindAst) -> fmt::Resul
             }
             write!(f, "}})")
         }
-        NoncovalentKindAst::Ref(id) => write!(f, "(?{})", id),
+        NoncovalentBondKindAst::Ref(id) => write!(f, "(?{})", id),
     }
 }
 
@@ -366,19 +367,19 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::hbond("Hbd", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond)))]
-    #[case::xbond("Xbd", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::HalogenBond)))]
-    #[case::ybond("Ybd", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::ChalcogenBond)))]
-    #[case::ion("Ion", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::Ionic)))]
-    #[case::vdw("Vdw", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::VanDerWaals)))]
-    #[case::whitespace("  Hbd  ", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond)))]
-    #[case::undetermined("*", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentKindAst::Undetermined)))]
-    #[case::set("{Hbd,Ion}", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond, NoncovalentKind::Ionic]))))]
-    #[case::set_spaced("{ Hbd, Vdw }", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond, NoncovalentKind::VanDerWaals]))))]
-    #[case::bind("(?k :: {Hbd,Ion})", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentKindAst::Bind { id: "k".to_string(), set: vec![NoncovalentKind::HydrogenBond, NoncovalentKind::Ionic] })))]
-    #[case::ref_("(?k)", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentKindAst::Ref("k".to_string()))))]
+    #[case::hbond("Hbd", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)))]
+    #[case::xbond("Xbd", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond)))]
+    #[case::ybond("Ybd", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::ChalcogenBond)))]
+    #[case::ion("Ion", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic)))]
+    #[case::vdw("Vdw", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::VanDerWaals)))]
+    #[case::whitespace("  Hbd  ", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)))]
+    #[case::undetermined("*", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Undetermined)))]
+    #[case::set("{Hbd,Ion}", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]))))]
+    #[case::set_spaced("{ Hbd, Vdw }", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::VanDerWaals]))))]
+    #[case::bind("(?k :: {Hbd,Ion})", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Bind { id: "k".to_string(), set: vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic] })))]
+    #[case::ref_("(?k)", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Ref("k".to_string()))))]
     fn test_parse_noncovalent(#[case] input: &str, #[case] expected: NoncovalentBondDsl) {
-        let result = noncovalent.parse(input);
+        let result = noncovalent_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
         let form = result.unwrap();
         assert_eq!(form, expected);
@@ -390,7 +391,7 @@ mod tests {
     #[case::two_letter("Hb")]
     #[case::bare_paren("(")]
     fn test_parse_noncovalent_invalid(#[case] input: &str) {
-        let result = noncovalent.parse(input);
+        let result = noncovalent_bond.parse(input);
         assert!(result.is_err(), "{:?} should fail", input);
     }
 
@@ -410,12 +411,14 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_dsl_to_ast_passthrough() {
-        let dsl = NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond));
+        let dsl = NoncovalentBondDsl(NoncovalentBondAst::from_kind(
+            NoncovalentBondKind::HydrogenBond,
+        ));
         let cfg = NoncovalentBondDefaults::zeroed();
         let ast = dsl.into_ast(&cfg).unwrap();
         assert_eq!(
             ast.kind,
-            NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond)
+            NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)
         );
     }
 

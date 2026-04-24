@@ -12,8 +12,8 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use super::config::{AromaticSystemDefaults, NumericDefault};
 use super::atom::AtomConstraintDsl;
+use super::config::{AromaticSystemDefaults, NumericDefault};
 use super::constraint::{AtomRef, EntityCounts};
 use super::error::{PResult, ParseError};
 use super::molecule::Metadata;
@@ -46,13 +46,13 @@ impl FromStr for AromaticSystemDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_aromatic(s)
+        parse_aromatic_system(s)
     }
 }
 
 impl Display for AromaticSystemDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_aromatic_ast(f, &self.0)
+        fmt_aromatic_system_ast(f, &self.0)
     }
 }
 
@@ -85,7 +85,7 @@ impl FromAst<AromaticSystemAst> for AromaticSystemDsl {
 
     fn from_ast(ast: &AromaticSystemAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
         let mut out = ast.clone();
-        lower_aromatic(&mut out, cfg);
+        lower_aromatic_system(&mut out, cfg);
         Ok(AromaticSystemDsl(out))
     }
 }
@@ -95,48 +95,51 @@ impl IntoAst<AromaticSystemAst> for AromaticSystemDsl {
     type Error = ParseError;
 
     fn into_ast(mut self, cfg: &Self::Ctx) -> Result<AromaticSystemAst, ParseError> {
-        raise_aromatic(&mut self.0, cfg);
+        raise_aromatic_system(&mut self.0, cfg);
         Ok(self.0)
     }
 }
 
 // -- Parse --------------------
 
-pub fn parse_aromatic(input: &str) -> Result<AromaticSystemDsl, ParseError> {
-    aromatic.parse(input).map_err(|e| e.into_inner())
+/// Parse a complete aromatic-system-string into an `AromaticSystemDsl`.
+pub fn parse_aromatic_system(input: &str) -> Result<AromaticSystemDsl, ParseError> {
+    aromatic_system.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn aromatic(i: &mut &str) -> PResult<AromaticSystemDsl> {
+pub(crate) fn aromatic_system(i: &mut &str) -> PResult<AromaticSystemDsl> {
     multispace0.parse_next(i)?;
-    let preds: Vec<AromaticPredicate> =
-        repeat(0.., terminated(aromatic_predicate, multispace0)).parse_next(i)?;
+    let preds: Vec<AromaticSystemPredicate> =
+        repeat(0.., terminated(aromatic_system_predicate, multispace0)).parse_next(i)?;
     let mut form = AromaticSystemDsl::default();
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
 }
 
+/// One predicate from an aromatic-system-string; the parser yields a
+/// `Vec` of these and the applier folds them into the `AromaticSystemAst`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AromaticPredicate {
+pub enum AromaticSystemPredicate {
     Charge(ValueAst),
     Spin(SpinPredicate),
     Electrons(ValueAst),
 }
 
-fn aromatic_predicate(i: &mut &str) -> PResult<AromaticPredicate> {
+fn aromatic_system_predicate(i: &mut &str) -> PResult<AromaticSystemPredicate> {
     let start = *i;
     let prefix: &str = take(2usize).parse_next(i)?;
     match prefix {
-        "#c" => charge.map(AromaticPredicate::Charge).parse_next(i),
+        "#c" => charge.map(AromaticSystemPredicate::Charge).parse_next(i),
         "#u" => optional_value
-            .map(|v| AromaticPredicate::Spin(SpinPredicate::Unpaired(v)))
+            .map(|v| AromaticSystemPredicate::Spin(SpinPredicate::Unpaired(v)))
             .parse_next(i),
         "#s" => optional_value
-            .map(|v| AromaticPredicate::Spin(SpinPredicate::Multiplicity(v)))
+            .map(|v| AromaticSystemPredicate::Spin(SpinPredicate::Multiplicity(v)))
             .parse_next(i),
         "#e" => optional_value
-            .map(AromaticPredicate::Electrons)
+            .map(AromaticSystemPredicate::Electrons)
             .parse_next(i),
-        p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownAromaticPredicate(
+        p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownAromaticSystemPredicate(
             p.to_string(),
         ))),
         _ => Err(ErrMode::Cut(ParseError::TrailingInput(start.to_string()))),
@@ -145,23 +148,31 @@ fn aromatic_predicate(i: &mut &str) -> PResult<AromaticPredicate> {
 
 fn apply_predicates(
     form: &mut AromaticSystemDsl,
-    preds: Vec<AromaticPredicate>,
+    preds: Vec<AromaticSystemPredicate>,
 ) -> Result<(), ParseError> {
     let ast = &mut form.0;
     for pred in preds {
         match pred {
-            AromaticPredicate::Charge(v) => {
+            AromaticSystemPredicate::Charge(v) => {
                 if !matches!(ast.charge, ValueAst::Undetermined) {
-                    return Err(ParseError::DuplicateAromaticPredicate("#c".to_string()));
+                    return Err(ParseError::DuplicateAromaticSystemPredicate(
+                        "#c".to_string(),
+                    ));
                 }
                 ast.charge = v;
             }
-            AromaticPredicate::Spin(sp) => {
-                apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateAromaticPredicate)?;
+            AromaticSystemPredicate::Spin(sp) => {
+                apply_spin_pair(
+                    &mut ast.spin,
+                    sp,
+                    ParseError::DuplicateAromaticSystemPredicate,
+                )?;
             }
-            AromaticPredicate::Electrons(v) => {
+            AromaticSystemPredicate::Electrons(v) => {
                 if !matches!(ast.electrons, ValueAst::Undetermined) {
-                    return Err(ParseError::DuplicateAromaticPredicate("#e".to_string()));
+                    return Err(ParseError::DuplicateAromaticSystemPredicate(
+                        "#e".to_string(),
+                    ));
                 }
                 ast.electrons = v;
             }
@@ -172,7 +183,7 @@ fn apply_predicates(
 
 // -- Format --------------------
 
-fn fmt_aromatic_ast(f: &mut fmt::Formatter<'_>, ast: &AromaticSystemAst) -> fmt::Result {
+fn fmt_aromatic_system_ast(f: &mut fmt::Formatter<'_>, ast: &AromaticSystemAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
     fmt_spin_pair(f, &ast.spin)?;
     fmt_electrons(f, &ast.electrons)
@@ -192,7 +203,7 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
 
 // -- Raise --------------------
 
-fn raise_aromatic(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
+fn raise_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
     // Exhaustive destructure: adding a new AromaticSystemAst field is a
     // compile error here, forcing the author to decide how raising should
     // handle it.
@@ -220,7 +231,7 @@ fn raise_aromatic(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
 
 // -- Lower --------------------
 
-fn lower_aromatic(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
+fn lower_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
     // Exhaustive destructure: adding a new AromaticSystemAst field is a
     // compile error here, forcing the author to decide how lowering should
     // handle it.
@@ -407,22 +418,22 @@ mod tests {
     #[case::charge_electrons("#c+#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: AromaticSystemConstraints::new() }))]
     #[case::full("#c0#u0#s1#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(6), constraints: AromaticSystemConstraints::new() }))]
     fn test_parse_aromatic(#[case] input: &str, #[case] expected: AromaticSystemDsl) {
-        let result = aromatic.parse(input);
+        let result = aromatic_system.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
         let form = result.unwrap();
         assert_eq!(form, expected);
     }
 
     #[rstest]
-    #[case::unknown("#x", ParseError::UnknownAromaticPredicate("#x".to_string()))]
-    #[case::unknown_a("#a", ParseError::UnknownAromaticPredicate("#a".to_string()))]
-    #[case::dup_charge("#c+#c-", ParseError::DuplicateAromaticPredicate("#c".to_string()))]
-    #[case::dup_electrons("#e6#e4", ParseError::DuplicateAromaticPredicate("#e".to_string()))]
-    #[case::dup_unpaired("#u1#u2", ParseError::DuplicateAromaticPredicate("#u".to_string()))]
-    #[case::dup_multiplicity("#s1#s2", ParseError::DuplicateAromaticPredicate("#s".to_string()))]
+    #[case::unknown("#x", ParseError::UnknownAromaticSystemPredicate("#x".to_string()))]
+    #[case::unknown_a("#a", ParseError::UnknownAromaticSystemPredicate("#a".to_string()))]
+    #[case::dup_charge("#c+#c-", ParseError::DuplicateAromaticSystemPredicate("#c".to_string()))]
+    #[case::dup_electrons("#e6#e4", ParseError::DuplicateAromaticSystemPredicate("#e".to_string()))]
+    #[case::dup_unpaired("#u1#u2", ParseError::DuplicateAromaticSystemPredicate("#u".to_string()))]
+    #[case::dup_multiplicity("#s1#s2", ParseError::DuplicateAromaticSystemPredicate("#s".to_string()))]
     #[case::trailing("#c+ foo", ParseError::TrailingInput("foo".to_string()))]
     fn test_parse_aromatic_error(#[case] input: &str, #[case] expected: ParseError) {
-        let result = aromatic.parse(input);
+        let result = aromatic_system.parse(input);
         assert!(
             result.is_err(),
             "{:?} should fail, got {:?}",

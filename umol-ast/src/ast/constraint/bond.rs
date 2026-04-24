@@ -8,6 +8,8 @@ use strum::EnumDiscriminants;
 use super::super::remap::IdxRemapping;
 use super::super::value::ValueAst;
 
+/// Covalent-bond-scope constraint. Held inline on `BondAst` via
+/// `BondConstraints`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(BondConstraintKind), derive(Hash))]
 pub enum BondConstraint {

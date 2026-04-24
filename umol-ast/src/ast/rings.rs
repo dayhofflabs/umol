@@ -5,12 +5,11 @@
 
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
-use umol_graph_core::{
-    BiconnectedComponentsAlgorithm, CycleEnumerationAlgorithm, Graph, NodeId,
-};
+use umol_graph_core::{BiconnectedComponentsAlgorithm, CycleEnumerationAlgorithm, Graph, NodeId};
 
 use super::idx::{AtomIdx, BondIdx};
 
+/// Index of a ring within a `RingSet`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RingIdx(pub u32);
 
@@ -44,6 +43,7 @@ fn intersection<T: Copy + Eq>(a: &[T], b: &[T]) -> Vec<T> {
         .collect()
 }
 
+/// Borrowed view of a ring: its index plus atom and bond membership.
 #[derive(Debug, Clone, Copy)]
 pub struct RingView<'a> {
     pub idx: RingIdx,
@@ -77,6 +77,7 @@ impl<'a> RingView<'a> {
     }
 }
 
+/// Topological relation between two rings in a `RingSet`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RingRelation {
     Identical,
@@ -88,12 +89,16 @@ pub enum RingRelation {
     Noncontiguous,
 }
 
+/// Selection of which cycle family to enumerate: `Simple` for the minimum
+/// cycle basis, `Induced` for the relevant-cycle (Vismara) set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RingFamily {
     Simple,
     Induced,
 }
 
+/// Collection of rings for a `MoleculeAst`, with atom/bond → ring reverse
+/// indices and a `RingGraph` describing pairwise relations between rings.
 #[derive(Debug, Clone)]
 pub struct RingSet {
     family: RingFamily,
@@ -316,6 +321,7 @@ impl RingSet {
     }
 }
 
+/// Edge in a `RingGraph`: the two rings it connects and their relation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RingGraphEdge {
     pub source: RingIdx,
@@ -323,6 +329,9 @@ pub struct RingGraphEdge {
     pub relation: RingRelation,
 }
 
+/// Graph over rings, with `RingRelation`-labeled edges. Connected
+/// components of the fused/bridged/spiro subgraph correspond to ring
+/// systems.
 #[derive(Debug, Clone)]
 pub struct RingGraph {
     edges: Vec<RingGraphEdge>,
@@ -458,10 +467,9 @@ pub(crate) fn enumerate_rings(
     let mut all_rings: Vec<Ring> = Vec::new();
     for component in &bcc {
         let comp_sub = sub.induced_subgraph(component);
-        let raw_cycles =
-            comp_sub
-                .graph
-                .enumerate_cycles(max_ring_size, CycleEnumerationAlgorithm::Vismara);
+        let raw_cycles = comp_sub
+            .graph
+            .enumerate_cycles(max_ring_size, CycleEnumerationAlgorithm::Vismara);
 
         let component_rings: Vec<Ring> = raw_cycles
             .into_iter()

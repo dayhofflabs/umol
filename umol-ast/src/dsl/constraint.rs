@@ -11,6 +11,7 @@ use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer
 use super::aromatic::AromaticSystemConstraintDsl;
 use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
 use super::bond::BondConstraintDsl;
+use super::config::MoleculeDefaults;
 use super::dative::DativeBondConstraintDsl;
 use super::error::ParseError;
 use super::molecule::{Metadata, MoleculeDsl};
@@ -24,7 +25,6 @@ use crate::ast::idx::{
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::traits::{FromAst, IntoAst};
-use super::config::MoleculeDefaults;
 
 /// Per-entity counts for numeric-index bounds checking during constraint
 /// resolution (DSL → AST). `from_ast` (AST → DSL) does not read counts.
@@ -885,10 +885,7 @@ pub enum MoleculeConstraintDsl {
 }
 
 impl MoleculeConstraintDsl {
-    pub(crate) fn from_ast(
-        c: &MoleculeConstraint,
-        meta: &Metadata,
-    ) -> Result<Self, ParseError> {
+    pub(crate) fn from_ast(c: &MoleculeConstraint, meta: &Metadata) -> Result<Self, ParseError> {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
                 atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
@@ -1590,12 +1587,14 @@ impl ConstraintDsl {
         meta: &Metadata,
     ) -> Result<Constraint, ParseError> {
         Ok(match self {
-            Self::Atom(r, c) => {
-                Constraint::Atom(r.into_ast(counts.atom_count, meta)?, c.into_ast(&()).unwrap())
-            }
-            Self::Bond(r, c) => {
-                Constraint::Bond(r.into_ast(counts.bond_count, meta)?, c.into_ast(&()).unwrap())
-            }
+            Self::Atom(r, c) => Constraint::Atom(
+                r.into_ast(counts.atom_count, meta)?,
+                c.into_ast(&()).unwrap(),
+            ),
+            Self::Bond(r, c) => Constraint::Bond(
+                r.into_ast(counts.bond_count, meta)?,
+                c.into_ast(&()).unwrap(),
+            ),
             Self::DativeBond(r, c) => Constraint::DativeBond(
                 r.into_ast(counts.dative_bond_count, meta)?,
                 c.into_ast(counts, meta)?,
@@ -1930,7 +1929,9 @@ mod tests {
         assert_eq!(edn, read_string("{}").unwrap());
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
         let counts = full_counts();
-        let back = parsed.into_ast_pair(&counts, &meta, &counts, &meta).unwrap();
+        let back = parsed
+            .into_ast_pair(&counts, &meta, &counts, &meta)
+            .unwrap();
         assert_eq!(back, anchor);
     }
 
@@ -1945,7 +1946,9 @@ mod tests {
         assert_eq!(edn, read_string("{:atoms [[3 0] [5 1]]}").unwrap());
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
         let counts = full_counts();
-        let back = parsed.into_ast_pair(&counts, &meta, &counts, &meta).unwrap();
+        let back = parsed
+            .into_ast_pair(&counts, &meta, &counts, &meta)
+            .unwrap();
         assert_eq!(back, anchor);
     }
 

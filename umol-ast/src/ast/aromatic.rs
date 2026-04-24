@@ -4,6 +4,9 @@ use super::constraint::AromaticSystemConstraints;
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
+/// Aromatic-system AST: net charge, spin state, π-electron count, and any
+/// system-scope constraints. The member atoms are held by the containing
+/// `MoleculeAst` and accessed via its aromatic-system views.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AromaticSystemAst {
     pub charge: ValueAst,

@@ -7,20 +7,20 @@ use super::constraint::NoncovalentBondConstraints;
 /// to noncovalent interactions.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct NoncovalentBondAst {
-    pub kind: NoncovalentKindAst,
+    pub kind: NoncovalentBondKindAst,
     pub constraints: NoncovalentBondConstraints,
 }
 
 impl NoncovalentBondAst {
-    pub fn new(kind: NoncovalentKindAst) -> Self {
+    pub fn new(kind: NoncovalentBondKindAst) -> Self {
         Self {
             kind,
             constraints: NoncovalentBondConstraints::new(),
         }
     }
 
-    pub fn from_kind(kind: NoncovalentKind) -> Self {
-        Self::new(NoncovalentKindAst::Lit(kind))
+    pub fn from_kind(kind: NoncovalentBondKind) -> Self {
+        Self::new(NoncovalentBondKindAst::Lit(kind))
     }
 
     pub fn is_ground(&self) -> bool {
@@ -35,20 +35,20 @@ impl NoncovalentBondAst {
 /// Noncovalent interaction kind expressions. Mirrors `ElementAst`:
 /// wildcard, literal, set, bind, ref.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub enum NoncovalentKindAst {
+pub enum NoncovalentBondKindAst {
     #[default]
     Undetermined,
-    Lit(NoncovalentKind),
-    Set(Vec<NoncovalentKind>),
+    Lit(NoncovalentBondKind),
+    Set(Vec<NoncovalentBondKind>),
     Bind {
         id: String,
-        set: Vec<NoncovalentKind>,
+        set: Vec<NoncovalentBondKind>,
     },
     Ref(String),
 }
 
-impl NoncovalentKindAst {
-    pub fn new(kind: NoncovalentKind) -> Self {
+impl NoncovalentBondKindAst {
+    pub fn new(kind: NoncovalentBondKind) -> Self {
         Self::Lit(kind)
     }
 
@@ -72,8 +72,9 @@ impl NoncovalentKindAst {
     }
 }
 
+/// Fundamental kind of a noncovalent interaction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum NoncovalentKind {
+pub enum NoncovalentBondKind {
     HydrogenBond,
     HalogenBond,
     ChalcogenBond,
@@ -90,13 +91,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond), true)]
-    #[case::undetermined(NoncovalentKindAst::Undetermined, false)]
-    #[case::set(NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond, NoncovalentKind::Ionic]), false)]
-    #[case::bind(NoncovalentKindAst::Bind { id: "k".into(), set: vec![NoncovalentKind::HydrogenBond] }, false)]
-    #[case::reference(NoncovalentKindAst::Ref("k".into()), false)]
+    #[case::lit(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), true)]
+    #[case::undetermined(NoncovalentBondKindAst::Undetermined, false)]
+    #[case::set(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]), false)]
+    #[case::bind(NoncovalentBondKindAst::Bind { id: "k".into(), set: vec![NoncovalentBondKind::HydrogenBond] }, false)]
+    #[case::reference(NoncovalentBondKindAst::Ref("k".into()), false)]
     fn test_noncovalent_kind_ast_is_ground(
-        #[case] ast: NoncovalentKindAst,
+        #[case] ast: NoncovalentBondKindAst,
         #[case] expected: bool,
     ) {
         assert_eq!(ast.is_ground(), expected);
@@ -104,23 +105,23 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_lit(NoncovalentKindAst::Undetermined, NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond), true)]
-    #[case::undetermined_undetermined(NoncovalentKindAst::Undetermined, NoncovalentKindAst::Undetermined, true)]
-    #[case::lit_undetermined(NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond), NoncovalentKindAst::Undetermined, false)]
-    #[case::lit_lit_match(NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond), NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond), true)]
-    #[case::lit_lit_mismatch(NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond), NoncovalentKindAst::Lit(NoncovalentKind::Ionic), false)]
-    #[case::set_lit_in(NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond, NoncovalentKind::Ionic]), NoncovalentKindAst::Lit(NoncovalentKind::Ionic), true)]
-    #[case::set_lit_out(NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond]), NoncovalentKindAst::Lit(NoncovalentKind::Ionic), false)]
-    #[case::set_set_subset(NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond, NoncovalentKind::Ionic, NoncovalentKind::VanDerWaals]),
-        NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond, NoncovalentKind::Ionic]), true)]
-    #[case::set_set_superset(NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond]),
-        NoncovalentKindAst::Set(vec![NoncovalentKind::HydrogenBond, NoncovalentKind::Ionic]), false)]
-    #[case::bind_lit_match(NoncovalentKindAst::Bind { id: "k".into(), set: vec![NoncovalentKind::HydrogenBond] },
-        NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond), true)]
-    #[case::ref_lit(NoncovalentKindAst::Ref("k".into()), NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond), false)]
+    #[case::undetermined_lit(NoncovalentBondKindAst::Undetermined, NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), true)]
+    #[case::undetermined_undetermined(NoncovalentBondKindAst::Undetermined, NoncovalentBondKindAst::Undetermined, true)]
+    #[case::lit_undetermined(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Undetermined, false)]
+    #[case::lit_lit_match(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), true)]
+    #[case::lit_lit_mismatch(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic), false)]
+    #[case::set_lit_in(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]), NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic), true)]
+    #[case::set_lit_out(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond]), NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic), false)]
+    #[case::set_set_subset(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic, NoncovalentBondKind::VanDerWaals]),
+        NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]), true)]
+    #[case::set_set_superset(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond]),
+        NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]), false)]
+    #[case::bind_lit_match(NoncovalentBondKindAst::Bind { id: "k".into(), set: vec![NoncovalentBondKind::HydrogenBond] },
+        NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), true)]
+    #[case::ref_lit(NoncovalentBondKindAst::Ref("k".into()), NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), false)]
     fn test_noncovalent_kind_ast_matches(
-        #[case] pattern: NoncovalentKindAst,
-        #[case] target: NoncovalentKindAst,
+        #[case] pattern: NoncovalentBondKindAst,
+        #[case] target: NoncovalentBondKindAst,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
@@ -128,17 +129,17 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::new(NoncovalentKindAst::new(NoncovalentKind::HydrogenBond), NoncovalentKindAst::Lit(NoncovalentKind::HydrogenBond))]
+    #[case::new(NoncovalentBondKindAst::new(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond))]
     fn test_noncovalent_kind_ast_new(
-        #[case] actual: NoncovalentKindAst,
-        #[case] expected: NoncovalentKindAst,
+        #[case] actual: NoncovalentBondKindAst,
+        #[case] expected: NoncovalentBondKindAst,
     ) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
     #[case::default_(NoncovalentBondAst::default(), false)]
-    #[case::ground_lit(NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond), true)]
+    #[case::ground_lit(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), true)]
     fn test_noncovalent_bond_ast_is_ground(
         #[case] ast: NoncovalentBondAst,
         #[case] expected: bool,
@@ -148,9 +149,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::default_matches_ground(NoncovalentBondAst::default(), NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond), true)]
-    #[case::same(NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond), true)]
-    #[case::different(NoncovalentBondAst::from_kind(NoncovalentKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentKind::Ionic), false)]
+    #[case::default_matches_ground(NoncovalentBondAst::default(), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), true)]
+    #[case::same(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), true)]
+    #[case::different(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic), false)]
     fn test_noncovalent_bond_ast_matches(
         #[case] pattern: NoncovalentBondAst,
         #[case] target: NoncovalentBondAst,

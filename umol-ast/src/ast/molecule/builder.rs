@@ -17,7 +17,7 @@ use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::AtomAst;
 use super::super::bond::BondAst;
 use super::super::constraint::{Constraint, Constraints};
-use super::super::dative::{DativeBondAst, DativeDirection};
+use super::super::dative::{DativeBondAst, DativeBondDirection};
 use super::super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -229,6 +229,10 @@ fn var_relation_removed<R: Clone>(storage: &VarSetStorage<R>, remap: &Remapping)
     removed
 }
 
+/// Mutable builder for a `MoleculeAst`. Accumulates atoms, bonds, and
+/// relations (dative, aromatic, multicenter, noncovalent), then finalizes
+/// into an immutable `MoleculeAst`. Supports incremental removal with
+/// index remapping via `remove`.
 pub struct MoleculeBuilder {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
@@ -283,9 +287,9 @@ impl MoleculeBuilder {
         mut bond: DativeBondAst,
     ) -> DativeBondIdx {
         bond.direction = if donor.0 <= acceptor.0 {
-            DativeDirection::Forward
+            DativeBondDirection::Forward
         } else {
-            DativeDirection::Reverse
+            DativeBondDirection::Reverse
         };
         let i = self
             .dative_bonds

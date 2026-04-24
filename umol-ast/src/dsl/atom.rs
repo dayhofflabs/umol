@@ -14,6 +14,10 @@ use winnow::error::{ErrMode, ParserError};
 use winnow::token::{one_of, take};
 use winnow::Parser;
 
+use super::config::{
+    AromaticValenceDefault, AtomDefaults, ImplicitHydrogensDefault, IsotopeDefault,
+    MulticenterValenceDefault, NumericDefault,
+};
 use super::error::{PResult, ParseError};
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, is_plus_sugar, lower_spin,
@@ -26,10 +30,6 @@ use crate::ast::constraint::{
 };
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::{Expr, RelOp, ValueAst};
-use super::config::{
-    AromaticValenceDefault, AtomDefaults, ImplicitDefault, IsotopeDefault,
-    MulticenterValenceDefault, NumericDefault,
-};
 
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in
@@ -168,6 +168,8 @@ fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
     }
 }
 
+/// One predicate from an atom-string; the parser yields a `Vec` of these
+/// and the applier folds them into the `AtomAst`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomPredicate {
     IsotopeMass(IsotopeAst),
@@ -568,9 +570,9 @@ fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     }
     if matches!(*implicit_hydrogens, ImplicitHydrogensAst::Undetermined) {
         *implicit_hydrogens = match cfg.implicit_hydrogens {
-            ImplicitDefault::Normal => ImplicitHydrogensAst::Normal,
-            ImplicitDefault::Zero => ImplicitHydrogensAst::Lit(0),
-            ImplicitDefault::Required => ImplicitHydrogensAst::Undetermined,
+            ImplicitHydrogensDefault::Normal => ImplicitHydrogensAst::Normal,
+            ImplicitHydrogensDefault::Zero => ImplicitHydrogensAst::Lit(0),
+            ImplicitHydrogensDefault::Required => ImplicitHydrogensAst::Undetermined,
         };
     }
     if matches!(*lone_pairs, ValueAst::Undetermined) {
@@ -681,10 +683,10 @@ fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
         *charge = ValueAst::Undetermined;
     }
     match (&cfg.implicit_hydrogens, &*implicit_hydrogens) {
-        (ImplicitDefault::Normal, ImplicitHydrogensAst::Normal) => {
+        (ImplicitHydrogensDefault::Normal, ImplicitHydrogensAst::Normal) => {
             *implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
         }
-        (ImplicitDefault::Zero, ImplicitHydrogensAst::Lit(0)) => {
+        (ImplicitHydrogensDefault::Zero, ImplicitHydrogensAst::Lit(0)) => {
             *implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
         }
         _ => {}

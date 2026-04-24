@@ -5,6 +5,9 @@ use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 
 use super::value::ValueAst;
 
+/// Spin state: unpaired-electron count and multiplicity as independent
+/// `ValueAst` fields. Both may be `Undetermined`, a literal, or an
+/// expression pattern.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SpinStateAst {
     pub unpaired: ValueAst,

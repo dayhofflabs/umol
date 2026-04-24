@@ -10,6 +10,10 @@ use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
 
+/// Index remapping produced by `MoleculeBuilder::remove`. Translates
+/// pre-removal `AtomIdx` / `BondIdx` / relation indices to post-removal
+/// indices, or signals that an entity was removed. Used to rewrite stale
+/// index references against the new `MoleculeAst` layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdxRemapping {
     graph: Remapping,

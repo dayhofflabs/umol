@@ -5,11 +5,13 @@ use std::slice::Iter;
 
 use strum::EnumDiscriminants;
 
-use super::atom::AtomConstraint;
 use super::super::idx::{AtomIdx, BondIdx};
 use super::super::remap::IdxRemapping;
 use super::super::value::ValueAst;
+use super::atom::AtomConstraint;
 
+/// Dative-bond-scope constraint. Held inline on `DativeBondAst` via
+/// `DativeBondConstraints`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(DativeBondConstraintKind), derive(Hash))]
 pub enum DativeBondConstraint {

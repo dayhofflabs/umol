@@ -3,10 +3,12 @@
 use std::mem;
 use std::slice::Iter;
 
-use super::atom::AtomConstraint;
 use super::super::idx::AtomIdx;
 use super::super::remap::IdxRemapping;
+use super::atom::AtomConstraint;
 
+/// Multicenter-bond-scope constraint. Held inline on `MulticenterBondAst`
+/// via `MulticenterBondConstraints`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MulticenterBondConstraint {
     Atoms(Vec<AtomIdx>),
@@ -119,8 +121,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::*;
     use super::super::super::value::ValueAst;
+    use super::*;
 
     fn idx_remapping(removed_nodes: Vec<u32>) -> IdxRemapping {
         IdxRemapping::new(

@@ -8,7 +8,8 @@ use winnow::stream::Stream;
 
 pub(crate) type PResult<T> = Result<T, ErrMode<ParseError>>;
 
-
+/// Error raised when a DSL input fails to parse (invalid syntax, unknown
+/// predicate, duplicate predicate, unresolved ref, etc.).
 #[rustfmt::skip]
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum ParseError {
@@ -24,20 +25,20 @@ pub enum ParseError {
     UnknownBondPredicate(String),
     #[error("duplicate bond predicate: {0}")]
     DuplicateBondPredicate(String),
-    #[error("unknown aromatic predicate: {0}")]
-    UnknownAromaticPredicate(String),
-    #[error("duplicate aromatic predicate: {0}")]
-    DuplicateAromaticPredicate(String),
-    #[error("unknown multicenter predicate: {0}")]
-    UnknownMulticenterPredicate(String),
-    #[error("duplicate multicenter predicate: {0}")]
-    DuplicateMulticenterPredicate(String),
-    #[error("unknown dative predicate: {0}")]
-    UnknownDativePredicate(String),
-    #[error("duplicate dative predicate: {0}")]
-    DuplicateDativePredicate(String),
-    #[error("expected noncovalent kind")]
-    ExpectedNoncovalentKind,
+    #[error("unknown aromatic-system predicate: {0}")]
+    UnknownAromaticSystemPredicate(String),
+    #[error("duplicate aromatic-system predicate: {0}")]
+    DuplicateAromaticSystemPredicate(String),
+    #[error("unknown multicenter-bond predicate: {0}")]
+    UnknownMulticenterBondPredicate(String),
+    #[error("duplicate multicenter-bond predicate: {0}")]
+    DuplicateMulticenterBondPredicate(String),
+    #[error("unknown dative-bond predicate: {0}")]
+    UnknownDativeBondPredicate(String),
+    #[error("duplicate dative-bond predicate: {0}")]
+    DuplicateDativeBondPredicate(String),
+    #[error("expected noncovalent-bond kind")]
+    ExpectedNoncovalentBondKind,
     #[error("trailing input: {0:?}")]
     TrailingInput(String),
     #[error("unpaired electrons {unpaired} out of range")]

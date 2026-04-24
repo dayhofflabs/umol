@@ -4,6 +4,8 @@ use umol_graph_core::{Matching, NodeId};
 
 use super::idx::{AtomIdx, BondIdx};
 
+/// Bond-level wrapper over `umol_graph_core::Matching`. Exposes matched
+/// bonds and matched-atom membership in terms of `AtomIdx` / `BondIdx`.
 #[derive(Clone, Debug)]
 pub struct BondMatching(pub(crate) Matching);
 

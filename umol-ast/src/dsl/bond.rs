@@ -126,6 +126,8 @@ fn constraint_tag(c: &BondConstraint) -> &'static str {
     }
 }
 
+/// One predicate from a bond-string; the parser yields a `Vec` of these
+/// and the applier folds them into the `BondAst`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BondPredicate {
     Charge(ValueAst),

@@ -18,7 +18,7 @@ pub enum NumericDefault {
 
 /// Implicit hydrogen default
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub enum ImplicitDefault {
+pub enum ImplicitHydrogensDefault {
     Zero,
     Normal,
     Required,
@@ -55,11 +55,13 @@ pub enum MulticenterValenceDefault {
     Required,
 }
 
+/// Complete set of lowering/raising defaults for atoms: how each
+/// `AtomAst` field is treated when converting between DSL and AST.
 #[derive(Clone, Debug, FromEdn, ToEdn)]
 pub struct AtomDefaults {
     pub isotope: IsotopeDefault,
     pub charge: NumericDefault,
-    pub implicit_hydrogens: ImplicitDefault,
+    pub implicit_hydrogens: ImplicitHydrogensDefault,
     pub lone_pairs: NumericDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
@@ -75,7 +77,7 @@ impl AtomDefaults {
         Self {
             isotope: IsotopeDefault::Natural,
             charge: NumericDefault::Zero,
-            implicit_hydrogens: ImplicitDefault::Zero,
+            implicit_hydrogens: ImplicitHydrogensDefault::Zero,
             lone_pairs: NumericDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
@@ -91,7 +93,7 @@ impl AtomDefaults {
         Self {
             isotope: IsotopeDefault::Required,
             charge: NumericDefault::Required,
-            implicit_hydrogens: ImplicitDefault::Required,
+            implicit_hydrogens: ImplicitHydrogensDefault::Required,
             lone_pairs: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Required,
             multiplicity: MultiplicityDefault::Required,
@@ -104,11 +106,13 @@ impl AtomDefaults {
     }
 }
 
+/// Sparse overrides on `AtomDefaults`. Fields set to `Some(..)` replace
+/// the corresponding `AtomDefaults` field; `None` leaves it unchanged.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct AtomOverrides {
     pub isotope: Option<IsotopeDefault>,
     pub charge: Option<NumericDefault>,
-    pub implicit_hydrogens: Option<ImplicitDefault>,
+    pub implicit_hydrogens: Option<ImplicitHydrogensDefault>,
     pub lone_pairs: Option<NumericDefault>,
     pub unpaired_electrons: Option<UnpairedElectronsDefault>,
     pub multiplicity: Option<MultiplicityDefault>,
@@ -158,6 +162,7 @@ impl AtomDefaults {
     }
 }
 
+/// Lowering/raising defaults for covalent bonds.
 #[derive(Clone, Debug, FromEdn, ToEdn)]
 pub struct BondDefaults {
     pub charge: NumericDefault,
@@ -183,6 +188,7 @@ impl BondDefaults {
     }
 }
 
+/// Sparse overrides on `BondDefaults`.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct BondOverrides {
     pub charge: Option<NumericDefault>,
@@ -205,6 +211,7 @@ impl BondDefaults {
     }
 }
 
+/// Lowering/raising defaults for aromatic systems.
 #[derive(Clone, Debug, FromEdn, ToEdn)]
 pub struct AromaticSystemDefaults {
     pub charge: NumericDefault,
@@ -233,6 +240,7 @@ impl AromaticSystemDefaults {
     }
 }
 
+/// Sparse overrides on `AromaticSystemDefaults`.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct AromaticSystemOverrides {
     pub charge: Option<NumericDefault>,
@@ -259,6 +267,7 @@ impl AromaticSystemDefaults {
     }
 }
 
+/// Lowering/raising defaults for multicenter bonds.
 #[derive(Clone, Debug, FromEdn, ToEdn)]
 pub struct MulticenterBondDefaults {
     pub charge: NumericDefault,
@@ -287,6 +296,7 @@ impl MulticenterBondDefaults {
     }
 }
 
+/// Sparse overrides on `MulticenterBondDefaults`.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct MulticenterBondOverrides {
     pub charge: Option<NumericDefault>,
@@ -313,6 +323,8 @@ impl MulticenterBondDefaults {
     }
 }
 
+/// Lowering/raising defaults for dative bonds. Currently empty
+/// (no defaultable fields); exists for API uniformity.
 #[derive(Clone, Debug, Default, FromEdn, ToEdn)]
 pub struct DativeBondDefaults {}
 
@@ -326,6 +338,8 @@ impl DativeBondDefaults {
     }
 }
 
+/// Lowering/raising defaults for noncovalent bonds. Currently empty
+/// (no defaultable fields); exists for API uniformity.
 #[derive(Clone, Debug, Default, FromEdn, ToEdn)]
 pub struct NoncovalentBondDefaults {}
 
@@ -339,6 +353,9 @@ impl NoncovalentBondDefaults {
     }
 }
 
+/// Aggregated lowering/raising defaults for an entire molecule. One
+/// per-entity-kind defaults bundle; consumed by the molecule-level
+/// `FromAst` / `IntoAst` implementations.
 #[derive(Debug, Clone, FromEdn, ToEdn)]
 pub struct MoleculeDefaults {
     pub atom: AtomDefaults,
@@ -373,6 +390,7 @@ impl MoleculeDefaults {
     }
 }
 
+/// Sparse overrides on `DativeBondDefaults`. Currently empty.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct DativeBondOverrides {}
 
@@ -382,6 +400,7 @@ impl DativeBondDefaults {
     }
 }
 
+/// Sparse overrides on `NoncovalentBondDefaults`. Currently empty.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct NoncovalentBondOverrides {}
 
@@ -391,6 +410,8 @@ impl NoncovalentBondDefaults {
     }
 }
 
+/// Sparse overrides on `MoleculeDefaults`. Each field is the
+/// corresponding per-entity `*Overrides` bundle.
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct MoleculeOverrides {
     #[edn(default)]
@@ -453,7 +474,7 @@ mod tests {
          :valence :zero :donated-pairs :zero :accepted-pairs :zero \
          :multicenter-valence :not-multicenter :aromatic-valence :not-aromatic}",
         NumericDefault::Zero,
-        ImplicitDefault::Zero,
+        ImplicitHydrogensDefault::Zero,
         MulticenterValenceDefault::NotMulticenter,
         AromaticValenceDefault::NotAromatic
     )]
@@ -463,14 +484,14 @@ mod tests {
          :valence :required :donated-pairs :required :accepted-pairs :required \
          :multicenter-valence :required :aromatic-valence :required}",
         NumericDefault::Required,
-        ImplicitDefault::Required,
+        ImplicitHydrogensDefault::Required,
         MulticenterValenceDefault::Required,
         AromaticValenceDefault::Required
     )]
     fn test_atom_ast_config_from_edn(
         #[case] edn: &str,
         #[case] expected_charge: NumericDefault,
-        #[case] expected_h: ImplicitDefault,
+        #[case] expected_h: ImplicitHydrogensDefault,
         #[case] expected_multicenter: MulticenterValenceDefault,
         #[case] expected_aromatic: AromaticValenceDefault,
     ) {

@@ -7,6 +7,9 @@ use super::error::EvaluationError;
 /// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`].
 pub type Bindings = HashMap<String, i64>;
 
+/// Integer-valued atom/bond field: undetermined (pattern wildcard), a
+/// literal, a finite literal set, or an arithmetic/boolean expression
+/// pattern. Used for charge, hydrogen count, isotope mass, valence, etc.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ValueAst {
     #[default]
@@ -89,6 +92,10 @@ impl ValueAst {
     }
 }
 
+/// Arithmetic / boolean expression tree over `ValueAst`. Captures
+/// atom/bond field constraints that can't be expressed as a literal or
+/// literal set, including bound variables (`Var`), membership tests
+/// (`Mem`), relational comparisons (`Rel`), and boolean combinators.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Expr {
     Lit(i64),
@@ -219,6 +226,7 @@ fn collect_bindings(expr: &Expr, value: i64, bindings: &mut Bindings) {
     }
 }
 
+/// Arithmetic operators for `Expr::BinOp`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ArithOp {
     Add,
@@ -228,6 +236,7 @@ pub enum ArithOp {
     Rem,
 }
 
+/// Relational operators for `Expr::Rel`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RelOp {
     Le,

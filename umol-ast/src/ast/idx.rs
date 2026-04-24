@@ -47,26 +47,38 @@ define_idx!(
 );
 
 impl From<NodeId> for AtomIdx {
-    fn from(id: NodeId) -> Self { Self(id.0) }
+    fn from(id: NodeId) -> Self {
+        Self(id.0)
+    }
 }
 impl From<AtomIdx> for NodeId {
-    fn from(idx: AtomIdx) -> Self { Self(idx.0) }
+    fn from(idx: AtomIdx) -> Self {
+        Self(idx.0)
+    }
 }
 
 impl From<EdgeId> for BondIdx {
-    fn from(id: EdgeId) -> Self { Self(id.0) }
+    fn from(id: EdgeId) -> Self {
+        Self(id.0)
+    }
 }
 impl From<BondIdx> for EdgeId {
-    fn from(idx: BondIdx) -> Self { Self(idx.0) }
+    fn from(idx: BondIdx) -> Self {
+        Self(idx.0)
+    }
 }
 
 macro_rules! relation_idx_from {
     ($name:ident) => {
         impl From<RelationId> for $name {
-            fn from(id: RelationId) -> Self { Self(id.0) }
+            fn from(id: RelationId) -> Self {
+                Self(id.0)
+            }
         }
         impl From<$name> for RelationId {
-            fn from(idx: $name) -> Self { Self(idx.0) }
+            fn from(idx: $name) -> Self {
+                Self(idx.0)
+            }
         }
     };
 }

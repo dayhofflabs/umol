@@ -7,6 +7,8 @@ use super::super::idx::AtomIdx;
 use super::super::remap::IdxRemapping;
 use super::atom::AtomConstraint;
 
+/// Noncovalent-bond-scope constraint. Held inline on `NoncovalentBondAst`
+/// via `NoncovalentBondConstraints`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondConstraint {
     Ends([AtomIdx; 2]),

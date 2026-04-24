@@ -46,13 +46,13 @@ impl FromStr for MulticenterBondDsl {
     type Err = ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_multicenter(s)
+        parse_multicenter_bond(s)
     }
 }
 
 impl Display for MulticenterBondDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt_multicenter_ast(f, &self.0)
+        fmt_multicenter_bond_ast(f, &self.0)
     }
 }
 
@@ -85,7 +85,7 @@ impl FromAst<MulticenterBondAst> for MulticenterBondDsl {
 
     fn from_ast(ast: &MulticenterBondAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
         let mut out = ast.clone();
-        lower_multicenter(&mut out, cfg);
+        lower_multicenter_bond(&mut out, cfg);
         Ok(MulticenterBondDsl(out))
     }
 }
@@ -95,48 +95,51 @@ impl IntoAst<MulticenterBondAst> for MulticenterBondDsl {
     type Error = ParseError;
 
     fn into_ast(mut self, cfg: &Self::Ctx) -> Result<MulticenterBondAst, ParseError> {
-        raise_multicenter(&mut self.0, cfg);
+        raise_multicenter_bond(&mut self.0, cfg);
         Ok(self.0)
     }
 }
 
 // -- Parse --------------------
 
-pub fn parse_multicenter(input: &str) -> Result<MulticenterBondDsl, ParseError> {
-    multicenter.parse(input).map_err(|e| e.into_inner())
+/// Parse a complete multicenter-bond-string into a `MulticenterBondDsl`.
+pub fn parse_multicenter_bond(input: &str) -> Result<MulticenterBondDsl, ParseError> {
+    multicenter_bond.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn multicenter(i: &mut &str) -> PResult<MulticenterBondDsl> {
+pub(crate) fn multicenter_bond(i: &mut &str) -> PResult<MulticenterBondDsl> {
     multispace0.parse_next(i)?;
-    let preds: Vec<MulticenterPredicate> =
-        repeat(0.., terminated(multicenter_predicate, multispace0)).parse_next(i)?;
+    let preds: Vec<MulticenterBondPredicate> =
+        repeat(0.., terminated(multicenter_bond_predicate, multispace0)).parse_next(i)?;
     let mut form = MulticenterBondDsl::default();
     apply_predicates(&mut form, preds).map_err(ErrMode::Cut)?;
     Ok(form)
 }
 
+/// One predicate from a multicenter-bond-string; the parser yields a
+/// `Vec` of these and the applier folds them into the `MulticenterBondAst`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum MulticenterPredicate {
+pub enum MulticenterBondPredicate {
     Charge(ValueAst),
     Spin(SpinPredicate),
     Electrons(ValueAst),
 }
 
-fn multicenter_predicate(i: &mut &str) -> PResult<MulticenterPredicate> {
+fn multicenter_bond_predicate(i: &mut &str) -> PResult<MulticenterBondPredicate> {
     let start = *i;
     let prefix: &str = take(2usize).parse_next(i)?;
     match prefix {
-        "#c" => charge.map(MulticenterPredicate::Charge).parse_next(i),
+        "#c" => charge.map(MulticenterBondPredicate::Charge).parse_next(i),
         "#u" => optional_value
-            .map(|v| MulticenterPredicate::Spin(SpinPredicate::Unpaired(v)))
+            .map(|v| MulticenterBondPredicate::Spin(SpinPredicate::Unpaired(v)))
             .parse_next(i),
         "#s" => optional_value
-            .map(|v| MulticenterPredicate::Spin(SpinPredicate::Multiplicity(v)))
+            .map(|v| MulticenterBondPredicate::Spin(SpinPredicate::Multiplicity(v)))
             .parse_next(i),
         "#e" => optional_value
-            .map(MulticenterPredicate::Electrons)
+            .map(MulticenterBondPredicate::Electrons)
             .parse_next(i),
-        p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownMulticenterPredicate(
+        p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownMulticenterBondPredicate(
             p.to_string(),
         ))),
         _ => Err(ErrMode::Cut(ParseError::TrailingInput(start.to_string()))),
@@ -145,23 +148,31 @@ fn multicenter_predicate(i: &mut &str) -> PResult<MulticenterPredicate> {
 
 fn apply_predicates(
     form: &mut MulticenterBondDsl,
-    preds: Vec<MulticenterPredicate>,
+    preds: Vec<MulticenterBondPredicate>,
 ) -> Result<(), ParseError> {
     let ast = &mut form.0;
     for pred in preds {
         match pred {
-            MulticenterPredicate::Charge(v) => {
+            MulticenterBondPredicate::Charge(v) => {
                 if !matches!(ast.charge, ValueAst::Undetermined) {
-                    return Err(ParseError::DuplicateMulticenterPredicate("#c".to_string()));
+                    return Err(ParseError::DuplicateMulticenterBondPredicate(
+                        "#c".to_string(),
+                    ));
                 }
                 ast.charge = v;
             }
-            MulticenterPredicate::Spin(sp) => {
-                apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateMulticenterPredicate)?;
+            MulticenterBondPredicate::Spin(sp) => {
+                apply_spin_pair(
+                    &mut ast.spin,
+                    sp,
+                    ParseError::DuplicateMulticenterBondPredicate,
+                )?;
             }
-            MulticenterPredicate::Electrons(v) => {
+            MulticenterBondPredicate::Electrons(v) => {
                 if !matches!(ast.electrons, ValueAst::Undetermined) {
-                    return Err(ParseError::DuplicateMulticenterPredicate("#e".to_string()));
+                    return Err(ParseError::DuplicateMulticenterBondPredicate(
+                        "#e".to_string(),
+                    ));
                 }
                 ast.electrons = v;
             }
@@ -172,7 +183,7 @@ fn apply_predicates(
 
 // -- Format --------------------
 
-fn fmt_multicenter_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
+fn fmt_multicenter_bond_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
     fmt_spin_pair(f, &ast.spin)?;
     fmt_electrons(f, &ast.electrons)
@@ -192,7 +203,7 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
 
 // -- Raise --------------------
 
-fn raise_multicenter(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
+fn raise_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
     // Exhaustive destructure: adding a new MulticenterBondAst field is a
     // compile error here, forcing the author to decide how raising should
     // handle it.
@@ -220,7 +231,7 @@ fn raise_multicenter(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults
 
 // -- Format --------------------
 
-fn lower_multicenter(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
+fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
     // Exhaustive destructure: adding a new MulticenterBondAst field is a
     // compile error here, forcing the author to decide how lowering should
     // handle it.
@@ -404,22 +415,22 @@ mod tests {
     #[case::charge_electrons("#c+#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Lit(2), constraints: MulticenterBondConstraints::new() }))]
     #[case::full("#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(2), constraints: MulticenterBondConstraints::new() }))]
     fn test_parse_multicenter(#[case] input: &str, #[case] expected: MulticenterBondDsl) {
-        let result = multicenter.parse(input);
+        let result = multicenter_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
         let form = result.unwrap();
         assert_eq!(form, expected);
     }
 
     #[rstest]
-    #[case::unknown("#x", ParseError::UnknownMulticenterPredicate("#x".to_string()))]
-    #[case::unknown_a("#a", ParseError::UnknownMulticenterPredicate("#a".to_string()))]
-    #[case::dup_charge("#c+#c-", ParseError::DuplicateMulticenterPredicate("#c".to_string()))]
-    #[case::dup_electrons("#e2#e4", ParseError::DuplicateMulticenterPredicate("#e".to_string()))]
-    #[case::dup_unpaired("#u1#u2", ParseError::DuplicateMulticenterPredicate("#u".to_string()))]
-    #[case::dup_multiplicity("#s1#s2", ParseError::DuplicateMulticenterPredicate("#s".to_string()))]
+    #[case::unknown("#x", ParseError::UnknownMulticenterBondPredicate("#x".to_string()))]
+    #[case::unknown_a("#a", ParseError::UnknownMulticenterBondPredicate("#a".to_string()))]
+    #[case::dup_charge("#c+#c-", ParseError::DuplicateMulticenterBondPredicate("#c".to_string()))]
+    #[case::dup_electrons("#e2#e4", ParseError::DuplicateMulticenterBondPredicate("#e".to_string()))]
+    #[case::dup_unpaired("#u1#u2", ParseError::DuplicateMulticenterBondPredicate("#u".to_string()))]
+    #[case::dup_multiplicity("#s1#s2", ParseError::DuplicateMulticenterBondPredicate("#s".to_string()))]
     #[case::trailing("#c+ foo", ParseError::TrailingInput("foo".to_string()))]
     fn test_parse_multicenter_error(#[case] input: &str, #[case] expected: ParseError) {
-        let result = multicenter.parse(input);
+        let result = multicenter_bond.parse(input);
         assert!(result.is_err(), "{:?} should fail", input);
         let err = result.unwrap_err().into_inner();
         assert_eq!(err, expected);

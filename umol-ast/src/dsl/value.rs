@@ -224,6 +224,7 @@ fn fmt_expr(f: &mut fmt::Formatter<'_>, e: &Expr) -> fmt::Result {
 
 // -- Parse -------------------
 
+/// Parse a complete value-string into a `ValueAst` (literal, set, or expression).
 pub fn parse_value(input: &str) -> Result<ValueAst, ParseError> {
     value.parse(input).map_err(|e| e.into_inner())
 }
