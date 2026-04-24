@@ -24,8 +24,17 @@ use crate::dsl::config::NoncovalentBondDefaults;
 /// Surface DSL wrapper around `NoncovalentBondAst`. String form is the
 /// noncovalent-kind expression (three-letter literal, set, bind, ref, or `*`).
 /// All `NoncovalentBondConstraint` variants are molecule-scope.
+#[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NoncovalentBondDsl(pub NoncovalentBondAst);
+
+impl NoncovalentBondDsl {
+    /// Zero-cost reference cast from `&NoncovalentBondAst`. Relies on `repr(transparent)`.
+    pub fn from_ref(ast: &NoncovalentBondAst) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(ast as *const NoncovalentBondAst as *const Self) }
+    }
+}
 
 impl FromStr for NoncovalentBondDsl {
     type Err = ParseError;
@@ -367,7 +376,11 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::super::molecule::Metadata;
     use super::*;
+    use crate::ast::constraint::{AtomConstraint, NoncovalentBondConstraint};
+    use crate::ast::idx::AtomIdx;
+    use crate::ast::value::ValueAst;
 
     #[rustfmt::skip]
     #[rstest]
@@ -437,25 +450,6 @@ mod tests {
 
     // -- NoncovalentBondConstraintDsl ----------------
 
-    use super::super::molecule::Metadata;
-    use crate::ast::constraint::{AtomConstraint, NoncovalentBondConstraint};
-    use crate::ast::idx::AtomIdx;
-    use crate::ast::value::ValueAst;
-    use bimap::BiMap;
-    use indexmap::IndexMap;
-
-    fn empty_metadata() -> Metadata {
-        Metadata {
-            atom_ids: IndexMap::new(),
-            atom_aliases: BiMap::new(),
-            bond_ids: IndexMap::new(),
-            dative_bond_ids: IndexMap::new(),
-            aromatic_system_ids: IndexMap::new(),
-            multicenter_bond_ids: IndexMap::new(),
-            noncovalent_bond_ids: IndexMap::new(),
-        }
-    }
-
     fn ctx_with_atoms(atom_count: usize, meta: &Metadata) -> ResolveContext<'_> {
         ResolveContext {
             atom_count,
@@ -480,7 +474,7 @@ mod tests {
         #[case] input: NoncovalentBondConstraint,
         #[case] edn_source: &str,
     ) {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let render_ctx = ResolveContext::for_rendering(&meta);
         let dsl = NoncovalentBondConstraintDsl::from_ast(&input, &render_ctx).unwrap();
         let edn = dsl.clone().to_edn();
@@ -493,7 +487,7 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_constraint_dsl_rejects_out_of_range_atom() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let edn = umol_edn::read_string("{:contains 99}").unwrap();
         let dsl = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap();
         let err = dsl.into_ast(&ctx_with_atoms(5, &meta)).unwrap_err();

@@ -5,6 +5,7 @@
 //! from the `AtomIdx` / `BondIdx` / ... on the AST is a separate fallible
 //! step that consults the surrounding `Metadata`.
 
+use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
 use super::aromatic::AromaticSystemConstraintDsl;
@@ -129,17 +130,13 @@ pub(super) fn consume_single_key_map_close(
     context: &'static str,
 ) -> Result<(), EdnError> {
     if !de.try_consume_byte(b'}')? {
-        return Err(DeError::Custom(format!(
-            "{} must have exactly one key",
-            context
-        ))
-        .into());
+        return Err(DeError::Custom(format!("{} must have exactly one key", context)).into());
     }
     Ok(())
 }
 
 macro_rules! define_ref {
-    ($name:ident, $idx:ident, $field:ident, $kind:literal, $reader:ident) => {
+    ($name:ident, $idx:ident, $accessor:ident, $kind:literal, $reader:ident) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub enum $name {
             Index(usize),
@@ -150,8 +147,8 @@ macro_rules! define_ref {
             /// Build a ref from an AST index, preferring an id from `metadata`
             /// if one is recorded for this index.
             pub fn from_ast(idx: $idx, metadata: &Metadata) -> Self {
-                if let Some(name) = metadata.$field.get(&idx) {
-                    Self::Id(name.clone())
+                if let Some(name) = metadata.$accessor(idx) {
+                    Self::Id(name.to_string())
                 } else {
                     Self::Index(idx.index())
                 }
@@ -171,15 +168,44 @@ macro_rules! define_ref {
                             })
                         }
                     }
-                    Self::Id(name) => metadata
-                        .$field
-                        .iter()
-                        .find(|(_, n)| n.as_str() == name)
-                        .map(|(idx, _)| *idx)
-                        .ok_or(ParseError::InvalidRef {
+                    Self::Id(name) => {
+                        for i in 0..count {
+                            let idx = $idx::from(i);
+                            if metadata.$accessor(idx) == Some(name.as_str()) {
+                                return Ok(idx);
+                            }
+                        }
+                        Err(ParseError::InvalidRef {
                             kind: $kind,
                             value: name,
-                        }),
+                        })
+                    }
+                }
+            }
+
+            /// Resolve this ref against a pre-built id → index map. O(1) id
+            /// lookup; intended for entity-loop resolution where cloning the
+            /// full `Metadata` per call is wasteful.
+            pub fn resolve(
+                self,
+                count: usize,
+                id_to_idx: &IndexMap<String, $idx>,
+            ) -> Result<$idx, ParseError> {
+                match self {
+                    Self::Index(i) => {
+                        if i < count {
+                            Ok($idx::from(i))
+                        } else {
+                            Err(ParseError::InvalidRef {
+                                kind: $kind,
+                                value: i.to_string(),
+                            })
+                        }
+                    }
+                    Self::Id(name) => id_to_idx.get(&name).copied().ok_or(ParseError::InvalidRef {
+                        kind: $kind,
+                        value: name,
+                    }),
                 }
             }
         }
@@ -214,9 +240,7 @@ macro_rules! define_ref {
             }
         }
 
-        pub(super) fn $reader(
-            de: &mut EdnStreamDeserializer<'_>,
-        ) -> Result<$name, EdnError> {
+        pub(super) fn $reader(de: &mut EdnStreamDeserializer<'_>) -> Result<$name, EdnError> {
             match de.peek_byte()?.ok_or_else(eof_err)? {
                 b':' => Ok($name::Id(de.read_keyword_name()?.into_owned())),
                 _ => {
@@ -233,33 +257,33 @@ macro_rules! define_ref {
     };
 }
 
-define_ref!(AtomRef, AtomIdx, atom_ids, "atom", read_atom_ref);
-define_ref!(BondRef, BondIdx, bond_ids, "bond", read_bond_ref);
+define_ref!(AtomRef, AtomIdx, atom_id, "atom", read_atom_ref);
+define_ref!(BondRef, BondIdx, bond_id, "bond", read_bond_ref);
 define_ref!(
     DativeBondRef,
     DativeBondIdx,
-    dative_bond_ids,
+    dative_bond_id,
     "dative-bond",
     read_dative_bond_ref
 );
 define_ref!(
     AromaticSystemRef,
     AromaticSystemIdx,
-    aromatic_system_ids,
+    aromatic_system_id,
     "aromatic-system",
     read_aromatic_system_ref
 );
 define_ref!(
     MulticenterBondRef,
     MulticenterBondIdx,
-    multicenter_bond_ids,
+    multicenter_bond_id,
     "multicenter-bond",
     read_multicenter_bond_ref
 );
 define_ref!(
     NoncovalentBondRef,
     NoncovalentBondIdx,
-    noncovalent_bond_ids,
+    noncovalent_bond_id,
     "noncovalent-bond",
     read_noncovalent_bond_ref
 );
@@ -288,11 +312,10 @@ pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Value
             if name.as_ref() == "undetermined" {
                 Ok(ValueDsl(ValueAst::Undetermined))
             } else {
-                Err(DeError::Custom(format!(
-                    "unexpected keyword :{} in value position",
-                    name
-                ))
-                .into())
+                Err(
+                    DeError::Custom(format!("unexpected keyword :{} in value position", name))
+                        .into(),
+                )
             }
         }
         _ => Ok(ValueDsl(ValueAst::Lit(de.read_i64()?))),
@@ -406,9 +429,9 @@ pub(super) fn read_atom_constraint_dsl(
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
         "valence" => AtomConstraint::Valence(read_value_dsl(de)?.into_ast(&()).unwrap()),
-        "aromatic-valence" => AtomConstraint::AromaticValence(
-            read_aromatic_valence_dsl(de)?.into_ast(&()).unwrap(),
-        ),
+        "aromatic-valence" => {
+            AtomConstraint::AromaticValence(read_aromatic_valence_dsl(de)?.into_ast(&()).unwrap())
+        }
         "multicenter-valence" => AtomConstraint::MulticenterValence(
             read_multicenter_valence_dsl(de)?.into_ast(&()).unwrap(),
         ),
@@ -417,9 +440,7 @@ pub(super) fn read_atom_constraint_dsl(
             AtomConstraint::AcceptedPairs(read_value_dsl(de)?.into_ast(&()).unwrap())
         }
         "degree" => AtomConstraint::Degree(read_value_dsl(de)?.into_ast(&()).unwrap()),
-        "connectivity" => {
-            AtomConstraint::Connectivity(read_value_dsl(de)?.into_ast(&()).unwrap())
-        }
+        "connectivity" => AtomConstraint::Connectivity(read_value_dsl(de)?.into_ast(&()).unwrap()),
         "ring-connectivity" => {
             AtomConstraint::RingConnectivity(read_value_dsl(de)?.into_ast(&()).unwrap())
         }
@@ -461,9 +482,7 @@ pub(super) fn read_bond_constraint_dsl(
                 "ring-count" => {
                     BondConstraint::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap())
                 }
-                "ring-size" => {
-                    BondConstraint::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap())
-                }
+                "ring-size" => BondConstraint::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap()),
                 other => {
                     return Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -489,8 +508,12 @@ pub(super) fn read_dative_bond_constraint_dsl(
 ) -> Result<DativeBondConstraintDsl, EdnError> {
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
-        "ring-count" => DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap()),
-        "ring-size" => DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "ring-count" => {
+            DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap())
+        }
+        "ring-size" => {
+            DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap())
+        }
         "donor" => DativeBondConstraintDsl::Donor(read_atom_ref(de)?),
         "acceptor" => DativeBondConstraintDsl::Acceptor(read_atom_ref(de)?),
         "donor-satisfies" => {
@@ -523,9 +546,7 @@ pub(super) fn read_aromatic_system_constraint_dsl(
         "all-atoms" => {
             AromaticSystemConstraintDsl::AllAtoms(Box::new(read_atom_constraint_dsl(de)?))
         }
-        "any-atom" => {
-            AromaticSystemConstraintDsl::AnyAtom(Box::new(read_atom_constraint_dsl(de)?))
-        }
+        "any-atom" => AromaticSystemConstraintDsl::AnyAtom(Box::new(read_atom_constraint_dsl(de)?)),
         other => {
             return Err(DeError::UnknownField {
                 key: other.to_string(),
@@ -545,9 +566,7 @@ pub(super) fn read_multicenter_bond_constraint_dsl(
     let c = match key.as_str() {
         "atoms" => MulticenterBondConstraintDsl::Atoms(read_vec(de, read_atom_ref)?),
         "contains" => MulticenterBondConstraintDsl::Contains(read_atom_ref(de)?),
-        "contains-all" => {
-            MulticenterBondConstraintDsl::ContainsAll(read_vec(de, read_atom_ref)?)
-        }
+        "contains-all" => MulticenterBondConstraintDsl::ContainsAll(read_vec(de, read_atom_ref)?),
         "all-atoms" => {
             MulticenterBondConstraintDsl::AllAtoms(Box::new(read_atom_constraint_dsl(de)?))
         }
@@ -624,8 +643,9 @@ pub(super) fn read_sub_pattern_anchor_dsl(
             "atoms" => out.atoms = read_vec(d, |d| read_ref_pair(d, read_atom_ref, read_atom_ref))?,
             "bonds" => out.bonds = read_vec(d, |d| read_ref_pair(d, read_bond_ref, read_bond_ref))?,
             "dative-bonds" => {
-                out.dative_bonds =
-                    read_vec(d, |d| read_ref_pair(d, read_dative_bond_ref, read_dative_bond_ref))?
+                out.dative_bonds = read_vec(d, |d| {
+                    read_ref_pair(d, read_dative_bond_ref, read_dative_bond_ref)
+                })?
             }
             "aromatic-systems" => {
                 out.aromatic_systems = read_vec(d, |d| {
@@ -828,11 +848,9 @@ fn read_entity_leaf<R, C>(
     let r = read_ref(de)?;
     let c = read_inner(de)?;
     if !de.try_consume_byte(b']')? {
-        return Err(DeError::Custom(format!(
-            "{} entity leaf must have 2 elements",
-            context
-        ))
-        .into());
+        return Err(
+            DeError::Custom(format!("{} entity leaf must have 2 elements", context)).into(),
+        );
     }
     Ok((r, c))
 }
@@ -1735,27 +1753,20 @@ fn combinator_edn(key: &str, xs: &[ConstraintDsl]) -> Edn<'static> {
 
 #[cfg(test)]
 mod tests {
-    use bimap::BiMap;
-    use indexmap::IndexMap;
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_edn::{read_string, EdnKeyword};
 
     use super::*;
+    use crate::ast::constraint::{AtomConstraint, BondConstraint};
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::value::ValueAst;
 
     #[fixture]
     fn meta_with_atom_id() -> Metadata {
-        let mut atom_ids = IndexMap::new();
-        atom_ids.insert(AtomIdx(2), "c1".to_string());
-        Metadata {
-            atom_ids,
-            atom_aliases: BiMap::new(),
-            bond_ids: IndexMap::new(),
-            dative_bond_ids: IndexMap::new(),
-            aromatic_system_ids: IndexMap::new(),
-            multicenter_bond_ids: IndexMap::new(),
-            noncovalent_bond_ids: IndexMap::new(),
-        }
+        let mut b = super::super::molecule::MetadataBuilder::default();
+        b.set_atom_id(AtomIdx(2), "c1".to_string());
+        b.build()
     }
 
     #[rstest]
@@ -1852,20 +1863,6 @@ mod tests {
 
     // -- MoleculeConstraintDsl ----------------
 
-    use crate::ast::value::ValueAst;
-
-    fn empty_metadata() -> Metadata {
-        Metadata {
-            atom_ids: IndexMap::new(),
-            atom_aliases: BiMap::new(),
-            bond_ids: IndexMap::new(),
-            dative_bond_ids: IndexMap::new(),
-            aromatic_system_ids: IndexMap::new(),
-            multicenter_bond_ids: IndexMap::new(),
-            noncovalent_bond_ids: IndexMap::new(),
-        }
-    }
-
     fn full_ctx<'a>(meta: &'a Metadata) -> ResolveContext<'a> {
         ResolveContext {
             atom_count: 10,
@@ -1909,7 +1906,7 @@ mod tests {
         #[case] input: MoleculeConstraint,
         #[case] edn_source: &str,
     ) {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let render_ctx = ResolveContext::for_rendering(&meta);
         let dsl = MoleculeConstraintDsl::from_ast(&input, &render_ctx).unwrap();
         let edn = dsl.to_edn();
@@ -1944,7 +1941,7 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_dsl_empty_roundtrip() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let anchor = SubPatternAnchor::new();
         let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
         let edn = dsl.to_edn();
@@ -1958,7 +1955,7 @@ mod tests {
 
     #[rstest]
     fn test_sub_pattern_anchor_dsl_atoms_roundtrip() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let mut anchor = SubPatternAnchor::new();
         anchor.push_atom(AtomIdx(3), AtomIdx(0));
         anchor.push_atom(AtomIdx(5), AtomIdx(1));
@@ -1986,9 +1983,6 @@ mod tests {
     }
 
     // -- ConstraintDsl ----------------
-
-    use crate::ast::constraint::{AtomConstraint, BondConstraint};
-    use crate::ast::molecule::MoleculeAst;
 
     #[rustfmt::skip]
     #[rstest]
@@ -2057,7 +2051,7 @@ mod tests {
         #[case] input: Constraint,
         #[case] edn_source: &str,
     ) {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let ctx = full_ctx(&meta);
         let dsl = ConstraintDsl::from_ast(&input, &ctx).unwrap();
         let edn = dsl.to_edn();
@@ -2079,7 +2073,7 @@ mod tests {
 
     #[rstest]
     fn test_constraints_dsl_empty_roundtrip() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let ctx = full_ctx(&meta);
         let cs = Constraints::new();
         let dsl = ConstraintsDsl::from_ast(&cs, &ctx).unwrap();
@@ -2092,7 +2086,7 @@ mod tests {
 
     #[rstest]
     fn test_constraints_dsl_multi_roundtrip() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let ctx = full_ctx(&meta);
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(

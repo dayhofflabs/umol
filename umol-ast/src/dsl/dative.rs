@@ -28,8 +28,17 @@ use crate::dsl::config::DativeBondDefaults;
 /// `DativeBondConstraint` are `RingCount` (`#R`) and `RingSize` (`#r`); the
 /// remaining variants reference other entities and stay in the molecule
 /// constraints container.
+#[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DativeBondDsl(pub DativeBondAst);
+
+impl DativeBondDsl {
+    /// Zero-cost reference cast from `&DativeBondAst`. Relies on `repr(transparent)`.
+    pub fn from_ref(ast: &DativeBondAst) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(ast as *const DativeBondAst as *const Self) }
+    }
+}
 
 impl FromStr for DativeBondDsl {
     type Err = ParseError;
@@ -304,9 +313,11 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::super::molecule::{Metadata, MetadataBuilder};
     use super::*;
-    use crate::ast::constraint::DativeBondConstraints;
+    use crate::ast::constraint::{AtomConstraint, DativeBondConstraints};
     use crate::ast::dative::DativeDirection;
+    use crate::ast::idx::{AtomIdx, BondIdx};
     use crate::ast::value::{Expr, RelOp};
 
     #[rustfmt::skip]
@@ -381,30 +392,11 @@ mod tests {
 
     // -- DativeBondConstraintDsl ----------------
 
-    use bimap::BiMap;
-    use indexmap::IndexMap;
-
-    use super::super::molecule::Metadata;
-    use crate::ast::constraint::AtomConstraint;
-    use crate::ast::idx::{AtomIdx, BondIdx};
-
-    fn empty_metadata() -> Metadata {
-        Metadata {
-            atom_ids: IndexMap::new(),
-            atom_aliases: BiMap::new(),
-            bond_ids: IndexMap::new(),
-            dative_bond_ids: IndexMap::new(),
-            aromatic_system_ids: IndexMap::new(),
-            multicenter_bond_ids: IndexMap::new(),
-            noncovalent_bond_ids: IndexMap::new(),
-        }
-    }
-
     fn metadata_with_atom_and_bond_id() -> Metadata {
-        let mut m = empty_metadata();
-        m.atom_ids.insert(AtomIdx(1), "n1".to_string());
-        m.bond_ids.insert(BondIdx(2), "b1".to_string());
-        m
+        let mut b = MetadataBuilder::default();
+        b.set_atom_id(AtomIdx(1), "n1".to_string());
+        b.set_bond_id(BondIdx(2), "b1".to_string());
+        b.build()
     }
 
     fn ctx_with(atom_count: usize, bond_count: usize, meta: &Metadata) -> ResolveContext<'_> {
@@ -432,7 +424,7 @@ mod tests {
         #[case] input: DativeBondConstraint,
         #[case] edn_source: &str,
     ) {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let render_ctx = ResolveContext::for_rendering(&meta);
         let dsl = DativeBondConstraintDsl::from_ast(&input, &render_ctx).unwrap();
         let edn = dsl.clone().to_edn();
@@ -476,7 +468,7 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_constraint_dsl_rejects_out_of_range_index() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let edn = umol_edn::read_string("{:donor 99}").unwrap();
         let dsl = DativeBondConstraintDsl::from_edn(&edn).unwrap();
         let err = dsl.into_ast(&ctx_with(5, 5, &meta)).unwrap_err();
@@ -491,7 +483,7 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_constraint_dsl_rejects_unknown_id() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let edn = umol_edn::read_string("{:acceptor :nope}").unwrap();
         let dsl = DativeBondConstraintDsl::from_edn(&edn).unwrap();
         let err = dsl.into_ast(&ctx_with(5, 5, &meta)).unwrap_err();

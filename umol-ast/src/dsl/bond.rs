@@ -27,8 +27,17 @@ use crate::ast::value::ValueAst;
 /// Surface DSL wrapper around `BondAst`. Parses and renders the bond-string
 /// form (order plus `#…` predicates); inline constraints land in
 /// `self.0.constraints`.
+#[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BondDsl(pub BondAst);
+
+impl BondDsl {
+    /// Zero-cost reference cast from `&BondAst`. Relies on `repr(transparent)`.
+    pub fn from_ref(ast: &BondAst) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(ast as *const BondAst as *const Self) }
+    }
+}
 
 impl FromStr for BondDsl {
     type Err = ParseError;

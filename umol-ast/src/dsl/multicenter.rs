@@ -29,8 +29,17 @@ use crate::dsl::config::{MulticenterBondDefaults, NumericDefault};
 /// Surface DSL wrapper around `MulticenterBondAst`. Parses and renders the
 /// multicenter-bond-string form. All `MulticenterBondConstraint` variants are
 /// molecule-scope, so nothing from the constraint vec serializes inline.
+#[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MulticenterBondDsl(pub MulticenterBondAst);
+
+impl MulticenterBondDsl {
+    /// Zero-cost reference cast from `&MulticenterBondAst`. Relies on `repr(transparent)`.
+    pub fn from_ref(ast: &MulticenterBondAst) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(ast as *const MulticenterBondAst as *const Self) }
+    }
+}
 
 impl FromStr for MulticenterBondDsl {
     type Err = ParseError;
@@ -264,12 +273,10 @@ impl FromAst<MulticenterBondConstraint> for MulticenterBondConstraintDsl {
             MulticenterBondConstraint::Atoms(atoms) => {
                 Self::Atoms(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
             }
-            MulticenterBondConstraint::Contains(a) => {
-                Self::Contains(AtomRef::from_ast(*a, meta))
+            MulticenterBondConstraint::Contains(a) => Self::Contains(AtomRef::from_ast(*a, meta)),
+            MulticenterBondConstraint::ContainsAll(atoms) => {
+                Self::ContainsAll(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
             }
-            MulticenterBondConstraint::ContainsAll(atoms) => Self::ContainsAll(
-                atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
-            ),
             MulticenterBondConstraint::AllAtoms(c) => {
                 Self::AllAtoms(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
             }
@@ -284,10 +291,7 @@ impl IntoAst<MulticenterBondConstraint> for MulticenterBondConstraintDsl {
     type Ctx<'a> = ResolveContext<'a>;
     type Error = ParseError;
 
-    fn into_ast<'a>(
-        self,
-        ctx: &Self::Ctx<'a>,
-    ) -> Result<MulticenterBondConstraint, ParseError> {
+    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<MulticenterBondConstraint, ParseError> {
         let meta = ctx.metadata;
         let resolve_atoms = |refs: Vec<AtomRef>| -> Result<Vec<_>, ParseError> {
             refs.into_iter()
@@ -299,9 +303,7 @@ impl IntoAst<MulticenterBondConstraint> for MulticenterBondConstraintDsl {
             Self::Contains(r) => {
                 MulticenterBondConstraint::Contains(r.into_ast(ctx.atom_count, meta)?)
             }
-            Self::ContainsAll(refs) => {
-                MulticenterBondConstraint::ContainsAll(resolve_atoms(refs)?)
-            }
+            Self::ContainsAll(refs) => MulticenterBondConstraint::ContainsAll(resolve_atoms(refs)?),
             Self::AllAtoms(c) => {
                 MulticenterBondConstraint::AllAtoms(Box::new(c.into_ast(&()).unwrap()))
             }
@@ -386,8 +388,12 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::super::molecule::Metadata;
     use super::*;
-    use crate::ast::constraint::MulticenterBondConstraints;
+    use crate::ast::constraint::{
+        AtomConstraint, MulticenterBondConstraint, MulticenterBondConstraints,
+    };
+    use crate::ast::idx::AtomIdx;
     use crate::ast::spin::SpinStateAst;
 
     #[rustfmt::skip]
@@ -475,24 +481,6 @@ mod tests {
 
     // -- MulticenterBondConstraintDsl ----------------
 
-    use super::super::molecule::Metadata;
-    use crate::ast::constraint::{AtomConstraint, MulticenterBondConstraint};
-    use crate::ast::idx::AtomIdx;
-    use bimap::BiMap;
-    use indexmap::IndexMap;
-
-    fn empty_metadata() -> Metadata {
-        Metadata {
-            atom_ids: IndexMap::new(),
-            atom_aliases: BiMap::new(),
-            bond_ids: IndexMap::new(),
-            dative_bond_ids: IndexMap::new(),
-            aromatic_system_ids: IndexMap::new(),
-            multicenter_bond_ids: IndexMap::new(),
-            noncovalent_bond_ids: IndexMap::new(),
-        }
-    }
-
     fn ctx_with_atoms(atom_count: usize, meta: &Metadata) -> ResolveContext<'_> {
         ResolveContext {
             atom_count,
@@ -516,7 +504,7 @@ mod tests {
         #[case] input: MulticenterBondConstraint,
         #[case] edn_source: &str,
     ) {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let render_ctx = ResolveContext::for_rendering(&meta);
         let dsl = MulticenterBondConstraintDsl::from_ast(&input, &render_ctx).unwrap();
         let edn = dsl.clone().to_edn();
@@ -529,7 +517,7 @@ mod tests {
 
     #[rstest]
     fn test_multicenter_bond_constraint_dsl_rejects_out_of_range_atom() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let edn = umol_edn::read_string("{:contains 99}").unwrap();
         let dsl = MulticenterBondConstraintDsl::from_edn(&edn).unwrap();
         let err = dsl.into_ast(&ctx_with_atoms(5, &meta)).unwrap_err();

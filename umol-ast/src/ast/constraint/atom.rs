@@ -1,5 +1,8 @@
 //! Per-atom constraints.
 
+use std::mem::replace;
+
+use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
 use super::super::remap::IdxRemapping;
@@ -72,20 +75,12 @@ impl MulticenterValenceAst {
     }
 }
 
-/// Per-atom constraint slotmap. Fixed-size array indexed by
-/// [`AtomConstraintKind`]; each slot holds at most one constraint of that
-/// kind. O(1) access and update by kind.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Per-atom constraints: at most one entry per [`AtomConstraintKind`].
+/// Stored kind-sorted in an inline-capacity-2 `SmallVec`; the common cases
+/// after resolution (0–2 constraints) never touch the heap.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct AtomConstraints {
-    slots: [Option<AtomConstraint>; AtomConstraintKind::COUNT],
-}
-
-impl Default for AtomConstraints {
-    fn default() -> Self {
-        Self {
-            slots: [const { None }; AtomConstraintKind::COUNT],
-        }
-    }
+    entries: SmallVec<[AtomConstraint; 2]>,
 }
 
 impl AtomConstraints {
@@ -94,65 +89,70 @@ impl AtomConstraints {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.slots.iter().all(Option::is_none)
+        self.entries.is_empty()
     }
 
     pub fn len(&self) -> usize {
-        self.slots.iter().filter(|s| s.is_some()).count()
+        self.entries.len()
     }
 
     pub fn contains(&self, kind: AtomConstraintKind) -> bool {
-        self.slots[kind as usize].is_some()
+        self.find(kind).is_ok()
     }
 
     pub fn get(&self, kind: AtomConstraintKind) -> Option<&AtomConstraint> {
-        self.slots[kind as usize].as_ref()
+        self.find(kind).ok().map(|i| &self.entries[i])
     }
 
     pub fn get_mut(&mut self, kind: AtomConstraintKind) -> Option<&mut AtomConstraint> {
-        self.slots[kind as usize].as_mut()
+        match self.find(kind) {
+            Ok(i) => Some(&mut self.entries[i]),
+            Err(_) => None,
+        }
     }
 
-    /// Insert a constraint in its kind's slot, returning the previous
-    /// occupant if any. Every `AtomConstraintKind` is single-valued per atom,
-    /// so `add` always replaces same-kind entries (last-wins).
+    /// Insert a constraint at its kind's sorted position, returning the
+    /// previous entry of the same kind if any. Every `AtomConstraintKind` is
+    /// single-valued per atom, so `add` always replaces same-kind entries
+    /// (last-wins).
     pub fn add(&mut self, constraint: AtomConstraint) -> Option<AtomConstraint> {
-        let slot = &mut self.slots[constraint.kind() as usize];
-        slot.replace(constraint)
+        match self.find(constraint.kind()) {
+            Ok(i) => Some(replace(&mut self.entries[i], constraint)),
+            Err(i) => {
+                self.entries.insert(i, constraint);
+                None
+            }
+        }
     }
 
     pub fn retain(&mut self, mut f: impl FnMut(&AtomConstraint) -> bool) {
-        let kinds_to_remove: Vec<AtomConstraintKind> = self
-            .iter()
-            .filter(|c| !f(c))
-            .map(|c| c.kind())
-            .collect();
-        for k in kinds_to_remove {
-            self.remove(k);
-        }
+        self.entries.retain(|c| f(c));
     }
 
     pub fn clear(&mut self) {
-        for slot in &mut self.slots {
-            *slot = None;
-        }
+        self.entries.clear();
     }
 
     pub fn remove(&mut self, kind: AtomConstraintKind) -> Option<AtomConstraint> {
-        self.slots[kind as usize].take()
+        self.find(kind).ok().map(|i| self.entries.remove(i))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &AtomConstraint> {
-        self.slots.iter().filter_map(Option::as_ref)
+        self.entries.iter()
     }
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut AtomConstraint> {
-        self.slots.iter_mut().filter_map(Option::as_mut)
+        self.entries.iter_mut()
     }
 
     /// No-op: no `AtomConstraint` variant carries an entity index.
     pub fn remap(self, _remap: &IdxRemapping) -> Self {
         self
+    }
+
+    fn find(&self, kind: AtomConstraintKind) -> Result<usize, usize> {
+        self.entries
+            .binary_search_by_key(&(kind as u8), |c| c.kind() as u8)
     }
 }
 

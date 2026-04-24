@@ -29,8 +29,17 @@ use crate::dsl::config::{AromaticSystemDefaults, NumericDefault};
 /// Surface DSL wrapper around `AromaticSystemAst`. Parses and renders the
 /// aromatic-system-string form. All `AromaticSystemConstraint` variants are
 /// molecule-scope, so nothing from the constraint vec serializes inline.
+#[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AromaticSystemDsl(pub AromaticSystemAst);
+
+impl AromaticSystemDsl {
+    /// Zero-cost reference cast from `&AromaticSystemAst`. Relies on `repr(transparent)`.
+    pub fn from_ref(ast: &AromaticSystemAst) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(ast as *const AromaticSystemAst as *const Self) }
+    }
+}
 
 impl FromStr for AromaticSystemDsl {
     type Err = ParseError;
@@ -376,8 +385,10 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::super::molecule::Metadata;
     use super::*;
-    use crate::ast::constraint::AromaticSystemConstraints;
+    use crate::ast::constraint::{AromaticSystemConstraint, AromaticSystemConstraints, AtomConstraint};
+    use crate::ast::idx::AtomIdx;
     use crate::ast::spin::SpinStateAst;
 
     #[rustfmt::skip]
@@ -494,25 +505,6 @@ mod tests {
 
     // -- AromaticSystemConstraintDsl ----------------
 
-    use bimap::BiMap;
-    use indexmap::IndexMap;
-
-    use super::super::molecule::Metadata;
-    use crate::ast::constraint::{AromaticSystemConstraint, AtomConstraint};
-    use crate::ast::idx::AtomIdx;
-
-    fn empty_metadata() -> Metadata {
-        Metadata {
-            atom_ids: IndexMap::new(),
-            atom_aliases: BiMap::new(),
-            bond_ids: IndexMap::new(),
-            dative_bond_ids: IndexMap::new(),
-            aromatic_system_ids: IndexMap::new(),
-            multicenter_bond_ids: IndexMap::new(),
-            noncovalent_bond_ids: IndexMap::new(),
-        }
-    }
-
     fn ctx_with_atoms(atom_count: usize, meta: &Metadata) -> ResolveContext<'_> {
         ResolveContext {
             atom_count,
@@ -536,7 +528,7 @@ mod tests {
         #[case] input: AromaticSystemConstraint,
         #[case] edn_source: &str,
     ) {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let render_ctx = ResolveContext::for_rendering(&meta);
         let dsl = AromaticSystemConstraintDsl::from_ast(&input, &render_ctx).unwrap();
         let edn = dsl.clone().to_edn();
@@ -549,7 +541,7 @@ mod tests {
 
     #[rstest]
     fn test_aromatic_system_constraint_dsl_rejects_out_of_range_atom() {
-        let meta = empty_metadata();
+        let meta = Metadata::default();
         let edn = umol_edn::read_string("{:contains 99}").unwrap();
         let dsl = AromaticSystemConstraintDsl::from_edn(&edn).unwrap();
         let err = dsl.into_ast(&ctx_with_atoms(5, &meta)).unwrap_err();

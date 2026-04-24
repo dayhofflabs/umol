@@ -21,6 +21,7 @@ bench = false
 bimap = "0.6.3"
 indexmap = "2.11.1"
 phf = { version = "0.13.1", features = ["macros"] }
+smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
 umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "indexmap"] }
@@ -35,6 +36,10 @@ rstest = "0.26.1"
 
 [[bench]]
 name = "parsing"
+harness = false
+
+[[bench]]
+name = "rendering"
 harness = false
 
 [lints.clippy]

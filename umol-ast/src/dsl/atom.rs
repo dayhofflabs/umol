@@ -34,8 +34,17 @@ use crate::dsl::config::{
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in
 /// `self.0.constraints`.
+#[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct AtomDsl(pub AtomAst);
+
+impl AtomDsl {
+    /// Zero-cost reference cast from `&AtomAst`. Relies on `repr(transparent)`.
+    pub fn from_ref(ast: &AtomAst) -> &Self {
+        // SAFETY: `#[repr(transparent)]` guarantees identical layout.
+        unsafe { &*(ast as *const AtomAst as *const Self) }
+    }
+}
 
 impl FromStr for AtomDsl {
     type Err = ParseError;
@@ -103,7 +112,30 @@ impl IntoAst<AtomAst> for AtomDsl {
 
 /// Parse a complete atom-string into an `AtomDsl`.
 pub fn parse_atom(input: &str) -> Result<AtomDsl, ParseError> {
+    if let Some(dsl) = parse_bare_element(input) {
+        return Ok(dsl);
+    }
     atom.parse(input).map_err(|e| e.into_inner())
+}
+
+/// Fast path for the overwhelmingly common case of an element-only
+/// atom-string ("C", "N", "Cl", "Og", …). Returns `None` if the input
+/// has anything beyond a single 1- or 2-byte ASCII element symbol, in
+/// which case the caller falls through to the winnow parser.
+fn parse_bare_element(input: &str) -> Option<AtomDsl> {
+    let bytes = input.as_bytes();
+    let is_first = |b: u8| b.is_ascii_uppercase();
+    let is_rest = |b: u8| b.is_ascii_lowercase();
+    let ok = match bytes {
+        [a] => is_first(*a),
+        [a, b] => is_first(*a) && is_rest(*b),
+        _ => false,
+    };
+    if !ok {
+        return None;
+    }
+    let el = Element::from_symbol_bytes(bytes)?;
+    Some(AtomDsl(AtomAst::new(ElementAst::Lit(el))))
 }
 
 /// Atom-string parser (does not require consuming all input).
@@ -1060,6 +1092,32 @@ mod tests {
     use super::*;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::value::{ArithOp, Expr, RelOp};
+
+    #[rstest]
+    #[case::single("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
+    #[case::double("Cl", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Cl))))]
+    #[case::transuranic("Og", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Og))))]
+    fn test_parse_bare_element_accepts(#[case] input: &str, #[case] expected: AtomDsl) {
+        assert_eq!(parse_bare_element(input), Some(expected));
+    }
+
+    #[rstest]
+    #[case::empty("")]
+    #[case::lowercase_first("cl")]
+    #[case::unknown_symbol("Zx")]
+    #[case::three_bytes("Abc")]
+    #[case::leading_whitespace(" C")]
+    #[case::trailing_whitespace("C ")]
+    #[case::wildcard("*")]
+    #[case::set("{C,N}")]
+    #[case::bind("(?e :: {C,N})")]
+    #[case::ref_("(?e)")]
+    #[case::h_count("C#h3")]
+    #[case::charge_plus("N#c+")]
+    #[case::full("C#c+1#R+#v4")]
+    fn test_parse_bare_element_rejects(#[case] input: &str) {
+        assert_eq!(parse_bare_element(input), None);
+    }
 
     #[rustfmt::skip]
     #[rstest]

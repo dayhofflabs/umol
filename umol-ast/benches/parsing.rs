@@ -22,6 +22,13 @@ use umol_ast::dsl::multicenter::MulticenterBondDsl;
 use umol_ast::dsl::noncovalent::NoncovalentBondDsl;
 use umol_edn::{read_string, FromEdn};
 
+#[path = "fixtures.rs"]
+mod fixtures;
+use fixtures::{
+    MOL_BENZENE, MOL_INDOLE, MOL_LARGE_ALL_IDS, MOL_LARGE_NO_IDS, MOL_LARGE_PARTIAL_IDS, MOL_SMALL,
+    MOL_WITH_CONSTRAINTS,
+};
+
 fn bench_pair<T>(group: &mut criterion::BenchmarkGroup<'_, WallTime>, label: &str, source: &'static str)
 where
     T: for<'de> FromEdn<'de>,
@@ -127,28 +134,15 @@ fn bench_constraints_dsl(c: &mut Criterion) {
 
 // -- MoleculeDsl --------------------
 
-const MOL_SMALL: &str = r##"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"##;
-
-const MOL_BENZENE: &str = r##"{:atoms ["C" "C" "C" "C" "C" "C"]
- :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
- :aromatic [{:atoms [0 1 2 3 4 5] :type "#e6"}]}"##;
-
-const MOL_INDOLE: &str = r##"{:atoms [[:n "N"] [:c2 "C"] [:c3 "C"] [:c3a "C"] [:c4 "C"] [:c5 "C"] [:c6 "C"] [:c7 "C"] [:c7a "C"]]
- :bonds [[:n :c2 "1"] [:c2 :c3 "1"] [:c3 :c3a "1"] [:c3a :c4 "1"] [:c4 :c5 "1"] [:c5 :c6 "1"] [:c6 :c7 "1"] [:c7 :c7a "1"] [:c7a :n "1"] [:c3a :c7a "1"]]
- :aromatic [{:atoms [:n :c2 :c3 :c3a :c4 :c5 :c6 :c7 :c7a] :type "#e10"}]}"##;
-
-const MOL_WITH_CONSTRAINTS: &str = r##"{:atoms [[:c1 "C"] [:c2 "C"] [:o "O"]]
- :bonds [{:id :b1 :a :c1 :b :c2 :type "1"} {:id :b2 :a :c2 :b :o :type "1"}]
- :constraints [{:connected [:c1 :c2 :o]}
-               {:bond-order-sum {:bonds [:b1 :b2] :sum 2}}
-               {:not {:atom [:c1 {:valence 3}]}}]}"##;
-
 fn bench_molecule_dsl(c: &mut Criterion) {
     let mut g = c.benchmark_group("molecule_dsl");
     bench_pair::<MoleculeDsl>(&mut g, "small", MOL_SMALL);
     bench_pair::<MoleculeDsl>(&mut g, "benzene", MOL_BENZENE);
     bench_pair::<MoleculeDsl>(&mut g, "indole", MOL_INDOLE);
     bench_pair::<MoleculeDsl>(&mut g, "with_constraints", MOL_WITH_CONSTRAINTS);
+    bench_pair::<MoleculeDsl>(&mut g, "large_no_ids", MOL_LARGE_NO_IDS.as_str());
+    bench_pair::<MoleculeDsl>(&mut g, "large_all_ids", MOL_LARGE_ALL_IDS.as_str());
+    bench_pair::<MoleculeDsl>(&mut g, "large_partial_ids", MOL_LARGE_PARTIAL_IDS.as_str());
     g.finish();
 }
 
