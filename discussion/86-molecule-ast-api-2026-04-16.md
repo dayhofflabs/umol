@@ -403,6 +403,7 @@ Universal — they follow from electron and angular-momentum conservation. Hold 
 - **Per-atom electron count.** Z − charge = bonded_electrons + 2·lone_pairs + unpaired.
 - **Total charge consistency.** Sum of atom charges = asserted molecular total (if asserted via `Derived { TotalCharge }`).
 - **Total spin coupling.** Per-atom unpaired electrons couple consistently to asserted total spin.
+- **Unpaired electrons/spin multiplicity consistency.** = u % 2 + 1 <= M <= u + 1
 - **Aromatic-system electron count.** Discovered count consistent with per-atom `aromatic_valence` values that produced it.
 
 Expressed as `MoleculeConstraint::Derived` entries. Verified during propagation. A `Molecule` whose tier-2 constraints fail is a resolution error.
@@ -469,6 +470,7 @@ Default both to tier 3 unless a use case forces stricter checks.
 - [ ] **`Pattern` type with matcher caches.** Today `MoleculePattern` (`api/pattern.rs`) is a thin `Arc`-wrapped AST. Doc 86 calls for a long-lived `Pattern` carrying matcher-side scaffolding (per-atom constraint index, sub-pattern dependency graph, recursion order, packed pattern adjacency) and `Pattern::new` well-formedness checks. Lands with doc 80 step 9.
 - [ ] **Tier-1 parser entry-points.** `parse_smiles → Molecule`, `parse_smarts → Pattern`, `parse_smirks → ReactionRule`, plus tier-2 `*_to_ast` and configurable `parse_*_with` variants. Current parsers return `MoleculeAst`.
 - [ ] **Remaining tier-2 invariants.** `TotalCharge`, `TotalSpin`, and `AromaticElectronCount` exist as `MoleculeConstraint` variants but have no evaluator. Once doc 87's propagator evaluators land, wire them into `Validator::validate`.
+- [ ] **Per-entity spin-coupling invariant.** `SpinCouplingInvariant` stub exists in `ops/propagate.rs`; check is `multiplicity = unpaired − 2k + 1` for some `k ∈ 0..=unpaired/2` on any entity carrying a `SpinStateAst` (atom, aromatic system, multicenter bond). Parser's tier-2 leak was removed (`dsl/predicates.rs::apply_spin_pair` no longer validates; `SpinStateAst::validate` and the matching `ParseError` variants are gone). Wire the propagator into `Validator::validate` + matcher post-filter alongside `ElectronInvariant`.
 - [ ] **Additional `Molecule` cache slots.** `DistanceMatrix`, `BiconnectedComponents`, `MatchTarget`, `MorganTarget` — add as their first consumer arrives, not speculatively.
 - [ ] **`Pattern` cache slots.** Per-atom constraint index, sub-pattern dependency graph, packed pattern adjacency. Land with step 9.
 - [ ] **`ReactionRule` / `ReactionRuleAst`.** Mirror of the `Molecule` / `MoleculeAst` split for reactions. Doc 80 step 10.

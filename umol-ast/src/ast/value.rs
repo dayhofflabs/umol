@@ -24,8 +24,30 @@ impl ValueAst {
         Self::Lit(value)
     }
 
+    /// The pattern denotes a single concrete integer. Semantic, not
+    /// syntactic: `Expr` that folds to a constant is ground, and a
+    /// `LitSet` of a single value (regardless of duplicates) is ground.
+    ///
+    /// Fast path — `Lit` and `Undetermined` dispatch with two tag compares
+    /// so the common case (a fully-lowered ground molecule) doesn't pay
+    /// for the `LitSet`/`Expr` logic.
+    #[inline]
     pub fn is_ground(&self) -> bool {
-        matches!(self, Self::Lit(_))
+        match self {
+            Self::Lit(_) => true,
+            Self::Undetermined => false,
+            _ => self.is_ground_slow(),
+        }
+    }
+
+    #[inline(never)]
+    #[cold]
+    fn is_ground_slow(&self) -> bool {
+        match self {
+            Self::LitSet(s) => litset_is_ground(s),
+            Self::Expr(e) => e.is_ground(),
+            Self::Lit(_) | Self::Undetermined => unreachable!(),
+        }
     }
 
     pub fn is_undetermined(&self) -> bool {
@@ -109,12 +131,57 @@ pub enum Expr {
     Or(Vec<Expr>),
 }
 
+/// A `LitSet` is ground iff non-empty and all elements are equal (semantic
+/// singleton). Shared by `ValueAst::is_ground` and the atom-field types that
+/// embed a `LitSet` directly (`IsotopeAst`, `ImplicitHydrogensAst`), so they
+/// avoid cloning the Vec just to delegate.
+#[inline(never)]
+pub(crate) fn litset_is_ground(s: &[i64]) -> bool {
+    match s {
+        [] => false,
+        [first, rest @ ..] => rest.iter().all(|x| x == first),
+    }
+}
+
 impl Expr {
     pub fn is_arithmetic(&self) -> bool {
         matches!(
             self,
             Expr::Lit(..) | Expr::Var(..) | Expr::Neg(..) | Expr::BinOp(..)
         )
+    }
+
+    /// The expression denotes a single concrete integer: it is arithmetic
+    /// (not a boolean-domain predicate) and evaluates without free variables
+    /// or error (including i64 overflow via the checked evaluator). A
+    /// `ValueAst::Expr` containing a ground expression is itself ground.
+    pub fn is_ground(&self) -> bool {
+        self.is_arithmetic() && self.evaluate_checked(&Bindings::new()).is_some()
+    }
+
+    /// Overflow-safe arithmetic evaluation. Returns `None` for free
+    /// variables, division/remainder by zero, type mismatch (boolean-domain
+    /// Expr), and any `i64` overflow in `Neg`/`BinOp`. Intended as the
+    /// foundation of [`Expr::is_ground`]; for error-reporting callers use
+    /// [`Expr::evaluate`].
+    pub fn evaluate_checked(&self, vars: &Bindings) -> Option<i64> {
+        match self {
+            Expr::Lit(n) => Some(*n),
+            Expr::Var(name) => vars.get(name).copied(),
+            Expr::Neg(e) => e.evaluate_checked(vars)?.checked_neg(),
+            Expr::BinOp(l, op, r) => {
+                let l = l.evaluate_checked(vars)?;
+                let r = r.evaluate_checked(vars)?;
+                match op {
+                    ArithOp::Add => l.checked_add(r),
+                    ArithOp::Sub => l.checked_sub(r),
+                    ArithOp::Mul => l.checked_mul(r),
+                    ArithOp::Div => l.checked_div(r),
+                    ArithOp::Rem => l.checked_rem(r),
+                }
+            }
+            Expr::Rel(..) | Expr::Mem(..) | Expr::Not(..) | Expr::And(..) | Expr::Or(..) => None,
+        }
     }
 
     /// Evaluate an arithmetic expression to an `i64`

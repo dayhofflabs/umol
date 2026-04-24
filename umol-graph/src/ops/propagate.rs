@@ -180,6 +180,28 @@ impl ElectronInvariant {
     }
 }
 
+/// Per-entity spin-coupling invariant. Tier-2 physics: a literal
+/// `(unpaired, multiplicity)` pair must satisfy `multiplicity = unpaired −
+/// 2k + 1` for some `k ∈ 0..=unpaired/2`. Runs on any entity carrying a
+/// `SpinStateAst` (atom, aromatic system, multicenter bond). Returns true
+/// for non-ground pairs (not yet evaluable).
+///
+/// Stub: evaluator not implemented. Until wired in, the parser admits
+/// physically incompatible literal pairs and the solver will need to reject
+/// them here. Migration item tracked in doc 86 §"Invariants" and the
+/// Implementation-status list.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SpinCouplingInvariant;
+
+impl SpinCouplingInvariant {
+    pub fn validate(&self, _spin: &SpinStateAst) -> bool {
+        // TODO(doc 86): lift the parity rule from SpinState::are_compatible
+        // and wire into Validator::validate + matcher post-filter, matching
+        // the ElectronInvariant layout above.
+        true
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn atom_typing_candidates(
     registry: &AtomTypeRegistry,

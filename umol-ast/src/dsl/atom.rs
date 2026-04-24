@@ -20,7 +20,7 @@ use super::config::{
 };
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, is_plus_sugar, lower_spin,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin,
     optional_value, raise_spin, ring_count, SpinPredicate,
 };
 use super::value::{fmt_value, id, value, ValueDsl};
@@ -29,7 +29,7 @@ use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::{Expr, RelOp, ValueAst};
+use crate::ast::value::ValueAst;
 
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in
@@ -327,11 +327,11 @@ fn aromatic_valence(i: &mut &str) -> PResult<AromaticValenceAst> {
         alt((
             "*".value(AromaticValenceAst::Undetermined),
             "!".value(AromaticValenceAst::NotAromatic),
-            "+".value(AromaticValenceAst::Aromatic(ValueAst::Expr(Expr::Rel(
-                Box::new(Expr::Var("a".to_string())),
-                RelOp::Ge,
-                Box::new(Expr::Lit(0)),
-            )))),
+            // `#a+` encodes "aromatic, count unspecified" — semantically the
+            // same as the (a >= 0) Expr form but structurally distinct from
+            // the outer Undetermined. Older sugar used Expr(Rel(Var("a"),
+            // Ge, Lit(0))); the canonical form is now Aromatic(Undetermined).
+            "+".value(AromaticValenceAst::Aromatic(ValueAst::Undetermined)),
             value.map(AromaticValenceAst::Aromatic),
             empty.value(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
         )),
@@ -346,13 +346,8 @@ fn multicenter_valence(i: &mut &str) -> PResult<MulticenterValenceAst> {
         alt((
             "*".value(MulticenterValenceAst::Undetermined),
             "!".value(MulticenterValenceAst::NotMulticenter),
-            "+".value(MulticenterValenceAst::Multicenter(ValueAst::Expr(
-                Expr::Rel(
-                    Box::new(Expr::Var("m".to_string())),
-                    RelOp::Ge,
-                    Box::new(Expr::Lit(0)),
-                ),
-            ))),
+            // `#m+` mirrors `#a+` — "multicenter, count unspecified".
+            "+".value(MulticenterValenceAst::Multicenter(ValueAst::Undetermined)),
             value.map(MulticenterValenceAst::Multicenter),
             empty.value(MulticenterValenceAst::Multicenter(ValueAst::Lit(1))),
         )),
@@ -474,11 +469,12 @@ fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
     }
 }
 
-/// Format a value field that suppresses zero (DSL convention for AST fields with
-/// implicit-zero defaults like lone_pairs).
+/// Format a value field with `Lit(1)` sugared as the bare prefix. Only
+/// `Undetermined` elides; every literal (including `Lit(0)`) must render so
+/// parsing recovers it.
 fn fmt_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fmt::Result {
     match v {
-        ValueAst::Undetermined | ValueAst::Lit(0) => Ok(()),
+        ValueAst::Undetermined => Ok(()),
         ValueAst::Lit(1) => write!(f, "{}", prefix),
         ValueAst::Lit(n) => write!(f, "{}{}", prefix, n),
         v => {
@@ -509,9 +505,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
         AtomConstraint::MulticenterValence(c) => match c {
             MulticenterValenceAst::Undetermined => write!(f, "#m*"),
             MulticenterValenceAst::NotMulticenter => write!(f, "#m!"),
-            MulticenterValenceAst::Multicenter(v) if is_plus_sugar(v, "m", 0) => {
-                write!(f, "#m+")
-            }
+            MulticenterValenceAst::Multicenter(ValueAst::Undetermined) => write!(f, "#m+"),
             MulticenterValenceAst::Multicenter(ValueAst::Lit(1)) => write!(f, "#m"),
             MulticenterValenceAst::Multicenter(ValueAst::Lit(n)) => write!(f, "#m{}", n),
             MulticenterValenceAst::Multicenter(v) => {
@@ -522,9 +516,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
         AtomConstraint::AromaticValence(c) => match c {
             AromaticValenceAst::Undetermined => write!(f, "#a*"),
             AromaticValenceAst::NotAromatic => write!(f, "#a!"),
-            AromaticValenceAst::Aromatic(v) if is_plus_sugar(v, "a", 0) => {
-                write!(f, "#a+")
-            }
+            AromaticValenceAst::Aromatic(ValueAst::Undetermined) => write!(f, "#a+"),
             AromaticValenceAst::Aromatic(ValueAst::Lit(1)) => write!(f, "#a"),
             AromaticValenceAst::Aromatic(ValueAst::Lit(n)) => write!(f, "#a{}", n),
             AromaticValenceAst::Aromatic(v) => {
@@ -748,13 +740,13 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                     }
                 }
                 MulticenterValenceDefault::Multicenter => {
-                    if let Some(AtomConstraint::MulticenterValence(
-                        MulticenterValenceAst::Multicenter(v),
-                    )) = constraints.get(kind)
-                    {
-                        if is_plus_sugar(v, "m", 0) {
-                            constraints.remove(kind);
-                        }
+                    if matches!(
+                        constraints.get(kind),
+                        Some(AtomConstraint::MulticenterValence(
+                            MulticenterValenceAst::Multicenter(ValueAst::Undetermined)
+                        ))
+                    ) {
+                        constraints.remove(kind);
                     }
                 }
                 MulticenterValenceDefault::Required => {}
@@ -771,12 +763,13 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                     }
                 }
                 AromaticValenceDefault::Aromatic => {
-                    if let Some(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(v))) =
-                        constraints.get(kind)
-                    {
-                        if is_plus_sugar(v, "a", 0) {
-                            constraints.remove(kind);
-                        }
+                    if matches!(
+                        constraints.get(kind),
+                        Some(AtomConstraint::AromaticValence(
+                            AromaticValenceAst::Aromatic(ValueAst::Undetermined)
+                        ))
+                    ) {
+                        constraints.remove(kind);
                     }
                 }
                 AromaticValenceDefault::Required => {}
@@ -1157,13 +1150,13 @@ mod tests {
     #[case::ring_size("C#r6", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingSize(ValueAst::Lit(6))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::arom_not_aromatic("C#a!", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::arom_undetermined("C#a*", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::arom_plus("C#a+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("a".to_string())), RelOp::Ge, Box::new(Expr::Lit(0))))))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::arom_plus("C#a+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Undetermined))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::arom_zero("C#a0", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(0)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::arom_one("C#a1", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::arom_omit("C#a", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multicenter_not("C#m!", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multicenter_undetermined("C#m*", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::multicenter_plus("C#m+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("m".to_string())), RelOp::Ge, Box::new(Expr::Lit(0))))))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::multicenter_plus("C#m+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Undetermined))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multicenter_zero("C#m0", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(0)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multicenter_one("C#m", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(1)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multicenter("C#m2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(2)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1299,12 +1292,12 @@ mod tests {
     #[case::ring_size("#r6", AtomPredicate::Constraint(AtomConstraint::RingSize(ValueAst::Lit(6))))]
     #[case::arom_not_aromatic("#a!", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic)))]
     #[case::arom_undetermined("#a*", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined)))]
-    #[case::arom_plus("#a+", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("a".to_string())), RelOp::Ge, Box::new(Expr::Lit(0))))))))]
+    #[case::arom_plus("#a+", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Undetermined))))]
     #[case::arom_lit("#a2", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(2)))))]
     #[case::arom_omit("#a", AtomPredicate::Constraint(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1)))))]
     #[case::multicenter_not("#m!", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter)))]
     #[case::multicenter_undetermined("#m*", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined)))]
-    #[case::multicenter_plus("#m+", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("m".to_string())), RelOp::Ge, Box::new(Expr::Lit(0))))))))]
+    #[case::multicenter_plus("#m+", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Undetermined))))]
     #[case::multicenter_zero("#m0", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(0)))))]
     #[case::multicenter_omit("#m", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(1)))))]
     #[case::multicenter("#m2", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(2)))))]

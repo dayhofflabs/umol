@@ -91,5 +91,5 @@
 | [87-constraint-taxonomy-2026-04-17.md](87-constraint-taxonomy-2026-04-17.md)                                                     | Completed     | 2026-04-19   |
 | [88-fix-dsl-parsing-2026-04-19.md](88-fix-dsl-parsing-2026-04-19.md)                                                             | Active        | 2026-04-19   |
 | [89-substructure-matching-variables-2026-04-21.md](89-substructure-matching-variables-2026-04-21.md)                             | Active        | 2026-04-21   |
-| [90-reactions-relation-mutation-2026-04-21.md](90-reactions-relation-mutation-2026-04-21.md)                                     | Active        | 2026-04-021  |
-| [91-molecule-dsl-profiling-2026-04-23.md](91-molecule-dsl-profiling-2026-04-23.md)                                               | Active        | 2026-04-23   |
+| [90-reactions-relation-mutation-2026-04-21.md](90-reactions-relation-mutation-2026-04-21.md)                                     | Active        | 2026-04-21   |
+| [91-molecule-dsl-profiling-2026-04-23.md](91-molecule-dsl-profiling-2026-04-23.md)                                               | Completed     | 2026-04-24   |

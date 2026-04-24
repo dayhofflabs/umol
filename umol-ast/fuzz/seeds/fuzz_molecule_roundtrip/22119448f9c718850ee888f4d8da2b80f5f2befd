@@ -1,4 +1,0 @@
-{:atoms [[:c1 "C"] [:c2 "C"] [:o "O"]]
- :bonds [{:id :b1 :a :"] [:c7Z "C"]]
- c1 :b :c2 :type "1"} {:id :b2 :a :c2ubd{ mo:ns [:b1 ?b2] :sum 2}}
-               {:not {a:tom [:c1 {:] [:c3 "£C"]valence 3}]}}]}

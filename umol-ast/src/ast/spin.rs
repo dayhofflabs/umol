@@ -1,7 +1,6 @@
 //! Spin-state AST.
 
-use umol_shared::error::SpinStateError;
-use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
+use umol_shared::spin::SpinState;
 
 use super::value::ValueAst;
 
@@ -37,49 +36,12 @@ impl SpinStateAst {
         Self::from_state(SpinState::closed_shell())
     }
 
-    /// Validate that literal fields fit within physical ranges and, when both
-    /// fields are literal, that the `(unpaired, multiplicity)` pair is
-    /// chemically compatible.
-    pub fn validate(&self) -> Result<(), SpinStateError> {
-        let u_lit =
-            match &self.unpaired {
-                ValueAst::Lit(n) => Some(u8::try_from(*n).map_err(|_| {
-                    SpinStateError::UnpairedElectronsOutOfRange { unpaired: u8::MAX }
-                })?),
-                _ => None,
-            };
-        if let Some(u) = u_lit {
-            if u > MAX_UNPAIRED_ELECTRONS {
-                return Err(SpinStateError::UnpairedElectronsOutOfRange { unpaired: u });
-            }
-        }
-        let m_mult = match &self.multiplicity {
-            ValueAst::Lit(n) => {
-                let m = u8::try_from(*n).map_err(|_| SpinStateError::MultiplicityOutOfRange {
-                    multiplicity: u8::MAX,
-                })?;
-                Some(
-                    SpinMultiplicity::from_multiplicity(m)
-                        .ok_or(SpinStateError::MultiplicityOutOfRange { multiplicity: m })?,
-                )
-            }
-            _ => None,
-        };
-        if let (Some(u), Some(m)) = (u_lit, m_mult) {
-            if !SpinState::are_compatible(u, m) {
-                return Err(SpinStateError::Incompatible {
-                    unpaired: u,
-                    multiplicity: m,
-                });
-            }
-        }
-        Ok(())
-    }
-
+    /// Both fields are literal. A ground spin state may still be physically
+    /// inconsistent — parity of `(unpaired, multiplicity)` is a tier-2
+    /// physics invariant enforced by a propagator in the solver, not here.
     pub fn is_ground(&self) -> bool {
         matches!(&self.unpaired, ValueAst::Lit(_))
             && matches!(&self.multiplicity, ValueAst::Lit(_))
-            && self.validate().is_ok()
     }
 
     /// Pattern matches target iff `unpaired` and `multiplicity` each
@@ -131,24 +93,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::ok(SpinStateAst::new(2, 3), Ok(()))]
-    #[case::unpaired_ok_partial(SpinStateAst::from_values(ValueAst::Lit(9), ValueAst::Undetermined), Ok(()))]
-    #[case::unpaired_out_of_range(SpinStateAst::from_values(ValueAst::Lit(10), ValueAst::Undetermined),
-        Err(SpinStateError::UnpairedElectronsOutOfRange { unpaired: 10 }))]
-    #[case::multiplicity_out_of_range(SpinStateAst::from_values(ValueAst::Undetermined, ValueAst::Lit(11)),
-        Err(SpinStateError::MultiplicityOutOfRange { multiplicity: 11 }))]
-    #[case::incompatible(SpinStateAst::new(0, 3), Err(SpinStateError::Incompatible { unpaired: 0, multiplicity: SpinMultiplicity::Triplet }))]
-    #[case::negative_unpaired(SpinStateAst::from_values(ValueAst::Lit(-1), ValueAst::Undetermined),
-        Err(SpinStateError::UnpairedElectronsOutOfRange { unpaired: u8::MAX }))]
-    fn test_spin_state_ast_validate(
-        #[case] ast: SpinStateAst,
-        #[case] expected: Result<(), SpinStateError>,
-    ) {
-        assert_eq!(ast.validate(), expected);
     }
 
     #[test]

@@ -1,8 +1,6 @@
 //! Domain errors for DSL parsing.
 
 use thiserror::Error;
-use umol_shared::error::SpinStateError;
-use umol_shared::spin::SpinMultiplicity;
 use winnow::error::{ErrMode, ParserError};
 use winnow::stream::Stream;
 
@@ -41,12 +39,6 @@ pub enum ParseError {
     ExpectedNoncovalentBondKind,
     #[error("trailing input: {0:?}")]
     TrailingInput(String),
-    #[error("unpaired electrons {unpaired} out of range")]
-    UnpairedElectronsOutOfRange { unpaired: u8 },
-    #[error("multiplicity {multiplicity} out of range")]
-    MultiplicityOutOfRange { multiplicity: u8 },
-    #[error("{unpaired} unpaired electrons, {multiplicity} multiplicity incompatible")]
-    IncompatibleSpin { unpaired: u8, multiplicity: SpinMultiplicity },
     #[error("raising error: {0}")]
     RaisingError(String),
     #[error("lowering error: {0}")]
@@ -67,27 +59,6 @@ pub enum ParseError {
     WrongFieldType { field: String, expected: String },
 }
 
-impl ParseError {
-    pub(crate) fn from_spin_state_error(err: SpinStateError) -> Self {
-        match err {
-            SpinStateError::UnpairedElectronsOutOfRange { unpaired } => {
-                ParseError::UnpairedElectronsOutOfRange { unpaired }
-            }
-            SpinStateError::MultiplicityOutOfRange { multiplicity } => {
-                ParseError::MultiplicityOutOfRange { multiplicity }
-            }
-            SpinStateError::Incompatible {
-                unpaired,
-                multiplicity,
-            } => ParseError::IncompatibleSpin {
-                unpaired,
-                multiplicity,
-            },
-            _ => ParseError::Syntax,
-        }
-    }
-}
-
 impl<I: Stream> ParserError<I> for ParseError {
     type Inner = Self;
 
@@ -97,5 +68,51 @@ impl<I: Stream> ParserError<I> for ParseError {
 
     fn into_inner(self) -> Result<Self::Inner, Self> {
         Ok(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+
+    use super::*;
+
+    #[rstest]
+    fn test_parse_error_parser_error_from_input_is_syntax() {
+        let input: &[u8] = b"bogus";
+        let err = <ParseError as ParserError<&[u8]>>::from_input(&input);
+        assert_eq!(err, ParseError::Syntax);
+    }
+
+    #[rstest]
+    #[case::trailing(ParseError::TrailingInput("rest".into()))]
+    #[case::syntax(ParseError::Syntax)]
+    #[case::invalid_value(ParseError::InvalidValue("x".into()))]
+    fn test_parse_error_into_inner_is_identity(#[case] err: ParseError) {
+        let cloned = err.clone();
+        let result = <ParseError as ParserError<&[u8]>>::into_inner(err);
+        assert_eq!(result, Ok(cloned));
+    }
+
+    #[rstest]
+    #[case::expected_element(
+        ParseError::ExpectedElement,
+        "expected atom element",
+    )]
+    #[case::unknown_atom_predicate(
+        ParseError::UnknownAtomPredicate("foo".into()),
+        "unknown atom predicate: foo",
+    )]
+    #[case::invalid_ref(
+        ParseError::InvalidRef { kind: "atom", value: "7".into() },
+        "invalid atom ref: 7",
+    )]
+    #[case::wrong_field_type(
+        ParseError::WrongFieldType { field: "charge".into(), expected: "int".into() },
+        "charge: expected int",
+    )]
+    fn test_parse_error_display(#[case] err: ParseError, #[case] expected: &str) {
+        assert_eq!(err.to_string(), expected);
     }
 }

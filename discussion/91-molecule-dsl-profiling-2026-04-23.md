@@ -1,7 +1,7 @@
 # Molecule DSL parsing — profiling and iterative optimization
 
-Date: 2026-04-23
-Status: Active
+Date: 2026-04-24
+Status: Completed
 
 ## Motivation
 

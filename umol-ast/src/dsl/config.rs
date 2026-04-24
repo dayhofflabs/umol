@@ -502,4 +502,132 @@ mod tests {
         assert_eq!(cfg.multicenter_valence, expected_multicenter);
         assert_eq!(cfg.aromatic_valence, expected_aromatic);
     }
+
+    // -- with_overrides --------
+
+    #[rstest]
+    fn test_atom_defaults_with_overrides_all_fields() {
+        let cfg = AtomDefaults::zeroed().with_overrides(AtomOverrides {
+            isotope: Some(IsotopeDefault::Required),
+            charge: Some(NumericDefault::Required),
+            implicit_hydrogens: Some(ImplicitHydrogensDefault::Normal),
+            lone_pairs: Some(NumericDefault::Required),
+            unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
+            multiplicity: Some(MultiplicityDefault::Required),
+            valence: Some(NumericDefault::Required),
+            donated_pairs: Some(NumericDefault::Required),
+            accepted_pairs: Some(NumericDefault::Required),
+            multicenter_valence: Some(MulticenterValenceDefault::Required),
+            aromatic_valence: Some(AromaticValenceDefault::Aromatic),
+        });
+        assert_eq!(cfg.isotope, IsotopeDefault::Required);
+        assert_eq!(cfg.charge, NumericDefault::Required);
+        assert_eq!(cfg.implicit_hydrogens, ImplicitHydrogensDefault::Normal);
+        assert_eq!(cfg.lone_pairs, NumericDefault::Required);
+        assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
+        assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
+        assert_eq!(cfg.valence, NumericDefault::Required);
+        assert_eq!(cfg.donated_pairs, NumericDefault::Required);
+        assert_eq!(cfg.accepted_pairs, NumericDefault::Required);
+        assert_eq!(cfg.multicenter_valence, MulticenterValenceDefault::Required);
+        assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::Aromatic);
+    }
+
+    #[rstest]
+    fn test_atom_defaults_with_overrides_partial_preserves_unset() {
+        let cfg = AtomDefaults::zeroed().with_overrides(AtomOverrides {
+            charge: Some(NumericDefault::Required),
+            ..AtomOverrides::default()
+        });
+        assert_eq!(cfg.charge, NumericDefault::Required);
+        // Untouched fields retain the zeroed() defaults.
+        assert_eq!(cfg.isotope, IsotopeDefault::Natural);
+        assert_eq!(cfg.implicit_hydrogens, ImplicitHydrogensDefault::Zero);
+        assert_eq!(cfg.valence, NumericDefault::Zero);
+        assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::NotAromatic);
+    }
+
+    #[rstest]
+    fn test_bond_defaults_with_overrides_all_fields() {
+        let cfg = BondDefaults::zeroed().with_overrides(BondOverrides {
+            charge: Some(NumericDefault::Required),
+            unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
+            multiplicity: Some(MultiplicityDefault::Required),
+        });
+        assert_eq!(cfg.charge, NumericDefault::Required);
+        assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
+        assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_defaults_with_overrides_all_fields() {
+        let cfg = AromaticSystemDefaults::zeroed().with_overrides(AromaticSystemOverrides {
+            charge: Some(NumericDefault::Required),
+            unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
+            multiplicity: Some(MultiplicityDefault::Required),
+            electrons: Some(NumericDefault::Required),
+        });
+        assert_eq!(cfg.charge, NumericDefault::Required);
+        assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
+        assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
+        assert_eq!(cfg.electrons, NumericDefault::Required);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_defaults_with_overrides_all_fields() {
+        let cfg = MulticenterBondDefaults::zeroed().with_overrides(MulticenterBondOverrides {
+            charge: Some(NumericDefault::Required),
+            unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
+            multiplicity: Some(MultiplicityDefault::Required),
+            electrons: Some(NumericDefault::Required),
+        });
+        assert_eq!(cfg.charge, NumericDefault::Required);
+        assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
+        assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
+        assert_eq!(cfg.electrons, NumericDefault::Required);
+    }
+
+    #[rstest]
+    fn test_dative_bond_defaults_with_overrides_is_noop() {
+        // `DativeBondDefaults` has no fields; `with_overrides` is an identity.
+        // Call-site coverage only; no field comparison.
+        let _ = DativeBondDefaults::zeroed().with_overrides(DativeBondOverrides::default());
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_defaults_with_overrides_is_noop() {
+        let _ =
+            NoncovalentBondDefaults::zeroed().with_overrides(NoncovalentBondOverrides::default());
+    }
+
+    #[rstest]
+    fn test_molecule_defaults_with_overrides_routes_to_per_entity() {
+        let cfg = MoleculeDefaults::zeroed().with_overrides(MoleculeOverrides {
+            atom: AtomOverrides {
+                charge: Some(NumericDefault::Required),
+                ..AtomOverrides::default()
+            },
+            bond: BondOverrides {
+                multiplicity: Some(MultiplicityDefault::Required),
+                ..BondOverrides::default()
+            },
+            aromatic_system: AromaticSystemOverrides {
+                electrons: Some(NumericDefault::Required),
+                ..AromaticSystemOverrides::default()
+            },
+            multicenter_bond: MulticenterBondOverrides {
+                charge: Some(NumericDefault::Required),
+                ..MulticenterBondOverrides::default()
+            },
+            dative_bond: DativeBondOverrides::default(),
+            noncovalent_bond: NoncovalentBondOverrides::default(),
+        });
+        assert_eq!(cfg.atom.charge, NumericDefault::Required);
+        assert_eq!(cfg.bond.multiplicity, MultiplicityDefault::Required);
+        assert_eq!(cfg.aromatic_system.electrons, NumericDefault::Required);
+        assert_eq!(cfg.multicenter_bond.charge, NumericDefault::Required);
+        // Untouched per-entity fields retain zeroed() values.
+        assert_eq!(cfg.atom.isotope, IsotopeDefault::Natural);
+        assert_eq!(cfg.bond.charge, NumericDefault::Zero);
+    }
 }

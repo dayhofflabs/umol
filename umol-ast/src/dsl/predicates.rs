@@ -76,7 +76,6 @@ pub(crate) fn apply_spin_pair(
             spin.multiplicity = v;
         }
     }
-    spin.validate().map_err(ParseError::from_spin_state_error)?;
     Ok(())
 }
 
@@ -225,7 +224,6 @@ pub(crate) fn lower_spin(
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_shared::spin::SpinMultiplicity;
 
     use super::*;
 
@@ -310,8 +308,6 @@ mod tests {
         ParseError::DuplicateAtomPredicate("#u".to_string()))]
     #[case::duplicate_multiplicity(spin(ValueAst::Undetermined, ValueAst::Lit(2)), SpinPredicate::Multiplicity(ValueAst::Lit(3)),
         ParseError::DuplicateAtomPredicate("#s".to_string()))]
-    #[case::incompatible(spin(ValueAst::Lit(1), ValueAst::Undetermined), SpinPredicate::Multiplicity(ValueAst::Lit(1)),
-        ParseError::IncompatibleSpin { unpaired: 1, multiplicity: SpinMultiplicity::Singlet })]
     fn test_apply_spin_pair_error(
         #[case] mut initial: SpinStateAst,
         #[case] pred: SpinPredicate,

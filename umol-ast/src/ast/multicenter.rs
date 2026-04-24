@@ -47,13 +47,31 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::default_all_undetermined(MulticenterBondAst::default(), false)]
-    #[case::ground(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1),
-        electrons: ValueAst::Lit(2), constraints: MulticenterBondConstraints::new() }, true)]
+    #[case::all_undetermined(MulticenterBondAst::default(), false)]
+    #[case::charge_only(MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::default(), ValueAst::Undetermined), false)]
+    #[case::all_ground(MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)), true)]
     fn test_multicenter_bond_ast_is_ground(
         #[case] ast: MulticenterBondAst,
         #[case] expected: bool,
     ) {
         assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::default_matches_ground(MulticenterBondAst::default(),
+        MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)), true)]
+    #[case::exact(MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)),
+        MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)), true)]
+    #[case::electrons_mismatch(MulticenterBondAst::new(ValueAst::Undetermined, SpinStateAst::default(), ValueAst::Lit(4)),
+        MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)), false)]
+    #[case::charge_mismatch(MulticenterBondAst::new(ValueAst::Lit(1), SpinStateAst::default(), ValueAst::Undetermined),
+        MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::default(), ValueAst::Undetermined), false)]
+    fn test_multicenter_bond_ast_matches(
+        #[case] pattern: MulticenterBondAst,
+        #[case] target: MulticenterBondAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
     }
 }

@@ -34,10 +34,3 @@ path = "fuzz_targets/fuzz_constraint.rs"
 test = false
 doc = false
 bench = false
-
-[[bin]]
-name = "fuzz_molecule_roundtrip"
-path = "fuzz_targets/fuzz_molecule_roundtrip.rs"
-test = false
-doc = false
-bench = false

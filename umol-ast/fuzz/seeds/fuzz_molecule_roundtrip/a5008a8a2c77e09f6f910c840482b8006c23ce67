@@ -1,2 +1,0 @@
-{:atoms [[:c1 "C"] [:c2 "C"] [:o "O"]]
- :bonds [{:id :b1 :a :c1 :b :c2 :type "1"} {:i{:not {:atom [:c1 {:valence 3}]}}]}

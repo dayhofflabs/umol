@@ -412,3 +412,124 @@ impl<'a> Index<MulticenterBondIdx> for MulticenterBondViews<'a> {
         self.set.data(RelationId::from(idx))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_shared::element::Element;
+
+    use super::*;
+    use crate::ast::aromatic::AromaticSystemAst;
+    use crate::ast::constraint::Constraints;
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::multicenter::MulticenterBondAst;
+    use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+
+    #[fixture]
+    fn rich() -> MoleculeAst {
+        MoleculeAst::new(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+                (AtomIdx(1), AtomIdx(2), BondAst::from_order(2)),
+                (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
+            ],
+            vec![(AtomIdx(2), AtomIdx(3), DativeBondAst::new())],
+            vec![(
+                vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+                AromaticSystemAst::default(),
+            )],
+            vec![(
+                vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+                MulticenterBondAst::default(),
+            )],
+            vec![(
+                AtomIdx(0),
+                AtomIdx(3),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    fn test_atom_views_count_and_ids(rich: MoleculeAst) {
+        let views = rich.atoms();
+        assert_eq!(views.count(), 4);
+        assert_eq!(
+            views.ids().collect::<Vec<_>>(),
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2), AtomIdx(3)],
+        );
+    }
+
+    #[rstest]
+    fn test_atom_views_index_trait(rich: MoleculeAst) {
+        let views = rich.atoms();
+        let atom: &AtomAst = &views[AtomIdx(2)];
+        assert_eq!(*atom, AtomAst::from_element(Element::N));
+    }
+
+    #[rstest]
+    fn test_bond_views_count_and_ids(rich: MoleculeAst) {
+        let views = rich.bonds();
+        assert_eq!(views.count(), 3);
+        assert_eq!(
+            views.ids().collect::<Vec<_>>(),
+            vec![BondIdx(0), BondIdx(1), BondIdx(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_bond_views_index_trait(rich: MoleculeAst) {
+        let views = rich.bonds();
+        let bond: &BondAst = &views[BondIdx(1)];
+        assert_eq!(*bond, BondAst::from_order(2));
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_count_ids_and_index(rich: MoleculeAst) {
+        let views = rich.dative_bonds();
+        assert_eq!(views.count(), 1);
+        assert_eq!(views.ids().collect::<Vec<_>>(), vec![DativeBondIdx(0)]);
+        let _: &DativeBondAst = &views[DativeBondIdx(0)];
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_count_ids_and_index(rich: MoleculeAst) {
+        let views = rich.aromatic_systems();
+        assert_eq!(views.count(), 1);
+        assert_eq!(
+            views.ids().collect::<Vec<_>>(),
+            vec![AromaticSystemIdx(0)],
+        );
+        let _: &AromaticSystemAst = &views[AromaticSystemIdx(0)];
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_views_count_ids_and_index(rich: MoleculeAst) {
+        let views = rich.multicenter_bonds();
+        assert_eq!(views.count(), 1);
+        assert_eq!(
+            views.ids().collect::<Vec<_>>(),
+            vec![MulticenterBondIdx(0)],
+        );
+        let _: &MulticenterBondAst = &views[MulticenterBondIdx(0)];
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_count_ids_and_index(rich: MoleculeAst) {
+        let views = rich.noncovalent_bonds();
+        assert_eq!(views.count(), 1);
+        assert_eq!(
+            views.ids().collect::<Vec<_>>(),
+            vec![NoncovalentBondIdx(0)],
+        );
+        let _: &NoncovalentBondAst = &views[NoncovalentBondIdx(0)];
+    }
+}

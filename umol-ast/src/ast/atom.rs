@@ -117,8 +117,27 @@ impl IsotopeAst {
         Self::Lit(mass as i64)
     }
 
+    /// Semantic ground: `Natural` and `Lit(_)` are the primary ground forms;
+    /// `LitSet`/`Expr` delegate through the shared helpers so constant-valued
+    /// expressions and singleton sets are also ground. Same fast-path /
+    /// cold-slow-path split as [`ValueAst::is_ground`].
+    #[inline]
     pub fn is_ground(&self) -> bool {
-        matches!(self, Self::Natural | Self::Lit(_))
+        match self {
+            Self::Natural | Self::Lit(_) => true,
+            Self::Undetermined => false,
+            _ => self.is_ground_slow(),
+        }
+    }
+
+    #[inline(never)]
+    #[cold]
+    fn is_ground_slow(&self) -> bool {
+        match self {
+            Self::LitSet(s) => super::value::litset_is_ground(s),
+            Self::Expr(e) => e.is_ground(),
+            Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
+        }
     }
 
     pub fn is_undetermined(&self) -> bool {
@@ -175,8 +194,27 @@ impl ImplicitHydrogensAst {
         Self::Lit(count as i64)
     }
 
+    /// Semantic ground: `Normal` and `Lit(_)` are the primary ground forms;
+    /// `LitSet`/`Expr` delegate through the shared helpers so constant-valued
+    /// expressions and singleton sets are also ground. Same fast-path /
+    /// cold-slow-path split as [`ValueAst::is_ground`].
+    #[inline]
     pub fn is_ground(&self) -> bool {
-        matches!(self, Self::Normal | Self::Lit(_))
+        match self {
+            Self::Normal | Self::Lit(_) => true,
+            Self::Undetermined => false,
+            _ => self.is_ground_slow(),
+        }
+    }
+
+    #[inline(never)]
+    #[cold]
+    fn is_ground_slow(&self) -> bool {
+        match self {
+            Self::LitSet(s) => super::value::litset_is_ground(s),
+            Self::Expr(e) => e.is_ground(),
+            Self::Normal | Self::Lit(_) | Self::Undetermined => unreachable!(),
+        }
     }
 
     pub fn is_undetermined(&self) -> bool {

@@ -1740,7 +1740,11 @@ mod tests {
     use umol_edn::{read_string, EdnKeyword};
 
     use super::*;
-    use crate::ast::constraint::{AtomConstraint, BondConstraint};
+    use crate::ast::constraint::{
+        AromaticSystemConstraint, AromaticValenceAst, AtomConstraint, BondConstraint,
+        DativeBondConstraint, MulticenterBondConstraint, MulticenterValenceAst,
+        NoncovalentBondConstraint,
+    };
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::value::ValueAst;
 
@@ -1845,6 +1849,7 @@ mod tests {
 
     // -- MoleculeConstraintDsl ----------------
 
+    #[fixture]
     fn full_counts() -> EntityCounts {
         EntityCounts {
             atom_count: 10,
@@ -1884,6 +1889,7 @@ mod tests {
         "{:connected [0 1 2]}"
     )]
     fn test_molecule_constraint_dsl_roundtrip(
+        #[from(full_counts)] counts: EntityCounts,
         #[case] input: MoleculeConstraint,
         #[case] edn_source: &str,
     ) {
@@ -1893,7 +1899,7 @@ mod tests {
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = MoleculeConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&full_counts(), &meta).unwrap();
+        let back = parsed.into_ast(&counts, &meta).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -1920,7 +1926,9 @@ mod tests {
     // -- SubPatternAnchorDsl ----------------
 
     #[rstest]
-    fn test_sub_pattern_anchor_dsl_empty_roundtrip() {
+    fn test_sub_pattern_anchor_dsl_empty_roundtrip(
+        #[from(full_counts)] counts: EntityCounts,
+    ) {
         let meta = Metadata::default();
         let anchor = SubPatternAnchor::new();
         let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
@@ -1928,7 +1936,6 @@ mod tests {
         // Empty anchor renders as an empty map.
         assert_eq!(edn, read_string("{}").unwrap());
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let counts = full_counts();
         let back = parsed
             .into_ast_pair(&counts, &meta, &counts, &meta)
             .unwrap();
@@ -1936,7 +1943,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_sub_pattern_anchor_dsl_atoms_roundtrip() {
+    fn test_sub_pattern_anchor_dsl_atoms_roundtrip(
+        #[from(full_counts)] counts: EntityCounts,
+    ) {
         let meta = Metadata::default();
         let mut anchor = SubPatternAnchor::new();
         anchor.push_atom(AtomIdx(3), AtomIdx(0));
@@ -1945,7 +1954,6 @@ mod tests {
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string("{:atoms [[3 0] [5 1]]}").unwrap());
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let counts = full_counts();
         let back = parsed
             .into_ast_pair(&counts, &meta, &counts, &meta)
             .unwrap();
@@ -1977,6 +1985,95 @@ mod tests {
     #[case::bond_leaf(
         Constraint::Bond(BondIdx(1), BondConstraint::Aromatic),
         "{:bond [1 :aromatic]}"
+    )]
+    #[case::dative_bond_leaf_ring_count(
+        Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::RingCount(ValueAst::Lit(1))),
+        "{:dative-bond [0 {:ring-count 1}]}"
+    )]
+    #[case::dative_bond_leaf_donor(
+        Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::Donor(AtomIdx(2))),
+        "{:dative-bond [0 {:donor 2}]}"
+    )]
+    #[case::dative_bond_leaf_acceptor(
+        Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::Acceptor(AtomIdx(3))),
+        "{:dative-bond [0 {:acceptor 3}]}"
+    )]
+    #[case::dative_bond_leaf_parallels(
+        Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::Parallels(BondIdx(2))),
+        "{:dative-bond [0 {:parallels 2}]}"
+    )]
+    #[case::dative_bond_leaf_donor_satisfies(
+        Constraint::DativeBond(
+            DativeBondIdx(0),
+            DativeBondConstraint::DonorSatisfies(Box::new(AtomConstraint::Valence(ValueAst::Lit(3)))),
+        ),
+        "{:dative-bond [0 {:donor-satisfies {:valence 3}}]}"
+    )]
+    #[case::aromatic_system_leaf_atoms(
+        Constraint::AromaticSystem(
+            AromaticSystemIdx(0),
+            AromaticSystemConstraint::Atoms(vec![AtomIdx(0), AtomIdx(1)]),
+        ),
+        "{:aromatic-system [0 {:atoms [0 1]}]}"
+    )]
+    #[case::aromatic_system_leaf_contains(
+        Constraint::AromaticSystem(
+            AromaticSystemIdx(0),
+            AromaticSystemConstraint::Contains(AtomIdx(2)),
+        ),
+        "{:aromatic-system [0 {:contains 2}]}"
+    )]
+    #[case::aromatic_system_leaf_all_atoms(
+        Constraint::AromaticSystem(
+            AromaticSystemIdx(0),
+            AromaticSystemConstraint::AllAtoms(Box::new(AtomConstraint::Valence(ValueAst::Lit(4)))),
+        ),
+        "{:aromatic-system [0 {:all-atoms {:valence 4}}]}"
+    )]
+    #[case::multicenter_leaf_atoms(
+        Constraint::MulticenterBond(
+            MulticenterBondIdx(0),
+            MulticenterBondConstraint::Atoms(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)]),
+        ),
+        "{:multicenter-bond [0 {:atoms [0 1 2]}]}"
+    )]
+    #[case::multicenter_leaf_contains_all(
+        Constraint::MulticenterBond(
+            MulticenterBondIdx(0),
+            MulticenterBondConstraint::ContainsAll(vec![AtomIdx(0), AtomIdx(1)]),
+        ),
+        "{:multicenter-bond [0 {:contains-all [0 1]}]}"
+    )]
+    #[case::multicenter_leaf_any_atom(
+        Constraint::MulticenterBond(
+            MulticenterBondIdx(0),
+            MulticenterBondConstraint::AnyAtom(Box::new(AtomConstraint::Degree(ValueAst::Lit(3)))),
+        ),
+        "{:multicenter-bond [0 {:any-atom {:degree 3}}]}"
+    )]
+    #[case::noncovalent_leaf_ends(
+        Constraint::NoncovalentBond(
+            NoncovalentBondIdx(0),
+            NoncovalentBondConstraint::Ends([AtomIdx(0), AtomIdx(3)]),
+        ),
+        "{:noncovalent-bond [0 {:ends [0 3]}]}"
+    )]
+    #[case::noncovalent_leaf_contains(
+        Constraint::NoncovalentBond(
+            NoncovalentBondIdx(0),
+            NoncovalentBondConstraint::Contains(AtomIdx(2)),
+        ),
+        "{:noncovalent-bond [0 {:contains 2}]}"
+    )]
+    #[case::noncovalent_leaf_ends_satisfy(
+        Constraint::NoncovalentBond(
+            NoncovalentBondIdx(0),
+            NoncovalentBondConstraint::EndsSatisfy([
+                Box::new(AtomConstraint::Valence(ValueAst::Lit(2))),
+                Box::new(AtomConstraint::Valence(ValueAst::Lit(3))),
+            ]),
+        ),
+        "{:noncovalent-bond [0 {:ends-satisfy [{:valence 2} {:valence 3}]}]}"
     )]
     #[case::molecule_connected(
         Constraint::Molecule(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)])),
@@ -2032,11 +2129,11 @@ mod tests {
         "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}"
     )]
     fn test_constraint_dsl_roundtrip(
+        #[from(full_counts)] counts: EntityCounts,
         #[case] input: Constraint,
         #[case] edn_source: &str,
     ) {
         let meta = Metadata::default();
-        let counts = full_counts();
         let dsl = ConstraintDsl::from_ast(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
@@ -2044,6 +2141,105 @@ mod tests {
         let parsed = ConstraintDsl::from_edn(&edn).unwrap();
         let back = parsed.into_ast(&counts, &meta).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::valence(AtomConstraint::Valence(ValueAst::Lit(4)), "{:valence 4}")]
+    #[case::aromatic_valence_not_aromatic(
+        AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
+        "{:aromatic-valence :not-aromatic}"
+    )]
+    #[case::aromatic_valence_aromatic(
+        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))),
+        "{:aromatic-valence {:aromatic 6}}"
+    )]
+    #[case::aromatic_valence_undetermined(
+        AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined),
+        "{:aromatic-valence :undetermined}"
+    )]
+    #[case::multicenter_valence_not_multicenter(
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
+        "{:multicenter-valence :not-multicenter}"
+    )]
+    #[case::multicenter_valence_multicenter(
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))),
+        "{:multicenter-valence {:multicenter 3}}"
+    )]
+    #[case::multicenter_valence_undetermined(
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined),
+        "{:multicenter-valence :undetermined}"
+    )]
+    #[case::donated_pairs(AtomConstraint::DonatedPairs(ValueAst::Lit(1)), "{:donated-pairs 1}")]
+    #[case::accepted_pairs(AtomConstraint::AcceptedPairs(ValueAst::Lit(2)), "{:accepted-pairs 2}")]
+    #[case::degree(AtomConstraint::Degree(ValueAst::Lit(3)), "{:degree 3}")]
+    #[case::connectivity(AtomConstraint::Connectivity(ValueAst::Lit(4)), "{:connectivity 4}")]
+    #[case::ring_connectivity(AtomConstraint::RingConnectivity(ValueAst::Lit(2)), "{:ring-connectivity 2}")]
+    #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
+    #[case::ring_count(AtomConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
+    #[case::ring_size(AtomConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
+    fn test_atom_constraint_dsl_roundtrip(
+        #[case] input: AtomConstraint,
+        #[case] edn_source: &str,
+    ) {
+        let dsl = AtomConstraintDsl::from_ast(&input, &()).unwrap();
+        let edn = dsl.to_edn();
+        let expected = read_string(edn_source).unwrap();
+        assert_eq!(edn, expected, "render mismatch");
+        let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
+        let back = parsed.into_ast(&()).unwrap();
+        assert_eq!(back, input, "parse-back mismatch");
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(BondConstraint::Aromatic, "{:bond [0 :aromatic]}")]
+    #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)), "{:bond [0 {:ring-count 1}]}")]
+    #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), "{:bond [0 {:ring-size 6}]}")]
+    fn test_bond_constraint_dsl_roundtrip(
+        #[from(full_counts)] counts: EntityCounts,
+        #[case] input: BondConstraint,
+        #[case] edn_source: &str,
+    ) {
+        let wrapped = Constraint::Bond(BondIdx(0), input.clone());
+        let meta = Metadata::default();
+        let dsl = ConstraintDsl::from_ast(&wrapped, &meta).unwrap();
+        let edn = dsl.to_edn();
+        let expected = read_string(edn_source).unwrap();
+        assert_eq!(edn, expected);
+        let parsed = ConstraintDsl::from_edn(&edn).unwrap();
+        let back = parsed.into_ast(&counts, &meta).unwrap();
+        assert_eq!(back, wrapped);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::atom_unknown_key("{:atom [0 {:bogus 1}]}")]
+    #[case::bond_unknown_key("{:bond [0 {:bogus 1}]}")]
+    #[case::bond_unknown_keyword("{:bond [0 :bogus]}")]
+    #[case::bond_wrong_type("{:bond [0 42]}")]
+    #[case::dative_unknown_key("{:dative-bond [0 {:bogus 1}]}")]
+    #[case::aromatic_system_unknown_key("{:aromatic-system [0 {:bogus 1}]}")]
+    #[case::multicenter_unknown_key("{:multicenter-bond [0 {:bogus 1}]}")]
+    #[case::noncovalent_unknown_key("{:noncovalent-bond [0 {:bogus 1}]}")]
+    #[case::aromatic_valence_unknown_keyword("{:atom [0 {:aromatic-valence :bogus}]}")]
+    #[case::aromatic_valence_unknown_key("{:atom [0 {:aromatic-valence {:bogus 1}}]}")]
+    #[case::multicenter_valence_unknown_keyword("{:atom [0 {:multicenter-valence :bogus}]}")]
+    #[case::multicenter_valence_unknown_key("{:atom [0 {:multicenter-valence {:bogus 1}}]}")]
+    fn test_constraint_dsl_rejects_invalid_subvariant(#[case] source: &str) {
+        let edn = read_string(source).unwrap();
+        let err = ConstraintDsl::from_edn(&edn).unwrap_err();
+        // Every case must fail; the specific error variant varies.
+        assert!(
+            matches!(
+                err,
+                DeError::UnknownField { .. }
+                    | DeError::TypeMismatch { .. }
+                    | DeError::Custom(_)
+                    | DeError::MissingField { .. },
+            ),
+            "unexpected error: {err:?}",
+        );
     }
 
     #[rstest]
@@ -2056,9 +2252,10 @@ mod tests {
     // -- ConstraintsDsl ----------------
 
     #[rstest]
-    fn test_constraints_dsl_empty_roundtrip() {
+    fn test_constraints_dsl_empty_roundtrip(
+        #[from(full_counts)] counts: EntityCounts,
+    ) {
         let meta = Metadata::default();
-        let counts = full_counts();
         let cs = Constraints::new();
         let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
         let edn = dsl.to_edn();
@@ -2069,9 +2266,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_constraints_dsl_multi_roundtrip() {
+    fn test_constraints_dsl_multi_roundtrip(
+        #[from(full_counts)] counts: EntityCounts,
+    ) {
         let meta = Metadata::default();
-        let counts = full_counts();
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(
             AtomIdx(0),
