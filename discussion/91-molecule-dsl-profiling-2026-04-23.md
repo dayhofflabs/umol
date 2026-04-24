@@ -650,3 +650,94 @@ only for pattern queries), #6 (pre-reserve Vec capacity). Parse path
 still has room: `id.clone()` sites in the dedup-plus-insert pattern
 (Section 11 audit finding C) are worth considering if parse becomes the
 next target.
+
+## 13. Iteration 6 — audit point B: `IntoAst` per-entity clones
+
+### 13.1 Motivation
+
+Audit finding B (Section 11 follow-up): `IntoAst for MoleculeDsl` at
+`molecule.rs:562` cloned each entity while walking `atoms_mut()`,
+`bonds_mut()`, etc., even though the slot was owned exclusively and
+about to be overwritten. Pattern was:
+
+```rust
+for atom in ast.atoms_mut() {
+    *atom = AtomDsl(atom.clone()).into_ast(&cfg.atom)?;
+}
+```
+
+### 13.2 New bench target
+
+Added `benches/conversion.rs` covering the `FromAst` and `IntoAst`
+paths on `MoleculeDsl` — neither is exercised by the parse/render
+benches (those bypass the trait via `MoleculeInput::into_ast`).
+
+### 13.3 Baselines (current code, before fix)
+
+`FromAst` (AST → DSL):
+
+| Input               | Time    | Thrpt       |
+| ------------------- | ------- | ----------- |
+| small               | 0.40 µs | 87 MiB/s    |
+| benzene             | 0.96 µs | 151 MiB/s   |
+| indole              | 1.29 µs | 244 MiB/s   |
+| with_constraints    | 0.68 µs | 372 MiB/s   |
+| large_no_ids        | 9.9 µs  | 153 MiB/s   |
+| large_all_ids       | 9.9 µs  | 220 MiB/s   |
+| large_partial_ids   | 9.9 µs  | 160 MiB/s   |
+
+`IntoAst` (DSL → AST):
+
+| Input               | Time     | Thrpt       |
+| ------------------- | -------- | ----------- |
+| small               | 0.61 µs  | 58 MiB/s    |
+| benzene             | 1.66 µs  | 87 MiB/s    |
+| indole              | 2.56 µs  | 122 MiB/s   |
+| with_constraints    | 0.97 µs  | 262 MiB/s   |
+| large_no_ids        | 24.2 µs  | 62 MiB/s    |
+| large_all_ids       | 25.3 µs  | 86 MiB/s    |
+| large_partial_ids   | 24.6 µs  | 64 MiB/s    |
+
+`IntoAst` is ~2.5× slower than `FromAst` on the large inputs — a clear
+signal for the per-entity clone hypothesis.
+
+### 13.4 Fix
+
+Replace `atom.clone()` with `std::mem::take(atom)` in the four entity
+loops of `IntoAst for MoleculeDsl`. The slot is owned exclusively and
+about to be overwritten, so moving out and leaving `Default::default()`
+in place is sound. `FromAst for MoleculeDsl` does not need the same
+treatment — its entity loop uses `AtomDsl::from_ast(&atom, cfg)` which
+takes `&atom` and has no inner clone.
+
+### 13.5 Results
+
+All 1296 umol-ast tests pass.
+
+| Input                    | Baseline  | After     | Δ     |
+| ------------------------ | --------- | --------- | ----- |
+| small                    | 58 MiB/s  | 57 MiB/s  | noise |
+| benzene                  | 87 MiB/s  | 93 MiB/s  | +7 %  |
+| indole                   | 122 MiB/s | 130 MiB/s | +5.7% |
+| with_constraints         | 262 MiB/s | 272 MiB/s | +4.4% |
+| large_no_ids             | 62 MiB/s  | 64 MiB/s  | +3.5% |
+| large_all_ids            | 86 MiB/s  | 89 MiB/s  | +3.8% |
+| large_partial_ids        | 64 MiB/s  | 68 MiB/s  | +5.6% |
+
+### 13.6 Interpretation
+
+The win is smaller than the ~20 % I predicted from byte-count napkin
+math. Two factors probably explain the gap: (a) the derived `Clone` on
+`AtomAst` is already efficient (post-iter-1 the slotmap is a 96 B
+`SmallVec`, not the old 440 B fixed array), and (b) the compiler likely
+RVOs part of the write-then-overwrite into a single store.
+
+The 900 ns saved on `large_no_ids` works out to ~4.5 ns per entity —
+below a cache-line write. The change is still worth keeping: idiomatic,
+touches correctness-neutral code, and the bench is now a regression net
+for future edits to this path.
+
+### 13.7 Point B closed
+
+`IntoAst` now uses `mem::take`. `FromAst` uses the already-optimal
+`&atom`-taking lower. No further action on point B.

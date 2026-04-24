@@ -42,6 +42,10 @@ harness = false
 name = "rendering"
 harness = false
 
+[[bench]]
+name = "conversion"
+harness = false
+
 [lints.clippy]
 absolute_paths = "warn"
 mod_module_files = "warn"

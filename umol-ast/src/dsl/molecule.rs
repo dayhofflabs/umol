@@ -14,6 +14,7 @@
 
 use std::borrow::Cow;
 use std::fmt::{self, Display};
+use std::mem::take;
 use std::str::FromStr;
 
 use bimap::BiMap;
@@ -562,16 +563,16 @@ impl IntoAst<MoleculeAst> for MoleculeDsl {
     fn into_ast<'a>(self, cfg: &Self::Ctx<'a>) -> Result<MoleculeAst, ParseError> {
         let mut ast = self.ast;
         for atom in ast.atoms_mut() {
-            *atom = AtomDsl(atom.clone()).into_ast(&cfg.atom)?;
+            *atom = AtomDsl(take(atom)).into_ast(&cfg.atom)?;
         }
         for bond in ast.bonds_mut() {
-            *bond = BondDsl(bond.clone()).into_ast(&cfg.bond)?;
+            *bond = BondDsl(take(bond)).into_ast(&cfg.bond)?;
         }
         for system in ast.aromatic_systems_mut() {
-            *system = AromaticSystemDsl(system.clone()).into_ast(&cfg.aromatic_system)?;
+            *system = AromaticSystemDsl(take(system)).into_ast(&cfg.aromatic_system)?;
         }
         for bond in ast.multicenter_bonds_mut() {
-            *bond = MulticenterBondDsl(bond.clone()).into_ast(&cfg.multicenter_bond)?;
+            *bond = MulticenterBondDsl(take(bond)).into_ast(&cfg.multicenter_bond)?;
         }
         Ok(ast)
     }
