@@ -1,0 +1,3 @@
+{:atoms [[:ntoms [[:n "N"] [:c2 "C"] [:c3 "C"] [:c3a "C"] [:c4 "C"]c4 "C"] [:c5 "C"] [:c6 "C"] [:c7 "C"] [:c7a "C"]]
+ [[:n "N"] [:c2 "2 :c3 :c3a :0 "1"]]
+ :aromatic [{:atoms =0 1 2 3 4 c4 :c5 :c6 c3 :c3a "1"] [:c3a :c4 "}

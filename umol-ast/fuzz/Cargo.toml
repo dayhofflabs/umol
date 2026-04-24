@@ -1,0 +1,43 @@
+[package]
+name = "umol-ast-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+umol-ast = { path = ".." }
+umol-edn = { path = "../../umol-edn" }
+
+[[bin]]
+name = "fuzz_entity_strings"
+path = "fuzz_targets/fuzz_entity_strings.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_molecule"
+path = "fuzz_targets/fuzz_molecule.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_constraint"
+path = "fuzz_targets/fuzz_constraint.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_molecule_roundtrip"
+path = "fuzz_targets/fuzz_molecule_roundtrip.rs"
+test = false
+doc = false
+bench = false

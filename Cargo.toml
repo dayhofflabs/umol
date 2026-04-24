@@ -11,7 +11,7 @@ members = [
     "umol-msym-sys",
     "umol-params",
 ]
-exclude = ["umol-edn/fuzz", "umol-graph/fuzz"]
+exclude = ["umol-ast/fuzz", "umol-edn/fuzz", "umol-graph/fuzz"]
 resolver = "2"
 
 [profile.bench]
