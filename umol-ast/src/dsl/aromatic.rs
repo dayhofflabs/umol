@@ -13,7 +13,8 @@ use winnow::token::take;
 use winnow::Parser;
 
 use super::atom::AtomConstraintDsl;
-use super::constraint::{AtomRef, ResolveContext};
+use super::constraint::{AtomRef, EntityCounts};
+use super::molecule::Metadata;
 use super::error::{PResult, ParseError};
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
@@ -79,10 +80,10 @@ impl ToEdn for AromaticSystemDsl {
 }
 
 impl FromAst<AromaticSystemAst> for AromaticSystemDsl {
-    type Ctx<'a> = AromaticSystemDefaults;
+    type Ctx = AromaticSystemDefaults;
     type Error = ParseError;
 
-    fn from_ast<'a>(ast: &AromaticSystemAst, cfg: &Self::Ctx<'a>) -> Result<Self, ParseError> {
+    fn from_ast(ast: &AromaticSystemAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
         let mut out = ast.clone();
         lower_aromatic(&mut out, cfg);
         Ok(AromaticSystemDsl(out))
@@ -90,10 +91,10 @@ impl FromAst<AromaticSystemAst> for AromaticSystemDsl {
 }
 
 impl IntoAst<AromaticSystemAst> for AromaticSystemDsl {
-    type Ctx<'a> = AromaticSystemDefaults;
+    type Ctx = AromaticSystemDefaults;
     type Error = ParseError;
 
-    fn into_ast<'a>(mut self, cfg: &Self::Ctx<'a>) -> Result<AromaticSystemAst, ParseError> {
+    fn into_ast(mut self, cfg: &Self::Ctx) -> Result<AromaticSystemAst, ParseError> {
         raise_aromatic(&mut self.0, cfg);
         Ok(self.0)
     }
@@ -314,12 +315,11 @@ impl ToEdn for AromaticSystemConstraintDsl {
     }
 }
 
-impl FromAst<AromaticSystemConstraint> for AromaticSystemConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = Infallible;
-
-    fn from_ast<'a>(c: &AromaticSystemConstraint, ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
-        let meta = ctx.metadata;
+impl AromaticSystemConstraintDsl {
+    pub(crate) fn from_ast(
+        c: &AromaticSystemConstraint,
+        meta: &Metadata,
+    ) -> Result<Self, Infallible> {
         Ok(match c {
             AromaticSystemConstraint::Atoms(atoms) => {
                 Self::Atoms(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
@@ -336,23 +336,21 @@ impl FromAst<AromaticSystemConstraint> for AromaticSystemConstraintDsl {
             }
         })
     }
-}
 
-impl IntoAst<AromaticSystemConstraint> for AromaticSystemConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<AromaticSystemConstraint, ParseError> {
-        let meta = ctx.metadata;
+    pub(crate) fn into_ast(
+        self,
+        counts: &EntityCounts,
+        meta: &Metadata,
+    ) -> Result<AromaticSystemConstraint, ParseError> {
         let resolve_atoms = |refs: Vec<AtomRef>| -> Result<Vec<_>, ParseError> {
             refs.into_iter()
-                .map(|r| r.into_ast(ctx.atom_count, meta))
+                .map(|r| r.into_ast(counts.atom_count, meta))
                 .collect()
         };
         Ok(match self {
             Self::Atoms(refs) => AromaticSystemConstraint::Atoms(resolve_atoms(refs)?),
             Self::Contains(r) => {
-                AromaticSystemConstraint::Contains(r.into_ast(ctx.atom_count, meta)?)
+                AromaticSystemConstraint::Contains(r.into_ast(counts.atom_count, meta)?)
             }
             Self::ContainsAll(refs) => AromaticSystemConstraint::ContainsAll(resolve_atoms(refs)?),
             Self::AllAtoms(c) => {
@@ -505,15 +503,14 @@ mod tests {
 
     // -- AromaticSystemConstraintDsl ----------------
 
-    fn ctx_with_atoms(atom_count: usize, meta: &Metadata) -> ResolveContext<'_> {
-        ResolveContext {
+    fn counts_with_atoms(atom_count: usize) -> EntityCounts {
+        EntityCounts {
             atom_count,
             bond_count: 0,
             dative_bond_count: 0,
             aromatic_system_count: 0,
             multicenter_bond_count: 0,
             noncovalent_bond_count: 0,
-            metadata: meta,
         }
     }
 
@@ -529,13 +526,12 @@ mod tests {
         #[case] edn_source: &str,
     ) {
         let meta = Metadata::default();
-        let render_ctx = ResolveContext::for_rendering(&meta);
-        let dsl = AromaticSystemConstraintDsl::from_ast(&input, &render_ctx).unwrap();
+        let dsl = AromaticSystemConstraintDsl::from_ast(&input, &meta).unwrap();
         let edn = dsl.clone().to_edn();
         let expected = umol_edn::read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = AromaticSystemConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&ctx_with_atoms(10, &meta)).unwrap();
+        let back = parsed.into_ast(&counts_with_atoms(10), &meta).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -544,7 +540,7 @@ mod tests {
         let meta = Metadata::default();
         let edn = umol_edn::read_string("{:contains 99}").unwrap();
         let dsl = AromaticSystemConstraintDsl::from_edn(&edn).unwrap();
-        let err = dsl.into_ast(&ctx_with_atoms(5, &meta)).unwrap_err();
+        let err = dsl.into_ast(&counts_with_atoms(5), &meta).unwrap_err();
         assert_eq!(
             err,
             ParseError::InvalidRef {

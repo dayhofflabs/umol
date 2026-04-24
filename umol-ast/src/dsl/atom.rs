@@ -88,10 +88,10 @@ impl ToEdn for AtomDsl {
 }
 
 impl FromAst<AtomAst> for AtomDsl {
-    type Ctx<'a> = AtomDefaults;
+    type Ctx = AtomDefaults;
     type Error = ParseError;
 
-    fn from_ast<'a>(ast: &AtomAst, cfg: &Self::Ctx<'a>) -> Result<Self, ParseError> {
+    fn from_ast(ast: &AtomAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
         let mut out = ast.clone();
         lower_atom(&mut out, cfg);
         Ok(AtomDsl(out))
@@ -99,10 +99,10 @@ impl FromAst<AtomAst> for AtomDsl {
 }
 
 impl IntoAst<AtomAst> for AtomDsl {
-    type Ctx<'a> = AtomDefaults;
+    type Ctx = AtomDefaults;
     type Error = ParseError;
 
-    fn into_ast<'a>(mut self, cfg: &Self::Ctx<'a>) -> Result<AtomAst, ParseError> {
+    fn into_ast(mut self, cfg: &Self::Ctx) -> Result<AtomAst, ParseError> {
         raise_atom(&mut self.0, cfg);
         Ok(self.0)
     }
@@ -852,19 +852,19 @@ impl ToEdn for AromaticValenceDsl {
 }
 
 impl FromAst<AromaticValenceAst> for AromaticValenceDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(ast: &AromaticValenceAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+    fn from_ast(ast: &AromaticValenceAst, _ctx: &Self::Ctx) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
 
 impl IntoAst<AromaticValenceAst> for AromaticValenceDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<AromaticValenceAst, Infallible> {
+    fn into_ast(self, _ctx: &Self::Ctx) -> Result<AromaticValenceAst, Infallible> {
         Ok(self.0)
     }
 }
@@ -928,19 +928,19 @@ impl ToEdn for MulticenterValenceDsl {
 }
 
 impl FromAst<MulticenterValenceAst> for MulticenterValenceDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(ast: &MulticenterValenceAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+    fn from_ast(ast: &MulticenterValenceAst, _ctx: &Self::Ctx) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
 
 impl IntoAst<MulticenterValenceAst> for MulticenterValenceDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<MulticenterValenceAst, Infallible> {
+    fn into_ast(self, _ctx: &Self::Ctx) -> Result<MulticenterValenceAst, Infallible> {
         Ok(self.0)
     }
 }
@@ -1060,19 +1060,19 @@ impl ToEdn for AtomConstraintDsl {
 }
 
 impl FromAst<AtomConstraint> for AtomConstraintDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(ast: &AtomConstraint, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+    fn from_ast(ast: &AtomConstraint, _ctx: &Self::Ctx) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
 
 impl IntoAst<AtomConstraint> for AtomConstraintDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<AtomConstraint, Infallible> {
+    fn into_ast(self, _ctx: &Self::Ctx) -> Result<AtomConstraint, Infallible> {
         Ok(self.0)
     }
 }

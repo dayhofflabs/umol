@@ -21,38 +21,35 @@ use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint, SubPat
 use crate::ast::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
+use crate::ast::molecule::MoleculeAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::dsl::config::MoleculeDefaults;
 
-/// Resolution context for turning DSL refs (`AtomRef`, `BondRef`, ...) into
-/// AST indices. Bundles the per-entity counts (for numeric index bounds
-/// checking) with a borrowed `Metadata` (for id → index lookup). Used
-/// uniformly by all constraint DSLs that contain refs, both on the
-/// `FromAst` direction (only `metadata` is read — counts are ignored) and on
-/// the `IntoAst` direction (both counts and `metadata` are read).
-pub struct ResolveContext<'a> {
-    pub atom_count: usize,
-    pub bond_count: usize,
-    pub dative_bond_count: usize,
-    pub aromatic_system_count: usize,
-    pub multicenter_bond_count: usize,
-    pub noncovalent_bond_count: usize,
-    pub metadata: &'a Metadata,
+/// Per-entity counts for numeric-index bounds checking during constraint
+/// resolution (DSL → AST). `from_ast` (AST → DSL) does not read counts.
+///
+/// Crate-internal. `Copy` (48 B of primitives) — callers pass by reference
+/// for consistency with `Metadata`, not for cost reasons.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EntityCounts {
+    pub(crate) atom_count: usize,
+    pub(crate) bond_count: usize,
+    pub(crate) dative_bond_count: usize,
+    pub(crate) aromatic_system_count: usize,
+    pub(crate) multicenter_bond_count: usize,
+    pub(crate) noncovalent_bond_count: usize,
 }
 
-impl<'a> ResolveContext<'a> {
-    /// Construct a context with only `metadata` populated; all counts zero.
-    /// Appropriate for the `FromAst` direction, where counts are not read.
-    pub fn for_rendering(metadata: &'a Metadata) -> Self {
+impl EntityCounts {
+    pub(crate) fn from_ast(ast: &MoleculeAst) -> Self {
         Self {
-            atom_count: 0,
-            bond_count: 0,
-            dative_bond_count: 0,
-            aromatic_system_count: 0,
-            multicenter_bond_count: 0,
-            noncovalent_bond_count: 0,
-            metadata,
+            atom_count: ast.atom_count(),
+            bond_count: ast.bond_count(),
+            dative_bond_count: ast.dative_bond_count(),
+            aromatic_system_count: ast.aromatic_system_count(),
+            multicenter_bond_count: ast.multicenter_bond_count(),
+            noncovalent_bond_count: ast.noncovalent_bond_count(),
         }
     }
 }
@@ -887,12 +884,11 @@ pub enum MoleculeConstraintDsl {
     },
 }
 
-impl FromAst<MoleculeConstraint> for MoleculeConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn from_ast<'a>(c: &MoleculeConstraint, ctx: &Self::Ctx<'a>) -> Result<Self, ParseError> {
-        let meta = ctx.metadata;
+impl MoleculeConstraintDsl {
+    pub(crate) fn from_ast(
+        c: &MoleculeConstraint,
+        meta: &Metadata,
+    ) -> Result<Self, ParseError> {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
                 atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
@@ -921,54 +917,48 @@ impl FromAst<MoleculeConstraint> for MoleculeConstraintDsl {
             }
         })
     }
-}
 
-impl IntoAst<MoleculeConstraint> for MoleculeConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<MoleculeConstraint, ParseError> {
-        let meta = ctx.metadata;
+    pub(crate) fn into_ast(
+        self,
+        counts: &EntityCounts,
+        meta: &Metadata,
+    ) -> Result<MoleculeConstraint, ParseError> {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
                 atoms: atoms
                     .into_iter()
-                    .map(|r| r.into_ast(ctx.atom_count, meta))
+                    .map(|r| r.into_ast(counts.atom_count, meta))
                     .collect::<Result<_, _>>()?,
                 sum: sum.into_ast(&()).unwrap(),
             },
             Self::SpinSum { atoms, spin } => MoleculeConstraint::SpinSum {
                 atoms: atoms
                     .into_iter()
-                    .map(|r| r.into_ast(ctx.atom_count, meta))
+                    .map(|r| r.into_ast(counts.atom_count, meta))
                     .collect::<Result<_, _>>()?,
                 spin,
             },
             Self::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
                 bonds: bonds
                     .into_iter()
-                    .map(|r| r.into_ast(ctx.bond_count, meta))
+                    .map(|r| r.into_ast(counts.bond_count, meta))
                     .collect::<Result<_, _>>()?,
                 sum: sum.into_ast(&()).unwrap(),
             },
             Self::Connected(atoms) => MoleculeConstraint::Connected(
                 atoms
                     .into_iter()
-                    .map(|r| r.into_ast(ctx.atom_count, meta))
+                    .map(|r| r.into_ast(counts.atom_count, meta))
                     .collect::<Result<_, _>>()?,
             ),
             Self::SubPattern { anchor, pattern } => {
                 let pattern_ast = (*pattern).into_ast(&MoleculeDefaults::zeroed())?;
-                let pattern_ctx = ResolveContext {
-                    atom_count: pattern_ast.atom_count(),
-                    bond_count: pattern_ast.bond_count(),
-                    dative_bond_count: pattern_ast.dative_bond_count(),
-                    aromatic_system_count: pattern_ast.aromatic_system_count(),
-                    multicenter_bond_count: pattern_ast.multicenter_bond_count(),
-                    noncovalent_bond_count: pattern_ast.noncovalent_bond_count(),
-                    metadata: ctx.metadata, // pattern metadata is lost after into_ast
-                };
-                let anchor_ast = anchor.into_ast_pair(ctx, &pattern_ctx)?;
+                let pattern_counts = EntityCounts::from_ast(&pattern_ast);
+                // Pattern metadata is lost after into_ast; use the target
+                // metadata for pattern-side resolution too. Pattern-side refs
+                // will never hit the id path (pattern DSL has no ids after
+                // conversion).
+                let anchor_ast = anchor.into_ast_pair(counts, meta, &pattern_counts, meta)?;
                 MoleculeConstraint::SubPattern {
                     anchor: anchor_ast,
                     pattern: Box::new(pattern_ast),
@@ -1172,48 +1162,50 @@ impl SubPatternAnchorDsl {
         }
     }
 
-    /// Resolve to an AST anchor. `target_ctx` carries outer-molecule counts +
-    /// metadata; `pattern_ctx` carries pattern-molecule counts + metadata.
-    pub fn into_ast_pair(
+    /// Resolve to an AST anchor. `target_*` carry outer-molecule counts +
+    /// metadata; `pattern_*` carry pattern-molecule counts + metadata.
+    pub(crate) fn into_ast_pair(
         self,
-        target_ctx: &ResolveContext,
-        pattern_ctx: &ResolveContext,
+        target_counts: &EntityCounts,
+        target_meta: &Metadata,
+        pattern_counts: &EntityCounts,
+        pattern_meta: &Metadata,
     ) -> Result<SubPatternAnchor, ParseError> {
         let mut anchor = SubPatternAnchor::new();
         for (t, p) in self.atoms {
             anchor.push_atom(
-                t.into_ast(target_ctx.atom_count, target_ctx.metadata)?,
-                p.into_ast(pattern_ctx.atom_count, pattern_ctx.metadata)?,
+                t.into_ast(target_counts.atom_count, target_meta)?,
+                p.into_ast(pattern_counts.atom_count, pattern_meta)?,
             );
         }
         for (t, p) in self.bonds {
             anchor.push_bond(
-                t.into_ast(target_ctx.bond_count, target_ctx.metadata)?,
-                p.into_ast(pattern_ctx.bond_count, pattern_ctx.metadata)?,
+                t.into_ast(target_counts.bond_count, target_meta)?,
+                p.into_ast(pattern_counts.bond_count, pattern_meta)?,
             );
         }
         for (t, p) in self.dative_bonds {
             anchor.push_dative_bond(
-                t.into_ast(target_ctx.dative_bond_count, target_ctx.metadata)?,
-                p.into_ast(pattern_ctx.dative_bond_count, pattern_ctx.metadata)?,
+                t.into_ast(target_counts.dative_bond_count, target_meta)?,
+                p.into_ast(pattern_counts.dative_bond_count, pattern_meta)?,
             );
         }
         for (t, p) in self.aromatic_systems {
             anchor.push_aromatic_system(
-                t.into_ast(target_ctx.aromatic_system_count, target_ctx.metadata)?,
-                p.into_ast(pattern_ctx.aromatic_system_count, pattern_ctx.metadata)?,
+                t.into_ast(target_counts.aromatic_system_count, target_meta)?,
+                p.into_ast(pattern_counts.aromatic_system_count, pattern_meta)?,
             );
         }
         for (t, p) in self.multicenter_bonds {
             anchor.push_multicenter_bond(
-                t.into_ast(target_ctx.multicenter_bond_count, target_ctx.metadata)?,
-                p.into_ast(pattern_ctx.multicenter_bond_count, pattern_ctx.metadata)?,
+                t.into_ast(target_counts.multicenter_bond_count, target_meta)?,
+                p.into_ast(pattern_counts.multicenter_bond_count, pattern_meta)?,
             );
         }
         for (t, p) in self.noncovalent_bonds {
             anchor.push_noncovalent_bond(
-                t.into_ast(target_ctx.noncovalent_bond_count, target_ctx.metadata)?,
-                p.into_ast(pattern_ctx.noncovalent_bond_count, pattern_ctx.metadata)?,
+                t.into_ast(target_counts.noncovalent_bond_count, target_meta)?,
+                p.into_ast(pattern_counts.noncovalent_bond_count, pattern_meta)?,
             );
         }
         Ok(anchor)
@@ -1550,12 +1542,8 @@ impl ToEdn for ConstraintDsl {
     }
 }
 
-impl FromAst<Constraint> for ConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn from_ast<'a>(c: &Constraint, ctx: &Self::Ctx<'a>) -> Result<Self, ParseError> {
-        let meta = ctx.metadata;
+impl ConstraintDsl {
+    pub(crate) fn from_ast(c: &Constraint, meta: &Metadata) -> Result<Self, ParseError> {
         Ok(match c {
             Constraint::Atom(idx, c) => Self::Atom(
                 AtomRef::from_ast(*idx, meta),
@@ -1567,76 +1555,75 @@ impl FromAst<Constraint> for ConstraintDsl {
             ),
             Constraint::DativeBond(idx, c) => Self::DativeBond(
                 DativeBondRef::from_ast(*idx, meta),
-                DativeBondConstraintDsl::from_ast(c, ctx).unwrap(),
+                DativeBondConstraintDsl::from_ast(c, meta).unwrap(),
             ),
             Constraint::AromaticSystem(idx, c) => Self::AromaticSystem(
                 AromaticSystemRef::from_ast(*idx, meta),
-                AromaticSystemConstraintDsl::from_ast(c, ctx).unwrap(),
+                AromaticSystemConstraintDsl::from_ast(c, meta).unwrap(),
             ),
             Constraint::MulticenterBond(idx, c) => Self::MulticenterBond(
                 MulticenterBondRef::from_ast(*idx, meta),
-                MulticenterBondConstraintDsl::from_ast(c, ctx).unwrap(),
+                MulticenterBondConstraintDsl::from_ast(c, meta).unwrap(),
             ),
             Constraint::NoncovalentBond(idx, c) => Self::NoncovalentBond(
                 NoncovalentBondRef::from_ast(*idx, meta),
-                NoncovalentBondConstraintDsl::from_ast(c, ctx).unwrap(),
+                NoncovalentBondConstraintDsl::from_ast(c, meta).unwrap(),
             ),
-            Constraint::Molecule(m) => Self::Molecule(MoleculeConstraintDsl::from_ast(m, ctx)?),
+            Constraint::Molecule(m) => Self::Molecule(MoleculeConstraintDsl::from_ast(m, meta)?),
             Constraint::And(xs) => Self::And(
                 xs.iter()
-                    .map(|c| ConstraintDsl::from_ast(c, ctx))
+                    .map(|c| ConstraintDsl::from_ast(c, meta))
                     .collect::<Result<_, _>>()?,
             ),
             Constraint::Or(xs) => Self::Or(
                 xs.iter()
-                    .map(|c| ConstraintDsl::from_ast(c, ctx))
+                    .map(|c| ConstraintDsl::from_ast(c, meta))
                     .collect::<Result<_, _>>()?,
             ),
-            Constraint::Not(c) => Self::Not(Box::new(ConstraintDsl::from_ast(c, ctx)?)),
+            Constraint::Not(c) => Self::Not(Box::new(ConstraintDsl::from_ast(c, meta)?)),
         })
     }
-}
 
-impl IntoAst<Constraint> for ConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<Constraint, ParseError> {
-        let meta = ctx.metadata;
+    pub(crate) fn into_ast(
+        self,
+        counts: &EntityCounts,
+        meta: &Metadata,
+    ) -> Result<Constraint, ParseError> {
         Ok(match self {
             Self::Atom(r, c) => {
-                Constraint::Atom(r.into_ast(ctx.atom_count, meta)?, c.into_ast(&()).unwrap())
+                Constraint::Atom(r.into_ast(counts.atom_count, meta)?, c.into_ast(&()).unwrap())
             }
             Self::Bond(r, c) => {
-                Constraint::Bond(r.into_ast(ctx.bond_count, meta)?, c.into_ast(&()).unwrap())
+                Constraint::Bond(r.into_ast(counts.bond_count, meta)?, c.into_ast(&()).unwrap())
             }
-            Self::DativeBond(r, c) => {
-                Constraint::DativeBond(r.into_ast(ctx.dative_bond_count, meta)?, c.into_ast(ctx)?)
-            }
+            Self::DativeBond(r, c) => Constraint::DativeBond(
+                r.into_ast(counts.dative_bond_count, meta)?,
+                c.into_ast(counts, meta)?,
+            ),
             Self::AromaticSystem(r, c) => Constraint::AromaticSystem(
-                r.into_ast(ctx.aromatic_system_count, meta)?,
-                c.into_ast(ctx)?,
+                r.into_ast(counts.aromatic_system_count, meta)?,
+                c.into_ast(counts, meta)?,
             ),
             Self::MulticenterBond(r, c) => Constraint::MulticenterBond(
-                r.into_ast(ctx.multicenter_bond_count, meta)?,
-                c.into_ast(ctx)?,
+                r.into_ast(counts.multicenter_bond_count, meta)?,
+                c.into_ast(counts, meta)?,
             ),
             Self::NoncovalentBond(r, c) => Constraint::NoncovalentBond(
-                r.into_ast(ctx.noncovalent_bond_count, meta)?,
-                c.into_ast(ctx)?,
+                r.into_ast(counts.noncovalent_bond_count, meta)?,
+                c.into_ast(counts, meta)?,
             ),
-            Self::Molecule(m) => Constraint::Molecule(m.into_ast(ctx)?),
+            Self::Molecule(m) => Constraint::Molecule(m.into_ast(counts, meta)?),
             Self::And(xs) => Constraint::And(
                 xs.into_iter()
-                    .map(|c| c.into_ast(ctx))
+                    .map(|c| c.into_ast(counts, meta))
                     .collect::<Result<_, _>>()?,
             ),
             Self::Or(xs) => Constraint::Or(
                 xs.into_iter()
-                    .map(|c| c.into_ast(ctx))
+                    .map(|c| c.into_ast(counts, meta))
                     .collect::<Result<_, _>>()?,
             ),
-            Self::Not(c) => Constraint::Not(Box::new(c.into_ast(ctx)?)),
+            Self::Not(c) => Constraint::Not(Box::new(c.into_ast(counts, meta)?)),
         })
     }
 }
@@ -1671,27 +1658,23 @@ impl ToEdn for ConstraintsDsl {
     }
 }
 
-impl FromAst<Constraints> for ConstraintsDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn from_ast<'a>(cs: &Constraints, ctx: &Self::Ctx<'a>) -> Result<Self, ParseError> {
+impl ConstraintsDsl {
+    pub(crate) fn from_ast(cs: &Constraints, meta: &Metadata) -> Result<Self, ParseError> {
         Ok(Self(
             cs.iter()
-                .map(|c| ConstraintDsl::from_ast(c, ctx))
+                .map(|c| ConstraintDsl::from_ast(c, meta))
                 .collect::<Result<_, _>>()?,
         ))
     }
-}
 
-impl IntoAst<Constraints> for ConstraintsDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<Constraints, ParseError> {
+    pub(crate) fn into_ast(
+        self,
+        counts: &EntityCounts,
+        meta: &Metadata,
+    ) -> Result<Constraints, ParseError> {
         let mut out = Constraints::new();
         for c in self.0 {
-            out.push(c.into_ast(ctx)?);
+            out.push(c.into_ast(counts, meta)?);
         }
         Ok(out)
     }
@@ -1863,15 +1846,14 @@ mod tests {
 
     // -- MoleculeConstraintDsl ----------------
 
-    fn full_ctx<'a>(meta: &'a Metadata) -> ResolveContext<'a> {
-        ResolveContext {
+    fn full_counts() -> EntityCounts {
+        EntityCounts {
             atom_count: 10,
             bond_count: 10,
             dative_bond_count: 10,
             aromatic_system_count: 10,
             multicenter_bond_count: 10,
             noncovalent_bond_count: 10,
-            metadata: meta,
         }
     }
 
@@ -1907,13 +1889,12 @@ mod tests {
         #[case] edn_source: &str,
     ) {
         let meta = Metadata::default();
-        let render_ctx = ResolveContext::for_rendering(&meta);
-        let dsl = MoleculeConstraintDsl::from_ast(&input, &render_ctx).unwrap();
+        let dsl = MoleculeConstraintDsl::from_ast(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = MoleculeConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&full_ctx(&meta)).unwrap();
+        let back = parsed.into_ast(&full_counts(), &meta).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -1948,8 +1929,8 @@ mod tests {
         // Empty anchor renders as an empty map.
         assert_eq!(edn, read_string("{}").unwrap());
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let ctx = full_ctx(&meta);
-        let back = parsed.into_ast_pair(&ctx, &ctx).unwrap();
+        let counts = full_counts();
+        let back = parsed.into_ast_pair(&counts, &meta, &counts, &meta).unwrap();
         assert_eq!(back, anchor);
     }
 
@@ -1963,8 +1944,8 @@ mod tests {
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string("{:atoms [[3 0] [5 1]]}").unwrap());
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
-        let ctx = full_ctx(&meta);
-        let back = parsed.into_ast_pair(&ctx, &ctx).unwrap();
+        let counts = full_counts();
+        let back = parsed.into_ast_pair(&counts, &meta, &counts, &meta).unwrap();
         assert_eq!(back, anchor);
     }
 
@@ -2052,13 +2033,13 @@ mod tests {
         #[case] edn_source: &str,
     ) {
         let meta = Metadata::default();
-        let ctx = full_ctx(&meta);
-        let dsl = ConstraintDsl::from_ast(&input, &ctx).unwrap();
+        let counts = full_counts();
+        let dsl = ConstraintDsl::from_ast(&input, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = ConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&ctx).unwrap();
+        let back = parsed.into_ast(&counts, &meta).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -2074,20 +2055,20 @@ mod tests {
     #[rstest]
     fn test_constraints_dsl_empty_roundtrip() {
         let meta = Metadata::default();
-        let ctx = full_ctx(&meta);
+        let counts = full_counts();
         let cs = Constraints::new();
-        let dsl = ConstraintsDsl::from_ast(&cs, &ctx).unwrap();
+        let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string("[]").unwrap());
         let parsed = ConstraintsDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&ctx).unwrap();
+        let back = parsed.into_ast(&counts, &meta).unwrap();
         assert_eq!(back, cs);
     }
 
     #[rstest]
     fn test_constraints_dsl_multi_roundtrip() {
         let meta = Metadata::default();
-        let ctx = full_ctx(&meta);
+        let counts = full_counts();
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(
             AtomIdx(0),
@@ -2097,12 +2078,12 @@ mod tests {
             AtomIdx(0),
             AtomIdx(1),
         ])));
-        let dsl = ConstraintsDsl::from_ast(&cs, &ctx).unwrap();
+        let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
         let edn = dsl.to_edn();
         let expected = read_string("[{:atom [0 {:valence 4}]} {:connected [0 1]}]").unwrap();
         assert_eq!(edn, expected);
         let parsed = ConstraintsDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&ctx).unwrap();
+        let back = parsed.into_ast(&counts, &meta).unwrap();
         assert_eq!(back, cs);
     }
 }

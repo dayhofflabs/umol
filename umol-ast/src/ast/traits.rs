@@ -3,13 +3,13 @@
 //! `FromAst` / `IntoAst` are conversion traits between the AST and external representations.
 
 pub trait FromAst<A>: Sized {
-    type Ctx<'a>;
+    type Ctx;
     type Error;
-    fn from_ast<'a>(ast: &A, ctx: &Self::Ctx<'a>) -> Result<Self, Self::Error>;
+    fn from_ast(ast: &A, ctx: &Self::Ctx) -> Result<Self, Self::Error>;
 }
 
 pub trait IntoAst<A>: Sized {
-    type Ctx<'a>;
+    type Ctx;
     type Error;
-    fn into_ast<'a>(self, ctx: &Self::Ctx<'a>) -> Result<A, Self::Error>;
+    fn into_ast(self, ctx: &Self::Ctx) -> Result<A, Self::Error>;
 }

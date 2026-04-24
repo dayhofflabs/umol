@@ -81,10 +81,10 @@ impl ToEdn for BondDsl {
 }
 
 impl FromAst<BondAst> for BondDsl {
-    type Ctx<'a> = BondDefaults;
+    type Ctx = BondDefaults;
     type Error = ParseError;
 
-    fn from_ast<'a>(ast: &BondAst, cfg: &Self::Ctx<'a>) -> Result<Self, ParseError> {
+    fn from_ast(ast: &BondAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
         let mut out = ast.clone();
         lower_bond(&mut out, cfg);
         Ok(BondDsl(out))
@@ -92,10 +92,10 @@ impl FromAst<BondAst> for BondDsl {
 }
 
 impl IntoAst<BondAst> for BondDsl {
-    type Ctx<'a> = BondDefaults;
+    type Ctx = BondDefaults;
     type Error = ParseError;
 
-    fn into_ast<'a>(mut self, cfg: &Self::Ctx<'a>) -> Result<BondAst, ParseError> {
+    fn into_ast(mut self, cfg: &Self::Ctx) -> Result<BondAst, ParseError> {
         raise_bond(&mut self.0, cfg);
         Ok(self.0)
     }
@@ -267,19 +267,19 @@ fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
 pub struct BondConstraintDsl(pub BondConstraint);
 
 impl FromAst<BondConstraint> for BondConstraintDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(ast: &BondConstraint, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+    fn from_ast(ast: &BondConstraint, _ctx: &Self::Ctx) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
 
 impl IntoAst<BondConstraint> for BondConstraintDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<BondConstraint, Infallible> {
+    fn into_ast(self, _ctx: &Self::Ctx) -> Result<BondConstraint, Infallible> {
         Ok(self.0)
     }
 }

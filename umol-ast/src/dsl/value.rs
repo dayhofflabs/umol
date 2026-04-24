@@ -26,19 +26,19 @@ use crate::ast::value::{ArithOp, Expr, RelOp, ValueAst};
 pub struct ValueDsl(pub ValueAst);
 
 impl FromAst<ValueAst> for ValueDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn from_ast<'a>(ast: &ValueAst, _ctx: &Self::Ctx<'a>) -> Result<Self, Infallible> {
+    fn from_ast(ast: &ValueAst, _ctx: &Self::Ctx) -> Result<Self, Infallible> {
         Ok(Self(ast.clone()))
     }
 }
 
 impl IntoAst<ValueAst> for ValueDsl {
-    type Ctx<'a> = ();
+    type Ctx = ();
     type Error = Infallible;
 
-    fn into_ast<'a>(self, _ctx: &Self::Ctx<'a>) -> Result<ValueAst, Infallible> {
+    fn into_ast(self, _ctx: &Self::Ctx) -> Result<ValueAst, Infallible> {
         Ok(self.0)
     }
 }

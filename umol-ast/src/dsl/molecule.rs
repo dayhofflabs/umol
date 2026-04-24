@@ -26,7 +26,7 @@ use super::atom::AtomDsl;
 use super::bond::BondDsl;
 use super::constraint::{
     eof_err, missing, read_atom_ref, read_constraints_dsl, read_map, read_vec,
-    unexpected_byte_kind, AtomRef, ConstraintDsl, ConstraintsDsl, ResolveContext,
+    unexpected_byte_kind, AtomRef, ConstraintDsl, ConstraintsDsl, EntityCounts,
 };
 use super::dative::DativeBondDsl;
 use super::error::ParseError;
@@ -530,10 +530,10 @@ impl ToEdn for MoleculeDsl {
 }
 
 impl FromAst<MoleculeAst> for MoleculeDsl {
-    type Ctx<'a> = MoleculeDefaults;
+    type Ctx = MoleculeDefaults;
     type Error = ParseError;
 
-    fn from_ast<'a>(ast: &MoleculeAst, cfg: &Self::Ctx<'a>) -> Result<Self, ParseError> {
+    fn from_ast(ast: &MoleculeAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
         let mut ast_out = ast.clone();
         for atom in ast_out.atoms_mut() {
             *atom = AtomDsl::from_ast(atom, &cfg.atom)?.0;
@@ -557,10 +557,10 @@ impl FromAst<MoleculeAst> for MoleculeDsl {
 }
 
 impl IntoAst<MoleculeAst> for MoleculeDsl {
-    type Ctx<'a> = MoleculeDefaults;
+    type Ctx = MoleculeDefaults;
     type Error = ParseError;
 
-    fn into_ast<'a>(self, cfg: &Self::Ctx<'a>) -> Result<MoleculeAst, ParseError> {
+    fn into_ast(self, cfg: &Self::Ctx) -> Result<MoleculeAst, ParseError> {
         let mut ast = self.ast;
         for atom in ast.atoms_mut() {
             *atom = AtomDsl(take(atom)).into_ast(&cfg.atom)?;
@@ -600,8 +600,7 @@ fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
         map.insert(Edn::keyword("atom-aliases"), render_atom_aliases(meta));
     }
     if !ast.constraints().is_empty() {
-        let ctx = ResolveContext::for_rendering(meta);
-        let dsl = ConstraintsDsl::from_ast(ast.constraints(), &ctx)
+        let dsl = ConstraintsDsl::from_ast(ast.constraints(), meta)
             .expect("ConstraintsDsl::from_ast is infallible for a well-formed AST");
         map.insert(Edn::keyword("constraints"), dsl.to_edn());
     }
@@ -999,16 +998,15 @@ impl MoleculeInput {
         let metadata = builder.build();
 
         // Resolve constraint refs against the final metadata + counts.
-        let ctx = ResolveContext {
+        let counts = EntityCounts {
             atom_count,
             bond_count: bonds.len(),
             dative_bond_count: dative_list.len(),
             aromatic_system_count: aromatic_list.len(),
             multicenter_bond_count: multicenter_list.len(),
             noncovalent_bond_count: noncovalent_list.len(),
-            metadata: &metadata,
         };
-        let constraints = ConstraintsDsl(constraint_dsls).into_ast(&ctx)?;
+        let constraints = ConstraintsDsl(constraint_dsls).into_ast(&counts, &metadata)?;
 
         let ast = MoleculeAst::new(
             atoms,

@@ -13,7 +13,8 @@ use winnow::token::one_of;
 use winnow::Parser;
 
 use super::atom::AtomConstraintDsl;
-use super::constraint::{AtomRef, ResolveContext};
+use super::constraint::{AtomRef, EntityCounts};
+use super::molecule::Metadata;
 use super::error::{PResult, ParseError};
 use super::value::id;
 use crate::ast::constraint::NoncovalentBondConstraint;
@@ -74,22 +75,22 @@ impl ToEdn for NoncovalentBondDsl {
 }
 
 impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
-    type Ctx<'a> = NoncovalentBondDefaults;
+    type Ctx = NoncovalentBondDefaults;
     type Error = ParseError;
 
-    fn from_ast<'a>(
+    fn from_ast(
         ast: &NoncovalentBondAst,
-        _cfg: &Self::Ctx<'a>,
+        _cfg: &Self::Ctx,
     ) -> Result<Self, ParseError> {
         Ok(NoncovalentBondDsl(ast.clone()))
     }
 }
 
 impl IntoAst<NoncovalentBondAst> for NoncovalentBondDsl {
-    type Ctx<'a> = NoncovalentBondDefaults;
+    type Ctx = NoncovalentBondDefaults;
     type Error = ParseError;
 
-    fn into_ast<'a>(self, _cfg: &Self::Ctx<'a>) -> Result<NoncovalentBondAst, ParseError> {
+    fn into_ast(self, _cfg: &Self::Ctx) -> Result<NoncovalentBondAst, ParseError> {
         Ok(self.0)
     }
 }
@@ -233,15 +234,11 @@ pub enum NoncovalentBondConstraintDsl {
     EndsSatisfy([Box<AtomConstraintDsl>; 2]),
 }
 
-impl FromAst<NoncovalentBondConstraint> for NoncovalentBondConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = Infallible;
-
-    fn from_ast<'a>(
+impl NoncovalentBondConstraintDsl {
+    pub(crate) fn from_ast(
         c: &NoncovalentBondConstraint,
-        ctx: &Self::Ctx<'a>,
+        meta: &Metadata,
     ) -> Result<Self, Infallible> {
-        let meta = ctx.metadata;
         Ok(match c {
             NoncovalentBondConstraint::Ends([a, b]) => Self::Ends([
                 AtomRef::from_ast(*a, meta),
@@ -256,24 +253,19 @@ impl FromAst<NoncovalentBondConstraint> for NoncovalentBondConstraintDsl {
             ]),
         })
     }
-}
 
-impl IntoAst<NoncovalentBondConstraint> for NoncovalentBondConstraintDsl {
-    type Ctx<'a> = ResolveContext<'a>;
-    type Error = ParseError;
-
-    fn into_ast<'a>(
+    pub(crate) fn into_ast(
         self,
-        ctx: &Self::Ctx<'a>,
+        counts: &EntityCounts,
+        meta: &Metadata,
     ) -> Result<NoncovalentBondConstraint, ParseError> {
-        let meta = ctx.metadata;
         Ok(match self {
             Self::Ends([a, b]) => NoncovalentBondConstraint::Ends([
-                a.into_ast(ctx.atom_count, meta)?,
-                b.into_ast(ctx.atom_count, meta)?,
+                a.into_ast(counts.atom_count, meta)?,
+                b.into_ast(counts.atom_count, meta)?,
             ]),
             Self::Contains(r) => {
-                NoncovalentBondConstraint::Contains(r.into_ast(ctx.atom_count, meta)?)
+                NoncovalentBondConstraint::Contains(r.into_ast(counts.atom_count, meta)?)
             }
             Self::EndsSatisfy([a, b]) => NoncovalentBondConstraint::EndsSatisfy([
                 Box::new(a.into_ast(&()).unwrap()),
@@ -450,15 +442,14 @@ mod tests {
 
     // -- NoncovalentBondConstraintDsl ----------------
 
-    fn ctx_with_atoms(atom_count: usize, meta: &Metadata) -> ResolveContext<'_> {
-        ResolveContext {
+    fn counts_with_atoms(atom_count: usize) -> EntityCounts {
+        EntityCounts {
             atom_count,
             bond_count: 0,
             dative_bond_count: 0,
             aromatic_system_count: 0,
             multicenter_bond_count: 0,
             noncovalent_bond_count: 0,
-            metadata: meta,
         }
     }
 
@@ -475,13 +466,12 @@ mod tests {
         #[case] edn_source: &str,
     ) {
         let meta = Metadata::default();
-        let render_ctx = ResolveContext::for_rendering(&meta);
-        let dsl = NoncovalentBondConstraintDsl::from_ast(&input, &render_ctx).unwrap();
+        let dsl = NoncovalentBondConstraintDsl::from_ast(&input, &meta).unwrap();
         let edn = dsl.clone().to_edn();
         let expected = umol_edn::read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&ctx_with_atoms(10, &meta)).unwrap();
+        let back = parsed.into_ast(&counts_with_atoms(10), &meta).unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 
@@ -490,7 +480,7 @@ mod tests {
         let meta = Metadata::default();
         let edn = umol_edn::read_string("{:contains 99}").unwrap();
         let dsl = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap();
-        let err = dsl.into_ast(&ctx_with_atoms(5, &meta)).unwrap_err();
+        let err = dsl.into_ast(&counts_with_atoms(5), &meta).unwrap_err();
         assert_eq!(
             err,
             ParseError::InvalidRef {
