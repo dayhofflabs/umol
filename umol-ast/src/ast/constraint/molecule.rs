@@ -17,12 +17,16 @@ use super::bond::BondConstraint;
 use super::dative::DativeBondConstraint;
 use super::multicenter::MulticenterBondConstraint;
 use super::noncovalent::NoncovalentBondConstraint;
+use super::relational::RelationalConstraint;
 
-/// Tree node type: per-entity leaf, molecule-scope leaf, or combinator. The
-/// bare entity-leaf forms appear only inside a combinator (e.g.
-/// `And(Atom(..), Bond(..))`) or a molecule-scope predicate; unconditional
-/// per-entity constraints live inline on the entity AST and are lifted there
-/// at DSL → AST conversion time.
+/// Tree node type: per-entity leaf, molecule-scope leaf, relational leaf, or
+/// combinator. The bare entity-leaf forms appear only inside a combinator
+/// (e.g. `And(Atom(..), Bond(..))`) or a molecule-scope predicate;
+/// unconditional per-entity value-only constraints live inline on the entity
+/// AST and are lifted there at DSL → AST conversion time. Cross-entity
+/// ref-bearing constraints (e.g. a dative-bond donor identity, aromatic
+/// system membership, noncovalent endpoints) live only at molecule scope
+/// via `Relational`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Constraint {
     Atom(AtomIdx, AtomConstraint),
@@ -31,6 +35,7 @@ pub enum Constraint {
     AromaticSystem(AromaticSystemIdx, AromaticSystemConstraint),
     MulticenterBond(MulticenterBondIdx, MulticenterBondConstraint),
     NoncovalentBond(NoncovalentBondIdx, NoncovalentBondConstraint),
+    Relational(RelationalConstraint),
     Molecule(MoleculeConstraint),
     And(Vec<Constraint>),
     Or(Vec<Constraint>),
@@ -58,6 +63,7 @@ impl Constraint {
                 let i = remap.noncovalent_bond(idx)?;
                 c.remap(remap).map(|c| Constraint::NoncovalentBond(i, c))
             }
+            Constraint::Relational(r) => r.remap(remap).map(Constraint::Relational),
             Constraint::Molecule(m) => m.remap(remap).map(Constraint::Molecule),
             Constraint::And(xs) => xs
                 .into_iter()
@@ -600,30 +606,30 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::dative_bond_shifts_inner_atom(
-        Constraint::DativeBond(DativeBondIdx(2), DativeBondConstraint::Donor(AtomIdx(3))),
+    #[case::dative_donor_shifts_inner_atom(
+        Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(2), atom: AtomIdx(3) }),
         idx_remapping(vec![0], vec![]),
-        Some(Constraint::DativeBond(DativeBondIdx(2), DativeBondConstraint::Donor(AtomIdx(2)))),
+        Some(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(2), atom: AtomIdx(2) })),
     )]
-    #[case::dative_bond_dropped_when_bond_removed(
-        Constraint::DativeBond(DativeBondIdx(1), DativeBondConstraint::Donor(AtomIdx(0))),
+    #[case::dative_donor_dropped_when_bond_removed(
+        Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(1), atom: AtomIdx(0) }),
         relation_remapping(vec![1], vec![], vec![], vec![]),
         None,
     )]
-    #[case::aromatic_system_shifts_inner_atom(
-        Constraint::AromaticSystem(AromaticSystemIdx(1), AromaticSystemConstraint::Contains(AtomIdx(2))),
+    #[case::aromatic_system_contains_shifts_inner_atom(
+        Constraint::Relational(RelationalConstraint::AromaticSystemContains { system: AromaticSystemIdx(1), atom: AtomIdx(2) }),
         idx_remapping(vec![0], vec![]),
-        Some(Constraint::AromaticSystem(AromaticSystemIdx(1), AromaticSystemConstraint::Contains(AtomIdx(1)))),
+        Some(Constraint::Relational(RelationalConstraint::AromaticSystemContains { system: AromaticSystemIdx(1), atom: AtomIdx(1) })),
     )]
-    #[case::multicenter_bond_shifts_inner_atom(
-        Constraint::MulticenterBond(MulticenterBondIdx(0), MulticenterBondConstraint::Contains(AtomIdx(2))),
+    #[case::multicenter_bond_contains_shifts_inner_atom(
+        Constraint::Relational(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondIdx(0), atom: AtomIdx(2) }),
         idx_remapping(vec![1], vec![]),
-        Some(Constraint::MulticenterBond(MulticenterBondIdx(0), MulticenterBondConstraint::Contains(AtomIdx(1)))),
+        Some(Constraint::Relational(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondIdx(0), atom: AtomIdx(1) })),
     )]
-    #[case::noncovalent_bond_shifts_inner_atom(
-        Constraint::NoncovalentBond(NoncovalentBondIdx(0), NoncovalentBondConstraint::Contains(AtomIdx(3))),
+    #[case::noncovalent_bond_contains_shifts_inner_atom(
+        Constraint::Relational(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondIdx(0), atom: AtomIdx(3) }),
         idx_remapping(vec![1], vec![]),
-        Some(Constraint::NoncovalentBond(NoncovalentBondIdx(0), NoncovalentBondConstraint::Contains(AtomIdx(2)))),
+        Some(Constraint::Relational(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondIdx(0), atom: AtomIdx(2) })),
     )]
     fn test_constraint_remap_relation_variants(
         #[case] c: Constraint,

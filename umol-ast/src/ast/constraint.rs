@@ -22,6 +22,7 @@ pub mod dative;
 pub mod molecule;
 pub mod multicenter;
 pub mod noncovalent;
+pub mod relational;
 
 pub use aromatic::{AromaticSystemConstraint, AromaticSystemConstraints};
 pub use atom::{
@@ -32,3 +33,4 @@ pub use dative::{DativeBondConstraint, DativeBondConstraintKind, DativeBondConst
 pub use molecule::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
 pub use multicenter::{MulticenterBondConstraint, MulticenterBondConstraints};
 pub use noncovalent::{NoncovalentBondConstraint, NoncovalentBondConstraints};
+pub use relational::RelationalConstraint;

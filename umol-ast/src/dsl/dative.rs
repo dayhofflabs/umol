@@ -1,7 +1,6 @@
 //! Dative-bond-string DSL.
 
 use std::borrow::Cow;
-use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -12,11 +11,8 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use super::atom::AtomConstraintDsl;
 use super::config::DativeBondDefaults;
-use super::constraint::{AtomRef, BondRef, EntityCounts};
 use super::error::{PResult, ParseError};
-use super::molecule::Metadata;
 use super::predicates::{fmt_ring_count, optional_value, ring_count};
 use super::value::{fmt_value, ValueDsl};
 use crate::ast::constraint::DativeBondConstraint;
@@ -115,16 +111,11 @@ pub(crate) fn dative_bond(i: &mut &str) -> PResult<DativeBondDsl> {
     Ok(form)
 }
 
-fn inline_constraint_tag(c: &DativeBondConstraint) -> Option<&'static str> {
-    match c {
-        DativeBondConstraint::RingCount(_) => Some("#R"),
-        DativeBondConstraint::RingSize(_) => Some("#r"),
-        _ => None,
-    }
-}
-
 fn constraint_tag(c: &DativeBondConstraint) -> &'static str {
-    inline_constraint_tag(c).expect("non-inline-capable dative constraint produced by parser")
+    match c {
+        DativeBondConstraint::RingCount(_) => "#R",
+        DativeBondConstraint::RingSize(_) => "#r",
+    }
 }
 
 /// One predicate from a dative-bond-string; the parser yields a `Vec` of
@@ -162,7 +153,7 @@ fn apply_predicates(
         if ast
             .constraints
             .iter()
-            .any(|existing| inline_constraint_tag(existing) == Some(tag))
+            .any(|existing| constraint_tag(existing) == tag)
         {
             return Err(ParseError::DuplicateDativeBondPredicate(tag.to_string()));
         }
@@ -185,25 +176,19 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraint) -> fmt::
                 fmt_value(f, v)
             }
         },
-        _ => Ok(()),
     }
 }
 
 // -- Constraint DSL -------------------
 
-/// Surface DSL wrapper around `DativeBondConstraint`. Mirrors the AST enum
-/// with atom/bond refs in place of `AtomIdx` / `BondIdx`. EDN form is a
-/// single-key map keyed by the constraint kind (e.g. `{:donor :n1}`,
-/// `{:donor-satisfies {:valence 4}}`, `{:parallels 0}`).
+/// Surface DSL wrapper around the narrow `DativeBondConstraint`. EDN form is
+/// a single-key map keyed by the constraint kind: `{:ring-count <value>}` or
+/// `{:ring-size <value>}`. Ref-bearing variants moved to
+/// [`super::relational::RelationalConstraintDsl`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DativeBondConstraintDsl {
     RingCount(ValueAst),
     RingSize(ValueAst),
-    Donor(AtomRef),
-    Acceptor(AtomRef),
-    DonorSatisfies(Box<AtomConstraintDsl>),
-    AcceptorSatisfies(Box<AtomConstraintDsl>),
-    Parallels(BondRef),
 }
 
 impl<'de> FromEdn<'de> for DativeBondConstraintDsl {
@@ -232,13 +217,6 @@ impl<'de> FromEdn<'de> for DativeBondConstraintDsl {
         Ok(match key.name() {
             "ring-count" => Self::RingCount(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
             "ring-size" => Self::RingSize(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
-            "donor" => Self::Donor(AtomRef::from_edn(v)?),
-            "acceptor" => Self::Acceptor(AtomRef::from_edn(v)?),
-            "donor-satisfies" => Self::DonorSatisfies(Box::new(AtomConstraintDsl::from_edn(v)?)),
-            "acceptor-satisfies" => {
-                Self::AcceptorSatisfies(Box::new(AtomConstraintDsl::from_edn(v)?))
-            }
-            "parallels" => Self::Parallels(BondRef::from_edn(v)?),
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -254,11 +232,6 @@ impl ToEdn for DativeBondConstraintDsl {
         let (key, value) = match self {
             Self::RingCount(v) => ("ring-count", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
             Self::RingSize(v) => ("ring-size", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
-            Self::Donor(r) => ("donor", r.to_edn()),
-            Self::Acceptor(r) => ("acceptor", r.to_edn()),
-            Self::DonorSatisfies(c) => ("donor-satisfies", c.to_edn()),
-            Self::AcceptorSatisfies(c) => ("acceptor-satisfies", c.to_edn()),
-            Self::Parallels(r) => ("parallels", r.to_edn()),
         };
         let mut m = umol_edn::EdnMap::with_capacity(1);
         m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
@@ -267,44 +240,20 @@ impl ToEdn for DativeBondConstraintDsl {
 }
 
 impl DativeBondConstraintDsl {
-    pub(crate) fn from_ast(c: &DativeBondConstraint, meta: &Metadata) -> Result<Self, Infallible> {
-        Ok(match c {
+    /// Build from the narrow inline AST form.
+    pub(crate) fn from_ast(c: &DativeBondConstraint) -> Self {
+        match c {
             DativeBondConstraint::RingCount(v) => Self::RingCount(v.clone()),
             DativeBondConstraint::RingSize(v) => Self::RingSize(v.clone()),
-            DativeBondConstraint::Donor(a) => Self::Donor(AtomRef::from_ast(*a, meta)),
-            DativeBondConstraint::Acceptor(a) => Self::Acceptor(AtomRef::from_ast(*a, meta)),
-            DativeBondConstraint::DonorSatisfies(c) => {
-                Self::DonorSatisfies(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
-            }
-            DativeBondConstraint::AcceptorSatisfies(c) => {
-                Self::AcceptorSatisfies(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
-            }
-            DativeBondConstraint::Parallels(b) => Self::Parallels(BondRef::from_ast(*b, meta)),
-        })
+        }
     }
 
-    pub(crate) fn into_ast(
-        self,
-        counts: &EntityCounts,
-        meta: &Metadata,
-    ) -> Result<DativeBondConstraint, ParseError> {
-        Ok(match self {
+    /// Convert into the narrow inline AST form.
+    pub(crate) fn into_ast(self) -> DativeBondConstraint {
+        match self {
             Self::RingCount(v) => DativeBondConstraint::RingCount(v),
             Self::RingSize(v) => DativeBondConstraint::RingSize(v),
-            Self::Donor(r) => DativeBondConstraint::Donor(r.into_ast(counts.atom_count, meta)?),
-            Self::Acceptor(r) => {
-                DativeBondConstraint::Acceptor(r.into_ast(counts.atom_count, meta)?)
-            }
-            Self::DonorSatisfies(c) => {
-                DativeBondConstraint::DonorSatisfies(Box::new(c.into_ast(&()).unwrap()))
-            }
-            Self::AcceptorSatisfies(c) => {
-                DativeBondConstraint::AcceptorSatisfies(Box::new(c.into_ast(&()).unwrap()))
-            }
-            Self::Parallels(r) => {
-                DativeBondConstraint::Parallels(r.into_ast(counts.bond_count, meta)?)
-            }
-        })
+        }
     }
 }
 
@@ -313,11 +262,9 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::super::molecule::{Metadata, MetadataBuilder};
     use super::*;
-    use crate::ast::constraint::{AtomConstraint, DativeBondConstraints};
+    use crate::ast::constraint::DativeBondConstraints;
     use crate::ast::dative::DativeBondDirection;
-    use crate::ast::idx::{AtomIdx, BondIdx};
     use crate::ast::value::{Expr, RelOp};
 
     #[rustfmt::skip]
@@ -392,103 +339,21 @@ mod tests {
 
     // -- DativeBondConstraintDsl ----------------
 
-    fn metadata_with_atom_and_bond_id() -> Metadata {
-        let mut b = MetadataBuilder::default();
-        b.set_atom_id(AtomIdx(1), "n1".to_string());
-        b.set_bond_id(BondIdx(2), "b1".to_string());
-        b.build()
-    }
-
-    fn counts_with(atom_count: usize, bond_count: usize) -> EntityCounts {
-        EntityCounts {
-            atom_count,
-            bond_count,
-            dative_bond_count: 0,
-            aromatic_system_count: 0,
-            multicenter_bond_count: 0,
-            noncovalent_bond_count: 0,
-        }
-    }
-
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_count(DativeBondConstraint::RingCount(ValueAst::Lit(2)), "{:ring-count 2}")]
     #[case::ring_size(DativeBondConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
-    #[case::donor_idx(DativeBondConstraint::Donor(AtomIdx(3)), "{:donor 3}")]
-    #[case::acceptor_idx(DativeBondConstraint::Acceptor(AtomIdx(4)), "{:acceptor 4}")]
-    #[case::parallels_idx(DativeBondConstraint::Parallels(BondIdx(5)), "{:parallels 5}")]
-    #[case::donor_satisfies(DativeBondConstraint::DonorSatisfies(Box::new(AtomConstraint::Valence(ValueAst::Lit(3)))), "{:donor-satisfies {:valence 3}}")]
-    #[case::acceptor_satisfies(DativeBondConstraint::AcceptorSatisfies(Box::new(AtomConstraint::Degree(ValueAst::Lit(2)))), "{:acceptor-satisfies {:degree 2}}")]
-    fn test_dative_bond_constraint_dsl_roundtrip_indices(
+    fn test_dative_bond_constraint_dsl_roundtrip(
         #[case] input: DativeBondConstraint,
         #[case] edn_source: &str,
     ) {
-        let meta = Metadata::default();
-        let dsl = DativeBondConstraintDsl::from_ast(&input, &meta).unwrap();
+        let dsl = DativeBondConstraintDsl::from_ast(&input);
         let edn = dsl.clone().to_edn();
         let expected = umol_edn::read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = DativeBondConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&counts_with(10, 10), &meta).unwrap();
+        let back = parsed.into_ast();
         assert_eq!(back, input, "parse-back mismatch");
-    }
-
-    #[rstest]
-    fn test_dative_bond_constraint_dsl_uses_keyword_for_known_atom() {
-        let meta = metadata_with_atom_and_bond_id();
-        let dsl =
-            DativeBondConstraintDsl::from_ast(&DativeBondConstraint::Donor(AtomIdx(1)), &meta)
-                .unwrap();
-        let edn = dsl.to_edn();
-        assert_eq!(edn, umol_edn::read_string("{:donor :n1}").unwrap());
-    }
-
-    #[rstest]
-    fn test_dative_bond_constraint_dsl_resolves_keyword_id() {
-        let meta = metadata_with_atom_and_bond_id();
-        let edn = umol_edn::read_string("{:donor :n1}").unwrap();
-        let dsl = DativeBondConstraintDsl::from_edn(&edn).unwrap();
-        let back = dsl.into_ast(&counts_with(10, 10), &meta).unwrap();
-        assert_eq!(back, DativeBondConstraint::Donor(AtomIdx(1)));
-    }
-
-    #[rstest]
-    fn test_dative_bond_constraint_dsl_resolves_bond_keyword() {
-        let meta = metadata_with_atom_and_bond_id();
-        let edn = umol_edn::read_string("{:parallels :b1}").unwrap();
-        let dsl = DativeBondConstraintDsl::from_edn(&edn).unwrap();
-        let back = dsl.into_ast(&counts_with(10, 10), &meta).unwrap();
-        assert_eq!(back, DativeBondConstraint::Parallels(BondIdx(2)));
-    }
-
-    #[rstest]
-    fn test_dative_bond_constraint_dsl_rejects_out_of_range_index() {
-        let meta = Metadata::default();
-        let edn = umol_edn::read_string("{:donor 99}").unwrap();
-        let dsl = DativeBondConstraintDsl::from_edn(&edn).unwrap();
-        let err = dsl.into_ast(&counts_with(5, 5), &meta).unwrap_err();
-        assert_eq!(
-            err,
-            ParseError::InvalidRef {
-                kind: "atom",
-                value: "99".into()
-            }
-        );
-    }
-
-    #[rstest]
-    fn test_dative_bond_constraint_dsl_rejects_unknown_id() {
-        let meta = Metadata::default();
-        let edn = umol_edn::read_string("{:acceptor :nope}").unwrap();
-        let dsl = DativeBondConstraintDsl::from_edn(&edn).unwrap();
-        let err = dsl.into_ast(&counts_with(5, 5), &meta).unwrap_err();
-        assert_eq!(
-            err,
-            ParseError::InvalidRef {
-                kind: "atom",
-                value: "nope".into()
-            }
-        );
     }
 
     #[rstest]

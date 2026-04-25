@@ -1,7 +1,6 @@
 //! Aromatic-system-string DSL.
 
 use std::borrow::Cow;
-use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -12,18 +11,14 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use super::atom::AtomConstraintDsl;
 use super::config::{AromaticSystemDefaults, NumericDefault};
-use super::constraint::{AtomRef, EntityCounts};
 use super::error::{PResult, ParseError};
-use super::molecule::Metadata;
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_spin_pair, lower_spin, optional_value, raise_spin,
     SpinPredicate,
 };
 use super::value::fmt_value;
 use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::constraint::AromaticSystemConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
@@ -259,134 +254,23 @@ fn lower_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaul
 
 // -- Constraint DSL -------------------
 
-/// Surface DSL wrapper around `AromaticSystemConstraint`. Mirrors the AST
-/// enum with atom refs in place of `AtomIdx`. EDN form is a single-key map
-/// keyed by the constraint kind (e.g. `{:atoms [0 1 2]}`, `{:contains :c1}`,
-/// `{:all-atoms {:valence 4}}`).
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum AromaticSystemConstraintDsl {
-    Atoms(Vec<AtomRef>),
-    Contains(AtomRef),
-    ContainsAll(Vec<AtomRef>),
-    AllAtoms(Box<AtomConstraintDsl>),
-    AnyAtom(Box<AtomConstraintDsl>),
-}
+pub enum AromaticSystemConstraintDsl {}
 
 impl<'de> FromEdn<'de> for AromaticSystemConstraintDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        let Edn::Map(m) = edn else {
-            return Err(DeError::TypeMismatch {
-                expected: "aromatic-system-constraint single-key map",
-                got: edn.kind(),
-                path: Vec::new(),
-            });
-        };
-        if m.len() != 1 {
-            return Err(DeError::Custom(format!(
-                "aromatic-system-constraint must have exactly one key, got {}",
-                m.len()
-            )));
-        }
-        let (k, v) = m.iter().next().unwrap();
-        let Edn::Keyword(key) = k else {
-            return Err(DeError::TypeMismatch {
-                expected: "keyword key",
-                got: k.kind(),
-                path: vec!["aromatic-system-constraint".into()],
-            });
-        };
-        Ok(match key.name() {
-            "atoms" => Self::Atoms(parse_atom_refs(v)?),
-            "contains" => Self::Contains(AtomRef::from_edn(v)?),
-            "contains-all" => Self::ContainsAll(parse_atom_refs(v)?),
-            "all-atoms" => Self::AllAtoms(Box::new(AtomConstraintDsl::from_edn(v)?)),
-            "any-atom" => Self::AnyAtom(Box::new(AtomConstraintDsl::from_edn(v)?)),
-            other => {
-                return Err(DeError::UnknownField {
-                    key: other.to_string(),
-                    path: vec!["aromatic-system-constraint".into()],
-                });
-            }
+        Err(DeError::TypeMismatch {
+            expected: "no value-only aromatic-system constraints exist yet",
+            got: edn.kind(),
+            path: vec!["aromatic-system-constraint".into()],
         })
     }
 }
 
 impl ToEdn for AromaticSystemConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
-        let (key, value) = match self {
-            Self::Atoms(refs) => ("atoms", render_atom_refs(refs)),
-            Self::Contains(r) => ("contains", r.to_edn()),
-            Self::ContainsAll(refs) => ("contains-all", render_atom_refs(refs)),
-            Self::AllAtoms(c) => ("all-atoms", c.to_edn()),
-            Self::AnyAtom(c) => ("any-atom", c.to_edn()),
-        };
-        let mut m = umol_edn::EdnMap::with_capacity(1);
-        m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
-        Edn::Map(m)
+        match *self {}
     }
-}
-
-impl AromaticSystemConstraintDsl {
-    pub(crate) fn from_ast(
-        c: &AromaticSystemConstraint,
-        meta: &Metadata,
-    ) -> Result<Self, Infallible> {
-        Ok(match c {
-            AromaticSystemConstraint::Atoms(atoms) => {
-                Self::Atoms(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
-            }
-            AromaticSystemConstraint::Contains(a) => Self::Contains(AtomRef::from_ast(*a, meta)),
-            AromaticSystemConstraint::ContainsAll(atoms) => {
-                Self::ContainsAll(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
-            }
-            AromaticSystemConstraint::AllAtoms(c) => {
-                Self::AllAtoms(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
-            }
-            AromaticSystemConstraint::AnyAtom(c) => {
-                Self::AnyAtom(Box::new(AtomConstraintDsl::from_ast(c, &()).unwrap()))
-            }
-        })
-    }
-
-    pub(crate) fn into_ast(
-        self,
-        counts: &EntityCounts,
-        meta: &Metadata,
-    ) -> Result<AromaticSystemConstraint, ParseError> {
-        let resolve_atoms = |refs: Vec<AtomRef>| -> Result<Vec<_>, ParseError> {
-            refs.into_iter()
-                .map(|r| r.into_ast(counts.atom_count, meta))
-                .collect()
-        };
-        Ok(match self {
-            Self::Atoms(refs) => AromaticSystemConstraint::Atoms(resolve_atoms(refs)?),
-            Self::Contains(r) => {
-                AromaticSystemConstraint::Contains(r.into_ast(counts.atom_count, meta)?)
-            }
-            Self::ContainsAll(refs) => AromaticSystemConstraint::ContainsAll(resolve_atoms(refs)?),
-            Self::AllAtoms(c) => {
-                AromaticSystemConstraint::AllAtoms(Box::new(c.into_ast(&()).unwrap()))
-            }
-            Self::AnyAtom(c) => {
-                AromaticSystemConstraint::AnyAtom(Box::new(c.into_ast(&()).unwrap()))
-            }
-        })
-    }
-}
-
-fn parse_atom_refs(edn: &Edn<'_>) -> Result<Vec<AtomRef>, DeError> {
-    let Edn::Vector(v) = edn else {
-        return Err(DeError::TypeMismatch {
-            expected: "vector of atom refs",
-            got: edn.kind(),
-            path: Vec::new(),
-        });
-    };
-    v.iter().map(AtomRef::from_edn).collect()
-}
-
-fn render_atom_refs(refs: &[AtomRef]) -> Edn<'static> {
-    Edn::Vector(refs.iter().map(AtomRef::to_edn).collect::<Vec<_>>().into())
 }
 
 #[cfg(test)]
@@ -394,12 +278,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::super::molecule::Metadata;
     use super::*;
-    use crate::ast::constraint::{
-        AromaticSystemConstraint, AromaticSystemConstraints, AtomConstraint,
-    };
-    use crate::ast::idx::AtomIdx;
+    use crate::ast::constraint::AromaticSystemConstraints;
     use crate::ast::spin::SpinStateAst;
 
     #[rustfmt::skip]
@@ -514,59 +394,10 @@ mod tests {
         assert_eq!(via_stream, via_tree);
     }
 
-    // -- AromaticSystemConstraintDsl ----------------
-
-    fn counts_with_atoms(atom_count: usize) -> EntityCounts {
-        EntityCounts {
-            atom_count,
-            bond_count: 0,
-            dative_bond_count: 0,
-            aromatic_system_count: 0,
-            multicenter_bond_count: 0,
-            noncovalent_bond_count: 0,
-        }
-    }
-
-    #[rustfmt::skip]
     #[rstest]
-    #[case::atoms(AromaticSystemConstraint::Atoms(vec![AtomIdx(0), AtomIdx(1)]), "{:atoms [0 1]}")]
-    #[case::contains(AromaticSystemConstraint::Contains(AtomIdx(3)), "{:contains 3}")]
-    #[case::contains_all(AromaticSystemConstraint::ContainsAll(vec![AtomIdx(2), AtomIdx(5)]), "{:contains-all [2 5]}")]
-    #[case::all_atoms(AromaticSystemConstraint::AllAtoms(Box::new(AtomConstraint::Valence(ValueAst::Lit(4)))), "{:all-atoms {:valence 4}}")]
-    #[case::any_atom(AromaticSystemConstraint::AnyAtom(Box::new(AtomConstraint::Degree(ValueAst::Lit(3)))), "{:any-atom {:degree 3}}")]
-    fn test_aromatic_system_constraint_dsl_roundtrip(
-        #[case] input: AromaticSystemConstraint,
-        #[case] edn_source: &str,
-    ) {
-        let meta = Metadata::default();
-        let dsl = AromaticSystemConstraintDsl::from_ast(&input, &meta).unwrap();
-        let edn = dsl.clone().to_edn();
-        let expected = umol_edn::read_string(edn_source).unwrap();
-        assert_eq!(edn, expected, "render mismatch");
-        let parsed = AromaticSystemConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&counts_with_atoms(10), &meta).unwrap();
-        assert_eq!(back, input, "parse-back mismatch");
-    }
-
-    #[rstest]
-    fn test_aromatic_system_constraint_dsl_rejects_out_of_range_atom() {
-        let meta = Metadata::default();
-        let edn = umol_edn::read_string("{:contains 99}").unwrap();
-        let dsl = AromaticSystemConstraintDsl::from_edn(&edn).unwrap();
-        let err = dsl.into_ast(&counts_with_atoms(5), &meta).unwrap_err();
-        assert_eq!(
-            err,
-            ParseError::InvalidRef {
-                kind: "atom",
-                value: "99".into()
-            }
-        );
-    }
-
-    #[rstest]
-    fn test_aromatic_system_constraint_dsl_rejects_unknown_key() {
-        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+    fn test_aromatic_system_constraint_dsl_from_edn_errors() {
+        let edn = umol_edn::read_string("{:contains 1}").unwrap();
         let err = AromaticSystemConstraintDsl::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, DeError::UnknownField { .. }));
+        assert!(matches!(err, DeError::TypeMismatch { .. }));
     }
 }

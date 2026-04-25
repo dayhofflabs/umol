@@ -142,6 +142,12 @@ impl AtomConstraints {
         self.entries.clear();
     }
 
+    /// Move the entries out of the store, leaving it empty. Returned items
+    /// are in the store's internal sorted-by-kind order.
+    pub fn take(&mut self) -> impl Iterator<Item = AtomConstraint> {
+        std::mem::take(&mut self.entries).into_iter()
+    }
+
     pub fn remove(&mut self, kind: AtomConstraintKind) -> Option<AtomConstraint> {
         self.find(kind).ok().map(|i| self.entries.remove(i))
     }

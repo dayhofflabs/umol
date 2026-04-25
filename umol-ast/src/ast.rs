@@ -30,7 +30,8 @@ pub use constraint::{
     AtomConstraintKind, AtomConstraints, BondConstraint, BondConstraintKind, BondConstraints,
     Constraint, Constraints, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
     MoleculeConstraint, MulticenterBondConstraint, MulticenterBondConstraints,
-    MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraints, SubPatternAnchor,
+    MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraints,
+    RelationalConstraint, SubPatternAnchor,
 };
 pub use dative::{DativeBondAst, DativeBondDirection};
 pub use error::{EvaluationError, RewriteError};

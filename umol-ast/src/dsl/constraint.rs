@@ -17,6 +17,7 @@ use super::error::ParseError;
 use super::molecule::{Metadata, MoleculeDsl};
 use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
+use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
 use super::value::{parse_value, ValueDsl};
 use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
 use crate::ast::idx::{
@@ -511,15 +512,6 @@ pub(super) fn read_dative_bond_constraint_dsl(
         "ring-size" => {
             DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap())
         }
-        "donor" => DativeBondConstraintDsl::Donor(read_atom_ref(de)?),
-        "acceptor" => DativeBondConstraintDsl::Acceptor(read_atom_ref(de)?),
-        "donor-satisfies" => {
-            DativeBondConstraintDsl::DonorSatisfies(Box::new(read_atom_constraint_dsl(de)?))
-        }
-        "acceptor-satisfies" => {
-            DativeBondConstraintDsl::AcceptorSatisfies(Box::new(read_atom_constraint_dsl(de)?))
-        }
-        "parallels" => DativeBondConstraintDsl::Parallels(read_bond_ref(de)?),
         other => {
             return Err(DeError::UnknownField {
                 key: other.to_string(),
@@ -532,77 +524,8 @@ pub(super) fn read_dative_bond_constraint_dsl(
     Ok(c)
 }
 
-pub(super) fn read_aromatic_system_constraint_dsl(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<AromaticSystemConstraintDsl, EdnError> {
-    let key = read_single_key_map_header(de)?;
-    let c = match key.as_str() {
-        "atoms" => AromaticSystemConstraintDsl::Atoms(read_vec(de, read_atom_ref)?),
-        "contains" => AromaticSystemConstraintDsl::Contains(read_atom_ref(de)?),
-        "contains-all" => AromaticSystemConstraintDsl::ContainsAll(read_vec(de, read_atom_ref)?),
-        "all-atoms" => {
-            AromaticSystemConstraintDsl::AllAtoms(Box::new(read_atom_constraint_dsl(de)?))
-        }
-        "any-atom" => AromaticSystemConstraintDsl::AnyAtom(Box::new(read_atom_constraint_dsl(de)?)),
-        other => {
-            return Err(DeError::UnknownField {
-                key: other.to_string(),
-                path: vec!["aromatic-system-constraint".into()],
-            }
-            .into());
-        }
-    };
-    consume_single_key_map_close(de, "aromatic-system-constraint")?;
-    Ok(c)
-}
-
-pub(super) fn read_multicenter_bond_constraint_dsl(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<MulticenterBondConstraintDsl, EdnError> {
-    let key = read_single_key_map_header(de)?;
-    let c = match key.as_str() {
-        "atoms" => MulticenterBondConstraintDsl::Atoms(read_vec(de, read_atom_ref)?),
-        "contains" => MulticenterBondConstraintDsl::Contains(read_atom_ref(de)?),
-        "contains-all" => MulticenterBondConstraintDsl::ContainsAll(read_vec(de, read_atom_ref)?),
-        "all-atoms" => {
-            MulticenterBondConstraintDsl::AllAtoms(Box::new(read_atom_constraint_dsl(de)?))
-        }
-        "any-atom" => {
-            MulticenterBondConstraintDsl::AnyAtom(Box::new(read_atom_constraint_dsl(de)?))
-        }
-        other => {
-            return Err(DeError::UnknownField {
-                key: other.to_string(),
-                path: vec!["multicenter-bond-constraint".into()],
-            }
-            .into());
-        }
-    };
-    consume_single_key_map_close(de, "multicenter-bond-constraint")?;
-    Ok(c)
-}
-
-pub(super) fn read_noncovalent_bond_constraint_dsl(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<NoncovalentBondConstraintDsl, EdnError> {
-    let key = read_single_key_map_header(de)?;
-    let c = match key.as_str() {
-        "ends" => NoncovalentBondConstraintDsl::Ends(read_atom_ref_pair(de, "ends")?),
-        "contains" => NoncovalentBondConstraintDsl::Contains(read_atom_ref(de)?),
-        "ends-satisfy" => {
-            let [a, b] = read_atom_constraint_pair(de, "ends-satisfy")?;
-            NoncovalentBondConstraintDsl::EndsSatisfy([Box::new(a), Box::new(b)])
-        }
-        other => {
-            return Err(DeError::UnknownField {
-                key: other.to_string(),
-                path: vec!["noncovalent-bond-constraint".into()],
-            }
-            .into());
-        }
-    };
-    consume_single_key_map_close(de, "noncovalent-bond-constraint")?;
-    Ok(c)
+fn read_atom_ref_vec(de: &mut EdnStreamDeserializer<'_>) -> Result<Vec<AtomRef>, EdnError> {
+    read_vec(de, read_atom_ref)
 }
 
 fn read_atom_ref_pair(
@@ -629,6 +552,101 @@ fn read_atom_constraint_pair(
         return Err(DeError::Custom(format!("{}: expected 2 elements", context)).into());
     }
     Ok([a, b])
+}
+
+pub(super) fn read_relational_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+    key: &str,
+) -> Result<RelationalConstraintDsl, EdnError> {
+    use RelationalConstraintDsl as R;
+    de.consume_byte(b'[')?;
+    let c = match key {
+        "dative-bond-donor" => R::DativeBondDonor {
+            bond: read_dative_bond_ref(de)?,
+            atom: read_atom_ref(de)?,
+        },
+        "dative-bond-acceptor" => R::DativeBondAcceptor {
+            bond: read_dative_bond_ref(de)?,
+            atom: read_atom_ref(de)?,
+        },
+        "dative-bond-parallels" => R::DativeBondParallels {
+            dative: read_dative_bond_ref(de)?,
+            parallel: read_bond_ref(de)?,
+        },
+        "dative-bond-donor-satisfies" => R::DativeBondDonorSatisfies {
+            bond: read_dative_bond_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "dative-bond-acceptor-satisfies" => R::DativeBondAcceptorSatisfies {
+            bond: read_dative_bond_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "aromatic-system-atoms" => R::AromaticSystemAtoms {
+            system: read_aromatic_system_ref(de)?,
+            atoms: read_atom_ref_vec(de)?,
+        },
+        "aromatic-system-contains" => R::AromaticSystemContains {
+            system: read_aromatic_system_ref(de)?,
+            atom: read_atom_ref(de)?,
+        },
+        "aromatic-system-contains-all" => R::AromaticSystemContainsAll {
+            system: read_aromatic_system_ref(de)?,
+            atoms: read_atom_ref_vec(de)?,
+        },
+        "aromatic-system-all-atoms" => R::AromaticSystemAllAtoms {
+            system: read_aromatic_system_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "aromatic-system-any-atom" => R::AromaticSystemAnyAtom {
+            system: read_aromatic_system_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "multicenter-bond-atoms" => R::MulticenterBondAtoms {
+            bond: read_multicenter_bond_ref(de)?,
+            atoms: read_atom_ref_vec(de)?,
+        },
+        "multicenter-bond-contains" => R::MulticenterBondContains {
+            bond: read_multicenter_bond_ref(de)?,
+            atom: read_atom_ref(de)?,
+        },
+        "multicenter-bond-contains-all" => R::MulticenterBondContainsAll {
+            bond: read_multicenter_bond_ref(de)?,
+            atoms: read_atom_ref_vec(de)?,
+        },
+        "multicenter-bond-all-atoms" => R::MulticenterBondAllAtoms {
+            bond: read_multicenter_bond_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "multicenter-bond-any-atom" => R::MulticenterBondAnyAtom {
+            bond: read_multicenter_bond_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "noncovalent-bond-ends" => R::NoncovalentBondEnds {
+            bond: read_noncovalent_bond_ref(de)?,
+            atoms: read_atom_ref_pair(de, "noncovalent-bond-ends")?,
+        },
+        "noncovalent-bond-contains" => R::NoncovalentBondContains {
+            bond: read_noncovalent_bond_ref(de)?,
+            atom: read_atom_ref(de)?,
+        },
+        "noncovalent-bond-ends-satisfy" => {
+            let bond = read_noncovalent_bond_ref(de)?;
+            let [a, b] = read_atom_constraint_pair(de, "noncovalent-bond-ends-satisfy")?;
+            R::NoncovalentBondEndsSatisfy {
+                bond,
+                predicates: [Box::new(a), Box::new(b)],
+            }
+        }
+        other => unreachable!("read_relational_constraint_dsl called with non-relational key {other}"),
+    };
+    if !de.try_consume_byte(b']')? {
+        return Err(DeError::Custom(format!(
+            "{}: expected 2 elements",
+            key
+        ))
+        .into());
+    }
+    Ok(c)
 }
 
 pub(super) fn read_sub_pattern_anchor_dsl(
@@ -790,38 +808,14 @@ pub(super) fn read_constraint_dsl(
             )?;
             ConstraintDsl::DativeBond(r, inner)
         }
-        "aromatic-system" => {
-            let (r, inner) = read_entity_leaf(
-                de,
-                read_aromatic_system_ref,
-                read_aromatic_system_constraint_dsl,
-                "aromatic-system",
-            )?;
-            ConstraintDsl::AromaticSystem(r, inner)
-        }
-        "multicenter-bond" => {
-            let (r, inner) = read_entity_leaf(
-                de,
-                read_multicenter_bond_ref,
-                read_multicenter_bond_constraint_dsl,
-                "multicenter-bond",
-            )?;
-            ConstraintDsl::MulticenterBond(r, inner)
-        }
-        "noncovalent-bond" => {
-            let (r, inner) = read_entity_leaf(
-                de,
-                read_noncovalent_bond_ref,
-                read_noncovalent_bond_constraint_dsl,
-                "noncovalent-bond",
-            )?;
-            ConstraintDsl::NoncovalentBond(r, inner)
-        }
         "and" => ConstraintDsl::And(read_vec(de, read_constraint_dsl)?),
         "or" => ConstraintDsl::Or(read_vec(de, read_constraint_dsl)?),
         "not" => ConstraintDsl::Not(Box::new(read_constraint_dsl(de)?)),
         "charge-sum" | "spin-sum" | "bond-order-sum" | "connected" | "sub-pattern" => {
             ConstraintDsl::Molecule(read_molecule_constraint_dsl(de, key.as_str())?)
+        }
+        k if RELATIONAL_KEYS.contains(&k) => {
+            ConstraintDsl::Relational(read_relational_constraint_dsl(de, k)?)
         }
         other => {
             return Err(DeError::UnknownField {
@@ -1431,10 +1425,16 @@ fn render_spin(spin: &SpinStateAst) -> Edn<'static> {
 // -- ConstraintDsl ------------------
 
 /// Surface DSL wrapper around `Constraint`. Single-key-map EDN form:
-/// `{:atom [<ref> <atom-constraint>]}` for entity leaves;
-/// `{:charge-sum {...}}` etc. for molecule-scope leaves (keys flattened from
-/// `MoleculeConstraintDsl`); `{:and [...]}` / `{:or [...]}` / `{:not <c>}`
-/// for combinators.
+/// `{:atom [<ref> <atom-constraint>]}` for narrow entity leaves;
+/// `{:dative-bond-donor [<bond_ref> <atom_ref>]}` etc. for relational
+/// (cross-entity) leaves; `{:charge-sum {...}}` etc. for molecule-scope
+/// leaves (keys flattened from `MoleculeConstraintDsl`); `{:and [...]}` /
+/// `{:or [...]}` / `{:not <c>}` for combinators.
+///
+/// Aromatic-system / multicenter-bond / noncovalent-bond entity-scope
+/// arms have uninhabited inner constraint types (all previous variants
+/// moved to Relational); they are placeholders for future value-only
+/// inline constraints.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ConstraintDsl {
     Atom(AtomRef, AtomConstraintDsl),
@@ -1443,6 +1443,7 @@ pub enum ConstraintDsl {
     AromaticSystem(AromaticSystemRef, AromaticSystemConstraintDsl),
     MulticenterBond(MulticenterBondRef, MulticenterBondConstraintDsl),
     NoncovalentBond(NoncovalentBondRef, NoncovalentBondConstraintDsl),
+    Relational(RelationalConstraintDsl),
     Molecule(MoleculeConstraintDsl),
     And(Vec<ConstraintDsl>),
     Or(Vec<ConstraintDsl>),
@@ -1508,6 +1509,7 @@ impl<'de> FromEdn<'de> for ConstraintDsl {
             "charge-sum" | "spin-sum" | "bond-order-sum" | "connected" | "sub-pattern" => {
                 Self::Molecule(MoleculeConstraintDsl::from_edn(edn)?)
             }
+            k if RELATIONAL_KEYS.contains(&k) => Self::Relational(RelationalConstraintDsl::from_edn(edn)?),
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -1524,9 +1526,10 @@ impl ToEdn for ConstraintDsl {
             Self::Atom(r, c) => entity_leaf_edn("atom", r, c),
             Self::Bond(r, c) => entity_leaf_edn("bond", r, c),
             Self::DativeBond(r, c) => entity_leaf_edn("dative-bond", r, c),
-            Self::AromaticSystem(r, c) => entity_leaf_edn("aromatic-system", r, c),
-            Self::MulticenterBond(r, c) => entity_leaf_edn("multicenter-bond", r, c),
-            Self::NoncovalentBond(r, c) => entity_leaf_edn("noncovalent-bond", r, c),
+            Self::AromaticSystem(_, c) => match *c {},
+            Self::MulticenterBond(_, c) => match *c {},
+            Self::NoncovalentBond(_, c) => match *c {},
+            Self::Relational(r) => r.to_edn(),
             Self::Molecule(m) => m.to_edn(),
             Self::And(xs) => combinator_edn("and", xs),
             Self::Or(xs) => combinator_edn("or", xs),
@@ -1552,20 +1555,17 @@ impl ConstraintDsl {
             ),
             Constraint::DativeBond(idx, c) => Self::DativeBond(
                 DativeBondRef::from_ast(*idx, meta),
-                DativeBondConstraintDsl::from_ast(c, meta).unwrap(),
+                DativeBondConstraintDsl::from_ast(c),
             ),
-            Constraint::AromaticSystem(idx, c) => Self::AromaticSystem(
-                AromaticSystemRef::from_ast(*idx, meta),
-                AromaticSystemConstraintDsl::from_ast(c, meta).unwrap(),
-            ),
-            Constraint::MulticenterBond(idx, c) => Self::MulticenterBond(
-                MulticenterBondRef::from_ast(*idx, meta),
-                MulticenterBondConstraintDsl::from_ast(c, meta).unwrap(),
-            ),
-            Constraint::NoncovalentBond(idx, c) => Self::NoncovalentBond(
-                NoncovalentBondRef::from_ast(*idx, meta),
-                NoncovalentBondConstraintDsl::from_ast(c, meta).unwrap(),
-            ),
+            // AromaticSystem/MulticenterBond/NoncovalentBond narrow constraints are
+            // currently uninhabited (all previous variants moved to Relational);
+            // these arms are structurally unreachable but kept exhaustive.
+            Constraint::AromaticSystem(_, c) => match *c {},
+            Constraint::MulticenterBond(_, c) => match *c {},
+            Constraint::NoncovalentBond(_, c) => match *c {},
+            Constraint::Relational(rel) => {
+                Self::Relational(RelationalConstraintDsl::from_ast(rel, meta))
+            }
             Constraint::Molecule(m) => Self::Molecule(MoleculeConstraintDsl::from_ast(m, meta)?),
             Constraint::And(xs) => Self::And(
                 xs.iter()
@@ -1595,22 +1595,13 @@ impl ConstraintDsl {
                 r.into_ast(counts.bond_count, meta)?,
                 c.into_ast(&()).unwrap(),
             ),
-            Self::DativeBond(r, c) => Constraint::DativeBond(
-                r.into_ast(counts.dative_bond_count, meta)?,
-                c.into_ast(counts, meta)?,
-            ),
-            Self::AromaticSystem(r, c) => Constraint::AromaticSystem(
-                r.into_ast(counts.aromatic_system_count, meta)?,
-                c.into_ast(counts, meta)?,
-            ),
-            Self::MulticenterBond(r, c) => Constraint::MulticenterBond(
-                r.into_ast(counts.multicenter_bond_count, meta)?,
-                c.into_ast(counts, meta)?,
-            ),
-            Self::NoncovalentBond(r, c) => Constraint::NoncovalentBond(
-                r.into_ast(counts.noncovalent_bond_count, meta)?,
-                c.into_ast(counts, meta)?,
-            ),
+            Self::DativeBond(r, c) => {
+                Constraint::DativeBond(r.into_ast(counts.dative_bond_count, meta)?, c.into_ast())
+            }
+            Self::AromaticSystem(_, c) => match c {},
+            Self::MulticenterBond(_, c) => match c {},
+            Self::NoncovalentBond(_, c) => match c {},
+            Self::Relational(r) => Constraint::Relational(r.into_ast(counts, meta)?),
             Self::Molecule(m) => Constraint::Molecule(m.into_ast(counts, meta)?),
             Self::And(xs) => Constraint::And(
                 xs.into_iter()
@@ -1741,9 +1732,8 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{
-        AromaticSystemConstraint, AromaticValenceAst, AtomConstraint, BondConstraint,
-        DativeBondConstraint, MulticenterBondConstraint, MulticenterValenceAst,
-        NoncovalentBondConstraint,
+        AromaticValenceAst, AtomConstraint, BondConstraint, DativeBondConstraint,
+        MulticenterValenceAst, RelationalConstraint,
     };
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::value::ValueAst;
@@ -1991,89 +1981,93 @@ mod tests {
         "{:dative-bond [0 {:ring-count 1}]}"
     )]
     #[case::dative_bond_leaf_donor(
-        Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::Donor(AtomIdx(2))),
-        "{:dative-bond [0 {:donor 2}]}"
+        Constraint::Relational(RelationalConstraint::DativeBondDonor {
+            bond: DativeBondIdx(0), atom: AtomIdx(2),
+        }),
+        "{:dative-bond-donor [0 2]}"
     )]
     #[case::dative_bond_leaf_acceptor(
-        Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::Acceptor(AtomIdx(3))),
-        "{:dative-bond [0 {:acceptor 3}]}"
+        Constraint::Relational(RelationalConstraint::DativeBondAcceptor {
+            bond: DativeBondIdx(0), atom: AtomIdx(3),
+        }),
+        "{:dative-bond-acceptor [0 3]}"
     )]
     #[case::dative_bond_leaf_parallels(
-        Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::Parallels(BondIdx(2))),
-        "{:dative-bond [0 {:parallels 2}]}"
+        Constraint::Relational(RelationalConstraint::DativeBondParallels {
+            dative: DativeBondIdx(0), parallel: BondIdx(2),
+        }),
+        "{:dative-bond-parallels [0 2]}"
     )]
     #[case::dative_bond_leaf_donor_satisfies(
-        Constraint::DativeBond(
-            DativeBondIdx(0),
-            DativeBondConstraint::DonorSatisfies(Box::new(AtomConstraint::Valence(ValueAst::Lit(3)))),
-        ),
-        "{:dative-bond [0 {:donor-satisfies {:valence 3}}]}"
+        Constraint::Relational(RelationalConstraint::DativeBondDonorSatisfies {
+            bond: DativeBondIdx(0),
+            predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))),
+        }),
+        "{:dative-bond-donor-satisfies [0 {:valence 3}]}"
     )]
     #[case::aromatic_system_leaf_atoms(
-        Constraint::AromaticSystem(
-            AromaticSystemIdx(0),
-            AromaticSystemConstraint::Atoms(vec![AtomIdx(0), AtomIdx(1)]),
-        ),
-        "{:aromatic-system [0 {:atoms [0 1]}]}"
+        Constraint::Relational(RelationalConstraint::AromaticSystemAtoms {
+            system: AromaticSystemIdx(0),
+            atoms: vec![AtomIdx(0), AtomIdx(1)],
+        }),
+        "{:aromatic-system-atoms [0 [0 1]]}"
     )]
     #[case::aromatic_system_leaf_contains(
-        Constraint::AromaticSystem(
-            AromaticSystemIdx(0),
-            AromaticSystemConstraint::Contains(AtomIdx(2)),
-        ),
-        "{:aromatic-system [0 {:contains 2}]}"
+        Constraint::Relational(RelationalConstraint::AromaticSystemContains {
+            system: AromaticSystemIdx(0), atom: AtomIdx(2),
+        }),
+        "{:aromatic-system-contains [0 2]}"
     )]
     #[case::aromatic_system_leaf_all_atoms(
-        Constraint::AromaticSystem(
-            AromaticSystemIdx(0),
-            AromaticSystemConstraint::AllAtoms(Box::new(AtomConstraint::Valence(ValueAst::Lit(4)))),
-        ),
-        "{:aromatic-system [0 {:all-atoms {:valence 4}}]}"
+        Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms {
+            system: AromaticSystemIdx(0),
+            predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))),
+        }),
+        "{:aromatic-system-all-atoms [0 {:valence 4}]}"
     )]
     #[case::multicenter_leaf_atoms(
-        Constraint::MulticenterBond(
-            MulticenterBondIdx(0),
-            MulticenterBondConstraint::Atoms(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)]),
-        ),
-        "{:multicenter-bond [0 {:atoms [0 1 2]}]}"
+        Constraint::Relational(RelationalConstraint::MulticenterBondAtoms {
+            bond: MulticenterBondIdx(0),
+            atoms: vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+        }),
+        "{:multicenter-bond-atoms [0 [0 1 2]]}"
     )]
     #[case::multicenter_leaf_contains_all(
-        Constraint::MulticenterBond(
-            MulticenterBondIdx(0),
-            MulticenterBondConstraint::ContainsAll(vec![AtomIdx(0), AtomIdx(1)]),
-        ),
-        "{:multicenter-bond [0 {:contains-all [0 1]}]}"
+        Constraint::Relational(RelationalConstraint::MulticenterBondContainsAll {
+            bond: MulticenterBondIdx(0),
+            atoms: vec![AtomIdx(0), AtomIdx(1)],
+        }),
+        "{:multicenter-bond-contains-all [0 [0 1]]}"
     )]
     #[case::multicenter_leaf_any_atom(
-        Constraint::MulticenterBond(
-            MulticenterBondIdx(0),
-            MulticenterBondConstraint::AnyAtom(Box::new(AtomConstraint::Degree(ValueAst::Lit(3)))),
-        ),
-        "{:multicenter-bond [0 {:any-atom {:degree 3}}]}"
+        Constraint::Relational(RelationalConstraint::MulticenterBondAnyAtom {
+            bond: MulticenterBondIdx(0),
+            predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))),
+        }),
+        "{:multicenter-bond-any-atom [0 {:degree 3}]}"
     )]
     #[case::noncovalent_leaf_ends(
-        Constraint::NoncovalentBond(
-            NoncovalentBondIdx(0),
-            NoncovalentBondConstraint::Ends([AtomIdx(0), AtomIdx(3)]),
-        ),
-        "{:noncovalent-bond [0 {:ends [0 3]}]}"
+        Constraint::Relational(RelationalConstraint::NoncovalentBondEnds {
+            bond: NoncovalentBondIdx(0),
+            atoms: [AtomIdx(0), AtomIdx(3)],
+        }),
+        "{:noncovalent-bond-ends [0 [0 3]]}"
     )]
     #[case::noncovalent_leaf_contains(
-        Constraint::NoncovalentBond(
-            NoncovalentBondIdx(0),
-            NoncovalentBondConstraint::Contains(AtomIdx(2)),
-        ),
-        "{:noncovalent-bond [0 {:contains 2}]}"
+        Constraint::Relational(RelationalConstraint::NoncovalentBondContains {
+            bond: NoncovalentBondIdx(0), atom: AtomIdx(2),
+        }),
+        "{:noncovalent-bond-contains [0 2]}"
     )]
     #[case::noncovalent_leaf_ends_satisfy(
-        Constraint::NoncovalentBond(
-            NoncovalentBondIdx(0),
-            NoncovalentBondConstraint::EndsSatisfy([
+        Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy {
+            bond: NoncovalentBondIdx(0),
+            predicates: [
                 Box::new(AtomConstraint::Valence(ValueAst::Lit(2))),
                 Box::new(AtomConstraint::Valence(ValueAst::Lit(3))),
-            ]),
-        ),
-        "{:noncovalent-bond [0 {:ends-satisfy [{:valence 2} {:valence 3}]}]}"
+            ],
+        }),
+        "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}"
     )]
     #[case::molecule_connected(
         Constraint::Molecule(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)])),

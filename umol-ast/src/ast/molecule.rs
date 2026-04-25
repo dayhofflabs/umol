@@ -17,7 +17,7 @@ use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::automorphism::AtomAutomorphism;
 use super::bond::BondAst;
-use super::constraint::Constraints;
+use super::constraint::{Constraint, Constraints};
 use super::dative::{DativeBondAst, DativeBondDirection};
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
@@ -705,6 +705,103 @@ impl MoleculeAst {
 
     pub fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
+    }
+
+    /// Drain every entity's inline `constraints` store into `self.constraints`
+    /// as `Constraint::Atom` / `Bond` / `DativeBond` / `AromaticSystem` /
+    /// `MulticenterBond` / `NoncovalentBond` entries. Each entity kind is
+    /// walked unconditionally; for entities whose narrow constraint enum is
+    /// currently uninhabited (aromatic system, multicenter, noncovalent),
+    /// the iteration is empty until a variant is added — at which point
+    /// new variants are lifted automatically with no code change here.
+    /// The order of inserted entries in `self.constraints` is unspecified.
+    pub fn lift_constraints(&mut self) {
+        let atom_count = self.atom_count();
+        let bond_count = self.bond_count();
+        let dative_count = self.dative_bond_count();
+        let aromatic_count = self.aromatic_system_count();
+        let multicenter_count = self.multicenter_bond_count();
+        let noncovalent_count = self.noncovalent_bond_count();
+
+        let mut additions: Vec<Constraint> = Vec::new();
+        for i in 0..atom_count {
+            let idx = AtomIdx::from(i);
+            for c in self.atom_mut(idx).data.constraints.take() {
+                additions.push(Constraint::Atom(idx, c));
+            }
+        }
+        for i in 0..bond_count {
+            let idx = BondIdx::from(i);
+            for c in self.bond_mut(idx).data.constraints.take() {
+                additions.push(Constraint::Bond(idx, c));
+            }
+        }
+        for i in 0..dative_count {
+            let idx = DativeBondIdx::from(i);
+            for c in self.dative_bond_mut(idx).constraints.take() {
+                additions.push(Constraint::DativeBond(idx, c));
+            }
+        }
+        for i in 0..aromatic_count {
+            let idx = AromaticSystemIdx::from(i);
+            for c in self.aromatic_system_mut(idx).constraints.take() {
+                additions.push(Constraint::AromaticSystem(idx, c));
+            }
+        }
+        for i in 0..multicenter_count {
+            let idx = MulticenterBondIdx::from(i);
+            for c in self.multicenter_bond_mut(idx).constraints.take() {
+                additions.push(Constraint::MulticenterBond(idx, c));
+            }
+        }
+        for i in 0..noncovalent_count {
+            let idx = NoncovalentBondIdx::from(i);
+            for c in self.noncovalent_bond_mut(idx).constraints.take() {
+                additions.push(Constraint::NoncovalentBond(idx, c));
+            }
+        }
+        for c in additions {
+            self.constraints.push(c);
+        }
+    }
+
+    /// Push every entity inline constraints from `self.constraints`
+    /// into the targeted entity's inline `constraints` store via `add`
+    /// (last-wins per kind), removing it from the molecule list.
+    /// Combinator subtrees, `Relational`, and `Molecule` entries are left
+    /// in place.
+    ///
+    /// The `Constraint` arm is exhaustively matched: adding a new variant
+    /// or making any uninhabited entity-leaf inner enum (aromatic,
+    /// multicenter, noncovalent) inhabited is a compile-time forcing
+    /// function on this method.
+    pub fn inline_constraints(&mut self) {
+        let entries = self.constraints.take();
+        let mut leftover: Vec<Constraint> = Vec::new();
+        for c in entries {
+            match c {
+                Constraint::Atom(idx, inner) => {
+                    self.atom_mut(idx).data.constraints.add(inner);
+                }
+                Constraint::Bond(idx, inner) => {
+                    self.bond_mut(idx).data.constraints.add(inner);
+                }
+                Constraint::DativeBond(idx, inner) => {
+                    self.dative_bond_mut(idx).constraints.add(inner);
+                }
+                Constraint::AromaticSystem(_, inner) => match inner {},
+                Constraint::MulticenterBond(_, inner) => match inner {},
+                Constraint::NoncovalentBond(_, inner) => match inner {},
+                c @ (Constraint::Relational(_)
+                | Constraint::Molecule(_)
+                | Constraint::And(_)
+                | Constraint::Or(_)
+                | Constraint::Not(_)) => leftover.push(c),
+            }
+        }
+        for c in leftover {
+            self.constraints.push(c);
+        }
     }
 
     // -- Topological mutation (via builder) --------------------------------

@@ -12,6 +12,7 @@ pub(crate) mod multicenter;
 pub(crate) mod noncovalent;
 mod predicates;
 pub(crate) mod refs;
+pub(crate) mod relational;
 pub(crate) mod value;
 
 pub use aromatic::{
@@ -46,4 +47,5 @@ pub use refs::{
     AromaticSystemRefDsl, AtomRefDsl, BondRefDsl, DativeBondRefDsl, MulticenterBondRefDsl,
     NoncovalentBondRefDsl,
 };
+pub use relational::RelationalConstraintDsl;
 pub use value::{parse_value, ValueDsl};

@@ -13,8 +13,8 @@ use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use super::super::bond::BondAst;
 use super::super::constraint::{
-    AtomConstraint, AtomConstraints, BondConstraints, Constraint, Constraints,
-    DativeBondConstraint, DativeBondConstraints, MoleculeConstraint,
+    AtomConstraint, AtomConstraints, BondConstraint, BondConstraints, Constraint, Constraints,
+    DativeBondConstraint, DativeBondConstraints, MoleculeConstraint, RelationalConstraint,
 };
 use super::super::dative::{DativeBondAst, DativeBondDirection};
 use super::super::idx::{
@@ -1401,4 +1401,227 @@ fn test_molecule_ast_noncovalent_bond_mut(#[from(rich_molecule)] mut ast: Molecu
         ast[NoncovalentBondIdx(0)].kind,
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic)
     );
+}
+
+// -- lift_constraints / inline_constraints ---------------------
+
+/// Set-equality assertion for constraint vecs: order is unspecified, so the
+/// test compares as multisets via sort+eq.
+fn assert_same_constraints(a: &Constraints, b: &Constraints) {
+    let mut x: Vec<&Constraint> = a.iter().collect();
+    let mut y: Vec<&Constraint> = b.iter().collect();
+    x.sort_by_key(|c| format!("{c:?}"));
+    y.sort_by_key(|c| format!("{c:?}"));
+    assert_eq!(x, y);
+}
+
+#[rstest]
+fn test_molecule_ast_lift_constraints_empty() {
+    let mut ast = MoleculeAst::default();
+    ast.lift_constraints();
+    assert!(ast.constraints().is_empty());
+}
+
+#[rstest]
+fn test_molecule_ast_lift_constraints_drains_inline_stores(
+    #[from(rich_molecule)] mut ast: MoleculeAst,
+) {
+    ast.atom_mut(AtomIdx(0))
+        .data
+        .constraints
+        .add(AtomConstraint::Valence(ValueAst::Lit(4)));
+    ast.atom_mut(AtomIdx(2))
+        .data
+        .constraints
+        .add(AtomConstraint::Degree(ValueAst::Lit(3)));
+    ast.bond_mut(BondIdx(0))
+        .data
+        .constraints
+        .add(BondConstraint::Aromatic);
+    ast.dative_bond_mut(DativeBondIdx(0))
+        .constraints
+        .add(DativeBondConstraint::RingCount(ValueAst::Lit(1)));
+
+    ast.lift_constraints();
+
+    assert!(ast[AtomIdx(0)].constraints.is_empty());
+    assert!(ast[AtomIdx(2)].constraints.is_empty());
+    assert!(ast[BondIdx(0)].constraints.is_empty());
+    assert!(ast[DativeBondIdx(0)].constraints.is_empty());
+
+    let mut expected = Constraints::new();
+    expected.push(Constraint::Atom(
+        AtomIdx(0),
+        AtomConstraint::Valence(ValueAst::Lit(4)),
+    ));
+    expected.push(Constraint::Atom(
+        AtomIdx(2),
+        AtomConstraint::Degree(ValueAst::Lit(3)),
+    ));
+    expected.push(Constraint::Bond(BondIdx(0), BondConstraint::Aromatic));
+    expected.push(Constraint::DativeBond(
+        DativeBondIdx(0),
+        DativeBondConstraint::RingCount(ValueAst::Lit(1)),
+    ));
+    assert_same_constraints(ast.constraints(), &expected);
+}
+
+#[rstest]
+fn test_molecule_ast_lift_constraints_appends_to_existing(
+    #[from(rich_molecule)] mut ast: MoleculeAst,
+) {
+    let prior = Constraint::Relational(RelationalConstraint::AromaticSystemContains {
+        system: AromaticSystemIdx(0),
+        atom: AtomIdx(0),
+    });
+    ast.constraints_mut().push(prior.clone());
+    ast.atom_mut(AtomIdx(0))
+        .data
+        .constraints
+        .add(AtomConstraint::Valence(ValueAst::Lit(4)));
+
+    ast.lift_constraints();
+
+    let mut expected = Constraints::new();
+    expected.push(prior);
+    expected.push(Constraint::Atom(
+        AtomIdx(0),
+        AtomConstraint::Valence(ValueAst::Lit(4)),
+    ));
+    assert_same_constraints(ast.constraints(), &expected);
+}
+
+#[rstest]
+fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
+    #[from(rich_molecule)] mut ast: MoleculeAst,
+) {
+    ast.constraints_mut().push(Constraint::Atom(
+        AtomIdx(0),
+        AtomConstraint::Valence(ValueAst::Lit(4)),
+    ));
+    ast.constraints_mut().push(Constraint::Bond(
+        BondIdx(0),
+        BondConstraint::Aromatic,
+    ));
+    ast.constraints_mut().push(Constraint::DativeBond(
+        DativeBondIdx(0),
+        DativeBondConstraint::RingSize(ValueAst::Lit(5)),
+    ));
+
+    ast.inline_constraints();
+
+    assert!(ast.constraints().is_empty());
+    assert_eq!(
+        ast[AtomIdx(0)].constraints,
+        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))])
+    );
+    assert_eq!(
+        ast[BondIdx(0)].constraints,
+        BondConstraints::from_iter([BondConstraint::Aromatic])
+    );
+    assert_eq!(
+        ast[DativeBondIdx(0)].constraints,
+        DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(5))])
+    );
+}
+
+#[rstest]
+fn test_molecule_ast_inline_constraints_last_wins_on_collision(
+    #[from(rich_molecule)] mut ast: MoleculeAst,
+) {
+    ast.constraints_mut().push(Constraint::Atom(
+        AtomIdx(0),
+        AtomConstraint::Valence(ValueAst::Lit(3)),
+    ));
+    ast.constraints_mut().push(Constraint::Atom(
+        AtomIdx(0),
+        AtomConstraint::Valence(ValueAst::Lit(4)),
+    ));
+
+    ast.inline_constraints();
+
+    // Only one Valence survives; with two competing inserts of the same kind,
+    // exactly one wins (which one is unspecified). Verify count and kind.
+    assert_eq!(ast[AtomIdx(0)].constraints.len(), 1);
+    let v = ast[AtomIdx(0)]
+        .constraints
+        .iter()
+        .next()
+        .unwrap()
+        .clone();
+    assert!(matches!(v, AtomConstraint::Valence(_)));
+}
+
+#[rstest]
+fn test_molecule_ast_inline_constraints_skips_combinator_nested(
+    #[from(rich_molecule)] mut ast: MoleculeAst,
+) {
+    let leaf = Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4)));
+    let nested = Constraint::And(vec![leaf.clone(), Constraint::Bond(BondIdx(0), BondConstraint::Aromatic)]);
+    ast.constraints_mut().push(nested.clone());
+
+    ast.inline_constraints();
+
+    let mut expected = Constraints::new();
+    expected.push(nested);
+    assert_same_constraints(ast.constraints(), &expected);
+    assert!(ast[AtomIdx(0)].constraints.is_empty());
+    assert!(ast[BondIdx(0)].constraints.is_empty());
+}
+
+#[rstest]
+fn test_molecule_ast_inline_constraints_skips_relational_and_molecule(
+    #[from(rich_molecule)] mut ast: MoleculeAst,
+) {
+    let rel = Constraint::Relational(RelationalConstraint::AromaticSystemContains {
+        system: AromaticSystemIdx(0),
+        atom: AtomIdx(0),
+    });
+    let mol = Constraint::Molecule(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)]));
+    ast.constraints_mut().push(rel.clone());
+    ast.constraints_mut().push(mol.clone());
+    ast.constraints_mut().push(Constraint::Atom(
+        AtomIdx(0),
+        AtomConstraint::Valence(ValueAst::Lit(4)),
+    ));
+
+    ast.inline_constraints();
+
+    let mut expected = Constraints::new();
+    expected.push(rel);
+    expected.push(mol);
+    assert_same_constraints(ast.constraints(), &expected);
+    assert_eq!(
+        ast[AtomIdx(0)].constraints,
+        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))])
+    );
+}
+
+#[rstest]
+fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
+    #[from(rich_molecule)] mut ast: MoleculeAst,
+) {
+    ast.atom_mut(AtomIdx(0))
+        .data
+        .constraints
+        .add(AtomConstraint::Valence(ValueAst::Lit(4)));
+    ast.atom_mut(AtomIdx(0))
+        .data
+        .constraints
+        .add(AtomConstraint::Degree(ValueAst::Lit(3)));
+    ast.bond_mut(BondIdx(0))
+        .data
+        .constraints
+        .add(BondConstraint::Aromatic);
+    ast.dative_bond_mut(DativeBondIdx(0))
+        .constraints
+        .add(DativeBondConstraint::RingCount(ValueAst::Lit(1)));
+
+    let original = ast.clone();
+
+    ast.lift_constraints();
+    assert!(ast[AtomIdx(0)].constraints.is_empty());
+    ast.inline_constraints();
+
+    assert_eq!(ast, original);
 }

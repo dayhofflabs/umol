@@ -4,6 +4,8 @@
 //! and asserts the render → parse cycle is the identity.
 
 use std::collections::HashSet;
+use std::iter::repeat_with;
+use std::ops::RangeInclusive;
 
 use proptest::prelude::*;
 use umol_ast::ast::{
@@ -67,7 +69,7 @@ fn element_ast_strategy() -> impl Strategy<Value = ElementAst> {
     ]
 }
 
-fn value_basic(range: std::ops::RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
+fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     prop_oneof![
         4 => Just(ValueAst::Undetermined),
         4 => range.clone().prop_map(ValueAst::Lit),
@@ -192,7 +194,7 @@ fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
 /// that the parser then re-reads as a plain `Lit`, breaking roundtrip. The
 /// molecule-level EDN tests cover `Expr` on constraint values through the
 /// tree-based path, so the gap is contained.
-fn constraint_value_strategy(range: std::ops::RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
+fn constraint_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     prop_oneof![
         3 => Just(ValueAst::Undetermined),
         3 => range.clone().prop_map(ValueAst::Lit),
@@ -209,7 +211,7 @@ fn constraint_value_strategy(range: std::ops::RangeInclusive<i64>) -> impl Strat
 /// in the entity-level formatter (see `BondConstraint::RingSize` /
 /// `DativeBondConstraint::RingSize` — vacuous, intentionally dropped).
 fn constraint_inner_value_strategy(
-    range: std::ops::RangeInclusive<i64>,
+    range: RangeInclusive<i64>,
 ) -> impl Strategy<Value = ValueAst> {
     prop_oneof![
         range.clone().prop_map(ValueAst::Lit),
@@ -454,7 +456,7 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
         .prop_flat_map(|(atom_count, atoms, edges, bond_pool)| {
             // Truncate bond pool to the number of edges generated.
             let bond_count = edges.len();
-            let bonds: Vec<BondAst> = bond_pool.into_iter().chain(std::iter::repeat_with(|| BondAst::from_order(1))).take(bond_count).collect();
+            let bonds: Vec<BondAst> = bond_pool.into_iter().chain(repeat_with(|| BondAst::from_order(1))).take(bond_count).collect();
             let bonds_full: Vec<_> = edges
                 .iter()
                 .zip(bonds)
