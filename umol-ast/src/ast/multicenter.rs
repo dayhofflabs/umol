@@ -6,44 +6,50 @@ use super::constraint::MulticenterBondConstraints;
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
-/// Multicenter bond: structural attributes of a bond spanning three or more
-/// atoms. Electron count and spin live on the system itself; individual atom
-/// participation is described by `MulticenterValence` atom constraints.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MulticenterBondAst {
+    pub electrons: Vec<ValueAst>,
     pub charge: ValueAst,
     pub spin: SpinStateAst,
-    pub electrons: ValueAst,
     pub constraints: MulticenterBondConstraints,
 }
 
 impl MulticenterBondAst {
-    pub fn new(charge: ValueAst, spin: SpinStateAst, electrons: ValueAst) -> Self {
+    pub fn new(electrons: Vec<ValueAst>, charge: ValueAst, spin: SpinStateAst) -> Self {
         Self {
+            electrons,
             charge,
             spin,
-            electrons,
             constraints: MulticenterBondConstraints::new(),
         }
     }
 
     pub fn is_ground(&self) -> bool {
-        self.charge.is_ground() && self.spin.is_ground() && self.electrons.is_ground()
+        self.charge.is_ground()
+            && self.spin.is_ground()
+            && self.electrons.iter().all(|v| v.is_ground())
     }
 
-    /// `self` (pattern) matches `target` iff every admissible assignment
-    /// of `target` is also admissible by `self`, checked field-wise.
+    /// `self` (pattern) matches `target` iff per-atom electrons match
+    /// position-wise (length-equality required) and `charge` / `spin` match
+    /// field-wise.
     pub fn matches(&self, target: &MulticenterBondAst) -> bool {
         self.charge.matches(&target.charge)
             && self.spin.matches(&target.spin)
-            && self.electrons.matches(&target.electrons)
+            && self.electrons.len() == target.electrons.len()
+            && self
+                .electrons
+                .iter()
+                .zip(&target.electrons)
+                .all(|(p, t)| p.matches(t))
     }
 
-    /// Simplify every value-bearing field in place.
     pub fn simplify_values(&mut self) {
         self.charge = mem::take(&mut self.charge).simplify();
         self.spin.simplify_values();
-        self.electrons = mem::take(&mut self.electrons).simplify();
+        for e in self.electrons.iter_mut() {
+            *e = mem::take(e).simplify();
+        }
         self.constraints.simplify_each();
     }
 }
@@ -57,9 +63,25 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::all_undetermined(MulticenterBondAst::default(), false)]
-    #[case::charge_only(MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::default(), ValueAst::Undetermined), false)]
-    #[case::all_ground(MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)), true)]
+    #[case::default_(MulticenterBondAst::default(), false)]
+    #[case::charge_only(MulticenterBondAst::new(Vec::new(), ValueAst::Lit(0), SpinStateAst::default()), false)]
+    #[case::ground_no_atoms(MulticenterBondAst::new(Vec::new(), ValueAst::Lit(0), SpinStateAst::new(0, 1)), true)]
+    #[case::all_ground_three(
+        MulticenterBondAst::new(
+            vec![ValueAst::Lit(1); 3],
+            ValueAst::Lit(0),
+            SpinStateAst::new(0, 1),
+        ),
+        true,
+    )]
+    #[case::one_undetermined_electron(
+        MulticenterBondAst::new(
+            vec![ValueAst::Lit(1), ValueAst::Undetermined, ValueAst::Lit(1)],
+            ValueAst::Lit(0),
+            SpinStateAst::new(0, 1),
+        ),
+        false,
+    )]
     fn test_multicenter_bond_ast_is_ground(
         #[case] ast: MulticenterBondAst,
         #[case] expected: bool,
@@ -69,14 +91,32 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::default_matches_ground(MulticenterBondAst::default(),
-        MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)), true)]
-    #[case::exact(MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)),
-        MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)), true)]
-    #[case::electrons_mismatch(MulticenterBondAst::new(ValueAst::Undetermined, SpinStateAst::default(), ValueAst::Lit(4)),
-        MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::new(0, 1), ValueAst::Lit(2)), false)]
-    #[case::charge_mismatch(MulticenterBondAst::new(ValueAst::Lit(1), SpinStateAst::default(), ValueAst::Undetermined),
-        MulticenterBondAst::new(ValueAst::Lit(0), SpinStateAst::default(), ValueAst::Undetermined), false)]
+    #[case::default_matches_default(MulticenterBondAst::default(), MulticenterBondAst::default(), true)]
+    #[case::default_matches_ground(
+        MulticenterBondAst::default(),
+        MulticenterBondAst::new(Vec::new(), ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        true,
+    )]
+    #[case::exact(
+        MulticenterBondAst::new(vec![ValueAst::Lit(1); 3], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        MulticenterBondAst::new(vec![ValueAst::Lit(1); 3], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        true,
+    )]
+    #[case::electrons_length_mismatch(
+        MulticenterBondAst::new(vec![ValueAst::Lit(1); 2], ValueAst::Undetermined, SpinStateAst::default()),
+        MulticenterBondAst::new(vec![ValueAst::Lit(1); 3], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        false,
+    )]
+    #[case::electrons_value_mismatch(
+        MulticenterBondAst::new(vec![ValueAst::Lit(2); 3], ValueAst::Undetermined, SpinStateAst::default()),
+        MulticenterBondAst::new(vec![ValueAst::Lit(1); 3], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        false,
+    )]
+    #[case::charge_mismatch(
+        MulticenterBondAst::new(vec![ValueAst::Undetermined; 3], ValueAst::Lit(1), SpinStateAst::default()),
+        MulticenterBondAst::new(vec![ValueAst::Undetermined; 3], ValueAst::Lit(0), SpinStateAst::default()),
+        false,
+    )]
     fn test_multicenter_bond_ast_matches(
         #[case] pattern: MulticenterBondAst,
         #[case] target: MulticenterBondAst,

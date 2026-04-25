@@ -21,8 +21,8 @@ use umol_edn::{read_string, FromEdn};
 #[path = "fixtures.rs"]
 mod fixtures;
 use fixtures::{
-    MOL_BENZENE, MOL_INDOLE, MOL_LARGE_ALL_IDS, MOL_LARGE_NO_IDS, MOL_LARGE_PARTIAL_IDS, MOL_SMALL,
-    MOL_WITH_CONSTRAINTS,
+    MOL_BENZENE, MOL_DIBORANE, MOL_INDOLE, MOL_LARGE_ALL_IDS, MOL_LARGE_NO_IDS,
+    MOL_LARGE_PARTIAL_IDS, MOL_SMALL, MOL_WITH_CONSTRAINTS,
 };
 
 fn bench_pair<T>(
@@ -138,6 +138,7 @@ fn bench_molecule_dsl(c: &mut Criterion) {
     bench_pair::<MoleculeDsl>(&mut g, "small", MOL_SMALL);
     bench_pair::<MoleculeDsl>(&mut g, "benzene", MOL_BENZENE);
     bench_pair::<MoleculeDsl>(&mut g, "indole", MOL_INDOLE);
+    bench_pair::<MoleculeDsl>(&mut g, "diborane", MOL_DIBORANE);
     bench_pair::<MoleculeDsl>(&mut g, "with_constraints", MOL_WITH_CONSTRAINTS);
     bench_pair::<MoleculeDsl>(&mut g, "large_no_ids", MOL_LARGE_NO_IDS.as_str());
     bench_pair::<MoleculeDsl>(&mut g, "large_all_ids", MOL_LARGE_ALL_IDS.as_str());

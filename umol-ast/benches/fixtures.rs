@@ -9,11 +9,16 @@ pub const MOL_SMALL: &str = r##"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"##;
 
 pub const MOL_BENZENE: &str = r##"{:atoms ["C" "C" "C" "C" "C" "C"]
  :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
- :aromatic [{:atoms [0 1 2 3 4 5] :type "#e6"}]}"##;
+ :aromatic [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type "#e6"}]}"##;
 
 pub const MOL_INDOLE: &str = r##"{:atoms [[:n "N"] [:c2 "C"] [:c3 "C"] [:c3a "C"] [:c4 "C"] [:c5 "C"] [:c6 "C"] [:c7 "C"] [:c7a "C"]]
  :bonds [[:n :c2 "1"] [:c2 :c3 "1"] [:c3 :c3a "1"] [:c3a :c4 "1"] [:c4 :c5 "1"] [:c5 :c6 "1"] [:c6 :c7 "1"] [:c7 :c7a "1"] [:c7a :n "1"] [:c3a :c7a "1"]]
- :aromatic [{:atoms [:n :c2 :c3 :c3a :c4 :c5 :c6 :c7 :c7a] :type "#e10"}]}"##;
+ :aromatic [{:atoms [:n :c2 :c3 :c3a :c4 :c5 :c6 :c7 :c7a] :electrons [2 1 1 1 1 1 1 1 1] :type "#e10"}]}"##;
+
+pub const MOL_DIBORANE: &str = r##"{:atoms ["B" "H" "B" "H" "H" "H" "H" "H"]
+ :bonds [[0 4 "1"] [0 5 "1"] [2 6 "1"] [2 7 "1"]]
+ :multicenter [{:atoms [0 1 2] :electrons [1 0 1] :type "#e2"}
+               {:atoms [0 3 2] :electrons [1 0 1] :type "#e2"}]}"##;
 
 pub const MOL_WITH_CONSTRAINTS: &str = r##"{:atoms [[:c1 "C"] [:c2 "C"] [:o "O"]]
  :bonds [{:id :b1 :a :c1 :b :c2 :type "1"} {:id :b2 :a :c2 :b :o :type "1"}]

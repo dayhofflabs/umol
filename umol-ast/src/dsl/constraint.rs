@@ -1500,11 +1500,6 @@ fn render_spin(spin: &SpinStateAst) -> Edn<'static> {
 /// (cross-entity) leaves; `{:charge-sum {...}}` etc. for molecule-scope
 /// leaves (keys flattened from `MoleculeConstraintDsl`); `{:and [...]}` /
 /// `{:or [...]}` / `{:not <c>}` for combinators.
-///
-/// Aromatic-system / multicenter-bond / noncovalent-bond entity-scope
-/// arms have uninhabited inner constraint types (all previous variants
-/// moved to Relational); they are placeholders for future value-only
-/// inline constraints.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ConstraintDsl {
     Atom(AtomRef, AtomConstraintDsl),
@@ -1598,8 +1593,8 @@ impl ToEdn for ConstraintDsl {
             Self::Atom(r, c) => entity_leaf_edn("atom", r, c),
             Self::Bond(r, c) => entity_leaf_edn("bond", r, c),
             Self::DativeBond(r, c) => entity_leaf_edn("dative-bond", r, c),
-            Self::AromaticSystem(_, c) => match *c {},
-            Self::MulticenterBond(_, c) => match *c {},
+            Self::AromaticSystem(r, c) => entity_leaf_edn("aromatic-system", r, c),
+            Self::MulticenterBond(r, c) => entity_leaf_edn("multicenter-bond", r, c),
             Self::NoncovalentBond(_, c) => match *c {},
             Self::Relational(r) => r.to_edn(),
             Self::Molecule(m) => m.to_edn(),
@@ -1629,11 +1624,14 @@ impl ConstraintDsl {
                 DativeBondRef::from_ast(*idx, meta),
                 DativeBondConstraintDsl::from_ast(c),
             ),
-            // AromaticSystem/MulticenterBond/NoncovalentBond narrow constraints are
-            // currently uninhabited (all previous variants moved to Relational);
-            // these arms are structurally unreachable but kept exhaustive.
-            Constraint::AromaticSystem(_, c) => match *c {},
-            Constraint::MulticenterBond(_, c) => match *c {},
+            Constraint::AromaticSystem(idx, c) => Self::AromaticSystem(
+                AromaticSystemRef::from_ast(*idx, meta),
+                AromaticSystemConstraintDsl::from_ast(c),
+            ),
+            Constraint::MulticenterBond(idx, c) => Self::MulticenterBond(
+                MulticenterBondRef::from_ast(*idx, meta),
+                MulticenterBondConstraintDsl::from_ast(c),
+            ),
             Constraint::NoncovalentBond(_, c) => match *c {},
             Constraint::Relational(rel) => {
                 Self::Relational(RelationalConstraintDsl::from_ast(rel, meta))
@@ -1670,8 +1668,14 @@ impl ConstraintDsl {
             Self::DativeBond(r, c) => {
                 Constraint::DativeBond(r.into_ast(counts.dative_bond_count, meta)?, c.into_ast())
             }
-            Self::AromaticSystem(_, c) => match c {},
-            Self::MulticenterBond(_, c) => match c {},
+            Self::AromaticSystem(r, c) => Constraint::AromaticSystem(
+                r.into_ast(counts.aromatic_system_count, meta)?,
+                c.into_ast(),
+            ),
+            Self::MulticenterBond(r, c) => Constraint::MulticenterBond(
+                r.into_ast(counts.multicenter_bond_count, meta)?,
+                c.into_ast(),
+            ),
             Self::NoncovalentBond(_, c) => match c {},
             Self::Relational(r) => Constraint::Relational(r.into_ast(counts, meta)?),
             Self::Molecule(m) => Constraint::Molecule(m.into_ast(counts, meta)?),
@@ -1723,9 +1727,14 @@ impl ToEdn for ConstraintsDsl {
 }
 
 impl ConstraintsDsl {
+    /// Vacuous constraints (per `Constraint::is_vacuous`) are dropped
+    /// during the AST → DSL lowering, matching the canonical-rendering
+    /// rule: a constraint that asserts nothing does not appear in the
+    /// canonical surface form.
     pub(crate) fn from_ast(cs: &Constraints, meta: &Metadata) -> Result<Self, ParseError> {
         Ok(Self(
             cs.iter()
+                .filter(|c| !c.is_vacuous())
                 .map(|c| ConstraintDsl::from_ast(c, meta))
                 .collect::<Result<_, _>>()?,
         ))

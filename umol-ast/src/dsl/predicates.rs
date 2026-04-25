@@ -131,12 +131,28 @@ pub(crate) fn fmt_spin_pair(f: &mut fmt::Formatter<'_>, spin: &SpinStateAst) -> 
     Ok(())
 }
 
+// Canonical-rendering rules:
+//
+// - Vacuous constraints (any constraint whose payload is `ValueAst::Undetermined`)
+//   are elided from the rendered surface form. The AST may carry them; the
+//   canonical entity / molecule string does not show them.
+// - Inherent fields whose payload is `ValueAst::Undetermined` are likewise
+//   elided when they have a leading prefix (`#c`, `#u`, `#s`, `#e`, …).
+// - Exception: leading **unprefixed** fields — bond order, atom element,
+//   noncovalent bond type — cannot be elided because they fix the entity
+//   string's start position. For these, `Undetermined` renders as `*`.
+//
+// Consequence for round-trip: rendering a vacuous constraint and reparsing
+// produces an AST without that constraint, so AST equality across a
+// render/parse cycle requires either generating only non-vacuous payloads
+// or normalizing the input before comparing.
+
 pub(crate) fn fmt_ring_count(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     if is_plus_sugar(v, "r", 1) {
         return write!(f, "#R+");
     }
     match v {
-        ValueAst::Undetermined => write!(f, "#R*"),
+        ValueAst::Undetermined => Ok(()),
         ValueAst::Lit(1) => write!(f, "#R"),
         ValueAst::Lit(n) => write!(f, "#R{}", n),
         v => {

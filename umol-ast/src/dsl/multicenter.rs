@@ -18,13 +18,14 @@ use super::predicates::{
     SpinPredicate,
 };
 use super::value::fmt_value;
+use crate::ast::constraint::MulticenterBondConstraint;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
-/// Surface DSL wrapper around `MulticenterBondAst`. Parses and renders the
-/// multicenter-bond-string form. All `MulticenterBondConstraint` variants are
-/// molecule-scope, so nothing from the constraint vec serializes inline.
+/// Surface DSL wrapper around `MulticenterBondAst`. The `electrons` field
+/// (per-atom contributions) is serialized at the molecule level. The
+/// `ElectronCount` constraint round-trips here as `#e<n>`.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct MulticenterBondDsl(pub MulticenterBondAst);
@@ -97,7 +98,6 @@ impl IntoAst<MulticenterBondAst> for MulticenterBondDsl {
 
 // region: Parse
 
-/// Parse a complete multicenter-bond-string into a `MulticenterBondDsl`.
 pub fn parse_multicenter_bond(input: &str) -> Result<MulticenterBondDsl, ParseError> {
     multicenter_bond.parse(input).map_err(|e| e.into_inner())
 }
@@ -111,8 +111,6 @@ pub(crate) fn multicenter_bond(i: &mut &str) -> PResult<MulticenterBondDsl> {
     Ok(form)
 }
 
-/// One predicate from a multicenter-bond-string; the parser yields a
-/// `Vec` of these and the applier folds them into the `MulticenterBondAst`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MulticenterBondPredicate {
     Charge(ValueAst),
@@ -164,16 +162,30 @@ fn apply_predicates(
                 )?;
             }
             MulticenterBondPredicate::Electrons(v) => {
-                if !matches!(ast.electrons, ValueAst::Undetermined) {
+                if has_electron_count(ast) {
                     return Err(ParseError::DuplicateMulticenterBondPredicate(
                         "#e".to_string(),
                     ));
                 }
-                ast.electrons = v;
+                ast.constraints
+                    .add(MulticenterBondConstraint::ElectronCount(v));
             }
         }
     }
     Ok(())
+}
+
+fn has_electron_count(ast: &MulticenterBondAst) -> bool {
+    ast.constraints
+        .iter()
+        .any(|c| matches!(c, MulticenterBondConstraint::ElectronCount(_)))
+}
+
+fn electron_count_value(ast: &MulticenterBondAst) -> Option<&ValueAst> {
+    ast.constraints
+        .iter()
+        .map(|MulticenterBondConstraint::ElectronCount(v)| v)
+        .next()
 }
 
 // endregion: Parse
@@ -183,7 +195,10 @@ fn apply_predicates(
 fn fmt_multicenter_bond_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
     fmt_spin_pair(f, &ast.spin)?;
-    fmt_electrons(f, &ast.electrons)
+    if let Some(v) = electron_count_value(ast) {
+        fmt_electrons(f, v)?;
+    }
+    Ok(())
 }
 
 fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
@@ -203,13 +218,10 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
 // region: Raise
 
 fn raise_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
-    // Exhaustive destructure: adding a new MulticenterBondAst field is a
-    // compile error here, forcing the author to decide how raising should
-    // handle it.
     let MulticenterBondAst {
         charge,
         spin,
-        electrons,
+        electrons: _,
         constraints: _,
     } = ast;
 
@@ -219,27 +231,18 @@ fn raise_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDef
             NumericDefault::Required => ValueAst::Undetermined,
         };
     }
-    if matches!(*electrons, ValueAst::Undetermined) {
-        *electrons = match cfg.electrons {
-            NumericDefault::Zero => ValueAst::Lit(0),
-            NumericDefault::Required => ValueAst::Undetermined,
-        };
-    }
     raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
 // endregion: Raise
 
-// region: Format
+// region: Lower
 
 fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
-    // Exhaustive destructure: adding a new MulticenterBondAst field is a
-    // compile error here, forcing the author to decide how lowering should
-    // handle it.
     let MulticenterBondAst {
         charge,
         spin,
-        electrons,
+        electrons: _,
         constraints: _,
     } = ast;
 
@@ -249,39 +252,91 @@ fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDef
     ) {
         *charge = ValueAst::Undetermined;
     }
-    if matches!(
-        (&cfg.electrons, &*electrons),
-        (NumericDefault::Zero, ValueAst::Lit(0))
-    ) {
-        *electrons = ValueAst::Undetermined;
-    }
     lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// endregion: Format
+// endregion: Lower
 
 // region: Constraint DSL
 
-/// Surface DSL wrapper around the narrow `MulticenterBondConstraint`.
-/// Currently uninhabited — all previous variants moved to
-/// [`super::relational::RelationalConstraintDsl`]. Kept as a placeholder
-/// for future value-only multicenter-bond constraints.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum MulticenterBondConstraintDsl {}
+pub enum MulticenterBondConstraintDsl {
+    ElectronCount(ValueAst),
+}
+
+impl MulticenterBondConstraintDsl {
+    pub(crate) fn from_ast(c: &MulticenterBondConstraint) -> Self {
+        match c {
+            MulticenterBondConstraint::ElectronCount(v) => Self::ElectronCount(v.clone()),
+        }
+    }
+
+    pub(crate) fn into_ast(self) -> MulticenterBondConstraint {
+        match self {
+            Self::ElectronCount(v) => MulticenterBondConstraint::ElectronCount(v),
+        }
+    }
+}
 
 impl<'de> FromEdn<'de> for MulticenterBondConstraintDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Err(DeError::TypeMismatch {
-            expected: "no value-only multicenter-bond constraints exist yet",
-            got: edn.kind(),
-            path: vec!["multicenter-bond-constraint".into()],
-        })
+        let map = match edn {
+            Edn::Map(m) => m,
+            other => {
+                return Err(DeError::TypeMismatch {
+                    expected: "map",
+                    got: other.kind(),
+                    path: vec!["multicenter-bond-constraint".into()],
+                });
+            }
+        };
+        let mut entries = map.iter();
+        let (key, value) = entries.next().ok_or_else(|| {
+            DeError::Custom(
+                "expected single-key map for multicenter-bond constraint".to_string(),
+            )
+        })?;
+        if entries.next().is_some() {
+            return Err(DeError::Custom(
+                "multicenter-bond constraint map has multiple keys".to_string(),
+            ));
+        }
+        let kw = match key {
+            Edn::Keyword(k) => k.name(),
+            other => {
+                return Err(DeError::TypeMismatch {
+                    expected: "keyword",
+                    got: other.kind(),
+                    path: vec!["multicenter-bond-constraint".into()],
+                });
+            }
+        };
+        match kw {
+            "electron-count" => {
+                let v = super::value::ValueDsl::from_edn(value)?;
+                Ok(Self::ElectronCount(v.0))
+            }
+            other => Err(DeError::Custom(format!(
+                "unknown multicenter-bond constraint keyword :{}",
+                other,
+            ))),
+        }
     }
 }
 
 impl ToEdn for MulticenterBondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
-        match *self {}
+        match self {
+            Self::ElectronCount(v) => {
+                let value_edn = super::value::ValueDsl(v.clone()).to_edn();
+                let mut map = umol_edn::EdnMap::with_capacity(1);
+                map.insert(
+                    Edn::Keyword(umol_edn::EdnKeyword::owned("electron-count".to_string())),
+                    value_edn,
+                );
+                Edn::Map(map)
+            }
+        }
     }
 }
 
@@ -300,14 +355,14 @@ mod tests {
     #[rstest]
     #[case::empty("", MulticenterBondDsl(MulticenterBondAst::default()))]
     #[case::whitespace("   ", MulticenterBondDsl(MulticenterBondAst::default()))]
-    #[case::charge_pos("#c+1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
-    #[case::charge_neg("#c-2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ValueAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
-    #[case::electrons("#e6", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(6), constraints: MulticenterBondConstraints::new() }))]
-    #[case::electrons_bare("#e", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ValueAst::Lit(1), constraints: MulticenterBondConstraints::new() }))]
-    #[case::unpaired("#u1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: ValueAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
-    #[case::mult("#s2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: ValueAst::Undetermined, constraints: MulticenterBondConstraints::new() }))]
-    #[case::charge_electrons("#c+#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ValueAst::Lit(2), constraints: MulticenterBondConstraints::new() }))]
-    #[case::full("#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: ValueAst::Lit(2), constraints: MulticenterBondConstraints::new() }))]
+    #[case::charge_pos("#c+1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: MulticenterBondConstraints::new() }))]
+    #[case::charge_neg("#c-2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: MulticenterBondConstraints::new() }))]
+    #[case::electrons("#e6", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: Vec::new(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
+    #[case::electrons_bare("#e", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: Vec::new(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(1))]) }))]
+    #[case::unpaired("#u1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: Vec::new(), constraints: MulticenterBondConstraints::new() }))]
+    #[case::mult("#s2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: Vec::new(), constraints: MulticenterBondConstraints::new() }))]
+    #[case::charge_electrons("#c+#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
+    #[case::full("#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: Vec::new(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
     fn test_parse_multicenter(#[case] input: &str, #[case] expected: MulticenterBondDsl) {
         let result = multicenter_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -349,8 +404,9 @@ mod tests {
         let cfg = MulticenterBondDefaults::zeroed();
         let ast = dsl.into_ast(&cfg).unwrap();
         assert_eq!(ast.charge, ValueAst::Lit(0));
-        assert_eq!(ast.electrons, ValueAst::Lit(0));
         assert_eq!(ast.spin, SpinStateAst::new(0, 1));
+        assert!(ast.electrons.is_empty());
+        assert!(ast.constraints.is_empty());
     }
 
     #[rstest]
@@ -358,14 +414,15 @@ mod tests {
         let ast = MulticenterBondAst {
             charge: ValueAst::Lit(0),
             spin: SpinStateAst::new(0, 1),
-            electrons: ValueAst::Lit(0),
+            electrons: Vec::new(),
             constraints: MulticenterBondConstraints::new(),
         };
         let cfg = MulticenterBondDefaults::zeroed();
         let dsl = MulticenterBondDsl::from_ast(&ast, &cfg).unwrap();
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
-        assert_eq!(dsl.0.electrons, ValueAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
+        assert!(dsl.0.electrons.is_empty());
+        assert!(dsl.0.constraints.is_empty());
     }
 
     #[rstest]
@@ -383,6 +440,21 @@ mod tests {
     fn test_multicenter_bond_constraint_dsl_from_edn_errors() {
         let edn = umol_edn::read_string("{:contains 1}").unwrap();
         let err = MulticenterBondConstraintDsl::from_edn(&edn).unwrap_err();
-        assert!(matches!(err, DeError::TypeMismatch { .. }));
+        assert!(matches!(err, DeError::Custom(_)));
+    }
+
+    /// Vacuous multicenter-bond inline constraint elides on rendering.
+    /// `#e*` parses to `ElectronCount(Undetermined)` but the canonical
+    /// surface form drops it.
+    #[rstest]
+    fn test_multicenter_render_elides_vacuous_electron_count() {
+        let parsed: MulticenterBondDsl = multicenter_bond.parse("#e*").unwrap();
+        assert_eq!(parsed.to_string(), "");
+        let reparsed: MulticenterBondDsl = multicenter_bond.parse(&parsed.to_string()).unwrap();
+        assert!(
+            reparsed.0.constraints.is_empty(),
+            "vacuous ElectronCount should be absent after render → reparse, got {:?}",
+            reparsed.0.constraints,
+        );
     }
 }

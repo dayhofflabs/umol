@@ -221,9 +221,6 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::R
 // region: Constraint DSL
 
 /// Surface DSL wrapper around the narrow `NoncovalentBondConstraint`.
-/// Currently uninhabited — all previous variants moved to
-/// [`super::relational::RelationalConstraintDsl`]. Kept as a placeholder
-/// for future value-only noncovalent-bond constraints.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondConstraintDsl {}
 

@@ -14,15 +14,16 @@ use umol_edn::FromEdn;
 #[path = "fixtures.rs"]
 mod fixtures;
 use fixtures::{
-    MOL_BENZENE, MOL_INDOLE, MOL_LARGE_ALL_IDS, MOL_LARGE_NO_IDS, MOL_LARGE_PARTIAL_IDS, MOL_SMALL,
-    MOL_WITH_CONSTRAINTS,
+    MOL_BENZENE, MOL_DIBORANE, MOL_INDOLE, MOL_LARGE_ALL_IDS, MOL_LARGE_NO_IDS,
+    MOL_LARGE_PARTIAL_IDS, MOL_SMALL, MOL_WITH_CONSTRAINTS,
 };
 
-fn cases() -> [(&'static str, &'static str); 7] {
+fn cases() -> [(&'static str, &'static str); 8] {
     [
         ("small", MOL_SMALL),
         ("benzene", MOL_BENZENE),
         ("indole", MOL_INDOLE),
+        ("diborane", MOL_DIBORANE),
         ("with_constraints", MOL_WITH_CONSTRAINTS),
         ("large_no_ids", MOL_LARGE_NO_IDS.as_str()),
         ("large_all_ids", MOL_LARGE_ALL_IDS.as_str()),

@@ -1,38 +1,51 @@
 //! Per-multicenter-bond constraints.
-//!
-//! All previous variants (`Atoms`, `Contains`, `ContainsAll`, `AllAtoms`,
-//! `AnyAtom`) were atom-ref-bearing or carried a delegated atom predicate;
-//! those moved to `RelationalConstraint` at molecule scope. The enum is
-//! kept (empty for now) so future value-only multicenter-bond constraints
-//! can be added here without reshaping the AST or DSL surface.
 
-use std::mem;
+use std::mem::{self, replace};
 use std::slice::Iter;
 
 use super::super::remap::IdxRemapping;
+use super::super::value::ValueAst;
 
-/// Multicenter-bond-scope constraint. Currently uninhabited — placeholder
-/// for future value-only variants. Atom-ref and quantified-predicate forms
-/// live at molecule scope via `RelationalConstraint`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum MulticenterBondConstraint {}
+pub enum MulticenterBondConstraint {
+    /// Asserted total electron count for the multicenter bond. Cross-checked
+    /// by the `ConsistencyValidator` against `sum(MulticenterBondAst::electrons)`.
+    ElectronCount(ValueAst),
+}
 
 impl MulticenterBondConstraint {
     pub fn is_unique(&self) -> bool {
-        match *self {}
+        match self {
+            Self::ElectronCount(_) => true,
+        }
     }
 
     pub fn is_undetermined(&self) -> bool {
-        match *self {}
+        match self {
+            Self::ElectronCount(v) => v.is_undetermined(),
+        }
+    }
+
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::ElectronCount(v) => Self::ElectronCount(v.simplify()),
+        }
     }
 
     pub fn remap(self, _remap: &IdxRemapping) -> Option<Self> {
-        match self {}
+        match self {
+            Self::ElectronCount(_) => Some(self),
+        }
+    }
+
+    fn matches_kind(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::ElectronCount(_), Self::ElectronCount(_)),
+        )
     }
 }
 
-/// Per-multicenter-bond constraint container. Empty in practice until new
-/// value-only variants land on `MulticenterBondConstraint`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct MulticenterBondConstraints(Vec<MulticenterBondConstraint>);
 
@@ -58,7 +71,13 @@ impl MulticenterBondConstraints {
     }
 
     pub fn add(&mut self, c: MulticenterBondConstraint) -> Option<MulticenterBondConstraint> {
-        match c {}
+        if c.is_unique() {
+            if let Some(i) = self.0.iter().position(|x| x.matches_kind(&c)) {
+                return Some(replace(&mut self.0[i], c));
+            }
+        }
+        self.0.push(c);
+        None
     }
 
     pub fn retain(&mut self, mut f: impl FnMut(&MulticenterBondConstraint) -> bool) {
@@ -69,17 +88,22 @@ impl MulticenterBondConstraints {
         self.0.clear();
     }
 
-    /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = MulticenterBondConstraint> {
         mem::take(&mut self.0).into_iter()
     }
 
-    /// No-op: the inner enum is uninhabited so the store has no values to
-    /// simplify. Kept for API symmetry with the inhabited containers.
-    pub fn simplify_each(&mut self) {}
+    pub fn simplify_each(&mut self) {
+        for c in self.0.iter_mut() {
+            *c = mem::replace(
+                c,
+                MulticenterBondConstraint::ElectronCount(ValueAst::Undetermined),
+            )
+            .simplify();
+        }
+    }
 
-    pub fn remap(self, _remap: &IdxRemapping) -> Self {
-        self
+    pub fn remap(self, remap: &IdxRemapping) -> Self {
+        Self(self.0.into_iter().filter_map(|c| c.remap(remap)).collect())
     }
 }
 
@@ -133,5 +157,77 @@ mod tests {
         assert!(from_empty.is_empty());
         let remapped = MulticenterBondConstraints::new().remap(&empty_remapping());
         assert!(remapped.is_empty());
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_add_inserts_new() {
+        let mut cs = MulticenterBondConstraints::new();
+        let displaced = cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)));
+        assert_eq!(displaced, None);
+        assert_eq!(cs.len(), 1);
+        assert_eq!(
+            cs.as_slice()[0],
+            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)),
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_add_replaces_existing_unique_kind() {
+        let mut cs = MulticenterBondConstraints::new();
+        cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)));
+        let displaced =
+            cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)));
+        assert_eq!(
+            displaced,
+            Some(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))),
+        );
+        assert_eq!(cs.len(), 1);
+        assert_eq!(
+            cs.as_slice()[0],
+            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraint_is_undetermined() {
+        assert!(MulticenterBondConstraint::ElectronCount(ValueAst::Undetermined).is_undetermined());
+        assert!(!MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)).is_undetermined());
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_simplify_each() {
+        use crate::ast::value::Expr;
+        let mut cs = MulticenterBondConstraints::new();
+        cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Expr(
+            Expr::Lit(2),
+        )));
+        cs.simplify_each();
+        assert_eq!(
+            cs.as_slice()[0],
+            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)),
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_remap_passes_through() {
+        let mut cs = MulticenterBondConstraints::new();
+        cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)));
+        let remapped = cs.remap(&empty_remapping());
+        assert_eq!(remapped.len(), 1);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_from_iter_uses_add() {
+        let cs: MulticenterBondConstraints = [
+            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)),
+            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(cs.len(), 1);
+        assert_eq!(
+            cs.as_slice()[0],
+            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
+        );
     }
 }

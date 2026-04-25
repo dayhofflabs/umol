@@ -9,13 +9,14 @@ use std::ops::RangeInclusive;
 
 use proptest::prelude::*;
 use umol_ast::ast::{
-    ArithOp, AromaticSystemAst, AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint,
-    AtomConstraints, AtomIdx, BondAst, BondConstraint, BondConstraints, BondIdx, Constraint,
-    Constraints, DativeBondAst, DativeBondConstraint, DativeBondConstraints, DativeBondIdx,
-    ElementAst, Expr, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MoleculeConstraint,
-    MulticenterBondAst, MulticenterBondIdx, MulticenterValenceAst, NoncovalentBondAst,
-    NoncovalentBondIdx, NoncovalentBondKind, NoncovalentBondKindAst, RelOp, RelationalConstraint,
-    SpinStateAst, SubPatternAnchor, ValueAst,
+    ArithOp, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraints,
+    AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraints, AtomIdx,
+    BondAst, BondConstraint, BondConstraints, BondIdx, Constraint, Constraints, DativeBondAst,
+    DativeBondConstraint, DativeBondConstraints, DativeBondIdx, ElementAst, Expr,
+    ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
+    MulticenterBondConstraint, MulticenterBondConstraints, MulticenterBondIdx,
+    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondIdx, NoncovalentBondKind,
+    NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst, SubPatternAnchor, ValueAst,
 };
 use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
@@ -267,6 +268,15 @@ fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
     (value_basic(0..=6), value_basic(1..=7)).prop_map(|(u, m)| SpinStateAst::from_values(u, m))
 }
 
+/// `SpinStateAst` with at least one of `unpaired` / `multiplicity` not
+/// `Undetermined`. Used inside `MoleculeConstraint::SpinSum` and similar
+/// where a fully-vacuous spin state would elide on render.
+fn non_vacuous_spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
+    (value_basic(0..=6), value_basic(1..=7))
+        .prop_map(|(u, m)| SpinStateAst::from_values(u, m))
+        .prop_filter("non-vacuous spin", |s| !s.is_undetermined())
+}
+
 /// Simple value strategy used inside constraint values: `Undetermined`,
 /// `Lit`, and `LitSet`. No `Expr` — the constraint formatters route to
 /// `fmt_value_field_required` / `fmt_ring_count` / the various `#r` blocks,
@@ -301,36 +311,38 @@ fn constraint_inner_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<
     ]
 }
 
+/// `AromaticValenceAst::Undetermined` is vacuous (renders empty per the
+/// canonical-rendering rule). Excluded so the strategy stays inside the
+/// render → reparse identity.
 fn aromatic_valence_ast_strategy() -> impl Strategy<Value = AromaticValenceAst> {
     prop_oneof![
-        Just(AromaticValenceAst::Undetermined),
         Just(AromaticValenceAst::NotAromatic),
-        // Aromatic(Undetermined) now renders as `#a+` and roundtrips — the
-        // former collision with the outer Undetermined has been closed.
         constraint_value_strategy(0..=6).prop_map(AromaticValenceAst::Aromatic),
     ]
 }
 
 fn multicenter_valence_ast_strategy() -> impl Strategy<Value = MulticenterValenceAst> {
     prop_oneof![
-        Just(MulticenterValenceAst::Undetermined),
         Just(MulticenterValenceAst::NotMulticenter),
-        // Multicenter(Undetermined) now renders as `#m+` and roundtrips.
         constraint_value_strategy(0..=6).prop_map(MulticenterValenceAst::Multicenter),
     ]
 }
 
+/// Atom constraints route through `fmt_value_field_required` (or
+/// `fmt_ring_count` for `#R`), which elide vacuous (Undetermined) payloads
+/// per the canonical-rendering rule. Generators excluding `Undetermined`
+/// keep the render → reparse identity intact.
 fn atom_constraint_strategy() -> BoxedStrategy<AtomConstraint> {
     prop_oneof![
-        constraint_value_strategy(0..=6).prop_map(AtomConstraint::Valence),
-        constraint_value_strategy(0..=4).prop_map(AtomConstraint::DonatedPairs),
-        constraint_value_strategy(0..=4).prop_map(AtomConstraint::AcceptedPairs),
-        constraint_value_strategy(0..=6).prop_map(AtomConstraint::Degree),
-        constraint_value_strategy(0..=6).prop_map(AtomConstraint::Connectivity),
-        constraint_value_strategy(0..=6).prop_map(AtomConstraint::RingConnectivity),
-        constraint_value_strategy(0..=6).prop_map(AtomConstraint::TotalHydrogens),
-        constraint_value_strategy(0..=6).prop_map(AtomConstraint::RingCount),
-        constraint_value_strategy(3..=10).prop_map(AtomConstraint::RingSize),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Valence),
+        constraint_inner_value_strategy(0..=4).prop_map(AtomConstraint::DonatedPairs),
+        constraint_inner_value_strategy(0..=4).prop_map(AtomConstraint::AcceptedPairs),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Degree),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Connectivity),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingConnectivity),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::TotalHydrogens),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingCount),
+        constraint_inner_value_strategy(3..=10).prop_map(AtomConstraint::RingSize),
         aromatic_valence_ast_strategy().prop_map(AtomConstraint::AromaticValence),
         multicenter_valence_ast_strategy().prop_map(AtomConstraint::MulticenterValence),
     ]
@@ -350,9 +362,7 @@ fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstraints> {
 fn bond_constraint_strategy() -> BoxedStrategy<BondConstraint> {
     prop_oneof![
         Just(BondConstraint::Aromatic),
-        constraint_value_strategy(0..=6).prop_map(BondConstraint::RingCount),
-        // RingSize(Undetermined) renders as the empty string (entity-level
-        // formatter), so roundtrip loses the constraint. Exclude it here.
+        constraint_inner_value_strategy(0..=6).prop_map(BondConstraint::RingCount),
         constraint_inner_value_strategy(3..=10).prop_map(BondConstraint::RingSize),
     ]
     .boxed()
@@ -373,7 +383,7 @@ fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraint> {
     // form; Donor/Acceptor/Parallels/{Donor,Acceptor}Satisfies carry
     // molecule-scope refs and are skipped by `fmt_constraint`.
     prop_oneof![
-        constraint_value_strategy(0..=6).prop_map(DativeBondConstraint::RingCount),
+        constraint_inner_value_strategy(0..=6).prop_map(DativeBondConstraint::RingCount),
         constraint_inner_value_strategy(3..=10).prop_map(DativeBondConstraint::RingSize),
     ]
     .boxed()
@@ -479,19 +489,98 @@ fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
     })
 }
 
-fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
-    (value_basic(-2..=2), value_basic(0..=12)).prop_map(|(charge, electrons)| AromaticSystemAst {
-        charge,
-        spin: SpinStateAst::default(),
-        electrons,
-        constraints: Default::default(),
+/// Optional `ElectronCount` constraint (the asserted total). The strategy
+/// emits `None` half the time, otherwise wraps a `ValueAst::Lit` or
+/// `LitSet`. `Undetermined` is excluded because it has no canonical
+/// surface form in the entity-string `#e<n>` slot — `#e*` is admitted on
+/// parse but the renderer omits the predicate entirely, breaking
+/// roundtrip.
+fn optional_aromatic_electron_count() -> impl Strategy<Value = AromaticSystemConstraints> {
+    prop::option::weighted(0.5, electron_count_value_strategy(0..=12)).prop_map(|opt| {
+        let mut cs = AromaticSystemConstraints::new();
+        if let Some(v) = opt {
+            cs.add(AromaticSystemConstraint::ElectronCount(v));
+        }
+        cs
     })
 }
 
-fn multicenter_bond_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
-    (value_basic(-2..=2), value_basic(0..=8)).prop_map(|(charge, electrons)| {
-        MulticenterBondAst::new(charge, SpinStateAst::default(), electrons)
+fn optional_multicenter_electron_count() -> impl Strategy<Value = MulticenterBondConstraints> {
+    prop::option::weighted(0.5, electron_count_value_strategy(0..=8)).prop_map(|opt| {
+        let mut cs = MulticenterBondConstraints::new();
+        if let Some(v) = opt {
+            cs.add(MulticenterBondConstraint::ElectronCount(v));
+        }
+        cs
     })
+}
+
+fn electron_count_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
+    prop_oneof![
+        3 => range.clone().prop_map(ValueAst::Lit),
+        1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
+            v.sort_unstable();
+            v.dedup();
+            ValueAst::LitSet(v)
+        }),
+    ]
+}
+
+/// Stand-alone strategy for entity-string roundtrip tests. The per-atom
+/// `electrons` vec is empty because the entity string carries no per-atom
+/// data; the `ElectronCount` constraint is exercised here via `#e<n>`.
+fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
+    (value_basic(-2..=2), optional_aromatic_electron_count()).prop_map(
+        |(charge, constraints)| AromaticSystemAst {
+            electrons: Vec::new(),
+            charge,
+            spin: SpinStateAst::default(),
+            constraints,
+        },
+    )
+}
+
+/// Atom-count-aware variant: generates an `AromaticSystemAst` whose
+/// `electrons` vec has exactly `atom_count` entries. Includes an optional
+/// `ElectronCount` constraint so the molecule-level prop tests exercise
+/// both the per-atom vec and the asserted total in the same pass.
+fn aromatic_system_ast_for(atom_count: usize) -> impl Strategy<Value = AromaticSystemAst> {
+    (
+        value_basic(-2..=2),
+        prop::collection::vec(value_basic(0..=2), atom_count),
+        optional_aromatic_electron_count(),
+    )
+        .prop_map(|(charge, electrons, constraints)| AromaticSystemAst {
+            electrons,
+            charge,
+            spin: SpinStateAst::default(),
+            constraints,
+        })
+}
+
+fn multicenter_bond_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
+    (value_basic(-2..=2), optional_multicenter_electron_count()).prop_map(
+        |(charge, constraints)| MulticenterBondAst {
+            electrons: Vec::new(),
+            charge,
+            spin: SpinStateAst::default(),
+            constraints,
+        },
+    )
+}
+
+fn multicenter_bond_ast_for(atom_count: usize) -> impl Strategy<Value = MulticenterBondAst> {
+    (
+        value_basic(-2..=2),
+        prop::collection::vec(value_basic(0..=2), atom_count),
+        optional_multicenter_electron_count(),
+    )
+        .prop_map(|(charge, electrons, constraints)| MulticenterBondAst {
+            electrons,
+            charge,
+            spin: SpinStateAst::default(),
+            constraints,
+        })
 }
 
 fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
@@ -566,17 +655,19 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                 0..=dative_count_max,
             );
             let aromatics = prop::collection::vec(
-                (
-                    distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))),
-                    aromatic_system_ast_strategy(),
-                ),
+                distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3)))
+                    .prop_flat_map(|atoms| {
+                        let n = atoms.len();
+                        (Just(atoms), aromatic_system_ast_for(n))
+                    }),
                 0..=aromatic_count_max,
             );
             let multicenters = prop::collection::vec(
-                (
-                    distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))),
-                    multicenter_bond_ast_strategy(),
-                ),
+                distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3)))
+                    .prop_flat_map(|atoms| {
+                        let n = atoms.len();
+                        (Just(atoms), multicenter_bond_ast_for(n))
+                    }),
                 0..=multicenter_count_max,
             );
             let noncovalents = prop::collection::vec(
@@ -705,12 +796,15 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
             .clone()
             .prop_map(|atoms| Constraint::Molecule(MoleculeConstraint::Connected { atoms }))
             .boxed();
-        let molecule_charge_sum = (optional_atoms.clone(), value_basic(-3..=3))
+        // Vacuous molecule-level constraints (Undetermined sum / fully
+        // Undetermined spin) elide on render and would break round-trip;
+        // restrict the value/spin strategies accordingly.
+        let molecule_charge_sum = (optional_atoms.clone(), constraint_inner_value_strategy(-3..=3))
             .prop_map(|(atoms, sum)| {
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms, sum })
             })
             .boxed();
-        let molecule_spin_sum = (optional_atoms, spin_state_strategy())
+        let molecule_spin_sum = (optional_atoms, non_vacuous_spin_state_strategy())
             .prop_map(|(atoms, spin)| {
                 Constraint::Molecule(MoleculeConstraint::SpinSum { atoms, spin })
             })
@@ -730,7 +824,7 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
         let max_bonds = counts.bond.min(3);
         let optional_bonds =
             prop::option::of(prop::collection::vec(bond_idx, 1..=max_bonds)).boxed();
-        let molecule_bond_order_sum = (optional_bonds, value_basic(0..=8))
+        let molecule_bond_order_sum = (optional_bonds, constraint_inner_value_strategy(0..=8))
             .prop_map(|(bonds, sum)| {
                 Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds, sum })
             })

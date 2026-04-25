@@ -217,7 +217,6 @@ pub struct AromaticSystemDefaults {
     pub charge: NumericDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
-    pub electrons: NumericDefault,
 }
 
 impl AromaticSystemDefaults {
@@ -226,7 +225,6 @@ impl AromaticSystemDefaults {
             charge: NumericDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
-            electrons: NumericDefault::Zero,
         }
     }
 
@@ -235,7 +233,6 @@ impl AromaticSystemDefaults {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
             multiplicity: MultiplicityDefault::Derived,
-            electrons: NumericDefault::Required,
         }
     }
 }
@@ -246,7 +243,6 @@ pub struct AromaticSystemOverrides {
     pub charge: Option<NumericDefault>,
     pub unpaired_electrons: Option<UnpairedElectronsDefault>,
     pub multiplicity: Option<MultiplicityDefault>,
-    pub electrons: Option<NumericDefault>,
 }
 
 impl AromaticSystemDefaults {
@@ -260,9 +256,6 @@ impl AromaticSystemDefaults {
         if let Some(v) = ov.multiplicity {
             self.multiplicity = v;
         }
-        if let Some(v) = ov.electrons {
-            self.electrons = v;
-        }
         self
     }
 }
@@ -273,7 +266,6 @@ pub struct MulticenterBondDefaults {
     pub charge: NumericDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
-    pub electrons: NumericDefault,
 }
 
 impl MulticenterBondDefaults {
@@ -282,7 +274,6 @@ impl MulticenterBondDefaults {
             charge: NumericDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
-            electrons: NumericDefault::Zero,
         }
     }
 
@@ -291,7 +282,6 @@ impl MulticenterBondDefaults {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
             multiplicity: MultiplicityDefault::Derived,
-            electrons: NumericDefault::Required,
         }
     }
 }
@@ -302,7 +292,6 @@ pub struct MulticenterBondOverrides {
     pub charge: Option<NumericDefault>,
     pub unpaired_electrons: Option<UnpairedElectronsDefault>,
     pub multiplicity: Option<MultiplicityDefault>,
-    pub electrons: Option<NumericDefault>,
 }
 
 impl MulticenterBondDefaults {
@@ -315,9 +304,6 @@ impl MulticenterBondDefaults {
         }
         if let Some(v) = ov.multiplicity {
             self.multiplicity = v;
-        }
-        if let Some(v) = ov.electrons {
-            self.electrons = v;
         }
         self
     }
@@ -457,14 +443,8 @@ mod tests {
         assert_eq!(cfg.atom.charge, back.atom.charge);
         assert_eq!(cfg.atom.implicit_hydrogens, back.atom.implicit_hydrogens);
         assert_eq!(cfg.bond.charge, back.bond.charge);
-        assert_eq!(
-            cfg.aromatic_system.electrons,
-            back.aromatic_system.electrons
-        );
-        assert_eq!(
-            cfg.multicenter_bond.electrons,
-            back.multicenter_bond.electrons
-        );
+        assert_eq!(cfg.aromatic_system.charge, back.aromatic_system.charge);
+        assert_eq!(cfg.multicenter_bond.charge, back.multicenter_bond.charge);
     }
 
     #[rstest]
@@ -565,12 +545,10 @@ mod tests {
             charge: Some(NumericDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
-            electrons: Some(NumericDefault::Required),
         });
         assert_eq!(cfg.charge, NumericDefault::Required);
         assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
         assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
-        assert_eq!(cfg.electrons, NumericDefault::Required);
     }
 
     #[rstest]
@@ -579,12 +557,10 @@ mod tests {
             charge: Some(NumericDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
-            electrons: Some(NumericDefault::Required),
         });
         assert_eq!(cfg.charge, NumericDefault::Required);
         assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
         assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
-        assert_eq!(cfg.electrons, NumericDefault::Required);
     }
 
     #[rstest]
@@ -612,7 +588,7 @@ mod tests {
                 ..BondOverrides::default()
             },
             aromatic_system: AromaticSystemOverrides {
-                electrons: Some(NumericDefault::Required),
+                charge: Some(NumericDefault::Required),
                 ..AromaticSystemOverrides::default()
             },
             multicenter_bond: MulticenterBondOverrides {
@@ -624,7 +600,7 @@ mod tests {
         });
         assert_eq!(cfg.atom.charge, NumericDefault::Required);
         assert_eq!(cfg.bond.multiplicity, MultiplicityDefault::Required);
-        assert_eq!(cfg.aromatic_system.electrons, NumericDefault::Required);
+        assert_eq!(cfg.aromatic_system.charge, NumericDefault::Required);
         assert_eq!(cfg.multicenter_bond.charge, NumericDefault::Required);
         // Untouched per-entity fields retain zeroed() values.
         assert_eq!(cfg.atom.isotope, IsotopeDefault::Natural);

@@ -43,6 +43,28 @@ pub enum Constraint {
 }
 
 impl Constraint {
+    /// A constraint is vacuous when it asserts nothing: the entity-leaf
+    /// variants delegate to their inner `is_undetermined`; molecule-scope
+    /// leaves delegate to `MoleculeConstraint::is_vacuous`. Combinators
+    /// (`And`/`Or`) are vacuous only when empty; `Not(c)` is treated as
+    /// non-vacuous (negating a vacuous claim is a meaningful unsat claim).
+    /// `Relational` and `NoncovalentBond` are always non-vacuous (no
+    /// `Undetermined` payload to elide).
+    pub fn is_vacuous(&self) -> bool {
+        match self {
+            Self::Atom(_, c) => c.is_undetermined(),
+            Self::Bond(_, c) => c.is_undetermined(),
+            Self::DativeBond(_, c) => c.is_undetermined(),
+            Self::AromaticSystem(_, c) => c.is_undetermined(),
+            Self::MulticenterBond(_, c) => c.is_undetermined(),
+            Self::NoncovalentBond(_, _) => false,
+            Self::Relational(_) => false,
+            Self::Molecule(c) => c.is_vacuous(),
+            Self::And(xs) | Self::Or(xs) => xs.is_empty(),
+            Self::Not(_) => false,
+        }
+    }
+
     /// Recursively simplify every contained `ValueAst`. Refs are unchanged;
     /// constraint kinds are preserved. SubPattern's inner `MoleculeAst` is
     /// recursively simplified via [`MoleculeAst::simplify_values`].
@@ -51,8 +73,8 @@ impl Constraint {
             Constraint::Atom(idx, c) => Constraint::Atom(idx, c.simplify()),
             Constraint::Bond(idx, c) => Constraint::Bond(idx, c.simplify()),
             Constraint::DativeBond(idx, c) => Constraint::DativeBond(idx, c.simplify()),
-            Constraint::AromaticSystem(_, c) => match c {},
-            Constraint::MulticenterBond(_, c) => match c {},
+            Constraint::AromaticSystem(idx, c) => Constraint::AromaticSystem(idx, c.simplify()),
+            Constraint::MulticenterBond(idx, c) => Constraint::MulticenterBond(idx, c.simplify()),
             Constraint::NoncovalentBond(_, c) => match c {},
             Constraint::Relational(r) => Constraint::Relational(r.simplify()),
             Constraint::Molecule(m) => Constraint::Molecule(m.simplify()),
@@ -193,6 +215,20 @@ pub enum MoleculeConstraint {
 }
 
 impl MoleculeConstraint {
+    /// A constraint is vacuous when its value-bearing payload is
+    /// `Undetermined`: `ChargeSum`/`BondOrderSum` with `Undetermined` sum,
+    /// `SpinSum` with both spin fields `Undetermined`. `Connected` and
+    /// `SubPattern` are structural — never vacuous in this sense.
+    pub fn is_vacuous(&self) -> bool {
+        match self {
+            Self::ChargeSum { sum, .. } => sum.is_undetermined(),
+            Self::BondOrderSum { sum, .. } => sum.is_undetermined(),
+            Self::SpinSum { spin, .. } => spin.is_undetermined(),
+            Self::Connected { .. } => false,
+            Self::SubPattern { .. } => false,
+        }
+    }
+
     /// Simplify every contained `ValueAst` and `SpinStateAst` in place.
     /// `Connected` carries no values to simplify; `SubPattern`'s pattern
     /// recurses via [`MoleculeAst::simplify_values`].

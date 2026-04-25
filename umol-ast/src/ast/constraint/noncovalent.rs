@@ -1,18 +1,11 @@
 //! Per-noncovalent-bond constraints.
-//!
-//! All previous variants (`Ends`, `Contains`, `EndsSatisfy`) were atom-ref-
-//! bearing or carried a delegated atom predicate; those moved to
-//! `RelationalConstraint` at molecule scope. The enum is kept (empty for
-//! now) so future value-only noncovalent-bond constraints can be added here
-//! without reshaping the AST or DSL surface.
 
 use std::mem;
 use std::slice::Iter;
 
 use super::super::remap::IdxRemapping;
 
-/// Noncovalent-bond-scope constraint. Currently uninhabited — placeholder
-/// for future value-only variants. Atom-ref and quantified-predicate forms
+/// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondConstraint {}

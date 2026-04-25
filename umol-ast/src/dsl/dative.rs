@@ -291,6 +291,25 @@ mod tests {
         assert_eq!(form, expected);
     }
 
+    /// Vacuous dative-bond constraints elide on rendering. `#R*` and `#r*`
+    /// parse but the canonical form drops them.
+    #[rstest]
+    #[case::ring_count("#R*", "")]
+    #[case::ring_size("#r*", "")]
+    fn test_dative_render_elides_vacuous_constraints(
+        #[case] input: &str,
+        #[case] expected_canonical: &str,
+    ) {
+        let parsed: DativeBondDsl = dative_bond.parse(input).unwrap();
+        assert_eq!(parsed.to_string(), expected_canonical);
+        let reparsed: DativeBondDsl = dative_bond.parse(&parsed.to_string()).unwrap();
+        assert!(
+            reparsed.0.constraints.is_empty(),
+            "vacuous constraint should be absent after render → reparse, got {:?}",
+            reparsed.0.constraints,
+        );
+    }
+
     #[rstest]
     #[case::unknown("#x", ParseError::UnknownDativeBondPredicate("#x".to_string()))]
     #[case::unknown_c("#c", ParseError::UnknownDativeBondPredicate("#c".to_string()))]

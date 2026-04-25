@@ -486,10 +486,12 @@ fn fmt_value_field(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fm
     }
 }
 
-/// Format a value field that always emits (constraint sugar — zero is meaningful).
+/// Format an inline-constraint value field. Per the canonical-rendering
+/// rules in `dsl::predicates`, vacuous constraints (`Undetermined`) elide.
+/// `Lit(0)` is a meaningful constraint and renders.
 fn fmt_value_field_required(f: &mut fmt::Formatter<'_>, prefix: &str, v: &ValueAst) -> fmt::Result {
     match v {
-        ValueAst::Undetermined => write!(f, "{}*", prefix),
+        ValueAst::Undetermined => Ok(()),
         ValueAst::Lit(1) => write!(f, "{}", prefix),
         ValueAst::Lit(n) => write!(f, "{}{}", prefix, n),
         v => {
@@ -505,7 +507,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
         AtomConstraint::DonatedPairs(v) => fmt_value_field_required(f, "#d", v),
         AtomConstraint::AcceptedPairs(v) => fmt_value_field_required(f, "#t", v),
         AtomConstraint::MulticenterValence(c) => match c {
-            MulticenterValenceAst::Undetermined => write!(f, "#m*"),
+            MulticenterValenceAst::Undetermined => Ok(()),
             MulticenterValenceAst::NotMulticenter => write!(f, "#m!"),
             MulticenterValenceAst::Multicenter(ValueAst::Undetermined) => write!(f, "#m+"),
             MulticenterValenceAst::Multicenter(ValueAst::Lit(1)) => write!(f, "#m"),
@@ -516,7 +518,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
             }
         },
         AtomConstraint::AromaticValence(c) => match c {
-            AromaticValenceAst::Undetermined => write!(f, "#a*"),
+            AromaticValenceAst::Undetermined => Ok(()),
             AromaticValenceAst::NotAromatic => write!(f, "#a!"),
             AromaticValenceAst::Aromatic(ValueAst::Undetermined) => write!(f, "#a+"),
             AromaticValenceAst::Aromatic(ValueAst::Lit(1)) => write!(f, "#a"),
@@ -1214,19 +1216,47 @@ mod tests {
     #[case::arom_plus("C#a+")]
     #[case::arom_zero("C#a0")]
     #[case::arom_omit("C#a")]
-    #[case::arom_undetermined("C#a*")]
     #[case::multicenter_not("C#m!")]
     #[case::multicenter_plus("C#m+")]
     #[case::multicenter_zero("C#m0")]
     #[case::multicenter_omit("C#m")]
-    #[case::multicenter_undetermined("C#m*")]
     #[case::ring_bare("C#R")]
     #[case::ring_plus("C#R+")]
     #[case::ring_count("C#R2")]
-    #[case::ring_undetermined("C#R*")]
     fn test_atom_display_roundtrip(#[case] input: &str) {
         let parsed = atom.parse(input).unwrap();
         assert_eq!(parsed.to_string(), input);
+    }
+
+    /// Vacuous constraints (those with `Undetermined` payload) elide on
+    /// rendering per the canonical-rendering rule (see `dsl::predicates`).
+    /// `#v*`, `#R*`, `#m*`, `#a*` etc. are admitted on parse but the
+    /// rendered surface drops them entirely, so the constraint is gone
+    /// after a render → reparse cycle.
+    #[rstest]
+    #[case::valence("C#v*", "C")]
+    #[case::donated("C#d*", "C")]
+    #[case::accepted("C#t*", "C")]
+    #[case::degree("C#D*", "C")]
+    #[case::connectivity("C#X*", "C")]
+    #[case::ring_connectivity("C#x*", "C")]
+    #[case::total_h("C#H*", "C")]
+    #[case::ring_count("C#R*", "C")]
+    #[case::ring_size("C#r*", "C")]
+    #[case::aromatic_undetermined("C#a*", "C")]
+    #[case::multicenter_undetermined("C#m*", "C")]
+    fn test_atom_render_elides_vacuous_constraints(
+        #[case] input: &str,
+        #[case] expected_canonical: &str,
+    ) {
+        let parsed: AtomDsl = atom.parse(input).unwrap();
+        assert_eq!(parsed.to_string(), expected_canonical);
+        let reparsed: AtomDsl = atom.parse(&parsed.to_string()).unwrap();
+        assert!(
+            reparsed.0.constraints.is_empty(),
+            "vacuous constraint should be absent after render → reparse, got {:?}",
+            reparsed.0.constraints,
+        );
     }
 
     #[rustfmt::skip]

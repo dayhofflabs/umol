@@ -1,9 +1,4 @@
 //! Per-dative-bond constraints.
-//!
-//! Narrow to value-only variants that live inline on `DativeBondAst`. Ref-
-//! bearing variants (Donor/Acceptor/Parallels, and the `*Satisfies`
-//! quantified predicates) moved to `RelationalConstraint` at molecule scope,
-//! since they reference more than one entity and require indices.
 
 use std::mem;
 use std::slice::Iter;

@@ -33,6 +33,8 @@ use super::dative::DativeBondDsl;
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
+use super::value::ValueDsl;
+use crate::ast::value::ValueAst;
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
@@ -448,10 +450,12 @@ fn read_aromatic_system_entry(
     let mut id = None;
     let mut atoms = None;
     let mut system = None;
+    let mut electrons = None;
     read_map(de, |de, key| {
         match key {
             "id" => id = Some(de.read_keyword_name()?.into_owned()),
             "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
+            "electrons" => electrons = Some(read_value_vec(de)?),
             "type" => {
                 let s = de.read_string()?;
                 system = Some(
@@ -464,10 +468,24 @@ fn read_aromatic_system_entry(
         }
         Ok(())
     })?;
+    let mut system = system.unwrap_or_default();
+    if let Some(es) = electrons {
+        system.0.electrons = es;
+    }
     Ok(AromaticSystemEntryInput {
         id,
         atoms: atoms.ok_or_else(|| missing("atoms", "aromatic-system-entry"))?,
-        system: system.unwrap_or_default(),
+        system,
+    })
+}
+
+fn read_value_vec(de: &mut EdnStreamDeserializer<'_>) -> Result<Vec<ValueAst>, EdnError> {
+    read_vec(de, |de| {
+        let slice = de.read_value_slice()?;
+        let edn = umol_edn::read_string(slice)?;
+        ValueDsl::from_edn(&edn)
+            .map(|v| v.0)
+            .map_err(EdnError::from)
     })
 }
 
@@ -477,10 +495,12 @@ fn read_multicenter_bond_entry(
     let mut id = None;
     let mut atoms = None;
     let mut bond = None;
+    let mut electrons = None;
     read_map(de, |de, key| {
         match key {
             "id" => id = Some(de.read_keyword_name()?.into_owned()),
             "atoms" => atoms = Some(read_vec(de, read_atom_ref)?),
+            "electrons" => electrons = Some(read_value_vec(de)?),
             "type" => {
                 let s = de.read_string()?;
                 bond = Some(
@@ -493,10 +513,14 @@ fn read_multicenter_bond_entry(
         }
         Ok(())
     })?;
+    let mut bond = bond.unwrap_or_default();
+    if let Some(es) = electrons {
+        bond.0.electrons = es;
+    }
     Ok(MulticenterBondEntryInput {
         id,
         atoms: atoms.ok_or_else(|| missing("atoms", "multicenter-bond-entry"))?,
-        bond: bond.unwrap_or_default(),
+        bond,
     })
 }
 
@@ -636,10 +660,10 @@ fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     if meta.has_atom_aliases() {
         map.insert(Edn::keyword("atom-aliases"), render_atom_aliases(meta));
     }
-    if !ast.constraints().is_empty() {
-        let dsl = ConstraintsDsl::from_ast(ast.constraints(), meta)
-            .expect("ConstraintsDsl::from_ast is infallible for a well-formed AST");
-        map.insert(Edn::keyword("constraints"), dsl.to_edn());
+    let constraints_dsl = ConstraintsDsl::from_ast(ast.constraints(), meta)
+        .expect("ConstraintsDsl::from_ast is infallible for a well-formed AST");
+    if !constraints_dsl.0.is_empty() {
+        map.insert(Edn::keyword("constraints"), constraints_dsl.to_edn());
     }
     Edn::Map(map)
 }
@@ -732,7 +756,7 @@ fn render_aromatic(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
         .aromatic_systems()
         .iter()
         .map(|view| {
-            let mut m = EdnMap::with_capacity(3);
+            let mut m = EdnMap::with_capacity(4);
             if let Some(id) = meta.aromatic_system_id(view.idx) {
                 m.insert(
                     Edn::keyword("id"),
@@ -741,6 +765,12 @@ fn render_aromatic(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
             }
             let atoms: Vec<Edn<'static>> = view.atoms().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
+            if !view.data.electrons.is_empty() {
+                m.insert(
+                    Edn::keyword("electrons"),
+                    render_value_vec(&view.data.electrons),
+                );
+            }
             let type_str = AromaticSystemDsl::from_ref(view.data).to_string();
             if !type_str.is_empty() {
                 m.insert(Edn::keyword("type"), Edn::Str(Cow::Owned(type_str)));
@@ -756,7 +786,7 @@ fn render_multicenter(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
         .multicenter_bonds()
         .iter()
         .map(|view| {
-            let mut m = EdnMap::with_capacity(3);
+            let mut m = EdnMap::with_capacity(4);
             if let Some(id) = meta.multicenter_bond_id(view.idx) {
                 m.insert(
                     Edn::keyword("id"),
@@ -765,12 +795,26 @@ fn render_multicenter(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
             }
             let atoms: Vec<Edn<'static>> = view.atoms().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
+            if !view.data.electrons.is_empty() {
+                m.insert(
+                    Edn::keyword("electrons"),
+                    render_value_vec(&view.data.electrons),
+                );
+            }
             let type_str = MulticenterBondDsl::from_ref(view.data).to_string();
             if !type_str.is_empty() {
                 m.insert(Edn::keyword("type"), Edn::Str(Cow::Owned(type_str)));
             }
             Edn::Map(m)
         })
+        .collect();
+    Edn::Vector(entries.into())
+}
+
+fn render_value_vec(values: &[ValueAst]) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = values
+        .iter()
+        .map(|v| ValueDsl(v.clone()).to_edn())
         .collect();
     Edn::Vector(entries.into())
 }
@@ -1208,6 +1252,13 @@ fn parse_dative_bond_entry(edn: &Edn<'_>) -> Result<DativeBondEntryInput, DeErro
 
 fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSystemEntryInput, DeError> {
     let m = expect_map(edn, "aromatic-system-entry")?;
+    let mut system = match m.get_keyword("type") {
+        Some(edn) => AromaticSystemDsl::from_edn(edn)?,
+        None => AromaticSystemDsl::default(),
+    };
+    if let Some(edn) = m.get_keyword("electrons") {
+        system.0.electrons = parse_value_vec(edn, ":electrons")?;
+    }
     Ok(AromaticSystemEntryInput {
         id: optional_id(m)?,
         atoms: parse_vec(
@@ -1215,15 +1266,19 @@ fn parse_aromatic_system_entry(edn: &Edn<'_>) -> Result<AromaticSystemEntryInput
             ":atoms",
             |e| AtomRef::from_edn(e),
         )?,
-        system: match m.get_keyword("type") {
-            Some(edn) => AromaticSystemDsl::from_edn(edn)?,
-            None => AromaticSystemDsl::default(),
-        },
+        system,
     })
 }
 
 fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInput, DeError> {
     let m = expect_map(edn, "multicenter-bond-entry")?;
+    let mut bond = match m.get_keyword("type") {
+        Some(edn) => MulticenterBondDsl::from_edn(edn)?,
+        None => MulticenterBondDsl::default(),
+    };
+    if let Some(edn) = m.get_keyword("electrons") {
+        bond.0.electrons = parse_value_vec(edn, ":electrons")?;
+    }
     Ok(MulticenterBondEntryInput {
         id: optional_id(m)?,
         atoms: parse_vec(
@@ -1231,11 +1286,12 @@ fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInp
             ":atoms",
             |e| AtomRef::from_edn(e),
         )?,
-        bond: match m.get_keyword("type") {
-            Some(edn) => MulticenterBondDsl::from_edn(edn)?,
-            None => MulticenterBondDsl::default(),
-        },
+        bond,
     })
+}
+
+fn parse_value_vec(edn: &Edn<'_>, label: &'static str) -> Result<Vec<ValueAst>, DeError> {
+    parse_vec(edn, label, |e| ValueDsl::from_edn(e).map(|v| v.0))
 }
 
 fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInput, DeError> {
@@ -1341,7 +1397,8 @@ mod tests {
     use super::*;
     use crate::ast::atom::{AtomAst, ElementAst};
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::Constraints;
+    use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint};
+    use crate::ast::spin::SpinStateAst;
     use crate::ast::value::ValueAst;
 
     fn c_atom() -> AtomAst {
@@ -1713,8 +1770,16 @@ mod tests {
     #[case::dative_with_id_and_type(r##"{:atoms ["C" "N"] :bonds [] :dative [{:id :d1 :donor 0 :acceptor 1 :type "#R"}]}"##)]
     #[case::aromatic_minimal(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic [{:atoms [0 1 2 3 4 5]}]}"##)]
     #[case::aromatic_with_id_and_type(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:id :a1 :atoms [0 1] :type "#e6"}]}"##)]
+    #[case::aromatic_with_electrons_lits(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1]}]}"##)]
+    #[case::aromatic_with_electrons_undetermined(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :electrons [:undetermined :undetermined]}]}"##)]
+    #[case::aromatic_with_electrons_litset(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :electrons [[1 2] 1]}]}"##)]
+    #[case::aromatic_with_electrons_expr(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :electrons ["?n + 1" 1]}]}"##)]
+    #[case::aromatic_with_electrons_and_total(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type "#e6"}]}"##)]
     #[case::multicenter_minimal(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter [{:atoms [0 1 2]}]}"##)]
     #[case::multicenter_with_id_and_type(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:id :m1 :atoms [0 1] :type "#e2"}]}"##)]
+    #[case::multicenter_with_electrons_lits(r##"{:atoms ["B" "H" "B"] :bonds [] :multicenter [{:atoms [0 1 2] :electrons [1 0 1]}]}"##)]
+    #[case::multicenter_with_electrons_undetermined(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :electrons [:undetermined :undetermined]}]}"##)]
+    #[case::multicenter_with_electrons_expr(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :electrons ["?n - 1" 1]}]}"##)]
     #[case::noncovalent(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}]}"##)]
     #[case::noncovalent_with_id(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:id :n1 :a 0 :b 1 :type "Hbd"}]}"##)]
     fn test_molecule_dsl_edn_roundtrip_non_localized_entities(#[case] source: &str) {
@@ -1731,6 +1796,113 @@ mod tests {
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.to_edn(), edn);
         assert_eq!(dsl.ast().constraints().len(), 1);
+    }
+
+    /// Vacuous molecule-level constraints — `ChargeSum` / `BondOrderSum`
+    /// with `Undetermined` sum, `SpinSum` with both spin fields
+    /// `Undetermined` — are dropped during AST → DSL lowering. The
+    /// canonical EDN omits the entire `:constraints` key when the only
+    /// entries are vacuous.
+    #[rstest]
+    fn test_molecule_dsl_render_elides_vacuous_charge_sum() {
+        let mut ast = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        ast.constraints_mut()
+            .push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: ValueAst::Undetermined,
+            }));
+        let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+        let edn = dsl.to_edn();
+        let Edn::Map(m) = &edn else { panic!("expected map") };
+        assert!(
+            m.get_keyword("constraints").is_none(),
+            "vacuous ChargeSum should not surface as :constraints, got {:?}",
+            m.get_keyword("constraints"),
+        );
+    }
+
+    #[rstest]
+    fn test_molecule_dsl_render_elides_vacuous_bond_order_sum() {
+        let mut ast = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        ast.constraints_mut()
+            .push(Constraint::Molecule(MoleculeConstraint::BondOrderSum {
+                bonds: None,
+                sum: ValueAst::Undetermined,
+            }));
+        let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+        let edn = dsl.to_edn();
+        let Edn::Map(m) = &edn else { panic!("expected map") };
+        assert!(m.get_keyword("constraints").is_none());
+    }
+
+    #[rstest]
+    fn test_molecule_dsl_render_elides_vacuous_spin_sum() {
+        let mut ast = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        ast.constraints_mut()
+            .push(Constraint::Molecule(MoleculeConstraint::SpinSum {
+                atoms: None,
+                spin: SpinStateAst::default(),
+            }));
+        let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+        let edn = dsl.to_edn();
+        let Edn::Map(m) = &edn else { panic!("expected map") };
+        assert!(m.get_keyword("constraints").is_none());
+    }
+
+    /// Non-vacuous molecule-level constraints survive the lowering and
+    /// vacuous neighbors in the same constraint vec are dropped while
+    /// the surviving entry is rendered.
+    #[rstest]
+    fn test_molecule_dsl_render_keeps_non_vacuous_drops_vacuous() {
+        let mut ast = MoleculeAst::new(
+            vec![AtomAst::from_element(Element::C)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        ast.constraints_mut()
+            .push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: ValueAst::Undetermined,
+            }));
+        ast.constraints_mut()
+            .push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+                atoms: None,
+                sum: ValueAst::Lit(0),
+            }));
+        let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+        let edn = dsl.to_edn();
+        let Edn::Map(m) = &edn else { panic!("expected map") };
+        let cs = m.get_keyword("constraints").expect("constraints key present");
+        let Edn::Vector(v) = cs else { panic!("expected vec") };
+        assert_eq!(v.len(), 1, "only the non-vacuous ChargeSum should survive");
     }
 
     #[rstest]

@@ -781,12 +781,8 @@ impl MoleculeAst {
 
     /// Drain every entity's inline `constraints` store into `self.constraints`
     /// as `Constraint::Atom` / `Bond` / `DativeBond` / `AromaticSystem` /
-    /// `MulticenterBond` / `NoncovalentBond` entries. Each entity kind is
-    /// walked unconditionally; for entities whose narrow constraint enum is
-    /// currently uninhabited (aromatic system, multicenter, noncovalent),
-    /// the iteration is empty until a variant is added — at which point
-    /// new variants are lifted automatically with no code change here.
-    /// The order of inserted entries in `self.constraints` is unspecified.
+    /// `MulticenterBond` / `NoncovalentBond` entries. The order of inserted
+    /// entries in `self.constraints` is unspecified.
     pub fn lift_constraints(&mut self) {
         let atom_count = self.atom_count();
         let bond_count = self.bond_count();
@@ -861,8 +857,12 @@ impl MoleculeAst {
                 Constraint::DativeBond(idx, inner) => {
                     self.dative_bond_mut(idx).constraints.add(inner);
                 }
-                Constraint::AromaticSystem(_, inner) => match inner {},
-                Constraint::MulticenterBond(_, inner) => match inner {},
+                Constraint::AromaticSystem(idx, inner) => {
+                    self.aromatic_system_mut(idx).constraints.add(inner);
+                }
+                Constraint::MulticenterBond(idx, inner) => {
+                    self.multicenter_bond_mut(idx).constraints.add(inner);
+                }
                 Constraint::NoncovalentBond(_, inner) => match inner {},
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)

@@ -598,6 +598,26 @@ mod tests {
         assert_eq!(parsed.into_ast(&()).unwrap(), input, "parse-back mismatch");
     }
 
+    /// Vacuous bond constraints elide on rendering (canonical-rendering
+    /// rule, see `dsl::predicates`). `#R*` and `#r*` are admitted on
+    /// parse but the rendered surface drops them.
+    #[rstest]
+    #[case::ring_count("1#R*", "1")]
+    #[case::ring_size("1#r*", "1")]
+    fn test_bond_render_elides_vacuous_constraints(
+        #[case] input: &str,
+        #[case] expected_canonical: &str,
+    ) {
+        let parsed: BondDsl = bond.parse(input).unwrap();
+        assert_eq!(parsed.to_string(), expected_canonical);
+        let reparsed: BondDsl = bond.parse(&parsed.to_string()).unwrap();
+        assert!(
+            reparsed.0.constraints.is_empty(),
+            "vacuous constraint should be absent after render → reparse, got {:?}",
+            reparsed.0.constraints,
+        );
+    }
+
     #[rstest]
     fn test_bond_constraint_dsl_rejects_wrong_shape() {
         let err = BondConstraintDsl::from_edn(&Edn::Int(3)).unwrap_err();

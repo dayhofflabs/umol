@@ -45,6 +45,11 @@ impl SpinStateAst {
         matches!(&self.unpaired, ValueAst::Lit(_)) && matches!(&self.multiplicity, ValueAst::Lit(_))
     }
 
+    /// Both fields are `Undetermined` — the spin state asserts nothing.
+    pub fn is_undetermined(&self) -> bool {
+        self.unpaired.is_undetermined() && self.multiplicity.is_undetermined()
+    }
+
     /// Pattern matches target iff `unpaired` and `multiplicity` each
     /// match field-wise under `ValueAst::matches`.
     pub fn matches(&self, target: &Self) -> bool {
