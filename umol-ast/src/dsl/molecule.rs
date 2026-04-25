@@ -23,7 +23,7 @@ use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer
 
 use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
-use super::bond::BondDsl;
+use super::bond::{BondDsl, expand_bond_keyword};
 use super::config::MoleculeDefaults;
 use super::constraint::{
     eof_err, missing, read_atom_ref, read_constraints_dsl, read_map, read_vec,
@@ -242,6 +242,30 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
     }
 }
 
+/// Direct EDN parsing for `MoleculeAst`. Accepts the same molecule-map
+/// surface as [`MoleculeDsl::from_edn`]; any id keywords or aliases in the
+/// input resolve to positional indices, then the metadata is discarded —
+/// the result is metadata-free.
+impl<'de> FromEdn<'de> for MoleculeAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        MoleculeDsl::from_edn(edn).map(|dsl| dsl.into_parts().0)
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        MoleculeDsl::from_edn_str(input).map(|dsl| dsl.into_parts().0)
+    }
+}
+
+/// Direct EDN rendering for `MoleculeAst`. Always emits canonical positional
+/// refs (no id keywords, no aliases) since the AST carries no metadata.
+/// For id-bearing surface output, wrap in [`MoleculeDsl`] with appropriate
+/// [`Metadata`] and call [`MoleculeDsl::to_edn`].
+impl ToEdn for MoleculeAst {
+    fn to_edn(&self) -> Edn<'static> {
+        render_molecule_edn(self, &Metadata::default())
+    }
+}
+
 // region: Streaming parser
 //
 // Single-pass parse of the molecule map directly off the source text, using
@@ -323,7 +347,18 @@ fn read_atom_spec(de: &mut EdnStreamDeserializer<'_>) -> Result<AtomSpecInput, E
 }
 
 fn read_bond_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<BondDsl, EdnError> {
-    let text = de.read_string_or_keyword()?;
+    let byte = de.peek_byte()?.ok_or_else(eof_err)?;
+    let text: Cow<'_, str> = match byte {
+        b':' => {
+            let name = de.read_keyword_name()?;
+            let expanded =
+                expand_bond_keyword(name.as_ref()).ok_or_else(|| {
+                    DeError::Custom(format!("unknown bond keyword :{}", name))
+                })?;
+            Cow::Borrowed(expanded)
+        }
+        _ => de.read_string()?,
+    };
     text.as_ref()
         .parse()
         .map_err(|e| DeError::subgrammar("bond", e).into())
@@ -1338,9 +1373,10 @@ mod tests {
         );
         let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
         let edn = dsl.to_edn();
+        // Canonical render: order-1 default bond becomes the `:single` keyword.
         assert_eq!(
             edn,
-            read_string(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##).unwrap()
+            read_string(r##"{:atoms ["C" "C"] :bonds [[0 1 :single]]}"##).unwrap()
         );
     }
 
@@ -1384,7 +1420,8 @@ mod tests {
         let edn = dsl.to_edn();
         assert_eq!(
             edn,
-            read_string(r##"{:atoms ["C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type "1"}]}"##).unwrap()
+            read_string(r##"{:atoms ["C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type :single}]}"##)
+                .unwrap()
         );
     }
 
@@ -1516,7 +1553,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_edn_roundtrip() {
-        let source = r##"{:atoms ["C" "C" "O"] :bonds [[0 1 "1"] [1 2 "1"]]}"##;
+        let source = r##"{:atoms ["C" "C" "O"] :bonds [[0 1 :single] [1 2 :single]]}"##;
         let edn = read_string(source).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
         let rendered = dsl.to_edn();
@@ -1525,7 +1562,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_edn_roundtrip_with_ids_and_aliases() {
-        let source = r##"{:atoms [[:a "C"] [:b "C"] :x] :bonds [{:id :b1 :a :a :b :b :type "1"} [:b 2 "2"]] :atom-aliases [:x "N"]}"##;
+        let source = r##"{:atoms [[:a "C"] [:b "C"] :x] :bonds [{:id :b1 :a :a :b :b :type :single} [:b 2 :double]] :atom-aliases [:x "N"]}"##;
         let edn = read_string(source).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
         let rendered = dsl.to_edn();
@@ -1707,7 +1744,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_edn_roundtrip_bond_order_sum_by_id() {
-        let source = r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type "1"} {:id :b2 :a 1 :b 2 :type "1"}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##;
+        let source = r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type :single} {:id :b2 :a 1 :b 2 :type :single}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##;
         let edn = read_string(source).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.to_edn(), edn);
@@ -1721,6 +1758,69 @@ mod tests {
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.to_edn(), edn);
     }
+
+    // region: MoleculeAst direct EDN
+
+    /// `MoleculeAst::to_edn` emits canonical EDN with positional refs only,
+    /// regardless of any id keywords on the input. Parsing the canonical
+    /// output back yields the same AST.
+    #[rstest]
+    fn test_molecule_ast_to_edn_canonical_positional_refs() {
+        // Input has id keywords on atoms, bonds, and a constraint anchor.
+        let source = r##"{:atoms [[:c1 "C"] [:c2 "C"]]
+                          :bonds [{:id :b1 :a :c1 :b :c2 :type "1"}]
+                          :constraints [{:atom [:c1 {:valence 4}]}
+                                        {:bond [:b1 :aromatic]}]}"##;
+        let dsl = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
+        let (ast, _meta) = dsl.into_parts();
+
+        // Canonical render: positional refs only.
+        let canonical_source =
+            r##"{:atoms ["C" "C"] :bonds [[0 1 :single]]
+                 :constraints [{:atom [0 {:valence 4}]}
+                               {:bond [0 :aromatic]}]}"##;
+        assert_eq!(ast.to_edn(), read_string(canonical_source).unwrap());
+    }
+
+    #[rstest]
+    fn test_molecule_ast_from_edn_tree_roundtrip() {
+        let source = r##"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"##;
+        let edn = read_string(source).unwrap();
+        let ast = MoleculeAst::from_edn(&edn).unwrap();
+        assert_eq!(ast.atom_count(), 2);
+        assert_eq!(ast.bond_count(), 1);
+        // Render → parse → equal AST.
+        let rendered = ast.to_edn();
+        let reparsed = MoleculeAst::from_edn(&rendered).unwrap();
+        assert_eq!(ast, reparsed);
+    }
+
+    #[rstest]
+    fn test_molecule_ast_from_edn_str_fast_path() {
+        let source = r##"{:atoms ["C" "O" "H"] :bonds [[0 1 "1"] [1 2 "1"]]}"##;
+        let ast = MoleculeAst::from_edn_str(source).unwrap();
+        assert_eq!(ast.atom_count(), 3);
+        assert_eq!(ast.bond_count(), 2);
+    }
+
+    #[rstest]
+    fn test_molecule_ast_from_edn_drops_id_metadata() {
+        // Input carries ids; AST is metadata-free, so reparsing the rendered
+        // form (which has no ids) should match the AST from the original parse.
+        let source = r##"{:atoms [[:carbon "C"] [:oxygen "O"]]
+                          :bonds [{:id :myb :a :carbon :b :oxygen :type "1"}]}"##;
+        let ast = MoleculeAst::from_edn(&read_string(source).unwrap()).unwrap();
+        let rendered = ast.to_edn().to_string();
+        // No user-defined id keywords leaked through. (`:a` / `:b` / `:type`
+        // are bond-entry field names, not ids.)
+        assert!(!rendered.contains(":carbon"));
+        assert!(!rendered.contains(":oxygen"));
+        assert!(!rendered.contains(":myb"));
+        let reparsed = MoleculeAst::from_edn_str(&rendered).unwrap();
+        assert_eq!(ast, reparsed);
+    }
+
+    // endregion: MoleculeAst direct EDN
 
     #[rstest]
     fn test_molecule_dsl_constraint_unknown_ref_errors() {
@@ -1751,8 +1851,19 @@ mod tests {
     #[case::valence(r##"{:atoms ["C#v4"] :bonds []}"##)]
     #[case::ring_count(r##"{:atoms ["N#R2"] :bonds []}"##)]
     #[case::atom_multiple(r##"{:atoms ["C#v4#R+"] :bonds []}"##)]
-    #[case::bond_aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"##)]
     fn test_molecule_dsl_edn_roundtrip_inline_constraints(#[case] source: &str) {
+        let edn = read_string(source).unwrap();
+        let dsl = MoleculeDsl::from_edn(&edn).unwrap();
+        assert_eq!(dsl.to_edn(), edn);
+    }
+
+    #[rstest]
+    #[case::single(r##"{:atoms ["C" "C"] :bonds [[0 1 :single]]}"##)]
+    #[case::double(r##"{:atoms ["C" "C"] :bonds [[0 1 :double]]}"##)]
+    #[case::triple(r##"{:atoms ["C" "C"] :bonds [[0 1 :triple]]}"##)]
+    #[case::quadruple(r##"{:atoms ["C" "C"] :bonds [[0 1 :quadruple]]}"##)]
+    #[case::aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 :aromatic]]}"##)]
+    fn test_molecule_dsl_edn_roundtrip_bond_keyword_shorthands(#[case] source: &str) {
         let edn = read_string(source).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.to_edn(), edn);

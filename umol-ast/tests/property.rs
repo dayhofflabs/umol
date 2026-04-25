@@ -21,7 +21,7 @@ use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
     MulticenterBondDsl, NoncovalentBondDsl, ValueDsl,
 };
-use umol_edn::{read_string, FromEdn, ToEdn};
+use umol_edn::{read_string, Edn, FromEdn, ToEdn};
 use umol_shared::element::Element;
 
 const ELEMENTS: &[Element] = &[
@@ -426,6 +426,23 @@ prop_compose! {
             constraints,
         }
     }
+}
+
+/// `BondAst` shapes that render to bond keyword shorthands per spec §7.7:
+/// `:single`, `:double`, `:triple`, `:quadruple`, plus `:aromatic` (an
+/// order-1 bond with the inline `Aromatic` flag).
+fn canonical_keyword_bond_strategy() -> impl Strategy<Value = BondAst> {
+    prop_oneof![
+        Just(BondAst::new(ValueAst::Lit(1))),
+        Just(BondAst::new(ValueAst::Lit(2))),
+        Just(BondAst::new(ValueAst::Lit(3))),
+        Just(BondAst::new(ValueAst::Lit(4))),
+        Just({
+            let mut bond = BondAst::new(ValueAst::Lit(1));
+            bond.constraints.add(BondConstraint::Aromatic);
+            bond
+        }),
+    ]
 }
 
 /// Generate a random undirected, simple-graph edge set over `atom_count`
@@ -1057,6 +1074,29 @@ proptest! {
         prop_assert_eq!(via_stream, via_tree);
     }
 
+    /// Direct `MoleculeAst::ToEdn` / `FromEdn` round-trips are the identity.
+    /// Refs render as positional integers (no id keywords); the AST carries
+    /// no metadata, so canonical EDN parses back to an equal AST.
+    #[test]
+    fn test_molecule_ast_to_edn_from_edn_tree_roundtrip(
+        ast in molecule_ast_with_constraints_strategy(),
+    ) {
+        let edn = ast.to_edn();
+        let parsed = MoleculeAst::from_edn(&edn)
+            .map_err(|e| TestCaseError::fail(format!("tree parse failed: {e}")))?;
+        prop_assert_eq!(ast, parsed);
+    }
+
+    #[test]
+    fn test_molecule_ast_to_edn_from_edn_str_roundtrip(
+        ast in molecule_ast_with_constraints_strategy(),
+    ) {
+        let rendered = ast.to_edn().to_string();
+        let parsed = MoleculeAst::from_edn_str(&rendered)
+            .map_err(|e| TestCaseError::fail(format!("streaming parse failed: {e}\nrendered: {rendered}")))?;
+        prop_assert_eq!(ast, parsed);
+    }
+
     #[test]
     fn test_molecule_dsl_double_render_is_stable(dsl in molecule_dsl_strategy()) {
         let s1 = dsl.to_edn().to_string();
@@ -1147,6 +1187,38 @@ proptest! {
         let rendered = dsl.to_string();
         let parsed: BondDsl = rendered.parse().map_err(|e| {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    /// `BondDsl::ToEdn` ↔ `FromEdn` round-trips for any generated bond
+    /// shape. Non-canonical bonds render as bond strings; canonical
+    /// shapes (order-only, no charge / spin / non-aromatic constraints,
+    /// or order-1 with the `Aromatic` flag) render as keyword shorthands.
+    #[test]
+    fn test_bond_dsl_to_edn_from_edn_roundtrip(bond in bond_ast_strategy()) {
+        let dsl = BondDsl(bond);
+        let edn = dsl.to_edn();
+        let parsed = BondDsl::from_edn(&edn).map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    /// Canonical-shape bonds render as keyword shorthands, and the
+    /// keyword form parses back to the same AST.
+    #[test]
+    fn test_bond_dsl_keyword_to_edn_from_edn_roundtrip(
+        bond in canonical_keyword_bond_strategy(),
+    ) {
+        let dsl = BondDsl(bond);
+        let edn = dsl.to_edn();
+        prop_assert!(
+            matches!(&edn, Edn::Keyword(_)),
+            "expected keyword render for canonical bond, got {edn:?}",
+        );
+        let parsed = BondDsl::from_edn(&edn).map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}"))
         })?;
         prop_assert_eq!(dsl, parsed);
     }

@@ -79,7 +79,7 @@
 | [75-geometry-operations-2026-04-06.md](75-geometry-operations-2026-04-06.md)                                                     | Active        | 2026-04-06   |
 | [76-numerical-primitives-2026-04-06.md](76-numerical-primitives-2026-04-06.md)                                                   | Active        | 2026-04-06   |
 | [77-umol-edn-usability-review-2026-04-07.md](77-umol-edn-usability-review-2026-04-07.md)                                         | Completed     | 2026-04-08   |
-| [78-edn-subgrammar-design-2026-04-09.md](78-edn-subgrammar-design-2026-04-09.md)                                                 | Active        | 2026-04-09   |
+| [78-edn-subgrammar-design-2026-04-09.md](78-edn-subgrammar-design-2026-04-09.md)                                                 | Completed     | 2026-04-24   |
 | [79-pattern-language-design-2026-04-10.md](79-pattern-language-design-2026-04-10.md)                                             | Informational | 2026-04-10   |
 | [80-unified-constraint-ast-2026-04-10.md](80-unified-constraint-ast-2026-04-10.md)                                               | Active        | 2026-04-10   |
 | [81-fix-point-group-impl-2026-04-11.md](81-fix-point-group-impl-2026-04-11.md)                                                   | Completed     | 2026-04-12   |
@@ -89,7 +89,7 @@
 | [85-kekulization-algorithms-2026-04-15.md](85-kekulization-algorithms-2026-04-15.md)                                             | Active        | 2026-04-15   |
 | [86-molecule-ast-api-2026-04-16.md](86-molecule-ast-api-2026-04-16.md)                                                           | Active        | 2026-04-17   |
 | [87-constraint-taxonomy-2026-04-17.md](87-constraint-taxonomy-2026-04-17.md)                                                     | Completed     | 2026-04-19   |
-| [88-fix-dsl-parsing-2026-04-19.md](88-fix-dsl-parsing-2026-04-19.md)                                                             | Active        | 2026-04-19   |
-| [89-substructure-matching-variables-2026-04-21.md](89-substructure-matching-variables-2026-04-21.md)                             | Active        | 2026-04-21   |
+| [88-fix-dsl-parsing-2026-04-19.md](88-fix-dsl-parsing-2026-04-19.md)                                                             | Complete      | 2026-04-24   |
+| [89-substructure-matching-variables-2026-04-21.md](89-substructure-matching-variables-2026-04-21.md)                             | Completed     | 2026-04-24   |
 | [90-reactions-relation-mutation-2026-04-21.md](90-reactions-relation-mutation-2026-04-21.md)                                     | Active        | 2026-04-21   |
 | [91-molecule-dsl-profiling-2026-04-23.md](91-molecule-dsl-profiling-2026-04-23.md)                                               | Completed     | 2026-04-24   |

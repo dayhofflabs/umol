@@ -21,6 +21,7 @@ use super::predicates::{
 use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::BondConstraint;
+use crate::ast::spin::SpinStateAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
@@ -61,8 +62,15 @@ impl<'de> FromEdn<'de> for BondDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
         match edn {
             Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("bond", e)),
+            Edn::Keyword(k) => {
+                let s = expand_bond_keyword(k.name()).ok_or_else(|| DeError::Custom(format!(
+                    "unknown bond keyword :{}",
+                    k.name()
+                )))?;
+                s.parse().map_err(|e| DeError::subgrammar("bond", e))
+            }
             other => Err(DeError::TypeMismatch {
-                expected: "string",
+                expected: "string or bond-keyword",
                 got: other.kind(),
                 path: Vec::new(),
             }),
@@ -74,9 +82,57 @@ impl<'de> FromEdn<'de> for BondDsl {
     }
 }
 
+/// Expand a bond-entry keyword shorthand to its equivalent bond-string
+/// payload. The five recognized keywords mirror the spec §7.7 table:
+///
+/// - `:single` → `"1"`
+/// - `:double` → `"2"`
+/// - `:triple` → `"3"`
+/// - `:quadruple` → `"4"`
+/// - `:aromatic` → `"1#a"` (single-order localized bond participating in
+///   an aromatic system; `#a` is the bond-string aromatic predicate)
+///
+/// Returns `None` for unrecognized keywords. Input sugar only — the AST
+/// renders back to bond-string form.
+pub(crate) fn expand_bond_keyword(name: &str) -> Option<&'static str> {
+    match name {
+        "single" => Some("1"),
+        "double" => Some("2"),
+        "triple" => Some("3"),
+        "quadruple" => Some("4"),
+        "aromatic" => Some("1#a"),
+        _ => None,
+    }
+}
+
 impl ToEdn for BondDsl {
     fn to_edn(&self) -> Edn<'static> {
-        Edn::Str(Cow::Owned(self.to_string()))
+        match bond_keyword_for(&self.0) {
+            Some(kw) => Edn::Keyword(umol_edn::EdnKeyword::owned(kw.to_string())),
+            None => Edn::Str(Cow::Owned(self.to_string())),
+        }
+    }
+}
+
+/// Return the bond-keyword shorthand for canonical bond shapes, or `None`
+/// when the bond requires the full bond-string form. Inverse of
+/// [`expand_bond_keyword`]: every shape this returns must round-trip.
+///
+/// Canonical means: charge/spin at their defaults (Undetermined / default
+/// pair) and either no constraints (orders 1–4) or exactly the `Aromatic`
+/// flag (order 1 → `:aromatic`).
+fn bond_keyword_for(ast: &BondAst) -> Option<&'static str> {
+    if !matches!(ast.charge, ValueAst::Undetermined) || ast.spin != SpinStateAst::default() {
+        return None;
+    }
+    let constraints: Vec<&BondConstraint> = ast.constraints.iter().collect();
+    match (&ast.order, constraints.as_slice()) {
+        (ValueAst::Lit(1), []) => Some("single"),
+        (ValueAst::Lit(2), []) => Some("double"),
+        (ValueAst::Lit(3), []) => Some("triple"),
+        (ValueAst::Lit(4), []) => Some("quadruple"),
+        (ValueAst::Lit(1), [BondConstraint::Aromatic]) => Some("aromatic"),
+        _ => None,
     }
 }
 
@@ -496,6 +552,29 @@ mod tests {
         let tree = umol_edn::read_string(input).unwrap();
         let via_tree = BondDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
+    }
+
+    /// Bond-keyword shorthands expand to their bond-string equivalents
+    /// in the tree-parse path (`BondDsl::from_edn`). Mirrors the spec
+    /// §7.7 expansion table.
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::single(":single", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+    #[case::double(":double", BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+    #[case::triple(":triple", BondAst { order: ValueAst::Lit(3), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+    #[case::quadruple(":quadruple", BondAst { order: ValueAst::Lit(4), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+    #[case::aromatic(":aromatic", BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) })]
+    fn test_bond_dsl_keyword_shorthand_tree(#[case] input: &str, #[case] expected: BondAst) {
+        let edn = umol_edn::read_string(input).unwrap();
+        let dsl = BondDsl::from_edn(&edn).unwrap();
+        assert_eq!(dsl.0, expected);
+    }
+
+    #[rstest]
+    fn test_bond_dsl_keyword_shorthand_unknown_rejected() {
+        let edn = umol_edn::read_string(":bogus").unwrap();
+        let err = BondDsl::from_edn(&edn).unwrap_err();
+        assert!(matches!(err, DeError::Custom(_)));
     }
 
     // region: BondConstraintDsl
