@@ -15,7 +15,7 @@ use umol_ast::ast::{
     ElementAst, Expr, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MoleculeConstraint,
     MulticenterBondAst, MulticenterBondIdx, MulticenterValenceAst, NoncovalentBondAst,
     NoncovalentBondIdx, NoncovalentBondKind, NoncovalentBondKindAst, RelOp, RelationalConstraint,
-    SpinStateAst, ValueAst,
+    SpinStateAst, SubPatternAnchor, ValueAst,
 };
 use umol_ast::dsl::{
     AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl, MulticenterBondDsl,
@@ -847,15 +847,83 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
         choices.push(ends_satisfy);
     }
 
-    // SubPattern intentionally omitted: its pattern molecule is materialized
-    // via MoleculeDefaults::zeroed(), which fills in zero defaults and breaks
-    // structural equality on round-trip when the generator emits Undetermined
-    // values inside the pattern. Covered separately by deterministic tests.
+    // SubPattern: pattern molecule and a small anchor pinning the first few
+    // entities to themselves on both sides (capped to keep refs valid).
+    let target_counts = counts;
+    let sub_pattern = molecule_ast_strategy()
+        .prop_flat_map(move |pattern| {
+            let pattern_counts = ConstraintCounts::from_ast(&pattern);
+            (
+                Just(pattern),
+                sub_pattern_anchor_strategy(target_counts, pattern_counts),
+            )
+        })
+        .prop_map(|(pattern, anchor)| {
+            Constraint::Molecule(MoleculeConstraint::SubPattern {
+                anchor,
+                pattern: Box::new(pattern),
+            })
+        })
+        .boxed();
+    choices.push(sub_pattern);
 
     if choices.is_empty() {
         return Just(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })).boxed();
     }
     prop::strategy::Union::new(choices).boxed()
+}
+
+/// Sub-pattern anchor: link the first few entities of each kind pairwise,
+/// capped at the minimum of the two molecules' counts on each side so all
+/// refs are valid in their respective metadata scopes.
+fn sub_pattern_anchor_strategy(
+    target: ConstraintCounts,
+    pattern: ConstraintCounts,
+) -> BoxedStrategy<SubPatternAnchor> {
+    let atom_pairs = target.atom.min(pattern.atom).min(2);
+    let bond_pairs = target.bond.min(pattern.bond).min(2);
+    let dative_pairs = target.dative.min(pattern.dative).min(1);
+    let aromatic_pairs = target.aromatic.min(pattern.aromatic).min(1);
+    let multicenter_pairs = target.multicenter.min(pattern.multicenter).min(1);
+    let noncovalent_pairs = target.noncovalent.min(pattern.noncovalent).min(1);
+    (
+        0..=atom_pairs,
+        0..=bond_pairs,
+        0..=dative_pairs,
+        0..=aromatic_pairs,
+        0..=multicenter_pairs,
+        0..=noncovalent_pairs,
+    )
+        .prop_map(|(a, b, d, ar, mc, nc)| {
+            let mut anchor = SubPatternAnchor::new();
+            for i in 0..a {
+                anchor.push_atom(AtomIdx(i as u32), AtomIdx(i as u32));
+            }
+            for i in 0..b {
+                anchor.push_bond(BondIdx(i as u32), BondIdx(i as u32));
+            }
+            for i in 0..d {
+                anchor.push_dative_bond(DativeBondIdx(i as u32), DativeBondIdx(i as u32));
+            }
+            for i in 0..ar {
+                anchor
+                    .push_aromatic_system(AromaticSystemIdx(i as u32), AromaticSystemIdx(i as u32));
+            }
+            for i in 0..mc {
+                anchor.push_multicenter_bond(
+                    MulticenterBondIdx(i as u32),
+                    MulticenterBondIdx(i as u32),
+                );
+            }
+            for i in 0..nc {
+                anchor.push_noncovalent_bond(
+                    NoncovalentBondIdx(i as u32),
+                    NoncovalentBondIdx(i as u32),
+                );
+            }
+            anchor
+        })
+        .boxed()
 }
 
 /// Constraint tree: leaves wrapped in bounded-depth combinators (And/Or/Not).
@@ -935,6 +1003,64 @@ proptest! {
             .map_err(|e| TestCaseError::fail(format!("first parse: {e}")))?;
         let s2 = d1.to_edn().to_string();
         prop_assert_eq!(s1, s2);
+    }
+
+    /// `lift_constraints` followed by `inline_constraints` is idempotent:
+    /// running the pair twice yields the same `MoleculeAst` as running it
+    /// once. This holds even if the original AST has duplicate (entity, kind)
+    /// entries across the inline + molecule scopes — the first pass collapses
+    /// them via the entity store's last-wins policy and the second pass is
+    /// a fixpoint.
+    #[test]
+    fn test_lift_inline_idempotent(ast in molecule_ast_with_constraints_strategy()) {
+        let mut once = ast.clone();
+        once.lift_constraints();
+        once.inline_constraints();
+
+        let mut twice = once.clone();
+        twice.lift_constraints();
+        twice.inline_constraints();
+
+        prop_assert_eq!(once, twice);
+    }
+
+    /// `lift_constraints` drains every entity's inline `constraints` store.
+    #[test]
+    fn test_lift_drains_entity_stores(ast in molecule_ast_with_constraints_strategy()) {
+        let mut a = ast;
+        a.lift_constraints();
+        for view in a.atoms().iter() {
+            prop_assert!(view.data.constraints.is_empty());
+        }
+        for view in a.bonds().iter() {
+            prop_assert!(view.data.constraints.is_empty());
+        }
+        for view in a.dative_bonds().iter() {
+            prop_assert!(view.data.constraints.is_empty());
+        }
+    }
+
+    /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow
+    /// leaf from the molecule list. Combinator-nested entries, relational
+    /// leaves, molecule-scope leaves are preserved.
+    #[test]
+    fn test_inline_removes_top_level_leaves(ast in molecule_ast_with_constraints_strategy()) {
+        let mut a = ast;
+        a.inline_constraints();
+        for c in a.constraints().iter() {
+            prop_assert!(
+                !matches!(
+                    c,
+                    Constraint::Atom(..)
+                        | Constraint::Bond(..)
+                        | Constraint::DativeBond(..)
+                        | Constraint::AromaticSystem(..)
+                        | Constraint::MulticenterBond(..)
+                        | Constraint::NoncovalentBond(..)
+                ),
+                "inline-capable narrow leaf survived inline_constraints: {c:?}",
+            );
+        }
     }
 
     // -- Per-entity Display ↔ FromStr roundtrip ----------------------------
