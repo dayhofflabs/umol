@@ -8,7 +8,6 @@ use umol_shared::spin::SpinMultiplicity;
 
 use super::error::ConversionError;
 use super::rgroup::RGroup;
-use crate::atom::Chirality;
 use crate::span::Span;
 
 /// Implicit hydrogens: either an explicit count or the "normal valence" inference rule.
@@ -220,6 +219,19 @@ impl AtomList {
             exclusion: false,
         }
     }
+}
+
+/// Chirality
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Chirality {
+    Clockwise,
+    CounterClockwise,
+    Unspecified,
+    Tetrahedral { arr: u32 },
+    Allenal { arr: u32 },
+    SquarePlanar { arr: u32 },
+    TrigonalBipyramidal { arr: u32 },
+    Octahedral { arr: u32 },
 }
 
 /// Bicyclic bridge stereo (CXSMILES THB/TLB/TEB).

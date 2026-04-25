@@ -2300,8 +2300,7 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::atom::Chirality;
-    use crate::table_ir::atom::{BicycloStereo, BicycloStereoData};
+    use crate::table_ir::atom::{BicycloStereo, BicycloStereoData, Chirality};
     use crate::table_ir::{Atom, Bond, ExtendedAtom, ExtendedBond};
 
     #[fixture]

@@ -5,9 +5,8 @@
 use umol_shared::element::Element;
 use umol_shared::isotope::Isotope;
 
-use crate::atom::Chirality;
 use crate::io::ctfile::error::ParseError;
-use crate::table_ir::atom::ImplicitHydrogens;
+use crate::table_ir::atom::{Chirality, ImplicitHydrogens};
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomSymbol, AttachmentPointType,
     BondOrder, BondReactingCenter, BondStereo, BondTopology, BondWedge, RingBondCount,

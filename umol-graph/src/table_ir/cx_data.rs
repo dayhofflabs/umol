@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 use super::atom::{BicycloStereo, BicycloStereoData};
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
-use crate::atom::Chirality;
+use crate::table_ir::atom::Chirality;
 
 /// Local parity entry (@: / @@:). Chiral center with ordered substituents.
 #[derive(Clone, Debug, PartialEq)]
