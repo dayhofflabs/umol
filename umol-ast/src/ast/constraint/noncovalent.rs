@@ -74,6 +74,10 @@ impl NoncovalentBondConstraints {
         mem::take(&mut self.0).into_iter()
     }
 
+    /// No-op: the inner enum is uninhabited so the store has no values to
+    /// simplify. Kept for API symmetry with the inhabited containers.
+    pub fn simplify_each(&mut self) {}
+
     pub fn remap(self, _remap: &IdxRemapping) -> Self {
         self
     }
@@ -86,5 +90,48 @@ impl FromIterator<NoncovalentBondConstraint> for NoncovalentBondConstraints {
             out.add(c);
         }
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::iter::empty;
+
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_graph_core::Remapping;
+
+    use super::*;
+
+    fn empty_remapping() -> IdxRemapping {
+        IdxRemapping::new(
+            Remapping {
+                removed_nodes: Vec::new(),
+                removed_edges: Vec::new(),
+            },
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_empty_methods() {
+        let mut cs = NoncovalentBondConstraints::new();
+        assert!(cs.is_empty());
+        assert_eq!(cs.len(), 0);
+        assert!(cs.as_slice().is_empty());
+        assert_eq!(cs.iter().count(), 0);
+        cs.retain(|_| true);
+        assert!(cs.is_empty());
+        let drained: Vec<_> = cs.take().collect();
+        assert!(drained.is_empty());
+        cs.clear();
+        assert!(cs.is_empty());
+        let from_empty: NoncovalentBondConstraints = empty().collect();
+        assert!(from_empty.is_empty());
+        let remapped = NoncovalentBondConstraints::new().remap(&empty_remapping());
+        assert!(remapped.is_empty());
     }
 }

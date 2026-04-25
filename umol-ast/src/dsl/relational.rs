@@ -33,15 +33,9 @@ use crate::ast::traits::{FromAst, IntoAst};
 pub enum RelationalConstraintDsl {
     // region: Dative bond
     /// EDN: `{:dative-bond-donor [<dative_ref> <atom_ref>]}`.
-    DativeBondDonor {
-        bond: DativeBondRef,
-        atom: AtomRef,
-    },
+    DativeBondDonor { bond: DativeBondRef, atom: AtomRef },
     /// EDN: `{:dative-bond-acceptor [<dative_ref> <atom_ref>]}`.
-    DativeBondAcceptor {
-        bond: DativeBondRef,
-        atom: AtomRef,
-    },
+    DativeBondAcceptor { bond: DativeBondRef, atom: AtomRef },
     /// EDN: `{:dative-bond-parallels [<dative_ref> <bond_ref>]}`.
     DativeBondParallels {
         dative: DativeBondRef,
@@ -264,7 +258,10 @@ impl RelationalConstraintDsl {
             },
             NoncovalentBondEnds { bond, atoms } => Self::NoncovalentBondEnds {
                 bond: NoncovalentBondRef::from_ast(*bond, meta),
-                atoms: [AtomRef::from_ast(atoms[0], meta), AtomRef::from_ast(atoms[1], meta)],
+                atoms: [
+                    AtomRef::from_ast(atoms[0], meta),
+                    AtomRef::from_ast(atoms[1], meta),
+                ],
             },
             NoncovalentBondContains { bond, atom } => Self::NoncovalentBondContains {
                 bond: NoncovalentBondRef::from_ast(*bond, meta),
@@ -318,10 +315,12 @@ impl RelationalConstraintDsl {
                     .map(|a| a.into_ast(counts.atom_count, meta))
                     .collect::<Result<_, _>>()?,
             },
-            AromaticSystemContains { system, atom } => RelationalConstraint::AromaticSystemContains {
-                system: system.into_ast(counts.aromatic_system_count, meta)?,
-                atom: atom.into_ast(counts.atom_count, meta)?,
-            },
+            AromaticSystemContains { system, atom } => {
+                RelationalConstraint::AromaticSystemContains {
+                    system: system.into_ast(counts.aromatic_system_count, meta)?,
+                    atom: atom.into_ast(counts.atom_count, meta)?,
+                }
+            }
             AromaticSystemContainsAll { system, atoms } => {
                 RelationalConstraint::AromaticSystemContainsAll {
                     system: system.into_ast(counts.aromatic_system_count, meta)?,
@@ -350,10 +349,12 @@ impl RelationalConstraintDsl {
                     .map(|a| a.into_ast(counts.atom_count, meta))
                     .collect::<Result<_, _>>()?,
             },
-            MulticenterBondContains { bond, atom } => RelationalConstraint::MulticenterBondContains {
-                bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
-                atom: atom.into_ast(counts.atom_count, meta)?,
-            },
+            MulticenterBondContains { bond, atom } => {
+                RelationalConstraint::MulticenterBondContains {
+                    bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
+                    atom: atom.into_ast(counts.atom_count, meta)?,
+                }
+            }
             MulticenterBondContainsAll { bond, atoms } => {
                 RelationalConstraint::MulticenterBondContainsAll {
                     bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
@@ -385,10 +386,12 @@ impl RelationalConstraintDsl {
                     ],
                 }
             }
-            NoncovalentBondContains { bond, atom } => RelationalConstraint::NoncovalentBondContains {
-                bond: bond.into_ast(counts.noncovalent_bond_count, meta)?,
-                atom: atom.into_ast(counts.atom_count, meta)?,
-            },
+            NoncovalentBondContains { bond, atom } => {
+                RelationalConstraint::NoncovalentBondContains {
+                    bond: bond.into_ast(counts.noncovalent_bond_count, meta)?,
+                    atom: atom.into_ast(counts.atom_count, meta)?,
+                }
+            }
             NoncovalentBondEndsSatisfy { bond, predicates } => {
                 let [a, b] = predicates;
                 RelationalConstraint::NoncovalentBondEndsSatisfy {
@@ -498,7 +501,10 @@ fn render_payload(dsl: &RelationalConstraintDsl) -> (&'static str, Edn<'static>)
     }
 }
 
-fn parse_pair<'a, 'de>(edn: &'a Edn<'de>, key: &str) -> Result<(&'a Edn<'de>, &'a Edn<'de>), DeError> {
+fn parse_pair<'a, 'de>(
+    edn: &'a Edn<'de>,
+    key: &str,
+) -> Result<(&'a Edn<'de>, &'a Edn<'de>), DeError> {
     let Edn::Vector(v) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "2-element vector",
@@ -785,9 +791,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_relational_constraint_dsl_rejects_out_of_range_atom(
-        meta: Metadata,
-    ) {
+    fn test_relational_constraint_dsl_rejects_out_of_range_atom(meta: Metadata) {
         let counts = EntityCounts {
             atom_count: 2,
             bond_count: 0,
@@ -811,9 +815,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_relational_constraint_dsl_rejects_out_of_range_bond(
-        meta: Metadata,
-    ) {
+    fn test_relational_constraint_dsl_rejects_out_of_range_bond(meta: Metadata) {
         let counts = EntityCounts {
             atom_count: 5,
             bond_count: 0,

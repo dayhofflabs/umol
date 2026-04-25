@@ -527,11 +527,7 @@ mod tests {
     #[case::partial(vec![1, 2, 3], vec![2, 3, 4], vec![2, 3])]
     #[case::first_shorter(vec![1, 2], vec![1, 2, 3, 4], vec![1, 2])]
     #[case::second_shorter(vec![1, 2, 3, 4], vec![2, 3], vec![2, 3])]
-    fn test_intersection(
-        #[case] a: Vec<u32>,
-        #[case] b: Vec<u32>,
-        #[case] expected: Vec<u32>,
-    ) {
+    fn test_intersection(#[case] a: Vec<u32>, #[case] b: Vec<u32>, #[case] expected: Vec<u32>) {
         assert_eq!(intersection(&a, &b), expected);
     }
 
@@ -632,11 +628,7 @@ mod tests {
 
     #[fixture]
     fn triangle_set() -> RingSet {
-        RingSet::from_rings(
-            RingFamily::Simple,
-            6,
-            vec![ring_of(&[0, 1, 2], &[0, 1, 2])],
-        )
+        RingSet::from_rings(RingFamily::Simple, 6, vec![ring_of(&[0, 1, 2], &[0, 1, 2])])
     }
 
     #[fixture]
@@ -673,8 +665,14 @@ mod tests {
         assert!(!set.contains_bond(BondIdx(0)));
         assert_eq!(set.atom_smallest_ring_size(AtomIdx(0)), None);
         assert_eq!(set.bond_smallest_ring_size(BondIdx(0)), None);
-        assert_eq!(set.shared_atoms(RingIdx(0), RingIdx(1)), Vec::<AtomIdx>::new());
-        assert_eq!(set.shared_bonds(RingIdx(0), RingIdx(1)), Vec::<BondIdx>::new());
+        assert_eq!(
+            set.shared_atoms(RingIdx(0), RingIdx(1)),
+            Vec::<AtomIdx>::new()
+        );
+        assert_eq!(
+            set.shared_bonds(RingIdx(0), RingIdx(1)),
+            Vec::<BondIdx>::new()
+        );
         assert_eq!(set.graph().edges(), &[]);
     }
 
@@ -774,12 +772,12 @@ mod tests {
     #[case::fused(fused_pair(), RingRelation::Fused)]
     #[case::spiro(spiro_pair(), RingRelation::Spiro)]
     #[case::bridged(bridged_pair(), RingRelation::Bridged)]
-    fn test_ring_set_relation_by_kind(
-        #[case] set: RingSet,
-        #[case] expected: RingRelation,
-    ) {
+    fn test_ring_set_relation_by_kind(#[case] set: RingSet, #[case] expected: RingRelation) {
         assert_eq!(set.relation(RingIdx(0), RingIdx(1)), expected);
-        assert_eq!(set.relation(RingIdx(0), RingIdx(0)), RingRelation::Identical);
+        assert_eq!(
+            set.relation(RingIdx(0), RingIdx(0)),
+            RingRelation::Identical
+        );
         assert_eq!(
             set.are_fused(RingIdx(0), RingIdx(1)),
             expected == RingRelation::Fused,
@@ -798,23 +796,32 @@ mod tests {
     #[case::fused(fused_pair(), RingRelation::Fused)]
     #[case::spiro(spiro_pair(), RingRelation::Spiro)]
     #[case::bridged(bridged_pair(), RingRelation::Bridged)]
-    fn test_ring_set_neighbors_by_kind(
-        #[case] set: RingSet,
-        #[case] expected_kind: RingRelation,
-    ) {
+    fn test_ring_set_neighbors_by_kind(#[case] set: RingSet, #[case] expected_kind: RingRelation) {
         let hit = vec![RingIdx(1)];
         let miss = Vec::<RingIdx>::new();
         assert_eq!(
             set.fused_neighbors(RingIdx(0)),
-            if expected_kind == RingRelation::Fused { hit.clone() } else { miss.clone() },
+            if expected_kind == RingRelation::Fused {
+                hit.clone()
+            } else {
+                miss.clone()
+            },
         );
         assert_eq!(
             set.spiro_neighbors(RingIdx(0)),
-            if expected_kind == RingRelation::Spiro { hit.clone() } else { miss.clone() },
+            if expected_kind == RingRelation::Spiro {
+                hit.clone()
+            } else {
+                miss.clone()
+            },
         );
         assert_eq!(
             set.bridged_neighbors(RingIdx(0)),
-            if expected_kind == RingRelation::Bridged { hit } else { miss },
+            if expected_kind == RingRelation::Bridged {
+                hit
+            } else {
+                miss
+            },
         );
     }
 
@@ -903,10 +910,7 @@ mod tests {
     fn test_enumerate_rings_induced_keeps_only_chord_free_cycles() {
         // K4: 4 nodes fully connected. Simple enumeration yields the three
         // 4-cycles plus four 3-cycles; Induced keeps only the 3-cycles.
-        let graph = Graph::new(
-            4,
-            &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
-        );
+        let graph = Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]);
         let simple = enumerate_rings(&graph, RingFamily::Simple, 4, |_| true);
         let induced = enumerate_rings(&graph, RingFamily::Induced, 4, |_| true);
         assert!(simple.count() >= induced.count());

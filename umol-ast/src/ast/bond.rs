@@ -1,5 +1,7 @@
 //! Bond-level AST fragments shared across crates.
 
+use std::mem;
+
 use super::constraint::BondConstraints;
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
@@ -38,6 +40,14 @@ impl BondAst {
         self.order.matches(&target.order)
             && self.charge.matches(&target.charge)
             && self.spin.matches(&target.spin)
+    }
+
+    /// Simplify every value-bearing field in place.
+    pub fn simplify_values(&mut self) {
+        self.order = mem::take(&mut self.order).simplify();
+        self.charge = mem::take(&mut self.charge).simplify();
+        self.spin.simplify_values();
+        self.constraints.simplify_each();
     }
 }
 

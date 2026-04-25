@@ -78,6 +78,31 @@ impl ValueAst {
     /// Variables in the pattern are bound to `value`. For boolean expressions the
     /// predicate is evaluated with those bindings; for arithmetic expressions the
     /// result is compared to `value`
+    /// Reduce to canonical form by lifting trivial `Expr` wrappers and
+    /// recursively simplifying any inner expression. Specifically:
+    ///
+    /// - `Expr(Expr::Lit(n))` → `Lit(n)`
+    /// - `Expr(Expr::Neg(Expr::Lit(n)))` → `Lit(-n)` when `-n` does not
+    ///   overflow `i64` (otherwise the wrapped form is preserved)
+    /// - `Expr(e)` for any other shape → `Expr(e.simplify())`
+    /// - `Lit` / `LitSet` / `Undetermined` → unchanged
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::Expr(e) => match e.simplify() {
+                Expr::Lit(n) => Self::Lit(n),
+                Expr::Neg(inner) => match *inner {
+                    Expr::Lit(n) => match n.checked_neg() {
+                        Some(neg) => Self::Lit(neg),
+                        None => Self::Expr(Expr::Neg(Box::new(Expr::Lit(n)))),
+                    },
+                    other => Self::Expr(Expr::Neg(Box::new(other))),
+                },
+                other => Self::Expr(other),
+            },
+            other => other,
+        }
+    }
+
     pub fn capture(&self, value: i64) -> Option<Bindings> {
         match self {
             ValueAst::Undetermined => Some(Bindings::new()),
@@ -131,19 +156,59 @@ pub enum Expr {
     Or(Vec<Expr>),
 }
 
-/// A `LitSet` is ground iff non-empty and all elements are equal (semantic
-/// singleton). Shared by `ValueAst::is_ground` and the atom-field types that
-/// embed a `LitSet` directly (`IsotopeAst`, `ImplicitHydrogensAst`), so they
-/// avoid cloning the Vec just to delegate.
-#[inline(never)]
-pub(crate) fn litset_is_ground(s: &[i64]) -> bool {
-    match s {
-        [] => false,
-        [first, rest @ ..] => rest.iter().all(|x| x == first),
-    }
-}
-
 impl Expr {
+    /// Reduce to canonical form. Recursively simplifies children, then
+    /// applies one round of structural folding:
+    ///
+    /// - `Lit(n)` for `n < 0` → `Neg(Lit(-n))`. Inside an `Expr` context
+    ///   the parser always produces `Neg(Lit(n))` for `-n`; only the
+    ///   ValueAst-level `Lit` slot reads signed integers directly.
+    ///   `Lit(i64::MIN)` is left as-is (cannot be negated without overflow).
+    /// - `Neg(Neg(e))` → `e`
+    /// - `Or(... Or(inner) ...)` flattens the inner `Or` one level
+    ///   (recursively, so the result has no `Or` direct child)
+    /// - `And(... And(inner) ...)` flattens identically
+    /// - `And([single])` / `Or([single])` → `single`. The renderer emits a
+    ///   single-child And/Or as just the child, and the parser reads it
+    ///   back without the wrapper.
+    ///
+    /// Idempotent. Mirrors the parser's normalization.
+    pub fn simplify(self) -> Self {
+        match self {
+            Expr::Lit(n) if n < 0 => match n.checked_neg() {
+                Some(pos) => Expr::Neg(Box::new(Expr::Lit(pos))),
+                None => Expr::Lit(n),
+            },
+            Expr::Lit(_) | Expr::Var(_) => self,
+            Expr::Neg(inner) => match inner.simplify() {
+                Expr::Neg(grand) => *grand,
+                other => Expr::Neg(Box::new(other)),
+            },
+            Expr::BinOp(l, op, r) => {
+                Expr::BinOp(Box::new(l.simplify()), op, Box::new(r.simplify()))
+            }
+            Expr::Mem(e, set) => Expr::Mem(Box::new(e.simplify()), set),
+            Expr::Rel(l, op, r) => Expr::Rel(Box::new(l.simplify()), op, Box::new(r.simplify())),
+            Expr::Not(e) => Expr::Not(Box::new(e.simplify())),
+            Expr::And(exprs) => {
+                let mut flat = flatten_simplified(exprs, |e| matches!(e, Expr::And(_)));
+                if flat.len() == 1 {
+                    flat.pop().unwrap()
+                } else {
+                    Expr::And(flat)
+                }
+            }
+            Expr::Or(exprs) => {
+                let mut flat = flatten_simplified(exprs, |e| matches!(e, Expr::Or(_)));
+                if flat.len() == 1 {
+                    flat.pop().unwrap()
+                } else {
+                    Expr::Or(flat)
+                }
+            }
+        }
+    }
+
     pub fn is_arithmetic(&self) -> bool {
         matches!(
             self,
@@ -264,6 +329,38 @@ impl Expr {
                 Err(EvaluationError::TypeMismatch)
             }
         }
+    }
+}
+
+/// Simplify each child, then flatten any whose simplified form satisfies
+/// `is_same_op` (i.e. an `Or` child of an `Or` parent, or `And` of `And`).
+/// One level of flattening is enough: each child has already been simplified,
+/// so its own children are themselves not same-op containers.
+fn flatten_simplified(exprs: Vec<Expr>, is_same_op: impl Fn(&Expr) -> bool) -> Vec<Expr> {
+    let mut out = Vec::with_capacity(exprs.len());
+    for child in exprs {
+        let simplified = child.simplify();
+        if is_same_op(&simplified) {
+            match simplified {
+                Expr::And(inner) | Expr::Or(inner) => out.extend(inner),
+                _ => unreachable!("is_same_op rejects non-And/Or"),
+            }
+        } else {
+            out.push(simplified);
+        }
+    }
+    out
+}
+
+/// A `LitSet` is ground iff non-empty and all elements are equal (semantic
+/// singleton). Shared by `ValueAst::is_ground` and the atom-field types that
+/// embed a `LitSet` directly (`IsotopeAst`, `ImplicitHydrogensAst`), so they
+/// avoid cloning the Vec just to delegate.
+#[inline(never)]
+pub(crate) fn litset_is_ground(s: &[i64]) -> bool {
+    match s {
+        [] => false,
+        [first, rest @ ..] => rest.iter().all(|x| x == first),
     }
 }
 
@@ -431,4 +528,120 @@ mod tests {
     fn test_capture_no_match(#[case] pattern: ValueAst, #[case] value: i64) {
         assert_eq!(pattern.capture(value), None);
     }
+
+    // region: simplify
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(Expr::Lit(5), Expr::Lit(5))]
+    #[case::var(Expr::Var("x".into()), Expr::Var("x".into()))]
+    #[case::neg_lit(Expr::Neg(Box::new(Expr::Lit(3))), Expr::Neg(Box::new(Expr::Lit(3))))]
+    #[case::neg_neg_collapses(
+        Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))),
+        Expr::Lit(3),
+    )]
+    #[case::neg_neg_neg_collapses_to_one(
+        Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))))),
+        Expr::Neg(Box::new(Expr::Var("x".into()))),
+    )]
+    #[case::or_flattens_or_child(
+        Expr::Or(vec![
+            Expr::Var("a".into()),
+            Expr::Or(vec![Expr::Var("b".into()), Expr::Var("c".into())]),
+        ]),
+        Expr::Or(vec![
+            Expr::Var("a".into()),
+            Expr::Var("b".into()),
+            Expr::Var("c".into()),
+        ]),
+    )]
+    #[case::and_flattens_and_child(
+        Expr::And(vec![
+            Expr::And(vec![Expr::Var("a".into()), Expr::Var("b".into())]),
+            Expr::Var("c".into()),
+        ]),
+        Expr::And(vec![
+            Expr::Var("a".into()),
+            Expr::Var("b".into()),
+            Expr::Var("c".into()),
+        ]),
+    )]
+    #[case::or_does_not_flatten_and(
+        Expr::Or(vec![
+            Expr::Var("a".into()),
+            Expr::And(vec![Expr::Var("b".into()), Expr::Var("c".into())]),
+        ]),
+        Expr::Or(vec![
+            Expr::Var("a".into()),
+            Expr::And(vec![Expr::Var("b".into()), Expr::Var("c".into())]),
+        ]),
+    )]
+    #[case::recursive_into_binop(
+        Expr::BinOp(
+            Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(2)))))),
+            ArithOp::Add,
+            Box::new(Expr::Lit(3)),
+        ),
+        Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3))),
+    )]
+    #[case::recursive_into_rel(
+        Expr::Rel(
+            Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Var("h".into())))))),
+            RelOp::Ge,
+            Box::new(Expr::Lit(1)),
+        ),
+        Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))),
+    )]
+    fn test_expr_simplify(#[case] input: Expr, #[case] expected: Expr) {
+        assert_eq!(input.simplify(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(ValueAst::Lit(5), ValueAst::Lit(5))]
+    #[case::undetermined(ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::lit_set(ValueAst::LitSet(vec![1, 2]), ValueAst::LitSet(vec![1, 2]))]
+    #[case::expr_lit_lifts(ValueAst::Expr(Expr::Lit(5)), ValueAst::Lit(5))]
+    #[case::expr_neg_lit_lifts(
+        ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(7)))),
+        ValueAst::Lit(-7),
+    )]
+    #[case::expr_neg_neg_lit_lifts(
+        ValueAst::Expr(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(4)))))),
+        ValueAst::Lit(4),
+    )]
+    #[case::expr_var_stays(
+        ValueAst::Expr(Expr::Var("x".into())),
+        ValueAst::Expr(Expr::Var("x".into())),
+    )]
+    #[case::expr_neg_var_stays(
+        ValueAst::Expr(Expr::Neg(Box::new(Expr::Var("x".into())))),
+        ValueAst::Expr(Expr::Neg(Box::new(Expr::Var("x".into())))),
+    )]
+    #[case::expr_neg_lit_min_overflow_keeps_form(
+        ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(i64::MIN)))),
+        ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(i64::MIN)))),
+    )]
+    fn test_value_ast_simplify(#[case] input: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(input.simplify(), expected);
+    }
+
+    #[rstest]
+    #[case::neg_neg(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))))]
+    #[case::nested_or(
+        Expr::Or(vec![
+            Expr::Or(vec![Expr::Var("a".into()), Expr::Var("b".into())]),
+            Expr::Or(vec![Expr::Var("c".into()), Expr::Var("d".into())]),
+        ])
+    )]
+    #[case::deep_neg(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
+        Expr::Neg(Box::new(Expr::Lit(1)))
+    )))))))]
+    fn test_expr_simplify_idempotent(#[case] input: Expr) {
+        let once = input.clone().simplify();
+        let twice = once.clone().simplify();
+        assert_eq!(once, twice);
+    }
+
+    // endregion: simplify
 }

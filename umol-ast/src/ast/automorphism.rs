@@ -56,7 +56,13 @@ mod tests {
     fn ring(n: usize) -> MoleculeAst {
         let atoms = vec![AtomAst::from_element(Element::C); n];
         let bonds: Vec<_> = (0..n)
-            .map(|i| (AtomIdx(i as u32), AtomIdx(((i + 1) % n) as u32), BondAst::from_order(1)))
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx(((i + 1) % n) as u32),
+                    BondAst::from_order(1),
+                )
+            })
             .collect();
         MoleculeAst::new(
             atoms,
@@ -72,7 +78,13 @@ mod tests {
     fn chain(n: usize) -> MoleculeAst {
         let atoms = vec![AtomAst::from_element(Element::C); n];
         let bonds: Vec<_> = (0..n.saturating_sub(1))
-            .map(|i| (AtomIdx(i as u32), AtomIdx((i + 1) as u32), BondAst::from_order(1)))
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx((i + 1) as u32),
+                    BondAst::from_order(1),
+                )
+            })
             .collect();
         MoleculeAst::new(
             atoms,
@@ -143,7 +155,10 @@ mod tests {
         assert_eq!(labeling.len(), 6);
         let mut sorted = labeling.clone();
         sorted.sort_unstable();
-        assert_eq!(sorted, (0..6).map(|i| AtomIdx(i as u32)).collect::<Vec<_>>());
+        assert_eq!(
+            sorted,
+            (0..6).map(|i| AtomIdx(i as u32)).collect::<Vec<_>>()
+        );
     }
 
     #[rstest]

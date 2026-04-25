@@ -46,6 +46,11 @@ impl DativeBondAst {
     pub fn matches(&self, target: &DativeBondAst) -> bool {
         self.direction == target.direction
     }
+
+    /// Simplify every constraint's inner value in place.
+    pub fn simplify_values(&mut self) {
+        self.constraints.simplify_each();
+    }
 }
 
 #[cfg(test)]

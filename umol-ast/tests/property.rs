@@ -18,8 +18,8 @@ use umol_ast::ast::{
     SpinStateAst, SubPatternAnchor, ValueAst,
 };
 use umol_ast::dsl::{
-    AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl, MulticenterBondDsl,
-    NoncovalentBondDsl,
+    parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
+    MulticenterBondDsl, NoncovalentBondDsl, ValueDsl,
 };
 use umol_edn::{read_string, FromEdn, ToEdn};
 use umol_shared::element::Element;
@@ -83,6 +83,74 @@ fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     ]
 }
 
+/// Arithmetic-typed Expr: produces only the arithmetic subset of `Expr`
+/// (`Lit`, `Var`, `Neg(arith)`, `BinOp(arith, op, arith)`). Includes
+/// negative `Lit` and `Neg(Neg(_))` shapes that the parser canonicalizes,
+/// to be paired with `simplify()` for roundtrip testing.
+fn arith_expr_strategy() -> BoxedStrategy<Expr> {
+    let leaf = prop_oneof![
+        (-10i64..=10).prop_map(Expr::Lit),
+        id_strategy().prop_map(Expr::Var),
+    ]
+    .boxed();
+    leaf.prop_recursive(3, 6, 3, |inner| {
+        prop_oneof![
+            inner.clone().prop_map(|e| Expr::Neg(Box::new(e))),
+            (inner.clone(), arith_op_strategy(), inner).prop_map(|(l, op, r)| Expr::BinOp(
+                Box::new(l),
+                op,
+                Box::new(r)
+            )),
+        ]
+        .boxed()
+    })
+    .boxed()
+}
+
+/// Boolean-typed Expr: `Rel(arith, op, arith)`, `Mem(arith, set)`,
+/// `Not(bool)`, `And(bool*)`, `Or(bool*)`. Each boolean recursion correctly
+/// roots in arithmetic leaves so the parser accepts the rendered form.
+fn bool_expr_strategy() -> BoxedStrategy<Expr> {
+    let arith = arith_expr_strategy();
+    let leaf = prop_oneof![
+        (arith.clone(), rel_op_strategy(), arith.clone()).prop_map(|(l, op, r)| Expr::Rel(
+            Box::new(l),
+            op,
+            Box::new(r)
+        )),
+        (arith, prop::collection::vec(-10i64..=10, 1..=3))
+            .prop_map(|(e, set)| Expr::Mem(Box::new(e), set)),
+    ]
+    .boxed();
+    leaf.prop_recursive(2, 6, 3, |inner| {
+        prop_oneof![
+            inner.clone().prop_map(|e| Expr::Not(Box::new(e))),
+            prop::collection::vec(inner.clone(), 1..=3).prop_map(Expr::And),
+            prop::collection::vec(inner, 1..=3).prop_map(Expr::Or),
+        ]
+        .boxed()
+    })
+    .boxed()
+}
+
+fn any_expr_strategy() -> BoxedStrategy<Expr> {
+    prop_oneof![arith_expr_strategy(), bool_expr_strategy()].boxed()
+}
+
+fn any_value_ast_strategy() -> BoxedStrategy<ValueAst> {
+    prop_oneof![
+        Just(ValueAst::Undetermined),
+        (-10i64..=10).prop_map(ValueAst::Lit),
+        prop::collection::vec(-10i64..=10, 1..=3).prop_map(|mut v| {
+            v.sort_unstable();
+            v.dedup();
+            ValueAst::LitSet(v)
+        }),
+        any_expr_strategy().prop_map(ValueAst::Expr),
+    ]
+    .boxed()
+}
+
 fn arith_op_strategy() -> impl Strategy<Value = ArithOp> {
     prop_oneof![
         Just(ArithOp::Add),
@@ -134,12 +202,24 @@ fn top_expr_strategy() -> BoxedStrategy<Expr> {
     prop_oneof![
         // Var alone renders as `?id`, distinguishable from a bare integer.
         id_strategy().prop_map(Expr::Var),
-        (expr_leaf_strategy(), arith_op_strategy(), expr_leaf_strategy())
+        (
+            expr_leaf_strategy(),
+            arith_op_strategy(),
+            expr_leaf_strategy()
+        )
             .prop_map(|(a, op, b)| Expr::BinOp(Box::new(a), op, Box::new(b))),
-        (expr_leaf_strategy(), rel_op_strategy(), expr_leaf_strategy())
+        (
+            expr_leaf_strategy(),
+            rel_op_strategy(),
+            expr_leaf_strategy()
+        )
             .prop_map(|(a, op, b)| Expr::Rel(Box::new(a), op, Box::new(b))),
         (expr_leaf_strategy(), set).prop_map(|(e, s)| Expr::Mem(Box::new(e), s)),
-        (expr_leaf_strategy(), rel_op_strategy(), expr_leaf_strategy())
+        (
+            expr_leaf_strategy(),
+            rel_op_strategy(),
+            expr_leaf_strategy()
+        )
             .prop_map(|(a, op, b)| {
                 Expr::Not(Box::new(Expr::Rel(Box::new(a), op, Box::new(b))))
             }),
@@ -184,8 +264,7 @@ fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
     // DSL preserves spin fields field-wise. Physical (u, m) parity is a
     // tier-2 solver invariant, not a parse-time check, so any independent
     // pair must roundtrip.
-    (value_basic(0..=6), value_basic(1..=7))
-        .prop_map(|(u, m)| SpinStateAst::from_values(u, m))
+    (value_basic(0..=6), value_basic(1..=7)).prop_map(|(u, m)| SpinStateAst::from_values(u, m))
 }
 
 /// Simple value strategy used inside constraint values: `Undetermined`,
@@ -211,9 +290,7 @@ fn constraint_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Value 
 /// `Undetermined` on the inner value collapses into a dropped constraint
 /// in the entity-level formatter (see `BondConstraint::RingSize` /
 /// `DativeBondConstraint::RingSize` — vacuous, intentionally dropped).
-fn constraint_inner_value_strategy(
-    range: RangeInclusive<i64>,
-) -> impl Strategy<Value = ValueAst> {
+fn constraint_inner_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     prop_oneof![
         range.clone().prop_map(ValueAst::Lit),
         prop::collection::vec(range, 1..=3).prop_map(|mut v| {
@@ -358,25 +435,22 @@ fn edge_set_strategy(atom_count: usize) -> impl Strategy<Value = Vec<[u32; 2]>> 
         return Just(Vec::new()).boxed();
     }
     let max_edges = atom_count.min(8);
-    prop::collection::vec(
-        (0..atom_count as u32, 0..atom_count as u32),
-        0..=max_edges,
-    )
-    .prop_map(|pairs| {
-        let mut seen: HashSet<(u32, u32)> = HashSet::new();
-        let mut out = Vec::new();
-        for (a, b) in pairs {
-            if a == b {
-                continue;
+    prop::collection::vec((0..atom_count as u32, 0..atom_count as u32), 0..=max_edges)
+        .prop_map(|pairs| {
+            let mut seen: HashSet<(u32, u32)> = HashSet::new();
+            let mut out = Vec::new();
+            for (a, b) in pairs {
+                if a == b {
+                    continue;
+                }
+                let key = if a < b { (a, b) } else { (b, a) };
+                if seen.insert(key) {
+                    out.push([key.0, key.1]);
+                }
             }
-            let key = if a < b { (a, b) } else { (b, a) };
-            if seen.insert(key) {
-                out.push([key.0, key.1]);
-            }
-        }
-        out
-    })
-    .boxed()
+            out
+        })
+        .boxed()
 }
 
 fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
@@ -389,59 +463,53 @@ fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
 }
 
 fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
-    (
-        value_basic(-2..=2),
-        value_basic(0..=12),
-    )
-        .prop_map(|(charge, electrons)| AromaticSystemAst {
-            charge,
-            spin: SpinStateAst::default(),
-            electrons,
-            constraints: Default::default(),
-        })
+    (value_basic(-2..=2), value_basic(0..=12)).prop_map(|(charge, electrons)| AromaticSystemAst {
+        charge,
+        spin: SpinStateAst::default(),
+        electrons,
+        constraints: Default::default(),
+    })
 }
 
 fn multicenter_bond_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
-    (
-        value_basic(-2..=2),
-        value_basic(0..=8),
-    )
-        .prop_map(|(charge, electrons)| {
-            MulticenterBondAst::new(charge, SpinStateAst::default(), electrons)
-        })
+    (value_basic(-2..=2), value_basic(0..=8)).prop_map(|(charge, electrons)| {
+        MulticenterBondAst::new(charge, SpinStateAst::default(), electrons)
+    })
 }
 
 fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
-    prop::sample::select(NONCOVALENT_KINDS)
-        .prop_map(|kind| NoncovalentBondAst {
-            kind: NoncovalentBondKindAst::Lit(kind),
-            constraints: Default::default(),
-        })
+    prop::sample::select(NONCOVALENT_KINDS).prop_map(|kind| NoncovalentBondAst {
+        kind: NoncovalentBondKindAst::Lit(kind),
+        constraints: Default::default(),
+    })
 }
 
 /// Generate k distinct atom indices in [0, atom_count).
-fn distinct_atoms_strategy(atom_count: usize, min_k: usize, max_k: usize) -> BoxedStrategy<Vec<AtomIdx>> {
+fn distinct_atoms_strategy(
+    atom_count: usize,
+    min_k: usize,
+    max_k: usize,
+) -> BoxedStrategy<Vec<AtomIdx>> {
     if atom_count < min_k {
         return Just(Vec::new()).boxed();
     }
     let max_k = max_k.min(atom_count);
     (min_k..=max_k)
         .prop_flat_map(move |k| {
-            prop::collection::vec(0..atom_count as u32, k)
-                .prop_map(move |mut v| {
-                    v.sort_unstable();
-                    v.dedup();
-                    // If dedup shrank the vec below k, pad from the start (always valid).
-                    let mut i = 0u32;
-                    while v.len() < k && (i as usize) < atom_count {
-                        if !v.contains(&i) {
-                            v.push(i);
-                        }
-                        i += 1;
+            prop::collection::vec(0..atom_count as u32, k).prop_map(move |mut v| {
+                v.sort_unstable();
+                v.dedup();
+                // If dedup shrank the vec below k, pad from the start (always valid).
+                let mut i = 0u32;
+                while v.len() < k && (i as usize) < atom_count {
+                    if !v.contains(&i) {
+                        v.push(i);
                     }
-                    v.sort_unstable();
-                    v.into_iter().map(AtomIdx).collect()
-                })
+                    i += 1;
+                }
+                v.sort_unstable();
+                v.into_iter().map(AtomIdx).collect()
+            })
         })
         .boxed()
 }
@@ -457,7 +525,11 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
         .prop_flat_map(|(atom_count, atoms, edges, bond_pool)| {
             // Truncate bond pool to the number of edges generated.
             let bond_count = edges.len();
-            let bonds: Vec<BondAst> = bond_pool.into_iter().chain(repeat_with(|| BondAst::from_order(1))).take(bond_count).collect();
+            let bonds: Vec<BondAst> = bond_pool
+                .into_iter()
+                .chain(repeat_with(|| BondAst::from_order(1)))
+                .take(bond_count)
+                .collect();
             let bonds_full: Vec<_> = edges
                 .iter()
                 .zip(bonds)
@@ -508,39 +580,41 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                 Just(atom_count),
             )
         })
-        .prop_map(|(atoms, bonds, datives, aromatics, multicenters, noncovalents, _n)| {
-            let dative_triples: Vec<_> = datives
-                .into_iter()
-                .filter_map(|(atoms, data)| match atoms.as_slice() {
-                    [a, b] if a != b => Some((*a, *b, data)),
-                    _ => None,
-                })
-                .collect();
-            let aromatic_entries: Vec<_> = aromatics
-                .into_iter()
-                .filter(|(atoms, _)| atoms.len() >= 3)
-                .collect();
-            let multicenter_entries: Vec<_> = multicenters
-                .into_iter()
-                .filter(|(atoms, _)| atoms.len() >= 3)
-                .collect();
-            let noncovalent_triples: Vec<_> = noncovalents
-                .into_iter()
-                .filter_map(|(atoms, data)| match atoms.as_slice() {
-                    [a, b] if a != b => Some((*a, *b, data)),
-                    _ => None,
-                })
-                .collect();
-            MoleculeAst::new(
-                atoms,
-                bonds,
-                dative_triples,
-                aromatic_entries,
-                multicenter_entries,
-                noncovalent_triples,
-                Constraints::new(),
-            )
-        })
+        .prop_map(
+            |(atoms, bonds, datives, aromatics, multicenters, noncovalents, _n)| {
+                let dative_triples: Vec<_> = datives
+                    .into_iter()
+                    .filter_map(|(atoms, data)| match atoms.as_slice() {
+                        [a, b] if a != b => Some((*a, *b, data)),
+                        _ => None,
+                    })
+                    .collect();
+                let aromatic_entries: Vec<_> = aromatics
+                    .into_iter()
+                    .filter(|(atoms, _)| atoms.len() >= 3)
+                    .collect();
+                let multicenter_entries: Vec<_> = multicenters
+                    .into_iter()
+                    .filter(|(atoms, _)| atoms.len() >= 3)
+                    .collect();
+                let noncovalent_triples: Vec<_> = noncovalents
+                    .into_iter()
+                    .filter_map(|(atoms, data)| match atoms.as_slice() {
+                        [a, b] if a != b => Some((*a, *b, data)),
+                        _ => None,
+                    })
+                    .collect();
+                MoleculeAst::new(
+                    atoms,
+                    bonds,
+                    dative_triples,
+                    aromatic_entries,
+                    multicenter_entries,
+                    noncovalent_triples,
+                    Constraints::new(),
+                )
+            },
+        )
 }
 
 /// Per-entity counts for a generated `MoleculeAst`. Carried into the
@@ -708,10 +782,7 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
 
         let atoms = (system_idx.clone(), atoms_vec.clone())
             .prop_map(|(system, atoms)| {
-                Constraint::Relational(RelationalConstraint::AromaticSystemAtoms {
-                    system,
-                    atoms,
-                })
+                Constraint::Relational(RelationalConstraint::AromaticSystemAtoms { system, atoms })
             })
             .boxed();
         let contains = (system_idx.clone(), atom_idx)
@@ -761,18 +832,12 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
 
         let atoms = (bond_idx.clone(), atoms_vec.clone())
             .prop_map(|(bond, atoms)| {
-                Constraint::Relational(RelationalConstraint::MulticenterBondAtoms {
-                    bond,
-                    atoms,
-                })
+                Constraint::Relational(RelationalConstraint::MulticenterBondAtoms { bond, atoms })
             })
             .boxed();
         let contains = (bond_idx.clone(), atom_idx)
             .prop_map(|(bond, atom)| {
-                Constraint::Relational(RelationalConstraint::MulticenterBondContains {
-                    bond,
-                    atom,
-                })
+                Constraint::Relational(RelationalConstraint::MulticenterBondContains { bond, atom })
             })
             .boxed();
         let contains_all = (bond_idx.clone(), atoms_vec)
@@ -810,11 +875,7 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
         let bond_idx = noncovalent_bond_idx_strategy(counts.noncovalent);
         let atom_idx = atom_idx_strategy(counts.atom);
 
-        let ends = (
-            bond_idx.clone(),
-            atom_idx.clone(),
-            atom_idx.clone(),
-        )
+        let ends = (bond_idx.clone(), atom_idx.clone(), atom_idx.clone())
             .prop_map(|(bond, a, b)| {
                 Constraint::Relational(RelationalConstraint::NoncovalentBondEnds {
                     bond,
@@ -824,10 +885,7 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
             .boxed();
         let contains = (bond_idx.clone(), atom_idx)
             .prop_map(|(bond, atom)| {
-                Constraint::Relational(RelationalConstraint::NoncovalentBondContains {
-                    bond,
-                    atom,
-                })
+                Constraint::Relational(RelationalConstraint::NoncovalentBondContains { bond, atom })
             })
             .boxed();
         let ends_satisfy = (
@@ -868,7 +926,10 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
     choices.push(sub_pattern);
 
     if choices.is_empty() {
-        return Just(Constraint::Molecule(MoleculeConstraint::Connected { atoms: None })).boxed();
+        return Just(Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: None,
+        }))
+        .boxed();
     }
     prop::strategy::Union::new(choices).boxed()
 }
@@ -1137,4 +1198,32 @@ proptest! {
         })?;
         prop_assert_eq!(dsl, parsed);
     }
+
+    // region: ValueAst::simplify
+
+    /// `simplify` is idempotent: `x.simplify().simplify() == x.simplify()`.
+    #[test]
+    fn test_value_ast_simplify_idempotent(v in any_value_ast_strategy()) {
+        let once = v.simplify();
+        let twice = once.clone().simplify();
+        prop_assert_eq!(once, twice);
+    }
+
+    /// `simplify()` is the canonical form: for any generated `ValueAst`,
+    /// rendering and parsing yields a value that — once simplified —
+    /// equals `simplify()` on the original. The parser produces a partly
+    /// canonical form (it folds within `Expr` but doesn't always lift
+    /// `Expr(Lit(n))` to `ValueAst::Lit(n)`); simplify completes the
+    /// canonicalization on both sides.
+    #[test]
+    fn test_value_ast_render_parse_equals_simplify(v in any_value_ast_strategy()) {
+        let dsl = ValueDsl(v.clone());
+        let rendered = dsl.to_string();
+        let parsed = parse_value(&rendered).map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered:?}"))
+        })?;
+        prop_assert_eq!(parsed.simplify(), v.simplify());
+    }
+
+    // endregion: ValueAst::simplify
 }

@@ -96,10 +96,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::expected_element(
-        ParseError::ExpectedElement,
-        "expected atom element",
-    )]
+    #[case::expected_element(ParseError::ExpectedElement, "expected atom element")]
     #[case::unknown_atom_predicate(
         ParseError::UnknownAtomPredicate("foo".into()),
         "unknown atom predicate: foo",

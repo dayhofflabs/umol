@@ -1,5 +1,7 @@
 //! Atom-level AST fragments shared across crates.
 
+use std::mem;
+
 use umol_shared::element::Element;
 
 use super::constraint::AtomConstraints;
@@ -51,6 +53,18 @@ impl AtomAst {
             && self.implicit_hydrogens.matches(&target.implicit_hydrogens)
             && self.lone_pairs.matches(&target.lone_pairs)
             && self.spin.matches(&target.spin)
+    }
+
+    /// Simplify every value-bearing field in place: `isotope_mass`,
+    /// `charge`, `implicit_hydrogens`, `lone_pairs`, both `spin` slots,
+    /// and each constraint. `element` has no value to simplify.
+    pub fn simplify_values(&mut self) {
+        self.isotope_mass = mem::take(&mut self.isotope_mass).simplify();
+        self.charge = mem::take(&mut self.charge).simplify();
+        self.implicit_hydrogens = mem::take(&mut self.implicit_hydrogens).simplify();
+        self.lone_pairs = mem::take(&mut self.lone_pairs).simplify();
+        self.spin.simplify_values();
+        self.constraints.simplify_each();
     }
 }
 
@@ -163,6 +177,16 @@ impl IsotopeAst {
             Self::Natural => unreachable!("Natural handled before as_value"),
         }
     }
+
+    /// Simplify the inner `Expr` of `Expr(_)` and lift `Expr(Lit(n))` /
+    /// `Expr(Neg(Lit(n)))` to `Lit(n)` / `Lit(-n)` (mirrors
+    /// `ValueAst::simplify`). Other variants are unchanged.
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::Expr(e) => Self::from(ValueAst::Expr(e).simplify()),
+            other => other,
+        }
+    }
 }
 
 impl From<ValueAst> for IsotopeAst {
@@ -238,6 +262,16 @@ impl ImplicitHydrogensAst {
             Self::LitSet(s) => ValueAst::LitSet(s.clone()),
             Self::Expr(e) => ValueAst::Expr(e.clone()),
             Self::Normal => unreachable!("Normal handled before as_value"),
+        }
+    }
+
+    /// Simplify the inner `Expr` of `Expr(_)` and lift `Expr(Lit(n))` /
+    /// `Expr(Neg(Lit(n)))` to `Lit(n)` / `Lit(-n)`. Other variants are
+    /// unchanged.
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::Expr(e) => Self::from(ValueAst::Expr(e).simplify()),
+            other => other,
         }
     }
 }

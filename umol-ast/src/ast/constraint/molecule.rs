@@ -43,6 +43,25 @@ pub enum Constraint {
 }
 
 impl Constraint {
+    /// Recursively simplify every contained `ValueAst`. Refs are unchanged;
+    /// constraint kinds are preserved. SubPattern's inner `MoleculeAst` is
+    /// recursively simplified via [`MoleculeAst::simplify_values`].
+    pub fn simplify(self) -> Self {
+        match self {
+            Constraint::Atom(idx, c) => Constraint::Atom(idx, c.simplify()),
+            Constraint::Bond(idx, c) => Constraint::Bond(idx, c.simplify()),
+            Constraint::DativeBond(idx, c) => Constraint::DativeBond(idx, c.simplify()),
+            Constraint::AromaticSystem(_, c) => match c {},
+            Constraint::MulticenterBond(_, c) => match c {},
+            Constraint::NoncovalentBond(_, c) => match c {},
+            Constraint::Relational(r) => Constraint::Relational(r.simplify()),
+            Constraint::Molecule(m) => Constraint::Molecule(m.simplify()),
+            Constraint::And(xs) => Constraint::And(xs.into_iter().map(|c| c.simplify()).collect()),
+            Constraint::Or(xs) => Constraint::Or(xs.into_iter().map(|c| c.simplify()).collect()),
+            Constraint::Not(c) => Constraint::Not(Box::new((*c).simplify())),
+        }
+    }
+
     pub fn remap(self, remap: &IdxRemapping) -> Option<Self> {
         match self {
             Constraint::Atom(idx, c) => remap.atom(idx).map(|i| Constraint::Atom(i, c)),
@@ -132,6 +151,15 @@ impl Constraints {
             .filter_map(|c| c.remap(remap))
             .collect();
     }
+
+    /// Simplify every contained constraint's value(s) in place by
+    /// recursively calling [`Constraint::simplify`].
+    pub fn simplify_each(&mut self) {
+        self.0 = mem::take(&mut self.0)
+            .into_iter()
+            .map(|c| c.simplify())
+            .collect();
+    }
 }
 
 /// Molecule-scope predicates: non-logical, unanchored assertions whose scope
@@ -165,6 +193,34 @@ pub enum MoleculeConstraint {
 }
 
 impl MoleculeConstraint {
+    /// Simplify every contained `ValueAst` and `SpinStateAst` in place.
+    /// `Connected` carries no values to simplify; `SubPattern`'s pattern
+    /// recurses via [`MoleculeAst::simplify_values`].
+    pub fn simplify(self) -> Self {
+        match self {
+            MoleculeConstraint::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
+                atoms,
+                sum: sum.simplify(),
+            },
+            MoleculeConstraint::SpinSum { atoms, mut spin } => {
+                spin.simplify_values();
+                MoleculeConstraint::SpinSum { atoms, spin }
+            }
+            MoleculeConstraint::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
+                bonds,
+                sum: sum.simplify(),
+            },
+            MoleculeConstraint::Connected { atoms } => MoleculeConstraint::Connected { atoms },
+            MoleculeConstraint::SubPattern {
+                anchor,
+                mut pattern,
+            } => {
+                pattern.simplify_values();
+                MoleculeConstraint::SubPattern { anchor, pattern }
+            }
+        }
+    }
+
     pub fn remap(self, remap: &IdxRemapping) -> Option<Self> {
         match self {
             MoleculeConstraint::ChargeSum { atoms, sum } => {
@@ -542,7 +598,10 @@ mod tests {
         let remap = relation_remapping(vec![0], vec![1], vec![0], vec![2]);
         let mapped = a.remap(&remap).expect("all targets survive");
 
-        assert_eq!(mapped.dative_bonds(), &[(DativeBondIdx(1), DativeBondIdx(0))]);
+        assert_eq!(
+            mapped.dative_bonds(),
+            &[(DativeBondIdx(1), DativeBondIdx(0))]
+        );
         assert_eq!(
             mapped.aromatic_systems(),
             &[(AromaticSystemIdx(2), AromaticSystemIdx(1))]

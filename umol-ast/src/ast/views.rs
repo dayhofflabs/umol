@@ -504,10 +504,7 @@ mod tests {
     fn test_aromatic_system_views_count_ids_and_index(rich: MoleculeAst) {
         let views = rich.aromatic_systems();
         assert_eq!(views.count(), 1);
-        assert_eq!(
-            views.ids().collect::<Vec<_>>(),
-            vec![AromaticSystemIdx(0)],
-        );
+        assert_eq!(views.ids().collect::<Vec<_>>(), vec![AromaticSystemIdx(0)],);
         let _: &AromaticSystemAst = &views[AromaticSystemIdx(0)];
     }
 
@@ -515,10 +512,7 @@ mod tests {
     fn test_multicenter_bond_views_count_ids_and_index(rich: MoleculeAst) {
         let views = rich.multicenter_bonds();
         assert_eq!(views.count(), 1);
-        assert_eq!(
-            views.ids().collect::<Vec<_>>(),
-            vec![MulticenterBondIdx(0)],
-        );
+        assert_eq!(views.ids().collect::<Vec<_>>(), vec![MulticenterBondIdx(0)],);
         let _: &MulticenterBondAst = &views[MulticenterBondIdx(0)];
     }
 
@@ -526,10 +520,7 @@ mod tests {
     fn test_noncovalent_bond_views_count_ids_and_index(rich: MoleculeAst) {
         let views = rich.noncovalent_bonds();
         assert_eq!(views.count(), 1);
-        assert_eq!(
-            views.ids().collect::<Vec<_>>(),
-            vec![NoncovalentBondIdx(0)],
-        );
+        assert_eq!(views.ids().collect::<Vec<_>>(), vec![NoncovalentBondIdx(0)],);
         let _: &NoncovalentBondAst = &views[NoncovalentBondIdx(0)];
     }
 }

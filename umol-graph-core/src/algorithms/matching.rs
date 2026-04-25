@@ -33,13 +33,7 @@ impl Matching {
         edges.sort_unstable();
         let mate_opt = mate
             .iter()
-            .map(|&m| {
-                if m >= 0 {
-                    Some(NodeId(m as u32))
-                } else {
-                    None
-                }
-            })
+            .map(|&m| if m >= 0 { Some(NodeId(m as u32)) } else { None })
             .collect();
         Self {
             edges,
@@ -75,10 +69,7 @@ impl Graph {
         }
     }
 
-    pub fn enumerate_perfect_matchings(
-        &self,
-        alg: MatchingEnumerationAlgorithm,
-    ) -> Vec<Matching> {
+    pub fn enumerate_perfect_matchings(&self, alg: MatchingEnumerationAlgorithm) -> Vec<Matching> {
         match alg {
             MatchingEnumerationAlgorithm::BranchAndBound => {
                 self.enumerate_perfect_matchings_branch_and_bound()
@@ -86,10 +77,7 @@ impl Graph {
         }
     }
 
-    pub fn enumerate_maximum_matchings(
-        &self,
-        alg: MatchingEnumerationAlgorithm,
-    ) -> Vec<Matching> {
+    pub fn enumerate_maximum_matchings(&self, alg: MatchingEnumerationAlgorithm) -> Vec<Matching> {
         match alg {
             MatchingEnumerationAlgorithm::BranchAndBound => {
                 self.enumerate_maximum_matchings_branch_and_bound()
@@ -395,11 +383,10 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
+    use super::Matching;
+    use super::MatchingEnumerationAlgorithm::BranchAndBound;
+    use super::MaxMatchingAlgorithm::Edmonds;
     use crate::graph::Graph;
-
-    use super::{
-        MatchingEnumerationAlgorithm::BranchAndBound, MaxMatchingAlgorithm::Edmonds, Matching,
-    };
 
     #[test]
     fn test_matching_empty() {
@@ -430,6 +417,7 @@ mod tests {
         assert_matching_valid(&g, &m);
     }
 
+    #[rustfmt::skip]
     #[test]
     fn test_graph_maximum_matching_petersen() {
         let g = Graph::new(
@@ -495,8 +483,6 @@ mod tests {
         }
         assert_all_distinct(&matchings);
     }
-
-    // ── helpers ─────────────────────────────────────────────────────
 
     fn assert_matching_valid(graph: &Graph, matching: &Matching) {
         let mut matched = vec![false; graph.node_count()];

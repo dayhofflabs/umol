@@ -15,6 +15,7 @@ use super::super::bond::BondAst;
 use super::super::constraint::{
     AtomConstraint, AtomConstraints, BondConstraint, BondConstraints, Constraint, Constraints,
     DativeBondConstraint, DativeBondConstraints, MoleculeConstraint, RelationalConstraint,
+    SubPatternAnchor,
 };
 use super::super::dative::{DativeBondAst, DativeBondDirection};
 use super::super::idx::{
@@ -24,7 +25,7 @@ use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use super::super::rings::RingFamily;
 use super::super::spin::SpinStateAst;
-use super::super::value::ValueAst;
+use super::super::value::{Expr, ValueAst};
 use super::MoleculeAst;
 
 fn ground_atom() -> AtomAst {
@@ -456,7 +457,11 @@ fn test_molecule_ast_induced_noncovalent_bonds(
 #[case::atom_1(AtomIdx(1), Element::C)]
 #[case::atom_2(AtomIdx(2), Element::N)]
 #[case::atom_3(AtomIdx(3), Element::O)]
-fn test_molecule_ast_atom(#[from(rich_molecule)] ast: MoleculeAst, #[case] idx: AtomIdx, #[case] element: Element) {
+fn test_molecule_ast_atom(
+    #[from(rich_molecule)] ast: MoleculeAst,
+    #[case] idx: AtomIdx,
+    #[case] element: Element,
+) {
     let av = ast.atom(idx);
     assert_eq!(av.idx, idx);
     assert_eq!(av.data.element, ElementAst::Lit(element));
@@ -923,12 +928,11 @@ fn test_molecule_builder_push_constraint_and_constraints_mut(
     b.push_constraint(Constraint::Molecule(MoleculeConstraint::Connected {
         atoms: Some(vec![AtomIdx(0), AtomIdx(1)]),
     }));
-    b.constraints_mut().push(Constraint::Molecule(
-        MoleculeConstraint::ChargeSum {
+    b.constraints_mut()
+        .push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: Some(vec![AtomIdx(0)]),
             sum: ValueAst::Lit(0),
-        },
-    ));
+        }));
     let result = b.build();
     assert_eq!(result.constraints().len(), 2);
 }
@@ -949,10 +953,7 @@ fn test_molecule_builder_aromatic_system_mut(#[from(rich_molecule)] ast: Molecul
     let mut b = ast.edit();
     b.aromatic_system_mut(AromaticSystemIdx(0)).charge = ValueAst::Lit(0);
     let result = b.build();
-    assert_eq!(
-        result[AromaticSystemIdx(0)].charge,
-        ValueAst::Lit(0)
-    );
+    assert_eq!(result[AromaticSystemIdx(0)].charge, ValueAst::Lit(0));
 }
 
 #[rstest]
@@ -960,10 +961,7 @@ fn test_molecule_builder_multicenter_bond_mut(#[from(rich_molecule)] ast: Molecu
     let mut b = ast.edit();
     b.multicenter_bond_mut(MulticenterBondIdx(0)).electrons = ValueAst::Lit(4);
     let result = b.build();
-    assert_eq!(
-        result[MulticenterBondIdx(0)].electrons,
-        ValueAst::Lit(4)
-    );
+    assert_eq!(result[MulticenterBondIdx(0)].electrons, ValueAst::Lit(4));
 }
 
 #[rstest]
@@ -1498,10 +1496,8 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
         AtomIdx(0),
         AtomConstraint::Valence(ValueAst::Lit(4)),
     ));
-    ast.constraints_mut().push(Constraint::Bond(
-        BondIdx(0),
-        BondConstraint::Aromatic,
-    ));
+    ast.constraints_mut()
+        .push(Constraint::Bond(BondIdx(0), BondConstraint::Aromatic));
     ast.constraints_mut().push(Constraint::DativeBond(
         DativeBondIdx(0),
         DativeBondConstraint::RingSize(ValueAst::Lit(5)),
@@ -1542,12 +1538,7 @@ fn test_molecule_ast_inline_constraints_last_wins_on_collision(
     // Only one Valence survives; with two competing inserts of the same kind,
     // exactly one wins (which one is unspecified). Verify count and kind.
     assert_eq!(ast[AtomIdx(0)].constraints.len(), 1);
-    let v = ast[AtomIdx(0)]
-        .constraints
-        .iter()
-        .next()
-        .unwrap()
-        .clone();
+    let v = ast[AtomIdx(0)].constraints.iter().next().unwrap().clone();
     assert!(matches!(v, AtomConstraint::Valence(_)));
 }
 
@@ -1556,7 +1547,10 @@ fn test_molecule_ast_inline_constraints_skips_combinator_nested(
     #[from(rich_molecule)] mut ast: MoleculeAst,
 ) {
     let leaf = Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4)));
-    let nested = Constraint::And(vec![leaf.clone(), Constraint::Bond(BondIdx(0), BondConstraint::Aromatic)]);
+    let nested = Constraint::And(vec![
+        leaf.clone(),
+        Constraint::Bond(BondIdx(0), BondConstraint::Aromatic),
+    ]);
     ast.constraints_mut().push(nested.clone());
 
     ast.inline_constraints();
@@ -1626,3 +1620,206 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
 
     assert_eq!(ast, original);
 }
+
+// region: simplify_values
+
+/// Walks every value-bearing slot the simplifier touches: atom fields
+/// (charge, isotope, implicit-h, lone-pairs, spin), inline atom constraints,
+/// bond order/charge/spin, dative ring constraint, aromatic-system
+/// charge/spin/electrons, multicenter charge/spin/electrons, molecule-scope
+/// `ChargeSum::sum`, an `And` combinator with non-canonical inner shapes,
+/// a `Relational` predicate, and a `SubPattern` whose pattern atom carries
+/// non-canonical values too. Each non-canonical shape simplifies to its
+/// canonical form, exercising the full recursion.
+#[rstest]
+fn test_molecule_ast_simplify_values_reduces_throughout() {
+    let mut ast = MoleculeAst::new(
+        vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::N),
+        ],
+        vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+        vec![(AtomIdx(0), AtomIdx(1), DativeBondAst::new())],
+        vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())],
+        vec![(vec![AtomIdx(0), AtomIdx(1)], MulticenterBondAst::default())],
+        vec![(
+            AtomIdx(0),
+            AtomIdx(1),
+            NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        )],
+        Constraints::default(),
+    );
+
+    // -- Non-canonical shapes seeded across the structure --------------
+    // Atom 0: charge as Expr::Lit (lifts to ValueAst::Lit), isotope_mass as
+    // Expr::Neg(Lit) (lifts to IsotopeAst::Lit), implicit_hydrogens as
+    // Expr::Lit, lone_pairs as Expr::Neg(Neg(_)) (folds), spin both fields
+    // wrapped in Expr.
+    {
+        let atom = ast.atom_mut(AtomIdx(0)).data;
+        atom.charge = ValueAst::Expr(Expr::Lit(2));
+        atom.isotope_mass = IsotopeAst::Expr(Expr::Neg(Box::new(Expr::Lit(13))));
+        atom.implicit_hydrogens = ImplicitHydrogensAst::Expr(Expr::Lit(3));
+        atom.lone_pairs = ValueAst::Expr(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))));
+        atom.spin =
+            SpinStateAst::from_values(ValueAst::Expr(Expr::Lit(0)), ValueAst::Expr(Expr::Lit(1)));
+        // And an inline atom constraint with a non-canonical Expr.
+        atom.constraints
+            .add(AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4))));
+    }
+
+    // Bond 0: order/charge/spin all wrapped, plus an inline bond ring-count
+    // with a non-canonical Expr.
+    {
+        let bond = ast.bond_mut(BondIdx(0)).data;
+        bond.order = ValueAst::Expr(Expr::Lit(1));
+        bond.charge = ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(0))));
+        bond.spin =
+            SpinStateAst::from_values(ValueAst::Expr(Expr::Lit(0)), ValueAst::Expr(Expr::Lit(1)));
+        bond.constraints
+            .add(BondConstraint::RingCount(ValueAst::Expr(Expr::Lit(1))));
+    }
+
+    // Dative bond inline ring-size with non-canonical Expr.
+    ast.dative_bond_mut(DativeBondIdx(0))
+        .constraints
+        .add(DativeBondConstraint::RingSize(ValueAst::Expr(Expr::Lit(5))));
+
+    // Aromatic system 0: charge/electrons/spin wrapped.
+    {
+        let ar = ast.aromatic_system_mut(AromaticSystemIdx(0));
+        ar.charge = ValueAst::Expr(Expr::Lit(0));
+        ar.electrons = ValueAst::Expr(Expr::Lit(6));
+        ar.spin =
+            SpinStateAst::from_values(ValueAst::Expr(Expr::Lit(0)), ValueAst::Expr(Expr::Lit(1)));
+    }
+
+    // Multicenter bond 0: same pattern.
+    {
+        let mc = ast.multicenter_bond_mut(MulticenterBondIdx(0));
+        mc.charge = ValueAst::Expr(Expr::Lit(0));
+        mc.electrons = ValueAst::Expr(Expr::Lit(2));
+        mc.spin =
+            SpinStateAst::from_values(ValueAst::Expr(Expr::Lit(0)), ValueAst::Expr(Expr::Lit(1)));
+    }
+
+    // Molecule-scope constraints: a ChargeSum, a Relational predicate,
+    // an And combinator wrapping non-canonical leaves, and a SubPattern
+    // whose pattern atom 0 carries a non-canonical charge.
+    let mut pattern = MoleculeAst::new(
+        vec![AtomAst::from_element(Element::C)],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        Constraints::default(),
+    );
+    pattern.atom_mut(AtomIdx(0)).data.charge = ValueAst::Expr(Expr::Lit(-3));
+
+    ast.constraints_mut()
+        .push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
+            atoms: Some(vec![AtomIdx(0), AtomIdx(1)]),
+            sum: ValueAst::Expr(Expr::Lit(0)),
+        }));
+    ast.constraints_mut().push(Constraint::Relational(
+        RelationalConstraint::AromaticSystemAllAtoms {
+            system: AromaticSystemIdx(0),
+            predicate: Box::new(AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4)))),
+        },
+    ));
+    ast.constraints_mut()
+        .push(Constraint::And(vec![Constraint::Atom(
+            AtomIdx(1),
+            AtomConstraint::Degree(ValueAst::Expr(Expr::Lit(3))),
+        )]));
+    ast.constraints_mut()
+        .push(Constraint::Molecule(MoleculeConstraint::SubPattern {
+            anchor: {
+                let mut a = SubPatternAnchor::new();
+                a.push_atom(AtomIdx(0), AtomIdx(0));
+                a
+            },
+            pattern: Box::new(pattern),
+        }));
+
+    ast.simplify_values();
+
+    // -- Atom 0 ---------------------------------------------------------
+    let atom = ast.atom(AtomIdx(0)).data;
+    assert_eq!(atom.charge, ValueAst::Lit(2));
+    assert_eq!(atom.isotope_mass, IsotopeAst::Lit(-13));
+    assert_eq!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(3));
+    assert_eq!(atom.lone_pairs, ValueAst::Lit(1));
+    assert_eq!(atom.spin, SpinStateAst::new(0, 1));
+    assert_eq!(
+        atom.constraints,
+        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))]),
+    );
+
+    // -- Bond 0 ---------------------------------------------------------
+    let bond = ast.bond(BondIdx(0)).data;
+    assert_eq!(bond.order, ValueAst::Lit(1));
+    // Neg(Lit(0)) is preserved by Expr::simplify but the Expr is not at the
+    // ValueAst-Expr top, so ValueAst::simplify lifts via Lit(-0) = Lit(0).
+    assert_eq!(bond.charge, ValueAst::Lit(0));
+    assert_eq!(bond.spin, SpinStateAst::new(0, 1));
+    assert_eq!(
+        bond.constraints,
+        BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(1))]),
+    );
+
+    // -- Dative bond 0 --------------------------------------------------
+    assert_eq!(
+        ast[DativeBondIdx(0)].constraints,
+        DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(5))]),
+    );
+
+    // -- Aromatic system 0 ---------------------------------------------
+    let ar = &ast[AromaticSystemIdx(0)];
+    assert_eq!(ar.charge, ValueAst::Lit(0));
+    assert_eq!(ar.electrons, ValueAst::Lit(6));
+    assert_eq!(ar.spin, SpinStateAst::new(0, 1));
+
+    // -- Multicenter bond 0 ---------------------------------------------
+    let mc = &ast[MulticenterBondIdx(0)];
+    assert_eq!(mc.charge, ValueAst::Lit(0));
+    assert_eq!(mc.electrons, ValueAst::Lit(2));
+    assert_eq!(mc.spin, SpinStateAst::new(0, 1));
+
+    // -- Molecule-scope constraints ------------------------------------
+    let cs: Vec<&Constraint> = ast.constraints().iter().collect();
+    match cs[0] {
+        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: _, sum }) => {
+            assert_eq!(sum, &ValueAst::Lit(0));
+        }
+        c => panic!("expected ChargeSum, got {c:?}"),
+    }
+    match cs[1] {
+        Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms {
+            predicate, ..
+        }) => {
+            assert_eq!(**predicate, AtomConstraint::Valence(ValueAst::Lit(4)));
+        }
+        c => panic!("expected Relational AromaticSystemAllAtoms, got {c:?}"),
+    }
+    match cs[2] {
+        Constraint::And(xs) => match &xs[0] {
+            Constraint::Atom(idx, AtomConstraint::Degree(v)) => {
+                assert_eq!(*idx, AtomIdx(1));
+                assert_eq!(v, &ValueAst::Lit(3));
+            }
+            c => panic!("expected Atom Degree leaf, got {c:?}"),
+        },
+        c => panic!("expected And, got {c:?}"),
+    }
+    match cs[3] {
+        Constraint::Molecule(MoleculeConstraint::SubPattern { pattern, .. }) => {
+            // The SubPattern's pattern molecule was simplified recursively.
+            assert_eq!(pattern.atom(AtomIdx(0)).data.charge, ValueAst::Lit(-3));
+        }
+        c => panic!("expected SubPattern, got {c:?}"),
+    }
+}
+
+// endregion: simplify_values

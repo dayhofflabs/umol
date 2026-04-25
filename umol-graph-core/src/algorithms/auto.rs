@@ -39,10 +39,7 @@ impl Graph {
     }
 
     // McKay & Piperno 2014 "Practical graph isomorphism, II". Impl: nauty-Traces-sys FFI.
-    fn automorphisms_nauty<C: Ord + Copy>(
-        &self,
-        node_color: impl Fn(NodeId) -> C,
-    ) -> Automorphism {
+    fn automorphisms_nauty<C: Ord + Copy>(&self, node_color: impl Fn(NodeId) -> C) -> Automorphism {
         let n = self.node_count();
 
         if n == 0 {
@@ -191,8 +188,8 @@ impl Automorphism {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::AutomorphismAlgorithm::Nauty;
+    use super::*;
 
     #[test]
     fn test_automorphisms_empty() {

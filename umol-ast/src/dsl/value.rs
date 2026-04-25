@@ -7,7 +7,7 @@ use std::convert::Infallible;
 use std::fmt::{self, Display, Write};
 
 use umol_edn::{DeError, Edn, EdnKeyword, FromEdn, ToEdn};
-use winnow::ascii::{dec_int, multispace0};
+use winnow::ascii::{dec_int, digit1, multispace0};
 use winnow::combinator::{alt, delimited, opt, preceded, repeat, separated, terminated};
 use winnow::error::ErrMode;
 use winnow::token::one_of;
@@ -233,12 +233,22 @@ pub fn parse_value(input: &str) -> Result<ValueAst, ParseError> {
 
 pub(crate) fn value(i: &mut &str) -> PResult<ValueAst> {
     alt((
-        terminated(dec_int, (multispace0, terminator)).map(ValueAst::Lit),
+        terminated(signed_int, (multispace0, terminator)).map(ValueAst::Lit),
         "*".value(ValueAst::Undetermined),
         lit_set.map(ValueAst::LitSet),
         bool_expr.map(ValueAst::Expr),
     ))
     .parse_next(i)
+}
+
+/// Parse a signed decimal integer matching `[-+]?\d+`. Unlike winnow's
+/// `dec_int`, this accepts redundant signed-zero spellings (`-0`, `+0`,
+/// `-00`) and explicit `+` sign on positive values, all of which the
+/// top-level `value` parser should treat as ground integer literals.
+fn signed_int(i: &mut &str) -> PResult<i64> {
+    let span: &str = (opt(one_of(['-', '+'])), digit1).take().parse_next(i)?;
+    span.parse::<i64>()
+        .map_err(|_| ErrMode::Backtrack(ParseError::Syntax))
 }
 
 pub(crate) fn id(i: &mut &str) -> PResult<String> {
@@ -424,6 +434,13 @@ mod tests {
     #[rstest]
     #[case::star("*", ValueAst::Undetermined)]
     #[case::num("0", ValueAst::Lit(0))]
+    #[case::num_neg("-1", ValueAst::Lit(-1))]
+    #[case::num_pos("+1", ValueAst::Lit(1))]
+    #[case::num_neg_zero("-0", ValueAst::Lit(0))]
+    #[case::num_pos_zero("+0", ValueAst::Lit(0))]
+    #[case::num_pos_multi("+42", ValueAst::Lit(42))]
+    #[case::num_neg_multi("-42", ValueAst::Lit(-42))]
+    #[case::num_i64_min("-9223372036854775808", ValueAst::Lit(i64::MIN))]
     #[case::set("{0,1,2}", ValueAst::LitSet(vec![0, 1, 2]))]
     #[case::set_spaced("{ 0, 1 ,2}", ValueAst::LitSet(vec![0, 1, 2]))]
     #[case::sum("1+2", ValueAst::Expr(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Add, Box::new(Expr::Lit(2)))))]

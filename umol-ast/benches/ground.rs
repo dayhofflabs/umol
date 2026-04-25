@@ -45,10 +45,8 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
         RelOp::Eq,
         Box::new(Expr::Lit(0)),
     ));
-    b.atom_mut(AtomIdx(2)).lone_pairs = ValueAst::Expr(Expr::Mem(
-        Box::new(Expr::Var("n".into())),
-        vec![0, 1, 2],
-    ));
+    b.atom_mut(AtomIdx(2)).lone_pairs =
+        ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("n".into())), vec![0, 1, 2]));
     ast = b.build();
     ast
 }
@@ -82,14 +80,16 @@ fn arith_expr_heavy() -> MoleculeAst {
         spin: SpinStateAst::from_values(arith(), arith()),
         constraints: Default::default(),
     };
-    let atoms: Vec<AtomAst> = (0..20).map(|i| {
-        make_atom(match i % 4 {
-            0 => Element::C,
-            1 => Element::N,
-            2 => Element::O,
-            _ => Element::H,
+    let atoms: Vec<AtomAst> = (0..20)
+        .map(|i| {
+            make_atom(match i % 4 {
+                0 => Element::C,
+                1 => Element::N,
+                2 => Element::O,
+                _ => Element::H,
+            })
         })
-    }).collect();
+        .collect();
     let bonds: Vec<(AtomIdx, AtomIdx, BondAst)> = (0..19)
         .map(|i| {
             let bond = BondAst {

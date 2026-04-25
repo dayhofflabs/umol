@@ -20,8 +20,8 @@ use super::config::{
 };
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin,
-    optional_value, raise_spin, ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
+    raise_spin, ring_count, SpinPredicate,
 };
 use super::value::{fmt_value, id, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};

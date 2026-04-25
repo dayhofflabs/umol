@@ -1,5 +1,7 @@
 //! Multicenter bond AST.
 
+use std::mem;
+
 use super::constraint::MulticenterBondConstraints;
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
@@ -35,6 +37,14 @@ impl MulticenterBondAst {
         self.charge.matches(&target.charge)
             && self.spin.matches(&target.spin)
             && self.electrons.matches(&target.electrons)
+    }
+
+    /// Simplify every value-bearing field in place.
+    pub fn simplify_values(&mut self) {
+        self.charge = mem::take(&mut self.charge).simplify();
+        self.spin.simplify_values();
+        self.electrons = mem::take(&mut self.electrons).simplify();
+        self.constraints.simplify_each();
     }
 }
 

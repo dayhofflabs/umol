@@ -48,6 +48,24 @@ impl AtomConstraint {
             Self::MulticenterValence(c) => c.is_undetermined(),
         }
     }
+
+    /// Recursively simplify the contained value. The constraint kind is
+    /// preserved.
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::Valence(v) => Self::Valence(v.simplify()),
+            Self::AromaticValence(c) => Self::AromaticValence(c.simplify()),
+            Self::MulticenterValence(c) => Self::MulticenterValence(c.simplify()),
+            Self::DonatedPairs(v) => Self::DonatedPairs(v.simplify()),
+            Self::AcceptedPairs(v) => Self::AcceptedPairs(v.simplify()),
+            Self::Degree(v) => Self::Degree(v.simplify()),
+            Self::Connectivity(v) => Self::Connectivity(v.simplify()),
+            Self::RingConnectivity(v) => Self::RingConnectivity(v.simplify()),
+            Self::TotalHydrogens(v) => Self::TotalHydrogens(v.simplify()),
+            Self::RingCount(v) => Self::RingCount(v.simplify()),
+            Self::RingSize(v) => Self::RingSize(v.simplify()),
+        }
+    }
 }
 
 /// Aromatic-valence state of an atom: `Undetermined`, explicitly
@@ -65,6 +83,15 @@ impl AromaticValenceAst {
     pub fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
+
+    /// Simplify the inner `ValueAst` of `Aromatic(_)`. Other variants are
+    /// already canonical.
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::Aromatic(v) => Self::Aromatic(v.simplify()),
+            other => other,
+        }
+    }
 }
 
 /// Multicenter-valence state of an atom: `Undetermined`, explicitly
@@ -81,6 +108,15 @@ pub enum MulticenterValenceAst {
 impl MulticenterValenceAst {
     pub fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
+    }
+
+    /// Simplify the inner `ValueAst` of `Multicenter(_)`. Other variants
+    /// are already canonical.
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::Multicenter(v) => Self::Multicenter(v.simplify()),
+            other => other,
+        }
     }
 }
 
@@ -146,6 +182,15 @@ impl AtomConstraints {
     /// are in the store's internal sorted-by-kind order.
     pub fn take(&mut self) -> impl Iterator<Item = AtomConstraint> {
         mem::take(&mut self.entries).into_iter()
+    }
+
+    /// Simplify each contained constraint's value in place. Kind is
+    /// preserved by `AtomConstraint::simplify`, so the sorted-by-kind
+    /// invariant holds without re-sorting.
+    pub fn simplify_each(&mut self) {
+        for c in self.entries.iter_mut() {
+            *c = mem::replace(c, AtomConstraint::Valence(ValueAst::Undetermined)).simplify();
+        }
     }
 
     pub fn remove(&mut self, kind: AtomConstraintKind) -> Option<AtomConstraint> {

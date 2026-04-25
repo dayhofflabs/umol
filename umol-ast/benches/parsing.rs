@@ -105,7 +105,7 @@ fn bench_constraint_dsl(c: &mut Criterion) {
     bench_pair::<ConstraintDsl>(
         &mut g,
         "molecule_connected",
-        r##"{:connected [0 1 2 3 4 5]}"##,
+        r##"{:connected {:atoms [0 1 2 3 4 5]}}"##,
     );
     bench_pair::<ConstraintDsl>(
         &mut g,
@@ -115,7 +115,7 @@ fn bench_constraint_dsl(c: &mut Criterion) {
     bench_pair::<ConstraintDsl>(
         &mut g,
         "nested_combinators",
-        r##"{:and [{:or [{:atom [0 {:valence 3}]} {:atom [0 {:valence 4}]}]} {:not {:connected [0 1]}}]}"##,
+        r##"{:and [{:or [{:atom [0 {:valence 3}]} {:atom [0 {:valence 4}]}]} {:not {:connected {:atoms [0 1]}}}]}"##,
     );
     g.finish();
 }
@@ -126,7 +126,7 @@ fn bench_constraints_dsl(c: &mut Criterion) {
     bench_pair::<ConstraintsDsl>(
         &mut g,
         "mixed_small",
-        r##"[{:atom [0 {:valence 4}]} {:connected [0 1]} {:not {:bond [0 :aromatic]}}]"##,
+        r##"[{:atom [0 {:valence 4}]} {:connected {:atoms [0 1]}} {:not {:bond [0 :aromatic]}}]"##,
     );
     g.finish();
 }

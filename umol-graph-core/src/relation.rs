@@ -88,6 +88,10 @@ impl<R, const N: usize> FixedRelationSet<R, N> {
         &mut self.data[id.index()]
     }
 
+    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut R> {
+        self.data.iter_mut()
+    }
+
     pub fn participants(&self, id: RelationId) -> &[NodeId; N] {
         &self.participants[id.index()]
     }
@@ -283,6 +287,21 @@ mod tests {
     }
 
     #[test]
+    fn test_fixed_relation_set_data_iter_mut() {
+        let mut rs: FixedRelationSet<i32, 2> = FixedRelationSet::new(vec![
+            ([n(0), n(1)], 1),
+            ([n(1), n(2)], 2),
+            ([n(2), n(3)], 3),
+        ]);
+        for d in rs.data_iter_mut() {
+            *d *= 10;
+        }
+        assert_eq!(rs.data(RelationId(0)), &10);
+        assert_eq!(rs.data(RelationId(1)), &20);
+        assert_eq!(rs.data(RelationId(2)), &30);
+    }
+
+    #[test]
     fn test_fixed_relation_set_default() {
         let rs = FixedRelationSet::<(), 2>::default();
         assert_eq!(rs.relation_count(), 0);
@@ -347,6 +366,21 @@ mod tests {
         let mut rs: VarRelationSet<i32> = VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], 1)]);
         *rs.data_mut(RelationId(0)) = 99;
         assert_eq!(rs.data(RelationId(0)), &99);
+    }
+
+    #[test]
+    fn test_var_relation_set_data_iter_mut() {
+        let mut rs: VarRelationSet<i32> = VarRelationSet::new(vec![
+            (vec![n(0), n(1)], 1),
+            (vec![n(2), n(3), n(4)], 2),
+            (vec![n(5)], 3),
+        ]);
+        for d in rs.data_iter_mut() {
+            *d *= 10;
+        }
+        assert_eq!(rs.data(RelationId(0)), &10);
+        assert_eq!(rs.data(RelationId(1)), &20);
+        assert_eq!(rs.data(RelationId(2)), &30);
     }
 
     #[test]

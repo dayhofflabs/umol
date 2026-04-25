@@ -699,6 +699,10 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.dative_bonds).data_mut(RelationId::from(idx))
     }
 
+    pub fn dative_bonds_mut(&mut self) -> impl Iterator<Item = &mut DativeBondAst> {
+        Arc::make_mut(&mut self.dative_bonds).data_iter_mut()
+    }
+
     // endregion: Entity mutation: dative bonds
 
     // region: Entity mutation: aromatic systems
@@ -731,6 +735,10 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.noncovalent_bonds).data_mut(RelationId::from(idx))
     }
 
+    pub fn noncovalent_bonds_mut(&mut self) -> impl Iterator<Item = &mut NoncovalentBondAst> {
+        Arc::make_mut(&mut self.noncovalent_bonds).data_iter_mut()
+    }
+
     // endregion: Entity mutation: noncovalent bonds
 
     // region: Constraints
@@ -741,6 +749,34 @@ impl MoleculeAst {
 
     pub fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
+    }
+
+    /// Recursively reduce every contained `ValueAst` to canonical form
+    /// via [`ValueAst::simplify`]. Walks every entity (atoms, bonds,
+    /// dative/aromatic/multicenter/noncovalent), each entity's inline
+    /// constraint store, and the molecule-scope `Constraints` tree —
+    /// including `SubPattern` patterns recursively. Entity counts and
+    /// topology are unchanged.
+    pub fn simplify_values(&mut self) {
+        for atom in self.atoms_mut() {
+            atom.simplify_values();
+        }
+        for bond in self.bonds_mut() {
+            bond.simplify_values();
+        }
+        for db in self.dative_bonds_mut() {
+            db.simplify_values();
+        }
+        for ar in self.aromatic_systems_mut() {
+            ar.simplify_values();
+        }
+        for mc in self.multicenter_bonds_mut() {
+            mc.simplify_values();
+        }
+        for nc in self.noncovalent_bonds_mut() {
+            nc.simplify_values();
+        }
+        self.constraints.simplify_each();
     }
 
     /// Drain every entity's inline `constraints` store into `self.constraints`

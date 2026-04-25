@@ -1,5 +1,7 @@
 //! Spin-state AST.
 
+use std::mem;
+
 use umol_shared::spin::SpinState;
 
 use super::value::ValueAst;
@@ -40,14 +42,20 @@ impl SpinStateAst {
     /// inconsistent — parity of `(unpaired, multiplicity)` is a tier-2
     /// physics invariant enforced by a propagator in the solver, not here.
     pub fn is_ground(&self) -> bool {
-        matches!(&self.unpaired, ValueAst::Lit(_))
-            && matches!(&self.multiplicity, ValueAst::Lit(_))
+        matches!(&self.unpaired, ValueAst::Lit(_)) && matches!(&self.multiplicity, ValueAst::Lit(_))
     }
 
     /// Pattern matches target iff `unpaired` and `multiplicity` each
     /// match field-wise under `ValueAst::matches`.
     pub fn matches(&self, target: &Self) -> bool {
         self.unpaired.matches(&target.unpaired) && self.multiplicity.matches(&target.multiplicity)
+    }
+
+    /// Simplify both `unpaired` and `multiplicity` in place via
+    /// [`ValueAst::simplify`].
+    pub fn simplify_values(&mut self) {
+        self.unpaired = mem::take(&mut self.unpaired).simplify();
+        self.multiplicity = mem::take(&mut self.multiplicity).simplify();
     }
 }
 

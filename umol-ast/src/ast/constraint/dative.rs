@@ -40,6 +40,14 @@ impl DativeBondConstraint {
         }
     }
 
+    /// Simplify the inner `ValueAst`.
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::RingCount(v) => Self::RingCount(v.simplify()),
+            Self::RingSize(v) => Self::RingSize(v.simplify()),
+        }
+    }
+
     pub fn remap(self, _remap: &IdxRemapping) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
@@ -97,6 +105,14 @@ impl DativeBondConstraints {
     /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = DativeBondConstraint> {
         mem::take(&mut self.0).into_iter()
+    }
+
+    /// Simplify each contained constraint's inner value in place.
+    pub fn simplify_each(&mut self) {
+        for c in self.0.iter_mut() {
+            *c =
+                mem::replace(c, DativeBondConstraint::RingCount(ValueAst::Undetermined)).simplify();
+        }
     }
 
     pub fn remap(self, remap: &IdxRemapping) -> Self {
@@ -160,7 +176,10 @@ mod tests {
         let mut cs = DativeBondConstraints::new();
         cs.add(DativeBondConstraint::RingCount(ValueAst::Lit(1)));
         let prev = cs.add(DativeBondConstraint::RingCount(ValueAst::Lit(2)));
-        assert_eq!(prev, Some(DativeBondConstraint::RingCount(ValueAst::Lit(1))));
+        assert_eq!(
+            prev,
+            Some(DativeBondConstraint::RingCount(ValueAst::Lit(1)))
+        );
         assert_eq!(
             cs.as_slice(),
             &[DativeBondConstraint::RingCount(ValueAst::Lit(2))]
@@ -190,9 +209,8 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_constraints_clear() {
-        let mut cs = DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(
-            ValueAst::Lit(1),
-        )]);
+        let mut cs =
+            DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(1))]);
         cs.clear();
         assert!(cs.is_empty());
     }

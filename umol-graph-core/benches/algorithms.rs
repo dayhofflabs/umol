@@ -1,9 +1,9 @@
 use criterion::{criterion_group, criterion_main, Criterion};
-
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
-    CycleEnumerationAlgorithm, EdgeId, Graph, MaxIndependentSetAlgorithm, MaxMatchingAlgorithm,
-    MatchingEnumerationAlgorithm, NodeId, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
+    CycleEnumerationAlgorithm, EdgeId, Graph, MatchingEnumerationAlgorithm,
+    MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
+    SubgraphIsomorphismAlgorithm,
 };
 
 fn path(n: usize) -> Graph {
@@ -17,6 +17,7 @@ fn cycle(n: usize) -> Graph {
     Graph::new(n, &edges)
 }
 
+#[rustfmt::skip]
 fn naphthalene() -> Graph {
     Graph::new(
         10,
@@ -27,6 +28,7 @@ fn naphthalene() -> Graph {
     )
 }
 
+#[rustfmt::skip]
 fn prismane() -> Graph {
     Graph::new(
         6,
@@ -38,6 +40,7 @@ fn prismane() -> Graph {
     )
 }
 
+#[rustfmt::skip]
 fn cubane() -> Graph {
     Graph::new(
         8,
@@ -49,6 +52,7 @@ fn cubane() -> Graph {
     )
 }
 
+#[rustfmt::skip]
 fn adamantane() -> Graph {
     Graph::new(
         10,
@@ -65,6 +69,7 @@ fn adamantane() -> Graph {
     )
 }
 
+#[rustfmt::skip]
 fn dodecahedron() -> Graph {
     Graph::new(
         20,
@@ -79,6 +84,7 @@ fn dodecahedron() -> Graph {
     )
 }
 
+#[rustfmt::skip]
 fn icosahedron() -> Graph {
     Graph::new(
         12,
@@ -93,6 +99,7 @@ fn icosahedron() -> Graph {
     )
 }
 
+#[rustfmt::skip]
 fn fullerene_c60() -> Graph {
     #[rustfmt::skip]
     let edges: [[u32; 2]; 90] = [
@@ -115,6 +122,7 @@ fn fullerene_c60() -> Graph {
     Graph::new(60, &edges)
 }
 
+#[rustfmt::skip]
 fn fullerene_c70() -> Graph {
     #[rustfmt::skip]
     let c70_edges: [[u32; 2]; 105] = [
@@ -138,6 +146,7 @@ fn fullerene_c70() -> Graph {
     Graph::new(70, &c70_edges)
 }
 
+#[rustfmt::skip]
 fn petersen() -> Graph {
     Graph::new(
         10,
@@ -301,9 +310,7 @@ fn automorphism(c: &mut Criterion) {
     }
     for (name, g) in &graphs {
         group.bench_function(format!("{name}/unique"), |b| {
-            b.iter(|| {
-                g.automorphisms(|n: NodeId| n.index() as u32, AutomorphismAlgorithm::Nauty)
-            });
+            b.iter(|| g.automorphisms(|n: NodeId| n.index() as u32, AutomorphismAlgorithm::Nauty));
         });
     }
     group.finish();

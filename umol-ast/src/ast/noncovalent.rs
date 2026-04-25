@@ -30,6 +30,12 @@ impl NoncovalentBondAst {
     pub fn matches(&self, target: &NoncovalentBondAst) -> bool {
         self.kind.matches(&target.kind)
     }
+
+    /// Simplify every constraint's inner value in place. `kind` carries no
+    /// `ValueAst`, so it is unchanged.
+    pub fn simplify_values(&mut self) {
+        self.constraints.simplify_each();
+    }
 }
 
 /// Noncovalent interaction kind expressions. Mirrors `ElementAst`:

@@ -36,6 +36,16 @@ impl BondConstraint {
             Self::RingCount(v) | Self::RingSize(v) => v.is_undetermined(),
         }
     }
+
+    /// Simplify the inner `ValueAst` of `RingCount` / `RingSize`. `Aromatic`
+    /// is unchanged.
+    pub fn simplify(self) -> Self {
+        match self {
+            Self::Aromatic => Self::Aromatic,
+            Self::RingCount(v) => Self::RingCount(v.simplify()),
+            Self::RingSize(v) => Self::RingSize(v.simplify()),
+        }
+    }
 }
 
 /// Per-bond constraint container. Enforces the per-variant cardinality policy
@@ -94,6 +104,13 @@ impl BondConstraints {
     /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = BondConstraint> {
         mem::take(&mut self.0).into_iter()
+    }
+
+    /// Simplify each contained constraint's inner value in place.
+    pub fn simplify_each(&mut self) {
+        for c in self.0.iter_mut() {
+            *c = mem::replace(c, BondConstraint::Aromatic).simplify();
+        }
     }
 
     /// No-op: no `BondConstraint` variant carries an entity index.

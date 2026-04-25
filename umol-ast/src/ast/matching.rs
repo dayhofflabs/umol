@@ -47,7 +47,13 @@ mod tests {
     fn chain(n: usize) -> MoleculeAst {
         let atoms = vec![AtomAst::from_element(Element::C); n];
         let bonds: Vec<_> = (0..n.saturating_sub(1))
-            .map(|i| (AtomIdx(i as u32), AtomIdx((i + 1) as u32), BondAst::from_order(1)))
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx((i + 1) as u32),
+                    BondAst::from_order(1),
+                )
+            })
             .collect();
         MoleculeAst::new(
             atoms,
@@ -63,7 +69,13 @@ mod tests {
     fn ring(n: usize) -> MoleculeAst {
         let atoms = vec![AtomAst::from_element(Element::C); n];
         let bonds: Vec<_> = (0..n)
-            .map(|i| (AtomIdx(i as u32), AtomIdx(((i + 1) % n) as u32), BondAst::from_order(1)))
+            .map(|i| {
+                (
+                    AtomIdx(i as u32),
+                    AtomIdx(((i + 1) % n) as u32),
+                    BondAst::from_order(1),
+                )
+            })
             .collect();
         MoleculeAst::new(
             atoms,
@@ -89,10 +101,7 @@ mod tests {
     #[rstest]
     #[case::chain_4(chain_4_matching(), 2)]
     #[case::ring_6(ring_6_matching(), 3)]
-    fn test_bond_matching_size(
-        #[case] matching: BondMatching,
-        #[case] expected: usize,
-    ) {
+    fn test_bond_matching_size(#[case] matching: BondMatching, #[case] expected: usize) {
         assert_eq!(matching.size(), expected);
     }
 

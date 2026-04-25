@@ -17,7 +17,7 @@ pub const MOL_INDOLE: &str = r##"{:atoms [[:n "N"] [:c2 "C"] [:c3 "C"] [:c3a "C"
 
 pub const MOL_WITH_CONSTRAINTS: &str = r##"{:atoms [[:c1 "C"] [:c2 "C"] [:o "O"]]
  :bonds [{:id :b1 :a :c1 :b :c2 :type "1"} {:id :b2 :a :c2 :b :o :type "1"}]
- :constraints [{:connected [:c1 :c2 :o]}
+ :constraints [{:connected {:atoms [:c1 :c2 :o]}}
                {:bond-order-sum {:bonds [:b1 :b2] :sum 2}}
                {:not {:atom [:c1 {:valence 3}]}}]}"##;
 
