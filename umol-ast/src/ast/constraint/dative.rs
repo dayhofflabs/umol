@@ -96,7 +96,7 @@ impl DativeBondConstraints {
 
     /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = DativeBondConstraint> {
-        std::mem::take(&mut self.0).into_iter()
+        mem::take(&mut self.0).into_iter()
     }
 
     pub fn remap(self, remap: &IdxRemapping) -> Self {

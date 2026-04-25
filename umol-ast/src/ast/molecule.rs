@@ -154,7 +154,7 @@ impl MoleculeAst {
         }
     }
 
-    // -- Read: topology ---------------------------------------------------
+    // region: Read: topology
 
     pub fn graph(&self) -> &Graph {
         &self.graph
@@ -172,7 +172,9 @@ impl MoleculeAst {
             })
     }
 
-    // -- Read: atoms ------------------------------------------------------
+    // endregion: Read: topology
+
+    // region: Read: atoms
 
     pub fn atom_count(&self) -> usize {
         self.atoms.len()
@@ -186,7 +188,9 @@ impl MoleculeAst {
         self.atoms().get(idx)
     }
 
-    // -- Read: bonds ------------------------------------------------------
+    // endregion: Read: atoms
+
+    // region: Read: bonds
 
     pub fn bond_count(&self) -> usize {
         self.bonds.len()
@@ -200,7 +204,9 @@ impl MoleculeAst {
         self.bonds().get(idx)
     }
 
-    // -- Read: dative bonds -----------------------------------------------
+    // endregion: Read: bonds
+
+    // region: Read: dative bonds
 
     pub fn dative_bond_count(&self) -> usize {
         self.dative_bonds.relation_count()
@@ -214,7 +220,9 @@ impl MoleculeAst {
         self.dative_bonds().get(idx)
     }
 
-    // -- Read: aromatic systems -------------------------------------------
+    // endregion: Read: dative bonds
+
+    // region: Read: aromatic systems
 
     pub fn aromatic_system_count(&self) -> usize {
         self.aromatic_systems.relation_count()
@@ -228,7 +236,9 @@ impl MoleculeAst {
         self.aromatic_systems().get(idx)
     }
 
-    // -- Read: multicenter bonds ------------------------------------------
+    // endregion: Read: aromatic systems
+
+    // region: Read: multicenter bonds
 
     pub fn multicenter_bond_count(&self) -> usize {
         self.multicenter_bonds.relation_count()
@@ -242,7 +252,9 @@ impl MoleculeAst {
         self.multicenter_bonds().get(idx)
     }
 
-    // -- Read: noncovalent bonds ------------------------------------------
+    // endregion: Read: multicenter bonds
+
+    // region: Read: noncovalent bonds
 
     pub fn noncovalent_bond_count(&self) -> usize {
         self.noncovalent_bonds.relation_count()
@@ -256,7 +268,9 @@ impl MoleculeAst {
         self.noncovalent_bonds().get(idx)
     }
 
-    // -- Read: connecting relations -----------------------------------------
+    // endregion: Read: noncovalent bonds
+
+    // region: Read: connecting relations
 
     pub fn connecting_bond(&self, a: AtomIdx, b: AtomIdx) -> Option<BondIdx> {
         self.graph
@@ -310,7 +324,9 @@ impl MoleculeAst {
         })
     }
 
-    // -- Read: incidence ----------------------------------------------------
+    // endregion: Read: connecting relations
+
+    // region: Read: incidence
 
     pub fn dative_bonds_incident(&self, atom: AtomIdx) -> impl Iterator<Item = DativeBondIdx> + '_ {
         self.dative_bonds
@@ -349,7 +365,9 @@ impl MoleculeAst {
             .map(|&rid| NoncovalentBondIdx::from(rid))
     }
 
-    // -- Read: induced subsets (bond/relation) --------------------------------
+    // endregion: Read: incidence
+
+    // region: Read: induced subsets (bond/relation)
 
     pub fn induced_subgraph(&self, atoms: &[AtomIdx]) -> MoleculeSubgraph {
         let keep: HashSet<AtomIdx> = atoms.iter().copied().collect();
@@ -489,7 +507,9 @@ impl MoleculeAst {
                 .all(|id| self.noncovalent_bonds.data(id).is_ground())
     }
 
-    // -- Ring enumeration -----------------------------------------------------
+    // endregion: Read: induced subsets (bond/relation)
+
+    // region: Ring enumeration
 
     pub fn rings(
         &self,
@@ -500,7 +520,9 @@ impl MoleculeAst {
         rings::enumerate_rings(&self.graph, family, max_ring_size, atom_filter)
     }
 
-    // -- Read: graph algorithms -----------------------------------------------
+    // endregion: Ring enumeration
+
+    // region: Read: graph algorithms
 
     pub fn degree(&self, atom: AtomIdx) -> usize {
         self.graph.degree(NodeId::from(atom))
@@ -637,7 +659,9 @@ impl MoleculeAst {
             .collect()
     }
 
-    // -- Entity mutation: atoms -------------------------------------------
+    // endregion: Read: graph algorithms
+
+    // region: Entity mutation: atoms
 
     pub fn atom_mut(&mut self, idx: AtomIdx) -> AtomViewMut<'_> {
         let data = &mut Arc::make_mut(&mut self.atoms)[idx.index()];
@@ -648,7 +672,9 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.atoms).iter_mut()
     }
 
-    // -- Entity mutation: bonds -------------------------------------------
+    // endregion: Entity mutation: atoms
+
+    // region: Entity mutation: bonds
 
     pub fn bond_mut(&mut self, idx: BondIdx) -> BondViewMut<'_> {
         let [s, t] = self.graph.edge_endpoints(idx.into());
@@ -665,13 +691,17 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.bonds).iter_mut()
     }
 
-    // -- Entity mutation: dative bonds ------------------------------------
+    // endregion: Entity mutation: bonds
+
+    // region: Entity mutation: dative bonds
 
     pub fn dative_bond_mut(&mut self, idx: DativeBondIdx) -> &mut DativeBondAst {
         Arc::make_mut(&mut self.dative_bonds).data_mut(RelationId::from(idx))
     }
 
-    // -- Entity mutation: aromatic systems --------------------------------
+    // endregion: Entity mutation: dative bonds
+
+    // region: Entity mutation: aromatic systems
 
     pub fn aromatic_system_mut(&mut self, idx: AromaticSystemIdx) -> &mut AromaticSystemAst {
         Arc::make_mut(&mut self.aromatic_systems).data_mut(RelationId::from(idx))
@@ -681,7 +711,9 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.aromatic_systems).data_iter_mut()
     }
 
-    // -- Entity mutation: multicenter bonds -------------------------------
+    // endregion: Entity mutation: aromatic systems
+
+    // region: Entity mutation: multicenter bonds
 
     pub fn multicenter_bond_mut(&mut self, idx: MulticenterBondIdx) -> &mut MulticenterBondAst {
         Arc::make_mut(&mut self.multicenter_bonds).data_mut(RelationId::from(idx))
@@ -691,13 +723,17 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.multicenter_bonds).data_iter_mut()
     }
 
-    // -- Entity mutation: noncovalent bonds -------------------------------
+    // endregion: Entity mutation: multicenter bonds
+
+    // region: Entity mutation: noncovalent bonds
 
     pub fn noncovalent_bond_mut(&mut self, idx: NoncovalentBondIdx) -> &mut NoncovalentBondAst {
         Arc::make_mut(&mut self.noncovalent_bonds).data_mut(RelationId::from(idx))
     }
 
-    // -- Constraints ------------------------------------------------------
+    // endregion: Entity mutation: noncovalent bonds
+
+    // region: Constraints
 
     pub fn constraints(&self) -> &Constraints {
         &self.constraints
@@ -804,7 +840,9 @@ impl MoleculeAst {
         }
     }
 
-    // -- Topological mutation (via builder) --------------------------------
+    // endregion: Constraints
+
+    // region: Topological mutation (via builder)
 
     pub fn edit(&self) -> MoleculeBuilder {
         MoleculeBuilder::from_parts(
@@ -818,6 +856,7 @@ impl MoleculeAst {
             self.constraints.clone(),
         )
     }
+    // endregion: Topological mutation (via builder)
 }
 
 impl Index<AtomIdx> for MoleculeAst {

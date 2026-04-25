@@ -93,7 +93,7 @@ impl BondConstraints {
 
     /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = BondConstraint> {
-        std::mem::take(&mut self.0).into_iter()
+        mem::take(&mut self.0).into_iter()
     }
 
     /// No-op: no `BondConstraint` variant carries an entity index.

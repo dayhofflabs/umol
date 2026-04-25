@@ -242,7 +242,7 @@ impl<'de> FromEdn<'de> for MoleculeDsl {
     }
 }
 
-// -- Streaming parser -------------------
+// region: Streaming parser
 //
 // Single-pass parse of the molecule map directly off the source text, using
 // only the byte-level / typed primitives on `EdnStreamDeserializer`. Each
@@ -578,7 +578,9 @@ impl IntoAst<MoleculeAst> for MoleculeDsl {
     }
 }
 
-// -- Render --------------------
+// endregion: Streaming parser
+
+// region: Render
 
 fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     let mut map = EdnMap::with_capacity(8);
@@ -771,7 +773,9 @@ fn render_atom_aliases(meta: &Metadata) -> Edn<'static> {
     Edn::Vector(pairs.into())
 }
 
-// -- Private parse intermediate ---------------------------------------------
+// endregion: Render
+
+// region: Private parse intermediate
 //
 // Unresolved, owned-by-value tree that mirrors the EDN shape. Atom entries and
 // per-bond endpoints carry `AtomRef` (index or id); constraint leaves carry
@@ -780,7 +784,6 @@ fn render_atom_aliases(meta: &Metadata) -> Edn<'static> {
 // into the final `MoleculeAst`.
 
 #[derive(Clone, Debug, Default, PartialEq)]
-#[allow(dead_code)]
 pub(crate) struct MoleculeInput {
     pub(crate) atoms: Vec<AtomEntryInput>,
     pub(crate) bonds: Vec<BondEntryInput>,
@@ -795,21 +798,18 @@ pub(crate) struct MoleculeInput {
 /// Atom entry in a parsed molecule map. Mirrors the DSL spec §4 grammar
 /// `atom-entry ::= atom-spec | [ keyword atom-spec ]`.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) struct AtomEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) spec: AtomSpecInput,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) enum AtomSpecInput {
     Bare(Box<AtomDsl>),
     Alias(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) struct BondEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) a: AtomRef,
@@ -818,7 +818,6 @@ pub(crate) struct BondEntryInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) struct DativeBondEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) donor: AtomRef,
@@ -827,7 +826,6 @@ pub(crate) struct DativeBondEntryInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) struct AromaticSystemEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) atoms: Vec<AtomRef>,
@@ -835,7 +833,6 @@ pub(crate) struct AromaticSystemEntryInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) struct MulticenterBondEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) atoms: Vec<AtomRef>,
@@ -843,7 +840,6 @@ pub(crate) struct MulticenterBondEntryInput {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) struct NoncovalentBondEntryInput {
     pub(crate) id: Option<String>,
     pub(crate) a: AtomRef,
@@ -1021,7 +1017,9 @@ impl MoleculeInput {
     }
 }
 
-// -- Parse --------------------
+// endregion: Private parse intermediate
+
+// region: Parse
 
 fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeError> {
     let Edn::Map(m) = edn else {
@@ -1296,6 +1294,8 @@ fn check_id_disjoint(
     Ok(())
 }
 
+// endregion: Parse
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -1544,10 +1544,10 @@ mod tests {
     #[case::dative_section(r##"{:atoms ["C" "N"] :bonds [] :dative [{:id :d1 :donor 0 :acceptor 1 :type "#R"}]}"##)]
     #[case::noncovalent_section(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}]}"##)]
     #[case::atom_aliases(r##"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"##)]
-    #[case::constraints_connected(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected [0 1]}]}"##)]
+    #[case::constraints_connected(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"##)]
     #[case::constraints_bond_order_sum(r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type "1"} {:id :b2 :a 1 :b 2 :type "1"}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##)]
     #[case::constraints_atom_leaf_in_not(r##"{:atoms [[:c1 "C"]] :bonds [] :constraints [{:not {:atom [:c1 {:valence 3}]}}]}"##)]
-    #[case::constraints_nested_combinators(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:and [{:or [{:atom [0 {:valence 3}]} {:atom [0 {:valence 4}]}]} {:not {:connected [0 1]}}]}]}"##)]
+    #[case::constraints_nested_combinators(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:and [{:or [{:atom [0 {:valence 3}]} {:atom [0 {:valence 4}]}]} {:not {:connected {:atoms [0 1]}}}]}]}"##)]
     #[case::constraints_sub_pattern(r##"{:atoms ["C"] :bonds [] :constraints [{:sub-pattern {:anchor {:atoms [[0 0]]} :pattern {:atoms ["N"] :bonds []}}}]}"##)]
     #[case::constraints_atom_degree(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:atom [0 {:degree 3}]}]}"##)]
     #[case::constraints_atom_connectivity(r##"{:atoms ["C"] :bonds [] :constraints [{:atom [0 {:connectivity 4}]}]}"##)]
@@ -1688,7 +1688,17 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_edn_roundtrip_connected_constraint() {
-        let source = r##"{:atoms ["C" "C" "C"] :bonds [] :constraints [{:connected [0 1 2]}]}"##;
+        let source =
+            r##"{:atoms ["C" "C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1 2]}}]}"##;
+        let edn = read_string(source).unwrap();
+        let dsl = MoleculeDsl::from_edn(&edn).unwrap();
+        assert_eq!(dsl.to_edn(), edn);
+        assert_eq!(dsl.ast().constraints().len(), 1);
+    }
+
+    #[rstest]
+    fn test_molecule_dsl_edn_roundtrip_connected_all_atoms() {
+        let source = r##"{:atoms ["C" "C" "C"] :bonds [] :constraints [{:connected {}}]}"##;
         let edn = read_string(source).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.to_edn(), edn);
@@ -1714,7 +1724,8 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_constraint_unknown_ref_errors() {
-        let source = r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected [:nope 0]}]}"##;
+        let source =
+            r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [:nope 0]}}]}"##;
         let edn = read_string(source).unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
@@ -1747,7 +1758,7 @@ mod tests {
         assert_eq!(dsl.to_edn(), edn);
     }
 
-    // -- Entity endpoint ref errors ----------------
+    // region: Entity endpoint ref errors
 
     #[rstest]
     fn test_molecule_dsl_bond_endpoint_out_of_range_errors() {
@@ -1790,7 +1801,9 @@ mod tests {
         assert!(matches!(err, DeError::Custom(_)));
     }
 
-    // -- :type optionality ----------------
+    // endregion: Entity endpoint ref errors
+
+    // region: :type optionality
 
     #[rustfmt::skip]
     #[rstest]
@@ -1811,9 +1824,13 @@ mod tests {
         assert!(matches!(err, DeError::MissingField { .. }));
     }
 
-    // -- :guards reserved-future key ----------------
+    // endregion: :type optionality
 
-    // -- Per-variant streaming parity ----------------
+    // region: :guards reserved-future key
+
+    // endregion: :guards reserved-future key
+
+    // region: Per-variant streaming parity
 
     #[rustfmt::skip]
     #[rstest]
@@ -1874,7 +1891,9 @@ mod tests {
         assert_eq!(via_str, via_tree);
     }
 
-    // -- Streaming vs tree error parity ----------------
+    // endregion: Per-variant streaming parity
+
+    // region: Streaming vs tree error parity
 
     #[rstest]
     #[case::missing_key_value(r##"{:atoms}"##)]
@@ -1900,7 +1919,9 @@ mod tests {
         assert!(via_tree_err, "{source:?}: tree path should have errored");
     }
 
-    // -- Cross-entity id disjointness ----------------
+    // endregion: Streaming vs tree error parity
+
+    // region: Cross-entity id disjointness
 
     #[rustfmt::skip]
     #[rstest]
@@ -1915,7 +1936,9 @@ mod tests {
         assert!(matches!(err, DeError::Custom(_)));
     }
 
-    // -- Alias bijectivity ----------------
+    // endregion: Cross-entity id disjointness
+
+    // region: Alias bijectivity
 
     #[rstest]
     fn test_molecule_dsl_duplicate_alias_name_errors() {
@@ -1945,4 +1968,5 @@ mod tests {
         assert!(m.get_keyword("guards").is_none());
         assert_eq!(dsl.ast().atom_count(), 1);
     }
+    // endregion: Alias bijectivity
 }

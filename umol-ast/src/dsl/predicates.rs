@@ -13,7 +13,7 @@ use super::value::{fmt_value, value};
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::{Expr, RelOp, ValueAst};
 
-// -- Parse --------------------
+// region: Parse
 
 pub(crate) fn charge(i: &mut &str) -> PResult<ValueAst> {
     preceded(
@@ -79,7 +79,9 @@ pub(crate) fn apply_spin_pair(
     Ok(())
 }
 
-// -- Format --------------------
+// endregion: Parse
+
+// region: Format
 
 /// Convert `#z?z >= threshold` to syntactic sugar `#z+`
 pub(crate) fn is_plus_sugar(v: &ValueAst, name: &str, threshold: i64) -> bool {
@@ -144,7 +146,9 @@ pub(crate) fn fmt_ring_count(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::R
     }
 }
 
-// -- Raise --------------------
+// endregion: Format
+
+// region: Raise
 
 /// Fill defaults on a `SpinStateAst` per the given modes. Shared across
 /// atom/bond/aromatic-system/multicenter-bond DSL lowering (all entities that
@@ -183,7 +187,9 @@ pub(crate) fn raise_spin(
     spin.multiplicity = resolved_m;
 }
 
-// -- Lower --------------------
+// endregion: Raise
+
+// region: Lower
 
 /// Strip defaults from a `SpinStateAst` per the given modes. Compute `strip_m`
 /// first so that under (Derived, Derived) the tie-break keeps `u` explicit:
@@ -219,6 +225,8 @@ pub(crate) fn lower_spin(
         spin.multiplicity = ValueAst::Undetermined;
     }
 }
+
+// endregion: Lower
 
 #[cfg(test)]
 mod tests {

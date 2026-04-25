@@ -1,6 +1,6 @@
 //! Per-atom constraints.
 
-use std::mem::replace;
+use std::mem::{self, replace};
 
 use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
@@ -145,7 +145,7 @@ impl AtomConstraints {
     /// Move the entries out of the store, leaving it empty. Returned items
     /// are in the store's internal sorted-by-kind order.
     pub fn take(&mut self) -> impl Iterator<Item = AtomConstraint> {
-        std::mem::take(&mut self.entries).into_iter()
+        mem::take(&mut self.entries).into_iter()
     }
 
     pub fn remove(&mut self, kind: AtomConstraintKind) -> Option<AtomConstraint> {

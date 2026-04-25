@@ -136,21 +136,28 @@ impl Constraints {
 
 /// Molecule-scope predicates: non-logical, unanchored assertions whose scope
 /// is the molecule as a whole or a declared subset of entities.
+///
+/// For `ChargeSum` / `SpinSum` / `BondOrderSum` / `Connected`, an `atoms`
+/// (or `bonds`) value of `None` denotes the entire molecule's atoms (or
+/// bonds), making the predicate stable across structural growth. `Some(vec)`
+/// denotes a fixed subset.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraint {
     ChargeSum {
-        atoms: Vec<AtomIdx>,
+        atoms: Option<Vec<AtomIdx>>,
         sum: ValueAst,
     },
     SpinSum {
-        atoms: Vec<AtomIdx>,
+        atoms: Option<Vec<AtomIdx>>,
         spin: SpinStateAst,
     },
     BondOrderSum {
-        bonds: Vec<BondIdx>,
+        bonds: Option<Vec<BondIdx>>,
         sum: ValueAst,
     },
-    Connected(Vec<AtomIdx>),
+    Connected {
+        atoms: Option<Vec<AtomIdx>>,
+    },
     SubPattern {
         anchor: SubPatternAnchor,
         pattern: Box<MoleculeAst>,
@@ -161,25 +168,57 @@ impl MoleculeConstraint {
     pub fn remap(self, remap: &IdxRemapping) -> Option<Self> {
         match self {
             MoleculeConstraint::ChargeSum { atoms, sum } => {
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
-                atoms.map(|atoms| MoleculeConstraint::ChargeSum { atoms, sum })
+                let atoms = remap_atom_subset(atoms, remap)?;
+                Some(MoleculeConstraint::ChargeSum { atoms, sum })
             }
             MoleculeConstraint::SpinSum { atoms, spin } => {
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
-                atoms.map(|atoms| MoleculeConstraint::SpinSum { atoms, spin })
+                let atoms = remap_atom_subset(atoms, remap)?;
+                Some(MoleculeConstraint::SpinSum { atoms, spin })
             }
             MoleculeConstraint::BondOrderSum { bonds, sum } => {
-                let bonds: Option<Vec<_>> = bonds.into_iter().map(|b| remap.bond(b)).collect();
-                bonds.map(|bonds| MoleculeConstraint::BondOrderSum { bonds, sum })
+                let bonds = remap_bond_subset(bonds, remap)?;
+                Some(MoleculeConstraint::BondOrderSum { bonds, sum })
             }
-            MoleculeConstraint::Connected(atoms) => {
-                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
-                atoms.map(MoleculeConstraint::Connected)
+            MoleculeConstraint::Connected { atoms } => {
+                let atoms = remap_atom_subset(atoms, remap)?;
+                Some(MoleculeConstraint::Connected { atoms })
             }
             MoleculeConstraint::SubPattern { anchor, pattern } => anchor
                 .remap(remap)
                 .map(|anchor| MoleculeConstraint::SubPattern { anchor, pattern }),
         }
+    }
+}
+
+/// Remap an `Option<Vec<AtomIdx>>`. `None` (all atoms) passes through.
+/// `Some(vec)` remaps each element; if any atom was removed the whole
+/// constraint is dropped (returns outer `None`).
+fn remap_atom_subset(
+    atoms: Option<Vec<AtomIdx>>,
+    remap: &IdxRemapping,
+) -> Option<Option<Vec<AtomIdx>>> {
+    match atoms {
+        None => Some(None),
+        Some(vec) => vec
+            .into_iter()
+            .map(|a| remap.atom(a))
+            .collect::<Option<Vec<_>>>()
+            .map(Some),
+    }
+}
+
+/// Remap an `Option<Vec<BondIdx>>`. Same semantics as `remap_atom_subset`.
+fn remap_bond_subset(
+    bonds: Option<Vec<BondIdx>>,
+    remap: &IdxRemapping,
+) -> Option<Option<Vec<BondIdx>>> {
+    match bonds {
+        None => Some(None),
+        Some(vec) => vec
+            .into_iter()
+            .map(|b| remap.bond(b))
+            .collect::<Option<Vec<_>>>()
+            .map(Some),
     }
 }
 
@@ -359,8 +398,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(vec![], 0)]
-    #[case::molecule_leaves(vec![Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: vec![AtomIdx(0), AtomIdx(1)], sum: ValueAst::Lit(0) }),
-            Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: vec![AtomIdx(0)], spin: SpinStateAst::new(0, 1) })], 2)]
+    #[case::molecule_leaves(vec![Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]), sum: ValueAst::Lit(0) }),
+            Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0)]), spin: SpinStateAst::new(0, 1) })], 2)]
     #[case::combinator(vec![Constraint::And(vec![Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
             Constraint::Bond(BondIdx(0), BondConstraint::Aromatic)])], 1)]
     fn test_constraints_push(
@@ -379,7 +418,7 @@ mod tests {
     fn test_constraints_retain() {
         let mut cs = Constraints::new();
         cs.push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: vec![AtomIdx(0)],
+            atoms: Some(vec![AtomIdx(0)]),
             sum: ValueAst::Lit(0),
         }));
         cs.push(Constraint::And(vec![]));
@@ -391,12 +430,11 @@ mod tests {
     #[rstest]
     fn test_constraints_take_drains() {
         let mut cs = Constraints::new();
-        cs.push(Constraint::Molecule(MoleculeConstraint::Connected(vec![
-            AtomIdx(0),
-            AtomIdx(1),
-        ])));
+        cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomIdx(0), AtomIdx(1)]),
+        }));
         cs.push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: vec![AtomIdx(0)],
+            atoms: Some(vec![AtomIdx(0)]),
             sum: ValueAst::Lit(0),
         }));
 
@@ -408,9 +446,9 @@ mod tests {
     #[rstest]
     fn test_constraints_clear() {
         let mut cs = Constraints::new();
-        cs.push(Constraint::Molecule(MoleculeConstraint::Connected(vec![
-            AtomIdx(0),
-        ])));
+        cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomIdx(0)]),
+        }));
         cs.clear();
         assert!(cs.is_empty());
     }
@@ -642,39 +680,54 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::charge_sum_shifts(
-        MoleculeConstraint::ChargeSum { atoms: vec![AtomIdx(0), AtomIdx(2)], sum: ValueAst::Lit(1) },
+        MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomIdx(0), AtomIdx(2)]), sum: ValueAst::Lit(1) },
         idx_remapping(vec![1], vec![]),
-        Some(MoleculeConstraint::ChargeSum { atoms: vec![AtomIdx(0), AtomIdx(1)], sum: ValueAst::Lit(1) }),
+        Some(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]), sum: ValueAst::Lit(1) }),
     )]
     #[case::charge_sum_drops_when_atom_removed(
-        MoleculeConstraint::ChargeSum { atoms: vec![AtomIdx(1), AtomIdx(2)], sum: ValueAst::Lit(0) },
+        MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomIdx(1), AtomIdx(2)]), sum: ValueAst::Lit(0) },
         idx_remapping(vec![1], vec![]),
         None,
+    )]
+    #[case::charge_sum_all_atoms_passes_through(
+        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) },
+        idx_remapping(vec![1], vec![]),
+        Some(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }),
     )]
     #[case::spin_sum_shifts(
-        MoleculeConstraint::SpinSum { atoms: vec![AtomIdx(0), AtomIdx(2)], spin: SpinStateAst::new(0, 1) },
+        MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0), AtomIdx(2)]), spin: SpinStateAst::new(0, 1) },
         idx_remapping(vec![1], vec![]),
-        Some(MoleculeConstraint::SpinSum { atoms: vec![AtomIdx(0), AtomIdx(1)], spin: SpinStateAst::new(0, 1) }),
+        Some(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]), spin: SpinStateAst::new(0, 1) }),
     )]
     #[case::bond_order_sum_shifts(
-        MoleculeConstraint::BondOrderSum { bonds: vec![BondIdx(0), BondIdx(2)], sum: ValueAst::Lit(4) },
+        MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondIdx(0), BondIdx(2)]), sum: ValueAst::Lit(4) },
         idx_remapping(vec![], vec![1]),
-        Some(MoleculeConstraint::BondOrderSum { bonds: vec![BondIdx(0), BondIdx(1)], sum: ValueAst::Lit(4) }),
+        Some(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondIdx(0), BondIdx(1)]), sum: ValueAst::Lit(4) }),
     )]
     #[case::bond_order_sum_drops_when_bond_removed(
-        MoleculeConstraint::BondOrderSum { bonds: vec![BondIdx(1)], sum: ValueAst::Lit(2) },
+        MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondIdx(1)]), sum: ValueAst::Lit(2) },
         idx_remapping(vec![], vec![1]),
         None,
     )]
+    #[case::bond_order_sum_all_bonds_passes_through(
+        MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(0) },
+        idx_remapping(vec![], vec![1]),
+        Some(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(0) }),
+    )]
     #[case::connected_shifts(
-        MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(2), AtomIdx(3)]),
+        MoleculeConstraint::Connected { atoms: Some(vec![AtomIdx(0), AtomIdx(2), AtomIdx(3)]) },
         idx_remapping(vec![1], vec![]),
-        Some(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)])),
+        Some(MoleculeConstraint::Connected { atoms: Some(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)]) }),
     )]
     #[case::connected_drops_when_atom_removed(
-        MoleculeConstraint::Connected(vec![AtomIdx(1)]),
+        MoleculeConstraint::Connected { atoms: Some(vec![AtomIdx(1)]) },
         idx_remapping(vec![1], vec![]),
         None,
+    )]
+    #[case::connected_all_atoms_passes_through(
+        MoleculeConstraint::Connected { atoms: None },
+        idx_remapping(vec![1], vec![]),
+        Some(MoleculeConstraint::Connected { atoms: None }),
     )]
     fn test_molecule_constraint_remap_variants(
         #[case] c: MoleculeConstraint,

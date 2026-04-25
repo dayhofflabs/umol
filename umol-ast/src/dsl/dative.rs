@@ -95,7 +95,7 @@ impl IntoAst<DativeBondAst> for DativeBondDsl {
     }
 }
 
-// -- Parse --------------------
+// region: Parse
 
 /// Parse a complete dative-bond-string into a `DativeBondDsl`.
 pub fn parse_dative_bond(input: &str) -> Result<DativeBondDsl, ParseError> {
@@ -162,7 +162,9 @@ fn apply_predicates(
     Ok(())
 }
 
-// -- Format --------------------
+// endregion: Parse
+
+// region: Format
 
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraint) -> fmt::Result {
     match c {
@@ -179,7 +181,9 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraint) -> fmt::
     }
 }
 
-// -- Constraint DSL -------------------
+// endregion: Format
+
+// region: Constraint DSL
 
 /// Surface DSL wrapper around the narrow `DativeBondConstraint`. EDN form is
 /// a single-key map keyed by the constraint kind: `{:ring-count <value>}` or
@@ -256,6 +260,8 @@ impl DativeBondConstraintDsl {
         }
     }
 }
+
+// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {
@@ -337,7 +343,7 @@ mod tests {
         assert_eq!(via_stream, via_tree);
     }
 
-    // -- DativeBondConstraintDsl ----------------
+    // region: DativeBondConstraintDsl
 
     #[rustfmt::skip]
     #[rstest]
@@ -368,4 +374,5 @@ mod tests {
         let err = DativeBondConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::UnknownField { .. }));
     }
+    // endregion: DativeBondConstraintDsl
 }

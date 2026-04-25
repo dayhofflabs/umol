@@ -24,90 +24,118 @@ use super::molecule::Metadata;
 use crate::ast::constraint::RelationalConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
 
-/// Surface DSL wrapper around `RelationalConstraint`. Structural parallel
-/// to the AST enum — same 18 variants, with surface refs in place of raw
-/// indices.
+/// Surface DSL wrapper around [`RelationalConstraint`]. Structural parallel
+/// to the AST enum — same 18 variants, with surface refs ([`AtomRef`],
+/// [`DativeBondRef`], etc.) in place of raw `*Idx`. Each variant's EDN
+/// form is a flat single-key map `{:<entity>-<role> [<owner_ref> <target>]}`.
+/// See the AST enum for per-variant semantics.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RelationalConstraintDsl {
-    // -- Dative bond ---------------------------------------------------
+    // region: Dative bond
+    /// EDN: `{:dative-bond-donor [<dative_ref> <atom_ref>]}`.
     DativeBondDonor {
         bond: DativeBondRef,
         atom: AtomRef,
     },
+    /// EDN: `{:dative-bond-acceptor [<dative_ref> <atom_ref>]}`.
     DativeBondAcceptor {
         bond: DativeBondRef,
         atom: AtomRef,
     },
+    /// EDN: `{:dative-bond-parallels [<dative_ref> <bond_ref>]}`.
     DativeBondParallels {
         dative: DativeBondRef,
         parallel: BondRef,
     },
+    /// EDN: `{:dative-bond-donor-satisfies [<dative_ref> <atom-constraint>]}`.
     DativeBondDonorSatisfies {
         bond: DativeBondRef,
         predicate: Box<AtomConstraintDsl>,
     },
+    /// EDN: `{:dative-bond-acceptor-satisfies [<dative_ref> <atom-constraint>]}`.
     DativeBondAcceptorSatisfies {
         bond: DativeBondRef,
         predicate: Box<AtomConstraintDsl>,
     },
 
-    // -- Aromatic system -----------------------------------------------
+    // endregion: Dative bond
+
+    // region: Aromatic system
+    /// EDN: `{:aromatic-system-atoms [<system_ref> [<atom_ref>+]]}`.
     AromaticSystemAtoms {
         system: AromaticSystemRef,
         atoms: Vec<AtomRef>,
     },
+    /// EDN: `{:aromatic-system-contains [<system_ref> <atom_ref>]}`.
     AromaticSystemContains {
         system: AromaticSystemRef,
         atom: AtomRef,
     },
+    /// EDN: `{:aromatic-system-contains-all [<system_ref> [<atom_ref>+]]}`.
     AromaticSystemContainsAll {
         system: AromaticSystemRef,
         atoms: Vec<AtomRef>,
     },
+    /// EDN: `{:aromatic-system-all-atoms [<system_ref> <atom-constraint>]}`.
     AromaticSystemAllAtoms {
         system: AromaticSystemRef,
         predicate: Box<AtomConstraintDsl>,
     },
+    /// EDN: `{:aromatic-system-any-atom [<system_ref> <atom-constraint>]}`.
     AromaticSystemAnyAtom {
         system: AromaticSystemRef,
         predicate: Box<AtomConstraintDsl>,
     },
 
-    // -- Multicenter bond ----------------------------------------------
+    // endregion: Aromatic system
+
+    // region: Multicenter bond
+    /// EDN: `{:multicenter-bond-atoms [<bond_ref> [<atom_ref>+]]}`.
     MulticenterBondAtoms {
         bond: MulticenterBondRef,
         atoms: Vec<AtomRef>,
     },
+    /// EDN: `{:multicenter-bond-contains [<bond_ref> <atom_ref>]}`.
     MulticenterBondContains {
         bond: MulticenterBondRef,
         atom: AtomRef,
     },
+    /// EDN: `{:multicenter-bond-contains-all [<bond_ref> [<atom_ref>+]]}`.
     MulticenterBondContainsAll {
         bond: MulticenterBondRef,
         atoms: Vec<AtomRef>,
     },
+    /// EDN: `{:multicenter-bond-all-atoms [<bond_ref> <atom-constraint>]}`.
     MulticenterBondAllAtoms {
         bond: MulticenterBondRef,
         predicate: Box<AtomConstraintDsl>,
     },
+    /// EDN: `{:multicenter-bond-any-atom [<bond_ref> <atom-constraint>]}`.
     MulticenterBondAnyAtom {
         bond: MulticenterBondRef,
         predicate: Box<AtomConstraintDsl>,
     },
 
-    // -- Noncovalent bond ----------------------------------------------
+    // endregion: Multicenter bond
+
+    // region: Noncovalent bond
+    /// EDN: `{:noncovalent-bond-ends [<bond_ref> [<atom_ref> <atom_ref>]]}`.
     NoncovalentBondEnds {
         bond: NoncovalentBondRef,
         atoms: [AtomRef; 2],
     },
+    /// EDN: `{:noncovalent-bond-contains [<bond_ref> <atom_ref>]}`.
     NoncovalentBondContains {
         bond: NoncovalentBondRef,
         atom: AtomRef,
     },
+    /// EDN: `{:noncovalent-bond-ends-satisfy [<bond_ref>
+    /// [<atom-constraint> <atom-constraint>]]}`.
     NoncovalentBondEndsSatisfy {
         bond: NoncovalentBondRef,
         predicates: [Box<AtomConstraintDsl>; 2],
     },
+    // endregion: Noncovalent bond
 }
 
 /// Top-level EDN keywords for every relational variant. Matches the
@@ -375,7 +403,7 @@ impl RelationalConstraintDsl {
     }
 }
 
-// -- EDN payload codec --------------------
+// region: EDN payload codec
 
 /// Render the `[owner_ref <target>]` 2-element pair shared by every variant.
 fn render_pair(owner: Edn<'static>, target: Edn<'static>) -> Edn<'static> {
@@ -649,6 +677,8 @@ fn parse_payload<'de>(key: &str, edn: &Edn<'de>) -> Result<RelationalConstraintD
     })
 }
 
+// endregion: EDN payload codec
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -681,117 +711,37 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::dative_donor(
-        RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(0), atom: AtomIdx(2) },
-        "{:dative-bond-donor [0 2]}",
-    )]
-    #[case::dative_acceptor(
-        RelationalConstraint::DativeBondAcceptor { bond: DativeBondIdx(1), atom: AtomIdx(3) },
-        "{:dative-bond-acceptor [1 3]}",
-    )]
-    #[case::dative_parallels(
-        RelationalConstraint::DativeBondParallels { dative: DativeBondIdx(0), parallel: BondIdx(2) },
-        "{:dative-bond-parallels [0 2]}",
-    )]
-    #[case::dative_donor_satisfies(
-        RelationalConstraint::DativeBondDonorSatisfies {
-            bond: DativeBondIdx(0),
-            predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))),
-        },
-        "{:dative-bond-donor-satisfies [0 {:valence 3}]}",
-    )]
-    #[case::dative_acceptor_satisfies(
-        RelationalConstraint::DativeBondAcceptorSatisfies {
-            bond: DativeBondIdx(0),
-            predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(2))),
-        },
-        "{:dative-bond-acceptor-satisfies [0 {:degree 2}]}",
-    )]
-    #[case::aromatic_system_atoms(
-        RelationalConstraint::AromaticSystemAtoms {
-            system: AromaticSystemIdx(0),
-            atoms: vec![AtomIdx(0), AtomIdx(1)],
-        },
-        "{:aromatic-system-atoms [0 [0 1]]}",
-    )]
-    #[case::aromatic_system_contains(
-        RelationalConstraint::AromaticSystemContains { system: AromaticSystemIdx(0), atom: AtomIdx(2) },
-        "{:aromatic-system-contains [0 2]}",
-    )]
-    #[case::aromatic_system_contains_all(
-        RelationalConstraint::AromaticSystemContainsAll {
-            system: AromaticSystemIdx(0),
-            atoms: vec![AtomIdx(2), AtomIdx(5)],
-        },
-        "{:aromatic-system-contains-all [0 [2 5]]}",
-    )]
-    #[case::aromatic_system_all_atoms(
-        RelationalConstraint::AromaticSystemAllAtoms {
-            system: AromaticSystemIdx(0),
-            predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))),
-        },
-        "{:aromatic-system-all-atoms [0 {:valence 4}]}",
-    )]
-    #[case::aromatic_system_any_atom(
-        RelationalConstraint::AromaticSystemAnyAtom {
-            system: AromaticSystemIdx(0),
-            predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))),
-        },
-        "{:aromatic-system-any-atom [0 {:degree 3}]}",
-    )]
-    #[case::multicenter_atoms(
-        RelationalConstraint::MulticenterBondAtoms {
-            bond: MulticenterBondIdx(0),
-            atoms: vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
-        },
-        "{:multicenter-bond-atoms [0 [0 1 2]]}",
-    )]
-    #[case::multicenter_contains(
-        RelationalConstraint::MulticenterBondContains { bond: MulticenterBondIdx(0), atom: AtomIdx(3) },
-        "{:multicenter-bond-contains [0 3]}",
-    )]
-    #[case::multicenter_contains_all(
-        RelationalConstraint::MulticenterBondContainsAll {
-            bond: MulticenterBondIdx(0),
-            atoms: vec![AtomIdx(0), AtomIdx(1)],
-        },
-        "{:multicenter-bond-contains-all [0 [0 1]]}",
-    )]
-    #[case::multicenter_all_atoms(
-        RelationalConstraint::MulticenterBondAllAtoms {
-            bond: MulticenterBondIdx(0),
-            predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))),
-        },
-        "{:multicenter-bond-all-atoms [0 {:valence 4}]}",
-    )]
-    #[case::multicenter_any_atom(
-        RelationalConstraint::MulticenterBondAnyAtom {
-            bond: MulticenterBondIdx(0),
-            predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))),
-        },
-        "{:multicenter-bond-any-atom [0 {:degree 3}]}",
-    )]
-    #[case::noncovalent_ends(
-        RelationalConstraint::NoncovalentBondEnds {
-            bond: NoncovalentBondIdx(0),
-            atoms: [AtomIdx(0), AtomIdx(3)],
-        },
-        "{:noncovalent-bond-ends [0 [0 3]]}",
-    )]
-    #[case::noncovalent_contains(
-        RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondIdx(0), atom: AtomIdx(2) },
-        "{:noncovalent-bond-contains [0 2]}",
-    )]
-    #[case::noncovalent_ends_satisfy(
-        RelationalConstraint::NoncovalentBondEndsSatisfy {
-            bond: NoncovalentBondIdx(0),
-            predicates: [
-                Box::new(AtomConstraint::Valence(ValueAst::Lit(2))),
-                Box::new(AtomConstraint::Valence(ValueAst::Lit(3))),
-            ],
-        },
-        "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}",
-    )]
+    #[case::dative_donor(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(0), atom: AtomIdx(2) }, "{:dative-bond-donor [0 2]}")]
+    #[case::dative_acceptor(RelationalConstraint::DativeBondAcceptor { bond: DativeBondIdx(1), atom: AtomIdx(3) }, "{:dative-bond-acceptor [1 3]}")]
+    #[case::dative_parallels(RelationalConstraint::DativeBondParallels { dative: DativeBondIdx(0), parallel: BondIdx(2) }, "{:dative-bond-parallels [0 2]}")]
+    #[case::dative_donor_satisfies(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondIdx(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))) },
+        "{:dative-bond-donor-satisfies [0 {:valence 3}]}")]
+    #[case::dative_acceptor_satisfies(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondIdx(0),
+        predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(2))) }, "{:dative-bond-acceptor-satisfies [0 {:degree 2}]}")]
+    #[case::aromatic_system_atoms(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemIdx(0), atoms: vec![AtomIdx(0), AtomIdx(1)] },
+        "{:aromatic-system-atoms [0 [0 1]]}")]
+    #[case::aromatic_system_contains(RelationalConstraint::AromaticSystemContains { system: AromaticSystemIdx(0), atom: AtomIdx(2) }, "{:aromatic-system-contains [0 2]}")]
+    #[case::aromatic_system_contains_all(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemIdx(0), atoms: vec![AtomIdx(2), AtomIdx(5)] },
+        "{:aromatic-system-contains-all [0 [2 5]]}")]
+    #[case::aromatic_system_all_atoms(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemIdx(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) },
+        "{:aromatic-system-all-atoms [0 {:valence 4}]}")]
+    #[case::aromatic_system_any_atom(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemIdx(0), predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))) },
+        "{:aromatic-system-any-atom [0 {:degree 3}]}")]
+    #[case::multicenter_atoms(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondIdx(0), atoms: vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)] },
+        "{:multicenter-bond-atoms [0 [0 1 2]]}")]
+    #[case::multicenter_contains(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondIdx(0), atom: AtomIdx(3) }, "{:multicenter-bond-contains [0 3]}")]
+    #[case::multicenter_contains_all(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondIdx(0), atoms: vec![AtomIdx(0), AtomIdx(1)] },
+        "{:multicenter-bond-contains-all [0 [0 1]]}")]
+    #[case::multicenter_all_atoms(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondIdx(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) },
+        "{:multicenter-bond-all-atoms [0 {:valence 4}]}")]
+    #[case::multicenter_any_atom(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondIdx(0), predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))) },
+        "{:multicenter-bond-any-atom [0 {:degree 3}]}")]
+    #[case::noncovalent_ends(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondIdx(0), atoms: [AtomIdx(0), AtomIdx(3)] },
+        "{:noncovalent-bond-ends [0 [0 3]]}")]
+    #[case::noncovalent_contains(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondIdx(0), atom: AtomIdx(2) }, "{:noncovalent-bond-contains [0 2]}")]
+    #[case::noncovalent_ends_satisfy(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondIdx(0),
+        predicates: [Box::new(AtomConstraint::Valence(ValueAst::Lit(2))), Box::new(AtomConstraint::Valence(ValueAst::Lit(3)))] },
+        "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}")]
     fn test_relational_constraint_dsl_roundtrip(
         meta: Metadata,
         full_counts: EntityCounts,

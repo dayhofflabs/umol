@@ -101,7 +101,7 @@ impl IntoAst<BondAst> for BondDsl {
     }
 }
 
-// -- Parse --------------------
+// region: Parse
 
 /// Parse a complete bond-string into a `BondDsl`.
 pub fn parse_bond(input: &str) -> Result<BondDsl, ParseError> {
@@ -189,7 +189,9 @@ fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(),
     Ok(())
 }
 
-// -- Format --------------------
+// endregion: Parse
+
+// region: Format
 
 fn fmt_bond_ast(f: &mut fmt::Formatter<'_>, ast: &BondAst) -> fmt::Result {
     match &ast.order {
@@ -218,7 +220,9 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
     }
 }
 
-// -- Lower --------------------
+// endregion: Format
+
+// region: Lower
 
 fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondAst field is a compile error
@@ -239,7 +243,9 @@ fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// -- Raise --------------------
+// endregion: Lower
+
+// region: Raise
 
 fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondAst field is a compile error
@@ -260,7 +266,9 @@ fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// -- Constraint DSL -------------------
+// endregion: Raise
+
+// region: Constraint DSL
 
 /// Surface DSL wrapper around `BondConstraint`. EDN form: the keyword
 /// `:aromatic` (flag variant, no value) or a single-key map
@@ -344,6 +352,8 @@ fn bond_constraint_single_key(key: &str, v: &ValueAst) -> Edn<'static> {
     );
     Edn::Map(m)
 }
+
+// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {
@@ -488,7 +498,7 @@ mod tests {
         assert_eq!(via_stream, via_tree);
     }
 
-    // -- BondConstraintDsl ----------------
+    // region: BondConstraintDsl
 
     #[rustfmt::skip]
     #[rstest]
@@ -534,4 +544,5 @@ mod tests {
             )))
         );
     }
+    // endregion: BondConstraintDsl
 }

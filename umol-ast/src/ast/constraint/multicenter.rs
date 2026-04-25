@@ -6,6 +6,7 @@
 //! kept (empty for now) so future value-only multicenter-bond constraints
 //! can be added here without reshaping the AST or DSL surface.
 
+use std::mem;
 use std::slice::Iter;
 
 use super::super::remap::IdxRemapping;
@@ -70,7 +71,7 @@ impl MulticenterBondConstraints {
 
     /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = MulticenterBondConstraint> {
-        std::mem::take(&mut self.0).into_iter()
+        mem::take(&mut self.0).into_iter()
     }
 
     pub fn remap(self, _remap: &IdxRemapping) -> Self {

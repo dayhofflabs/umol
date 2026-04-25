@@ -26,87 +26,124 @@ use super::super::idx::{
 use super::super::remap::IdxRemapping;
 use super::atom::AtomConstraint;
 
+/// Cross-entity constraint relating one DAMN entity (dative bond, aromatic
+/// system, multicenter bond, noncovalent bond) to atoms, bonds, or atom
+/// predicates by reference. Lives only at molecule scope (in
+/// [`Constraint::Relational`](super::Constraint::Relational) or inside
+/// `And`/`Or`/`Not`); cannot appear inline on an entity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RelationalConstraint {
-    // -- Dative bond ---------------------------------------------------
+    // region: Dative bond
+    /// The donor end of dative bond `bond` is `atom`.
     DativeBondDonor {
         bond: DativeBondIdx,
         atom: AtomIdx,
     },
+    /// The acceptor end of dative bond `bond` is `atom`.
     DativeBondAcceptor {
         bond: DativeBondIdx,
         atom: AtomIdx,
     },
+    /// Dative bond `dative` is parallel to a covalent bond `parallel`
+    /// (same atom pair).
     DativeBondParallels {
         dative: DativeBondIdx,
         parallel: BondIdx,
     },
+    /// The donor end of dative bond `bond` satisfies `predicate`.
     DativeBondDonorSatisfies {
         bond: DativeBondIdx,
         predicate: Box<AtomConstraint>,
     },
+    /// The acceptor end of dative bond `bond` satisfies `predicate`.
     DativeBondAcceptorSatisfies {
         bond: DativeBondIdx,
         predicate: Box<AtomConstraint>,
     },
 
-    // -- Aromatic system -----------------------------------------------
+    // endregion: Dative bond
+
+    // region: Aromatic system
+    /// Aromatic system `system` consists of exactly `atoms` (as a set).
     AromaticSystemAtoms {
         system: AromaticSystemIdx,
         atoms: Vec<AtomIdx>,
     },
+    /// `atom` is one of the atoms participating in aromatic system `system`.
     AromaticSystemContains {
         system: AromaticSystemIdx,
         atom: AtomIdx,
     },
+    /// Every atom in `atoms` participates in aromatic system `system`
+    /// (set inclusion, not equality).
     AromaticSystemContainsAll {
         system: AromaticSystemIdx,
         atoms: Vec<AtomIdx>,
     },
+    /// Every atom of aromatic system `system` satisfies `predicate`.
     AromaticSystemAllAtoms {
         system: AromaticSystemIdx,
         predicate: Box<AtomConstraint>,
     },
+    /// At least one atom of aromatic system `system` satisfies `predicate`.
     AromaticSystemAnyAtom {
         system: AromaticSystemIdx,
         predicate: Box<AtomConstraint>,
     },
 
-    // -- Multicenter bond ----------------------------------------------
+    // endregion: Aromatic system
+
+    // region: Multicenter bond
+    /// Multicenter bond `bond` consists of exactly `atoms` (as a set).
     MulticenterBondAtoms {
         bond: MulticenterBondIdx,
         atoms: Vec<AtomIdx>,
     },
+    /// `atom` is one of the participants in multicenter bond `bond`.
     MulticenterBondContains {
         bond: MulticenterBondIdx,
         atom: AtomIdx,
     },
+    /// Every atom in `atoms` participates in multicenter bond `bond`.
     MulticenterBondContainsAll {
         bond: MulticenterBondIdx,
         atoms: Vec<AtomIdx>,
     },
+    /// Every participating atom of multicenter bond `bond` satisfies
+    /// `predicate`.
     MulticenterBondAllAtoms {
         bond: MulticenterBondIdx,
         predicate: Box<AtomConstraint>,
     },
+    /// At least one participating atom of multicenter bond `bond` satisfies
+    /// `predicate`.
     MulticenterBondAnyAtom {
         bond: MulticenterBondIdx,
         predicate: Box<AtomConstraint>,
     },
 
-    // -- Noncovalent bond ----------------------------------------------
+    // endregion: Multicenter bond
+
+    // region: Noncovalent bond
+    /// Noncovalent bond `bond` connects exactly the pair `atoms` (unordered).
     NoncovalentBondEnds {
         bond: NoncovalentBondIdx,
         atoms: [AtomIdx; 2],
     },
+    /// `atom` is one of the two endpoints of noncovalent bond `bond`.
     NoncovalentBondContains {
         bond: NoncovalentBondIdx,
         atom: AtomIdx,
     },
+    /// The two endpoints of noncovalent bond `bond` satisfy `predicates[0]`
+    /// and `predicates[1]` respectively. Order is not symmetric: the bond
+    /// stores its endpoints as an unordered pair, but each predicate is
+    /// associated with one specific slot.
     NoncovalentBondEndsSatisfy {
         bond: NoncovalentBondIdx,
         predicates: [Box<AtomConstraint>; 2],
     },
+    // endregion: Noncovalent bond
 }
 
 impl RelationalConstraint {

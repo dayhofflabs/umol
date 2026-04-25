@@ -11,7 +11,6 @@ use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer
 use super::aromatic::AromaticSystemConstraintDsl;
 use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
 use super::bond::BondConstraintDsl;
-use super::config::MoleculeDefaults;
 use super::dative::DativeBondConstraintDsl;
 use super::error::ParseError;
 use super::molecule::{Metadata, MoleculeDsl};
@@ -19,13 +18,17 @@ use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
 use super::value::{parse_value, ValueDsl};
-use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
+use crate::ast::constraint::{
+    AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints,
+    MoleculeConstraint, MulticenterValenceAst, SubPatternAnchor,
+};
 use crate::ast::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::value::ValueAst;
 
 /// Per-entity counts for numeric-index bounds checking during constraint
 /// resolution (DSL → AST). `from_ast` (AST → DSL) does not read counts.
@@ -55,7 +58,7 @@ impl EntityCounts {
     }
 }
 
-// -- Streaming-parser helpers ------------------
+// region: Streaming-parser helpers
 //
 // Shared across the constraint-tree readers here and the molecule-map reader
 // in `super::molecule`.
@@ -286,12 +289,9 @@ define_ref!(
     read_noncovalent_bond_ref
 );
 
-// -- Streaming constraint readers ------------------
+// endregion: Streaming-parser helpers
 
-use crate::ast::constraint::{
-    AromaticValenceAst, AtomConstraint, BondConstraint, MulticenterValenceAst,
-};
-use crate::ast::value::ValueAst;
+// region: Streaming constraint readers
 
 pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
@@ -637,14 +637,12 @@ pub(super) fn read_relational_constraint_dsl(
                 predicates: [Box::new(a), Box::new(b)],
             }
         }
-        other => unreachable!("read_relational_constraint_dsl called with non-relational key {other}"),
+        other => {
+            unreachable!("read_relational_constraint_dsl called with non-relational key {other}")
+        }
     };
     if !de.try_consume_byte(b']')? {
-        return Err(DeError::Custom(format!(
-            "{}: expected 2 elements",
-            key
-        ))
-        .into());
+        return Err(DeError::Custom(format!("{}: expected 2 elements", key)).into());
     }
     Ok(c)
 }
@@ -722,7 +720,7 @@ pub(super) fn read_molecule_constraint_dsl(
                 Ok(())
             })?;
             MoleculeConstraintDsl::ChargeSum {
-                atoms: atoms.ok_or_else(|| missing("atoms", "charge-sum"))?,
+                atoms,
                 sum: sum.ok_or_else(|| missing("sum", "charge-sum"))?,
             }
         }
@@ -738,7 +736,7 @@ pub(super) fn read_molecule_constraint_dsl(
                 Ok(())
             })?;
             MoleculeConstraintDsl::SpinSum {
-                atoms: atoms.ok_or_else(|| missing("atoms", "spin-sum"))?,
+                atoms,
                 spin: spin.ok_or_else(|| missing("spin", "spin-sum"))?,
             }
         }
@@ -754,11 +752,21 @@ pub(super) fn read_molecule_constraint_dsl(
                 Ok(())
             })?;
             MoleculeConstraintDsl::BondOrderSum {
-                bonds: bonds.ok_or_else(|| missing("bonds", "bond-order-sum"))?,
+                bonds,
                 sum: sum.ok_or_else(|| missing("sum", "bond-order-sum"))?,
             }
         }
-        "connected" => MoleculeConstraintDsl::Connected(read_vec(de, read_atom_ref)?),
+        "connected" => {
+            let mut atoms = None;
+            read_map(de, |d, k| {
+                match k {
+                    "atoms" => atoms = Some(read_vec(d, read_atom_ref)?),
+                    _ => d.read_skip_value()?,
+                }
+                Ok(())
+            })?;
+            MoleculeConstraintDsl::Connected { atoms }
+        }
         "sub-pattern" => {
             let mut anchor = None;
             let mut pattern = None;
@@ -767,10 +775,10 @@ pub(super) fn read_molecule_constraint_dsl(
                     "anchor" => anchor = Some(read_sub_pattern_anchor_dsl(d)?),
                     "pattern" => {
                         let input = super::molecule::read_molecule_input(d)?;
-                        let (ast, metadata) = input
+                        let (ast, _metadata) = input
                             .into_ast()
                             .map_err(|e| DeError::Custom(e.to_string()))?;
-                        pattern = Some(Box::new(MoleculeDsl::from_parts(ast, metadata)));
+                        pattern = Some(Box::new(ast));
                     }
                     _ => d.read_skip_value()?,
                 }
@@ -852,58 +860,111 @@ pub(super) fn read_constraints_dsl(
     read_vec(de, read_constraint_dsl)
 }
 
-// -- MoleculeConstraintDsl -------------------
+// endregion: Streaming constraint readers
+
+// region: MoleculeConstraintDsl
 
 /// Surface DSL wrapper around `MoleculeConstraint`. EDN form is a single-key
 /// map keyed by the variant: `{:charge-sum {...}}`, `{:spin-sum {...}}`,
-/// `{:bond-order-sum {...}}`, `{:connected [...]}`, `{:sub-pattern {...}}`.
+/// `{:bond-order-sum {...}}`, `{:connected {...}}`, `{:sub-pattern {...}}`.
+///
+/// For `ChargeSum` / `SpinSum` / `BondOrderSum` / `Connected`, the
+/// `atoms` (or `bonds`) field is `None` to denote the entire molecule's
+/// atoms (or bonds). Empty subset must be expressed explicitly as
+/// `Some(vec![])`.
+///
+/// `SubPattern` carries a `Box<MoleculeAst>` directly: defaults are a
+/// ground-input convenience that has no meaning for patterns, where
+/// `Undetermined` is a wildcard. The AST↔DSL bridge for the pattern is
+/// the identity; the EDN bridge wraps with empty `Metadata` so refs render
+/// as numeric indices.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MoleculeConstraintDsl {
     ChargeSum {
-        atoms: Vec<AtomRef>,
+        atoms: Option<Vec<AtomRef>>,
         sum: ValueDsl,
     },
     SpinSum {
-        atoms: Vec<AtomRef>,
+        atoms: Option<Vec<AtomRef>>,
         spin: SpinStateAst,
     },
     BondOrderSum {
-        bonds: Vec<BondRef>,
+        bonds: Option<Vec<BondRef>>,
         sum: ValueDsl,
     },
-    Connected(Vec<AtomRef>),
+    Connected {
+        atoms: Option<Vec<AtomRef>>,
+    },
     SubPattern {
         anchor: SubPatternAnchorDsl,
-        pattern: Box<MoleculeDsl>,
+        pattern: Box<MoleculeAst>,
     },
+}
+
+fn atom_subset_from_ast(atoms: &Option<Vec<AtomIdx>>, meta: &Metadata) -> Option<Vec<AtomRef>> {
+    atoms
+        .as_ref()
+        .map(|v| v.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
+}
+
+fn bond_subset_from_ast(bonds: &Option<Vec<BondIdx>>, meta: &Metadata) -> Option<Vec<BondRef>> {
+    bonds
+        .as_ref()
+        .map(|v| v.iter().map(|&b| BondRef::from_ast(b, meta)).collect())
+}
+
+fn atom_subset_into_ast(
+    atoms: Option<Vec<AtomRef>>,
+    count: usize,
+    meta: &Metadata,
+) -> Result<Option<Vec<AtomIdx>>, ParseError> {
+    atoms
+        .map(|v| {
+            v.into_iter()
+                .map(|r| r.into_ast(count, meta))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()
+}
+
+fn bond_subset_into_ast(
+    bonds: Option<Vec<BondRef>>,
+    count: usize,
+    meta: &Metadata,
+) -> Result<Option<Vec<BondIdx>>, ParseError> {
+    bonds
+        .map(|v| {
+            v.into_iter()
+                .map(|r| r.into_ast(count, meta))
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .transpose()
 }
 
 impl MoleculeConstraintDsl {
     pub(crate) fn from_ast(c: &MoleculeConstraint, meta: &Metadata) -> Result<Self, ParseError> {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                atoms: atom_subset_from_ast(atoms, meta),
                 sum: ValueDsl::from_ast(sum, &()).unwrap(),
             },
             MoleculeConstraint::SpinSum { atoms, spin } => Self::SpinSum {
-                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+                atoms: atom_subset_from_ast(atoms, meta),
                 spin: spin.clone(),
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum {
-                bonds: bonds.iter().map(|&b| BondRef::from_ast(b, meta)).collect(),
+                bonds: bond_subset_from_ast(bonds, meta),
                 sum: ValueDsl::from_ast(sum, &()).unwrap(),
             },
-            MoleculeConstraint::Connected(atoms) => {
-                Self::Connected(atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect())
-            }
+            MoleculeConstraint::Connected { atoms } => Self::Connected {
+                atoms: atom_subset_from_ast(atoms, meta),
+            },
             MoleculeConstraint::SubPattern { anchor, pattern } => {
-                let pattern_dsl =
-                    MoleculeDsl::from_ast(pattern.as_ref(), &MoleculeDefaults::zeroed())?;
-                let anchor_dsl =
-                    SubPatternAnchorDsl::from_ast_pair(anchor, meta, pattern_dsl.metadata());
+                let pattern_meta = Metadata::default();
+                let anchor_dsl = SubPatternAnchorDsl::from_ast_pair(anchor, meta, &pattern_meta);
                 Self::SubPattern {
                     anchor: anchor_dsl,
-                    pattern: Box::new(pattern_dsl),
+                    pattern: pattern.clone(),
                 }
             }
         })
@@ -916,43 +977,28 @@ impl MoleculeConstraintDsl {
     ) -> Result<MoleculeConstraint, ParseError> {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
-                atoms: atoms
-                    .into_iter()
-                    .map(|r| r.into_ast(counts.atom_count, meta))
-                    .collect::<Result<_, _>>()?,
+                atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
                 sum: sum.into_ast(&()).unwrap(),
             },
             Self::SpinSum { atoms, spin } => MoleculeConstraint::SpinSum {
-                atoms: atoms
-                    .into_iter()
-                    .map(|r| r.into_ast(counts.atom_count, meta))
-                    .collect::<Result<_, _>>()?,
+                atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
                 spin,
             },
             Self::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
-                bonds: bonds
-                    .into_iter()
-                    .map(|r| r.into_ast(counts.bond_count, meta))
-                    .collect::<Result<_, _>>()?,
+                bonds: bond_subset_into_ast(bonds, counts.bond_count, meta)?,
                 sum: sum.into_ast(&()).unwrap(),
             },
-            Self::Connected(atoms) => MoleculeConstraint::Connected(
-                atoms
-                    .into_iter()
-                    .map(|r| r.into_ast(counts.atom_count, meta))
-                    .collect::<Result<_, _>>()?,
-            ),
+            Self::Connected { atoms } => MoleculeConstraint::Connected {
+                atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
+            },
             Self::SubPattern { anchor, pattern } => {
-                let pattern_ast = (*pattern).into_ast(&MoleculeDefaults::zeroed())?;
-                let pattern_counts = EntityCounts::from_ast(&pattern_ast);
-                // Pattern metadata is lost after into_ast; use the target
-                // metadata for pattern-side resolution too. Pattern-side refs
-                // will never hit the id path (pattern DSL has no ids after
-                // conversion).
-                let anchor_ast = anchor.into_ast_pair(counts, meta, &pattern_counts, meta)?;
+                let pattern_counts = EntityCounts::from_ast(&pattern);
+                let pattern_meta = Metadata::default();
+                let anchor_ast =
+                    anchor.into_ast_pair(counts, meta, &pattern_counts, &pattern_meta)?;
                 MoleculeConstraint::SubPattern {
                     anchor: anchor_ast,
-                    pattern: Box::new(pattern_ast),
+                    pattern,
                 }
             }
         })
@@ -989,18 +1035,13 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
             }
             "spin-sum" => {
                 let m = expect_map(v, "spin-sum")?;
-                let atoms_edn = m
-                    .get_keyword("atoms")
-                    .ok_or_else(|| DeError::MissingField {
-                        key: "atoms".into(),
-                        path: vec!["spin-sum".into()],
-                    })?;
+                let atoms = parse_optional_refs::<AtomRef>(m, "atoms")?;
                 let spin_edn = m.get_keyword("spin").ok_or_else(|| DeError::MissingField {
                     key: "spin".into(),
                     path: vec!["spin-sum".into()],
                 })?;
                 Self::SpinSum {
-                    atoms: parse_refs::<AtomRef>(atoms_edn)?,
+                    atoms,
                     spin: parse_spin(spin_edn)?,
                 }
             }
@@ -1008,7 +1049,12 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
                 let (bonds, sum) = parse_sum_map::<BondRef>(v, "bond-order-sum", "bonds")?;
                 Self::BondOrderSum { bonds, sum }
             }
-            "connected" => Self::Connected(parse_refs::<AtomRef>(v)?),
+            "connected" => {
+                let m = expect_map(v, "connected")?;
+                Self::Connected {
+                    atoms: parse_optional_refs::<AtomRef>(m, "atoms")?,
+                }
+            }
             "sub-pattern" => {
                 let m = expect_map(v, "sub-pattern")?;
                 let anchor_edn = m
@@ -1023,9 +1069,11 @@ impl<'de> FromEdn<'de> for MoleculeConstraintDsl {
                             key: "pattern".into(),
                             path: vec!["sub-pattern".into()],
                         })?;
+                let pattern_dsl = MoleculeDsl::from_edn(pattern_edn)?;
+                let (pattern_ast, _) = pattern_dsl.into_parts();
                 Self::SubPattern {
                     anchor: SubPatternAnchorDsl::from_edn(anchor_edn)?,
-                    pattern: Box::new(MoleculeDsl::from_edn(pattern_edn)?),
+                    pattern: Box::new(pattern_ast),
                 }
             }
             other => {
@@ -1044,18 +1092,27 @@ impl ToEdn for MoleculeConstraintDsl {
             Self::ChargeSum { atoms, sum } => ("charge-sum", render_sum_map("atoms", atoms, sum)),
             Self::SpinSum { atoms, spin } => {
                 let mut m = EdnMap::with_capacity(2);
-                m.insert(Edn::keyword("atoms"), render_refs(atoms));
+                if let Some(refs) = atoms {
+                    m.insert(Edn::keyword("atoms"), render_refs(refs));
+                }
                 m.insert(Edn::keyword("spin"), render_spin(spin));
                 ("spin-sum", Edn::Map(m))
             }
             Self::BondOrderSum { bonds, sum } => {
                 ("bond-order-sum", render_sum_map("bonds", bonds, sum))
             }
-            Self::Connected(atoms) => ("connected", render_refs(atoms)),
+            Self::Connected { atoms } => {
+                let mut m = EdnMap::with_capacity(1);
+                if let Some(refs) = atoms {
+                    m.insert(Edn::keyword("atoms"), render_refs(refs));
+                }
+                ("connected", Edn::Map(m))
+            }
             Self::SubPattern { anchor, pattern } => {
+                let pattern_dsl = MoleculeDsl::from_parts((**pattern).clone(), Metadata::default());
                 let mut m = EdnMap::with_capacity(2);
                 m.insert(Edn::keyword("anchor"), anchor.to_edn());
-                m.insert(Edn::keyword("pattern"), pattern.to_edn());
+                m.insert(Edn::keyword("pattern"), pattern_dsl.to_edn());
                 ("sub-pattern", Edn::Map(m))
             }
         };
@@ -1065,7 +1122,9 @@ impl ToEdn for MoleculeConstraintDsl {
     }
 }
 
-// -- SubPatternAnchorDsl ------------------
+// endregion: MoleculeConstraintDsl
+
+// region: SubPatternAnchorDsl
 
 /// Surface DSL wrapper around `SubPatternAnchor`. Each vector carries
 /// `(target, pattern)` ref pairs. Target-side refs resolve against the outer
@@ -1282,7 +1341,9 @@ impl ToEdn for SubPatternAnchorDsl {
     }
 }
 
-// -- Helpers ------------------
+// endregion: SubPatternAnchorDsl
+
+// region: Helpers
 
 fn expect_map<'e>(edn: &'e Edn<'e>, context: &'static str) -> Result<&'e EdnMap<'e>, DeError> {
     match edn {
@@ -1355,34 +1416,41 @@ fn render_ref_pairs<A: ToEdn, B: ToEdn>(pairs: &[(A, B)]) -> Edn<'static> {
     )
 }
 
+fn parse_optional_refs<R>(m: &EdnMap<'_>, refs_key: &'static str) -> Result<Option<Vec<R>>, DeError>
+where
+    R: for<'de> FromEdn<'de>,
+{
+    match m.get_keyword(refs_key) {
+        Some(refs_edn) => parse_refs::<R>(refs_edn).map(Some),
+        None => Ok(None),
+    }
+}
+
 fn parse_sum_map<R>(
     edn: &Edn<'_>,
     context: &'static str,
     refs_key: &'static str,
-) -> Result<(Vec<R>, ValueDsl), DeError>
+) -> Result<(Option<Vec<R>>, ValueDsl), DeError>
 where
     R: for<'de> FromEdn<'de>,
 {
     let m = expect_map(edn, context)?;
-    let refs_edn = m
-        .get_keyword(refs_key)
-        .ok_or_else(|| DeError::MissingField {
-            key: refs_key.to_string(),
-            path: vec![context.into()],
-        })?;
+    let refs = parse_optional_refs::<R>(m, refs_key)?;
     let sum_edn = m.get_keyword("sum").ok_or_else(|| DeError::MissingField {
         key: "sum".into(),
         path: vec![context.into()],
     })?;
-    Ok((parse_refs::<R>(refs_edn)?, ValueDsl::from_edn(sum_edn)?))
+    Ok((refs, ValueDsl::from_edn(sum_edn)?))
 }
 
-fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &[R], sum: &ValueDsl) -> Edn<'static> {
+fn render_sum_map<R: ToEdn>(refs_key: &str, refs: &Option<Vec<R>>, sum: &ValueDsl) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
-    m.insert(
-        Edn::Keyword(EdnKeyword::owned(refs_key.into())),
-        render_refs(refs),
-    );
+    if let Some(v) = refs {
+        m.insert(
+            Edn::Keyword(EdnKeyword::owned(refs_key.into())),
+            render_refs(v),
+        );
+    }
     m.insert(Edn::keyword("sum"), sum.to_edn());
     Edn::Map(m)
 }
@@ -1422,7 +1490,9 @@ fn render_spin(spin: &SpinStateAst) -> Edn<'static> {
     Edn::Map(m)
 }
 
-// -- ConstraintDsl ------------------
+// endregion: Helpers
+
+// region: ConstraintDsl
 
 /// Surface DSL wrapper around `Constraint`. Single-key-map EDN form:
 /// `{:atom [<ref> <atom-constraint>]}` for narrow entity leaves;
@@ -1509,7 +1579,9 @@ impl<'de> FromEdn<'de> for ConstraintDsl {
             "charge-sum" | "spin-sum" | "bond-order-sum" | "connected" | "sub-pattern" => {
                 Self::Molecule(MoleculeConstraintDsl::from_edn(edn)?)
             }
-            k if RELATIONAL_KEYS.contains(&k) => Self::Relational(RelationalConstraintDsl::from_edn(edn)?),
+            k if RELATIONAL_KEYS.contains(&k) => {
+                Self::Relational(RelationalConstraintDsl::from_edn(edn)?)
+            }
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -1618,7 +1690,9 @@ impl ConstraintDsl {
     }
 }
 
-// -- ConstraintsDsl ------------------
+// endregion: ConstraintDsl
+
+// region: ConstraintsDsl
 
 /// Surface DSL wrapper around `Constraints` (a flat vec of `Constraint`).
 /// EDN form: a vector of `ConstraintDsl` EDN forms.
@@ -1723,6 +1797,8 @@ fn combinator_edn(key: &str, xs: &[ConstraintDsl]) -> Edn<'static> {
     );
     Edn::Map(m)
 }
+
+// endregion: ConstraintsDsl
 
 #[cfg(test)]
 mod tests {
@@ -1837,7 +1913,7 @@ mod tests {
         );
     }
 
-    // -- MoleculeConstraintDsl ----------------
+    // region: MoleculeConstraintDsl
 
     #[fixture]
     fn full_counts() -> EntityCounts {
@@ -1853,31 +1929,16 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::charge_sum(
-        MoleculeConstraint::ChargeSum {
-            atoms: vec![AtomIdx(0), AtomIdx(1)],
-            sum: ValueAst::Lit(0),
-        },
-        "{:charge-sum {:atoms [0 1] :sum 0}}"
-    )]
-    #[case::spin_sum(
-        MoleculeConstraint::SpinSum {
-            atoms: vec![AtomIdx(0)],
-            spin: SpinStateAst::new(1, 2),
-        },
-        "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}"
-    )]
-    #[case::bond_order_sum(
-        MoleculeConstraint::BondOrderSum {
-            bonds: vec![BondIdx(0), BondIdx(1)],
-            sum: ValueAst::Lit(4),
-        },
-        "{:bond-order-sum {:bonds [0 1] :sum 4}}"
-    )]
-    #[case::connected(
-        MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)]),
-        "{:connected [0 1 2]}"
-    )]
+    #[case::charge_sum(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]), sum: ValueAst::Lit(0) }, "{:charge-sum {:atoms [0 1] :sum 0}}")]
+    #[case::charge_sum_all(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }, "{:charge-sum {:sum 0}}")]
+    #[case::spin_sum(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0)]), spin: SpinStateAst::new(1, 2) },
+        "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}")]
+    #[case::spin_sum_all(MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::new(0, 1) }, "{:spin-sum {:spin {:unpaired 0 :multiplicity 1}}}")]
+    #[case::bond_order_sum(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondIdx(0), BondIdx(1)]), sum: ValueAst::Lit(4) },
+        "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
+    #[case::bond_order_sum_all(MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(0) }, "{:bond-order-sum {:sum 0}}")]
+    #[case::connected(MoleculeConstraint::Connected { atoms: Some(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)]) }, "{:connected {:atoms [0 1 2]}}")]
+    #[case::connected_all(MoleculeConstraint::Connected { atoms: None }, "{:connected {}}")]
     fn test_molecule_constraint_dsl_roundtrip(
         #[from(full_counts)] counts: EntityCounts,
         #[case] input: MoleculeConstraint,
@@ -1913,12 +1974,12 @@ mod tests {
         assert!(matches!(err, DeError::MissingField { .. }));
     }
 
-    // -- SubPatternAnchorDsl ----------------
+    // endregion: MoleculeConstraintDsl
+
+    // region: SubPatternAnchorDsl
 
     #[rstest]
-    fn test_sub_pattern_anchor_dsl_empty_roundtrip(
-        #[from(full_counts)] counts: EntityCounts,
-    ) {
+    fn test_sub_pattern_anchor_dsl_empty_roundtrip(#[from(full_counts)] counts: EntityCounts) {
         let meta = Metadata::default();
         let anchor = SubPatternAnchor::new();
         let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
@@ -1933,9 +1994,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_sub_pattern_anchor_dsl_atoms_roundtrip(
-        #[from(full_counts)] counts: EntityCounts,
-    ) {
+    fn test_sub_pattern_anchor_dsl_atoms_roundtrip(#[from(full_counts)] counts: EntityCounts) {
         let meta = Metadata::default();
         let mut anchor = SubPatternAnchor::new();
         anchor.push_atom(AtomIdx(3), AtomIdx(0));
@@ -1964,164 +2023,57 @@ mod tests {
         assert!(matches!(err, DeError::Custom(_)));
     }
 
-    // -- ConstraintDsl ----------------
+    // endregion: SubPatternAnchorDsl
+
+    // region: ConstraintDsl
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::atom_leaf(
-        Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
-        "{:atom [0 {:valence 4}]}"
-    )]
-    #[case::bond_leaf(
-        Constraint::Bond(BondIdx(1), BondConstraint::Aromatic),
-        "{:bond [1 :aromatic]}"
-    )]
-    #[case::dative_bond_leaf_ring_count(
-        Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::RingCount(ValueAst::Lit(1))),
-        "{:dative-bond [0 {:ring-count 1}]}"
-    )]
-    #[case::dative_bond_leaf_donor(
-        Constraint::Relational(RelationalConstraint::DativeBondDonor {
-            bond: DativeBondIdx(0), atom: AtomIdx(2),
-        }),
-        "{:dative-bond-donor [0 2]}"
-    )]
-    #[case::dative_bond_leaf_acceptor(
-        Constraint::Relational(RelationalConstraint::DativeBondAcceptor {
-            bond: DativeBondIdx(0), atom: AtomIdx(3),
-        }),
-        "{:dative-bond-acceptor [0 3]}"
-    )]
-    #[case::dative_bond_leaf_parallels(
-        Constraint::Relational(RelationalConstraint::DativeBondParallels {
-            dative: DativeBondIdx(0), parallel: BondIdx(2),
-        }),
-        "{:dative-bond-parallels [0 2]}"
-    )]
-    #[case::dative_bond_leaf_donor_satisfies(
-        Constraint::Relational(RelationalConstraint::DativeBondDonorSatisfies {
-            bond: DativeBondIdx(0),
-            predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))),
-        }),
-        "{:dative-bond-donor-satisfies [0 {:valence 3}]}"
-    )]
-    #[case::aromatic_system_leaf_atoms(
-        Constraint::Relational(RelationalConstraint::AromaticSystemAtoms {
-            system: AromaticSystemIdx(0),
-            atoms: vec![AtomIdx(0), AtomIdx(1)],
-        }),
-        "{:aromatic-system-atoms [0 [0 1]]}"
-    )]
-    #[case::aromatic_system_leaf_contains(
-        Constraint::Relational(RelationalConstraint::AromaticSystemContains {
-            system: AromaticSystemIdx(0), atom: AtomIdx(2),
-        }),
-        "{:aromatic-system-contains [0 2]}"
-    )]
-    #[case::aromatic_system_leaf_all_atoms(
-        Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms {
-            system: AromaticSystemIdx(0),
-            predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))),
-        }),
-        "{:aromatic-system-all-atoms [0 {:valence 4}]}"
-    )]
-    #[case::multicenter_leaf_atoms(
-        Constraint::Relational(RelationalConstraint::MulticenterBondAtoms {
-            bond: MulticenterBondIdx(0),
-            atoms: vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
-        }),
-        "{:multicenter-bond-atoms [0 [0 1 2]]}"
-    )]
-    #[case::multicenter_leaf_contains_all(
-        Constraint::Relational(RelationalConstraint::MulticenterBondContainsAll {
-            bond: MulticenterBondIdx(0),
-            atoms: vec![AtomIdx(0), AtomIdx(1)],
-        }),
-        "{:multicenter-bond-contains-all [0 [0 1]]}"
-    )]
-    #[case::multicenter_leaf_any_atom(
-        Constraint::Relational(RelationalConstraint::MulticenterBondAnyAtom {
-            bond: MulticenterBondIdx(0),
-            predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))),
-        }),
-        "{:multicenter-bond-any-atom [0 {:degree 3}]}"
-    )]
-    #[case::noncovalent_leaf_ends(
-        Constraint::Relational(RelationalConstraint::NoncovalentBondEnds {
-            bond: NoncovalentBondIdx(0),
-            atoms: [AtomIdx(0), AtomIdx(3)],
-        }),
-        "{:noncovalent-bond-ends [0 [0 3]]}"
-    )]
-    #[case::noncovalent_leaf_contains(
-        Constraint::Relational(RelationalConstraint::NoncovalentBondContains {
-            bond: NoncovalentBondIdx(0), atom: AtomIdx(2),
-        }),
-        "{:noncovalent-bond-contains [0 2]}"
-    )]
-    #[case::noncovalent_leaf_ends_satisfy(
-        Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy {
-            bond: NoncovalentBondIdx(0),
-            predicates: [
-                Box::new(AtomConstraint::Valence(ValueAst::Lit(2))),
-                Box::new(AtomConstraint::Valence(ValueAst::Lit(3))),
-            ],
-        }),
-        "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}"
-    )]
-    #[case::molecule_connected(
-        Constraint::Molecule(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)])),
-        "{:connected [0 1]}"
-    )]
-    #[case::molecule_charge_sum(
-        Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: vec![AtomIdx(0), AtomIdx(1)],
-            sum: ValueAst::Lit(0),
-        }),
-        "{:charge-sum {:atoms [0 1] :sum 0}}"
-    )]
-    #[case::molecule_spin_sum(
-        Constraint::Molecule(MoleculeConstraint::SpinSum {
-            atoms: vec![AtomIdx(0)],
-            spin: SpinStateAst::new(1, 2),
-        }),
-        "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}"
-    )]
-    #[case::molecule_bond_order_sum(
-        Constraint::Molecule(MoleculeConstraint::BondOrderSum {
-            bonds: vec![BondIdx(0), BondIdx(1)],
-            sum: ValueAst::Lit(4),
-        }),
-        "{:bond-order-sum {:bonds [0 1] :sum 4}}"
-    )]
-    #[case::molecule_sub_pattern(
-        Constraint::Molecule(MoleculeConstraint::SubPattern {
-            anchor: SubPatternAnchor::new(),
-            pattern: Box::new(MoleculeAst::default()),
-        }),
-        "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}"
-    )]
-    #[case::not(
-        Constraint::Not(Box::new(Constraint::Atom(
-            AtomIdx(0),
-            AtomConstraint::Valence(ValueAst::Lit(3)),
-        ))),
-        "{:not {:atom [0 {:valence 3}]}}"
-    )]
-    #[case::and(
-        Constraint::And(vec![
-            Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
-            Constraint::Bond(BondIdx(0), BondConstraint::Aromatic),
-        ]),
-        "{:and [{:atom [0 {:valence 4}]} {:bond [0 :aromatic]}]}"
-    )]
-    #[case::or(
-        Constraint::Or(vec![
-            Constraint::Atom(AtomIdx(0), AtomConstraint::Degree(ValueAst::Lit(3))),
-            Constraint::Atom(AtomIdx(0), AtomConstraint::Degree(ValueAst::Lit(4))),
-        ]),
-        "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}"
-    )]
+    #[case::atom_leaf(Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))), "{:atom [0 {:valence 4}]}")]
+    #[case::bond_leaf(Constraint::Bond(BondIdx(1), BondConstraint::Aromatic), "{:bond [1 :aromatic]}")]
+    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondIdx(0), DativeBondConstraint::RingCount(ValueAst::Lit(1))),
+        "{:dative-bond [0 {:ring-count 1}]}")]
+    #[case::dative_bond_leaf_donor(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(0), atom: AtomIdx(2) }),
+        "{:dative-bond-donor [0 2]}")]
+    #[case::dative_bond_leaf_acceptor(Constraint::Relational(RelationalConstraint::DativeBondAcceptor { bond: DativeBondIdx(0), atom: AtomIdx(3) }),
+        "{:dative-bond-acceptor [0 3]}")]
+    #[case::dative_bond_leaf_parallels(Constraint::Relational(RelationalConstraint::DativeBondParallels { dative: DativeBondIdx(0), parallel: BondIdx(2) }),
+        "{:dative-bond-parallels [0 2]}")]
+    #[case::dative_bond_leaf_donor_satisfies(Constraint::Relational(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondIdx(0),
+        predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(3))) }), "{:dative-bond-donor-satisfies [0 {:valence 3}]}")]
+    #[case::aromatic_system_leaf_atoms(Constraint::Relational(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemIdx(0),
+        atoms: vec![AtomIdx(0), AtomIdx(1)] }), "{:aromatic-system-atoms [0 [0 1]]}")]
+    #[case::aromatic_system_leaf_contains(Constraint::Relational(RelationalConstraint::AromaticSystemContains { system: AromaticSystemIdx(0), atom: AtomIdx(2) }),
+        "{:aromatic-system-contains [0 2]}")]
+    #[case::aromatic_system_leaf_all_atoms(Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemIdx(0),
+        predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) }), "{:aromatic-system-all-atoms [0 {:valence 4}]}")]
+    #[case::multicenter_leaf_atoms(Constraint::Relational(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondIdx(0),
+        atoms: vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)] }), "{:multicenter-bond-atoms [0 [0 1 2]]}")]
+    #[case::multicenter_leaf_contains_all(Constraint::Relational(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondIdx(0),
+        atoms: vec![AtomIdx(0), AtomIdx(1)] }), "{:multicenter-bond-contains-all [0 [0 1]]}")]
+    #[case::multicenter_leaf_any_atom(Constraint::Relational(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondIdx(0),
+        predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))) }), "{:multicenter-bond-any-atom [0 {:degree 3}]}")]
+    #[case::noncovalent_leaf_ends(Constraint::Relational(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondIdx(0), atoms: [AtomIdx(0), AtomIdx(3)] }),
+        "{:noncovalent-bond-ends [0 [0 3]]}")]
+    #[case::noncovalent_leaf_contains(Constraint::Relational(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondIdx(0), atom: AtomIdx(2) }),
+        "{:noncovalent-bond-contains [0 2]}")]
+    #[case::noncovalent_leaf_ends_satisfy(Constraint::Relational(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondIdx(0),
+        predicates: [Box::new(AtomConstraint::Valence(ValueAst::Lit(2))), Box::new(AtomConstraint::Valence(ValueAst::Lit(3)))] }),
+        "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}")]
+    #[case::molecule_connected(Constraint::Molecule(MoleculeConstraint::Connected { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]) }), "{:connected {:atoms [0 1]}}")]
+    #[case::molecule_charge_sum(Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]), sum: ValueAst::Lit(0) }),
+        "{:charge-sum {:atoms [0 1] :sum 0}}")]
+    #[case::molecule_spin_sum(Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0)]), spin: SpinStateAst::new(1, 2) }),
+        "{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}")]
+    #[case::molecule_bond_order_sum(Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondIdx(0), BondIdx(1)]), sum: ValueAst::Lit(4) }),
+        "{:bond-order-sum {:bonds [0 1] :sum 4}}")]
+    #[case::molecule_sub_pattern(Constraint::Molecule(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) }),
+        "{:sub-pattern {:anchor {} :pattern {:atoms [] :bonds []}}}")]
+    #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(3))))), "{:not {:atom [0 {:valence 3}]}}")]
+    #[case::and(Constraint::And(vec![Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))), Constraint::Bond(BondIdx(0), BondConstraint::Aromatic)]),
+        "{:and [{:atom [0 {:valence 4}]} {:bond [0 :aromatic]}]}")]
+    #[case::or(Constraint::Or(vec![Constraint::Atom(AtomIdx(0), AtomConstraint::Degree(ValueAst::Lit(3))), Constraint::Atom(AtomIdx(0), AtomConstraint::Degree(ValueAst::Lit(4)))]),
+        "{:or [{:atom [0 {:degree 3}]} {:atom [0 {:degree 4}]}]}")]
     fn test_constraint_dsl_roundtrip(
         #[from(full_counts)] counts: EntityCounts,
         #[case] input: Constraint,
@@ -2140,30 +2092,12 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::valence(AtomConstraint::Valence(ValueAst::Lit(4)), "{:valence 4}")]
-    #[case::aromatic_valence_not_aromatic(
-        AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
-        "{:aromatic-valence :not-aromatic}"
-    )]
-    #[case::aromatic_valence_aromatic(
-        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))),
-        "{:aromatic-valence {:aromatic 6}}"
-    )]
-    #[case::aromatic_valence_undetermined(
-        AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined),
-        "{:aromatic-valence :undetermined}"
-    )]
-    #[case::multicenter_valence_not_multicenter(
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
-        "{:multicenter-valence :not-multicenter}"
-    )]
-    #[case::multicenter_valence_multicenter(
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))),
-        "{:multicenter-valence {:multicenter 3}}"
-    )]
-    #[case::multicenter_valence_undetermined(
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined),
-        "{:multicenter-valence :undetermined}"
-    )]
+    #[case::aromatic_valence_not_aromatic(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic), "{:aromatic-valence :not-aromatic}")]
+    #[case::aromatic_valence_aromatic(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
+    #[case::aromatic_valence_undetermined(AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined), "{:aromatic-valence :undetermined}")]
+    #[case::multicenter_valence_not_multicenter(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
+    #[case::multicenter_valence_multicenter(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
+    #[case::multicenter_valence_undetermined(AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined), "{:multicenter-valence :undetermined}")]
     #[case::donated_pairs(AtomConstraint::DonatedPairs(ValueAst::Lit(1)), "{:donated-pairs 1}")]
     #[case::accepted_pairs(AtomConstraint::AcceptedPairs(ValueAst::Lit(2)), "{:accepted-pairs 2}")]
     #[case::degree(AtomConstraint::Degree(ValueAst::Lit(3)), "{:degree 3}")]
@@ -2243,12 +2177,12 @@ mod tests {
         assert!(matches!(err, DeError::UnknownField { .. }));
     }
 
-    // -- ConstraintsDsl ----------------
+    // endregion: ConstraintDsl
+
+    // region: ConstraintsDsl
 
     #[rstest]
-    fn test_constraints_dsl_empty_roundtrip(
-        #[from(full_counts)] counts: EntityCounts,
-    ) {
+    fn test_constraints_dsl_empty_roundtrip(#[from(full_counts)] counts: EntityCounts) {
         let meta = Metadata::default();
         let cs = Constraints::new();
         let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
@@ -2260,25 +2194,24 @@ mod tests {
     }
 
     #[rstest]
-    fn test_constraints_dsl_multi_roundtrip(
-        #[from(full_counts)] counts: EntityCounts,
-    ) {
+    fn test_constraints_dsl_multi_roundtrip(#[from(full_counts)] counts: EntityCounts) {
         let meta = Metadata::default();
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(
             AtomIdx(0),
             AtomConstraint::Valence(ValueAst::Lit(4)),
         ));
-        cs.push(Constraint::Molecule(MoleculeConstraint::Connected(vec![
-            AtomIdx(0),
-            AtomIdx(1),
-        ])));
+        cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomIdx(0), AtomIdx(1)]),
+        }));
         let dsl = ConstraintsDsl::from_ast(&cs, &meta).unwrap();
         let edn = dsl.to_edn();
-        let expected = read_string("[{:atom [0 {:valence 4}]} {:connected [0 1]}]").unwrap();
+        let expected =
+            read_string("[{:atom [0 {:valence 4}]} {:connected {:atoms [0 1]}}]").unwrap();
         assert_eq!(edn, expected);
         let parsed = ConstraintsDsl::from_edn(&edn).unwrap();
         let back = parsed.into_ast(&counts, &meta).unwrap();
         assert_eq!(back, cs);
     }
+    // endregion: ConstraintsDsl
 }

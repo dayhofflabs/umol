@@ -94,7 +94,7 @@ impl ToEdn for ValueDsl {
     }
 }
 
-// -- Format -------------------
+// region: Format
 //
 // `Display for ValueDsl` delegates to the helpers below, which know how to
 // render any `ValueAst` or `Expr` node in the surface subgrammar. They are
@@ -222,7 +222,9 @@ fn fmt_expr(f: &mut fmt::Formatter<'_>, e: &Expr) -> fmt::Result {
     }
 }
 
-// -- Parse -------------------
+// endregion: Format
+
+// region: Parse
 
 /// Parse a complete value-string into a `ValueAst` (literal, set, or expression).
 pub fn parse_value(input: &str) -> Result<ValueAst, ParseError> {
@@ -408,6 +410,8 @@ fn base_expr(i: &mut &str) -> PResult<Expr> {
     ))
     .parse_next(i)
 }
+
+// endregion: Parse
 
 #[cfg(test)]
 mod tests {

@@ -95,7 +95,7 @@ impl IntoAst<AromaticSystemAst> for AromaticSystemDsl {
     }
 }
 
-// -- Parse --------------------
+// region: Parse
 
 /// Parse a complete aromatic-system-string into an `AromaticSystemDsl`.
 pub fn parse_aromatic_system(input: &str) -> Result<AromaticSystemDsl, ParseError> {
@@ -176,7 +176,9 @@ fn apply_predicates(
     Ok(())
 }
 
-// -- Format --------------------
+// endregion: Parse
+
+// region: Format
 
 fn fmt_aromatic_system_ast(f: &mut fmt::Formatter<'_>, ast: &AromaticSystemAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
@@ -196,7 +198,9 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     }
 }
 
-// -- Raise --------------------
+// endregion: Format
+
+// region: Raise
 
 fn raise_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
     // Exhaustive destructure: adding a new AromaticSystemAst field is a
@@ -224,7 +228,9 @@ fn raise_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaul
     raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// -- Lower --------------------
+// endregion: Raise
+
+// region: Lower
 
 fn lower_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
     // Exhaustive destructure: adding a new AromaticSystemAst field is a
@@ -252,7 +258,9 @@ fn lower_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaul
     lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// -- Constraint DSL -------------------
+// endregion: Lower
+
+// region: Constraint DSL
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AromaticSystemConstraintDsl {}
@@ -272,6 +280,7 @@ impl ToEdn for AromaticSystemConstraintDsl {
         match *self {}
     }
 }
+// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {

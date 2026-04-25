@@ -89,7 +89,7 @@ impl AtomDefaults {
         }
     }
 
-    pub fn open() -> Self {
+    pub fn verbatim() -> Self {
         Self {
             isotope: IsotopeDefault::Required,
             charge: NumericDefault::Required,
@@ -179,7 +179,7 @@ impl BondDefaults {
         }
     }
 
-    pub fn open() -> Self {
+    pub fn verbatim() -> Self {
         Self {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
@@ -230,7 +230,7 @@ impl AromaticSystemDefaults {
         }
     }
 
-    pub fn open() -> Self {
+    pub fn verbatim() -> Self {
         Self {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
@@ -286,7 +286,7 @@ impl MulticenterBondDefaults {
         }
     }
 
-    pub fn open() -> Self {
+    pub fn verbatim() -> Self {
         Self {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
@@ -333,7 +333,7 @@ impl DativeBondDefaults {
         Self {}
     }
 
-    pub fn open() -> Self {
+    pub fn verbatim() -> Self {
         Self {}
     }
 }
@@ -348,7 +348,7 @@ impl NoncovalentBondDefaults {
         Self {}
     }
 
-    pub fn open() -> Self {
+    pub fn verbatim() -> Self {
         Self {}
     }
 }
@@ -378,14 +378,14 @@ impl MoleculeDefaults {
         }
     }
 
-    pub fn open() -> Self {
+    pub fn verbatim() -> Self {
         Self {
-            atom: AtomDefaults::open(),
-            bond: BondDefaults::open(),
-            aromatic_system: AromaticSystemDefaults::open(),
-            multicenter_bond: MulticenterBondDefaults::open(),
-            dative_bond: DativeBondDefaults::open(),
-            noncovalent_bond: NoncovalentBondDefaults::open(),
+            atom: AtomDefaults::verbatim(),
+            bond: BondDefaults::verbatim(),
+            aromatic_system: AromaticSystemDefaults::verbatim(),
+            multicenter_bond: MulticenterBondDefaults::verbatim(),
+            dative_bond: DativeBondDefaults::verbatim(),
+            noncovalent_bond: NoncovalentBondDefaults::verbatim(),
         }
     }
 }
@@ -450,7 +450,7 @@ mod tests {
 
     #[rstest]
     #[case::zeroed(MoleculeDefaults::zeroed())]
-    #[case::open(MoleculeDefaults::open())]
+    #[case::verbatim(MoleculeDefaults::verbatim())]
     fn test_molecule_ast_config_roundtrip(#[case] cfg: MoleculeDefaults) {
         let edn = cfg.to_edn();
         let back = MoleculeDefaults::from_edn(&edn).unwrap();

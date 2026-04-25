@@ -108,7 +108,7 @@ impl IntoAst<AtomAst> for AtomDsl {
     }
 }
 
-// -- Parse -------------------------------------------------------
+// region: Parse
 
 /// Parse a complete atom-string into an `AtomDsl`.
 pub fn parse_atom(input: &str) -> Result<AtomDsl, ParseError> {
@@ -401,7 +401,9 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
     Ok(())
 }
 
-// -- Format -------------------------------------------------------
+// endregion: Parse
+
+// region: Format
 
 fn fmt_atom_ast(f: &mut fmt::Formatter<'_>, ast: &AtomAst) -> fmt::Result {
     fmt_element(f, &ast.element)?;
@@ -533,7 +535,9 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
     }
 }
 
-// -- Raise -------------------------------------------------------
+// endregion: Format
+
+// region: Raise
 
 fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     // Exhaustive destructure: adding a new AtomAst field is a compile error
@@ -647,7 +651,9 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
     }
 }
 
-// -- Lower -------------------------------------------------------
+// endregion: Raise
+
+// region: Lower
 
 fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     // Exhaustive destructure: adding a new AtomAst field is a compile error
@@ -786,7 +792,9 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
     }
 }
 
-// -- Constraint DSLs -------------------
+// endregion: Lower
+
+// region: Constraint DSLs
 
 /// Surface DSL wrapper around `AromaticValenceAst`. EDN form: `:undetermined`,
 /// `:not-aromatic`, or `{:aromatic <value>}`.
@@ -1077,6 +1085,8 @@ fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
     m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
     Edn::Map(m)
 }
+
+// endregion: Constraint DSLs
 
 #[cfg(test)]
 mod tests {
@@ -1397,7 +1407,7 @@ mod tests {
         assert_eq!(via_stream, via_tree);
     }
 
-    // -- AromaticValenceDsl / MulticenterValenceDsl ----------------
+    // region: AromaticValenceDsl / MulticenterValenceDsl
 
     #[rustfmt::skip]
     #[rstest]
@@ -1447,7 +1457,9 @@ mod tests {
         assert!(matches!(err, DeError::TypeMismatch { .. }));
     }
 
-    // -- AtomConstraintDsl ----------------
+    // endregion: AromaticValenceDsl / MulticenterValenceDsl
+
+    // region: AtomConstraintDsl
 
     #[rustfmt::skip]
     #[rstest]
@@ -1509,4 +1521,5 @@ mod tests {
             )))
         );
     }
+    // endregion: AtomConstraintDsl
 }

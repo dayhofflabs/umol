@@ -78,7 +78,7 @@ fn constraints_with_molecule(c: Constraint) -> Constraints {
         vec![ground_atom()],
         vec![], vec![], vec![], vec![], vec![],
         constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
-            atoms: vec![],
+            atoms: Some(vec![]),
             sum: ValueAst::Undetermined,
         })),
     ),
@@ -920,13 +920,12 @@ fn test_molecule_builder_push_constraint_and_constraints_mut(
     #[from(rich_molecule)] ast: MoleculeAst,
 ) {
     let mut b = ast.edit();
-    b.push_constraint(Constraint::Molecule(MoleculeConstraint::Connected(vec![
-        AtomIdx(0),
-        AtomIdx(1),
-    ])));
+    b.push_constraint(Constraint::Molecule(MoleculeConstraint::Connected {
+        atoms: Some(vec![AtomIdx(0), AtomIdx(1)]),
+    }));
     b.constraints_mut().push(Constraint::Molecule(
         MoleculeConstraint::ChargeSum {
-            atoms: vec![AtomIdx(0)],
+            atoms: Some(vec![AtomIdx(0)]),
             sum: ValueAst::Lit(0),
         },
     ));
@@ -1577,7 +1576,9 @@ fn test_molecule_ast_inline_constraints_skips_relational_and_molecule(
         system: AromaticSystemIdx(0),
         atom: AtomIdx(0),
     });
-    let mol = Constraint::Molecule(MoleculeConstraint::Connected(vec![AtomIdx(0), AtomIdx(1)]));
+    let mol = Constraint::Molecule(MoleculeConstraint::Connected {
+        atoms: Some(vec![AtomIdx(0), AtomIdx(1)]),
+    });
     ast.constraints_mut().push(rel.clone());
     ast.constraints_mut().push(mol.clone());
     ast.constraints_mut().push(Constraint::Atom(

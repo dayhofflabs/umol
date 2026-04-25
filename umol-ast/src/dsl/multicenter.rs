@@ -95,7 +95,7 @@ impl IntoAst<MulticenterBondAst> for MulticenterBondDsl {
     }
 }
 
-// -- Parse --------------------
+// region: Parse
 
 /// Parse a complete multicenter-bond-string into a `MulticenterBondDsl`.
 pub fn parse_multicenter_bond(input: &str) -> Result<MulticenterBondDsl, ParseError> {
@@ -176,7 +176,9 @@ fn apply_predicates(
     Ok(())
 }
 
-// -- Format --------------------
+// endregion: Parse
+
+// region: Format
 
 fn fmt_multicenter_bond_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
@@ -196,7 +198,9 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     }
 }
 
-// -- Raise --------------------
+// endregion: Format
+
+// region: Raise
 
 fn raise_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
     // Exhaustive destructure: adding a new MulticenterBondAst field is a
@@ -224,7 +228,9 @@ fn raise_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDef
     raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// -- Format --------------------
+// endregion: Raise
+
+// region: Format
 
 fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
     // Exhaustive destructure: adding a new MulticenterBondAst field is a
@@ -252,7 +258,9 @@ fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDef
     lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// -- Constraint DSL -------------------
+// endregion: Format
+
+// region: Constraint DSL
 
 /// Surface DSL wrapper around the narrow `MulticenterBondConstraint`.
 /// Currently uninhabited — all previous variants moved to
@@ -276,6 +284,8 @@ impl ToEdn for MulticenterBondConstraintDsl {
         match *self {}
     }
 }
+
+// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {

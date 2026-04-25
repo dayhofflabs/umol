@@ -129,7 +129,7 @@ noncovalent-keyword ::= :h-bond | :halogen-bond | :chalcogen-bond | :ionic | :va
 
 **`:atom-aliases`**. The **`alias-list`** defines named atom shorthands scoped to the enclosing molecule map. It is a flat vector of alternating keyword/atom-spec pairs. Each value **MUST** be an **EDN string** carrying an **atom-string** payload. An **`atom-entry`** that is a bare **keyword** (not a string and not in a **`[id entry]`** position) is an alias reference and **MUST** resolve to a key in **`:atom-aliases`**. Aliases are resolved at parse time; the resolved **`atom-string`** is substituted as if written inline. A reference to an undefined alias is an error. Alias definitions **MUST** be bijective: no two alias names **MAY** map to the same atom definition.
 
-**`:constraints`**. Molecule-wide derived predicates — total charge, total spin, per-atom topology, bond-order sums, connectivity, sub-pattern anchors, boolean combinators — live here. The canonical grammar appears in **§7.9**. Molecule-wide charge and spin assertions are written as **`{:total-charge n}`** and **`{:total-spin spin-literal}`** entries within this list; there is no top-level **`:charge`** or **`:spin`** key on the molecule map.
+**`:constraints`**. Molecule-wide and per-entity constraints, cross-entity relational predicates, sub-pattern anchors, and boolean combinators live here. The canonical grammar appears in **§7.9**. Whole-molecule charge and spin assertions are written as **`{:charge-sum {:sum n}}`** and **`{:spin-sum {:spin spin-literal}}`** entries (omit `:atoms` to range over the whole molecule); a subset is selected by adding `:atoms [...]`. There is no top-level **`:charge`** or **`:spin`** key on the molecule map.
 
 **Inline ids.** An **`atom-entry`** of the form **`[`** *keyword* *atom-spec* **`]`** assigns the keyword as an **id** to the atom at that position. Ids enable symbolic reference from bond endpoints (instead of positional index). Entries with and without ids **MAY** be freely mixed within the same **`:atoms`** vector.
 
@@ -390,7 +390,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 **Chemical elements.** Any **`element-literal`**, any entry in an **`element-set`**, and any **nominal** binding or reference (**`element-bind`**, **`element-ref`**) **MUST** refer only to elements from **hydrogen** (**H**) through **oganesson** (**Og**). Implementations **MUST** reject symbols outside that range in **Ground**; **Query** / **Rule** **SHOULD** use the same restriction unless explicitly documented otherwise.
 
-**Charges.** **Formal charge** on atoms (**`#c`**), **formal bond charge** (**`#c`** on **bond-string**), **aromatic-system charge** (**`#c`** on **aromatic-string**, **§7.10**), and molecule-wide **`{:total-charge n}`** (**§7.9**) where integral **MUST** fit a **signed 8-bit** integer (**−128…127**). The **`#c`** payload is a **`value-expr`** (or **Ground** subset) that evaluates to the signed charge, including the **special** forms **`+`** / **`-`** for **±1** (**§7.3**), e.g. **`#c2`**, **`#c-2`**, **`#c+`**, **`#c-`**.
+**Charges.** **Formal charge** on atoms (**`#c`**), **formal bond charge** (**`#c`** on **bond-string**), **aromatic-system charge** (**`#c`** on **aromatic-string**, **§7.10**), and atom-subset charge sums **`{:charge-sum {:atoms [...] :sum n}}`** (**§7.9**) where integral **MUST** fit a **signed 8-bit** integer (**−128…127**). The **`#c`** payload is a **`value-expr`** (or **Ground** subset) that evaluates to the signed charge, including the **special** forms **`+`** / **`-`** for **±1** (**§7.3**), e.g. **`#c2`**, **`#c-2`**, **`#c+`**, **`#c-`**.
 
 **Isotope mass number.** The numeric value carried by **`#i`** in **Ground** **MUST** fit an **unsigned 32-bit** integer.
 
@@ -528,7 +528,7 @@ order ::= value-expr
 | **`#c`** | Bond formal charge (**`i8`**, **§7.2**) |
 | **`#u`** | Unpaired electrons (bond centered); **`u8`** |
 | **`#s`** | Spin multiplicity (2S+1) (bond centered); **`u8`** |
-| **`#a`** | Bond is a member of some aromatic system declared under **`:aromatic`**. Derived predicate; no payload. Canonical form is **`{:bond-pred [i :aromatic]}`** under **`:constraints`**. |
+| **`#a`** | Bond is a member of some aromatic system declared under **`:aromatic`**. Derived predicate; no payload. Canonical form is **`{:bond [i :aromatic]}`** under **`:constraints`**. |
 | **`#R`** | **Ring count**: the bond lies in this many rings. Follows the **§5.3** omitted-numeral convention; **special** **`#R*`**, **`#R+`** (as for atoms, **§7.3**). Derived. |
 | **`#r`** | **Ring size**: the bond lies in a ring of this size. Derived. |
 
@@ -580,29 +580,67 @@ Precedence of **`mult-op`** over **`add-op`** unchanged. **Membership** **`::`**
 
 ### 7.9 Constraint grammar
 
-Molecule-wide derived predicates live under the **`:constraints`** key on a **molecule-map** (**§4**). Each entry is a **single-key map** whose key names the constraint kind; some entries are bare keywords (no payload).
+Molecule-wide constraints live under the **`:constraints`** key on a **molecule-map** (**§4**). Each entry is a **single-key map** whose key names the constraint kind. Constraints fall into four categories:
+
+- **Entity** — a value-only predicate over one entity. Same payload as the inline string form on that entity; lift/inline (below) move them between scopes.
+- **Relational** — a predicate that ties one DAMN entity (dative bond, aromatic system, multicenter bond, noncovalent bond) to atoms, bonds, or atom-predicates. Cannot appear inline.
+- **Molecule-scope** — predicates over the molecule as a whole or an arbitrary atom/bond subset.
+- **Combinator** — **`:and`** / **`:or`** / **`:not`** over any constraint-entry.
 
 ```
 constraint-list ::= [ constraint-entry* ]
 
 constraint-entry ::=
-    { :atom-pred                [atom-ref atom-constraint-form] }
-  | { :bond-pred                [bond-ref bond-constraint-form] }
-  | { :aromatic-pred            [arom-sys-ref aromatic-system-constraint-form] }
-  | { :total-charge             int }
-  | { :total-spin               spin-literal }
-  | { :multicenter-electron-count [mc-bond-ref int] }
-  | { :bond-order-sum           { :bonds [bond-ref+] :equals int } }
-  | { :connected                [atom-ref+] }
-  | { :sub-pattern              { :anchor atom-ref :pattern molecule-map } }
-  | { :and                      [constraint-entry+] }
-  | { :or                       [constraint-entry+] }
-  | { :not                      constraint-entry }
+    entity-constraint
+  | relational-constraint
+  | molecule-constraint
+  | combinator-constraint
+
+entity-constraint ::=
+    { :atom              [atom-ref            atom-constraint-form] }
+  | { :bond              [bond-ref            bond-constraint-form] }
+  | { :dative-bond       [dative-bond-ref     dative-bond-constraint-form] }
+  | { :aromatic-system   [aromatic-system-ref aromatic-system-constraint-form] }
+  | { :multicenter-bond  [multicenter-bond-ref multicenter-bond-constraint-form] }
+  | { :noncovalent-bond  [noncovalent-bond-ref noncovalent-bond-constraint-form] }
+
+relational-constraint ::=
+    { :dative-bond-donor              [dative-bond-ref atom-ref]              }
+  | { :dative-bond-acceptor           [dative-bond-ref atom-ref]              }
+  | { :dative-bond-parallels          [dative-bond-ref bond-ref]              }
+  | { :dative-bond-donor-satisfies    [dative-bond-ref atom-constraint-form]  }
+  | { :dative-bond-acceptor-satisfies [dative-bond-ref atom-constraint-form]  }
+  | { :aromatic-system-atoms          [aromatic-system-ref [atom-ref+]]       }
+  | { :aromatic-system-contains       [aromatic-system-ref atom-ref]          }
+  | { :aromatic-system-contains-all   [aromatic-system-ref [atom-ref+]]       }
+  | { :aromatic-system-all-atoms      [aromatic-system-ref atom-constraint-form] }
+  | { :aromatic-system-any-atom       [aromatic-system-ref atom-constraint-form] }
+  | { :multicenter-bond-atoms         [multicenter-bond-ref [atom-ref+]]      }
+  | { :multicenter-bond-contains      [multicenter-bond-ref atom-ref]         }
+  | { :multicenter-bond-contains-all  [multicenter-bond-ref [atom-ref+]]      }
+  | { :multicenter-bond-all-atoms     [multicenter-bond-ref atom-constraint-form] }
+  | { :multicenter-bond-any-atom      [multicenter-bond-ref atom-constraint-form] }
+  | { :noncovalent-bond-ends          [noncovalent-bond-ref [atom-ref atom-ref]] }
+  | { :noncovalent-bond-contains      [noncovalent-bond-ref atom-ref]         }
+  | { :noncovalent-bond-ends-satisfy  [noncovalent-bond-ref
+                                       [atom-constraint-form atom-constraint-form]] }
+
+molecule-constraint ::=
+    { :charge-sum     { [:atoms [atom-ref+]]? :sum value-expr } }
+  | { :spin-sum       { [:atoms [atom-ref+]]? :spin spin-literal } }
+  | { :bond-order-sum { [:bonds [bond-ref+]]? :sum value-expr } }
+  | { :connected      { [:atoms [atom-ref+]]? } }
+  | { :sub-pattern    { :anchor anchor-spec :pattern molecule-map } }
+
+combinator-constraint ::=
+    { :and [constraint-entry+] }
+  | { :or  [constraint-entry+] }
+  | { :not constraint-entry }
 
 atom-constraint-form ::=
     { :valence             value-expr }
-  | { :aromatic-valence    ( value-expr | :not-aromatic ) }
-  | { :multicenter-valence value-expr }
+  | { :aromatic-valence    ( value-expr | :not-aromatic | :undetermined ) }
+  | { :multicenter-valence ( value-expr | :not-multicenter | :undetermined ) }
   | { :donated-pairs       value-expr }
   | { :accepted-pairs      value-expr }
   | { :degree              value-expr }
@@ -614,23 +652,58 @@ atom-constraint-form ::=
 
 bond-constraint-form ::=
     :aromatic
-  | { :ring-count          value-expr }
-  | { :ring-size           value-expr }
+  | { :ring-count value-expr }
+  | { :ring-size value-expr }
 
-aromatic-system-constraint-form ::=
-    { :electrons           value-expr }
+dative-bond-constraint-form ::=
+    { :ring-count value-expr }
+  | { :ring-size value-expr }
 
-atom-ref     ::= int | keyword
-bond-ref     ::= int | keyword
-arom-sys-ref ::= int | keyword
-mc-bond-ref  ::= int | keyword
+aromatic-system-constraint-form  ::= (* uninhabited — no value-only variants yet *)
+multicenter-bond-constraint-form ::= (* uninhabited — no value-only variants yet *)
+noncovalent-bond-constraint-form ::= (* uninhabited — no value-only variants yet *)
+
+anchor-spec ::=
+    { [:atoms             [[atom-ref atom-ref]+]]?
+      [:bonds             [[bond-ref bond-ref]+]]?
+      [:dative-bonds      [[dative-bond-ref dative-bond-ref]+]]?
+      [:aromatic-systems  [[aromatic-system-ref aromatic-system-ref]+]]?
+      [:multicenter-bonds [[multicenter-bond-ref multicenter-bond-ref]+]]?
+      [:noncovalent-bonds [[noncovalent-bond-ref noncovalent-bond-ref]+]]? }
+
+atom-ref             ::= int | keyword
+bond-ref             ::= int | keyword
+dative-bond-ref      ::= int | keyword
+aromatic-system-ref  ::= int | keyword
+multicenter-bond-ref ::= int | keyword
+noncovalent-bond-ref ::= int | keyword
 ```
 
-**Ref resolution.** Integer refs are **positional**: for **`atom-ref`**, the index into **`:atoms`**; for **`bond-ref`**, the index into **`:bonds`**; for **`arom-sys-ref`** and **`mc-bond-ref`**, the index into **`:aromatic`** and **`:multicenter`** respectively. A keyword ref resolves against the **`:id`** declared on the corresponding structural entry (**§4**). On **serialization**, implementations **MUST** prefer the **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer otherwise.
+**Ref resolution.** An integer ref is the **positional** index into the corresponding entity vector on the molecule map: **`atom-ref`** → **`:atoms`**, **`bond-ref`** → **`:bonds`**, **`dative-bond-ref`** → **`:dative`**, **`aromatic-system-ref`** → **`:aromatic`**, **`multicenter-bond-ref`** → **`:multicenter`**, **`noncovalent-bond-ref`** → **`:noncovalent`**. A keyword ref resolves against the **`:id`** declared on the corresponding entry (**§4**). On serialization, implementations **MUST** emit the **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer otherwise.
 
-**Sugar and canonical forms.** All **`atom-constraint-form`** entries (**`:valence`**, **`:aromatic-valence`**, **`:multicenter-valence`**, **`:donated-pairs`**, **`:accepted-pairs`**, **`:degree`**, **`:connectivity`**, **`:ring-connectivity`**, **`:total-hydrogens`**, **`:ring-count`**, **`:ring-size`**), all **`bond-constraint-form`** entries (**`:aromatic`**, **`:ring-count`**, **`:ring-size`**), and all **`aromatic-system-constraint-form`** entries (**`:electrons`**) have equivalent **packed-string** sugar in the atom (**§7.3**), bond (**§7.5**), and aromatic-system (**§7.10**) subgrammars. When the constraint is a **bare per-atom**, **per-bond**, or **per-aromatic-system** predicate (not nested under **`:and`** / **`:or`** / **`:not`** / **`:sub-pattern`**), implementations **MAY** emit the sugared form on the atom, bond, or aromatic-system string; nested constraints **MUST** be emitted in canonical form inside **`:constraints`**. Parsers **MUST** accept both forms and merge them into a single structural representation.
+**Uninhabited narrow inner forms.** **`:aromatic-system`**, **`:multicenter-bond`**, and **`:noncovalent-bond`** narrow leaves are reserved keys whose inner **`*-constraint-form`** has no inhabited variants in this revision; every cross-entity predicate on those entities is a relational leaf instead. Future revisions **MAY** add value-only variants here without reshaping the surrounding grammar.
 
-**Multiple constraints per entity.** Each per-atom, per-bond, or per-aromatic-system constraint serializes as its **own** **`{:atom-pred …}`**, **`{:bond-pred …}`**, or **`{:aromatic-pred …}`** entry; implementations **MUST NOT** bundle multiple constraints on the same entity into a single map.
+**Anchor cardinality.** Each keyed slot in **`anchor-spec`** is optional and may appear at most once; if present, it is a vector of **`(target-side-ref, pattern-side-ref)`** pairs of the same entity kind. An empty **`anchor-spec`** denotes an unanchored sub-pattern (the pattern can embed anywhere). Target-side refs resolve against the outer molecule's metadata; pattern-side refs against the pattern molecule's metadata.
+
+**Molecule-scope subset selectors.** `:charge-sum`, `:spin-sum`, `:bond-order-sum`, and `:connected` accept an **optional** `:atoms` (or `:bonds`) vector. When **omitted**, the predicate ranges over **every** atom (or bond) in the molecule, including atoms added by future structural growth. When **present**, the predicate ranges over the listed entities only. An empty vector `[]` is **distinct** from omission: it selects no entities.
+
+**Sub-pattern materialization.** A **`:sub-pattern`** **`:pattern`** is a full **molecule-map**; its inner constraints are evaluated independently from the outer constraint tree. The pattern carries **no defaults** — values pass through verbatim — so a pattern's atom **`charge: undetermined`** stays **`undetermined`** at match time and behaves as a wildcard (**§5.4**); zero-defaulting that would apply to a ground input does **not** apply inside a pattern.
+
+**Sugar (inline string equivalents).** Narrow leaves whose entity also has a string subgrammar **`packed-string`** form (atom **§7.3**, bond **§7.5**, dative **§7.12**) admit two interchangeable serializations:
+
+- the inline **`#tag`** payload on the entity's **`:type`** string (or, for atoms, on the atom literal directly);
+- the **`{:<entity> [ref form]}`** entry in **`:constraints`**.
+
+Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:and`** / **`:or`** / **`:not`** / **`:sub-pattern`**) **MAY** be emitted in the sugared inline form; nested predicates **MUST** be emitted as **`:constraints`** entries since the inline form has no logical context. Aromatic-system, multicenter, noncovalent, and *any* relational leaf has **no** inline form.
+
+**Lift / inline.** The two storage scopes — inline on the entity (`AtomAst::constraints` etc.) and at molecule scope (`MoleculeAst::constraints` as `{:atom [ref form]}` peers) — are interchangeable for the inline-capable narrow leaves. Implementations **SHOULD** expose:
+
+- **`lift_constraints`** (entity → molecule): drains every inline store into the molecule list as `{:<entity> [ref form]}` peers.
+- **`inline_constraints`** (molecule → entity): drains top-level inline-capable narrow leaves from the molecule list into the targeted entity's inline store.
+
+Combinator subtrees, relational leaves, and molecule-scope leaves are never moved by either operation. With multiple top-level entries targeting the same (entity, kind), `inline_constraints` resolves the collision via the entity store's per-kind insert policy (last-wins for unique-kind variants).
+
+**Multiple constraints per entity.** Each per-entity constraint serializes as its **own** entity-constraint entry; implementations **MUST NOT** bundle multiple constraints on the same entity into a single map.
 
 ### 7.10 Aromatic system subgrammar
 
@@ -657,7 +730,7 @@ aromatic-predicate ::= '#' tag payload
 | **`#s`** | Spin multiplicity (2S+1) (system-centered); **`u8`** |
 | **`#e`** | Total π-electron count; **`u8`** |
 
-**Canonical-constraint equivalent.** **`#e`** has an equivalent **canonical** form in **`:constraints`** via **`:aromatic-pred`** with an **`aromatic-system-constraint-form`** payload (**§7.9**): **`{:aromatic-pred [arom-sys-ref {:electrons value-expr}]}`**. Charge (**`#c`**), unpaired electrons (**`#u`**), and spin multiplicity (**`#s`**) appear **only** in the aromatic-string (no canonical constraint form).
+**No canonical-constraint equivalent.** Aromatic-system charge (**`#c`**), unpaired electrons (**`#u`**), spin multiplicity (**`#s`**), and π-electron count (**`#e`**) live as direct fields on the aromatic-system entity (set by the aromatic-string predicates above) and have **no** canonical **`:constraints`** form in this revision.
 
 ### 7.11 Multicenter-bond subgrammar
 

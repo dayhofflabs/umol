@@ -87,7 +87,7 @@ impl IntoAst<NoncovalentBondAst> for NoncovalentBondDsl {
     }
 }
 
-// -- Parse --------------------
+// region: Parse
 
 /// Parse a complete noncovalent-bond-string into a `NoncovalentBondDsl`.
 pub fn parse_noncovalent_bond(input: &str) -> Result<NoncovalentBondDsl, ParseError> {
@@ -180,7 +180,9 @@ fn kind_symbol(k: NoncovalentBondKind) -> &'static str {
     }
 }
 
-// -- Format --------------------
+// endregion: Parse
+
+// region: Format
 
 fn fmt_noncovalent_bond_ast(f: &mut fmt::Formatter<'_>, ast: &NoncovalentBondAst) -> fmt::Result {
     fmt_kind(f, &ast.kind)
@@ -214,7 +216,9 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::R
     }
 }
 
-// -- Constraint DSL -------------------
+// endregion: Format
+
+// region: Constraint DSL
 
 /// Surface DSL wrapper around the narrow `NoncovalentBondConstraint`.
 /// Currently uninhabited — all previous variants moved to
@@ -238,6 +242,8 @@ impl ToEdn for NoncovalentBondConstraintDsl {
         match *self {}
     }
 }
+
+// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {

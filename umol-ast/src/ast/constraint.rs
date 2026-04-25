@@ -15,14 +15,14 @@
 //! The molecule-level `Constraints` (under `molecule`) is a flat
 //! `Vec<Constraint>` for molecule-scope predicates and combinator forms.
 
-pub mod aromatic;
-pub mod atom;
-pub mod bond;
-pub mod dative;
-pub mod molecule;
-pub mod multicenter;
-pub mod noncovalent;
-pub mod relational;
+mod aromatic;
+mod atom;
+mod bond;
+mod dative;
+mod molecule;
+mod multicenter;
+mod noncovalent;
+mod relational;
 
 pub use aromatic::{AromaticSystemConstraint, AromaticSystemConstraints};
 pub use atom::{
