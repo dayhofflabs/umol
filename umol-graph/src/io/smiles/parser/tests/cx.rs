@@ -4,7 +4,7 @@ use rstest::*;
 use umol_shared::spin::SpinMultiplicity;
 
 use super::super::*;
-use crate::bond::BondNoncovalent;
+use crate::table_ir::bond::BondNoncovalent;
 use crate::position::Point3D;
 use crate::table_ir::{
     BondDonation, BondOrder, BondStereo, BondWedge, LinkAtom, RingBondCount, SGroupBracketCoords,

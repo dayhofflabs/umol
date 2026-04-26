@@ -22,8 +22,8 @@ use umol_shared::spin::SpinMultiplicity;
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
-use crate::bond::BondNoncovalent;
 use crate::position::Point3D;
+use crate::table_ir::bond::BondNoncovalent;
 use crate::table_ir::{
     BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondStereo, BondWedge,
     CxAnnotationData, ExtendedMolecule, ExtendedReaction, LinkAtom, Molecule, MulticenterBond,

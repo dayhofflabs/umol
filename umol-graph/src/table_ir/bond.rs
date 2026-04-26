@@ -6,7 +6,6 @@ use strum::{Display, EnumString};
 use umol_shared::spin::SpinMultiplicity;
 
 use super::error::ConversionError;
-use crate::bond::BondNoncovalent;
 use crate::span::Span;
 
 /// Ordered pair of atom indices, `first <= second`
@@ -82,6 +81,13 @@ impl BondDonation {
             Self::Accepting => Self::Donating,
         }
     }
+}
+
+/// Non-covalent interaction type for weak bonds (H-bonds, halogen bonds, etc.)
+/// These bonds do not contribute to valence calculations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BondNoncovalent {
+    Hydrogen,
 }
 
 // Basic Bond IR

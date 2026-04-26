@@ -9,7 +9,6 @@
 // pub mod dsl;
 // pub mod api;
 
-pub mod bond;
 pub mod diagnostics;
 pub mod io;
 pub mod position;
