@@ -4,12 +4,14 @@
 //! returning either `Solution<T, Contradiction>` for chemistry outcomes or
 //! `Err(Error)` for setup-level failures.
 
+pub mod config;
 pub mod solution;
+pub mod valence;
 
 // Disabled during the engine/config restructure (doc 92). Files kept on disk
 // while their content is migrated, phase by phase:
 // - `chemistry`, `error` -> `config.rs`, per-engine error types (phase 1+)
-// - `valence`, `propagate` -> `validator.rs`, `valence/*`, `valence.rs` (phase 3, 5)
+// - `propagate` -> `validator.rs`, `valence/*`, `valence.rs` (phase 3, 5)
 // - `aromaticity`, `aromaticity/*` -> `aromaticity.rs` + subdir (phase 4)
 // - `resolve`, `validate` -> `resolver.rs`, `validator.rs` (phase 3, 6)
 // - `evaluate`, `matcher` were already disabled; remain so until the matcher
@@ -20,6 +22,5 @@ pub mod solution;
 // pub mod propagate;
 // pub mod resolve;
 // pub mod validate;
-// pub mod valence;
 // pub mod evaluate;
 // pub mod matcher;
