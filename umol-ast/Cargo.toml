@@ -13,6 +13,7 @@ keywords = [
     "molecular representation",
 ]
 description = "DSL and AST layers for umol molecular representation."
+autobenches = false
 
 [lib]
 bench = false
