@@ -1,26 +1,37 @@
-//! Hueckel Molecular Orbital (HMO) aromaticity model.
+//! Hückel Molecular Orbital (HMO) aromaticity perception.
 //!
-//! Uses Van-Catledge parameters and aufbau filling to compute the delocalization energy and pi-bond orders.
-//! Compares the delocalization energy per pi-electron to a threshold to determine if the system is aromatic.
+//! Builds a π-only Hamiltonian from Van-Catledge parameters, fills it via aufbau,
+//! and compares the delocalization energy per π-electron to a configured threshold.
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use nalgebra::{DMatrix, SymmetricEigen};
-use umol_shared::element::Element;
-use umol_ast::ast::value::ValueAst;
+use umol_ast::ast::{
+    AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomIdx,
+    ElementAst, MoleculeAst, RingSet, SpinStateAst, ValueAst,
+};
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
+use umol_shared::element::Element;
 
-use umol_ast::ast::atom::ElementAst;
+use thiserror::Error;
 
-use super::AromaticityError;
-use super::ElementScope;
-use crate::ast::AtomIdx;
-use crate::ast::aromatic::AromaticSystem;
-use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::molecule::MoleculeAst;
-use crate::ast::rings::RingSet;
+use crate::ops::config::ElementScope;
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum HmoError {
+    /// Configuration gap: dispatcher surfaces as `Err(AromaticityError)`.
+    #[error("hmo: missing parameters: {0}")]
+    MissingParameters(String),
+    /// Algorithm preconditions failed (empty pi-system, odd electron count,
+    /// orbital count > atoms): dispatcher surfaces as `Solution::Contradictory`.
+    #[error("hmo: invalid input: {0}")]
+    InvalidInput(String),
+    /// Atom data not ground enough to evaluate: dispatcher surfaces as
+    /// `Solution::Underdetermined`.
+    #[error("hmo: undetermined atom data: {0}")]
+    UndeterminedAtom(String),
+}
 
 #[derive(Clone, Debug)]
 pub struct HmoAromaticity {
@@ -48,7 +59,7 @@ impl HmoAromaticity {
         &self,
         ast: &MoleculeAst,
         rings: &RingSet,
-    ) -> Result<Vec<AromaticSystem>, AromaticityError> {
+    ) -> Result<Vec<(Vec<AtomIdx>, AromaticSystemAst)>, HmoError> {
         let pi_atoms: Vec<AtomIdx> = ast
             .atoms()
             .iter()
@@ -60,7 +71,7 @@ impl HmoAromaticity {
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                ast.atom_aromatic_valence(view.idx).map(|_| view.idx)
+                aromatic_pi_contribution(view.data).map(|_| view.idx)
             })
             .collect();
 
@@ -111,25 +122,17 @@ impl HmoAromaticity {
                 let mut atoms = result.atom_indices.clone();
                 atoms.sort_unstable();
 
-                let atom_constraints: Vec<AtomConstraint> = atoms
+                let electrons: Vec<ValueAst> = atoms
                     .iter()
                     .map(|&atom| {
-                        let pi = ast.atom_aromatic_valence(atom).unwrap_or(0);
-                        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
-                            ValueAst::Lit(pi as i64),
-                        ))
+                        let pi = aromatic_pi_contribution(ast.atom(atom).data).unwrap_or(0);
+                        ValueAst::Lit(pi as i64)
                     })
                     .collect();
 
-                let bonds = ast.induced_bonds(&atoms);
-                let bond_constraints = vec![BondConstraint::Aromatic; bonds.len()];
-
-                candidates.push(AromaticSystem::new(
+                candidates.push((
                     atoms,
-                    bonds,
-                    AromaticSystemAst::default(),
-                    atom_constraints,
-                    bond_constraints,
+                    AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::default()),
                 ));
             }
         }
@@ -141,7 +144,7 @@ impl HmoAromaticity {
         &self,
         ast: &MoleculeAst,
         pi_atoms: &[AtomIdx],
-    ) -> Result<HmoCalculator, AromaticityError> {
+    ) -> Result<HmoCalculator, HmoError> {
         let atom_to_idx: HashMap<AtomIdx, usize> =
             pi_atoms.iter().enumerate().map(|(i, &a)| (a, i)).collect();
 
@@ -149,20 +152,20 @@ impl HmoAromaticity {
         let mut electron_count: u32 = 0;
         let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(pi_atoms.len());
         for &atom in pi_atoms {
-            let atom_ast = ast.atom(atom);
-            let element = match atom_ast.data.element {
+            let atom_data = ast.atom(atom).data;
+            let element = match atom_data.element {
                 ElementAst::Lit(e) => e,
                 _ => {
-                    return Err(AromaticityError::HmoMissingAtom(
+                    return Err(HmoError::UndeterminedAtom(
                         "undetermined element".to_string(),
                     ))
                 }
             };
-            let valence = ast.atom_aromatic_valence(atom).ok_or_else(|| {
-                AromaticityError::HmoMissingAtom("undetermined aromatic valence".to_string())
+            let valence = aromatic_pi_contribution(atom_data).ok_or_else(|| {
+                HmoError::UndeterminedAtom("undetermined aromatic valence".to_string())
             })?;
             let hx = VanCatledgeParams::h_x(element, valence).ok_or_else(|| {
-                AromaticityError::HmoMissingParameters(format!(
+                HmoError::MissingParameters(format!(
                     "no Van-Catledge parameters for {:?} with {} pi-electrons",
                     element, valence
                 ))
@@ -180,7 +183,7 @@ impl HmoAromaticity {
                     if j > i {
                         let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(
                             || {
-                                AromaticityError::HmoMissingParameters(format!(
+                                HmoError::MissingParameters(format!(
                                     "no Van-Catledge k_XY for {:?}-{:?}",
                                     atom_types[i], atom_types[j]
                                 ))
@@ -193,6 +196,17 @@ impl HmoAromaticity {
         }
 
         HmoCalculator::new(pi_atoms.to_vec(), electron_count, h_values, bonds)
+    }
+}
+
+fn aromatic_pi_contribution(atom: &AtomAst) -> Option<u8> {
+    match atom.constraints.get(AtomConstraintKind::AromaticValence)? {
+        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n)))
+            if *n >= 0 =>
+        {
+            Some(*n as u8)
+        }
+        _ => None,
     }
 }
 
@@ -209,25 +223,25 @@ impl HmoCalculator {
         electron_count: u32,
         h_values: Vec<f64>,
         bonds: Vec<(usize, usize, f64)>,
-    ) -> Result<Self, AromaticityError> {
+    ) -> Result<Self, HmoError> {
         if pi_atoms.is_empty() {
-            return Err(AromaticityError::HmoInvalidInput(
+            return Err(HmoError::InvalidInput(
                 "empty pi-system for HMO".to_string(),
             ));
         }
         if electron_count == 0 {
-            return Err(AromaticityError::HmoInvalidInput(
+            return Err(HmoError::InvalidInput(
                 "zero pi-electrons".to_string(),
             ));
         }
         if !electron_count.is_multiple_of(2) {
-            return Err(AromaticityError::HmoInvalidInput(
+            return Err(HmoError::InvalidInput(
                 "open-shell pi-system (odd electron count) not supported by HMO".to_string(),
             ));
         }
         let orbital_count = (electron_count / 2) as usize;
         if orbital_count > pi_atoms.len() {
-            return Err(AromaticityError::HmoInvalidInput(
+            return Err(HmoError::InvalidInput(
                 "more electron pairs than orbitals".to_string(),
             ));
         }
@@ -317,43 +331,36 @@ pub struct HmoOutput {
 mod tests {
     use float_cmp::*;
     use rstest::*;
+    use umol_ast::ast::{
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, MoleculeAst,
+        RingFamily, ValueAst,
+    };
     use umol_shared::element::Element;
-    use umol_ast::ast::value::ValueAst;
 
     use super::*;
-    use crate::ast::AtomIdx;
-    use crate::ast::atom::AtomAst;
-    use crate::ast::bond::BondAst;
-    use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, MoleculeConstraint};
-    use crate::ast::molecule::MoleculeAst;
-    use crate::ast::rings::RingEnumerationStrategy;
-    use crate::ast::rings::{RingEnumerator, RingFamily};
 
     fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
         (AtomAst::from_element(element), Some(pi))
     }
 
-    fn pi_constraints(specs: &[(AtomAst, Option<i64>)]) -> Vec<MoleculeConstraint> {
+    fn apply_pi(specs: Vec<(AtomAst, Option<i64>)>) -> Vec<AtomAst> {
         specs
-            .iter()
-            .enumerate()
-            .filter_map(|(i, (_, pi))| {
-                pi.map(|n| {
-                    MoleculeConstraint::AtomPred(
-                        AtomIdx(i as u32),
-                        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+            .into_iter()
+            .map(|(mut atom, pi)| {
+                if let Some(n) = pi {
+                    atom.constraints
+                        .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
                             ValueAst::Lit(n),
-                        )),
-                    )
-                })
+                        )));
+                }
+                atom
             })
             .collect()
     }
 
     fn make_ring(specs: Vec<(AtomAst, Option<i64>)>) -> MoleculeAst {
         let n = specs.len();
-        let constraints = pi_constraints(&specs);
-        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
+        let atoms = apply_pi(specs);
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
@@ -363,22 +370,41 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
+        MoleculeAst::new(
+            atoms,
+            bonds,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
     }
 
     fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
-        let constraints = pi_constraints(&specs);
-        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
+        let atoms = apply_pi(specs);
         let bonds: Vec<_> = edges
             .iter()
             .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
+        MoleculeAst::new(
+            atoms,
+            bonds,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
     }
 
     fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
         let atoms: Vec<AtomIdx> = (0..ast.atoms().count() as u32).map(AtomIdx).collect();
         model.build_calculator(ast, &atoms).unwrap().solve()
+    }
+
+    fn enumerate_simple(ast: &MoleculeAst) -> RingSet {
+        ast.enumerate_rings(RingFamily::Simple, 22, |_| true)
     }
 
     #[fixture]
@@ -502,19 +528,14 @@ mod tests {
         #[case] expected_systems: usize,
         #[case] expected_atoms: Option<usize>,
     ) {
-        let ring_info =
-            RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-                .enumerate(&ast);
+        let ring_info = enumerate_simple(&ast);
         let systems = hmo_model.find_from_rings(&ast, &ring_info).unwrap();
         assert_eq!(systems.len(), expected_systems);
-        assert_eq!(
-            systems.first().map(|s| s.atom_count()),
-            expected_atoms
-        );
+        assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
     }
 
     #[rstest]
-    fn test_hmo_output(hmo_model: HmoAromaticity, benzene: MoleculeAst) {
+    fn test_hmo_aromaticity_output(hmo_model: HmoAromaticity, benzene: MoleculeAst) {
         let output = solve_hmo(&hmo_model, &benzene);
 
         assert_eq!(output.bond_orders.len(), 6);
@@ -540,7 +561,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_hmo_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
+    fn test_hmo_aromaticity_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
         let atoms: Vec<AtomIdx> = (0..pyridine.atoms().count() as u32).map(AtomIdx).collect();
         let calc = hmo_model.build_calculator(&pyridine, &atoms).unwrap();
         let h = calc.hamiltonian();

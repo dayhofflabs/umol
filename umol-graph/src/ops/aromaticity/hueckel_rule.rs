@@ -1,23 +1,19 @@
-//! HueckelRule (4n+2 electron counting) aromaticity model.
+//! HueckelRule (4n+2 electron counting) aromaticity perception.
 //!
-//! Filters candidate atoms by element scope and aromatic valence, enumerates
-//! rings within configured bounds, checks the Hueckel 4n+2 rule on individual
-//! and fused ring combinations, and produces `AromaticSystem` objects.
+//! Filters candidate atoms by element scope and the per-atom aromatic-valence
+//! constraint, enumerates rings within configured bounds, checks the Hueckel
+//! 4n+2 rule on individual and fused ring combinations, and produces aromatic
+//! system tuples `(Vec<AtomIdx>, AromaticSystemAst)` ready for `MoleculeAst::edit`.
 
 use std::collections::{HashMap, HashSet};
 
+use umol_ast::ast::{
+    AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomIdx,
+    ElementAst, MoleculeAst, RingIdx, RingSet, RingView, SpinStateAst, ValueAst,
+};
 use umol_graph_core::UnionFind;
 
-use umol_ast::ast::atom::ElementAst;
-use umol_ast::ast::value::ValueAst;
-
-use super::{ElementScope, RingLimits};
-use crate::ast::AtomIdx;
-use crate::ast::aromatic::AromaticSystem;
-use crate::ast::constraint::{AromaticValenceConstraint, AtomConstraint, BondConstraint};
-use crate::ast::aromatic::AromaticSystemAst;
-use crate::ast::molecule::MoleculeAst;
-use crate::ast::rings::{RingIdx, RingSet, RingView};
+use crate::ops::config::{ElementScope, RingLimits};
 
 #[derive(Clone, Debug)]
 pub struct HueckelRuleAromaticity {
@@ -37,7 +33,7 @@ impl HueckelRuleAromaticity {
         &self,
         ast: &MoleculeAst,
         rings: &RingSet,
-    ) -> Vec<AromaticSystem> {
+    ) -> Vec<(Vec<AtomIdx>, AromaticSystemAst)> {
         let eligible_cycles: Vec<RingIdx> = rings
             .ids()
             .filter(|&i| rings.get(i).is_some_and(|r| self.filter_ring(ast, r)))
@@ -49,10 +45,10 @@ impl HueckelRuleAromaticity {
             let Some(ring) = rings.get(cycle_idx) else {
                 continue;
             };
-            if let Some(electrons) = self.ring_electron_count(ast, ring.atoms()) {
-                if self.check_4n_plus_2(electrons) {
-                    let atom_set: HashSet<AtomIdx> = ring.atoms().iter().copied().collect();
-                    aromatic_atom_sets.push(atom_set);
+            let ring_atoms: Vec<AtomIdx> = ring.atoms().iter().copied().collect();
+            if let Some(electrons) = self.ring_electron_count(ast, &ring_atoms) {
+                if check_4n_plus_2(electrons) {
+                    aromatic_atom_sets.push(ring_atoms.into_iter().collect());
                 }
             }
         }
@@ -62,7 +58,7 @@ impl HueckelRuleAromaticity {
             for atoms in fused_systems {
                 let atom_vec: Vec<AtomIdx> = atoms.iter().copied().collect();
                 if let Some(electrons) = self.ring_electron_count(ast, &atom_vec) {
-                    if self.check_4n_plus_2(electrons) {
+                    if check_4n_plus_2(electrons) {
                         aromatic_atom_sets.push(atoms);
                     }
                 }
@@ -76,13 +72,11 @@ impl HueckelRuleAromaticity {
             let mut atoms: Vec<AtomIdx> = atom_set.into_iter().collect();
             atoms.sort_unstable();
 
-            let mut atom_constraints: Vec<AtomConstraint> = Vec::with_capacity(atoms.len());
+            let mut electrons: Vec<ValueAst> = Vec::with_capacity(atoms.len());
             let mut valid = true;
             for &atom in &atoms {
-                if let Some(e) = self.aromatic_electron_count(ast, atom) {
-                    atom_constraints.push(AtomConstraint::AromaticValence(
-                        AromaticValenceConstraint::Value(ValueAst::Lit(e as i64)),
-                    ));
+                if let Some(e) = aromatic_pi_contribution(ast.atom(atom).data) {
+                    electrons.push(ValueAst::Lit(e as i64));
                 } else {
                     valid = false;
                     break;
@@ -92,15 +86,9 @@ impl HueckelRuleAromaticity {
                 continue;
             }
 
-            let bonds = ast.induced_bonds(&atoms);
-            let bond_constraints = vec![BondConstraint::Aromatic; bonds.len()];
-
-            candidates.push(AromaticSystem::new(
+            candidates.push((
                 atoms,
-                bonds,
-                AromaticSystemAst::default(),
-                atom_constraints,
-                bond_constraints,
+                AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::default()),
             ));
         }
 
@@ -108,24 +96,15 @@ impl HueckelRuleAromaticity {
     }
 
     fn is_atom_eligible(&self, ast: &MoleculeAst, atom: AtomIdx) -> bool {
-        let atom_ast = ast.atom(atom);
-        let element = match atom_ast.data.element {
+        let atom_data = ast.atom(atom).data;
+        let element = match atom_data.element {
             ElementAst::Lit(e) => e,
             _ => return false,
         };
-        match &self.element_scope {
-            ElementScope::Any => {}
-            ElementScope::AllowList(allowed) => {
-                if !allowed.contains(&element) {
-                    return false;
-                }
-            }
+        if !self.element_scope.contains(element) {
+            return false;
         }
-        ast.atom_aromatic_valence(atom).is_some()
-    }
-
-    fn aromatic_electron_count(&self, ast: &MoleculeAst, atom: AtomIdx) -> Option<u8> {
-        ast.atom_aromatic_valence(atom)
+        aromatic_pi_contribution(atom_data).is_some()
     }
 
     fn filter_ring(&self, ast: &MoleculeAst, ring: RingView<'_>) -> bool {
@@ -136,17 +115,10 @@ impl HueckelRuleAromaticity {
         ring.atoms().iter().all(|&a| self.is_atom_eligible(ast, a))
     }
 
-    fn check_4n_plus_2(&self, electron_count: u32) -> bool {
-        if electron_count < 2 {
-            return false;
-        }
-        (electron_count - 2).is_multiple_of(4)
-    }
-
     fn ring_electron_count(&self, ast: &MoleculeAst, atoms: &[AtomIdx]) -> Option<u32> {
         let mut total: u32 = 0;
         for &atom in atoms {
-            total += self.aromatic_electron_count(ast, atom)? as u32;
+            total += aromatic_pi_contribution(ast.atom(atom).data)? as u32;
         }
         Some(total)
     }
@@ -212,9 +184,25 @@ impl HueckelRuleAromaticity {
     }
 }
 
-fn merge_overlapping_systems(
-    aromatic_systems: &[HashSet<AtomIdx>],
-) -> Vec<HashSet<AtomIdx>> {
+fn check_4n_plus_2(electron_count: u32) -> bool {
+    if electron_count < 2 {
+        return false;
+    }
+    (electron_count - 2).is_multiple_of(4)
+}
+
+fn aromatic_pi_contribution(atom: &AtomAst) -> Option<u8> {
+    match atom.constraints.get(AtomConstraintKind::AromaticValence)? {
+        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n)))
+            if *n >= 0 =>
+        {
+            Some(*n as u8)
+        }
+        _ => None,
+    }
+}
+
+fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomIdx>]) -> Vec<HashSet<AtomIdx>> {
     if aromatic_systems.is_empty() {
         return Vec::new();
     }
@@ -250,20 +238,13 @@ fn merge_overlapping_systems(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::atom::ElementAst;
+    use umol_ast::ast::{
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, ElementAst,
+        MoleculeAst, RingFamily, ValueAst,
+    };
     use umol_shared::element::Element;
-    use umol_ast::ast::value::ValueAst;
 
     use super::*;
-    use crate::ast::AtomIdx;
-    use crate::ast::atom::AtomAst;
-    use crate::ast::bond::BondAst;
-    use crate::ast::constraint::{
-        AromaticValenceConstraint, AtomConstraint, MoleculeConstraint,
-    };
-    use crate::ast::molecule::MoleculeAst;
-    use crate::ast::rings::RingEnumerationStrategy;
-    use crate::ast::rings::{RingEnumerator, RingFamily};
 
     fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
         (AtomAst::from_element(element), Some(pi))
@@ -284,19 +265,17 @@ mod tests {
         (AtomAst::from_element(element), None)
     }
 
-    fn pi_constraints(specs: &[(AtomAst, Option<i64>)]) -> Vec<MoleculeConstraint> {
+    fn apply_pi(specs: Vec<(AtomAst, Option<i64>)>) -> Vec<AtomAst> {
         specs
-            .iter()
-            .enumerate()
-            .filter_map(|(i, (_, pi))| {
-                pi.map(|n| {
-                    MoleculeConstraint::AtomPred(
-                        AtomIdx(i as u32),
-                        AtomConstraint::AromaticValence(AromaticValenceConstraint::Value(
+            .into_iter()
+            .map(|(mut atom, pi)| {
+                if let Some(n) = pi {
+                    atom.constraints
+                        .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
                             ValueAst::Lit(n),
-                        )),
-                    )
-                })
+                        )));
+                }
+                atom
             })
             .collect()
     }
@@ -312,9 +291,16 @@ mod tests {
                 )
             })
             .collect();
-        let constraints = pi_constraints(&specs);
-        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
+        let atoms = apply_pi(specs);
+        MoleculeAst::new(
+            atoms,
+            bonds,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
     }
 
     fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
@@ -322,9 +308,20 @@ mod tests {
             .iter()
             .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
             .collect();
-        let constraints = pi_constraints(&specs);
-        let atoms: Vec<AtomAst> = specs.into_iter().map(|(a, _)| a).collect();
-        MoleculeAst::new(atoms, bonds, vec![], vec![], vec![], vec![], constraints)
+        let atoms = apply_pi(specs);
+        MoleculeAst::new(
+            atoms,
+            bonds,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
+    }
+
+    fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {
+        ast.enumerate_rings(RingFamily::Simple, max_ring_size, |_| true)
     }
 
     fn daylight_model() -> HueckelRuleAromaticity {
@@ -503,6 +500,18 @@ mod tests {
         ])
     }
 
+    fn electron_total(system: &(Vec<AtomIdx>, AromaticSystemAst)) -> i64 {
+        system
+            .1
+            .electrons
+            .iter()
+            .map(|v| match v {
+                ValueAst::Lit(n) => *n,
+                _ => 0,
+            })
+            .sum()
+    }
+
     #[rstest]
     #[case::benzene(benzene(), 6, 6)]
     #[case::pyridine(pyridine(), 6, 6)]
@@ -515,18 +524,17 @@ mod tests {
     #[case::phenanthrene(phenanthrene(), 14, 14)]
     #[case::tropylium(tropylium(), 7, 6)]
     #[case::cyclopentadienyl_anion(cyclopentadienyl_anion(), 5, 10)]
-    fn test_find_from_rings_aromatic(
+    fn test_hueckel_rule_find_from_rings_aromatic(
         #[case] ast: MoleculeAst,
         #[case] expected_atoms: usize,
-        #[case] expected_electrons: u8,
+        #[case] expected_electrons: i64,
     ) {
-        let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-            .enumerate(&ast);
+        let rings = enumerate_simple(&ast, RingLimits::default().max_ring_size);
         let model = daylight_model();
         let systems = model.find_from_rings(&ast, &rings);
         assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].atom_count(), expected_atoms);
-        assert_eq!(systems[0].electron_count(), expected_electrons);
+        assert_eq!(systems[0].0.len(), expected_atoms);
+        assert_eq!(electron_total(&systems[0]), expected_electrons);
     }
 
     #[rstest]
@@ -535,23 +543,21 @@ mod tests {
     #[case::cubane(cubane(), daylight_model())]
     #[case::borazine_daylight(borazine(), daylight_model())]
     #[case::pyrrole_mdl(pyrrole(), mdl_model())]
-    fn test_find_from_rings_non_aromatic(
+    fn test_hueckel_rule_find_from_rings_non_aromatic(
         #[case] ast: MoleculeAst,
         #[case] model: HueckelRuleAromaticity,
     ) {
-        let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-            .enumerate(&ast);
+        let rings = enumerate_simple(&ast, RingLimits::default().max_ring_size);
         let systems = model.find_from_rings(&ast, &rings);
         assert!(systems.is_empty());
     }
 
     #[rstest]
-    fn test_find_from_rings_borazine_permissive(borazine: MoleculeAst) {
-        let rings = RingEnumerator::new(RingFamily::Simple, &RingEnumerationStrategy::default())
-            .enumerate(&borazine);
+    fn test_hueckel_rule_find_from_rings_borazine_permissive(borazine: MoleculeAst) {
+        let rings = enumerate_simple(&borazine, RingLimits::default().max_ring_size);
         let systems = permissive_model().find_from_rings(&borazine, &rings);
         assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].atom_count(), 6);
-        assert_eq!(systems[0].electron_count(), 6);
+        assert_eq!(systems[0].0.len(), 6);
+        assert_eq!(electron_total(&systems[0]), 6);
     }
 }

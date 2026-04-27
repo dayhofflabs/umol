@@ -4,6 +4,7 @@
 //! returning either `Solution<T, Contradiction>` for chemistry outcomes or
 //! `Err(Error)` for setup-level failures.
 
+pub mod aromaticity;
 pub mod config;
 pub mod solution;
 pub mod validator;
