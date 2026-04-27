@@ -41,6 +41,12 @@ mod rewrite;
 /// Topology and per-atom/bond data are `Arc`-shared (copy-on-write). The AST
 /// itself only allows attribute mutation (`atom_mut`, `bond_mut`); structural
 /// edits go through `MoleculeBuilder` via [`MoleculeAst::edit`].
+///
+/// Carries a single-slot last-request-wins ring cache (`rings(family,
+/// max_ring_size)`). Caching is sound because topology is invariant across
+/// every in-place mutation path (only attribute fields change). Structural
+/// edits go through the builder, which produces a fresh `MoleculeAst` with
+/// an empty cache.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MoleculeAst {
     graph: Graph,
@@ -51,7 +57,27 @@ pub struct MoleculeAst {
     multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
     noncovalent_bonds: Arc<FixedRelationSet<NoncovalentBondAst, 2>>,
     constraints: Constraints,
+    /// Single-slot ring cache; never participates in `PartialEq`/`Hash`.
+    ring_cache: RingCache,
 }
+
+#[derive(Clone, Debug, Default)]
+struct RingCache(Option<Box<RingCacheEntry>>);
+
+#[derive(Clone, Debug)]
+struct RingCacheEntry {
+    family: RingFamily,
+    max_ring_size: usize,
+    rings: RingSet,
+}
+
+impl PartialEq for RingCache {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for RingCache {}
 
 impl Default for MoleculeAst {
     fn default() -> Self {
@@ -64,6 +90,7 @@ impl Default for MoleculeAst {
             multicenter_bonds: Arc::new(VarRelationSet::default()),
             noncovalent_bonds: Arc::new(FixedRelationSet::default()),
             constraints: Constraints::new(),
+            ring_cache: RingCache::default(),
         }
     }
 }
@@ -134,6 +161,7 @@ impl MoleculeAst {
             multicenter_bonds: Arc::new(multicenter_bonds),
             noncovalent_bonds: Arc::new(noncovalent_bonds),
             constraints,
+            ring_cache: RingCache::default(),
         }
     }
 
@@ -157,6 +185,7 @@ impl MoleculeAst {
             multicenter_bonds,
             noncovalent_bonds,
             constraints,
+            ring_cache: RingCache::default(),
         }
     }
 
@@ -517,7 +546,31 @@ impl MoleculeAst {
 
     // region: Ring enumeration
 
-    pub fn rings(
+    /// Cached ring enumeration. Single-slot last-request-wins: a call with
+    /// different `(family, max_ring_size)` than the previous one replaces the
+    /// stored result. Topology is invariant across in-place mutation paths,
+    /// so the cache stays valid for the molecule's lifetime; structural
+    /// edits go through the builder, which produces a fresh `MoleculeAst`.
+    pub fn rings(&mut self, family: RingFamily, max_ring_size: usize) -> &RingSet {
+        let stale = match self.ring_cache.0.as_deref() {
+            Some(entry) => entry.family != family || entry.max_ring_size != max_ring_size,
+            None => true,
+        };
+        if stale {
+            let rings = rings::enumerate_rings(&self.graph, family, max_ring_size, |_| true);
+            self.ring_cache.0 = Some(Box::new(RingCacheEntry {
+                family,
+                max_ring_size,
+                rings,
+            }));
+        }
+        &self.ring_cache.0.as_deref().unwrap().rings
+    }
+
+    /// Uncached ring enumeration with a custom atom filter. The cache slot
+    /// is not consulted or written; callers that want to amortize across
+    /// queries should use [`MoleculeAst::rings`] and filter at use-time.
+    pub fn enumerate_rings(
         &self,
         family: RingFamily,
         max_ring_size: usize,
