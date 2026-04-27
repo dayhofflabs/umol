@@ -91,20 +91,26 @@ impl<'a> AtomView<'a> {
         })
     }
 
-    /// π contribution from the aromatic system this atom belongs to. `None`
-    /// if the atom is not in any aromatic system, or the recorded
-    /// contribution is not a non-negative `Lit`.
+    /// π contribution from the aromatic system this atom belongs to.
+    /// `Some(0)` if the atom is not in any aromatic system. `None` if the
+    /// recorded contribution is not a non-negative `Lit`.
     ///
     /// An atom belongs to at most one aromatic system; the first incident
     /// system is consulted.
     pub fn aromatic_contribution(&self) -> Option<u32> {
-        let sys_id = self.ast.aromatic_systems_incident(self.idx).next()?;
+        let Some(sys_id) = self.ast.aromatic_systems_incident(self.idx).next() else {
+            return Some(0);
+        };
         let view = self.ast.aromatic_system(sys_id);
         let pos = view.atoms().position(|a| a == self.idx)?;
         match view.data.electrons.get(pos)? {
             ValueAst::Lit(v) if *v >= 0 => Some(*v as u32),
             _ => None,
         }
+    }
+
+    pub fn is_in_aromatic_system(&self) -> bool {
+        self.ast.aromatic_systems_incident(self.idx).next().is_some()
     }
 
     pub fn aromatic_valence_constraint(&self) -> Option<&'a AromaticValenceAst> {
@@ -802,7 +808,9 @@ mod tests {
             vec![],
             Constraints::default(),
         );
-        assert_eq!(ast.atom(AtomIdx(0)).aromatic_contribution(), None);
+        let view = ast.atom(AtomIdx(0));
+        assert_eq!(view.aromatic_contribution(), Some(0));
+        assert!(!view.is_in_aromatic_system());
     }
 
     #[rstest]

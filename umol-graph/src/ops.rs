@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod solution;
+pub mod validator;
 pub mod valence;
 
 // Disabled during the engine/config restructure (doc 92). Files kept on disk

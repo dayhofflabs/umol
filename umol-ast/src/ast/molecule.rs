@@ -68,6 +68,12 @@ impl Default for MoleculeAst {
     }
 }
 
+impl AsRef<MoleculeAst> for MoleculeAst {
+    fn as_ref(&self) -> &MoleculeAst {
+        self
+    }
+}
+
 impl MoleculeAst {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
