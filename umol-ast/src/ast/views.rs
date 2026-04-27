@@ -13,18 +13,140 @@ use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet};
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
 use super::bond::BondAst;
+use super::constraint::{
+    AromaticValenceAst, AtomConstraint, AtomConstraintKind, MulticenterValenceAst,
+};
 use super::dative::{DativeBondAst, DativeBondDirection};
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
+use super::molecule::MoleculeAst;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
+use super::value::ValueAst;
 
-/// Borrowed view of an atom: its index and the underlying `AtomAst`.
+/// Borrowed view of an atom: index, underlying `AtomAst`, and the parent
+/// `MoleculeAst` for cross-relation chemistry methods.
+///
+/// Chemistry methods come in pairs: the topology-derived value (summed from
+/// incident bonds / dative bonds / aromatic system / multicenter bonds) and
+/// the matching local-constraint value carried in `data.constraints`. The
+/// validator cross-checks the two when both are ground.
 #[derive(Clone, Copy, Debug)]
 pub struct AtomView<'a> {
     pub idx: AtomIdx,
     pub data: &'a AtomAst,
+    ast: &'a MoleculeAst,
+}
+
+impl<'a> AtomView<'a> {
+    /// σ-valence summed from incident bond orders. `None` if any incident
+    /// bond's order is not a non-negative `Lit`.
+    pub fn bond_order_sum(&self) -> Option<u32> {
+        let mut sum: u32 = 0;
+        for n in self.ast.neighbors(self.idx) {
+            match n.data.order {
+                ValueAst::Lit(v) if v >= 0 => sum = sum.checked_add(v as u32)?,
+                _ => return None,
+            }
+        }
+        Some(sum)
+    }
+
+    /// Local valence constraint, if asserted.
+    pub fn valence_constraint(&self) -> Option<&'a ValueAst> {
+        atom_constraint_value(self.data, AtomConstraintKind::Valence, |c| match c {
+            AtomConstraint::Valence(v) => Some(v),
+            _ => None,
+        })
+    }
+
+    /// Number of incident dative bonds where this atom is the donor.
+    pub fn donated_pairs(&self) -> u32 {
+        self.ast
+            .dative_bonds_incident(self.idx)
+            .filter(|&id| self.ast.dative_bond(id).donor == self.idx)
+            .count() as u32
+    }
+
+    pub fn donated_pairs_constraint(&self) -> Option<&'a ValueAst> {
+        atom_constraint_value(self.data, AtomConstraintKind::DonatedPairs, |c| match c {
+            AtomConstraint::DonatedPairs(v) => Some(v),
+            _ => None,
+        })
+    }
+
+    /// Number of incident dative bonds where this atom is the acceptor.
+    pub fn accepted_pairs(&self) -> u32 {
+        self.ast
+            .dative_bonds_incident(self.idx)
+            .filter(|&id| self.ast.dative_bond(id).acceptor == self.idx)
+            .count() as u32
+    }
+
+    pub fn accepted_pairs_constraint(&self) -> Option<&'a ValueAst> {
+        atom_constraint_value(self.data, AtomConstraintKind::AcceptedPairs, |c| match c {
+            AtomConstraint::AcceptedPairs(v) => Some(v),
+            _ => None,
+        })
+    }
+
+    /// π contribution from the aromatic system this atom belongs to. `None`
+    /// if the atom is not in any aromatic system, or the recorded
+    /// contribution is not a non-negative `Lit`.
+    ///
+    /// An atom belongs to at most one aromatic system; the first incident
+    /// system is consulted.
+    pub fn aromatic_contribution(&self) -> Option<u32> {
+        let sys_id = self.ast.aromatic_systems_incident(self.idx).next()?;
+        let view = self.ast.aromatic_system(sys_id);
+        let pos = view.atoms().position(|a| a == self.idx)?;
+        match view.data.electrons.get(pos)? {
+            ValueAst::Lit(v) if *v >= 0 => Some(*v as u32),
+            _ => None,
+        }
+    }
+
+    pub fn aromatic_valence_constraint(&self) -> Option<&'a AromaticValenceAst> {
+        atom_constraint_value(self.data, AtomConstraintKind::AromaticValence, |c| match c {
+            AtomConstraint::AromaticValence(v) => Some(v),
+            _ => None,
+        })
+    }
+
+    /// Sum of per-atom contributions across incident multicenter bonds.
+    /// `None` if any contribution is not a non-negative `Lit`.
+    pub fn multicenter_contribution(&self) -> Option<u32> {
+        let mut sum: u32 = 0;
+        for mc_id in self.ast.multicenter_bonds_incident(self.idx) {
+            let view = self.ast.multicenter_bond(mc_id);
+            let pos = view.atoms().position(|a| a == self.idx)?;
+            match view.data.electrons.get(pos)? {
+                ValueAst::Lit(v) if *v >= 0 => sum = sum.checked_add(*v as u32)?,
+                _ => return None,
+            }
+        }
+        Some(sum)
+    }
+
+    pub fn multicenter_valence_constraint(&self) -> Option<&'a MulticenterValenceAst> {
+        atom_constraint_value(
+            self.data,
+            AtomConstraintKind::MulticenterValence,
+            |c| match c {
+                AtomConstraint::MulticenterValence(v) => Some(v),
+                _ => None,
+            },
+        )
+    }
+}
+
+fn atom_constraint_value<'a, T>(
+    atom: &'a AtomAst,
+    kind: AtomConstraintKind,
+    extract: impl FnOnce(&'a AtomConstraint) -> Option<&'a T>,
+) -> Option<&'a T> {
+    extract(atom.constraints.get(kind)?)
 }
 
 /// Mutable borrowed view of an atom.
@@ -118,12 +240,13 @@ impl<'a> MulticenterBondView<'a> {
 /// `ids`, `iter`, `get`, and `Index` without burying them on `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct AtomViews<'a> {
+    ast: &'a MoleculeAst,
     atoms: &'a [AtomAst],
 }
 
 impl<'a> AtomViews<'a> {
-    pub(super) fn new(atoms: &'a [AtomAst]) -> Self {
-        Self { atoms }
+    pub(super) fn new(ast: &'a MoleculeAst, atoms: &'a [AtomAst]) -> Self {
+        Self { ast, atoms }
     }
 
     pub fn count(&self) -> usize {
@@ -135,9 +258,11 @@ impl<'a> AtomViews<'a> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> {
-        self.atoms.iter().enumerate().map(|(i, data)| AtomView {
+        let ast = self.ast;
+        self.atoms.iter().enumerate().map(move |(i, data)| AtomView {
             idx: AtomIdx(i as u32),
             data,
+            ast,
         })
     }
 
@@ -145,6 +270,7 @@ impl<'a> AtomViews<'a> {
         AtomView {
             idx,
             data: &self.atoms[idx.index()],
+            ast: self.ast,
         }
     }
 }
@@ -522,5 +648,255 @@ mod tests {
         assert_eq!(views.count(), 1);
         assert_eq!(views.ids().collect::<Vec<_>>(), vec![NoncovalentBondIdx(0)],);
         let _: &NoncovalentBondAst = &views[NoncovalentBondIdx(0)];
+    }
+
+    use crate::ast::bond::BondAst;
+    use crate::ast::constraint::AtomConstraint;
+    use crate::ast::dative::{DativeBondAst, DativeBondDirection};
+    use crate::ast::spin::SpinStateAst;
+    use crate::ast::value::ValueAst;
+
+    fn atom_with_constraints(element: Element, cs: Vec<AtomConstraint>) -> AtomAst {
+        let mut atom = AtomAst::from_element(element);
+        for c in cs {
+            atom.constraints.add(c);
+        }
+        atom
+    }
+
+    fn dative_with_direction(direction: DativeBondDirection) -> DativeBondAst {
+        DativeBondAst {
+            direction,
+            constraints: Default::default(),
+        }
+    }
+
+    fn aromatic_with_electrons(electrons: Vec<ValueAst>) -> AromaticSystemAst {
+        AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::default())
+    }
+
+    fn multicenter_with_electrons(electrons: Vec<ValueAst>) -> MulticenterBondAst {
+        MulticenterBondAst::new(electrons, ValueAst::Lit(0), SpinStateAst::default())
+    }
+
+    #[rstest]
+    #[case::no_bonds(AtomIdx(3), Some(0))]
+    #[case::single(AtomIdx(0), Some(1))]
+    #[case::two_incident(AtomIdx(1), Some(3))]
+    #[case::double(AtomIdx(2), Some(2))]
+    fn test_atom_view_bond_order_sum_ground(
+        #[case] center: AtomIdx,
+        #[case] expected: Option<u32>,
+    ) {
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+        ];
+        let bonds = vec![
+            (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
+            (AtomIdx(1), AtomIdx(2), BondAst::from_order(2)),
+        ];
+        let ast = MoleculeAst::new(
+            atoms,
+            bonds,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(ast.atom(center).bond_order_sum(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_bond_order_sum_undetermined() {
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+        ];
+        let mut undetermined = BondAst::from_order(1);
+        undetermined.order = ValueAst::Undetermined;
+        let bonds = vec![(AtomIdx(0), AtomIdx(1), undetermined)];
+        let ast = MoleculeAst::new(
+            atoms,
+            bonds,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(ast.atom(AtomIdx(0)).bond_order_sum(), None);
+    }
+
+    #[rstest]
+    #[case::donor_forward(AtomIdx(0), 1, 0)]
+    #[case::acceptor_forward(AtomIdx(1), 0, 1)]
+    fn test_atom_view_dative_pair_counts(
+        #[case] atom: AtomIdx,
+        #[case] expected_donated: u32,
+        #[case] expected_accepted: u32,
+    ) {
+        let atoms = vec![
+            AtomAst::from_element(Element::N),
+            AtomAst::from_element(Element::C),
+        ];
+        let dative = vec![(
+            AtomIdx(0),
+            AtomIdx(1),
+            dative_with_direction(DativeBondDirection::Forward),
+        )];
+        let ast = MoleculeAst::new(
+            atoms,
+            vec![],
+            dative,
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        let view = ast.atom(atom);
+        assert_eq!(view.donated_pairs(), expected_donated);
+        assert_eq!(view.accepted_pairs(), expected_accepted);
+    }
+
+    #[rstest]
+    #[case::lit(ValueAst::Lit(2), Some(2))]
+    #[case::undetermined(ValueAst::Undetermined, None)]
+    fn test_atom_view_aromatic_contribution(
+        #[case] entry: ValueAst,
+        #[case] expected: Option<u32>,
+    ) {
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+        ];
+        let bonds = vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))];
+        let aromatic = vec![(
+            vec![AtomIdx(0), AtomIdx(1)],
+            aromatic_with_electrons(vec![entry, ValueAst::Lit(1)]),
+        )];
+        let ast = MoleculeAst::new(
+            atoms,
+            bonds,
+            vec![],
+            aromatic,
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(ast.atom(AtomIdx(0)).aromatic_contribution(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_aromatic_contribution_not_in_system() {
+        let atoms = vec![AtomAst::from_element(Element::C)];
+        let ast = MoleculeAst::new(
+            atoms,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(ast.atom(AtomIdx(0)).aromatic_contribution(), None);
+    }
+
+    #[rstest]
+    #[case::single_bond(vec![(vec![AtomIdx(0), AtomIdx(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)])], Some(2))]
+    #[case::two_bonds(
+        vec![
+            (vec![AtomIdx(0), AtomIdx(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)]),
+            (vec![AtomIdx(0), AtomIdx(2)], vec![ValueAst::Lit(1), ValueAst::Lit(1)]),
+        ],
+        Some(3),
+    )]
+    #[case::undetermined_aborts(
+        vec![(vec![AtomIdx(0), AtomIdx(1)], vec![ValueAst::Undetermined, ValueAst::Lit(2)])],
+        None,
+    )]
+    fn test_atom_view_multicenter_contribution(
+        #[case] bonds: Vec<(Vec<AtomIdx>, Vec<ValueAst>)>,
+        #[case] expected: Option<u32>,
+    ) {
+        let atoms = vec![
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+            AtomAst::from_element(Element::C),
+        ];
+        let multicenter: Vec<_> = bonds
+            .into_iter()
+            .map(|(parts, electrons)| (parts, multicenter_with_electrons(electrons)))
+            .collect();
+        let ast = MoleculeAst::new(
+            atoms,
+            vec![],
+            vec![],
+            vec![],
+            multicenter,
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(ast.atom(AtomIdx(0)).multicenter_contribution(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_constraint_accessors_present() {
+        let atoms = vec![atom_with_constraints(
+            Element::C,
+            vec![
+                AtomConstraint::Valence(ValueAst::Lit(4)),
+                AtomConstraint::DonatedPairs(ValueAst::Lit(0)),
+                AtomConstraint::AcceptedPairs(ValueAst::Lit(0)),
+                AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+                AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(
+                    ValueAst::Lit(2),
+                )),
+            ],
+        )];
+        let ast = MoleculeAst::new(
+            atoms,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        let view = ast.atom(AtomIdx(0));
+        assert_eq!(view.valence_constraint(), Some(&ValueAst::Lit(4)));
+        assert_eq!(view.donated_pairs_constraint(), Some(&ValueAst::Lit(0)));
+        assert_eq!(view.accepted_pairs_constraint(), Some(&ValueAst::Lit(0)));
+        assert_eq!(
+            view.aromatic_valence_constraint(),
+            Some(&AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+        );
+        assert_eq!(
+            view.multicenter_valence_constraint(),
+            Some(&MulticenterValenceAst::Multicenter(ValueAst::Lit(2))),
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_constraint_accessors_absent() {
+        let atoms = vec![AtomAst::from_element(Element::C)];
+        let ast = MoleculeAst::new(
+            atoms,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        let view = ast.atom(AtomIdx(0));
+        assert!(view.valence_constraint().is_none());
+        assert!(view.donated_pairs_constraint().is_none());
+        assert!(view.accepted_pairs_constraint().is_none());
+        assert!(view.aromatic_valence_constraint().is_none());
+        assert!(view.multicenter_valence_constraint().is_none());
     }
 }

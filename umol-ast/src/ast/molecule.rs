@@ -181,7 +181,7 @@ impl MoleculeAst {
     }
 
     pub fn atoms(&self) -> AtomViews<'_> {
-        AtomViews::new(&self.atoms)
+        AtomViews::new(self, &self.atoms)
     }
 
     pub fn atom(&self, idx: AtomIdx) -> AtomView<'_> {
