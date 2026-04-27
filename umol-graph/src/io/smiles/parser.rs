@@ -22,51 +22,58 @@ use self::utils::{
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::{ParseError, SmilesError};
-use crate::ast::molecule::MoleculeAst;
-use crate::ops::chemistry::Chemistry;
-use crate::ops::resolve::Resolver;
+use crate::ops::config::ChemistryModel;
+use crate::ops::resolver::Resolver;
+use crate::ops::solution::Solution;
 use crate::span::Span;
 use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
     BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
     SourceFormat, WildcardAtom,
 };
+use umol_ast::ast::{IntoAst, MoleculeAst};
 
-/// Parse SMILES to [`api::Molecule`] using default IO config and [`Chemistry::default`].
-pub fn parse_smiles(input: &str) -> Result<api::Molecule, SmilesError> {
+/// Parse SMILES to a resolved [`MoleculeAst`] using default IO config and
+/// [`ChemistryModel::default`].
+pub fn parse_smiles(input: &str) -> Result<MoleculeAst, SmilesError> {
     parse_smiles_bytes(input.as_bytes())
 }
 
-/// Parse SMILES bytes to [`api::Molecule`] using default IO config and [`Chemistry::default`].
-pub fn parse_smiles_bytes(input: &[u8]) -> Result<api::Molecule, SmilesError> {
-    parse_smiles_bytes_with(input, &SmilesIoConfig::basic_opensmiles(), &Chemistry::default())
+/// Parse SMILES bytes to a resolved [`MoleculeAst`] using default IO config
+/// and [`ChemistryModel::default`].
+pub fn parse_smiles_bytes(input: &[u8]) -> Result<MoleculeAst, SmilesError> {
+    parse_smiles_bytes_with(
+        input,
+        &SmilesIoConfig::basic_opensmiles(),
+        &ChemistryModel::default(),
+    )
 }
 
-/// Parse SMILES to [`api::Molecule`] with explicit IO config and chemistry.
+/// Parse SMILES to a resolved [`MoleculeAst`] with explicit IO config and
+/// chemistry model.
 pub fn parse_smiles_with(
     input: &str,
     io_config: &SmilesIoConfig,
-    chemistry: &Chemistry,
-) -> Result<api::Molecule, SmilesError> {
-    parse_smiles_bytes_with(input.as_bytes(), io_config, chemistry)
+    model: &ChemistryModel,
+) -> Result<MoleculeAst, SmilesError> {
+    parse_smiles_bytes_with(input.as_bytes(), io_config, model)
 }
 
-/// Parse SMILES bytes to [`api::Molecule`] with explicit IO config and chemistry.
+/// Parse SMILES bytes to a resolved [`MoleculeAst`] with explicit IO config
+/// and chemistry model.
 pub fn parse_smiles_bytes_with(
     input: &[u8],
     io_config: &SmilesIoConfig,
-    chemistry: &Chemistry,
-) -> Result<api::Molecule, SmilesError> {
+    model: &ChemistryModel,
+) -> Result<MoleculeAst, SmilesError> {
     let table_mol = parse_smiles_bytes_to_table_ir_with(input, io_config)?;
-    let ast = MoleculeAst::from_table_molecule(&table_mol);
-    match Resolver::new(chemistry).resolve(ast)? {
-        crate::ops::solution::Solution::Determined(ast) => {
-            api::Molecule::new(ast).map_err(|_| SmilesError::ResolveUnderdetermined)
-        }
-        crate::ops::solution::Solution::Underdetermined(_) => {
-            Err(SmilesError::ResolveUnderdetermined)
-        }
-        crate::ops::solution::Solution::Contradictory => Err(SmilesError::ResolveContradictory),
+    let mut ast: MoleculeAst = (&table_mol)
+        .into_ast(&())
+        .expect("table_ir → MoleculeAst lift is currently infallible");
+    match Resolver::new(model).resolve(&mut ast)? {
+        Solution::Determined(()) => Ok(ast),
+        Solution::Underdetermined(()) => Err(SmilesError::ResolveUnderdetermined),
+        Solution::Contradictory(c) => Err(SmilesError::ResolveContradictory(c)),
     }
 }
 
@@ -78,7 +85,10 @@ pub fn parse_smiles_to_ast(input: &str) -> Result<MoleculeAst, SmilesError> {
 /// Parse SMILES bytes to [`MoleculeAst`] without running the solver.
 pub fn parse_smiles_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, SmilesError> {
     let table_mol = parse_smiles_bytes_to_table_ir(input)?;
-    Ok(MoleculeAst::from_table_molecule(&table_mol))
+    let ast: MoleculeAst = (&table_mol)
+        .into_ast(&())
+        .expect("table_ir → MoleculeAst lift is currently infallible");
+    Ok(ast)
 }
 
 /// Parse SMILES string to `table_ir::Molecule` with basic OpenSMILES configuration.

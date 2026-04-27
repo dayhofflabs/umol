@@ -24,15 +24,15 @@ pub use self::properties::{extended_property_input, property_input}; // NOTE: Re
 use self::sdf_data::sdf_data_block;
 use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::{CtfileError, ParseError};
-use crate::ast::molecule::MoleculeAst;
 use crate::io::utils::normalize_whitespace;
-use crate::api;
+use crate::ops::config::ChemistryModel;
+use crate::ops::resolver::Resolver;
+use crate::ops::solution::Solution;
 use crate::position::Point3D;
-use crate::ops::chemistry::Chemistry;
-use crate::ops::resolve::Resolver;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
 use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
+use umol_ast::ast::{IntoAst, MoleculeAst};
 
 mod accumulator;
 mod atom;
@@ -251,41 +251,43 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     false
 }
 
-/// Parse MOL to [`api::Molecule`] using default IO config and [`Chemistry::default`].
-pub fn parse_mol(input: &str) -> Result<api::Molecule, CtfileError> {
+/// Parse MOL to a resolved [`MoleculeAst`] using default IO config and
+/// [`ChemistryModel::default`].
+pub fn parse_mol(input: &str) -> Result<MoleculeAst, CtfileError> {
     parse_mol_bytes(input.as_bytes())
 }
 
-/// Parse MOL bytes to [`api::Molecule`] using default IO config and [`Chemistry::default`].
-pub fn parse_mol_bytes(input: &[u8]) -> Result<api::Molecule, CtfileError> {
-    parse_mol_bytes_with(input, &CtfileIoConfig::basic(), &Chemistry::default())
+/// Parse MOL bytes to a resolved [`MoleculeAst`] using default IO config and
+/// [`ChemistryModel::default`].
+pub fn parse_mol_bytes(input: &[u8]) -> Result<MoleculeAst, CtfileError> {
+    parse_mol_bytes_with(input, &CtfileIoConfig::basic(), &ChemistryModel::default())
 }
 
-/// Parse MOL to [`api::Molecule`] with explicit IO config and chemistry.
+/// Parse MOL to a resolved [`MoleculeAst`] with explicit IO config and
+/// chemistry model.
 pub fn parse_mol_with(
     input: &str,
     io_config: &CtfileIoConfig,
-    chemistry: &Chemistry,
-) -> Result<api::Molecule, CtfileError> {
-    parse_mol_bytes_with(input.as_bytes(), io_config, chemistry)
+    model: &ChemistryModel,
+) -> Result<MoleculeAst, CtfileError> {
+    parse_mol_bytes_with(input.as_bytes(), io_config, model)
 }
 
-/// Parse MOL bytes to [`api::Molecule`] with explicit IO config and chemistry.
+/// Parse MOL bytes to a resolved [`MoleculeAst`] with explicit IO config and
+/// chemistry model.
 pub fn parse_mol_bytes_with(
     input: &[u8],
     io_config: &CtfileIoConfig,
-    chemistry: &Chemistry,
-) -> Result<api::Molecule, CtfileError> {
+    model: &ChemistryModel,
+) -> Result<MoleculeAst, CtfileError> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
-    let ast = MoleculeAst::from_table_molecule(&table_mol);
-    match Resolver::new(chemistry).resolve(ast)? {
-        crate::ops::solution::Solution::Determined(ast) => {
-            api::Molecule::new(ast).map_err(|_| CtfileError::ResolveUnderdetermined)
-        }
-        crate::ops::solution::Solution::Underdetermined(_) => {
-            Err(CtfileError::ResolveUnderdetermined)
-        }
-        crate::ops::solution::Solution::Contradictory => Err(CtfileError::ResolveContradictory),
+    let mut ast: MoleculeAst = (&table_mol)
+        .into_ast(&())
+        .expect("table_ir → MoleculeAst lift is currently infallible");
+    match Resolver::new(model).resolve(&mut ast)? {
+        Solution::Determined(()) => Ok(ast),
+        Solution::Underdetermined(()) => Err(CtfileError::ResolveUnderdetermined),
+        Solution::Contradictory(c) => Err(CtfileError::ResolveContradictory(c)),
     }
 }
 
@@ -297,7 +299,10 @@ pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, CtfileError> {
 /// Parse MOL bytes to [`MoleculeAst`] without running the solver.
 pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, CtfileError> {
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
-    Ok(MoleculeAst::from_table_molecule(&table_mol))
+    let ast: MoleculeAst = (&table_mol)
+        .into_ast(&())
+        .expect("table_ir → MoleculeAst lift is currently infallible");
+    Ok(ast)
 }
 
 /// Parse MOL bytes to `table_ir::Molecule` with options (optimized, basic molecules only)

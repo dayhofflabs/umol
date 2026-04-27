@@ -5,6 +5,7 @@ pub mod bond;
 pub mod ctfile_data;
 pub mod cx_data;
 pub mod error;
+pub mod lift;
 pub mod molecule;
 pub mod multicenter;
 pub mod property;

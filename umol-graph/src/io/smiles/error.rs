@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use crate::ops::error::ResolutionError;
+use crate::ops::resolver::{ResolverContradiction, ResolverError};
 use crate::span::Span;
 
 #[derive(Debug, Clone, PartialEq, Error)]
@@ -9,9 +9,9 @@ pub enum SmilesError {
     #[error(transparent)]
     Parse(#[from] ParseError),
     #[error(transparent)]
-    Resolve(#[from] ResolutionError),
-    #[error("resolution contradictory")]
-    ResolveContradictory,
+    Resolve(#[from] ResolverError),
+    #[error("resolution contradictory: {0}")]
+    ResolveContradictory(ResolverContradiction),
     #[error("resolution underdetermined")]
     ResolveUnderdetermined,
 }

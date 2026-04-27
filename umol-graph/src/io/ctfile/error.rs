@@ -6,7 +6,7 @@ use thiserror::Error;
 use umol_shared::element::Element;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use crate::ops::error::ResolutionError;
+use crate::ops::resolver::{ResolverContradiction, ResolverError};
 use crate::span::Span;
 use crate::table_ir::SGroupType;
 
@@ -15,9 +15,9 @@ pub enum CtfileError {
     #[error(transparent)]
     Parse(#[from] ParseError),
     #[error(transparent)]
-    Resolve(#[from] ResolutionError),
-    #[error("resolution contradictory")]
-    ResolveContradictory,
+    Resolve(#[from] ResolverError),
+    #[error("resolution contradictory: {0}")]
+    ResolveContradictory(ResolverContradiction),
     #[error("resolution underdetermined")]
     ResolveUnderdetermined,
 }
