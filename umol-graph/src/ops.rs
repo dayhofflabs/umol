@@ -10,7 +10,3 @@ pub mod resolver;
 pub mod solution;
 pub mod valence;
 pub mod validator;
-
-// `evaluate` and `matcher` stay disabled until the matcher work picks up.
-// pub mod evaluate;
-// pub mod matcher;

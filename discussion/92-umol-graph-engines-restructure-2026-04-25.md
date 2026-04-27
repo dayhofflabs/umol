@@ -203,11 +203,100 @@ Ergonomics question: methods on `MoleculeAst` taking `AtomIdx` (`ast.valence(idx
 - `ops/` restructure designed; `ops/solution.rs` rewritten with `Solution<T, C>`; `ops/evaluate.rs` and `ops/matcher.rs` disabled
 - Remainder of the layout (`ops/config.rs`, `ops/resolver.rs`, `ops/validator.rs`, `ops/valence.rs`, `ops/aromaticity.rs` plus subdirs) not yet implemented
 
-## Outstanding
+## Status at close (2026-04-27)
 
-- Implement the `ops/` layout above. Bottom-up order: `solution.rs` (done) → `config.rs` → `validator.rs` (validators don't mutate, easier first) → `valence.rs` + `valence/*` → `aromaticity.rs` + `aromaticity/*` → composites in `resolver.rs`.
-- Resolve `ConstraintValidator` vs. `ConsistencyValidator` naming.
-- AtomView back-ref — placement, naming, and minimum method set.
-- Metadata on `Molecule`: round-trip preservation vs. purely semantic object.
-- Re-enable `api`, then port to the new `ops/` shapes.
-- `Matcher` re-enable (deferred to substructure / transformations work).
+The bottom-up implementation plan finished in nine phases. Final state:
+
+- **Phase 0 — quarantine.** `lib.rs` and `ops.rs` reduced to the live core;
+  bins / tests / benches gated behind a `legacy` Cargo feature.
+- **Phase 1 — configs.** `ops/config.rs` (`ChemistryModel`, `ValenceModel`,
+  `AromaticityModel`, `ElementScope`, `RingLimits`, `ConfigError`).
+  `ops/valence/registry.rs`, `ops/valence/table.rs`. `AtomTypeRegistry` now
+  stores `Vec<AtomAst>` directly via the new umol-ast `IntoAst` path.
+- **AtomView extension.** `umol-ast::AtomView` gained an `&'a MoleculeAst`
+  back-ref and the five chemistry method pairs per scheme A1
+  (`bond_order_sum` / `valence_constraint`, `donated_pairs` /
+  `donated_pairs_constraint`, `accepted_pairs` /
+  `accepted_pairs_constraint`, `aromatic_contribution` /
+  `aromatic_valence_constraint`, `multicenter_contribution` /
+  `multicenter_valence_constraint`), plus `is_in_aromatic_system`. Other
+  views deliberately untouched.
+- **Phases 2 + 3 — validators.** `ops/validator.rs` with
+  `ElectronInvariantValidator` (full impl, both `validate` and
+  `validate_atom`), `SpinCouplingValidator` (stub), `ConstraintValidator`
+  (stub), `EntityStructureValidator` (length checks), composite
+  `Validator`. Method signatures take `impl AsRef<MoleculeAst>`. The
+  electron-invariant equation keeps both `orbital_count` and
+  `electron_count` as the two independent total-electron-per-atom
+  accountings; renamed from the original `orbital`/`source` after
+  surfacing the `thiserror` `source` field collision and clarifying that
+  each side is meaningful in isolation. `impl AsRef<MoleculeAst> for
+  MoleculeAst` added in umol-ast for transparent `&MoleculeAst` /
+  `&Molecule` interop later.
+- **Phase 4 — aromaticity resolver.** `ops/aromaticity.rs` plus the three
+  algorithm modules ported off `crate::ast::*` to `umol_ast::ast::*`.
+  Algorithm output is now `Vec<(Vec<AtomIdx>, AromaticSystemAst)>` directly
+  — the legacy `AromaticSystem` perception-output wrapper is gone.
+  Per-atom π contributions land in `AromaticSystemAst.electrons`. Bond-side
+  `BondConstraint::Aromatic` is added by the dispatcher per induced bond.
+  `RingFamily::InducedBenzenoid` proved unnecessary once the legacy
+  coronene fixture (which had spurious cross-slice triangles) was rebuilt
+  with real coronene topology — Vismara's relevant cycle basis returns the
+  7 hexagonal faces directly. Each algorithm carries one error enum;
+  `AromaticityResolver::resolve` classifies variants into Solution /
+  Underdetermined / Err.
+- **Phase 5 — valence resolver.** `ops/valence/atom_typing.rs`,
+  `ops/valence/counts.rs`, private `shared.rs` for narrowing helpers.
+  `NormalValenceTable` folded into `ValenceTable` via
+  `ValenceEntry.normal_valence: Option<u8>`; the standalone
+  `default-normal-valence-table.toml` deleted, the corresponding entries
+  merged into `default-valence-table.toml`. Each algorithm has one error
+  enum; composite `ValenceResolver` lifts variants via `From`.
+- **Phase 6 — composite resolver.** `ops/resolver.rs` with `Resolver`,
+  `ResolverContradiction`, `ResolverError`. One-shot per pass — no
+  `ResolverCell`, no fixpoint, no `Progress`. `ops/chemistry.rs`,
+  `ops/error.rs`, `ops/propagate.rs`, `ops/resolve.rs`, `ops/validate.rs`
+  deleted.
+- **Phase 7 — io re-enabled.** `umol-graph/src/table_ir/lift.rs` —
+  `IntoAst<MoleculeAst> for &TableMolecule` (and per-atom and per-bond
+  analogues) replaces the legacy `MoleculeAst::from_table_molecule`. SMILES
+  and CTfile parser entry points return `Result<MoleculeAst, ParseError>`;
+  resolver outcomes (Determined / Underdetermined / Contradictory) are
+  classified at the parser boundary into the parser's error type.
+- **Phase 8 — bins / tests / benches.** Ungated for everything except the
+  resolution conformance suite and three benches (`morgan`,
+  `molecule_dsl_parsing`, `substructure`) that depend on deleted modules.
+  `cargo test -p umol-graph --features conformance`: 3253 lib + 12,677
+  conformance assertions pass.
+- **Phase 9 — cleanup.** Deleted `umol-graph/src/ast/`, `dsl/`, `api/`,
+  module headers, `ops/evaluate.rs`, `ops/matcher.rs`. Cleaned up the
+  comments in `lib.rs` and `ops.rs`.
+
+Settled side decisions:
+
+- **AtomView naming**: scheme A1 (`<topology>` / `<topology>_constraint`).
+- **Validator naming**: `ConstraintValidator` (over `ConsistencyValidator`).
+- **EntityStructureValidator** kept as a fourth, separate sub-validator —
+  not folded into `ConstraintValidator`. Owns length-mismatch checks and
+  any other structural invariants that aren't constraints.
+- **ResolverCell removed.** Topology-invariance during narrowing means a
+  cell type is unnecessary; `&mut MoleculeAst` is the only resolver
+  argument. The `RingSet` cache moved onto `MoleculeAst` itself per the
+  user's framing that AST is mutable during narrowing.
+- **`Solution` retained.** CSP-flavored vocabulary (`Determined`,
+  `Underdetermined`, `Contradictory`) stayed because there's no clean
+  domain replacement and the three-valued shape is load-bearing.
+- **No internal `Fault` union.** Each algorithm declares one error enum;
+  the dispatcher classifies variants. No "Outcome" wrapper, no separate
+  "RejectionReason" type per algorithm. Setup-vs-chemistry split happens
+  at the dispatcher boundary, never inside an algorithm.
+
+Items deferred to other docs:
+
+- **Chemist-facing `Molecule` wrapper** (with caches and metadata
+  question), **`Pattern`** with matcher caches, **`ReactionRule`**, the
+  matcher port, transformations as ops, tier-3 validators, builder API,
+  resolution conformance suite port. All filed under doc 86's
+  "Outstanding" section.
+
+Status: **Completed.**

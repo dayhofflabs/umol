@@ -13,8 +13,8 @@ keywords = [
     "molecular representation",
 ]
 description = "Graph-based molecular models for umol."
-# Integration tests listed explicitly so the `legacy` gate applies. Re-enable
-# autodiscovery once `legacy` is gone.
+# Integration tests listed explicitly so the `legacy` gate applies to the
+# resolution conformance suite which still uses pre-restructure types.
 autotests = false
 
 [lib]
@@ -22,7 +22,6 @@ bench = false
 
 [[test]]
 name = "mol_parsing"
-required-features = ["legacy"]
 
 [[test]]
 name = "resolution"
@@ -30,46 +29,38 @@ required-features = ["legacy"]
 
 [[test]]
 name = "sdf_parsing"
-required-features = ["legacy"]
 
 [[test]]
 name = "smiles_parsing"
-required-features = ["legacy"]
 
 [[test]]
 name = "smiles_proptest"
-required-features = ["legacy"]
 
 [[bin]]
 name = "test_mol_file"
 bench = false
-required-features = ["legacy"]
 
 [[bin]]
 name = "classify_mol_files"
 bench = false
-required-features = ["legacy"]
 
 [[bin]]
 name = "classify_sdf_files"
 bench = false
-required-features = ["legacy"]
 
 [[bin]]
 name = "test_smiles"
 bench = false
-required-features = ["legacy"]
 
 [[bin]]
 name = "classify_smiles_strings"
 bench = false
-required-features = ["legacy"]
 
 [features]
 conformance = []
-# Gate on the legacy `api` / `io` / `ast` / `dsl` modules. Off during the
-# umol-graph engines/config restructure (doc 92); the bins, tests, and benches
-# below are gated behind it. Re-enabled phase-by-phase.
+# Gate for the resolution conformance suite and benches that still depend on
+# `umol_graph::api`, `ast`, `dsl`, or the matcher (deferred). Removed once
+# the chemist-facing `Molecule` wrapper and the matcher port land.
 legacy = []
 
 [dependencies]
@@ -122,12 +113,10 @@ walkdir = "2.5.0"
 [[bench]]
 name = "mol_parsing"
 harness = false
-required-features = ["legacy"]
 
 [[bench]]
 name = "smiles_parsing"
 harness = false
-required-features = ["legacy"]
 
 [[bench]]
 name = "molecule_dsl_parsing"

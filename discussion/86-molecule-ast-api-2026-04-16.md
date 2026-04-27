@@ -457,24 +457,106 @@ Default both to tier 3 unless a use case forces stricter checks.
 
 (To be filled in as the rest of this discussion progresses.)
 
-## Implementation status (2026-04-17)
+## Implementation status (2026-04-27)
 
-- [x] **`MoleculeAst`** (`ast/molecule.rs`) — algebraic, immutable, `Arc`-wrapped per-relation storage; ground or partial; no caches.
-- [x] **`Molecule`** (`api/molecule.rs`) — `Arc<MoleculeInner>`; ground invariant enforced at `Molecule::new`; `OnceLock<RingSet>` cache; view API mirroring `MoleculeAst` (atoms, bonds, dative/noncovalent/aromatic/multicenter relations, neighbors, graph, `bond_order_sum`, `dative_bond_order_sums`, `is_in_aromatic_system`); EDN roundtrip via `to_edn_str` / `from_edn_str`.
-- [x] **`ResolverCell` cache transfer.** Topology cache (`OnceLock<RingSet>`) transfers from `ResolverCell` into the resulting `Molecule` on finalize.
-- [x] **Tier-1 structural invariants** enforced at `MoleculeAst::new` (index validity, relation arity, element/isotope existence, bond order ≥ 0).
-- [x] **Per-atom electron-count tier-2 invariant.** `ElectronInvariant` propagator (`unify/propagate.rs`) runs on every atom in `Validator::validate` and the matcher post-filter. Theory-independent; equation per the orbital-side / source-side balance.
+The pre-restructure tier-1 prototype (in-tree `umol_graph::api::Molecule`,
+`MoleculePattern`, the bespoke `MoleculeAst`/`MoleculePattern` storage with
+`OnceLock<RingSet>`, and `ResolverCell`) was deleted along with the
+`umol_graph::ast`/`dsl`/`api` trees during the doc 92 restructure. What's
+actually live now:
+
+- [x] **`MoleculeAst`** in `umol-ast` — algebraic, `Arc`-wrapped per-relation
+  storage; ground or partial; **carries a single-slot
+  last-request-wins ring cache** (`MoleculeAst::rings(family, max_size)`,
+  init/replace via `&mut self`). Topology-invariance during narrowing keeps
+  the cache valid across in-place mutations; structural edits go through the
+  builder, which produces a fresh `MoleculeAst` with an empty cache. Cache
+  field excluded from `PartialEq` / `Eq` via a newtype wrapper.
+- [x] **Tier-1 structural invariants** enforced at `MoleculeAst::new`.
+- [x] **Per-atom electron-count tier-2 invariant.**
+  `ElectronInvariantValidator` (`umol-graph/src/ops/validator.rs`) runs over
+  every atom; uses local atom constraints first and falls back to topology
+  via the AtomView chemistry-method pairs (scheme A1 — `bond_order_sum` /
+  `valence_constraint`, `donated_pairs` / `donated_pairs_constraint`, etc.).
+  Standalone-atom mode (`validate_atom`) reads constraints only.
+- [x] **Entity-structure validator.** `EntityStructureValidator` checks
+  `electrons.len() == atoms.len()` on `AromaticSystemAst` and
+  `MulticenterBondAst`.
+- [x] **Composite `Validator`** with sub-validators
+  `ElectronInvariantValidator`, `SpinCouplingValidator` (stub),
+  `ConstraintValidator` (stub), `EntityStructureValidator`. Each declares
+  its own `Contradiction` and `Error` types; composite unions via `From`.
+  Methods take `impl AsRef<MoleculeAst>` so `&MoleculeAst` and (future)
+  `&Molecule` work interchangeably.
+- [x] **Composite `Resolver` + `ChemistryModel`.** `ChemistryModel { valence,
+  aromaticity }` — no `ResolveConfig` wrapper; one shared model. `Resolver`
+  composes `ValenceResolver` (AtomTyping / Counts) and `AromaticityResolver`
+  (HueckelRule / Hmo / Clar). Each algorithm carries one error enum;
+  dispatcher classifies variants into `Solution::Contradictory` (chemistry),
+  `Solution::Underdetermined` (e.g. HMO `UndeterminedAtom`), or `Err`
+  (setup-level — currently only HMO `MissingParameters`).
+- [x] **TableIR → MoleculeAst lift.** `IntoAst<MoleculeAst> for &Molecule`
+  (and the per-atom and per-bond analogues) in
+  `umol-graph/src/table_ir/lift.rs`. Same conversion vocabulary as
+  umol-ast's DSL → AST lifts. `LiftError` empty for now; reserves a fail
+  surface for future strict checks.
+- [x] **Parser entry-points** return `MoleculeAst` (not `api::Molecule`):
+  `parse_smiles`, `parse_smiles_with(... &ChemistryModel)`,
+  `parse_smiles_to_ast`, plus the ctfile equivalents. Configuration takes
+  `&ChemistryModel`.
 
 ## Outstanding
 
-- [ ] **`Pattern` type with matcher caches.** Today `MoleculePattern` (`api/pattern.rs`) is a thin `Arc`-wrapped AST. Doc 86 calls for a long-lived `Pattern` carrying matcher-side scaffolding (per-atom constraint index, sub-pattern dependency graph, recursion order, packed pattern adjacency) and `Pattern::new` well-formedness checks. Lands with doc 80 step 9.
-- [ ] **Tier-1 parser entry-points.** `parse_smiles → Molecule`, `parse_smarts → Pattern`, `parse_smirks → ReactionRule`, plus tier-2 `*_to_ast` and configurable `parse_*_with` variants. Current parsers return `MoleculeAst`.
-- [ ] **Remaining tier-2 invariants.** `TotalCharge`, `TotalSpin`, and `AromaticElectronCount` exist as `MoleculeConstraint` variants but have no evaluator. Once doc 87's propagator evaluators land, wire them into `Validator::validate`.
-- [ ] **Per-entity spin-coupling invariant.** `SpinCouplingInvariant` stub exists in `ops/propagate.rs`; check is `multiplicity = unpaired − 2k + 1` for some `k ∈ 0..=unpaired/2` on any entity carrying a `SpinStateAst` (atom, aromatic system, multicenter bond). Parser's tier-2 leak was removed (`dsl/predicates.rs::apply_spin_pair` no longer validates; `SpinStateAst::validate` and the matching `ParseError` variants are gone). Wire the propagator into `Validator::validate` + matcher post-filter alongside `ElectronInvariant`.
-- [ ] **Additional `Molecule` cache slots.** `DistanceMatrix`, `BiconnectedComponents`, `MatchTarget`, `MorganTarget` — add as their first consumer arrives, not speculatively.
-- [ ] **`Pattern` cache slots.** Per-atom constraint index, sub-pattern dependency graph, packed pattern adjacency. Land with step 9.
-- [ ] **`ReactionRule` / `ReactionRuleAst`.** Mirror of the `Molecule` / `MoleculeAst` split for reactions. Doc 80 step 10.
-- [ ] **Coordinate annotations on `Molecule`.** Optional per-atom `Coordinate` payload propagated through MOL / CXSMILES roundtrip; `Molecule` stores but never recomputes.
-- [ ] **Transformations as ops** — `kekulize`, `aromatize`, `tautomers`, `to_canonical_smiles`, `apply_reaction` — with the signatures and result types from §"Transformation ops" and §"Result types". `kekulize_all` and `tautomers` return `Vec<Molecule>`; `apply_reaction` returns `Vec<ReactionResult>`.
-- [ ] **Tier-3 model-dependent validators** (octet, normal-valence tables, drug-like charge bounds, connectedness). Opt-in `validator` modules; never gate `Molecule::new`.
-- [ ] **Builder API** producing `MoleculeAst` then resolving to `Molecule` (tier-1 surface example in §"Where AST surfaces even at tier 1").
+The chemist-facing tier-1 wrappers and several tier-2 invariants still need
+to land:
+
+- [ ] **`Molecule` chemist-facing wrapper.** Holds an `Arc<MoleculeInner>`
+  with the AST plus chemistry-side cache slots. Doc 92's open question on
+  metadata-on-`Molecule` (round-trip preservation vs. purely semantic
+  object) is unsettled; revisit when the type is reintroduced.
+- [ ] **Cache slots on `Molecule`.** `DistanceMatrix`,
+  `BiconnectedComponents`, `MatchTarget`, `MorganTarget`. Add as their first
+  consumer arrives, not speculatively. The `RingSet` cache already lives on
+  `MoleculeAst` itself (doc 92 settled this); other Molecule-side caches are
+  for ground-only views that don't make sense on patterns.
+- [ ] **Coordinate annotations on `Molecule`.** Optional per-atom
+  `Coordinate` payload propagated through MOL / CXSMILES roundtrip; stored
+  but never recomputed.
+- [ ] **`Pattern` chemist-facing wrapper** with matcher-side scaffolding
+  (per-atom constraint index, sub-pattern dependency graph, recursion
+  order, packed pattern adjacency) and well-formedness checks at
+  construction. Lands alongside doc 80 step 9 (matcher port).
+- [ ] **`ReactionRule` / `ReactionRuleAst` split.** Mirror of the
+  `Molecule` / `MoleculeAst` split for reactions. Doc 80 step 10.
+- [ ] **Tier-1 parser entry-points returning chemist-facing types.**
+  `parse_smiles → Molecule`, `parse_smarts → Pattern`, `parse_smirks →
+  ReactionRule`. Today the parsers return `MoleculeAst`; chemist-facing
+  variants land once `Molecule` and `Pattern` exist.
+- [ ] **Remaining tier-2 propagators.** `TotalCharge`, `TotalSpin`, and
+  `AromaticElectronCount` exist as `MoleculeConstraint` variants but the
+  `ConstraintValidator` is a stub. Wire evaluators in once their per-engine
+  work lands.
+- [ ] **Per-entity spin-coupling propagator.** `SpinCouplingValidator` is a
+  stub returning `Determined`; check is `multiplicity = unpaired − 2k + 1`
+  for some `k ∈ 0..=unpaired/2` on any entity carrying a `SpinStateAst`
+  (atom, aromatic system, multicenter bond). Parity rule lives in
+  `umol_shared::spin::SpinState`; lift into the validator alongside
+  `ElectronInvariant`.
+- [ ] **`ConstraintValidator` cross-checks.** Constraint-vs-topology
+  agreement across entity types, plus molecule-scope constraints
+  (`:connected`, etc.). Currently a stub returning `Determined`.
+- [ ] **Matcher port** + the `evaluate.rs` it carried — both deleted at the
+  end of doc 92. Doc 80 step 9.
+- [ ] **Transformation ops** — `kekulize`, `aromatize`, `tautomers`,
+  `to_canonical_smiles`, `apply_reaction` — with the signatures and result
+  types from §"Transformation ops" and §"Result types".
+- [ ] **Tier-3 model-dependent validators** (octet, normal-valence tables,
+  drug-like charge bounds, connectedness). Opt-in `validator` modules;
+  never gate construction.
+- [ ] **Builder API** producing `MoleculeAst` then resolving to `Molecule`.
+- [ ] **Resolution conformance suite port.** `tests/resolution/*` is gated
+  behind `cargo` feature `legacy` and currently broken (uses deleted
+  `umol_graph::ast`/`dsl`/old `Chemistry`/`ValenceTheory`). Either rewrite
+  on the new `ChemistryModel` + `Resolver` API or delete and grow new
+  conformance coverage. Same call applies to the gated benches:
+  `morgan.rs`, `molecule_dsl_parsing.rs`, `substructure.rs`.

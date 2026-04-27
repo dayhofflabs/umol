@@ -93,4 +93,4 @@
 | [89-substructure-matching-variables-2026-04-21.md](89-substructure-matching-variables-2026-04-21.md)                             | Completed     | 2026-04-24   |
 | [90-reactions-relation-mutation-2026-04-21.md](90-reactions-relation-mutation-2026-04-21.md)                                     | Active        | 2026-04-21   |
 | [91-molecule-dsl-profiling-2026-04-23.md](91-molecule-dsl-profiling-2026-04-23.md)                                               | Completed     | 2026-04-24   |
-| [92-umol-graph-engines-restructure-2026-04-25.md](92-umol-graph-engines-restructure-2026-04-25.md)                               | Active        | 2026-04=25   |
+| [92-umol-graph-engines-restructure-2026-04-25.md](92-umol-graph-engines-restructure-2026-04-25.md)                               | Completed     | 2026-04-27   |
