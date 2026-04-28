@@ -5,7 +5,9 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 {
   :atom-typing {
     :output {
-      :aromatic [{:atoms [0 1 2 3 4 5]} {:atoms [6 7 8 9 10 11]}]
+      :aromatic [
+        {:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type ""}
+        {:atoms [6 7 8 9 10 11] :electrons [1 1 1 1 1 1] :type ""}]
       :atoms [
         "C#v3#a"
         "C#h#v2#a"
@@ -20,24 +22,25 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#v2#a"
         "C#h#v2#a"]
       :bonds [
-        [0 1 "1#a"]
-        [1 2 "1#a"]
-        [2 3 "1#a"]
-        [3 4 "1#a"]
-        [4 5 "1#a"]
-        [5 0 "1#a"]
-        [6 7 "1#a"]
-        [7 8 "1#a"]
-        [8 9 "1#a"]
-        [9 10 "1#a"]
-        [10 11 "1#a"]
-        [11 6 "1#a"]
-        [0 6 "1"]]
-      :constraints [{:aromatic-electron-count [0 6]} {:aromatic-electron-count [1 6]}]}
+        [0 1 :aromatic]
+        [1 2 :aromatic]
+        [2 3 :aromatic]
+        [3 4 :aromatic]
+        [4 5 :aromatic]
+        [0 5 :aromatic]
+        [6 7 :aromatic]
+        [7 8 :aromatic]
+        [8 9 :aromatic]
+        [9 10 :aromatic]
+        [10 11 :aromatic]
+        [6 11 :aromatic]
+        [0 6 :single]]}
     :success true}
   :counts {
     :output {
-      :aromatic [{:atoms [0 1 2 3 4 5]} {:atoms [6 7 8 9 10 11]}]
+      :aromatic [
+        {:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type ""}
+        {:atoms [6 7 8 9 10 11] :electrons [1 1 1 1 1 1] :type ""}]
       :atoms [
         "C#v3#a"
         "C#h#v2#a"
@@ -52,18 +55,17 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#v2#a"
         "C#h#v2#a"]
       :bonds [
-        [0 1 "1#a"]
-        [1 2 "1#a"]
-        [2 3 "1#a"]
-        [3 4 "1#a"]
-        [4 5 "1#a"]
-        [5 0 "1#a"]
-        [6 7 "1#a"]
-        [7 8 "1#a"]
-        [8 9 "1#a"]
-        [9 10 "1#a"]
-        [10 11 "1#a"]
-        [11 6 "1#a"]
-        [0 6 "1"]]
-      :constraints [{:aromatic-electron-count [0 6]} {:aromatic-electron-count [1 6]}]}
+        [0 1 :aromatic]
+        [1 2 :aromatic]
+        [2 3 :aromatic]
+        [3 4 :aromatic]
+        [4 5 :aromatic]
+        [0 5 :aromatic]
+        [6 7 :aromatic]
+        [7 8 :aromatic]
+        [8 9 :aromatic]
+        [9 10 :aromatic]
+        [10 11 :aromatic]
+        [6 11 :aromatic]
+        [0 6 :single]]}
     :success true}}

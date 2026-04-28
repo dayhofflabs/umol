@@ -1,6 +1,6 @@
-{:input {:atoms ["C" "C" "N" "C" "S"]
-         :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [3 4 :double]]}
- :config-overrides {:atom {:implicit-h-mode :normal :charge-mode :zero :aromatic-valence-mode :not-aromatic}}
- :context {:atom-candidates {}
-           :atom-aromatic-hints {0 false 1 false 2 false 3 false 4 false}
-           :atom-normal-implicit-hydrogens [0 1 2 3 4]}}
+{
+  :config-overrides {
+    :atom {:aromatic-valence :not-aromatic :charge :zero :implicit-hydrogens :normal}}
+  :input {
+    :atoms ["C#h=" "C#h=" "N#h=" "C#h=" "S#h="]
+    :bonds [[0 1 :single] [1 2 :single] [2 3 :double] [3 4 :double]]}}

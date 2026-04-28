@@ -16,7 +16,8 @@ pub mod hmo;
 pub mod hueckel_rule;
 
 use thiserror::Error;
-use umol_ast::ast::{BondConstraint, BondIdx, MoleculeAst, RingFamily};
+use umol_ast::ast::{BondConstraint, BondIdx, MoleculeAst, RingFamily, SpinStateAst, ValueAst};
+use umol_shared::spin::SpinState;
 
 use crate::ops::config::AromaticityModel;
 use crate::ops::solution::Solution;
@@ -104,8 +105,49 @@ impl AromaticityResolver {
         let mut sorted = systems;
         sorted.sort_by(|a, b| a.0.first().cmp(&b.0.first()));
 
+        // Transfer per-atom charge / spin into each system before writing,
+        // then reset the constituent atoms to neutral / closed-shell.
+        // A non-`Lit` atom field, or a coupled total that would overflow the
+        // supported spin range, means we can't complete the transfer and report
+        // `Underdetermined`.
+        for (atoms, system) in &mut sorted {
+            let mut total_charge: i64 = 0;
+            let mut total_unpaired: u32 = 0;
+            let mut transferred = true;
+            for &idx in atoms.iter() {
+                let atom = ast.atom(idx).data;
+                let (ValueAst::Lit(c), ValueAst::Lit(u)) = (&atom.charge, &atom.spin.unpaired)
+                else {
+                    transferred = false;
+                    break;
+                };
+                if *u < 0 {
+                    transferred = false;
+                    break;
+                }
+                total_charge += c;
+                total_unpaired += *u as u32;
+            }
+            if !transferred {
+                return Ok(Solution::Underdetermined(()));
+            }
+            let Ok(total_unpaired_u8) = u8::try_from(total_unpaired) else {
+                return Ok(Solution::Underdetermined(()));
+            };
+            let Some(state) = SpinState::max_multiplicity(total_unpaired_u8) else {
+                return Ok(Solution::Underdetermined(()));
+            };
+            system.charge = ValueAst::Lit(total_charge);
+            system.spin = SpinStateAst::from_state(state);
+        }
+
         let mut builder = ast.edit();
         for (atoms, system_ast) in sorted {
+            for &idx in &atoms {
+                let atom = builder.atom_mut(idx);
+                atom.charge = ValueAst::Lit(0);
+                atom.spin = SpinStateAst::closed_shell();
+            }
             let _ = builder.add_aromatic_system(atoms, system_ast);
         }
         *ast = builder.build();
@@ -132,6 +174,7 @@ impl AromaticityResolver {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use rstest::*;
@@ -146,6 +189,8 @@ mod tests {
 
     fn aromatic(element: Element, pi: i64) -> AtomAst {
         let mut atom = AtomAst::from_element(element);
+        atom.charge = ValueAst::Lit(0);
+        atom.spin = umol_ast::ast::SpinStateAst::closed_shell();
         atom.constraints
             .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
                 ValueAst::Lit(pi),

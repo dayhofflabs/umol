@@ -85,7 +85,7 @@ impl ClarAromaticity {
 
         Ok(vec![(
             atoms,
-            AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::default()),
+            AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::closed_shell()),
         )])
     }
 }

@@ -17,9 +17,18 @@ use crate::ops::config::ConfigError;
 
 #[derive(Debug, Clone)]
 pub struct ValenceEntry {
-    pub allowed_valences: Vec<i8>,
+    /// Admissible σ-valences for the neutral atom. Empty means "no preferred
+    /// σ-valence" (transition metals, post-transition ions): the atom is
+    /// accepted at any explicit valence and contributes no implicit
+    /// hydrogens. For charged atoms, lookup falls back to the isoelectronic
+    /// neutral entry.
+    pub allowed_valences: Vec<u8>,
     pub allowed_aromatic_valences: Vec<u8>,
     pub normal_valence: Option<u8>,
+    /// Conventional σ-valence used to fill `ImplicitHydrogensAst::Normal` on an
+    /// aromatic atom: H = `aromatic_normal_valence - actual σ-valence`. `None`
+    /// for elements that don't have a well-defined aromatic normal valence.
+    pub aromatic_normal_valence: Option<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,11 +39,14 @@ pub struct ValenceTable {
 
 #[derive(Deserialize)]
 struct ValenceEntryToml {
-    allowed_valences: Vec<i8>,
+    #[serde(default)]
+    allowed_valences: Vec<u8>,
     #[serde(default)]
     allowed_aromatic_valences: Vec<u8>,
     #[serde(default)]
     normal_valence: Option<u8>,
+    #[serde(default)]
+    aromatic_normal_valence: Option<u8>,
 }
 
 impl ValenceTable {
@@ -65,11 +77,12 @@ impl ValenceTable {
         for (element, entry) in &self.entries {
             let _ = writeln!(
                 buf,
-                "{}:{:?}:{:?}:{:?}",
+                "{}:{:?}:{:?}:{:?}:{:?}",
                 element,
                 entry.allowed_valences,
                 entry.allowed_aromatic_valences,
                 entry.normal_valence,
+                entry.aromatic_normal_valence,
             );
         }
         self.content_hash = xxh3_64(buf.as_bytes());
@@ -93,6 +106,7 @@ impl ValenceTable {
                     allowed_valences: entry.allowed_valences,
                     allowed_aromatic_valences: entry.allowed_aromatic_valences,
                     normal_valence: entry.normal_valence,
+                    aromatic_normal_valence: entry.aromatic_normal_valence,
                 },
             );
         }
@@ -108,12 +122,23 @@ impl ValenceTable {
         self.entries.get(&element)
     }
 
-    /// Compute implicit-hydrogen count using RDKit-style counts logic.
+    /// Compute implicit-hydrogen count from the table's `allowed_valences`.
     ///
-    /// Walks `allowed_valences` for the element (or its isoelectronic
-    /// counterpart if charged and the entry doesn't carry `-1`), returning
-    /// `allowed - explicit_valence` for the first entry that fits. `-1` means
-    /// unconstrained: `max(0, valence_electrons - charge - explicit)`.
+    /// For a charged atom, the lookup transparently switches to the
+    /// isoelectronic neutral entry (`element.shift(-charge)`), so e.g. Na+
+    /// reads as Ne and resolves to 0 implicit H without the parent table
+    /// having to special-case the cation.
+    ///
+    /// Then walks `allowed_valences` and returns `allowed -
+    /// explicit_valence` for the first entry that satisfies `explicit ≤
+    /// allowed ≤ num_electrons`. The upper bound rejects covalent valences
+    /// the atom can't actually reach (Na+ valence 1: needs 1 electron,
+    /// has 0).
+    ///
+    /// An empty `allowed_valences` means the table imposes no σ-valence
+    /// preference (transition metals, ionic cores): returns `Some(0)`. A
+    /// non-empty list with no entry that fits the constraints returns
+    /// `None`.
     pub fn compute_implicit_hydrogens(
         &self,
         element: Element,
@@ -123,22 +148,21 @@ impl ValenceTable {
         if element == Element::H {
             return Some(0);
         }
-        let entry = self.entries.get(&element)?;
         let num_electrons = (element.valence_electrons() as i16) - (charge as i16);
 
-        let effective_valences = if charge != 0 && !entry.allowed_valences.contains(&-1) {
-            let eff_entry = self.entries.get(&element.shift(-charge)?)?;
-            &eff_entry.allowed_valences
+        let effective_valences: &[u8] = if charge != 0 {
+            let iso = element.shift(-charge)?;
+            &self.entries.get(&iso)?.allowed_valences
         } else {
-            &entry.allowed_valences
+            &self.entries.get(&element)?.allowed_valences
         };
 
+        if effective_valences.is_empty() {
+            return Some(0);
+        }
         for &allowed in effective_valences {
-            if allowed == -1 {
-                return Some((num_electrons - explicit_valence as i16).max(0) as u8);
-            }
-            if allowed as u8 >= explicit_valence {
-                return Some(allowed as u8 - explicit_valence);
+            if allowed >= explicit_valence && (allowed as i16) <= num_electrons {
+                return Some(allowed - explicit_valence);
             }
         }
         None
@@ -159,16 +183,28 @@ impl ValenceTable {
         }
         self.entries.get(&element)?.normal_valence
     }
+
+    /// Conventional σ-valence used to fill `ImplicitHydrogensAst::Normal` on
+    /// an aromatic atom: H = `aromatic_normal_valence - actual σ-valence`.
+    /// Returns `None` for charged atoms (no charged-aromatic-normal data) or
+    /// for elements that don't have an aromatic normal valence set.
+    pub fn aromatic_normal_valence_for(&self, element: Element, charge: i8) -> Option<u8> {
+        if charge != 0 {
+            return None;
+        }
+        self.entries.get(&element)?.aromatic_normal_valence
+    }
 }
 
-/// Defines a `ValenceTable` from element-name keys.
+/// Defines a `ValenceTable` from element-name keys. Empty list means
+/// "no preferred σ-valence" (transition metals, ionic cores).
 ///
 /// ```ignore
 /// let table = valence_table! {
 ///     C => [4],
 ///     N => [3],
 ///     S => [2, 4, 6],
-///     Fe => [-1],
+///     Fe => [],
 /// };
 /// ```
 #[macro_export]
@@ -183,6 +219,7 @@ macro_rules! valence_table {
                     allowed_valences: vec![$($v),*],
                     allowed_aromatic_valences: vec![],
                     normal_valence: None,
+                    aromatic_normal_valence: None,
                 },
             );
         )*
@@ -238,9 +275,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::fe_neutral(Element::Fe, 0, 3, Some(5))]
-    #[case::fe_two_plus(Element::Fe, 2, 3, Some(3))]
-    fn test_valence_table_compute_implicit_hydrogens_unconstrained(
+    #[case::fe_neutral(Element::Fe, 0, 3, Some(0))]
+    #[case::fe_two_plus(Element::Fe, 2, 3, Some(0))]
+    #[case::na_plus(Element::Na, 1, 0, Some(0))]
+    #[case::mg_two_plus(Element::Mg, 2, 0, Some(0))]
+    fn test_valence_table_compute_implicit_hydrogens_no_preference(
         #[case] element: Element,
         #[case] charge: i8,
         #[case] explicit: u8,
@@ -274,11 +313,10 @@ mod tests {
 
     #[test]
     fn test_valence_table_normal_valence_for_unset() {
-        // Element with allowed_valences but no normal_valence: returns None.
         let table = ValenceTable::from_toml_str(
             r#"
         [Fe]
-        allowed_valences = [-1]
+        allowed_valences = []
         "#,
         )
         .unwrap();

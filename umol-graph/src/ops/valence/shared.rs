@@ -2,7 +2,8 @@
 
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomIdx, AtomView, BondAst,
-    ElementAst, ImplicitHydrogensAst, MoleculeAst, SpinStateAst, ValueAst,
+    ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterValenceAst,
+    SpinStateAst, ValueAst,
 };
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
@@ -71,27 +72,8 @@ pub fn infer_normal_implicit_hydrogens(
     is_aromatic: bool,
 ) -> Option<u8> {
     if is_aromatic {
-        if charge != 0 {
-            return None;
-        }
-        return if element == Element::C {
-            Some(3_u8.saturating_sub(explicit_valence))
-        } else if matches!(
-            element,
-            Element::B
-                | Element::N
-                | Element::O
-                | Element::P
-                | Element::S
-                | Element::Se
-                | Element::As
-        ) {
-            Some(0)
-        } else {
-            None
-        };
+        return infer_normal_aromatic_implicit_hydrogens(element, charge, explicit_valence);
     }
-
     let normal_valence = ValenceTable::default_table().normal_valence_for(element, charge)?;
     Some(normal_valence.saturating_sub(explicit_valence))
 }
@@ -101,25 +83,8 @@ pub fn infer_normal_aromatic_implicit_hydrogens(
     charge: i8,
     valence: u8,
 ) -> Option<u8> {
-    if charge != 0 {
-        return None;
-    }
-    if element == Element::C {
-        Some(3_u8.saturating_sub(valence))
-    } else if matches!(
-        element,
-        Element::B
-            | Element::N
-            | Element::O
-            | Element::P
-            | Element::S
-            | Element::Se
-            | Element::As
-    ) {
-        Some(0)
-    } else {
-        None
-    }
+    let normal = ValenceTable::default_table().aromatic_normal_valence_for(element, charge)?;
+    Some(normal.saturating_sub(valence))
 }
 
 pub fn base_atom_compatible(query: &AtomAst, candidate: &AtomAst) -> bool {
@@ -182,8 +147,12 @@ fn atom_constraint_holds(
             _ => false,
         },
         AtomConstraint::AromaticValence(query) => {
-            let actual_pi = aromatic_pi_pinned(view.data);
             let actual_is_aromatic = atom_is_aromatic(view);
+            let actual_pi: Option<u8> = if view.is_in_aromatic_system() {
+                view.aromatic_contribution().and_then(|v| u8::try_from(v).ok())
+            } else {
+                aromatic_pi_pinned(view.data)
+            };
             match query {
                 AromaticValenceAst::NotAromatic => !actual_is_aromatic,
                 AromaticValenceAst::Aromatic(ValueAst::Undetermined) => actual_is_aromatic,
@@ -191,6 +160,19 @@ fn atom_constraint_holds(
                     Some(actual) => actual == *q as u8,
                     None => actual_is_aromatic,
                 },
+                _ => false,
+            }
+        }
+        AtomConstraint::MulticenterValence(query) => {
+            let actual = view
+                .multicenter_contribution()
+                .and_then(|v| u8::try_from(v).ok());
+            match query {
+                MulticenterValenceAst::NotMulticenter => actual == Some(0),
+                MulticenterValenceAst::Multicenter(ValueAst::Undetermined) => {
+                    matches!(actual, Some(n) if n > 0)
+                }
+                MulticenterValenceAst::Multicenter(ValueAst::Lit(q)) => actual == Some(*q as u8),
                 _ => false,
             }
         }
@@ -232,7 +214,10 @@ pub fn try_build_candidate(
 
     Some(AtomAst {
         element: ElementAst::Lit(element),
-        isotope_mass: atom_ast.isotope_mass.clone(),
+        isotope_mass: match &atom_ast.isotope_mass {
+            IsotopeAst::Undetermined => IsotopeAst::Natural,
+            other => other.clone(),
+        },
         charge: ValueAst::Lit(charge as i64),
         implicit_hydrogens: ImplicitHydrogensAst::Lit(implicit_hydrogens as i64),
         lone_pairs: ValueAst::Lit(lone_pairs as i64),
@@ -285,6 +270,12 @@ fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u
 /// fields onto literal candidates; never overwrites existing literals.
 pub fn narrow_atom(atom: &mut AtomAst, candidate: &AtomAst) -> bool {
     let mut changed = false;
+    if matches!(atom.isotope_mass, IsotopeAst::Undetermined)
+        && !matches!(candidate.isotope_mass, IsotopeAst::Undetermined)
+    {
+        atom.isotope_mass = candidate.isotope_mass.clone();
+        changed = true;
+    }
     changed |= narrow_value(&mut atom.charge, &candidate.charge);
     if matches!(
         atom.implicit_hydrogens,
@@ -388,4 +379,178 @@ pub fn bond_order_lit(bond: &BondAst) -> Option<u8> {
 #[allow(dead_code)]
 pub fn atom_view<'a>(ast: &'a MoleculeAst, idx: AtomIdx) -> AtomView<'a> {
     ast.atom(idx)
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use umol_ast::ast::{
+        AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, Constraints,
+        MoleculeAst, MulticenterBondAst, MulticenterValenceAst, SpinStateAst, ValueAst,
+    };
+    use umol_shared::element::Element;
+
+    use super::*;
+
+    fn molecule_with_multicenter(
+        atom_count: usize,
+        multicenter_atoms: Vec<AtomIdx>,
+        electrons: Vec<ValueAst>,
+    ) -> MoleculeAst {
+        let atoms: Vec<AtomAst> = (0..atom_count)
+            .map(|_| AtomAst::from_element(Element::Xe))
+            .collect();
+        let multicenter = vec![(
+            multicenter_atoms,
+            MulticenterBondAst::new(electrons, ValueAst::Lit(0), SpinStateAst::closed_shell()),
+        )];
+        MoleculeAst::new(
+            atoms,
+            vec![],
+            vec![],
+            vec![],
+            multicenter,
+            vec![],
+            Constraints::default(),
+        )
+    }
+
+    fn molecule_with_aromatic(
+        atom_count: usize,
+        aromatic_atoms: Vec<AtomIdx>,
+        electrons: Vec<ValueAst>,
+    ) -> MoleculeAst {
+        let atoms: Vec<AtomAst> = (0..atom_count)
+            .map(|_| AtomAst::from_element(Element::C))
+            .collect();
+        let aromatic = vec![(
+            aromatic_atoms,
+            AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::closed_shell()),
+        )];
+        MoleculeAst::new(
+            atoms,
+            vec![],
+            vec![],
+            aromatic,
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
+    }
+
+    fn bare_molecule() -> MoleculeAst {
+        MoleculeAst::new(
+            vec![AtomAst::from_element(Element::Xe)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    #[case::not_multicenter_on_bare(
+        bare_molecule(),
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
+        true,
+    )]
+    #[case::not_multicenter_on_participant(
+        molecule_with_multicenter(
+            3,
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+            vec![ValueAst::Lit(2), ValueAst::Lit(1), ValueAst::Lit(1)],
+        ),
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
+        false,
+    )]
+    #[case::multicenter_lit_match(
+        molecule_with_multicenter(
+            3,
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+            vec![ValueAst::Lit(2), ValueAst::Lit(1), ValueAst::Lit(1)],
+        ),
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(2))),
+        true,
+    )]
+    #[case::multicenter_lit_mismatch(
+        molecule_with_multicenter(
+            3,
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+            vec![ValueAst::Lit(2), ValueAst::Lit(1), ValueAst::Lit(1)],
+        ),
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))),
+        false,
+    )]
+    #[case::multicenter_undetermined_on_participant(
+        molecule_with_multicenter(
+            3,
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+            vec![ValueAst::Lit(2), ValueAst::Lit(1), ValueAst::Lit(1)],
+        ),
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Undetermined)),
+        true,
+    )]
+    #[case::multicenter_undetermined_on_bare(
+        bare_molecule(),
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Undetermined)),
+        false,
+    )]
+    fn test_atom_constraint_holds_multicenter_valence(
+        #[case] ast: MoleculeAst,
+        #[case] constraint: AtomConstraint,
+        #[case] expected: bool,
+    ) {
+        let view = ast.atom(AtomIdx(0));
+        assert_eq!(
+            atom_constraint_holds(&view, &constraint, 0, 0, 0),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::aromatic_lit_match_from_system(
+        molecule_with_aromatic(
+            6,
+            (0..6).map(AtomIdx).collect(),
+            vec![ValueAst::Lit(1); 6],
+        ),
+        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+        true,
+    )]
+    #[case::aromatic_lit_mismatch_from_system(
+        molecule_with_aromatic(
+            6,
+            (0..6).map(AtomIdx).collect(),
+            vec![ValueAst::Lit(1); 6],
+        ),
+        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(2))),
+        false,
+    )]
+    #[case::not_aromatic_on_bare(
+        bare_molecule(),
+        AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
+        true,
+    )]
+    #[case::not_aromatic_on_member(
+        molecule_with_aromatic(
+            6,
+            (0..6).map(AtomIdx).collect(),
+            vec![ValueAst::Lit(1); 6],
+        ),
+        AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
+        false,
+    )]
+    fn test_atom_constraint_holds_aromatic_valence(
+        #[case] ast: MoleculeAst,
+        #[case] constraint: AtomConstraint,
+        #[case] expected: bool,
+    ) {
+        let view = ast.atom(AtomIdx(0));
+        assert_eq!(
+            atom_constraint_holds(&view, &constraint, 0, 0, 0),
+            expected
+        );
+    }
 }

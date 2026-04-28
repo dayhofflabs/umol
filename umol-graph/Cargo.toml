@@ -25,7 +25,7 @@ name = "mol_parsing"
 
 [[test]]
 name = "resolution"
-required-features = ["legacy"]
+required-features = ["conformance"]
 
 [[test]]
 name = "sdf_parsing"

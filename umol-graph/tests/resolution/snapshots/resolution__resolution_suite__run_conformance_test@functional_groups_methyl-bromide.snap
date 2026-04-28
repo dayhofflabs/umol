@@ -3,5 +3,5 @@ source: umol-graph/tests/resolution/mod.rs
 expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
-  :atom-typing {:output {:atoms ["C#h3#v" "Br#n3#v"] :bonds [[0 1 "1"]]} :success true}
-  :counts {:output {:atoms ["C#h3#v" "Br#n3#v"] :bonds [[0 1 "1"]]} :success true}}
+  :atom-typing {:output {:atoms ["C#h3#v" "Br#n3#v"] :bonds [[0 1 :single]]} :success true}
+  :counts {:output {:atoms ["C#h3#v" "Br#n3#v"] :bonds [[0 1 :single]]} :success true}}

@@ -15,14 +15,14 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "Cl#n3#v"
         "Cl#n3#v"]
       :bonds [
-        [0 1 "1"]
-        [1 2 "1"]
-        [2 3 "1"]
-        [3 4 "1"]
-        [4 5 "1"]
-        [5 0 "1"]
-        [0 6 "1"]
-        [1 7 "1"]]}
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [0 5 :single]
+        [0 6 :single]
+        [1 7 :single]]}
     :success true}
   :counts {
     :output {
@@ -36,12 +36,12 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "Cl#n3#v"
         "Cl#n3#v"]
       :bonds [
-        [0 1 "1"]
-        [1 2 "1"]
-        [2 3 "1"]
-        [3 4 "1"]
-        [4 5 "1"]
-        [5 0 "1"]
-        [0 6 "1"]
-        [1 7 "1"]]}
+        [0 1 :single]
+        [1 2 :single]
+        [2 3 :single]
+        [3 4 :single]
+        [4 5 :single]
+        [0 5 :single]
+        [0 6 :single]
+        [1 7 :single]]}
     :success true}}

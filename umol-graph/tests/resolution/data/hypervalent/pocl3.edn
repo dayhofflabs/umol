@@ -1,5 +1,6 @@
-{:input {:atoms ["P" "O" "Cl" "Cl" "Cl"]
-         :bonds [[0 1 :double] [0 2 :single] [0 3 :single] [0 4 :single]]}
- :config-overrides {:atom {:implicit-h-mode :zero :charge-mode :zero :aromatic-valence-mode :not-aromatic}}
- :context {:atom-candidates {}
-           :atom-aromatic-hints {0 false 1 false 2 false 3 false 4 false}}}
+{
+  :config-overrides {
+    :atom {:aromatic-valence :not-aromatic :charge :zero :implicit-hydrogens :zero}}
+  :input {
+    :atoms ["P" "O" "Cl" "Cl" "Cl"]
+    :bonds [[0 1 :double] [0 2 :single] [0 3 :single] [0 4 :single]]}}

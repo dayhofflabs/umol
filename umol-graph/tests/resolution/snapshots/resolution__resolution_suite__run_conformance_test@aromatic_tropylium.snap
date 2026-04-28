@@ -5,7 +5,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 {
   :atom-typing {
     :output {
-      :aromatic [{:atoms [0 1 2 3 4 5 6]}]
+      :aromatic [{:atoms [0 1 2 3 4 5 6] :electrons [1 1 1 1 1 1 0] :type "#c+"}]
       :atoms [
         "C#h#v2#a"
         "C#h#v2#a"
@@ -13,20 +13,19 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#v2#a"
         "C#h#v2#a"
         "C#h#v2#a"
-        "C#c+#h#v2#a0"]
+        "C#h#v2#a0"]
       :bonds [
-        [0 1 "1#a"]
-        [1 2 "1#a"]
-        [2 3 "1#a"]
-        [3 4 "1#a"]
-        [4 5 "1#a"]
-        [5 6 "1#a"]
-        [6 0 "1#a"]]
-      :constraints [{:aromatic-electron-count [0 6]}]}
+        [0 1 :aromatic]
+        [1 2 :aromatic]
+        [2 3 :aromatic]
+        [3 4 :aromatic]
+        [4 5 :aromatic]
+        [5 6 :aromatic]
+        [0 6 :aromatic]]}
     :success true}
   :counts {
     :output {
-      :aromatic [{:atoms [0 1 2 3 4 5 6]}]
+      :aromatic [{:atoms [0 1 2 3 4 5 6] :electrons [1 1 1 1 1 1 0] :type "#c+"}]
       :atoms [
         "C#h#v2#a"
         "C#h#v2#a"
@@ -34,14 +33,13 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
         "C#h#v2#a"
         "C#h#v2#a"
         "C#h#v2#a"
-        "C#c+#h#v2#a0"]
+        "C#h#v2#a0"]
       :bonds [
-        [0 1 "1#a"]
-        [1 2 "1#a"]
-        [2 3 "1#a"]
-        [3 4 "1#a"]
-        [4 5 "1#a"]
-        [5 6 "1#a"]
-        [6 0 "1#a"]]
-      :constraints [{:aromatic-electron-count [0 6]}]}
+        [0 1 :aromatic]
+        [1 2 :aromatic]
+        [2 3 :aromatic]
+        [3 4 :aromatic]
+        [4 5 :aromatic]
+        [5 6 :aromatic]
+        [0 6 :aromatic]]}
     :success true}}

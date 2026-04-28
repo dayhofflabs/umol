@@ -1,9 +1,4 @@
-{:input {:atoms ["C" "C"]
-         :bonds [[0 1 :single]]}
- :config-overrides {:atom {:charge-mode :zero
-                           :implicit-h-mode :normal
-                           :aromatic-valence-mode :not-aromatic}}
- :context {:atom-candidates {}
-           :atom-aromatic-hints {0 false 1 false}
-           :bond-aromatic-hints {}
-           :atom-normal-implicit-hydrogens [0 1]}}
+{
+  :config-overrides {
+    :atom {:aromatic-valence :not-aromatic :charge :zero :implicit-hydrogens :normal}}
+  :input {:atoms ["C#h=" "C#h="] :bonds [[0 1 :single]]}}

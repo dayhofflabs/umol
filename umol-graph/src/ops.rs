@@ -5,7 +5,9 @@
 //! `Err(Error)` for setup-level failures.
 
 pub mod aromaticity;
+pub mod bonds;
 pub mod config;
+pub mod multicenter_bonds;
 pub mod resolver;
 pub mod solution;
 pub mod valence;

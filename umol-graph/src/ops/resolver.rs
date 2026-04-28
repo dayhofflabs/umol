@@ -1,7 +1,12 @@
-//! Composite resolver: runs the valence resolver, then aromaticity
-//! perception, on a single `MoleculeAst`. One-shot per pass — no fixpoint
-//! loop, no `ResolverCell`. Topology stays invariant across narrowing, so
-//! intermediate views remain valid.
+//! Composite resolver: chains the per-entity resolvers (valence,
+//! aromaticity, bonds, multicenter bonds) on a single `MoleculeAst`.
+//! One-shot per pass — no fixpoint loop, no `ResolverCell`. Topology stays
+//! invariant across narrowing, so intermediate views remain valid.
+//!
+//! `Determined` requires every entity (atoms, bonds, dative bonds, aromatic
+//! systems, multicenter bonds, noncovalent bonds) to be ground. Sub-resolvers
+//! report only completion or contradiction; the top-level `Resolver` decides
+//! the global ground-status verdict.
 
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
@@ -9,7 +14,11 @@ use umol_ast::ast::MoleculeAst;
 use crate::ops::aromaticity::{
     AromaticityContradiction, AromaticityError, AromaticityResolver,
 };
+use crate::ops::bonds::{BondsContradiction, BondsError, BondsResolver};
 use crate::ops::config::ChemistryModel;
+use crate::ops::multicenter_bonds::{
+    MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
+};
 use crate::ops::solution::Solution;
 use crate::ops::valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
@@ -17,6 +26,8 @@ use crate::ops::valence::{ValenceContradiction, ValenceError, ValenceResolver};
 pub struct Resolver {
     pub valence: ValenceResolver,
     pub aromaticity: AromaticityResolver,
+    pub bonds: BondsResolver,
+    pub multicenter_bonds: MulticenterBondsResolver,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -25,6 +36,10 @@ pub enum ResolverContradiction {
     Valence(#[from] ValenceContradiction),
     #[error(transparent)]
     Aromaticity(#[from] AromaticityContradiction),
+    #[error(transparent)]
+    Bonds(#[from] BondsContradiction),
+    #[error(transparent)]
+    MulticenterBonds(#[from] MulticenterBondsContradiction),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -33,6 +48,10 @@ pub enum ResolverError {
     Valence(#[from] ValenceError),
     #[error(transparent)]
     Aromaticity(#[from] AromaticityError),
+    #[error(transparent)]
+    Bonds(#[from] BondsError),
+    #[error(transparent)]
+    MulticenterBonds(#[from] MulticenterBondsError),
 }
 
 impl Resolver {
@@ -40,6 +59,8 @@ impl Resolver {
         Self {
             valence: ValenceResolver::new(&model.valence),
             aromaticity: AromaticityResolver::new(&model.aromaticity),
+            bonds: BondsResolver::new(),
+            multicenter_bonds: MulticenterBondsResolver::new(),
         }
     }
 
@@ -47,32 +68,50 @@ impl Resolver {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), ResolverContradiction>, ResolverError> {
-        let mut underdetermined = false;
-
         match self.valence.resolve(ast)? {
-            Solution::Determined(()) => {}
-            Solution::Underdetermined(()) => underdetermined = true,
+            Solution::Determined(()) | Solution::Underdetermined(()) => {}
             Solution::Contradictory(c) => {
                 return Ok(Solution::Contradictory(ResolverContradiction::Valence(c)));
             }
         }
-
         match self.aromaticity.resolve(ast)? {
-            Solution::Determined(()) => {}
-            Solution::Underdetermined(()) => underdetermined = true,
+            Solution::Determined(()) | Solution::Underdetermined(()) => {}
             Solution::Contradictory(c) => {
                 return Ok(Solution::Contradictory(
                     ResolverContradiction::Aromaticity(c),
                 ));
             }
         }
+        match self.bonds.resolve(ast)? {
+            Solution::Determined(()) | Solution::Underdetermined(()) => {}
+            Solution::Contradictory(c) => {
+                return Ok(Solution::Contradictory(ResolverContradiction::Bonds(c)));
+            }
+        }
+        match self.multicenter_bonds.resolve(ast)? {
+            Solution::Determined(()) | Solution::Underdetermined(()) => {}
+            Solution::Contradictory(c) => {
+                return Ok(Solution::Contradictory(
+                    ResolverContradiction::MulticenterBonds(c),
+                ));
+            }
+        }
 
-        Ok(if underdetermined {
-            Solution::Underdetermined(())
-        } else {
+        Ok(if molecule_all_ground(ast) {
             Solution::Determined(())
+        } else {
+            Solution::Underdetermined(())
         })
     }
+}
+
+fn molecule_all_ground(ast: &MoleculeAst) -> bool {
+    ast.atoms().iter().all(|v| v.data.is_ground())
+        && ast.bonds().iter().all(|v| v.data.is_ground())
+        && ast.dative_bonds().iter().all(|v| v.data.is_ground())
+        && ast.aromatic_systems().iter().all(|v| v.data.is_ground())
+        && ast.multicenter_bonds().iter().all(|v| v.data.is_ground())
+        && ast.noncovalent_bonds().iter().all(|v| v.data.is_ground())
 }
 
 #[cfg(test)]

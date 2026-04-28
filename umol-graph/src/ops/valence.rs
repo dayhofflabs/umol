@@ -50,6 +50,8 @@ impl ValenceResolver {
         }
     }
 
+    /// Reports completion or contradiction; the global ground-status verdict
+    /// is the composite `Resolver`'s job, not this sub-resolver's.
     pub fn resolve(
         &self,
         ast: &mut MoleculeAst,
@@ -58,16 +60,8 @@ impl ValenceResolver {
             Self::AtomTyping(r) => r.resolve(ast).map_err(ValenceContradiction::from),
             Self::Counts(r) => r.resolve(ast).map_err(ValenceContradiction::from),
         };
-
         match outcome {
-            Ok(()) => {
-                let all_ground = ast.atoms().iter().all(|v| v.data.is_ground());
-                Ok(if all_ground {
-                    Solution::Determined(())
-                } else {
-                    Solution::Underdetermined(())
-                })
-            }
+            Ok(()) => Ok(Solution::Determined(())),
             Err(c) => Ok(Solution::Contradictory(c)),
         }
     }

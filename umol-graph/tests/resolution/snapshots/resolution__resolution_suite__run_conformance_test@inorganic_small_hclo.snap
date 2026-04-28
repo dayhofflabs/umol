@@ -4,8 +4,8 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 ---
 {
   :atom-typing {
-    :output {:atoms ["H#v" "O#n2#v2" "Cl#n3#v"] :bonds [[0 1 "1"] [1 2 "1"]]}
+    :output {:atoms ["H#v" "O#n2#v2" "Cl#n3#v"] :bonds [[0 1 :single] [1 2 :single]]}
     :success true}
   :counts {
-    :output {:atoms ["H#v" "O#n2#v2" "Cl#n3#v"] :bonds [[0 1 "1"] [1 2 "1"]]}
+    :output {:atoms ["H#v" "O#n2#v2" "Cl#n3#v"] :bonds [[0 1 :single] [1 2 :single]]}
     :success true}}
