@@ -81,7 +81,10 @@ impl AtomTypingValenceResolver {
             None => return Vec::new(),
         };
         let charge = charge_or_zero(atom);
-        let (donated_pairs, accepted_pairs) = atom_dative_counts(view);
+        let (donated_pairs, accepted_pairs) = match atom_dative_counts(view) {
+            (Some(d), Some(a)) => (d, a),
+            _ => return Vec::new(),
+        };
         let is_aromatic = atom_is_aromatic(view);
 
         let implicit_h_constraint = match &atom.implicit_hydrogens {

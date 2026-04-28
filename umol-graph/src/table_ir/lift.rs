@@ -41,21 +41,25 @@ impl IntoAst<MoleculeAst> for &TableMolecule {
             .collect::<Result<_, _>>()?;
 
         let mut regular = Vec::new();
-        let mut dative = Vec::new();
+        let mut dative: Vec<(Vec<AtomIdx>, AtomIdx, umol_ast::ast::DativeBondAst)> = Vec::new();
         let mut noncovalent = Vec::new();
         for b in &self.bonds {
             let a_idx = AtomIdx(b.atoms.first());
             let b_idx = AtomIdx(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
                 noncovalent.push((a_idx, b_idx, NoncovalentBondAst::from_kind(kind)));
-            } else if matches!(
-                b.donation,
-                Some(TableBondDonation::Donating | TableBondDonation::Accepting)
-            ) {
-                let bond: BondAst = b.into_ast(ctx)?;
-                let _ = bond;
-                let dative_bond = umol_ast::ast::DativeBondAst::new();
-                dative.push((a_idx, b_idx, dative_bond));
+            } else if let Some(donation) = b.donation {
+                let (donor, acceptor) = match donation {
+                    TableBondDonation::Donating => (a_idx, b_idx),
+                    TableBondDonation::Accepting => (b_idx, a_idx),
+                    _ => {
+                        regular.push((a_idx, b_idx, b.into_ast(ctx)?));
+                        continue;
+                    }
+                };
+                let dative_bond =
+                    umol_ast::ast::DativeBondAst::new(lift_bond_order(b.order));
+                dative.push((vec![donor], acceptor, dative_bond));
             } else {
                 regular.push((a_idx, b_idx, b.into_ast(ctx)?));
             }

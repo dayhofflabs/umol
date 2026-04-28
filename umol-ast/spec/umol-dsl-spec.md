@@ -18,10 +18,10 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **RECOMMENDED*
 
 **Term algebra levels (non-normative sketch).** Four levels of expressiveness exist in this algebra, each a strict superset of the previous:
 
-- **L1 — Ground**: fully instantiated molecules; no wildcards, binds, or logic. Every numeric slot is a concrete integer; element is a single symbol. The atom-string and bond-string parsers in the current reference implementation target this level.
+- **L1 — Ground**: fully instantiated molecules; no wildcards, binds, or logic. Every numeric slot is a concrete integer; element is a single symbol.
 - **L2 — Constraint / Query**: adds wildcards (**`*`**), element/numeric sets, **`bool-expr`**, and **`?id`** references. Sufficient for substructure queries.
 - **L3 — Rule**: adds **`element-bind`** / **`element-ref`**, cross-atom **`id`** scope (**§6**), and **`:guards`** on molecule maps. Sufficient for transformation rules.
-- **L4 — Compound**: rules whose RHS produces molecule maps that are themselves L2/L3 terms; higher-order composition. Not further specified in this revision.
+- **L4 — Compound**: rules whose RHS produces molecule maps that are themselves L2/L3 terms; higher-order composition.
 
 The subgrammars in **§5**, **§7** define forms that are syntactically valid across all levels; which forms are *semantically* allowed depends on which level is in force (**§3**).
 
@@ -61,9 +61,7 @@ The same token grammars are used in every context; which **`value-expr`** shapes
 
 **Builder-oriented** use (expecting a unique ground resolution) and **query-oriented** use (selecting a set of matches) differ only in evaluation policy, not in the grammars.
 
-**Implementation note (non-normative).** **Ground** input uses the **same** grammars as **Query** / **Rule**; only allowed token shapes differ. For speed, implementations **MAY** provide a **Ground-only** parser (or fast path) and a **full** parser, analogous to **basic** vs **extended** entry points in **`umol-models-graph`** I/O (e.g. **`umol-models-graph/src/io/smiles/parser.rs`**, **`umol-models-graph/src/io/ctfile/parser.rs`**). That split is **not** a second language: any string valid as **Ground** **MUST** be interpreted the same whether handled by the restricted implementation or the full one.
-
-**Open issue (blocks full Query / Rule lowering).** In the current **reference model**, a **Ground** atom is **fully specified** in every numeric slot (**isotope mass** on the resolved atom remains **optional** as today). **Query** and **Rule** introduce **partial** or **wildcard** attribute states. Allowing **indeterminacy** in the **electron budget** (e.g. lone pairs, unpaired electrons, and related fields not all fixed independently) has **not** been specified: how many **valid completions** exist for a given pattern, and how **`#n`** (lone pairs) vs **`#u`** / **`#s`** (unpaired electrons vs spin multiplicity) interact under partial data, are **TBD**. Until that is defined, implementations **MAY** reject or restrict constraint atom-strings beyond **literal Ground**-shaped payloads.
+**Ground / Query / Rule split.** **Ground** input uses the **same** grammars as **Query** / **Rule**; only allowed token shapes differ. Implementations **MAY** provide a **Ground-only** parser (or fast path) and a **full** parser. That split is **not** a second language: any string valid as **Ground** **MUST** be interpreted the same whether handled by the restricted implementation or the full one.
 
 ---
 
@@ -101,25 +99,33 @@ atom-ref ::= int | keyword
 localized-bond-entry ::= { [:id keyword] :a atom-ref :b atom-ref :type bond-spec }
                       | [ atom-ref atom-ref bond-spec ]
 dative-bond-entry   ::= { [:id keyword] :donor atom-ref :acceptor atom-ref
-                          [:type "dative-string"] }
+                          :type dative-spec }
 
 bond-spec ::= "bond-string" | bond-keyword
+dative-spec ::= "dative-string" | dative-keyword
 
 aromatic-list    ::= [ aromatic-entry* ]
 multicenter-list ::= [ multicenter-entry* ]
 noncovalent-list ::= [ noncovalent-entry* ]
 
-aromatic-entry    ::= { [:id keyword] :atoms [ atom-ref+ ] [:electrons [ value-expr+ ]] [:type "aromatic-string"] }
-multicenter-entry ::= { [:id keyword] :atoms [ atom-ref+ ] [:electrons [ value-expr+ ]] [:type "multicenter-string"] }
+aromatic-entry    ::= { [:id keyword] :atoms [ atom-ref+ ] [:electrons [ value-expr+ ]] :type "aromatic-string" }
+multicenter-entry ::= { [:id keyword] :atoms [ atom-ref+ ] [:electrons [ value-expr+ ]] :type "multicenter-string" }
 noncovalent-entry ::= { [:id keyword] :a atom-ref :b atom-ref :type noncovalent-spec }
 
 noncovalent-spec ::= "noncovalent-string" | noncovalent-keyword
 noncovalent-keyword ::= :h-bond | :halogen-bond | :chalcogen-bond | :ionic | :van-der-waals
 ```
 
-**Dative bond entry.** A dative bond's only identity-bearing content at the molecule-map level is the ordered endpoint pair: **`:donor`** names the atom donating the electron pair, **`:acceptor`** names the atom accepting it. The bond order is fixed at two electrons by definition. **`:donor`** and **`:acceptor`** **MUST** reference distinct atom sites. The optional **`:type`** slot carries a **`dative-string`** payload (**§7.12**) encoding ring-membership constraints (**`#R`**, **`#r`**); the dative-string itself has **no** inherent-field tags and **no** direction token — direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment. When **`:type`** is absent, the dative bond has no inline constraints.
+**`:type` is mandatory.** Every structural entry that has a DSL surface — **`localized-bond-entry`**, **`dative-bond-entry`**, **`aromatic-entry`**, **`multicenter-entry`**, **`noncovalent-entry`** — **MUST** carry a **`:type`** key. The payload is a subgrammar string (or its EDN-keyword shorthand where defined); an entry without **`:type`** is a parse error.
 
-**Multicenter entry.** The optional **`:type`** slot carries a **`multicenter-string`** payload (**§7.11**) encoding per-system charge, spin, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape.
+Whether an empty string **`:type ""`** parses depends on the subgrammar:
+
+- **`aromatic-string`** (**§7.9**) and **`multicenter-string`** (**§7.10**) admit the empty payload — the grammar is zero-or-more **`#…`** predicates, so **`:type ""`** is the canonical "no inline state" form.
+- **`bond-string`** (**§7.5**), **`dative-string`** (**§7.11**), and **`noncovalent-string`** (**§7.12**) require a leading inherent-field token (bond order, dative order, noncovalent kind), so an empty payload is a parse error. Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
+
+**Dative bond entry.** A dative bond carries identity at the molecule-map level via the ordered endpoint pair plus the bond order: **`:donor`** names the atom donating the electron pair(s), **`:acceptor`** names the atom accepting them, and the leading **`order`** token of the **`dative-string`** payload (**§7.12**) records the number of donated pairs. **`:donor`** and **`:acceptor`** **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.12**) — order plus optional ring-membership predicates (**`#R`**, **`#r`**); its leading order parallels the bond-string's (**§7.5** / **§7.6**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment.
+
+**Multicenter entry.** The mandatory **`:type`** slot carries a **`multicenter-string`** payload (**§7.11**) encoding per-system charge, spin, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape. A vacuous string (**`""`**) is admissible when the multicenter bond carries no inline state.
 
 **`:electrons` vector (aromatic and multicenter entries).** Both **`aromatic-entry`** and **`multicenter-entry`** **MAY** carry an optional **`:electrons`** key whose value is a vector of **`value-expr`** payloads. When present, the vector **MUST** have the same length as the entry's **`:atoms`** vector — entry **`i`** of **`:electrons`** is the per-atom electron contribution of the atom at position **`i`** of **`:atoms`**. Each per-atom slot is a full **`value-expr`** and **MAY** be a literal integer, **`:undetermined`**, an integer **set** (vector of literals), or a **string-encoded expression**, mirroring the **§7.3** value forms used elsewhere. When **`:electrons`** is omitted, the per-atom contributions are unspecified (each entry **`Undetermined`**); the vector is **never auto-filled** at parse time. The vector's content is independent of the optional **`#e<n>`** total carried by the entry's **`:type`** payload — when both are present, downstream validation **MAY** require **`sum(:electrons) == #e<n>`** on ground inputs.
 
@@ -146,9 +152,7 @@ noncovalent-keyword ::= :h-bond | :halogen-bond | :chalcogen-bond | :ionic | :va
 
 **Empty molecule.** The **`atom-collection`** **MAY** have length **0** (**`[]`**). If **`:atoms`** is empty, **`:bonds`** **MUST** be **`[]`**, and **`:dative`**, **`:aromatic`**, **`:multicenter`**, and **`:noncovalent`** **MUST** be absent or **empty** lists — no bond-like entry **MAY** name a site that is not in **`:atoms`**.
 
-**`aromatic-entry`** and **`multicenter-entry`** **MAY** carry a **`:type`** key whose value is an **aromatic-string** (**§7.10**) or **multicenter-string** (**§7.11**) encoding per-system charge, spin, and the asserted total electron count. The per-atom contributions are carried separately in **`:electrons`** (above), not in the **`:type`** string.
-
-**`bond-keyword`** (shorthand) is defined in **§7.7**. **`logic-expr`** and **`spin-literal`** are not fully specified in this document (TODO).
+**`bond-keyword`** and **`dative-keyword`** (shorthands) are defined in **§7.7**.
 
 ### 4.1 Structural validity (within one map)
 
@@ -319,7 +323,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 | localized bond | order, charge (**`#c`**), spin (**`#u`**, **`#s`**) |
 | aromatic system | charge (**`#c`**), spin (**`#u`**, **`#s`**), π-electron count (**`#e`**) |
 | multicenter bond | charge (**`#c`**), spin (**`#u`**, **`#s`**), electron count (**`#e`**) |
-| dative bond | ordered endpoint pair — the **`:donor`** / **`:acceptor`** assignment on the map entry (**§4**). The dative-string payload has no inherent-field tags; order is two electrons by definition. |
+| dative bond | ordered endpoint pair — the **`:donor`** / **`:acceptor`** assignment on the map entry (**§4**) — plus the leading **`order`** token of the dative-string (number of donated electron pairs; **§7.12**). |
 | noncovalent bond | interaction kind (**`:h-bond`**, **`:halogen-bond`**, **`:chalcogen-bond`**, **`:ionic`**, **`:van-der-waals`**) |
 
 **Derived predicates.** Every predicate admitted in the DSL that is not an inherent field is a **derived predicate** — a topological query evaluated against the target graph once an embedding is proposed. This includes per-atom **`#D`**, **`#X`**, **`#x`**, **`#H`**, **`#R`**, **`#r`** (**§7.3**); the bond-namespace **`#R`**, **`#r`**; per-aromatic, per-multicenter, per-dative ring-membership and ring-size predicates; and the molecule-wide entries of **§7.9**. Derived predicates **filter** matches; they do **not** carry identity and **do not** affect grounding. Adding a derived predicate — even a wildcard-valued one — to a pattern never makes a ground target stop being ground.
@@ -416,8 +420,6 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 **Bond-string** **`#u`** / **`#s`** / **`#c`** use the **bond** namespace (**§7.5**); meanings parallel **unpaired electrons**, **multiplicity**, and **bond formal charge**.
 
 **Aromatic-string** **`#c`** / **`#u`** / **`#s`** / **`#e`** use the **aromatic-system** namespace (**§7.10**); **`#e`** denotes the total π-electron count (**`u8`**), other tags parallel the bond namespace.
-
-**`#n`** and **`#s`** together constrain spin-related fields; when both appear, consistency rules are **TBD** (**§3**, open issue).
 
 **Lexical** **`nat`** in the grammar is unbounded; **Ground** validation **MUST** reject values outside the **u8** (or **i8** / **u32** as above) range for the corresponding slot.
 
@@ -553,7 +555,7 @@ This section does **not** define **`bond-keyword`** shorthands; see **§7.7**.
 
 ### 7.7 Bond and atom literals
 
-**Bond entry shorthands.** A **`bond-keyword`** as the **`:bond`** value of a **`localized-bond-entry`** (**§4**) is a fixed **EDN keyword** that expands to an equivalent bond-string payload. Normative expansion table:
+**Bond entry shorthands.** A **`bond-keyword`** as the **`:type`** value of a **`localized-bond-entry`** (**§4**) is a fixed **EDN keyword** that expands to an equivalent bond-string payload. Normative expansion table:
 
 | Keyword | Expands to | Bond order |
 |---------|-----------|------------|
@@ -562,25 +564,20 @@ This section does **not** define **`bond-keyword`** shorthands; see **§7.7**.
 | **`:triple`** | **`"3"`** | 3 |
 | **`:quadruple`** | **`"4"`** | 4 |
 
-Implementations **MUST** accept these four keywords wherever **`bond-spec`** is expected. No other **`bond-keyword`** values are defined in this revision; unrecognized keywords **MUST** be rejected.
+Implementations **MUST** accept these four keywords wherever **`bond-spec`** is expected. No other **`bond-keyword`** values are defined; unrecognized keywords **MUST** be rejected.
+
+**Dative entry shorthands.** A **`dative-keyword`** as the **`:type`** value of a **`dative-bond-entry`** (**§4**) is a fixed **EDN keyword** that expands to an equivalent dative-string payload. Normative expansion table:
+
+| Keyword | Expands to | Pairs donated | Example |
+|---------|-----------|---------------|---------|
+| **`:single`** | **`"1"`** | 1 | NH₃→BF₃ |
+| **`:double`** | **`"2"`** | 2 | Ni(C₄H₄)₂ |
+| **`:triple`** | **`"3"`** | 3 | |
+| **`:quadruple`** | **`"4"`** | 4 | uranocene U(C₈H₈)₂ |
+
+Implementations **MUST** accept these four keywords wherever **`dative-spec`** is expected. Higher pair counts and any non-trivial dative payload **MUST** use the **`dative-string`** form (**§7.12**); unrecognized **`dative-keyword`** values **MUST** be rejected.
 
 **Atom literals.** Atom literals are **EDN strings** whose contents are **atom-string** payloads (**§7.3** / **§7.4**). Keyword-shaped atom shorthands (via **`:atom-aliases`**) are defined in **§4**.
-
-### 7.8 Future extensions
-
-**Full binary arithmetic.** Generalize **`add-expr`** / **`mult-expr`** to a single **`arith-expr`** with arbitrary **binary** nesting (not only **`nat`** and **`?id`** as **leaves** and one level of **`(` arith `)`**):
-
-```
-arith-expr ::= arith-expr mult-op arith-expr
-             | arith-expr add-op arith-expr
-             | base-arith
-
-base-arith ::= nat | '?' id | '(' arith-expr ')'
-```
-
-Precedence of **`mult-op`** over **`add-op`** unchanged. **Membership** **`::`**, **relations** (**`==`**, **`<`**, …), and **logic** (**§5.1**) would still apply **outside** this **`arith-expr`** layer as today. **`sign`*** prefixes (**§5**) would extend to **`arith-expr`** leaves as needed.
-
-**Other** (non-normative placeholders): functions (**`min`**, **`abs`**, …), typed variables, cross-atom **`id`** scope, **chained** relations **`a < b < c`**, etc.
 
 ### 7.9 Constraint grammar
 
@@ -685,7 +682,7 @@ noncovalent-bond-ref ::= int | keyword
 
 **Ref resolution.** An integer ref is the **positional** index into the corresponding entity vector on the molecule map: **`atom-ref`** → **`:atoms`**, **`bond-ref`** → **`:bonds`**, **`dative-bond-ref`** → **`:dative`**, **`aromatic-system-ref`** → **`:aromatic`**, **`multicenter-bond-ref`** → **`:multicenter`**, **`noncovalent-bond-ref`** → **`:noncovalent`**. A keyword ref resolves against the **`:id`** declared on the corresponding entry (**§4**). On serialization, implementations **MUST** emit the **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer otherwise.
 
-**Uninhabited narrow inner forms.** **`:aromatic-system`**, **`:multicenter-bond`**, and **`:noncovalent-bond`** narrow leaves are reserved keys whose inner **`*-constraint-form`** has no inhabited variants in this revision; every cross-entity predicate on those entities is a relational leaf instead. Future revisions **MAY** add value-only variants here without reshaping the surrounding grammar.
+**Uninhabited narrow inner forms.** **`:aromatic-system`**, **`:multicenter-bond`**, and **`:noncovalent-bond`** narrow leaves are reserved keys whose inner **`*-constraint-form`** has no inhabited variants; every cross-entity predicate on those entities is a relational leaf instead.
 
 **Anchor cardinality.** Each keyed slot in **`anchor-spec`** is optional and may appear at most once; if present, it is a vector of **`(target-side-ref, pattern-side-ref)`** pairs of the same entity kind. An empty **`anchor-spec`** denotes an unanchored sub-pattern (the pattern can embed anywhere). Target-side refs resolve against the outer molecule's metadata; pattern-side refs against the pattern molecule's metadata.
 
@@ -736,7 +733,7 @@ aromatic-predicate ::= '#' tag payload
 
 **`#e<n>` semantics.** **`#e<n>`** asserts the system's total π-electron count and parses to an inline aromatic-system constraint (`AromaticSystemConstraint::ElectronCount(n)`) on the entry's constraint store, **not** to a direct field. The per-atom contributions in the entry's **`:electrons`** vector (**§4**) are the canonical data; **`#e<n>`** is the optional total assertion that downstream validation cross-checks against **`sum(:electrons)`** on ground inputs. **`#e`** is omitted from the canonical entity-string form when no `ElectronCount` constraint is present.
 
-**No canonical-constraint equivalent for charge / spin.** Aromatic-system charge (**`#c`**), unpaired electrons (**`#u`**), and spin multiplicity (**`#s`**) live as direct fields on the aromatic-system entity (set by the aromatic-string predicates above) and have **no** canonical **`:constraints`** form in this revision.
+**No canonical-constraint equivalent for charge / spin.** Aromatic-system charge (**`#c`**), unpaired electrons (**`#u`**), and spin multiplicity (**`#s`**) live as direct fields on the aromatic-system entity (set by the aromatic-string predicates above) and have **no** canonical **`:constraints`** form.
 
 ### 7.11 Multicenter-bond subgrammar
 
@@ -769,15 +766,18 @@ multicenter-predicate ::= '#' tag payload
 
 ### 7.12 Dative-bond subgrammar
 
-**Dative-string** carries **ring-membership** constraints on a single **`dative-bond-entry`** (**§4**). It has **no** leading **`order`** token (the order of a dative bond is fixed at two electrons) and **no** inherent-field predicates.
+**Dative-string** carries the **bond order** (number of donated electron pairs) and optional **ring-membership** constraints on a single **`dative-bond-entry`** (**§4**). The grammar parallels **bond-string** (**§7.5**): a leading **`order`** token followed by zero or more **`#…`** predicates. The dative-string has **no** inherent-field tags beyond order and **no** direction token; direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment on the containing entry.
 
 ```
-dative-string ::= dative-predicate*
+dative-string ::= order dative-predicate*
 
+order            ::= value-expr | '*'
 dative-predicate ::= '#' tag payload
 ```
 
-**Dative predicates.** **Zero or more** **`dative-predicate`** units. **Optional** ASCII whitespace **MAY** appear before the first **`#`** and between successive predicates. **At most one** predicate per **tag** letter among **`R`**, **`r`**. **Canonical** predicate order (stable serialization): **`#R`**, **`#r`**.
+**Order.** The leading **`order`** token is a **`value-expr`** (**§5**) — typically a positive integer literal — that records how many electron pairs are donated. **`*`** means **`Undetermined`**. The **`dative-keyword`** shorthands (**§7.7**) — **`:single`**, **`:double`**, **`:triple`**, **`:quadruple`** — expand to the literal forms **`"1"`**, **`"2"`**, **`"3"`**, **`"4"`**.
+
+**Dative predicates.** **Zero or more** **`dative-predicate`** units after the order token. **Optional** ASCII whitespace **MAY** appear between the order and the first **`#`**, and between successive predicates. **At most one** predicate per **tag** letter among **`R`**, **`r`**. **Canonical** predicate order (stable serialization): order, then **`#R`**, then **`#r`**.
 
 **Whitespace** between **`#`** and the tag letter is **invalid** (**§7.1**).
 
@@ -785,10 +785,11 @@ dative-predicate ::= '#' tag payload
 
 **`#r` (dative-bond ring size).** After **`#r`**, parse a **`value-expr`** (**§5**) **first**; if that fails, the **omitted** payload means ring size **1** (same convention as **§5.3** for decimal-only slots).
 
-| Tag | Meaning (dative-bond namespace) |
-|-----|-----------------------------------|
-| **`#R`** | **Ring count**: the dative bond lies in this many rings. Derived predicate. |
-| **`#r`** | **Ring size**: the dative bond lies in a ring of this size. Derived. |
+| Tag | Meaning (dative-bond namespace) | Storage |
+|-----|-----------------------------------|----------|
+| (leading) | **Order**: number of donated electron pairs (**`u8`**, **§7.2**) | inherent field |
+| **`#R`** | **Ring count**: the dative bond lies in this many rings. | derived |
+| **`#r`** | **Ring size**: the dative bond lies in a ring of this size. | derived |
 
 **Direction.** Dative bonds are intrinsically directional. Direction is carried entirely by the ordered **`:donor`** / **`:acceptor`** assignment on the containing **`dative-bond-entry`** (**§4**); the dative-string itself has **no** direction token. Under pattern matching (**§6**), the embedding MUST map a pattern **`:donor`** to a target **`:donor`** and a pattern **`:acceptor`** to a target **`:acceptor`** — a donor/acceptor swap across the embedding rejects the match.
 
@@ -867,8 +868,8 @@ The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one
          [:C3a :C7a :single] [:C7a :N :single] [:C3a :C4 :single]
          [:C4 :C5 :double] [:C5 :C6 :single] [:C6 :C7 :double]
          [:C7 :C7a :single]]
- :aromatic [{:id :ar1 :atoms [:N :C2 :C3 :C3a :C7a]}
-            {:id :ar2 :atoms [:C3a :C4 :C5 :C6 :C7 :C7a]}]}
+ :aromatic [{:id :ar1 :atoms [:N :C2 :C3 :C3a :C7a] :type ""}
+            {:id :ar2 :atoms [:C3a :C4 :C5 :C6 :C7 :C7a] :type ""}]}
 ```
 
 Localized bonds carry the σ-skeleton orders; the aromatic π system is expressed in **`:aromatic`**.

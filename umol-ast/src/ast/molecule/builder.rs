@@ -17,7 +17,7 @@ use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::AtomAst;
 use super::super::bond::BondAst;
 use super::super::constraint::{Constraint, Constraints};
-use super::super::dative::{DativeBondAst, DativeBondDirection};
+use super::super::dative::DativeBondAst;
 use super::super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -237,7 +237,7 @@ pub struct MoleculeBuilder {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
     bonds: Arc<Vec<BondAst>>,
-    dative_bonds: FixedSetStorage<DativeBondAst, 2>,
+    dative_bonds: VarSetStorage<DativeBondAst>,
     aromatic_systems: VarSetStorage<AromaticSystemAst>,
     multicenter_bonds: VarSetStorage<MulticenterBondAst>,
     noncovalent_bonds: FixedSetStorage<NoncovalentBondAst, 2>,
@@ -250,7 +250,7 @@ impl MoleculeBuilder {
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
         bonds: Arc<Vec<BondAst>>,
-        dative_bonds: Arc<FixedRelationSet<DativeBondAst, 2>>,
+        dative_bonds: Arc<VarRelationSet<DativeBondAst>>,
         aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
         multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
         noncovalent_bonds: Arc<FixedRelationSet<NoncovalentBondAst, 2>>,
@@ -260,7 +260,7 @@ impl MoleculeBuilder {
             graph,
             atoms,
             bonds,
-            dative_bonds: FixedSetStorage::Shared(dative_bonds),
+            dative_bonds: VarSetStorage::Shared(dative_bonds),
             aromatic_systems: VarSetStorage::Shared(aromatic_systems),
             multicenter_bonds: VarSetStorage::Shared(multicenter_bonds),
             noncovalent_bonds: FixedSetStorage::Shared(noncovalent_bonds),
@@ -282,18 +282,23 @@ impl MoleculeBuilder {
 
     pub fn add_dative_bond(
         &mut self,
-        donor: AtomIdx,
+        donors: Vec<AtomIdx>,
         acceptor: AtomIdx,
         mut bond: DativeBondAst,
     ) -> DativeBondIdx {
-        bond.direction = if donor.0 <= acceptor.0 {
-            DativeBondDirection::Forward
-        } else {
-            DativeBondDirection::Reverse
-        };
-        let i = self
-            .dative_bonds
-            .push([NodeId::from(donor), NodeId::from(acceptor)], bond);
+        let acceptor_node = NodeId::from(acceptor);
+        let mut participants: Vec<NodeId> = donors
+            .into_iter()
+            .map(NodeId::from)
+            .chain(std::iter::once(acceptor_node))
+            .collect();
+        participants.sort_unstable();
+        let slot = participants
+            .iter()
+            .position(|&n| n == acceptor_node)
+            .expect("acceptor must appear in participants");
+        bond.acceptor_slot = slot as u8;
+        let i = self.dative_bonds.push(participants, bond);
         DativeBondIdx(i)
     }
 
@@ -347,7 +352,7 @@ impl MoleculeBuilder {
 
     pub fn dative_bond_mut(&mut self, idx: DativeBondIdx) -> &mut DativeBondAst {
         self.dative_bonds.materialize();
-        let FixedSetStorage::Mutable(vec) = &mut self.dative_bonds else {
+        let VarSetStorage::Mutable(vec) = &mut self.dative_bonds else {
             unreachable!()
         };
         &mut vec[idx.index()].1
@@ -459,14 +464,14 @@ impl MoleculeBuilder {
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
-        let removed_dative = fixed_relation_removed(&self.dative_bonds, &remap);
+        let removed_dative = var_relation_removed(&self.dative_bonds, &remap);
         let removed_aromatic = var_relation_removed(&self.aromatic_systems, &remap);
         let removed_multicenter = var_relation_removed(&self.multicenter_bonds, &remap);
         let removed_noncovalent = fixed_relation_removed(&self.noncovalent_bonds, &remap);
 
         let dative = mem::replace(
             &mut self.dative_bonds,
-            FixedSetStorage::Shared(Arc::new(FixedRelationSet::default())),
+            VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
         );
         self.dative_bonds = dative.apply_remapping(&remap);
 

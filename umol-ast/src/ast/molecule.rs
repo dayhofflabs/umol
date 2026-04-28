@@ -18,7 +18,7 @@ use super::atom::AtomAst;
 use super::automorphism::AtomAutomorphism;
 use super::bond::BondAst;
 use super::constraint::{Constraint, Constraints};
-use super::dative::{DativeBondAst, DativeBondDirection};
+use super::dative::DativeBondAst;
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -52,7 +52,7 @@ pub struct MoleculeAst {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
     bonds: Arc<Vec<BondAst>>,
-    dative_bonds: Arc<FixedRelationSet<DativeBondAst, 2>>,
+    dative_bonds: Arc<VarRelationSet<DativeBondAst>>,
     aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
     multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
     noncovalent_bonds: Arc<FixedRelationSet<NoncovalentBondAst, 2>>,
@@ -85,7 +85,7 @@ impl Default for MoleculeAst {
             graph: Graph::default(),
             atoms: Arc::new(Vec::new()),
             bonds: Arc::new(Vec::new()),
-            dative_bonds: Arc::new(FixedRelationSet::default()),
+            dative_bonds: Arc::new(VarRelationSet::default()),
             aromatic_systems: Arc::new(VarRelationSet::default()),
             multicenter_bonds: Arc::new(VarRelationSet::default()),
             noncovalent_bonds: Arc::new(FixedRelationSet::default()),
@@ -106,7 +106,7 @@ impl MoleculeAst {
     pub fn new(
         atoms: Vec<AtomAst>,
         bonds: Vec<(AtomIdx, AtomIdx, BondAst)>,
-        dative: Vec<(AtomIdx, AtomIdx, DativeBondAst)>,
+        dative: Vec<(Vec<AtomIdx>, AtomIdx, DativeBondAst)>,
         aromatic: Vec<(Vec<AtomIdx>, AromaticSystemAst)>,
         multicenter: Vec<(Vec<AtomIdx>, MulticenterBondAst)>,
         noncovalent: Vec<(AtomIdx, AtomIdx, NoncovalentBondAst)>,
@@ -117,16 +117,23 @@ impl MoleculeAst {
         let bond_data: Vec<BondAst> = bonds.into_iter().map(|(_, _, d)| d).collect();
         let graph = Graph::new(node_count, &edges);
 
-        let dative_bonds = FixedRelationSet::new(
+        let dative_bonds = VarRelationSet::new(
             dative
                 .into_iter()
-                .map(|(donor, acceptor, mut d)| {
-                    d.direction = if donor.0 <= acceptor.0 {
-                        DativeBondDirection::Forward
-                    } else {
-                        DativeBondDirection::Reverse
-                    };
-                    ([NodeId::from(donor), NodeId::from(acceptor)], d)
+                .map(|(donors, acceptor, mut d)| {
+                    let acceptor_node = NodeId::from(acceptor);
+                    let mut participants: Vec<NodeId> = donors
+                        .into_iter()
+                        .map(NodeId::from)
+                        .chain(std::iter::once(acceptor_node))
+                        .collect();
+                    participants.sort_unstable();
+                    let slot = participants
+                        .iter()
+                        .position(|&n| n == acceptor_node)
+                        .expect("acceptor must appear in participants");
+                    d.acceptor_slot = slot as u8;
+                    (participants, d)
                 })
                 .collect(),
         );
@@ -170,7 +177,7 @@ impl MoleculeAst {
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
         bonds: Arc<Vec<BondAst>>,
-        dative_bonds: Arc<FixedRelationSet<DativeBondAst, 2>>,
+        dative_bonds: Arc<VarRelationSet<DativeBondAst>>,
         aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
         multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
         noncovalent_bonds: Arc<FixedRelationSet<NoncovalentBondAst, 2>>,
@@ -315,12 +322,13 @@ impl MoleculeAst {
 
     pub fn connecting_dative_bond(
         &self,
-        donor: AtomIdx,
-        acceptor: AtomIdx,
+        atoms: &HashSet<AtomIdx>,
     ) -> Option<DativeBondIdx> {
-        self.dative_bonds_incident(donor).find(|&idx| {
+        let &first = atoms.iter().next()?;
+        self.dative_bonds_incident(first).find(|&idx| {
             let v = self.dative_bond(idx);
-            v.donor == donor && v.acceptor == acceptor
+            let parts: HashSet<AtomIdx> = v.atoms().collect();
+            parts == *atoms
         })
     }
 

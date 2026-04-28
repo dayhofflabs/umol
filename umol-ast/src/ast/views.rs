@@ -16,7 +16,7 @@ use super::bond::BondAst;
 use super::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, MulticenterValenceAst,
 };
-use super::dative::{DativeBondAst, DativeBondDirection};
+use super::dative::DativeBondAst;
 use super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -46,7 +46,7 @@ impl<'a> AtomView<'a> {
         let mut sum: u32 = 0;
         for n in self.ast.neighbors(self.idx) {
             match n.data.order {
-                ValueAst::Lit(v) if v >= 0 => sum = sum.checked_add(v as u32)?,
+                ValueAst::Lit(v) if v >= 0 => sum += v as u32,
                 _ => return None,
             }
         }
@@ -61,12 +61,25 @@ impl<'a> AtomView<'a> {
         })
     }
 
-    /// Number of incident dative bonds where this atom is the donor.
-    pub fn donated_pairs(&self) -> u32 {
-        self.ast
-            .dative_bonds_incident(self.idx)
-            .filter(|&id| self.ast.dative_bond(id).donor == self.idx)
-            .count() as u32
+    /// Sum of `order` over incident dative bonds where this atom is the sole
+    /// donor (i.e. the dative is single-donor). Multi-donor datives contribute
+    /// nothing per individual donor atom — the donated pair is collective and
+    /// has no well-defined per-atom share. `None` if any contributing dative's
+    /// `order` is not a non-negative `Lit`.
+    pub fn donated_pairs(&self) -> Option<u32> {
+        let mut sum: u32 = 0;
+        for id in self.ast.dative_bonds_incident(self.idx) {
+            let view = self.ast.dative_bond(id);
+            let donors: Vec<_> = view.donors().collect();
+            if donors.len() != 1 || donors[0] != self.idx {
+                continue;
+            }
+            match view.data.order {
+                ValueAst::Lit(v) if v >= 0 => sum += v as u32,
+                _ => return None,
+            }
+        }
+        Some(sum)
     }
 
     pub fn donated_pairs_constraint(&self) -> Option<&'a ValueAst> {
@@ -76,12 +89,22 @@ impl<'a> AtomView<'a> {
         })
     }
 
-    /// Number of incident dative bonds where this atom is the acceptor.
-    pub fn accepted_pairs(&self) -> u32 {
-        self.ast
-            .dative_bonds_incident(self.idx)
-            .filter(|&id| self.ast.dative_bond(id).acceptor == self.idx)
-            .count() as u32
+    /// Sum of `order` over incident dative bonds where this atom is the
+    /// acceptor. `None` if any contributing dative's `order` is not a
+    /// non-negative `Lit`.
+    pub fn accepted_pairs(&self) -> Option<u32> {
+        let mut sum: u32 = 0;
+        for id in self.ast.dative_bonds_incident(self.idx) {
+            let view = self.ast.dative_bond(id);
+            if view.acceptor != self.idx {
+                continue;
+            }
+            match view.data.order {
+                ValueAst::Lit(v) if v >= 0 => sum += v as u32,
+                _ => return None,
+            }
+        }
+        Some(sum)
     }
 
     pub fn accepted_pairs_constraint(&self) -> Option<&'a ValueAst> {
@@ -128,7 +151,7 @@ impl<'a> AtomView<'a> {
             let view = self.ast.multicenter_bond(mc_id);
             let pos = view.atoms().position(|a| a == self.idx)?;
             match view.data.electrons.get(pos)? {
-                ValueAst::Lit(v) if *v >= 0 => sum = sum.checked_add(*v as u32)?,
+                ValueAst::Lit(v) if *v >= 0 => sum += *v as u32,
                 _ => return None,
             }
         }
@@ -189,13 +212,32 @@ pub struct NeighborView<'a> {
     pub data: &'a BondAst,
 }
 
-/// Borrowed view of a dative bond: donor and acceptor atom indices plus data.
+/// Borrowed view of a dative bond: index, designated acceptor atom, and the
+/// underlying `DativeBondAst`. Donor atoms and the full participant set are
+/// reachable through `donors()` and `atoms()`.
 #[derive(Clone, Copy, Debug)]
 pub struct DativeBondView<'a> {
     pub idx: DativeBondIdx,
-    pub donor: AtomIdx,
     pub acceptor: AtomIdx,
     pub data: &'a DativeBondAst,
+    atoms: &'a [NodeId],
+}
+
+impl<'a> DativeBondView<'a> {
+    /// All atoms in this dative bond (donors + acceptor), sorted by `AtomIdx`.
+    pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
+        self.atoms.iter().map(|&n| AtomIdx::from(n))
+    }
+
+    /// Donor atoms (participants minus the acceptor slot).
+    pub fn donors(&self) -> impl Iterator<Item = AtomIdx> + '_ {
+        let acceptor_slot = self.data.acceptor_slot as usize;
+        self.atoms
+            .iter()
+            .enumerate()
+            .filter(move |(i, _)| *i != acceptor_slot)
+            .map(|(_, &n)| AtomIdx::from(n))
+    }
 }
 
 /// Borrowed view of a noncovalent bond: the two participating atoms plus data.
@@ -343,11 +385,11 @@ impl<'a> Index<BondIdx> for BondViews<'a> {
 /// Namespace accessor for dative-bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
-    set: &'a FixedRelationSet<DativeBondAst, 2>,
+    set: &'a VarRelationSet<DativeBondAst>,
 }
 
 impl<'a> DativeBondViews<'a> {
-    pub(super) fn new(set: &'a FixedRelationSet<DativeBondAst, 2>) -> Self {
+    pub(super) fn new(set: &'a VarRelationSet<DativeBondAst>) -> Self {
         Self { set }
     }
 
@@ -362,36 +404,29 @@ impl<'a> DativeBondViews<'a> {
     pub fn iter(&self) -> impl Iterator<Item = DativeBondView<'a>> {
         let set = self.set;
         set.relation_ids().map(move |rid| {
-            let parts = set.participants(rid);
+            let atoms = set.participants(rid);
             let data = set.data(rid);
-            let (donor, acceptor) = directed_endpoints(parts, data.direction);
+            let acceptor = AtomIdx::from(atoms[data.acceptor_slot as usize]);
             DativeBondView {
                 idx: DativeBondIdx::from(rid),
-                donor,
                 acceptor,
                 data,
+                atoms,
             }
         })
     }
 
     pub fn get(&self, idx: DativeBondIdx) -> DativeBondView<'a> {
         let rid = RelationId::from(idx);
-        let parts = self.set.participants(rid);
+        let atoms = self.set.participants(rid);
         let data = self.set.data(rid);
-        let (donor, acceptor) = directed_endpoints(parts, data.direction);
+        let acceptor = AtomIdx::from(atoms[data.acceptor_slot as usize]);
         DativeBondView {
             idx,
-            donor,
             acceptor,
             data,
+            atoms,
         }
-    }
-}
-
-fn directed_endpoints(parts: &[NodeId; 2], direction: DativeBondDirection) -> (AtomIdx, AtomIdx) {
-    match direction {
-        DativeBondDirection::Forward => (AtomIdx::from(parts[0]), AtomIdx::from(parts[1])),
-        DativeBondDirection::Reverse => (AtomIdx::from(parts[1]), AtomIdx::from(parts[0])),
     }
 }
 
@@ -572,7 +607,7 @@ mod tests {
                 (AtomIdx(1), AtomIdx(2), BondAst::from_order(2)),
                 (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
             ],
-            vec![(AtomIdx(2), AtomIdx(3), DativeBondAst::new())],
+            vec![(vec![AtomIdx(2)], AtomIdx(3), DativeBondAst::from_order(1))],
             vec![(
                 vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
                 AromaticSystemAst::default(),
@@ -658,7 +693,7 @@ mod tests {
 
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::AtomConstraint;
-    use crate::ast::dative::{DativeBondAst, DativeBondDirection};
+    use crate::ast::dative::DativeBondAst;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::value::ValueAst;
 
@@ -668,13 +703,6 @@ mod tests {
             atom.constraints.add(c);
         }
         atom
-    }
-
-    fn dative_with_direction(direction: DativeBondDirection) -> DativeBondAst {
-        DativeBondAst {
-            direction,
-            constraints: Default::default(),
-        }
     }
 
     fn aromatic_with_electrons(electrons: Vec<ValueAst>) -> AromaticSystemAst {
@@ -738,22 +766,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::donor_forward(AtomIdx(0), 1, 0)]
-    #[case::acceptor_forward(AtomIdx(1), 0, 1)]
+    #[case::donor(AtomIdx(0), Some(1), Some(0))]
+    #[case::acceptor(AtomIdx(1), Some(0), Some(1))]
     fn test_atom_view_dative_pair_counts(
         #[case] atom: AtomIdx,
-        #[case] expected_donated: u32,
-        #[case] expected_accepted: u32,
+        #[case] expected_donated: Option<u32>,
+        #[case] expected_accepted: Option<u32>,
     ) {
         let atoms = vec![
             AtomAst::from_element(Element::N),
             AtomAst::from_element(Element::C),
         ];
-        let dative = vec![(
-            AtomIdx(0),
-            AtomIdx(1),
-            dative_with_direction(DativeBondDirection::Forward),
-        )];
+        let dative = vec![(vec![AtomIdx(0)], AtomIdx(1), DativeBondAst::from_order(1))];
         let ast = MoleculeAst::new(
             atoms,
             vec![],

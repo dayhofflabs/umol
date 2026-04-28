@@ -365,11 +365,13 @@ pub fn atom_sigma_valence(view: &AtomView<'_>) -> Option<u8> {
     u8::try_from(v).ok()
 }
 
-/// Donor/acceptor pair counts on incident dative bonds.
-pub fn atom_dative_counts(view: &AtomView<'_>) -> (u8, u8) {
+/// Donor/acceptor pair counts on incident dative bonds. Either component is
+/// `None` if any contributing dative's `order` is non-ground (or if the donor
+/// side aggregates over multi-donor datives, which have no per-atom share).
+pub fn atom_dative_counts(view: &AtomView<'_>) -> (Option<u8>, Option<u8>) {
     (
-        view.donated_pairs() as u8,
-        view.accepted_pairs() as u8,
+        view.donated_pairs().and_then(|v| u8::try_from(v).ok()),
+        view.accepted_pairs().and_then(|v| u8::try_from(v).ok()),
     )
 }
 

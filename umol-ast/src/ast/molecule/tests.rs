@@ -17,7 +17,7 @@ use super::super::constraint::{
     DativeBondConstraint, DativeBondConstraints, MoleculeConstraint, RelationalConstraint,
     SubPatternAnchor,
 };
-use super::super::dative::{DativeBondAst, DativeBondDirection};
+use super::super::dative::DativeBondAst;
 use super::super::idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
 };
@@ -161,7 +161,7 @@ fn rich_molecule() -> MoleculeAst {
             (AtomIdx(1), AtomIdx(2), BondAst::from_order(2)),
             (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
         ],
-        vec![(AtomIdx(2), AtomIdx(3), DativeBondAst::new())],
+        vec![(vec![AtomIdx(2)], AtomIdx(3), DativeBondAst::from_order(1))],
         vec![(
             vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
             AromaticSystemAst::default(),
@@ -218,26 +218,22 @@ fn test_molecule_ast_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
 fn test_molecule_ast_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     let dv = ast.dative_bond(DativeBondIdx(0));
     assert_eq!(dv.idx, DativeBondIdx(0));
-    assert_eq!(dv.donor, AtomIdx(2));
     assert_eq!(dv.acceptor, AtomIdx(3));
-    assert_eq!(dv.data.direction, DativeBondDirection::Forward);
+    assert_eq!(dv.donors().collect::<Vec<_>>(), vec![AtomIdx(2)]);
+    assert_eq!(dv.atoms().collect::<Vec<_>>(), vec![AtomIdx(2), AtomIdx(3)]);
+    assert_eq!(dv.data.order, ValueAst::Lit(1));
 }
 
 #[rstest]
 fn test_molecule_ast_dative_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
-    let projected: Vec<(DativeBondIdx, AtomIdx, AtomIdx, DativeBondDirection)> = ast
+    let projected: Vec<(DativeBondIdx, Vec<AtomIdx>, AtomIdx)> = ast
         .dative_bonds()
         .iter()
-        .map(|v| (v.idx, v.donor, v.acceptor, v.data.direction))
+        .map(|v| (v.idx, v.donors().collect(), v.acceptor))
         .collect();
     assert_eq!(
         projected,
-        vec![(
-            DativeBondIdx(0),
-            AtomIdx(2),
-            AtomIdx(3),
-            DativeBondDirection::Forward,
-        )]
+        vec![(DativeBondIdx(0), vec![AtomIdx(2)], AtomIdx(3))]
     );
 }
 
@@ -329,16 +325,15 @@ fn test_molecule_ast_connecting_bond(
 }
 
 #[rstest]
-#[case::donor(AtomIdx(2), AtomIdx(3), Some(DativeBondIdx(0)))]
-#[case::reverse_rejects(AtomIdx(3), AtomIdx(2), None)]
-#[case::unrelated(AtomIdx(0), AtomIdx(3), None)]
+#[case::full_match(HashSet::from([AtomIdx(2), AtomIdx(3)]), Some(DativeBondIdx(0)))]
+#[case::subset(HashSet::from([AtomIdx(2)]), None)]
+#[case::disjoint(HashSet::from([AtomIdx(0), AtomIdx(1)]), None)]
 fn test_molecule_ast_connecting_dative_bond(
     #[from(rich_molecule)] ast: MoleculeAst,
-    #[case] donor: AtomIdx,
-    #[case] acceptor: AtomIdx,
+    #[case] atoms: HashSet<AtomIdx>,
     #[case] expected: Option<DativeBondIdx>,
 ) {
-    assert_eq!(ast.connecting_dative_bond(donor, acceptor), expected);
+    assert_eq!(ast.connecting_dative_bond(&atoms), expected);
 }
 
 #[rstest]
@@ -792,9 +787,9 @@ fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] as
     assert_eq!(sub.atom_map, vec![AtomIdx(2), AtomIdx(3)]);
     assert_eq!(sub.dative_bond_map, vec![DativeBondIdx(0)]);
     let dv = sub.ast.dative_bond(DativeBondIdx(0));
-    assert_eq!(dv.donor, AtomIdx(0));
     assert_eq!(dv.acceptor, AtomIdx(1));
-    assert_eq!(dv.data.direction, DativeBondDirection::Forward);
+    assert_eq!(dv.donors().collect::<Vec<_>>(), vec![AtomIdx(0)]);
+    assert_eq!(dv.data.order, ValueAst::Lit(1));
 }
 
 #[rstest]
@@ -884,14 +879,14 @@ fn test_molecule_builder_atom_constraint_mut(#[from(rich_molecule)] ast: Molecul
 #[rstest]
 fn test_molecule_builder_add_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
-    let id = b.add_dative_bond(AtomIdx(1), AtomIdx(0), DativeBondAst::new());
+    let id = b.add_dative_bond(vec![AtomIdx(1)], AtomIdx(0), DativeBondAst::from_order(1));
     let result = b.build();
     assert_eq!(id, DativeBondIdx(1));
     let view = result.dative_bond(id);
-    // donor=1, acceptor=0 → donor > acceptor triggers Reverse direction.
-    assert_eq!(view.data.direction, DativeBondDirection::Reverse);
-    assert_eq!(view.donor, AtomIdx(1));
     assert_eq!(view.acceptor, AtomIdx(0));
+    assert_eq!(view.donors().collect::<Vec<_>>(), vec![AtomIdx(1)]);
+    // Participants are sorted by NodeId; acceptor=0 lands at slot 0.
+    assert_eq!(view.data.acceptor_slot, 0);
 }
 
 #[rstest]
@@ -1129,27 +1124,27 @@ fn test_molecule_builder_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst)
 }
 
 #[rstest]
-#[case::forward_order(AtomIdx(0), AtomIdx(1), DativeBondDirection::Forward)]
-#[case::reverse_order(AtomIdx(1), AtomIdx(0), DativeBondDirection::Reverse)]
-fn test_molecule_ast_dative_direction_normalization(
+#[case::donor_below_acceptor(AtomIdx(0), AtomIdx(1), 1)]
+#[case::donor_above_acceptor(AtomIdx(1), AtomIdx(0), 0)]
+fn test_molecule_ast_dative_acceptor_slot(
     #[case] donor: AtomIdx,
     #[case] acceptor: AtomIdx,
-    #[case] expected_direction: DativeBondDirection,
+    #[case] expected_slot: u8,
 ) {
     let atoms = vec![ground_atom(), ground_atom()];
     let ast = MoleculeAst::new(
         atoms,
         Vec::new(),
-        vec![(donor, acceptor, DativeBondAst::new())],
+        vec![(vec![donor], acceptor, DativeBondAst::from_order(1))],
         Vec::new(),
         Vec::new(),
         Vec::new(),
         Constraints::new(),
     );
     let view = ast.dative_bond(DativeBondIdx(0));
-    assert_eq!(view.donor, donor);
     assert_eq!(view.acceptor, acceptor);
-    assert_eq!(view.data.direction, expected_direction);
+    assert_eq!(view.donors().collect::<Vec<_>>(), vec![donor]);
+    assert_eq!(view.data.acceptor_slot, expected_slot);
 }
 
 #[rstest]
@@ -1190,7 +1185,7 @@ fn test_molecule_ast_eq_canonical_across_dative_order() {
     let forward = MoleculeAst::new(
         atoms_a,
         Vec::new(),
-        vec![(AtomIdx(0), AtomIdx(1), DativeBondAst::new())],
+        vec![(vec![AtomIdx(0)], AtomIdx(1), DativeBondAst::from_order(1))],
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -1199,7 +1194,7 @@ fn test_molecule_ast_eq_canonical_across_dative_order() {
     let reverse = MoleculeAst::new(
         atoms_b,
         Vec::new(),
-        vec![(AtomIdx(1), AtomIdx(0), DativeBondAst::new())],
+        vec![(vec![AtomIdx(1)], AtomIdx(0), DativeBondAst::from_order(1))],
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -1207,7 +1202,7 @@ fn test_molecule_ast_eq_canonical_across_dative_order() {
     );
     assert_ne!(
         forward, reverse,
-        "dative direction is part of identity; reversed donor/acceptor should differ"
+        "acceptor identity is part of dative bond; swapping donor/acceptor should differ"
     );
 }
 
@@ -1294,10 +1289,7 @@ fn test_molecule_ast_index_bond(#[from(rich_molecule)] ast: MoleculeAst) {
 
 #[rstest]
 fn test_molecule_ast_index_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert_eq!(
-        ast[DativeBondIdx(0)].direction,
-        DativeBondDirection::Forward
-    );
+    assert_eq!(ast[DativeBondIdx(0)].order, ValueAst::Lit(1));
 }
 
 #[rstest]
@@ -1655,7 +1647,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
             AtomAst::from_element(Element::N),
         ],
         vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
-        vec![(AtomIdx(0), AtomIdx(1), DativeBondAst::new())],
+        vec![(vec![AtomIdx(0)], AtomIdx(1), DativeBondAst::from_order(1))],
         vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())],
         vec![(vec![AtomIdx(0), AtomIdx(1)], MulticenterBondAst::default())],
         vec![(

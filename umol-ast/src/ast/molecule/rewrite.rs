@@ -90,13 +90,16 @@ impl MoleculeAst {
 
         // Phase 1: add R\K dative bonds
         for dv in rhs.dative_bonds().iter() {
-            let in_k = r_to_l.contains_key(&dv.donor)
-                && r_to_l.contains_key(&dv.acceptor)
-                && lhs
-                    .connecting_dative_bond(r_to_l[&dv.donor], r_to_l[&dv.acceptor])
-                    .is_some();
+            let r_parts: Vec<AtomIdx> = dv.atoms().collect();
+            let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
+            let in_k = all_k && {
+                let l_parts: HashSet<AtomIdx> = r_parts.iter().map(|a| r_to_l[a]).collect();
+                lhs.connecting_dative_bond(&l_parts).is_some()
+            };
             if !in_k {
-                builder.add_dative_bond(r_to_g[&dv.donor], r_to_g[&dv.acceptor], dv.data.clone());
+                let g_donors: Vec<AtomIdx> = dv.donors().map(|d| r_to_g[&d]).collect();
+                let g_acceptor = r_to_g[&dv.acceptor];
+                builder.add_dative_bond(g_donors, g_acceptor, dv.data.clone());
             }
         }
 
@@ -167,14 +170,18 @@ impl MoleculeAst {
         // Phase 3: remove L\K dative bonds
         let mut remove_dative: Vec<DativeBondIdx> = Vec::new();
         for dv in lhs.dative_bonds().iter() {
-            let in_k = k_l.contains(&dv.donor)
-                && k_l.contains(&dv.acceptor)
-                && rhs
-                    .connecting_dative_bond(l_to_r[&dv.donor], l_to_r[&dv.acceptor])
-                    .is_some();
+            let l_parts: Vec<AtomIdx> = dv.atoms().collect();
+            let all_k = l_parts.iter().all(|a| k_l.contains(a));
+            let in_k = all_k && {
+                let r_parts: Option<HashSet<AtomIdx>> =
+                    l_parts.iter().map(|a| l_to_r.get(a).copied()).collect();
+                r_parts.is_some_and(|rp| rhs.connecting_dative_bond(&rp).is_some())
+            };
             if !in_k {
-                if let (Some(&gd), Some(&ga)) = (l_to_g.get(&dv.donor), l_to_g.get(&dv.acceptor)) {
-                    if let Some(g_idx) = self.connecting_dative_bond(gd, ga) {
+                let g_parts: Option<HashSet<AtomIdx>> =
+                    l_parts.iter().map(|a| l_to_g.get(a).copied()).collect();
+                if let Some(gp) = g_parts {
+                    if let Some(g_idx) = self.connecting_dative_bond(&gp) {
                         remove_dative.push(g_idx);
                     }
                 }

@@ -33,7 +33,7 @@ pub use constraint::{
     MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraints,
     RelationalConstraint, SubPatternAnchor,
 };
-pub use dative::{DativeBondAst, DativeBondDirection};
+pub use dative::DativeBondAst;
 pub use error::{EvaluationError, RewriteError};
 pub use idx::{
     AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,

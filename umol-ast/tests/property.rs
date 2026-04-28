@@ -481,12 +481,23 @@ fn edge_set_strategy(atom_count: usize) -> impl Strategy<Value = Vec<[u32; 2]>> 
 }
 
 fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
-    // Direction is set by the owning molecule from endpoint ordering, so
-    // only the constraints vary at the entity level.
-    dative_bond_constraints_strategy().prop_map(|constraints| DativeBondAst {
-        constraints,
-        ..DativeBondAst::new()
-    })
+    // `acceptor_slot` is set by the owning molecule from endpoint ordering.
+    // Order is sampled from the small literal range that the DSL keyword
+    // shorthands cover (`:single` / `:double` / `:triple`), keeping
+    // canonical-form roundtrip exercised across haptic-pair counts.
+    let order_strategy = prop_oneof![
+        Just(ValueAst::Lit(1)),
+        Just(ValueAst::Lit(2)),
+        Just(ValueAst::Lit(3)),
+        Just(ValueAst::Undetermined),
+    ];
+    (order_strategy, dative_bond_constraints_strategy()).prop_map(
+        |(order, constraints)| DativeBondAst {
+            acceptor_slot: 0,
+            order,
+            constraints,
+        },
+    )
 }
 
 /// Optional `ElectronCount` constraint (the asserted total). The strategy
@@ -693,7 +704,7 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                 let dative_triples: Vec<_> = datives
                     .into_iter()
                     .filter_map(|(atoms, data)| match atoms.as_slice() {
-                        [a, b] if a != b => Some((*a, *b, data)),
+                        [a, b] if a != b => Some((vec![*a], *b, data)),
                         _ => None,
                     })
                     .collect();

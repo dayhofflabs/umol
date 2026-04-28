@@ -111,12 +111,12 @@ fn check_electron_invariant_in_molecule(view: &AtomView<'_>) -> AtomInvariantChe
         None => return AtomInvariantCheck::Underdetermined,
     };
     let donated_pairs =
-        match resolve_value(view.donated_pairs_constraint(), Some(view.donated_pairs())) {
+        match resolve_value(view.donated_pairs_constraint(), view.donated_pairs()) {
             Some(v) => v,
             None => return AtomInvariantCheck::Underdetermined,
         };
     let accepted_pairs =
-        match resolve_value(view.accepted_pairs_constraint(), Some(view.accepted_pairs())) {
+        match resolve_value(view.accepted_pairs_constraint(), view.accepted_pairs()) {
             Some(v) => v,
             None => return AtomInvariantCheck::Underdetermined,
         };
