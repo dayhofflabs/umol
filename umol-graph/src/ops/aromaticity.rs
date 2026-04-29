@@ -15,16 +15,15 @@ pub mod clar;
 pub mod hmo;
 pub mod hueckel_rule;
 
+pub use clar::{ClarAromaticity, ClarError};
+pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
+pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_ast::ast::{BondConstraint, BondIdx, MoleculeAst, RingFamily, SpinStateAst, ValueAst};
 use umol_shared::spin::SpinState;
 
 use crate::ops::config::AromaticityModel;
 use crate::ops::solution::Solution;
-
-pub use clar::{ClarAromaticity, ClarError};
-pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
-pub use hueckel_rule::HueckelRuleAromaticity;
 
 /// Chemistry-level rejection: the algorithm decided the input doesn't
 /// satisfy the model. Carried inside `Solution::Contradictory`.
@@ -174,13 +173,12 @@ impl AromaticityResolver {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, MoleculeAst,
-        ValueAst,
+        AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst,
+        BondConstraintKind, Constraints, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -190,11 +188,10 @@ mod tests {
     fn aromatic(element: Element, pi: i64) -> AtomAst {
         let mut atom = AtomAst::from_element(element);
         atom.charge = ValueAst::Lit(0);
-        atom.spin = umol_ast::ast::SpinStateAst::closed_shell();
-        atom.constraints
-            .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
-                ValueAst::Lit(pi),
-            )));
+        atom.spin = SpinStateAst::closed_shell();
+        atom.constraints.add(AtomConstraint::AromaticValence(
+            AromaticValenceAst::Aromatic(ValueAst::Lit(pi)),
+        ));
         atom
     }
 
@@ -246,7 +243,7 @@ mod tests {
         let solution = resolver.resolve(&mut ast).unwrap();
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 1);
-        let system = ast.aromatic_system(umol_ast::ast::AromaticSystemIdx(0));
+        let system = ast.aromatic_system(AromaticSystemIdx(0));
         let atoms: Vec<AtomIdx> = system.atoms().collect();
         assert_eq!(atoms.len(), 6);
         let aromatic_bond_count = ast
@@ -256,7 +253,7 @@ mod tests {
                 view.data
                     .constraints
                     .iter()
-                    .any(|c| c.kind() == umol_ast::ast::BondConstraintKind::Aromatic)
+                    .any(|c| c.kind() == BondConstraintKind::Aromatic)
             })
             .count();
         assert_eq!(aromatic_bond_count, 6);
@@ -302,7 +299,7 @@ mod tests {
             view.data
                 .constraints
                 .iter()
-                .any(|c| c.kind() == umol_ast::ast::BondConstraintKind::Aromatic)
+                .any(|c| c.kind() == BondConstraintKind::Aromatic)
         });
         assert!(!any_aromatic);
     }

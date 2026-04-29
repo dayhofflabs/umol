@@ -15,10 +15,10 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemView, AromaticValenceAst, AtomAst, AtomConstraintKind, AtomIdx, AtomView,
-    ImplicitHydrogensAst, MoleculeAst, MulticenterBondView, MulticenterValenceAst, ValueAst,
+    AromaticSystemView, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomIdx,
+    AtomView, ElementAst, ImplicitHydrogensAst, MoleculeAst, MulticenterBondView,
+    MulticenterValenceAst, ValueAst,
 };
-use umol_ast::ast::ElementAst;
 
 use crate::ops::solution::Solution;
 
@@ -110,11 +110,10 @@ fn check_electron_invariant_in_molecule(view: &AtomView<'_>) -> AtomInvariantChe
         Some(v) => v,
         None => return AtomInvariantCheck::Underdetermined,
     };
-    let donated_pairs =
-        match resolve_value(view.donated_pairs_constraint(), view.donated_pairs()) {
-            Some(v) => v,
-            None => return AtomInvariantCheck::Underdetermined,
-        };
+    let donated_pairs = match resolve_value(view.donated_pairs_constraint(), view.donated_pairs()) {
+        Some(v) => v,
+        None => return AtomInvariantCheck::Underdetermined,
+    };
     let accepted_pairs =
         match resolve_value(view.accepted_pairs_constraint(), view.accepted_pairs()) {
             Some(v) => v,
@@ -168,20 +167,16 @@ fn check_electron_invariant_standalone(atom: &AtomAst) -> AtomInvariantCheck {
     ) else {
         return AtomInvariantCheck::Underdetermined;
     };
-    let aromatic_valence = match resolve_aromatic_valence(
-        atom_aromatic_valence_constraint(atom),
-        Some(0),
-    ) {
-        Some(v) => v,
-        None => return AtomInvariantCheck::Underdetermined,
-    };
-    let multicenter_valence = match resolve_multicenter_valence(
-        atom_multicenter_valence_constraint(atom),
-        Some(0),
-    ) {
-        Some(v) => v,
-        None => return AtomInvariantCheck::Underdetermined,
-    };
+    let aromatic_valence =
+        match resolve_aromatic_valence(atom_aromatic_valence_constraint(atom), Some(0)) {
+            Some(v) => v,
+            None => return AtomInvariantCheck::Underdetermined,
+        };
+    let multicenter_valence =
+        match resolve_multicenter_valence(atom_multicenter_valence_constraint(atom), Some(0)) {
+            Some(v) => v,
+            None => return AtomInvariantCheck::Underdetermined,
+        };
 
     evaluate_invariant(
         intrinsic,
@@ -308,29 +303,32 @@ fn resolve_multicenter_valence(
 
 fn constraint_value(atom: &AtomAst, kind: AtomConstraintKind) -> Option<&ValueAst> {
     match atom.constraints.get(kind)? {
-        umol_ast::ast::AtomConstraint::Valence(v)
-        | umol_ast::ast::AtomConstraint::DonatedPairs(v)
-        | umol_ast::ast::AtomConstraint::AcceptedPairs(v)
-        | umol_ast::ast::AtomConstraint::Degree(v)
-        | umol_ast::ast::AtomConstraint::Connectivity(v)
-        | umol_ast::ast::AtomConstraint::RingConnectivity(v)
-        | umol_ast::ast::AtomConstraint::TotalHydrogens(v)
-        | umol_ast::ast::AtomConstraint::RingCount(v)
-        | umol_ast::ast::AtomConstraint::RingSize(v) => Some(v),
+        AtomConstraint::Valence(v)
+        | AtomConstraint::DonatedPairs(v)
+        | AtomConstraint::AcceptedPairs(v)
+        | AtomConstraint::Degree(v)
+        | AtomConstraint::Connectivity(v)
+        | AtomConstraint::RingConnectivity(v)
+        | AtomConstraint::TotalHydrogens(v)
+        | AtomConstraint::RingCount(v)
+        | AtomConstraint::RingSize(v) => Some(v),
         _ => None,
     }
 }
 
 fn atom_aromatic_valence_constraint(atom: &AtomAst) -> Option<&AromaticValenceAst> {
     match atom.constraints.get(AtomConstraintKind::AromaticValence)? {
-        umol_ast::ast::AtomConstraint::AromaticValence(v) => Some(v),
+        AtomConstraint::AromaticValence(v) => Some(v),
         _ => None,
     }
 }
 
 fn atom_multicenter_valence_constraint(atom: &AtomAst) -> Option<&MulticenterValenceAst> {
-    match atom.constraints.get(AtomConstraintKind::MulticenterValence)? {
-        umol_ast::ast::AtomConstraint::MulticenterValence(v) => Some(v),
+    match atom
+        .constraints
+        .get(AtomConstraintKind::MulticenterValence)?
+    {
+        AtomConstraint::MulticenterValence(v) => Some(v),
         _ => None,
     }
 }
@@ -411,16 +409,12 @@ pub struct EntityStructureValidator;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum EntityStructureContradiction {
-    #[error(
-        "aromatic system: electrons.len() = {electrons_len} but atoms.len() = {atoms_len}"
-    )]
+    #[error("aromatic system: electrons.len() = {electrons_len} but atoms.len() = {atoms_len}")]
     AromaticSystemElectronsLengthMismatch {
         electrons_len: usize,
         atoms_len: usize,
     },
-    #[error(
-        "multicenter bond: electrons.len() = {electrons_len} but atoms.len() = {atoms_len}"
-    )]
+    #[error("multicenter bond: electrons.len() = {electrons_len} but atoms.len() = {atoms_len}")]
     MulticenterElectronsLengthMismatch {
         electrons_len: usize,
         atoms_len: usize,
@@ -592,8 +586,8 @@ impl Validator {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AromaticSystemAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst,
-        MoleculeAst, MulticenterBondAst, SpinStateAst, ValueAst,
+        AromaticSystemAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints,
+        ImplicitHydrogensAst, MoleculeAst, MulticenterBondAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -754,10 +748,7 @@ mod tests {
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
         ];
-        let aromatic = vec![(
-            vec![AtomIdx(0), AtomIdx(1)],
-            AromaticSystemAst::default(),
-        )];
+        let aromatic = vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())];
         let ast = MoleculeAst::new(
             atoms,
             vec![],

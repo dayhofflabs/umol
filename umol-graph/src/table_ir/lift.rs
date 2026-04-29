@@ -5,11 +5,13 @@
 //! `umol-ast`. Field-by-field copy with no defaulting beyond the literal
 //! mapping of `Option<T>` → `Lit(t) | Undetermined`.
 
+use std::collections::HashSet;
+
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, BondConstraint, Constraints,
-    ElementAst, ImplicitHydrogensAst, IntoAst, IsotopeAst, MoleculeAst, MulticenterBondAst,
-    NoncovalentBondAst, NoncovalentBondKind, SpinStateAst, ValueAst,
+    DativeBondAst, ElementAst, ImplicitHydrogensAst, IntoAst, IsotopeAst, MoleculeAst,
+    MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, SpinStateAst, ValueAst,
 };
 use umol_shared::spin::SpinState;
 
@@ -41,7 +43,7 @@ impl IntoAst<MoleculeAst> for &TableMolecule {
             .collect::<Result<_, _>>()?;
 
         let mut regular = Vec::new();
-        let mut dative: Vec<(Vec<AtomIdx>, AtomIdx, umol_ast::ast::DativeBondAst)> = Vec::new();
+        let mut dative: Vec<(Vec<AtomIdx>, AtomIdx, DativeBondAst)> = Vec::new();
         let mut noncovalent = Vec::new();
         for b in &self.bonds {
             let a_idx = AtomIdx(b.atoms.first());
@@ -57,8 +59,7 @@ impl IntoAst<MoleculeAst> for &TableMolecule {
                         continue;
                     }
                 };
-                let dative_bond =
-                    umol_ast::ast::DativeBondAst::new(lift_bond_order(b.order));
+                let dative_bond = DativeBondAst::new(lift_bond_order(b.order));
                 dative.push((vec![donor], acceptor, dative_bond));
             } else {
                 regular.push((a_idx, b_idx, b.into_ast(ctx)?));
@@ -69,7 +70,7 @@ impl IntoAst<MoleculeAst> for &TableMolecule {
             .multicenter_bonds
             .iter()
             .map(|mc| {
-                let mut seen = std::collections::HashSet::new();
+                let mut seen = HashSet::new();
                 let atoms: Vec<AtomIdx> = mc
                     .all_atoms()
                     .into_iter()
@@ -95,11 +96,9 @@ impl IntoAst<MoleculeAst> for &TableMolecule {
         let mut atoms = atoms;
         for (i, a) in self.atoms.iter().enumerate() {
             if a.aromatic == Some(true) {
-                atoms[i]
-                    .constraints
-                    .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
-                        ValueAst::Undetermined,
-                    )));
+                atoms[i].constraints.add(AtomConstraint::AromaticValence(
+                    AromaticValenceAst::Aromatic(ValueAst::Undetermined),
+                ));
             }
             if let Some(v) = a.valence {
                 atoms[i]
@@ -241,6 +240,7 @@ fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_ast::ast::BondIdx;
     use umol_shared::element::Element;
 
     use super::*;
@@ -263,7 +263,10 @@ mod tests {
         assert_eq!(ast.atoms().count(), 1);
         let atom = ast.atom(AtomIdx(0)).data;
         assert_eq!(atom.element, ElementAst::Lit(Element::C));
-        assert!(matches!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(4)));
+        assert!(matches!(
+            atom.implicit_hydrogens,
+            ImplicitHydrogensAst::Lit(4)
+        ));
     }
 
     #[rstest]
@@ -273,7 +276,7 @@ mod tests {
         mol.atoms.push(TableAtom::from_element(Element::C));
         mol.bonds.push(TableBond::new(0, 1, TableBondOrder::Double));
         let ast: MoleculeAst = (&mol).into_ast(&()).unwrap();
-        let bond = ast.bond(umol_ast::ast::BondIdx(0)).data;
+        let bond = ast.bond(BondIdx(0)).data;
         assert!(matches!(bond.order, ValueAst::Lit(2)));
     }
 
@@ -285,7 +288,7 @@ mod tests {
         mol.bonds
             .push(TableBond::new(0, 1, TableBondOrder::Aromatic));
         let ast: MoleculeAst = (&mol).into_ast(&()).unwrap();
-        let bond = ast.bond(umol_ast::ast::BondIdx(0)).data;
+        let bond = ast.bond(BondIdx(0)).data;
         // Definite-aromatic lifts to Kekulé σ-order 1 plus the Aromatic
         // constraint, rendering as `1#a`.
         assert!(matches!(bond.order, ValueAst::Lit(1)));

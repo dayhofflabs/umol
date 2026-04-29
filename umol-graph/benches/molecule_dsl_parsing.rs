@@ -3,7 +3,8 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use umol_graph::dsl::molecule::parse_molecule_dsl;
+use umol_ast::dsl::MoleculeDsl;
+use umol_edn::FromEdn;
 
 const EMPTY: &str = r#"{:atoms [] :bonds []}"#;
 
@@ -15,7 +16,7 @@ const TAGGED_ETHANOL: &str = r#"{:atoms [[:C1 "C #h3"] [:C2 "C #h2"] [:O "O #h1"
 const ALIASED_BENZENE: &str = r#"{:atoms [:ch :ch :ch :ch :ch :ch]
                                     :bonds [[0 1 :single] [1 2 :single] [2 3 :single]
                                             [3 4 :single] [4 5 :single] [5 0 :single]]
-                                    :aliases [:ch "C #h1 #v2 #a1"]}"#;
+                                    :atom-aliases [:ch "C #h1 #v2 #a1"]}"#;
 
 const C20_CHAIN: &str = r#"{:atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"
                                      "C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
@@ -37,7 +38,7 @@ fn bench_molecule_dsl(c: &mut Criterion) {
     let mut group = c.benchmark_group("molecule_dsl_fused");
     for (name, input) in cases {
         group.bench_function(*name, |b| {
-            b.iter(|| parse_molecule_dsl(black_box(input)).unwrap())
+            b.iter(|| MoleculeDsl::from_edn_str(black_box(input)).unwrap())
         });
     }
     group.finish();

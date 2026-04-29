@@ -45,7 +45,7 @@ impl HueckelRuleAromaticity {
             let Some(ring) = rings.get(cycle_idx) else {
                 continue;
             };
-            let ring_atoms: Vec<AtomIdx> = ring.atoms().iter().copied().collect();
+            let ring_atoms: Vec<AtomIdx> = ring.atoms().to_vec();
             if let Some(electrons) = self.ring_electron_count(ast, &ring_atoms) {
                 if check_4n_plus_2(electrons) {
                     aromatic_atom_sets.push(ring_atoms.into_iter().collect());
