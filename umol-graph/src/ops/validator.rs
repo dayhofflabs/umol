@@ -16,8 +16,7 @@
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemView, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomIdx,
-    AtomView, ElementAst, ImplicitHydrogensAst, MoleculeAst, MulticenterBondView,
-    MulticenterValenceAst, ValueAst,
+    MoleculeAst, MulticenterBondView, MulticenterValenceAst, ValueAst,
 };
 
 use crate::ops::solution::Solution;
@@ -48,21 +47,107 @@ impl ElectronInvariantValidator {
         let ast = ast.as_ref();
         let mut any_undetermined = false;
         for view in ast.atoms().iter() {
-            match check_electron_invariant_in_molecule(&view) {
-                AtomInvariantCheck::Balanced => {}
-                AtomInvariantCheck::Underdetermined => any_undetermined = true,
-                AtomInvariantCheck::Mismatch {
-                    orbital_count,
-                    electron_count,
-                } => {
-                    return Ok(Solution::Contradictory(
-                        ElectronInvariantContradiction::AtomInvariantMismatch {
-                            atom: view.idx,
-                            orbital_count,
-                            electron_count,
-                        },
-                    ));
+            let atom = view.data;
+            let Some(element) = atom.element.literal() else {
+                any_undetermined = true;
+                continue;
+            };
+            let Some(charge) = atom.charge.literal() else {
+                any_undetermined = true;
+                continue;
+            };
+            let Some(implicit_h) = atom.implicit_hydrogens.literal() else {
+                any_undetermined = true;
+                continue;
+            };
+            let Some(lone_pairs) = atom.lone_pairs.literal() else {
+                any_undetermined = true;
+                continue;
+            };
+            let Some(unpaired) = atom.spin.unpaired.literal() else {
+                any_undetermined = true;
+                continue;
+            };
+            let valence_electrons = element.valence_electrons() as i64;
+
+            let valence: i64 = match (view.valence_constraint(), view.bond_order_sum()) {
+                (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
+                (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
+                _ => {
+                    any_undetermined = true;
+                    continue;
                 }
+            };
+            let donated_pairs: i64 =
+                match (view.donated_pairs_constraint(), view.donated_pairs()) {
+                    (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
+                    (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
+                    _ => {
+                        any_undetermined = true;
+                        continue;
+                    }
+                };
+            let accepted_pairs: i64 =
+                match (view.accepted_pairs_constraint(), view.accepted_pairs()) {
+                    (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
+                    (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
+                    _ => {
+                        any_undetermined = true;
+                        continue;
+                    }
+                };
+            let aromatic_valence: i64 = match (
+                view.aromatic_valence_constraint(),
+                view.aromatic_contribution(),
+            ) {
+                (Some(AromaticValenceAst::Aromatic(ValueAst::Lit(v))), _) if *v >= 0 => *v,
+                (Some(AromaticValenceAst::NotAromatic), _) => 0,
+                (None | Some(AromaticValenceAst::Undetermined), Some(t)) => t as i64,
+                _ => {
+                    any_undetermined = true;
+                    continue;
+                }
+            };
+            let multicenter_valence: i64 = match (
+                view.multicenter_valence_constraint(),
+                view.multicenter_contribution(),
+            ) {
+                (Some(MulticenterValenceAst::Multicenter(ValueAst::Lit(v))), _) if *v >= 0 => *v,
+                (Some(MulticenterValenceAst::NotMulticenter), _) => 0,
+                (None | Some(MulticenterValenceAst::Undetermined), Some(t)) => t as i64,
+                _ => {
+                    any_undetermined = true;
+                    continue;
+                }
+            };
+
+            let aromatic_increment = if aromatic_valence == 1 { 1 } else { 0 };
+            // orbital_count counts electrons by orbital occupancy;
+            // electron_count counts electrons in reference to neutral state
+            // Must be equal.
+            let orbital_count = unpaired
+                + 2 * lone_pairs
+                + 2 * donated_pairs
+                + 2 * accepted_pairs
+                + 2 * implicit_h
+                + 2 * valence
+                + aromatic_valence
+                + aromatic_increment
+                + multicenter_valence;
+            let electron_count = valence_electrons - charge
+                + implicit_h
+                + valence
+                + aromatic_increment
+                + 2 * accepted_pairs;
+
+            if orbital_count != electron_count {
+                return Ok(Solution::Contradictory(
+                    ElectronInvariantContradiction::AtomInvariantMismatch {
+                        atom: view.idx,
+                        orbital_count,
+                        electron_count,
+                    },
+                ));
             }
         }
         Ok(if any_undetermined {
@@ -76,260 +161,91 @@ impl ElectronInvariantValidator {
         &self,
         atom: &AtomAst,
     ) -> Result<Solution<(), ElectronInvariantContradiction>, ElectronInvariantError> {
-        Ok(match check_electron_invariant_standalone(atom) {
-            AtomInvariantCheck::Balanced => Solution::Determined(()),
-            AtomInvariantCheck::Underdetermined => Solution::Underdetermined(()),
-            AtomInvariantCheck::Mismatch {
-                orbital_count,
-                electron_count,
-            } => Solution::Contradictory(ElectronInvariantContradiction::AtomInvariantMismatch {
-                atom: AtomIdx(0),
-                orbital_count,
-                electron_count,
-            }),
-        })
-    }
-}
-
-enum AtomInvariantCheck {
-    Balanced,
-    Underdetermined,
-    Mismatch {
-        orbital_count: i64,
-        electron_count: i64,
-    },
-}
-
-fn check_electron_invariant_in_molecule(view: &AtomView<'_>) -> AtomInvariantCheck {
-    let atom = view.data;
-    let Some(intrinsic) = read_atom_intrinsics(atom) else {
-        return AtomInvariantCheck::Underdetermined;
-    };
-
-    let valence = match resolve_value(view.valence_constraint(), view.bond_order_sum()) {
-        Some(v) => v,
-        None => return AtomInvariantCheck::Underdetermined,
-    };
-    let donated_pairs = match resolve_value(view.donated_pairs_constraint(), view.donated_pairs()) {
-        Some(v) => v,
-        None => return AtomInvariantCheck::Underdetermined,
-    };
-    let accepted_pairs =
-        match resolve_value(view.accepted_pairs_constraint(), view.accepted_pairs()) {
-            Some(v) => v,
-            None => return AtomInvariantCheck::Underdetermined,
+        let Some(element) = atom.element.literal() else {
+            return Ok(Solution::Underdetermined(()));
         };
-    let aromatic_valence = match resolve_aromatic_valence(
-        view.aromatic_valence_constraint(),
-        view.aromatic_contribution(),
-    ) {
-        Some(v) => v,
-        None => return AtomInvariantCheck::Underdetermined,
-    };
-    let multicenter_valence = match resolve_multicenter_valence(
-        view.multicenter_valence_constraint(),
-        view.multicenter_contribution(),
-    ) {
-        Some(v) => v,
-        None => return AtomInvariantCheck::Underdetermined,
-    };
-
-    evaluate_invariant(
-        intrinsic,
-        valence,
-        donated_pairs,
-        accepted_pairs,
-        aromatic_valence,
-        multicenter_valence,
-    )
-}
-
-fn check_electron_invariant_standalone(atom: &AtomAst) -> AtomInvariantCheck {
-    let Some(intrinsic) = read_atom_intrinsics(atom) else {
-        return AtomInvariantCheck::Underdetermined;
-    };
-
-    // Atom-only mode: no topology. Valences default to 0 unless asserted
-    // via constraints.
-    let Some(valence) = resolve_value(constraint_value(atom, AtomConstraintKind::Valence), Some(0))
-    else {
-        return AtomInvariantCheck::Underdetermined;
-    };
-    let Some(donated_pairs) = resolve_value(
-        constraint_value(atom, AtomConstraintKind::DonatedPairs),
-        Some(0),
-    ) else {
-        return AtomInvariantCheck::Underdetermined;
-    };
-    let Some(accepted_pairs) = resolve_value(
-        constraint_value(atom, AtomConstraintKind::AcceptedPairs),
-        Some(0),
-    ) else {
-        return AtomInvariantCheck::Underdetermined;
-    };
-    let aromatic_valence =
-        match resolve_aromatic_valence(atom_aromatic_valence_constraint(atom), Some(0)) {
-            Some(v) => v,
-            None => return AtomInvariantCheck::Underdetermined,
+        let Some(charge) = atom.charge.literal() else {
+            return Ok(Solution::Underdetermined(()));
         };
-    let multicenter_valence =
-        match resolve_multicenter_valence(atom_multicenter_valence_constraint(atom), Some(0)) {
-            Some(v) => v,
-            None => return AtomInvariantCheck::Underdetermined,
+        let Some(implicit_h) = atom.implicit_hydrogens.literal() else {
+            return Ok(Solution::Underdetermined(()));
         };
+        let Some(lone_pairs) = atom.lone_pairs.literal() else {
+            return Ok(Solution::Underdetermined(()));
+        };
+        let Some(unpaired) = atom.spin.unpaired.literal() else {
+            return Ok(Solution::Underdetermined(()));
+        };
+        let valence_electrons = element.valence_electrons() as i64;
 
-    evaluate_invariant(
-        intrinsic,
-        valence,
-        donated_pairs,
-        accepted_pairs,
-        aromatic_valence,
-        multicenter_valence,
-    )
-}
+        // Atom-only mode: no topology. Each valence defaults to 0 unless a
+        // literal constraint pins it.
+        let valence: i64 = match atom.constraints.get(AtomConstraintKind::Valence) {
+            Some(AtomConstraint::Valence(ValueAst::Lit(v))) if *v >= 0 => *v,
+            None | Some(AtomConstraint::Valence(ValueAst::Undetermined)) => 0,
+            _ => return Ok(Solution::Underdetermined(())),
+        };
+        let donated_pairs: i64 = match atom.constraints.get(AtomConstraintKind::DonatedPairs) {
+            Some(AtomConstraint::DonatedPairs(ValueAst::Lit(v))) if *v >= 0 => *v,
+            None | Some(AtomConstraint::DonatedPairs(ValueAst::Undetermined)) => 0,
+            _ => return Ok(Solution::Underdetermined(())),
+        };
+        let accepted_pairs: i64 = match atom.constraints.get(AtomConstraintKind::AcceptedPairs) {
+            Some(AtomConstraint::AcceptedPairs(ValueAst::Lit(v))) if *v >= 0 => *v,
+            None | Some(AtomConstraint::AcceptedPairs(ValueAst::Undetermined)) => 0,
+            _ => return Ok(Solution::Underdetermined(())),
+        };
+        let aromatic_valence: i64 = match atom.constraints.get(AtomConstraintKind::AromaticValence)
+        {
+            Some(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(
+                v,
+            )))) if *v >= 0 => *v,
+            Some(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic)) => 0,
+            None | Some(AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined)) => 0,
+            _ => return Ok(Solution::Underdetermined(())),
+        };
+        let multicenter_valence: i64 =
+            match atom.constraints.get(AtomConstraintKind::MulticenterValence) {
+                Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(
+                    ValueAst::Lit(v),
+                ))) if *v >= 0 => *v,
+                Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter)) => {
+                    0
+                }
+                None
+                | Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined)) => {
+                    0
+                }
+                _ => return Ok(Solution::Underdetermined(())),
+            };
 
-struct AtomIntrinsics {
-    valence_electrons: i64,
-    charge: i64,
-    implicit_h: i64,
-    lone_pairs: i64,
-    unpaired: i64,
-}
+        let aromatic_increment = if aromatic_valence == 1 { 1 } else { 0 };
+        let orbital_count = unpaired
+            + 2 * lone_pairs
+            + 2 * donated_pairs
+            + 2 * accepted_pairs
+            + 2 * implicit_h
+            + 2 * valence
+            + aromatic_valence
+            + aromatic_increment
+            + multicenter_valence;
+        let electron_count = valence_electrons - charge
+            + implicit_h
+            + valence
+            + aromatic_increment
+            + 2 * accepted_pairs;
 
-fn read_atom_intrinsics(atom: &AtomAst) -> Option<AtomIntrinsics> {
-    let ElementAst::Lit(element) = atom.element else {
-        return None;
-    };
-    let ValueAst::Lit(charge) = atom.charge else {
-        return None;
-    };
-    let ImplicitHydrogensAst::Lit(implicit_h) = atom.implicit_hydrogens else {
-        return None;
-    };
-    let ValueAst::Lit(lone_pairs) = atom.lone_pairs else {
-        return None;
-    };
-    let ValueAst::Lit(unpaired) = atom.spin.unpaired else {
-        return None;
-    };
-    Some(AtomIntrinsics {
-        valence_electrons: element.valence_electrons() as i64,
-        charge,
-        implicit_h,
-        lone_pairs,
-        unpaired,
-    })
-}
-
-fn evaluate_invariant(
-    intrinsic: AtomIntrinsics,
-    valence: u32,
-    donated_pairs: u32,
-    accepted_pairs: u32,
-    aromatic_valence: u32,
-    multicenter_valence: u32,
-) -> AtomInvariantCheck {
-    let valence = valence as i64;
-    let donated_pairs = donated_pairs as i64;
-    let accepted_pairs = accepted_pairs as i64;
-    let aromatic_valence = aromatic_valence as i64;
-    let multicenter_valence = multicenter_valence as i64;
-    let aromatic_increment = if aromatic_valence == 1 { 1 } else { 0 };
-
-    // Two independent counts of total valence electrons at this atom:
-    //   `orbital_count`  — electrons by orbital occupancy (lone pairs,
-    //                      bond pairs, π contributions, unpaired)
-    //   `electron_count` — electrons by source (atom's own Z−q + electrons
-    //                      contributed by each neighbor)
-    // Equal for every chemically valid atom; mismatch is the tier-2 violation.
-    let orbital_count = intrinsic.unpaired
-        + 2 * intrinsic.lone_pairs
-        + 2 * donated_pairs
-        + 2 * accepted_pairs
-        + 2 * intrinsic.implicit_h
-        + 2 * valence
-        + aromatic_valence
-        + aromatic_increment
-        + multicenter_valence;
-
-    let electron_count = intrinsic.valence_electrons - intrinsic.charge
-        + intrinsic.implicit_h
-        + valence
-        + aromatic_increment
-        + 2 * accepted_pairs;
-
-    if orbital_count == electron_count {
-        AtomInvariantCheck::Balanced
-    } else {
-        AtomInvariantCheck::Mismatch {
-            orbital_count,
-            electron_count,
+        if orbital_count == electron_count {
+            Ok(Solution::Determined(()))
+        } else {
+            Ok(Solution::Contradictory(
+                ElectronInvariantContradiction::AtomInvariantMismatch {
+                    atom: AtomIdx(0),
+                    orbital_count,
+                    electron_count,
+                },
+            ))
         }
-    }
-}
-
-fn resolve_value(constraint: Option<&ValueAst>, topology: Option<u32>) -> Option<u32> {
-    match constraint {
-        Some(ValueAst::Lit(v)) if *v >= 0 => Some(*v as u32),
-        Some(ValueAst::Lit(_)) => None,
-        Some(ValueAst::Undetermined) | None => topology,
-        Some(_) => None,
-    }
-}
-
-fn resolve_aromatic_valence(
-    constraint: Option<&AromaticValenceAst>,
-    topology: Option<u32>,
-) -> Option<u32> {
-    match constraint {
-        Some(AromaticValenceAst::Aromatic(ValueAst::Lit(v))) if *v >= 0 => Some(*v as u32),
-        Some(AromaticValenceAst::NotAromatic) => Some(0),
-        Some(AromaticValenceAst::Undetermined) | None => topology,
-        Some(_) => None,
-    }
-}
-
-fn resolve_multicenter_valence(
-    constraint: Option<&MulticenterValenceAst>,
-    topology: Option<u32>,
-) -> Option<u32> {
-    match constraint {
-        Some(MulticenterValenceAst::Multicenter(ValueAst::Lit(v))) if *v >= 0 => Some(*v as u32),
-        Some(MulticenterValenceAst::NotMulticenter) => Some(0),
-        Some(MulticenterValenceAst::Undetermined) | None => topology,
-        Some(_) => None,
-    }
-}
-
-fn constraint_value(atom: &AtomAst, kind: AtomConstraintKind) -> Option<&ValueAst> {
-    match atom.constraints.get(kind)? {
-        AtomConstraint::Valence(v)
-        | AtomConstraint::DonatedPairs(v)
-        | AtomConstraint::AcceptedPairs(v)
-        | AtomConstraint::Degree(v)
-        | AtomConstraint::Connectivity(v)
-        | AtomConstraint::RingConnectivity(v)
-        | AtomConstraint::TotalHydrogens(v)
-        | AtomConstraint::RingCount(v)
-        | AtomConstraint::RingSize(v) => Some(v),
-        _ => None,
-    }
-}
-
-fn atom_aromatic_valence_constraint(atom: &AtomAst) -> Option<&AromaticValenceAst> {
-    match atom.constraints.get(AtomConstraintKind::AromaticValence)? {
-        AtomConstraint::AromaticValence(v) => Some(v),
-        _ => None,
-    }
-}
-
-fn atom_multicenter_valence_constraint(atom: &AtomAst) -> Option<&MulticenterValenceAst> {
-    match atom
-        .constraints
-        .get(AtomConstraintKind::MulticenterValence)?
-    {
-        AtomConstraint::MulticenterValence(v) => Some(v),
-        _ => None,
     }
 }
 
@@ -393,6 +309,10 @@ impl ConstraintValidator {
         &self,
         _ast: impl AsRef<MoleculeAst>,
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
+        // TODO: stub. Per-relation constraint evaluators not yet implemented.
+        // Aromatic systems: `ElectronCount(#e) == sum(electrons) - system.charge`.
+        // Multicenter bonds: analogous rule once settled.
+        // Molecule-scope constraints: `:connected`, `:total-charge`, etc.
         Ok(Solution::Determined(()))
     }
 }

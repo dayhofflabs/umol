@@ -50,6 +50,28 @@ impl ValueAst {
         }
     }
 
+    /// The single integer this value denotes when ground; `None` otherwise.
+    /// Aligned with [`Self::is_ground`]: `is_ground() == literal().is_some()`.
+    /// Non-destructive — does not mutate or simplify in place.
+    #[inline]
+    pub fn literal(&self) -> Option<i64> {
+        match self {
+            Self::Lit(n) => Some(*n),
+            Self::Undetermined => None,
+            _ => self.literal_slow(),
+        }
+    }
+
+    #[inline(never)]
+    #[cold]
+    fn literal_slow(&self) -> Option<i64> {
+        match self {
+            Self::LitSet(s) => litset_is_ground(s).then(|| s[0]),
+            Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
+            Self::Lit(_) | Self::Undetermined => unreachable!(),
+        }
+    }
+
     pub fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -482,13 +504,33 @@ mod tests {
         assert_eq!(result.unwrap_err(), expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::lit(ValueAst::Lit(3), true)]
-    #[case::undetermined(ValueAst::Undetermined, false)]
-    #[case::lit_set(ValueAst::LitSet(vec![1, 2]), false)]
-    #[case::expr(ValueAst::Expr(Expr::Var("x".to_string())), false)]
-    fn test_value_ast_is_ground(#[case] ast: ValueAst, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    #[case::lit(ValueAst::Lit(3), Some(3))]
+    #[case::lit_zero(ValueAst::Lit(0), Some(0))]
+    #[case::lit_neg(ValueAst::Lit(-5), Some(-5))]
+    #[case::undetermined(ValueAst::Undetermined, None)]
+    #[case::lit_set_empty(ValueAst::LitSet(vec![]), None)]
+    #[case::lit_set_singleton(ValueAst::LitSet(vec![7]), Some(7))]
+    #[case::lit_set_all_equal(ValueAst::LitSet(vec![3, 3, 3]), Some(3))]
+    #[case::lit_set_multi(ValueAst::LitSet(vec![1, 2]), None)]
+    #[case::expr_lit(ValueAst::Expr(Expr::Lit(5)), Some(5))]
+    #[case::expr_neg_lit(ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(3)))), Some(-3))]
+    #[case::expr_const_add(
+        ValueAst::Expr(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3)))),
+        Some(5),
+    )]
+    #[case::expr_var(ValueAst::Expr(Expr::Var("x".to_string())), None)]
+    #[case::expr_boolean(
+        ValueAst::Expr(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(1)))),
+        None,
+    )]
+    fn test_value_ast_literal_and_is_ground(
+        #[case] ast: ValueAst,
+        #[case] expected_literal: Option<i64>,
+    ) {
+        assert_eq!(ast.literal(), expected_literal);
+        assert_eq!(ast.is_ground(), expected_literal.is_some());
     }
 
     #[rustfmt::skip]

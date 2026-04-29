@@ -47,7 +47,7 @@ impl BondsResolver {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AtomAst, AtomIdx, BondAst, BondIdx, Constraints, MoleculeAst, SpinStateAst, ValueAst
+        AtomAst, AtomIdx, BondAst, BondIdx, Constraints, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 

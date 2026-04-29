@@ -1,6 +1,7 @@
 //! Molecule structural AST.
 
 use std::collections::HashSet;
+use std::iter;
 use std::ops::Index;
 use std::sync::Arc;
 
@@ -125,7 +126,7 @@ impl MoleculeAst {
                     let mut participants: Vec<NodeId> = donors
                         .into_iter()
                         .map(NodeId::from)
-                        .chain(std::iter::once(acceptor_node))
+                        .chain(iter::once(acceptor_node))
                         .collect();
                     participants.sort_unstable();
                     let slot = participants
@@ -320,10 +321,7 @@ impl MoleculeAst {
             .map(BondIdx::from)
     }
 
-    pub fn connecting_dative_bond(
-        &self,
-        atoms: &HashSet<AtomIdx>,
-    ) -> Option<DativeBondIdx> {
+    pub fn connecting_dative_bond(&self, atoms: &HashSet<AtomIdx>) -> Option<DativeBondIdx> {
         let &first = atoms.iter().next()?;
         self.dative_bonds_incident(first).find(|&idx| {
             let v = self.dative_bond(idx);

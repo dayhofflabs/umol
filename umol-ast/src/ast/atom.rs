@@ -91,6 +91,16 @@ impl ElementAst {
         matches!(self, Self::Lit(_))
     }
 
+    /// The element this value denotes when ground; `None` otherwise. Aligned
+    /// with [`Self::is_ground`].
+    #[inline]
+    pub fn literal(&self) -> Option<Element> {
+        match self {
+            Self::Lit(e) => Some(*e),
+            _ => None,
+        }
+    }
+
     pub fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -150,6 +160,34 @@ impl IsotopeAst {
         match self {
             Self::LitSet(s) => super::value::litset_is_ground(s),
             Self::Expr(e) => e.is_ground(),
+            Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
+        }
+    }
+
+    /// The mass number this value denotes when ground; `None` otherwise.
+    /// `Natural` returns `Some(0)` as the sentinel for "natural isotopic
+    /// abundance — no specific mass committed". Aligned with
+    /// [`Self::is_ground`].
+    #[inline]
+    pub fn literal(&self) -> Option<u32> {
+        match self {
+            Self::Natural => Some(0),
+            Self::Lit(n) => u32::try_from(*n).ok(),
+            Self::Undetermined => None,
+            _ => self.literal_slow(),
+        }
+    }
+
+    #[inline(never)]
+    #[cold]
+    fn literal_slow(&self) -> Option<u32> {
+        match self {
+            Self::LitSet(s) => super::value::litset_is_ground(s)
+                .then(|| u32::try_from(s[0]).ok())
+                .flatten(),
+            Self::Expr(e) => e
+                .evaluate_checked(&super::value::Bindings::new())
+                .and_then(|n| u32::try_from(n).ok()),
             Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
         }
     }
@@ -218,15 +256,14 @@ impl ImplicitHydrogensAst {
         Self::Lit(count as i64)
     }
 
-    /// Semantic ground: `Normal` and `Lit(_)` are the primary ground forms;
-    /// `LitSet`/`Expr` delegate through the shared helpers so constant-valued
-    /// expressions and singleton sets are also ground. Same fast-path /
-    /// cold-slow-path split as [`ValueAst::is_ground`].
+    /// Semantic ground: only `Lit(_)`, ground singleton `LitSet`, and ground
+    /// `Expr` count. `Normal` is **not** ground — it's a placeholder for
+    /// "compute via valence model"; the resolver lowers it to `Lit(n)`.
     #[inline]
     pub fn is_ground(&self) -> bool {
         match self {
-            Self::Normal | Self::Lit(_) => true,
-            Self::Undetermined => false,
+            Self::Lit(_) => true,
+            Self::Normal | Self::Undetermined => false,
             _ => self.is_ground_slow(),
         }
     }
@@ -237,7 +274,28 @@ impl ImplicitHydrogensAst {
         match self {
             Self::LitSet(s) => super::value::litset_is_ground(s),
             Self::Expr(e) => e.is_ground(),
-            Self::Normal | Self::Lit(_) | Self::Undetermined => unreachable!(),
+            Self::Lit(_) | Self::Normal | Self::Undetermined => unreachable!(),
+        }
+    }
+
+    /// The single integer this value denotes when ground; `None` otherwise
+    /// (including `Normal`). Aligned with [`Self::is_ground`].
+    #[inline]
+    pub fn literal(&self) -> Option<i64> {
+        match self {
+            Self::Lit(n) => Some(*n),
+            Self::Normal | Self::Undetermined => None,
+            _ => self.literal_slow(),
+        }
+    }
+
+    #[inline(never)]
+    #[cold]
+    fn literal_slow(&self) -> Option<i64> {
+        match self {
+            Self::LitSet(s) => super::value::litset_is_ground(s).then(|| s[0]),
+            Self::Expr(e) => e.evaluate_checked(&super::value::Bindings::new()),
+            Self::Lit(_) | Self::Normal | Self::Undetermined => unreachable!(),
         }
     }
 
@@ -321,13 +379,21 @@ mod tests {
     }
 
     #[rstest]
-    #[case::lit(ElementAst::Lit(Element::C), true)]
-    #[case::wildcard(ElementAst::Undetermined, false)]
-    #[case::set(ElementAst::Set(vec![Element::C, Element::N]), false)]
-    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, false)]
-    #[case::reference(ElementAst::Ref("e".into()), false)]
-    fn test_element_ast_is_ground(#[case] ast: ElementAst, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    #[case::lit_carbon(ElementAst::Lit(Element::C), Some(Element::C))]
+    #[case::lit_nitrogen(ElementAst::Lit(Element::N), Some(Element::N))]
+    #[case::wildcard(ElementAst::Undetermined, None)]
+    #[case::set(ElementAst::Set(vec![Element::C, Element::N]), None)]
+    #[case::bind(
+        ElementAst::Bind { id: "e".into(), set: vec![Element::C] },
+        None,
+    )]
+    #[case::reference(ElementAst::Ref("e".into()), None)]
+    fn test_element_ast_literal_and_is_ground(
+        #[case] ast: ElementAst,
+        #[case] expected: Option<Element>,
+    ) {
+        assert_eq!(ast.literal(), expected);
+        assert_eq!(ast.is_ground(), expected.is_some());
     }
 
     #[rstest]
@@ -340,25 +406,42 @@ mod tests {
         assert_eq!(ast.is_undetermined(), expected);
     }
 
+    // Isotope mass is u32; negative Lit values are out-of-range input and
+    // not covered by the alignment contract.
+    #[rustfmt::skip]
     #[rstest]
-    #[case::natural(IsotopeAst::Natural, true)]
-    #[case::lit(IsotopeAst::Lit(12), true)]
-    #[case::wildcard(IsotopeAst::Undetermined, false)]
-    #[case::value_wildcard(IsotopeAst::Undetermined, false)]
-    #[case::set(IsotopeAst::LitSet(vec![12, 13]), false)]
-    fn test_isotope_ast_is_ground(#[case] ast: IsotopeAst, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
+    #[case::natural(IsotopeAst::Natural, Some(0))]
+    #[case::lit(IsotopeAst::Lit(12), Some(12))]
+    #[case::lit_zero(IsotopeAst::Lit(0), Some(0))]
+    #[case::wildcard(IsotopeAst::Undetermined, None)]
+    #[case::set_singleton(IsotopeAst::LitSet(vec![14]), Some(14))]
+    #[case::set_multi(IsotopeAst::LitSet(vec![12, 13]), None)]
+    #[case::expr_lit(IsotopeAst::Expr(Expr::Lit(15)), Some(15))]
+    #[case::expr_var(IsotopeAst::Expr(Expr::Var("x".into())), None)]
+    fn test_isotope_ast_literal_and_is_ground(
+        #[case] ast: IsotopeAst,
+        #[case] expected: Option<u32>,
+    ) {
+        assert_eq!(ast.literal(), expected);
+        assert_eq!(ast.is_ground(), expected.is_some());
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::normal(ImplicitHydrogensAst::Normal, true)]
-    #[case::lit(ImplicitHydrogensAst::Lit(2), true)]
-    #[case::wildcard(ImplicitHydrogensAst::Undetermined, false)]
-    fn test_implicit_hydrogens_ast_is_ground(
+    #[case::normal(ImplicitHydrogensAst::Normal, None)]
+    #[case::lit(ImplicitHydrogensAst::Lit(2), Some(2))]
+    #[case::lit_zero(ImplicitHydrogensAst::Lit(0), Some(0))]
+    #[case::wildcard(ImplicitHydrogensAst::Undetermined, None)]
+    #[case::set_singleton(ImplicitHydrogensAst::LitSet(vec![3]), Some(3))]
+    #[case::set_multi(ImplicitHydrogensAst::LitSet(vec![1, 2]), None)]
+    #[case::expr_lit(ImplicitHydrogensAst::Expr(Expr::Lit(4)), Some(4))]
+    #[case::expr_var(ImplicitHydrogensAst::Expr(Expr::Var("x".into())), None)]
+    fn test_implicit_hydrogens_ast_literal_and_is_ground(
         #[case] ast: ImplicitHydrogensAst,
-        #[case] expected: bool,
+        #[case] expected: Option<i64>,
     ) {
-        assert_eq!(ast.is_ground(), expected);
+        assert_eq!(ast.literal(), expected);
+        assert_eq!(ast.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
