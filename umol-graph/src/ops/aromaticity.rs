@@ -19,8 +19,10 @@ pub use clar::{ClarAromaticity, ClarError};
 pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
 pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
-use umol_ast::ast::{BondConstraint, BondIdx, MoleculeAst, RingFamily, SpinStateAst, ValueAst};
-use umol_shared::spin::SpinState;
+use umol_ast::ast::{
+    AromaticSystemAst, AromaticValenceAst, AtomConstraint, AtomIdx, BondConstraint, BondIdx,
+    MoleculeAst, RingFamily, ValueAst,
+};
 
 use crate::ops::config::AromaticityModel;
 use crate::ops::solution::Solution;
@@ -104,49 +106,12 @@ impl AromaticityResolver {
         let mut sorted = systems;
         sorted.sort_by(|a, b| a.0.first().cmp(&b.0.first()));
 
-        // Transfer per-atom charge / spin into each system before writing,
-        // then reset the constituent atoms to neutral / closed-shell.
-        // A non-`Lit` atom field, or a coupled total that would overflow the
-        // supported spin range, means we can't complete the transfer and report
-        // `Underdetermined`.
         for (atoms, system) in &mut sorted {
-            let mut total_charge: i64 = 0;
-            let mut total_unpaired: u32 = 0;
-            let mut transferred = true;
-            for &idx in atoms.iter() {
-                let atom = ast.atom(idx).data;
-                let (ValueAst::Lit(c), ValueAst::Lit(u)) = (&atom.charge, &atom.spin.unpaired)
-                else {
-                    transferred = false;
-                    break;
-                };
-                if *u < 0 {
-                    transferred = false;
-                    break;
-                }
-                total_charge += c;
-                total_unpaired += *u as u32;
-            }
-            if !transferred {
-                return Ok(Solution::Underdetermined(()));
-            }
-            let Ok(total_unpaired_u8) = u8::try_from(total_unpaired) else {
-                return Ok(Solution::Underdetermined(()));
-            };
-            let Some(state) = SpinState::max_multiplicity(total_unpaired_u8) else {
-                return Ok(Solution::Underdetermined(()));
-            };
-            system.charge = ValueAst::Lit(total_charge);
-            system.spin = SpinStateAst::from_state(state);
+            Self::equalize_charges(ast, atoms, system);
         }
 
         let mut builder = ast.edit();
         for (atoms, system_ast) in sorted {
-            for &idx in &atoms {
-                let atom = builder.atom_mut(idx);
-                atom.charge = ValueAst::Lit(0);
-                atom.spin = SpinStateAst::closed_shell();
-            }
             let _ = builder.add_aromatic_system(atoms, system_ast);
         }
         *ast = builder.build();
@@ -170,6 +135,49 @@ impl AromaticityResolver {
             Self::Hmo(_) => (RingFamily::Simple, 22),
             Self::Clar(_) => (RingFamily::Simple, 6),
         }
+    }
+
+    /// Pattern-match charge equalization on a single aromatic system.
+    /// Examines `(atom.charge, system.electrons[i])` for each atom; the two
+    /// patterns
+    ///
+    /// - `(+1, 0)` (tropylium-style C⁺)
+    /// - `(-1, 2)` (Cp⁻-style C⁻)
+    ///
+    /// rewrite to `(0, 1)` on the atom side (`charge`, `AromaticValence`
+    /// constraint) and on the system side (`electrons[i]`, `system.charge`).
+    /// Other atoms — including pyridinium-style `(+1, 1)` and any non-`Lit`
+    /// values — are left untouched. Spin is not modified.
+    fn equalize_charges(
+        ast: &mut MoleculeAst,
+        atoms: &[AtomIdx],
+        system: &mut AromaticSystemAst,
+    ) {
+        let mut accumulated = match system.charge {
+            ValueAst::Lit(c) => c,
+            _ => 0,
+        };
+        for (i, &atom_idx) in atoms.iter().enumerate() {
+            let c = match &ast.atom(atom_idx).data.charge {
+                ValueAst::Lit(c) => *c,
+                _ => continue,
+            };
+            let e = match &system.electrons[i] {
+                ValueAst::Lit(e) => *e,
+                _ => continue,
+            };
+            if !matches!((c, e), (1, 0) | (-1, 2)) {
+                continue;
+            }
+            system.electrons[i] = ValueAst::Lit(1);
+            accumulated += c;
+            let atom_mut = ast.atom_mut(atom_idx).data;
+            atom_mut.charge = ValueAst::Lit(0);
+            atom_mut.constraints.add(AtomConstraint::AromaticValence(
+                AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
+            ));
+        }
+        system.charge = ValueAst::Lit(accumulated);
     }
 }
 

@@ -428,7 +428,13 @@ mod tests {
 
     #[fixture]
     fn cyclopentadienyl_anion() -> MoleculeAst {
-        make_ring(vec![aromatic_charged(Element::C, -1, 2); 5])
+        make_ring(vec![
+            aromatic_charged(Element::C, -1, 2),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+            aromatic(Element::C, 1),
+        ])
     }
 
     #[rustfmt::skip]
@@ -523,7 +529,7 @@ mod tests {
     #[case::azulene(azulene(), 10, 10)]
     #[case::phenanthrene(phenanthrene(), 14, 14)]
     #[case::tropylium(tropylium(), 7, 6)]
-    #[case::cyclopentadienyl_anion(cyclopentadienyl_anion(), 5, 10)]
+    #[case::cyclopentadienyl_anion(cyclopentadienyl_anion(), 5, 6)]
     fn test_hueckel_rule_find_from_rings_aromatic(
         #[case] ast: MoleculeAst,
         #[case] expected_atoms: usize,
