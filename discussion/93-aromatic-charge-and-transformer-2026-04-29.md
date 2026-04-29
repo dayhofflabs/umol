@@ -49,30 +49,6 @@ Two behavioral changes vs current code:
 1. Charge: the resolver currently zeroes every aromatic atom's charge unconditionally, transferring everything into `system.charge`. Under the new rule only the matched atoms are zeroed, so pyridinium-like σ-charges stay on the heteroatom.
 2. Spin: the resolver currently sums all atom unpaired electrons into `system.spin` and resets every atom to closed-shell. Drop this entirely. Per-atom spin stays where the input put it; `system.spin` keeps its construction default (closed-shell). No analogous pattern rule is introduced for spin.
 
-### Equalization step
-
-The transformation that satisfies the new rule and conserves total π:
-
-```
-for atom i in system.atoms:
-    new_electrons[i]  =  old_electrons[i] + atom[i].charge
-    atom[i].charge    =  0
-system.charge  =  sum(old atom[i].charge)
-```
-
-Conservation check: `sum(new_electrons) - system.charge = sum(old_electrons) + sum(charges) - sum(charges) = sum(old_electrons)`. The right-hand side equals the original total π, so the count is preserved.
-
-Applied to the cases above:
-
-| Case        | new electrons         | system.charge | total |
-|-------------|-----------------------|---------------|-------|
-| Cp⁻         | `[1 1 1 1 1]`         | -1 | 5 - (-1) = 6 ✓ |
-| Tropylium   | `[1 1 1 1 1 1 1]`     | +1 | 7 - 1 = 6 ✓ |
-| Benzene     | `[1 1 1 1 1 1]`       | 0  | 6 ✓ |
-| Pyridinium  | `[2 1 1 1 1 1]` (N→2) | +1 | 7 - 1 = 6 ✓ |
-
-The first three rows match the user-prescribed output. The fourth row is the pyridinium edge case.
-
 ### Cascade of changes
 
 1. `aromaticity.rs::resolve` — replace the current unconditional charge/spin aggregation with the pattern-match rule: walk system atoms, apply the two charge patterns, leave everything else (including all spin handling) untouched. The per-atom-spin reset and `system.spin` aggregation block goes away.
@@ -97,70 +73,55 @@ The first three rows match the user-prescribed output. The fourth row is the pyr
 
 Two operations on a fully resolved `MoleculeAst`:
 
-- **Aromatize**: collapse a Kekulé form (alternating single/double bonds) into an aromatic system + aromatic bonds. Inverse of kekulize.
-- **Kekulize**: pick one Kekulé structure for each aromatic system; remove the system entry; assign bond orders 1/2 to the system's bonds.
+- **Aromatize**: collapse a Kekulé form (alternating single/double bonds) into an aromatic system + aromatic bonds.
+- **Kekulize**: pick a Kekulé structure for each aromatic system; remove the system entry; assign bond orders 1/2 to the system's bonds.
+
+Aromatize and Kekulize are *not* inverse pairs in general (kekulize loses the aromatic-system identity that aromatize would re-derive from topology + chemistry; aromatize commits a single canonical aromatic form when multiple were possible at the Kekulé level). They share a trait but have independent semantics.
 
 Both operate on resolved input and produce resolved output. They are not part of the resolution pipeline.
 
-User-facing shape (given): `Transformer::new(&model).transform(&ast) -> ast`.
+### Trait
 
-Open design questions are below. Each carries options, no recommendation.
+```rust
+pub trait Transformer {
+    fn transform_into(&self, ast: &mut MoleculeAst) -> Result<…>;
 
-### Q1. One transformer trait, or two distinct operations?
+    fn transform(&self, ast: &MoleculeAst) -> Result<MoleculeAst, …> {
+        let mut out = ast.clone();
+        self.transform_into(&mut out)?;
+        Ok(out)
+    }
 
-a. **Single `Transformer` trait** with `Aromatize` and `Kekulize` enum variants (parallel to `AromaticityResolver`'s current shape). One entry point, dispatch by config.
+    fn generate_all<'a>(
+        &'a self,
+        ast: &'a MoleculeAst,
+    ) -> Box<dyn Iterator<Item = MoleculeAst> + 'a>;
+}
+```
 
-b. **Two separate types**: `Aromatizer::new(&AromatizationModel).transform(...)`, `Kekulizer::new(&KekulizationModel).transform(...)`. No shared trait.
+- `transform_into` — required, in-place. Picks the canonical result for transformers that have multiple (Kekulize: deterministic single matching in canonical atom order, per discussion 85 §"Phase 1").
+- `transform` — value return, default impl via clone.
+- `generate_all` — required, yields all results. Boxed iterator preserves dyn-compat for `Vec<Box<dyn Transformer>>`. For Aromatize the iterator yields one element; for Kekulize it enumerates Kekulé structures (Uno's algorithm, doc 85 §"All Kekulé structures").
 
-c. **`Transformer` trait** parameterized by an enum of all possible transforms (current and future: tautomerize, normalize, etc.).
+### Concrete types
 
-The current `AromaticityResolver` follows shape (a). `Resolver` is a struct enum dispatching by model. Pattern continuity suggests (a); composability with future transforms suggests (c); minimum surface suggests (b).
+`AromaticityModel` is reused for aromatize — aromatize is perception applied to a Kekulé-form input. The `c1ccc[cH-]1` vs `C1=CC=C[CH-]1` distinction collapses: both parse into valid `MoleculeAst`s; the second form runs through aromatize to acquire aromatic systems if the user wants them.
 
-### Q2. In-place vs return-new
+```rust
+pub struct Aromatize { model: AromaticityModel }
+pub struct Kekulize { model: KekulizationModel }
+```
 
-a. `fn transform(&self, ast: &mut MoleculeAst) -> Result<Solution<...>, ...>` — mirrors the resolver shape.
+### Module location
 
-b. `fn transform(&self, ast: &MoleculeAst) -> Result<MoleculeAst, ...>` — value return, matches the user's stated shape.
+`umol-graph/src/ops/transform/aromatize.rs`, `umol-graph/src/ops/transform/kekulize.rs`. The `Transformer` trait and shared error types live in `ops/transform.rs` (parent module).
 
-(b) is what the user wrote. (a) is what the codebase already uses for resolvers. The two differ in how a partial-failure result is reported (Solution vs Result) and in cost (no clone vs always clone).
+### SMILES input policy (point 2a)
 
-### Q3. Aromatize: what model parameters?
+Both `c1ccc[cH-]1` (lowercase, aromatic) and `C1=CC=C[CH-]1` (uppercase, Kekulé) parse to valid `MoleculeAst`s. The lowercase form already carries an aromatic system after parsing; the uppercase form does not, and the user runs Aromatize if they want one.
 
-The aromatize step needs the same chemistry policy as the perception phase of resolution. Two options:
+The SMILES parser already distinguishes lowercase aromatic atoms from uppercase. Verifying the current behavior end-to-end is a separate small task; the perception-fix work in §1 doesn't depend on it.
 
-a. Reuse `AromaticityModel` — aromatize is "just run perception on a Kekulé input". The `c1ccc[cH-]1` vs `C1=CC=C[CH-]1` distinction collapses: both run through perception, and the user simply doesn't run aromatize on the second form. This makes aromatize a thin wrapper around the existing resolver.
+### Open: ordering vs §1
 
-b. Distinct `AromatizationModel` — aromatize accepts a Kekulé form and only that. Adds input validation: reject input that already has aromatic systems / aromatic bonds. Conceptually cleaner separation, but duplicates most of perception's logic.
-
-### Q4. Kekulize: which Kekulé structure?
-
-Discussion 85 already covers the matching algorithms. The transformer-level question is which one to surface:
-
-a. **Single canonical structure** (RDKit-style greedy DFS in canonical atom order). Deterministic, one output. Discussion 85 §"Phase 1".
-
-b. **All Kekulé structures** (Uno enumeration). Returns `Vec<MoleculeAst>` instead of one. Different return type.
-
-c. **One configurable** — `KekulizationModel::SingleCanonical` vs `KekulizationModel::All`, dispatched at the transformer level.
-
-Phase 1 of discussion 85 is single-canonical. (c) leaves the door open without committing to (b) now; (a) commits to single-output and forces a separate API later for enumeration.
-
-### Q5. Where does the transformer module live?
-
-a. `umol-graph/src/ops/transform/aromatize.rs`, `umol-graph/src/ops/transform/kekulize.rs` — sibling to `ops/aromaticity.rs`, `ops/valence.rs`, etc.
-
-b. `umol-graph/src/transform.rs` (top-level) — distinct from `ops` (which is resolution-pipeline territory).
-
-c. `umol-graph/src/ops/aromaticity/` — both aromatize and kekulize are aromatic-system transformations; live next to perception.
-
-`ops/` currently contains the resolver pipeline. If transformers are explicitly *not* part of resolution, (b) keeps that boundary visible; (a) keeps everything in `ops/` for discoverability; (c) groups by chemistry topic.
-
-### Q6. SMILES input policy (user's point 2a)
-
-The user stated that both `c1ccc[cH-]1` (lowercase, aromatic) and `C1=CC=C[CH-]1` (uppercase, Kekulé) must parse to valid `MoleculeAst`s, with the first triggering perception and the second not.
-
-The SMILES parser already distinguishes lowercase aromatic atoms from uppercase. Confirming the current behavior and writing it down explicitly is a separate small task; the perception-fix work in §1 doesn't depend on it.
-
-### What I want to confirm before coding
-
-- Q1, Q2, Q3, Q4, Q5 each with one of the listed options (or another).
-- Whether the transformer work blocks on §1 (perception fix) or can proceed in parallel.
+§2 reuses `AromaticityModel` and the perception path (Q3). The §1 pattern-match fix in `aromaticity.rs::resolve` lands first; §2 builds on the corrected behavior. Whether to overlap implementation in parallel branches or sequence them is a workflow question, not a design one.

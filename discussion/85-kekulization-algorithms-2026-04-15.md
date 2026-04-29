@@ -140,12 +140,16 @@ New module `algorithms/matching.rs`:
 - Returns `None` if no perfect matching exists (non-kekulizable)
 - The canonical node order comes from the caller (umol-graph's SMILES canonicalization or Morgan algorithm)
 
+**Status (2026-04-29):** landed. `Graph::perfect_matching(node_order, PerfectMatchingAlgorithm::BacktrackingDfs) -> Option<Matching>` in `umol-graph-core/src/algorithms/matching.rs`. Returns the existing `Matching` struct rather than `Vec<EdgeId>` directly. Companion: `BipartitionAlgorithm::Bfs` in `algorithms/coloring.rs` and `MaxMatchingAlgorithm::HopcroftKarp` (bipartite-only via `debug_assert!`; current implementation is BFS-augmenting per unmatched vertex, the layered O(E·√V) HK speedup deferred).
+
 ### Phase 2: all Kekulé structures
 
 - `fn enumerate_perfect_matchings(graph: &Graph) -> Vec<Vec<EdgeId>>`
 - Bipartite check → Uno's algorithm or blossom-based enumeration
 - Returns all perfect matchings
 - For the e-graph: each matching is one term in the aromatic e-class
+
+**Status (2026-04-29):** Uno's algorithm has been hard to extract from the original papers and from public reference implementations. Until that lands, `Kekulize::generate_all` returns a single-element iterator (the canonical structure produced by `BacktrackingDfs`). The trait shape stays uniform; enumeration capability lights up later. Alternatives if Uno remains unavailable: (a) backtracking enumeration (DFS that emits each completed matching, then backtracks — exponential worst case but fine at molecular sizes), (b) alternating-cycle enumeration from one matching (Uno's idea without polynomial-delay machinery; constructions in Lovász & Plummer, *Matching Theory*).
 
 ### Phase 3 (optional): matching count
 

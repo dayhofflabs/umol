@@ -2,16 +2,25 @@
 
 use std::collections::VecDeque;
 
+use crate::algorithms::coloring::BipartitionAlgorithm;
 use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaxMatchingAlgorithm {
     Edmonds,
+    /// Bipartite-only. Caller must ensure the graph is bipartite; verified via
+    /// `debug_assert!` inside the implementation.
+    HopcroftKarp,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MatchingEnumerationAlgorithm {
     BranchAndBound,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PerfectMatchingAlgorithm {
+    BacktrackingDfs,
 }
 
 /// A matching: a set of edges with no shared endpoints.
@@ -66,6 +75,22 @@ impl Graph {
     pub fn maximum_matching(&self, alg: MaxMatchingAlgorithm) -> Matching {
         match alg {
             MaxMatchingAlgorithm::Edmonds => self.maximum_matching_edmonds(),
+            MaxMatchingAlgorithm::HopcroftKarp => self.maximum_matching_hopcroft_karp(),
+        }
+    }
+
+    /// Returns a perfect matching (covers every vertex) when one exists in the
+    /// node order given, else `None`. The order controls determinism: the same
+    /// graph + same order always yields the same matching.
+    pub fn perfect_matching(
+        &self,
+        node_order: &[NodeId],
+        alg: PerfectMatchingAlgorithm,
+    ) -> Option<Matching> {
+        match alg {
+            PerfectMatchingAlgorithm::BacktrackingDfs => {
+                self.perfect_matching_backtracking_dfs(node_order)
+            }
         }
     }
 
@@ -82,6 +107,57 @@ impl Graph {
             MatchingEnumerationAlgorithm::BranchAndBound => {
                 self.enumerate_maximum_matchings_branch_and_bound()
             }
+        }
+    }
+
+    // Bipartite augmenting-path matching. Repeatedly grows the matching by
+    // BFS for an augmenting path from each unmatched vertex on the U-side.
+    // Each augmenting BFS is O(V+E), repeated up to |M*| ≤ V/2 times, giving
+    // O(V·(V+E)). The full Hopcroft-Karp speedup to O(E·√V) — layered BFS
+    // plus batched DFS — is a future optimization; the variant name carries
+    // the algorithm family rather than the exact complexity.
+    fn maximum_matching_hopcroft_karp(&self) -> Matching {
+        let n = self.node_count();
+        let bipartition = self.bipartition(BipartitionAlgorithm::Bfs);
+        debug_assert!(
+            bipartition.is_some(),
+            "MaxMatchingAlgorithm::HopcroftKarp requires a bipartite graph",
+        );
+        let colors = bipartition.unwrap_or_else(|| vec![false; n]);
+
+        let mut mate = vec![-1i32; n];
+        // Iterate U-side (color = false) in node order.
+        for start_idx in 0..n {
+            if colors[start_idx] || mate[start_idx] >= 0 {
+                continue;
+            }
+            bfs_augment_bipartite(self, NodeId(start_idx as u32), &mut mate, n);
+        }
+
+        Matching::from_mate_array(self, &mate)
+    }
+
+    // Greedy DFS with backtracking. Walks `node_order` left-to-right; at each
+    // unmatched vertex tries each unmatched neighbor in adjacency order;
+    // backtracks on dead ends. Returns `Some` if every vertex in `node_order`
+    // can be paired, else `None`. RDKit-style; deterministic given a stable
+    // `node_order` and the graph's stable neighbor list.
+    fn perfect_matching_backtracking_dfs(&self, node_order: &[NodeId]) -> Option<Matching> {
+        let n = self.node_count();
+        if node_order.is_empty() {
+            return Some(Matching {
+                edges: Vec::new(),
+                mate: Vec::new(),
+            });
+        }
+        if node_order.len() % 2 != 0 {
+            return None;
+        }
+        let mut mate = vec![-1i32; n];
+        if backtrack_pair(self, node_order, 0, &mut mate) {
+            Some(Matching::from_mate_array(self, &mate))
+        } else {
+            None
         }
     }
 
@@ -159,6 +235,82 @@ impl Graph {
         );
         result
     }
+}
+
+// Bipartite-only augmenting BFS. `start` is on the U-side. Returns whether
+// an augmenting path was found and applied to `mate`.
+fn bfs_augment_bipartite(graph: &Graph, start: NodeId, mate: &mut [i32], n: usize) -> bool {
+    let mut parent = vec![-1i32; n];
+    let mut visited = vec![false; n];
+    visited[start.index()] = true;
+    let mut queue = VecDeque::new();
+    queue.push_back(start);
+
+    while let Some(u) = queue.pop_front() {
+        for nbr in graph.neighbors(u) {
+            let v = nbr.node;
+            if visited[v.index()] {
+                continue;
+            }
+            visited[v.index()] = true;
+            parent[v.index()] = u.0 as i32;
+            let m = mate[v.index()];
+            if m < 0 {
+                augment_alternating_path(v, &parent, mate);
+                return true;
+            }
+            // v is matched to some U-side vertex; continue exploration there.
+            let m_u = m as usize;
+            if !visited[m_u] {
+                visited[m_u] = true;
+                parent[m_u] = v.0 as i32;
+                queue.push_back(NodeId(m as u32));
+            }
+        }
+    }
+    false
+}
+
+// Walk back along `parent` from `end`, toggling matched edges along the way.
+fn augment_alternating_path(end: NodeId, parent: &[i32], mate: &mut [i32]) {
+    let mut cur = end.0 as i32;
+    while cur >= 0 {
+        let p = parent[cur as usize];
+        let next = if p >= 0 { mate[p as usize] } else { -1 };
+        mate[cur as usize] = p;
+        if p >= 0 {
+            mate[p as usize] = cur;
+        }
+        cur = next;
+    }
+}
+
+// Backtracking helper for `perfect_matching_backtracking_dfs`. Returns true
+// when every vertex in `order[idx..]` has been paired (recursing into
+// `idx + 1` after each successful pair).
+fn backtrack_pair(graph: &Graph, order: &[NodeId], idx: usize, mate: &mut [i32]) -> bool {
+    let mut i = idx;
+    while i < order.len() && mate[order[i].index()] >= 0 {
+        i += 1;
+    }
+    if i >= order.len() {
+        return true;
+    }
+    let v = order[i];
+    for nbr in graph.neighbors(v) {
+        let u = nbr.node;
+        if mate[u.index()] >= 0 {
+            continue;
+        }
+        mate[v.index()] = u.0 as i32;
+        mate[u.index()] = v.0 as i32;
+        if backtrack_pair(graph, order, i + 1, mate) {
+            return true;
+        }
+        mate[v.index()] = -1;
+        mate[u.index()] = -1;
+    }
+    false
 }
 
 fn augment_from(graph: &Graph, mate: &mut [i32], root: usize) -> bool {
@@ -385,8 +537,9 @@ mod tests {
 
     use super::Matching;
     use super::MatchingEnumerationAlgorithm::BranchAndBound;
-    use super::MaxMatchingAlgorithm::Edmonds;
-    use crate::graph::Graph;
+    use super::MaxMatchingAlgorithm::{Edmonds, HopcroftKarp};
+    use super::PerfectMatchingAlgorithm::BacktrackingDfs;
+    use crate::graph::{Graph, NodeId};
 
     #[test]
     fn test_matching_empty() {
@@ -482,6 +635,108 @@ mod tests {
             assert_matching_valid(&g, m);
         }
         assert_all_distinct(&matchings);
+    }
+
+    #[rstest]
+    #[case::single_edge(2, vec![[0, 1]], 1, true)]
+    #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], 2, true)]
+    #[case::path_4(4, vec![[0, 1], [1, 2], [2, 3]], 2, true)]
+    #[case::path_5(5, vec![[0, 1], [1, 2], [2, 3], [3, 4]], 2, false)]
+    #[case::hexagon(6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]], 3, true)]
+    #[case::k_2_3(
+        5,
+        vec![[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]],
+        2,
+        false,
+    )]
+    fn test_graph_maximum_matching_hopcroft_karp(
+        #[case] node_count: usize,
+        #[case] edges: Vec<[u32; 2]>,
+        #[case] expected_size: usize,
+        #[case] expected_perfect: bool,
+    ) {
+        let g = Graph::new(node_count, &edges);
+        let m = g.maximum_matching(HopcroftKarp);
+        assert_eq!(m.size(), expected_size, "matching size");
+        assert_eq!(m.is_perfect(node_count), expected_perfect, "is_perfect");
+        assert_matching_valid(&g, &m);
+    }
+
+    #[rstest]
+    fn test_graph_maximum_matching_hopcroft_karp_matches_edmonds_on_bipartite() {
+        let cases: &[(usize, Vec<[u32; 2]>)] = &[
+            (4, vec![[0, 1], [1, 2], [2, 3], [3, 0]]),
+            (6, vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
+            (8, vec![[0, 4], [0, 5], [1, 4], [1, 6], [2, 5], [2, 7], [3, 6], [3, 7]]),
+        ];
+        for (n, edges) in cases {
+            let g = Graph::new(*n, edges);
+            let hk = g.maximum_matching(HopcroftKarp);
+            let ed = g.maximum_matching(Edmonds);
+            assert_eq!(hk.size(), ed.size(), "n={}, edges={:?}", n, edges);
+        }
+    }
+
+    fn ids(range: std::ops::Range<u32>) -> Vec<NodeId> {
+        range.map(NodeId).collect()
+    }
+
+    #[rstest]
+    #[case::single_edge(2, vec![[0, 1]], ids(0..2), true, 1)]
+    #[case::square(4, vec![[0, 1], [1, 2], [2, 3], [3, 0]], ids(0..4), true, 2)]
+    #[case::hexagon(
+        6,
+        vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]],
+        ids(0..6),
+        true,
+        3,
+    )]
+    #[case::k4(
+        4,
+        vec![[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]],
+        ids(0..4),
+        true,
+        2,
+    )]
+    #[case::triangle_no_perfect(
+        3,
+        vec![[0, 1], [1, 2], [0, 2]],
+        ids(0..3),
+        false,
+        0,
+    )]
+    #[case::path_5_no_perfect(
+        5,
+        vec![[0, 1], [1, 2], [2, 3], [3, 4]],
+        ids(0..5),
+        false,
+        0,
+    )]
+    #[case::two_disconnected_edges(4, vec![[0, 1], [2, 3]], ids(0..4), true, 2)]
+    fn test_graph_perfect_matching_backtracking_dfs(
+        #[case] node_count: usize,
+        #[case] edges: Vec<[u32; 2]>,
+        #[case] node_order: Vec<NodeId>,
+        #[case] expected_some: bool,
+        #[case] expected_size: usize,
+    ) {
+        let g = Graph::new(node_count, &edges);
+        let m = g.perfect_matching(&node_order, BacktrackingDfs);
+        assert_eq!(m.is_some(), expected_some, "Some-ness");
+        if let Some(m) = m {
+            assert_eq!(m.size(), expected_size);
+            assert!(m.is_perfect(node_count));
+            assert_matching_valid(&g, &m);
+        }
+    }
+
+    #[rstest]
+    fn test_graph_perfect_matching_deterministic_under_node_order() {
+        let g = Graph::new(4, &[[0, 1], [0, 2], [1, 3], [2, 3]]);
+        let order = ids(0..4);
+        let m1 = g.perfect_matching(&order, BacktrackingDfs).unwrap();
+        let m2 = g.perfect_matching(&order, BacktrackingDfs).unwrap();
+        assert_eq!(m1.edges(), m2.edges());
     }
 
     fn assert_matching_valid(graph: &Graph, matching: &Matching) {

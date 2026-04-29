@@ -12,6 +12,7 @@ pub mod union_find;
 
 pub use algorithms::auto::{AutoGroupOrder, Automorphism, AutomorphismAlgorithm};
 pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
+pub use algorithms::coloring::BipartitionAlgorithm;
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
 pub use algorithms::matching::{Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm};

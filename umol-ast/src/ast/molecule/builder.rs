@@ -7,8 +7,8 @@
 //! re-wraps everything in `Arc`, reusing untouched shared data.
 
 use std::collections::HashSet;
-use std::mem;
 use std::sync::Arc;
+use std::{iter, mem};
 
 use umol_graph_core::relation::RelationId;
 use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, Remapping, VarRelationSet};
@@ -290,7 +290,7 @@ impl MoleculeBuilder {
         let mut participants: Vec<NodeId> = donors
             .into_iter()
             .map(NodeId::from)
-            .chain(std::iter::once(acceptor_node))
+            .chain(iter::once(acceptor_node))
             .collect();
         participants.sort_unstable();
         let slot = participants
