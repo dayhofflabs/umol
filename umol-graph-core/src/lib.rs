@@ -15,7 +15,9 @@ pub use algorithms::bcc::BiconnectedComponentsAlgorithm;
 pub use algorithms::coloring::BipartitionAlgorithm;
 pub use algorithms::connected::ConnectedComponentsAlgorithm;
 pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
-pub use algorithms::matching::{Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm};
+pub use algorithms::matching::{
+    Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm, PerfectMatchingAlgorithm,
+};
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::subiso::SubgraphIsomorphismAlgorithm;
 pub use graph::{EdgeId, Graph, Neighbor, NodeId, Remapping, Subgraph};

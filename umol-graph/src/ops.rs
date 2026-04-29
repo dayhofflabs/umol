@@ -10,5 +10,6 @@ pub mod config;
 pub mod multicenter_bonds;
 pub mod resolver;
 pub mod solution;
+pub mod transform;
 pub mod valence;
 pub mod validator;
