@@ -278,11 +278,11 @@ fn monoelement(ast: &MoleculeAst, atoms: &[AtomIdx]) -> Option<Element> {
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_ast::mol_zeroed;
     use umol_ast::ast::{
         AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind,
-        AtomIdx, BondAst, BondConstraintKind, IntoAst, MoleculeAst, SpinStateAst, ValueAst,
+        AtomIdx, BondAst, BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
     };
-    use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
     use umol_shared::element::Element;
 
     use super::*;
@@ -401,66 +401,64 @@ mod tests {
 
     #[rstest]
     #[case::cyclopropenium_cation(
-        r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
         1, vec![1, 1, 1], vec![0, 0, 0], vec![1, 1, 1],
     )]
     #[case::cot_dianion(
-        r#"{:atoms ["C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"
-                    "C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"]
-                    [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"
+                                "C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"]
+                               [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 0 "1"]]}"#),
         -2, vec![1; 8], vec![0; 8], vec![1; 8],
     )]
     #[case::s4_dication(
-        r#"{:atoms ["S #c+ #n1 #a" "S #n1 #a2" "S #c+ #n1 #a" "S #n1 #a2"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["S #c+ #n1 #a" "S #n1 #a2" "S #c+ #n1 #a" "S #n1 #a2"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]}"#),
         2, vec![2; 4], vec![0; 4], vec![2; 4],
     )]
     #[case::boratabenzene_anion(
-        r#"{:atoms ["B #c- #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["B #c- #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![-1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::borepin(
-        r#"{:atoms ["B #h #a0" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["B #h #a0" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 0 "1"]]}"#),
         0, vec![0, 1, 1, 1, 1, 1, 1], vec![0; 7], vec![0, 1, 1, 1, 1, 1, 1],
     )]
     #[case::pyridinium(
-        r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::pyrylium(
-        r#"{:atoms ["O #c+ #n1 #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["O #c+ #n1 #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::pyrrole(
-        r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     #[case::furan(
-        r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     #[case::thiophene(
-        r#"{:atoms ["S #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
-            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#,
+        mol_zeroed!(r#"{:atoms ["S #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+                       :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     fn test_equalize_charges(
-        #[case] input: &str,
+        #[case] mut ast: MoleculeAst,
         #[case] system_charge: i64,
         #[case] electrons: Vec<i64>,
         #[case] atom_charges: Vec<i64>,
         #[case] aromatic_valences: Vec<i64>,
     ) {
-        let dsl: MoleculeDsl = input.parse().unwrap();
-        let mut ast = dsl.into_ast(&MoleculeDefaults::zeroed());
         let outcome = any_hueckel()
             .find_systems(&mut ast, electrons_from_aromatic_constraint)
             .unwrap();
