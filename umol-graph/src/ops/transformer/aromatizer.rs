@@ -1,6 +1,6 @@
 //! Aromatize: Kekulé form → aromatic-system form.
 //!
-//! [`Aromatizer`] runs aromaticity perception against a Kekulé-style input —
+//! [`Aromatizer`] runs aromaticity perception against a Kekulé-form input —
 //! atoms with explicit single/double bonds and no aromatic hints. Per-atom π
 //! contributions are derived from bond orders by [`electrons_from_kekule`]
 //! rather than from the `AromaticValence` constraint that the resolver reads.
@@ -68,7 +68,7 @@ impl Transformer for Aromatizer {
 /// - Exactly one incident double bond → 1 π electron (sp² atom on a single
 ///   π bond, e.g. benzene C, pyridine N).
 /// - Zero incident double bonds, atom is an N/O/S/Se/P/As → 2 π electrons
-///   (pyrrole-, furan-, thiophene-style heteroatom donating a lone pair).
+///   (pyrrole-, furan-, thiophene-class heteroatom donating a lone pair).
 /// - Zero incident double bonds, atom is C with charge `+1` → 0 π electrons
 ///   (sp² carbocation, empty p_z, e.g. tropylium C⁺).
 /// - Anything else (sp³ C, two or more double bonds, undetermined data) →

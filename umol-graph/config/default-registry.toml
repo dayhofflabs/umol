@@ -34,25 +34,31 @@
 
 [B]
 0 = [
-    "B #v3",       # BX3, BH3
-    "B #v2 #h",    # BX2H
-    "B #v1 #h2",   # BXH2
-    "B #h3",       # BH3
-    "B #u1 #v2",   # BX2, BH2, BO
-    "B #u1 #v #h", # BXH
-    "B #u1 #h2",   # BH2
-    "B #n1 #v",    # BX, BH, BF
-    "B #n1 #u",    # B atom, s2p1
+    "B #v3",        # BX3, BH3
+    "B #v2 #h",     # BX2H
+    "B #v1 #h2",    # BXH2
+    "B #h3",        # BH3
+    "B #u1 #v2",    # BX2, BH2, BO
+    "B #u1 #v #h",  # BXH
+    "B #u1 #h2",    # BH2
+    "B #n1 #v",     # BX, BH, BF
+    "B #n1 #u",     # B atom, s2p1
+    "B #v3 #a0",    # neutral aromatic B with substituent: borepin BR, boroxine BR3, 1-substituted 1,2-azaborine
+    "B #v2 #a0 #h", # neutral aromatic B with H: borazine BH, 1,2-azaborine BH, borepin BH
 ]
 -1 = [
-    "B #c- #v4",      # [BX4]-, BO2-
-    "B #c- #v3 #h",   # BX3H-
-    "B #c- #v2 #h2",  # [BX2H2]-
-    "B #c- #v #h3",   # [BXH3]-
-    "B #c- #h4",      # [BH4]-
-    "B #c- #n #v2",   # [BX2]-, BO-, [B-][N+]
-    "B #c- #n #v #h", # BXH-
-    "B #c- #n #h2",   # [BH2]-
+    "B #c- #v4",        # [BX4]-, BO2-
+    "B #c- #v3 #h",     # BX3H-
+    "B #c- #v2 #h2",    # [BX2H2]-
+    "B #c- #v #h3",     # [BXH3]-
+    "B #c- #h4",        # [BH4]-
+    "B #c- #n #v2",     # [BX2]-, BO-, [B-][N+]
+    "B #c- #n #v #h",   # BXH-
+    "B #c- #n #h2",     # [BH2]-
+    "B #c- #v2 #a #h",  # [C5H5BH]-, boratabenzene anion (1H)
+    "B #c- #v3 #a",     # [C5H5BR]-, boratabenzene anion (R-substituted)
+    "B #c- #v3 #a2",    # borolide dianion BR (1-substituted 5-ring), localized
+    "B #c- #v2 #a2 #h", # borolide dianion BH
 ]
 
 [C]

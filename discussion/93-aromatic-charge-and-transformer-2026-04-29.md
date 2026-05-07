@@ -29,8 +29,8 @@ Per atom in the system, examine the pair `(atom.charge, electrons[i])` and rewri
 
 | Match | Rewrite |
 |-------|---------|
-| `(+1, 0)` (tropylium-style C⁺) | `(0, 1)`, `system.charge += +1` |
-| `(-1, 2)` (Cp⁻-style C⁻)       | `(0, 1)`, `system.charge += -1` |
+| `(+1, 0)` (tropylium-class C⁺) | `(0, 1)`, `system.charge += +1` |
+| `(-1, 2)` (Cp⁻-class C⁻)       | `(0, 1)`, `system.charge += -1` |
 | anything else                   | leave atom and `electrons[i]` untouched |
 
 Pyridinium / pyrylium-type heteroatoms with `(+1, 1)` or `(-1, 1)` fall through unchanged: their per-atom contribution already matches the canonical 1, so the charge is σ-localized and stays on the atom.
@@ -128,78 +128,63 @@ The SMILES parser already distinguishes lowercase aromatic atoms from uppercase.
 
 ---
 
-## 3. Equalization rule: generality and limits (2026-05-07)
+## 3. Equalization rule: delocalization criterion (2026-05-07)
 
-§1 introduced a pattern-match equalization with two patterns, `(+1, 0)` and `(-1, 2)` → `(0, 1)`. Reframing in terms of a per-atom invariant clarifies what the rule covers and what it cannot reach.
+§1 introduced a pattern-match equalization. After working through the test cases, the principled framing is **delocalization**: equalization captures the case where the system's charge has no chemically meaningful localization on any specific atom, because the atoms are π-MO-equivalent. Operationally that's the **monoelement** condition — every atom in the aromatic system has the same element. In a heterogeneous system the heteroatom is the natural locus of the molecule's charge (pyridinium's `+1` on N, pyrylium's on O, boratabenzene's `−1` on B), and equalization would erase that.
 
-### The k_i invariant
+### Rule
 
-For each atom in an aromatic system, define the local canonical occupancy `k_i`: the value `atom.charge + electrons[i]` would take if the atom were neutral and contributing canonically to the ring. Equalization rewrites `(q, e)` → `(0, k_i)` when `q + e == k_i` and `e` is offset by ±1 from `k_i` (the offset lives in π). The shifted charge accumulates into `system.charge`.
+For each aromatic system:
 
-The current implementation hard-codes `k = 1`: it triggers only on `(+1, 0)` and `(-1, 2)`. The two `(q, e)` patterns above are the complete `k = 1` instance; nothing more is needed for `k = 1` alone.
+1. If every member atom has the same `Element::Lit` value:
+   - For each atom, compute `K = V − σ − 2·LP` from closed-shell electron accounting, with `V = Element::valence_electrons()`, `σ` the σ-bond count (graph degree + implicit H), `LP` the σ-lone-pair count.
+   - If `electrons[i] ≠ K`, rewrite the atom to `(q = 0, π = K)` and accumulate the per-atom `q` into `system.charge`.
+2. Otherwise (heterogeneous): skip the system. Charges stay on whichever atom carried them.
 
-Correctly handled:
+The K formula is element-uniform — `V` is read from `umol_shared::Element`, the rest is atom state. No element-specific table or scope list is buried in code; the only datum that varies per element is V, which is intrinsic chemistry and already lives in shared element data.
 
-- Atoms with canonical π = 1: sp² C, pyridine-like N (sp² N with the lone pair in σ), and analogous P, As at the same kind of position. `(charge, π)` triggers are `(+1, 0)` and `(-1, 2)`.
-- ±n totals via per-atom accumulation: COT²⁻ has two atoms each at `(-1, 2)`; cyclooctatetraene dication would have two atoms each at `(+1, 0)`. `accumulated += c` rolls them into `system.charge`. No "n=2" branch is needed. (Benzene dication itself is anti-aromatic — 4 π electrons — so Hückel rejects it before equalization runs; not a useful test.)
+### Concrete coverage
 
-Correctly left alone:
+Equalizes (monoelement):
 
-- σ-side charges on pyridine-like heteroatoms: pyridinium N, pyrylium O at `(+1, 1)` — `q+e=2`, no match.
-- Canonical π=2 atoms: pyrrole N, furan O, thiophene S at `(0, 2)` — `q+e=2`, no match.
+- Cyclopropenium `[C₃H₃]⁺` (3 π in 3-ring): one C at `(+1, 0)` → `(0, 1)`. K_C = 4 − 3 − 0 = 1.
+- Tropylium `[C₇H₇]⁺` and Cp⁻ `[C₅H₅]⁻` (6 π): single `(+1, 0)` or `(-1, 2)` atom equalizes.
+- Cyclononatetraenide `[C₉H₉]⁻` (10 π): one C at `(-1, 2)` equalizes.
+- COT²⁻ `[C₈H₈]²⁻` (10 π): two C at `(-1, 2)`, both equalize, system.charge = −2.
+- `[S₄]²⁺` (square-planar, 6 π in 4-ring): K_S = 6 − 2 − 2 = 2; the two `(+1, 1)` atoms equalize to `(0, 2)`; system.charge = +2.
 
-The `q+e=2` coincidence collapses both "leave alone" categories into the same skip path.
+Skips (heterogeneous):
 
-### Heterocyclic and ring-size coverage
+- Pyridinium `[C₅H₅NH]⁺`, pyrylium `[C₅H₅O]⁺`, thiopyrylium — N/O/S keeps its charge.
+- Boratabenzene anion `[C₅H₅BR]⁻`, borabenzene cation — B keeps its charge.
+- Pyrrole, furan, thiophene, borepin, borazine, 1,2-azaborine, boroxine — no charge to equalize anyway, but the heterogeneous check makes the no-op explicit.
 
-Concrete examples within the `k = 1` rule, all carbocyclic:
+±n accumulation (e.g., COT²⁻'s `−2`, S₄²⁺'s `+2`) falls out of per-atom `accumulated += q`. No special handling for n.
 
-- Cyclopropenium `[C₃H₃]⁺` (n=0, 2 π electrons): one C at `(+1, 0)` → `(0, 1)`.
-- Tropylium `[C₇H₇]⁺` and Cp⁻ `[C₅H₅]⁻` (n=1, 6 π electrons): a single `(+1, 0)` or `(-1, 2)` atom respectively.
-- Cyclononatetraenide `[C₉H₉]⁻` (n=2, 10 π electrons): one C at `(-1, 2)` → `(0, 1)`.
-- COT²⁻ `[C₈H₈]²⁻` (n=2, 10 π electrons): two C at `(-1, 2)` → `(0, 1)` each, accumulating into `system.charge = -2`.
+### Why this answers the σ/π-origin question
 
-Heteroaromatic atoms with canonical π=1 (pyridine-like sp² N, P, As) work the same way in principle, but `(±1, 0)` / `(±1, 2)` configurations on these atoms are exotic — typical heteroaromatics keep the heteroatom at canonical `(0, 1)` or `(0, 2)`. Boron in the borabenzene/boratabenzene family does NOT fit the `k = 1` rule: B in pyridine-analog has canonical π = 0, not 1, so the boratabenzene anion's B is at `(-1, 1)` (q+e=0) — outside the rule's domain.
+The atom state `(q, e, σ, LP)` doesn't disambiguate a σ-side charge (pyridinium = pyridine + H⁺) from a π-side charge in the same per-atom shape (hypothetical "oxidized pyrrole-N" at the same `(q, π, σ, LP)`). Tying the rule to the monoelement condition sidesteps the ambiguity: whenever the rule fires, every atom in the ring is the same element, so per-atom localization of the system's charge can only be a symmetry-breaking artifact (the atoms are equivalent under the ring's automorphisms), not a chemical fact about which atom the charge "actually" sits on. In heterogeneous systems the heteroatom *is* a chemical fact about the charge's location, and skipping is correct.
 
-Untouched (rule correctly skips):
+### Tests
 
-- pyridinium, pyrylium, thiopyrylium — heteroatom at `(+1, 1)`, σ-side charge.
-- pyrrole, furan, thiophene — heteroatom at `(0, 2)`, k=2 canonical.
-- boratabenzene anion — B at `(-1, 1)`, q+e=0, not a `k = 1` configuration at all.
+Implemented in `umol-graph/src/ops/aromaticity.rs::tests`:
 
-### k = 2 case: S₄²⁺
+Equalizes:
+- `test_equalize_charges_cyclopropenium_cation`
+- `test_equalize_charges_cot_dianion_accumulates_to_minus_two`
+- `test_equalize_charges_s4_dication`
 
-Square-planar S₄²⁺ is the canonical `k = 2` system. 4 S, total charge +2, 6 π electrons (4n+2, n=1). Each S is a lone-pair donor (canonical π = 2 like furan O). Electron accounting: 22 valence e⁻ (4×6 − 2); σ skeleton 16 e⁻ (4 σ bonds + 4 σ in-plane lone pairs); π = 6. The fully equalized form has `(q=0, π=2)` on every atom with `system.charge = +2`; total π = 4×2 − 2 = 6.
+Skips (heterogeneous):
+- `test_equalize_charges_boratabenzene_anion_leaves_b_charged`
+- `test_equalize_charges_borepin_neutral_aromatic_no_op`
+- `test_equalize_charges_pyridinium_leaves_n_charged`
+- `test_equalize_charges_pyrylium_leaves_o_charged`
+- `test_equalize_charges_pyrrole_leaves_n_at_pi_two`
+- `test_equalize_charges_furan_thiophene_leave_heteroatom_alone` (rstest, two cases)
 
-A natural input description has two S at `(+1, 1)` (lost a lone-pair electron from π) and two S at `(0, 2)`. All atoms have `q + e = 2`; the `k = 1` rule does nothing. The molecule remains in the mixed input form — not wrong (total π is correct) but not uniform.
+All inputs use the `mol!` macro from doc 94's notation work; assertions read AST via direct accessors.
 
-Reaching the equalized `(0, 2)`-uniform form requires per-atom `k_i`, which is element + σ-environment dependent and effectively another atom-typing concern. Deferred until concrete demand exists. The `k = 1` rule is documented as such; S₄²⁺ is recorded as a known gap.
+### Open
 
-### Test coverage to add
-
-Tests will live alongside `equalize_charges`.
-
-Equalizes (`k = 1`):
-
-- cyclopropenium `[C₃H₃]⁺` — single `(+1, 0)` atom.
-- cyclooctatetraenide dianion `[C₈H₈]²⁻` — two `(-1, 2)` atoms; demonstrates ±n accumulation.
-- (tropylium and Cp⁻ are already covered indirectly by the conformance suite.)
-
-Leaves alone:
-
-- pyridinium, pyrylium.
-- pyrrole, furan, thiophene.
-
-Out of scope (`k = 2` known gap):
-
-- S₄²⁺ — assert input passes through unchanged.
-
-### Notation work, sequenced first
-
-Writing these inputs against `MoleculeAst::new(vec![...], vec![...], ...)` with manual atom/bond construction is the friction the EDN DSL was supposed to remove. Before adding tests, decide:
-
-1. **Inline EDN packaging** — per-module `fn mol(edn: &str) -> MoleculeAst` helper, or shared `umol_ast::test_support::mol`, or a `mol!` macro.
-2. **Output assertion** — direct accessors (`ast.atom(i).data.charge` etc.), or EDN roundtrip equality, or insta snapshots.
-3. **Aromatic-system input form** — the existing EDN `:aromatic [{:atoms [...] :type "#e2" :charge n}]` block already supports declaring a pre-existing aromatic system, which is what these equalization tests need (input has the system inserted, run equalization, check resulting fields).
-
-Picks 1 and 2 are independent.
+- AtomView lacks a `sigma_bond_count()` accessor. The rule currently inlines `view.neighbors().count() + implicit_h` with a `TODO` to replace once the AtomView API is fleshed out. Tracked separately as part of the umol-ast view-API completion.
+- The discussion of σ/π-origin distinction is folded into the monoelement framing here; if the σ/π origin ever needs to be preserved in the AST (e.g., to support equalization within heteroaromatics), it's a separate AST-level decision (extra bits per atom recording charge origin), not a refinement of this rule.

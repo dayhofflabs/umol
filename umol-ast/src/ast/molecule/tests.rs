@@ -27,7 +27,7 @@ use super::super::rings::RingFamily;
 use super::super::spin::SpinStateAst;
 use super::super::value::{Expr, ValueAst};
 use super::MoleculeAst;
-use crate::mol;
+use crate::{mol, mol_zeroed};
 
 fn ground_atom() -> AtomAst {
     let mut a = AtomAst::from_element(Element::C);
@@ -89,11 +89,7 @@ fn test_molecule_ast_builder() {
 #[rstest]
 #[case::empty(MoleculeAst::default(), true)]
 #[case::ground_atom(
-    MoleculeAst::from_parts(
-        vec![ground_atom()],
-        vec![], vec![], vec![], vec![], vec![],
-        Constraints::default(),
-    ),
+    mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#),
     true,
 )]
 #[case::wildcard_element(
@@ -101,15 +97,7 @@ fn test_molecule_ast_builder() {
     false,
 )]
 #[case::wildcard_bond(
-    MoleculeAst::from_parts(
-        vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::O),
-        ],
-        vec![(AtomIdx(0), AtomIdx(1), BondAst::new(ValueAst::Undetermined))],
-        vec![], vec![], vec![], vec![],
-        Constraints::default(),
-    ),
+    mol!(r#"{:atoms ["C" "O"] :bonds [[0 1 "*"]]}"#),
     false,
 )]
 #[case::ground_atom_with_undetermined_constraint(

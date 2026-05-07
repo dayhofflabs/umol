@@ -207,24 +207,14 @@ fn build_aromatic_candidates(
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::mol;
+    use umol_ast::{mol, mol_zeroed};
     use umol_ast::ast::{
-        AtomAst, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst, SpinStateAst,
-        ValueAst,
+        AtomAst, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst,
     };
     use umol_shared::element::Element;
 
     use super::*;
     use crate::valence_table;
-
-    fn ground_carbon() -> AtomAst {
-        let mut c = AtomAst::from_element(Element::C);
-        c.charge = ValueAst::Lit(0);
-        c.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
-        c.lone_pairs = ValueAst::Lit(0);
-        c.spin = SpinStateAst::new(0, 1);
-        c
-    }
 
     fn carbon_methane_with_undetermined() -> MoleculeAst {
         // Carbon with implicit_hydrogens left undetermined; valence = 0 (no
@@ -252,15 +242,7 @@ mod tests {
     fn test_counts_valence_resolver_resolve_ground_passthrough() {
         let table = ValenceTable::default_table().clone();
         let resolver = CountsValenceResolver::new(table, true);
-        let mut ast = MoleculeAst::from_parts(
-            vec![ground_carbon()],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+        let mut ast = mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#);
         resolver.resolve(&mut ast).unwrap();
     }
 

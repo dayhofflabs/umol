@@ -54,12 +54,64 @@ macro_rules! bond {
     }};
 }
 
+/// Parse a molecule-EDN string into a `MoleculeAst` with `MoleculeDefaults::zeroed()`
+/// applied — every undetermined per-atom and per-bond field is filled with
+/// the zero-policy default (charge 0, lone pairs 0, normal H, closed-shell
+/// spin, etc.). Use this for ground-state fixture inputs; use [`mol!`] when
+/// you want the input to pass through verbatim.
+///
+/// ```ignore
+/// let methane = mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#);
+/// ```
+#[macro_export]
+macro_rules! mol_zeroed {
+    ($s:expr $(,)?) => {{
+        let dsl: $crate::dsl::MoleculeDsl =
+            <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
+        let (ast, _meta) = dsl.into_parts();
+        <$crate::dsl::MoleculeDsl as $crate::ast::IntoAst<$crate::ast::MoleculeAst>>::into_ast(
+            $crate::dsl::MoleculeDsl::from_parts(ast, $crate::dsl::Metadata::default()),
+            &$crate::dsl::MoleculeDefaults::zeroed(),
+        )
+    }};
+}
+
+/// Parse a compact atom-string into an `AtomAst` with `AtomDefaults::zeroed()`
+/// applied.
+#[macro_export]
+macro_rules! atom_zeroed {
+    ($s:expr $(,)?) => {{
+        let dsl: $crate::dsl::AtomDsl =
+            <$crate::dsl::AtomDsl as ::core::str::FromStr>::from_str($s).unwrap();
+        <$crate::dsl::AtomDsl as $crate::ast::IntoAst<$crate::ast::AtomAst>>::into_ast(
+            dsl,
+            &$crate::dsl::AtomDefaults::zeroed(),
+        )
+    }};
+}
+
+/// Parse a compact bond-string into a `BondAst` with `BondDefaults::zeroed()`
+/// applied.
+#[macro_export]
+macro_rules! bond_zeroed {
+    ($s:expr $(,)?) => {{
+        let dsl: $crate::dsl::BondDsl =
+            <$crate::dsl::BondDsl as ::core::str::FromStr>::from_str($s).unwrap();
+        <$crate::dsl::BondDsl as $crate::ast::IntoAst<$crate::ast::BondAst>>::into_ast(
+            dsl,
+            &$crate::dsl::BondDefaults::zeroed(),
+        )
+    }};
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::*;
     use umol_shared::element::Element;
 
-    use crate::ast::{AtomIdx, BondIdx, ElementAst, MoleculeAst, ValueAst};
+    use crate::ast::{
+        AtomIdx, BondIdx, ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, ValueAst,
+    };
 
     #[rstest]
     fn test_mol_macro_parses_to_molecule_ast() {
@@ -101,5 +153,36 @@ mod tests {
     #[should_panic]
     fn test_atom_macro_panics_on_malformed() {
         let _ = atom!("definitely not an atom");
+    }
+
+    #[rstest]
+    fn test_mol_zeroed_macro_fills_ground_state_defaults() {
+        // Methane via mol_zeroed: only #h4 supplied; other fields filled
+        // by zeroed defaults (isotope=Natural, charge=0, lone_pairs=0,
+        // closed-shell spin).
+        let m = mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let atom = m.atom(AtomIdx(0)).data;
+        assert_eq!(atom.element, ElementAst::Lit(Element::C));
+        assert_eq!(atom.isotope_mass, IsotopeAst::Natural);
+        assert_eq!(atom.charge, ValueAst::Lit(0));
+        assert_eq!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(4));
+        assert_eq!(atom.lone_pairs, ValueAst::Lit(0));
+    }
+
+    #[rstest]
+    fn test_atom_zeroed_macro_fills_ground_state_defaults() {
+        let a = atom_zeroed!("C #h4");
+        assert_eq!(a.element, ElementAst::Lit(Element::C));
+        assert_eq!(a.isotope_mass, IsotopeAst::Natural);
+        assert_eq!(a.charge, ValueAst::Lit(0));
+        assert_eq!(a.implicit_hydrogens, ImplicitHydrogensAst::Lit(4));
+        assert_eq!(a.lone_pairs, ValueAst::Lit(0));
+    }
+
+    #[rstest]
+    fn test_bond_zeroed_macro_fills_ground_state_defaults() {
+        let b = bond_zeroed!("1");
+        assert_eq!(b.order, ValueAst::Lit(1));
+        assert_eq!(b.charge, ValueAst::Lit(0));
     }
 }

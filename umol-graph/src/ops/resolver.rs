@@ -120,10 +120,8 @@ fn molecule_all_ground(ast: &MoleculeAst) -> bool {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints,
-        ImplicitHydrogensAst, IsotopeAst, MoleculeAst, SpinStateAst, ValueAst,
-    };
+    use umol_ast::mol_zeroed;
+    use umol_ast::ast::MoleculeAst;
     use umol_shared::element::Element;
 
     use super::*;
@@ -131,46 +129,14 @@ mod tests {
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
     fn ground_methane() -> MoleculeAst {
-        let mut c = AtomAst::from_element(Element::C);
-        c.isotope_mass = IsotopeAst::Natural;
-        c.charge = ValueAst::Lit(0);
-        c.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
-        c.lone_pairs = ValueAst::Lit(0);
-        c.spin = SpinStateAst::new(0, 1);
-        MoleculeAst::from_parts(
-            vec![c],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        )
+        mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#)
     }
 
     fn benzene_pinned() -> MoleculeAst {
-        let atoms: Vec<AtomAst> = (0..6)
-            .map(|_| {
-                let mut a = AtomAst::from_element(Element::C);
-                a.isotope_mass = IsotopeAst::Natural;
-                a.charge = ValueAst::Lit(0);
-                a.implicit_hydrogens = ImplicitHydrogensAst::Lit(1);
-                a.lone_pairs = ValueAst::Lit(0);
-                a.spin = SpinStateAst::new(0, 1);
-                a.constraints
-                    .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
-                        ValueAst::Lit(1),
-                    )));
-                a
-            })
-            .collect();
-        let bonds: Vec<_> = (0..6)
-            .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(1)))
-            .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        mol_zeroed!(r#"{
+            :atoms ["C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#)
     }
 
     fn counts_model() -> ChemistryModel {

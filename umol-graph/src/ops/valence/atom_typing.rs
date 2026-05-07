@@ -146,50 +146,18 @@ fn collect_pattern_constraints(pattern: &AtomAst) -> Vec<AtomConstraint> {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{
-        AtomAst, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst, IsotopeAst, MoleculeAst,
-        SpinStateAst, ValueAst,
-    };
-    use umol_shared::element::Element;
+    use umol_ast::{mol, mol_zeroed};
+    use umol_ast::ast::MoleculeAst;
 
     use super::*;
     use crate::registry;
 
-    fn ground_methane_atom() -> AtomAst {
-        let mut c = AtomAst::from_element(Element::C);
-        c.isotope_mass = IsotopeAst::Natural;
-        c.charge = ValueAst::Lit(0);
-        c.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
-        c.lone_pairs = ValueAst::Lit(0);
-        c.spin = SpinStateAst::new(0, 1);
-        c
-    }
-
     fn methane() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![ground_methane_atom()],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        )
+        mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#)
     }
 
     fn methyl_chloride_partial() -> MoleculeAst {
-        let mut c = AtomAst::from_element(Element::C);
-        c.implicit_hydrogens = ImplicitHydrogensAst::Lit(3);
-        let cl = AtomAst::from_element(Element::Cl);
-        MoleculeAst::from_parts(
-            vec![c, cl],
-            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        )
+        mol!(r#"{:atoms ["C #h3" "Cl"] :bonds [[0 1 "1"]]}"#)
     }
 
     #[rstest]

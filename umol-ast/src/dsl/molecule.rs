@@ -1422,19 +1422,12 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ast::atom::{AtomAst, ElementAst};
+    use crate::{dsl, mol};
+    use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint};
     use crate::ast::spin::SpinStateAst;
     use crate::ast::value::ValueAst;
-
-    fn c_atom() -> AtomAst {
-        AtomAst::new(ElementAst::Lit(Element::C))
-    }
-
-    fn single_bond() -> BondAst {
-        BondAst::new(ValueAst::Lit(1))
-    }
 
     #[rstest]
     fn test_molecule_dsl_to_edn_empty() {
@@ -1446,16 +1439,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_to_edn_two_atoms_one_bond() {
-        let ast = MoleculeAst::from_parts(
-            vec![c_atom(), c_atom()],
-            vec![(AtomIdx(0), AtomIdx(1), single_bond())],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
-        let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+        let dsl = dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
         let edn = dsl.to_edn();
         // Canonical render: order-1 default bond becomes the `:single` keyword.
         assert_eq!(
@@ -1466,19 +1450,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_to_edn_atom_with_id() {
-        let mut b = MetadataBuilder::default();
-        b.set_atom_id(AtomIdx(0), "c1".to_string());
-        let meta = b.build();
-        let ast = MoleculeAst::from_parts(
-            vec![c_atom(), c_atom()],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
-        let dsl = MoleculeDsl::from_parts(ast, meta);
+        let dsl = dsl!(r#"{:atoms [[:c1 "C"] "C"] :bonds []}"#);
         let edn = dsl.to_edn();
         assert_eq!(
             edn,
@@ -1488,19 +1460,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_to_edn_bond_with_id_uses_map_form() {
-        let mut b = MetadataBuilder::default();
-        b.set_bond_id(BondIdx(0), "b1".to_string());
-        let meta = b.build();
-        let ast = MoleculeAst::from_parts(
-            vec![c_atom(), c_atom()],
-            vec![(AtomIdx(0), AtomIdx(1), single_bond())],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
-        let dsl = MoleculeDsl::from_parts(ast, meta);
+        let dsl = dsl!(r#"{:atoms ["C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type "1"}]}"#);
         let edn = dsl.to_edn();
         assert_eq!(
             edn,
@@ -1511,20 +1471,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_to_edn_atom_alias_substituted() {
-        let mut b = MetadataBuilder::default();
-        b.add_atom_alias("x".into(), Box::new(AtomDsl(c_atom())))
-            .unwrap();
-        let meta = b.build();
-        let ast = MoleculeAst::from_parts(
-            vec![c_atom(), c_atom()],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
-        let dsl = MoleculeDsl::from_parts(ast, meta);
+        let dsl = dsl!(r#"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"#);
         let edn = dsl.to_edn();
         // Both atoms match the alias — rendered as :x keyword references; the
         // alias table emits the :atom-aliases key.
@@ -1536,31 +1483,13 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_display_matches_edn() {
-        let ast = MoleculeAst::from_parts(
-            vec![c_atom(), c_atom()],
-            vec![(AtomIdx(0), AtomIdx(1), single_bond())],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
-        let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+        let dsl = dsl!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
         assert_eq!(dsl.to_string(), dsl.to_edn().to_string());
     }
 
     #[rstest]
     fn test_molecule_dsl_to_edn_omits_empty_optional_sections() {
-        let ast = MoleculeAst::from_parts(
-            vec![c_atom()],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
-        let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
+        let dsl = dsl!(r#"{:atoms ["C"] :bonds []}"#);
         let edn = dsl.to_edn();
         let Edn::Map(m) = &edn else {
             panic!("expected map");
@@ -1759,15 +1688,7 @@ mod tests {
         // Round-trip direction: DSL → AST (raise) → DSL (lower) is the
         // identity. AST → DSL → AST isn't, since raising `Undetermined`
         // fields to `Lit(0)` is one-way under `zeroed()`.
-        let ast = MoleculeAst::from_parts(
-            vec![c_atom(), c_atom()],
-            vec![(AtomIdx(0), AtomIdx(1), single_bond())],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
+        let ast = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#);
         let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
         let cfg = MoleculeDefaults::zeroed();
         let raised = dsl.clone().into_ast(&cfg);
@@ -1777,15 +1698,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_from_ast_has_empty_metadata() {
-        let ast = MoleculeAst::from_parts(
-            vec![c_atom()],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::new(),
-        );
+        let ast = mol!(r#"{:atoms ["C"] :bonds []}"#);
         let cfg = MoleculeDefaults::zeroed();
         let dsl = MoleculeDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.metadata(), &Metadata::default());
