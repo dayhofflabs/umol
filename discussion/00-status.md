@@ -94,5 +94,5 @@
 | [90-reactions-relation-mutation-2026-04-21.md](90-reactions-relation-mutation-2026-04-21.md)                                     | Active        | 2026-04-21   |
 | [91-molecule-dsl-profiling-2026-04-23.md](91-molecule-dsl-profiling-2026-04-23.md)                                               | Completed     | 2026-04-24   |
 | [92-umol-graph-engines-restructure-2026-04-25.md](92-umol-graph-engines-restructure-2026-04-25.md)                               | Completed     | 2026-04-27   |
-| [93-aromatic-charge-and-transformer-2026-04-29.md](93-aromatic-charge-and-transformer-2026-04-29.md)                             | Active        | 2026-05-07   |
-| [94-dsl-ast-io-ergonomics-2026-05-07.md](94-dsl-ast-io-ergonomics-2026-05-07.md)                                                 | Active        | 2026-05-07   |
+| [93-aromatic-charge-and-transformer-2026-04-29.md](93-aromatic-charge-and-transformer-2026-04-29.md)                             | Completed     | 2026-05-07   |
+| [94-dsl-ast-io-ergonomics-2026-05-07.md](94-dsl-ast-io-ergonomics-2026-05-07.md)                                                 | Completed     | 2026-05-07   |
