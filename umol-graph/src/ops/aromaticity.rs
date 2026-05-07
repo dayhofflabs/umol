@@ -218,14 +218,31 @@ fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemIdx) {
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_ast::mol;
     use umol_ast::ast::{
-        AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst,
-        BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
+        AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind,
+        AtomIdx, BondAst, BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
     use super::*;
     use crate::ops::config::{ElementScope, RingLimits};
+
+    fn any_hueckel() -> AromaticityPerception {
+        AromaticityPerception::new(&AromaticityModel::HueckelRule {
+            scope: ElementScope::Any,
+            ring_limits: RingLimits::default(),
+        })
+    }
+
+    fn aromatic_valence_lit(ast: &MoleculeAst, idx: AtomIdx) -> Option<i64> {
+        match ast.atom(idx).data.constraints.get(AtomConstraintKind::AromaticValence)? {
+            AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n))) => {
+                Some(*n)
+            }
+            _ => None,
+        }
+    }
 
     fn aromatic(element: Element, pi: i64) -> AtomAst {
         let mut atom = AtomAst::from_element(element);
@@ -321,6 +338,199 @@ mod tests {
             Solution::Contradictory(AromaticityContradiction::ClarNonBenzenoid(_))
         ));
     }
+
+    // region: equalize_charges
+
+    #[rstest]
+    fn test_equalize_charges_cyclopropenium_cation() {
+        // [C₃H₃]⁺: one atom at (+1, 0), two at (0, 1). After equalization,
+        // all three atoms are (0, 1) and the system carries charge +1.
+        let mut ast = mol!(r#"{
+            :atoms ["C #c0 #a" "C #c0 #a" "C #c+ #a0"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]
+        }"#);
+        let outcome = any_hueckel()
+            .find_systems(&mut ast, electrons_from_aromatic_constraint)
+            .unwrap();
+        let Solution::Determined(systems) = outcome else {
+            panic!("expected Determined, got {outcome:?}");
+        };
+        any_hueckel().add_systems(&mut ast, systems);
+
+        let system = ast.aromatic_system(AromaticSystemIdx(0));
+        assert_eq!(system.data.charge, ValueAst::Lit(1));
+        assert_eq!(system.data.electrons, vec![ValueAst::Lit(1); 3]);
+        for i in 0..3 {
+            assert_eq!(ast.atom(AtomIdx(i)).data.charge, ValueAst::Lit(0));
+            assert_eq!(aromatic_valence_lit(&ast, AtomIdx(i)), Some(1));
+        }
+    }
+
+    #[rstest]
+    fn test_equalize_charges_cot_dianion_accumulates_to_minus_two() {
+        // [C₈H₈]²⁻: six atoms at (0, 1), two at (-1, 2). Equalization fires
+        // on each (-1, 2) atom; the per-atom -1 charges accumulate into
+        // system.charge = -2. No "n=2" branch is required.
+        let mut ast = mol!(r#"{
+            :atoms ["C #c0 #a" "C #c- #a2" "C #c0 #a" "C #c0 #a"
+                    "C #c0 #a" "C #c- #a2" "C #c0 #a" "C #c0 #a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"]
+                    [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 0 "1"]]
+        }"#);
+        let outcome = any_hueckel()
+            .find_systems(&mut ast, electrons_from_aromatic_constraint)
+            .unwrap();
+        let Solution::Determined(systems) = outcome else {
+            panic!("expected Determined, got {outcome:?}");
+        };
+        any_hueckel().add_systems(&mut ast, systems);
+
+        let system = ast.aromatic_system(AromaticSystemIdx(0));
+        assert_eq!(system.data.charge, ValueAst::Lit(-2));
+        assert_eq!(system.data.electrons, vec![ValueAst::Lit(1); 8]);
+        for i in 0..8 {
+            assert_eq!(ast.atom(AtomIdx(i)).data.charge, ValueAst::Lit(0));
+            assert_eq!(aromatic_valence_lit(&ast, AtomIdx(i)), Some(1));
+        }
+    }
+
+    #[rstest]
+    fn test_equalize_charges_pyridinium_leaves_n_charged() {
+        // Pyridinium [C₅H₅NH]⁺: N at (+1, 1) — σ-side charge, π already
+        // canonical. Rule skips (q+e=2 ≠ 1). N keeps its +1 charge.
+        let mut ast = mol!(r#"{
+            :atoms ["N #c+ #a" "C #c0 #a" "C #c0 #a" "C #c0 #a" "C #c0 #a" "C #c0 #a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#);
+        let outcome = any_hueckel()
+            .find_systems(&mut ast, electrons_from_aromatic_constraint)
+            .unwrap();
+        let Solution::Determined(systems) = outcome else {
+            panic!("expected Determined, got {outcome:?}");
+        };
+        any_hueckel().add_systems(&mut ast, systems);
+
+        let system = ast.aromatic_system(AromaticSystemIdx(0));
+        assert_eq!(system.data.charge, ValueAst::Lit(0));
+        assert_eq!(ast.atom(AtomIdx(0)).data.charge, ValueAst::Lit(1));
+        assert_eq!(aromatic_valence_lit(&ast, AtomIdx(0)), Some(1));
+        for i in 1..6 {
+            assert_eq!(ast.atom(AtomIdx(i)).data.charge, ValueAst::Lit(0));
+        }
+    }
+
+    #[rstest]
+    fn test_equalize_charges_pyrylium_leaves_o_charged() {
+        // Pyrylium [C₅H₅O]⁺: O at (+1, 1). Same shape as pyridinium.
+        let mut ast = mol!(r#"{
+            :atoms ["O #c+ #a" "C #c0 #a" "C #c0 #a" "C #c0 #a" "C #c0 #a" "C #c0 #a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+        }"#);
+        let outcome = any_hueckel()
+            .find_systems(&mut ast, electrons_from_aromatic_constraint)
+            .unwrap();
+        let Solution::Determined(systems) = outcome else {
+            panic!("expected Determined, got {outcome:?}");
+        };
+        any_hueckel().add_systems(&mut ast, systems);
+
+        let system = ast.aromatic_system(AromaticSystemIdx(0));
+        assert_eq!(system.data.charge, ValueAst::Lit(0));
+        assert_eq!(ast.atom(AtomIdx(0)).data.charge, ValueAst::Lit(1));
+        assert_eq!(aromatic_valence_lit(&ast, AtomIdx(0)), Some(1));
+    }
+
+    #[rstest]
+    fn test_equalize_charges_pyrrole_leaves_n_at_pi_two() {
+        // Pyrrole [C₄H₄NH]: neutral N at (0, 2) — k=2 atom in canonical
+        // form, no offset. Rule skips. N keeps its π=2 contribution.
+        let mut ast = mol!(r#"{
+            :atoms ["N #c0 #a2" "C #c0 #a" "C #c0 #a" "C #c0 #a" "C #c0 #a"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+        }"#);
+        let outcome = any_hueckel()
+            .find_systems(&mut ast, electrons_from_aromatic_constraint)
+            .unwrap();
+        let Solution::Determined(systems) = outcome else {
+            panic!("expected Determined, got {outcome:?}");
+        };
+        any_hueckel().add_systems(&mut ast, systems);
+
+        let system = ast.aromatic_system(AromaticSystemIdx(0));
+        assert_eq!(system.data.charge, ValueAst::Lit(0));
+        assert_eq!(system.data.electrons[0], ValueAst::Lit(2));
+        assert_eq!(ast.atom(AtomIdx(0)).data.charge, ValueAst::Lit(0));
+        assert_eq!(aromatic_valence_lit(&ast, AtomIdx(0)), Some(2));
+    }
+
+    #[rstest]
+    #[case::furan(Element::O)]
+    #[case::thiophene(Element::S)]
+    fn test_equalize_charges_furan_thiophene_leave_heteroatom_alone(
+        #[case] heteroatom: Element,
+    ) {
+        // Furan / thiophene: heteroatom at (0, 2). Same shape as pyrrole.
+        let symbol = heteroatom.symbol();
+        let source = format!(
+            r#"{{
+                :atoms ["{symbol} #c0 #a2" "C #c0 #a" "C #c0 #a" "C #c0 #a" "C #c0 #a"]
+                :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]
+            }}"#
+        );
+        let mut ast: MoleculeAst = source.parse().unwrap();
+        let outcome = any_hueckel()
+            .find_systems(&mut ast, electrons_from_aromatic_constraint)
+            .unwrap();
+        let Solution::Determined(systems) = outcome else {
+            panic!("expected Determined, got {outcome:?}");
+        };
+        any_hueckel().add_systems(&mut ast, systems);
+
+        let system = ast.aromatic_system(AromaticSystemIdx(0));
+        assert_eq!(system.data.charge, ValueAst::Lit(0));
+        assert_eq!(system.data.electrons[0], ValueAst::Lit(2));
+        assert_eq!(ast.atom(AtomIdx(0)).data.charge, ValueAst::Lit(0));
+        assert_eq!(aromatic_valence_lit(&ast, AtomIdx(0)), Some(2));
+    }
+
+    #[rstest]
+    fn test_equalize_charges_s4_dication_known_gap() {
+        // S₄²⁺ (square-planar): two S at (+1, 1), two S at (0, 2). Total π
+        // = 6 (4n+2, n=1), Hueckel-aromatic. Per-atom q+e = 2 for every
+        // atom; the k=1 rule never fires. The molecule passes through with
+        // its mixed (+1,1)/(0,2) distribution intact and system.charge = 0.
+        // Reaching the (0,2)-uniform equalized form would require k=2
+        // equalization, which is not implemented.
+        let mut ast = mol!(r#"{
+            :atoms ["S #c+ #a" "S #c0 #a2" "S #c+ #a" "S #c0 #a2"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]
+        }"#);
+        let outcome = any_hueckel()
+            .find_systems(&mut ast, electrons_from_aromatic_constraint)
+            .unwrap();
+        let Solution::Determined(systems) = outcome else {
+            panic!("expected Determined, got {outcome:?}");
+        };
+        any_hueckel().add_systems(&mut ast, systems);
+
+        let system = ast.aromatic_system(AromaticSystemIdx(0));
+        assert_eq!(system.data.charge, ValueAst::Lit(0));
+        assert_eq!(
+            system.data.electrons,
+            vec![
+                ValueAst::Lit(1),
+                ValueAst::Lit(2),
+                ValueAst::Lit(1),
+                ValueAst::Lit(2),
+            ],
+        );
+        assert_eq!(ast.atom(AtomIdx(0)).data.charge, ValueAst::Lit(1));
+        assert_eq!(ast.atom(AtomIdx(1)).data.charge, ValueAst::Lit(0));
+        assert_eq!(ast.atom(AtomIdx(2)).data.charge, ValueAst::Lit(1));
+        assert_eq!(ast.atom(AtomIdx(3)).data.charge, ValueAst::Lit(0));
+    }
+
+    // endregion: equalize_charges
 
     #[rstest]
     fn test_aromaticity_perception_hueckel_rule_no_aromatic_atom_returns_determined() {

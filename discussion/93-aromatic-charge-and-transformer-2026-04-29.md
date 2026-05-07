@@ -140,8 +140,8 @@ The current implementation hard-codes `k = 1`: it triggers only on `(+1, 0)` and
 
 Correctly handled:
 
-- Atoms with canonical π = 1: sp² C, pyridine-like N, P, As, B in pyridine-analog positions.
-- ±n totals via per-atom accumulation: COT²⁻ has two atoms each at `(-1, 2)`; benzene dication has two atoms each at `(+1, 0)`. `accumulated += c` rolls them into `system.charge`. No "n=2" branch is needed.
+- Atoms with canonical π = 1: sp² C, pyridine-like N (sp² N with the lone pair in σ), and analogous P, As at the same kind of position. `(charge, π)` triggers are `(+1, 0)` and `(-1, 2)`.
+- ±n totals via per-atom accumulation: COT²⁻ has two atoms each at `(-1, 2)`; cyclooctatetraene dication would have two atoms each at `(+1, 0)`. `accumulated += c` rolls them into `system.charge`. No "n=2" branch is needed. (Benzene dication itself is anti-aromatic — 4 π electrons — so Hückel rejects it before equalization runs; not a useful test.)
 
 Correctly left alone:
 
@@ -150,18 +150,22 @@ Correctly left alone:
 
 The `q+e=2` coincidence collapses both "leave alone" categories into the same skip path.
 
-### Heterocyclic coverage
+### Heterocyclic and ring-size coverage
 
-Concrete examples within the `k = 1` rule:
+Concrete examples within the `k = 1` rule, all carbocyclic:
 
-- Boratabenzene anion `[C₅H₅BR]⁻`: B at `(-1, 2)` → `(0, 1)`, `system.charge = -1`.
-- Borabenzene cation (hypothetical): B at `(+1, 0)` → `(0, 1)`.
-- Cyclopropenium `[C₃H₃]⁺`, cyclononatetraenide `[C₉H₉]⁻`: tropylium / Cp⁻ pattern at different ring sizes.
+- Cyclopropenium `[C₃H₃]⁺` (n=0, 2 π electrons): one C at `(+1, 0)` → `(0, 1)`.
+- Tropylium `[C₇H₇]⁺` and Cp⁻ `[C₅H₅]⁻` (n=1, 6 π electrons): a single `(+1, 0)` or `(-1, 2)` atom respectively.
+- Cyclononatetraenide `[C₉H₉]⁻` (n=2, 10 π electrons): one C at `(-1, 2)` → `(0, 1)`.
+- COT²⁻ `[C₈H₈]²⁻` (n=2, 10 π electrons): two C at `(-1, 2)` → `(0, 1)` each, accumulating into `system.charge = -2`.
 
-Untouched:
+Heteroaromatic atoms with canonical π=1 (pyridine-like sp² N, P, As) work the same way in principle, but `(±1, 0)` / `(±1, 2)` configurations on these atoms are exotic — typical heteroaromatics keep the heteroatom at canonical `(0, 1)` or `(0, 2)`. Boron in the borabenzene/boratabenzene family does NOT fit the `k = 1` rule: B in pyridine-analog has canonical π = 0, not 1, so the boratabenzene anion's B is at `(-1, 1)` (q+e=0) — outside the rule's domain.
 
-- pyridinium, pyrylium, thiopyrylium.
-- pyrrole, furan, thiophene.
+Untouched (rule correctly skips):
+
+- pyridinium, pyrylium, thiopyrylium — heteroatom at `(+1, 1)`, σ-side charge.
+- pyrrole, furan, thiophene — heteroatom at `(0, 2)`, k=2 canonical.
+- boratabenzene anion — B at `(-1, 1)`, q+e=0, not a `k = 1` configuration at all.
 
 ### k = 2 case: S₄²⁺
 
@@ -177,10 +181,8 @@ Tests will live alongside `equalize_charges`.
 
 Equalizes (`k = 1`):
 
-- cyclopropenium `[C₃H₃]⁺`.
-- benzene dication `[C₆H₆]²⁺`.
-- cyclooctatetraenide dianion `[C₈H₈]²⁻`.
-- boratabenzene anion `[C₅H₅B]⁻`.
+- cyclopropenium `[C₃H₃]⁺` — single `(+1, 0)` atom.
+- cyclooctatetraenide dianion `[C₈H₈]²⁻` — two `(-1, 2)` atoms; demonstrates ±n accumulation.
 - (tropylium and Cp⁻ are already covered indirectly by the conformance suite.)
 
 Leaves alone:
