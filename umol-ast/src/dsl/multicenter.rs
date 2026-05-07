@@ -77,22 +77,51 @@ impl ToEdn for MulticenterBondDsl {
 
 impl FromAst<MulticenterBondAst> for MulticenterBondDsl {
     type Ctx = MulticenterBondDefaults;
-    type Error = ParseError;
 
-    fn from_ast(ast: &MulticenterBondAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
+
+    fn from_ast(ast: &MulticenterBondAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_multicenter_bond(&mut out, cfg);
-        Ok(MulticenterBondDsl(out))
+        MulticenterBondDsl(out)
     }
 }
 
 impl IntoAst<MulticenterBondAst> for MulticenterBondDsl {
     type Ctx = MulticenterBondDefaults;
-    type Error = ParseError;
 
-    fn into_ast(mut self, cfg: &Self::Ctx) -> Result<MulticenterBondAst, ParseError> {
+    fn into_ast(mut self, cfg: &Self::Ctx) -> MulticenterBondAst {
         raise_multicenter_bond(&mut self.0, cfg);
-        Ok(self.0)
+        self.0
+    }
+}
+
+impl FromStr for MulticenterBondAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(MulticenterBondDsl::from_str(s)?.into_ast(&MulticenterBondDefaults::default()))
+    }
+}
+
+impl Display for MulticenterBondAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        MulticenterBondDsl::from_ref(self).fmt(f)
+    }
+}
+
+impl<'de> FromEdn<'de> for MulticenterBondAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        Ok(MulticenterBondDsl::from_edn(edn)?.into_ast(&MulticenterBondDefaults::default()))
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        Ok(MulticenterBondDsl::from_edn_str(input)?.into_ast(&MulticenterBondDefaults::default()))
+    }
+}
+
+impl ToEdn for MulticenterBondAst {
+    fn to_edn(&self) -> Edn<'static> {
+        MulticenterBondDsl::from_ref(self).to_edn()
     }
 }
 
@@ -402,7 +431,7 @@ mod tests {
     fn test_multicenter_dsl_to_ast_fills_zero_defaults() {
         let dsl = MulticenterBondDsl::default();
         let cfg = MulticenterBondDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg).unwrap();
+        let ast = dsl.into_ast(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(ast.spin, SpinStateAst::new(0, 1));
         assert!(ast.electrons.is_empty());
@@ -418,7 +447,7 @@ mod tests {
             constraints: MulticenterBondConstraints::new(),
         };
         let cfg = MulticenterBondDefaults::zeroed();
-        let dsl = MulticenterBondDsl::from_ast(&ast, &cfg).unwrap();
+        let dsl = MulticenterBondDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
         assert!(dsl.0.electrons.is_empty());
@@ -456,5 +485,13 @@ mod tests {
             "vacuous ElectronCount should be absent after render → reparse, got {:?}",
             reparsed.0.constraints,
         );
+    }
+
+    #[rstest]
+    #[case::empty("")]
+    #[case::charged("#c+")]
+    fn test_multicenter_bond_ast_from_str_to_string_roundtrip(#[case] s: &str) {
+        let ast: MulticenterBondAst = s.parse().unwrap();
+        assert_eq!(ast.to_string(), s);
     }
 }

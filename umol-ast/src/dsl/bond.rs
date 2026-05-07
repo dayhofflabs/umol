@@ -1,7 +1,6 @@
 //! Bond-string DSL.
 
 use std::borrow::Cow;
-use std::convert::Infallible;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
@@ -138,22 +137,51 @@ fn bond_keyword_for(ast: &BondAst) -> Option<&'static str> {
 
 impl FromAst<BondAst> for BondDsl {
     type Ctx = BondDefaults;
-    type Error = ParseError;
 
-    fn from_ast(ast: &BondAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
+
+    fn from_ast(ast: &BondAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_bond(&mut out, cfg);
-        Ok(BondDsl(out))
+        BondDsl(out)
     }
 }
 
 impl IntoAst<BondAst> for BondDsl {
     type Ctx = BondDefaults;
-    type Error = ParseError;
 
-    fn into_ast(mut self, cfg: &Self::Ctx) -> Result<BondAst, ParseError> {
+    fn into_ast(mut self, cfg: &Self::Ctx) -> BondAst {
         raise_bond(&mut self.0, cfg);
-        Ok(self.0)
+        self.0
+    }
+}
+
+impl FromStr for BondAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(BondDsl::from_str(s)?.into_ast(&BondDefaults::default()))
+    }
+}
+
+impl Display for BondAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        BondDsl::from_ref(self).fmt(f)
+    }
+}
+
+impl<'de> FromEdn<'de> for BondAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        Ok(BondDsl::from_edn(edn)?.into_ast(&BondDefaults::default()))
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        Ok(BondDsl::from_edn_str(input)?.into_ast(&BondDefaults::default()))
+    }
+}
+
+impl ToEdn for BondAst {
+    fn to_edn(&self) -> Edn<'static> {
+        BondDsl::from_ref(self).to_edn()
     }
 }
 
@@ -334,19 +362,19 @@ pub struct BondConstraintDsl(pub BondConstraint);
 
 impl FromAst<BondConstraint> for BondConstraintDsl {
     type Ctx = ();
-    type Error = Infallible;
 
-    fn from_ast(ast: &BondConstraint, _ctx: &Self::Ctx) -> Result<Self, Infallible> {
-        Ok(Self(ast.clone()))
+
+    fn from_ast(ast: &BondConstraint, _ctx: &Self::Ctx) -> Self {
+        Self(ast.clone())
     }
 }
 
 impl IntoAst<BondConstraint> for BondConstraintDsl {
     type Ctx = ();
-    type Error = Infallible;
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> Result<BondConstraint, Infallible> {
-        Ok(self.0)
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> BondConstraint {
+        self.0
     }
 }
 
@@ -365,10 +393,10 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                 };
                 let c = match key.name() {
                     "ring-count" => BondConstraint::RingCount(
-                        super::value::ValueDsl::from_edn(v)?.into_ast(&()).unwrap(),
+                        super::value::ValueDsl::from_edn(v)?.into_ast(&()),
                     ),
                     "ring-size" => BondConstraint::RingSize(
-                        super::value::ValueDsl::from_edn(v)?.into_ast(&()).unwrap(),
+                        super::value::ValueDsl::from_edn(v)?.into_ast(&()),
                     ),
                     other => {
                         return Err(DeError::UnknownField {
@@ -404,7 +432,7 @@ fn bond_constraint_single_key(key: &str, v: &ValueAst) -> Edn<'static> {
     let mut m = umol_edn::EdnMap::with_capacity(1);
     m.insert(
         Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())),
-        super::value::ValueDsl::from_ast(v, &()).unwrap().to_edn(),
+        super::value::ValueDsl::from_ast(v, &()).to_edn(),
     );
     Edn::Map(m)
 }
@@ -518,7 +546,7 @@ mod tests {
     fn test_bond_dsl_to_ast_fills_zero_defaults() {
         let dsl = BondDsl(BondAst::new(ValueAst::Lit(1)));
         let cfg = BondDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg).unwrap();
+        let ast = dsl.into_ast(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(ast.spin, SpinStateAst::new(0, 1));
     }
@@ -529,7 +557,7 @@ mod tests {
         ast.charge = ValueAst::Lit(0);
         ast.spin = SpinStateAst::new(0, 1);
         let cfg = BondDefaults::zeroed();
-        let dsl = BondDsl::from_ast(&ast, &cfg).unwrap();
+        let dsl = BondDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
     }
@@ -538,8 +566,8 @@ mod tests {
     fn test_bond_dsl_roundtrip_zeroed() {
         let input = BondDsl(BondAst::new(ValueAst::Lit(2)));
         let cfg = BondDefaults::zeroed();
-        let raised = input.clone().into_ast(&cfg).unwrap();
-        let lowered = BondDsl::from_ast(&raised, &cfg).unwrap();
+        let raised = input.clone().into_ast(&cfg);
+        let lowered = BondDsl::from_ast(&raised, &cfg);
         assert_eq!(input, lowered);
     }
 
@@ -590,12 +618,12 @@ mod tests {
         #[case] input: BondConstraint,
         #[case] edn_source: &str,
     ) {
-        let dsl = BondConstraintDsl::from_ast(&input, &()).unwrap();
+        let dsl = BondConstraintDsl::from_ast(&input, &());
         let edn = dsl.to_edn();
         let expected = umol_edn::read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
-        assert_eq!(parsed.into_ast(&()).unwrap(), input, "parse-back mismatch");
+        assert_eq!(parsed.into_ast(&()), input, "parse-back mismatch");
     }
 
     /// Vacuous bond constraints elide on rendering (canonical-rendering
@@ -636,7 +664,7 @@ mod tests {
         let edn = umol_edn::read_string(r##"{:ring-size "?n :: {5,6}"}"##).unwrap();
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
-            parsed.into_ast(&()).unwrap(),
+            parsed.into_ast(&()),
             BondConstraint::RingSize(ValueAst::Expr(Expr::Mem(
                 Box::new(Expr::Var("n".into())),
                 vec![5, 6],
@@ -644,4 +672,26 @@ mod tests {
         );
     }
     // endregion: BondConstraintDsl
+
+    // region: BondAst symmetric I/O
+
+    #[rstest]
+    #[case::single("1")]
+    #[case::double("2")]
+    #[case::aromatic("1#a")]
+    fn test_bond_ast_from_str_to_string_roundtrip(#[case] s: &str) {
+        let ast: BondAst = s.parse().unwrap();
+        assert_eq!(ast.to_string(), s);
+    }
+
+    #[rstest]
+    fn test_bond_ast_to_edn_roundtrip() {
+        use umol_edn::ToEdn;
+        let ast: BondAst = "2".parse().unwrap();
+        let edn = ast.to_edn();
+        let back = BondAst::from_edn(&edn).unwrap();
+        assert_eq!(back, ast);
+    }
+
+    // endregion: BondAst symmetric I/O
 }

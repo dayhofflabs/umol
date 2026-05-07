@@ -137,7 +137,7 @@ mod tests {
         c.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
         c.lone_pairs = ValueAst::Lit(0);
         c.spin = SpinStateAst::new(0, 1);
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             vec![c],
             vec![],
             vec![],
@@ -167,14 +167,9 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 

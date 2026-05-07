@@ -207,6 +207,7 @@ fn build_aromatic_candidates(
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_ast::mol;
     use umol_ast::ast::{
         AtomAst, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst, SpinStateAst,
         ValueAst,
@@ -228,16 +229,7 @@ mod tests {
     fn carbon_methane_with_undetermined() -> MoleculeAst {
         // Carbon with implicit_hydrogens left undetermined; valence = 0 (no
         // bonds). Counts resolver should infer 4 implicit Hs.
-        let c = AtomAst::from_element(Element::C);
-        MoleculeAst::new(
-            vec![c],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        )
+        mol!(r#"{:atoms ["C"] :bonds []}"#)
     }
 
     fn ethane() -> MoleculeAst {
@@ -245,7 +237,7 @@ mod tests {
         let mut b = AtomAst::from_element(Element::C);
         a.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
         b.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             vec![a, b],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
             vec![],
@@ -260,7 +252,7 @@ mod tests {
     fn test_counts_valence_resolver_resolve_ground_passthrough() {
         let table = ValenceTable::default_table().clone();
         let resolver = CountsValenceResolver::new(table, true);
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_parts(
             vec![ground_carbon()],
             vec![],
             vec![],
@@ -301,14 +293,9 @@ mod tests {
         let table = valence_table! { C => [4] };
         let resolver = CountsValenceResolver::new(table, true);
         let si = AtomAst::from_element(Element::Si);
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_atoms_and_bonds(
             vec![si],
             vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         );
         let err = resolver.resolve(&mut ast).unwrap_err();
         assert!(matches!(

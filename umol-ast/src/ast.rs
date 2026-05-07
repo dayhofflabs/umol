@@ -47,7 +47,7 @@ pub use remap::IdxRemapping;
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingIdx, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use subgraph::MoleculeSubgraph;
-pub use traits::{FromAst, IntoAst};
+pub use traits::{FromAst, IntoAst, TryFromAst, TryIntoAst};
 pub use value::{ArithOp, Bindings, Expr, RelOp, ValueAst};
 pub use views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,

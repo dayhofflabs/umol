@@ -71,19 +71,48 @@ impl ToEdn for NoncovalentBondDsl {
 
 impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
-    type Error = ParseError;
 
-    fn from_ast(ast: &NoncovalentBondAst, _cfg: &Self::Ctx) -> Result<Self, ParseError> {
-        Ok(NoncovalentBondDsl(ast.clone()))
+
+    fn from_ast(ast: &NoncovalentBondAst, _cfg: &Self::Ctx) -> Self {
+        NoncovalentBondDsl(ast.clone())
     }
 }
 
 impl IntoAst<NoncovalentBondAst> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
-    type Error = ParseError;
 
-    fn into_ast(self, _cfg: &Self::Ctx) -> Result<NoncovalentBondAst, ParseError> {
-        Ok(self.0)
+    fn into_ast(self, _cfg: &Self::Ctx) -> NoncovalentBondAst {
+        self.0
+    }
+}
+
+impl FromStr for NoncovalentBondAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(NoncovalentBondDsl::from_str(s)?.into_ast(&NoncovalentBondDefaults::default()))
+    }
+}
+
+impl Display for NoncovalentBondAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        NoncovalentBondDsl::from_ref(self).fmt(f)
+    }
+}
+
+impl<'de> FromEdn<'de> for NoncovalentBondAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        Ok(NoncovalentBondDsl::from_edn(edn)?.into_ast(&NoncovalentBondDefaults::default()))
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        Ok(NoncovalentBondDsl::from_edn_str(input)?.into_ast(&NoncovalentBondDefaults::default()))
+    }
+}
+
+impl ToEdn for NoncovalentBondAst {
+    fn to_edn(&self) -> Edn<'static> {
+        NoncovalentBondDsl::from_ref(self).to_edn()
     }
 }
 
@@ -299,7 +328,7 @@ mod tests {
             NoncovalentBondKind::HydrogenBond,
         ));
         let cfg = NoncovalentBondDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg).unwrap();
+        let ast = dsl.into_ast(&cfg);
         assert_eq!(
             ast.kind,
             NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)
@@ -322,5 +351,14 @@ mod tests {
         let edn = umol_edn::read_string("{:contains 1}").unwrap();
         let err = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::TypeMismatch { .. }));
+    }
+
+    #[rstest]
+    #[case::hbond("Hbd")]
+    #[case::xbond("Xbd")]
+    #[case::ybond("Ybd")]
+    fn test_noncovalent_bond_ast_from_str_to_string_roundtrip(#[case] s: &str) {
+        let ast: NoncovalentBondAst = s.parse().unwrap();
+        assert_eq!(ast.to_string(), s);
     }
 }

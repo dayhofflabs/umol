@@ -38,16 +38,13 @@ struct ResolveResult {
     error: Option<String>,
 }
 
-fn lower(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> Result<MoleculeAst, String> {
-    input
-        .clone()
-        .into_ast(defaults)
-        .map_err(|e| format!("lowering: {}", e))
+fn lower(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> MoleculeAst {
+    input.clone().into_ast(defaults)
 }
 
-fn raise(ast: &MoleculeAst) -> Result<MoleculeDsl, String> {
+fn raise(ast: &MoleculeAst) -> MoleculeDsl {
     let zeroed = MoleculeDefaults::zeroed();
-    MoleculeDsl::from_ast(ast, &zeroed).map_err(|e| format!("raising: {}", e))
+    MoleculeDsl::from_ast(ast, &zeroed)
 }
 
 fn resolve_test(
@@ -55,28 +52,12 @@ fn resolve_test(
     chemistry: &ChemistryModel,
     defaults: &MoleculeDefaults,
 ) -> ResolveResult {
-    let mut ast = match lower(input, defaults) {
-        Ok(ast) => ast,
-        Err(error) => {
-            return ResolveResult {
-                success: false,
-                output: None,
-                error: Some(error),
-            }
-        }
-    };
+    let mut ast = lower(input, defaults);
     match Resolver::new(chemistry).resolve(&mut ast) {
-        Ok(Solution::Determined(())) => match raise(&ast) {
-            Ok(out) => ResolveResult {
-                success: true,
-                output: Some(out),
-                error: None,
-            },
-            Err(error) => ResolveResult {
-                success: false,
-                output: None,
-                error: Some(error),
-            },
+        Ok(Solution::Determined(())) => ResolveResult {
+            success: true,
+            output: Some(raise(&ast)),
+            error: None,
         },
         Ok(Solution::Underdetermined(())) => ResolveResult {
             success: false,
@@ -130,7 +111,7 @@ fn extract_category(path: &Path) -> String {
 fn run_conformance_test(file_path: &Path) {
     let content = fs::read_to_string(file_path).expect("failed to read test file");
     let test_input = TestInput::from_edn_str(&content).expect("failed to parse EDN input");
-    let defaults = MoleculeDefaults::verbatim().with_overrides(test_input.config_overrides);
+    let defaults = MoleculeDefaults::default().with_overrides(test_input.config_overrides);
 
     let atom_typing = resolve_test(&test_input.input, &atom_typing_chemistry(), &defaults);
     let counts = resolve_test(&test_input.input, &counts_chemistry(&defaults), &defaults);

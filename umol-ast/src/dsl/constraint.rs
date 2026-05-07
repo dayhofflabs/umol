@@ -327,8 +327,8 @@ pub(super) fn read_spin_state(
     let mut multiplicity = None;
     read_map(de, |d, key| {
         match key {
-            "unpaired" => unpaired = Some(read_value_dsl(d)?.into_ast(&()).unwrap()),
-            "multiplicity" => multiplicity = Some(read_value_dsl(d)?.into_ast(&()).unwrap()),
+            "unpaired" => unpaired = Some(read_value_dsl(d)?.into_ast(&())),
+            "multiplicity" => multiplicity = Some(read_value_dsl(d)?.into_ast(&())),
             _ => d.read_skip_value()?,
         }
         Ok(())
@@ -359,7 +359,7 @@ pub(super) fn read_aromatic_valence_dsl(
             let key = read_single_key_map_header(de)?;
             match key.as_str() {
                 "aromatic" => {
-                    let v = read_value_dsl(de)?.into_ast(&()).unwrap();
+                    let v = read_value_dsl(de)?.into_ast(&());
                     consume_single_key_map_close(de, "aromatic-valence")?;
                     Ok(AromaticValenceDsl(AromaticValenceAst::Aromatic(v)))
                 }
@@ -401,7 +401,7 @@ pub(super) fn read_multicenter_valence_dsl(
             let key = read_single_key_map_header(de)?;
             match key.as_str() {
                 "multicenter" => {
-                    let v = read_value_dsl(de)?.into_ast(&()).unwrap();
+                    let v = read_value_dsl(de)?.into_ast(&());
                     consume_single_key_map_close(de, "multicenter-valence")?;
                     Ok(MulticenterValenceDsl(MulticenterValenceAst::Multicenter(v)))
                 }
@@ -426,27 +426,27 @@ pub(super) fn read_atom_constraint_dsl(
 ) -> Result<AtomConstraintDsl, EdnError> {
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
-        "valence" => AtomConstraint::Valence(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "valence" => AtomConstraint::Valence(read_value_dsl(de)?.into_ast(&())),
         "aromatic-valence" => {
-            AtomConstraint::AromaticValence(read_aromatic_valence_dsl(de)?.into_ast(&()).unwrap())
+            AtomConstraint::AromaticValence(read_aromatic_valence_dsl(de)?.into_ast(&()))
         }
         "multicenter-valence" => AtomConstraint::MulticenterValence(
-            read_multicenter_valence_dsl(de)?.into_ast(&()).unwrap(),
+            read_multicenter_valence_dsl(de)?.into_ast(&()),
         ),
-        "donated-pairs" => AtomConstraint::DonatedPairs(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "donated-pairs" => AtomConstraint::DonatedPairs(read_value_dsl(de)?.into_ast(&())),
         "accepted-pairs" => {
-            AtomConstraint::AcceptedPairs(read_value_dsl(de)?.into_ast(&()).unwrap())
+            AtomConstraint::AcceptedPairs(read_value_dsl(de)?.into_ast(&()))
         }
-        "degree" => AtomConstraint::Degree(read_value_dsl(de)?.into_ast(&()).unwrap()),
-        "connectivity" => AtomConstraint::Connectivity(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "degree" => AtomConstraint::Degree(read_value_dsl(de)?.into_ast(&())),
+        "connectivity" => AtomConstraint::Connectivity(read_value_dsl(de)?.into_ast(&())),
         "ring-connectivity" => {
-            AtomConstraint::RingConnectivity(read_value_dsl(de)?.into_ast(&()).unwrap())
+            AtomConstraint::RingConnectivity(read_value_dsl(de)?.into_ast(&()))
         }
         "total-hydrogens" => {
-            AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&()).unwrap())
+            AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&()))
         }
-        "ring-count" => AtomConstraint::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap()),
-        "ring-size" => AtomConstraint::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap()),
+        "ring-count" => AtomConstraint::RingCount(read_value_dsl(de)?.into_ast(&())),
+        "ring-size" => AtomConstraint::RingSize(read_value_dsl(de)?.into_ast(&())),
         other => {
             return Err(DeError::UnknownField {
                 key: other.to_string(),
@@ -478,9 +478,9 @@ pub(super) fn read_bond_constraint_dsl(
             let key = read_single_key_map_header(de)?;
             let c = match key.as_str() {
                 "ring-count" => {
-                    BondConstraint::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap())
+                    BondConstraint::RingCount(read_value_dsl(de)?.into_ast(&()))
                 }
-                "ring-size" => BondConstraint::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap()),
+                "ring-size" => BondConstraint::RingSize(read_value_dsl(de)?.into_ast(&())),
                 other => {
                     return Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -507,10 +507,10 @@ pub(super) fn read_dative_bond_constraint_dsl(
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
         "ring-count" => {
-            DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()).unwrap())
+            DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()))
         }
         "ring-size" => {
-            DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()).unwrap())
+            DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()))
         }
         other => {
             return Err(DeError::UnknownField {
@@ -946,7 +946,7 @@ impl MoleculeConstraintDsl {
         Ok(match c {
             MoleculeConstraint::ChargeSum { atoms, sum } => Self::ChargeSum {
                 atoms: atom_subset_from_ast(atoms, meta),
-                sum: ValueDsl::from_ast(sum, &()).unwrap(),
+                sum: ValueDsl::from_ast(sum, &()),
             },
             MoleculeConstraint::SpinSum { atoms, spin } => Self::SpinSum {
                 atoms: atom_subset_from_ast(atoms, meta),
@@ -954,7 +954,7 @@ impl MoleculeConstraintDsl {
             },
             MoleculeConstraint::BondOrderSum { bonds, sum } => Self::BondOrderSum {
                 bonds: bond_subset_from_ast(bonds, meta),
-                sum: ValueDsl::from_ast(sum, &()).unwrap(),
+                sum: ValueDsl::from_ast(sum, &()),
             },
             MoleculeConstraint::Connected { atoms } => Self::Connected {
                 atoms: atom_subset_from_ast(atoms, meta),
@@ -978,7 +978,7 @@ impl MoleculeConstraintDsl {
         Ok(match self {
             Self::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
                 atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
-                sum: sum.into_ast(&()).unwrap(),
+                sum: sum.into_ast(&()),
             },
             Self::SpinSum { atoms, spin } => MoleculeConstraint::SpinSum {
                 atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
@@ -986,7 +986,7 @@ impl MoleculeConstraintDsl {
             },
             Self::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
                 bonds: bond_subset_into_ast(bonds, counts.bond_count, meta)?,
-                sum: sum.into_ast(&()).unwrap(),
+                sum: sum.into_ast(&()),
             },
             Self::Connected { atoms } => MoleculeConstraint::Connected {
                 atoms: atom_subset_into_ast(atoms, counts.atom_count, meta)?,
@@ -1470,8 +1470,8 @@ fn parse_spin(edn: &Edn<'_>) -> Result<SpinStateAst, DeError> {
             path: vec!["spin".into()],
         })?;
     Ok(SpinStateAst::from_values(
-        ValueDsl::from_edn(unpaired)?.into_ast(&()).unwrap(),
-        ValueDsl::from_edn(multiplicity)?.into_ast(&()).unwrap(),
+        ValueDsl::from_edn(unpaired)?.into_ast(&()),
+        ValueDsl::from_edn(multiplicity)?.into_ast(&()),
     ))
 }
 
@@ -1479,13 +1479,11 @@ fn render_spin(spin: &SpinStateAst) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(2);
     m.insert(
         Edn::keyword("unpaired"),
-        ValueDsl::from_ast(&spin.unpaired, &()).unwrap().to_edn(),
+        ValueDsl::from_ast(&spin.unpaired, &()).to_edn(),
     );
     m.insert(
         Edn::keyword("multiplicity"),
-        ValueDsl::from_ast(&spin.multiplicity, &())
-            .unwrap()
-            .to_edn(),
+        ValueDsl::from_ast(&spin.multiplicity, &()).to_edn(),
     );
     Edn::Map(m)
 }
@@ -1614,11 +1612,11 @@ impl ConstraintDsl {
         Ok(match c {
             Constraint::Atom(idx, c) => Self::Atom(
                 AtomRef::from_ast(*idx, meta),
-                AtomConstraintDsl::from_ast(c, &()).unwrap(),
+                AtomConstraintDsl::from_ast(c, &()),
             ),
             Constraint::Bond(idx, c) => Self::Bond(
                 BondRef::from_ast(*idx, meta),
-                BondConstraintDsl::from_ast(c, &()).unwrap(),
+                BondConstraintDsl::from_ast(c, &()),
             ),
             Constraint::DativeBond(idx, c) => Self::DativeBond(
                 DativeBondRef::from_ast(*idx, meta),
@@ -1659,11 +1657,11 @@ impl ConstraintDsl {
         Ok(match self {
             Self::Atom(r, c) => Constraint::Atom(
                 r.into_ast(counts.atom_count, meta)?,
-                c.into_ast(&()).unwrap(),
+                c.into_ast(&()),
             ),
             Self::Bond(r, c) => Constraint::Bond(
                 r.into_ast(counts.bond_count, meta)?,
-                c.into_ast(&()).unwrap(),
+                c.into_ast(&()),
             ),
             Self::DativeBond(r, c) => {
                 Constraint::DativeBond(r.into_ast(counts.dative_bond_count, meta)?, c.into_ast())
@@ -2119,12 +2117,12 @@ mod tests {
         #[case] input: AtomConstraint,
         #[case] edn_source: &str,
     ) {
-        let dsl = AtomConstraintDsl::from_ast(&input, &()).unwrap();
+        let dsl = AtomConstraintDsl::from_ast(&input, &());
         let edn = dsl.to_edn();
         let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
-        let back = parsed.into_ast(&()).unwrap();
+        let back = parsed.into_ast(&());
         assert_eq!(back, input, "parse-back mismatch");
     }
 

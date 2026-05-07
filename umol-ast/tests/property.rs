@@ -723,7 +723,7 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                         _ => None,
                     })
                     .collect();
-                MoleculeAst::new(
+                MoleculeAst::from_parts(
                     atoms,
                     bonds,
                     dative_triples,

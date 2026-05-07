@@ -328,7 +328,7 @@ mod tests {
     use float_cmp::*;
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, MoleculeAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, MoleculeAst,
         RingFamily, ValueAst,
     };
     use umol_shared::element::Element;
@@ -367,14 +367,9 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 
@@ -384,14 +379,9 @@ mod tests {
             .iter()
             .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 

@@ -68,7 +68,7 @@ fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> Molecule
         .into_iter()
         .map(|(s, t, b)| (AtomIdx(s as u32), AtomIdx(t as u32), b))
         .collect();
-    let ast = MoleculeAst::new(atoms, bond_list, vec![], vec![], vec![], vec![], vec![]);
+    let ast = MoleculeAst::from_parts(atoms, bond_list, vec![], vec![], vec![], vec![], vec![]);
     MoleculePattern::new(ast)
 }
 

@@ -166,7 +166,7 @@ mod tests {
     }
 
     fn methane() -> MoleculeAst {
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             vec![ground_methane_atom()],
             vec![],
             vec![],
@@ -181,7 +181,7 @@ mod tests {
         let mut c = AtomAst::from_element(Element::C);
         c.implicit_hydrogens = ImplicitHydrogensAst::Lit(3);
         let cl = AtomAst::from_element(Element::Cl);
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             vec![c, cl],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
             vec![],

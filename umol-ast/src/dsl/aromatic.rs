@@ -78,22 +78,51 @@ impl ToEdn for AromaticSystemDsl {
 
 impl FromAst<AromaticSystemAst> for AromaticSystemDsl {
     type Ctx = AromaticSystemDefaults;
-    type Error = ParseError;
 
-    fn from_ast(ast: &AromaticSystemAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
+
+    fn from_ast(ast: &AromaticSystemAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_aromatic_system(&mut out, cfg);
-        Ok(AromaticSystemDsl(out))
+        AromaticSystemDsl(out)
     }
 }
 
 impl IntoAst<AromaticSystemAst> for AromaticSystemDsl {
     type Ctx = AromaticSystemDefaults;
-    type Error = ParseError;
 
-    fn into_ast(mut self, cfg: &Self::Ctx) -> Result<AromaticSystemAst, ParseError> {
+    fn into_ast(mut self, cfg: &Self::Ctx) -> AromaticSystemAst {
         raise_aromatic_system(&mut self.0, cfg);
-        Ok(self.0)
+        self.0
+    }
+}
+
+impl FromStr for AromaticSystemAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(AromaticSystemDsl::from_str(s)?.into_ast(&AromaticSystemDefaults::default()))
+    }
+}
+
+impl Display for AromaticSystemAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        AromaticSystemDsl::from_ref(self).fmt(f)
+    }
+}
+
+impl<'de> FromEdn<'de> for AromaticSystemAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        Ok(AromaticSystemDsl::from_edn(edn)?.into_ast(&AromaticSystemDefaults::default()))
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        Ok(AromaticSystemDsl::from_edn_str(input)?.into_ast(&AromaticSystemDefaults::default()))
+    }
+}
+
+impl ToEdn for AromaticSystemAst {
+    fn to_edn(&self) -> Edn<'static> {
+        AromaticSystemDsl::from_ref(self).to_edn()
     }
 }
 
@@ -420,7 +449,7 @@ mod tests {
     fn test_aromatic_dsl_to_ast_fills_zero_defaults() {
         let dsl = AromaticSystemDsl::default();
         let cfg = AromaticSystemDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg).unwrap();
+        let ast = dsl.into_ast(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(ast.spin, SpinStateAst::new(0, 1));
         assert!(ast.electrons.is_empty());
@@ -436,7 +465,7 @@ mod tests {
             constraints: AromaticSystemConstraints::new(),
         };
         let cfg = AromaticSystemDefaults::zeroed();
-        let dsl = AromaticSystemDsl::from_ast(&ast, &cfg).unwrap();
+        let dsl = AromaticSystemDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
         assert!(dsl.0.electrons.is_empty());
@@ -447,8 +476,8 @@ mod tests {
     fn test_aromatic_dsl_roundtrip_zeroed() {
         let input = AromaticSystemDsl::default();
         let cfg = AromaticSystemDefaults::zeroed();
-        let raised = input.clone().into_ast(&cfg).unwrap();
-        let lowered = AromaticSystemDsl::from_ast(&raised, &cfg).unwrap();
+        let raised = input.clone().into_ast(&cfg);
+        let lowered = AromaticSystemDsl::from_ast(&raised, &cfg);
         assert_eq!(input, lowered);
     }
 
@@ -483,5 +512,13 @@ mod tests {
             "vacuous ElectronCount should be absent after render → reparse, got {:?}",
             reparsed.0.constraints,
         );
+    }
+
+    #[rstest]
+    #[case::empty("")]
+    #[case::charged("#c+")]
+    fn test_aromatic_system_ast_from_str_to_string_roundtrip(#[case] s: &str) {
+        let ast: AromaticSystemAst = s.parse().unwrap();
+        assert_eq!(ast.to_string(), s);
     }
 }

@@ -31,7 +31,7 @@ use crate::table_ir::{
     BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
     SourceFormat, WildcardAtom,
 };
-use umol_ast::ast::{IntoAst, MoleculeAst};
+use umol_ast::ast::{MoleculeAst, TryIntoAst};
 
 /// Parse SMILES to a resolved [`MoleculeAst`] using default IO config and
 /// [`ChemistryModel::default`].
@@ -68,7 +68,7 @@ pub fn parse_smiles_bytes_with(
 ) -> Result<MoleculeAst, SmilesError> {
     let table_mol = parse_smiles_bytes_to_table_ir_with(input, io_config)?;
     let mut ast: MoleculeAst = (&table_mol)
-        .into_ast(&())
+        .try_into_ast(&())
         .expect("table_ir → MoleculeAst lift is currently infallible");
     match Resolver::new(model).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
@@ -86,7 +86,7 @@ pub fn parse_smiles_to_ast(input: &str) -> Result<MoleculeAst, SmilesError> {
 pub fn parse_smiles_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, SmilesError> {
     let table_mol = parse_smiles_bytes_to_table_ir(input)?;
     let ast: MoleculeAst = (&table_mol)
-        .into_ast(&())
+        .try_into_ast(&())
         .expect("table_ir → MoleculeAst lift is currently infallible");
     Ok(ast)
 }

@@ -258,6 +258,20 @@ impl<'de> FromEdn<'de> for MoleculeAst {
     }
 }
 
+impl FromStr for MoleculeAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::from_edn_str(s).map_err(|e| ParseError::EdnParse(e.to_string()))
+    }
+}
+
+impl Display for MoleculeAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_edn())
+    }
+}
+
 /// Direct EDN rendering for `MoleculeAst`. Always emits canonical positional
 /// refs (no id keywords, no aliases) since the AST carries no metadata.
 /// For id-bearing surface output, wrap in [`MoleculeDsl`] with appropriate
@@ -600,50 +614,48 @@ impl ToEdn for MoleculeDsl {
 
 impl FromAst<MoleculeAst> for MoleculeDsl {
     type Ctx = MoleculeDefaults;
-    type Error = ParseError;
 
-    fn from_ast(ast: &MoleculeAst, cfg: &Self::Ctx) -> Result<Self, ParseError> {
+    fn from_ast(ast: &MoleculeAst, cfg: &Self::Ctx) -> Self {
         let mut ast_out = ast.clone();
         for atom in ast_out.atoms_mut() {
-            *atom = AtomDsl::from_ast(atom, &cfg.atom)?.0;
+            *atom = AtomDsl::from_ast(atom, &cfg.atom).0;
         }
         for bond in ast_out.bonds_mut() {
-            *bond = BondDsl::from_ast(bond, &cfg.bond)?.0;
+            *bond = BondDsl::from_ast(bond, &cfg.bond).0;
         }
         for system in ast_out.aromatic_systems_mut() {
-            *system = AromaticSystemDsl::from_ast(system, &cfg.aromatic_system)?.0;
+            *system = AromaticSystemDsl::from_ast(system, &cfg.aromatic_system).0;
         }
         for bond in ast_out.multicenter_bonds_mut() {
-            *bond = MulticenterBondDsl::from_ast(bond, &cfg.multicenter_bond)?.0;
+            *bond = MulticenterBondDsl::from_ast(bond, &cfg.multicenter_bond).0;
         }
         // `DativeBondDsl` and `NoncovalentBondDsl` use unit-shaped defaults
         // (empty struct), so there is nothing to strip here.
-        Ok(MoleculeDsl {
+        MoleculeDsl {
             ast: ast_out,
             metadata: Metadata::default(),
-        })
+        }
     }
 }
 
 impl IntoAst<MoleculeAst> for MoleculeDsl {
     type Ctx = MoleculeDefaults;
-    type Error = ParseError;
 
-    fn into_ast(self, cfg: &Self::Ctx) -> Result<MoleculeAst, ParseError> {
+    fn into_ast(self, cfg: &Self::Ctx) -> MoleculeAst {
         let mut ast = self.ast;
         for atom in ast.atoms_mut() {
-            *atom = AtomDsl(take(atom)).into_ast(&cfg.atom)?;
+            *atom = AtomDsl(take(atom)).into_ast(&cfg.atom);
         }
         for bond in ast.bonds_mut() {
-            *bond = BondDsl(take(bond)).into_ast(&cfg.bond)?;
+            *bond = BondDsl(take(bond)).into_ast(&cfg.bond);
         }
         for system in ast.aromatic_systems_mut() {
-            *system = AromaticSystemDsl(take(system)).into_ast(&cfg.aromatic_system)?;
+            *system = AromaticSystemDsl(take(system)).into_ast(&cfg.aromatic_system);
         }
         for bond in ast.multicenter_bonds_mut() {
-            *bond = MulticenterBondDsl(take(bond)).into_ast(&cfg.multicenter_bond)?;
+            *bond = MulticenterBondDsl(take(bond)).into_ast(&cfg.multicenter_bond);
         }
-        Ok(ast)
+        ast
     }
 }
 
@@ -1105,7 +1117,7 @@ impl MoleculeInput {
         };
         let constraints = ConstraintsDsl(constraint_dsls).into_ast(&counts, &metadata)?;
 
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             atoms,
             bonds,
             dative_list,
@@ -1434,7 +1446,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_to_edn_two_atoms_one_bond() {
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             vec![c_atom(), c_atom()],
             vec![(AtomIdx(0), AtomIdx(1), single_bond())],
             vec![],
@@ -1457,7 +1469,7 @@ mod tests {
         let mut b = MetadataBuilder::default();
         b.set_atom_id(AtomIdx(0), "c1".to_string());
         let meta = b.build();
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             vec![c_atom(), c_atom()],
             vec![],
             vec![],
@@ -1479,7 +1491,7 @@ mod tests {
         let mut b = MetadataBuilder::default();
         b.set_bond_id(BondIdx(0), "b1".to_string());
         let meta = b.build();
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             vec![c_atom(), c_atom()],
             vec![(AtomIdx(0), AtomIdx(1), single_bond())],
             vec![],
@@ -1503,7 +1515,7 @@ mod tests {
         b.add_atom_alias("x".into(), Box::new(AtomDsl(c_atom())))
             .unwrap();
         let meta = b.build();
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             vec![c_atom(), c_atom()],
             vec![],
             vec![],
@@ -1524,7 +1536,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_display_matches_edn() {
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             vec![c_atom(), c_atom()],
             vec![(AtomIdx(0), AtomIdx(1), single_bond())],
             vec![],
@@ -1539,7 +1551,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_to_edn_omits_empty_optional_sections() {
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             vec![c_atom()],
             vec![],
             vec![],
@@ -1747,7 +1759,7 @@ mod tests {
         // Round-trip direction: DSL → AST (raise) → DSL (lower) is the
         // identity. AST → DSL → AST isn't, since raising `Undetermined`
         // fields to `Lit(0)` is one-way under `zeroed()`.
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             vec![c_atom(), c_atom()],
             vec![(AtomIdx(0), AtomIdx(1), single_bond())],
             vec![],
@@ -1758,14 +1770,14 @@ mod tests {
         );
         let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
         let cfg = MoleculeDefaults::zeroed();
-        let raised = dsl.clone().into_ast(&cfg).unwrap();
-        let lowered = MoleculeDsl::from_ast(&raised, &cfg).unwrap();
+        let raised = dsl.clone().into_ast(&cfg);
+        let lowered = MoleculeDsl::from_ast(&raised, &cfg);
         assert_eq!(lowered.ast(), dsl.ast());
     }
 
     #[rstest]
     fn test_molecule_dsl_from_ast_has_empty_metadata() {
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             vec![c_atom()],
             vec![],
             vec![],
@@ -1775,7 +1787,7 @@ mod tests {
             Constraints::new(),
         );
         let cfg = MoleculeDefaults::zeroed();
-        let dsl = MoleculeDsl::from_ast(&ast, &cfg).unwrap();
+        let dsl = MoleculeDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.metadata(), &Metadata::default());
     }
 
@@ -1820,7 +1832,7 @@ mod tests {
     /// entries are vacuous.
     #[rstest]
     fn test_molecule_dsl_render_elides_vacuous_charge_sum() {
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_parts(
             vec![AtomAst::from_element(Element::C)],
             vec![],
             vec![],
@@ -1846,7 +1858,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_render_elides_vacuous_bond_order_sum() {
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_parts(
             vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
             vec![],
@@ -1868,7 +1880,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_render_elides_vacuous_spin_sum() {
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_parts(
             vec![AtomAst::from_element(Element::C)],
             vec![],
             vec![],
@@ -1893,7 +1905,7 @@ mod tests {
     /// the surviving entry is rendered.
     #[rstest]
     fn test_molecule_dsl_render_keeps_non_vacuous_drops_vacuous() {
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_parts(
             vec![AtomAst::from_element(Element::C)],
             vec![],
             vec![],
@@ -2290,4 +2302,26 @@ mod tests {
         assert_eq!(dsl.ast().atom_count(), 1);
     }
     // endregion: Alias bijectivity
+
+    // region: MoleculeAst symmetric I/O
+
+    #[rstest]
+    fn test_molecule_ast_from_str_to_string_roundtrip() {
+        let s = r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##;
+        let ast: MoleculeAst = s.parse().unwrap();
+        let rendered = ast.to_string();
+        let back: MoleculeAst = rendered.parse().unwrap();
+        assert_eq!(back, ast);
+    }
+
+    #[rstest]
+    fn test_molecule_ast_to_edn_roundtrip() {
+        let s = r##"{:atoms ["C" "O"] :bonds [[0 1 "2"]]}"##;
+        let ast: MoleculeAst = s.parse().unwrap();
+        let edn = ast.to_edn();
+        let back = MoleculeAst::from_edn(&edn).unwrap();
+        assert_eq!(back, ast);
+    }
+
+    // endregion: MoleculeAst symmetric I/O
 }

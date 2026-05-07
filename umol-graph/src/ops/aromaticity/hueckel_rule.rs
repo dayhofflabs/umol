@@ -247,7 +247,7 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomIdx>]) -> Vec<HashS
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, ElementAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, ElementAst,
         MoleculeAst, RingFamily, ValueAst,
     };
 
@@ -302,14 +302,9 @@ mod tests {
             })
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 
@@ -319,14 +314,9 @@ mod tests {
             .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 

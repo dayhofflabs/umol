@@ -57,7 +57,7 @@ mod tests {
         let mut bond = BondAst::from_order(1);
         bond.charge = charge;
         bond.spin = spin;
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),

@@ -210,11 +210,11 @@ impl RelationalConstraintDsl {
             },
             DativeBondDonorSatisfies { bond, predicate } => Self::DativeBondDonorSatisfies {
                 bond: DativeBondRef::from_ast(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &()).unwrap()),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             DativeBondAcceptorSatisfies { bond, predicate } => Self::DativeBondAcceptorSatisfies {
                 bond: DativeBondRef::from_ast(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &()).unwrap()),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             AromaticSystemAtoms { system, atoms } => Self::AromaticSystemAtoms {
                 system: AromaticSystemRef::from_ast(*system, meta),
@@ -230,11 +230,11 @@ impl RelationalConstraintDsl {
             },
             AromaticSystemAllAtoms { system, predicate } => Self::AromaticSystemAllAtoms {
                 system: AromaticSystemRef::from_ast(*system, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &()).unwrap()),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             AromaticSystemAnyAtom { system, predicate } => Self::AromaticSystemAnyAtom {
                 system: AromaticSystemRef::from_ast(*system, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &()).unwrap()),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             MulticenterBondAtoms { bond, atoms } => Self::MulticenterBondAtoms {
                 bond: MulticenterBondRef::from_ast(*bond, meta),
@@ -250,11 +250,11 @@ impl RelationalConstraintDsl {
             },
             MulticenterBondAllAtoms { bond, predicate } => Self::MulticenterBondAllAtoms {
                 bond: MulticenterBondRef::from_ast(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &()).unwrap()),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             MulticenterBondAnyAtom { bond, predicate } => Self::MulticenterBondAnyAtom {
                 bond: MulticenterBondRef::from_ast(*bond, meta),
-                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &()).unwrap()),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
             NoncovalentBondEnds { bond, atoms } => Self::NoncovalentBondEnds {
                 bond: NoncovalentBondRef::from_ast(*bond, meta),
@@ -270,8 +270,8 @@ impl RelationalConstraintDsl {
             NoncovalentBondEndsSatisfy { bond, predicates } => Self::NoncovalentBondEndsSatisfy {
                 bond: NoncovalentBondRef::from_ast(*bond, meta),
                 predicates: [
-                    Box::new(AtomConstraintDsl::from_ast(&predicates[0], &()).unwrap()),
-                    Box::new(AtomConstraintDsl::from_ast(&predicates[1], &()).unwrap()),
+                    Box::new(AtomConstraintDsl::from_ast(&predicates[0], &())),
+                    Box::new(AtomConstraintDsl::from_ast(&predicates[1], &())),
                 ],
             },
         }
@@ -299,13 +299,13 @@ impl RelationalConstraintDsl {
             DativeBondDonorSatisfies { bond, predicate } => {
                 RelationalConstraint::DativeBondDonorSatisfies {
                     bond: bond.into_ast(counts.dative_bond_count, meta)?,
-                    predicate: Box::new(predicate.into_ast(&()).unwrap()),
+                    predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             DativeBondAcceptorSatisfies { bond, predicate } => {
                 RelationalConstraint::DativeBondAcceptorSatisfies {
                     bond: bond.into_ast(counts.dative_bond_count, meta)?,
-                    predicate: Box::new(predicate.into_ast(&()).unwrap()),
+                    predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             AromaticSystemAtoms { system, atoms } => RelationalConstraint::AromaticSystemAtoms {
@@ -333,13 +333,13 @@ impl RelationalConstraintDsl {
             AromaticSystemAllAtoms { system, predicate } => {
                 RelationalConstraint::AromaticSystemAllAtoms {
                     system: system.into_ast(counts.aromatic_system_count, meta)?,
-                    predicate: Box::new(predicate.into_ast(&()).unwrap()),
+                    predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             AromaticSystemAnyAtom { system, predicate } => {
                 RelationalConstraint::AromaticSystemAnyAtom {
                     system: system.into_ast(counts.aromatic_system_count, meta)?,
-                    predicate: Box::new(predicate.into_ast(&()).unwrap()),
+                    predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             MulticenterBondAtoms { bond, atoms } => RelationalConstraint::MulticenterBondAtoms {
@@ -367,13 +367,13 @@ impl RelationalConstraintDsl {
             MulticenterBondAllAtoms { bond, predicate } => {
                 RelationalConstraint::MulticenterBondAllAtoms {
                     bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
-                    predicate: Box::new(predicate.into_ast(&()).unwrap()),
+                    predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             MulticenterBondAnyAtom { bond, predicate } => {
                 RelationalConstraint::MulticenterBondAnyAtom {
                     bond: bond.into_ast(counts.multicenter_bond_count, meta)?,
-                    predicate: Box::new(predicate.into_ast(&()).unwrap()),
+                    predicate: Box::new(predicate.into_ast(&())),
                 }
             }
             NoncovalentBondEnds { bond, atoms } => {
@@ -397,8 +397,8 @@ impl RelationalConstraintDsl {
                 RelationalConstraint::NoncovalentBondEndsSatisfy {
                     bond: bond.into_ast(counts.noncovalent_bond_count, meta)?,
                     predicates: [
-                        Box::new(a.into_ast(&()).unwrap()),
-                        Box::new(b.into_ast(&()).unwrap()),
+                        Box::new(a.into_ast(&())),
+                        Box::new(b.into_ast(&())),
                     ],
                 }
             }

@@ -103,8 +103,41 @@ impl AsRef<MoleculeAst> for MoleculeAst {
 }
 
 impl MoleculeAst {
+    /// Empty molecule: zero atoms, zero bonds, zero relations, zero
+    /// constraints. Mirrors `Vec::new()` / `HashMap::new()`.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Common shape: atoms plus pairwise bonds, no relations or constraints.
+    pub fn from_atoms_and_bonds(
+        atoms: Vec<AtomAst>,
+        bonds: Vec<(AtomIdx, AtomIdx, BondAst)>,
+    ) -> Self {
+        Self::from_parts(
+            atoms,
+            bonds,
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Constraints::default(),
+        )
+    }
+
+    /// Start an empty `MoleculeBuilder` for fluent / programmatic
+    /// construction. Use [`MoleculeAst::edit`] to start from an existing
+    /// molecule.
+    pub fn builder() -> MoleculeBuilder {
+        Self::new().edit()
+    }
+
+    /// Full structural constructor: every entity-type vector is supplied
+    /// directly. The escape hatch when the molecule has relations or
+    /// molecule-level constraints; tests covering all entity types route
+    /// through here.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub fn from_parts(
         atoms: Vec<AtomAst>,
         bonds: Vec<(AtomIdx, AtomIdx, BondAst)>,
         dative: Vec<(Vec<AtomIdx>, AtomIdx, DativeBondAst)>,

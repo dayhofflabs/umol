@@ -27,6 +27,7 @@ use super::super::rings::RingFamily;
 use super::super::spin::SpinStateAst;
 use super::super::value::{Expr, ValueAst};
 use super::MoleculeAst;
+use crate::mol;
 
 fn ground_atom() -> AtomAst {
     let mut a = AtomAst::from_element(Element::C);
@@ -45,9 +46,50 @@ fn constraints_with_molecule(c: Constraint) -> Constraints {
 }
 
 #[rstest]
+fn test_molecule_ast_new() {
+    let m = MoleculeAst::new();
+    assert_eq!(m.atom_count(), 0);
+    assert_eq!(m.bond_count(), 0);
+    assert_eq!(m.dative_bond_count(), 0);
+    assert_eq!(m.aromatic_system_count(), 0);
+    assert_eq!(m.multicenter_bond_count(), 0);
+    assert_eq!(m.noncovalent_bond_count(), 0);
+    assert_eq!(m.constraints().len(), 0);
+}
+
+#[rstest]
+fn test_molecule_ast_default_equals_new() {
+    assert_eq!(MoleculeAst::default(), MoleculeAst::new());
+}
+
+#[rstest]
+fn test_molecule_ast_from_atoms_and_bonds() {
+    let atoms = vec![
+        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::O),
+    ];
+    let bonds = vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))];
+    let m = MoleculeAst::from_atoms_and_bonds(atoms, bonds);
+    assert_eq!(m.atom_count(), 2);
+    assert_eq!(m.bond_count(), 1);
+    assert_eq!(m.dative_bond_count(), 0);
+    assert_eq!(m.aromatic_system_count(), 0);
+    assert_eq!(m.multicenter_bond_count(), 0);
+    assert_eq!(m.noncovalent_bond_count(), 0);
+    assert_eq!(m.atom(AtomIdx(0)).data.element, ElementAst::Lit(Element::C));
+    assert_eq!(m.atom(AtomIdx(1)).data.element, ElementAst::Lit(Element::O));
+    assert_eq!(m.bond(BondIdx(0)).data.order, ValueAst::Lit(1));
+}
+
+#[rstest]
+fn test_molecule_ast_builder() {
+    assert_eq!(MoleculeAst::builder().build(), MoleculeAst::new());
+}
+
+#[rstest]
 #[case::empty(MoleculeAst::default(), true)]
 #[case::ground_atom(
-    MoleculeAst::new(
+    MoleculeAst::from_parts(
         vec![ground_atom()],
         vec![], vec![], vec![], vec![], vec![],
         Constraints::default(),
@@ -55,15 +97,11 @@ fn constraints_with_molecule(c: Constraint) -> Constraints {
     true,
 )]
 #[case::wildcard_element(
-    MoleculeAst::new(
-        vec![AtomAst::new(ElementAst::Undetermined)],
-        vec![], vec![], vec![], vec![], vec![],
-        Constraints::default(),
-    ),
+    mol!(r#"{:atoms ["*"] :bonds []}"#),
     false,
 )]
 #[case::wildcard_bond(
-    MoleculeAst::new(
+    MoleculeAst::from_parts(
         vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::O),
@@ -75,7 +113,7 @@ fn constraints_with_molecule(c: Constraint) -> Constraints {
     false,
 )]
 #[case::ground_atom_with_undetermined_constraint(
-    MoleculeAst::new(
+    MoleculeAst::from_parts(
         vec![ground_atom()],
         vec![], vec![], vec![], vec![], vec![],
         constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
@@ -94,7 +132,7 @@ fn test_molecule_ast_is_ground(#[case] ast: MoleculeAst, #[case] expected: bool)
 #[case::leaf_o(AtomIdx(1), vec![(AtomIdx(0), BondIdx(0))])]
 #[case::leaf_n(AtomIdx(2), vec![(AtomIdx(0), BondIdx(1))])]
 fn test_molecule_ast_neighbors(#[case] atom: AtomIdx, #[case] expected: Vec<(AtomIdx, BondIdx)>) {
-    let ast = MoleculeAst::new(
+    let ast = MoleculeAst::from_parts(
         vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::O),
@@ -116,7 +154,7 @@ fn test_molecule_ast_neighbors(#[case] atom: AtomIdx, #[case] expected: Vec<(Ato
 
 #[rstest]
 fn test_molecule_builder_add_aromatic_system() {
-    let ast = MoleculeAst::new(
+    let ast = MoleculeAst::from_parts(
         vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
@@ -149,7 +187,7 @@ fn test_molecule_builder_add_aromatic_system() {
 
 #[fixture]
 fn rich_molecule() -> MoleculeAst {
-    MoleculeAst::new(
+    MoleculeAst::from_parts(
         vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
@@ -482,7 +520,7 @@ fn test_molecule_ast_atoms(#[from(rich_molecule)] ast: MoleculeAst) {
 
 #[test]
 fn test_molecule_ast_induced_bonds() {
-    let ast = MoleculeAst::new(
+    let ast = MoleculeAst::from_parts(
         vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
@@ -518,14 +556,9 @@ fn chain(n: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::new(
+    MoleculeAst::from_atoms_and_bonds(
         atoms,
         bonds,
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Constraints::default(),
     )
 }
 
@@ -540,14 +573,9 @@ fn ring(n: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::new(
+    MoleculeAst::from_atoms_and_bonds(
         atoms,
         bonds,
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Constraints::default(),
     )
 }
 
@@ -557,7 +585,7 @@ fn two_components() -> MoleculeAst {
         (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
         (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
     ];
-    MoleculeAst::new(
+    MoleculeAst::from_parts(
         atoms,
         bonds,
         vec![],
@@ -1012,25 +1040,10 @@ fn test_molecule_ast_enumerate_rings_atom_filter() {
 
 #[test]
 fn test_molecule_ast_rings_induced() {
-    let atoms = vec![AtomAst::from_element(Element::C); 4];
-    let bonds = vec![
-        (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
-        (AtomIdx(0), AtomIdx(2), BondAst::from_order(1)),
-        (AtomIdx(0), AtomIdx(3), BondAst::from_order(1)),
-        (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)),
-        (AtomIdx(1), AtomIdx(3), BondAst::from_order(1)),
-        (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
-    ];
-    let ast = MoleculeAst::new(
-        atoms,
-        bonds,
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Constraints::default(),
-    );
-    let mut ast = ast;
+    let mut ast = mol!(r#"{
+        :atoms ["C" "C" "C" "C"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]
+    }"#);
     let simple_count = ast.rings(RingFamily::Simple, 4).count();
     let induced_count = ast.rings(RingFamily::Induced, 4).count();
     assert_eq!(simple_count, 4);
@@ -1039,31 +1052,13 @@ fn test_molecule_ast_rings_induced() {
 
 #[test]
 fn test_molecule_ast_rings_induced_naphthalene() {
-    let atoms = vec![AtomAst::from_element(Element::C); 10];
-    #[rustfmt::skip]
-    let bonds = vec![
-        (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
-        (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)),
-        (AtomIdx(2), AtomIdx(3), BondAst::from_order(1)),
-        (AtomIdx(3), AtomIdx(4), BondAst::from_order(1)),
-        (AtomIdx(4), AtomIdx(5), BondAst::from_order(1)),
-        (AtomIdx(5), AtomIdx(0), BondAst::from_order(1)),
-        (AtomIdx(3), AtomIdx(6), BondAst::from_order(1)),
-        (AtomIdx(6), AtomIdx(7), BondAst::from_order(1)),
-        (AtomIdx(7), AtomIdx(8), BondAst::from_order(1)),
-        (AtomIdx(8), AtomIdx(9), BondAst::from_order(1)),
-        (AtomIdx(9), AtomIdx(4), BondAst::from_order(1)),
-    ];
-    let ast = MoleculeAst::new(
-        atoms,
-        bonds,
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Constraints::default(),
-    );
-    let mut ast = ast;
+    let mut ast = mol!(r#"{
+        :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
+        :bonds [
+            [0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
+            [3 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]
+        ]
+    }"#);
     let simple_count = ast.rings(RingFamily::Simple, 10).count();
     assert_eq!(simple_count, 2);
     let induced_count = ast.rings(RingFamily::Induced, 10).count();
@@ -1132,7 +1127,7 @@ fn test_molecule_ast_dative_acceptor_slot(
     #[case] expected_slot: u8,
 ) {
     let atoms = vec![ground_atom(), ground_atom()];
-    let ast = MoleculeAst::new(
+    let ast = MoleculeAst::from_parts(
         atoms,
         Vec::new(),
         vec![(vec![donor], acceptor, DativeBondAst::from_order(1))],
@@ -1157,7 +1152,7 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
         spin: SpinStateAst::closed_shell(),
         constraints: BondConstraints::new(),
     };
-    let forward = MoleculeAst::new(
+    let forward = MoleculeAst::from_parts(
         atoms_a,
         vec![(AtomIdx(0), AtomIdx(1), bond.clone())],
         Vec::new(),
@@ -1166,7 +1161,7 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
         Vec::new(),
         Constraints::new(),
     );
-    let reverse = MoleculeAst::new(
+    let reverse = MoleculeAst::from_parts(
         atoms_b,
         vec![(AtomIdx(1), AtomIdx(0), bond)],
         Vec::new(),
@@ -1182,7 +1177,7 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
 fn test_molecule_ast_eq_canonical_across_dative_order() {
     let atoms_a = vec![ground_atom(), ground_atom()];
     let atoms_b = vec![ground_atom(), ground_atom()];
-    let forward = MoleculeAst::new(
+    let forward = MoleculeAst::from_parts(
         atoms_a,
         Vec::new(),
         vec![(vec![AtomIdx(0)], AtomIdx(1), DativeBondAst::from_order(1))],
@@ -1191,7 +1186,7 @@ fn test_molecule_ast_eq_canonical_across_dative_order() {
         Vec::new(),
         Constraints::new(),
     );
-    let reverse = MoleculeAst::new(
+    let reverse = MoleculeAst::from_parts(
         atoms_b,
         Vec::new(),
         vec![(vec![AtomIdx(1)], AtomIdx(0), DativeBondAst::from_order(1))],
@@ -1641,7 +1636,7 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
 /// canonical form, exercising the full recursion.
 #[rstest]
 fn test_molecule_ast_simplify_values_reduces_throughout() {
-    let mut ast = MoleculeAst::new(
+    let mut ast = MoleculeAst::from_parts(
         vec![
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::N),
@@ -1723,7 +1718,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     // Molecule-scope constraints: a ChargeSum, a Relational predicate,
     // an And combinator wrapping non-canonical leaves, and a SubPattern
     // whose pattern atom 0 carries a non-canonical charge.
-    let mut pattern = MoleculeAst::new(
+    let mut pattern = MoleculeAst::from_parts(
         vec![AtomAst::from_element(Element::C)],
         vec![],
         vec![],

@@ -220,7 +220,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst,
-        BondConstraintKind, Constraints, MoleculeAst, SpinStateAst, ValueAst,
+        BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -242,14 +242,9 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 
@@ -264,14 +259,9 @@ mod tests {
         let bonds: Vec<_> = (0..5)
             .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 5), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 
@@ -342,14 +332,9 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         );
         let solution = run_full(&perception, &mut ast);
         assert!(matches!(solution, Solution::Determined(())));

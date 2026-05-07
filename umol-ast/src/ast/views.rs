@@ -598,12 +598,13 @@ mod tests {
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::molecule::MoleculeAst;
+    use crate::mol;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
 
     #[fixture]
     fn rich() -> MoleculeAst {
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             vec![
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
@@ -730,46 +731,13 @@ mod tests {
         #[case] center: AtomIdx,
         #[case] expected: Option<u32>,
     ) {
-        let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-        ];
-        let bonds = vec![
-            (AtomIdx(0), AtomIdx(1), BondAst::from_order(1)),
-            (AtomIdx(1), AtomIdx(2), BondAst::from_order(2)),
-        ];
-        let ast = MoleculeAst::new(
-            atoms,
-            bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+        let ast = mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#);
         assert_eq!(ast.atom(center).bond_order_sum(), expected);
     }
 
     #[rstest]
     fn test_atom_view_bond_order_sum_undetermined() {
-        let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-        ];
-        let mut undetermined = BondAst::from_order(1);
-        undetermined.order = ValueAst::Undetermined;
-        let bonds = vec![(AtomIdx(0), AtomIdx(1), undetermined)];
-        let ast = MoleculeAst::new(
-            atoms,
-            bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+        let ast = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#);
         assert_eq!(ast.atom(AtomIdx(0)).bond_order_sum(), None);
     }
 
@@ -786,7 +754,7 @@ mod tests {
             AtomAst::from_element(Element::C),
         ];
         let dative = vec![(vec![AtomIdx(0)], AtomIdx(1), DativeBondAst::from_order(1))];
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             atoms,
             vec![],
             dative,
@@ -816,7 +784,7 @@ mod tests {
             vec![AtomIdx(0), AtomIdx(1)],
             aromatic_with_electrons(vec![entry, ValueAst::Lit(1)]),
         )];
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             atoms,
             bonds,
             vec![],
@@ -830,16 +798,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_aromatic_contribution_not_in_system() {
-        let atoms = vec![AtomAst::from_element(Element::C)];
-        let ast = MoleculeAst::new(
-            atoms,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+        let ast = mol!(r#"{:atoms ["C"] :bonds []}"#);
         let view = ast.atom(AtomIdx(0));
         assert_eq!(view.aromatic_contribution(), Some(0));
         assert!(!view.is_in_aromatic_system());
@@ -871,7 +830,7 @@ mod tests {
             .into_iter()
             .map(|(parts, electrons)| (parts, multicenter_with_electrons(electrons)))
             .collect();
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             atoms,
             vec![],
             vec![],
@@ -897,7 +856,7 @@ mod tests {
                 )),
             ],
         )];
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             atoms,
             vec![],
             vec![],
@@ -922,16 +881,7 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_constraint_accessors_absent() {
-        let atoms = vec![AtomAst::from_element(Element::C)];
-        let ast = MoleculeAst::new(
-            atoms,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
+        let ast = mol!(r#"{:atoms ["C"] :bonds []}"#);
         let view = ast.atom(AtomIdx(0));
         assert!(view.valence_constraint().is_none());
         assert!(view.donated_pairs_constraint().is_none());

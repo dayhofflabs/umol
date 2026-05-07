@@ -166,9 +166,7 @@ fn parse_entry(
     let dsl: AtomDsl = source
         .parse()
         .map_err(|e| ConfigError::InvalidAtomTypeRegistry(format!("{}: {}", source, e)))?;
-    let atom: AtomAst = dsl.into_ast(defaults).map_err(|e| {
-        ConfigError::InvalidAtomTypeRegistry(format!("{}: raise failed: {}", source, e))
-    })?;
+    let atom: AtomAst = dsl.into_ast(defaults);
     let &ElementAst::Lit(atom_element) = &atom.element else {
         return Err(ConfigError::InvalidAtomTypeRegistry(format!(
             "atom '{}' has non-literal element",
@@ -213,8 +211,7 @@ macro_rules! registry {
                 .expect("invalid atom DSL");
             let atom: ::umol_ast::ast::AtomAst = <_ as ::umol_ast::ast::IntoAst<
                 ::umol_ast::ast::AtomAst,
-            >>::into_ast(dsl, &::umol_ast::dsl::AtomDefaults::zeroed())
-                .expect("zeroed defaults must succeed on a parsed atom DSL");
+            >>::into_ast(dsl, &::umol_ast::dsl::AtomDefaults::zeroed());
             registry.add(atom);
         )*
         registry

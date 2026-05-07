@@ -98,7 +98,7 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticSystemIdx, AtomAst, AtomIdx, BondAst, BondConstraintKind, Constraints,
+        AromaticSystemIdx, AtomAst, AtomIdx, BondAst, BondConstraintKind,
         MoleculeAst, SpinStateAst,
     };
     use umol_shared::element::Element;
@@ -120,14 +120,9 @@ mod tests {
                 (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(order))
             })
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 

@@ -38,7 +38,7 @@ fn bench_molecule_from_ast(c: &mut Criterion) {
         let ast = MoleculeDsl::from_edn_str(source).unwrap().into_parts().0;
         g.throughput(Throughput::Bytes(source.len() as u64));
         g.bench_function(label, |b| {
-            b.iter(|| MoleculeDsl::from_ast(black_box(&ast), &cfg).unwrap())
+            b.iter(|| MoleculeDsl::from_ast(black_box(&ast), &cfg))
         });
     }
     g.finish();
@@ -53,7 +53,7 @@ fn bench_molecule_into_ast(c: &mut Criterion) {
         g.bench_function(label, |b| {
             b.iter_batched(
                 || dsl.clone(),
-                |dsl| dsl.into_ast(&cfg).unwrap(),
+                |dsl| dsl.into_ast(&cfg),
                 BatchSize::SmallInput,
             )
         });

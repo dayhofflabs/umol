@@ -384,6 +384,7 @@ pub fn atom_view<'a>(ast: &'a MoleculeAst, idx: AtomIdx) -> AtomView<'a> {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
+    use umol_ast::mol;
     use umol_ast::ast::{
         AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, Constraints,
         MoleculeAst, MulticenterBondAst, MulticenterValenceAst, SpinStateAst, ValueAst,
@@ -404,7 +405,7 @@ mod tests {
             multicenter_atoms,
             MulticenterBondAst::new(electrons, ValueAst::Lit(0), SpinStateAst::closed_shell()),
         )];
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             atoms,
             vec![],
             vec![],
@@ -427,7 +428,7 @@ mod tests {
             aromatic_atoms,
             AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::closed_shell()),
         )];
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             atoms,
             vec![],
             vec![],
@@ -439,15 +440,7 @@ mod tests {
     }
 
     fn bare_molecule() -> MoleculeAst {
-        MoleculeAst::new(
-            vec![AtomAst::from_element(Element::Xe)],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        )
+        mol!(r#"{:atoms ["Xe"] :bonds []}"#)
     }
 
     #[rstest]

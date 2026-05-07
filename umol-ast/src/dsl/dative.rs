@@ -128,19 +128,48 @@ fn dative_keyword_for(ast: &DativeBondAst) -> Option<&'static str> {
 
 impl FromAst<DativeBondAst> for DativeBondDsl {
     type Ctx = DativeBondDefaults;
-    type Error = ParseError;
 
-    fn from_ast(ast: &DativeBondAst, _cfg: &Self::Ctx) -> Result<Self, ParseError> {
-        Ok(DativeBondDsl(ast.clone()))
+
+    fn from_ast(ast: &DativeBondAst, _cfg: &Self::Ctx) -> Self {
+        DativeBondDsl(ast.clone())
     }
 }
 
 impl IntoAst<DativeBondAst> for DativeBondDsl {
     type Ctx = DativeBondDefaults;
-    type Error = ParseError;
 
-    fn into_ast(self, _cfg: &Self::Ctx) -> Result<DativeBondAst, ParseError> {
-        Ok(self.0)
+    fn into_ast(self, _cfg: &Self::Ctx) -> DativeBondAst {
+        self.0
+    }
+}
+
+impl FromStr for DativeBondAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(DativeBondDsl::from_str(s)?.into_ast(&DativeBondDefaults::default()))
+    }
+}
+
+impl Display for DativeBondAst {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        DativeBondDsl::from_ref(self).fmt(f)
+    }
+}
+
+impl<'de> FromEdn<'de> for DativeBondAst {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        Ok(DativeBondDsl::from_edn(edn)?.into_ast(&DativeBondDefaults::default()))
+    }
+
+    fn from_edn_str(input: &'de str) -> Result<Self, EdnError> {
+        Ok(DativeBondDsl::from_edn_str(input)?.into_ast(&DativeBondDefaults::default()))
+    }
+}
+
+impl ToEdn for DativeBondAst {
+    fn to_edn(&self) -> Edn<'static> {
+        DativeBondDsl::from_ref(self).to_edn()
     }
 }
 
@@ -276,8 +305,8 @@ impl<'de> FromEdn<'de> for DativeBondConstraintDsl {
             });
         };
         Ok(match key.name() {
-            "ring-count" => Self::RingCount(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
-            "ring-size" => Self::RingSize(ValueDsl::from_edn(v)?.into_ast(&()).unwrap()),
+            "ring-count" => Self::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
+            "ring-size" => Self::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -291,8 +320,8 @@ impl<'de> FromEdn<'de> for DativeBondConstraintDsl {
 impl ToEdn for DativeBondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         let (key, value) = match self {
-            Self::RingCount(v) => ("ring-count", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
-            Self::RingSize(v) => ("ring-size", ValueDsl::from_ast(v, &()).unwrap().to_edn()),
+            Self::RingCount(v) => ("ring-count", ValueDsl::from_ast(v, &()).to_edn()),
+            Self::RingSize(v) => ("ring-size", ValueDsl::from_ast(v, &()).to_edn()),
         };
         let mut m = umol_edn::EdnMap::with_capacity(1);
         m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
@@ -411,7 +440,7 @@ mod tests {
             DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2))]),
         ));
         let cfg = DativeBondDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg).unwrap();
+        let ast = dsl.into_ast(&cfg);
         assert_eq!(
             ast.constraints,
             DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2))])
@@ -480,4 +509,12 @@ mod tests {
         assert!(matches!(err, DeError::UnknownField { .. }));
     }
     // endregion: DativeBondConstraintDsl
+
+    #[rstest]
+    #[case::single("1")]
+    #[case::triple("3")]
+    fn test_dative_bond_ast_from_str_to_string_roundtrip(#[case] s: &str) {
+        let ast: DativeBondAst = s.parse().unwrap();
+        assert_eq!(ast.to_string(), s);
+    }
 }

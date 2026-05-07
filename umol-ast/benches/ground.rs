@@ -16,8 +16,8 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
-    ArithOp, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, ElementAst, Expr,
-    ImplicitHydrogensAst, IntoAst, IsotopeAst, MoleculeAst, RelOp, SpinStateAst, ValueAst,
+    ArithOp, AtomAst, AtomConstraint, AtomIdx, BondAst, ElementAst, Expr, ImplicitHydrogensAst,
+    IntoAst, IsotopeAst, MoleculeAst, RelOp, SpinStateAst, ValueAst,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_edn::FromEdn;
@@ -31,7 +31,7 @@ use fixtures::MOL_INDOLE;
 fn indole_ground() -> MoleculeAst {
     let dsl = MoleculeDsl::from_edn_str(MOL_INDOLE).unwrap();
     let cfg = MoleculeDefaults::zeroed();
-    dsl.into_ast(&cfg).unwrap()
+    dsl.into_ast(&cfg)
 }
 
 fn indole_with_bool_expr_fields() -> MoleculeAst {
@@ -101,14 +101,9 @@ fn arith_expr_heavy() -> MoleculeAst {
             (AtomIdx(i as u32), AtomIdx(i as u32 + 1), bond)
         })
         .collect();
-    MoleculeAst::new(
+    MoleculeAst::from_atoms_and_bonds(
         atoms,
         bonds,
-        vec![],
-        vec![],
-        vec![],
-        vec![],
-        Constraints::new(),
     )
 }
 

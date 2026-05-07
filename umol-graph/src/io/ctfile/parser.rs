@@ -32,7 +32,7 @@ use crate::position::Point3D;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
 use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
-use umol_ast::ast::{IntoAst, MoleculeAst};
+use umol_ast::ast::{MoleculeAst, TryIntoAst};
 
 mod accumulator;
 mod atom;
@@ -282,7 +282,7 @@ pub fn parse_mol_bytes_with(
 ) -> Result<MoleculeAst, CtfileError> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
     let mut ast: MoleculeAst = (&table_mol)
-        .into_ast(&())
+        .try_into_ast(&())
         .expect("table_ir → MoleculeAst lift is currently infallible");
     match Resolver::new(model).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
@@ -300,7 +300,7 @@ pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, CtfileError> {
 pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, CtfileError> {
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
     let ast: MoleculeAst = (&table_mol)
-        .into_ast(&())
+        .try_into_ast(&())
         .expect("table_ir → MoleculeAst lift is currently infallible");
     Ok(ast)
 }

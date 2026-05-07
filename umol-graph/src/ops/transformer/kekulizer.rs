@@ -204,7 +204,7 @@ mod tests {
             SpinStateAst::closed_shell(),
         );
         let aromatic_systems = vec![((0..6).map(AtomIdx).collect(), system)];
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             atoms,
             bonds,
             vec![],
@@ -262,14 +262,9 @@ mod tests {
 
     #[rstest]
     fn test_kekulize_no_aromatic_systems_is_noop() {
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_atoms_and_bonds(
             vec![AtomAst::from_element(Element::C); 2],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         );
         let original = ast.clone();
         Kekulizer::new(KekulizationModel::default(), ascending(2))
@@ -295,7 +290,7 @@ mod tests {
             SpinStateAst::closed_shell(),
         );
         let aromatic_systems = vec![((0..5).map(AtomIdx).collect(), system)];
-        let mut ast = MoleculeAst::new(
+        let mut ast = MoleculeAst::from_parts(
             atoms,
             bonds,
             vec![],

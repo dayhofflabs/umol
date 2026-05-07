@@ -259,7 +259,7 @@ mod tests {
         ch3_a.implicit_hydrogens = ImplicitHydrogensAst::Lit(3);
         ch3_a.spin = SpinStateAst::new(0, 1);
         let ch3_b = ch3_a.clone();
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             vec![ch3_a, ch3_b],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
             vec![],

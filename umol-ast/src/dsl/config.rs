@@ -89,7 +89,7 @@ impl AtomDefaults {
         }
     }
 
-    pub fn verbatim() -> Self {
+    pub fn new() -> Self {
         Self {
             isotope: IsotopeDefault::Required,
             charge: NumericDefault::Required,
@@ -103,6 +103,12 @@ impl AtomDefaults {
             multicenter_valence: MulticenterValenceDefault::Required,
             aromatic_valence: AromaticValenceDefault::Required,
         }
+    }
+}
+
+impl Default for AtomDefaults {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -179,12 +185,18 @@ impl BondDefaults {
         }
     }
 
-    pub fn verbatim() -> Self {
+    pub fn new() -> Self {
         Self {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
             multiplicity: MultiplicityDefault::Derived,
         }
+    }
+}
+
+impl Default for BondDefaults {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -228,12 +240,18 @@ impl AromaticSystemDefaults {
         }
     }
 
-    pub fn verbatim() -> Self {
+    pub fn new() -> Self {
         Self {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
             multiplicity: MultiplicityDefault::Derived,
         }
+    }
+}
+
+impl Default for AromaticSystemDefaults {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -277,12 +295,18 @@ impl MulticenterBondDefaults {
         }
     }
 
-    pub fn verbatim() -> Self {
+    pub fn new() -> Self {
         Self {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
             multiplicity: MultiplicityDefault::Derived,
         }
+    }
+}
+
+impl Default for MulticenterBondDefaults {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -319,7 +343,7 @@ impl DativeBondDefaults {
         Self {}
     }
 
-    pub fn verbatim() -> Self {
+    pub fn new() -> Self {
         Self {}
     }
 }
@@ -334,7 +358,7 @@ impl NoncovalentBondDefaults {
         Self {}
     }
 
-    pub fn verbatim() -> Self {
+    pub fn new() -> Self {
         Self {}
     }
 }
@@ -364,15 +388,21 @@ impl MoleculeDefaults {
         }
     }
 
-    pub fn verbatim() -> Self {
+    pub fn new() -> Self {
         Self {
-            atom: AtomDefaults::verbatim(),
-            bond: BondDefaults::verbatim(),
-            aromatic_system: AromaticSystemDefaults::verbatim(),
-            multicenter_bond: MulticenterBondDefaults::verbatim(),
-            dative_bond: DativeBondDefaults::verbatim(),
-            noncovalent_bond: NoncovalentBondDefaults::verbatim(),
+            atom: AtomDefaults::new(),
+            bond: BondDefaults::new(),
+            aromatic_system: AromaticSystemDefaults::new(),
+            multicenter_bond: MulticenterBondDefaults::new(),
+            dative_bond: DativeBondDefaults::new(),
+            noncovalent_bond: NoncovalentBondDefaults::new(),
         }
+    }
+}
+
+impl Default for MoleculeDefaults {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -436,7 +466,7 @@ mod tests {
 
     #[rstest]
     #[case::zeroed(MoleculeDefaults::zeroed())]
-    #[case::verbatim(MoleculeDefaults::verbatim())]
+    #[case::verbatim(MoleculeDefaults::new())]
     fn test_molecule_ast_config_roundtrip(#[case] cfg: MoleculeDefaults) {
         let edn = cfg.to_edn();
         let back = MoleculeDefaults::from_edn(&edn).unwrap();

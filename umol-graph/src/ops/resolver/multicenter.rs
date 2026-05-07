@@ -56,7 +56,7 @@ mod tests {
             charge,
             spin,
         );
-        MoleculeAst::new(
+        MoleculeAst::from_parts(
             vec![
                 AtomAst::from_element(Element::B),
                 AtomAst::from_element(Element::H),

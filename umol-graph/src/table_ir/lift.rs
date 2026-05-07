@@ -10,8 +10,8 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, BondConstraint, Constraints,
-    DativeBondAst, ElementAst, ImplicitHydrogensAst, IntoAst, IsotopeAst, MoleculeAst,
-    MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, SpinStateAst, ValueAst,
+    DativeBondAst, ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterBondAst,
+    NoncovalentBondAst, NoncovalentBondKind, SpinStateAst, TryIntoAst, ValueAst,
 };
 use umol_shared::spin::SpinState;
 
@@ -31,15 +31,15 @@ use crate::table_ir::Molecule as TableMolecule;
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum LiftError {}
 
-impl IntoAst<MoleculeAst> for &TableMolecule {
+impl TryIntoAst<MoleculeAst> for &TableMolecule {
     type Ctx = ();
     type Error = LiftError;
 
-    fn into_ast(self, ctx: &Self::Ctx) -> Result<MoleculeAst, LiftError> {
+    fn try_into_ast(self, ctx: &Self::Ctx) -> Result<MoleculeAst, LiftError> {
         let atoms: Vec<AtomAst> = self
             .atoms
             .iter()
-            .map(|a| a.into_ast(ctx))
+            .map(|a| a.try_into_ast(ctx))
             .collect::<Result<_, _>>()?;
 
         let mut regular = Vec::new();
@@ -55,14 +55,14 @@ impl IntoAst<MoleculeAst> for &TableMolecule {
                     TableBondDonation::Donating => (a_idx, b_idx),
                     TableBondDonation::Accepting => (b_idx, a_idx),
                     _ => {
-                        regular.push((a_idx, b_idx, b.into_ast(ctx)?));
+                        regular.push((a_idx, b_idx, b.try_into_ast(ctx)?));
                         continue;
                     }
                 };
                 let dative_bond = DativeBondAst::new(lift_bond_order(b.order));
                 dative.push((vec![donor], acceptor, dative_bond));
             } else {
-                regular.push((a_idx, b_idx, b.into_ast(ctx)?));
+                regular.push((a_idx, b_idx, b.try_into_ast(ctx)?));
             }
         }
 
@@ -108,7 +108,7 @@ impl IntoAst<MoleculeAst> for &TableMolecule {
         }
         let constraints = Constraints::new();
 
-        Ok(MoleculeAst::new(
+        Ok(MoleculeAst::from_parts(
             atoms,
             regular,
             dative,
@@ -120,11 +120,11 @@ impl IntoAst<MoleculeAst> for &TableMolecule {
     }
 }
 
-impl IntoAst<AtomAst> for &TableAtom {
+impl TryIntoAst<AtomAst> for &TableAtom {
     type Ctx = ();
     type Error = LiftError;
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> Result<AtomAst, LiftError> {
+    fn try_into_ast(self, _ctx: &Self::Ctx) -> Result<AtomAst, LiftError> {
         Ok(AtomAst {
             element: ElementAst::Lit(self.element),
             isotope_mass: match self.isotope_mass {
@@ -150,11 +150,11 @@ impl IntoAst<AtomAst> for &TableAtom {
     }
 }
 
-impl IntoAst<BondAst> for &TableBond {
+impl TryIntoAst<BondAst> for &TableBond {
     type Ctx = ();
     type Error = LiftError;
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> Result<BondAst, LiftError> {
+    fn try_into_ast(self, _ctx: &Self::Ctx) -> Result<BondAst, LiftError> {
         let mut bond = BondAst::new(lift_bond_order(self.order));
         bond.charge = match self.charge {
             Some(c) => ValueAst::Lit(c as i64),
@@ -259,7 +259,7 @@ mod tests {
     #[rstest]
     fn test_table_molecule_into_ast_methane() {
         let mol = methane_table();
-        let ast: MoleculeAst = (&mol).into_ast(&()).unwrap();
+        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
         assert_eq!(ast.atoms().count(), 1);
         let atom = ast.atom(AtomIdx(0)).data;
         assert_eq!(atom.element, ElementAst::Lit(Element::C));
@@ -275,7 +275,7 @@ mod tests {
         mol.atoms.push(TableAtom::from_element(Element::C));
         mol.atoms.push(TableAtom::from_element(Element::C));
         mol.bonds.push(TableBond::new(0, 1, TableBondOrder::Double));
-        let ast: MoleculeAst = (&mol).into_ast(&()).unwrap();
+        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
         let bond = ast.bond(BondIdx(0)).data;
         assert!(matches!(bond.order, ValueAst::Lit(2)));
     }
@@ -287,7 +287,7 @@ mod tests {
         mol.atoms.push(TableAtom::from_element(Element::C));
         mol.bonds
             .push(TableBond::new(0, 1, TableBondOrder::Aromatic));
-        let ast: MoleculeAst = (&mol).into_ast(&()).unwrap();
+        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
         let bond = ast.bond(BondIdx(0)).data;
         // Definite-aromatic lifts to Kekulé σ-order 1 plus the Aromatic
         // constraint, rendering as `1#a`.

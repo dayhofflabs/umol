@@ -41,7 +41,7 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::Constraints;
+    
     use crate::ast::molecule::MoleculeAst;
 
     fn chain(n: usize) -> MoleculeAst {
@@ -55,14 +55,9 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 
@@ -77,14 +72,9 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 

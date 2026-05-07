@@ -101,7 +101,7 @@ impl AromaticityValidator {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, BondAst, Constraints, MoleculeAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, BondAst, MoleculeAst,
         SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
@@ -131,14 +131,9 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::new(
+        MoleculeAst::from_atoms_and_bonds(
             atoms,
             bonds,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
         )
     }
 

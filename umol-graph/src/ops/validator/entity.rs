@@ -107,7 +107,7 @@ mod tests {
                 SpinStateAst::default(),
             ),
         )];
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             atoms,
             vec![],
             vec![],
@@ -144,7 +144,7 @@ mod tests {
                 SpinStateAst::default(),
             ),
         )];
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             atoms,
             vec![],
             vec![],
@@ -173,7 +173,7 @@ mod tests {
             AtomAst::from_element(Element::C),
         ];
         let aromatic = vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())];
-        let ast = MoleculeAst::new(
+        let ast = MoleculeAst::from_parts(
             atoms,
             vec![],
             vec![],
