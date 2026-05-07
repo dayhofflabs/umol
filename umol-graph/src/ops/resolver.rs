@@ -8,19 +8,22 @@
 //! report only completion or contradiction; the top-level `Resolver` decides
 //! the global ground-status verdict.
 
+pub mod aromaticity;
+pub mod bonds;
+pub mod multicenter;
+pub mod valence;
+
+pub use aromaticity::AromaticityResolver;
+pub use bonds::{BondsContradiction, BondsError, BondsResolver};
+pub use multicenter::{MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver};
+pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
+
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
 
-use crate::ops::aromaticity::{
-    AromaticityContradiction, AromaticityError, AromaticityResolver,
-};
-use crate::ops::bonds::{BondsContradiction, BondsError, BondsResolver};
+use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
 use crate::ops::config::ChemistryModel;
-use crate::ops::multicenter_bonds::{
-    MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
-};
 use crate::ops::solution::Solution;
-use crate::ops::valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 #[derive(Clone, Debug)]
 pub struct Resolver {

@@ -1,4 +1,4 @@
-# Insta snapshot testing configuration for umol-models-graph compliance tests
+# Insta snapshot testing configuration for umol-graph compliance tests
 
 settings:
   # Use YAML format for human-readable snapshots

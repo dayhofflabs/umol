@@ -1,4 +1,4 @@
-//! Kekulize: aromatic-system form → Kekulé bond orders.
+//! Kekulizer: aromatic-system form → Kekulé bond orders.
 //!
 //! For each aromatic system in the input, finds a perfect matching on the
 //! induced subgraph (atoms in the system, bonds between them). Matched bonds
@@ -13,13 +13,20 @@
 
 use std::collections::{HashMap, HashSet};
 
+use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemIdx, AtomConstraintKind, AtomIdx, BondConstraintKind, BondIdx, MoleculeAst,
     ValueAst,
 };
 use umol_graph_core::{EdgeId, Graph, NodeId, PerfectMatchingAlgorithm};
 
-use crate::ops::transform::{Transformer, TransformerError};
+use crate::ops::transformer::Transformer;
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum KekulizerError {
+    #[error("no perfect matching exists for aromatic system {0:?}")]
+    NoMatching(AromaticSystemIdx),
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct KekulizationModel {
@@ -39,19 +46,21 @@ impl Default for KekulizationModel {
 }
 
 #[derive(Clone, Debug)]
-pub struct Kekulize {
+pub struct Kekulizer {
     model: KekulizationModel,
     node_order: Vec<AtomIdx>,
 }
 
-impl Kekulize {
+impl Kekulizer {
     pub fn new(model: KekulizationModel, node_order: Vec<AtomIdx>) -> Self {
         Self { model, node_order }
     }
 }
 
-impl Transformer for Kekulize {
-    fn transform_into(&self, ast: &mut MoleculeAst) -> Result<(), TransformerError> {
+impl Transformer for Kekulizer {
+    type Error = KekulizerError;
+
+    fn transform_into(&self, ast: &mut MoleculeAst) -> Result<(), KekulizerError> {
         if ast.aromatic_systems().count() == 0 {
             return Ok(());
         }
@@ -105,9 +114,9 @@ struct SystemPlan {
     unmatched_bonds: Vec<BondIdx>,
 }
 
-impl Kekulize {
+impl Kekulizer {
     /// Build the per-system matching plan against an immutable AST.
-    fn plan_systems(&self, ast: &MoleculeAst) -> Result<Vec<SystemPlan>, TransformerError> {
+    fn plan_systems(&self, ast: &MoleculeAst) -> Result<Vec<SystemPlan>, KekulizerError> {
         let mut plans = Vec::with_capacity(ast.aromatic_systems().count());
         for view in ast.aromatic_systems().iter() {
             let system_idx = view.idx;
@@ -136,7 +145,7 @@ impl Kekulize {
 
             let matching = subgraph
                 .perfect_matching(&local_order, self.model.algorithm)
-                .ok_or(TransformerError::KekulizeNoMatching(system_idx))?;
+                .ok_or(KekulizerError::NoMatching(system_idx))?;
 
             let matched_local: HashSet<EdgeId> = matching.edges().iter().copied().collect();
             let mut matched_bonds = Vec::new();
@@ -213,7 +222,7 @@ mod tests {
     #[rstest]
     fn test_kekulize_benzene_assigns_alternating_orders() {
         let mut ast = benzene_aromatic();
-        Kekulize::new(KekulizationModel::default(), ascending(6))
+        Kekulizer::new(KekulizationModel::default(), ascending(6))
             .transform_into(&mut ast)
             .unwrap();
         assert_eq!(ast.aromatic_systems().count(), 0);
@@ -263,7 +272,7 @@ mod tests {
             Constraints::default(),
         );
         let original = ast.clone();
-        Kekulize::new(KekulizationModel::default(), ascending(2))
+        Kekulizer::new(KekulizationModel::default(), ascending(2))
             .transform_into(&mut ast)
             .unwrap();
         assert_eq!(ast, original);
@@ -296,11 +305,11 @@ mod tests {
             Constraints::default(),
         );
 
-        let result = Kekulize::new(KekulizationModel::default(), ascending(5))
+        let result = Kekulizer::new(KekulizationModel::default(), ascending(5))
             .transform_into(&mut ast);
         assert!(matches!(
             result,
-            Err(TransformerError::KekulizeNoMatching(_))
+            Err(KekulizerError::NoMatching(_))
         ));
     }
 }

@@ -140,8 +140,8 @@ impl Graph {
     // Greedy DFS with backtracking. Walks `node_order` left-to-right; at each
     // unmatched vertex tries each unmatched neighbor in adjacency order;
     // backtracks on dead ends. Returns `Some` if every vertex in `node_order`
-    // can be paired, else `None`. RDKit-style; deterministic given a stable
-    // `node_order` and the graph's stable neighbor list.
+    // can be paired, else `None`. Deterministic given a stable `node_order`
+    // and the graph's stable neighbor list.
     fn perfect_matching_backtracking_dfs(&self, node_order: &[NodeId]) -> Option<Matching> {
         let n = self.node_count();
         if node_order.is_empty() {
@@ -150,7 +150,7 @@ impl Graph {
                 mate: Vec::new(),
             });
         }
-        if node_order.len() % 2 != 0 {
+        if !node_order.len().is_multiple_of(2) {
             return None;
         }
         let mut mate = vec![-1i32; n];
@@ -532,6 +532,8 @@ fn build_mate(graph: &Graph, included: &[bool]) -> Vec<i32> {
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Range;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -662,6 +664,7 @@ mod tests {
         assert_matching_valid(&g, &m);
     }
 
+    #[rustfmt::skip]
     #[rstest]
     fn test_graph_maximum_matching_hopcroft_karp_matches_edmonds_on_bipartite() {
         let cases: &[(usize, Vec<[u32; 2]>)] = &[
@@ -677,7 +680,7 @@ mod tests {
         }
     }
 
-    fn ids(range: std::ops::Range<u32>) -> Vec<NodeId> {
+    fn ids(range: Range<u32>) -> Vec<NodeId> {
         range.map(NodeId).collect()
     }
 

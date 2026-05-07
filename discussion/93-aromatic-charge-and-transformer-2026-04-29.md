@@ -125,3 +125,79 @@ The SMILES parser already distinguishes lowercase aromatic atoms from uppercase.
 ### Open: ordering vs §1
 
 §2 reuses `AromaticityModel` and the perception path (Q3). The §1 pattern-match fix in `aromaticity.rs::resolve` lands first; §2 builds on the corrected behavior. Whether to overlap implementation in parallel branches or sequence them is a workflow question, not a design one.
+
+---
+
+## 3. Equalization rule: generality and limits (2026-05-07)
+
+§1 introduced a pattern-match equalization with two patterns, `(+1, 0)` and `(-1, 2)` → `(0, 1)`. Reframing in terms of a per-atom invariant clarifies what the rule covers and what it cannot reach.
+
+### The k_i invariant
+
+For each atom in an aromatic system, define the local canonical occupancy `k_i`: the value `atom.charge + electrons[i]` would take if the atom were neutral and contributing canonically to the ring. Equalization rewrites `(q, e)` → `(0, k_i)` when `q + e == k_i` and `e` is offset by ±1 from `k_i` (the offset lives in π). The shifted charge accumulates into `system.charge`.
+
+The current implementation hard-codes `k = 1`: it triggers only on `(+1, 0)` and `(-1, 2)`. The two `(q, e)` patterns above are the complete `k = 1` instance; nothing more is needed for `k = 1` alone.
+
+Correctly handled:
+
+- Atoms with canonical π = 1: sp² C, pyridine-like N, P, As, B in pyridine-analog positions.
+- ±n totals via per-atom accumulation: COT²⁻ has two atoms each at `(-1, 2)`; benzene dication has two atoms each at `(+1, 0)`. `accumulated += c` rolls them into `system.charge`. No "n=2" branch is needed.
+
+Correctly left alone:
+
+- σ-side charges on pyridine-like heteroatoms: pyridinium N, pyrylium O at `(+1, 1)` — `q+e=2`, no match.
+- Canonical π=2 atoms: pyrrole N, furan O, thiophene S at `(0, 2)` — `q+e=2`, no match.
+
+The `q+e=2` coincidence collapses both "leave alone" categories into the same skip path.
+
+### Heterocyclic coverage
+
+Concrete examples within the `k = 1` rule:
+
+- Boratabenzene anion `[C₅H₅BR]⁻`: B at `(-1, 2)` → `(0, 1)`, `system.charge = -1`.
+- Borabenzene cation (hypothetical): B at `(+1, 0)` → `(0, 1)`.
+- Cyclopropenium `[C₃H₃]⁺`, cyclononatetraenide `[C₉H₉]⁻`: tropylium / Cp⁻ pattern at different ring sizes.
+
+Untouched:
+
+- pyridinium, pyrylium, thiopyrylium.
+- pyrrole, furan, thiophene.
+
+### k = 2 case: S₄²⁺
+
+Square-planar S₄²⁺ is the canonical `k = 2` system. 4 S, total charge +2, 6 π electrons (4n+2, n=1). Each S is a lone-pair donor (canonical π = 2 like furan O). Electron accounting: 22 valence e⁻ (4×6 − 2); σ skeleton 16 e⁻ (4 σ bonds + 4 σ in-plane lone pairs); π = 6. The fully equalized form has `(q=0, π=2)` on every atom with `system.charge = +2`; total π = 4×2 − 2 = 6.
+
+A natural input description has two S at `(+1, 1)` (lost a lone-pair electron from π) and two S at `(0, 2)`. All atoms have `q + e = 2`; the `k = 1` rule does nothing. The molecule remains in the mixed input form — not wrong (total π is correct) but not uniform.
+
+Reaching the equalized `(0, 2)`-uniform form requires per-atom `k_i`, which is element + σ-environment dependent and effectively another atom-typing concern. Deferred until concrete demand exists. The `k = 1` rule is documented as such; S₄²⁺ is recorded as a known gap.
+
+### Test coverage to add
+
+Tests will live alongside `equalize_charges`.
+
+Equalizes (`k = 1`):
+
+- cyclopropenium `[C₃H₃]⁺`.
+- benzene dication `[C₆H₆]²⁺`.
+- cyclooctatetraenide dianion `[C₈H₈]²⁻`.
+- boratabenzene anion `[C₅H₅B]⁻`.
+- (tropylium and Cp⁻ are already covered indirectly by the conformance suite.)
+
+Leaves alone:
+
+- pyridinium, pyrylium.
+- pyrrole, furan, thiophene.
+
+Out of scope (`k = 2` known gap):
+
+- S₄²⁺ — assert input passes through unchanged.
+
+### Notation work, sequenced first
+
+Writing these inputs against `MoleculeAst::new(vec![...], vec![...], ...)` with manual atom/bond construction is the friction the EDN DSL was supposed to remove. Before adding tests, decide:
+
+1. **Inline EDN packaging** — per-module `fn mol(edn: &str) -> MoleculeAst` helper, or shared `umol_ast::test_support::mol`, or a `mol!` macro.
+2. **Output assertion** — direct accessors (`ast.atom(i).data.charge` etc.), or EDN roundtrip equality, or insta snapshots.
+3. **Aromatic-system input form** — the existing EDN `:aromatic [{:atoms [...] :type "#e2" :charge n}]` block already supports declaring a pre-existing aromatic system, which is what these equalization tests need (input has the system inserted, run equalization, check resulting fields).
+
+Picks 1 and 2 are independent.

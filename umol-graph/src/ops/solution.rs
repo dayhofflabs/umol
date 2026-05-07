@@ -89,6 +89,30 @@ impl<T, C> Solution<T, C> {
             Self::Contradictory(c) => Solution::Contradictory(f(c)),
         }
     }
+
+    /// Validator-style mapping: Determined and Underdetermined are both
+    /// successful observations; Contradictory is the only failure. The
+    /// payload is discarded.
+    pub fn into_observation(self) -> Result<(), C> {
+        match self {
+            Self::Determined(_) | Self::Underdetermined(_) => Ok(()),
+            Self::Contradictory(c) => Err(c),
+        }
+    }
+
+    /// Transformer-style mapping: only Determined is successful; both
+    /// Underdetermined and Contradictory map to `Err`. The caller supplies
+    /// the error value used for the Underdetermined case.
+    pub fn into_decisive<E>(self, on_underdetermined: E) -> Result<T, E>
+    where
+        C: Into<E>,
+    {
+        match self {
+            Self::Determined(v) => Ok(v),
+            Self::Underdetermined(_) => Err(on_underdetermined),
+            Self::Contradictory(c) => Err(c.into()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -238,6 +262,52 @@ mod tests {
         assert_eq!(
             mapped,
             Solution::Contradictory(Wrapped::FromMismatch(Mismatch::Reason("nope"))),
+        );
+    }
+
+    #[rstest]
+    fn test_solution_into_observation(
+        determined: Solution<Payload, Mismatch>,
+        underdetermined: Solution<Payload, Mismatch>,
+        contradictory: Solution<Payload, Mismatch>,
+    ) {
+        assert_eq!(determined.into_observation(), Ok(()));
+        assert_eq!(underdetermined.into_observation(), Ok(()));
+        assert_eq!(
+            contradictory.into_observation(),
+            Err(Mismatch::Reason("nope")),
+        );
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum DecisiveError {
+        Undetermined,
+        Mismatch(Mismatch),
+    }
+
+    impl From<Mismatch> for DecisiveError {
+        fn from(m: Mismatch) -> Self {
+            DecisiveError::Mismatch(m)
+        }
+    }
+
+    #[rstest]
+    fn test_solution_into_decisive(
+        determined: Solution<Payload, Mismatch>,
+        underdetermined: Solution<Payload, Mismatch>,
+        contradictory: Solution<Payload, Mismatch>,
+    ) {
+        assert_eq!(
+            determined.into_decisive::<DecisiveError>(DecisiveError::Undetermined),
+            Ok(Payload(7)),
+        );
+        assert_eq!(
+            underdetermined.into_decisive::<DecisiveError>(DecisiveError::Undetermined),
+            Err(DecisiveError::Undetermined),
+        );
+        assert_eq!(
+            contradictory.into_decisive::<DecisiveError>(DecisiveError::Undetermined),
+            Err(DecisiveError::Mismatch(Mismatch::Reason("nope"))),
         );
     }
 }

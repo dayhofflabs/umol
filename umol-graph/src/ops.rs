@@ -1,15 +1,13 @@
 //! Engines that operate on a `MoleculeAst`: resolvers (valence, aromaticity)
-//! and tier-2 validators (electron-count, spin-coupling, constraints, entity
+//! and validators (electron-count, spin-coupling, constraints, entity
 //! structure). Each engine has the shape `Engine::new(&model).op(ast)`
 //! returning either `Solution<T, Contradiction>` for chemistry outcomes or
 //! `Err(Error)` for setup-level failures.
 
 pub mod aromaticity;
-pub mod bonds;
 pub mod config;
-pub mod multicenter_bonds;
 pub mod resolver;
 pub mod solution;
-pub mod transform;
+pub mod transformer;
 pub mod valence;
 pub mod validator;

@@ -8,8 +8,8 @@
 use std::collections::HashSet;
 
 use umol_ast::ast::{
-    AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomIdx,
-    ElementAst, MoleculeAst, RingIdx, RingSet, SpinStateAst, ValueAst,
+    AromaticSystemAst, AtomIdx, AtomView, ElementAst, MoleculeAst, RingIdx, RingSet, SpinStateAst,
+    ValueAst,
 };
 use umol_graph_core::Graph;
 use umol_shared::element::Element;
@@ -26,14 +26,18 @@ pub enum ClarError {
 pub struct ClarAromaticity;
 
 impl ClarAromaticity {
-    pub fn find_from_rings(
+    pub fn find_from_rings<F>(
         &self,
         ast: &MoleculeAst,
         rings: &RingSet,
-    ) -> Result<Vec<(Vec<AtomIdx>, AromaticSystemAst)>, ClarError> {
+        electrons_at: &F,
+    ) -> Result<Vec<(Vec<AtomIdx>, AromaticSystemAst)>, ClarError>
+    where
+        F: Fn(&AtomView<'_>) -> Option<u8>,
+    {
         let has_non_benzenoid = ast.atoms().iter().any(|view| {
             !matches!(view.data.element, ElementAst::Lit(Element::C))
-                && aromatic_pi_contribution(view.data).is_some()
+                && electrons_at(&view).is_some()
         });
         if has_non_benzenoid {
             return Err(ClarError::NonBenzenoid(
@@ -52,7 +56,7 @@ impl ClarAromaticity {
                     && cycle.atoms().iter().all(|&atom| {
                         let a = ast.atom(atom);
                         matches!(a.data.element, ElementAst::Lit(Element::C))
-                            && aromatic_pi_contribution(a.data).is_some()
+                            && electrons_at(&a).is_some()
                     })
             })
             .collect();
@@ -78,7 +82,7 @@ impl ClarAromaticity {
         let electrons: Vec<ValueAst> = atoms
             .iter()
             .map(|&atom| {
-                let pi = aromatic_pi_contribution(ast.atom(atom).data).unwrap_or(0);
+                let pi = electrons_at(&ast.atom(atom)).unwrap_or(0);
                 ValueAst::Lit(pi as i64)
             })
             .collect();
@@ -87,17 +91,6 @@ impl ClarAromaticity {
             atoms,
             AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::closed_shell()),
         )])
-    }
-}
-
-fn aromatic_pi_contribution(atom: &AtomAst) -> Option<u8> {
-    match atom.constraints.get(AtomConstraintKind::AromaticValence)? {
-        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n)))
-            if *n >= 0 =>
-        {
-            Some(*n as u8)
-        }
-        _ => None,
     }
 }
 
@@ -145,6 +138,7 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
+    use crate::ops::aromaticity::electrons_from_aromatic_constraint;
 
     fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
         (AtomAst::from_element(element), Some(pi))
@@ -301,7 +295,7 @@ mod tests {
     ) {
         let rings = enumerate_induced(&ast);
         let model = ClarAromaticity;
-        let systems = model.find_from_rings(&ast, &rings).unwrap();
+        let systems = model.find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint).unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
         if let Some((system_atoms_vec, _)) = systems.first() {
@@ -342,7 +336,7 @@ mod tests {
     fn test_clar_aromaticity_find_from_rings_error(#[case] ast: MoleculeAst) {
         let rings = enumerate_induced(&ast);
         let model = ClarAromaticity;
-        assert!(model.find_from_rings(&ast, &rings).is_err());
+        assert!(model.find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint).is_err());
     }
 
     #[rstest]

@@ -1,406 +1,36 @@
-//! Tier-2 validators: physics invariants (electron count, spin coupling),
-//! constraint cross-checks, and entity-structure shape checks.
+//! Validators: physics invariants (electron count, spin coupling),
+//! constraint cross-checks, entity-structure shape checks, and aromaticity
+//! verification.
 //!
 //! Each validator borrows a `MoleculeAst` (or `AtomAst`) and returns
-//! `Result<Solution<(), C>, E>` per doc 92. Determined and Underdetermined
-//! are both successful outcomes; only `Contradictory(C)` is a failure on the
-//! `Solution` side. Setup-level failures (parameter-table gaps, etc.) live in
-//! `Err(E)`; tier-2 validators have no setup so their `Error` types are
-//! uninhabited.
+//! `Result<Solution<(), C>, E>`. Determined and Underdetermined are both
+//! successful outcomes; only `Contradictory(C)` is a failure on the `Solution`
+//! side. Setup-level failures (parameter-table gaps, etc.) live in `Err(E)`;
+//! tier-2 validators that have no setup use uninhabited error types.
 //!
-//! The composite [`Validator`] runs the four sub-validators in order and
-//! lifts their per-engine `Contradiction` and `Error` types into unions via
-//! `From` impls. `validate_atom` runs only those sub-validators that make
-//! sense without a surrounding molecule (atom-typing registry use).
+//! The composite [`Validator`] runs the four sub-validators in order and lifts
+//! their per-engine `Contradiction` and `Error` types into unions via `From`
+//! impls. `validate_atom` runs only those sub-validators that make sense
+//! without a surrounding molecule (atom-typing registry use).
+//! `AromaticityValidator` is configured separately because it carries a model.
 
-use thiserror::Error;
-use umol_ast::ast::{
-    AromaticSystemView, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomIdx,
-    MoleculeAst, MulticenterBondView, MulticenterValenceAst, ValueAst,
+pub mod aromaticity;
+pub mod constraint;
+pub mod entity;
+pub mod invariant;
+pub mod spin;
+
+pub use aromaticity::{AromaticityValidator, AromaticityValidatorContradiction};
+pub use constraint::{ConstraintContradiction, ConstraintError, ConstraintValidator};
+pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};
+pub use invariant::{
+    ElectronInvariantContradiction, ElectronInvariantError, ElectronInvariantValidator,
 };
+pub use spin::{SpinCouplingContradiction, SpinCouplingError, SpinCouplingValidator};
+use thiserror::Error;
+use umol_ast::ast::{AtomAst, MoleculeAst};
 
 use crate::ops::solution::Solution;
-
-// region: ElectronInvariantValidator
-
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ElectronInvariantValidator;
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ElectronInvariantContradiction {
-    #[error("atom {atom:?}: orbital count {orbital_count} != electron count {electron_count}")]
-    AtomInvariantMismatch {
-        atom: AtomIdx,
-        orbital_count: i64,
-        electron_count: i64,
-    },
-}
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ElectronInvariantError {}
-
-impl ElectronInvariantValidator {
-    pub fn validate(
-        &self,
-        ast: impl AsRef<MoleculeAst>,
-    ) -> Result<Solution<(), ElectronInvariantContradiction>, ElectronInvariantError> {
-        let ast = ast.as_ref();
-        let mut any_undetermined = false;
-        for view in ast.atoms().iter() {
-            let atom = view.data;
-            let Some(element) = atom.element.literal() else {
-                any_undetermined = true;
-                continue;
-            };
-            let Some(charge) = atom.charge.literal() else {
-                any_undetermined = true;
-                continue;
-            };
-            let Some(implicit_h) = atom.implicit_hydrogens.literal() else {
-                any_undetermined = true;
-                continue;
-            };
-            let Some(lone_pairs) = atom.lone_pairs.literal() else {
-                any_undetermined = true;
-                continue;
-            };
-            let Some(unpaired) = atom.spin.unpaired.literal() else {
-                any_undetermined = true;
-                continue;
-            };
-            let valence_electrons = element.valence_electrons() as i64;
-
-            let valence: i64 = match (view.valence_constraint(), view.bond_order_sum()) {
-                (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
-                (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
-                _ => {
-                    any_undetermined = true;
-                    continue;
-                }
-            };
-            let donated_pairs: i64 =
-                match (view.donated_pairs_constraint(), view.donated_pairs()) {
-                    (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
-                    (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
-                    _ => {
-                        any_undetermined = true;
-                        continue;
-                    }
-                };
-            let accepted_pairs: i64 =
-                match (view.accepted_pairs_constraint(), view.accepted_pairs()) {
-                    (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
-                    (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
-                    _ => {
-                        any_undetermined = true;
-                        continue;
-                    }
-                };
-            let aromatic_valence: i64 = match (
-                view.aromatic_valence_constraint(),
-                view.aromatic_contribution(),
-            ) {
-                (Some(AromaticValenceAst::Aromatic(ValueAst::Lit(v))), _) if *v >= 0 => *v,
-                (Some(AromaticValenceAst::NotAromatic), _) => 0,
-                (None | Some(AromaticValenceAst::Undetermined), Some(t)) => t as i64,
-                _ => {
-                    any_undetermined = true;
-                    continue;
-                }
-            };
-            let multicenter_valence: i64 = match (
-                view.multicenter_valence_constraint(),
-                view.multicenter_contribution(),
-            ) {
-                (Some(MulticenterValenceAst::Multicenter(ValueAst::Lit(v))), _) if *v >= 0 => *v,
-                (Some(MulticenterValenceAst::NotMulticenter), _) => 0,
-                (None | Some(MulticenterValenceAst::Undetermined), Some(t)) => t as i64,
-                _ => {
-                    any_undetermined = true;
-                    continue;
-                }
-            };
-
-            let aromatic_increment = if aromatic_valence == 1 { 1 } else { 0 };
-            // orbital_count counts electrons by orbital occupancy;
-            // electron_count counts electrons in reference to neutral state
-            // Must be equal.
-            let orbital_count = unpaired
-                + 2 * lone_pairs
-                + 2 * donated_pairs
-                + 2 * accepted_pairs
-                + 2 * implicit_h
-                + 2 * valence
-                + aromatic_valence
-                + aromatic_increment
-                + multicenter_valence;
-            let electron_count = valence_electrons - charge
-                + implicit_h
-                + valence
-                + aromatic_increment
-                + 2 * accepted_pairs;
-
-            if orbital_count != electron_count {
-                return Ok(Solution::Contradictory(
-                    ElectronInvariantContradiction::AtomInvariantMismatch {
-                        atom: view.idx,
-                        orbital_count,
-                        electron_count,
-                    },
-                ));
-            }
-        }
-        Ok(if any_undetermined {
-            Solution::Underdetermined(())
-        } else {
-            Solution::Determined(())
-        })
-    }
-
-    pub fn validate_atom(
-        &self,
-        atom: &AtomAst,
-    ) -> Result<Solution<(), ElectronInvariantContradiction>, ElectronInvariantError> {
-        let Some(element) = atom.element.literal() else {
-            return Ok(Solution::Underdetermined(()));
-        };
-        let Some(charge) = atom.charge.literal() else {
-            return Ok(Solution::Underdetermined(()));
-        };
-        let Some(implicit_h) = atom.implicit_hydrogens.literal() else {
-            return Ok(Solution::Underdetermined(()));
-        };
-        let Some(lone_pairs) = atom.lone_pairs.literal() else {
-            return Ok(Solution::Underdetermined(()));
-        };
-        let Some(unpaired) = atom.spin.unpaired.literal() else {
-            return Ok(Solution::Underdetermined(()));
-        };
-        let valence_electrons = element.valence_electrons() as i64;
-
-        // Atom-only mode: no topology. Each valence defaults to 0 unless a
-        // literal constraint pins it.
-        let valence: i64 = match atom.constraints.get(AtomConstraintKind::Valence) {
-            Some(AtomConstraint::Valence(ValueAst::Lit(v))) if *v >= 0 => *v,
-            None | Some(AtomConstraint::Valence(ValueAst::Undetermined)) => 0,
-            _ => return Ok(Solution::Underdetermined(())),
-        };
-        let donated_pairs: i64 = match atom.constraints.get(AtomConstraintKind::DonatedPairs) {
-            Some(AtomConstraint::DonatedPairs(ValueAst::Lit(v))) if *v >= 0 => *v,
-            None | Some(AtomConstraint::DonatedPairs(ValueAst::Undetermined)) => 0,
-            _ => return Ok(Solution::Underdetermined(())),
-        };
-        let accepted_pairs: i64 = match atom.constraints.get(AtomConstraintKind::AcceptedPairs) {
-            Some(AtomConstraint::AcceptedPairs(ValueAst::Lit(v))) if *v >= 0 => *v,
-            None | Some(AtomConstraint::AcceptedPairs(ValueAst::Undetermined)) => 0,
-            _ => return Ok(Solution::Underdetermined(())),
-        };
-        let aromatic_valence: i64 = match atom.constraints.get(AtomConstraintKind::AromaticValence)
-        {
-            Some(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(
-                v,
-            )))) if *v >= 0 => *v,
-            Some(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic)) => 0,
-            None | Some(AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined)) => 0,
-            _ => return Ok(Solution::Underdetermined(())),
-        };
-        let multicenter_valence: i64 =
-            match atom.constraints.get(AtomConstraintKind::MulticenterValence) {
-                Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(
-                    ValueAst::Lit(v),
-                ))) if *v >= 0 => *v,
-                Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter)) => {
-                    0
-                }
-                None
-                | Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined)) => {
-                    0
-                }
-                _ => return Ok(Solution::Underdetermined(())),
-            };
-
-        let aromatic_increment = if aromatic_valence == 1 { 1 } else { 0 };
-        let orbital_count = unpaired
-            + 2 * lone_pairs
-            + 2 * donated_pairs
-            + 2 * accepted_pairs
-            + 2 * implicit_h
-            + 2 * valence
-            + aromatic_valence
-            + aromatic_increment
-            + multicenter_valence;
-        let electron_count = valence_electrons - charge
-            + implicit_h
-            + valence
-            + aromatic_increment
-            + 2 * accepted_pairs;
-
-        if orbital_count == electron_count {
-            Ok(Solution::Determined(()))
-        } else {
-            Ok(Solution::Contradictory(
-                ElectronInvariantContradiction::AtomInvariantMismatch {
-                    atom: AtomIdx(0),
-                    orbital_count,
-                    electron_count,
-                },
-            ))
-        }
-    }
-}
-
-// endregion: ElectronInvariantValidator
-
-// region: SpinCouplingValidator
-
-/// Per-entity spin-coupling parity check: a literal `(unpaired,
-/// multiplicity)` pair must satisfy `multiplicity = unpaired - 2k + 1` for
-/// some `k ∈ 0..=unpaired/2`. Runs on any entity carrying a `SpinStateAst`
-/// (atom, aromatic system, multicenter bond).
-///
-/// Stub: always returns `Determined`. Implementation pending; the parity
-/// rule is in `umol_shared::spin::SpinState::are_compatible`.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SpinCouplingValidator;
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum SpinCouplingContradiction {}
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum SpinCouplingError {}
-
-impl SpinCouplingValidator {
-    pub fn validate(
-        &self,
-        _ast: impl AsRef<MoleculeAst>,
-    ) -> Result<Solution<(), SpinCouplingContradiction>, SpinCouplingError> {
-        Ok(Solution::Determined(()))
-    }
-
-    pub fn validate_atom(
-        &self,
-        _atom: &AtomAst,
-    ) -> Result<Solution<(), SpinCouplingContradiction>, SpinCouplingError> {
-        Ok(Solution::Determined(()))
-    }
-}
-
-// endregion: SpinCouplingValidator
-
-// region: ConstraintValidator
-
-/// Cross-check between local atom constraints and topology-derived values
-/// across all entity types, plus molecule-scope constraint evaluation
-/// (`:connected`, `:total-charge`, etc.).
-///
-/// Stub: always returns `Determined`. Filled in once the per-relation
-/// constraint evaluators land.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ConstraintValidator;
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ConstraintContradiction {}
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum ConstraintError {}
-
-impl ConstraintValidator {
-    pub fn validate(
-        &self,
-        _ast: impl AsRef<MoleculeAst>,
-    ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
-        // TODO: stub. Per-relation constraint evaluators not yet implemented.
-        // Aromatic systems: `ElectronCount(#e) == sum(electrons) - system.charge`.
-        // Multicenter bonds: analogous rule once settled.
-        // Molecule-scope constraints: `:connected`, `:total-charge`, etc.
-        Ok(Solution::Determined(()))
-    }
-}
-
-// endregion: ConstraintValidator
-
-// region: EntityStructureValidator
-
-/// Structural shape checks on per-relation entities: the
-/// `electrons: Vec<ValueAst>` field on each aromatic system and multicenter
-/// bond must match the participants list in length.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct EntityStructureValidator;
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum EntityStructureContradiction {
-    #[error("aromatic system: electrons.len() = {electrons_len} but atoms.len() = {atoms_len}")]
-    AromaticSystemElectronsLengthMismatch {
-        electrons_len: usize,
-        atoms_len: usize,
-    },
-    #[error("multicenter bond: electrons.len() = {electrons_len} but atoms.len() = {atoms_len}")]
-    MulticenterElectronsLengthMismatch {
-        electrons_len: usize,
-        atoms_len: usize,
-    },
-}
-
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum EntityStructureError {}
-
-impl EntityStructureValidator {
-    pub fn validate(
-        &self,
-        ast: impl AsRef<MoleculeAst>,
-    ) -> Result<Solution<(), EntityStructureContradiction>, EntityStructureError> {
-        let ast = ast.as_ref();
-        for view in ast.aromatic_systems().iter() {
-            if let Some(c) = aromatic_system_length_check(&view) {
-                return Ok(Solution::Contradictory(c));
-            }
-        }
-        for view in ast.multicenter_bonds().iter() {
-            if let Some(c) = multicenter_length_check(&view) {
-                return Ok(Solution::Contradictory(c));
-            }
-        }
-        Ok(Solution::Determined(()))
-    }
-}
-
-fn aromatic_system_length_check(
-    view: &AromaticSystemView<'_>,
-) -> Option<EntityStructureContradiction> {
-    let atoms_len = view.atoms().count();
-    let electrons_len = view.data.electrons.len();
-    if electrons_len != 0 && electrons_len != atoms_len {
-        Some(
-            EntityStructureContradiction::AromaticSystemElectronsLengthMismatch {
-                electrons_len,
-                atoms_len,
-            },
-        )
-    } else {
-        None
-    }
-}
-
-fn multicenter_length_check(
-    view: &MulticenterBondView<'_>,
-) -> Option<EntityStructureContradiction> {
-    let atoms_len = view.atoms().count();
-    let electrons_len = view.data.electrons.len();
-    if electrons_len != 0 && electrons_len != atoms_len {
-        Some(
-            EntityStructureContradiction::MulticenterElectronsLengthMismatch {
-                electrons_len,
-                atoms_len,
-            },
-        )
-    } else {
-        None
-    }
-}
-
-// endregion: EntityStructureValidator
-
-// region: composite Validator
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Validator {
@@ -500,14 +130,12 @@ impl Validator {
     }
 }
 
-// endregion: composite Validator
-
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AromaticSystemAst, AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints,
-        ImplicitHydrogensAst, MoleculeAst, MulticenterBondAst, SpinStateAst, ValueAst,
+        AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst,
+        SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -520,35 +148,6 @@ mod tests {
         atom.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
         atom.spin = SpinStateAst::new(0, 1);
         atom
-    }
-
-    #[rstest]
-    fn test_electron_invariant_validator_validate_atom_determined() {
-        let v = ElectronInvariantValidator;
-        let atom = ground_methane_atom();
-        let result = v.validate_atom(&atom).unwrap();
-        assert!(matches!(result, Solution::Determined(())));
-    }
-
-    #[rstest]
-    fn test_electron_invariant_validator_validate_atom_underdetermined() {
-        let v = ElectronInvariantValidator;
-        let mut atom = ground_methane_atom();
-        atom.charge = ValueAst::Undetermined;
-        let result = v.validate_atom(&atom).unwrap();
-        assert!(matches!(result, Solution::Underdetermined(())));
-    }
-
-    #[rstest]
-    fn test_electron_invariant_validator_validate_atom_contradictory() {
-        let v = ElectronInvariantValidator;
-        let mut atom = ground_methane_atom();
-        atom.implicit_hydrogens = ImplicitHydrogensAst::Lit(99);
-        let result = v.validate_atom(&atom).unwrap();
-        assert!(matches!(
-            result,
-            Solution::Contradictory(ElectronInvariantContradiction::AtomInvariantMismatch { .. })
-        ));
     }
 
     fn ethane() -> MoleculeAst {
@@ -567,119 +166,6 @@ mod tests {
             vec![],
             Constraints::default(),
         )
-    }
-
-    #[rstest]
-    fn test_electron_invariant_validator_validate_determined() {
-        let v = ElectronInvariantValidator;
-        let result = v.validate(ethane()).unwrap();
-        assert!(matches!(result, Solution::Determined(())));
-    }
-
-    #[rstest]
-    fn test_electron_invariant_validator_validate_contradictory() {
-        let v = ElectronInvariantValidator;
-        let mut ast = ethane();
-        ast.atoms_mut().next().unwrap().implicit_hydrogens = ImplicitHydrogensAst::Lit(99);
-        let result = v.validate(ast).unwrap();
-        assert!(matches!(
-            result,
-            Solution::Contradictory(ElectronInvariantContradiction::AtomInvariantMismatch { .. })
-        ));
-    }
-
-    #[rstest]
-    fn test_entity_structure_validator_aromatic_length_mismatch() {
-        let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-        ];
-        let aromatic = vec![(
-            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
-            AromaticSystemAst::new(
-                vec![ValueAst::Lit(1), ValueAst::Lit(1)],
-                ValueAst::Lit(0),
-                SpinStateAst::default(),
-            ),
-        )];
-        let ast = MoleculeAst::new(
-            atoms,
-            vec![],
-            vec![],
-            aromatic,
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
-        let v = EntityStructureValidator;
-        let result = v.validate(ast).unwrap();
-        assert!(matches!(
-            result,
-            Solution::Contradictory(
-                EntityStructureContradiction::AromaticSystemElectronsLengthMismatch {
-                    electrons_len: 2,
-                    atoms_len: 3,
-                }
-            )
-        ));
-    }
-
-    #[rstest]
-    fn test_entity_structure_validator_multicenter_length_mismatch() {
-        let atoms = vec![
-            AtomAst::from_element(Element::B),
-            AtomAst::from_element(Element::B),
-            AtomAst::from_element(Element::H),
-        ];
-        let multicenter = vec![(
-            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
-            MulticenterBondAst::new(
-                vec![ValueAst::Lit(1)],
-                ValueAst::Lit(0),
-                SpinStateAst::default(),
-            ),
-        )];
-        let ast = MoleculeAst::new(
-            atoms,
-            vec![],
-            vec![],
-            vec![],
-            multicenter,
-            vec![],
-            Constraints::default(),
-        );
-        let v = EntityStructureValidator;
-        let result = v.validate(ast).unwrap();
-        assert!(matches!(
-            result,
-            Solution::Contradictory(
-                EntityStructureContradiction::MulticenterElectronsLengthMismatch {
-                    electrons_len: 1,
-                    atoms_len: 3,
-                }
-            )
-        ));
-    }
-
-    #[rstest]
-    fn test_entity_structure_validator_empty_electrons_passes() {
-        let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-        ];
-        let aromatic = vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())];
-        let ast = MoleculeAst::new(
-            atoms,
-            vec![],
-            vec![],
-            aromatic,
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
-        let v = EntityStructureValidator;
-        assert!(matches!(v.validate(ast).unwrap(), Solution::Determined(())));
     }
 
     #[rstest]

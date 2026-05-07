@@ -40,6 +40,14 @@ pub struct AtomView<'a> {
 }
 
 impl<'a> AtomView<'a> {
+    /// Iterator over incident bonds and their neighbor atoms. Equivalent to
+    /// `self.ast.neighbors(self.idx)` but exposed on the view so closures
+    /// that take `&AtomView` (e.g. perception electron-counting) can inspect
+    /// bonds without reaching back to the molecule.
+    pub fn neighbors(&self) -> impl Iterator<Item = NeighborView<'a>> {
+        self.ast.neighbors(self.idx)
+    }
+
     /// σ-valence summed from incident bond orders. `None` if any incident
     /// bond's order is not a non-negative `Lit`.
     pub fn bond_order_sum(&self) -> Option<u32> {

@@ -1,0 +1,178 @@
+//! Aromaticity validator. Wraps [`AromaticityPerception`] and verifies that
+//! the aromatic systems already in the AST agree with what perception
+//! independently finds. Input contract: AST atoms carry filled-in
+//! `AromaticValence::Aromatic(Lit(n))` (atom-typing has run) and the AST
+//! already carries one or more `AromaticSystemAst` entries.
+
+use thiserror::Error;
+use umol_ast::ast::{AtomIdx, MoleculeAst};
+
+use crate::ops::aromaticity::{
+    electrons_from_aromatic_constraint, AromaticityContradiction, AromaticityError,
+    AromaticityPerception,
+};
+use crate::ops::config::AromaticityModel;
+use crate::ops::solution::Solution;
+
+#[derive(Clone, Debug)]
+pub struct AromaticityValidator {
+    perception: AromaticityPerception,
+}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum AromaticityValidatorContradiction {
+    #[error("perception rejected the input: {0}")]
+    Perception(AromaticityContradiction),
+    #[error(
+        "aromatic system count mismatch: AST has {ast_count}, perception found {perception_count}"
+    )]
+    SystemCountMismatch {
+        ast_count: usize,
+        perception_count: usize,
+    },
+    #[error("aromatic system atoms differ: AST {ast_atoms:?}, perception {perception_atoms:?}")]
+    AtomsMismatch {
+        ast_atoms: Vec<AtomIdx>,
+        perception_atoms: Vec<AtomIdx>,
+    },
+}
+
+impl AromaticityValidator {
+    pub fn new(model: &AromaticityModel) -> Self {
+        Self {
+            perception: AromaticityPerception::new(model),
+        }
+    }
+
+    pub fn validate(
+        &self,
+        ast: &mut MoleculeAst,
+    ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
+        let outcome = self
+            .perception
+            .find_systems(ast, electrons_from_aromatic_constraint)?;
+        let perception_systems = match outcome {
+            Solution::Determined(systems) => systems,
+            Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),
+            Solution::Contradictory(c) => {
+                return Ok(Solution::Contradictory(
+                    AromaticityValidatorContradiction::Perception(c),
+                ));
+            }
+        };
+
+        let ast_systems: Vec<Vec<AtomIdx>> = ast
+            .aromatic_systems()
+            .iter()
+            .map(|view| {
+                let mut atoms: Vec<AtomIdx> = view.atoms().collect();
+                atoms.sort_unstable();
+                atoms
+            })
+            .collect();
+        let mut ast_systems_sorted = ast_systems;
+        ast_systems_sorted.sort_by(|a, b| a.first().cmp(&b.first()));
+
+        if ast_systems_sorted.len() != perception_systems.len() {
+            return Ok(Solution::Contradictory(
+                AromaticityValidatorContradiction::SystemCountMismatch {
+                    ast_count: ast_systems_sorted.len(),
+                    perception_count: perception_systems.len(),
+                },
+            ));
+        }
+        for (ast_atoms, (perception_atoms, _)) in
+            ast_systems_sorted.iter().zip(perception_systems.iter())
+        {
+            if ast_atoms != perception_atoms {
+                return Ok(Solution::Contradictory(
+                    AromaticityValidatorContradiction::AtomsMismatch {
+                        ast_atoms: ast_atoms.clone(),
+                        perception_atoms: perception_atoms.clone(),
+                    },
+                ));
+            }
+        }
+        Ok(Solution::Determined(()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::*;
+    use umol_ast::ast::{
+        AromaticValenceAst, AtomAst, AtomConstraint, BondAst, Constraints, MoleculeAst,
+        SpinStateAst, ValueAst,
+    };
+    use umol_shared::element::Element;
+
+    use super::*;
+    use crate::ops::config::{ElementScope, RingLimits};
+    use crate::ops::resolver::aromaticity::AromaticityResolver;
+
+    fn aromatic(element: Element, pi: i64) -> AtomAst {
+        let mut atom = AtomAst::from_element(element);
+        atom.charge = ValueAst::Lit(0);
+        atom.spin = SpinStateAst::closed_shell();
+        atom.constraints.add(AtomConstraint::AromaticValence(
+            AromaticValenceAst::Aromatic(ValueAst::Lit(pi)),
+        ));
+        atom
+    }
+
+    fn benzene() -> MoleculeAst {
+        let atoms: Vec<AtomAst> = (0..6).map(|_| aromatic(Element::C, 1)).collect();
+        let bonds: Vec<_> = (0..6)
+            .map(|i| {
+                (
+                    AtomIdx(i),
+                    AtomIdx((i + 1) % 6),
+                    BondAst::from_order(1),
+                )
+            })
+            .collect();
+        MoleculeAst::new(
+            atoms,
+            bonds,
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
+    }
+
+    fn carbon_only() -> AromaticityModel {
+        AromaticityModel::HueckelRule {
+            scope: ElementScope::AllowList(vec![Element::C]),
+            ring_limits: RingLimits::default(),
+        }
+    }
+
+    #[rstest]
+    fn test_aromaticity_validator_benzene_passes() {
+        let mut ast = benzene();
+        AromaticityResolver::new(&carbon_only())
+            .resolve(&mut ast)
+            .unwrap();
+        let solution = AromaticityValidator::new(&carbon_only())
+            .validate(&mut ast)
+            .unwrap();
+        assert!(matches!(solution, Solution::Determined(())));
+    }
+
+    #[rstest]
+    fn test_aromaticity_validator_missing_system_contradicts() {
+        let mut ast = benzene();
+        let solution = AromaticityValidator::new(&carbon_only())
+            .validate(&mut ast)
+            .unwrap();
+        assert!(matches!(
+            solution,
+            Solution::Contradictory(AromaticityValidatorContradiction::SystemCountMismatch {
+                ast_count: 0,
+                perception_count: 1,
+            })
+        ));
+    }
+}
