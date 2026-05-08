@@ -34,6 +34,21 @@ impl DativeBondAst {
         Self::new(ValueAst::Lit(order as i64))
     }
 
+    pub fn with_acceptor_slot(mut self, slot: u8) -> Self {
+        self.acceptor_slot = slot;
+        self
+    }
+
+    pub fn with_order(mut self, order: impl Into<ValueAst>) -> Self {
+        self.order = order.into();
+        self
+    }
+
+    pub fn with_constraints(mut self, constraints: impl Into<DativeBondConstraints>) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
+
     pub fn is_ground(&self) -> bool {
         self.order.is_ground()
     }

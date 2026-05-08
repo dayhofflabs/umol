@@ -30,6 +30,26 @@ impl BondAst {
         Self::new(ValueAst::Lit(order as i64))
     }
 
+    pub fn with_order(mut self, order: impl Into<ValueAst>) -> Self {
+        self.order = order.into();
+        self
+    }
+
+    pub fn with_charge(mut self, charge: impl Into<ValueAst>) -> Self {
+        self.charge = charge.into();
+        self
+    }
+
+    pub fn with_spin(mut self, spin: impl Into<SpinStateAst>) -> Self {
+        self.spin = spin.into();
+        self
+    }
+
+    pub fn with_constraints(mut self, constraints: impl Into<BondConstraints>) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
+
     pub fn is_ground(&self) -> bool {
         self.order.is_ground() && self.charge.is_ground() && self.spin.is_ground()
     }

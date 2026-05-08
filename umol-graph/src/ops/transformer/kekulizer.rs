@@ -198,11 +198,7 @@ mod tests {
             bond.constraints.add(BondConstraint::Aromatic);
             bonds.push((AtomIdx(i), AtomIdx((i + 1) % 6), bond));
         }
-        let system = AromaticSystemAst::new(
-            vec![ValueAst::Lit(1); 6],
-            ValueAst::Lit(0),
-            SpinStateAst::closed_shell(),
-        );
+        let system = AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]);
         let aromatic_systems = vec![((0..6).map(AtomIdx).collect(), system)];
         MoleculeAst::from_parts(
             atoms,
@@ -284,11 +280,7 @@ mod tests {
             bond.constraints.add(BondConstraint::Aromatic);
             bonds.push((AtomIdx(i), AtomIdx((i + 1) % 5), bond));
         }
-        let system = AromaticSystemAst::new(
-            vec![ValueAst::Lit(1); 5],
-            ValueAst::Lit(0),
-            SpinStateAst::closed_shell(),
-        );
+        let system = AromaticSystemAst::new(vec![ValueAst::Lit(1); 5]);
         let aromatic_systems = vec![((0..5).map(AtomIdx).collect(), system)];
         let mut ast = MoleculeAst::from_parts(
             atoms,

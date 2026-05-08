@@ -73,6 +73,18 @@ impl Default for SpinStateAst {
     }
 }
 
+impl From<(u8, u8)> for SpinStateAst {
+    fn from((unpaired, multiplicity): (u8, u8)) -> Self {
+        Self::new(unpaired, multiplicity)
+    }
+}
+
+impl From<SpinState> for SpinStateAst {
+    fn from(state: SpinState) -> Self {
+        Self::from_state(state)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;

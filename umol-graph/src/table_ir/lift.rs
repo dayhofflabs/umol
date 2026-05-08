@@ -80,11 +80,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
                 let n = atoms.len();
                 (
                     atoms,
-                    MulticenterBondAst::new(
-                        vec![ValueAst::Undetermined; n],
-                        ValueAst::Undetermined,
-                        SpinStateAst::default(),
-                    ),
+                    MulticenterBondAst::new(vec![ValueAst::Undetermined; n]),
                 )
             })
             .collect();

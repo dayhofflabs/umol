@@ -387,7 +387,7 @@ mod tests {
     use umol_ast::mol;
     use umol_ast::ast::{
         AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, Constraints,
-        MoleculeAst, MulticenterBondAst, MulticenterValenceAst, SpinStateAst, ValueAst,
+        MoleculeAst, MulticenterBondAst, MulticenterValenceAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -403,7 +403,7 @@ mod tests {
             .collect();
         let multicenter = vec![(
             multicenter_atoms,
-            MulticenterBondAst::new(electrons, ValueAst::Lit(0), SpinStateAst::closed_shell()),
+            MulticenterBondAst::new(electrons),
         )];
         MoleculeAst::from_parts(
             atoms,
@@ -426,7 +426,7 @@ mod tests {
             .collect();
         let aromatic = vec![(
             aromatic_atoms,
-            AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::closed_shell()),
+            AromaticSystemAst::new(electrons),
         )];
         MoleculeAst::from_parts(
             atoms,

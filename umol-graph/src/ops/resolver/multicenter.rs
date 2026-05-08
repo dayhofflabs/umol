@@ -51,11 +51,9 @@ mod tests {
     use super::*;
 
     fn one_multicenter(charge: ValueAst, spin: SpinStateAst) -> MoleculeAst {
-        let bond = MulticenterBondAst::new(
-            vec![ValueAst::Lit(1), ValueAst::Lit(0), ValueAst::Lit(1)],
-            charge,
-            spin,
-        );
+        let bond = MulticenterBondAst::new(vec![ValueAst::Lit(1), ValueAst::Lit(0), ValueAst::Lit(1)])
+            .with_charge(charge)
+            .with_spin(spin);
         MoleculeAst::from_parts(
             vec![
                 AtomAst::from_element(Element::B),

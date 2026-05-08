@@ -23,6 +23,19 @@ impl NoncovalentBondAst {
         Self::new(NoncovalentBondKindAst::Lit(kind))
     }
 
+    pub fn with_kind(mut self, kind: impl Into<NoncovalentBondKindAst>) -> Self {
+        self.kind = kind.into();
+        self
+    }
+
+    pub fn with_constraints(
+        mut self,
+        constraints: impl Into<NoncovalentBondConstraints>,
+    ) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
+
     pub fn is_ground(&self) -> bool {
         self.kind.is_ground()
     }
@@ -53,11 +66,13 @@ pub enum NoncovalentBondKindAst {
     Ref(String),
 }
 
-impl NoncovalentBondKindAst {
-    pub fn new(kind: NoncovalentBondKind) -> Self {
+impl From<NoncovalentBondKind> for NoncovalentBondKindAst {
+    fn from(kind: NoncovalentBondKind) -> Self {
         Self::Lit(kind)
     }
+}
 
+impl NoncovalentBondKindAst {
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Lit(_))
     }
@@ -131,16 +146,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::new(NoncovalentBondKindAst::new(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond))]
-    fn test_noncovalent_kind_ast_new(
-        #[case] actual: NoncovalentBondKindAst,
-        #[case] expected: NoncovalentBondKindAst,
-    ) {
-        assert_eq!(actual, expected);
     }
 
     #[rstest]

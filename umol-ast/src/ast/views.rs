@@ -715,11 +715,11 @@ mod tests {
     }
 
     fn aromatic_with_electrons(electrons: Vec<ValueAst>) -> AromaticSystemAst {
-        AromaticSystemAst::new(electrons, ValueAst::Lit(0), SpinStateAst::default())
+        AromaticSystemAst::new(electrons)
     }
 
     fn multicenter_with_electrons(electrons: Vec<ValueAst>) -> MulticenterBondAst {
-        MulticenterBondAst::new(electrons, ValueAst::Lit(0), SpinStateAst::default())
+        MulticenterBondAst::new(electrons)
     }
 
     #[rstest]

@@ -19,11 +19,13 @@ pub enum ValueAst {
     Expr(Expr),
 }
 
-impl ValueAst {
-    pub fn new(value: i64) -> Self {
+impl From<i64> for ValueAst {
+    fn from(value: i64) -> Self {
         Self::Lit(value)
     }
+}
 
+impl ValueAst {
     /// The pattern denotes a single concrete integer. Semantic, not
     /// syntactic: `Expr` that folds to a constant is ground, and a
     /// `LitSet` of a single value (regardless of duplicates) is ground.

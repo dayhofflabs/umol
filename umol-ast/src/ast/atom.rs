@@ -34,6 +34,41 @@ impl AtomAst {
         Self::new(ElementAst::Lit(element))
     }
 
+    pub fn with_element(mut self, element: impl Into<ElementAst>) -> Self {
+        self.element = element.into();
+        self
+    }
+
+    pub fn with_isotope_mass(mut self, mass: impl Into<IsotopeAst>) -> Self {
+        self.isotope_mass = mass.into();
+        self
+    }
+
+    pub fn with_charge(mut self, charge: impl Into<ValueAst>) -> Self {
+        self.charge = charge.into();
+        self
+    }
+
+    pub fn with_implicit_hydrogens(mut self, hydrogens: impl Into<ImplicitHydrogensAst>) -> Self {
+        self.implicit_hydrogens = hydrogens.into();
+        self
+    }
+
+    pub fn with_lone_pairs(mut self, lone_pairs: impl Into<ValueAst>) -> Self {
+        self.lone_pairs = lone_pairs.into();
+        self
+    }
+
+    pub fn with_spin(mut self, spin: impl Into<SpinStateAst>) -> Self {
+        self.spin = spin.into();
+        self
+    }
+
+    pub fn with_constraints(mut self, constraints: impl Into<AtomConstraints>) -> Self {
+        self.constraints = constraints.into();
+        self
+    }
+
     pub fn is_ground(&self) -> bool {
         self.element.is_ground()
             && self.isotope_mass.is_ground()
@@ -82,11 +117,13 @@ pub enum ElementAst {
     Ref(String),
 }
 
-impl ElementAst {
-    pub fn new(element: Element) -> Self {
+impl From<Element> for ElementAst {
+    fn from(element: Element) -> Self {
         Self::Lit(element)
     }
+}
 
+impl ElementAst {
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Lit(_))
     }
@@ -137,10 +174,6 @@ pub enum IsotopeAst {
 }
 
 impl IsotopeAst {
-    pub fn new(mass: u32) -> Self {
-        Self::Lit(mass as i64)
-    }
-
     /// Semantic ground: `Natural` and `Lit(_)` are the primary ground forms;
     /// `LitSet`/`Expr` delegate through the shared helpers so constant-valued
     /// expressions and singleton sets are also ground. Same fast-path /
@@ -238,6 +271,12 @@ impl From<ValueAst> for IsotopeAst {
     }
 }
 
+impl From<i64> for IsotopeAst {
+    fn from(value: i64) -> Self {
+        Self::Lit(value)
+    }
+}
+
 /// Implicit hydrogen expressions. `Normal` denotes the valence-model default
 /// (`#h=`); numeric variants mirror `ValueAst` and are flattened here to keep
 /// `Undetermined` as a single top-level state.
@@ -252,10 +291,6 @@ pub enum ImplicitHydrogensAst {
 }
 
 impl ImplicitHydrogensAst {
-    pub fn new(count: u8) -> Self {
-        Self::Lit(count as i64)
-    }
-
     /// Semantic ground: only `Lit(_)`, ground singleton `LitSet`, and ground
     /// `Expr` count. `Normal` is **not** ground — it's a placeholder for
     /// "compute via valence model"; the resolver lowers it to `Lit(n)`.
@@ -345,6 +380,12 @@ impl From<ValueAst> for ImplicitHydrogensAst {
     }
 }
 
+impl From<i64> for ImplicitHydrogensAst {
+    fn from(value: i64) -> Self {
+        Self::Lit(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -352,26 +393,18 @@ mod tests {
 
     use super::*;
 
-    #[rstest]
-    #[case::new_element(ElementAst::new(Element::C), ElementAst::Lit(Element::C))]
-    fn test_element_ast_new(#[case] actual: ElementAst, #[case] expected: ElementAst) {
-        assert_eq!(actual, expected);
-    }
-
     #[rustfmt::skip]
     #[rstest]
-    #[case::new(IsotopeAst::new(12), IsotopeAst::Lit(12))]
     #[case::from_lit(IsotopeAst::from(ValueAst::Lit(13)), IsotopeAst::Lit(13))]
     #[case::from_undetermined(IsotopeAst::from(ValueAst::Undetermined), IsotopeAst::Undetermined)]
-    fn test_isotope_ast_new(#[case] actual: IsotopeAst, #[case] expected: IsotopeAst) {
+    fn test_isotope_ast_from_value(#[case] actual: IsotopeAst, #[case] expected: IsotopeAst) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::new(ImplicitHydrogensAst::new(3), ImplicitHydrogensAst::Lit(3))]
     #[case::from_lit_set(ImplicitHydrogensAst::from(ValueAst::LitSet(vec![0, 1])), ImplicitHydrogensAst::LitSet(vec![0, 1]))]
-    fn test_implicit_hydrogens_ast_new(
+    fn test_implicit_hydrogens_ast_from_value(
         #[case] actual: ImplicitHydrogensAst,
         #[case] expected: ImplicitHydrogensAst,
     ) {

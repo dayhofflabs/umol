@@ -15,13 +15,35 @@ pub struct AromaticSystemAst {
 }
 
 impl AromaticSystemAst {
-    pub fn new(electrons: Vec<ValueAst>, charge: ValueAst, spin: SpinStateAst) -> Self {
+    pub fn new(electrons: Vec<ValueAst>) -> Self {
         Self {
             electrons,
-            charge,
-            spin,
-            constraints: AromaticSystemConstraints::new(),
+            ..Default::default()
         }
+    }
+
+    pub fn from_electrons(electrons: Vec<u8>) -> Self {
+        Self::new(electrons.into_iter().map(|n| ValueAst::Lit(n as i64)).collect())
+    }
+
+    pub fn with_electrons(mut self, electrons: Vec<ValueAst>) -> Self {
+        self.electrons = electrons;
+        self
+    }
+
+    pub fn with_charge(mut self, charge: impl Into<ValueAst>) -> Self {
+        self.charge = charge.into();
+        self
+    }
+
+    pub fn with_spin(mut self, spin: impl Into<SpinStateAst>) -> Self {
+        self.spin = spin.into();
+        self
+    }
+
+    pub fn with_constraints(mut self, constraints: impl Into<AromaticSystemConstraints>) -> Self {
+        self.constraints = constraints.into();
+        self
     }
 
     pub fn is_ground(&self) -> bool {
@@ -64,22 +86,15 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::all_undetermined(AromaticSystemAst::default(), false)]
-    #[case::charge_only(AromaticSystemAst::new(Vec::new(), ValueAst::Lit(0), SpinStateAst::default()), false)]
-    #[case::ground_no_atoms(AromaticSystemAst::new(Vec::new(), ValueAst::Lit(0), SpinStateAst::new(0, 1)), true)]
+    #[case::charge_only(AromaticSystemAst::new(Vec::new()).with_charge(0), false)]
+    #[case::ground_no_atoms(AromaticSystemAst::new(Vec::new()).with_charge(0).with_spin((0, 1)), true)]
     #[case::all_ground_six(
-        AromaticSystemAst::new(
-            vec![ValueAst::Lit(1); 6],
-            ValueAst::Lit(0),
-            SpinStateAst::new(0, 1),
-        ),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
         true,
     )]
     #[case::one_undetermined_electron(
-        AromaticSystemAst::new(
-            vec![ValueAst::Lit(1), ValueAst::Undetermined, ValueAst::Lit(1)],
-            ValueAst::Lit(0),
-            SpinStateAst::new(0, 1),
-        ),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1), ValueAst::Undetermined, ValueAst::Lit(1)])
+            .with_charge(0).with_spin((0, 1)),
         false,
     )]
     fn test_aromatic_system_ast_is_ground(
@@ -94,31 +109,27 @@ mod tests {
     #[case::default_matches_default(AromaticSystemAst::default(), AromaticSystemAst::default(), true)]
     #[case::default_matches_ground(
         AromaticSystemAst::default(),
-        AromaticSystemAst::new(Vec::new(), ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        AromaticSystemAst::new(Vec::new()).with_charge(0).with_spin((0, 1)),
         true,
     )]
     #[case::exact(
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
         true,
     )]
     #[case::electrons_length_mismatch(
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 5], ValueAst::Undetermined, SpinStateAst::default()),
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 5]),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
         false,
     )]
     #[case::electrons_value_mismatch(
-        AromaticSystemAst::new(vec![ValueAst::Lit(2); 6], ValueAst::Undetermined, SpinStateAst::default()),
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        AromaticSystemAst::new(vec![ValueAst::Lit(2); 6]),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
         false,
     )]
     #[case::pattern_undetermined_electron_matches_lit(
-        AromaticSystemAst::new(
-            vec![ValueAst::Undetermined; 6],
-            ValueAst::Undetermined,
-            SpinStateAst::default(),
-        ),
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6], ValueAst::Lit(0), SpinStateAst::new(0, 1)),
+        AromaticSystemAst::new(vec![ValueAst::Undetermined; 6]),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
         true,
     )]
     fn test_aromatic_system_ast_matches(
