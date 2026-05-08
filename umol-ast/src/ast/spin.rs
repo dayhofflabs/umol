@@ -16,26 +16,8 @@ pub struct SpinStateAst {
 }
 
 impl SpinStateAst {
-    pub fn new(unpaired: u8, multiplicity: u8) -> Self {
-        Self::from_values(
-            ValueAst::Lit(unpaired as i64),
-            ValueAst::Lit(multiplicity as i64),
-        )
-    }
-
-    pub fn from_values(unpaired: ValueAst, multiplicity: ValueAst) -> Self {
-        Self {
-            unpaired,
-            multiplicity,
-        }
-    }
-
-    pub fn from_state(state: SpinState) -> Self {
-        Self::new(state.unpaired(), state.multiplicity().multiplicity())
-    }
-
     pub fn closed_shell() -> Self {
-        Self::from_state(SpinState::closed_shell())
+        SpinState::closed_shell().into()
     }
 
     /// Both fields are literal. A ground spin state may still be physically
@@ -75,13 +57,16 @@ impl Default for SpinStateAst {
 
 impl From<(u8, u8)> for SpinStateAst {
     fn from((unpaired, multiplicity): (u8, u8)) -> Self {
-        Self::new(unpaired, multiplicity)
+        Self {
+            unpaired: ValueAst::Lit(unpaired as i64),
+            multiplicity: ValueAst::Lit(multiplicity as i64),
+        }
     }
 }
 
 impl From<SpinState> for SpinStateAst {
     fn from(state: SpinState) -> Self {
-        Self::from_state(state)
+        (state.unpaired(), u8::from(state.multiplicity())).into()
     }
 }
 
@@ -98,20 +83,24 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case(SpinStateAst::default(), false)]
-    #[case(SpinStateAst::from_state(spin!("#u2")), true)]
-    #[case(SpinStateAst::new(2, 3), true)]
-    #[case(SpinStateAst::from_values(ValueAst::Lit(2), ValueAst::Undetermined), false)]
+    #[case(spin!("#u2").into(), true)]
+    #[case((2, 3).into(), true)]
+    #[case(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, false)]
     fn test_spin_state_ast_is_ground(#[case] ast: SpinStateAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::both_undetermined(SpinStateAst::default(), SpinStateAst::new(2, 3), true)]
-    #[case::pattern_specific_target_undetermined(SpinStateAst::new(2, 3), SpinStateAst::default(), false)]
-    #[case::exact(SpinStateAst::new(2, 3), SpinStateAst::new(2, 3), true)]
-    #[case::unpaired_mismatch(SpinStateAst::new(2, 3), SpinStateAst::new(0, 3), false)]
-    #[case::partial_pattern(SpinStateAst::from_values(ValueAst::Undetermined, ValueAst::Lit(3)), SpinStateAst::new(2, 3), true)]
+    #[case::both_undetermined(SpinStateAst::default(), (2_u8, 3_u8).into(), true)]
+    #[case::pattern_specific_target_undetermined((2_u8, 3_u8).into(), SpinStateAst::default(), false)]
+    #[case::exact((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), true)]
+    #[case::unpaired_mismatch((2_u8, 3_u8).into(), (0_u8, 3_u8).into(), false)]
+    #[case::partial_pattern(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
+        (2_u8, 3_u8).into(),
+        true,
+    )]
     fn test_spin_state_ast_matches(
         #[case] pattern: SpinStateAst,
         #[case] target: SpinStateAst,
@@ -121,8 +110,8 @@ mod tests {
     }
 
     #[test]
-    fn test_spin_state_ast_from_state() {
-        let ast = SpinStateAst::from_state(spin!("#u2"));
+    fn test_spin_state_ast_from_spin_state() {
+        let ast: SpinStateAst = spin!("#u2").into();
         assert_eq!(ast.unpaired, ValueAst::Lit(2));
         assert_eq!(ast.multiplicity, ValueAst::Lit(3));
     }
@@ -137,6 +126,7 @@ mod tests {
     #[test]
     fn test_spin_state_from_str_roundtrip() {
         let s = SpinState::from_str("#u0#s1").unwrap();
-        assert_eq!(SpinStateAst::from_state(s), SpinStateAst::closed_shell());
+        let ast: SpinStateAst = s.into();
+        assert_eq!(ast, SpinStateAst::closed_shell());
     }
 }

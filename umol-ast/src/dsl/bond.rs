@@ -548,14 +548,14 @@ mod tests {
         let cfg = BondDefaults::zeroed();
         let ast = dsl.into_ast(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
-        assert_eq!(ast.spin, SpinStateAst::new(0, 1));
+        assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
     }
 
     #[rstest]
     fn test_bond_dsl_from_ast_strips_zero_defaults() {
         let mut ast = BondAst::new(ValueAst::Lit(1));
         ast.charge = ValueAst::Lit(0);
-        ast.spin = SpinStateAst::new(0, 1);
+        ast.spin = SpinStateAst::from((0_u8, 1_u8));
         let cfg = BondDefaults::zeroed();
         let dsl = BondDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);

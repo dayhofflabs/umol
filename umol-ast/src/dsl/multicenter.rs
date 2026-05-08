@@ -391,7 +391,7 @@ mod tests {
     #[case::unpaired("#u1", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: Vec::new(), constraints: MulticenterBondConstraints::new() }))]
     #[case::mult("#s2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: Vec::new(), constraints: MulticenterBondConstraints::new() }))]
     #[case::charge_electrons("#c+#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
-    #[case::full("#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::new(0, 1), electrons: Vec::new(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
+    #[case::full("#c0#u0#s1#e2", MulticenterBondDsl(MulticenterBondAst { charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), electrons: Vec::new(), constraints: MulticenterBondConstraints::from_iter([MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))]) }))]
     fn test_parse_multicenter(#[case] input: &str, #[case] expected: MulticenterBondDsl) {
         let result = multicenter_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -433,7 +433,7 @@ mod tests {
         let cfg = MulticenterBondDefaults::zeroed();
         let ast = dsl.into_ast(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
-        assert_eq!(ast.spin, SpinStateAst::new(0, 1));
+        assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
         assert!(ast.electrons.is_empty());
         assert!(ast.constraints.is_empty());
     }
@@ -442,7 +442,7 @@ mod tests {
     fn test_multicenter_dsl_from_ast_strips_zero_defaults() {
         let ast = MulticenterBondAst {
             charge: ValueAst::Lit(0),
-            spin: SpinStateAst::new(0, 1),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
             electrons: Vec::new(),
             constraints: MulticenterBondConstraints::new(),
         };

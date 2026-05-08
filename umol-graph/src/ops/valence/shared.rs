@@ -56,7 +56,7 @@ pub fn ground_spin_state(spin: &SpinStateAst) -> Option<SpinState> {
     let (ValueAst::Lit(u), ValueAst::Lit(m)) = (&spin.unpaired, &spin.multiplicity) else {
         return None;
     };
-    let mult = SpinMultiplicity::from_multiplicity(*m as u8)?;
+    let mult = SpinMultiplicity::from_repr(*m as u8)?;
     SpinState::try_new(*u as u8, mult).ok()
 }
 
@@ -206,7 +206,7 @@ pub fn try_build_candidate(
         }
         g
     } else if let ValueAst::Lit(m) = &atom_ast.spin.multiplicity {
-        let mult = SpinMultiplicity::from_multiplicity(*m as u8)?;
+        let mult = SpinMultiplicity::from_repr(*m as u8)?;
         SpinState::try_new(unpaired, mult).ok()?
     } else {
         SpinState::max_multiplicity(unpaired)?
@@ -221,7 +221,7 @@ pub fn try_build_candidate(
         charge: ValueAst::Lit(charge as i64),
         implicit_hydrogens: ImplicitHydrogensAst::Lit(implicit_hydrogens as i64),
         lone_pairs: ValueAst::Lit(lone_pairs as i64),
-        spin: SpinStateAst::from_state(spin),
+        spin: SpinStateAst::from(spin),
         constraints: atom_ast.constraints.clone(),
     })
 }

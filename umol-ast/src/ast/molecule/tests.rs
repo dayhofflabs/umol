@@ -35,7 +35,7 @@ fn ground_atom() -> AtomAst {
     a.charge = ValueAst::Lit(0);
     a.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
     a.lone_pairs = ValueAst::Lit(0);
-    a.spin = SpinStateAst::new(0, 1);
+    a.spin = SpinStateAst::from((0_u8, 1_u8));
     a
 }
 
@@ -1653,7 +1653,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         atom.implicit_hydrogens = ImplicitHydrogensAst::Expr(Expr::Lit(3));
         atom.lone_pairs = ValueAst::Expr(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))));
         atom.spin =
-            SpinStateAst::from_values(ValueAst::Expr(Expr::Lit(0)), ValueAst::Expr(Expr::Lit(1)));
+            SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) };
         // And an inline atom constraint with a non-canonical Expr.
         atom.constraints
             .add(AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4))));
@@ -1666,7 +1666,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         bond.order = ValueAst::Expr(Expr::Lit(1));
         bond.charge = ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(0))));
         bond.spin =
-            SpinStateAst::from_values(ValueAst::Expr(Expr::Lit(0)), ValueAst::Expr(Expr::Lit(1)));
+            SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) };
         bond.constraints
             .add(BondConstraint::RingCount(ValueAst::Expr(Expr::Lit(1))));
     }
@@ -1687,7 +1687,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
             ValueAst::Expr(Expr::Lit(1)),
         ];
         ar.spin =
-            SpinStateAst::from_values(ValueAst::Expr(Expr::Lit(0)), ValueAst::Expr(Expr::Lit(1)));
+            SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) };
     }
 
     // Multicenter bond 0: same pattern, three member atoms.
@@ -1700,7 +1700,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
             ValueAst::Expr(Expr::Lit(0)),
         ];
         mc.spin =
-            SpinStateAst::from_values(ValueAst::Expr(Expr::Lit(0)), ValueAst::Expr(Expr::Lit(1)));
+            SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) };
     }
 
     // Molecule-scope constraints: a ChargeSum, a Relational predicate,
@@ -1751,7 +1751,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     assert_eq!(atom.isotope_mass, IsotopeAst::Lit(-13));
     assert_eq!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(3));
     assert_eq!(atom.lone_pairs, ValueAst::Lit(1));
-    assert_eq!(atom.spin, SpinStateAst::new(0, 1));
+    assert_eq!(atom.spin, SpinStateAst::from((0_u8, 1_u8)));
     assert_eq!(
         atom.constraints,
         AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))]),
@@ -1763,7 +1763,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     // Neg(Lit(0)) is preserved by Expr::simplify but the Expr is not at the
     // ValueAst-Expr top, so ValueAst::simplify lifts via Lit(-0) = Lit(0).
     assert_eq!(bond.charge, ValueAst::Lit(0));
-    assert_eq!(bond.spin, SpinStateAst::new(0, 1));
+    assert_eq!(bond.spin, SpinStateAst::from((0_u8, 1_u8)));
     assert_eq!(
         bond.constraints,
         BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(1))]),
@@ -1782,7 +1782,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         ar.electrons,
         vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(1)],
     );
-    assert_eq!(ar.spin, SpinStateAst::new(0, 1));
+    assert_eq!(ar.spin, SpinStateAst::from((0_u8, 1_u8)));
 
     // -- Multicenter bond 0 ---------------------------------------------
     let mc = &ast[MulticenterBondIdx(0)];
@@ -1791,7 +1791,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         mc.electrons,
         vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)],
     );
-    assert_eq!(mc.spin, SpinStateAst::new(0, 1));
+    assert_eq!(mc.spin, SpinStateAst::from((0_u8, 1_u8)));
 
     // -- Molecule-scope constraints ------------------------------------
     let cs: Vec<&Constraint> = ast.constraints().iter().collect();

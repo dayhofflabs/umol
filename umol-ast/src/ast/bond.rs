@@ -50,6 +50,20 @@ impl BondAst {
         self
     }
 
+    /// Fill `Undetermined` value-bearing fields with zero defaults: charge
+    /// to `Lit(0)`, spin to closed-shell singlet `(0, 1)`. Existing values
+    /// and `constraints` are preserved. If `order` is `Undetermined`, the
+    /// result is not ground.
+    pub fn zeroed(mut self) -> Self {
+        if self.charge.is_undetermined() {
+            self.charge = ValueAst::Lit(0);
+        }
+        if self.spin.is_undetermined() {
+            self.spin = SpinStateAst::from((0_u8, 1_u8));
+        }
+        self
+    }
+
     pub fn is_ground(&self) -> bool {
         self.order.is_ground() && self.charge.is_ground() && self.spin.is_ground()
     }
@@ -124,5 +138,29 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::from_ground_order(
+        BondAst::from_order(1).zeroed(),
+        BondAst {
+            order: ValueAst::Lit(1),
+            charge: ValueAst::Lit(0),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: BondConstraints::new(),
+        },
+    )]
+    #[case::preserves_set_charge(
+        BondAst::from_order(2).with_charge(1_i64).zeroed(),
+        BondAst {
+            order: ValueAst::Lit(2),
+            charge: ValueAst::Lit(1),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: BondConstraints::new(),
+        },
+    )]
+    fn test_bond_ast_zeroed(#[case] actual: BondAst, #[case] expected: BondAst) {
+        assert_eq!(actual, expected);
     }
 }

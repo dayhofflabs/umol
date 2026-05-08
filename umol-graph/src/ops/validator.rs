@@ -146,7 +146,7 @@ mod tests {
         atom.charge = ValueAst::Lit(0);
         atom.lone_pairs = ValueAst::Lit(0);
         atom.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
-        atom.spin = SpinStateAst::new(0, 1);
+        atom.spin = SpinStateAst::from((0_u8, 1_u8));
         atom
     }
 
@@ -155,7 +155,7 @@ mod tests {
         ch3_a.charge = ValueAst::Lit(0);
         ch3_a.lone_pairs = ValueAst::Lit(0);
         ch3_a.implicit_hydrogens = ImplicitHydrogensAst::Lit(3);
-        ch3_a.spin = SpinStateAst::new(0, 1);
+        ch3_a.spin = SpinStateAst::from((0_u8, 1_u8));
         let ch3_b = ch3_a.clone();
         MoleculeAst::from_parts(
             vec![ch3_a, ch3_b],
@@ -190,7 +190,7 @@ mod tests {
         atom.charge = ValueAst::Lit(0);
         atom.lone_pairs = ValueAst::Lit(0);
         atom.implicit_hydrogens = ImplicitHydrogensAst::Lit(3);
-        atom.spin = SpinStateAst::new(0, 1);
+        atom.spin = SpinStateAst::from((0_u8, 1_u8));
         atom.constraints
             .add(AtomConstraint::Valence(ValueAst::Lit(1)));
         let result = v.validate_atom(&atom).unwrap();

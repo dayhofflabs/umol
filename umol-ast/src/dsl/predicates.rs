@@ -256,7 +256,7 @@ mod tests {
         #[default(ValueAst::Undetermined)] unpaired: ValueAst,
         #[default(ValueAst::Undetermined)] multiplicity: ValueAst,
     ) -> SpinStateAst {
-        SpinStateAst::from_values(unpaired, multiplicity)
+        SpinStateAst { unpaired, multiplicity }
     }
 
     #[rustfmt::skip]
@@ -420,7 +420,7 @@ mod tests {
         #[case] expected_u: ValueAst,
         #[case] expected_m: ValueAst,
     ) {
-        let mut spin = SpinStateAst::from_values(init_u, init_m);
+        let mut spin = SpinStateAst { unpaired: init_u, multiplicity: init_m };
         raise_spin(&mut spin, u_mode, m_mode);
         assert_eq!(spin.unpaired, expected_u);
         assert_eq!(spin.multiplicity, expected_m);
@@ -471,7 +471,7 @@ mod tests {
         #[case] expected_u: ValueAst,
         #[case] expected_m: ValueAst,
     ) {
-        let mut spin = SpinStateAst::from_values(init_u, init_m);
+        let mut spin = SpinStateAst { unpaired: init_u, multiplicity: init_m };
         lower_spin(&mut spin, u_mode, m_mode);
         assert_eq!(spin.unpaired, expected_u);
         assert_eq!(spin.multiplicity, expected_m);
@@ -528,7 +528,7 @@ mod tests {
         #[case] u_mode: UnpairedElectronsDefault,
         #[case] m_mode: MultiplicityDefault,
     ) {
-        let mut raised = SpinStateAst::from_values(init_u, init_m);
+        let mut raised = SpinStateAst { unpaired: init_u, multiplicity: init_m };
         raise_spin(&mut raised, u_mode, m_mode);
 
         let mut lowered_then_raised = raised.clone();

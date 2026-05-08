@@ -491,7 +491,7 @@ mod tests {
     #[rstest]
     #[case::empty(vec![], 0)]
     #[case::molecule_leaves(vec![Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]), sum: ValueAst::Lit(0) }),
-            Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0)]), spin: SpinStateAst::new(0, 1) })], 2)]
+            Constraint::Molecule(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0)]), spin: SpinStateAst::from((0_u8, 1_u8)) })], 2)]
     #[case::combinator(vec![Constraint::And(vec![Constraint::Atom(AtomIdx(0), AtomConstraint::Valence(ValueAst::Lit(4))),
             Constraint::Bond(BondIdx(0), BondConstraint::Aromatic)])], 1)]
     fn test_constraints_push(
@@ -790,9 +790,9 @@ mod tests {
         Some(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) }),
     )]
     #[case::spin_sum_shifts(
-        MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0), AtomIdx(2)]), spin: SpinStateAst::new(0, 1) },
+        MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0), AtomIdx(2)]), spin: SpinStateAst::from((0_u8, 1_u8)) },
         idx_remapping(vec![1], vec![]),
-        Some(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]), spin: SpinStateAst::new(0, 1) }),
+        Some(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomIdx(0), AtomIdx(1)]), spin: SpinStateAst::from((0_u8, 1_u8)) }),
     )]
     #[case::bond_order_sum_shifts(
         MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondIdx(0), BondIdx(2)]), sum: ValueAst::Lit(4) },

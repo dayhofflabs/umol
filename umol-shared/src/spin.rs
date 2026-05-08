@@ -6,11 +6,11 @@ use std::str::FromStr;
 use serde::de::{Deserializer, Error as SerdeError};
 use serde::ser::Serializer;
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
+use strum::{Display, EnumString, FromRepr};
 
 use crate::error::SpinStateError;
 
-/// Spin multiplicity descriptor (2S+1)
+/// Spin multiplicity descriptor. Discriminant equals the canonical 2S+1 value.
 #[derive(
     Debug,
     Clone,
@@ -22,21 +22,23 @@ use crate::error::SpinStateError;
     Hash,
     Display,
     EnumString,
+    FromRepr,
     Serialize,
     Deserialize,
 )]
 #[strum(serialize_all = "snake_case", ascii_case_insensitive)]
+#[repr(u8)]
 pub enum SpinMultiplicity {
-    Singlet = 0,
-    Doublet = 1,
-    Triplet = 2,
-    Quartet = 3,
-    Quintet = 4,
-    Sextet = 5,
-    Septet = 6,
-    Octet = 7,
-    Nonet = 8,
-    Decet = 9,
+    Singlet = 1,
+    Doublet = 2,
+    Triplet = 3,
+    Quartet = 4,
+    Quintet = 5,
+    Sextet = 6,
+    Septet = 7,
+    Octet = 8,
+    Nonet = 9,
+    Decet = 10,
 }
 
 /// Highest spin multiplicity
@@ -45,27 +47,17 @@ pub const HIGHEST_SPIN_MULTIPLICITY: SpinMultiplicity = SpinMultiplicity::Decet;
 /// Maximum number of unpaired electrons representable by a `SpinState`.
 pub const MAX_UNPAIRED_ELECTRONS: u8 = 9;
 
-impl SpinMultiplicity {
-    /// Create spin multiplicity from the numeric multiplicity value (2S+1).
-    pub fn from_multiplicity(multiplicity: u8) -> Option<Self> {
-        match multiplicity {
-            1 => Some(SpinMultiplicity::Singlet),
-            2 => Some(SpinMultiplicity::Doublet),
-            3 => Some(SpinMultiplicity::Triplet),
-            4 => Some(SpinMultiplicity::Quartet),
-            5 => Some(SpinMultiplicity::Quintet),
-            6 => Some(SpinMultiplicity::Sextet),
-            7 => Some(SpinMultiplicity::Septet),
-            8 => Some(SpinMultiplicity::Octet),
-            9 => Some(SpinMultiplicity::Nonet),
-            10 => Some(SpinMultiplicity::Decet),
-            _ => None,
-        }
+impl From<SpinMultiplicity> for u8 {
+    fn from(m: SpinMultiplicity) -> Self {
+        m as u8
     }
+}
 
-    /// Get multiplicity value (2S+1).
-    pub fn multiplicity(&self) -> u8 {
-        *self as u8 + 1
+impl TryFrom<u8> for SpinMultiplicity {
+    type Error = SpinStateError;
+
+    fn try_from(m: u8) -> Result<Self, Self::Error> {
+        Self::from_repr(m).ok_or(SpinStateError::MultiplicityOutOfRange { multiplicity: m })
     }
 }
 
@@ -82,7 +74,7 @@ macro_rules! spin {
 /// Validated (unpaired, multiplicity) pair.
 ///
 /// Invariant: `m <= u + 1` and `m` has the same parity as `u+1`, where
-/// `m = multiplicity.multiplicity()` and `u = unpaired_electrons`.
+/// `m = u8::from(multiplicity)` and `u = unpaired_electrons`.
 ///
 /// String format (canonical): `"#u<u> #m<m>"`, e.g. `"#u2 #m3"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -97,7 +89,7 @@ impl SpinState {
     /// Valid multiplicities for `u` unpaired electrons are `u%2+1, u%2+3, ..., u+1`.
     pub fn are_compatible(unpaired: u8, multiplicity: SpinMultiplicity) -> bool {
         let u = unpaired;
-        let m = multiplicity.multiplicity();
+        let m = u8::from(multiplicity);
         m <= u + 1 && m % 2 == (u + 1) % 2
     }
 
@@ -124,7 +116,7 @@ impl SpinState {
 
     /// Create a spin state assuming maximum multiplicity (Hund's rule: m = n+1).
     pub fn max_multiplicity(unpaired_electrons: u8) -> Option<Self> {
-        let m = SpinMultiplicity::from_multiplicity(unpaired_electrons + 1)?;
+        let m = SpinMultiplicity::from_repr(unpaired_electrons + 1)?;
         Some(Self {
             unpaired: unpaired_electrons,
             multiplicity: m,
@@ -174,16 +166,16 @@ impl SpinState {
             return false;
         }
 
-        let target_two_s = (self.multiplicity.multiplicity() - 1) as u32;
+        let target_two_s = (u8::from(self.multiplicity) - 1) as u32;
 
         if states.is_empty() {
             return target_two_s == 0;
         }
 
-        let mut possible: Vec<u32> = vec![(states[0].multiplicity.multiplicity() - 1) as u32];
+        let mut possible: Vec<u32> = vec![(u8::from(states[0].multiplicity) - 1) as u32];
 
         for state in &states[1..] {
-            let two_s = (state.multiplicity.multiplicity() - 1) as u32;
+            let two_s = (u8::from(state.multiplicity) - 1) as u32;
             let mut next = Vec::new();
             for &prev in &possible {
                 let lo = prev.abs_diff(two_s);
@@ -209,7 +201,7 @@ impl fmt::Display for SpinState {
             f,
             "#u{}#s{}",
             self.unpaired,
-            self.multiplicity.multiplicity()
+            u8::from(self.multiplicity)
         )
     }
 }
@@ -273,11 +265,7 @@ impl FromStr for SpinState {
                 if empty {
                     value = 1;
                 }
-                let mult = SpinMultiplicity::from_multiplicity(value).ok_or(
-                    SpinStateError::MultiplicityOutOfRange {
-                        multiplicity: value,
-                    },
-                )?;
+                let mult = SpinMultiplicity::try_from(value)?;
                 multiplicity = Some(mult);
                 rest = digits_str[digits_len..].trim_start();
             } else if rest.starts_with("#") {
@@ -295,7 +283,7 @@ impl FromStr for SpinState {
             (Some(u), Some(m)) => SpinState::try_new(u, m),
             (Some(u), None) => SpinState::max_multiplicity(u)
                 .ok_or(SpinStateError::UnpairedElectronsOutOfRange { unpaired: u }),
-            (None, Some(m)) => SpinState::try_new(m.multiplicity() - 1, m),
+            (None, Some(m)) => SpinState::try_new(u8::from(m) - 1, m),
             (None, None) => Err(SpinStateError::Underdetermined),
         }
     }
@@ -326,21 +314,18 @@ mod tests {
     #[case(2, SpinMultiplicity::Doublet)]
     #[case(3, SpinMultiplicity::Triplet)]
     #[case(10, SpinMultiplicity::Decet)]
-    fn test_spin_multiplicity_from_multiplicity(
+    fn test_spin_multiplicity_try_from_u8(
         #[case] multiplicity: u8,
         #[case] expected: SpinMultiplicity,
     ) {
-        assert_eq!(
-            SpinMultiplicity::from_multiplicity(multiplicity).unwrap(),
-            expected
-        );
+        assert_eq!(SpinMultiplicity::try_from(multiplicity).unwrap(), expected);
     }
 
     #[rstest]
     #[case(0)]
     #[case(11)]
-    fn test_spin_multiplicity_from_multiplicity_invalid(#[case] multiplicity: u8) {
-        assert!(SpinMultiplicity::from_multiplicity(multiplicity).is_none());
+    fn test_spin_multiplicity_try_from_u8_invalid(#[case] multiplicity: u8) {
+        assert!(SpinMultiplicity::try_from(multiplicity).is_err());
     }
 
     #[rstest]
@@ -348,8 +333,8 @@ mod tests {
     #[case(SpinMultiplicity::Doublet, 2)]
     #[case(SpinMultiplicity::Triplet, 3)]
     #[case(SpinMultiplicity::Decet, 10)]
-    fn test_spin_multiplicity_multiplicity(#[case] spin: SpinMultiplicity, #[case] expected: u8) {
-        assert_eq!(spin.multiplicity(), expected);
+    fn test_spin_multiplicity_into_u8(#[case] spin: SpinMultiplicity, #[case] expected: u8) {
+        assert_eq!(u8::from(spin), expected);
     }
 
     #[rstest]

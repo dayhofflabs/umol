@@ -36,6 +36,13 @@ impl NoncovalentBondAst {
         self
     }
 
+    /// No-op: `NoncovalentBondAst` has no value-bearing fields besides
+    /// `kind`, which is essential and never zeroed. Provided for API
+    /// symmetry across entity ASTs.
+    pub fn zeroed(self) -> Self {
+        self
+    }
+
     pub fn is_ground(&self) -> bool {
         self.kind.is_ground()
     }
@@ -169,5 +176,11 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_zeroed() {
+        let bond = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
+        assert_eq!(bond.clone().zeroed(), bond);
     }
 }

@@ -703,7 +703,6 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::AtomConstraint;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::spin::SpinStateAst;
     use crate::ast::value::ValueAst;
 
     fn atom_with_constraints(element: Element, cs: Vec<AtomConstraint>) -> AtomAst {

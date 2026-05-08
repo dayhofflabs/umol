@@ -265,7 +265,7 @@ fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
     // DSL preserves spin fields field-wise. Physical (u, m) parity is a
     // tier-2 solver invariant, not a parse-time check, so any independent
     // pair must roundtrip.
-    (value_basic(0..=6), value_basic(1..=7)).prop_map(|(u, m)| SpinStateAst::from_values(u, m))
+    (value_basic(0..=6), value_basic(1..=7)).prop_map(|(u, m)| SpinStateAst { unpaired: u, multiplicity: m })
 }
 
 /// `SpinStateAst` with at least one of `unpaired` / `multiplicity` not
@@ -273,7 +273,7 @@ fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
 /// where a fully-vacuous spin state would elide on render.
 fn non_vacuous_spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
     (value_basic(0..=6), value_basic(1..=7))
-        .prop_map(|(u, m)| SpinStateAst::from_values(u, m))
+        .prop_map(|(u, m)| SpinStateAst { unpaired: u, multiplicity: m })
         .prop_filter("non-vacuous spin", |s| !s.is_undetermined())
 }
 

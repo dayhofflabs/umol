@@ -167,19 +167,20 @@ impl TryIntoAst<BondAst> for &TableBond {
 fn lift_atom_spin(atom: &TableAtom) -> SpinStateAst {
     match (atom.unpaired_electrons, atom.multiplicity) {
         (Some(u), Some(m)) => match SpinState::try_new(u, m) {
-            Ok(s) => SpinStateAst::from_state(s),
-            Err(_) => SpinStateAst::from_values(
-                ValueAst::Lit(u as i64),
-                ValueAst::Lit(m.multiplicity() as i64),
-            ),
+            Ok(s) => s.into(),
+            Err(_) => SpinStateAst {
+                unpaired: ValueAst::Lit(u as i64),
+                multiplicity: ValueAst::Lit(u8::from(m) as i64),
+            },
         },
-        (Some(u), None) => {
-            SpinStateAst::from_values(ValueAst::Lit(u as i64), ValueAst::Undetermined)
-        }
-        (None, Some(m)) => SpinStateAst::from_values(
-            ValueAst::Undetermined,
-            ValueAst::Lit(m.multiplicity() as i64),
-        ),
+        (Some(u), None) => SpinStateAst {
+            unpaired: ValueAst::Lit(u as i64),
+            multiplicity: ValueAst::Undetermined,
+        },
+        (None, Some(m)) => SpinStateAst {
+            unpaired: ValueAst::Undetermined,
+            multiplicity: ValueAst::Lit(u8::from(m) as i64),
+        },
         (None, None) => SpinStateAst::default(),
     }
 }
@@ -187,19 +188,20 @@ fn lift_atom_spin(atom: &TableAtom) -> SpinStateAst {
 fn lift_bond_spin(bond: &TableBond) -> SpinStateAst {
     match (bond.unpaired_electrons, bond.multiplicity) {
         (Some(u), Some(m)) => match SpinState::try_new(u, m) {
-            Ok(s) => SpinStateAst::from_state(s),
-            Err(_) => SpinStateAst::from_values(
-                ValueAst::Lit(u as i64),
-                ValueAst::Lit(m.multiplicity() as i64),
-            ),
+            Ok(s) => s.into(),
+            Err(_) => SpinStateAst {
+                unpaired: ValueAst::Lit(u as i64),
+                multiplicity: ValueAst::Lit(u8::from(m) as i64),
+            },
         },
-        (Some(u), None) => {
-            SpinStateAst::from_values(ValueAst::Lit(u as i64), ValueAst::Undetermined)
-        }
-        (None, Some(m)) => SpinStateAst::from_values(
-            ValueAst::Undetermined,
-            ValueAst::Lit(m.multiplicity() as i64),
-        ),
+        (Some(u), None) => SpinStateAst {
+            unpaired: ValueAst::Lit(u as i64),
+            multiplicity: ValueAst::Undetermined,
+        },
+        (None, Some(m)) => SpinStateAst {
+            unpaired: ValueAst::Undetermined,
+            multiplicity: ValueAst::Lit(u8::from(m) as i64),
+        },
         (None, None) => SpinStateAst::default(),
     }
 }

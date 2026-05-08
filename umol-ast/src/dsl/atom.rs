@@ -1402,7 +1402,7 @@ mod tests {
         assert_eq!(ast.lone_pairs, ValueAst::Lit(0));
         assert_eq!(ast.implicit_hydrogens, ImplicitHydrogensAst::Lit(0));
         assert_eq!(ast.isotope_mass, IsotopeAst::Natural);
-        assert_eq!(ast.spin, SpinStateAst::new(0, 1));
+        assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
         assert_eq!(
             ast.constraints.get(AtomConstraintKind::Valence),
             Some(&AtomConstraint::Valence(ValueAst::Lit(0)))
@@ -1422,7 +1422,7 @@ mod tests {
         ast.lone_pairs = ValueAst::Lit(0);
         ast.implicit_hydrogens = ImplicitHydrogensAst::Lit(0);
         ast.isotope_mass = IsotopeAst::Natural;
-        ast.spin = SpinStateAst::new(0, 1);
+        ast.spin = SpinStateAst::from((0_u8, 1_u8));
         ast.constraints
             .add(AtomConstraint::Valence(ValueAst::Lit(0)));
         ast.constraints.add(AtomConstraint::AromaticValence(

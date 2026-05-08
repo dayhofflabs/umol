@@ -77,7 +77,7 @@ fn arith_expr_heavy() -> MoleculeAst {
         charge: arith(),
         implicit_hydrogens: ImplicitHydrogensAst::Expr(Expr::Neg(Box::new(Expr::Lit(1)))),
         lone_pairs: arith(),
-        spin: SpinStateAst::from_values(arith(), arith()),
+        spin: SpinStateAst { unpaired: arith(), multiplicity: arith() },
         constraints: Default::default(),
     };
     let atoms: Vec<AtomAst> = (0..20)

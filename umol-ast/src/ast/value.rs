@@ -2,6 +2,8 @@
 
 use std::collections::HashMap;
 
+use umol_shared::spin::SpinMultiplicity;
+
 use super::error::EvaluationError;
 
 /// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`].
@@ -22,6 +24,12 @@ pub enum ValueAst {
 impl From<i64> for ValueAst {
     fn from(value: i64) -> Self {
         Self::Lit(value)
+    }
+}
+
+impl From<SpinMultiplicity> for ValueAst {
+    fn from(m: SpinMultiplicity) -> Self {
+        Self::Lit(u8::from(m) as i64)
     }
 }
 
