@@ -88,16 +88,59 @@ impl FromIterator<NoncovalentBondConstraint> for NoncovalentBondConstraints {
 
 #[cfg(test)]
 mod tests {
-    use std::iter::empty;
-
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::Remapping;
 
     use super::*;
 
-    fn empty_remapping() -> IdxRemapping {
-        IdxRemapping::new(
+    #[rstest]
+    fn test_noncovalent_bond_constraints_new() {
+        let cs = NoncovalentBondConstraints::new();
+        assert!(cs.is_empty());
+        assert_eq!(cs.len(), 0);
+        assert_eq!(cs.as_slice(), &[] as &[NoncovalentBondConstraint]);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_iter() {
+        let cs = NoncovalentBondConstraints::new();
+        assert_eq!(cs.iter().count(), 0);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_retain() {
+        let mut cs = NoncovalentBondConstraints::new();
+        cs.retain(|_| true);
+        assert_eq!(cs, NoncovalentBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_clear() {
+        let mut cs = NoncovalentBondConstraints::new();
+        cs.clear();
+        assert_eq!(cs, NoncovalentBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_take() {
+        let mut cs = NoncovalentBondConstraints::new();
+        let drained: Vec<_> = cs.take().collect();
+        assert!(drained.is_empty());
+        assert_eq!(cs, NoncovalentBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_simplify_each() {
+        let mut cs = NoncovalentBondConstraints::new();
+        cs.simplify_each();
+        assert_eq!(cs, NoncovalentBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_remap() {
+        let cs = NoncovalentBondConstraints::new();
+        let remap = IdxRemapping::new(
             Remapping {
                 removed_nodes: Vec::new(),
                 removed_edges: Vec::new(),
@@ -106,25 +149,13 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
-        )
+        );
+        assert_eq!(cs.clone().remap(&remap), cs);
     }
 
     #[rstest]
-    fn test_noncovalent_bond_constraints_empty_methods() {
-        let mut cs = NoncovalentBondConstraints::new();
-        assert!(cs.is_empty());
-        assert_eq!(cs.len(), 0);
-        assert!(cs.as_slice().is_empty());
-        assert_eq!(cs.iter().count(), 0);
-        cs.retain(|_| true);
-        assert!(cs.is_empty());
-        let drained: Vec<_> = cs.take().collect();
-        assert!(drained.is_empty());
-        cs.clear();
-        assert!(cs.is_empty());
-        let from_empty: NoncovalentBondConstraints = empty().collect();
-        assert!(from_empty.is_empty());
-        let remapped = NoncovalentBondConstraints::new().remap(&empty_remapping());
-        assert!(remapped.is_empty());
+    fn test_noncovalent_bond_constraints_from_iter() {
+        let cs: NoncovalentBondConstraints = std::iter::empty().collect();
+        assert_eq!(cs, NoncovalentBondConstraints::new());
     }
 }
