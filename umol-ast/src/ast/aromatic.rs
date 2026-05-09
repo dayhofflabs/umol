@@ -46,11 +46,11 @@ impl AromaticSystemAst {
         self
     }
 
-    /// Fill `Undetermined` value-bearing fields with zero defaults: charge
-    /// to `Lit(0)`, spin to closed-shell singlet `(0, 1)`. Per-atom
+    /// Fill `Undetermined` value-bearing struct fields with zero defaults:
+    /// charge → `Lit(0)`, spin → closed-shell singlet `(0, 1)`. Per-atom
     /// `electrons` entries and `constraints` are preserved. The result is
     /// ground iff every `electrons` entry is already ground.
-    pub fn zeroed(mut self) -> Self {
+    pub fn into_ground(mut self) -> Self {
         if self.charge.is_undetermined() {
             self.charge = ValueAst::Lit(0);
         }
@@ -58,6 +58,12 @@ impl AromaticSystemAst {
             self.spin = SpinStateAst::from((0_u8, 1_u8));
         }
         self
+    }
+
+    /// Equivalent to `into_ground()`. `AromaticSystemAst` has no constraint
+    /// defaults.
+    pub fn into_zeroed(self) -> Self {
+        self.into_ground()
     }
 
     pub fn is_ground(&self) -> bool {
@@ -157,7 +163,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::from_ground_electrons(
-        AromaticSystemAst::from_electrons(vec![1; 6]).zeroed(),
+        AromaticSystemAst::from_electrons(vec![1; 6]).into_ground(),
         AromaticSystemAst {
             electrons: vec![ValueAst::Lit(1); 6],
             charge: ValueAst::Lit(0),
@@ -166,7 +172,7 @@ mod tests {
         },
     )]
     #[case::preserves_set_charge(
-        AromaticSystemAst::from_electrons(vec![1; 6]).with_charge(1_i64).zeroed(),
+        AromaticSystemAst::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
         AromaticSystemAst {
             electrons: vec![ValueAst::Lit(1); 6],
             charge: ValueAst::Lit(1),
@@ -174,10 +180,16 @@ mod tests {
             constraints: AromaticSystemConstraints::new(),
         },
     )]
-    fn test_aromatic_system_ast_zeroed(
+    fn test_aromatic_system_ast_into_ground(
         #[case] actual: AromaticSystemAst,
         #[case] expected: AromaticSystemAst,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_ast_into_zeroed() {
+        let system = AromaticSystemAst::from_electrons(vec![1; 6]);
+        assert_eq!(system.clone().into_zeroed(), system.into_ground());
     }
 }

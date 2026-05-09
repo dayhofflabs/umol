@@ -50,10 +50,15 @@ impl DativeBondAst {
     }
 
     /// No-op: `DativeBondAst` has no value-bearing fields besides `order`,
-    /// which is essential and never zeroed. Provided for API symmetry across
-    /// entity ASTs.
-    pub fn zeroed(self) -> Self {
+    /// which is essential and never filled. Provided for API symmetry.
+    pub fn into_ground(self) -> Self {
         self
+    }
+
+    /// Equivalent to `into_ground()`. `DativeBondAst` has no constraint
+    /// defaults.
+    pub fn into_zeroed(self) -> Self {
+        self.into_ground()
     }
 
     pub fn is_ground(&self) -> bool {
@@ -120,8 +125,14 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_ast_zeroed() {
+    fn test_dative_bond_ast_into_ground() {
         let bond = DativeBondAst::from_order(1);
-        assert_eq!(bond.clone().zeroed(), bond);
+        assert_eq!(bond.clone().into_ground(), bond);
+    }
+
+    #[rstest]
+    fn test_dative_bond_ast_into_zeroed() {
+        let bond = DativeBondAst::from_order(1);
+        assert_eq!(bond.clone().into_zeroed(), bond);
     }
 }

@@ -285,9 +285,10 @@ When a **predicate** (**§7.3**, **§7.5**) allows a **decimal-only** payload an
 |----------|-----------------------------------------------|
 | **`#c`** | **no** — charge **MUST** be explicit (**`#c0`**, **`#c+`**, **`#c-`**, **`#c+2`**, **`#c-2`**, …); empty **`#c`** is **invalid** |
 | **`#h`** | yes, when the payload is decimal-only; **`#h=`**, **`#h*`**, etc. are **special** (**§7.3**) |
-| **`#n` `#u` `#s` `#v` `#d` `#t` `#r` `#m`** | yes, when the payload is decimal-only |
+| **`#n` `#u` `#s` `#v` `#d` `#t` `#r`** | yes, when the payload is decimal-only |
 | **`#a`** | yes when decimal-only; **`#a*`**, **`#a+`**, **`#a!`** are **special** (**§7.3**) |
-| **`#i`** | yes, when the payload is decimal-only; bare **`#i`** denotes isotope mass **1** (unusual but permitted) |
+| **`#m`** | yes when decimal-only; **`#m*`**, **`#m+`**, **`#m!`** are **special** (**§7.3**) |
+| **`#i`** | yes, when the payload is decimal-only; bare **`#i`** denotes isotope mass **1** |
 | **`#R`** | yes when decimal-only; **`#R*`**, **`#R+`** are **special** (**§7.3**) |
 
 Bond predicates that use **decimal-only** payloads follow the same **`decimal-tail`** rule where applicable (**§7.5**).
@@ -330,7 +331,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 ### 6.2 Pattern–target match
 
-**Match as solution-set inclusion.** Each attribute slot has a **solution set** — the set of ground values the slot admits. A **literal** (e.g. **`C`**, **`3`**, **`+1`**) admits exactly itself; a **set** (**`{C,N}`**, top-level **`nat-set`**) admits its members; a **wildcard** (**`*`**) admits everything in the slot's value domain; a **`bool-expr`** admits every value for which the expression holds (**§5**); a **special-symbolic** payload (**`#h=`**, **`#i=`**, **`#a*`**, **`#a+`**, **`#a!`**, **`#R*`**, **`#R+`**) admits only its named symbolic state (**§7.3**). For a given slot, the **pattern** matches the **target** iff `solution-set(pattern)` ⊇ `solution-set(target)` — the pattern admits every value the target admits. Match is **not** symmetric.
+**Match as solution-set inclusion.** Each attribute slot has a **solution set** — the set of ground values the slot admits. A **literal** (e.g. **`C`**, **`3`**, **`+1`**) admits exactly itself; a **set** (**`{C,N}`**, top-level **`nat-set`**) admits its members; a **wildcard** (**`*`**) admits everything in the slot's value domain; a **`bool-expr`** admits every value for which the expression holds (**§5**); a **special-symbolic** payload (**`#h=`**, **`#i=`**, **`#a*`**, **`#a+`**, **`#a!`**, **`#m*`**, **`#m+`**, **`#m!`**, **`#R*`**, **`#R+`**) admits only its named symbolic state (**§7.3**). For a given slot, the **pattern** matches the **target** iff `solution-set(pattern)` ⊇ `solution-set(target)` — the pattern admits every value the target admits. Match is **not** symmetric.
 
 | pattern kind | target kind | matches iff |
 |--------------|-------------|-------------|
@@ -445,7 +446,7 @@ tag ::= [A-Za-z_]
 1. **`#c`**, **Ground** or **Query** / **Rule**: if the trimmed payload is **exactly** **`+`** or **`-`**, the formal charge is **+1** or **−1** (same meaning as **`#c+1`** / **`#c-1`**). Otherwise parse as **`value-expr`** (**§5**) (or the **Ground** subset in **§5.4**).
 2. **Any other tag**: parse the payload as **`value-expr`** (or **Ground** subset) unless the payload matches a **special** form below.
 
-**`#i`** follows the usual **§5.3** decimal-only rule: bare **`#i`** denotes mass **1**. This is chemically unusual and implementations **SHOULD** warn, but the form is **valid**.
+**`#i`** follows the usual **§5.3** decimal-only rule: bare **`#i`** denotes mass **1**.
 
 **Special predicate payloads** (trimmed; **not** parsed as boolean **`!`** — these are **opaque** lexemes for the given tag):
 
@@ -456,12 +457,15 @@ tag ::= [A-Za-z_]
 | **`*`** | **`#h`** | **Wildcard** implicit H count (**Query** / **Rule**). |
 | **`*`** | **`#a`** | **No constraint** on aromatic π contribution — equivalent to omitting **`#a`** entirely. |
 | **`+`** | **`#a`** | **Sugar** for the constraint **`?a >= 0`**: atom is a member of some aromatic system with an unspecified π contribution (**Query** / **Rule**). |
-| **`!`** | **`#a`** | Atom is **not** a member of any aromatic system. Distinct from **`#a0`**: a **`#a0`** atom *is* in an aromatic system and contributes **zero** π electrons (e.g. a carbocation with an empty p orbital participating in a ring current); a **`#a!`** atom has no aromatic membership at all. In **Ground**, a **`#a!`** atom **MUST NOT** appear in any **`:aromatic`** entry. |
+| **`!`** | **`#a`** | Atom is **not** a member of any aromatic system. Distinct from **`#a0`**: a **`#a0`** atom *is* in an aromatic system and contributes **zero** π electrons (e.g. a carbocation with an empty p orbital participating in a ring current); a **`#a!`** atom has no aromatic membership at all. Cross-checked against **`:aromatic`** membership during validation (inconsistency is a validator error, not a parse / ground error). |
+| **`*`** | **`#m`** | **No constraint** on multicenter valence — equivalent to omitting **`#m`** entirely. |
+| **`+`** | **`#m`** | **Sugar** for the constraint **`?m >= 0`**: atom is a member of some multicenter bond with an unspecified multicenter-valence count (**Query** / **Rule**). |
+| **`!`** | **`#m`** | Atom is **not** a member of any multicenter bond. Parallels **`#a!`**; cross-checked against **`:multicenter`** membership during validation. |
 | **`*`** | **`#R`** | **No constraint** on ring count — equivalent to omitting **`#R`** entirely. |
 | **`+`** | **`#R`** | **Sugar** for the constraint **`?r >= 1`**: atom is in **at least one** ring (**Query** / **Rule**). |
 | **`+`** / **`-`** (alone) | **`#c`** | **+1** / **−1** formal charge (**§7.3** above). |
 
-Other **`#h`** / **`#a`** payloads use the usual **`value-expr`** / **`decimal-tail`** rules (**§5**, **§5.3**).
+Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / **`decimal-tail`** rules (**§5**, **§5.3**).
 
 | Tag | Meaning |
 |-----|---------|
@@ -475,7 +479,7 @@ Other **`#h`** / **`#a`** payloads use the usual **`value-expr`** / **`decimal-t
 | **`#d`** | Dative **donated** pair count (electrons donated **by** this atom) |
 | **`#t`** | Dative **accepted** pair count (“accepted”; electrons accepted **by** this atom) |
 | **`#a`** | Aromatic π contribution; **special** **`#a*`**, **`#a+`**, **`#a!`** (**§7.3**) |
-| **`#m`** | Multicenter valence |
+| **`#m`** | Multicenter valence; **special** **`#m*`**, **`#m+`**, **`#m!`** (**§7.3**) |
 | **`#D`** | **Degree**: number of neighbors in the molecular graph (SMARTS `D`). Derived predicate evaluated against the target; **not** a ground atom field. |
 | **`#X`** | **Connectivity**: degree plus implicit-H count (SMARTS `X`). Derived. |
 | **`#x`** | **Ring connectivity**: number of ring bonds at the atom (SMARTS `x`). Derived. |
@@ -660,8 +664,8 @@ dative-bond-constraint-form ::=
     { :ring-count value-expr }
   | { :ring-size value-expr }
 
-aromatic-system-constraint-form  ::= (* uninhabited — no value-only variants yet *)
-multicenter-bond-constraint-form ::= (* uninhabited — no value-only variants yet *)
+aromatic-system-constraint-form  ::= { :electron-count value-expr }
+multicenter-bond-constraint-form ::= { :electron-count value-expr }
 noncovalent-bond-constraint-form ::= (* uninhabited — no value-only variants yet *)
 
 anchor-spec ::=
@@ -682,7 +686,7 @@ noncovalent-bond-ref ::= int | keyword
 
 **Ref resolution.** An integer ref is the **positional** index into the corresponding entity vector on the molecule map: **`atom-ref`** → **`:atoms`**, **`bond-ref`** → **`:bonds`**, **`dative-bond-ref`** → **`:dative`**, **`aromatic-system-ref`** → **`:aromatic`**, **`multicenter-bond-ref`** → **`:multicenter`**, **`noncovalent-bond-ref`** → **`:noncovalent`**. A keyword ref resolves against the **`:id`** declared on the corresponding entry (**§4**). On serialization, implementations **MUST** emit the **`:id`** keyword when one is declared on the referenced entry, falling back to the positional integer otherwise.
 
-**Uninhabited narrow inner forms.** **`:aromatic-system`**, **`:multicenter-bond`**, and **`:noncovalent-bond`** narrow leaves are reserved keys whose inner **`*-constraint-form`** has no inhabited variants; every cross-entity predicate on those entities is a relational leaf instead.
+**Narrow inner forms for DAMN entities.** **`:aromatic-system`** and **`:multicenter-bond`** narrow leaves carry only the **`:electron-count`** value-only variant; every other predicate on those entities is a relational leaf instead. **`:noncovalent-bond`** narrow leaves have no inhabited inner form yet; every noncovalent predicate is a relational leaf.
 
 **Anchor cardinality.** Each keyed slot in **`anchor-spec`** is optional and may appear at most once; if present, it is a vector of **`(target-side-ref, pattern-side-ref)`** pairs of the same entity kind. An empty **`anchor-spec`** denotes an unanchored sub-pattern (the pattern can embed anywhere). Target-side refs resolve against the outer molecule's metadata; pattern-side refs against the pattern molecule's metadata.
 
@@ -690,12 +694,23 @@ noncovalent-bond-ref ::= int | keyword
 
 **Sub-pattern materialization.** A **`:sub-pattern`** **`:pattern`** is a full **molecule-map**; its inner constraints are evaluated independently from the outer constraint tree. The pattern carries **no defaults** — values pass through verbatim — so a pattern's atom **`charge: undetermined`** stays **`undetermined`** at match time and behaves as a wildcard (**§5.4**); zero-defaulting that would apply to a ground input does **not** apply inside a pattern.
 
-**Sugar (inline string equivalents).** Narrow leaves whose entity also has a string subgrammar **`packed-string`** form (atom **§7.3**, bond **§7.5**, dative **§7.12**) admit two interchangeable serializations:
+**Sugar (inline string equivalents).** Narrow leaves whose entity has a string subgrammar admit two interchangeable serializations:
 
 - the inline **`#tag`** payload on the entity's **`:type`** string (or, for atoms, on the atom literal directly);
 - the **`{:<entity> [ref form]}`** entry in **`:constraints`**.
 
-Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:and`** / **`:or`** / **`:not`** / **`:sub-pattern`**) **MAY** be emitted in the sugared inline form; nested predicates **MUST** be emitted as **`:constraints`** entries since the inline form has no logical context. Aromatic-system, multicenter, noncovalent, and *any* relational leaf has **no** inline form.
+Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:and`** / **`:or`** / **`:not`** / **`:sub-pattern`**) **MAY** be emitted in the sugared inline form; nested predicates **MUST** be emitted as **`:constraints`** entries since the inline form has no logical context.
+
+**Inline-form coverage by entity:**
+
+- **Atom** (**§7.3**): all `atom-constraint-form` variants except the derived ones (`#D`, `#X`, `#x`, `#H`, `#R`, `#r`) lift to inline atom predicates; the derived predicates also have inline tags but are pattern-only.
+- **Bond** (**§7.5**): all `bond-constraint-form` variants (`:aromatic`, `:ring-count`, `:ring-size`) have inline forms (`#a`, `#R`, `#r`).
+- **Dative bond** (**§7.12**): both `dative-bond-constraint-form` variants (`:ring-count`, `:ring-size`) have inline forms (`#R`, `#r`).
+- **Aromatic system** (**§7.10**): the single `aromatic-system-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
+- **Multicenter bond** (**§7.11**): the single `multicenter-bond-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
+- **Noncovalent bond** (**§7.13**): `noncovalent-bond-constraint-form` is uninhabited; no inline-form question arises.
+
+**Relational leaves** (**§7.9** `relational-constraint`) and **molecule-scope leaves** (`molecule-constraint`) have **no** inline form regardless of which entity they reference.
 
 **Lift / inline.** The two storage scopes — inline on the entity (`AtomAst::constraints` etc.) and at molecule scope (`MoleculeAst::constraints` as `{:atom [ref form]}` peers) — are interchangeable for the inline-capable narrow leaves. Implementations **SHOULD** expose:
 
@@ -722,7 +737,7 @@ aromatic-predicate ::= '#' tag payload
 
 **`#c` (aromatic-system formal charge).** After **`#c`**, parse **either** a full **`value-expr`** (**§5**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. (So e.g. **`#c+2`** is charge **+2** via **`value-expr`**, not **`#c+`** followed by junk.) Same convention as atom (**§7.3**) and bond (**§7.5**) **`#c`**.
 
-**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`value-expr`** (**§5**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.3** for decimal-only slots). **`#e`** omitted means **1** π-electron; this is chemically unusual but grammatically valid.
+**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`value-expr`** (**§5**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.3** for decimal-only slots). **`#e`** omitted means **1** π-electron.
 
 | Tag | Meaning (aromatic-system namespace) | Storage |
 |-----|---------------------------------------|----------|
@@ -751,7 +766,7 @@ multicenter-predicate ::= '#' tag payload
 
 **`#c` (multicenter-bond formal charge).** After **`#c`**, parse **either** a full **`value-expr`** (**§5**) **first**, **or** if that fails, a payload consisting **solely** of **`+`** (meaning **+1**) or **solely** of **`-`** (meaning **−1**), with **no** space between **`c`** and **`+`** / **`-`**. Same convention as atom (**§7.3**), bond (**§7.5**), and aromatic (**§7.10**) **`#c`**.
 
-**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`value-expr`** (**§5**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.3** for decimal-only slots). **`#e`** omitted means **1** bonded electron; chemically unusual but grammatically valid.
+**`#u` / `#s` / `#e`.** After **`#u`**, **`#s`**, or **`#e`**, parse a **`value-expr`** (**§5**) **first**; if that fails, the **omitted** payload means numeric slot **1** (same convention as **§5.3** for decimal-only slots). **`#e`** omitted means **1** bonded electron.
 
 | Tag | Meaning (multicenter-bond namespace) | Storage |
 |-----|----------------------------------------|----------|

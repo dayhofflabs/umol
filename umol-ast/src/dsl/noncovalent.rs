@@ -72,7 +72,6 @@ impl ToEdn for NoncovalentBondDsl {
 impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
 
-
     fn from_ast(ast: &NoncovalentBondAst, _cfg: &Self::Ctx) -> Self {
         NoncovalentBondDsl(ast.clone())
     }
@@ -275,6 +274,7 @@ impl ToEdn for NoncovalentBondConstraintDsl {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_edn::read_string;
 
     use super::*;
 
@@ -341,14 +341,14 @@ mod tests {
     #[case::undetermined(r##""*""##)]
     fn test_noncovalent_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = NoncovalentBondDsl::from_edn_str(input).unwrap();
-        let tree = umol_edn::read_string(input).unwrap();
+        let tree = read_string(input).unwrap();
         let via_tree = NoncovalentBondDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
     }
 
     #[rstest]
     fn test_noncovalent_bond_constraint_dsl_from_edn_errors() {
-        let edn = umol_edn::read_string("{:contains 1}").unwrap();
+        let edn = read_string("{:contains 1}").unwrap();
         let err = NoncovalentBondConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::TypeMismatch { .. }));
     }

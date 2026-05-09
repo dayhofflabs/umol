@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{repeat, terminated};
 use winnow::error::ErrMode;
@@ -78,7 +78,6 @@ impl ToEdn for AromaticSystemDsl {
 
 impl FromAst<AromaticSystemAst> for AromaticSystemDsl {
     type Ctx = AromaticSystemDefaults;
-
 
     fn from_ast(ast: &AromaticSystemAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
@@ -321,9 +320,9 @@ impl<'de> FromEdn<'de> for AromaticSystemConstraintDsl {
             }
         };
         let mut entries = map.iter();
-        let (key, value) = entries.next().ok_or_else(|| DeError::Custom(
-            "expected single-key map for aromatic-system constraint".to_string(),
-        ))?;
+        let (key, value) = entries.next().ok_or_else(|| {
+            DeError::Custom("expected single-key map for aromatic-system constraint".to_string())
+        })?;
         if entries.next().is_some() {
             return Err(DeError::Custom(
                 "aromatic-system constraint map has multiple keys".to_string(),
@@ -357,9 +356,9 @@ impl ToEdn for AromaticSystemConstraintDsl {
         match self {
             Self::ElectronCount(v) => {
                 let value_edn = super::value::ValueDsl(v.clone()).to_edn();
-                let mut map = umol_edn::EdnMap::with_capacity(1);
+                let mut map = EdnMap::with_capacity(1);
                 map.insert(
-                    Edn::Keyword(umol_edn::EdnKeyword::owned("electron-count".to_string())),
+                    Edn::Keyword(EdnKeyword::owned("electron-count".to_string())),
                     value_edn,
                 );
                 Edn::Map(map)
@@ -373,6 +372,7 @@ impl ToEdn for AromaticSystemConstraintDsl {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_edn::read_string;
 
     use super::*;
     use crate::ast::constraint::AromaticSystemConstraints;
@@ -487,14 +487,14 @@ mod tests {
     #[case::full(r##""#c0#u0#s1#e6""##)]
     fn test_aromatic_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = AromaticSystemDsl::from_edn_str(input).unwrap();
-        let tree = umol_edn::read_string(input).unwrap();
+        let tree = read_string(input).unwrap();
         let via_tree = AromaticSystemDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
     }
 
     #[rstest]
     fn test_aromatic_system_constraint_dsl_from_edn_errors() {
-        let edn = umol_edn::read_string("{:contains 1}").unwrap();
+        let edn = read_string("{:contains 1}").unwrap();
         let err = AromaticSystemConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }

@@ -50,11 +50,11 @@ impl BondAst {
         self
     }
 
-    /// Fill `Undetermined` value-bearing fields with zero defaults: charge
-    /// to `Lit(0)`, spin to closed-shell singlet `(0, 1)`. Existing values
-    /// and `constraints` are preserved. If `order` is `Undetermined`, the
-    /// result is not ground.
-    pub fn zeroed(mut self) -> Self {
+    /// Fill `Undetermined` value-bearing struct fields with zero defaults:
+    /// charge → `Lit(0)`, spin → closed-shell singlet `(0, 1)`. Existing
+    /// values and `constraints` are preserved. The result is ground iff
+    /// `order` is already ground.
+    pub fn into_ground(mut self) -> Self {
         if self.charge.is_undetermined() {
             self.charge = ValueAst::Lit(0);
         }
@@ -62,6 +62,11 @@ impl BondAst {
             self.spin = SpinStateAst::from((0_u8, 1_u8));
         }
         self
+    }
+
+    /// Equivalent to `into_ground()`. `BondAst` has no constraint defaults.
+    pub fn into_zeroed(self) -> Self {
+        self.into_ground()
     }
 
     pub fn is_ground(&self) -> bool {
@@ -143,7 +148,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::from_ground_order(
-        BondAst::from_order(1).zeroed(),
+        BondAst::from_order(1).into_ground(),
         BondAst {
             order: ValueAst::Lit(1),
             charge: ValueAst::Lit(0),
@@ -152,7 +157,7 @@ mod tests {
         },
     )]
     #[case::preserves_set_charge(
-        BondAst::from_order(2).with_charge(1_i64).zeroed(),
+        BondAst::from_order(2).with_charge(1_i64).into_ground(),
         BondAst {
             order: ValueAst::Lit(2),
             charge: ValueAst::Lit(1),
@@ -160,7 +165,13 @@ mod tests {
             constraints: BondConstraints::new(),
         },
     )]
-    fn test_bond_ast_zeroed(#[case] actual: BondAst, #[case] expected: BondAst) {
+    fn test_bond_ast_into_ground(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_bond_ast_into_zeroed() {
+        let bond = BondAst::from_order(1);
+        assert_eq!(bond.clone().into_zeroed(), bond.into_ground());
     }
 }

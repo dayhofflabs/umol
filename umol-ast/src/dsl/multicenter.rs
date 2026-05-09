@@ -78,7 +78,6 @@ impl ToEdn for MulticenterBondDsl {
 impl FromAst<MulticenterBondAst> for MulticenterBondDsl {
     type Ctx = MulticenterBondDefaults;
 
-
     fn from_ast(ast: &MulticenterBondAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
         lower_multicenter_bond(&mut out, cfg);
@@ -321,9 +320,7 @@ impl<'de> FromEdn<'de> for MulticenterBondConstraintDsl {
         };
         let mut entries = map.iter();
         let (key, value) = entries.next().ok_or_else(|| {
-            DeError::Custom(
-                "expected single-key map for multicenter-bond constraint".to_string(),
-            )
+            DeError::Custom("expected single-key map for multicenter-bond constraint".to_string())
         })?;
         if entries.next().is_some() {
             return Err(DeError::Custom(
@@ -375,6 +372,7 @@ impl ToEdn for MulticenterBondConstraintDsl {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_edn::read_string;
 
     use super::*;
     use crate::ast::constraint::MulticenterBondConstraints;
@@ -460,14 +458,14 @@ mod tests {
     #[case::full(r##""#c0#u0#s1#e2""##)]
     fn test_multicenter_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = MulticenterBondDsl::from_edn_str(input).unwrap();
-        let tree = umol_edn::read_string(input).unwrap();
+        let tree = read_string(input).unwrap();
         let via_tree = MulticenterBondDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
     }
 
     #[rstest]
     fn test_multicenter_bond_constraint_dsl_from_edn_errors() {
-        let edn = umol_edn::read_string("{:contains 1}").unwrap();
+        let edn = read_string("{:contains 1}").unwrap();
         let err = MulticenterBondConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }

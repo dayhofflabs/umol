@@ -29,6 +29,50 @@ pub enum AtomConstraint {
 }
 
 impl AtomConstraint {
+    pub fn valence(v: impl Into<ValueAst>) -> Self {
+        Self::Valence(v.into())
+    }
+
+    pub fn aromatic_valence(v: AromaticValenceAst) -> Self {
+        Self::AromaticValence(v)
+    }
+
+    pub fn multicenter_valence(v: MulticenterValenceAst) -> Self {
+        Self::MulticenterValence(v)
+    }
+
+    pub fn donated_pairs(v: impl Into<ValueAst>) -> Self {
+        Self::DonatedPairs(v.into())
+    }
+
+    pub fn accepted_pairs(v: impl Into<ValueAst>) -> Self {
+        Self::AcceptedPairs(v.into())
+    }
+
+    pub fn degree(v: impl Into<ValueAst>) -> Self {
+        Self::Degree(v.into())
+    }
+
+    pub fn connectivity(v: impl Into<ValueAst>) -> Self {
+        Self::Connectivity(v.into())
+    }
+
+    pub fn ring_connectivity(v: impl Into<ValueAst>) -> Self {
+        Self::RingConnectivity(v.into())
+    }
+
+    pub fn total_hydrogens(v: impl Into<ValueAst>) -> Self {
+        Self::TotalHydrogens(v.into())
+    }
+
+    pub fn ring_count(v: impl Into<ValueAst>) -> Self {
+        Self::RingCount(v.into())
+    }
+
+    pub fn ring_size(v: impl Into<ValueAst>) -> Self {
+        Self::RingSize(v.into())
+    }
+
     pub fn kind(&self) -> AtomConstraintKind {
         self.into()
     }
@@ -80,6 +124,10 @@ pub enum AromaticValenceAst {
 }
 
 impl AromaticValenceAst {
+    pub fn aromatic(v: impl Into<ValueAst>) -> Self {
+        Self::Aromatic(v.into())
+    }
+
     pub fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -106,6 +154,10 @@ pub enum MulticenterValenceAst {
 }
 
 impl MulticenterValenceAst {
+    pub fn multicenter(v: impl Into<ValueAst>) -> Self {
+        Self::Multicenter(v.into())
+    }
+
     pub fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -226,6 +278,27 @@ impl FromIterator<AtomConstraint> for AtomConstraints {
     }
 }
 
+impl IntoIterator for AtomConstraints {
+    type Item = AtomConstraint;
+    type IntoIter = smallvec::IntoIter<[AtomConstraint; 2]>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.entries.into_iter()
+    }
+}
+
+impl From<AtomConstraint> for AtomConstraints {
+    fn from(c: AtomConstraint) -> Self {
+        Self::from_iter([c])
+    }
+}
+
+impl From<Vec<AtomConstraint>> for AtomConstraints {
+    fn from(cs: Vec<AtomConstraint>) -> Self {
+        Self::from_iter(cs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -262,7 +335,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_set_inserts_and_returns_none() {
+    fn test_atom_constraints_set() {
         let mut cs = AtomConstraints::new();
         let prev = cs.add(AtomConstraint::Valence(ValueAst::Lit(4)));
         assert_eq!(prev, None);
@@ -275,7 +348,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_constraints_set_replaces_same_kind() {
+    fn test_atom_constraints_set_replace() {
         let mut cs = AtomConstraints::new();
         cs.add(AtomConstraint::Valence(ValueAst::Lit(3)));
         let prev = cs.add(AtomConstraint::Valence(ValueAst::Lit(4)));
@@ -524,5 +597,84 @@ mod tests {
         );
         let after = cs.clone().remap(&remap);
         assert_eq!(after, cs);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::valence(AtomConstraint::valence(4_i64), AtomConstraint::Valence(ValueAst::Lit(4)))]
+    #[case::donated_pairs(AtomConstraint::donated_pairs(1_i64), AtomConstraint::DonatedPairs(ValueAst::Lit(1)))]
+    #[case::accepted_pairs(AtomConstraint::accepted_pairs(2_i64), AtomConstraint::AcceptedPairs(ValueAst::Lit(2)))]
+    #[case::degree(AtomConstraint::degree(3_i64), AtomConstraint::Degree(ValueAst::Lit(3)))]
+    #[case::connectivity(AtomConstraint::connectivity(4_i64), AtomConstraint::Connectivity(ValueAst::Lit(4)))]
+    #[case::ring_connectivity(AtomConstraint::ring_connectivity(2_i64), AtomConstraint::RingConnectivity(ValueAst::Lit(2)))]
+    #[case::total_hydrogens(AtomConstraint::total_hydrogens(3_i64), AtomConstraint::TotalHydrogens(ValueAst::Lit(3)))]
+    #[case::ring_count(AtomConstraint::ring_count(1_i64), AtomConstraint::RingCount(ValueAst::Lit(1)))]
+    #[case::ring_size(AtomConstraint::ring_size(6_i64), AtomConstraint::RingSize(ValueAst::Lit(6)))]
+    #[case::aromatic_valence(
+        AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
+        AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
+    )]
+    #[case::multicenter_valence(
+        AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
+    )]
+    fn test_atom_constraint_constructors(
+        #[case] actual: AtomConstraint,
+        #[case] expected: AtomConstraint,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_valence_ast_aromatic() {
+        assert_eq!(
+            AromaticValenceAst::aromatic(1_i64),
+            AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_valence_ast_multicenter() {
+        assert_eq!(
+            MulticenterValenceAst::multicenter(2_i64),
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
+        );
+    }
+
+    #[rstest]
+    fn test_atom_constraints_from_atom_constraint() {
+        let cs: AtomConstraints = AtomConstraint::valence(4_i64).into();
+        assert_eq!(cs.len(), 1);
+        assert_eq!(
+            cs.get(AtomConstraintKind::Valence),
+            Some(&AtomConstraint::Valence(ValueAst::Lit(4))),
+        );
+    }
+
+    #[rstest]
+    fn test_atom_constraints_from_vec() {
+        let cs: AtomConstraints = vec![
+            AtomConstraint::valence(4_i64),
+            AtomConstraint::donated_pairs(1_i64),
+        ].into();
+        assert_eq!(cs.len(), 2);
+        assert_eq!(cs.get(AtomConstraintKind::Valence), Some(&AtomConstraint::Valence(ValueAst::Lit(4))));
+        assert_eq!(cs.get(AtomConstraintKind::DonatedPairs), Some(&AtomConstraint::DonatedPairs(ValueAst::Lit(1))));
+    }
+
+    #[rstest]
+    fn test_atom_constraints_into_iter() {
+        let cs = AtomConstraints::from_iter([
+            AtomConstraint::valence(4_i64),
+            AtomConstraint::degree(3_i64),
+        ]);
+        let collected: Vec<AtomConstraint> = cs.into_iter().collect();
+        assert_eq!(
+            collected,
+            vec![
+                AtomConstraint::Valence(ValueAst::Lit(4)),
+                AtomConstraint::Degree(ValueAst::Lit(3)),
+            ],
+        );
     }
 }

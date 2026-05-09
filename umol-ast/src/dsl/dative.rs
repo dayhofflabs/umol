@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{preceded, repeat, terminated};
 use winnow::error::ErrMode;
@@ -102,7 +102,7 @@ pub(crate) fn expand_dative_keyword(name: &str) -> Option<&'static str> {
 impl ToEdn for DativeBondDsl {
     fn to_edn(&self) -> Edn<'static> {
         match dative_keyword_for(&self.0) {
-            Some(kw) => Edn::Keyword(umol_edn::EdnKeyword::owned(kw.to_string())),
+            Some(kw) => Edn::Keyword(EdnKeyword::owned(kw.to_string())),
             None => Edn::Str(Cow::Owned(self.to_string())),
         }
     }
@@ -128,7 +128,6 @@ fn dative_keyword_for(ast: &DativeBondAst) -> Option<&'static str> {
 
 impl FromAst<DativeBondAst> for DativeBondDsl {
     type Ctx = DativeBondDefaults;
-
 
     fn from_ast(ast: &DativeBondAst, _cfg: &Self::Ctx) -> Self {
         DativeBondDsl(ast.clone())
@@ -323,8 +322,8 @@ impl ToEdn for DativeBondConstraintDsl {
             Self::RingCount(v) => ("ring-count", ValueDsl::from_ast(v, &()).to_edn()),
             Self::RingSize(v) => ("ring-size", ValueDsl::from_ast(v, &()).to_edn()),
         };
-        let mut m = umol_edn::EdnMap::with_capacity(1);
-        m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
+        let mut m = EdnMap::with_capacity(1);
+        m.insert(Edn::Keyword(EdnKeyword::owned(key.into())), value);
         Edn::Map(m)
     }
 }
@@ -353,6 +352,7 @@ impl DativeBondConstraintDsl {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_edn::read_string;
 
     use super::*;
     use crate::ast::constraint::DativeBondConstraints;
@@ -454,14 +454,14 @@ mod tests {
     #[case::triple(":triple", DativeBondAst::from_order(3))]
     #[case::quadruple(":quadruple", DativeBondAst::from_order(4))]
     fn test_dative_dsl_keyword_shorthand(#[case] input: &str, #[case] expected: DativeBondAst) {
-        let edn = umol_edn::read_string(input).unwrap();
+        let edn = read_string(input).unwrap();
         let dsl = DativeBondDsl::from_edn(&edn).unwrap();
         assert_eq!(dsl.0, expected);
     }
 
     #[rstest]
     fn test_dative_dsl_keyword_shorthand_unknown_rejected() {
-        let edn = umol_edn::read_string(":bogus").unwrap();
+        let edn = read_string(":bogus").unwrap();
         let err = DativeBondDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }
@@ -472,7 +472,7 @@ mod tests {
     #[case::ring_count_and_size(r##""1#R2#r6""##)]
     fn test_dative_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = DativeBondDsl::from_edn_str(input).unwrap();
-        let tree = umol_edn::read_string(input).unwrap();
+        let tree = read_string(input).unwrap();
         let via_tree = DativeBondDsl::from_edn(&tree).unwrap();
         assert_eq!(via_stream, via_tree);
     }
@@ -489,7 +489,7 @@ mod tests {
     ) {
         let dsl = DativeBondConstraintDsl::from_ast(&input);
         let edn = dsl.clone().to_edn();
-        let expected = umol_edn::read_string(edn_source).unwrap();
+        let expected = read_string(edn_source).unwrap();
         assert_eq!(edn, expected, "render mismatch");
         let parsed = DativeBondConstraintDsl::from_edn(&edn).unwrap();
         let back = parsed.into_ast();
@@ -504,7 +504,7 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_constraint_dsl_rejects_unknown_key() {
-        let edn = umol_edn::read_string("{:bogus 1}").unwrap();
+        let edn = read_string("{:bogus 1}").unwrap();
         let err = DativeBondConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::UnknownField { .. }));
     }

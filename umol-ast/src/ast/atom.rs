@@ -4,7 +4,9 @@ use std::mem;
 
 use umol_shared::element::Element;
 
-use super::constraint::AtomConstraints;
+use super::constraint::{
+    AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
+};
 use super::spin::SpinStateAst;
 use super::value::{Expr, ValueAst};
 
@@ -64,17 +66,34 @@ impl AtomAst {
         self
     }
 
-    pub fn with_constraints(mut self, constraints: impl Into<AtomConstraints>) -> Self {
-        self.constraints = constraints.into();
+    /// Add a single constraint, replacing any existing entry of the same
+    /// kind (last-wins per `AtomConstraints::add`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<AtomConstraint>) -> Self {
+        self.constraints.add(constraint.into());
         self
     }
 
-    /// Fill `Undetermined` value-bearing fields with zero defaults: isotope
-    /// mass to `Natural`, charge / implicit hydrogens / lone pairs to `Lit(0)`,
-    /// spin to closed-shell singlet `(0, 1)`. Existing literal or expression
-    /// values are preserved. `element` and `constraints` are not modified;
-    /// if `element` is `Undetermined`, the result is not ground.
-    pub fn zeroed(mut self) -> Self {
+    /// Add each constraint from the iterator, replacing any existing entry
+    /// of the same kind (last-wins per `AtomConstraints::add`). Does not
+    /// clear existing constraints; use `atom.constraints.clear()` or direct
+    /// field assignment for wipe-and-replace.
+    pub fn with_constraints<I>(mut self, constraints: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<AtomConstraint>,
+    {
+        for c in constraints {
+            self.constraints.add(c.into());
+        }
+        self
+    }
+
+    /// Fill `Undetermined` value-bearing struct fields with zero defaults
+    /// (isotope→Natural, charge / implicit hydrogens / lone pairs → 0, spin →
+    /// closed-shell singlet). Existing literal or expression values and all
+    /// constraints are preserved. The result is ground iff `element` is
+    /// already ground.
+    pub fn into_ground(mut self) -> Self {
         if self.isotope_mass.is_undetermined() {
             self.isotope_mass = IsotopeAst::Natural;
         }
@@ -89,6 +108,45 @@ impl AtomAst {
         }
         if self.spin.is_undetermined() {
             self.spin = SpinStateAst::from((0_u8, 1_u8));
+        }
+        self
+    }
+
+    /// `into_ground()` plus chemistry-default constraints for an isolated,
+    /// non-bonded, non-aromatic, non-multicenter atom: `Valence(0)`,
+    /// `DonatedPairs(0)`, `AcceptedPairs(0)`, `MulticenterValence(NotMulticenter)`,
+    /// `AromaticValence(NotAromatic)`. Each is added only if the corresponding
+    /// constraint kind is not already present; existing entries are preserved.
+    /// Matches the `atom_zeroed!` / `mol_zeroed!` macro semantics.
+    pub fn into_zeroed(mut self) -> Self {
+        self = self.into_ground();
+        if !self.constraints.contains(AtomConstraintKind::Valence) {
+            self.constraints
+                .add(AtomConstraint::Valence(ValueAst::Lit(0)));
+        }
+        if !self.constraints.contains(AtomConstraintKind::DonatedPairs) {
+            self.constraints
+                .add(AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
+        }
+        if !self.constraints.contains(AtomConstraintKind::AcceptedPairs) {
+            self.constraints
+                .add(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
+        }
+        if !self
+            .constraints
+            .contains(AtomConstraintKind::MulticenterValence)
+        {
+            self.constraints.add(AtomConstraint::MulticenterValence(
+                MulticenterValenceAst::NotMulticenter,
+            ));
+        }
+        if !self
+            .constraints
+            .contains(AtomConstraintKind::AromaticValence)
+        {
+            self.constraints.add(AtomConstraint::AromaticValence(
+                AromaticValenceAst::NotAromatic,
+            ));
         }
         self
     }
@@ -417,6 +475,151 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{AtomConstraint, AtomConstraintKind};
+    use crate::atom_zeroed;
+
+    #[rstest]
+    fn test_atom_ast_from_element() {
+        assert_eq!(
+            AtomAst::from_element(Element::C),
+            AtomAst {
+                element: ElementAst::Lit(Element::C),
+                ..Default::default()
+            },
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::with_element_ast(AtomAst::default().with_element(ElementAst::Lit(Element::C)), AtomAst { element: ElementAst::Lit(Element::C), ..Default::default() })]
+    #[case::with_element_primitive(AtomAst::default().with_element(Element::N), AtomAst { element: ElementAst::Lit(Element::N), ..Default::default() })]
+    #[case::with_isotope_mass(AtomAst::default().with_isotope_mass(12_i64), AtomAst { isotope_mass: IsotopeAst::Lit(12), ..Default::default() })]
+    #[case::with_charge(AtomAst::default().with_charge(1_i64), AtomAst { charge: ValueAst::Lit(1), ..Default::default() })]
+    #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Lit(3), ..Default::default() })]
+    #[case::with_lone_pairs(AtomAst::default().with_lone_pairs(2_i64), AtomAst { lone_pairs: ValueAst::Lit(2), ..Default::default() })]
+    #[case::with_spin_tuple(AtomAst::default().with_spin((0_u8, 1_u8)), AtomAst { spin: SpinStateAst::from((0_u8, 1_u8)), ..Default::default() })]
+    #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)),
+        AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))]),..Default::default() })]
+    #[case::with_constraints_extends(
+        AtomAst::default()
+            .with_constraint(AtomConstraint::valence(4_i64))
+            .with_constraints([AtomConstraint::donated_pairs(1_i64), AtomConstraint::ring_size(6_i64)]),
+        AtomAst { constraints: AtomConstraints::from_iter([
+            AtomConstraint::Valence(ValueAst::Lit(4)),
+            AtomConstraint::DonatedPairs(ValueAst::Lit(1)),
+            AtomConstraint::RingSize(ValueAst::Lit(6)),
+        ]), ..Default::default() },
+    )]
+    #[case::with_constraint_replaces_same_kind(
+        AtomAst::default()
+            .with_constraint(AtomConstraint::valence(3_i64))
+            .with_constraint(AtomConstraint::valence(4_i64)),
+        AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))]), ..Default::default() },
+    )]
+    fn test_atom_ast_with_methods(#[case] actual: AtomAst, #[case] expected: AtomAst) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::from_element(AtomAst::from_element(Element::C).into_ground(),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
+        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() })]
+    #[case::with_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_ground(),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(1), implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
+        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() })]
+    #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)).into_ground(),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
+        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))]) })]
+    fn test_atom_ast_into_ground(#[case] actual: AtomAst, #[case] expected: AtomAst) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::element(AtomAst::from_element(Element::C).into_zeroed(), atom_zeroed!("C"))]
+    #[case::element_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_zeroed(), atom_zeroed!("C #i= #c+"))]
+    #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(3_i64)).into_zeroed(),
+        atom_zeroed!("C #v3"))]
+    fn test_atom_ast_into_zeroed(#[case] actual: AtomAst, #[case] expected: AtomAst) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::default_(AtomAst::default(), false)]
+    #[case::all_ground(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AtomConstraints::new() }, true)]
+    #[case::element_undetermined(AtomAst { element: ElementAst::Undetermined, isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AtomConstraints::new() }, false)]
+    #[case::isotope_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Undetermined, charge: ValueAst::Lit(0),
+        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AtomConstraints::new() }, false)]
+    #[case::charge_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Undetermined,
+        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AtomConstraints::new() }, false)]
+    #[case::hydrogens_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+        implicit_hydrogens: ImplicitHydrogensAst::Undetermined, lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AtomConstraints::new() }, false)]
+    #[case::lone_pairs_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Undetermined, spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AtomConstraints::new() }, false)]
+    #[case::spin_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::default(),
+        constraints: AtomConstraints::new() }, false)]
+    fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
+        assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard_vs_ground(AtomAst::default(), AtomAst::from_element(Element::C), true)]
+    #[case::same_element(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C), true)]
+    #[case::element_mismatch(AtomAst::from_element(Element::C), AtomAst::from_element(Element::N), false)]
+    #[case::pattern_more_specific_than_target(AtomAst::from_element(Element::C), AtomAst::default(), false)]
+    #[case::charge_mismatch(AtomAst::from_element(Element::C).with_charge(1_i64), AtomAst::from_element(Element::C).with_charge(0_i64), false)]
+    #[case::charge_wildcard_pattern(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C).with_charge(1_i64), true)]
+    #[case::isotope_mismatch(AtomAst::from_element(Element::C).with_isotope_mass(12_i64), AtomAst::from_element(Element::C).with_isotope_mass(13_i64), false)]
+    #[case::hydrogens_mismatch(AtomAst::from_element(Element::C).with_implicit_hydrogens(3_i64), AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), false)]
+    #[case::lone_pairs_mismatch(AtomAst::from_element(Element::C).with_lone_pairs(1_i64), AtomAst::from_element(Element::C).with_lone_pairs(2_i64), false)]
+    #[case::spin_mismatch(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)), false)]
+    fn test_atom_ast_matches(
+        #[case] pattern: AtomAst,
+        #[case] target: AtomAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    fn test_atom_ast_simplify_values() {
+        let mut atom = AtomAst {
+            element: ElementAst::Lit(Element::C),
+            isotope_mass: IsotopeAst::Expr(Expr::Lit(12)),
+            charge: ValueAst::Expr(Expr::Lit(1)),
+            implicit_hydrogens: ImplicitHydrogensAst::Expr(Expr::Lit(3)),
+            lone_pairs: ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(2)))),
+            spin: SpinStateAst {
+                unpaired: ValueAst::Expr(Expr::Lit(0)),
+                multiplicity: ValueAst::Expr(Expr::Lit(1)),
+            },
+            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(
+                Expr::Lit(4),
+            ))]),
+        };
+        atom.simplify_values();
+        assert_eq!(atom.isotope_mass, IsotopeAst::Lit(12));
+        assert_eq!(atom.charge, ValueAst::Lit(1));
+        assert_eq!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(3));
+        assert_eq!(atom.lone_pairs, ValueAst::Lit(-2));
+        assert_eq!(atom.spin.unpaired, ValueAst::Lit(0));
+        assert_eq!(atom.spin.multiplicity, ValueAst::Lit(1));
+        assert_eq!(
+            atom.constraints.get(AtomConstraintKind::Valence),
+            Some(&AtomConstraint::Valence(ValueAst::Lit(4))),
+        );
+    }
 
     #[rstest]
     #[case::carbon(Element::C, ElementAst::Lit(Element::C))]
@@ -426,30 +629,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::from_lit(IsotopeAst::from(ValueAst::Lit(13)), IsotopeAst::Lit(13))]
-    #[case::from_undetermined(IsotopeAst::from(ValueAst::Undetermined), IsotopeAst::Undetermined)]
-    fn test_isotope_ast_from_value(#[case] actual: IsotopeAst, #[case] expected: IsotopeAst) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    #[case::from_lit_set(ImplicitHydrogensAst::from(ValueAst::LitSet(vec![0, 1])), ImplicitHydrogensAst::LitSet(vec![0, 1]))]
-    fn test_implicit_hydrogens_ast_from_value(
-        #[case] actual: ImplicitHydrogensAst,
-        #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rstest]
     #[case::lit_carbon(ElementAst::Lit(Element::C), Some(Element::C))]
     #[case::lit_nitrogen(ElementAst::Lit(Element::N), Some(Element::N))]
     #[case::wildcard(ElementAst::Undetermined, None)]
     #[case::set(ElementAst::Set(vec![Element::C, Element::N]), None)]
-    #[case::bind(
-        ElementAst::Bind { id: "e".into(), set: vec![Element::C] },
-        None,
-    )]
+    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, None)]
     #[case::reference(ElementAst::Ref("e".into()), None)]
     fn test_element_ast_literal_and_is_ground(
         #[case] ast: ElementAst,
@@ -467,40 +651,6 @@ mod tests {
     #[case::reference(ElementAst::Ref("e".into()), false)]
     fn test_element_ast_is_undetermined(#[case] ast: ElementAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
-    }
-
-    #[rstest]
-    #[case::natural(IsotopeAst::Natural, Some(0))]
-    #[case::lit(IsotopeAst::Lit(12), Some(12))]
-    #[case::lit_zero(IsotopeAst::Lit(0), Some(0))]
-    #[case::wildcard(IsotopeAst::Undetermined, None)]
-    #[case::set_singleton(IsotopeAst::LitSet(vec![14]), Some(14))]
-    #[case::set_multi(IsotopeAst::LitSet(vec![12, 13]), None)]
-    #[case::expr_lit(IsotopeAst::Expr(Expr::Lit(15)), Some(15))]
-    #[case::expr_var(IsotopeAst::Expr(Expr::Var("x".into())), None)]
-    fn test_isotope_ast_literal_and_is_ground(
-        #[case] ast: IsotopeAst,
-        #[case] expected: Option<u32>,
-    ) {
-        assert_eq!(ast.literal(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
-    }
-
-    #[rstest]
-    #[case::normal(ImplicitHydrogensAst::Normal, None)]
-    #[case::lit(ImplicitHydrogensAst::Lit(2), Some(2))]
-    #[case::lit_zero(ImplicitHydrogensAst::Lit(0), Some(0))]
-    #[case::wildcard(ImplicitHydrogensAst::Undetermined, None)]
-    #[case::set_singleton(ImplicitHydrogensAst::LitSet(vec![3]), Some(3))]
-    #[case::set_multi(ImplicitHydrogensAst::LitSet(vec![1, 2]), None)]
-    #[case::expr_lit(ImplicitHydrogensAst::Expr(Expr::Lit(4)), Some(4))]
-    #[case::expr_var(ImplicitHydrogensAst::Expr(Expr::Var("x".into())), None)]
-    fn test_implicit_hydrogens_ast_literal_and_is_ground(
-        #[case] ast: ImplicitHydrogensAst,
-        #[case] expected: Option<i64>,
-    ) {
-        assert_eq!(ast.literal(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
@@ -542,6 +692,30 @@ mod tests {
         assert_eq!(pattern.matches(&target), expected);
     }
 
+    #[rstest]
+    #[case::from_lit(IsotopeAst::from(ValueAst::Lit(13)), IsotopeAst::Lit(13))]
+    #[case::from_undetermined(IsotopeAst::from(ValueAst::Undetermined), IsotopeAst::Undetermined)]
+    fn test_isotope_ast_from_value(#[case] actual: IsotopeAst, #[case] expected: IsotopeAst) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::natural(IsotopeAst::Natural, Some(0))]
+    #[case::lit(IsotopeAst::Lit(12), Some(12))]
+    #[case::lit_zero(IsotopeAst::Lit(0), Some(0))]
+    #[case::wildcard(IsotopeAst::Undetermined, None)]
+    #[case::set_singleton(IsotopeAst::LitSet(vec![14]), Some(14))]
+    #[case::set_multi(IsotopeAst::LitSet(vec![12, 13]), None)]
+    #[case::expr_lit(IsotopeAst::Expr(Expr::Lit(15)), Some(15))]
+    #[case::expr_var(IsotopeAst::Expr(Expr::Var("x".into())), None)]
+    fn test_isotope_ast_literal_and_is_ground(
+        #[case] ast: IsotopeAst,
+        #[case] expected: Option<u32>,
+    ) {
+        assert_eq!(ast.literal(), expected);
+        assert_eq!(ast.is_ground(), expected.is_some());
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined_natural(IsotopeAst::Undetermined, IsotopeAst::Natural, true)]
@@ -570,6 +744,50 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::expr_lit(IsotopeAst::Expr(Expr::Lit(13)), IsotopeAst::Lit(13))]
+    #[case::expr_neg_lit(IsotopeAst::Expr(Expr::Neg(Box::new(Expr::Lit(12)))), IsotopeAst::Lit(-12))]
+    fn test_isotope_ast_simplify(#[case] input: IsotopeAst, #[case] expected: IsotopeAst) {
+        assert_eq!(input.simplify(), expected);
+    }
+
+    #[rstest]
+    #[case::natural(IsotopeAst::Natural)]
+    #[case::lit(IsotopeAst::Lit(12))]
+    #[case::undetermined(IsotopeAst::Undetermined)]
+    #[case::lit_set(IsotopeAst::LitSet(vec![12, 13]))]
+    #[case::expr_var(IsotopeAst::Expr(Expr::Var("x".into())))]
+    fn test_isotope_ast_simplify_identity(#[case] input: IsotopeAst) {
+        assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rstest]
+    #[case::from_lit_set(ImplicitHydrogensAst::from(ValueAst::LitSet(vec![0, 1])), ImplicitHydrogensAst::LitSet(vec![0, 1]))]
+    fn test_implicit_hydrogens_ast_from_value(
+        #[case] actual: ImplicitHydrogensAst,
+        #[case] expected: ImplicitHydrogensAst,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::normal(ImplicitHydrogensAst::Normal, None)]
+    #[case::lit(ImplicitHydrogensAst::Lit(2), Some(2))]
+    #[case::lit_zero(ImplicitHydrogensAst::Lit(0), Some(0))]
+    #[case::wildcard(ImplicitHydrogensAst::Undetermined, None)]
+    #[case::set_singleton(ImplicitHydrogensAst::LitSet(vec![3]), Some(3))]
+    #[case::set_multi(ImplicitHydrogensAst::LitSet(vec![1, 2]), None)]
+    #[case::expr_lit(ImplicitHydrogensAst::Expr(Expr::Lit(4)), Some(4))]
+    #[case::expr_var(ImplicitHydrogensAst::Expr(Expr::Var("x".into())), None)]
+    fn test_implicit_hydrogens_ast_literal_and_is_ground(
+        #[case] ast: ImplicitHydrogensAst,
+        #[case] expected: Option<i64>,
+    ) {
+        assert_eq!(ast.literal(), expected);
+        assert_eq!(ast.is_ground(), expected.is_some());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::undetermined_normal(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Normal, true)]
     #[case::undetermined_value(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Lit(3), true)]
     #[case::normal_undetermined(ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Undetermined, false)]
@@ -590,126 +808,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard_vs_ground(AtomAst::default(), AtomAst::from_element(Element::C), true)]
-    #[case::same_element(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C), true)]
-    #[case::element_mismatch(AtomAst::from_element(Element::C), AtomAst::from_element(Element::N), false)]
-    #[case::pattern_more_specific_than_target(AtomAst::from_element(Element::C), AtomAst::default(), false)]
-    #[case::charge_mismatch(AtomAst { element: ElementAst::Lit(Element::C), charge: ValueAst::Lit(1),..Default::default() },
-                            AtomAst { element: ElementAst::Lit(Element::C), charge: ValueAst::Lit(0),..Default::default() }, false)]
-    #[case::charge_wildcard_pattern(AtomAst::from_element(Element::C), AtomAst { element: ElementAst::Lit(Element::C), charge: ValueAst::Lit(1),..Default::default() }, true)]
-    fn test_atom_ast_matches(
-        #[case] pattern: AtomAst,
-        #[case] target: AtomAst,
-        #[case] expected: bool,
+    #[case::expr_lit(ImplicitHydrogensAst::Expr(Expr::Lit(4)), ImplicitHydrogensAst::Lit(4))]
+    #[case::expr_neg_lit(ImplicitHydrogensAst::Expr(Expr::Neg(Box::new(Expr::Lit(3)))), ImplicitHydrogensAst::Lit(-3))]
+    fn test_implicit_hydrogens_ast_simplify(
+        #[case] input: ImplicitHydrogensAst,
+        #[case] expected: ImplicitHydrogensAst,
     ) {
-        assert_eq!(pattern.matches(&target), expected);
+        assert_eq!(input.simplify(), expected);
     }
 
     #[rstest]
-    fn test_atom_ast_from_element() {
-        assert_eq!(
-            AtomAst::from_element(Element::C),
-            AtomAst {
-                element: ElementAst::Lit(Element::C),
-                ..Default::default()
-            },
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::default_(AtomAst::default(), false)]
-    #[case::all_ground(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0), implicit_hydrogens: ImplicitHydrogensAst::Lit(4),
-        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() }, true)]
-    #[case::element_undetermined(AtomAst { element: ElementAst::Undetermined, isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0), implicit_hydrogens: ImplicitHydrogensAst::Lit(4),
-        lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() }, false)]
-    fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::with_element_ast(AtomAst::default().with_element(ElementAst::Lit(Element::C)), AtomAst { element: ElementAst::Lit(Element::C), ..Default::default() })]
-    #[case::with_element_primitive(AtomAst::default().with_element(Element::N), AtomAst { element: ElementAst::Lit(Element::N), ..Default::default() })]
-    #[case::with_isotope_mass(AtomAst::default().with_isotope_mass(12_i64), AtomAst { isotope_mass: IsotopeAst::Lit(12), ..Default::default() })]
-    #[case::with_charge(AtomAst::default().with_charge(1_i64), AtomAst { charge: ValueAst::Lit(1), ..Default::default() })]
-    #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Lit(3), ..Default::default() })]
-    #[case::with_lone_pairs(AtomAst::default().with_lone_pairs(2_i64), AtomAst { lone_pairs: ValueAst::Lit(2), ..Default::default() })]
-    #[case::with_spin_tuple(AtomAst::default().with_spin((0_u8, 1_u8)), AtomAst { spin: SpinStateAst::from((0_u8, 1_u8)), ..Default::default() })]
-    #[case::with_constraints(AtomAst::default().with_constraints(AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))])),
-        AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Lit(4))]),..Default::default() })]
-    fn test_atom_ast_with_methods(#[case] actual: AtomAst, #[case] expected: AtomAst) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::from_ground_element(
-        AtomAst::from_element(Element::C).zeroed(),
-        AtomAst {
-            element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Natural,
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AtomConstraints::new(),
-        },
-    )]
-    #[case::preserves_set_charge(
-        AtomAst::from_element(Element::C).with_charge(1_i64).zeroed(),
-        AtomAst {
-            element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Natural,
-            charge: ValueAst::Lit(1),
-            implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AtomConstraints::new(),
-        },
-    )]
-    #[case::leaves_undetermined_element(
-        AtomAst::default().zeroed(),
-        AtomAst {
-            element: ElementAst::Undetermined,
-            isotope_mass: IsotopeAst::Natural,
-            charge: ValueAst::Lit(0),
-            implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
-            lone_pairs: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AtomConstraints::new(),
-        },
-    )]
-    fn test_atom_ast_zeroed(#[case] actual: AtomAst, #[case] expected: AtomAst) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    fn test_atom_ast_simplify_values() {
-        let mut atom = AtomAst {
-            element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Expr(Expr::Lit(12)),
-            charge: ValueAst::Expr(Expr::Lit(1)),
-            implicit_hydrogens: ImplicitHydrogensAst::Expr(Expr::Lit(3)),
-            lone_pairs: ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(2)))),
-            spin: SpinStateAst {
-                unpaired: ValueAst::Expr(Expr::Lit(0)),
-                multiplicity: ValueAst::Expr(Expr::Lit(1)),
-            },
-            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(
-                Expr::Lit(4),
-            ))]),
-        };
-        atom.simplify_values();
-        assert_eq!(atom.isotope_mass, IsotopeAst::Lit(12));
-        assert_eq!(atom.charge, ValueAst::Lit(1));
-        assert_eq!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(3));
-        assert_eq!(atom.lone_pairs, ValueAst::Lit(-2));
-        assert_eq!(atom.spin.unpaired, ValueAst::Lit(0));
-        assert_eq!(atom.spin.multiplicity, ValueAst::Lit(1));
-        assert_eq!(
-            atom.constraints.get(AtomConstraintKind::Valence),
-            Some(&AtomConstraint::Valence(ValueAst::Lit(4))),
-        );
+    #[case::normal(ImplicitHydrogensAst::Normal)]
+    #[case::lit(ImplicitHydrogensAst::Lit(2))]
+    #[case::undetermined(ImplicitHydrogensAst::Undetermined)]
+    #[case::lit_set(ImplicitHydrogensAst::LitSet(vec![1, 2]))]
+    #[case::expr_var(ImplicitHydrogensAst::Expr(Expr::Var("h".into())))]
+    fn test_implicit_hydrogens_ast_simplify_identity(#[case] input: ImplicitHydrogensAst) {
+        assert_eq!(input.clone().simplify(), input);
     }
 }

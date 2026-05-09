@@ -46,11 +46,11 @@ impl MulticenterBondAst {
         self
     }
 
-    /// Fill `Undetermined` value-bearing fields with zero defaults: charge
-    /// to `Lit(0)`, spin to closed-shell singlet `(0, 1)`. Per-atom
+    /// Fill `Undetermined` value-bearing struct fields with zero defaults:
+    /// charge → `Lit(0)`, spin → closed-shell singlet `(0, 1)`. Per-atom
     /// `electrons` entries and `constraints` are preserved. The result is
     /// ground iff every `electrons` entry is already ground.
-    pub fn zeroed(mut self) -> Self {
+    pub fn into_ground(mut self) -> Self {
         if self.charge.is_undetermined() {
             self.charge = ValueAst::Lit(0);
         }
@@ -58,6 +58,12 @@ impl MulticenterBondAst {
             self.spin = SpinStateAst::from((0_u8, 1_u8));
         }
         self
+    }
+
+    /// Equivalent to `into_ground()`. `MulticenterBondAst` has no constraint
+    /// defaults.
+    pub fn into_zeroed(self) -> Self {
+        self.into_ground()
     }
 
     pub fn is_ground(&self) -> bool {
@@ -157,7 +163,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::from_ground_electrons(
-        MulticenterBondAst::from_electrons(vec![1; 3]).zeroed(),
+        MulticenterBondAst::from_electrons(vec![1; 3]).into_ground(),
         MulticenterBondAst {
             electrons: vec![ValueAst::Lit(1); 3],
             charge: ValueAst::Lit(0),
@@ -166,7 +172,7 @@ mod tests {
         },
     )]
     #[case::preserves_set_charge(
-        MulticenterBondAst::from_electrons(vec![1; 3]).with_charge(1_i64).zeroed(),
+        MulticenterBondAst::from_electrons(vec![1; 3]).with_charge(1_i64).into_ground(),
         MulticenterBondAst {
             electrons: vec![ValueAst::Lit(1); 3],
             charge: ValueAst::Lit(1),
@@ -174,10 +180,16 @@ mod tests {
             constraints: MulticenterBondConstraints::new(),
         },
     )]
-    fn test_multicenter_bond_ast_zeroed(
+    fn test_multicenter_bond_ast_into_ground(
         #[case] actual: MulticenterBondAst,
         #[case] expected: MulticenterBondAst,
     ) {
         assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_ast_into_zeroed() {
+        let bond = MulticenterBondAst::from_electrons(vec![1; 3]);
+        assert_eq!(bond.clone().into_zeroed(), bond.into_ground());
     }
 }
