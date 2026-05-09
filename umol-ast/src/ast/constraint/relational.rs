@@ -38,7 +38,7 @@ pub enum RelationalConstraint {
     DativeBondDonor { bond: DativeBondIdx, atom: AtomIdx },
     /// The acceptor end of dative bond `bond` is `atom`.
     DativeBondAcceptor { bond: DativeBondIdx, atom: AtomIdx },
-    /// Dative bond `dative` is parallel to a covalent bond `parallel`
+    /// Dative bond `dative` is parallel to a localized bond `parallel`
     /// (same atom pair).
     DativeBondParallels {
         dative: DativeBondIdx,

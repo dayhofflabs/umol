@@ -2,6 +2,7 @@
 
 use std::mem;
 use std::slice::Iter;
+use std::vec::IntoIter;
 
 use strum::EnumDiscriminants;
 
@@ -157,7 +158,7 @@ impl FromIterator<DativeBondConstraint> for DativeBondConstraints {
 
 impl IntoIterator for DativeBondConstraints {
     type Item = DativeBondConstraint;
-    type IntoIter = std::vec::IntoIter<DativeBondConstraint>;
+    type IntoIter = IntoIter<DativeBondConstraint>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -304,7 +305,10 @@ mod tests {
         *entry = DativeBondConstraint::ring_size(5);
         assert_eq!(
             cs.as_slice(),
-            &[DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(5)],
+            &[
+                DativeBondConstraint::Aromatic,
+                DativeBondConstraint::ring_size(5)
+            ],
         );
     }
 
@@ -409,7 +413,10 @@ mod tests {
         let drained: Vec<_> = cs.take().collect();
         assert_eq!(
             drained,
-            vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
+            vec![
+                DativeBondConstraint::Aromatic,
+                DativeBondConstraint::ring_size(6)
+            ],
         );
         assert_eq!(cs, DativeBondConstraints::new());
     }
@@ -509,7 +516,10 @@ mod tests {
         let collected: Vec<_> = cs.into_iter().collect();
         assert_eq!(
             collected,
-            vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
+            vec![
+                DativeBondConstraint::Aromatic,
+                DativeBondConstraint::ring_size(6)
+            ],
         );
     }
 
@@ -528,7 +538,10 @@ mod tests {
         .into();
         assert_eq!(
             cs.as_slice(),
-            &[DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
+            &[
+                DativeBondConstraint::Aromatic,
+                DativeBondConstraint::ring_size(6)
+            ],
         );
     }
 }

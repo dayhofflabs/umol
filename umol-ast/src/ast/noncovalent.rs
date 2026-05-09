@@ -122,6 +122,8 @@ pub enum NoncovalentBondKind {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::empty;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -154,7 +156,7 @@ mod tests {
             constraints: NoncovalentBondConstraints::new() })]
     #[case::with_constraints_empty(
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
-            .with_constraints(std::iter::empty::<NoncovalentBondConstraint>()),
+            .with_constraints(empty::<NoncovalentBondConstraint>()),
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
     fn test_noncovalent_bond_ast_with_methods(
         #[case] actual: NoncovalentBondAst,

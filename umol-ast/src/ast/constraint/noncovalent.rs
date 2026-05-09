@@ -88,6 +88,8 @@ impl FromIterator<NoncovalentBondConstraint> for NoncovalentBondConstraints {
 
 #[cfg(test)]
 mod tests {
+    use std::iter::empty;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::Remapping;
@@ -155,7 +157,7 @@ mod tests {
 
     #[rstest]
     fn test_noncovalent_bond_constraints_from_iter() {
-        let cs: NoncovalentBondConstraints = std::iter::empty().collect();
+        let cs: NoncovalentBondConstraints = empty().collect();
         assert_eq!(cs, NoncovalentBondConstraints::new());
     }
 }

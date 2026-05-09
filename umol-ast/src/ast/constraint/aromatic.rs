@@ -2,6 +2,7 @@
 
 use std::mem::{self, replace};
 use std::slice::Iter;
+use std::vec::IntoIter;
 
 use strum::EnumDiscriminants;
 
@@ -116,8 +117,11 @@ impl AromaticSystemConstraints {
 
     pub fn simplify_each(&mut self) {
         for c in self.0.iter_mut() {
-            *c = mem::replace(c, AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined))
-                .simplify();
+            *c = mem::replace(
+                c,
+                AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined),
+            )
+            .simplify();
         }
     }
 
@@ -146,7 +150,7 @@ impl FromIterator<AromaticSystemConstraint> for AromaticSystemConstraints {
 
 impl IntoIterator for AromaticSystemConstraints {
     type Item = AromaticSystemConstraint;
-    type IntoIter = std::vec::IntoIter<AromaticSystemConstraint>;
+    type IntoIter = IntoIter<AromaticSystemConstraint>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
@@ -177,7 +181,7 @@ mod tests {
     #[rstest]
     #[case::electron_count(
         AromaticSystemConstraint::electron_count(6),
-        AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
+        AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))
     )]
     fn test_aromatic_system_constraint_constructors(
         #[case] actual: AromaticSystemConstraint,
@@ -189,7 +193,7 @@ mod tests {
     #[rstest]
     #[case::electron_count(
         AromaticSystemConstraint::electron_count(6),
-        AromaticSystemConstraintKind::ElectronCount,
+        AromaticSystemConstraintKind::ElectronCount
     )]
     fn test_aromatic_system_constraint_kind(
         #[case] c: AromaticSystemConstraint,
@@ -206,10 +210,7 @@ mod tests {
 
     #[rstest]
     #[case::lit(AromaticSystemConstraint::electron_count(6), false)]
-    #[case::undetermined(
-        AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined),
-        true,
-    )]
+    #[case::undetermined(AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined), true)]
     fn test_aromatic_system_constraint_is_undetermined(
         #[case] c: AromaticSystemConstraint,
         #[case] expected: bool,
@@ -220,7 +221,7 @@ mod tests {
     #[rstest]
     #[case::folds_expr(
         AromaticSystemConstraint::ElectronCount(ValueAst::Expr(Expr::Lit(6))),
-        AromaticSystemConstraint::electron_count(6),
+        AromaticSystemConstraint::electron_count(6)
     )]
     fn test_aromatic_system_constraint_simplify(
         #[case] input: AromaticSystemConstraint,
@@ -272,16 +273,15 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_get_absent() {
         let cs = AromaticSystemConstraints::new();
-        assert_eq!(
-            cs.get(AromaticSystemConstraintKind::ElectronCount),
-            None,
-        );
+        assert_eq!(cs.get(AromaticSystemConstraintKind::ElectronCount), None,);
     }
 
     #[rstest]
     fn test_aromatic_system_constraints_get_mut() {
         let mut cs = AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6));
-        let entry = cs.get_mut(AromaticSystemConstraintKind::ElectronCount).unwrap();
+        let entry = cs
+            .get_mut(AromaticSystemConstraintKind::ElectronCount)
+            .unwrap();
         *entry = AromaticSystemConstraint::electron_count(10);
         assert_eq!(
             cs.as_slice(),
@@ -292,10 +292,9 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_get_mut_absent() {
         let mut cs = AromaticSystemConstraints::new();
-        assert!(
-            cs.get_mut(AromaticSystemConstraintKind::ElectronCount)
-                .is_none()
-        );
+        assert!(cs
+            .get_mut(AromaticSystemConstraintKind::ElectronCount)
+            .is_none());
     }
 
     #[rstest]
@@ -394,10 +393,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_remove_absent() {
         let mut cs = AromaticSystemConstraints::new();
-        assert_eq!(
-            cs.remove(AromaticSystemConstraintKind::ElectronCount),
-            None,
-        );
+        assert_eq!(cs.remove(AromaticSystemConstraintKind::ElectronCount), None,);
     }
 
     #[rstest]
@@ -448,13 +444,19 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_from_aromatic_system_constraint() {
         let cs: AromaticSystemConstraints = AromaticSystemConstraint::electron_count(6).into();
-        assert_eq!(cs.as_slice(), &[AromaticSystemConstraint::electron_count(6)]);
+        assert_eq!(
+            cs.as_slice(),
+            &[AromaticSystemConstraint::electron_count(6)]
+        );
     }
 
     #[rstest]
     fn test_aromatic_system_constraints_from_vec() {
         let cs: AromaticSystemConstraints =
             vec![AromaticSystemConstraint::electron_count(6)].into();
-        assert_eq!(cs.as_slice(), &[AromaticSystemConstraint::electron_count(6)]);
+        assert_eq!(
+            cs.as_slice(),
+            &[AromaticSystemConstraint::electron_count(6)]
+        );
     }
 }
