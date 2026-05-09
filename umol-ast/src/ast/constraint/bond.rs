@@ -1,14 +1,15 @@
-//! Per-covalent-bond constraints.
+//! Localized bond constraints.
 
 use std::mem;
 use std::slice::Iter;
+use std::vec::IntoIter;
 
 use strum::EnumDiscriminants;
 
 use super::super::remap::IdxRemapping;
 use super::super::value::ValueAst;
 
-/// Covalent-bond-scope constraint. Held inline on `BondAst` via
+/// Localized bond constraint. Held inline on `BondAst` via
 /// `BondConstraints`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(BondConstraintKind), derive(Hash))]
@@ -19,6 +20,14 @@ pub enum BondConstraint {
 }
 
 impl BondConstraint {
+    pub fn ring_count(v: impl Into<ValueAst>) -> Self {
+        Self::RingCount(v.into())
+    }
+
+    pub fn ring_size(v: impl Into<ValueAst>) -> Self {
+        Self::RingSize(v.into())
+    }
+
     pub fn kind(&self) -> BondConstraintKind {
         self.into()
     }
@@ -72,6 +81,18 @@ impl BondConstraints {
         &self.0
     }
 
+    pub fn contains(&self, kind: BondConstraintKind) -> bool {
+        self.0.iter().any(|c| c.kind() == kind)
+    }
+
+    pub fn get(&self, kind: BondConstraintKind) -> Option<&BondConstraint> {
+        self.0.iter().find(|c| c.kind() == kind)
+    }
+
+    pub fn get_mut(&mut self, kind: BondConstraintKind) -> Option<&mut BondConstraint> {
+        self.0.iter_mut().find(|c| c.kind() == kind)
+    }
+
     pub fn iter(&self) -> Iter<'_, BondConstraint> {
         self.0.iter()
     }
@@ -113,6 +134,11 @@ impl BondConstraints {
         }
     }
 
+    pub fn remove(&mut self, kind: BondConstraintKind) -> Option<BondConstraint> {
+        let pos = self.0.iter().position(|c| c.kind() == kind)?;
+        Some(self.0.remove(pos))
+    }
+
     /// No-op: no `BondConstraint` variant carries an entity index.
     pub fn remap(self, _remap: &IdxRemapping) -> Self {
         self
@@ -129,146 +155,320 @@ impl FromIterator<BondConstraint> for BondConstraints {
     }
 }
 
+impl IntoIterator for BondConstraints {
+    type Item = BondConstraint;
+    type IntoIter = IntoIter<BondConstraint>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl From<BondConstraint> for BondConstraints {
+    fn from(c: BondConstraint) -> Self {
+        Self::from_iter([c])
+    }
+}
+
+impl From<Vec<BondConstraint>> for BondConstraints {
+    fn from(cs: Vec<BondConstraint>) -> Self {
+        Self::from_iter(cs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::Remapping;
 
+    use super::super::super::value::Expr;
     use super::*;
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::ring_count(BondConstraint::ring_count(1), BondConstraint::RingCount(ValueAst::Lit(1)))]
+    #[case::ring_size(BondConstraint::ring_size(6), BondConstraint::RingSize(ValueAst::Lit(6)))]
+    fn test_bond_constraint_constructors(
+        #[case] actual: BondConstraint,
+        #[case] expected: BondConstraint,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::aromatic(BondConstraint::Aromatic, BondConstraintKind::Aromatic)]
-    #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)), BondConstraintKind::RingCount)]
-    #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), BondConstraintKind::RingSize)]
+    #[case::ring_count(BondConstraint::ring_count(1), BondConstraintKind::RingCount)]
+    #[case::ring_size(BondConstraint::ring_size(6), BondConstraintKind::RingSize)]
     fn test_bond_constraint_kind(#[case] c: BondConstraint, #[case] expected: BondConstraintKind) {
         assert_eq!(c.kind(), expected);
     }
 
     #[rstest]
     #[case::aromatic(BondConstraint::Aromatic)]
-    #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)))]
-    #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)))]
-    fn test_bond_constraint_is_unique_true_everywhere(#[case] c: BondConstraint) {
+    #[case::ring_count(BondConstraint::ring_count(1))]
+    #[case::ring_size(BondConstraint::ring_size(6))]
+    fn test_bond_constraint_is_unique(#[case] c: BondConstraint) {
         assert!(c.is_unique());
     }
 
+    #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(BondConstraint::Aromatic, false)]
-    #[case::ring_count_lit(BondConstraint::RingCount(ValueAst::Lit(1)), false)]
+    #[case::ring_count_lit(BondConstraint::ring_count(1), false)]
     #[case::ring_count_undetermined(BondConstraint::RingCount(ValueAst::Undetermined), true)]
-    #[case::ring_size_lit(BondConstraint::RingSize(ValueAst::Lit(6)), false)]
+    #[case::ring_size_lit(BondConstraint::ring_size(6), false)]
     #[case::ring_size_undetermined(BondConstraint::RingSize(ValueAst::Undetermined), true)]
     fn test_bond_constraint_is_undetermined(#[case] c: BondConstraint, #[case] expected: bool) {
         assert_eq!(c.is_undetermined(), expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_bond_constraints_new_is_empty() {
+    #[case::ring_count_folds_expr(
+        BondConstraint::RingCount(ValueAst::Expr(Expr::Lit(2))),
+        BondConstraint::ring_count(2),
+    )]
+    #[case::ring_size_folds_expr(
+        BondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6))),
+        BondConstraint::ring_size(6),
+    )]
+    fn test_bond_constraint_simplify(
+        #[case] input: BondConstraint,
+        #[case] expected: BondConstraint,
+    ) {
+        assert_eq!(input.simplify(), expected);
+    }
+
+    #[rstest]
+    #[case::aromatic(BondConstraint::Aromatic)]
+    #[case::ring_count_lit(BondConstraint::ring_count(1))]
+    #[case::ring_size_undetermined(BondConstraint::RingSize(ValueAst::Undetermined))]
+    fn test_bond_constraint_simplify_identity(#[case] input: BondConstraint) {
+        assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rstest]
+    fn test_bond_constraints_new() {
         let cs = BondConstraints::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
         assert_eq!(cs.as_slice(), &[] as &[BondConstraint]);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_bond_constraints_add_fresh_returns_none() {
-        let mut cs = BondConstraints::new();
-        let prev = cs.add(BondConstraint::Aromatic);
-        assert_eq!(prev, None);
-        assert_eq!(cs.as_slice(), &[BondConstraint::Aromatic]);
+    #[case::aromatic_present(BondConstraintKind::Aromatic, true)]
+    #[case::ring_size_present(BondConstraintKind::RingSize, true)]
+    #[case::ring_count_absent(BondConstraintKind::RingCount, false)]
+    fn test_bond_constraints_contains(
+        #[case] kind: BondConstraintKind,
+        #[case] expected: bool,
+    ) {
+        let cs = BondConstraints::from_iter([
+            BondConstraint::Aromatic,
+            BondConstraint::ring_size(6),
+        ]);
+        assert_eq!(cs.contains(kind), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(BondConstraintKind::Aromatic, Some(BondConstraint::Aromatic))]
+    #[case::ring_size(BondConstraintKind::RingSize, Some(BondConstraint::ring_size(6)))]
+    #[case::ring_count_absent(BondConstraintKind::RingCount, None)]
+    fn test_bond_constraints_get(
+        #[case] kind: BondConstraintKind,
+        #[case] expected: Option<BondConstraint>,
+    ) {
+        let cs = BondConstraints::from_iter([
+            BondConstraint::Aromatic,
+            BondConstraint::ring_size(6),
+        ]);
+        assert_eq!(cs.get(kind), expected.as_ref());
     }
 
     #[rstest]
-    fn test_bond_constraints_add_same_kind_replaces() {
-        let mut cs = BondConstraints::new();
-        cs.add(BondConstraint::RingCount(ValueAst::Lit(1)));
-        let prev = cs.add(BondConstraint::RingCount(ValueAst::Lit(2)));
-        assert_eq!(prev, Some(BondConstraint::RingCount(ValueAst::Lit(1))));
+    fn test_bond_constraints_get_mut() {
+        let mut cs =
+            BondConstraints::from_iter([BondConstraint::Aromatic, BondConstraint::ring_size(6)]);
+        let entry = cs.get_mut(BondConstraintKind::RingSize).unwrap();
+        *entry = BondConstraint::ring_size(5);
         assert_eq!(
             cs.as_slice(),
-            &[BondConstraint::RingCount(ValueAst::Lit(2))]
+            &[BondConstraint::Aromatic, BondConstraint::ring_size(5),],
         );
-        assert_eq!(cs.len(), 1);
     }
 
     #[rstest]
-    fn test_bond_constraints_add_distinct_kinds_coexist() {
-        let mut cs = BondConstraints::new();
-        assert_eq!(cs.add(BondConstraint::Aromatic), None);
-        assert_eq!(cs.add(BondConstraint::RingCount(ValueAst::Lit(1))), None);
-        assert_eq!(cs.add(BondConstraint::RingSize(ValueAst::Lit(6))), None);
+    fn test_bond_constraints_get_mut_absent() {
+        let mut cs = BondConstraints::from_iter([BondConstraint::Aromatic]);
+        assert!(cs.get_mut(BondConstraintKind::RingCount).is_none());
+    }
+
+    #[rstest]
+    fn test_bond_constraints_iter() {
+        let cs = BondConstraints::from_iter([
+            BondConstraint::ring_size(6),
+            BondConstraint::Aromatic,
+            BondConstraint::ring_count(1),
+        ]);
+        let collected: Vec<_> = cs.iter().cloned().collect();
         assert_eq!(
-            cs.as_slice(),
-            &[
+            collected,
+            vec![
+                BondConstraint::ring_size(6),
                 BondConstraint::Aromatic,
-                BondConstraint::RingCount(ValueAst::Lit(1)),
-                BondConstraint::RingSize(ValueAst::Lit(6)),
-            ]
+                BondConstraint::ring_count(1),
+            ],
         );
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_bond_constraints_retain_keeps_matching() {
+    #[case::fresh(
+        vec![BondConstraint::Aromatic],
+        vec![None],
+        vec![BondConstraint::Aromatic],
+    )]
+    #[case::replace_same_kind(
+        vec![
+            BondConstraint::ring_count(1),
+            BondConstraint::ring_count(2),
+        ],
+        vec![None, Some(BondConstraint::ring_count(1))],
+        vec![BondConstraint::ring_count(2)],
+    )]
+    #[case::replace_unit_variant(
+        vec![BondConstraint::Aromatic, BondConstraint::Aromatic],
+        vec![None, Some(BondConstraint::Aromatic)],
+        vec![BondConstraint::Aromatic],
+    )]
+    #[case::distinct_kinds(
+        vec![
+            BondConstraint::Aromatic,
+            BondConstraint::ring_count(1),
+            BondConstraint::ring_size(6),
+        ],
+        vec![None, None, None],
+        vec![
+            BondConstraint::Aromatic,
+            BondConstraint::ring_count(1),
+            BondConstraint::ring_size(6),
+        ],
+    )]
+    fn test_bond_constraints_add(
+        #[case] sequence: Vec<BondConstraint>,
+        #[case] expected_returns: Vec<Option<BondConstraint>>,
+        #[case] expected_state: Vec<BondConstraint>,
+    ) {
+        let mut cs = BondConstraints::new();
+        let returns: Vec<_> = sequence.into_iter().map(|c| cs.add(c)).collect();
+        assert_eq!(returns, expected_returns);
+        assert_eq!(cs.as_slice(), expected_state.as_slice());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::partial(
+        |c: &BondConstraint| matches!(c, BondConstraint::Aromatic | BondConstraint::RingSize(_)),
+        vec![
+            BondConstraint::Aromatic,
+            BondConstraint::ring_size(6),
+        ],
+    )]
+    #[case::all_dropped(
+        |_: &BondConstraint| false,
+        vec![],
+    )]
+    fn test_bond_constraints_retain(
+        #[case] predicate: impl FnMut(&BondConstraint) -> bool,
+        #[case] expected: Vec<BondConstraint>,
+    ) {
         let mut cs = BondConstraints::from_iter([
             BondConstraint::Aromatic,
-            BondConstraint::RingCount(ValueAst::Lit(1)),
-            BondConstraint::RingSize(ValueAst::Lit(6)),
+            BondConstraint::ring_count(1),
+            BondConstraint::ring_size(6),
         ]);
-        cs.retain(|c| matches!(c, BondConstraint::Aromatic | BondConstraint::RingSize(_)));
-        assert_eq!(
-            cs.as_slice(),
-            &[
-                BondConstraint::Aromatic,
-                BondConstraint::RingSize(ValueAst::Lit(6))
-            ]
-        );
+        cs.retain(predicate);
+        assert_eq!(cs.as_slice(), expected.as_slice());
     }
 
     #[rstest]
     fn test_bond_constraints_clear() {
         let mut cs = BondConstraints::from_iter([BondConstraint::Aromatic]);
         cs.clear();
-        assert!(cs.is_empty());
+        assert_eq!(cs, BondConstraints::new());
     }
 
     #[rstest]
-    fn test_bond_constraints_iter_preserves_insertion_order() {
-        let cs = BondConstraints::from_iter([
-            BondConstraint::RingSize(ValueAst::Lit(6)),
-            BondConstraint::Aromatic,
-            BondConstraint::RingCount(ValueAst::Lit(1)),
-        ]);
-        let collected: Vec<_> = cs.iter().cloned().collect();
+    fn test_bond_constraints_take() {
+        let mut cs =
+            BondConstraints::from_iter([BondConstraint::Aromatic, BondConstraint::ring_size(6)]);
+        let drained: Vec<_> = cs.take().collect();
         assert_eq!(
-            collected,
-            vec![
-                BondConstraint::RingSize(ValueAst::Lit(6)),
+            drained,
+            vec![BondConstraint::Aromatic, BondConstraint::ring_size(6),],
+        );
+        assert_eq!(cs, BondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_bond_constraints_simplify_each() {
+        let mut cs = BondConstraints::from_iter([
+            BondConstraint::Aromatic,
+            BondConstraint::RingCount(ValueAst::Expr(Expr::Lit(1))),
+            BondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6))),
+        ]);
+        cs.simplify_each();
+        assert_eq!(
+            cs,
+            BondConstraints::from_iter([
                 BondConstraint::Aromatic,
-                BondConstraint::RingCount(ValueAst::Lit(1)),
-            ]
+                BondConstraint::ring_count(1),
+                BondConstraint::ring_size(6),
+            ]),
         );
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_bond_constraints_from_iter_last_wins_same_kind() {
-        let cs = BondConstraints::from_iter([
-            BondConstraint::RingCount(ValueAst::Lit(1)),
-            BondConstraint::RingCount(ValueAst::Lit(2)),
-        ]);
-        assert_eq!(
-            cs.as_slice(),
-            &[BondConstraint::RingCount(ValueAst::Lit(2))]
-        );
-    }
-
-    #[rstest]
-    fn test_bond_constraints_remap_is_noop() {
-        let cs = BondConstraints::from_iter([
+    #[case::aromatic_present(
+        BondConstraintKind::Aromatic,
+        Some(BondConstraint::Aromatic),
+        vec![BondConstraint::ring_size(6)],
+    )]
+    #[case::ring_size_present(
+        BondConstraintKind::RingSize,
+        Some(BondConstraint::ring_size(6)),
+        vec![BondConstraint::Aromatic],
+    )]
+    #[case::ring_count_absent(
+        BondConstraintKind::RingCount,
+        None,
+        vec![
             BondConstraint::Aromatic,
-            BondConstraint::RingSize(ValueAst::Lit(6)),
+            BondConstraint::ring_size(6),
+        ],
+    )]
+    fn test_bond_constraints_remove(
+        #[case] kind: BondConstraintKind,
+        #[case] expected_returned: Option<BondConstraint>,
+        #[case] expected_state: Vec<BondConstraint>,
+    ) {
+        let mut cs = BondConstraints::from_iter([
+            BondConstraint::Aromatic,
+            BondConstraint::ring_size(6),
         ]);
+        assert_eq!(cs.remove(kind), expected_returned);
+        assert_eq!(cs.as_slice(), expected_state.as_slice());
+    }
+
+    #[rstest]
+    fn test_bond_constraints_remap() {
+        let cs =
+            BondConstraints::from_iter([BondConstraint::Aromatic, BondConstraint::ring_size(6)]);
         let remap = IdxRemapping::new(
             Remapping {
                 removed_nodes: vec![0, 1, 2],
@@ -279,7 +479,61 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let after = cs.clone().remap(&remap);
-        assert_eq!(after, cs);
+        assert_eq!(cs.clone().remap(&remap), cs);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::distinct(
+        vec![
+            BondConstraint::Aromatic,
+            BondConstraint::ring_count(1),
+        ],
+        vec![
+            BondConstraint::Aromatic,
+            BondConstraint::ring_count(1),
+        ],
+    )]
+    #[case::same_kind_last_wins(
+        vec![
+            BondConstraint::ring_count(1),
+            BondConstraint::ring_count(2),
+        ],
+        vec![BondConstraint::ring_count(2)],
+    )]
+    #[case::empty(vec![], vec![])]
+    fn test_bond_constraints_from_iter(
+        #[case] input: Vec<BondConstraint>,
+        #[case] expected: Vec<BondConstraint>,
+    ) {
+        let cs = BondConstraints::from_iter(input);
+        assert_eq!(cs.as_slice(), expected.as_slice());
+    }
+
+    #[rstest]
+    fn test_bond_constraints_into_iter() {
+        let cs =
+            BondConstraints::from_iter([BondConstraint::Aromatic, BondConstraint::ring_size(6)]);
+        let collected: Vec<_> = cs.into_iter().collect();
+        assert_eq!(
+            collected,
+            vec![BondConstraint::Aromatic, BondConstraint::ring_size(6),],
+        );
+    }
+
+    #[rstest]
+    fn test_bond_constraints_from_bond_constraint() {
+        let cs: BondConstraints = BondConstraint::Aromatic.into();
+        assert_eq!(cs.as_slice(), &[BondConstraint::Aromatic]);
+    }
+
+    #[rstest]
+    fn test_bond_constraints_from_vec() {
+        let cs: BondConstraints =
+            vec![BondConstraint::Aromatic, BondConstraint::ring_size(6)].into();
+        assert_eq!(
+            cs.as_slice(),
+            &[BondConstraint::Aromatic, BondConstraint::ring_size(6),],
+        );
     }
 }

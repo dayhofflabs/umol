@@ -2,7 +2,7 @@
 
 use std::mem;
 
-use super::constraint::BondConstraints;
+use super::constraint::{BondConstraint, BondConstraints};
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
@@ -45,8 +45,25 @@ impl BondAst {
         self
     }
 
-    pub fn with_constraints(mut self, constraints: impl Into<BondConstraints>) -> Self {
-        self.constraints = constraints.into();
+    /// Add a single constraint, replacing any existing entry of the same
+    /// kind (last-wins per `BondConstraints::add`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<BondConstraint>) -> Self {
+        self.constraints.add(constraint.into());
+        self
+    }
+
+    /// Add each constraint from the iterator, replacing any existing entry
+    /// of the same kind (last-wins per `BondConstraints::add`). Does not
+    /// clear existing constraints; use `bond.constraints.clear()` or direct
+    /// field assignment for wipe-and-replace.
+    pub fn with_constraints<I>(mut self, constraints: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<BondConstraint>,
+    {
+        for c in constraints {
+            self.constraints.add(c.into());
+        }
         self
     }
 
@@ -97,15 +114,6 @@ mod tests {
 
     use super::*;
 
-    fn ground() -> BondAst {
-        BondAst {
-            order: ValueAst::Lit(1),
-            charge: ValueAst::Lit(0),
-            spin: SpinStateAst::closed_shell(),
-            constraints: BondConstraints::new(),
-        }
-    }
-
     #[rustfmt::skip]
     #[rstest]
     #[case::new(BondAst::new(ValueAst::Lit(2)),
@@ -118,31 +126,33 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::default_(BondAst::default(), false)]
-    #[case::order_only(BondAst::from_order(1), false)]
-    #[case::all_ground(ground(), true)]
-    #[case::charge_undetermined(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(),
-        constraints: BondConstraints::new() }, false)]
-    fn test_bond_ast_is_ground(#[case] ast: BondAst, #[case] expected: bool) {
-        assert_eq!(ast.is_ground(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::default_matches_ground(BondAst::default(), ground(), true)]
-    #[case::same_order(BondAst::from_order(2), BondAst::from_order(2), true)]
-    #[case::order_mismatch(BondAst::from_order(2), BondAst::from_order(1), false)]
-    #[case::pattern_more_specific_than_target(BondAst::from_order(2), BondAst::default(), false)]
-    #[case::charge_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default(), constraints: BondConstraints::new() },
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }, false)]
-    #[case::charge_wildcard_pattern(BondAst::from_order(1),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }, true)]
-    fn test_bond_ast_matches(
-        #[case] pattern: BondAst,
-        #[case] target: BondAst,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(pattern.matches(&target), expected);
+    #[case::with_order(BondAst::default().with_order(2_i64),
+        BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+    #[case::with_charge(BondAst::from_order(1).with_charge(-1_i64),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), constraints: BondConstraints::new() })]
+    #[case::with_spin(BondAst::from_order(1).with_spin((0_u8, 1_u8)),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() })]
+    #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraint::Aromatic),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: BondConstraints::from(BondConstraint::Aromatic) })]
+    #[case::with_constraints_extends(
+        BondAst::from_order(1)
+            .with_constraint(BondConstraint::Aromatic)
+            .with_constraints([BondConstraint::ring_count(1), BondConstraint::ring_size(6)]),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: BondConstraints::from_iter([
+                BondConstraint::Aromatic,
+                BondConstraint::ring_count(1),
+                BondConstraint::ring_size(6),
+            ]) })]
+    #[case::with_constraint_replaces_same_kind(
+        BondAst::from_order(1)
+            .with_constraint(BondConstraint::ring_size(5))
+            .with_constraint(BondConstraint::ring_size(6)),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: BondConstraints::from(BondConstraint::ring_size(6)) })]
+    fn test_bond_ast_with_methods(#[case] actual: BondAst, #[case] expected: BondAst) {
+        assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
@@ -165,13 +175,79 @@ mod tests {
             constraints: BondConstraints::new(),
         },
     )]
+    #[case::preserves_constraints(
+        BondAst::from_order(1).with_constraint(BondConstraint::Aromatic).into_ground(),
+        BondAst {
+            order: ValueAst::Lit(1),
+            charge: ValueAst::Lit(0),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: BondConstraints::from(BondConstraint::Aromatic),
+        },
+    )]
     fn test_bond_ast_into_ground(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
-    fn test_bond_ast_into_zeroed() {
-        let bond = BondAst::from_order(1);
+    #[case::from_order(BondAst::from_order(1))]
+    #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraint::Aromatic))]
+    fn test_bond_ast_into_zeroed(#[case] bond: BondAst) {
         assert_eq!(bond.clone().into_zeroed(), bond.into_ground());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::default_(BondAst::default(), false)]
+    #[case::order_only(BondAst::from_order(1), false)]
+    #[case::all_ground(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::closed_shell(),
+        constraints: BondConstraints::new() }, true)]
+    #[case::charge_undetermined(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(),
+        constraints: BondConstraints::new() }, false)]
+    #[case::ground_with_constraint(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::closed_shell(),
+        constraints: BondConstraints::from(BondConstraint::Aromatic) }, true)]
+    fn test_bond_ast_is_ground(#[case] ast: BondAst, #[case] expected: bool) {
+        assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::default_matches_ground(BondAst::default(),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() }, true)]
+    #[case::same_order(BondAst::from_order(2), BondAst::from_order(2), true)]
+    #[case::order_mismatch(BondAst::from_order(2), BondAst::from_order(1), false)]
+    #[case::pattern_more_specific_than_target(BondAst::from_order(2), BondAst::default(), false)]
+    #[case::charge_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(0), spin: SpinStateAst::default(), constraints: BondConstraints::new() },
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }, false)]
+    #[case::charge_wildcard_pattern(BondAst::from_order(1),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }, true)]
+    fn test_bond_ast_matches(
+        #[case] pattern: BondAst,
+        #[case] target: BondAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    fn test_bond_ast_simplify_values() {
+        use super::super::value::Expr;
+        let mut bond = BondAst {
+            order: ValueAst::Expr(Expr::Lit(2)),
+            charge: ValueAst::Expr(Expr::Lit(0)),
+            spin: SpinStateAst::default(),
+            constraints: BondConstraints::from(BondConstraint::RingSize(ValueAst::Expr(
+                Expr::Lit(6),
+            ))),
+        };
+        bond.simplify_values();
+        assert_eq!(
+            bond,
+            BondAst {
+                order: ValueAst::Lit(2),
+                charge: ValueAst::Lit(0),
+                spin: SpinStateAst::default(),
+                constraints: BondConstraints::from(BondConstraint::ring_size(6)),
+            }
+        );
     }
 }

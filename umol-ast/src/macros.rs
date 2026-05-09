@@ -290,7 +290,7 @@ mod tests {
 
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraints, AtomAst,
-        AtomConstraint, AtomIdx, BondAst, BondConstraint, BondConstraints, Constraints,
+        AtomConstraint, AtomIdx, BondAst, BondConstraint, Constraints,
         DativeBondAst, DativeBondConstraint, DativeBondConstraints, MoleculeAst,
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, ValueAst,
     };
@@ -377,7 +377,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::double("2", BondAst::from_order(2))]
-    #[case::aromatic("1#a", BondAst::from_order(1).with_constraints(BondConstraints::from_iter([BondConstraint::Aromatic])))]
+    #[case::aromatic("1#a", BondAst::from_order(1).with_constraint(BondConstraint::Aromatic))]
     fn test_bond_macro(#[case] input: &str, #[case] expected: BondAst) {
         assert_eq!(bond!(input), expected);
     }
