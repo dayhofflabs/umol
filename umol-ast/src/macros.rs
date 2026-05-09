@@ -291,7 +291,7 @@ mod tests {
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraints, AtomAst,
         AtomConstraint, AtomIdx, BondAst, BondConstraint, Constraints,
-        DativeBondAst, DativeBondConstraint, DativeBondConstraints, MoleculeAst,
+        DativeBondAst, DativeBondConstraint, MoleculeAst,
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, ValueAst,
     };
     use crate::dsl::molecule::MetadataBuilder;
@@ -442,10 +442,7 @@ mod tests {
     #[case::single("1", DativeBondAst::from_order(1))]
     #[case::with_ring_size(
         "2 #r6",
-        DativeBondAst::from_order(2)
-            .with_constraints(DativeBondConstraints::from_iter([
-                DativeBondConstraint::RingSize(ValueAst::Lit(6)),
-            ])),
+        DativeBondAst::from_order(2).with_constraint(DativeBondConstraint::ring_size(6)),
     )]
     fn test_dative_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
         assert_eq!(dative!(input), expected);

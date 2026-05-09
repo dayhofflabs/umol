@@ -21,6 +21,14 @@ pub enum DativeBondConstraint {
 }
 
 impl DativeBondConstraint {
+    pub fn ring_count(v: impl Into<ValueAst>) -> Self {
+        Self::RingCount(v.into())
+    }
+
+    pub fn ring_size(v: impl Into<ValueAst>) -> Self {
+        Self::RingSize(v.into())
+    }
+
     pub fn kind(&self) -> DativeBondConstraintKind {
         self.into()
     }
@@ -77,6 +85,18 @@ impl DativeBondConstraints {
         &self.0
     }
 
+    pub fn contains(&self, kind: DativeBondConstraintKind) -> bool {
+        self.0.iter().any(|c| c.kind() == kind)
+    }
+
+    pub fn get(&self, kind: DativeBondConstraintKind) -> Option<&DativeBondConstraint> {
+        self.0.iter().find(|c| c.kind() == kind)
+    }
+
+    pub fn get_mut(&mut self, kind: DativeBondConstraintKind) -> Option<&mut DativeBondConstraint> {
+        self.0.iter_mut().find(|c| c.kind() == kind)
+    }
+
     pub fn iter(&self) -> Iter<'_, DativeBondConstraint> {
         self.0.iter()
     }
@@ -115,6 +135,11 @@ impl DativeBondConstraints {
         }
     }
 
+    pub fn remove(&mut self, kind: DativeBondConstraintKind) -> Option<DativeBondConstraint> {
+        let pos = self.0.iter().position(|c| c.kind() == kind)?;
+        Some(self.0.remove(pos))
+    }
+
     pub fn remap(self, remap: &IdxRemapping) -> Self {
         Self(self.0.into_iter().filter_map(|c| c.remap(remap)).collect())
     }
@@ -130,6 +155,27 @@ impl FromIterator<DativeBondConstraint> for DativeBondConstraints {
     }
 }
 
+impl IntoIterator for DativeBondConstraints {
+    type Item = DativeBondConstraint;
+    type IntoIter = std::vec::IntoIter<DativeBondConstraint>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl From<DativeBondConstraint> for DativeBondConstraints {
+    fn from(c: DativeBondConstraint) -> Self {
+        Self::from_iter([c])
+    }
+}
+
+impl From<Vec<DativeBondConstraint>> for DativeBondConstraints {
+    fn from(cs: Vec<DativeBondConstraint>) -> Self {
+        Self::from_iter(cs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -140,9 +186,20 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::ring_count(DativeBondConstraint::ring_count(1), DativeBondConstraint::RingCount(ValueAst::Lit(1)))]
+    #[case::ring_size(DativeBondConstraint::ring_size(6), DativeBondConstraint::RingSize(ValueAst::Lit(6)))]
+    fn test_dative_bond_constraint_constructors(
+        #[case] actual: DativeBondConstraint,
+        #[case] expected: DativeBondConstraint,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::aromatic(DativeBondConstraint::Aromatic, DativeBondConstraintKind::Aromatic)]
-    #[case::ring_count(DativeBondConstraint::RingCount(ValueAst::Lit(1)), DativeBondConstraintKind::RingCount)]
-    #[case::ring_size(DativeBondConstraint::RingSize(ValueAst::Lit(6)), DativeBondConstraintKind::RingSize)]
+    #[case::ring_count(DativeBondConstraint::ring_count(1), DativeBondConstraintKind::RingCount)]
+    #[case::ring_size(DativeBondConstraint::ring_size(6), DativeBondConstraintKind::RingSize)]
     fn test_dative_bond_constraint_kind(
         #[case] c: DativeBondConstraint,
         #[case] expected: DativeBondConstraintKind,
@@ -152,8 +209,8 @@ mod tests {
 
     #[rstest]
     #[case::aromatic(DativeBondConstraint::Aromatic)]
-    #[case::ring_count(DativeBondConstraint::RingCount(ValueAst::Lit(1)))]
-    #[case::ring_size(DativeBondConstraint::RingSize(ValueAst::Lit(6)))]
+    #[case::ring_count(DativeBondConstraint::ring_count(1))]
+    #[case::ring_size(DativeBondConstraint::ring_size(6))]
     fn test_dative_bond_constraint_is_unique(#[case] c: DativeBondConstraint) {
         assert!(c.is_unique());
     }
@@ -161,8 +218,9 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(DativeBondConstraint::Aromatic, false)]
-    #[case::ring_count_lit(DativeBondConstraint::RingCount(ValueAst::Lit(1)), false)]
+    #[case::ring_count_lit(DativeBondConstraint::ring_count(1), false)]
     #[case::ring_count_undetermined(DativeBondConstraint::RingCount(ValueAst::Undetermined), true)]
+    #[case::ring_size_lit(DativeBondConstraint::ring_size(6), false)]
     #[case::ring_size_undetermined(DativeBondConstraint::RingSize(ValueAst::Undetermined), true)]
     fn test_dative_bond_constraint_is_undetermined(
         #[case] c: DativeBondConstraint,
@@ -175,11 +233,11 @@ mod tests {
     #[rstest]
     #[case::ring_count_folds_expr(
         DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Lit(2))),
-        DativeBondConstraint::RingCount(ValueAst::Lit(2)),
+        DativeBondConstraint::ring_count(2),
     )]
     #[case::ring_size_folds_expr(
         DativeBondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6))),
-        DativeBondConstraint::RingSize(ValueAst::Lit(6)),
+        DativeBondConstraint::ring_size(6),
     )]
     fn test_dative_bond_constraint_simplify(
         #[case] input: DativeBondConstraint,
@@ -190,60 +248,225 @@ mod tests {
 
     #[rstest]
     #[case::aromatic(DativeBondConstraint::Aromatic)]
-    #[case::ring_count_lit(DativeBondConstraint::RingCount(ValueAst::Lit(1)))]
+    #[case::ring_count_lit(DativeBondConstraint::ring_count(1))]
+    #[case::ring_size_undetermined(DativeBondConstraint::RingSize(ValueAst::Undetermined))]
     fn test_dative_bond_constraint_simplify_identity(#[case] input: DativeBondConstraint) {
         assert_eq!(input.clone().simplify(), input);
     }
 
     #[rstest]
-    fn test_dative_bond_constraints_add_unique_replaces() {
-        let mut cs = DativeBondConstraints::new();
-        cs.add(DativeBondConstraint::RingCount(ValueAst::Lit(1)));
-        let prev = cs.add(DativeBondConstraint::RingCount(ValueAst::Lit(2)));
-        assert_eq!(
-            prev,
-            Some(DativeBondConstraint::RingCount(ValueAst::Lit(1)))
-        );
-        assert_eq!(
-            cs.as_slice(),
-            &[DativeBondConstraint::RingCount(ValueAst::Lit(2))]
-        );
+    fn test_dative_bond_constraints_new() {
+        let cs = DativeBondConstraints::new();
+        assert!(cs.is_empty());
+        assert_eq!(cs.len(), 0);
+        assert_eq!(cs.as_slice(), &[] as &[DativeBondConstraint]);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_dative_bond_constraints_add_distinct_kinds_coexist() {
-        let mut cs = DativeBondConstraints::new();
-        cs.add(DativeBondConstraint::RingCount(ValueAst::Lit(1)));
-        cs.add(DativeBondConstraint::RingSize(ValueAst::Lit(6)));
-        assert_eq!(cs.len(), 2);
-    }
-
-    #[rstest]
-    fn test_dative_bond_constraints_retain() {
-        let mut cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::RingCount(ValueAst::Lit(2)),
-            DativeBondConstraint::RingSize(ValueAst::Lit(6)),
+    #[case::aromatic_present(DativeBondConstraintKind::Aromatic, true)]
+    #[case::ring_size_present(DativeBondConstraintKind::RingSize, true)]
+    #[case::ring_count_absent(DativeBondConstraintKind::RingCount, false)]
+    fn test_dative_bond_constraints_contains(
+        #[case] kind: DativeBondConstraintKind,
+        #[case] expected: bool,
+    ) {
+        let cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_size(6),
         ]);
-        cs.retain(|c| matches!(c, DativeBondConstraint::RingCount(_)));
+        assert_eq!(cs.contains(kind), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(DativeBondConstraintKind::Aromatic, Some(DativeBondConstraint::Aromatic))]
+    #[case::ring_size(DativeBondConstraintKind::RingSize, Some(DativeBondConstraint::ring_size(6)))]
+    #[case::ring_count_absent(DativeBondConstraintKind::RingCount, None)]
+    fn test_dative_bond_constraints_get(
+        #[case] kind: DativeBondConstraintKind,
+        #[case] expected: Option<DativeBondConstraint>,
+    ) {
+        let cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_size(6),
+        ]);
+        assert_eq!(cs.get(kind), expected.as_ref());
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_get_mut() {
+        let mut cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_size(6),
+        ]);
+        let entry = cs.get_mut(DativeBondConstraintKind::RingSize).unwrap();
+        *entry = DativeBondConstraint::ring_size(5);
         assert_eq!(
             cs.as_slice(),
-            &[DativeBondConstraint::RingCount(ValueAst::Lit(2))]
+            &[DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(5)],
         );
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_get_mut_absent() {
+        let mut cs = DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic]);
+        assert!(cs.get_mut(DativeBondConstraintKind::RingCount).is_none());
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_iter() {
+        let cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::ring_size(6),
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_count(1),
+        ]);
+        let collected: Vec<_> = cs.iter().cloned().collect();
+        assert_eq!(
+            collected,
+            vec![
+                DativeBondConstraint::ring_size(6),
+                DativeBondConstraint::Aromatic,
+                DativeBondConstraint::ring_count(1),
+            ],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fresh(
+        vec![DativeBondConstraint::Aromatic],
+        vec![None],
+        vec![DativeBondConstraint::Aromatic],
+    )]
+    #[case::replace_same_kind(
+        vec![DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_count(2)],
+        vec![None, Some(DativeBondConstraint::ring_count(1))],
+        vec![DativeBondConstraint::ring_count(2)],
+    )]
+    #[case::replace_unit_variant(
+        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::Aromatic],
+        vec![None, Some(DativeBondConstraint::Aromatic)],
+        vec![DativeBondConstraint::Aromatic],
+    )]
+    #[case::distinct_kinds(
+        vec![
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_count(1),
+            DativeBondConstraint::ring_size(6),
+        ],
+        vec![None, None, None],
+        vec![
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_count(1),
+            DativeBondConstraint::ring_size(6),
+        ],
+    )]
+    fn test_dative_bond_constraints_add(
+        #[case] sequence: Vec<DativeBondConstraint>,
+        #[case] expected_returns: Vec<Option<DativeBondConstraint>>,
+        #[case] expected_state: Vec<DativeBondConstraint>,
+    ) {
+        let mut cs = DativeBondConstraints::new();
+        let returns: Vec<_> = sequence.into_iter().map(|c| cs.add(c)).collect();
+        assert_eq!(returns, expected_returns);
+        assert_eq!(cs.as_slice(), expected_state.as_slice());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::partial(
+        |c: &DativeBondConstraint| matches!(c, DativeBondConstraint::Aromatic | DativeBondConstraint::RingSize(_)),
+        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
+    )]
+    #[case::all_dropped(|_: &DativeBondConstraint| false, vec![])]
+    fn test_dative_bond_constraints_retain(
+        #[case] predicate: impl FnMut(&DativeBondConstraint) -> bool,
+        #[case] expected: Vec<DativeBondConstraint>,
+    ) {
+        let mut cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_count(1),
+            DativeBondConstraint::ring_size(6),
+        ]);
+        cs.retain(predicate);
+        assert_eq!(cs.as_slice(), expected.as_slice());
     }
 
     #[rstest]
     fn test_dative_bond_constraints_clear() {
-        let mut cs =
-            DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(1))]);
+        let mut cs = DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic]);
         cs.clear();
-        assert!(cs.is_empty());
+        assert_eq!(cs, DativeBondConstraints::new());
     }
 
     #[rstest]
-    fn test_dative_bond_constraints_remap_is_identity_for_value_only() {
+    fn test_dative_bond_constraints_take() {
+        let mut cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_size(6),
+        ]);
+        let drained: Vec<_> = cs.take().collect();
+        assert_eq!(
+            drained,
+            vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
+        );
+        assert_eq!(cs, DativeBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_simplify_each() {
+        let mut cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Lit(1))),
+            DativeBondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6))),
+        ]);
+        cs.simplify_each();
+        assert_eq!(
+            cs,
+            DativeBondConstraints::from_iter([
+                DativeBondConstraint::Aromatic,
+                DativeBondConstraint::ring_count(1),
+                DativeBondConstraint::ring_size(6),
+            ]),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic_present(
+        DativeBondConstraintKind::Aromatic,
+        Some(DativeBondConstraint::Aromatic),
+        vec![DativeBondConstraint::ring_size(6)],
+    )]
+    #[case::ring_size_present(
+        DativeBondConstraintKind::RingSize,
+        Some(DativeBondConstraint::ring_size(6)),
+        vec![DativeBondConstraint::Aromatic],
+    )]
+    #[case::ring_count_absent(
+        DativeBondConstraintKind::RingCount,
+        None,
+        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
+    )]
+    fn test_dative_bond_constraints_remove(
+        #[case] kind: DativeBondConstraintKind,
+        #[case] expected_returned: Option<DativeBondConstraint>,
+        #[case] expected_state: Vec<DativeBondConstraint>,
+    ) {
+        let mut cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_size(6),
+        ]);
+        assert_eq!(cs.remove(kind), expected_returned);
+        assert_eq!(cs.as_slice(), expected_state.as_slice());
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_remap() {
         let cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::RingCount(ValueAst::Lit(1)),
-            DativeBondConstraint::RingSize(ValueAst::Lit(6)),
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_size(6),
         ]);
         let remap = IdxRemapping::new(
             umol_graph_core::Remapping {
@@ -255,7 +478,57 @@ mod tests {
             Vec::new(),
             Vec::new(),
         );
-        let after = cs.clone().remap(&remap);
-        assert_eq!(after, cs);
+        assert_eq!(cs.clone().remap(&remap), cs);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::distinct(
+        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_count(1)],
+        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_count(1)],
+    )]
+    #[case::same_kind_last_wins(
+        vec![DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_count(2)],
+        vec![DativeBondConstraint::ring_count(2)],
+    )]
+    #[case::empty(vec![], vec![])]
+    fn test_dative_bond_constraints_from_iter(
+        #[case] input: Vec<DativeBondConstraint>,
+        #[case] expected: Vec<DativeBondConstraint>,
+    ) {
+        let cs = DativeBondConstraints::from_iter(input);
+        assert_eq!(cs.as_slice(), expected.as_slice());
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_into_iter() {
+        let cs = DativeBondConstraints::from_iter([
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_size(6),
+        ]);
+        let collected: Vec<_> = cs.into_iter().collect();
+        assert_eq!(
+            collected,
+            vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_from_dative_bond_constraint() {
+        let cs: DativeBondConstraints = DativeBondConstraint::Aromatic.into();
+        assert_eq!(cs.as_slice(), &[DativeBondConstraint::Aromatic]);
+    }
+
+    #[rstest]
+    fn test_dative_bond_constraints_from_vec() {
+        let cs: DativeBondConstraints = vec![
+            DativeBondConstraint::Aromatic,
+            DativeBondConstraint::ring_size(6),
+        ]
+        .into();
+        assert_eq!(
+            cs.as_slice(),
+            &[DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
+        );
     }
 }
