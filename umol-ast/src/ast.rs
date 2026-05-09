@@ -30,8 +30,8 @@ pub use constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, BondConstraint,
     BondConstraintKind, BondConstraints, Constraint, Constraints, DativeBondConstraint,
     DativeBondConstraintKind, DativeBondConstraints, MoleculeConstraint, MulticenterBondConstraint,
-    MulticenterBondConstraints, MulticenterValenceAst, NoncovalentBondConstraint,
-    NoncovalentBondConstraints, RelationalConstraint, SubPatternAnchor,
+    MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterValenceAst,
+    NoncovalentBondConstraint, NoncovalentBondConstraints, RelationalConstraint, SubPatternAnchor,
 };
 pub use dative::DativeBondAst;
 pub use error::{EvaluationError, RewriteError};

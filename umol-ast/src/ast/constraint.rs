@@ -33,6 +33,8 @@ pub use atom::{
 pub use bond::{BondConstraint, BondConstraintKind, BondConstraints};
 pub use dative::{DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints};
 pub use molecule::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
-pub use multicenter::{MulticenterBondConstraint, MulticenterBondConstraints};
+pub use multicenter::{
+    MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
+};
 pub use noncovalent::{NoncovalentBondConstraint, NoncovalentBondConstraints};
 pub use relational::RelationalConstraint;

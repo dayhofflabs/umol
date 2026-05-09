@@ -3,10 +3,15 @@
 use std::mem::{self, replace};
 use std::slice::Iter;
 
+use strum::EnumDiscriminants;
+
 use super::super::remap::IdxRemapping;
 use super::super::value::ValueAst;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// Multicenter-bond-scope constraint. Held inline on `MulticenterBondAst` via
+/// `MulticenterBondConstraints`.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[strum_discriminants(name(MulticenterBondConstraintKind), derive(Hash))]
 pub enum MulticenterBondConstraint {
     /// Asserted total electron count for the multicenter bond. Cross-checked
     /// by the `ConsistencyValidator` against `sum(MulticenterBondAst::electrons)`.
@@ -14,10 +19,17 @@ pub enum MulticenterBondConstraint {
 }
 
 impl MulticenterBondConstraint {
+    pub fn electron_count(v: impl Into<ValueAst>) -> Self {
+        Self::ElectronCount(v.into())
+    }
+
+    pub fn kind(&self) -> MulticenterBondConstraintKind {
+        self.into()
+    }
+
+    /// Every `MulticenterBondConstraint` variant is single-valued per bond.
     pub fn is_unique(&self) -> bool {
-        match self {
-            Self::ElectronCount(_) => true,
-        }
+        true
     }
 
     pub fn is_undetermined(&self) -> bool {
@@ -33,16 +45,8 @@ impl MulticenterBondConstraint {
     }
 
     pub fn remap(self, _remap: &IdxRemapping) -> Option<Self> {
-        match self {
-            Self::ElectronCount(_) => Some(self),
-        }
-    }
-
-    fn matches_kind(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (Self::ElectronCount(_), Self::ElectronCount(_)),
-        )
+        // Value-only: no indices to remap.
+        Some(self)
     }
 }
 
@@ -66,13 +70,31 @@ impl MulticenterBondConstraints {
         &self.0
     }
 
+    pub fn contains(&self, kind: MulticenterBondConstraintKind) -> bool {
+        self.0.iter().any(|c| c.kind() == kind)
+    }
+
+    pub fn get(&self, kind: MulticenterBondConstraintKind) -> Option<&MulticenterBondConstraint> {
+        self.0.iter().find(|c| c.kind() == kind)
+    }
+
+    pub fn get_mut(
+        &mut self,
+        kind: MulticenterBondConstraintKind,
+    ) -> Option<&mut MulticenterBondConstraint> {
+        self.0.iter_mut().find(|c| c.kind() == kind)
+    }
+
     pub fn iter(&self) -> Iter<'_, MulticenterBondConstraint> {
         self.0.iter()
     }
 
+    /// Insert a constraint per the per-variant cardinality policy. Returns
+    /// the replaced entry if `c.is_unique()` and a same-kind entry already
+    /// existed; `None` otherwise.
     pub fn add(&mut self, c: MulticenterBondConstraint) -> Option<MulticenterBondConstraint> {
         if c.is_unique() {
-            if let Some(i) = self.0.iter().position(|x| x.matches_kind(&c)) {
+            if let Some(i) = self.0.iter().position(|x| x.kind() == c.kind()) {
                 return Some(replace(&mut self.0[i], c));
             }
         }
@@ -102,6 +124,14 @@ impl MulticenterBondConstraints {
         }
     }
 
+    pub fn remove(
+        &mut self,
+        kind: MulticenterBondConstraintKind,
+    ) -> Option<MulticenterBondConstraint> {
+        let pos = self.0.iter().position(|c| c.kind() == kind)?;
+        Some(self.0.remove(pos))
+    }
+
     pub fn remap(self, remap: &IdxRemapping) -> Self {
         Self(self.0.into_iter().filter_map(|c| c.remap(remap)).collect())
     }
@@ -117,117 +147,324 @@ impl FromIterator<MulticenterBondConstraint> for MulticenterBondConstraints {
     }
 }
 
+impl IntoIterator for MulticenterBondConstraints {
+    type Item = MulticenterBondConstraint;
+    type IntoIter = std::vec::IntoIter<MulticenterBondConstraint>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl From<MulticenterBondConstraint> for MulticenterBondConstraints {
+    fn from(c: MulticenterBondConstraint) -> Self {
+        Self::from_iter([c])
+    }
+}
+
+impl From<Vec<MulticenterBondConstraint>> for MulticenterBondConstraints {
+    fn from(cs: Vec<MulticenterBondConstraint>) -> Self {
+        Self::from_iter(cs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::iter::empty;
-
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::Remapping;
 
     use super::*;
+    use crate::ast::value::Expr;
 
-    fn empty_remapping() -> IdxRemapping {
-        IdxRemapping::new(
+    #[rstest]
+    #[case::electron_count(
+        MulticenterBondConstraint::electron_count(2),
+        MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)),
+    )]
+    fn test_multicenter_bond_constraint_constructors(
+        #[case] actual: MulticenterBondConstraint,
+        #[case] expected: MulticenterBondConstraint,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::electron_count(
+        MulticenterBondConstraint::electron_count(2),
+        MulticenterBondConstraintKind::ElectronCount,
+    )]
+    fn test_multicenter_bond_constraint_kind(
+        #[case] c: MulticenterBondConstraint,
+        #[case] expected: MulticenterBondConstraintKind,
+    ) {
+        assert_eq!(c.kind(), expected);
+    }
+
+    #[rstest]
+    #[case::electron_count(MulticenterBondConstraint::electron_count(2))]
+    fn test_multicenter_bond_constraint_is_unique(#[case] c: MulticenterBondConstraint) {
+        assert!(c.is_unique());
+    }
+
+    #[rstest]
+    #[case::lit(MulticenterBondConstraint::electron_count(2), false)]
+    #[case::undetermined(
+        MulticenterBondConstraint::ElectronCount(ValueAst::Undetermined),
+        true,
+    )]
+    fn test_multicenter_bond_constraint_is_undetermined(
+        #[case] c: MulticenterBondConstraint,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(c.is_undetermined(), expected);
+    }
+
+    #[rstest]
+    #[case::folds_expr(
+        MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Expr::Lit(2))),
+        MulticenterBondConstraint::electron_count(2),
+    )]
+    fn test_multicenter_bond_constraint_simplify(
+        #[case] input: MulticenterBondConstraint,
+        #[case] expected: MulticenterBondConstraint,
+    ) {
+        assert_eq!(input.simplify(), expected);
+    }
+
+    #[rstest]
+    #[case::lit(MulticenterBondConstraint::electron_count(2))]
+    #[case::undetermined(MulticenterBondConstraint::ElectronCount(ValueAst::Undetermined))]
+    fn test_multicenter_bond_constraint_simplify_identity(
+        #[case] input: MulticenterBondConstraint,
+    ) {
+        assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_new() {
+        let cs = MulticenterBondConstraints::new();
+        assert!(cs.is_empty());
+        assert_eq!(cs.len(), 0);
+        assert_eq!(cs.as_slice(), &[] as &[MulticenterBondConstraint]);
+    }
+
+    #[rstest]
+    #[case::present(MulticenterBondConstraintKind::ElectronCount, true)]
+    fn test_multicenter_bond_constraints_contains(
+        #[case] kind: MulticenterBondConstraintKind,
+        #[case] expected: bool,
+    ) {
+        let cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        assert_eq!(cs.contains(kind), expected);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_contains_absent() {
+        let cs = MulticenterBondConstraints::new();
+        assert!(!cs.contains(MulticenterBondConstraintKind::ElectronCount));
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_get() {
+        let cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        assert_eq!(
+            cs.get(MulticenterBondConstraintKind::ElectronCount),
+            Some(&MulticenterBondConstraint::electron_count(2)),
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_get_absent() {
+        let cs = MulticenterBondConstraints::new();
+        assert_eq!(cs.get(MulticenterBondConstraintKind::ElectronCount), None);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_get_mut() {
+        let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        let entry = cs
+            .get_mut(MulticenterBondConstraintKind::ElectronCount)
+            .unwrap();
+        *entry = MulticenterBondConstraint::electron_count(4);
+        assert_eq!(
+            cs.as_slice(),
+            &[MulticenterBondConstraint::electron_count(4)],
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_get_mut_absent() {
+        let mut cs = MulticenterBondConstraints::new();
+        assert!(
+            cs.get_mut(MulticenterBondConstraintKind::ElectronCount)
+                .is_none()
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_iter() {
+        let cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        let collected: Vec<_> = cs.iter().cloned().collect();
+        assert_eq!(collected, vec![MulticenterBondConstraint::electron_count(2)]);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fresh(
+        vec![MulticenterBondConstraint::electron_count(2)],
+        vec![None],
+        vec![MulticenterBondConstraint::electron_count(2)],
+    )]
+    #[case::replace_same_kind(
+        vec![
+            MulticenterBondConstraint::electron_count(2),
+            MulticenterBondConstraint::electron_count(4),
+        ],
+        vec![None, Some(MulticenterBondConstraint::electron_count(2))],
+        vec![MulticenterBondConstraint::electron_count(4)],
+    )]
+    fn test_multicenter_bond_constraints_add(
+        #[case] sequence: Vec<MulticenterBondConstraint>,
+        #[case] expected_returns: Vec<Option<MulticenterBondConstraint>>,
+        #[case] expected_state: Vec<MulticenterBondConstraint>,
+    ) {
+        let mut cs = MulticenterBondConstraints::new();
+        let returns: Vec<_> = sequence.into_iter().map(|c| cs.add(c)).collect();
+        assert_eq!(returns, expected_returns);
+        assert_eq!(cs.as_slice(), expected_state.as_slice());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::partial(
+        |c: &MulticenterBondConstraint| matches!(c, MulticenterBondConstraint::ElectronCount(_)),
+        vec![MulticenterBondConstraint::electron_count(2)],
+    )]
+    #[case::all_dropped(|_: &MulticenterBondConstraint| false, vec![])]
+    fn test_multicenter_bond_constraints_retain(
+        #[case] predicate: impl FnMut(&MulticenterBondConstraint) -> bool,
+        #[case] expected: Vec<MulticenterBondConstraint>,
+    ) {
+        let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        cs.retain(predicate);
+        assert_eq!(cs.as_slice(), expected.as_slice());
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_clear() {
+        let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        cs.clear();
+        assert_eq!(cs, MulticenterBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_take() {
+        let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        let drained: Vec<_> = cs.take().collect();
+        assert_eq!(drained, vec![MulticenterBondConstraint::electron_count(2)]);
+        assert_eq!(cs, MulticenterBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_simplify_each() {
+        let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::ElectronCount(
+            ValueAst::Expr(Expr::Lit(2)),
+        ));
+        cs.simplify_each();
+        assert_eq!(
+            cs,
+            MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2)),
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::present(
+        MulticenterBondConstraintKind::ElectronCount,
+        Some(MulticenterBondConstraint::electron_count(2)),
+        vec![],
+    )]
+    fn test_multicenter_bond_constraints_remove(
+        #[case] kind: MulticenterBondConstraintKind,
+        #[case] expected_returned: Option<MulticenterBondConstraint>,
+        #[case] expected_state: Vec<MulticenterBondConstraint>,
+    ) {
+        let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        assert_eq!(cs.remove(kind), expected_returned);
+        assert_eq!(cs.as_slice(), expected_state.as_slice());
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_remove_absent() {
+        let mut cs = MulticenterBondConstraints::new();
+        assert_eq!(
+            cs.remove(MulticenterBondConstraintKind::ElectronCount),
+            None,
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_constraints_remap() {
+        let cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        let remap = IdxRemapping::new(
             Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
+                removed_nodes: vec![0, 1],
+                removed_edges: vec![0],
             },
             Vec::new(),
             Vec::new(),
             Vec::new(),
             Vec::new(),
-        )
+        );
+        assert_eq!(cs.clone().remap(&remap), cs);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::single(
+        vec![MulticenterBondConstraint::electron_count(2)],
+        vec![MulticenterBondConstraint::electron_count(2)],
+    )]
+    #[case::same_kind_last_wins(
+        vec![
+            MulticenterBondConstraint::electron_count(2),
+            MulticenterBondConstraint::electron_count(4),
+        ],
+        vec![MulticenterBondConstraint::electron_count(4)],
+    )]
+    #[case::empty(vec![], vec![])]
+    fn test_multicenter_bond_constraints_from_iter(
+        #[case] input: Vec<MulticenterBondConstraint>,
+        #[case] expected: Vec<MulticenterBondConstraint>,
+    ) {
+        let cs = MulticenterBondConstraints::from_iter(input);
+        assert_eq!(cs.as_slice(), expected.as_slice());
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_empty_methods() {
-        let mut cs = MulticenterBondConstraints::new();
-        assert!(cs.is_empty());
-        assert_eq!(cs.len(), 0);
-        assert!(cs.as_slice().is_empty());
-        assert_eq!(cs.iter().count(), 0);
-        cs.retain(|_| true);
-        assert!(cs.is_empty());
-        let drained: Vec<_> = cs.take().collect();
-        assert!(drained.is_empty());
-        cs.clear();
-        assert!(cs.is_empty());
-        let from_empty: MulticenterBondConstraints = empty().collect();
-        assert!(from_empty.is_empty());
-        let remapped = MulticenterBondConstraints::new().remap(&empty_remapping());
-        assert!(remapped.is_empty());
+    fn test_multicenter_bond_constraints_into_iter() {
+        let cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
+        let collected: Vec<_> = cs.into_iter().collect();
+        assert_eq!(collected, vec![MulticenterBondConstraint::electron_count(2)]);
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_add_inserts_new() {
-        let mut cs = MulticenterBondConstraints::new();
-        let displaced = cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)));
-        assert_eq!(displaced, None);
-        assert_eq!(cs.len(), 1);
+    fn test_multicenter_bond_constraints_from_multicenter_bond_constraint() {
+        let cs: MulticenterBondConstraints = MulticenterBondConstraint::electron_count(2).into();
         assert_eq!(
-            cs.as_slice()[0],
-            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)),
+            cs.as_slice(),
+            &[MulticenterBondConstraint::electron_count(2)],
         );
     }
 
     #[rstest]
-    fn test_multicenter_bond_constraints_add_replaces_existing_unique_kind() {
-        let mut cs = MulticenterBondConstraints::new();
-        cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)));
-        let displaced =
-            cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)));
+    fn test_multicenter_bond_constraints_from_vec() {
+        let cs: MulticenterBondConstraints =
+            vec![MulticenterBondConstraint::electron_count(2)].into();
         assert_eq!(
-            displaced,
-            Some(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))),
-        );
-        assert_eq!(cs.len(), 1);
-        assert_eq!(
-            cs.as_slice()[0],
-            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
-        );
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_constraint_is_undetermined() {
-        assert!(MulticenterBondConstraint::ElectronCount(ValueAst::Undetermined).is_undetermined());
-        assert!(!MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)).is_undetermined());
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_constraints_simplify_each() {
-        use crate::ast::value::Expr;
-        let mut cs = MulticenterBondConstraints::new();
-        cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Expr(
-            Expr::Lit(2),
-        )));
-        cs.simplify_each();
-        assert_eq!(
-            cs.as_slice()[0],
-            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)),
-        );
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_constraints_remap_passes_through() {
-        let mut cs = MulticenterBondConstraints::new();
-        cs.add(MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)));
-        let remapped = cs.remap(&empty_remapping());
-        assert_eq!(remapped.len(), 1);
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_constraints_from_iter_uses_add() {
-        let cs: MulticenterBondConstraints = [
-            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)),
-            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
-        ]
-        .into_iter()
-        .collect();
-        assert_eq!(cs.len(), 1);
-        assert_eq!(
-            cs.as_slice()[0],
-            MulticenterBondConstraint::ElectronCount(ValueAst::Lit(4)),
+            cs.as_slice(),
+            &[MulticenterBondConstraint::electron_count(2)],
         );
     }
 }
