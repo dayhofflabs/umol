@@ -45,6 +45,12 @@ impl AtomDsl {
     }
 }
 
+impl From<AtomAst> for AtomDsl {
+    fn from(ast: AtomAst) -> Self {
+        Self(ast)
+    }
+}
+
 impl FromStr for AtomDsl {
     type Err = ParseError;
 

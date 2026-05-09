@@ -294,7 +294,7 @@ mod tests {
         DativeBondAst, DativeBondConstraint, MoleculeAst,
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, ValueAst,
     };
-    use crate::dsl::molecule::MetadataBuilder;
+    use crate::dsl::molecule::Metadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
 
     #[rustfmt::skip]
@@ -324,32 +324,23 @@ mod tests {
     #[case::empty("{}", MoleculeDsl::default())]
     #[case::with_alias(
         r#"{:atom-aliases [:c "C"] :atoms [:c :c] :bonds [[0 1 "1"]]}"#,
-        {
-            let mut mb = MetadataBuilder::default();
-            mb.add_atom_alias("c".into(), Box::new("C".parse::<AtomDsl>().unwrap())).unwrap();
-            MoleculeDsl::from_parts(
-                MoleculeAst::from_atoms_and_bonds(
-                    vec![AtomAst::from_element(Element::C); 2],
-                    vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
-                ),
-                mb.build(),
-            )
-        },
+        MoleculeDsl::from_parts(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::C); 2],
+                vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            ),
+            Metadata::new().with_atom_alias("c", "C".parse::<AtomDsl>().unwrap()),
+        ),
     )]
     #[case::with_atom_ids(
         r#"{:atoms [[:a "C"] [:b "C"]] :bonds []}"#,
-        {
-            let mut mb = MetadataBuilder::default();
-            mb.set_atom_id(AtomIdx(0), "a".into());
-            mb.set_atom_id(AtomIdx(1), "b".into());
-            MoleculeDsl::from_parts(
-                MoleculeAst::from_atoms_and_bonds(
-                    vec![AtomAst::from_element(Element::C); 2],
-                    vec![],
-                ),
-                mb.build(),
-            )
-        },
+        MoleculeDsl::from_parts(
+            MoleculeAst::from_atoms_and_bonds(
+                vec![AtomAst::from_element(Element::C); 2],
+                vec![],
+            ),
+            Metadata::new().with_atom_id(AtomIdx(0), "a").with_atom_id(AtomIdx(1), "b"),
+        ),
     )]
     fn test_dsl_macro(#[case] input: &str, #[case] expected: MoleculeDsl) {
         assert_eq!(dsl!(input), expected);

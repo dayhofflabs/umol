@@ -48,12 +48,9 @@ use crate::ast::noncovalent::NoncovalentBondAst;
 use crate::ast::traits::{FromAst, IntoAst};
 
 /// Surface-form metadata paired with a `MoleculeAst`. Records atom ids,
-/// per-entity ids, and the atom-alias table. Never drifts: rewrapped
-/// atomically through `MoleculeDsl::from_parts`.
-///
-/// Opaque: storage is internal. Build via `MetadataBuilder` during
-/// parsing; read via the accessor methods (`atom_id`, `bond_id`, etc.,
-/// and the `*atom_alias*` methods for the alias table).
+/// per-entity ids, and the atom-alias table. Never drifts onto a different
+/// AST: `MoleculeDsl` keeps both fields private and rewraps atomically
+/// through `from_parts`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
     atom_ids: IndexMap<AtomIdx, String>,
@@ -66,6 +63,10 @@ pub struct Metadata {
 }
 
 impl Metadata {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub fn atom_id(&self, idx: AtomIdx) -> Option<&str> {
         self.atom_ids.get(&idx).map(String::as_str)
     }
@@ -112,69 +113,89 @@ impl Metadata {
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_ref()))
     }
-}
 
-/// Crate-private assembler for `Metadata`. Used by the DSL parser and
-/// by tests; external callers read through `Metadata`'s accessors.
-#[derive(Debug, Default)]
-pub(crate) struct MetadataBuilder {
-    atom_ids: IndexMap<AtomIdx, String>,
-    atom_aliases: BiMap<String, Box<AtomDsl>>,
-    bond_ids: IndexMap<BondIdx, String>,
-    dative_bond_ids: IndexMap<DativeBondIdx, String>,
-    aromatic_system_ids: IndexMap<AromaticSystemIdx, String>,
-    multicenter_bond_ids: IndexMap<MulticenterBondIdx, String>,
-    noncovalent_bond_ids: IndexMap<NoncovalentBondIdx, String>,
-}
-
-impl MetadataBuilder {
-    pub(crate) fn set_atom_id(&mut self, idx: AtomIdx, name: String) {
-        self.atom_ids.insert(idx, name);
+    pub fn set_atom_id(&mut self, idx: AtomIdx, name: impl Into<String>) {
+        self.atom_ids.insert(idx, name.into());
     }
 
-    pub(crate) fn set_bond_id(&mut self, idx: BondIdx, name: String) {
-        self.bond_ids.insert(idx, name);
+    pub fn set_bond_id(&mut self, idx: BondIdx, name: impl Into<String>) {
+        self.bond_ids.insert(idx, name.into());
     }
 
-    pub(crate) fn set_dative_bond_id(&mut self, idx: DativeBondIdx, name: String) {
-        self.dative_bond_ids.insert(idx, name);
+    pub fn set_dative_bond_id(&mut self, idx: DativeBondIdx, name: impl Into<String>) {
+        self.dative_bond_ids.insert(idx, name.into());
     }
 
-    pub(crate) fn set_aromatic_system_id(&mut self, idx: AromaticSystemIdx, name: String) {
-        self.aromatic_system_ids.insert(idx, name);
+    pub fn set_aromatic_system_id(&mut self, idx: AromaticSystemIdx, name: impl Into<String>) {
+        self.aromatic_system_ids.insert(idx, name.into());
     }
 
-    pub(crate) fn set_multicenter_bond_id(&mut self, idx: MulticenterBondIdx, name: String) {
-        self.multicenter_bond_ids.insert(idx, name);
+    pub fn set_multicenter_bond_id(&mut self, idx: MulticenterBondIdx, name: impl Into<String>) {
+        self.multicenter_bond_ids.insert(idx, name.into());
     }
 
-    pub(crate) fn set_noncovalent_bond_id(&mut self, idx: NoncovalentBondIdx, name: String) {
-        self.noncovalent_bond_ids.insert(idx, name);
+    pub fn set_noncovalent_bond_id(&mut self, idx: NoncovalentBondIdx, name: impl Into<String>) {
+        self.noncovalent_bond_ids.insert(idx, name.into());
     }
 
-    /// Insert an atom alias. Fails if the name or the atom DSL is already
-    /// bound — the alias table must be bijective (atoms are rare, and
-    /// `Box<AtomDsl>` keeps the hash slot pointer-sized).
-    pub(crate) fn add_atom_alias(
-        &mut self,
-        name: String,
-        dsl: Box<AtomDsl>,
-    ) -> Result<(), ParseError> {
+    /// Insert an atom alias. Last-wins on either side of the bijection: a
+    /// duplicate name displaces its prior atom-dsl mapping, and a duplicate
+    /// atom-dsl displaces its prior name. Callers that need collision
+    /// detection check upstream.
+    pub fn add_atom_alias(&mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) {
         self.atom_aliases
-            .insert_no_overwrite(name, dsl)
-            .map_err(|_| ParseError::InvalidValue("atom-aliases must be bijective".into()))
+            .insert(name.into(), Box::new(atom.into()));
     }
 
-    pub(crate) fn build(self) -> Metadata {
-        Metadata {
-            atom_ids: self.atom_ids,
-            atom_aliases: self.atom_aliases,
-            bond_ids: self.bond_ids,
-            dative_bond_ids: self.dative_bond_ids,
-            aromatic_system_ids: self.aromatic_system_ids,
-            multicenter_bond_ids: self.multicenter_bond_ids,
-            noncovalent_bond_ids: self.noncovalent_bond_ids,
-        }
+    pub fn with_atom_id(mut self, idx: AtomIdx, name: impl Into<String>) -> Self {
+        self.set_atom_id(idx, name);
+        self
+    }
+
+    pub fn with_bond_id(mut self, idx: BondIdx, name: impl Into<String>) -> Self {
+        self.set_bond_id(idx, name);
+        self
+    }
+
+    pub fn with_dative_bond_id(mut self, idx: DativeBondIdx, name: impl Into<String>) -> Self {
+        self.set_dative_bond_id(idx, name);
+        self
+    }
+
+    pub fn with_aromatic_system_id(
+        mut self,
+        idx: AromaticSystemIdx,
+        name: impl Into<String>,
+    ) -> Self {
+        self.set_aromatic_system_id(idx, name);
+        self
+    }
+
+    pub fn with_multicenter_bond_id(
+        mut self,
+        idx: MulticenterBondIdx,
+        name: impl Into<String>,
+    ) -> Self {
+        self.set_multicenter_bond_id(idx, name);
+        self
+    }
+
+    pub fn with_noncovalent_bond_id(
+        mut self,
+        idx: NoncovalentBondIdx,
+        name: impl Into<String>,
+    ) -> Self {
+        self.set_noncovalent_bond_id(idx, name);
+        self
+    }
+
+    pub fn with_atom_alias(
+        mut self,
+        name: impl Into<String>,
+        atom: impl Into<AtomDsl>,
+    ) -> Self {
+        self.add_atom_alias(name, atom);
+        self
     }
 }
 
@@ -976,25 +997,32 @@ impl MoleculeInput {
             constraints: constraint_dsls,
         } = self;
 
-        // Alias table: check no duplicate alias names.
+        // Alias table: bijective. The parser enforces both directions —
+        // duplicate names and duplicate atom-dsls are rejected at parse
+        // time. Programmatic `Metadata::add_atom_alias` is last-wins.
         let mut alias_table: IndexMap<String, Box<AtomDsl>> = IndexMap::new();
         for (name, dsl) in alias_entries {
             if alias_table.contains_key(&name) {
                 return Err(ParseError::DuplicateId(name));
+            }
+            if alias_table.values().any(|existing| existing == &dsl) {
+                return Err(ParseError::InvalidValue(
+                    "atom-aliases must be bijective: two names map to the same atom".into(),
+                ));
             }
             alias_table.insert(name, dsl);
         }
 
         // Atoms: materialize AtomAst from each entry; collect ids.
         let mut atoms: Vec<AtomAst> = Vec::with_capacity(atom_entries.len());
-        let mut builder = MetadataBuilder::default();
+        let mut metadata = Metadata::new();
         let mut atom_id_to_idx: IndexMap<String, AtomIdx> = IndexMap::new();
         for (pos, entry) in atom_entries.into_iter().enumerate() {
             let idx = AtomIdx(pos as u32);
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 atom_id_to_idx.insert(id.clone(), idx);
-                builder.set_atom_id(idx, id);
+                metadata.set_atom_id(idx, id);
             }
             let ast = match entry.spec {
                 AtomSpecInput::Bare(dsl) => dsl.0,
@@ -1022,7 +1050,7 @@ impl MoleculeInput {
                 if entry_ids.insert(id.clone(), ()).is_some() {
                     return Err(ParseError::DuplicateId(id));
                 }
-                builder.set_bond_id(BondIdx(pos as u32), id);
+                metadata.set_bond_id(BondIdx(pos as u32), id);
             }
             let a = entry.a.resolve(atom_count, &atom_id_to_idx)?;
             let b = entry.b.resolve(atom_count, &atom_id_to_idx)?;
@@ -1038,7 +1066,7 @@ impl MoleculeInput {
                 if entry_ids.insert(id.clone(), ()).is_some() {
                     return Err(ParseError::DuplicateId(id));
                 }
-                builder.set_dative_bond_id(DativeBondIdx(pos as u32), id);
+                metadata.set_dative_bond_id(DativeBondIdx(pos as u32), id);
             }
             let donor = entry.donor.resolve(atom_count, &atom_id_to_idx)?;
             let acceptor = entry.acceptor.resolve(atom_count, &atom_id_to_idx)?;
@@ -1054,7 +1082,7 @@ impl MoleculeInput {
                 if entry_ids.insert(id.clone(), ()).is_some() {
                     return Err(ParseError::DuplicateId(id));
                 }
-                builder.set_aromatic_system_id(AromaticSystemIdx(pos as u32), id);
+                metadata.set_aromatic_system_id(AromaticSystemIdx(pos as u32), id);
             }
             let atoms_resolved: Vec<AtomIdx> = entry
                 .atoms
@@ -1073,7 +1101,7 @@ impl MoleculeInput {
                 if entry_ids.insert(id.clone(), ()).is_some() {
                     return Err(ParseError::DuplicateId(id));
                 }
-                builder.set_multicenter_bond_id(MulticenterBondIdx(pos as u32), id);
+                metadata.set_multicenter_bond_id(MulticenterBondIdx(pos as u32), id);
             }
             let atoms_resolved: Vec<AtomIdx> = entry
                 .atoms
@@ -1092,19 +1120,19 @@ impl MoleculeInput {
                 if entry_ids.insert(id.clone(), ()).is_some() {
                     return Err(ParseError::DuplicateId(id));
                 }
-                builder.set_noncovalent_bond_id(NoncovalentBondIdx(pos as u32), id);
+                metadata.set_noncovalent_bond_id(NoncovalentBondIdx(pos as u32), id);
             }
             let a = entry.a.resolve(atom_count, &atom_id_to_idx)?;
             let b = entry.b.resolve(atom_count, &atom_id_to_idx)?;
             noncovalent_list.push((a, b, entry.bond.0));
         }
 
-        // Atom aliases — must be bijective.
+        // Atom aliases. Names are guaranteed unique by the upstream
+        // `parse_aliases` dedup; `add_atom_alias` is last-wins on
+        // duplicate atom-dsl, which can't fire here.
         for (name, dsl) in alias_table {
-            builder.add_atom_alias(name, dsl)?;
+            metadata.add_atom_alias(name, *dsl);
         }
-
-        let metadata = builder.build();
 
         // Resolve constraint refs against the final metadata + counts.
         let counts = EntityCounts {
@@ -1428,6 +1456,174 @@ mod tests {
     use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint};
     use crate::ast::spin::SpinStateAst;
     use crate::ast::value::ValueAst;
+
+    #[rstest]
+    fn test_metadata_new() {
+        let m = Metadata::new();
+        assert_eq!(m, Metadata::default());
+        assert!(m.atom_id(AtomIdx(0)).is_none());
+        assert!(m.bond_id(BondIdx(0)).is_none());
+        assert!(m.dative_bond_id(DativeBondIdx(0)).is_none());
+        assert!(m.aromatic_system_id(AromaticSystemIdx(0)).is_none());
+        assert!(m.multicenter_bond_id(MulticenterBondIdx(0)).is_none());
+        assert!(m.noncovalent_bond_id(NoncovalentBondIdx(0)).is_none());
+        assert!(!m.has_atom_aliases());
+        assert_eq!(m.atom_aliases_len(), 0);
+    }
+
+    #[rstest]
+    fn test_metadata_set_atom_id() {
+        let mut m = Metadata::new();
+        m.set_atom_id(AtomIdx(0), "c1");
+        assert_eq!(m.atom_id(AtomIdx(0)), Some("c1"));
+    }
+
+    #[rstest]
+    fn test_metadata_set_atom_id_last_wins() {
+        let mut m = Metadata::new();
+        m.set_atom_id(AtomIdx(0), "old");
+        m.set_atom_id(AtomIdx(0), "new");
+        assert_eq!(m.atom_id(AtomIdx(0)), Some("new"));
+    }
+
+    #[rstest]
+    fn test_metadata_set_bond_id() {
+        let mut m = Metadata::new();
+        m.set_bond_id(BondIdx(2), "b1");
+        assert_eq!(m.bond_id(BondIdx(2)), Some("b1"));
+    }
+
+    #[rstest]
+    fn test_metadata_set_dative_bond_id() {
+        let mut m = Metadata::new();
+        m.set_dative_bond_id(DativeBondIdx(1), "d1");
+        assert_eq!(m.dative_bond_id(DativeBondIdx(1)), Some("d1"));
+    }
+
+    #[rstest]
+    fn test_metadata_set_aromatic_system_id() {
+        let mut m = Metadata::new();
+        m.set_aromatic_system_id(AromaticSystemIdx(0), "ring1");
+        assert_eq!(m.aromatic_system_id(AromaticSystemIdx(0)), Some("ring1"));
+    }
+
+    #[rstest]
+    fn test_metadata_set_multicenter_bond_id() {
+        let mut m = Metadata::new();
+        m.set_multicenter_bond_id(MulticenterBondIdx(0), "mc1");
+        assert_eq!(m.multicenter_bond_id(MulticenterBondIdx(0)), Some("mc1"));
+    }
+
+    #[rstest]
+    fn test_metadata_set_noncovalent_bond_id() {
+        let mut m = Metadata::new();
+        m.set_noncovalent_bond_id(NoncovalentBondIdx(0), "h1");
+        assert_eq!(m.noncovalent_bond_id(NoncovalentBondIdx(0)), Some("h1"));
+    }
+
+    #[rstest]
+    fn test_metadata_add_atom_alias() {
+        let mut m = Metadata::new();
+        let atom = AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64);
+        m.add_atom_alias("HC2", atom.clone());
+        assert!(m.has_atom_alias("HC2"));
+        assert_eq!(m.atom_aliases_len(), 1);
+        assert_eq!(m.atom_alias_for(&AtomDsl(atom)), Some("HC2"));
+    }
+
+    #[rstest]
+    fn test_metadata_add_atom_alias_duplicate_name_replaces_atom() {
+        let mut m = Metadata::new();
+        let first = AtomAst::from_element(Element::C);
+        let second = AtomAst::from_element(Element::N);
+        m.add_atom_alias("X", first.clone());
+        m.add_atom_alias("X", second.clone());
+        assert_eq!(m.atom_aliases_len(), 1);
+        assert_eq!(m.atom_alias_for(&AtomDsl(second)), Some("X"));
+        assert_eq!(m.atom_alias_for(&AtomDsl(first)), None);
+    }
+
+    #[rstest]
+    fn test_metadata_add_atom_alias_duplicate_atom_replaces_name() {
+        let mut m = Metadata::new();
+        let atom = AtomAst::from_element(Element::C);
+        m.add_atom_alias("first", atom.clone());
+        m.add_atom_alias("second", atom.clone());
+        assert_eq!(m.atom_aliases_len(), 1);
+        assert!(!m.has_atom_alias("first"));
+        assert_eq!(m.atom_alias_for(&AtomDsl(atom)), Some("second"));
+    }
+
+    #[rstest]
+    fn test_metadata_iter_atom_aliases() {
+        let m = Metadata::new()
+            .with_atom_alias("a", AtomAst::from_element(Element::C))
+            .with_atom_alias("b", AtomAst::from_element(Element::N));
+        let collected: Vec<(&str, AtomAst)> = m
+            .iter_atom_aliases()
+            .map(|(name, dsl)| (name, dsl.0.clone()))
+            .collect();
+        assert_eq!(collected.len(), 2);
+        assert!(collected.contains(&("a", AtomAst::from_element(Element::C))));
+        assert!(collected.contains(&("b", AtomAst::from_element(Element::N))));
+    }
+
+    #[rstest]
+    fn test_metadata_with_atom_id_chains() {
+        let m = Metadata::new()
+            .with_atom_id(AtomIdx(0), "a")
+            .with_atom_id(AtomIdx(1), "b");
+        assert_eq!(m.atom_id(AtomIdx(0)), Some("a"));
+        assert_eq!(m.atom_id(AtomIdx(1)), Some("b"));
+    }
+
+    #[rstest]
+    fn test_metadata_with_bond_id() {
+        let m = Metadata::new().with_bond_id(BondIdx(0), "b");
+        assert_eq!(m.bond_id(BondIdx(0)), Some("b"));
+    }
+
+    #[rstest]
+    fn test_metadata_with_dative_bond_id() {
+        let m = Metadata::new().with_dative_bond_id(DativeBondIdx(0), "d");
+        assert_eq!(m.dative_bond_id(DativeBondIdx(0)), Some("d"));
+    }
+
+    #[rstest]
+    fn test_metadata_with_aromatic_system_id() {
+        let m = Metadata::new().with_aromatic_system_id(AromaticSystemIdx(0), "r");
+        assert_eq!(m.aromatic_system_id(AromaticSystemIdx(0)), Some("r"));
+    }
+
+    #[rstest]
+    fn test_metadata_with_multicenter_bond_id() {
+        let m = Metadata::new().with_multicenter_bond_id(MulticenterBondIdx(0), "mc");
+        assert_eq!(m.multicenter_bond_id(MulticenterBondIdx(0)), Some("mc"));
+    }
+
+    #[rstest]
+    fn test_metadata_with_noncovalent_bond_id() {
+        let m = Metadata::new().with_noncovalent_bond_id(NoncovalentBondIdx(0), "h");
+        assert_eq!(m.noncovalent_bond_id(NoncovalentBondIdx(0)), Some("h"));
+    }
+
+    #[rstest]
+    fn test_metadata_with_atom_alias() {
+        let atom = AtomAst::from_element(Element::C);
+        let m = Metadata::new().with_atom_alias("c", atom.clone());
+        assert_eq!(m.atom_alias_for(&AtomDsl(atom)), Some("c"));
+    }
+
+    #[rstest]
+    fn test_metadata_mixed_chain() {
+        let m = Metadata::new()
+            .with_atom_id(AtomIdx(0), "c1")
+            .with_bond_id(BondIdx(0), "b1")
+            .with_atom_alias("X", AtomAst::from_element(Element::C));
+        assert_eq!(m.atom_id(AtomIdx(0)), Some("c1"));
+        assert_eq!(m.bond_id(BondIdx(0)), Some("b1"));
+        assert!(m.has_atom_alias("X"));
+    }
 
     #[rstest]
     fn test_molecule_dsl_to_edn_empty() {

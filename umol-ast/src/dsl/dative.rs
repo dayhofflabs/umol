@@ -38,6 +38,12 @@ impl DativeBondDsl {
     }
 }
 
+impl From<DativeBondAst> for DativeBondDsl {
+    fn from(ast: DativeBondAst) -> Self {
+        Self(ast)
+    }
+}
+
 impl FromStr for DativeBondDsl {
     type Err = ParseError;
 

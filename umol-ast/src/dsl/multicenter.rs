@@ -38,6 +38,12 @@ impl MulticenterBondDsl {
     }
 }
 
+impl From<MulticenterBondAst> for MulticenterBondDsl {
+    fn from(ast: MulticenterBondAst) -> Self {
+        Self(ast)
+    }
+}
+
 impl FromStr for MulticenterBondDsl {
     type Err = ParseError;
 

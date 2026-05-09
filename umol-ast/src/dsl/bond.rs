@@ -39,6 +39,12 @@ impl BondDsl {
     }
 }
 
+impl From<BondAst> for BondDsl {
+    fn from(ast: BondAst) -> Self {
+        Self(ast)
+    }
+}
+
 impl FromStr for BondDsl {
     type Err = ParseError;
 

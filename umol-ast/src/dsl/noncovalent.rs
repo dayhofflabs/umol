@@ -32,6 +32,12 @@ impl NoncovalentBondDsl {
     }
 }
 
+impl From<NoncovalentBondAst> for NoncovalentBondDsl {
+    fn from(ast: NoncovalentBondAst) -> Self {
+        Self(ast)
+    }
+}
+
 impl FromStr for NoncovalentBondDsl {
     type Err = ParseError;
 

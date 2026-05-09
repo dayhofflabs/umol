@@ -39,6 +39,12 @@ impl AromaticSystemDsl {
     }
 }
 
+impl From<AromaticSystemAst> for AromaticSystemDsl {
+    fn from(ast: AromaticSystemAst) -> Self {
+        Self(ast)
+    }
+}
+
 impl FromStr for AromaticSystemDsl {
     type Err = ParseError;
 

@@ -1823,9 +1823,7 @@ mod tests {
 
     #[fixture]
     fn meta_with_atom_id() -> Metadata {
-        let mut b = super::super::molecule::MetadataBuilder::default();
-        b.set_atom_id(AtomIdx(2), "c1".to_string());
-        b.build()
+        Metadata::new().with_atom_id(AtomIdx(2), "c1")
     }
 
     #[rstest]
