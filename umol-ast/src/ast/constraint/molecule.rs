@@ -448,13 +448,13 @@ mod tests {
     use rstest::*;
     use umol_graph_core::Remapping;
 
-    use super::super::super::idx::{
+    use super::*;
+    use crate::ast::idx::{
         AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
     };
-    use super::super::super::molecule::MoleculeAst;
-    use super::super::super::spin::SpinStateAst;
-    use super::super::super::value::ValueAst;
-    use super::*;
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::spin::SpinStateAst;
+    use crate::ast::value::ValueAst;
 
     fn idx_remapping(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdxRemapping {
         IdxRemapping::new(

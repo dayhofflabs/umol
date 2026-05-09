@@ -1,4 +1,4 @@
-//! Per-multicenter-bond constraints.
+//! Multicenter bond constraints.
 
 use std::mem::{self, replace};
 use std::slice::Iter;

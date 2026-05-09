@@ -190,6 +190,7 @@ pub(crate) fn dative_bond(i: &mut &str) -> PResult<DativeBondDsl> {
 
 fn constraint_tag(c: &DativeBondConstraint) -> &'static str {
     match c {
+        DativeBondConstraint::Aromatic => "#a",
         DativeBondConstraint::RingCount(_) => "#R",
         DativeBondConstraint::RingSize(_) => "#r",
     }
@@ -206,6 +207,9 @@ fn dative_bond_predicate(i: &mut &str) -> PResult<DativeBondPredicate> {
     let start = *i;
     let prefix: &str = take(2usize).parse_next(i)?;
     match prefix {
+        "#a" => Ok(DativeBondPredicate::Constraint(
+            DativeBondConstraint::Aromatic,
+        )),
         "#R" => ring_count
             .map(|v| DativeBondPredicate::Constraint(DativeBondConstraint::RingCount(v)))
             .parse_next(i),
@@ -253,6 +257,7 @@ fn fmt_order(f: &mut fmt::Formatter<'_>, order: &ValueAst) -> fmt::Result {
 
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraint) -> fmt::Result {
     match c {
+        DativeBondConstraint::Aromatic => write!(f, "#a"),
         DativeBondConstraint::RingCount(v) => fmt_ring_count(f, v),
         DativeBondConstraint::RingSize(v) => match v {
             ValueAst::Undetermined => Ok(()),
@@ -271,60 +276,74 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraint) -> fmt::
 // region: Constraint DSL
 
 /// Surface DSL wrapper around the narrow `DativeBondConstraint`. EDN form is
-/// a single-key map keyed by the constraint kind: `{:ring-count <value>}` or
+/// either the bare keyword `:aromatic` (flag variant, no value) or a
+/// single-key map keyed by the constraint kind: `{:ring-count <value>}` or
 /// `{:ring-size <value>}`. Ref-bearing variants moved to
 /// [`super::relational::RelationalConstraintDsl`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DativeBondConstraintDsl {
+    Aromatic,
     RingCount(ValueAst),
     RingSize(ValueAst),
 }
 
 impl<'de> FromEdn<'de> for DativeBondConstraintDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        let Edn::Map(m) = edn else {
-            return Err(DeError::TypeMismatch {
-                expected: "dative-bond-constraint single-key map",
-                got: edn.kind(),
-                path: Vec::new(),
-            });
-        };
-        if m.len() != 1 {
-            return Err(DeError::Custom(format!(
-                "dative-bond-constraint must have exactly one key, got {}",
-                m.len()
-            )));
-        }
-        let (k, v) = m.iter().next().unwrap();
-        let Edn::Keyword(key) = k else {
-            return Err(DeError::TypeMismatch {
-                expected: "keyword key",
-                got: k.kind(),
-                path: vec!["dative-bond-constraint".into()],
-            });
-        };
-        Ok(match key.name() {
-            "ring-count" => Self::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
-            "ring-size" => Self::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
-            other => {
-                return Err(DeError::UnknownField {
-                    key: other.to_string(),
-                    path: vec!["dative-bond-constraint".into()],
-                });
+        match edn {
+            Edn::Keyword(k) if k.name() == "aromatic" => Ok(Self::Aromatic),
+            Edn::Map(m) => {
+                if m.len() != 1 {
+                    return Err(DeError::Custom(format!(
+                        "dative-bond-constraint must have exactly one key, got {}",
+                        m.len()
+                    )));
+                }
+                let (k, v) = m.iter().next().unwrap();
+                let Edn::Keyword(key) = k else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "keyword key",
+                        got: k.kind(),
+                        path: vec!["dative-bond-constraint".into()],
+                    });
+                };
+                Ok(match key.name() {
+                    "ring-count" => Self::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
+                    "ring-size" => Self::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
+                    other => {
+                        return Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["dative-bond-constraint".into()],
+                        });
+                    }
+                })
             }
-        })
+            other => Err(DeError::TypeMismatch {
+                expected: ":aromatic / {:ring-count <value>} / {:ring-size <value>}",
+                got: other.kind(),
+                path: Vec::new(),
+            }),
+        }
     }
 }
 
 impl ToEdn for DativeBondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
-        let (key, value) = match self {
-            Self::RingCount(v) => ("ring-count", ValueDsl::from_ast(v, &()).to_edn()),
-            Self::RingSize(v) => ("ring-size", ValueDsl::from_ast(v, &()).to_edn()),
-        };
-        let mut m = EdnMap::with_capacity(1);
-        m.insert(Edn::Keyword(EdnKeyword::owned(key.into())), value);
-        Edn::Map(m)
+        match self {
+            Self::Aromatic => Edn::Keyword(EdnKeyword::owned("aromatic".into())),
+            Self::RingCount(v) | Self::RingSize(v) => {
+                let key = match self {
+                    Self::RingCount(_) => "ring-count",
+                    Self::RingSize(_) => "ring-size",
+                    Self::Aromatic => unreachable!(),
+                };
+                let mut m = EdnMap::with_capacity(1);
+                m.insert(
+                    Edn::Keyword(EdnKeyword::owned(key.into())),
+                    ValueDsl::from_ast(v, &()).to_edn(),
+                );
+                Edn::Map(m)
+            }
+        }
     }
 }
 
@@ -332,6 +351,7 @@ impl DativeBondConstraintDsl {
     /// Build from the narrow inline AST form.
     pub(crate) fn from_ast(c: &DativeBondConstraint) -> Self {
         match c {
+            DativeBondConstraint::Aromatic => Self::Aromatic,
             DativeBondConstraint::RingCount(v) => Self::RingCount(v.clone()),
             DativeBondConstraint::RingSize(v) => Self::RingSize(v.clone()),
         }
@@ -340,6 +360,7 @@ impl DativeBondConstraintDsl {
     /// Convert into the narrow inline AST form.
     pub(crate) fn into_ast(self) -> DativeBondConstraint {
         match self {
+            Self::Aromatic => DativeBondConstraint::Aromatic,
             Self::RingCount(v) => DativeBondConstraint::RingCount(v),
             Self::RingSize(v) => DativeBondConstraint::RingSize(v),
         }
@@ -372,6 +393,8 @@ mod tests {
     #[case::triple("3", DativeBondDsl(DativeBondAst::from_order(3)))]
     #[case::single_whitespace("  1  ", DativeBondDsl(DativeBondAst::from_order(1)))]
     #[case::undetermined_order("*", DativeBondDsl(DativeBondAst::default()))]
+    #[case::aromatic("1#a", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic]))))]
+    #[case::aromatic_with_ring("1#a#r6", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic, DativeBondConstraint::RingSize(ValueAst::Lit(6))]))))]
     #[case::ring_count("1#R2", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2))]))))]
     #[case::ring_bare("1#R", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(1))]))))]
     #[case::ring_plus("1#R+", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))]))))]
@@ -411,6 +434,7 @@ mod tests {
     #[case::unknown_c("1#c", ParseError::UnknownDativeBondPredicate("#c".to_string()))]
     #[case::dup_ring("1#R1#R2", ParseError::DuplicateDativeBondPredicate("#R".to_string()))]
     #[case::dup_ring_size("1#r6#r5", ParseError::DuplicateDativeBondPredicate("#r".to_string()))]
+    #[case::dup_aromatic("1#a#a", ParseError::DuplicateDativeBondPredicate("#a".to_string()))]
     #[case::trailing("1#R2 foo", ParseError::TrailingInput("foo".to_string()))]
     fn test_parse_dative_error(#[case] input: &str, #[case] expected: ParseError) {
         let result = dative_bond.parse(input);
@@ -426,6 +450,8 @@ mod tests {
     #[case::ring_count("1#R2")]
     #[case::ring_size("1#r6")]
     #[case::both("1#R2#r6")]
+    #[case::aromatic("1#a")]
+    #[case::aromatic_with_ring("1#a#r6")]
     fn test_dative_roundtrip(#[case] input: &str) {
         let form: DativeBondDsl = input.parse().unwrap();
         let rendered = form.to_string();
@@ -481,6 +507,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::aromatic(DativeBondConstraint::Aromatic, ":aromatic")]
     #[case::ring_count(DativeBondConstraint::RingCount(ValueAst::Lit(2)), "{:ring-count 2}")]
     #[case::ring_size(DativeBondConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
     fn test_dative_bond_constraint_dsl_roundtrip(

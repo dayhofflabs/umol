@@ -123,7 +123,7 @@ Whether an empty string **`:type ""`** parses depends on the subgrammar:
 - **`aromatic-string`** (**§7.9**) and **`multicenter-string`** (**§7.10**) admit the empty payload — the grammar is zero-or-more **`#…`** predicates, so **`:type ""`** is the canonical "no inline state" form.
 - **`bond-string`** (**§7.5**), **`dative-string`** (**§7.11**), and **`noncovalent-string`** (**§7.12**) require a leading inherent-field token (bond order, dative order, noncovalent kind), so an empty payload is a parse error. Use the appropriate keyword shorthand (e.g. **`:single`**) or the literal token (e.g. **`"1"`**, **`"Hbd"`**).
 
-**Dative bond entry.** A dative bond carries identity at the molecule-map level via the ordered endpoint pair plus the bond order: **`:donor`** names the atom donating the electron pair(s), **`:acceptor`** names the atom accepting them, and the leading **`order`** token of the **`dative-string`** payload (**§7.12**) records the number of donated pairs. **`:donor`** and **`:acceptor`** **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.12**) — order plus optional ring-membership predicates (**`#R`**, **`#r`**); its leading order parallels the bond-string's (**§7.5** / **§7.6**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment.
+**Dative bond entry.** A dative bond carries identity at the molecule-map level via the ordered endpoint pair plus the bond order: **`:donor`** names the atom donating the electron pair(s), **`:acceptor`** names the atom accepting them, and the leading **`order`** token of the **`dative-string`** payload (**§7.12**) records the number of donated pairs. **`:donor`** and **`:acceptor`** **MUST** reference distinct atom sites. The mandatory **`:type`** slot carries a **`dative-string`** (**§7.12**) — order plus optional aromatic flag (**`#a`**) and ring-membership predicates (**`#R`**, **`#r`**); its leading order parallels the bond-string's (**§7.5** / **§7.6**). The dative-string has **no** direction token — direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment.
 
 **Multicenter entry.** The mandatory **`:type`** slot carries a **`multicenter-string`** payload (**§7.11**) encoding per-system charge, spin, and the optional asserted total electron count (**`#e<n>`**). The **`multicenter-string`** subgrammar is independent from **`aromatic-string`** even though they share the same predicate shape. A vacuous string (**`""`**) is admissible when the multicenter bond carries no inline state.
 
@@ -661,7 +661,8 @@ bond-constraint-form ::=
   | { :ring-size value-expr }
 
 dative-bond-constraint-form ::=
-    { :ring-count value-expr }
+    :aromatic
+  | { :ring-count value-expr }
   | { :ring-size value-expr }
 
 aromatic-system-constraint-form  ::= { :electron-count value-expr }
@@ -705,7 +706,7 @@ Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:a
 
 - **Atom** (**§7.3**): all `atom-constraint-form` variants except the derived ones (`#D`, `#X`, `#x`, `#H`, `#R`, `#r`) lift to inline atom predicates; the derived predicates also have inline tags but are pattern-only.
 - **Bond** (**§7.5**): all `bond-constraint-form` variants (`:aromatic`, `:ring-count`, `:ring-size`) have inline forms (`#a`, `#R`, `#r`).
-- **Dative bond** (**§7.12**): both `dative-bond-constraint-form` variants (`:ring-count`, `:ring-size`) have inline forms (`#R`, `#r`).
+- **Dative bond** (**§7.12**): all `dative-bond-constraint-form` variants (`:aromatic`, `:ring-count`, `:ring-size`) have inline forms (`#a`, `#R`, `#r`).
 - **Aromatic system** (**§7.10**): the single `aromatic-system-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
 - **Multicenter bond** (**§7.11**): the single `multicenter-bond-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
 - **Noncovalent bond** (**§7.13**): `noncovalent-bond-constraint-form` is uninhabited; no inline-form question arises.
@@ -781,7 +782,7 @@ multicenter-predicate ::= '#' tag payload
 
 ### 7.12 Dative-bond subgrammar
 
-**Dative-string** carries the **bond order** (number of donated electron pairs) and optional **ring-membership** constraints on a single **`dative-bond-entry`** (**§4**). The grammar parallels **bond-string** (**§7.5**): a leading **`order`** token followed by zero or more **`#…`** predicates. The dative-string has **no** inherent-field tags beyond order and **no** direction token; direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment on the containing entry.
+**Dative-string** carries the **bond order** (number of donated electron pairs) and optional **aromatic** and **ring-membership** constraints on a single **`dative-bond-entry`** (**§4**). The grammar parallels **bond-string** (**§7.5**): a leading **`order`** token followed by zero or more **`#…`** predicates. The dative-string has **no** inherent-field tags beyond order and **no** direction token; direction is expressed entirely by the **`:donor`** / **`:acceptor`** assignment on the containing entry.
 
 ```
 dative-string ::= order dative-predicate*
@@ -792,9 +793,11 @@ dative-predicate ::= '#' tag payload
 
 **Order.** The leading **`order`** token is a **`value-expr`** (**§5**) — typically a positive integer literal — that records how many electron pairs are donated. **`*`** means **`Undetermined`**. The **`dative-keyword`** shorthands (**§7.7**) — **`:single`**, **`:double`**, **`:triple`**, **`:quadruple`** — expand to the literal forms **`"1"`**, **`"2"`**, **`"3"`**, **`"4"`**.
 
-**Dative predicates.** **Zero or more** **`dative-predicate`** units after the order token. **Optional** ASCII whitespace **MAY** appear between the order and the first **`#`**, and between successive predicates. **At most one** predicate per **tag** letter among **`R`**, **`r`**. **Canonical** predicate order (stable serialization): order, then **`#R`**, then **`#r`**.
+**Dative predicates.** **Zero or more** **`dative-predicate`** units after the order token. **Optional** ASCII whitespace **MAY** appear between the order and the first **`#`**, and between successive predicates. **At most one** predicate per **tag** letter among **`a`**, **`R`**, **`r`**. **Canonical** predicate order (stable serialization): order, then **`#a`**, then **`#R`**, then **`#r`**.
 
 **Whitespace** between **`#`** and the tag letter is **invalid** (**§7.1**).
+
+**`#a` (dative-bond aromatic flag).** A bare **`#a`** with no payload marks the dative bond as participating in an aromatic system. Examples: the N→B π-donation of borazine, O→B of boroxine, or a C→M coordination spanning a metallaaromatic ring. The flag carries no value (parallel to the bond-namespace **`#a`** of **§7.5**); aromatic-ring perception cross-checks the flag against actual ring membership.
 
 **`#R` (dative-bond ring count).** Same **special** payloads as the atom-level and bond-level **`#R`** (**§7.3**, **§7.5**): bare **`#R`** means **1**; **`#R*`** means no constraint; **`#R+`** is sugar for **`?r >= 1`** ("dative bond lies in at least one ring").
 
@@ -803,6 +806,7 @@ dative-predicate ::= '#' tag payload
 | Tag | Meaning (dative-bond namespace) | Storage |
 |-----|-----------------------------------|----------|
 | (leading) | **Order**: number of donated electron pairs (**`u8`**, **§7.2**) | inherent field |
+| **`#a`** | **Aromatic**: the dative bond is part of an aromatic system. | derived |
 | **`#R`** | **Ring count**: the dative bond lies in this many rings. | derived |
 | **`#r`** | **Ring size**: the dative bond lies in a ring of this size. | derived |
 

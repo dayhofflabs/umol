@@ -1,4 +1,4 @@
-//! Per-atom constraints.
+//! Atom constraints.
 
 use std::mem::{self, replace};
 
@@ -304,8 +304,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::super::super::value::Expr;
     use super::*;
+    use crate::ast::value::Expr;
 
     #[rustfmt::skip]
     #[rstest]
@@ -399,16 +399,21 @@ mod tests {
 
     #[rstest]
     #[case::valence_lit(AtomConstraint::valence(4))]
-    #[case::aromatic_not_aromatic(AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic))]
-    #[case::multicenter_undetermined(
-        AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined)
-    )]
+    #[case::aromatic_not_aromatic(AtomConstraint::aromatic_valence(
+        AromaticValenceAst::NotAromatic
+    ))]
+    #[case::multicenter_undetermined(AtomConstraint::multicenter_valence(
+        MulticenterValenceAst::Undetermined
+    ))]
     fn test_atom_constraint_simplify_identity(#[case] input: AtomConstraint) {
         assert_eq!(input.clone().simplify(), input);
     }
 
     #[rstest]
-    #[case::lit(AromaticValenceAst::aromatic(1), AromaticValenceAst::Aromatic(ValueAst::Lit(1)))]
+    #[case::lit(
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::Aromatic(ValueAst::Lit(1))
+    )]
     fn test_aromatic_valence_ast_aromatic(
         #[case] actual: AromaticValenceAst,
         #[case] expected: AromaticValenceAst,
@@ -434,7 +439,7 @@ mod tests {
     #[rstest]
     #[case::aromatic_folds_expr(
         AromaticValenceAst::Aromatic(ValueAst::Expr(Expr::Lit(2))),
-        AromaticValenceAst::aromatic(2),
+        AromaticValenceAst::aromatic(2)
     )]
     fn test_aromatic_valence_ast_simplify(
         #[case] input: AromaticValenceAst,
@@ -452,7 +457,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::lit(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Multicenter(ValueAst::Lit(2)))]
+    #[case::lit(
+        MulticenterValenceAst::multicenter(2),
+        MulticenterValenceAst::Multicenter(ValueAst::Lit(2))
+    )]
     fn test_multicenter_valence_ast_multicenter(
         #[case] actual: MulticenterValenceAst,
         #[case] expected: MulticenterValenceAst,
@@ -474,7 +482,7 @@ mod tests {
     #[rstest]
     #[case::multicenter_folds_expr(
         MulticenterValenceAst::Multicenter(ValueAst::Expr(Expr::Lit(3))),
-        MulticenterValenceAst::multicenter(3),
+        MulticenterValenceAst::multicenter(3)
     )]
     fn test_multicenter_valence_ast_simplify(
         #[case] input: MulticenterValenceAst,
@@ -608,20 +616,16 @@ mod tests {
 
     #[rstest]
     fn test_atom_constraints_clear() {
-        let mut cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::degree(3),
-        ]);
+        let mut cs =
+            AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
         cs.clear();
         assert_eq!(cs, AtomConstraints::new());
     }
 
     #[rstest]
     fn test_atom_constraints_take() {
-        let mut cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::degree(3),
-        ]);
+        let mut cs =
+            AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
         let drained: Vec<_> = cs.take().collect();
         assert_eq!(
             drained,
@@ -701,10 +705,8 @@ mod tests {
 
     #[rstest]
     fn test_atom_constraints_iter_mut() {
-        let mut cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(3),
-            AtomConstraint::degree(2),
-        ]);
+        let mut cs =
+            AtomConstraints::from_iter([AtomConstraint::valence(3), AtomConstraint::degree(2)]);
         for c in cs.iter_mut() {
             if let AtomConstraint::Valence(v) = c {
                 *v = ValueAst::Lit(7);
@@ -712,19 +714,14 @@ mod tests {
         }
         assert_eq!(
             cs,
-            AtomConstraints::from_iter([
-                AtomConstraint::valence(7),
-                AtomConstraint::degree(2),
-            ]),
+            AtomConstraints::from_iter([AtomConstraint::valence(7), AtomConstraint::degree(2),]),
         );
     }
 
     #[rstest]
     fn test_atom_constraints_remap() {
-        let cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::degree(3),
-        ]);
+        let cs =
+            AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
         let remap = IdxRemapping::new(
             umol_graph_core::Remapping {
                 removed_nodes: vec![0, 1, 2],
@@ -760,10 +757,8 @@ mod tests {
 
     #[rstest]
     fn test_atom_constraints_into_iter() {
-        let cs = AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::degree(3),
-        ]);
+        let cs =
+            AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
         let collected: Vec<AtomConstraint> = cs.into_iter().collect();
         assert_eq!(
             collected,
@@ -779,11 +774,8 @@ mod tests {
 
     #[rstest]
     fn test_atom_constraints_from_vec() {
-        let cs: AtomConstraints = vec![
-            AtomConstraint::valence(4),
-            AtomConstraint::donated_pairs(1),
-        ]
-        .into();
+        let cs: AtomConstraints =
+            vec![AtomConstraint::valence(4), AtomConstraint::donated_pairs(1)].into();
         assert_eq!(
             cs,
             AtomConstraints::from_iter([

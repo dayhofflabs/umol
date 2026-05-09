@@ -182,8 +182,8 @@ mod tests {
     use rstest::*;
     use umol_graph_core::Remapping;
 
-    use super::super::super::value::Expr;
     use super::*;
+    use crate::ast::value::Expr;
 
     #[rustfmt::skip]
     #[rstest]

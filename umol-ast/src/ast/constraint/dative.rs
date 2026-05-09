@@ -1,4 +1,4 @@
-//! Per-dative-bond constraints.
+//! Dative bond constraints.
 
 use std::mem;
 use std::slice::Iter;
@@ -9,10 +9,13 @@ use super::super::remap::IdxRemapping;
 use super::super::value::ValueAst;
 
 /// Dative-bond-scope constraint. Held inline on `DativeBondAst` via
-/// `DativeBondConstraints`.
+/// `DativeBondConstraints`. `Aromatic` flags the dative bond as part of an
+/// aromatic system (e.g. the N→B π-donation in borazine, O→B in boroxine,
+/// or a C→M coordination spanning a metallaaromatic ring).
 #[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(DativeBondConstraintKind), derive(Hash))]
 pub enum DativeBondConstraint {
+    Aromatic,
     RingCount(ValueAst),
     RingSize(ValueAst),
 }
@@ -22,22 +25,25 @@ impl DativeBondConstraint {
         self.into()
     }
 
-    /// Single-valued per dative bond: both variants pin a single integer
-    /// shape per kind.
+    /// Every `DativeBondConstraint` variant is single-valued per dative bond.
     pub fn is_unique(&self) -> bool {
         true
     }
 
-    /// `RingCount`/`RingSize` are undetermined iff their inner value is.
+    /// `Aromatic` is a flag with no value. `RingCount`/`RingSize` are
+    /// undetermined iff their inner value is.
     pub fn is_undetermined(&self) -> bool {
         match self {
+            Self::Aromatic => false,
             Self::RingCount(v) | Self::RingSize(v) => v.is_undetermined(),
         }
     }
 
-    /// Simplify the inner `ValueAst`.
+    /// Simplify the inner `ValueAst` of `RingCount` / `RingSize`. `Aromatic`
+    /// is unchanged.
     pub fn simplify(self) -> Self {
         match self {
+            Self::Aromatic => Self::Aromatic,
             Self::RingCount(v) => Self::RingCount(v.simplify()),
             Self::RingSize(v) => Self::RingSize(v.simplify()),
         }
@@ -105,8 +111,7 @@ impl DativeBondConstraints {
     /// Simplify each contained constraint's inner value in place.
     pub fn simplify_each(&mut self) {
         for c in self.0.iter_mut() {
-            *c =
-                mem::replace(c, DativeBondConstraint::RingCount(ValueAst::Undetermined)).simplify();
+            *c = mem::replace(c, DativeBondConstraint::Aromatic).simplify();
         }
     }
 
@@ -131,9 +136,11 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::value::Expr;
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::aromatic(DativeBondConstraint::Aromatic, DativeBondConstraintKind::Aromatic)]
     #[case::ring_count(DativeBondConstraint::RingCount(ValueAst::Lit(1)), DativeBondConstraintKind::RingCount)]
     #[case::ring_size(DativeBondConstraint::RingSize(ValueAst::Lit(6)), DativeBondConstraintKind::RingSize)]
     fn test_dative_bond_constraint_kind(
@@ -143,19 +150,17 @@ mod tests {
         assert_eq!(c.kind(), expected);
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::ring_count(DativeBondConstraint::RingCount(ValueAst::Lit(1)), true)]
-    #[case::ring_size(DativeBondConstraint::RingSize(ValueAst::Lit(6)), true)]
-    fn test_dative_bond_constraint_is_unique(
-        #[case] c: DativeBondConstraint,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(c.is_unique(), expected);
+    #[case::aromatic(DativeBondConstraint::Aromatic)]
+    #[case::ring_count(DativeBondConstraint::RingCount(ValueAst::Lit(1)))]
+    #[case::ring_size(DativeBondConstraint::RingSize(ValueAst::Lit(6)))]
+    fn test_dative_bond_constraint_is_unique(#[case] c: DativeBondConstraint) {
+        assert!(c.is_unique());
     }
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::aromatic(DativeBondConstraint::Aromatic, false)]
     #[case::ring_count_lit(DativeBondConstraint::RingCount(ValueAst::Lit(1)), false)]
     #[case::ring_count_undetermined(DativeBondConstraint::RingCount(ValueAst::Undetermined), true)]
     #[case::ring_size_undetermined(DativeBondConstraint::RingSize(ValueAst::Undetermined), true)]
@@ -164,6 +169,30 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_undetermined(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ring_count_folds_expr(
+        DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Lit(2))),
+        DativeBondConstraint::RingCount(ValueAst::Lit(2)),
+    )]
+    #[case::ring_size_folds_expr(
+        DativeBondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6))),
+        DativeBondConstraint::RingSize(ValueAst::Lit(6)),
+    )]
+    fn test_dative_bond_constraint_simplify(
+        #[case] input: DativeBondConstraint,
+        #[case] expected: DativeBondConstraint,
+    ) {
+        assert_eq!(input.simplify(), expected);
+    }
+
+    #[rstest]
+    #[case::aromatic(DativeBondConstraint::Aromatic)]
+    #[case::ring_count_lit(DativeBondConstraint::RingCount(ValueAst::Lit(1)))]
+    fn test_dative_bond_constraint_simplify_identity(#[case] input: DativeBondConstraint) {
+        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rstest]

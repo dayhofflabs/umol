@@ -302,8 +302,8 @@ mod tests {
     use rstest::*;
     use umol_graph_core::Remapping;
 
-    use super::super::super::value::ValueAst;
     use super::*;
+    use crate::ast::value::ValueAst;
 
     fn remapping(
         removed_nodes: Vec<u32>,

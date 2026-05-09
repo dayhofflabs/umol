@@ -1,4 +1,4 @@
-//! Per-noncovalent-bond constraints.
+//! Noncovalent bond constraints.
 
 use std::mem;
 use std::slice::Iter;
