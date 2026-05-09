@@ -2,7 +2,7 @@
 
 use std::mem;
 
-use super::constraint::AromaticSystemConstraints;
+use super::constraint::{AromaticSystemConstraint, AromaticSystemConstraints};
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
@@ -41,8 +41,25 @@ impl AromaticSystemAst {
         self
     }
 
-    pub fn with_constraints(mut self, constraints: impl Into<AromaticSystemConstraints>) -> Self {
-        self.constraints = constraints.into();
+    /// Add a single constraint, replacing any existing entry of the same
+    /// kind (last-wins per `AromaticSystemConstraints::add`). Chainable.
+    pub fn with_constraint(mut self, constraint: impl Into<AromaticSystemConstraint>) -> Self {
+        self.constraints.add(constraint.into());
+        self
+    }
+
+    /// Add each constraint from the iterator, replacing any existing entry
+    /// of the same kind (last-wins per `AromaticSystemConstraints::add`).
+    /// Does not clear existing constraints; use `system.constraints.clear()`
+    /// or direct field assignment for wipe-and-replace.
+    pub fn with_constraints<I>(mut self, constraints: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<AromaticSystemConstraint>,
+    {
+        for c in constraints {
+            self.constraints.add(c.into());
+        }
         self
     }
 
@@ -102,6 +119,111 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::value::Expr;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::new(AromaticSystemAst::new(vec![ValueAst::Lit(1); 3]),
+        AromaticSystemAst { electrons: vec![ValueAst::Lit(1); 3],
+            charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: AromaticSystemConstraints::new() })]
+    #[case::from_electrons(AromaticSystemAst::from_electrons(vec![1, 1, 1]),
+        AromaticSystemAst { electrons: vec![ValueAst::Lit(1); 3],
+            charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: AromaticSystemConstraints::new() })]
+    fn test_aromatic_system_ast_new(
+        #[case] actual: AromaticSystemAst,
+        #[case] expected: AromaticSystemAst,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::with_electrons(AromaticSystemAst::default().with_electrons(vec![ValueAst::Lit(2); 3]),
+        AromaticSystemAst { electrons: vec![ValueAst::Lit(2); 3],
+            charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: AromaticSystemConstraints::new() })]
+    #[case::with_charge(AromaticSystemAst::default().with_charge(-1),
+        AromaticSystemAst { electrons: Vec::new(),
+            charge: ValueAst::Lit(-1), spin: SpinStateAst::default(),
+            constraints: AromaticSystemConstraints::new() })]
+    #[case::with_spin(AromaticSystemAst::default().with_spin((0_u8, 1_u8)),
+        AromaticSystemAst { electrons: Vec::new(),
+            charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(),
+            constraints: AromaticSystemConstraints::new() })]
+    #[case::with_constraint(
+        AromaticSystemAst::default().with_constraint(AromaticSystemConstraint::electron_count(6)),
+        AromaticSystemAst { electrons: Vec::new(),
+            charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)) })]
+    #[case::with_constraints_extends(
+        AromaticSystemAst::default()
+            .with_constraints([AromaticSystemConstraint::electron_count(6)]),
+        AromaticSystemAst { electrons: Vec::new(),
+            charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)) })]
+    #[case::with_constraint_replaces_same_kind(
+        AromaticSystemAst::default()
+            .with_constraint(AromaticSystemConstraint::electron_count(2))
+            .with_constraint(AromaticSystemConstraint::electron_count(6)),
+        AromaticSystemAst { electrons: Vec::new(),
+            charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)) })]
+    fn test_aromatic_system_ast_with_methods(
+        #[case] actual: AromaticSystemAst,
+        #[case] expected: AromaticSystemAst,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::from_ground_electrons(
+        AromaticSystemAst::from_electrons(vec![1; 6]).into_ground(),
+        AromaticSystemAst {
+            electrons: vec![ValueAst::Lit(1); 6],
+            charge: ValueAst::Lit(0),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: AromaticSystemConstraints::new(),
+        },
+    )]
+    #[case::preserves_set_charge(
+        AromaticSystemAst::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
+        AromaticSystemAst {
+            electrons: vec![ValueAst::Lit(1); 6],
+            charge: ValueAst::Lit(1),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: AromaticSystemConstraints::new(),
+        },
+    )]
+    #[case::preserves_constraints(
+        AromaticSystemAst::from_electrons(vec![1; 6])
+            .with_constraint(AromaticSystemConstraint::electron_count(6))
+            .into_ground(),
+        AromaticSystemAst {
+            electrons: vec![ValueAst::Lit(1); 6],
+            charge: ValueAst::Lit(0),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)),
+        },
+    )]
+    fn test_aromatic_system_ast_into_ground(
+        #[case] actual: AromaticSystemAst,
+        #[case] expected: AromaticSystemAst,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::from_electrons(AromaticSystemAst::from_electrons(vec![1; 6]))]
+    #[case::with_constraint(
+        AromaticSystemAst::from_electrons(vec![1; 6])
+            .with_constraint(AromaticSystemConstraint::electron_count(6))
+    )]
+    fn test_aromatic_system_ast_into_zeroed(#[case] system: AromaticSystemAst) {
+        assert_eq!(system.clone().into_zeroed(), system.into_ground());
+    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -116,6 +238,12 @@ mod tests {
         AromaticSystemAst::new(vec![ValueAst::Lit(1), ValueAst::Undetermined, ValueAst::Lit(1)])
             .with_charge(0).with_spin((0, 1)),
         false,
+    )]
+    #[case::ground_with_constraint(
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6])
+            .with_charge(0).with_spin((0, 1))
+            .with_constraint(AromaticSystemConstraint::electron_count(6)),
+        true,
     )]
     fn test_aromatic_system_ast_is_ground(
         #[case] ast: AromaticSystemAst,
@@ -160,36 +288,27 @@ mod tests {
         assert_eq!(pattern.matches(&target), expected);
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::from_ground_electrons(
-        AromaticSystemAst::from_electrons(vec![1; 6]).into_ground(),
-        AromaticSystemAst {
-            electrons: vec![ValueAst::Lit(1); 6],
-            charge: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AromaticSystemConstraints::new(),
-        },
-    )]
-    #[case::preserves_set_charge(
-        AromaticSystemAst::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
-        AromaticSystemAst {
-            electrons: vec![ValueAst::Lit(1); 6],
-            charge: ValueAst::Lit(1),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AromaticSystemConstraints::new(),
-        },
-    )]
-    fn test_aromatic_system_ast_into_ground(
-        #[case] actual: AromaticSystemAst,
-        #[case] expected: AromaticSystemAst,
-    ) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    fn test_aromatic_system_ast_into_zeroed() {
-        let system = AromaticSystemAst::from_electrons(vec![1; 6]);
-        assert_eq!(system.clone().into_zeroed(), system.into_ground());
+    fn test_aromatic_system_ast_simplify_values() {
+        let mut system = AromaticSystemAst {
+            electrons: vec![ValueAst::Expr(Expr::Lit(1))],
+            charge: ValueAst::Expr(Expr::Lit(0)),
+            spin: SpinStateAst::default(),
+            constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(
+                ValueAst::Expr(Expr::Lit(6)),
+            )),
+        };
+        system.simplify_values();
+        assert_eq!(
+            system,
+            AromaticSystemAst {
+                electrons: vec![ValueAst::Lit(1)],
+                charge: ValueAst::Lit(0),
+                spin: SpinStateAst::default(),
+                constraints: AromaticSystemConstraints::from(
+                    AromaticSystemConstraint::electron_count(6),
+                ),
+            },
+        );
     }
 }

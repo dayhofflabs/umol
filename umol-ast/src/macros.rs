@@ -289,7 +289,7 @@ mod tests {
     use umol_shared::element::Element;
 
     use crate::ast::{
-        AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraints, AtomAst,
+        AromaticSystemAst, AromaticSystemConstraint, AtomAst,
         AtomConstraint, AtomIdx, BondAst, BondConstraint, Constraints,
         DativeBondAst, DativeBondConstraint, MoleculeAst,
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, ValueAst,
@@ -307,7 +307,7 @@ mod tests {
         MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
             vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1)), (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)), (AtomIdx(2), AtomIdx(0), BondAst::from_order(1))],
             vec![], vec![(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
-            AromaticSystemAst::new(vec![ValueAst::Lit(1); 3]).with_constraints(AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(3))])))],
+            AromaticSystemAst::new(vec![ValueAst::Lit(1); 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
             vec![], vec![], Constraints::default()))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
         assert_eq!(mol!(input), expected);
@@ -476,10 +476,7 @@ mod tests {
     )]
     #[case::electrons(
         "#e6",
-        AromaticSystemAst::default()
-            .with_constraints(AromaticSystemConstraints::from_iter([
-                AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
-            ])),
+        AromaticSystemAst::default().with_constraint(AromaticSystemConstraint::electron_count(6)),
     )]
     fn test_aromatic_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
         assert_eq!(aromatic!(input), expected);
@@ -494,9 +491,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::electrons("#e6", AromaticSystemAst::default()
-        .with_constraints(AromaticSystemConstraints::from_iter([
-            AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
-        ]))
+        .with_constraint(AromaticSystemConstraint::electron_count(6))
         .into_ground())]
     fn test_aromatic_ground_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
         assert_eq!(aromatic_ground!(input), expected);
@@ -505,9 +500,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::electrons("#e6", AromaticSystemAst::default()
-        .with_constraints(AromaticSystemConstraints::from_iter([
-            AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6)),
-        ]))
+        .with_constraint(AromaticSystemConstraint::electron_count(6))
         .into_zeroed())]
     fn test_aromatic_zeroed_macro(#[case] input: &str, #[case] expected: AromaticSystemAst) {
         assert_eq!(aromatic_zeroed!(input), expected);

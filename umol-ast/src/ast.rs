@@ -26,12 +26,12 @@ pub use atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
 pub use automorphism::AtomAutomorphism;
 pub use bond::BondAst;
 pub use constraint::{
-    AromaticSystemConstraint, AromaticSystemConstraints, AromaticValenceAst, AtomConstraint,
-    AtomConstraintKind, AtomConstraints, BondConstraint, BondConstraintKind, BondConstraints,
-    Constraint, Constraints, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
-    MoleculeConstraint, MulticenterBondConstraint, MulticenterBondConstraints,
-    MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraints,
-    RelationalConstraint, SubPatternAnchor,
+    AromaticSystemConstraint, AromaticSystemConstraintKind, AromaticSystemConstraints,
+    AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, BondConstraint,
+    BondConstraintKind, BondConstraints, Constraint, Constraints, DativeBondConstraint,
+    DativeBondConstraintKind, DativeBondConstraints, MoleculeConstraint, MulticenterBondConstraint,
+    MulticenterBondConstraints, MulticenterValenceAst, NoncovalentBondConstraint,
+    NoncovalentBondConstraints, RelationalConstraint, SubPatternAnchor,
 };
 pub use dative::DativeBondAst;
 pub use error::{EvaluationError, RewriteError};

@@ -24,7 +24,9 @@ mod multicenter;
 mod noncovalent;
 mod relational;
 
-pub use aromatic::{AromaticSystemConstraint, AromaticSystemConstraints};
+pub use aromatic::{
+    AromaticSystemConstraint, AromaticSystemConstraintKind, AromaticSystemConstraints,
+};
 pub use atom::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
