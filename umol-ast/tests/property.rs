@@ -8,6 +8,7 @@ use std::iter::repeat_with;
 use std::ops::RangeInclusive;
 
 use proptest::prelude::*;
+use rstest::rstest;
 use umol_ast::ast::{
     ArithOp, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
     AromaticSystemConstraints, AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint,
@@ -1352,6 +1353,15 @@ proptest! {
         for view in a.dative_bonds().iter() {
             prop_assert!(view.data.constraints.is_empty());
         }
+        for view in a.aromatic_systems().iter() {
+            prop_assert!(view.data.constraints.is_empty());
+        }
+        for view in a.multicenter_bonds().iter() {
+            prop_assert!(view.data.constraints.is_empty());
+        }
+        for view in a.noncovalent_bonds().iter() {
+            prop_assert!(view.data.constraints.is_empty());
+        }
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow
@@ -1583,4 +1593,76 @@ proptest! {
     }
 
     // endregion: ValueAst::simplify
+}
+
+/// Vacuous-payload `AtomConstraint` variants render to nothing in the
+/// canonical entity-string form. The proptest generator excludes these from
+/// roundtrip strategies; this asserts the elision invariant directly so a
+/// regression in `fmt_value_field_required` / `fmt_ring_count` / the
+/// AromaticValence / MulticenterValence formatters can't slip through.
+#[rstest]
+#[case::valence(AtomConstraint::Valence(ValueAst::Undetermined))]
+#[case::donated_pairs(AtomConstraint::DonatedPairs(ValueAst::Undetermined))]
+#[case::accepted_pairs(AtomConstraint::AcceptedPairs(ValueAst::Undetermined))]
+#[case::degree(AtomConstraint::Degree(ValueAst::Undetermined))]
+#[case::connectivity(AtomConstraint::Connectivity(ValueAst::Undetermined))]
+#[case::ring_connectivity(AtomConstraint::RingConnectivity(ValueAst::Undetermined))]
+#[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Undetermined))]
+#[case::ring_count(AtomConstraint::RingCount(ValueAst::Undetermined))]
+#[case::ring_size(AtomConstraint::RingSize(ValueAst::Undetermined))]
+#[case::aromatic_valence_undetermined(
+    AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined)
+)]
+#[case::multicenter_valence_undetermined(
+    AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined)
+)]
+fn test_atom_dsl_vacuous_constraint_renders_empty(#[case] vacuous: AtomConstraint) {
+    let mut atom = AtomAst::default();
+    atom.constraints.add(vacuous);
+    let with_vacuous = AtomDsl(atom).to_string();
+    let bare = AtomDsl(AtomAst::default()).to_string();
+    assert_eq!(with_vacuous, bare);
+}
+
+/// When `Metadata` records an id for an entity, refs in molecule constraints
+/// render as the keyword `:id` rather than the positional integer. Rendered
+/// EDN must carry the keyword form, never the integer index, and must
+/// roundtrip back through both the tree and streaming parsers.
+#[rstest]
+fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
+    let atoms = vec![AtomAst::default(), AtomAst::default()];
+    let mut cs = Constraints::new();
+    cs.push(Constraint::Atom(
+        AtomIdx(0),
+        AtomConstraint::Valence(ValueAst::Lit(4)),
+    ));
+    let ast = MoleculeAst::from_parts(
+        atoms,
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        cs,
+    );
+
+    let mut metadata = Metadata::new();
+    metadata.set_atom_id(AtomIdx(0), "carbon".to_string());
+
+    let dsl = MoleculeDsl::from_parts(ast, metadata);
+    let rendered = dsl.to_edn().to_string();
+
+    assert!(
+        rendered.contains(":carbon"),
+        "expected :carbon in rendered output: {rendered}",
+    );
+    assert!(
+        !rendered.contains("[0 {:valence"),
+        "rendered output must not use positional ref when id is present: {rendered}",
+    );
+
+    let via_tree = MoleculeDsl::from_edn(&dsl.to_edn()).expect("tree parse");
+    assert_eq!(dsl, via_tree, "tree roundtrip");
+    let via_stream = MoleculeDsl::from_edn_str(&rendered).expect("streaming parse");
+    assert_eq!(dsl, via_stream, "streaming roundtrip");
 }
