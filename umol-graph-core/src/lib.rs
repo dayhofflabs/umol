@@ -6,9 +6,9 @@
 //! components, cycle enumeration, maximum independent set).
 
 pub mod algorithms;
-pub mod graph;
-pub mod relation;
-pub mod union_find;
+pub(crate) mod graph;
+pub(crate) mod relation;
+pub(crate) mod union_find;
 
 pub use algorithms::auto::{AutoGroupOrder, Automorphism, AutomorphismAlgorithm};
 pub use algorithms::bcc::BiconnectedComponentsAlgorithm;

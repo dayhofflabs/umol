@@ -7,11 +7,10 @@
 
 use std::ops::Index;
 
-use umol_graph_core::relation::RelationId;
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     CycleEnumerationAlgorithm, EdgeId, FixedRelationSet, Graph, MatchingEnumerationAlgorithm,
-    MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
+    MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, RelationId, ShortestCycleAlgorithm,
     SubgraphIsomorphismAlgorithm, VarRelationSet,
 };
 

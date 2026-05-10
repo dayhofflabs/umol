@@ -3,8 +3,7 @@
 use std::fmt;
 
 use umol_edn::{FromEdn, ToEdn};
-use umol_graph_core::relation::RelationId;
-use umol_graph_core::{EdgeId, NodeId};
+use umol_graph_core::{EdgeId, NodeId, RelationId};
 
 macro_rules! define_idx {
     ($($(#[doc = $doc:literal])* $name:ident),+ $(,)?) => {

@@ -10,8 +10,9 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::{iter, mem};
 
-use umol_graph_core::relation::RelationId;
-use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, Remapping, VarRelationSet};
+use umol_graph_core::{
+    EdgeId, FixedRelationSet, Graph, NodeId, Remapping, RelationId, VarRelationSet,
+};
 
 use super::super::aromatic::AromaticSystemAst;
 use super::super::atom::AtomAst;

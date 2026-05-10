@@ -6,8 +6,7 @@ use std::ops::Index;
 use std::sync::Arc;
 
 pub use builder::MoleculeBuilder;
-use umol_graph_core::relation::RelationId;
-use umol_graph_core::{FixedRelationSet, Graph, NodeId, VarRelationSet};
+use umol_graph_core::{FixedRelationSet, Graph, NodeId, RelationId, VarRelationSet};
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
