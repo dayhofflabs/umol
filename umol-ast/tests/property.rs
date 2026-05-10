@@ -9,14 +9,16 @@ use std::ops::RangeInclusive;
 
 use proptest::prelude::*;
 use umol_ast::ast::{
-    ArithOp, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraints,
-    AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraints, AtomIdx,
-    BondAst, BondConstraint, BondConstraints, BondIdx, Constraint, Constraints, DativeBondAst,
-    DativeBondConstraint, DativeBondConstraints, DativeBondIdx, ElementAst, Expr,
+    ArithOp, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
+    AromaticSystemConstraints, AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint,
+    AtomConstraintKind, AtomConstraints, AtomIdx, BondAst, BondConstraint, BondConstraintKind,
+    BondConstraints, BondIdx, Constraint, Constraints, DativeBondAst, DativeBondConstraint,
+    DativeBondConstraintKind, DativeBondConstraints, DativeBondIdx, ElementAst, Expr,
     ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
-    MulticenterBondConstraint, MulticenterBondConstraints, MulticenterBondIdx,
-    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondIdx, NoncovalentBondKind,
-    NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst, SubPatternAnchor, ValueAst,
+    MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
+    MulticenterBondIdx, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondIdx,
+    NoncovalentBondKind, NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst,
+    SubPatternAnchor, ValueAst,
 };
 use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
@@ -894,101 +896,130 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
         }
     }
 
-    if counts.aromatic > 0 && counts.atom > 0 {
+    if counts.aromatic > 0 {
         let system_idx = aromatic_system_idx_strategy(counts.aromatic);
-        let atom_idx = atom_idx_strategy(counts.atom);
-        let max_atoms = counts.atom.min(3);
-        let atoms_vec = prop::collection::vec(atom_idx.clone(), 1..=max_atoms);
 
-        let atoms = (system_idx.clone(), atoms_vec.clone())
-            .prop_map(|(system, atoms)| {
-                Constraint::Relational(RelationalConstraint::AromaticSystemAtoms { system, atoms })
+        let aromatic_leaf = (system_idx.clone(), electron_count_value_strategy(0..=12))
+            .prop_map(|(system, v)| {
+                Constraint::AromaticSystem(system, AromaticSystemConstraint::ElectronCount(v))
             })
             .boxed();
-        let contains = (system_idx.clone(), atom_idx)
-            .prop_map(|(system, atom)| {
-                Constraint::Relational(RelationalConstraint::AromaticSystemContains {
-                    system,
-                    atom,
+        choices.push(aromatic_leaf);
+
+        if counts.atom > 0 {
+            let atom_idx = atom_idx_strategy(counts.atom);
+            let max_atoms = counts.atom.min(3);
+            let atoms_vec = prop::collection::vec(atom_idx.clone(), 1..=max_atoms);
+
+            let atoms = (system_idx.clone(), atoms_vec.clone())
+                .prop_map(|(system, atoms)| {
+                    Constraint::Relational(RelationalConstraint::AromaticSystemAtoms {
+                        system,
+                        atoms,
+                    })
                 })
-            })
-            .boxed();
-        let contains_all = (system_idx.clone(), atoms_vec)
-            .prop_map(|(system, atoms)| {
-                Constraint::Relational(RelationalConstraint::AromaticSystemContainsAll {
-                    system,
-                    atoms,
+                .boxed();
+            let contains = (system_idx.clone(), atom_idx)
+                .prop_map(|(system, atom)| {
+                    Constraint::Relational(RelationalConstraint::AromaticSystemContains {
+                        system,
+                        atom,
+                    })
                 })
-            })
-            .boxed();
-        let all_atoms = (system_idx.clone(), atom_constraint_strategy())
-            .prop_map(|(system, predicate)| {
-                Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms {
-                    system,
-                    predicate: Box::new(predicate),
+                .boxed();
+            let contains_all = (system_idx.clone(), atoms_vec)
+                .prop_map(|(system, atoms)| {
+                    Constraint::Relational(RelationalConstraint::AromaticSystemContainsAll {
+                        system,
+                        atoms,
+                    })
                 })
-            })
-            .boxed();
-        let any_atom = (system_idx, atom_constraint_strategy())
-            .prop_map(|(system, predicate)| {
-                Constraint::Relational(RelationalConstraint::AromaticSystemAnyAtom {
-                    system,
-                    predicate: Box::new(predicate),
+                .boxed();
+            let all_atoms = (system_idx.clone(), atom_constraint_strategy())
+                .prop_map(|(system, predicate)| {
+                    Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms {
+                        system,
+                        predicate: Box::new(predicate),
+                    })
                 })
-            })
-            .boxed();
-        choices.push(atoms);
-        choices.push(contains);
-        choices.push(contains_all);
-        choices.push(all_atoms);
-        choices.push(any_atom);
+                .boxed();
+            let any_atom = (system_idx, atom_constraint_strategy())
+                .prop_map(|(system, predicate)| {
+                    Constraint::Relational(RelationalConstraint::AromaticSystemAnyAtom {
+                        system,
+                        predicate: Box::new(predicate),
+                    })
+                })
+                .boxed();
+            choices.push(atoms);
+            choices.push(contains);
+            choices.push(contains_all);
+            choices.push(all_atoms);
+            choices.push(any_atom);
+        }
     }
 
-    if counts.multicenter > 0 && counts.atom > 0 {
+    if counts.multicenter > 0 {
         let bond_idx = multicenter_bond_idx_strategy(counts.multicenter);
-        let atom_idx = atom_idx_strategy(counts.atom);
-        let max_atoms = counts.atom.min(3);
-        let atoms_vec = prop::collection::vec(atom_idx.clone(), 1..=max_atoms);
 
-        let atoms = (bond_idx.clone(), atoms_vec.clone())
-            .prop_map(|(bond, atoms)| {
-                Constraint::Relational(RelationalConstraint::MulticenterBondAtoms { bond, atoms })
+        let multicenter_leaf = (bond_idx.clone(), electron_count_value_strategy(0..=8))
+            .prop_map(|(bond, v)| {
+                Constraint::MulticenterBond(bond, MulticenterBondConstraint::ElectronCount(v))
             })
             .boxed();
-        let contains = (bond_idx.clone(), atom_idx)
-            .prop_map(|(bond, atom)| {
-                Constraint::Relational(RelationalConstraint::MulticenterBondContains { bond, atom })
-            })
-            .boxed();
-        let contains_all = (bond_idx.clone(), atoms_vec)
-            .prop_map(|(bond, atoms)| {
-                Constraint::Relational(RelationalConstraint::MulticenterBondContainsAll {
-                    bond,
-                    atoms,
+        choices.push(multicenter_leaf);
+
+        if counts.atom > 0 {
+            let atom_idx = atom_idx_strategy(counts.atom);
+            let max_atoms = counts.atom.min(3);
+            let atoms_vec = prop::collection::vec(atom_idx.clone(), 1..=max_atoms);
+
+            let atoms = (bond_idx.clone(), atoms_vec.clone())
+                .prop_map(|(bond, atoms)| {
+                    Constraint::Relational(RelationalConstraint::MulticenterBondAtoms {
+                        bond,
+                        atoms,
+                    })
                 })
-            })
-            .boxed();
-        let all_atoms = (bond_idx.clone(), atom_constraint_strategy())
-            .prop_map(|(bond, predicate)| {
-                Constraint::Relational(RelationalConstraint::MulticenterBondAllAtoms {
-                    bond,
-                    predicate: Box::new(predicate),
+                .boxed();
+            let contains = (bond_idx.clone(), atom_idx)
+                .prop_map(|(bond, atom)| {
+                    Constraint::Relational(RelationalConstraint::MulticenterBondContains {
+                        bond,
+                        atom,
+                    })
                 })
-            })
-            .boxed();
-        let any_atom = (bond_idx, atom_constraint_strategy())
-            .prop_map(|(bond, predicate)| {
-                Constraint::Relational(RelationalConstraint::MulticenterBondAnyAtom {
-                    bond,
-                    predicate: Box::new(predicate),
+                .boxed();
+            let contains_all = (bond_idx.clone(), atoms_vec)
+                .prop_map(|(bond, atoms)| {
+                    Constraint::Relational(RelationalConstraint::MulticenterBondContainsAll {
+                        bond,
+                        atoms,
+                    })
                 })
-            })
-            .boxed();
-        choices.push(atoms);
-        choices.push(contains);
-        choices.push(contains_all);
-        choices.push(all_atoms);
-        choices.push(any_atom);
+                .boxed();
+            let all_atoms = (bond_idx.clone(), atom_constraint_strategy())
+                .prop_map(|(bond, predicate)| {
+                    Constraint::Relational(RelationalConstraint::MulticenterBondAllAtoms {
+                        bond,
+                        predicate: Box::new(predicate),
+                    })
+                })
+                .boxed();
+            let any_atom = (bond_idx, atom_constraint_strategy())
+                .prop_map(|(bond, predicate)| {
+                    Constraint::Relational(RelationalConstraint::MulticenterBondAnyAtom {
+                        bond,
+                        predicate: Box::new(predicate),
+                    })
+                })
+                .boxed();
+            choices.push(atoms);
+            choices.push(contains);
+            choices.push(contains_all);
+            choices.push(all_atoms);
+            choices.push(any_atom);
+        }
     }
 
     if counts.noncovalent > 0 && counts.atom > 0 {
@@ -1342,6 +1373,78 @@ proptest! {
                         | Constraint::NoncovalentBond(..)
                 ),
                 "inline-capable narrow leaf survived inline_constraints: {c:?}",
+            );
+        }
+    }
+
+    /// `inline_constraints` deposits each top-level narrow leaf into the
+    /// targeted entity's inline `constraints` store, indexed by the leaf's
+    /// `kind()`. Last-wins per kind: if the same `(idx, kind)` appeared
+    /// multiple times, or if the entity already had an inline same-kind
+    /// entry, the kind is still present after the call.
+    #[test]
+    fn test_inline_deposits_leaves_into_entities(
+        ast in molecule_ast_with_constraints_strategy(),
+    ) {
+        let mut atom_kinds: HashSet<(AtomIdx, AtomConstraintKind)> = HashSet::new();
+        let mut bond_kinds: HashSet<(BondIdx, BondConstraintKind)> = HashSet::new();
+        let mut dative_kinds: HashSet<(DativeBondIdx, DativeBondConstraintKind)> = HashSet::new();
+        let mut aromatic_kinds: HashSet<(AromaticSystemIdx, AromaticSystemConstraintKind)> =
+            HashSet::new();
+        let mut multicenter_kinds: HashSet<(MulticenterBondIdx, MulticenterBondConstraintKind)> =
+            HashSet::new();
+        for c in ast.constraints().iter() {
+            match c {
+                Constraint::Atom(idx, inner) => {
+                    atom_kinds.insert((*idx, inner.kind()));
+                }
+                Constraint::Bond(idx, inner) => {
+                    bond_kinds.insert((*idx, inner.kind()));
+                }
+                Constraint::DativeBond(idx, inner) => {
+                    dative_kinds.insert((*idx, inner.kind()));
+                }
+                Constraint::AromaticSystem(idx, inner) => {
+                    aromatic_kinds.insert((*idx, inner.kind()));
+                }
+                Constraint::MulticenterBond(idx, inner) => {
+                    multicenter_kinds.insert((*idx, inner.kind()));
+                }
+                _ => {}
+            }
+        }
+
+        let mut a = ast;
+        a.inline_constraints();
+
+        for (idx, kind) in atom_kinds {
+            prop_assert!(
+                a[idx].constraints.contains(kind),
+                "atom {idx:?} missing kind {kind:?} after inline",
+            );
+        }
+        for (idx, kind) in bond_kinds {
+            prop_assert!(
+                a[idx].constraints.contains(kind),
+                "bond {idx:?} missing kind {kind:?} after inline",
+            );
+        }
+        for (idx, kind) in dative_kinds {
+            prop_assert!(
+                a[idx].constraints.contains(kind),
+                "dative bond {idx:?} missing kind {kind:?} after inline",
+            );
+        }
+        for (idx, kind) in aromatic_kinds {
+            prop_assert!(
+                a[idx].constraints.contains(kind),
+                "aromatic system {idx:?} missing kind {kind:?} after inline",
+            );
+        }
+        for (idx, kind) in multicenter_kinds {
+            prop_assert!(
+                a[idx].constraints.contains(kind),
+                "multicenter bond {idx:?} missing kind {kind:?} after inline",
             );
         }
     }

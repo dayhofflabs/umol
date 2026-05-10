@@ -545,6 +545,55 @@ pub(super) fn read_dative_bond_constraint_dsl(
     }
 }
 
+pub(super) fn read_aromatic_system_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<AromaticSystemConstraintDsl, EdnError> {
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "electron-count" => {
+            AromaticSystemConstraintDsl::ElectronCount(read_value_dsl(de)?.into_ast(&()))
+        }
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["aromatic-system-constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "aromatic-system-constraint")?;
+    Ok(c)
+}
+
+pub(super) fn read_multicenter_bond_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<MulticenterBondConstraintDsl, EdnError> {
+    let key = read_single_key_map_header(de)?;
+    let c = match key.as_str() {
+        "electron-count" => {
+            MulticenterBondConstraintDsl::ElectronCount(read_value_dsl(de)?.into_ast(&()))
+        }
+        other => {
+            return Err(DeError::UnknownField {
+                key: other.to_string(),
+                path: vec!["multicenter-bond-constraint".into()],
+            }
+            .into());
+        }
+    };
+    consume_single_key_map_close(de, "multicenter-bond-constraint")?;
+    Ok(c)
+}
+
+pub(super) fn read_noncovalent_bond_constraint_dsl(
+    _de: &mut EdnStreamDeserializer<'_>,
+) -> Result<NoncovalentBondConstraintDsl, EdnError> {
+    Err(DeError::Custom(
+        "no value-only noncovalent-bond constraints exist yet".to_string(),
+    )
+    .into())
+}
+
 fn read_atom_ref_vec(de: &mut EdnStreamDeserializer<'_>) -> Result<Vec<AtomRef>, EdnError> {
     read_vec(de, read_atom_ref)
 }
@@ -836,6 +885,33 @@ pub(super) fn read_constraint_dsl(
                 "dative-bond",
             )?;
             ConstraintDsl::DativeBond(r, inner)
+        }
+        "aromatic-system" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_aromatic_system_ref,
+                read_aromatic_system_constraint_dsl,
+                "aromatic-system",
+            )?;
+            ConstraintDsl::AromaticSystem(r, inner)
+        }
+        "multicenter-bond" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_multicenter_bond_ref,
+                read_multicenter_bond_constraint_dsl,
+                "multicenter-bond",
+            )?;
+            ConstraintDsl::MulticenterBond(r, inner)
+        }
+        "noncovalent-bond" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_noncovalent_bond_ref,
+                read_noncovalent_bond_constraint_dsl,
+                "noncovalent-bond",
+            )?;
+            ConstraintDsl::NoncovalentBond(r, inner)
         }
         "and" => ConstraintDsl::And(read_vec(de, read_constraint_dsl)?),
         "or" => ConstraintDsl::Or(read_vec(de, read_constraint_dsl)?),
