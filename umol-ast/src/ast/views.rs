@@ -25,6 +25,55 @@ use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::value::ValueAst;
 
+/// Namespace accessor for atom views on a `MoleculeAst`. Provides `count`,
+/// `ids`, `iter`, `get`, and `Index` without burying them on `MoleculeAst`.
+#[derive(Clone, Copy)]
+pub struct AtomViews<'a> {
+    ast: &'a MoleculeAst,
+    atoms: &'a [AtomAst],
+}
+
+impl<'a> AtomViews<'a> {
+    pub(super) fn new(ast: &'a MoleculeAst, atoms: &'a [AtomAst]) -> Self {
+        Self { ast, atoms }
+    }
+
+    pub fn count(&self) -> usize {
+        self.atoms.len()
+    }
+
+    pub fn ids(&self) -> impl Iterator<Item = AtomIdx> {
+        (0..self.atoms.len() as u32).map(AtomIdx)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> {
+        let ast = self.ast;
+        self.atoms
+            .iter()
+            .enumerate()
+            .map(move |(i, data)| AtomView {
+                idx: AtomIdx(i as u32),
+                data,
+                ast,
+            })
+    }
+
+    pub fn get(&self, idx: AtomIdx) -> AtomView<'a> {
+        AtomView {
+            idx,
+            data: &self.atoms[idx.index()],
+            ast: self.ast,
+        }
+    }
+}
+
+impl<'a> Index<AtomIdx> for AtomViews<'a> {
+    type Output = AtomAst;
+    fn index(&self, idx: AtomIdx) -> &AtomAst {
+        &self.atoms[idx.index()]
+    }
+}
+
 /// Borrowed view of an atom: index, underlying `AtomAst`, and the parent
 /// `MoleculeAst` for cross-relation chemistry methods.
 ///
@@ -141,14 +190,21 @@ impl<'a> AtomView<'a> {
     }
 
     pub fn is_in_aromatic_system(&self) -> bool {
-        self.ast.aromatic_systems_incident(self.idx).next().is_some()
+        self.ast
+            .aromatic_systems_incident(self.idx)
+            .next()
+            .is_some()
     }
 
     pub fn aromatic_valence_constraint(&self) -> Option<&'a AromaticValenceAst> {
-        atom_constraint_value(self.data, AtomConstraintKind::AromaticValence, |c| match c {
-            AtomConstraint::AromaticValence(v) => Some(v),
-            _ => None,
-        })
+        atom_constraint_value(
+            self.data,
+            AtomConstraintKind::AromaticValence,
+            |c| match c {
+                AtomConstraint::AromaticValence(v) => Some(v),
+                _ => None,
+            },
+        )
     }
 
     /// Sum of per-atom contributions across incident multicenter bonds.
@@ -193,159 +249,6 @@ pub struct AtomViewMut<'a> {
     pub data: &'a mut AtomAst,
 }
 
-/// Borrowed view of a bond: its index, endpoints (`src`, `tgt`), and data.
-#[derive(Clone, Copy, Debug)]
-pub struct BondView<'a> {
-    pub idx: BondIdx,
-    pub src: AtomIdx,
-    pub tgt: AtomIdx,
-    pub data: &'a BondAst,
-    #[allow(dead_code)]
-    ast: &'a MoleculeAst,
-}
-
-/// Mutable borrowed view of a bond.
-#[derive(Debug)]
-pub struct BondViewMut<'a> {
-    pub idx: BondIdx,
-    pub src: AtomIdx,
-    pub tgt: AtomIdx,
-    pub data: &'a mut BondAst,
-}
-
-/// Neighbor-side view of a bond: the atom on the other end (`atom`), the
-/// bond index, and the bond data. Yielded by `MoleculeAst::neighbors`.
-#[derive(Clone, Copy, Debug)]
-pub struct NeighborView<'a> {
-    pub atom: AtomIdx,
-    pub bond: BondIdx,
-    pub data: &'a BondAst,
-}
-
-/// Borrowed view of a dative bond: index, designated acceptor atom, and the
-/// underlying `DativeBondAst`. Donor atoms and the full participant set are
-/// reachable through `donors()` and `atoms()`.
-#[derive(Clone, Copy, Debug)]
-pub struct DativeBondView<'a> {
-    pub idx: DativeBondIdx,
-    pub acceptor: AtomIdx,
-    pub data: &'a DativeBondAst,
-    atoms: &'a [NodeId],
-    #[allow(dead_code)]
-    ast: &'a MoleculeAst,
-}
-
-impl<'a> DativeBondView<'a> {
-    /// All atoms in this dative bond (donors + acceptor), sorted by `AtomIdx`.
-    pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
-        self.atoms.iter().map(|&n| AtomIdx::from(n))
-    }
-
-    /// Donor atoms (participants minus the acceptor slot).
-    pub fn donors(&self) -> impl Iterator<Item = AtomIdx> + '_ {
-        let acceptor_slot = self.data.acceptor_slot as usize;
-        self.atoms
-            .iter()
-            .enumerate()
-            .filter(move |(i, _)| *i != acceptor_slot)
-            .map(|(_, &n)| AtomIdx::from(n))
-    }
-}
-
-/// Borrowed view of a noncovalent bond: the two participating atoms plus data.
-#[derive(Clone, Copy, Debug)]
-pub struct NoncovalentBondView<'a> {
-    pub idx: NoncovalentBondIdx,
-    pub atoms: [AtomIdx; 2],
-    pub data: &'a NoncovalentBondAst,
-    #[allow(dead_code)]
-    ast: &'a MoleculeAst,
-}
-
-/// Borrowed view of an aromatic system: its index, the `AromaticSystemAst`,
-/// and accessors for member atoms and induced ring bonds via `atoms()` and
-/// `bonds()`.
-#[derive(Clone, Copy, Debug)]
-pub struct AromaticSystemView<'a> {
-    pub idx: AromaticSystemIdx,
-    pub data: &'a AromaticSystemAst,
-    atoms: &'a [NodeId],
-    ast: &'a MoleculeAst,
-}
-
-impl<'a> AromaticSystemView<'a> {
-    pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
-        self.atoms.iter().map(|&n| AtomIdx::from(n))
-    }
-
-    pub fn bonds(&self) -> impl Iterator<Item = BondIdx> + '_ {
-        self.ast.graph().induced_edges(self.atoms).map(BondIdx::from)
-    }
-}
-
-/// Borrowed view of a multicenter bond: its index, data, and member atoms
-/// via `atoms()`.
-#[derive(Clone, Copy, Debug)]
-pub struct MulticenterBondView<'a> {
-    pub idx: MulticenterBondIdx,
-    pub data: &'a MulticenterBondAst,
-    atoms: &'a [NodeId],
-    #[allow(dead_code)]
-    ast: &'a MoleculeAst,
-}
-
-impl<'a> MulticenterBondView<'a> {
-    pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
-        self.atoms.iter().map(|&n| AtomIdx::from(n))
-    }
-}
-
-/// Namespace accessor for atom views on a `MoleculeAst`. Provides `count`,
-/// `ids`, `iter`, `get`, and `Index` without burying them on `MoleculeAst`.
-#[derive(Clone, Copy)]
-pub struct AtomViews<'a> {
-    ast: &'a MoleculeAst,
-    atoms: &'a [AtomAst],
-}
-
-impl<'a> AtomViews<'a> {
-    pub(super) fn new(ast: &'a MoleculeAst, atoms: &'a [AtomAst]) -> Self {
-        Self { ast, atoms }
-    }
-
-    pub fn count(&self) -> usize {
-        self.atoms.len()
-    }
-
-    pub fn ids(&self) -> impl Iterator<Item = AtomIdx> {
-        (0..self.atoms.len() as u32).map(AtomIdx)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> {
-        let ast = self.ast;
-        self.atoms.iter().enumerate().map(move |(i, data)| AtomView {
-            idx: AtomIdx(i as u32),
-            data,
-            ast,
-        })
-    }
-
-    pub fn get(&self, idx: AtomIdx) -> AtomView<'a> {
-        AtomView {
-            idx,
-            data: &self.atoms[idx.index()],
-            ast: self.ast,
-        }
-    }
-}
-
-impl<'a> Index<AtomIdx> for AtomViews<'a> {
-    type Output = AtomAst;
-    fn index(&self, idx: AtomIdx) -> &AtomAst {
-        &self.atoms[idx.index()]
-    }
-}
-
 /// Namespace accessor for bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct BondViews<'a> {
@@ -374,8 +277,7 @@ impl<'a> BondViews<'a> {
             let [s, t] = graph.edge_endpoints(id);
             BondView {
                 idx: BondIdx::from(id),
-                src: AtomIdx::from(s),
-                tgt: AtomIdx::from(t),
+                atoms: [AtomIdx::from(s), AtomIdx::from(t)],
                 data: &bonds[id.index()],
                 ast,
             }
@@ -386,8 +288,7 @@ impl<'a> BondViews<'a> {
         let [s, t] = self.ast.graph().edge_endpoints(EdgeId::from(idx));
         BondView {
             idx,
-            src: AtomIdx::from(s),
-            tgt: AtomIdx::from(t),
+            atoms: [AtomIdx::from(s), AtomIdx::from(t)],
             data: &self.bonds[idx.index()],
             ast: self.ast,
         }
@@ -398,6 +299,42 @@ impl<'a> Index<BondIdx> for BondViews<'a> {
     type Output = BondAst;
     fn index(&self, idx: BondIdx) -> &BondAst {
         &self.bonds[idx.index()]
+    }
+}
+
+/// Borrowed view of a bond: its index, the two participating atoms, and data.
+#[derive(Clone, Copy, Debug)]
+pub struct BondView<'a> {
+    pub idx: BondIdx,
+    atoms: [AtomIdx; 2],
+    pub data: &'a BondAst,
+    #[allow(dead_code)]
+    ast: &'a MoleculeAst,
+}
+
+impl<'a> BondView<'a> {
+    /// The two atoms incident to this bond.
+    pub fn atoms(&self) -> [AtomIdx; 2] {
+        self.atoms
+    }
+}
+
+/// Mutable borrowed view of a bond.
+#[derive(Debug)]
+pub struct BondViewMut<'a> {
+    pub idx: BondIdx,
+    atoms: [AtomIdx; 2],
+    pub data: &'a mut BondAst,
+}
+
+impl<'a> BondViewMut<'a> {
+    pub(super) fn new(idx: BondIdx, atoms: [AtomIdx; 2], data: &'a mut BondAst) -> Self {
+        Self { idx, atoms, data }
+    }
+
+    /// The two atoms incident to this bond.
+    pub fn atoms(&self) -> [AtomIdx; 2] {
+        self.atoms
     }
 }
 
@@ -430,8 +367,8 @@ impl<'a> DativeBondViews<'a> {
             let acceptor = AtomIdx::from(atoms[data.acceptor_slot as usize]);
             DativeBondView {
                 idx: DativeBondIdx::from(rid),
-                acceptor,
                 data,
+                acceptor,
                 atoms,
                 ast,
             }
@@ -445,8 +382,8 @@ impl<'a> DativeBondViews<'a> {
         let acceptor = AtomIdx::from(atoms[data.acceptor_slot as usize]);
         DativeBondView {
             idx,
-            acceptor,
             data,
+            acceptor,
             atoms,
             ast: self.ast,
         }
@@ -460,59 +397,33 @@ impl<'a> Index<DativeBondIdx> for DativeBondViews<'a> {
     }
 }
 
-/// Namespace accessor for noncovalent-bond views on a `MoleculeAst`.
-#[derive(Clone, Copy)]
-pub struct NoncovalentBondViews<'a> {
+/// Borrowed view of a dative bond: index, the designated acceptor atom,
+/// and underlying `DativeBondAst`. Donor atoms and the full participant
+/// set are reachable through `donors()` and `atoms()`.
+#[derive(Clone, Copy, Debug)]
+pub struct DativeBondView<'a> {
+    pub idx: DativeBondIdx,
+    pub acceptor: AtomIdx,
+    atoms: &'a [NodeId],
+    pub data: &'a DativeBondAst,
+    #[allow(dead_code)]
     ast: &'a MoleculeAst,
-    set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
 }
 
-impl<'a> NoncovalentBondViews<'a> {
-    pub(super) fn new(
-        ast: &'a MoleculeAst,
-        set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
-    ) -> Self {
-        Self { ast, set }
+impl<'a> DativeBondView<'a> {
+    /// All atoms in this dative bond (donors + acceptor), sorted by `AtomIdx`.
+    pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
+        self.atoms.iter().map(|&n| AtomIdx::from(n))
     }
 
-    pub fn count(&self) -> usize {
-        self.set.relation_count()
-    }
-
-    pub fn ids(&self) -> impl Iterator<Item = NoncovalentBondIdx> {
-        self.set.relation_ids().map(NoncovalentBondIdx::from)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> {
-        let ast = self.ast;
-        let set = self.set;
-        set.relation_ids().map(move |rid| {
-            let parts = set.participants(rid);
-            NoncovalentBondView {
-                idx: NoncovalentBondIdx::from(rid),
-                atoms: [AtomIdx::from(parts[0]), AtomIdx::from(parts[1])],
-                data: set.data(rid),
-                ast,
-            }
-        })
-    }
-
-    pub fn get(&self, idx: NoncovalentBondIdx) -> NoncovalentBondView<'a> {
-        let rid = RelationId::from(idx);
-        let parts = self.set.participants(rid);
-        NoncovalentBondView {
-            idx,
-            atoms: [AtomIdx::from(parts[0]), AtomIdx::from(parts[1])],
-            data: self.set.data(rid),
-            ast: self.ast,
-        }
-    }
-}
-
-impl<'a> Index<NoncovalentBondIdx> for NoncovalentBondViews<'a> {
-    type Output = NoncovalentBondAst;
-    fn index(&self, idx: NoncovalentBondIdx) -> &NoncovalentBondAst {
-        self.set.data(RelationId::from(idx))
+    /// Donor atoms (participants minus the acceptor slot).
+    pub fn donors(&self) -> impl Iterator<Item = AtomIdx> + '_ {
+        let acceptor_slot = self.data.acceptor_slot as usize;
+        self.atoms
+            .iter()
+            .enumerate()
+            .filter(move |(i, _)| *i != acceptor_slot)
+            .map(|(_, &n)| AtomIdx::from(n))
     }
 }
 
@@ -565,6 +476,30 @@ impl<'a> Index<AromaticSystemIdx> for AromaticSystemViews<'a> {
     }
 }
 
+/// Borrowed view of an aromatic system: its index, the `AromaticSystemAst`,
+/// and accessors for member atoms and induced ring bonds via `atoms()` and
+/// `bonds()`.
+#[derive(Clone, Copy, Debug)]
+pub struct AromaticSystemView<'a> {
+    pub idx: AromaticSystemIdx,
+    atoms: &'a [NodeId],
+    pub data: &'a AromaticSystemAst,
+    ast: &'a MoleculeAst,
+}
+
+impl<'a> AromaticSystemView<'a> {
+    pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
+        self.atoms.iter().map(|&n| AtomIdx::from(n))
+    }
+
+    pub fn bonds(&self) -> impl Iterator<Item = BondIdx> + '_ {
+        self.ast
+            .graph()
+            .induced_edges(self.atoms)
+            .map(BondIdx::from)
+    }
+}
+
 /// Namespace accessor for multicenter-bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct MulticenterBondViews<'a> {
@@ -573,10 +508,7 @@ pub struct MulticenterBondViews<'a> {
 }
 
 impl<'a> MulticenterBondViews<'a> {
-    pub(super) fn new(
-        ast: &'a MoleculeAst,
-        set: &'a VarRelationSet<MulticenterBondAst>,
-    ) -> Self {
+    pub(super) fn new(ast: &'a MoleculeAst, set: &'a VarRelationSet<MulticenterBondAst>) -> Self {
         Self { ast, set }
     }
 
@@ -617,6 +549,124 @@ impl<'a> Index<MulticenterBondIdx> for MulticenterBondViews<'a> {
     }
 }
 
+/// Borrowed view of a multicenter bond: its index, member atoms via
+/// `atoms()`, and underlying `MulticenterBondAst`.
+#[derive(Clone, Copy, Debug)]
+pub struct MulticenterBondView<'a> {
+    pub idx: MulticenterBondIdx,
+    atoms: &'a [NodeId],
+    pub data: &'a MulticenterBondAst,
+    #[allow(dead_code)]
+    ast: &'a MoleculeAst,
+}
+
+impl<'a> MulticenterBondView<'a> {
+    pub fn atoms(&self) -> impl Iterator<Item = AtomIdx> + '_ {
+        self.atoms.iter().map(|&n| AtomIdx::from(n))
+    }
+}
+
+/// Namespace accessor for noncovalent-bond views on a `MoleculeAst`.
+#[derive(Clone, Copy)]
+pub struct NoncovalentBondViews<'a> {
+    ast: &'a MoleculeAst,
+    set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
+}
+
+impl<'a> NoncovalentBondViews<'a> {
+    pub(super) fn new(
+        ast: &'a MoleculeAst,
+        set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
+    ) -> Self {
+        Self { ast, set }
+    }
+
+    pub fn count(&self) -> usize {
+        self.set.relation_count()
+    }
+
+    pub fn ids(&self) -> impl Iterator<Item = NoncovalentBondIdx> {
+        self.set.relation_ids().map(NoncovalentBondIdx::from)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> {
+        let ast = self.ast;
+        let set = self.set;
+        set.relation_ids().map(move |rid| NoncovalentBondView {
+            idx: NoncovalentBondIdx::from(rid),
+            data: set.data(rid),
+            atoms: {
+                let parts = set.participants(rid);
+                [AtomIdx::from(parts[0]), AtomIdx::from(parts[1])]
+            },
+            ast,
+        })
+    }
+
+    pub fn get(&self, idx: NoncovalentBondIdx) -> NoncovalentBondView<'a> {
+        let rid = RelationId::from(idx);
+        let parts = self.set.participants(rid);
+        NoncovalentBondView {
+            idx,
+            data: self.set.data(rid),
+            atoms: [AtomIdx::from(parts[0]), AtomIdx::from(parts[1])],
+            ast: self.ast,
+        }
+    }
+}
+
+impl<'a> Index<NoncovalentBondIdx> for NoncovalentBondViews<'a> {
+    type Output = NoncovalentBondAst;
+    fn index(&self, idx: NoncovalentBondIdx) -> &NoncovalentBondAst {
+        self.set.data(RelationId::from(idx))
+    }
+}
+
+/// Borrowed view of a noncovalent bond: the two participating atoms plus data.
+#[derive(Clone, Copy, Debug)]
+pub struct NoncovalentBondView<'a> {
+    pub idx: NoncovalentBondIdx,
+    atoms: [AtomIdx; 2],
+    pub data: &'a NoncovalentBondAst,
+    #[allow(dead_code)]
+    ast: &'a MoleculeAst,
+}
+
+impl<'a> NoncovalentBondView<'a> {
+    /// The two atoms in this noncovalent interaction.
+    pub fn atoms(&self) -> [AtomIdx; 2] {
+        self.atoms
+    }
+}
+
+/// Neighbor-side view of a bond: the atom on the other end (`atom`), the
+/// bond index, the bond data, and the parent `MoleculeAst` for navigation
+/// to the neighbor's full atom view. Yielded by `MoleculeAst::neighbors`.
+#[derive(Clone, Copy, Debug)]
+pub struct NeighborView<'a> {
+    pub bond: BondIdx,
+    pub atom: AtomIdx,
+    pub data: &'a BondAst,
+    #[allow(dead_code)]
+    ast: &'a MoleculeAst,
+}
+
+impl<'a> NeighborView<'a> {
+    pub(super) fn new(
+        bond: BondIdx,
+        atom: AtomIdx,
+        data: &'a BondAst,
+        ast: &'a MoleculeAst,
+    ) -> Self {
+        Self {
+            bond,
+            atom,
+            data,
+            ast,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -625,14 +675,21 @@ mod tests {
 
     use super::*;
     use crate::ast::aromatic::AromaticSystemAst;
-    use crate::ast::constraint::Constraints;
+    use crate::ast::bond::BondAst;
+    use crate::ast::constraint::{AtomConstraint, Constraints};
+    use crate::ast::dative::DativeBondAst;
     use crate::ast::molecule::MoleculeAst;
-    use crate::mol;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ast::value::ValueAst;
+    use crate::mol;
 
+    /// 4-atom molecule with one of every relation kind:
+    /// atoms C C N O; bonds 0-1 single, 1-2 double, 2-3 single;
+    /// dative donor=2 → acceptor=3; aromatic system [0,1,2];
+    /// multicenter bond [0,1,2]; noncovalent H-bond 0-3.
     #[fixture]
-    fn rich() -> MoleculeAst {
+    fn molecule() -> MoleculeAst {
         MoleculeAst::from_parts(
             vec![
                 AtomAst::from_element(Element::C),
@@ -663,102 +720,74 @@ mod tests {
         )
     }
 
+    // --- AtomViews ---
+
     #[rstest]
-    fn test_atom_views_count_and_ids(rich: MoleculeAst) {
-        let views = rich.atoms();
-        assert_eq!(views.count(), 4);
+    fn test_atom_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.atoms().count(), 4);
+    }
+
+    #[rstest]
+    fn test_atom_views_ids(molecule: MoleculeAst) {
         assert_eq!(
-            views.ids().collect::<Vec<_>>(),
+            molecule.atoms().ids().collect::<Vec<_>>(),
             vec![AtomIdx(0), AtomIdx(1), AtomIdx(2), AtomIdx(3)],
         );
     }
 
     #[rstest]
-    fn test_atom_views_index_trait(rich: MoleculeAst) {
-        let views = rich.atoms();
-        let atom: &AtomAst = &views[AtomIdx(2)];
-        assert_eq!(*atom, AtomAst::from_element(Element::N));
-    }
-
-    #[rstest]
-    fn test_bond_views_count_and_ids(rich: MoleculeAst) {
-        let views = rich.bonds();
-        assert_eq!(views.count(), 3);
+    fn test_atom_views_iter(molecule: MoleculeAst) {
+        let views = molecule.atoms();
+        let collected: Vec<(AtomIdx, AtomAst)> =
+            views.iter().map(|v| (v.idx, v.data.clone())).collect();
         assert_eq!(
-            views.ids().collect::<Vec<_>>(),
-            vec![BondIdx(0), BondIdx(1), BondIdx(2)],
+            collected,
+            vec![
+                (AtomIdx(0), AtomAst::from_element(Element::C)),
+                (AtomIdx(1), AtomAst::from_element(Element::C)),
+                (AtomIdx(2), AtomAst::from_element(Element::N)),
+                (AtomIdx(3), AtomAst::from_element(Element::O)),
+            ],
         );
     }
 
     #[rstest]
-    fn test_bond_views_index_trait(rich: MoleculeAst) {
-        let views = rich.bonds();
-        let bond: &BondAst = &views[BondIdx(1)];
-        assert_eq!(*bond, BondAst::from_order(2));
+    fn test_atom_views_get(molecule: MoleculeAst) {
+        let view = molecule.atoms().get(AtomIdx(2));
+        assert_eq!(view.idx, AtomIdx(2));
+        assert_eq!(*view.data, AtomAst::from_element(Element::N));
     }
 
     #[rstest]
-    fn test_dative_bond_views_count_ids_and_index(rich: MoleculeAst) {
-        let views = rich.dative_bonds();
-        assert_eq!(views.count(), 1);
-        assert_eq!(views.ids().collect::<Vec<_>>(), vec![DativeBondIdx(0)]);
-        let _: &DativeBondAst = &views[DativeBondIdx(0)];
+    fn test_atom_views_index(molecule: MoleculeAst) {
+        let atom: &AtomAst = &molecule.atoms()[AtomIdx(2)];
+        assert_eq!(*atom, AtomAst::from_element(Element::N));
+    }
+
+    // --- AtomView ---
+
+    #[rstest]
+    fn test_atom_view_neighbors(molecule: MoleculeAst) {
+        let view = molecule.atom(AtomIdx(1));
+        let collected: Vec<(BondIdx, AtomIdx, BondAst)> = view
+            .neighbors()
+            .map(|n| (n.bond, n.atom, n.data.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![
+                (BondIdx(0), AtomIdx(0), BondAst::from_order(1)),
+                (BondIdx(1), AtomIdx(2), BondAst::from_order(2)),
+            ],
+        );
     }
 
     #[rstest]
-    fn test_aromatic_system_views_count_ids_and_index(rich: MoleculeAst) {
-        let views = rich.aromatic_systems();
-        assert_eq!(views.count(), 1);
-        assert_eq!(views.ids().collect::<Vec<_>>(), vec![AromaticSystemIdx(0)],);
-        let _: &AromaticSystemAst = &views[AromaticSystemIdx(0)];
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_views_count_ids_and_index(rich: MoleculeAst) {
-        let views = rich.multicenter_bonds();
-        assert_eq!(views.count(), 1);
-        assert_eq!(views.ids().collect::<Vec<_>>(), vec![MulticenterBondIdx(0)],);
-        let _: &MulticenterBondAst = &views[MulticenterBondIdx(0)];
-    }
-
-    #[rstest]
-    fn test_noncovalent_bond_views_count_ids_and_index(rich: MoleculeAst) {
-        let views = rich.noncovalent_bonds();
-        assert_eq!(views.count(), 1);
-        assert_eq!(views.ids().collect::<Vec<_>>(), vec![NoncovalentBondIdx(0)],);
-        let _: &NoncovalentBondAst = &views[NoncovalentBondIdx(0)];
-    }
-
-    use crate::ast::bond::BondAst;
-    use crate::ast::constraint::AtomConstraint;
-    use crate::ast::dative::DativeBondAst;
-    use crate::ast::value::ValueAst;
-
-    fn atom_with_constraints(element: Element, cs: Vec<AtomConstraint>) -> AtomAst {
-        let mut atom = AtomAst::from_element(element);
-        for c in cs {
-            atom.constraints.add(c);
-        }
-        atom
-    }
-
-    fn aromatic_with_electrons(electrons: Vec<ValueAst>) -> AromaticSystemAst {
-        AromaticSystemAst::new(electrons)
-    }
-
-    fn multicenter_with_electrons(electrons: Vec<ValueAst>) -> MulticenterBondAst {
-        MulticenterBondAst::new(electrons)
-    }
-
-    #[rstest]
-    #[case::no_bonds(AtomIdx(3), Some(0))]
+    #[case::no_incident(AtomIdx(3), Some(0))]
     #[case::single(AtomIdx(0), Some(1))]
-    #[case::two_incident(AtomIdx(1), Some(3))]
+    #[case::three_around_center(AtomIdx(1), Some(3))]
     #[case::double(AtomIdx(2), Some(2))]
-    fn test_atom_view_bond_order_sum_ground(
-        #[case] center: AtomIdx,
-        #[case] expected: Option<u32>,
-    ) {
+    fn test_atom_view_bond_order_sum(#[case] center: AtomIdx, #[case] expected: Option<u32>) {
         let ast = mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#);
         assert_eq!(ast.atom(center).bond_order_sum(), expected);
     }
@@ -770,30 +799,79 @@ mod tests {
     }
 
     #[rstest]
-    #[case::donor(AtomIdx(0), Some(1), Some(0))]
-    #[case::acceptor(AtomIdx(1), Some(0), Some(1))]
-    fn test_atom_view_dative_pair_counts(
-        #[case] atom: AtomIdx,
-        #[case] expected_donated: Option<u32>,
-        #[case] expected_accepted: Option<u32>,
-    ) {
-        let atoms = vec![
-            AtomAst::from_element(Element::N),
-            AtomAst::from_element(Element::C),
-        ];
-        let dative = vec![(vec![AtomIdx(0)], AtomIdx(1), DativeBondAst::from_order(1))];
+    fn test_atom_view_valence_constraint() {
+        let mut atom = AtomAst::from_element(Element::C);
+        atom.constraints.add(AtomConstraint::valence(4));
+        let ast = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(
+            ast.atom(AtomIdx(0)).valence_constraint(),
+            Some(&ValueAst::Lit(4)),
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_valence_constraint_absent(molecule: MoleculeAst) {
+        assert!(molecule.atom(AtomIdx(0)).valence_constraint().is_none());
+    }
+
+    #[rstest]
+    #[case::donor(AtomIdx(0), Some(1))]
+    #[case::acceptor(AtomIdx(1), Some(0))]
+    fn test_atom_view_donated_pairs(#[case] atom: AtomIdx, #[case] expected: Option<u32>) {
         let ast = MoleculeAst::from_parts(
-            atoms,
+            vec![
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::C),
+            ],
             vec![],
-            dative,
+            vec![(vec![AtomIdx(0)], AtomIdx(1), DativeBondAst::from_order(1))],
             vec![],
             vec![],
             vec![],
             Constraints::default(),
         );
-        let view = ast.atom(atom);
-        assert_eq!(view.donated_pairs(), expected_donated);
-        assert_eq!(view.accepted_pairs(), expected_accepted);
+        assert_eq!(ast.atom(atom).donated_pairs(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_donated_pairs_constraint() {
+        let mut atom = AtomAst::from_element(Element::N);
+        atom.constraints.add(AtomConstraint::donated_pairs(1));
+        let ast = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(
+            ast.atom(AtomIdx(0)).donated_pairs_constraint(),
+            Some(&ValueAst::Lit(1)),
+        );
+    }
+
+    #[rstest]
+    #[case::donor(AtomIdx(0), Some(0))]
+    #[case::acceptor(AtomIdx(1), Some(1))]
+    fn test_atom_view_accepted_pairs(#[case] atom: AtomIdx, #[case] expected: Option<u32>) {
+        let ast = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![],
+            vec![(vec![AtomIdx(0)], AtomIdx(1), DativeBondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(ast.atom(atom).accepted_pairs(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_accepted_pairs_constraint() {
+        let mut atom = AtomAst::from_element(Element::C);
+        atom.constraints.add(AtomConstraint::accepted_pairs(2));
+        let ast = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(
+            ast.atom(AtomIdx(0)).accepted_pairs_constraint(),
+            Some(&ValueAst::Lit(2)),
+        );
     }
 
     #[rstest]
@@ -803,20 +881,17 @@ mod tests {
         #[case] entry: ValueAst,
         #[case] expected: Option<u32>,
     ) {
-        let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-        ];
-        let bonds = vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))];
-        let aromatic = vec![(
-            vec![AtomIdx(0), AtomIdx(1)],
-            aromatic_with_electrons(vec![entry, ValueAst::Lit(1)]),
-        )];
         let ast = MoleculeAst::from_parts(
-            atoms,
-            bonds,
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
             vec![],
-            aromatic,
+            vec![(
+                vec![AtomIdx(0), AtomIdx(1)],
+                AromaticSystemAst::new(vec![entry, ValueAst::Lit(1)]),
+            )],
             vec![],
             vec![],
             Constraints::default(),
@@ -827,9 +902,31 @@ mod tests {
     #[rstest]
     fn test_atom_view_aromatic_contribution_not_in_system() {
         let ast = mol!(r#"{:atoms ["C"] :bonds []}"#);
-        let view = ast.atom(AtomIdx(0));
-        assert_eq!(view.aromatic_contribution(), Some(0));
-        assert!(!view.is_in_aromatic_system());
+        assert_eq!(ast.atom(AtomIdx(0)).aromatic_contribution(), Some(0));
+    }
+
+    #[rstest]
+    #[case::in_system(AtomIdx(0), true)]
+    #[case::not_in_system(AtomIdx(3), false)]
+    fn test_atom_view_is_in_aromatic_system(
+        molecule: MoleculeAst,
+        #[case] atom: AtomIdx,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(molecule.atom(atom).is_in_aromatic_system(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_aromatic_valence_constraint() {
+        let mut atom = AtomAst::from_element(Element::C);
+        atom.constraints.add(AtomConstraint::aromatic_valence(
+            AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
+        ));
+        let ast = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(
+            ast.atom(AtomIdx(0)).aromatic_valence_constraint(),
+            Some(&AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+        );
     }
 
     #[rstest]
@@ -849,17 +946,16 @@ mod tests {
         #[case] bonds: Vec<(Vec<AtomIdx>, Vec<ValueAst>)>,
         #[case] expected: Option<u32>,
     ) {
-        let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-        ];
         let multicenter: Vec<_> = bonds
             .into_iter()
-            .map(|(parts, electrons)| (parts, multicenter_with_electrons(electrons)))
+            .map(|(parts, electrons)| (parts, MulticenterBondAst::new(electrons)))
             .collect();
         let ast = MoleculeAst::from_parts(
-            atoms,
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
             vec![],
             vec![],
             vec![],
@@ -871,50 +967,344 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_view_constraint_accessors_present() {
-        let atoms = vec![atom_with_constraints(
-            Element::C,
-            vec![
-                AtomConstraint::Valence(ValueAst::Lit(4)),
-                AtomConstraint::DonatedPairs(ValueAst::Lit(0)),
-                AtomConstraint::AcceptedPairs(ValueAst::Lit(0)),
-                AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-                AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(
-                    ValueAst::Lit(2),
-                )),
-            ],
-        )];
-        let ast = MoleculeAst::from_parts(
-            atoms,
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
-        let view = ast.atom(AtomIdx(0));
-        assert_eq!(view.valence_constraint(), Some(&ValueAst::Lit(4)));
-        assert_eq!(view.donated_pairs_constraint(), Some(&ValueAst::Lit(0)));
-        assert_eq!(view.accepted_pairs_constraint(), Some(&ValueAst::Lit(0)));
+    fn test_atom_view_multicenter_valence_constraint() {
+        let mut atom = AtomAst::from_element(Element::C);
+        atom.constraints.add(AtomConstraint::multicenter_valence(
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
+        ));
+        let ast = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
-            view.aromatic_valence_constraint(),
-            Some(&AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-        );
-        assert_eq!(
-            view.multicenter_valence_constraint(),
+            ast.atom(AtomIdx(0)).multicenter_valence_constraint(),
             Some(&MulticenterValenceAst::Multicenter(ValueAst::Lit(2))),
         );
     }
 
+    // --- BondViews ---
+
     #[rstest]
-    fn test_atom_view_constraint_accessors_absent() {
-        let ast = mol!(r#"{:atoms ["C"] :bonds []}"#);
-        let view = ast.atom(AtomIdx(0));
-        assert!(view.valence_constraint().is_none());
-        assert!(view.donated_pairs_constraint().is_none());
-        assert!(view.accepted_pairs_constraint().is_none());
-        assert!(view.aromatic_valence_constraint().is_none());
-        assert!(view.multicenter_valence_constraint().is_none());
+    fn test_bond_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.bonds().count(), 3);
+    }
+
+    #[rstest]
+    fn test_bond_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.bonds().ids().collect::<Vec<_>>(),
+            vec![BondIdx(0), BondIdx(1), BondIdx(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_bond_views_iter(molecule: MoleculeAst) {
+        let collected: Vec<(BondIdx, [AtomIdx; 2], BondAst)> = molecule
+            .bonds()
+            .iter()
+            .map(|v| (v.idx, v.atoms(), v.data.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![
+                (BondIdx(0), [AtomIdx(0), AtomIdx(1)], BondAst::from_order(1)),
+                (BondIdx(1), [AtomIdx(1), AtomIdx(2)], BondAst::from_order(2)),
+                (BondIdx(2), [AtomIdx(2), AtomIdx(3)], BondAst::from_order(1)),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_bond_views_get(molecule: MoleculeAst) {
+        let view = molecule.bonds().get(BondIdx(1));
+        assert_eq!(view.idx, BondIdx(1));
+        assert_eq!(view.atoms(), [AtomIdx(1), AtomIdx(2)]);
+        assert_eq!(*view.data, BondAst::from_order(2));
+    }
+
+    #[rstest]
+    fn test_bond_views_index(molecule: MoleculeAst) {
+        let bond: &BondAst = &molecule.bonds()[BondIdx(1)];
+        assert_eq!(*bond, BondAst::from_order(2));
+    }
+
+    // --- BondView ---
+
+    #[rstest]
+    fn test_bond_view_atoms(molecule: MoleculeAst) {
+        assert_eq!(molecule.bond(BondIdx(1)).atoms(), [AtomIdx(1), AtomIdx(2)]);
+    }
+
+    // --- DativeBondViews ---
+
+    #[rstest]
+    fn test_dative_bond_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.dative_bonds().count(), 1);
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.dative_bonds().ids().collect::<Vec<_>>(),
+            vec![DativeBondIdx(0)],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_iter(molecule: MoleculeAst) {
+        let collected: Vec<(DativeBondIdx, AtomIdx, DativeBondAst)> = molecule
+            .dative_bonds()
+            .iter()
+            .map(|v| (v.idx, v.acceptor, v.data.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![(
+                DativeBondIdx(0),
+                AtomIdx(3),
+                DativeBondAst::from_order(1).with_acceptor_slot(1),
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_get(molecule: MoleculeAst) {
+        let view = molecule.dative_bonds().get(DativeBondIdx(0));
+        assert_eq!(view.idx, DativeBondIdx(0));
+        assert_eq!(view.acceptor, AtomIdx(3));
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_index(molecule: MoleculeAst) {
+        let dative: &DativeBondAst = &molecule.dative_bonds()[DativeBondIdx(0)];
+        assert_eq!(dative.order, ValueAst::Lit(1));
+    }
+
+    // --- DativeBondView ---
+
+    #[rstest]
+    fn test_dative_bond_view_atoms(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .dative_bond(DativeBondIdx(0))
+                .atoms()
+                .collect::<Vec<_>>(),
+            vec![AtomIdx(2), AtomIdx(3)],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_donors(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .dative_bond(DativeBondIdx(0))
+                .donors()
+                .collect::<Vec<_>>(),
+            vec![AtomIdx(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_acceptor(molecule: MoleculeAst) {
+        assert_eq!(molecule.dative_bond(DativeBondIdx(0)).acceptor, AtomIdx(3));
+    }
+
+    // --- AromaticSystemViews ---
+
+    #[rstest]
+    fn test_aromatic_system_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.aromatic_systems().count(), 1);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.aromatic_systems().ids().collect::<Vec<_>>(),
+            vec![AromaticSystemIdx(0)],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_iter(molecule: MoleculeAst) {
+        let collected: Vec<(AromaticSystemIdx, Vec<AtomIdx>)> = molecule
+            .aromatic_systems()
+            .iter()
+            .map(|v| (v.idx, v.atoms().collect()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![(
+                AromaticSystemIdx(0),
+                vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)]
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_get(molecule: MoleculeAst) {
+        let view = molecule.aromatic_systems().get(AromaticSystemIdx(0));
+        assert_eq!(view.idx, AromaticSystemIdx(0));
+        assert_eq!(
+            view.atoms().collect::<Vec<_>>(),
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_index(molecule: MoleculeAst) {
+        let _: &AromaticSystemAst = &molecule.aromatic_systems()[AromaticSystemIdx(0)];
+    }
+
+    // --- AromaticSystemView ---
+
+    #[rstest]
+    fn test_aromatic_system_view_atoms(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .aromatic_system(AromaticSystemIdx(0))
+                .atoms()
+                .collect::<Vec<_>>(),
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_bonds(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .aromatic_system(AromaticSystemIdx(0))
+                .bonds()
+                .collect::<Vec<_>>(),
+            vec![BondIdx(0), BondIdx(1)],
+        );
+    }
+
+    // --- MulticenterBondViews ---
+
+    #[rstest]
+    fn test_multicenter_bond_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.multicenter_bonds().count(), 1);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.multicenter_bonds().ids().collect::<Vec<_>>(),
+            vec![MulticenterBondIdx(0)],
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_views_iter(molecule: MoleculeAst) {
+        let collected: Vec<(MulticenterBondIdx, Vec<AtomIdx>)> = molecule
+            .multicenter_bonds()
+            .iter()
+            .map(|v| (v.idx, v.atoms().collect()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![(
+                MulticenterBondIdx(0),
+                vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_views_get(molecule: MoleculeAst) {
+        let view = molecule.multicenter_bonds().get(MulticenterBondIdx(0));
+        assert_eq!(view.idx, MulticenterBondIdx(0));
+        assert_eq!(
+            view.atoms().collect::<Vec<_>>(),
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_views_index(molecule: MoleculeAst) {
+        let _: &MulticenterBondAst = &molecule.multicenter_bonds()[MulticenterBondIdx(0)];
+    }
+
+    // --- MulticenterBondView ---
+
+    #[rstest]
+    fn test_multicenter_bond_view_atoms(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .multicenter_bond(MulticenterBondIdx(0))
+                .atoms()
+                .collect::<Vec<_>>(),
+            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+        );
+    }
+
+    // --- NoncovalentBondViews ---
+
+    #[rstest]
+    fn test_noncovalent_bond_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.noncovalent_bonds().count(), 1);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.noncovalent_bonds().ids().collect::<Vec<_>>(),
+            vec![NoncovalentBondIdx(0)],
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_iter(molecule: MoleculeAst) {
+        let collected: Vec<(NoncovalentBondIdx, [AtomIdx; 2], NoncovalentBondAst)> = molecule
+            .noncovalent_bonds()
+            .iter()
+            .map(|v| (v.idx, v.atoms(), v.data.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![(
+                NoncovalentBondIdx(0),
+                [AtomIdx(0), AtomIdx(3)],
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_get(molecule: MoleculeAst) {
+        let view = molecule.noncovalent_bonds().get(NoncovalentBondIdx(0));
+        assert_eq!(view.idx, NoncovalentBondIdx(0));
+        assert_eq!(view.atoms(), [AtomIdx(0), AtomIdx(3)]);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_index(molecule: MoleculeAst) {
+        let _: &NoncovalentBondAst = &molecule.noncovalent_bonds()[NoncovalentBondIdx(0)];
+    }
+
+    // --- NoncovalentBondView ---
+
+    #[rstest]
+    fn test_noncovalent_bond_view_atoms(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .noncovalent_bond(NoncovalentBondIdx(0))
+                .atoms(),
+            [AtomIdx(0), AtomIdx(3)],
+        );
+    }
+
+    // --- NeighborView ---
+
+    #[rstest]
+    fn test_neighbor_view_fields(molecule: MoleculeAst) {
+        let collected: Vec<(BondIdx, AtomIdx, BondAst)> = molecule
+            .neighbors(AtomIdx(2))
+            .map(|n| (n.bond, n.atom, n.data.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![
+                (BondIdx(1), AtomIdx(1), BondAst::from_order(2)),
+                (BondIdx(2), AtomIdx(3), BondAst::from_order(1)),
+            ],
+        );
     }
 }

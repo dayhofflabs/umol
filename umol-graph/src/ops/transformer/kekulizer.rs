@@ -132,7 +132,7 @@ impl Kekulizer {
                 .iter()
                 .map(|&bid| {
                     let bond = ast.bond(bid);
-                    [atom_to_node[&bond.src], atom_to_node[&bond.tgt]]
+                    [atom_to_node[&bond.atoms()[0]], atom_to_node[&bond.atoms()[1]]]
                 })
                 .collect();
             let subgraph = Graph::new(atoms.len(), &local_edges);

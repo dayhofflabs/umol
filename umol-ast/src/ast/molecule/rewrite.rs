@@ -78,13 +78,13 @@ impl MoleculeAst {
 
         // Phase 1: add R\K bonds
         for bv in rhs.bonds().iter() {
-            let in_k = r_to_l.contains_key(&bv.src)
-                && r_to_l.contains_key(&bv.tgt)
+            let in_k = r_to_l.contains_key(&bv.atoms()[0])
+                && r_to_l.contains_key(&bv.atoms()[1])
                 && lhs
-                    .connecting_bond(r_to_l[&bv.src], r_to_l[&bv.tgt])
+                    .connecting_bond(r_to_l[&bv.atoms()[0]], r_to_l[&bv.atoms()[1]])
                     .is_some();
             if !in_k {
-                builder.add_bond(r_to_g[&bv.src], r_to_g[&bv.tgt], bv.data.clone());
+                builder.add_bond(r_to_g[&bv.atoms()[0]], r_to_g[&bv.atoms()[1]], bv.data.clone());
             }
         }
 
@@ -133,14 +133,14 @@ impl MoleculeAst {
 
         // Phase 1: add R\K noncovalent bonds
         for nv in rhs.noncovalent_bonds().iter() {
-            let in_k = r_to_l.contains_key(&nv.atoms[0])
-                && r_to_l.contains_key(&nv.atoms[1])
+            let in_k = r_to_l.contains_key(&nv.atoms()[0])
+                && r_to_l.contains_key(&nv.atoms()[1])
                 && lhs
-                    .connecting_noncovalent_bond(r_to_l[&nv.atoms[0]], r_to_l[&nv.atoms[1]])
+                    .connecting_noncovalent_bond(r_to_l[&nv.atoms()[0]], r_to_l[&nv.atoms()[1]])
                     .is_some();
             if !in_k {
                 builder.add_noncovalent_bond(
-                    [r_to_g[&nv.atoms[0]], r_to_g[&nv.atoms[1]]],
+                    [r_to_g[&nv.atoms()[0]], r_to_g[&nv.atoms()[1]]],
                     nv.data.clone(),
                 );
             }
@@ -154,15 +154,15 @@ impl MoleculeAst {
 
         // Phase 2: update K bond attributes from R
         for bv in rhs.bonds().iter() {
-            if !r_to_l.contains_key(&bv.src) || !r_to_l.contains_key(&bv.tgt) {
+            if !r_to_l.contains_key(&bv.atoms()[0]) || !r_to_l.contains_key(&bv.atoms()[1]) {
                 continue;
             }
-            let l_src = r_to_l[&bv.src];
-            let l_tgt = r_to_l[&bv.tgt];
+            let l_src = r_to_l[&bv.atoms()[0]];
+            let l_tgt = r_to_l[&bv.atoms()[1]];
             if lhs.connecting_bond(l_src, l_tgt).is_none() {
                 continue;
             }
-            if let Some(g_bond) = self.connecting_bond(r_to_g[&bv.src], r_to_g[&bv.tgt]) {
+            if let Some(g_bond) = self.connecting_bond(r_to_g[&bv.atoms()[0]], r_to_g[&bv.atoms()[1]]) {
                 *builder.bond_mut(g_bond) = bv.data.clone();
             }
         }
@@ -238,13 +238,13 @@ impl MoleculeAst {
         // Phase 3: remove L\K noncovalent bonds
         let mut remove_noncovalent: Vec<NoncovalentBondIdx> = Vec::new();
         for nv in lhs.noncovalent_bonds().iter() {
-            let in_k = k_l.contains(&nv.atoms[0])
-                && k_l.contains(&nv.atoms[1])
+            let in_k = k_l.contains(&nv.atoms()[0])
+                && k_l.contains(&nv.atoms()[1])
                 && rhs
-                    .connecting_noncovalent_bond(l_to_r[&nv.atoms[0]], l_to_r[&nv.atoms[1]])
+                    .connecting_noncovalent_bond(l_to_r[&nv.atoms()[0]], l_to_r[&nv.atoms()[1]])
                     .is_some();
             if !in_k {
-                if let (Some(&ga), Some(&gb)) = (l_to_g.get(&nv.atoms[0]), l_to_g.get(&nv.atoms[1]))
+                if let (Some(&ga), Some(&gb)) = (l_to_g.get(&nv.atoms()[0]), l_to_g.get(&nv.atoms()[1]))
                 {
                     if let Some(g_idx) = self.connecting_noncovalent_bond(ga, gb) {
                         remove_noncovalent.push(g_idx);
@@ -265,13 +265,13 @@ impl MoleculeAst {
 
         let mut remove_bonds_g: Vec<BondIdx> = Vec::new();
         for bv in lhs.bonds().iter() {
-            let in_k = k_l.contains(&bv.src)
-                && k_l.contains(&bv.tgt)
+            let in_k = k_l.contains(&bv.atoms()[0])
+                && k_l.contains(&bv.atoms()[1])
                 && rhs
-                    .connecting_bond(l_to_r[&bv.src], l_to_r[&bv.tgt])
+                    .connecting_bond(l_to_r[&bv.atoms()[0]], l_to_r[&bv.atoms()[1]])
                     .is_some();
             if !in_k {
-                if let (Some(&gs), Some(&gt_)) = (l_to_g.get(&bv.src), l_to_g.get(&bv.tgt)) {
+                if let (Some(&gs), Some(&gt_)) = (l_to_g.get(&bv.atoms()[0]), l_to_g.get(&bv.atoms()[1])) {
                     if let Some(g_bond) = self.connecting_bond(gs, gt_) {
                         remove_bonds_g.push(g_bond);
                     }

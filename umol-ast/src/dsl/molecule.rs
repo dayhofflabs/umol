@@ -746,8 +746,8 @@ fn render_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
         .iter()
         .map(|view| {
             let bond_edn = BondDsl::from_ref(view.data).to_edn();
-            let a = render_atom_ref(view.src, meta);
-            let b = render_atom_ref(view.tgt, meta);
+            let a = render_atom_ref(view.atoms()[0], meta);
+            let b = render_atom_ref(view.atoms()[1], meta);
             match meta.bond_id(view.idx) {
                 Some(id) => {
                     let mut m = EdnMap::with_capacity(4);
@@ -886,8 +886,8 @@ fn render_noncovalent(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            m.insert(Edn::keyword("a"), render_atom_ref(view.atoms[0], meta));
-            m.insert(Edn::keyword("b"), render_atom_ref(view.atoms[1], meta));
+            m.insert(Edn::keyword("a"), render_atom_ref(view.atoms()[0], meta));
+            m.insert(Edn::keyword("b"), render_atom_ref(view.atoms()[1], meta));
             m.insert(
                 Edn::keyword("type"),
                 NoncovalentBondDsl::from_ref(view.data).to_edn(),

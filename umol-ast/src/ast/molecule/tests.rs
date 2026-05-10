@@ -218,8 +218,8 @@ fn test_molecule_ast_bond(
 ) {
     let bv = ast.bond(idx);
     assert_eq!(bv.idx, idx);
-    assert_eq!(bv.src, src);
-    assert_eq!(bv.tgt, tgt);
+    assert_eq!(bv.atoms()[0], src);
+    assert_eq!(bv.atoms()[1], tgt);
     assert_eq!(bv.data.order, order);
 }
 
@@ -228,7 +228,7 @@ fn test_molecule_ast_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
     let projected: Vec<(BondIdx, AtomIdx, AtomIdx, ValueAst)> = ast
         .bonds()
         .iter()
-        .map(|v| (v.idx, v.src, v.tgt, v.data.order.clone()))
+        .map(|v| (v.idx, v.atoms()[0], v.atoms()[1], v.data.order.clone()))
         .collect();
     assert_eq!(
         projected,
@@ -321,7 +321,7 @@ fn test_molecule_ast_multicenter_bonds(#[from(rich_molecule)] ast: MoleculeAst) 
 fn test_molecule_ast_noncovalent_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     let nv = ast.noncovalent_bond(NoncovalentBondIdx(0));
     assert_eq!(nv.idx, NoncovalentBondIdx(0));
-    assert_eq!(nv.atoms, [AtomIdx(0), AtomIdx(3)]);
+    assert_eq!(nv.atoms(), [AtomIdx(0), AtomIdx(3)]);
 }
 
 #[rstest]
@@ -329,7 +329,7 @@ fn test_molecule_ast_noncovalent_bonds(#[from(rich_molecule)] ast: MoleculeAst) 
     let projected: Vec<(NoncovalentBondIdx, [AtomIdx; 2])> = ast
         .noncovalent_bonds()
         .iter()
-        .map(|v| (v.idx, v.atoms))
+        .map(|v| (v.idx, v.atoms()))
         .collect();
     assert_eq!(
         projected,
@@ -780,7 +780,7 @@ fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
         .ast
         .bonds()
         .iter()
-        .map(|v| (v.src, v.tgt, v.data.order.clone()))
+        .map(|v| (v.atoms()[0], v.atoms()[1], v.data.order.clone()))
         .collect();
     assert_eq!(
         bonds,
@@ -928,7 +928,7 @@ fn test_molecule_builder_add_noncovalent_bond(#[from(rich_molecule)] ast: Molecu
     let result = b.build();
     assert_eq!(id, NoncovalentBondIdx(1));
     let view = result.noncovalent_bond(id);
-    assert_eq!(view.atoms, [AtomIdx(1), AtomIdx(2)]);
+    assert_eq!(view.atoms(), [AtomIdx(1), AtomIdx(2)]);
 }
 
 #[rstest]
@@ -1082,7 +1082,7 @@ fn test_molecule_builder_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst)
     let bonds: Vec<(AtomIdx, AtomIdx, ValueAst)> = result
         .bonds()
         .iter()
-        .map(|v| (v.src, v.tgt, v.data.order.clone()))
+        .map(|v| (v.atoms()[0], v.atoms()[1], v.data.order.clone()))
         .collect();
     assert_eq!(
         bonds,
