@@ -48,12 +48,12 @@ pub(crate) struct EntityCounts {
 impl EntityCounts {
     pub(crate) fn from_ast(ast: &MoleculeAst) -> Self {
         Self {
-            atom_count: ast.atom_count(),
-            bond_count: ast.bond_count(),
-            dative_bond_count: ast.dative_bond_count(),
-            aromatic_system_count: ast.aromatic_system_count(),
-            multicenter_bond_count: ast.multicenter_bond_count(),
-            noncovalent_bond_count: ast.noncovalent_bond_count(),
+            atom_count: ast.atoms().count(),
+            bond_count: ast.bonds().count(),
+            dative_bond_count: ast.dative_bonds().count(),
+            aromatic_system_count: ast.aromatic_systems().count(),
+            multicenter_bond_count: ast.multicenter_bonds().count(),
+            noncovalent_bond_count: ast.noncovalent_bonds().count(),
         }
     }
 }

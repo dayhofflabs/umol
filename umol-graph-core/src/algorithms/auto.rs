@@ -23,7 +23,7 @@ pub struct Automorphism {
     orbits: Vec<NodeId>,
     canonical_lab: Vec<NodeId>,
     node_count: usize,
-    num_orbits: usize,
+    orbit_count: usize,
     group_order: AutoGroupOrder,
 }
 
@@ -47,7 +47,7 @@ impl Graph {
                 orbits: vec![],
                 canonical_lab: vec![],
                 node_count: 0,
-                num_orbits: 0,
+                orbit_count: 0,
                 group_order: AutoGroupOrder::Exact(1),
             };
         }
@@ -154,7 +154,7 @@ impl Graph {
             orbits,
             canonical_lab,
             node_count: n,
-            num_orbits,
+            orbit_count: num_orbits,
             group_order,
         }
     }
@@ -166,7 +166,7 @@ impl Automorphism {
     }
 
     pub fn num_orbits(&self) -> usize {
-        self.num_orbits
+        self.orbit_count
     }
 
     pub fn orbit_of(&self, v: NodeId) -> NodeId {

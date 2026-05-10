@@ -688,16 +688,16 @@ fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     let mut map = EdnMap::with_capacity(8);
     map.insert(Edn::keyword("atoms"), render_atoms(ast, meta));
     map.insert(Edn::keyword("bonds"), render_bonds(ast, meta));
-    if ast.dative_bond_count() > 0 {
+    if ast.dative_bonds().count() > 0 {
         map.insert(Edn::keyword("dative"), render_dative(ast, meta));
     }
-    if ast.aromatic_system_count() > 0 {
+    if ast.aromatic_systems().count() > 0 {
         map.insert(Edn::keyword("aromatic"), render_aromatic(ast, meta));
     }
-    if ast.multicenter_bond_count() > 0 {
+    if ast.multicenter_bonds().count() > 0 {
         map.insert(Edn::keyword("multicenter"), render_multicenter(ast, meta));
     }
-    if ast.noncovalent_bond_count() > 0 {
+    if ast.noncovalent_bonds().count() > 0 {
         map.insert(Edn::keyword("noncovalent"), render_noncovalent(ast, meta));
     }
     if meta.has_atom_aliases() {
@@ -1702,16 +1702,16 @@ mod tests {
     fn test_molecule_dsl_from_edn_empty() {
         let edn = read_string("{:atoms [] :bonds []}").unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
-        assert_eq!(dsl.ast().atom_count(), 0);
-        assert_eq!(dsl.ast().bond_count(), 0);
+        assert_eq!(dsl.ast().atoms().count(), 0);
+        assert_eq!(dsl.ast().bonds().count(), 0);
     }
 
     #[rstest]
     fn test_molecule_dsl_from_edn_two_atoms_one_bond() {
         let edn = read_string(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"##).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
-        assert_eq!(dsl.ast().atom_count(), 2);
-        assert_eq!(dsl.ast().bond_count(), 1);
+        assert_eq!(dsl.ast().atoms().count(), 2);
+        assert_eq!(dsl.ast().bonds().count(), 1);
     }
 
     #[rstest]
@@ -1727,7 +1727,7 @@ mod tests {
         let edn =
             read_string(r##"{:atoms ["C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type "1"}]}"##).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
-        assert_eq!(dsl.ast().bond_count(), 1);
+        assert_eq!(dsl.ast().bonds().count(), 1);
         assert_eq!(dsl.metadata().bond_id(BondIdx(0)), Some("b1"));
     }
 
@@ -1735,7 +1735,7 @@ mod tests {
     fn test_molecule_dsl_from_edn_atom_aliases() {
         let edn = read_string(r##"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"##).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
-        assert_eq!(dsl.ast().atom_count(), 2);
+        assert_eq!(dsl.ast().atoms().count(), 2);
         assert!(dsl.metadata().has_atom_alias("x"));
     }
 
@@ -1869,8 +1869,8 @@ mod tests {
     fn test_molecule_dsl_from_str_parses_edn_source() {
         let source = r##"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"##;
         let dsl: MoleculeDsl = source.parse().unwrap();
-        assert_eq!(dsl.ast().atom_count(), 2);
-        assert_eq!(dsl.ast().bond_count(), 1);
+        assert_eq!(dsl.ast().atoms().count(), 2);
+        assert_eq!(dsl.ast().bonds().count(), 1);
     }
 
     #[rstest]
@@ -2095,8 +2095,8 @@ mod tests {
         let source = r##"{:atoms ["C" "O"] :bonds [[0 1 "1"]]}"##;
         let edn = read_string(source).unwrap();
         let ast = MoleculeAst::from_edn(&edn).unwrap();
-        assert_eq!(ast.atom_count(), 2);
-        assert_eq!(ast.bond_count(), 1);
+        assert_eq!(ast.atoms().count(), 2);
+        assert_eq!(ast.bonds().count(), 1);
         // Render → parse → equal AST.
         let rendered = ast.to_edn();
         let reparsed = MoleculeAst::from_edn(&rendered).unwrap();
@@ -2107,8 +2107,8 @@ mod tests {
     fn test_molecule_ast_from_edn_str_fast_path() {
         let source = r##"{:atoms ["C" "O" "H"] :bonds [[0 1 "1"] [1 2 "1"]]}"##;
         let ast = MoleculeAst::from_edn_str(source).unwrap();
-        assert_eq!(ast.atom_count(), 3);
-        assert_eq!(ast.bond_count(), 2);
+        assert_eq!(ast.atoms().count(), 3);
+        assert_eq!(ast.bonds().count(), 2);
     }
 
     #[rstest]
@@ -2408,7 +2408,7 @@ mod tests {
             panic!("expected map");
         };
         assert!(m.get_keyword("guards").is_none());
-        assert_eq!(dsl.ast().atom_count(), 1);
+        assert_eq!(dsl.ast().atoms().count(), 1);
     }
     // endregion: Alias bijectivity
 

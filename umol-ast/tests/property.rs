@@ -752,12 +752,12 @@ struct ConstraintCounts {
 impl ConstraintCounts {
     fn from_ast(ast: &MoleculeAst) -> Self {
         Self {
-            atom: ast.atom_count(),
-            bond: ast.bond_count(),
-            dative: ast.dative_bond_count(),
-            aromatic: ast.aromatic_system_count(),
-            multicenter: ast.multicenter_bond_count(),
-            noncovalent: ast.noncovalent_bond_count(),
+            atom: ast.atoms().count(),
+            bond: ast.bonds().count(),
+            dative: ast.dative_bonds().count(),
+            aromatic: ast.aromatic_systems().count(),
+            multicenter: ast.multicenter_bonds().count(),
+            noncovalent: ast.noncovalent_bonds().count(),
         }
     }
 }

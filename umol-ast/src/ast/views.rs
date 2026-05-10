@@ -8,7 +8,7 @@
 use std::ops::Index;
 
 use umol_graph_core::relation::RelationId;
-use umol_graph_core::{EdgeId, FixedRelationSet, Graph, NodeId, VarRelationSet};
+use umol_graph_core::{EdgeId, FixedRelationSet, NodeId, VarRelationSet};
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
@@ -48,7 +48,7 @@ impl<'a> AtomView<'a> {
         self.ast.neighbors(self.idx)
     }
 
-    /// σ-valence summed from incident bond orders. `None` if any incident
+    /// Localized valence summed from incident bond orders. `None` if any incident
     /// bond's order is not a non-negative `Lit`.
     pub fn bond_order_sum(&self) -> Option<u32> {
         let mut sum: u32 = 0;
@@ -61,7 +61,7 @@ impl<'a> AtomView<'a> {
         Some(sum)
     }
 
-    /// Local valence constraint, if asserted.
+    /// Localized valence constraint, if asserted.
     pub fn valence_constraint(&self) -> Option<&'a ValueAst> {
         atom_constraint_value(self.data, AtomConstraintKind::Valence, |c| match c {
             AtomConstraint::Valence(v) => Some(v),
@@ -200,6 +200,8 @@ pub struct BondView<'a> {
     pub src: AtomIdx,
     pub tgt: AtomIdx,
     pub data: &'a BondAst,
+    #[allow(dead_code)]
+    ast: &'a MoleculeAst,
 }
 
 /// Mutable borrowed view of a bond.
@@ -229,6 +231,8 @@ pub struct DativeBondView<'a> {
     pub acceptor: AtomIdx,
     pub data: &'a DativeBondAst,
     atoms: &'a [NodeId],
+    #[allow(dead_code)]
+    ast: &'a MoleculeAst,
 }
 
 impl<'a> DativeBondView<'a> {
@@ -254,6 +258,8 @@ pub struct NoncovalentBondView<'a> {
     pub idx: NoncovalentBondIdx,
     pub atoms: [AtomIdx; 2],
     pub data: &'a NoncovalentBondAst,
+    #[allow(dead_code)]
+    ast: &'a MoleculeAst,
 }
 
 /// Borrowed view of an aromatic system: its index, the `AromaticSystemAst`,
@@ -264,7 +270,7 @@ pub struct AromaticSystemView<'a> {
     pub idx: AromaticSystemIdx,
     pub data: &'a AromaticSystemAst,
     atoms: &'a [NodeId],
-    graph: &'a Graph,
+    ast: &'a MoleculeAst,
 }
 
 impl<'a> AromaticSystemView<'a> {
@@ -273,7 +279,7 @@ impl<'a> AromaticSystemView<'a> {
     }
 
     pub fn bonds(&self) -> impl Iterator<Item = BondIdx> + '_ {
-        self.graph.induced_edges(self.atoms).map(BondIdx::from)
+        self.ast.graph().induced_edges(self.atoms).map(BondIdx::from)
     }
 }
 
@@ -284,6 +290,8 @@ pub struct MulticenterBondView<'a> {
     pub idx: MulticenterBondIdx,
     pub data: &'a MulticenterBondAst,
     atoms: &'a [NodeId],
+    #[allow(dead_code)]
+    ast: &'a MoleculeAst,
 }
 
 impl<'a> MulticenterBondView<'a> {
@@ -341,13 +349,13 @@ impl<'a> Index<AtomIdx> for AtomViews<'a> {
 /// Namespace accessor for bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct BondViews<'a> {
+    ast: &'a MoleculeAst,
     bonds: &'a [BondAst],
-    graph: &'a Graph,
 }
 
 impl<'a> BondViews<'a> {
-    pub(super) fn new(bonds: &'a [BondAst], graph: &'a Graph) -> Self {
-        Self { bonds, graph }
+    pub(super) fn new(ast: &'a MoleculeAst, bonds: &'a [BondAst]) -> Self {
+        Self { ast, bonds }
     }
 
     pub fn count(&self) -> usize {
@@ -359,8 +367,9 @@ impl<'a> BondViews<'a> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = BondView<'a>> {
+        let ast = self.ast;
         let bonds = self.bonds;
-        let graph = self.graph;
+        let graph = ast.graph();
         graph.edge_ids().map(move |id| {
             let [s, t] = graph.edge_endpoints(id);
             BondView {
@@ -368,17 +377,19 @@ impl<'a> BondViews<'a> {
                 src: AtomIdx::from(s),
                 tgt: AtomIdx::from(t),
                 data: &bonds[id.index()],
+                ast,
             }
         })
     }
 
     pub fn get(&self, idx: BondIdx) -> BondView<'a> {
-        let [s, t] = self.graph.edge_endpoints(EdgeId::from(idx));
+        let [s, t] = self.ast.graph().edge_endpoints(EdgeId::from(idx));
         BondView {
             idx,
             src: AtomIdx::from(s),
             tgt: AtomIdx::from(t),
             data: &self.bonds[idx.index()],
+            ast: self.ast,
         }
     }
 }
@@ -393,12 +404,13 @@ impl<'a> Index<BondIdx> for BondViews<'a> {
 /// Namespace accessor for dative-bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
+    ast: &'a MoleculeAst,
     set: &'a VarRelationSet<DativeBondAst>,
 }
 
 impl<'a> DativeBondViews<'a> {
-    pub(super) fn new(set: &'a VarRelationSet<DativeBondAst>) -> Self {
-        Self { set }
+    pub(super) fn new(ast: &'a MoleculeAst, set: &'a VarRelationSet<DativeBondAst>) -> Self {
+        Self { ast, set }
     }
 
     pub fn count(&self) -> usize {
@@ -410,6 +422,7 @@ impl<'a> DativeBondViews<'a> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = DativeBondView<'a>> {
+        let ast = self.ast;
         let set = self.set;
         set.relation_ids().map(move |rid| {
             let atoms = set.participants(rid);
@@ -420,6 +433,7 @@ impl<'a> DativeBondViews<'a> {
                 acceptor,
                 data,
                 atoms,
+                ast,
             }
         })
     }
@@ -434,6 +448,7 @@ impl<'a> DativeBondViews<'a> {
             acceptor,
             data,
             atoms,
+            ast: self.ast,
         }
     }
 }
@@ -448,12 +463,16 @@ impl<'a> Index<DativeBondIdx> for DativeBondViews<'a> {
 /// Namespace accessor for noncovalent-bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct NoncovalentBondViews<'a> {
+    ast: &'a MoleculeAst,
     set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
 }
 
 impl<'a> NoncovalentBondViews<'a> {
-    pub(super) fn new(set: &'a FixedRelationSet<NoncovalentBondAst, 2>) -> Self {
-        Self { set }
+    pub(super) fn new(
+        ast: &'a MoleculeAst,
+        set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
+    ) -> Self {
+        Self { ast, set }
     }
 
     pub fn count(&self) -> usize {
@@ -465,6 +484,7 @@ impl<'a> NoncovalentBondViews<'a> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> {
+        let ast = self.ast;
         let set = self.set;
         set.relation_ids().map(move |rid| {
             let parts = set.participants(rid);
@@ -472,6 +492,7 @@ impl<'a> NoncovalentBondViews<'a> {
                 idx: NoncovalentBondIdx::from(rid),
                 atoms: [AtomIdx::from(parts[0]), AtomIdx::from(parts[1])],
                 data: set.data(rid),
+                ast,
             }
         })
     }
@@ -483,6 +504,7 @@ impl<'a> NoncovalentBondViews<'a> {
             idx,
             atoms: [AtomIdx::from(parts[0]), AtomIdx::from(parts[1])],
             data: self.set.data(rid),
+            ast: self.ast,
         }
     }
 }
@@ -497,13 +519,13 @@ impl<'a> Index<NoncovalentBondIdx> for NoncovalentBondViews<'a> {
 /// Namespace accessor for aromatic-system views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
+    ast: &'a MoleculeAst,
     set: &'a VarRelationSet<AromaticSystemAst>,
-    graph: &'a Graph,
 }
 
 impl<'a> AromaticSystemViews<'a> {
-    pub(super) fn new(set: &'a VarRelationSet<AromaticSystemAst>, graph: &'a Graph) -> Self {
-        Self { set, graph }
+    pub(super) fn new(ast: &'a MoleculeAst, set: &'a VarRelationSet<AromaticSystemAst>) -> Self {
+        Self { ast, set }
     }
 
     pub fn count(&self) -> usize {
@@ -515,13 +537,13 @@ impl<'a> AromaticSystemViews<'a> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = AromaticSystemView<'a>> {
+        let ast = self.ast;
         let set = self.set;
-        let graph = self.graph;
         set.relation_ids().map(move |rid| AromaticSystemView {
             idx: AromaticSystemIdx::from(rid),
             data: set.data(rid),
             atoms: set.participants(rid),
-            graph,
+            ast,
         })
     }
 
@@ -531,7 +553,7 @@ impl<'a> AromaticSystemViews<'a> {
             idx,
             data: self.set.data(rid),
             atoms: self.set.participants(rid),
-            graph: self.graph,
+            ast: self.ast,
         }
     }
 }
@@ -546,12 +568,16 @@ impl<'a> Index<AromaticSystemIdx> for AromaticSystemViews<'a> {
 /// Namespace accessor for multicenter-bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct MulticenterBondViews<'a> {
+    ast: &'a MoleculeAst,
     set: &'a VarRelationSet<MulticenterBondAst>,
 }
 
 impl<'a> MulticenterBondViews<'a> {
-    pub(super) fn new(set: &'a VarRelationSet<MulticenterBondAst>) -> Self {
-        Self { set }
+    pub(super) fn new(
+        ast: &'a MoleculeAst,
+        set: &'a VarRelationSet<MulticenterBondAst>,
+    ) -> Self {
+        Self { ast, set }
     }
 
     pub fn count(&self) -> usize {
@@ -563,11 +589,13 @@ impl<'a> MulticenterBondViews<'a> {
     }
 
     pub fn iter(&self) -> impl Iterator<Item = MulticenterBondView<'a>> {
+        let ast = self.ast;
         let set = self.set;
         set.relation_ids().map(move |rid| MulticenterBondView {
             idx: MulticenterBondIdx::from(rid),
             data: set.data(rid),
             atoms: set.participants(rid),
+            ast,
         })
     }
 
@@ -577,6 +605,7 @@ impl<'a> MulticenterBondViews<'a> {
             idx,
             data: self.set.data(rid),
             atoms: self.set.participants(rid),
+            ast: self.ast,
         }
     }
 }

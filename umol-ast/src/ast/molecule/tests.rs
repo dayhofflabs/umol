@@ -48,12 +48,12 @@ fn constraints_with_molecule(c: Constraint) -> Constraints {
 #[rstest]
 fn test_molecule_ast_new() {
     let m = MoleculeAst::new();
-    assert_eq!(m.atom_count(), 0);
-    assert_eq!(m.bond_count(), 0);
-    assert_eq!(m.dative_bond_count(), 0);
-    assert_eq!(m.aromatic_system_count(), 0);
-    assert_eq!(m.multicenter_bond_count(), 0);
-    assert_eq!(m.noncovalent_bond_count(), 0);
+    assert_eq!(m.atoms().count(), 0);
+    assert_eq!(m.bonds().count(), 0);
+    assert_eq!(m.dative_bonds().count(), 0);
+    assert_eq!(m.aromatic_systems().count(), 0);
+    assert_eq!(m.multicenter_bonds().count(), 0);
+    assert_eq!(m.noncovalent_bonds().count(), 0);
     assert_eq!(m.constraints().len(), 0);
 }
 
@@ -70,12 +70,12 @@ fn test_molecule_ast_from_atoms_and_bonds() {
     ];
     let bonds = vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))];
     let m = MoleculeAst::from_atoms_and_bonds(atoms, bonds);
-    assert_eq!(m.atom_count(), 2);
-    assert_eq!(m.bond_count(), 1);
-    assert_eq!(m.dative_bond_count(), 0);
-    assert_eq!(m.aromatic_system_count(), 0);
-    assert_eq!(m.multicenter_bond_count(), 0);
-    assert_eq!(m.noncovalent_bond_count(), 0);
+    assert_eq!(m.atoms().count(), 2);
+    assert_eq!(m.bonds().count(), 1);
+    assert_eq!(m.dative_bonds().count(), 0);
+    assert_eq!(m.aromatic_systems().count(), 0);
+    assert_eq!(m.multicenter_bonds().count(), 0);
+    assert_eq!(m.noncovalent_bonds().count(), 0);
     assert_eq!(m.atom(AtomIdx(0)).data.element, ElementAst::Lit(Element::C));
     assert_eq!(m.atom(AtomIdx(1)).data.element, ElementAst::Lit(Element::O));
     assert_eq!(m.bond(BondIdx(0)).data.order, ValueAst::Lit(1));
@@ -359,7 +359,7 @@ fn test_molecule_ast_connecting_dative_bond(
     #[case] atoms: HashSet<AtomIdx>,
     #[case] expected: Option<DativeBondIdx>,
 ) {
-    assert_eq!(ast.connecting_dative_bond(&atoms), expected);
+    assert_eq!(ast.connecting_dative_bond(atoms), expected);
 }
 
 #[rstest]
@@ -691,7 +691,7 @@ fn test_molecule_ast_enumerate_perfect_matchings(
     let ms = ast.enumerate_perfect_matchings(MatchingEnumerationAlgorithm::BranchAndBound);
     assert_eq!(ms.len(), expected);
     for m in &ms {
-        assert!(m.is_perfect(ast.atom_count()));
+        assert!(m.is_perfect(ast.atoms().count()));
     }
 }
 
@@ -701,7 +701,7 @@ fn test_molecule_ast_enumerate_perfect_matchings(
 fn test_molecule_ast_automorphisms(#[case] ast: MoleculeAst, #[case] expected_orbits: usize) {
     let auto = ast.automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
     assert_eq!(auto.num_orbits(), expected_orbits);
-    assert_eq!(auto.atom_count(), ast.atom_count());
+    assert_eq!(auto.atom_count(), ast.atoms().count());
 }
 
 #[test]
@@ -1215,7 +1215,7 @@ fn test_molecule_ast_connecting_aromatic_system(
     #[case] atoms: HashSet<AtomIdx>,
     #[case] expected: Option<AromaticSystemIdx>,
 ) {
-    assert_eq!(ast.connecting_aromatic_system(&atoms), expected);
+    assert_eq!(ast.connecting_aromatic_system(atoms), expected);
 }
 
 #[rstest]
@@ -1232,7 +1232,7 @@ fn test_molecule_ast_connecting_multicenter_bond(
     #[case] atoms: HashSet<AtomIdx>,
     #[case] expected: Option<MulticenterBondIdx>,
 ) {
-    assert_eq!(ast.connecting_multicenter_bond(&atoms), expected);
+    assert_eq!(ast.connecting_multicenter_bond(atoms), expected);
 }
 
 #[rstest]
@@ -1242,7 +1242,7 @@ fn test_molecule_ast_enumerate_maximum_matchings() {
         .enumerate_maximum_matchings(MatchingEnumerationAlgorithm::BranchAndBound)
         .into_iter()
         .map(|m| {
-            let mut pairs: Vec<_> = (0..ast.atom_count())
+            let mut pairs: Vec<_> = (0..ast.atoms().count())
                 .map(AtomIdx::from)
                 .filter_map(|a| m.mate(a).filter(|b| a < *b).map(|b| (a, b)))
                 .collect();

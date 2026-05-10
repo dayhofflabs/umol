@@ -39,7 +39,7 @@ impl MoleculeAst {
         let l_atoms_g: HashSet<AtomIdx> = l_to_g.values().copied().collect();
 
         // Gluing condition: every neighbor of a deleted atom must be in L
-        for l_atom in (0..lhs.atom_count()).map(AtomIdx::from) {
+        for l_atom in (0..lhs.atoms().count()).map(AtomIdx::from) {
             if k_l.contains(&l_atom) {
                 continue;
             }
@@ -68,7 +68,7 @@ impl MoleculeAst {
         let mut builder = self.edit();
 
         // Phase 1: add R\K atoms
-        for r_atom in (0..rhs.atom_count()).map(AtomIdx::from) {
+        for r_atom in (0..rhs.atoms().count()).map(AtomIdx::from) {
             if r_to_l.contains_key(&r_atom) {
                 continue;
             }
@@ -94,7 +94,7 @@ impl MoleculeAst {
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomIdx> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.connecting_dative_bond(&l_parts).is_some()
+                lhs.connecting_dative_bond(l_parts.iter().copied()).is_some()
             };
             if !in_k {
                 let g_donors: Vec<AtomIdx> = dv.donors().map(|d| r_to_g[&d]).collect();
@@ -109,7 +109,7 @@ impl MoleculeAst {
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomIdx> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.connecting_aromatic_system(&l_parts).is_some()
+                lhs.connecting_aromatic_system(l_parts.iter().copied()).is_some()
             };
             if !in_k {
                 let g_parts: Vec<AtomIdx> = r_parts.iter().map(|a| r_to_g[a]).collect();
@@ -123,7 +123,7 @@ impl MoleculeAst {
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomIdx> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.connecting_multicenter_bond(&l_parts).is_some()
+                lhs.connecting_multicenter_bond(l_parts.iter().copied()).is_some()
             };
             if !in_k {
                 let g_parts: Vec<AtomIdx> = r_parts.iter().map(|a| r_to_g[a]).collect();
@@ -175,13 +175,13 @@ impl MoleculeAst {
             let in_k = all_k && {
                 let r_parts: Option<HashSet<AtomIdx>> =
                     l_parts.iter().map(|a| l_to_r.get(a).copied()).collect();
-                r_parts.is_some_and(|rp| rhs.connecting_dative_bond(&rp).is_some())
+                r_parts.is_some_and(|rp| rhs.connecting_dative_bond(rp.iter().copied()).is_some())
             };
             if !in_k {
                 let g_parts: Option<HashSet<AtomIdx>> =
                     l_parts.iter().map(|a| l_to_g.get(a).copied()).collect();
                 if let Some(gp) = g_parts {
-                    if let Some(g_idx) = self.connecting_dative_bond(&gp) {
+                    if let Some(g_idx) = self.connecting_dative_bond(gp.iter().copied()) {
                         remove_dative.push(g_idx);
                     }
                 }
@@ -198,12 +198,12 @@ impl MoleculeAst {
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts = map_participants(l_parts.iter().copied(), &l_to_r);
-                r_parts.is_some_and(|rp| rhs.connecting_aromatic_system(&rp).is_some())
+                r_parts.is_some_and(|rp| rhs.connecting_aromatic_system(rp.iter().copied()).is_some())
             };
             if !in_k {
                 let g_parts = map_participants(l_parts.iter().copied(), &l_to_g);
                 if let Some(gp) = g_parts {
-                    if let Some(g_idx) = self.connecting_aromatic_system(&gp) {
+                    if let Some(g_idx) = self.connecting_aromatic_system(gp.iter().copied()) {
                         remove_aromatic.push(g_idx);
                     }
                 }
@@ -220,12 +220,12 @@ impl MoleculeAst {
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts = map_participants(l_parts.iter().copied(), &l_to_r);
-                r_parts.is_some_and(|rp| rhs.connecting_multicenter_bond(&rp).is_some())
+                r_parts.is_some_and(|rp| rhs.connecting_multicenter_bond(rp.iter().copied()).is_some())
             };
             if !in_k {
                 let g_parts = map_participants(l_parts.iter().copied(), &l_to_g);
                 if let Some(gp) = g_parts {
-                    if let Some(g_idx) = self.connecting_multicenter_bond(&gp) {
+                    if let Some(g_idx) = self.connecting_multicenter_bond(gp.iter().copied()) {
                         remove_multicenter.push(g_idx);
                     }
                 }
@@ -257,7 +257,7 @@ impl MoleculeAst {
         }
 
         // Phase 4: remove L\K atoms and bonds from the topological graph
-        let remove_atoms_g: Vec<AtomIdx> = (0..lhs.atom_count())
+        let remove_atoms_g: Vec<AtomIdx> = (0..lhs.atoms().count())
             .map(AtomIdx::from)
             .filter(|a| !k_l.contains(a))
             .filter_map(|a| l_to_g.get(&a).copied())
