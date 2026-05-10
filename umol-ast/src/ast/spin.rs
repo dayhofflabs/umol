@@ -9,7 +9,7 @@ use super::value::ValueAst;
 /// Spin state: unpaired-electron count and multiplicity as independent
 /// `ValueAst` fields. Both may be `Undetermined`, a literal, or an
 /// expression pattern.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SpinStateAst {
     pub unpaired: ValueAst,
     pub multiplicity: ValueAst,

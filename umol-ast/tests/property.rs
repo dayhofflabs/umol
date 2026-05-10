@@ -379,10 +379,8 @@ fn bond_constraints_strategy() -> impl Strategy<Value = BondConstraints> {
 }
 
 fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraint> {
-    // Only the ring-membership constraints render into the entity's string
-    // form; Donor/Acceptor/Parallels/{Donor,Acceptor}Satisfies carry
-    // molecule-scope refs and are skipped by `fmt_constraint`.
     prop_oneof![
+        Just(DativeBondConstraint::Aromatic),
         constraint_inner_value_strategy(0..=6).prop_map(DativeBondConstraint::RingCount),
         constraint_inner_value_strategy(3..=10).prop_map(DativeBondConstraint::RingSize),
     ]
@@ -1143,9 +1141,88 @@ fn molecule_ast_with_constraints_strategy() -> impl Strategy<Value = MoleculeAst
     })
 }
 
+/// Generate a `Metadata` populated for an AST of the given counts. Entity
+/// ids use deterministic prefixed names (`atom0`, `bond1`, ...) so that
+/// names are unique across kinds and disjoint from alias names. Atom
+/// aliases are capped at 3 and use a 3-element pool (`C`, `N`, `O`) for
+/// the alias atom-DSL values, keeping bijectivity (each alias name
+/// distinct, each alias atom distinct).
+fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
+    const ALIAS_ELEMENTS: [Element; 3] = [Element::C, Element::N, Element::O];
+    let id_flag = || prop::option::weighted(0.4, Just(()));
+    let atom_flags = prop::collection::vec(id_flag(), counts.atom);
+    let bond_flags = prop::collection::vec(id_flag(), counts.bond);
+    let dative_flags = prop::collection::vec(id_flag(), counts.dative);
+    let aromatic_flags = prop::collection::vec(id_flag(), counts.aromatic);
+    let multicenter_flags = prop::collection::vec(id_flag(), counts.multicenter);
+    let noncovalent_flags = prop::collection::vec(id_flag(), counts.noncovalent);
+    let alias_count = 0usize..=ALIAS_ELEMENTS.len();
+    (
+        atom_flags,
+        bond_flags,
+        dative_flags,
+        aromatic_flags,
+        multicenter_flags,
+        noncovalent_flags,
+        alias_count,
+    )
+        .prop_map(|(atoms, bonds, datives, aromatics, multicenters, noncovalents, n_aliases)| {
+            let mut meta = Metadata::new();
+            for (i, slot) in atoms.iter().enumerate() {
+                if slot.is_some() {
+                    meta.set_atom_id(AtomIdx(i as u32), format!("atom{i}"));
+                }
+            }
+            for (i, slot) in bonds.iter().enumerate() {
+                if slot.is_some() {
+                    meta.set_bond_id(BondIdx(i as u32), format!("bond{i}"));
+                }
+            }
+            for (i, slot) in datives.iter().enumerate() {
+                if slot.is_some() {
+                    meta.set_dative_bond_id(DativeBondIdx(i as u32), format!("dative{i}"));
+                }
+            }
+            for (i, slot) in aromatics.iter().enumerate() {
+                if slot.is_some() {
+                    meta.set_aromatic_system_id(
+                        AromaticSystemIdx(i as u32),
+                        format!("aromatic{i}"),
+                    );
+                }
+            }
+            for (i, slot) in multicenters.iter().enumerate() {
+                if slot.is_some() {
+                    meta.set_multicenter_bond_id(
+                        MulticenterBondIdx(i as u32),
+                        format!("multicenter{i}"),
+                    );
+                }
+            }
+            for (i, slot) in noncovalents.iter().enumerate() {
+                if slot.is_some() {
+                    meta.set_noncovalent_bond_id(
+                        NoncovalentBondIdx(i as u32),
+                        format!("noncovalent{i}"),
+                    );
+                }
+            }
+            for i in 0..n_aliases {
+                let atom = AtomAst::from_element(ALIAS_ELEMENTS[i]);
+                meta.add_atom_alias(format!("al{i}"), atom);
+            }
+            meta
+        })
+        .boxed()
+}
+
 fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
-    molecule_ast_with_constraints_strategy()
-        .prop_map(|ast| MoleculeDsl::from_parts(ast, Metadata::default()))
+    molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
+        let counts = ConstraintCounts::from_ast(&ast);
+        metadata_for(counts).prop_map(move |metadata| {
+            MoleculeDsl::from_parts(ast.clone(), metadata)
+        })
+    })
 }
 
 proptest! {

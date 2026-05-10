@@ -11,7 +11,7 @@ use super::super::value::ValueAst;
 /// Atom-scope constraint: a predicate that pattern-matches a single atom
 /// on a topological or valence property (valence, degree, ring membership,
 /// etc.). Held inline on `AtomAst` via `AtomConstraints`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(AtomConstraintKind), derive(Hash, EnumCount, EnumIter))]
 #[repr(u8)]
 pub enum AtomConstraint {
@@ -115,7 +115,7 @@ impl AtomConstraint {
 /// Aromatic-valence state of an atom: `Undetermined`, explicitly
 /// `NotAromatic`, or participating in an aromatic system with the given
 /// aromatic-valence count.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum AromaticValenceAst {
     #[default]
     Undetermined,
@@ -145,7 +145,7 @@ impl AromaticValenceAst {
 /// Multicenter-valence state of an atom: `Undetermined`, explicitly
 /// `NotMulticenter`, or participating in a multicenter bond with the given
 /// multicenter-valence count.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MulticenterValenceAst {
     #[default]
     Undetermined,
@@ -175,7 +175,7 @@ impl MulticenterValenceAst {
 /// Per-atom constraints: at most one entry per [`AtomConstraintKind`].
 /// Stored kind-sorted in an inline-capacity-2 `SmallVec`; the common cases
 /// after resolution (0–2 constraints) never touch the heap.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AtomConstraints {
     entries: SmallVec<[AtomConstraint; 2]>,
 }

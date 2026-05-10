@@ -34,7 +34,7 @@ use crate::ast::value::ValueAst;
 /// (element plus `#…` predicates); inline-capable constraints land in
 /// `self.0.constraints`.
 #[repr(transparent)]
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AtomDsl(pub AtomAst);
 
 impl AtomDsl {

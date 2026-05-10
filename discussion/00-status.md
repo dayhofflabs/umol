@@ -96,3 +96,4 @@
 | [92-umol-graph-engines-restructure-2026-04-25.md](92-umol-graph-engines-restructure-2026-04-25.md)                               | Completed     | 2026-04-27   |
 | [93-aromatic-charge-and-transformer-2026-04-29.md](93-aromatic-charge-and-transformer-2026-04-29.md)                             | Completed     | 2026-05-07   |
 | [94-dsl-ast-io-ergonomics-2026-05-07.md](94-dsl-ast-io-ergonomics-2026-05-07.md)                                                 | Completed     | 2026-05-07   |
+| [95-ast-equality-and-ordering-2026-05-10.md](95-ast-equality-and-ordering-2026-05-10.md)                                         | Active        | 2026-05-10   |

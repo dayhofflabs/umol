@@ -1,4 +1,4 @@
-//! Graph algorithms operating on `Graph` topology.
+//! Graph algorithms operating on `Graph`.
 
 pub mod auto;
 pub mod bcc;

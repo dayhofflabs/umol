@@ -1,9 +1,9 @@
-//! CSR graph topology with Arc-based structural sharing.
+//! CSR graph with Arc-based structural sharing.
 //!
 //! `Graph` stores only adjacency (offsets, neighbor lists, edge endpoints).
 //! Node and edge data live externally in `Vec`s indexed by `NodeId`/`EdgeId`.
-//! Topology is wrapped in `Arc` for zero-cost cloning; mutations rebuild
-//! the CSR and produce a `Remapping` for reindexing external data.
+//! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
+//! it and produce a `Remapping` for reindexing external data.
 
 use std::sync::Arc;
 
@@ -34,7 +34,7 @@ impl EdgeId {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct Topology {
+struct Csr {
     offsets: Vec<u32>,
     neighbors: Vec<Neighbor>,
     endpoints: Vec<[NodeId; 2]>,
@@ -42,19 +42,19 @@ struct Topology {
     edge_count: usize,
 }
 
-/// Undirected graph stored as compressed sparse row (CSR) topology.
+/// Undirected graph stored as compressed sparse row (CSR).
 ///
 /// Stores only adjacency structure — node and edge data live externally,
-/// indexed by `NodeId` and `EdgeId` positions. Topology is shared via
+/// indexed by `NodeId` and `EdgeId` positions. The CSR is shared via
 /// `Arc`; mutations trigger copy-on-write.
 #[derive(Clone, Debug)]
 pub struct Graph {
-    topology: Arc<Topology>,
+    csr: Arc<Csr>,
 }
 
 impl PartialEq for Graph {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.topology, &other.topology) || self.topology == other.topology
+        Arc::ptr_eq(&self.csr, &other.csr) || self.csr == other.csr
     }
 }
 
@@ -63,42 +63,42 @@ impl Eq for Graph {}
 impl Graph {
     pub fn new(node_count: usize, edges: &[[u32; 2]]) -> Self {
         Self {
-            topology: Arc::new(Self::build_topology(node_count, edges)),
+            csr: Arc::new(Self::build_csr(node_count, edges)),
         }
     }
 
     pub fn node_count(&self) -> usize {
-        self.topology.node_count
+        self.csr.node_count
     }
 
     pub fn edge_count(&self) -> usize {
-        self.topology.edge_count
+        self.csr.edge_count
     }
 
     pub fn node_bound(&self) -> usize {
-        self.topology.node_count
+        self.csr.node_count
     }
 
     pub fn edge_bound(&self) -> usize {
-        self.topology.edge_count
+        self.csr.edge_count
     }
 
     /// Neighbors sorted by `NodeId`. Enables binary search in `find_edge`
     /// and set-intersection in `induced_edges`.
     pub fn neighbors(&self, id: NodeId) -> &[Neighbor] {
-        let start = self.topology.offsets[id.index()] as usize;
-        let end = self.topology.offsets[id.index() + 1] as usize;
-        &self.topology.neighbors[start..end]
+        let start = self.csr.offsets[id.index()] as usize;
+        let end = self.csr.offsets[id.index() + 1] as usize;
+        &self.csr.neighbors[start..end]
     }
 
     pub fn degree(&self, id: NodeId) -> usize {
-        let start = self.topology.offsets[id.index()] as usize;
-        let end = self.topology.offsets[id.index() + 1] as usize;
+        let start = self.csr.offsets[id.index()] as usize;
+        let end = self.csr.offsets[id.index() + 1] as usize;
         end - start
     }
 
     pub fn edge_endpoints(&self, id: EdgeId) -> [NodeId; 2] {
-        self.topology.endpoints[id.index()]
+        self.csr.endpoints[id.index()]
     }
 
     pub fn find_edge(&self, a: NodeId, b: NodeId) -> Option<EdgeId> {
@@ -123,41 +123,41 @@ impl Graph {
     }
 
     pub fn contains_node(&self, id: NodeId) -> bool {
-        id.index() < self.topology.node_count
+        id.index() < self.csr.node_count
     }
 
     pub fn contains_edge(&self, id: EdgeId) -> bool {
-        id.index() < self.topology.edge_count
+        id.index() < self.csr.edge_count
     }
 
     pub fn node_ids(&self) -> impl Iterator<Item = NodeId> {
-        (0..self.topology.node_count as u32).map(NodeId)
+        (0..self.csr.node_count as u32).map(NodeId)
     }
 
     pub fn edge_ids(&self) -> impl Iterator<Item = EdgeId> {
-        (0..self.topology.edge_count as u32).map(EdgeId)
+        (0..self.csr.edge_count as u32).map(EdgeId)
     }
 
     pub fn is_dense(&self) -> bool {
         true
     }
 
-    // --- Mutations (rebuild topology, CoW via Arc) ---
+    // --- Mutations (rebuild CSR, CoW via Arc) ---
 
     pub fn add_node(&mut self) -> NodeId {
-        let old = &*self.topology;
+        let old = &*self.csr;
         let new_id = NodeId(old.node_count as u32);
         let edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[a, b]| [a.0, b.0]).collect();
-        self.topology = Arc::new(Self::build_topology(old.node_count + 1, &edges));
+        self.csr = Arc::new(Self::build_csr(old.node_count + 1, &edges));
         new_id
     }
 
     pub fn add_edge(&mut self, a: NodeId, b: NodeId) -> EdgeId {
-        let old = &*self.topology;
+        let old = &*self.csr;
         let new_id = EdgeId(old.edge_count as u32);
         let mut edges: Vec<[u32; 2]> = old.endpoints.iter().map(|&[s, t]| [s.0, t.0]).collect();
         edges.push([a.0, b.0]);
-        self.topology = Arc::new(Self::build_topology(old.node_count, &edges));
+        self.csr = Arc::new(Self::build_csr(old.node_count, &edges));
         new_id
     }
 
@@ -168,7 +168,7 @@ impl Graph {
 
         let mut removed_edge_set: Vec<u32> = edges.iter().map(|e| e.0).collect();
 
-        let old = &*self.topology;
+        let old = &*self.csr;
 
         // Also remove edges incident to removed nodes
         for (i, &[a, b]) in old.endpoints.iter().enumerate() {
@@ -193,7 +193,7 @@ impl Graph {
             })
             .collect();
 
-        self.topology = Arc::new(Self::build_topology(
+        self.csr = Arc::new(Self::build_csr(
             old.node_count - removed_nodes.len(),
             &kept_edges,
         ));
@@ -243,7 +243,7 @@ impl Graph {
         }
     }
 
-    fn build_topology(node_count: usize, edges: &[[u32; 2]]) -> Topology {
+    fn build_csr(node_count: usize, edges: &[[u32; 2]]) -> Csr {
         let edge_count = edges.len();
 
         let mut degree = vec![0u32; node_count];
@@ -300,7 +300,7 @@ impl Graph {
             })
             .collect();
 
-        Topology {
+        Csr {
             offsets,
             neighbors,
             endpoints,

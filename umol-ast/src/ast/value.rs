@@ -12,7 +12,7 @@ pub type Bindings = HashMap<String, i64>;
 /// Integer-valued atom/bond field: undetermined (pattern wildcard), a
 /// literal, a finite literal set, or an arithmetic/boolean expression
 /// pattern. Used for charge, hydrogen count, isotope mass, valence, etc.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueAst {
     #[default]
     Undetermined,
@@ -175,7 +175,7 @@ impl ValueAst {
 /// atom/bond field constraints that can't be expressed as a literal or
 /// literal set, including bound variables (`Var`), membership tests
 /// (`Mem`), relational comparisons (`Rel`), and boolean combinators.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Expr {
     Lit(i64),
     Var(String),
@@ -423,7 +423,7 @@ fn collect_bindings(expr: &Expr, value: i64, bindings: &mut Bindings) {
 }
 
 /// Arithmetic operators for `Expr::BinOp`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ArithOp {
     Add,
     Sub,
@@ -433,7 +433,7 @@ pub enum ArithOp {
 }
 
 /// Relational operators for `Expr::Rel`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RelOp {
     Le,
     Ge,

@@ -504,24 +504,45 @@ pub(super) fn read_bond_constraint_dsl(
 pub(super) fn read_dative_bond_constraint_dsl(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<DativeBondConstraintDsl, EdnError> {
-    let key = read_single_key_map_header(de)?;
-    let c = match key.as_str() {
-        "ring-count" => {
-            DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()))
-        }
-        "ring-size" => {
-            DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()))
-        }
-        other => {
-            return Err(DeError::UnknownField {
-                key: other.to_string(),
-                path: vec!["dative-bond-constraint".into()],
+    match de.peek_byte()?.ok_or_else(eof_err)? {
+        b':' => {
+            let name = de.read_keyword_name()?;
+            match name.as_ref() {
+                "aromatic" => Ok(DativeBondConstraintDsl::Aromatic),
+                other => Err(DeError::Custom(format!(
+                    "unknown dative-bond-constraint keyword :{}",
+                    other
+                ))
+                .into()),
             }
-            .into());
         }
-    };
-    consume_single_key_map_close(de, "dative-bond-constraint")?;
-    Ok(c)
+        b'{' => {
+            let key = read_single_key_map_header(de)?;
+            let c = match key.as_str() {
+                "ring-count" => {
+                    DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()))
+                }
+                "ring-size" => {
+                    DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()))
+                }
+                other => {
+                    return Err(DeError::UnknownField {
+                        key: other.to_string(),
+                        path: vec!["dative-bond-constraint".into()],
+                    }
+                    .into());
+                }
+            };
+            consume_single_key_map_close(de, "dative-bond-constraint")?;
+            Ok(c)
+        }
+        b => Err(DeError::TypeMismatch {
+            expected: ":aromatic / {:ring-count …} / {:ring-size …}",
+            got: unexpected_byte_kind(b),
+            path: vec!["dative-bond-constraint".into()],
+        }
+        .into()),
+    }
 }
 
 fn read_atom_ref_vec(de: &mut EdnStreamDeserializer<'_>) -> Result<Vec<AtomRef>, EdnError> {

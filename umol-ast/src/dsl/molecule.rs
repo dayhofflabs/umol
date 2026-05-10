@@ -17,7 +17,7 @@ use std::fmt::{self, Display};
 use std::mem::take;
 use std::str::FromStr;
 
-use bimap::BiMap;
+use bimap::BiBTreeMap;
 use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 
@@ -54,7 +54,7 @@ use crate::ast::traits::{FromAst, IntoAst};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Metadata {
     atom_ids: IndexMap<AtomIdx, String>,
-    atom_aliases: BiMap<String, Box<AtomDsl>>,
+    atom_aliases: BiBTreeMap<String, Box<AtomDsl>>,
     bond_ids: IndexMap<BondIdx, String>,
     dative_bond_ids: IndexMap<DativeBondIdx, String>,
     aromatic_system_ids: IndexMap<AromaticSystemIdx, String>,

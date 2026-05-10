@@ -13,7 +13,7 @@ use super::value::{Expr, ValueAst};
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
 /// against the surrounding topology.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AtomAst {
     pub element: ElementAst,
     pub isotope_mass: IsotopeAst,
@@ -186,7 +186,7 @@ impl AtomAst {
 }
 
 /// Element expressions
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ElementAst {
     Lit(Element),
     #[default]
@@ -245,7 +245,7 @@ impl ElementAst {
 /// Isotope-mass expressions. `Natural` denotes the naturally most abundant
 /// isotope (`#i=`); numeric variants mirror `ValueAst` and are flattened here
 /// to keep `Undetermined` as a single top-level state.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IsotopeAst {
     #[default]
     Undetermined,
@@ -362,7 +362,7 @@ impl From<i64> for IsotopeAst {
 /// Implicit hydrogen expressions. `Normal` denotes the valence-model default
 /// (`#h=`); numeric variants mirror `ValueAst` and are flattened here to keep
 /// `Undetermined` as a single top-level state.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ImplicitHydrogensAst {
     #[default]
     Undetermined,
