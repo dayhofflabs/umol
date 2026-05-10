@@ -130,7 +130,7 @@ impl Graph {
         let orbits: Vec<NodeId> = orbits.iter().map(|&o| NodeId(o as u32)).collect();
         let canonical_lab: Vec<NodeId> = lab.iter().map(|&v| NodeId(v as u32)).collect();
 
-        let num_orbits = {
+        let orbit_count = {
             let mut reps = HashSet::new();
             for &o in &orbits {
                 reps.insert(o);
@@ -154,7 +154,7 @@ impl Graph {
             orbits,
             canonical_lab,
             node_count: n,
-            orbit_count: num_orbits,
+            orbit_count,
             group_order,
         }
     }
@@ -165,7 +165,7 @@ impl Automorphism {
         self.node_count
     }
 
-    pub fn num_orbits(&self) -> usize {
+    pub fn orbit_count(&self) -> usize {
         self.orbit_count
     }
 
@@ -195,7 +195,7 @@ mod tests {
     fn test_automorphisms_empty() {
         let g = Graph::default();
         let aut = g.automorphisms(|_: NodeId| 0u8, Nauty);
-        assert_eq!(aut.num_orbits(), 0);
+        assert_eq!(aut.orbit_count(), 0);
         assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(1));
     }
 
@@ -203,7 +203,7 @@ mod tests {
     fn test_automorphisms_single_vertex() {
         let g = Graph::new(1, &[]);
         let aut = g.automorphisms(|_| 0u8, Nauty);
-        assert_eq!(aut.num_orbits(), 1);
+        assert_eq!(aut.orbit_count(), 1);
         assert_eq!(aut.orbit_of(NodeId(0)), NodeId(0));
         assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(1));
     }
@@ -212,7 +212,7 @@ mod tests {
     fn test_automorphisms_two_same_color() {
         let g = Graph::new(2, &[[0, 1]]);
         let aut = g.automorphisms(|_| 0u8, Nauty);
-        assert_eq!(aut.num_orbits(), 1);
+        assert_eq!(aut.orbit_count(), 1);
         assert!(aut.same_orbit(NodeId(0), NodeId(1)));
         assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(2));
     }
@@ -221,7 +221,7 @@ mod tests {
     fn test_automorphisms_two_different_color() {
         let g = Graph::new(2, &[[0, 1]]);
         let aut = g.automorphisms(|n| n.index() as u8, Nauty);
-        assert_eq!(aut.num_orbits(), 2);
+        assert_eq!(aut.orbit_count(), 2);
         assert!(!aut.same_orbit(NodeId(0), NodeId(1)));
         assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(1));
     }
@@ -230,7 +230,7 @@ mod tests {
     fn test_automorphisms_square_uniform() {
         let g = Graph::new(4, &[[0, 1], [1, 2], [2, 3], [3, 0]]);
         let aut = g.automorphisms(|_| 0u8, Nauty);
-        assert_eq!(aut.num_orbits(), 1);
+        assert_eq!(aut.orbit_count(), 1);
         assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(8));
     }
 
@@ -239,7 +239,7 @@ mod tests {
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
         let colors = [0u8, 1, 0];
         let aut = g.automorphisms(|n| colors[n.index()], Nauty);
-        assert_eq!(aut.num_orbits(), 2);
+        assert_eq!(aut.orbit_count(), 2);
         assert!(aut.same_orbit(NodeId(0), NodeId(2)));
         assert!(!aut.same_orbit(NodeId(0), NodeId(1)));
         assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(2));

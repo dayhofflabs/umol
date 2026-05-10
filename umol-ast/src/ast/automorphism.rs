@@ -14,8 +14,8 @@ impl AtomAutomorphism {
         self.0.node_count()
     }
 
-    pub fn num_orbits(&self) -> usize {
-        self.0.num_orbits()
+    pub fn orbit_count(&self) -> usize {
+        self.0.orbit_count()
     }
 
     pub fn orbit_of(&self, atom: AtomIdx) -> AtomIdx {
@@ -89,12 +89,12 @@ mod tests {
 
     #[fixture]
     fn hexagon() -> AtomAutomorphism {
-        ring(6).automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
+        ring(6).graph().automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
     }
 
     #[fixture]
     fn chain_3() -> AtomAutomorphism {
-        chain(3).automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
+        chain(3).graph().automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
     }
 
     #[rstest]
@@ -106,7 +106,7 @@ mod tests {
         #[case] expected_orbit_count: usize,
     ) {
         assert_eq!(auto.atom_count(), expected_atom_count);
-        assert_eq!(auto.num_orbits(), expected_orbit_count);
+        assert_eq!(auto.orbit_count(), expected_orbit_count);
     }
 
     #[rstest]

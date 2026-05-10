@@ -8,7 +8,15 @@
 use std::ops::Index;
 
 use umol_graph_core::relation::RelationId;
-use umol_graph_core::{EdgeId, FixedRelationSet, NodeId, VarRelationSet};
+use umol_graph_core::{
+    AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
+    CycleEnumerationAlgorithm, EdgeId, FixedRelationSet, Graph, MatchingEnumerationAlgorithm,
+    MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
+    SubgraphIsomorphismAlgorithm, VarRelationSet,
+};
+
+use super::automorphism::AtomAutomorphism;
+use super::matching::BondMatching;
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
@@ -272,7 +280,7 @@ impl<'a> BondViews<'a> {
     pub fn iter(&self) -> impl Iterator<Item = BondView<'a>> {
         let ast = self.ast;
         let bonds = self.bonds;
-        let graph = ast.graph();
+        let graph = ast.raw_graph();
         graph.edge_ids().map(move |id| {
             let [s, t] = graph.edge_endpoints(id);
             BondView {
@@ -285,7 +293,7 @@ impl<'a> BondViews<'a> {
     }
 
     pub fn get(&self, idx: BondIdx) -> BondView<'a> {
-        let [s, t] = self.ast.graph().edge_endpoints(EdgeId::from(idx));
+        let [s, t] = self.ast.raw_graph().edge_endpoints(EdgeId::from(idx));
         BondView {
             idx,
             atoms: [AtomIdx::from(s), AtomIdx::from(t)],
@@ -494,7 +502,7 @@ impl<'a> AromaticSystemView<'a> {
 
     pub fn bonds(&self) -> impl Iterator<Item = BondIdx> + '_ {
         self.ast
-            .graph()
+            .raw_graph()
             .induced_edges(self.atoms)
             .map(BondIdx::from)
     }
@@ -664,6 +672,159 @@ impl<'a> NeighborView<'a> {
             data,
             ast,
         }
+    }
+}
+
+/// AtomIdx/BondIdx-typed adapter over the underlying `Graph`. Holds the
+/// pure-graph algorithms (connectivity, cycles, matchings, isomorphisms)
+/// without exposing graph-core's `NodeId` / `EdgeId` types in the public
+/// API. Construct via `MoleculeAst::graph()`.
+#[derive(Clone, Copy)]
+pub struct GraphView<'a> {
+    graph: &'a Graph,
+}
+
+impl<'a> GraphView<'a> {
+    pub(super) fn new(graph: &'a Graph) -> Self {
+        Self { graph }
+    }
+
+    pub fn degree(&self, atom: AtomIdx) -> usize {
+        self.graph.degree(NodeId::from(atom))
+    }
+
+    pub fn connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .connected_components(alg)
+            .into_iter()
+            .map(|c| c.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    pub fn biconnected_components(
+        &self,
+        alg: BiconnectedComponentsAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .biconnected_components(alg)
+            .into_iter()
+            .map(|c| c.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    pub fn shortest_cycle_through_bond(
+        &self,
+        bond: BondIdx,
+        alg: ShortestCycleAlgorithm,
+    ) -> Option<usize> {
+        self.graph
+            .shortest_cycle_through_edge(EdgeId::from(bond), alg)
+    }
+
+    pub fn shortest_cycle_through_atom(
+        &self,
+        atom: AtomIdx,
+        alg: ShortestCycleAlgorithm,
+    ) -> Option<usize> {
+        self.graph
+            .shortest_cycle_through_node(NodeId::from(atom), alg)
+    }
+
+    pub fn enumerate_cycles(
+        &self,
+        max_size: usize,
+        alg: CycleEnumerationAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .enumerate_cycles(max_size, alg)
+            .into_iter()
+            .map(|c| c.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    pub fn maximum_independent_set(&self, alg: MaxIndependentSetAlgorithm) -> Vec<AtomIdx> {
+        self.graph
+            .maximum_independent_set(alg)
+            .into_iter()
+            .map(AtomIdx::from)
+            .collect()
+    }
+
+    pub fn maximum_matching(&self, alg: MaxMatchingAlgorithm) -> BondMatching {
+        BondMatching(self.graph.maximum_matching(alg))
+    }
+
+    pub fn enumerate_perfect_matchings(
+        &self,
+        alg: MatchingEnumerationAlgorithm,
+    ) -> Vec<BondMatching> {
+        self.graph
+            .enumerate_perfect_matchings(alg)
+            .into_iter()
+            .map(BondMatching)
+            .collect()
+    }
+
+    pub fn enumerate_maximum_matchings(
+        &self,
+        alg: MatchingEnumerationAlgorithm,
+    ) -> Vec<BondMatching> {
+        self.graph
+            .enumerate_maximum_matchings(alg)
+            .into_iter()
+            .map(BondMatching)
+            .collect()
+    }
+
+    pub fn automorphisms<C: Ord + Copy>(
+        &self,
+        atom_color: impl Fn(AtomIdx) -> C,
+        alg: AutomorphismAlgorithm,
+    ) -> AtomAutomorphism {
+        AtomAutomorphism(
+            self.graph
+                .automorphisms(|n| atom_color(AtomIdx::from(n)), alg),
+        )
+    }
+
+    pub fn subgraph_isomorphisms(
+        &self,
+        query: &GraphView<'_>,
+        atom_match: &mut impl FnMut(AtomIdx, AtomIdx) -> bool,
+        bond_match: &mut impl FnMut(BondIdx, BondIdx) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .subgraph_isomorphisms(
+                query.graph,
+                &mut |tn, qn| atom_match(AtomIdx::from(tn), AtomIdx::from(qn)),
+                &mut |te, qe| bond_match(BondIdx::from(te), BondIdx::from(qe)),
+                alg,
+            )
+            .into_iter()
+            .map(|m| m.into_iter().map(AtomIdx::from).collect())
+            .collect()
+    }
+
+    pub fn subgraph_isomorphisms_at(
+        &self,
+        query: &GraphView<'_>,
+        anchor: (AtomIdx, AtomIdx),
+        atom_match: &mut impl FnMut(AtomIdx, AtomIdx) -> bool,
+        bond_match: &mut impl FnMut(BondIdx, BondIdx) -> bool,
+        alg: SubgraphIsomorphismAlgorithm,
+    ) -> Vec<Vec<AtomIdx>> {
+        self.graph
+            .subgraph_isomorphisms_at(
+                query.graph,
+                (NodeId::from(anchor.0), NodeId::from(anchor.1)),
+                &mut |tn, qn| atom_match(AtomIdx::from(tn), AtomIdx::from(qn)),
+                &mut |te, qe| bond_match(BondIdx::from(te), BondIdx::from(qe)),
+                alg,
+            )
+            .into_iter()
+            .map(|m| m.into_iter().map(AtomIdx::from).collect())
+            .collect()
     }
 }
 

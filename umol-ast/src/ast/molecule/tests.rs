@@ -594,7 +594,7 @@ fn test_molecule_ast_degree(
     #[case] atom: AtomIdx,
     #[case] expected: usize,
 ) {
-    assert_eq!(ast.degree(atom), expected);
+    assert_eq!(ast.graph().degree(atom), expected);
 }
 
 #[rstest]
@@ -602,7 +602,7 @@ fn test_molecule_ast_degree(
 #[case::two(two_components(), 2)]
 #[case::empty(MoleculeAst::default(), 0)]
 fn test_molecule_ast_connected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
-    let cc = ast.connected_components(ConnectedComponentsAlgorithm::Bfs);
+    let cc = ast.graph().connected_components(ConnectedComponentsAlgorithm::Bfs);
     assert_eq!(cc.len(), expected);
 }
 
@@ -610,7 +610,7 @@ fn test_molecule_ast_connected_components(#[case] ast: MoleculeAst, #[case] expe
 #[case::ring_6(ring(6), 1)]
 #[case::chain(chain(5), 0)]
 fn test_molecule_ast_biconnected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
-    let bcc = ast.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
+    let bcc = ast.graph().biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
     assert_eq!(bcc.len(), expected);
 }
 
@@ -623,7 +623,7 @@ fn test_molecule_ast_shortest_cycle_through_bond(
     #[case] expected: Option<usize>,
 ) {
     assert_eq!(
-        ast.shortest_cycle_through_bond(bond, ShortestCycleAlgorithm::Bfs),
+        ast.graph().shortest_cycle_through_bond(bond, ShortestCycleAlgorithm::Bfs),
         expected
     );
 }
@@ -637,7 +637,7 @@ fn test_molecule_ast_shortest_cycle_through_atom(
     #[case] expected: Option<usize>,
 ) {
     assert_eq!(
-        ast.shortest_cycle_through_atom(atom, ShortestCycleAlgorithm::Bfs),
+        ast.graph().shortest_cycle_through_atom(atom, ShortestCycleAlgorithm::Bfs),
         expected
     );
 }
@@ -652,7 +652,7 @@ fn test_molecule_ast_enumerate_cycles(
     #[case] max_size: usize,
     #[case] expected: usize,
 ) {
-    let cycles = ast.enumerate_cycles(max_size, CycleEnumerationAlgorithm::Vismara);
+    let cycles = ast.graph().enumerate_cycles(max_size, CycleEnumerationAlgorithm::Vismara);
     assert_eq!(cycles.len(), expected);
 }
 
@@ -660,7 +660,7 @@ fn test_molecule_ast_enumerate_cycles(
 #[case::triangle(ring(3), 1)]
 #[case::chain_3(chain(3), 2)]
 fn test_molecule_ast_maximum_independent_set(#[case] ast: MoleculeAst, #[case] expected: usize) {
-    let mis = ast.maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound);
+    let mis = ast.graph().maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound);
     assert_eq!(mis.len(), expected);
 }
 
@@ -669,14 +669,14 @@ fn test_molecule_ast_maximum_independent_set(#[case] ast: MoleculeAst, #[case] e
 #[case::ring_6(ring(6), 3)]
 #[case::single(chain(1), 0)]
 fn test_molecule_ast_maximum_matching(#[case] ast: MoleculeAst, #[case] expected_size: usize) {
-    let m = ast.maximum_matching(MaxMatchingAlgorithm::Edmonds);
+    let m = ast.graph().maximum_matching(MaxMatchingAlgorithm::Edmonds);
     assert_eq!(m.size(), expected_size);
 }
 
 #[test]
 fn test_bond_matching_mate() {
     let ast = chain(4);
-    let m = ast.maximum_matching(MaxMatchingAlgorithm::Edmonds);
+    let m = ast.graph().maximum_matching(MaxMatchingAlgorithm::Edmonds);
     assert!(m.is_matched(AtomIdx(0)));
     let mate = m.mate(AtomIdx(0));
     assert!(mate.is_some());
@@ -688,7 +688,7 @@ fn test_molecule_ast_enumerate_perfect_matchings(
     #[case] ast: MoleculeAst,
     #[case] expected: usize,
 ) {
-    let ms = ast.enumerate_perfect_matchings(MatchingEnumerationAlgorithm::BranchAndBound);
+    let ms = ast.graph().enumerate_perfect_matchings(MatchingEnumerationAlgorithm::BranchAndBound);
     assert_eq!(ms.len(), expected);
     for m in &ms {
         assert!(m.is_perfect(ast.atoms().count()));
@@ -699,15 +699,15 @@ fn test_molecule_ast_enumerate_perfect_matchings(
 #[case::ring_6(ring(6), 1)]
 #[case::chain_3(chain(3), 2)]
 fn test_molecule_ast_automorphisms(#[case] ast: MoleculeAst, #[case] expected_orbits: usize) {
-    let auto = ast.automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
-    assert_eq!(auto.num_orbits(), expected_orbits);
+    let auto = ast.graph().automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
+    assert_eq!(auto.orbit_count(), expected_orbits);
     assert_eq!(auto.atom_count(), ast.atoms().count());
 }
 
 #[test]
 fn test_atom_automorphism_same_orbit() {
     let ast = ring(6);
-    let auto = ast.automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
+    let auto = ast.graph().automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
     assert!(auto.same_orbit(AtomIdx(0), AtomIdx(3)));
 }
 
@@ -715,8 +715,8 @@ fn test_atom_automorphism_same_orbit() {
 fn test_molecule_ast_subgraph_isomorphisms() {
     let target = ring(6);
     let query = chain(2);
-    let mut matches = target.subgraph_isomorphisms(
-        &query,
+    let mut matches = target.graph().subgraph_isomorphisms(
+        &query.graph(),
         &mut |_, _| true,
         &mut |_, _| true,
         SubgraphIsomorphismAlgorithm::Vf2,
@@ -745,8 +745,8 @@ fn test_molecule_ast_subgraph_isomorphisms() {
 fn test_molecule_ast_subgraph_isomorphisms_at() {
     let target = ring(6);
     let query = chain(2);
-    let mut matches = target.subgraph_isomorphisms_at(
-        &query,
+    let mut matches = target.graph().subgraph_isomorphisms_at(
+        &query.graph(),
         (AtomIdx(0), AtomIdx(0)),
         &mut |_, _| true,
         &mut |_, _| true,
@@ -1190,8 +1190,8 @@ fn test_molecule_ast_eq_canonical_across_dative_order() {
 }
 
 #[rstest]
-fn test_molecule_ast_graph(#[from(rich_molecule)] ast: MoleculeAst) {
-    let g = ast.graph();
+fn test_molecule_ast_raw_graph(#[from(rich_molecule)] ast: MoleculeAst) {
+    let g = ast.raw_graph();
     assert_eq!(g.node_count(), 4);
     assert_eq!(g.edge_count(), 3);
     assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
@@ -1239,6 +1239,7 @@ fn test_molecule_ast_connecting_multicenter_bond(
 fn test_molecule_ast_enumerate_maximum_matchings() {
     let ast = ring(4);
     let mut ms: Vec<Vec<(AtomIdx, AtomIdx)>> = ast
+        .graph()
         .enumerate_maximum_matchings(MatchingEnumerationAlgorithm::BranchAndBound)
         .into_iter()
         .map(|m| {
