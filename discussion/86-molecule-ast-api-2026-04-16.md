@@ -1,6 +1,27 @@
 # Molecule AST API
 
-Working notes on the public API around `MoleculeAst` and its derived views, started while finishing the `Ring` → `RingView` refactor on `feature/relational-ast`. Focus: where derived data is cached, how it surfaces to consumers, and which procedural operations should also have constraint counterparts in step 9 of doc 80.
+Working notes on the public API around `MoleculeAst` and its derived views. Focus: where derived data is cached, how it surfaces to consumers, and which procedural operations should also have constraint counterparts in step 9 of doc 80.
+
+## Terminology
+
+**Bond** in this codebase means *localized two-atom bond* of positive integer order. This includes single, double, triple, quadruple bonds — i.e., not only the σ component, but also the π and (for quadruple bonds) δ components of a multiply-bonded pair. Localized-multicenter aggregates and delocalized aromatic systems are not bonds.
+
+The codebase does not name them `LocalizedBond` for space economy, but the meaning is exactly that. In particular:
+
+- **Not "sigma bond"** — a double bond is one `Bond`, not one σ + one π split into two entries. Counts like `bond_order_sum` and `connectivity` are localized-bond aggregates over this single entity.
+- **Not "covalent bond"** — `DativeBond`, atoms participating in `AromaticSystem`, `MulticenterBond`, and even some `NoncovalentBond` types are *also* covalent in the chemistry sense. The covalent-vs-noncovalent dimension is orthogonal to the bond-vs-other-relation dimension.
+
+The four **overlays** (`DativeBond`, `AromaticSystem`, `MulticenterBond`, `NoncovalentBond`) are explicitly not "bonds" in this vocabulary. They are separate relation types with their own participant lists and feature data, layered on top of the localized-bond graph. The umbrella term *overlay* is a codebase-internal usage — accurate (each is a typed n-ary relation over atoms, sitting above the basic atom + bond skeleton) and applicable uniformly to all four without contorting against any one of them.
+
+**Structural assumptions on overlay × localized-bond overlap (provisional):**
+
+- `AromaticSystem` is overlaid on both atoms *and* localized bonds — its `bonds()` method returns the localized bonds connecting its participants. Removing a participating atom *or* a participating bond invalidates the aromatic system's perceptual basis.
+- `MulticenterBond` and `NoncovalentBond` should *not* share atom-pairs with localized bonds — these are alternative bonding representations, not enrichments of an existing bond. Not enforced at construction today; revisit if a use case surfaces that requires coexistence.
+- `DativeBond` *may* coexist independently with localized bonds between the same atoms (e.g., a covalent backbone bond + a separate dative pair); mutation of one does not affect the other.
+
+These assumptions drive the cascade rules for `MoleculeBuilder::remove` (§"Cascade semantics on `MoleculeBuilder::remove`").
+
+Anywhere existing names use "sigma" or "covalent" as a substitute for "bond", they are misnamed. Flagged for the naming pass; do not propagate the misuse.
 
 ## Design context
 
@@ -12,133 +33,25 @@ Two anchors shape the design:
 
 ## Concurrency
 
-`Molecule` must be safe to hand to per-thread workers (doc 80 line 365). Requirements:
+### `MoleculeAst` (current)
 
-- `Molecule: Send + Sync`. The `Arc<MoleculeInner>` shape supports this.
-- All cached views use `OnceLock`, not `Cell` / `RefCell`. Init-once, read-many.
-- View contents (`RingSet`, `MatchTarget`, `MorganTarget`) must themselves be `Sync`. Today they hold owned data with no interior mutability.
-- Cloning `Molecule` is an `Arc` bump; all clones share the same cache.
+`MoleculeAst` carries a single-slot ring cache (`RingCache(Option<Box<RingCacheEntry>>)`, `umol-ast/src/ast/molecule.rs:54`) that is populated via `&mut self` in `mol.rings()` (canonical: Vismara relevant cycles, max_size 22). The cache is a plain `Option`, not `OnceLock` — mutation requires exclusive access; there is no interior mutability. Thread-safety story:
 
-`Pattern` follows the same pattern. Coordinate annotations (below) also must be `Sync` — pure data, no mutation.
+- `MoleculeAst: Send + Sync` per Rust's normal rules (no `Cell`/`RefCell`/raw pointers).
+- Sharing across threads is via clone (cheap: most fields are `Arc`-wrapped) plus per-thread cache population, or via external synchronization (`Mutex` / `RwLock`) if a single shared instance is needed.
+- `&MoleculeAst` in any thread is safe; cache writes need exclusive access by construction.
+- The cache is excluded from `PartialEq` / `Hash` via custom impls, so `Molecule == Molecule` and hashing are independent of cache state.
 
-## Current state of the ring API
+The cache location on `MoleculeAst` is the current state; this may change if a future `Molecule` wrapper takes over caching responsibility (see §"AST-vs-API layering").
 
-`umol-graph/src/ast/rings.rs` was reorganized to match the `views.rs` namespace pattern:
+### `Molecule` / `Pattern` (when they return)
 
-- `Ring` is now private storage (atoms vec + bonds vec).
-- `RingView<'a>` is the public read shape: `pub idx: RingIdx`, plus `atoms()`/`bonds()` returning slices and `len()`/`is_empty()`/`shared_atoms()`/`shared_bonds()`.
-- `RingSet` fields are private; accessors `family()`, `scope()`, `max_ring_size()`, `count()`, `ids()`, `iter() -> impl Iterator<Item = RingView<'_>>`, `get(idx) -> Option<RingView<'_>>`.
-- Per-atom / per-bond accessors keep `atom_smallest_ring_size`, `bond_smallest_ring_size`, `contains_atom`, `contains_bond`.
-- Pairwise relation surface: `relation`, `are_spiro`, `are_fused`, `are_bridged`, `spiro_neighbors`, `fused_neighbors`, `bridged_neighbors`, `fused_component(s)`, `shared_atoms`, `shared_bonds`, `graph()`.
+For the future chemist-facing wrappers (per §"AST-vs-API layering"):
 
-`RingIndex` was renamed to `RingIdx` for consistency with the rest of the index types (`AtomIdx`, `BondIdx`, etc.). All consumers updated; 3608 lib tests pass.
-
-`MoleculeAst` itself does not expose `rings()` — the only way to get a `RingSet` today is to construct a `RingEnumerator` and call `enumerate(&ast)`. That returns an owned `RingSet` and the caller is responsible for caching it. `Solver` currently builds one inside `resolve` and does not retain it across stratification.
-
-## Where the `RingSet` cache should live
-
-Doc 80 line 369 commits to: **`MoleculeAst` itself holds no cache.** Reasons restated there: interior mutability does not compose cleanly with equality, hashing, or constraint narrowing; ungrounded `MoleculeAst` values (patterns, mid-resolve partial structures) do not benefit from the same views.
-
-The cache belongs on `GroundMolecule`, in the shape doc 80 already sketched at lines 340–361:
-
-```rust
-struct GroundMoleculeInner {
-    ast: MoleculeAst,
-    ring_set: OnceLock<RingSet>,
-    distance_matrix: OnceLock<DistanceMatrix>,
-    biconnected: OnceLock<BiconnectedComponents>,
-    match_target: OnceLock<MatchTarget>,
-    morgan_target: OnceLock<MorganTarget>,
-}
-```
-
-Step 3 of the migration plan (line 406) deferred this — `GroundMolecule` is currently a plain newtype `(MoleculeAst)` with no `Arc`/`OnceLock`. Step 9 is the natural moment to lift it: the matcher recursion needs ring access in its inner loop, and a per-target cache is what keeps `Derived { InRing | RingSize | RingCount }` from re-enumerating per query.
-
-## Two use cases driving the cache decision
-
-### Aromaticity perception
-
-Today: `Solver::resolve` allocates a fresh `RingSet` inside the aromaticity stratum and discards it. The valence → aromaticity → re-valence loop pays for at most one enumeration, so the cache is not load-bearing for *resolution*. It becomes load-bearing the moment a downstream pass (matcher, constraint verifier, fingerprinter) wants the same ring data without re-enumerating.
-
-After step 9: aromaticity perception calls `ground.rings()` and the cache survives across the stratification *and* across subsequent matcher queries on the same molecule.
-
-### SMARTS-style ring attributes
-
-SMARTS distinguishes:
-
-| SMARTS atom predicate | Meaning | Backed by |
-|---|---|---|
-| `R` | atom is in any ring | `RingSet::contains_atom` |
-| `R<n>` | atom is in exactly *n* SSSR rings | `atom_to_rings[a].len()` (accessor missing today) |
-| `r<n>` | smallest containing ring has size *n* | `RingSet::atom_smallest_ring_size` |
-
-These are **topology-derived atom attributes** in the discussion 79 taxonomy: derived from graph structure, not stored on `AtomAst`. They are evaluated against a target during matching, not pinned on a query atom.
-
-For a query batch over 10k molecules, hitting `ring_count_at` once per atom for every SMARTS check means the build cost must be amortized. `OnceLock` per `GroundMolecule` does that without a global cache.
-
-One missing accessor: `ring_count_at(atom: AtomIdx) -> usize`. Trivial — `atom_to_rings.get(&atom).map_or(0, Vec::len)`.
-
-## Procedural vs declarative split
-
-Doc 80 line 194 commits to: *"Discovery is procedural; verification and narrowing are constraint-based."* Apply that rule to each `RingSet` method:
-
-| Operation | Stays procedural | Becomes `DerivedPred` |
-|---|---|---|
-| `RingEnumerator::enumerate` | yes (graph search) | — |
-| `iter` / `get` / `count` / `ids` | yes (cache walk) | — |
-| `contains_atom`, `contains_bond` | — | `InRing` (already in D3) |
-| `atom_smallest_ring_size` | — | `RingSize(ValueAst)` (already in D3) |
-| `ring_count_at` (new accessor) | — | new `RingCount(ValueAst)` |
-| `relation`, `are_spiro/fused/bridged` | yes (perception-internal) | — |
-| `spiro_neighbors`, `fused_neighbors`, `bridged_neighbors` | yes (perception-internal) | — |
-| `fused_component(s)` | yes (perception-internal) | — |
-| `shared_atoms`, `shared_bonds` | yes (perception-internal) | — |
-
-The asymmetry is principled: SMARTS attributes are atom- or bond-local properties derived from ring membership. Pairwise ring-vs-ring queries are aromaticity-internal — no SMARTS analog, no constraint slot. Adding constraint variants for `Spiro(a, b)` / `Fused(a, b)` would invent vocabulary nobody writes.
-
-## Ring topology in patterns: no special constraint needed
-
-A "back-closure" in SMILES (`C1CCCCC1`'s second `1`) is a notational convenience for the string form. After parsing it is an ordinary bond entry whose endpoints both already exist. `MoleculeAst` stores bonds in `Arc<Vec<BondAst>>` indexed off `graph: Graph`; nothing distinguishes a tree edge from a cycle-closing edge.
-
-To assert "atom 0 lies in some 6-ring" as a sub-pattern:
-
-```rust
-SubPattern {
-    anchor: 0,
-    pattern: MoleculeAst {
-        atoms: [C, C, C, C, C, C],
-        bonds: [
-            (0, 1), (1, 2), (2, 3), (3, 4), (4, 5),
-            (5, 0),  // cycle-closing bond — same shape as any other
-        ],
-        ..
-    }
-}
-```
-
-The `(5, 0)` entry is what SMILES would call a back-closure. From the matcher's standpoint it is an ordinary bond constraint: VF2 must find six target atoms with all six bonds present, including `(t5, t0)`. The "ring" is encoded entirely in the pattern's bond list — no `RingPattern` constraint variant is needed.
-
-So three ways to express ring membership in queries, picking the cheapest evaluator each time:
-
-1. `R` / `r<n>` / `R<n>` → `DerivedPred::InRing | RingSize | RingCount` against the cached `RingSet`. O(1) bit/vec lookup.
-2. "Some 6-ring touches this atom" → 6-cycle `SubPattern`. VF2 search.
-3. "Atom is in the same ring as atom X" → `SubPattern` that anchors both atoms in a cycle.
-
-(1) is for SMARTS atom predicates; (2)–(3) are for genuine topology assertions that go beyond SSSR membership.
-
-## Implications for step 9 (SubPattern + matcher recursion)
-
-Concrete additions on top of D3 in doc 80:
-
-1. **`MatchTarget` carries ring access.** Either it wraps `GroundMolecule` (so `target.rings()` resolves through the cache) or it holds an `Arc<RingSet>` cloned at construction. The matcher dispatches `DerivedPred::InRing | NotInRing | RingSize | RingCount` against this view in a single hot-path call.
-
-2. **Add `RingCount(ValueAst)` to `DerivedPred`.** Symmetric with `RingSize`; closes the SMARTS `R<n>` gap.
-
-3. **Lift `GroundMolecule` to the `Arc<Inner>` + `OnceLock` shape from doc 80 lines 340–361.** Step 3 of the migration deferred this; step 9 needs it.
-
-4. **Solver loop materializes views via `target.rings()`.** Per doc 80 lines 232–237, view materialization is step 1 of the propagate phase. Currently `Solver::resolve` builds rings inline; the migration unit is "stop allocating, call `ground.rings()`."
-
-What does **not** change: `RingEnumerator` stays procedural, the pairwise relation surface stays consumer-local to aromaticity, and there is no `RingPattern` constraint variant.
+- `Molecule: Send + Sync` via `Arc<MoleculeInner>`.
+- Wrapper-side caches use `OnceLock` (init-once, read-many) so cloning is an `Arc` bump and clones share cache state.
+- View contents (`RingSet`, `MatchTarget`, `MorganTarget`) must themselves be `Sync` — pure owned data, no interior mutability.
+- `Pattern` follows the same shape. Coordinate annotations (when their location is settled) also must be `Sync`.
 
 ## Data structure hierarchy
 
@@ -174,8 +87,8 @@ Cache contents are not the same. `Pattern` does not need `MorganTarget`; `Molecu
 ### Resolved hierarchy
 
 ```
-MoleculeAst                       algebraic, immutable, ground or partial, no caches
-   │
+MoleculeAst                       algebraic, ground or partial, single-slot ring cache
+   │                              (cache location may move to wrapper if Molecule returns)
    ├─ Molecule                    ground invariant; chemistry-side caches
    ├─ Pattern                     no ground requirement; matcher-side caches
    └─ ResolverCell (private)      transient; transfers caches into Molecule on success
@@ -198,128 +111,44 @@ Both converge in a private `Molecule::from_inner(MoleculeInner { ast, ring_set, 
 
 - `Pattern::new(MoleculeAst) -> Result<Pattern, PatternError>` — validates pattern well-formedness (sub-pattern anchors in range, constraints reference valid relations); no propagation. Caches start empty; populate lazily on first match.
 
-### Asymmetries worth naming
-
-1. **Resolution flows into `Molecule` but not `Pattern`.** Patterns are intentionally underdetermined; running a resolver on them would either fail or invent constraints the user never wrote.
-2. **Transformations produce `MoleculeAst`, not `Molecule`.** The producer wraps to `Molecule::new` if the result is ground (kekulization), or returns `MoleculeAst` if the result is itself a family or partial structure.
-3. **A ground `MoleculeAst` can be wrapped as `Pattern`** — useful for "exact-match this molecule" queries. Cheap rewrap; cache slots start empty because pattern caches differ from molecule caches.
-4. **`ResolverCell`'s topology cache transfer only targets `Molecule`.** The resolver is not called on patterns.
-
-### Cache-transfer mechanics
-
-`ResolverCell` owns a `OnceLock<RingSet>` that the aromaticity stratum populates. On finalize, the cell moves the `OnceLock` value into `MoleculeInner`'s slot. No extra copy; `RingSet` is moved by value.
-
-Topology caches not populated during resolution (e.g., a registry-only valence pass that never touched rings) leave the corresponding `OnceLock` in the resulting `Molecule` unset. The first chemistry query pays for it. Pay-on-use is preserved.
-
-Solver per-molecule state (candidate sets, propagation queue, fixpoint counters) lives only in `ResolverCell` and is dropped at finalize. None of it leaks into `Molecule`.
-
-### Naming
-
-`GroundMolecule` is precise but reads like compiler vocabulary to chemists. With the recently-deleted `graph_ir::Molecule` gone, the name `Molecule` is free. Recommended pairing:
-
-- `MoleculeAst` — algebraic, the input/output of parsers, transformations, and serializers.
-- `Molecule` — chemist-facing, ground invariant, cached views.
-
-Symmetric with the rest of the AST-vs-resolved distinction in the codebase. Final decision deferred to the implementation step.
-
 ## Operation boundaries: what each IO / transformation operates on
+
+Current state (no chemist-facing wrapper exists; all ops operate on `MoleculeAst`).
 
 ### DSL IO
 
-EDN parser produces `MoleculeAst`. Caller wraps via `Molecule::new(ast)` (ground required, errors if not) or `Pattern::new(ast)` (no ground requirement, well-formedness checks only). `is_ground()` is paid at the wrap.
+EDN parser produces `MoleculeDsl` as a boundary type — surface form with metadata (entity ids, atom aliases). `MoleculeDsl` raises to `MoleculeAst` via `IntoAst<MoleculeAst>` / `FromAst` in a separate step. Reverse: `MoleculeAst` lowers to `MoleculeDsl` via `FromAst<MoleculeAst>`, then renders to EDN. The two-step shape exists so the algebraic `MoleculeAst` carries no surface-form metadata.
 
 ### SMILES / MOL IO
 
-Read: `SMILES/MOL → TableIR → MoleculeAst → Solver::resolve → Molecule`.
+Read: `SMILES/MOL → TableIR → MoleculeAst`. The lift step is `impl TryIntoAst<MoleculeAst> for &TableMolecule` (`umol-graph/src/table_ir/lift.rs:34`) — uses the same `IntoAst` trait family as the DSL → AST step. Per-atom and per-bond analogues exist in the same module.
 
-TableIR → MoleculeAst is the clean handoff. The lowering does not know whether the result is ground; the resolver decides. Skipping the intermediate and going `TableIR → ResolverCell` directly would couple file-format parser with solver strategy.
+After lift, `MoleculeAst` is passed to `Resolver::resolve(&MoleculeAst, &ChemistryModel) -> Solution` for narrowing. There is no `Molecule` wrapper to return into; resolved state lives on the (mutated) `MoleculeAst` itself. Validators (`ElectronInvariantValidator`, etc.) take `&MoleculeAst` directly.
 
-If `Solver::resolve` receives an already-ground input (canonical SMILES with all atoms fully specified), it detects this up front and returns `Molecule::from_inner` with empty caches — same return type, zero cost.
+Write: `MoleculeAst → TableIR → text`. No reverse `TryIntoTableIR` shortcut today; writers that need the table form go through whatever lowering exists per format.
 
-Write: `Molecule → MoleculeAst (via Molecule::as_ast) → TableIR → text`. No separate "table view" on `Molecule` needed; the AST is the canonical serialization shape, and after resolution all fields are concrete. Writers that need derived data (e.g., CTAB ring block) query the `Molecule` cache.
+### Transformation ops (kekulize, aromatize)
 
-### Transformation ops (kekulize, aromatize, tautomerize)
+Operate on `&mut MoleculeAst` in place (or take `&MoleculeAst` and produce a new `MoleculeAst`). Implemented in `umol-graph/src/ops/transformer/`:
 
-These are rewrites that preserve ground-ness by construction. The resolver is not needed on the output — the operation is responsible for producing a valid ground structure.
+- **`Aromatizer`** (`ops/transformer/aromatizer.rs`) — perception + assignment.
+- **`Kekulizer`** (`ops/transformer/kekulizer.rs`) — picks a Kekulé assignment via maximum matching on the aromatic subgraph.
 
-| Op | Signature | Resolver pass? |
-|---|---|---|
-| `kekulize` | `&Molecule → Molecule` (pick one canonical) | no |
-| `kekulize_all` | `&Molecule → Vec<Molecule>` | no |
-| `aromatize` | `&Molecule → Molecule` | no — perception is part of the op |
-| `tautomers` | `&Molecule → Vec<Molecule>` | no — proton shifts preserve valence by construction |
-
-Start with `Vec<Molecule>` for families. E-graph for tautomers is deferred (doc 80 line 270).
-
-Cache implication: per doc 80 line 371, a new `Molecule` from a rewrite starts with empty `OnceLock` caches. The cost of proving a transferred cache is still correct outweighs the rebuild.
+Tautomer enumeration and canonical SMILES are not implemented at this point. The original `Molecule → Molecule` signatures from earlier in this doc are projections for the future chemist-facing wrapper, not current API.
 
 ### Reactions
 
-Pattern well-formedness is validatable at `Pattern::new` — sub-pattern anchors in range, constraints reference existing relations, no cyclic sub-pattern references. Standard AST-level structural checks.
+`ReactionRuleAst` exists in `umol-ast` (`ast/reaction.rs`). Mechanical apply lives in `umol-ast/src/ast/molecule/rewrite.rs`: takes a `&ReactionRuleAst` and a target `&MoleculeAst` plus an `Assignment`, produces a rewritten `MoleculeAst`. No chemist-facing `ReactionRule` wrapper. Re-resolution after rewrite is up to the caller.
 
-Semantic well-formedness of a full `ReactionRule` (LHS + RHS + correspondence) — whether applying the rule to *any* matching target yields a chemically valid product — is **not** validatable statically in the general case. It depends on target-specific valence, charges, stereo. A narrow class (mass-balanced electron-pushing rules) is provably ground-preserving; the general case is not.
+Semantic well-formedness of a full reaction rule (LHS + RHS + correspondence) — whether applying the rule to *any* matching target yields a chemically valid product — is **not** validatable statically in the general case. It depends on target-specific valence, charges, stereo. A narrow class (mass-balanced electron-pushing rules) is provably ground-preserving; the general case is not.
 
-Flow:
+### Coordinates
 
-```
-rule: &ReactionRule + target: &Molecule
-    │
-    ├─► LHS Pattern matches target → Assignment
-    ├─► Rule applied mechanically → MoleculeAst (possibly non-ground on RHS-introduced atoms)
-    └─► Solver::resolve on the result → Molecule
-```
+Representation of coordinates in `MoleculeAst` is **undecided**. Likely belongs at a higher level than the AST (a separate annotation carried on a future `Molecule` wrapper, or a sidecar payload). The open question is how MOL / CXSMILES → DSL conversion threads the coordinate references — needed because DSL would have to either carry the coordinates or reference them externally, and that decision affects the boundary between AST and any wrapper.
 
-Re-resolution cost is amortized over VF2 match + rewrite. Regiochemistry: one rule + one target can produce multiple products via different match assignments.
-
-### Coordinates as annotations
-
-3D and 2D coordinates are owned by `umol-geometric`, not `umol-graph`. The `Molecule` type carries coordinates only as **annotations**, not as first-class chemistry data:
-
-- Source: MOL files and CXSMILES carry coordinates; the parser must propagate them.
-- Storage on `Molecule`: an optional per-atom `Coordinate` payload, populated only if the input had coordinates.
-- Operations: pass-through only. `Molecule` does not interpret, normalize, or recompute coordinates. Round-trip (MOL → Molecule → MOL) preserves them faithfully.
-- No conformers. Multiple-conformer support is a `umol-graph → umol-geometric` conversion via distance geometry (doc 71), not a `Molecule` concern.
-
-This keeps `umol-graph` graph-only at its core while letting MOL/CXSMILES roundtrip through.
-
-### Result types
-
-No generic `OpResult`. Metadata shapes are heterogeneous:
-
-| Op class | Returns | Rationale |
-|---|---|---|
-| `kekulize`, `aromatize` | `Molecule` | Single product, no meaningful metadata |
-| `to_canonical_smiles` | `String` | Query, not a transformation |
-| `kekulize_all`, `tautomers` | `Vec<Molecule>` | Single-type family, no correspondence |
-| `apply_reaction` | `Vec<ReactionResult>` | Per-match metadata (assignment, atom mapping, rule ref) must travel with the product |
-| `match_substructure` | `Vec<Assignment>` | Matches are not new molecules |
-
-`ReactionResult` carries products + atom mapping + rule reference + assignment. A generic `OpResult<M>` parameterized by metadata is premature; wait for a second op with the same shape before abstracting.
-
-## Summary table
-
-| Stage | Works on | Notes |
-|---|---|---|
-| EDN / DSL parse | produces `MoleculeAst` | caller wraps to `Molecule` or `Pattern` |
-| SMILES / MOL read | `TableIR → MoleculeAst → Solver → Molecule` | clean boundary at AST |
-| SMILES / MOL write | `Molecule → MoleculeAst → TableIR → text` | no extra table view |
-| Kekulize / aromatize | `&Molecule → Molecule` or `Vec<Molecule>` | no resolver pass |
-| Tautomerize | `&Molecule → Vec<Molecule>` | E-graph later |
-| React | `&ReactionRule + &Molecule → Vec<ReactionResult>` | re-resolve product internally |
-| Canonicalize | `&Molecule → String` | query, not transformation |
+Out of scope for the current AST API work. Status today: `umol-geometric` owns geometric primitives but no integration path with `MoleculeAst` is wired.
 
 ## API tiering: where MoleculeAst surfaces
-
-Walking the four 3-month use cases through a candidate first-tier API confirms that `MoleculeAst` does not appear in the user-visible code path of any of them:
-
-| Use case | First-tier code |
-|---|---|
-| SMILES → Morgan | `let mol = parse_smiles(s)?; let fp = mol.morgan_fingerprint(2);` |
-| DSL → Morgan | `let mol = Molecule::from_edn_str(text)?; let fp = mol.morgan_fingerprint(2);` |
-| SMILES + SMARTS → annotated DSL | `parse_smiles → Molecule`, `parse_smarts → Pattern`, `mol.find_matches(&pattern)`, `mol.to_edn_with_match(m)` |
-| SMILES + SMIRKS → product SMILES | `parse_smirks → ReactionRule`, `apply_reaction(&rule, &mol) → Vec<ReactionResult>`, each `result.products: Vec<Molecule>` |
-
-`MoleculeAst` is therefore second-tier: visible in the public API but not the type a normal user reaches for first.
 
 ### Two-tier surface
 
@@ -370,8 +199,6 @@ pub fn parse_smirks_to_ast(s: &str) -> Result<ReactionRuleAst, SmirksError>;
 pub fn parse_smiles_with(s: &str, cfg: &ResolverConfig) -> Result<Molecule, SmilesError>;
 ```
 
-`parse_smiles` uses `Solver::default()`. Power users compose the raw parser with a custom `Solver`.
-
 ### Implication for naming
 
 The two-tier framing supports:
@@ -380,6 +207,1131 @@ The two-tier framing supports:
 - `Pattern` — query-facing, first-tier.
 
 `MoleculeAst` is not hidden, just not what users type day-to-day.
+
+## MoleculeAst operation taxonomy
+
+This section consolidates the public operation surface on `MoleculeAst` and its views, organizing by intent. Each row carries a state tag:
+
+- **Impl** — exists in code, verified.
+- **Designed** — shape settled in a doc, no impl yet.
+- **Open** — no decision; surfaces a real need from doc / ops survey but the API shape is undecided.
+
+Names tagged `[naming TBD]` are working-name placeholders deferred to a separate naming pass after the surface stabilizes. References point to authoritative specs (other discussion docs) or call sites (file:line where the need recurs).
+
+### Design principles for the AST surface
+
+Three cross-cutting rules the taxonomy assumes throughout.
+
+**1. Molecule-scope indices, not graph ids.** Public methods on `MoleculeAst` and its views speak `AtomId` / `BondId` / `DativeBondId` / `AromaticSystemId` / `MulticenterBondId` / `NoncovalentBondId`. Graph-level identifiers (`NodeId`, `EdgeId`, `RelationId`) belong to `umol-graph-core` and stay behind the `raw_graph() -> &Graph` escape hatch. Every method that wraps a graph primitive performs the index-space conversion at the boundary; no pure pass-through.
+
+**2. View field naming.** Inside entity views (`AtomView`, `BondView`, `DativeBondView`, etc.) the current fields `data: &EntityAst` and `ast: &MoleculeAst` (the back-pointer just added) are misnamed. Settled convention:
+
+- `data: &EntityAst` → `ast: &EntityAst` — public field. The *entity's* AST is the natural meaning of "ast" inside the view. Used as the escape hatch for whole-struct operations (cloning, comparison, low-level inspection). Not duplicated as a method; the field IS the access path.
+- `ast: &MoleculeAst` → `molecule: &MoleculeAst` — private field. Internal navigation back-pointer; not part of the public surface.
+
+Mixed field-vs-method surface on `AtomView` (and the other entity views):
+
+- **Fields**: `pub id: AtomId`, `pub ast: &EntityAst` — structural primitives of the view. Direct field access for both.
+- **Methods**: per-field accessors (`element()`, `charge()`, ...), derived readers (`valence()`, `degree()`, ...), predicates (`is_in_ring()`, ...), cross-entity navigation (`neighbors()`, `rings()`, `aromatic_system()`, ...). Methods for everything computed or naming-an-operation.
+
+The line: field for "what this view *is* (id + entity-AST handle)"; method for "what this view *does* (reads, derivations, predicates, navigation)".
+
+Mut views (`AtomViewMut`, etc.) follow the same shape with `pub ast: &mut EntityAst`. Auto-deref handles both read and write through the field; no `ast()` / `ast_mut()` method pair needed.
+
+**3. Topology-only caches OK on the AST; attribute-derived caches go on the wrapper.** Topology is invariant across resolution (per §"What's stable vs. changing during resolution"); a cache that depends only on `(atoms, bonds)` (current ring cache, future `BiconnectedComponents`, `DistanceMatrix`) stays valid through every in-place mutation and is safe on `MoleculeAst`. Caches that depend on attribute concretion (Morgan fingerprint, packed `MatchTarget`) need a ground-only home — the future `Molecule` wrapper. The current `MoleculeAst::rings` slot fits the topology-only rule; no immediate need to relocate.
+
+**4. Cross-molecule index misuse is not validated.** Index types (`AtomId`, `BondId`, `DativeBondId`, `AromaticSystemId`, `MulticenterBondId`, `NoncovalentBondId`, `RingId`) are bare newtypes over `u32`; they carry no provenance tag identifying which molecule they were obtained from. Methods that consume an index obtained from a different `MoleculeAst`, view, or `RingSet` silently produce wrong answers (out-of-range panic at best, semantically incorrect chemistry at worst) rather than rejecting the call at the boundary. Examples:
+
+- Passing one molecule's `AtomId` to another molecule's `atom()` / `atom_view`.
+- Passing a `&RingSet` enumerated against molecule A into a parametric ring query on molecule B's atom view (a real hazard for the parametric API in §"Ring access").
+- Indexing into one molecule's `electrons` array with a position derived from another molecule's aromatic-system view.
+
+The pattern matches RDKit and the rest of the cheminformatics ecosystem. Lifetime-branded indices (`'mol` parameter, `GhostCell`-style typestate) would catch the misuse at compile time but at substantial ergonomic cost; the consequence of misuse is incorrect chemistry, not memory unsafety, and we accept the hazard. Callers are responsible for keeping index provenance consistent.
+
+**5. `ValueAst` arithmetic carries `Option<i64>` semantics; `Undetermined` ≡ "no constraint".** Two interlocking simplifications that unify derived-quantity computation and constraint inspection:
+
+*Arithmetic*. `ValueAst` supports `Add` / `Sub` / `Mul` / `Div` (binary and scalar). Operations on two `Lit`s yield a `Lit`; anything involving a non-`Lit` (`Undetermined`, `LitSet`, `Expr`) collapses to `Undetermined`. The Option-isomorphism is:
+
+| `Option<i64>` | `ValueAst` |
+|---|---|
+| `Some(n)` | `Lit(n)` |
+| `None` | `Undetermined` |
+| `lhs.zip(rhs).map(\|(a,b)\| a+b)` | `lhs + rhs` (collapses non-Lit) |
+
+This isn't symbolic arithmetic — `Expr(charge + 4) + Lit(2)` collapses to `Undetermined`, not to `Expr(charge + 6)`. Reflective of the resolver's "narrow to `Lit` before computing" assumption; full symbolic resolution is a separate future pass.
+
+*Constraint absence ≡ `Undetermined`*. Per-kind constraint accessors on `*Constraints` stores return `ValueAst` (not `Option<ValueAst>`). "No constraint of this kind asserted" returns `ValueAst::Undetermined`, identical to "constraint asserted as `Undetermined`". Justified by the existing render rule (Undetermined constraints elide on output, so storage-presence is already not load-bearing) and the wildcard semantics of `Undetermined` in `*Ast::matches` (memory: `feedback_undetermined_is_wildcard`).
+
+Together these unify derived and constraint-asserted reads:
+
+```rust
+view.valence()                    -> ValueAst  // Lit or Undetermined
+view.constraints().valence()      -> ValueAst  // Lit, LitSet, Expr, or Undetermined
+view.constraints().valence().matches(&view.valence())  // direct comparison; always works
+```
+
+Marker constraints (those without a value payload — `BondConstraint::Aromatic`, `InRing`, etc.) stay `bool`-shaped: `bond.constraints().aromatic() -> bool`, `atom.in_ring() -> bool`. The ValueAst-collapse rule applies only to value-bearing constraint kinds.
+
+*Edge cases for `ValueAst` arithmetic*:
+
+- **Divide-by-zero**: panic. Programmer error; no chemistry-level scenario justifies a silent collapse.
+- **Overflow**: panic. Chemistry counts don't approach `i64` bounds in practice; reaching the bound indicates a bug, not a degenerate input.
+- **Negative results**: allowed. `Lit(1) - Lit(4) = Lit(-3)`. Whether a negative result is meaningful for a given quantity (e.g., a negative bond count is nonsense) is a semantic concern at the call site, not an arithmetic one.
+
+*Parallel ASTs*:
+
+- **`ImplicitHydrogensAst`** gets the same arithmetic and collapse rule. `Normal` (the "default-implicit-H" meta-state) collapses to `Undetermined` under arithmetic, identical to bare `Undetermined`.
+- **`IsotopeAst`** does *not* get arithmetic. Isotope masses behave more like enum tags than numerics — adding mass numbers across atoms is meaningless outside nuclear chemistry, which is out of scope. Revisit if nuclear chemistry becomes a real consumer.
+
+**6. Mutation goes through an `Edit` vocabulary; transactions are the load-bearing primitive.** Every primitive mutation is one variant of an `Edit` enum; every batch is a `Vec<Edit>`; every mutation goes through `MoleculeBuilder::transact(Vec<Edit>) -> Result<Vec<Action>, TransactionError>` (data form) or `transact_with(|tx| ...)` (closure form for procedural logic). Per-method convenience APIs (`add_atom`, `remove`, `atom_mut`, etc.) become sugar over `transact`.
+
+This buys five capabilities that direct-mutation can't:
+
+- **Atomicity**: a batch either applies entirely or rolls back (no partial-mutation states for callers to clean up).
+- **Transient invariant violation**: intermediate states inside a transaction can be temporarily tier-1-invalid (DPO needs this — between L\\K removal and R\\K addition the molecule is structurally incomplete).
+- **Reified cascade**: cascade Edits induced by R3 (overlay-removal cascade) become part of the same transaction; rollback undoes them.
+- **Serializable / replayable / undoable mutation**: every Edit is self-inverting (carries `old` data needed to reverse it, per doc 43); reaction rules become pure data (LHS pattern + Vec<Edit>); inverse generation is trivial.
+- **Validation gate**: tier-1 invariants checked on commit, not per-Edit.
+
+Detail design lives under §"Mutation operations" → §"Edit vocabulary and transactions"; doc 43 has the prior-art patch design that this builds on.
+
+### Naming conventions
+
+Captured for reference after the long naming pass. Most rules emerge from decisions documented in the surrounding sections; consolidated here for cross-referencing.
+
+#### Method-name conventions
+
+- **`is_<predicate>()`** for boolean checks: `is_in_ring()`, `is_in_aromatic_system()`, `is_ground()`, `is_empty()`. Plain `<predicate>()` (no `is_` prefix) is reserved for non-boolean readers.
+- **`<entity_attribute>()`** for scalar/value readers on a view: `valence()`, `ring_count()`, `charge()`. Singular method name matches the attribute label; the return type carries the arity (`ValueAst`, `usize`, etc.).
+- **`<plural_entity>()`** for collection iteration: `atoms()`, `bonds()`, `rings()`, `aromatic_systems()`. Iterator returns `Iterator<EntityView<'_>>`.
+- **`<modifier>_<entity>(args)`** for filtered/qualified collections: `overlapping_rings(set)`, `connecting_bond(a, b)`, `induced_bonds(atoms)`, `dative_bonds()` (on `atom_view`). The modifier qualifies which entities are returned.
+- **Both modifier-entity (`connecting_bond`) and entity-relation (`bond_between`) patterns exist in English** but we standardize on modifier-entity for the molecule-AST surface to reduce the patterns callers must learn.
+
+#### Arity and return-type conventions
+
+- **Views by default; `_id` / `_ids` suffix for index-returning companions.** `mol.connecting_bond(a, b) -> Option<BondView>`; companion `mol.connecting_bond_id(a, b) -> Option<BondId>`. Collections: `relation_view.atoms() -> Iterator<AtomView>`; companion `relation_view.atom_ids() -> &[AtomId]`. The default is the chaining-friendly form; index access is the explicit opt-in.
+- **`Option<T>` for at-most-one results.** Used where the data model enforces the constraint (per-atom `aromatic_system()`, `connecting_bond(a, b)`). Iterator-returning methods naturally cover 0–* arities; `Option` for 0–1 makes the constraint legible from the signature.
+- **`Iterator<T>` for collections** (0–* including 0–1 when the data model doesn't enforce uniqueness).
+- **`Vec<T>` only when allocation is integral to the operation** (e.g., `transact(Vec<Edit>) -> Vec<Action>`). Otherwise prefer `impl Iterator<Item = T>` for laziness.
+
+#### Suffix conventions
+
+- **`_with(args)`**: default-having method with explicit parameter override. `mol.rings_with(family, max_size, filter)` (vs `mol.rings()` which uses canonical defaults). Pattern matches Rust stdlib (`Vec::with_capacity`, `HashMap::with_hasher`).
+- **`_from(&SourceCollection)`**: scope-restricted to a caller-supplied collection. `atom_view.rings_from(&RingSet)`, `atom_view.is_in_ring_from(&RingSet)`. Reads as "drawn from this set". (Mixed use of `_in` is acceptable but `_from` is preferred for clarity.)
+- **`_all(kind)`**: multi-valued retrieval on stores with the `is_unique()`-aware add path. `*Constraints::get_all(kind) -> Iterator<&Constraint>`.
+- **`for_<entity>(idx)` / `by_<discriminant>(kind)`**: iterator-filter methods on the `Constraints` collection. `mol.constraints().for_atom(idx).by_kind(kind)`. Composable.
+- **`_id` / `_ids`**: index-returning companion of a view-returning method, per P1 above.
+
+#### Collection-type conventions
+
+Two distinct shapes for "give me this set of entities", chosen by structural fit:
+
+- **`*Views<'a>` wrapper struct** for canonical molecule storage. Borrowed window over `MoleculeAst`'s entity vec; provides `.iter()` (yields `*View`), `.count()` (O(1)), `.ids()` (yields `*Id`), `.get(idx) -> Option<*View>`. Examples: `mol.atoms() -> AtomViews<'_>`, `mol.bonds() -> BondViews<'_>`, `mol.dative_bonds() -> DativeBondViews<'_>`, plus the three other overlay collections.
+
+- **Bare `impl Iterator<Item = *View<'_>>`** for derived / filtered streams. One-shot; no O(1) count or random access. Examples: `atom_view.neighbors()`, `atom_view.dative_bonds()` (atom → relations is a filter over the full dative-bond set), `atom_view.rings()`, `aromatic_system_view.atoms()`.
+
+The split reflects cost: `*Views` over canonical storage gives O(1) count and random access for free; derived streams don't have that property. Wrapping every derived iterator in a `Views`-like struct would add a type per accessor without buying anything.
+
+**Exceptions where the collection type is named differently** — principled, tracking structural differences:
+
+- **`RingSet`** owns its data (it's the perception artifact); `*Views` types borrow from molecule storage. Naming distinction follows ownership distinction.
+- **`Constraints`** (the molecule-list flat-vec) holds mixed-kind entries; `*Views` types are kind-uniform with idx-keyed random access. The flat-vec needs different access patterns (iterator-filter, not idx lookup).
+- **Neighbors** has no wrapper type — bare iterator only. Could grow a `Neighbors<'a>` wrapper if O(1) count becomes a hot-path concern; not justified by current usage.
+
+#### DSL symbol conventions
+
+- **Lowercase** for atom-intrinsic per-atom properties: `#c` (charge), `#i` (isotope), `#h` (implicit H), `#l` (lone pairs), `#u` (unpaired), `#s` (multiplicity), `#v` (localized valence), `#a` (aromatic valence), `#m` (multicenter valence), `#d` (donated pairs), `#t` (accepted pairs).
+- **Uppercase** for derived totals / SMARTS-compatible aggregates: `#D` (degree), `#X` (total degree / SMARTS `X`), `#H` (total hydrogens), `#R` (ring count), `#V` (total valence per principle 5).
+- **Lowercase, SMARTS-faithful** for narrow-scope quantities: `#r` (ring size, SMARTS `r<n>`), `#x` (ring degree, SMARTS `x<n>`).
+- **Lowercase, new (no SMARTS analog)**: `#y` (ring valence, new for systematic naming alongside `#x`).
+- **Symbol sugar**: `+` for "at least 1" (`#R+`, `#a+`, `#m+`), `!` for "not" or zero (`#a!`, `#R!`). See per-predicate parser definitions in `umol-ast/src/dsl/predicates.rs`.
+
+### Read operations
+
+#### Pure-graph (adjacency) reads
+
+Operations on the underlying graph (atoms = nodes, bonds = edges) that ignore entity feature data. Per principle 1, all operations use molecule-scope indices; the raw `Graph` is reachable only via `raw_graph()`.
+
+| Operation | State | Notes |
+|---|---|---|
+| `mol.graph() -> GraphView<'_>` | **Impl** | molecule-scope graph operations; constructed at `views.rs:682` |
+| `mol.raw_graph() -> &Graph` | **Impl** | escape hatch for callers that want graph-id-space algorithms |
+| `GraphView::degree(atom: AtomId) -> usize` | **Impl** | `views.rs:691` |
+| `GraphView::connected_components(alg) -> Vec<Vec<AtomId>>` | **Impl** | `views.rs:695` |
+| `GraphView::biconnected_components(alg) -> Vec<Vec<AtomId>>` | **Impl** | `views.rs:703` |
+| `GraphView::shortest_cycle_through_bond(bond, alg) -> Option<usize>` | **Impl** | `views.rs:714` |
+| `GraphView::connected_components_in(&[AtomId]) -> Vec<Vec<AtomId>>` | **Open** | restricted to a node subset (π-subgraph case in `ops/aromaticity/hmo.rs:85-107`) |
+
+Atom-local adjacency reads live on `AtomView`, not on `MoleculeAst` directly:
+
+
+| Operation | State | Notes |
+|---|---|---|
+| `atom_view.neighbors() -> impl Iterator<Item = NeighborView<'_>>` | **Impl (reshape pending)** | `views.rs:103`; new shape: `NeighborView { atom_idx, bond_idx, molecule }` — all fields private; `nbr.atom() -> AtomView` and `nbr.bond() -> BondView` accessor methods (`#[inline]`); raw indices accessible via `nbr.atom().idx` / `nbr.bond().idx`. View construction stays lazy so iteration cost is one back-pointer copy per item, lookups deferred to whichever side the caller actually consumes |
+
+Localized-bond lookup by endpoint pair and induced-bond enumeration are categorized as inter-entity reads (atoms-in, bond-out); see §"Inter-entity derived reads" below.
+
+#### Internal relation reads
+
+Per-relation accessors on `DativeBondView`, `AromaticSystemView`, `MulticenterBondView`, `NoncovalentBondView`. Read the participant atom list, derived bond list (atom-pairs in the relation that also have a localized bond), and any per-participant parallel data (`electrons` on aromatic / multicenter).
+
+| Operation | State | Notes |
+|---|---|---|
+| `relation_view.atoms() -> impl Iterator<Item = AtomView<'_>>` | **Impl (return-type pending)** | participant list as views (P1: views by default); currently returns `&[AtomId]`. `_ids` companion: `relation_view.atom_ids() -> &[AtomId]` retains direct slice access |
+| `relation_view.bonds() -> impl Iterator<Item = BondView<'_>>` | **Impl (return-type pending)** | localized bonds induced by participants as views; `_ids` companion: `relation_view.bond_ids() -> impl Iterator<Item = BondId>` |
+| `aromatic_view.electrons[pos]`, `multicenter_view.electrons[pos]` | **Impl** | per-participant parallel array |
+| `view.constraints() -> &EntityConstraints` | **Open** | per principle 2, expose as direct method on the view so callers don't reach through to the inner AST; the returned store has per-kind named accessors (see below) |
+
+Degree-style and order-summing aggregates on relation views (`AromaticSystemView::degree()`, `::heavy_atom_degree()`, `::valence()`) are categorized as inter-entity derived reads; see that section below.
+
+#### Entity feature reads
+
+Per-entity feature data on `AtomAst`, `BondAst`, `DativeBondAst`, `AromaticSystemAst`, `MulticenterBondAst`, `NoncovalentBondAst`. Accessed via the `*View` types returned from `mol.atoms() / bonds() / dative_bonds() / aromatic_systems() / multicenter_bonds() / noncovalent_bonds()`.
+
+| Operation | State | Notes |
+|---|---|---|
+| `mol.atoms() -> AtomViews`, `mol.bonds()`, ... | **Impl** | view collections; `*Views::iter()`, `get(idx)`, `count()` |
+| `view.ast` (field, public) | **Settled** | direct field access; escape hatch for whole-entity-AST operations (cloning, structural comparison, low-level inspection). Replaces the proposed `view.ast()` method — field is the access path, no redundant accessor. For mut views, `view_mut.ast: &mut EntityAst` handles both read and write via auto-deref, eliminating the `ast()` / `ast_mut()` method pair that the methods-route would require |
+| Per-field accessors on each view | **Open** | `#[inline]` getters returning `&T` for AST fields, by-value for `Copy` primitives; pattern below |
+
+##### Per-field accessor pattern
+
+For each entity view, add one `#[inline]` method per field on the inner AST returning `&T` (or `T` if `Copy`-cheap). Callers stop reaching through `.data` / `.ast` for routine reads; the field access stays available only via `view.ast()` for whole-struct operations.
+
+The accessor methods sit uniformly alongside the derived-quantity readers from §"Inter-entity derived reads" — at the call site, `atom_view.charge()` (stored), `atom_view.total_valence()` (derived from incident bond orders + implicit H), and `atom_view.in_ring()` (derived against the canonical ring set) all look identical. Callers don't have to mentally distinguish "direct field" from "computed quantity"; the implementation distinction is hidden, which also leaves room to migrate a field to a derived quantity (or vice versa) without breaking call sites.
+
+| View | Accessors |
+|---|---|
+| `AtomView` | `element()`, `isotope_mass()`, `charge()`, `implicit_hydrogens()`, `lone_pairs()`, `spin()`, `constraints()` |
+| `BondView` | `order()`, `charge()`, `spin()`, `constraints()` |
+| `DativeBondView` | `acceptor_slot()`, `order()`, `constraints()` |
+| `AromaticSystemView` | `electrons()`, `charge()`, `spin()`, `constraints()` |
+| `MulticenterBondView` | `electrons()`, `charge()`, `spin()`, `constraints()` |
+| `NoncovalentBondView` | `kind()`, `constraints()` |
+
+Return-type convention: `&T` uniformly for AST-typed fields (`&ValueAst`, `&ElementAst`, `&IsotopeAst`, `&SpinStateAst`, `&EntityConstraints`). `Copy` primitives (if any future field) return by value. `#[inline]` everywhere — semantically a field read, optimizes to zero-cost.
+
+The `constraints()` row already appeared under §"Internal relation reads" and §"Constraint reads"; both refer to the same accessor.
+
+Mutation-side parallel (`atom_view_mut.charge_mut() -> &mut ValueAst`, etc.) deferred — current mutation through `view_mut.data.<field>` (or `view_mut.ast.<field>` post-rename) is workable; revisit if an ergonomic complaint surfaces.
+
+#### Cross-entity navigation
+
+Reverse direction: from an atom (or bond), enumerate the relations that contain it.
+
+**Working convention on shape (provisional).** The iterator-returning method is the primary form; count queries use `.count()` directly. For boolean ("is in any relation of this type") tests, the canonical iterator idiom is `.next().is_some()`, which is correct but ergonomically awkward; named boolean shortcuts (`atom_view.is_in_aromatic_system()`, and symmetric methods for dative / multicenter / noncovalent) are kept as sugar over the iterator emptiness check.
+
+This is provisional. If the relation count grows or the symmetric boolean methods multiply, revisit before release — possibly drop the named booleans and standardize on the iterator idiom, or introduce a small extension trait giving `is_empty()` on iterators.
+
+All iteration items are `*View`, not `*Id`, consistent with the `NeighborView` reshape convention — back-pointers are already on the views; yielding indices would force callers to re-look up the views every iteration step.
+
+| Operation | State | Notes |
+|---|---|---|
+| `atom_view.aromatic_system() -> Option<AromaticSystemView<'_>>` | **Open** | at-most-one (per doc 52 perception design); singular Option is the right shape — singular Iterator over 0–1 elements would be a footgun (one-character-typo collision with the plural-iterator forms for other overlays) |
+| `atom_view.is_in_aromatic_system() -> bool` | **Impl** | binary shortcut (`atom_view.aromatic_system().is_some()`); kept because hot |
+| `atom_view.dative_bonds() -> impl Iterator<Item = DativeBondView<'_>>` | **Open** | possibly many |
+| `atom_view.multicenter_bonds() -> impl Iterator<Item = MulticenterBondView<'_>>` | **Open** | possibly many |
+| `atom_view.noncovalent_bonds() -> impl Iterator<Item = NoncovalentBondView<'_>>` | **Open** | possibly many |
+| `bond_view.aromatic_system() -> Option<AromaticSystemView<'_>>` | **Open** | bond is also in at-most-one aromatic system by perception design; symmetric Option |
+| `bond_view.is_in_aromatic_system() -> bool` | **Open** | symmetric boolean shortcut |
+| `dative_bond_view.aromatic_system()`, etc. (relation → other relations) | **Open** | stub out for now, mirror the atom-side shape if a need arises |
+
+The forward direction (`relation.atoms()`) is fully impl. Reverse-direction recurs in valence and aromaticity perception. The aromatic-system singular Option asymmetry tracks the data-model constraint (perception assigns each atom / bond to at most one aromatic system); if that ever relaxes, the API breaks loudly rather than silently (Option-to-Iterator type change).
+
+#### Ring access (perception-derived collection)
+
+Rings are not stored on the AST — they are computed from graph topology by an enumerator. The result (`RingSet`) is a perception artifact whose shape depends on caller-chosen parameters: ring family, maximum ring size, optional atom filter. Two distinct uses:
+
+- **Canonical-rings semantics**: a single fixed choice of (family, max_size) that all view-side ring methods and constraint evaluators (`InRing`, `RingSize`, `RingCount`) refer to. Hard-coded so that two molecules with identical structure never give different answers to "is this atom in a ring" depending on hidden configuration.
+- **Non-canonical procedural use**: aromaticity perception algorithms (HMO, Clar) and other future passes (chirality perception in multicyclic systems) that want a specific family / size cap / atom filter. Available through `mol.rings_with(family, max_size, filter)` returning an owned `RingSet`; uncached, never surface in the DSL or constraint vocabulary.
+
+##### Canonical commitment
+
+The canonical ring set is **Vismara relevant cycles** (the unique, ordering-independent set of all cycles that participate in at least one minimum cycle basis), enumerated up to a fixed maximum size of **22 atoms**.
+
+- *Why Vismara*: well-defined and unique (atom-ordering / algorithm-independent), unlike SSSR. Practical on highly connected systems (linear in molecule size after BCC decomposition), unlike enumerating all simple cycles (C60 has ~10^25 simple cycles).
+- *Why 22*: porphyrin (an 18-π-electron macrocycle with formal ring size 16) plus headroom for common metalloporphyrin frameworks. Crown ethers, macrocyclic peptides past this size go through the non-canonical procedural path.
+- *Why hard-coded*: the canonical commitment is part of the SMARTS-frontend contract. Configurable canonical params would create the RDKit-class problem where two implementations both claim "in a ring" but disagree silently.
+
+The existing variant `RingFamily::Induced` is misleadingly named — Vismara relevant cycles are not necessarily induced (chordless) cycles in the graph-theoretic sense. **Rename to `RingFamily::Relevant`** in the naming pass.
+
+Non-canonical configuration sits on `ChemistryModel` (for per-resolver-pass choices); the DSL has no parameter for it. A schema-like DSL extension for non-canonical ring constraints could be considered later if a real use case emerges, but is deliberately out of scope now.
+
+##### Caching strategy
+
+**Cache the canonical answer only.** The single slot on `MoleculeAst` holds the canonical `RingSet` (Vismara relevant cycles, max_size 22, no atom filter) — populated lazily on first access. Non-canonical or filtered enumerations bypass the cache entirely and return owned `RingSet` to the caller, who manages amortization themselves.
+
+This resolves the caching-vs-filtering asymmetry: the filter is a closure (`impl Fn(AtomId) -> bool`) and isn't hashable, so it can't participate in a cache key anyway. Rather than pretend the parametric cache covers the no-filter subset of a more general API, the API names the actual contract — cache covers canonical; everything else is caller-managed.
+
+Callers that need a non-canonical ring set across many queries (a perception algorithm doing thousands of filtered ring lookups) hold their own `RingSet`:
+
+```rust
+let pi_rings = mol.rings_with(RingFamily::Relevant, 22, |a| pi_atoms.contains(&a));
+// reuse pi_rings across local queries
+```
+
+Same effect as a parametric cache; lifetime is explicit.
+
+##### API surface
+
+| Operation | State | Notes |
+|---|---|---|
+| `RingEnumerator::enumerate(&MoleculeAst, family, max_size, filter) -> RingSet` | **Impl** | underlying procedural primitive |
+| `mol.rings() -> &RingSet` | **Designed** | canonical (Vismara relevant cycles, max_size 22, no filter); cached single-slot on `MoleculeAst`; `&mut self` for lazy init |
+| `mol.rings_with(family: RingFamily, max_size: usize, atom_filter: impl Fn(AtomId) -> bool) -> RingSet` | **Designed** (rename from `enumerate_rings`) | uncached, owned; caller manages amortization |
+| `RingSet::iter()`, `get`, `count`, `ids`, `family`, `scope`, `max_ring_size` | **Impl** | collection accessors |
+| `RingSet::contains_atom`, `contains_bond`, `atom_smallest_ring_size`, `bond_smallest_ring_size` | **Impl** | per-atom / per-bond derived |
+| `RingSet::ring_count_at(atom) -> usize` | **Open** (designed) | symmetric with `atom_smallest_ring_size`; `RingCount(ValueAst)` constraint counterpart designed not impl |
+| `RingSet::overlapping_rings(&[AtomId]) -> impl Iterator<Item = RingView>` | **Open** | rings sharing any atom with the subset |
+| `RingSet::overlapping_atoms(&[AtomId]) -> impl Iterator<Item = AtomView<'_>>` | **Open** | atoms in the subset that participate in at least one ring (P1: views). `_ids` companion available if needed |
+| `RingSet::overlapping_bonds(&[BondId]) -> impl Iterator<Item = BondView<'_>>` | **Open** | bonds in the subset that participate in at least one ring |
+| `RingSet::relation`, `are_spiro/fused/bridged`, `*_neighbors`, `fused_component(s)`, `shared_atoms`, `shared_bonds` | **Impl** | pairwise ring-vs-ring; **no constraint variants** by design |
+
+Canonical view-side sugar (entity-centered queries against the canonical ring set):
+
+| Operation | State | Notes |
+|---|---|---|
+| `atom_view.is_in_ring() -> bool` | **Open** | boolean predicate; equivalent to `atom_view.rings().next().is_some()` |
+| `atom_view.ring_count() -> ValueAst` | **Open** | count of canonical rings containing this atom; paired with `RingCount(ValueAst)` constraint |
+| `atom_view.ring_size() -> impl Iterator<Item = usize>` | **Open** | multi-valued: sizes of all canonical rings containing this atom; paired with `RingSize(ValueAst)` constraint (interpretation B) |
+| `atom_view.rings() -> impl Iterator<Item = RingView<'_>>` | **Open** | iterator over canonical rings containing this atom; yields `RingView`, not `RingId` |
+| `bond_view.is_in_ring()`, `ring_count`, `ring_size`, `rings()` | **Open** | symmetric; bond-side analogs |
+| `aromatic_system_view.overlapping_rings()`, `.overlapping_atoms()`, `.overlapping_bonds()` | **Open** | canonical-keyed sugar over the `RingSet` overlap queries |
+
+`smallest_ring_size()` is dropped — callers compose `atom_view.ring_size().min()`. The multi-valued `ring_size()` exposes all containing ring sizes; the smallest is one of many possible reductions.
+
+##### Ring size constraint semantics (interpretation B)
+
+`RingSize(ValueAst)` and DSL `#r<n>` follow **interpretation B**: the constraint matches iff the atom (or bond) is in *some* canonical ring whose size matches the `ValueAst` pattern. Examples for an indene 5/6-ring junction atom:
+
+- `RingSize(Lit(5))` ↔ `#r5`: matches ✓ (junction atom is in a 5-ring).
+- `RingSize(Lit(6))` ↔ `#r6`: matches ✓ (junction atom is also in a 6-ring).
+- `RingSize(LitSet([3,4]))`: doesn't match (not in any 3- or 4-ring).
+- `RingSize(Expr("r >= 6"))`: matches ✓ (in a 6-ring).
+
+Equivalent reader-side formulation:
+
+```rust
+ring_size_pattern.matches_any(atom.rings().map(|r| r.len()))
+```
+
+**Divergence note**: Daylight's SMARTS reference phrases `r<n>` as "in *smallest* SSSR ring of size n", which reads as a stricter interpretation A ("the smallest containing ring has size n"). In practice most implementations (RDKit, OpenBabel) implement interpretation B silently; we adopt B as the explicit, documented choice. Under B, an indene junction atom matches both `#r5` and `#r6`, which is what users expect from looking at the structure.
+
+`atom_smallest_ring_size()` is kept as a separate utility — useful for chemical environment classification ("is this a 5- or 6-membered ring atom?") — but it's **not** the constraint counterpart to `RingSize`. The constraint counterpart is the rings iterator + the pattern's `matches_any` against ring sizes.
+
+Translation to Vismara relevant cycles: the smallest containing ring size is graph-theoretically invariant (same answer under SSSR or Vismara), but "atom is in some ring of size n" can differ in fused/symmetric systems where Vismara includes additional rings beyond a given SSSR choice (cubane, etc.). For those systems our answers may differ from a specific SMARTS engine's SSSR-based answer — by design, since Vismara is the canonical-rings commitment.
+
+##### Ring size as a multi-valued constraint kind
+
+Interpretation B makes `RingSize` the first **multi-valued** constraint kind on atoms (and bonds): an indene 5/6-ring junction atom legitimately satisfies *both* `RingSize(Lit(5))` and `RingSize(Lit(6))` simultaneously. Asserting both as separate constraints on the same atom is meaningful (conjunction by default) — the atom must be in some 5-ring AND some 6-ring.
+
+This is the only multi-valued kind in the current `AtomConstraint` / `BondConstraint` surface; every other kind (Valence, Degree, Charge, RingCount, etc.) is single-valued per atom.
+
+Storage adjustment (no Vec-shape restructure required):
+
+```rust
+impl AtomConstraint {
+    fn is_unique(&self) -> bool {
+        match self {
+            AtomConstraint::RingSize(_) => false,
+            _ => true,
+        }
+    }
+}
+
+impl AtomConstraints {
+    pub fn add(&mut self, c: AtomConstraint) -> Option<AtomConstraint> {
+        if c.is_unique() {
+            // existing last-wins-per-kind path
+        } else {
+            // append within the kind cluster (entries stay grouped by kind)
+        }
+    }
+}
+```
+
+Same applies to `BondConstraint::RingSize`. The constraint stores keep their sorted-by-kind invariant, generalized to sorted-and-clustered-by-kind. `AromaticSystemConstraints` already uses this pattern; the change unifies the implementations.
+
+Store-side accessors:
+
+- `view.constraints().ring_count() -> ValueAst` (single-valued)
+- `view.constraints().ring_sizes() -> impl Iterator<Item = &ValueAst>` (plural; multi-valued)
+
+The plural-vs-singular naming signals the data-model arity. Other single-valued kinds keep singular names returning `ValueAst` with Undetermined ≡ no constraint (principle 5).
+
+Surface-form composition (DSL and EDN):
+
+| Form | Meaning |
+|---|---|
+| DSL `[C#r5]` | atom in some 5-ring (one entry) |
+| DSL `[C#r{5,6}]` | atom in some 5- OR 6-ring (`RingSize(LitSet([5, 6]))`, disjunction, one entry) |
+| DSL `[C#r5#r6]` | atom in 5-ring AND 6-ring (two entries, conjunction) |
+| EDN `{:ring-size 5}` | `RingSize(Lit(5))` (one entry) |
+| EDN `{:ring-size [5 6]}` | `RingSize(LitSet([5, 6]))` (LitSet, disjunction, one entry — existing serialization, not conjunction) |
+| EDN at molecule level: `[{:atom [0 {:ring-size 5}]} {:atom [0 {:ring-size 6}]}]` inside `:constraints` | two entries on atom 0, conjunction (the `:constraints` vec is a flat conjunction at top level) |
+| EDN atom-inline via atom DSL string `"#r5#r6"` | conjunction (parser produces two entries inside the atom store) |
+
+No new per-kind EDN sugar for conjunction. The vector-under-kind form `{:ring-size [5 6]}` is already taken by `LitSet` (disjunction) and stays that way. Conjunction emerges from:
+
+- Repeated DSL predicates inside the atom string (`#r5#r6`),
+- Multiple entries in the molecule-level `:constraints` vec (which is already a conjunction at top level).
+
+Edit vocabulary implication: `SetAtomConstraint` works cleanly for unique kinds (replace by kind). For multi-valued kinds, we need explicit `Add` / `Remove` semantics — the user specifies which `RingSize(value)` is being added or removed, not just the kind. Detail design lives with the Edit-vocab impl.
+
+Parametric view-side sugar (entity-centered queries against a caller-supplied `RingSet`). Suffix convention: `_from(&RingSet)` — reads as "drawn from this ring set":
+
+| Operation | State | Notes |
+|---|---|---|
+| `atom_view.is_in_ring_from(&RingSet) -> bool` | **Open** | non-canonical boolean predicate |
+| `atom_view.ring_count_from(&RingSet) -> ValueAst` | **Open** | count against caller-supplied set |
+| `atom_view.ring_size_from(&RingSet) -> impl Iterator<Item = usize>` | **Open** | multi-valued: containing-ring sizes from the supplied set |
+| `atom_view.rings_from(&RingSet) -> impl Iterator<Item = RingView<'_>>` | **Open** | iterator over rings from the supplied set containing this atom |
+| Bond-side parametric analogs (`bond_view.is_in_ring_from(...)` etc.) | **Open** | symmetric |
+| `aromatic_system_view.overlapping_rings_from(&RingSet)`, `.overlapping_atoms_from(&RingSet)`, `.overlapping_bonds_from(&RingSet)` | **Open** | non-canonical analog of the canonical-keyed overlap queries |
+
+The view-side parametric methods are sugar — functionally they call the `RingSet`-side methods with the view's idx. The redundancy is intentional: it centers the object of interest at the call site (`atom_view.in_ring_set(&rs)` reads naturally when the caller already has the view in hand).
+
+##### Settled: `RingView` context
+
+`RingSet` carries a `&MoleculeAst` back-pointer; `RingView<'a>` carries a `&'a RingSet<'a>` back-pointer (and reaches the molecule transitively via `ring_view.set.molecule`). Smallest change that resolves the freestanding-RingView problem:
+
+- Per-ring queries that need ring-vs-ring context (`is_spiro`, `is_fused`, `shared_atoms` between this ring and another) are methods on `RingView`, dispatching through `&RingSet`.
+- Per-ring queries that need atom/bond data (degree of a ring atom, neighbors outside the ring) reach the molecule through `set.molecule`.
+- `RingView` stays as the iteration item type for `ring_set.iter()` and the random-access return type for `ring_set.get(idx)` — keeps the per-ring API consistent with the rest of the View pattern.
+
+#### Inter-entity derived reads
+
+Properties computed across multiple entities. Two organizing principles:
+
+**Constraint ↔ derived-quantity symmetry.** Every atom/bond-local constraint variant has a corresponding derived-quantity reader on the view, and the two should be name-paired (the reader name is the lower-cased / unprefixed constraint name). This enables direct read-vs-assert comparisons during validation and matcher dispatch. Per §"Procedural vs declarative split", multi-entity topological relations (ring-vs-ring spiro/fused) stay procedural with no constraint variant.
+
+**Degree / valence variants.** Six aggregates over incident bonds, distinguished along two axes:
+
+- *Order weighting*: count bonds equally (`degree` family) vs. sum bond orders (`valence` family).
+- *Hydrogen inclusion*: exclude both explicit and implicit H (`heavy_*`), include explicit H only (the bare name, equals what's stored in the graph), or include both explicit and implicit H (`total_*`).
+
+| Reader | Counts | Includes explicit H | Includes implicit H | Includes aromatic | Includes multicenter | SMARTS / DSL |
+|---|---|---|---|---|---|---|
+| `degree` | bonds, each = 1 | yes | no | no | no | `D` / `#D` |
+| `total_degree` | bonds, each = 1; co-participants per multicenter | yes | yes | no (no new neighbors) | yes (`multicenter_degree`) | `X` / `#X` (extends SMARTS for multicenter — equal to SMARTS `X` where multicenter absent) |
+| `heavy_atom_degree` | bonds, each = 1 | no | no | no | no | — |
+| `valence` | localized bond orders | yes | no | no | no | — / `#v` |
+| `total_valence` | electron-sharing contributions | yes | yes (each implicit H = 1) | yes (`aromatic_valence`) | yes (`multicenter_valence`) | — / `#V` |
+| `heavy_atom_valence` | localized bond orders | no | no | no | no | — |
+
+The aromatic-vs-multicenter asymmetry inside the *total* family is principled: aromatic systems overlay localized bonds (atoms in an aromatic system are already neighbors via localized bonds, so no new connections appear), while multicenter bonds, per the no-overlap rule (§"Terminology" → structural assumptions), connect atoms that *aren't* localized-bond neighbors. So multicenter contributes new "neighbor count" entries; aromatic doesn't.
+
+`connectivity` is dropped as a reader name; the quantity is the same as `total_degree` and the systematic name fits the family. **DSL surface symbol `#X` is unchanged** — it still maps to the SMARTS `X<n>` semantics; the rename is purely internal (constraint variant `Connectivity → TotalDegree`, reader method `connectivity() → total_degree()`). DSL users see no change.
+
+##### `total_valence` definition (full electron-sharing sum)
+
+`total_valence` = `valence` + `implicit_hydrogens` + `aromatic_valence` + `multicenter_valence`. DSL symbol `#V`. This is the comprehensive electron-sharing contribution at the atom — every term is electrons this atom donates to a shared interaction. Excludes dative (`donated_pairs`, `accepted_pairs`) and non-covalent participations on purpose: those aren't electron-sharing in the same sense.
+
+This corresponds to one column of the per-atom electron-accounting invariant from doc 52 §"Three valence types":
+
+```
+charge + lone_pairs + unpaired + total_valence + 2·donated + 2·accepted = outer_electrons
+```
+
+Diverges from SMARTS `v<n>` for aromatic atoms where the per-atom aromatic contribution is a donated lone pair (pyrrole N, furan O, thiophene S):
+
+| Atom | Localized | Implicit H | Aromatic | Multicenter | `total_valence` | Textbook valence |
+|---|---|---|---|---|---|---|
+| C in benzene | 2 | 1 | 1 | 0 | **4** | 4 |
+| N in pyridine | 2 | 0 | 1 | 0 | **3** | 3 |
+| N in pyridinium / N-methylpyridinium | 3 | 0 | 1 | 0 | **4** | 4 |
+| **N in pyrrole** | 2 | 1 | **2** | 0 | **5** | 3 |
+| O in water | 0 | 2 | 0 | 0 | **2** | 2 |
+| O in oxonium | 0 | 3 | 0 | 0 | **3** | 3 |
+| O in furan | 2 | 0 | **2** | 0 | **4** | 2 |
+
+The pyrrole/furan-style cases (lone-pair donors) give `total_valence` exceeding the textbook bond-count valence by exactly the donated pair (2 vs 0 for the aromatic term). This is not a bug — it reflects electron accounting precisely. Textbook valence buries the donated lone pair; our `total_valence` exposes it. Pattern matching wanting the bond-count form composes `valence + implicit_hydrogens + 1[if in aromatic system]`; `total_valence` is the electron-count form.
+
+##### `total_degree` parallel definition
+
+```
+total_degree = degree + implicit_hydrogens + multicenter_degree
+```
+
+Where `multicenter_degree(a)` = Σ over multicenter bonds containing `a` of (atom count − 1) — the count of multicenter co-participants which, per the no-overlap rule, aren't already localized-bond neighbors.
+
+Equals SMARTS `X<n>` for molecules without multicenter bonds. Extends SMARTS in cases SMARTS can't address (multicenter participation), introducing no incompatibility for SMARTS-compatible molecules.
+
+Aromatic systems contribute to `total_valence` (electron donation) but *not* to `total_degree` (no new bonded neighbors — aromatic atoms are connected via localized bonds). This asymmetry inside the "total" family is principled, not arbitrary.
+
+Heavy-atom variants have no SMARTS counterpart by design; constraint variants for them are not added preemptively. Per the "don't need to be limited by SMARTS" rule (memory: avoid software-development conventions when they don't fit) — constraint variants can be added later if a use case surfaces.
+
+Per principle 5, value-bearing derived reads return `ValueAst` (collapsed to `Lit` or `Undetermined`). Per-kind constraint accessors on the entity stores return `ValueAst` (where "no constraint" is indistinguishable from `Undetermined`). Marker derived reads return `bool`.
+
+Atom-side derived readers:
+
+| Derived reader | State | Constraint counterpart | Returns | Notes |
+|---|---|---|---|---|
+| `atom_view.valence()` | **Impl** (rename from `bond_order_sum`) | `view.constraints().valence()` ↔ `Valence` | `ValueAst` | sum of incident `Bond.order`, no implicit H |
+| `atom_view.total_valence()` | **Open** | `TotalValence` (DSL `#V`) | `ValueAst` | full electron-sharing sum: `valence + implicit_H + aromatic_valence + multicenter_valence`; diverges from SMARTS `v<n>` for aromatic lone-pair-donors (pyrrole N=5, furan O=4 vs textbook 3 and 2 — see §"Degree / valence variants") |
+| `atom_view.heavy_atom_valence()` | **Designed** | — | `ValueAst` | bond-order sum, no implicit/explicit H |
+| `atom_view.degree()` | **Impl** | `Degree` (SMARTS `D`) | `ValueAst` | incident bond count, no implicit H |
+| `atom_view.total_degree()` | **Impl** (rename from `connectivity`) | `TotalDegree` (renamed from `Connectivity`) | `ValueAst` | `degree` + implicit H; DSL symbol `#X` unchanged (still maps to SMARTS `X<n>` semantics) |
+| `atom_view.heavy_atom_degree()` | **Designed** | — | `ValueAst` | bond count, no implicit/explicit H |
+| `atom_view.total_hydrogens()` | **Impl** | `TotalHydrogens` (SMARTS `H`) | `ValueAst` | implicit + explicit H |
+| `atom_view.donated_pairs()`, `accepted_pairs()` | **Impl** | `DonatedPairs`, `AcceptedPairs` | `ValueAst` | dative-bond accounting |
+| `atom_view.multicenter_degree()` | **Open** | — (reader-only for now) | `ValueAst` | sum, across all multicenter bonds this atom is in, of (co-participant count). Per the no-overlap rule, these aren't localized-bond neighbors. Building block for `total_degree`; constraint variant deferred until a consumer arrives |
+| `atom_view.aromatic_valence()` | **Impl** (rename from `aromatic_contribution`) | `AromaticValence` | `AromaticValenceAst` | per-atom delocalized-electron count under the atom's aromatic system |
+| `atom_view.multicenter_valence()` | **Impl** (rename from `multicenter_contribution`) | `MulticenterValence` | `MulticenterValenceAst` | symmetric for multicenter bonds |
+| `atom_view.in_ring()` | **Open** | `InRing` (implicit via `RingCount >= 1`) | `bool` | canonical ring set (Vismara, max_size 22) |
+| `atom_view.ring_count()` | **Open** | `RingCount(ValueAst)` | `ValueAst` | count of canonical containing rings |
+| `atom_view.rings()` | **Open** | `RingSize(ValueAst)` matches against this | `Iterator<RingView>` | interpretation B for `RingSize`: constraint matches iff some ring in this iterator has size matching the pattern (see §"Ring access" → "Ring size constraint semantics") |
+| `atom_view.smallest_ring_size()` | **Open** | — (utility, not paired) | `ValueAst` | smallest containing ring size; chemistry-classification helper |
+| `atom_view.ring_degree()` | **Open** | `RingDegree(ValueAst)` (rename from `RingConnectivity`; SMARTS `x<n>`) | `ValueAst` | count of incident ring bonds, each = 1 |
+| `atom_view.ring_valence()` | **Open** | `RingValence(ValueAst)` (new; DSL `#y`) | `ValueAst` | sum of bond orders of incident ring bonds; no SMARTS analog |
+
+Bond-side derived readers:
+
+| Derived reader | State | Constraint counterpart | Returns | Notes |
+|---|---|---|---|---|
+| `bond_view.endpoints() -> [AtomId; 2]` | **Open** | — | array | sugar over `Graph::edge_endpoints` |
+| `bond_view.atoms() -> impl Iterator<Item = AtomView<'_>>` | **Open** | — | iter | yield endpoint atoms as views |
+| `bond_view.in_ring()`, `smallest_ring_size()`, `ring_count()` | **Open** | `InRing` / `RingSize` / `RingCount` | `bool` / `ValueAst` / `ValueAst` | canonical-rings sugar |
+| `bond_view.is_in_aromatic_system()` | **Open** | — | `bool` | symmetric with `atom_view.is_in_aromatic_system()` |
+
+Relation-view derived readers:
+
+| Derived reader | State | Returns | Notes |
+|---|---|---|---|
+| `aromatic_system_view.electron_count()` | **Open** | `ValueAst` | sum over `electrons[]`; `Undetermined` if any participant electron is non-Lit; pairs with `AromaticElectronCount` constraint |
+| `aromatic_system_view.atom_count()`, `bond_count()` | **Open** | `usize` | participant counts |
+| `aromatic_system_view.overlapping_atoms(&[AtomId])`, `overlapping_bonds(&[BondId])` | **Open** | iter of views | intersection with caller-supplied set; P1 (views); `_ids` companions available |
+| `aromatic_system_view.overlapping_rings()` | **Open** | `Iterator<RingView>` | canonical-rings sugar (§"Ring access") |
+| `multicenter_bond_view.electron_count()` | **Open** | `ValueAst` | parallel; pairs with `MulticenterElectronCount` |
+| `multicenter_bond_view.atom_count()`, `bond_count()` | **Open** | `usize` | participant counts |
+| `multicenter_bond_view.overlapping_atoms(&[AtomId])` | **Open** | `Iterator<AtomView>` | overlapping bonds and rings *provisionally* not added — multicenter bonds typically don't share bonds with other relations; revisit if a use case surfaces |
+| `dative_bond_view.atom_count()` | **Open** | `usize` | not always 2 — multi-donor dative bonds are real |
+| `dative_bond_view.overlapping_atoms(&[AtomId])`, `overlapping_bonds(&[BondId])`, `overlapping_rings()` | **Open** | iter of views | full overlap surface (think borazine: dative bonds participating in aromatic ring systems) |
+| `noncovalent_bond_view.*` | not added | — | wait for a consumer |
+
+Pairwise ring-vs-ring and molecule-level entries:
+
+| Reader | State | Constraint counterpart | Returns | Notes |
+|---|---|---|---|---|
+| `RingSet::relation`, `are_spiro/fused/bridged`, `*_neighbors`, `fused_component(s)`, `shared_atoms`, `shared_bonds` | **Impl** | **none** (procedural-only by design) | — | aromaticity-perception internal; no SMARTS analog — see §"Procedural vs declarative split" |
+| Total charge / spin | **Designed (constraint propagator stubs)** | `TotalCharge`, `TotalSpin` | `ValueAst` / `SpinStateAst` | propagators stubbed in `ConstraintValidator` per §"Outstanding" |
+| `mol.connecting_bond(a: AtomId, b: AtomId) -> Option<BondView<'_>>` | **Open** | — | `Option<BondView>` | atoms-in, bond-out; renamed from `bond_between` for modifier-entity consistency. `_id` companion: `mol.connecting_bond_id(a, b) -> Option<BondId>` |
+| `mol.induced_bonds(atoms: &[AtomId]) -> impl Iterator<Item = BondView<'_>>` | **Impl (return-type pending)** | — | `Iterator<BondView>` | both endpoints in subset; currently returns `Vec<BondId>`, migrating to views per P1. `_ids` companion: `mol.induced_bond_ids(atoms) -> Vec<BondId>` |
+
+##### Comparison idiom
+
+For value-bearing constraints (the common case):
+
+```rust
+view.constraints().valence().matches(&view.valence())
+```
+
+Always well-typed; `Undetermined` on either side is wildcard-matched. No `Option` unwrapping, no `_constraint` suffix on the view, no asymmetric numeric vs. AST types.
+
+For marker constraints (`Aromatic`, `InRing`):
+
+```rust
+view.constraints().aromatic() == view.aromatic()  // both bool
+view.in_ring() == view.constraints().in_ring()    // both bool
+```
+
+#### Constraint reads
+
+Per doc 87 the constraint architecture has two scopes: per-entity inline (`*Constraints` stores attached to each entity AST) and molecule-list (a flat `Vec<Constraint>` for combinators, relational, and molecule-scope predicates). The two are read very differently:
+
+##### Per-entity inline (`AtomConstraints` etc.)
+
+Each entity-kind constraint variant is single-valued per entity (the store enforces this via `add()`'s last-wins-per-kind). The natural shape is per-kind named accessors:
+
+| Operation | State | Notes |
+|---|---|---|
+| `AtomConstraints::valence() -> ValueAst` | **Open** | single-valued; `Undetermined` if no constraint or if asserted as `Undetermined` (principle 5) |
+| `AtomConstraints::degree()`, `total_degree()`, `heavy_atom_degree()`, `total_hydrogens()`, `donated_pairs()`, `accepted_pairs()`, `ring_count()`, `ring_degree()`, `ring_valence()` | **Open** | single-valued; all return `ValueAst` |
+| `AtomConstraints::ring_sizes() -> impl Iterator<Item = &ValueAst>` | **Open** | **multi-valued** (per §"Ring size as a multi-valued constraint kind"); plural name signals arity |
+| `AtomConstraints::aromatic_valence()` | **Open** | returns `AromaticValenceAst` (its own Undetermined-bearing AST) |
+| `AtomConstraints::multicenter_valence()` | **Open** | returns `MulticenterValenceAst` |
+| `BondConstraints::aromatic() -> bool` | **Open** | marker; true iff asserted |
+| `BondConstraints::ring_count() -> ValueAst` | **Open** | single-valued |
+| `BondConstraints::ring_sizes() -> impl Iterator<Item = &ValueAst>` | **Open** | multi-valued; same rationale as atom side |
+| `DativeBondConstraints::*`, `AromaticSystemConstraints::*`, `MulticenterBondConstraints::*` | **Open** | symmetric, one accessor per kind |
+| `*Constraints::contains(kind)`, `get(kind)`, `add(c)`, `remove(kind)`, `retain`, `clear`, `iter` | **Impl** | generic store API; stays for code that walks all entries |
+| `*Constraints::get_all(kind) -> impl Iterator<Item = &Constraint>`, `remove_all(kind) -> Vec<Constraint>` | **Open** | multi-valued generic accessors; new for the `is_unique`-aware add path |
+
+Per-kind singular accessors are sugar over `get(kind)`, with Undetermined-unification baked in. Plural accessors walk the kind cluster directly. `is_unique` predicate on each constraint variant (`AtomConstraint`, `BondConstraint`) drives `add()` behavior — same shape as `AromaticSystemConstraints`.
+
+##### Molecule-list (`mol.constraints()`)
+
+A `Vec<Constraint>` where the same constraint kind can appear multiple times with different idx targets, plus combinators (`And` / `Or` / `Not`), `Relational`, and `Molecule`-scope predicates. Per-kind named accessors don't fit (multi-valued, indexed by entity reference). The natural shape is iterator-filtering:
+
+| Operation | State | Notes |
+|---|---|---|
+| `mol.constraints() -> &Constraints` | **Impl** | molecule-list read |
+| `Constraints::iter()`, `len()`, `as_slice()` | **Impl** | flat-vec walks |
+| `Constraints::for_atom(AtomId)`, `for_bond(BondId)`, etc. | **Open** | filter by entity reference; recurring pattern in `ops/validator/invariant.rs`; per naming conventions §"Suffix conventions" |
+| `Constraints::by_kind(ConstraintKind)` | **Open** | filter by variant discriminant; same recurring pattern |
+
+Naming convention (working): `for_*` for "constraints referencing this entity", `by_*` for "constraints matching this discriminant". Both return iterators (consistent with §"Cross-entity navigation" working convention — iterators primary, no dedicated `count_*` / `has_*` methods). The two filters compose: `constraints.for_atom(idx).by_kind(AtomConstraintKind::Valence)`.
+
+#### Molecule-scope state predicates
+
+Boolean queries about the molecule as a whole. Each is a one-liner over an existing iterator / counter, but recurring enough in ops code (and in the future SMILES / MOL writers) to be worth named methods.
+
+| Operation | State | Notes |
+|---|---|---|
+| `mol.is_ground() -> bool` | **Impl** | all entity attributes are concrete (`molecule.rs:525-528`); gates the resolver-output assumption |
+| `mol.is_empty() -> bool` | **Open** | zero atoms; sugar over `mol.atoms().count() == 0` |
+| `mol.has_constraints() -> bool` | **Open** | true if any per-entity inline `*Constraints` is non-empty OR `mol.constraints()` is non-empty |
+| `mol.has_overlays() -> bool` | **Open** | umbrella: true if any of the four overlays is non-empty. Useful as a "is this molecule topology-only?" check — false means the molecule is a pure atom + localized-bond skeleton, no aromatic systems / multicenter / dative / noncovalent enrichment |
+| `mol.has_dative_bonds() -> bool` | **Open** | sugar over `mol.dative_bonds().count() > 0` |
+| `mol.has_aromatic_systems() -> bool` | **Open** | sugar over `mol.aromatic_systems().count() > 0` |
+| `mol.has_multicenter_bonds() -> bool` | **Open** | sugar over `mol.multicenter_bonds().count() > 0` |
+| `mol.has_noncovalent_bonds() -> bool` | **Open** | sugar over `mol.noncovalent_bonds().count() > 0` |
+
+#### Metadata: lives on `MoleculeDsl`, not on `MoleculeAst`
+
+Entity ids (`atom0`, `bond1`, ...) and atom aliases (`al0` → `AtomAst`) are surface-form metadata carried by `MoleculeDsl`, not by `MoleculeAst`. The split is deliberate (per doc 94 / IO ergonomics): `MoleculeAst` carries algebraic content only; `MoleculeDsl` carries the boundary representation with metadata. Reads of metadata happen on the DSL side via `MoleculeDsl::metadata() -> &Metadata` and `Metadata::iter_atom_aliases() / iter_*_ids()`. There is no metadata reader on `MoleculeAst` by design.
+
+### Mutation operations
+
+Per principle 6, the load-bearing mutation primitive is `MoleculeBuilder::transact(Vec<Edit>)`. The tables in the subsections below describe the operations *semantically*; in the implementation they're sugar over Edit. The "Edit vocabulary" subsection below sets out the unified shape.
+
+#### Edit vocabulary and transactions
+
+##### Edit enum (sketch)
+
+```rust
+enum Edit {
+    // -- atoms / bonds
+    AddAtom { ast: AtomAst },
+    RemoveAtom { idx: AtomRef, ast: AtomAst },          // ast carried for inverse
+    SetAtomField { idx: AtomRef, field: AtomField, old: ?, new: ? },
+        // ↑ field-typed-variants vs field-enum: open, see below
+
+    AddBond { a: AtomRef, b: AtomRef, ast: BondAst },
+    RemoveBond { idx: BondRef, endpoints: [AtomRef; 2], ast: BondAst },
+    SetBondField { idx: BondRef, field: BondField, old: ?, new: ? },
+
+    // -- overlays (uniform shape across the four kinds)
+    AddAromaticSystem { atoms: Vec<AtomRef>, ast: AromaticSystemAst },
+    RemoveAromaticSystem { idx: AromaticSystemRef, atoms: Vec<AtomRef>, ast: AromaticSystemAst },
+    SetAromaticSystemField { idx: AromaticSystemRef, field: AromaticSystemField, old: ?, new: ? },
+    // ... DativeBond, MulticenterBond, NoncovalentBond analogs
+
+    // -- constraints (entity-inline; per principle 5, set-via-named-kind)
+    SetAtomConstraint { idx: AtomRef, kind: AtomConstraintKind, old: ValueAst, new: ValueAst },
+    // ... per entity kind for value-bearing kinds
+    SetBondAromaticConstraint { idx: BondRef, old: bool, new: bool },  // marker constraint
+
+    // -- constraints (molecule-list)
+    PushMoleculeConstraint { c: Constraint },
+    RemoveMoleculeConstraint { position: usize, c: Constraint },
+}
+```
+
+Three properties (per doc 43):
+
+- **Self-inverting**: every `Remove*` carries the AST data needed to restore the entity; every `Set*` carries `old` and `new`. `Edit::inverse(&self) -> Edit` is total.
+- **Operation-level granularity**: per-field setters, not whole-entity replacements (matches per-field-accessor decision).
+- **Composable**: concatenate `Vec<Edit>`; transactions provide atomicity.
+
+##### Symbolic refs (intra-batch dependency)
+
+A later edit in a batch may depend on an entity created by an earlier edit. The Ref types lift the absolute-index requirement only inside `Edit`:
+
+```rust
+enum AtomRef            { Id(AtomId),            New(usize) }
+enum BondRef            { Id(BondId),            New(usize) }
+enum DativeBondRef      { Id(DativeBondId),      New(usize) }
+enum AromaticSystemRef  { Id(AromaticSystemId),  New(usize) }
+enum MulticenterBondRef { Id(MulticenterBondId), New(usize) }
+enum NoncovalentBondRef { Id(NoncovalentBondId), New(usize) }
+```
+
+Resolution at apply time: `Id(_)` used directly; `New(N)` resolved against `Action` of the Nth edit in this batch. Type mismatch (e.g., `AtomRef::New(N)` where edit N is `AddBond`, not `AddAtom`) fails the transaction.
+
+Refs appear *only* inside `Edit`. `Action`, view methods, cascade Edits, and inverse Edits all use absolute `*Id` types.
+
+##### Transaction API
+
+```rust
+impl MoleculeBuilder {
+    // Data form: primary; pre-computed Edit list with symbolic refs for intra-batch deps
+    pub fn transact(&mut self, edits: Vec<Edit>)
+        -> Result<Vec<Action>, TransactionError>;
+
+    // Closure form (sugar): for procedural logic, branching, or edits whose existence
+    // depends on inspecting state between earlier applications
+    pub fn transact_with<F, R, E>(&mut self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&mut Transaction<'_>) -> Result<R, E>,
+        E: From<TransactionError>;
+}
+
+enum Action {
+    AtomAdded(AtomId),
+    BondAdded(BondId),
+    AromaticSystemAdded(AromaticSystemId),
+    DativeBondAdded(DativeBondId),
+    MulticenterBondAdded(MulticenterBondId),
+    NoncovalentBondAdded(NoncovalentBondId),
+    Done,             // for Set / Remove edits that yield no new index
+    Cascaded { user: Box<Action>, cascade: Vec<Edit> },
+}
+```
+
+Semantics:
+
+- **Atomic**: success → all edits applied; failure → state restored to pre-transaction.
+- **Validation timing**: tier-1 invariants checked on commit; intermediate states inside a transaction may transiently violate them.
+- **Cascade integration**: R3-cascade Edits (overlay drops on atom/bond removal) become part of the transaction; rollback undoes cascades. The cascade Edit list is reported via `Action::Cascaded { user, cascade }`.
+- **Closure form is sugar**: `transact(edits)` is `transact_with(|tx| { for e in edits { tx.apply(e)?; } Ok(()) })`. Either is fine to call from outside; closure form just adds the option of procedural logic between applications.
+
+##### Settled design choices
+
+- **Field-enum `Set*` variants.** Single outer Edit variant per entity (`SetAtomField`, `SetBondField`, ...), wrapping a per-entity `*FieldChange` enum that carries the field discriminant + type-correct `old`/`new`:
+
+  ```rust
+  enum AtomFieldChange {
+      Element            { old: ElementAst,            new: ElementAst },
+      IsotopeMass        { old: IsotopeAst,            new: IsotopeAst },
+      Charge             { old: ValueAst,              new: ValueAst },
+      ImplicitHydrogens  { old: ImplicitHydrogensAst,  new: ImplicitHydrogensAst },
+      LonePairs          { old: ValueAst,              new: ValueAst },
+      Spin               { old: SpinStateAst,          new: SpinStateAst },
+  }
+
+  enum Edit {
+      SetAtomField { idx: AtomRef, change: AtomFieldChange },
+      // ...
+  }
+  ```
+
+  Outer `Edit` stays manageable; per-field type discrimination preserved inside `*FieldChange`. Symmetric `BondFieldChange`, `DativeBondFieldChange`, `AromaticSystemFieldChange`, `MulticenterBondFieldChange`, `NoncovalentBondFieldChange` for the other entity kinds.
+
+- **Rollback mechanism: snapshot at transaction start.** `MoleculeAst` is mostly Arc-wrapped (per-relation `Vec`s, the CSR), so a clone is cheap; on rollback, the saved snapshot replaces the current state. Inverse-Edit replay deferred — possibly useful later for editor-style undo stacks outside transactions, but the transaction primitive itself uses snapshot-restore.
+
+- **Cascade nesting allowed.** `Action::Cascaded { user, cascade }` can recurse — a cascade Edit itself may trigger further cascades. For current overlay rules nesting is unlikely, but the recursive shape costs nothing and handles future edge cases.
+
+- **Pre-commit validation hook.** `tx.validate() -> Result<(), Vec<Error>>` is callable at any point during a transaction; commit calls it implicitly before applying. Lets callers do "try this, check, decide whether to commit" workflows without forcing commit-only validation.
+
+##### Cost model and batching guidance
+
+Per-transaction overhead breaks down as `1 × snapshot + N × apply + 1 × commit-validation` for an N-Edit transaction. None of these scale with N except the apply cost, which is the unavoidable cost of doing the mutations. Snapshot is cheap (Arc clone of `MoleculeAst`'s mostly-Arc-wrapped fields, ~100 ns); commit-validation is O(atoms+bonds+relations+constraints), µs scale.
+
+This means **per-Edit overhead amortizes to almost nothing as long as callers batch into transactions**. Hot-path callers (resolver, propagator loops) should aggregate mutations into one transaction per natural unit of work (one fixpoint iteration, one propagator pass) rather than wrapping each mutation in its own transaction. The natural batch boundary is whatever the caller's algorithm uses anyway.
+
+Pattern to avoid: `for narrowing in narrowings { mol.transact(vec![narrowing])? }` — pays N snapshots and N validations.
+Pattern to use: `mol.transact(narrowings.collect())?` — pays 1 snapshot and 1 validation regardless of N.
+
+##### Unchecked escape hatch
+
+`MoleculeBuilder::transact_unchecked(Vec<Edit>) -> Result<Vec<Action>, ApplyError>` is a documented escape hatch that skips the commit-time validation pass. Intended for callers that produce known-correct batches by construction:
+
+- Reaction rules whose RHS is verified at rule-definition time.
+- Built-in transformations (`kekulize`, `aromatize`) that compute the result and prove its correctness internally.
+- Test fixtures and replay paths from logged Edit sequences.
+
+The snapshot still happens (cheap; provides rollback against catastrophic apply errors like out-of-range indices). What's skipped is the structural validation pass at commit. The contract: caller asserts the resulting molecule is tier-1-valid; runtime does not check.
+
+Not the load-bearing primitive — `transact` is the default. `transact_unchecked` exists for the small slice of callers where commit-validation cost is measured to matter and where correctness can be argued at the rule / transform level.
+
+#### Entity feature attribute mutators
+
+In-place mutation of entity feature data without changing topology.
+
+| Operation | State | Notes |
+|---|---|---|
+| `mol.atom_mut(idx) -> AtomViewMut` | **Impl** | direct in-place edit on the AST |
+| `mol.bond_mut(idx) -> BondViewMut` | **Impl** | |
+| `mol.dative_bond_mut(idx)`, `aromatic_system_mut`, `multicenter_bond_mut`, `noncovalent_bond_mut` | **Impl** | symmetric |
+| `MoleculeBuilder::atom_mut(idx)` (Phase-2 of DPO) | **Designed** (doc 90 "Missing on MoleculeBuilder") | for K-entity attribute mutation during a structural edit; not yet on builder |
+| `MoleculeBuilder::bond_mut(idx)`, etc. | **Designed** | same |
+
+#### Adjacency mutators
+
+Topology edits via `MoleculeBuilder` with copy-on-write of the Arc-shared CSR. Changes return an `IdRemapping` so callers can reindex external data.
+
+| Operation | State | Notes |
+|---|---|---|
+| `MoleculeBuilder::add_atom() -> AtomId` | **Impl** | |
+| `MoleculeBuilder::add_bond(a, b, BondAst) -> BondId` | **Impl** | |
+| `MoleculeBuilder::remove(&[AtomId], &[BondId]) -> Result<Vec<Action>, TransactionError>` | **Sugar over `transact`** | batched; sugar over `transact(vec![Edit::RemoveAtom { ... }, Edit::RemoveBond { ... }])`; cascade Edits surface via `Action::Cascaded { user, cascade }` per §"Edit vocabulary and transactions" |
+| `MoleculeBuilder::remove_atom(AtomId)`, `remove_bond(BondId)` | **Impl** | sugar over `remove` |
+
+##### Cascade semantics on `MoleculeBuilder::remove`
+
+**R3 — cascade-and-report.** `remove` deletes the requested atoms and bonds, then drops any overlay that becomes invalid as a result, returning the dropped overlays alongside the index remapping. The caller is responsible for restoring chemistry validity (re-perception, re-adding compensating overlays, charge balancing) — the AST does not attempt to preserve overlays automatically because:
+
+- A "shrunk" aromatic system (atom removed, system kept with fewer atoms) carries no useful semantic — the original perception assumed all atoms; the partial set isn't an aromatic system at the new shape.
+- Silent re-perception would conflate caller-asserted aromaticity with algorithm-detected aromaticity, losing the user's intent.
+- "Refuse" would force every reaction / DPO call to do an upfront overlay-cleanup pass, which is friction without benefit when the caller knows what they're doing.
+
+The chosen middle ground (R3 from the cascade-options table): execute the cascade but report what was dropped, so callers can re-add or log explicitly.
+
+What gets dropped:
+
+| Mutation | Overlays dropped |
+|---|---|
+| Atom removed | every overlay whose participant list contains that atom (all four overlay types) |
+| Bond removed | every aromatic system whose `bonds()` includes that bond — *only* aromatic systems, since multicenter/noncovalent overlays don't share localized bonds (provisional structural rule, §"Terminology"), and dative bonds coexist independently of localized bonds |
+
+Return type: cascade is reported as Edit data per §"Edit vocabulary and transactions". A `Edit::RemoveAtom` (or `RemoveBond`) inside a transaction yields `Action::Cascaded { user: Done, cascade: Vec<Edit> }` where the cascade list contains `Edit::RemoveAromaticSystem { ... }` / `Edit::RemoveDativeBond { ... }` / etc. for every overlay dropped. Callers who don't care about cascade can ignore the variant; the molecule is still tier-1-valid post-removal. Callers that *do* care (logging, undo stacks, replay) get the cascade as a uniform `Vec<Edit>` they can replay or invert.
+
+Index remapping (old→new atom/bond indices after the removal) lives separately in `Vec<Action>` ordering plus the `*Added` / `Done` variants — the historical `IdRemapping` struct is subsumed.
+
+##### Pre-mutation predicate
+
+To support callers that prefer to clean up overlays explicitly before calling `remove` (rather than relying on the cascade-and-report path), the atom view exposes a binary check:
+
+| Operation | State | Notes |
+|---|---|---|
+| `atom_view.is_in_overlays() -> bool` | **Open** | umbrella; atom-scope mirror of `mol.has_overlays()`. True if the atom participates in any of the four overlays; backed by the existing per-overlay-kind iterators in §"Cross-entity navigation" |
+
+#### Whole-relation mutators
+
+Add or remove an entire dative-bond / aromatic-system / multicenter-bond / noncovalent-bond entry on the builder.
+
+| Operation | State | Notes |
+|---|---|---|
+| `add_dative_bond(donor, acceptor, DativeBondAst) -> DativeBondId` | **Impl** | doc 90 |
+| `add_aromatic_system(atoms, AromaticSystemAst) -> AromaticSystemId` | **Impl** | |
+| `add_multicenter_bond(atoms, MulticenterBondAst) -> MulticenterBondId` | **Impl** | |
+| `add_noncovalent_bond(ends, NoncovalentBondAst) -> NoncovalentBondId` | **Impl** | |
+| `remove_dative_bonds(&[DativeBondId])` | **Designed** (doc 90) | wired into builder per doc 92 but DPO Phase-3 integration deferred |
+| `remove_aromatic_systems(&[AromaticSystemId])` | **Designed** | same status |
+| `remove_multicenter_bonds(&[MulticenterBondId])` | **Designed** | same status |
+| `remove_noncovalent_bonds(&[NoncovalentBondId])` | **Designed** | same status |
+
+#### Internal relation mutators
+
+**Resolved by Edit + transactions.** Internal mutation of an overlay (add/remove an atom *within* an existing aromatic system, multicenter bond, etc., keeping `electrons` arrays in sync) is expressed as a transaction containing `Edit::RemoveAromaticSystem { ... }` followed by `Edit::AddAromaticSystem { ... }` with the desired new shape. The transaction is atomic, so the molecule never observes the in-between state. No dedicated `aromatic_system_add_atom` / `aromatic_system_remove_atom` API needed.
+
+This matches doc 90's DPO assumption (relations are immutable participant tuples; modify by remove-and-readd) and pays the same conceptual cost as elsewhere — every modification is an Edit batch, not an in-place tweak. The cascade question that previously sat under this heading (when an atom is removed from the molecule, what happens to overlays it participates in) is settled separately as R3 under §"Cascade semantics on `MoleculeBuilder::remove`".
+
+The convenience wrapper for this pattern (a single method that takes an overlay-idx and a desired-new-shape, expanding to the Remove + Add transaction internally) can be added later if usage shows it earns its keep; not part of the core API.
+
+#### Constraint mutators
+
+| Operation | State | Notes |
+|---|---|---|
+| Entity-inline: `view.data.constraints.add/remove/retain/clear` | **Impl** | |
+| Molecule-list: `mol.constraints_mut().push/retain/clear` | **Impl** | |
+| `mol.lift_constraints()` | **Impl** | inline → molecule-list (per-entity store drained) |
+| `mol.inline_constraints()` | **Impl** | molecule-list → inline (top-level narrow leaves only; combinators / relational / molecule-scope preserved) |
+| `MoleculeBuilder::constraints_mut()` | **Designed** | builder constraint surface thinner than AST; doc 90 §"Constraint access" |
+
+### Cross-cutting
+
+#### Subgraph and projection
+
+| Operation | State | Notes |
+|---|---|---|
+| `induced_subgraph(&[AtomId]) -> (MoleculeAst, Vec<Edit>)` | **Designed** (doc 90) | not impl; the `MoleculeAst` is the extracted subgraph as a standalone molecule; the `Vec<Edit>` describes side effects relative to the parent (overlay drops, etc.) per the Edit-language convention. Naturally consumed by callers who want to log / replay / invert the extraction |
+| `induced_bonds(&[AtomId]) -> impl Iterator<Item = BondView<'_>>` | **Impl (return-type pending)** | lighter alternative when only the bond list is needed; used by `AromaticSystemView` and `ops/transformer/kekulizer.rs`. Returns views per P1; `_ids` companion `induced_bond_ids(atoms) -> Vec<BondId>` for raw-index access |
+| Dense atom-ordering projection (atom → 0..n_subset map) | **Open** | hand-rolled `HashMap<AtomId, usize>` in matrix-building code (`hmo.rs:157`); decision needed: returned from `induced_subgraph` or separate primitive |
+
+#### Index-space conversions
+
+| Operation | State | Notes |
+|---|---|---|
+| `IdRemapping` (returned by `MoleculeBuilder::remove`) | **Impl** | old → new for all six relation kinds |
+| Subgraph remapping (returned by `induced_subgraph`) | **Designed** (shape unsettled — see doc 90) | should it return `MoleculeSubgraph` carrying both directions or `(MoleculeAst, IdRemapping)`? Open |
+| Constraint remapping under structural edit | **Impl** | piggy-backs on `IdRemapping` |
+
+#### Pattern-vs-ground scope per operation
+
+Some operations are meaningful only on ground molecules (electron-accounting reads, tier-2 invariant checks); others are pattern-meaningful (substructure search, constraint propagation). The taxonomy above is shared between scopes — the asymmetry is in *invariants*, not API shape:
+
+- All read operations (entity, adjacency, relation, derived, constraint) work on both `MoleculeAst` ground and partial.
+- All mutation operations work on both.
+- Tier-2 invariant verification (`ElectronInvariantValidator`, `ConstraintValidator`) is ground-only.
+- Cache-backed reads (`mol.rings(...)`) work on both, but pattern usage rarely benefits since pattern molecules are small and short-lived.
+
+See doc 86 §"Asymmetries worth naming" for the framing of which operation classes flow only into `Molecule` (resolved-only) vs. both.
+
+#### Iteration order contracts
+
+The implicit-but-load-bearing guarantees today:
+
+| Iterator | Order contract |
+|---|---|
+| `mol.atoms().iter()` | by `AtomId` ascending |
+| `mol.bonds().iter()` | by `BondId` ascending |
+| `mol.neighbors(atom)` | by `NodeId` ascending (CSR neighbors are sorted; relied on by `connecting_bond` binary-search and `induced_bonds` set-intersection) |
+| `mol.dative_bonds().iter()` etc. (relations) | by relation index ascending |
+| `relation_view.atoms()` | sorted ascending by `AtomId` (set semantics) |
+| `metadata.iter_atom_aliases()` | sorted by alias name (`BiBTreeMap` iteration); see doc 95 |
+| `mol.constraints().iter()` | insertion order (flat `Vec`); not sorted |
+| `RingSet::iter()` | enumeration order (depends on ring-finding algorithm; not user-specified) |
+
+These should be documented on the iterator-returning methods themselves. Anywhere an op constructs a `BTreeMap` or `sort_by_key` on AST output is a candidate for upgrading the iterator's order contract.
+
+### What stays out (intentionally not on the AST)
+
+Operations the AST does not surface; they live on higher tiers (`Molecule`) or in separate ops modules.
+
+| Operation | Lives in | Notes |
+|---|---|---|
+| Aromaticity perception | `umol-graph/src/ops/aromaticity*` | discovery is procedural (doc 80 line 194); the AST receives the resulting aromatic-system tuples via `add_aromatic_system` |
+| Ring enumeration | `RingEnumerator` (`umol-graph/src/ast/rings.rs`) | procedural; canonical output cached on `MoleculeAst` via `mol.rings()` (single slot); non-canonical / filtered via `mol.rings_with(...)` (uncached, owned) |
+| Substructure matching (VF2) | matcher (deleted at end of doc 92, awaits port; doc 80 step 9) | operates on `Pattern` against `MatchTarget`; not a `MoleculeAst` method |
+| Transformations: `kekulize`, `aromatize`, `tautomers`, `apply_reaction` | `umol-graph/src/ops/transformer*` | take `&Molecule`, return `Molecule` or `Vec<Molecule>`; see §"Transformation ops" |
+| Validation: `ElectronInvariantValidator`, `ConstraintValidator`, `EntityStructureValidator`, `SpinCouplingValidator` | `umol-graph/src/ops/validator*` | take `&MoleculeAst` (`AsRef`); not methods on the AST |
+| Resolution: `Solver`, `ChemistryModel` | `umol-graph/src/ops/resolver*` | top-level; `Solver::resolve(ast, model) -> Result<Molecule, _>` |
+| Canonical SMILES, Morgan fingerprint | `Molecule` methods | tier-1 chemist surface, not AST |
+
+### Summary of gaps surfaced by this taxonomy
+
+The Open rows above represent real recurring needs from the ops survey or doc 90 that have not been designed. Concretely, before the next round of MoleculeAst API work:
+
+1. **Cross-entity reverse navigation** (atom → containing relations) — recurring scan in valence and aromaticity ops; modest design.
+2. **`bond_between(a, b)`**, **`connected_components()`**, **`induced_bonds(&[AtomId])`** — adjacency-convenience the ops repeatedly hand-rolls.
+3. **`induced_subgraph` shape** — designed in doc 90; impl + return type (`MoleculeSubgraph` vs. `(MoleculeAst, IdRemapping)`) unsettled.
+4. **Internal relation mutators** — settled. Express as a `Remove*` + `Add*` Edit pair inside a transaction; no dedicated in-place API. See §"Internal relation mutators".
+5. **Cascade behavior of `MoleculeBuilder::remove`** — settled as R3 (cascade-and-report). Cascade Edits returned via `Action::Cascaded { user, cascade }` per §"Edit vocabulary and transactions"; replaces the earlier `RemoveOutcome` struct. `atom_view.is_in_overlays()` umbrella predicate to land at the same time.
+6. **`ring_count_at`** + `RingCount(ValueAst)` constraint — designed, not impl.
+7. **Iteration-order contracts** — implicit; should be documented on each iterator-returning method.
+8. **Constraint find-by-kind / find-by-idx queries** — recurring `for c in mol.constraints().iter() { match c { ... } }` pattern.
+9. **`RingView` context** — settled. `RingSet` gets `&MoleculeAst` back-pointer; `RingView` gets `&RingSet` back-pointer; molecule reachable transitively via `view.set.molecule`. See §"Ring access" → "Settled: RingView context".
+10. **Canonical ring view-side sugar** — `atom_view.in_ring()`, `smallest_ring_size()`, `ring_count()`, `rings() -> Iterator<RingView>`, plus bond-side and aromatic-system-overlap analogs, plus their parametric `*_in(&RingSet)` versions. Designed in §"Ring access"; not implemented.
+11. **`RingFamily::Induced` → `RingFamily::Relevant`** rename — the existing enum variant for Vismara relevant cycles is misnamed. Mechanical, but on the naming-pass list.
+12. **Per-field accessors on entity views** — `#[inline]` getters returning `&T` (or value where naturally `Copy`) for every field on each entity AST. ~25 methods; mechanical. See §"Entity feature reads" → "Per-field accessor pattern".
+13. **Per-kind accessors on entity inline `*Constraints` stores** — `AtomConstraints::valence() -> ValueAst`, etc., plus markers as `bool`. Per principle 5: `Undetermined` ≡ "no constraint asserted"; single-valued per-kind accessor returns `ValueAst` with no `Option` wrapping. Multi-valued kinds (currently just `RingSize` on atom and bond) use plural-named accessors returning iterators (`ring_sizes() -> Iterator<&ValueAst>`); `is_unique` predicate on the constraint variant drives `add()` behavior. See §"Constraint reads" and §"Ring size as a multi-valued constraint kind".
+14. **`ValueAst` arithmetic surface** — `Add` / `Sub` / `Mul` / `Div` (binary + scalar) with Lit/Undetermined collapse semantics per principle 5; panic on div-by-zero and overflow; negative results allowed. Same scheme extends to `ImplicitHydrogensAst` (with `Normal` collapsing to `Undetermined`). `IsotopeAst` excluded — isotope masses are enum-like, not numeric. Mechanical; impl-only.
+15. **Naming alignment renames on derived readers and constraints** — workspace-wide `*Idx → *Id` rename across `umol-ast`, `umol-graph`, ops/, tests: `AtomIdx → AtomId`, `BondIdx → BondId`, `DativeBondIdx → DativeBondId`, `AromaticSystemIdx → AromaticSystemId`, `MulticenterBondIdx → MulticenterBondId`, `NoncovalentBondIdx → NoncovalentBondId`, `RingIdx → RingId`; `IdxRemapping → IdRemapping`; `AtomRef::Idx → AtomRef::Id` and symmetric for the other Ref enums. Aligns molecule-scope identifiers with the `umol-graph-core` `NodeId`/`EdgeId`/`RelationId` convention; method names `.ids()`, `_id`, `_ids` become coherent with the type names. Plus reader/constraint renames: `bond_order_sum → valence`, `aromatic_contribution → aromatic_valence`, `multicenter_contribution → multicenter_valence`, `connectivity → total_degree` (reader) and `Connectivity → TotalDegree` (constraint variant; **DSL symbol `#X` unchanged**, still maps to SMARTS `X<n>` semantics — rename is internal only, DSL users see no change), `RingConnectivity → RingDegree` (constraint variant; SMARTS `x<n>` reads unweighted per Daylight spec). Pairs each derived reader with its constraint counterpart; on the naming-pass list with the field-rename items. Plus: `#R!` DSL sugar for `RingCount(Lit(0))` (atom and bond sides; symmetric with `#R+` for `RingCount(Expr("r >= 1"))`; canonical output for `Lit(0)`); `#R0` accepted on input. Parser + renderer changes localized to `umol-ast/src/dsl/predicates.rs` (`ring_count` and `fmt_ring_count`). New `RingValence` constraint variant (order-weighted ring bonds, no SMARTS analog; DSL symbol `#y`) with view-side reader `atom_view.ring_valence()`. New `TotalValence` constraint variant + `atom_view.total_valence()` reader (full electron-sharing sum `valence + implicit_H + aromatic_valence + multicenter_valence`; DSL symbol `#V`; replaces earlier "`valence + implicit H` only" definition; diverges from SMARTS `v<n>` for aromatic lone-pair-donors — see §"Degree / valence variants"). New `atom_view.multicenter_degree()` reader (reader-only for now, no constraint, no DSL; sum across multicenter bonds of co-participant count) and parallel `total_degree` definition extension: `total_degree = degree + implicit_H + multicenter_degree` — equals SMARTS `X<n>` for molecules without multicenter bonds, extends for those with.
+16. **Relation-view derived readers** — `aromatic_system_view.{electron_count, atom_count, bond_count, overlapping_atoms, overlapping_bonds, overlapping_rings}`, `multicenter_bond_view.{electron_count, atom_count, bond_count, overlapping_atoms}` (overlapping_bonds and overlapping_rings provisionally not added — multicenter bonds don't typically share with other relations), `dative_bond_view.{atom_count, overlapping_atoms, overlapping_bonds, overlapping_rings}` (full overlap surface — borazine case). Noncovalent-bond view derived readers not added preemptively. See §"Inter-entity derived reads".
+17. **`NeighborView` reshape** — all-private-fields shape: `{ atom_idx, bond_idx, molecule }` with `nbr.atom() -> AtomView` and `nbr.bond() -> BondView` accessor methods. Indices accessible via `nbr.atom().idx`. View construction lazy; cached `data: &BondAst` field dropped (callers go through `.bond()` accessor).
+18. **Molecule-scope state predicates** — `is_empty`, `has_constraints`, `has_overlays` (topology-only check), plus per-overlay `has_dative_bonds` / `has_aromatic_systems` / `has_multicenter_bonds` / `has_noncovalent_bonds`. `is_ground` already impl. See §"Molecule-scope state predicates".
+19. **Terminology**: "overlays" adopted as the umbrella term for the four typed n-ary relations (`DativeBond`, `AromaticSystem`, `MulticenterBond`, `NoncovalentBond`). Codebase-internal usage; documented in §"Terminology".
+20. **Edit vocabulary** (principle 6) — `Edit` enum with one variant per primitive mutation, self-inverting (`Remove*` carries the AST data, `Set*` carries `old`/`new`); ~30–40 variants. `AtomRef`/`BondRef`/four overlay Refs with `Id(_)` and `New(usize)` variants for intra-batch dependency. `Action` enum with `*Added(*Id)` / `Done` / `Cascaded { user, cascade }` variants. See §"Edit vocabulary and transactions".
+21. **Transaction primitive** — `MoleculeBuilder::transact(Vec<Edit>) -> Result<Vec<Action>, TransactionError>` (data form, primary) plus `transact_with(F)` (closure form, sugar). Atomic, on-commit validation, R3-cascade integrated. `transact_unchecked` documented escape hatch for known-correct-by-construction batches (reactions, built-in transformations) — skips commit validation only. Existing convenience methods (`add_atom`, `remove`, `atom_mut`) become sugar over `transact`. Batching guidance: hot-path callers (resolver, propagators) aggregate mutations into one transaction per natural unit of work; per-Edit overhead amortizes to nothing.
+22. **Field-typed `Set*` Edit variants** — per-field variants (`SetAtomCharge`, `SetAtomElement`, ...) vs single `SetAtomField { field: AtomField }` enum-dispatched. Per-field is type-safe but explodes variant count; field-enum loses type discrimination. Open. See §"Edit vocabulary and transactions" → Open design questions.
+23. **Rollback mechanism** — snapshot-restore (Arc-share is cheap at our scale) vs inverse-Edit replay (smaller memory, more impl work). Open.
+
+## Implementation phases
+
+Ordered phasing for the doc-86 work, with dependencies and parallelization noted.
+
+### Phase 1 — Workspace renames (mechanical)
+
+rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
+
+- `*Idx → *Id`: `AtomIdx`, `BondIdx`, `DativeBondIdx`, `AromaticSystemIdx`, `MulticenterBondIdx`, `NoncovalentBondIdx`, `RingIdx`
+- `IdxRemapping → IdRemapping`
+- `AtomRef::Idx → AtomRef::Id` and four overlay-ref enum variants
+- `RingFamily::Induced → Relevant`
+- View field renames: `data → ast`, `ast → molecule`
+- Reader renames: `bond_order_sum → valence`, `connectivity → total_degree`, `aromatic_contribution → aromatic_valence`, `multicenter_contribution → multicenter_valence`
+- Constraint variant renames: `Connectivity → TotalDegree`, `RingConnectivity → RingDegree`
+
+**Completion**: `cargo test --workspace --tests` green. **Dependencies**: none. **Risk**: low.
+
+### Phase 2 — Per-field accessors + per-kind constraint accessors
+
+- `#[inline]` per-field methods on all 6 entity read-views (~25 methods); same on mut-views as read-only borrows (no `_mut` companions per the field-write decision)
+- Per-kind named accessors on `AtomConstraints`, `BondConstraints`, `DativeBondConstraints`, etc.
+- `is_unique()` predicate on `AtomConstraint` and `BondConstraint` (RingSize → false, all others true)
+- Multi-valued `add()` path mirroring `AromaticSystemConstraints`
+- Plural `ring_sizes()` accessor (multi-valued) + `get_all(kind)` / `remove_all(kind)` generics
+
+**Completion**: new accessors callable; tests cover per-kind accessors and multi-valued add semantics. **Dependencies**: phase 1. **Risk**: low.
+
+### Phase 3 — `ValueAst` arithmetic + Undetermined unification
+
+- `Add`/`Sub`/`Mul`/`Div` impls on `ValueAst` (Lit/Undetermined collapse; panic on div-by-zero and overflow)
+- Same on `ImplicitHydrogensAst` (`Normal → Undetermined` under arithmetic)
+- Per-kind constraint accessors return `ValueAst` (Undetermined ≡ no constraint)
+- Update existing call sites in `ops/*` to use the new operator surface
+
+**Completion**: arithmetic tests cover collapse; existing valence computations migrated. **Dependencies**: phases 1, 2. **Risk**: low.
+
+### Phase 4 — Cross-entity navigation + RingSet back-pointer
+
+- `RingSet` carries `&MoleculeAst` back-pointer
+- `RingView` carries `&RingSet` back-pointer
+- `atom_view.aromatic_system() -> Option<AromaticSystemView>` (singular)
+- `atom_view.dative_bonds()`, `multicenter_bonds()`, `noncovalent_bonds()` returning view iterators
+- `atom_view.rings()`, `bond_view.rings()` returning `Iterator<RingView>`
+- `atom_view.is_in_ring()`, `is_in_aromatic_system()`, `is_in_overlays()`
+- `bond_view.is_in_aromatic_system()`, `aromatic_system()`
+
+**Completion**: all navigation methods callable; ops migration shows reverse navigation works. **Dependencies**: phase 1. **Risk**: low–medium.
+
+### Phase 5 — Derived readers (atom + bond + relation views)
+
+- Atom-side: `valence`, `total_valence`, `degree`, `total_degree`, `heavy_atom_degree`, `heavy_atom_valence`, `ring_count`, `ring_size`, `ring_degree`, `ring_valence`, `multicenter_degree`, `aromatic_valence`, `multicenter_valence`, `donated_pairs`, `accepted_pairs`, `total_hydrogens`
+- Bond-side: `is_in_ring`, `ring_count`, `ring_size`, `is_in_aromatic_system`, `endpoints()`, `atoms()` (view-yielding)
+- Relation views: `electron_count()`, `atom_count()`, `bond_count()`, `overlapping_*`
+
+**Completion**: each reader has a test; existing ops behavior unchanged. **Dependencies**: phases 1, 2, 3, 4. **Risk**: medium.
+
+### Phase 6 — New constraint variants + DSL surface
+
+- `TotalValence(ValueAst)` + DSL `#V`
+- `RingValence(ValueAst)` + DSL `#y`
+- `RingDegree(ValueAst)` (renamed from `RingConnectivity`; DSL `#x` unchanged)
+- `#R!` DSL sugar for `RingCount(Lit(0))` (parser + renderer)
+- Multi-valued DSL `#r5#r6` (parser exempt from duplicate-detection for non-unique kinds)
+- Multi-valued EDN preserved: vector under kind already means LitSet; conjunction via multiple molecule-list entries or repeated DSL predicates
+
+**Completion**: proptest roundtrips for each new symbol. **Dependencies**: phases 1, 2, 5. **Risk**: medium.
+
+### Phase 7 — Ring access redesign
+
+- `mol.rings() -> &RingSet` (canonical, cached, Vismara/22)
+- `mol.rings_with(family, max_size, filter) -> RingSet` (uncached, owned; renamed from `enumerate_rings`)
+- View-side sugar: canonical `is_in_ring`, `rings`, `ring_count`, `ring_size` already added in phases 4+5
+- Parametric `*_from(&RingSet)` variants
+
+**Completion**: ring access tests pass; cache behavior verified single-slot. **Dependencies**: phases 1, 4. **Risk**: low.
+
+### Phase 8 — Edit vocabulary + transaction primitive
+
+Largest single phase; subdivided.
+
+- **8a** `Edit` enum core variants (Add/Remove for atoms and bonds; SetAtomField for common fields)
+- **8b** `Action` enum + `*Ref` enums (AtomRef, BondRef, four overlay refs)
+- **8c** `*FieldChange` enums for each entity kind
+- **8d** `MoleculeBuilder::transact(Vec<Edit>) -> Result<Vec<Action>, TransactionError>` (snapshot rollback)
+- **8e** `transact_with(F)` closure form
+- **8f** `transact_unchecked` escape hatch
+- **8g** `tx.validate()` hook
+- **8h** R3 cascade in `Edit::RemoveAtom` / `Edit::RemoveBond`; `Action::Cascaded { user, cascade }` reporting
+- **8i** existing convenience methods (`add_atom`, `remove`, `atom_mut`) re-implemented as sugar over `transact`
+
+**Completion**: full Edit vocab covered; transaction tests cover atomicity, rollback, cascade, validation. **Dependencies**: phases 1–7 for data structures. **Risk**: high (~30+ variants, novel cascade behavior).
+
+### Phase 9 — Mutation API completion
+
+- `MoleculeBuilder::atom_mut(id) -> AtomViewMut` etc. for all entity kinds (DPO Phase-2)
+- `MoleculeBuilder::remove_*` overlay-mutators wired in (DPO Phase-3)
+- Internal relation mutation via Edit batch (no new API; documented usage pattern)
+- `atom.is_in_overlays()` umbrella predicate
+
+**Completion**: reaction-rule application end-to-end on a simple example. **Dependencies**: phase 8. **Risk**: medium.
+
+### Phase 10 — Subgraph + projection
+
+- `induced_subgraph(atoms) -> (MoleculeAst, Vec<Edit>)`
+- `induced_bonds(atoms) -> Iterator<BondView>` (return-type migration to P1)
+- `GraphView::connected_components(alg)`, `connected_components_in(atoms)`
+- `mol.connecting_bond(a, b) -> Option<BondView>` (renamed from `bond_between`)
+
+**Completion**: subgraph extraction works for kekulizer / HMO callers. **Dependencies**: phase 8 (uses Edit). **Risk**: medium.
+
+### Phase 11 — State predicates + small tail items
+
+- `mol.is_empty()`, `has_constraints()`, `has_overlays()`, `has_dative_bonds()`, `has_aromatic_systems()`, `has_multicenter_bonds()`, `has_noncovalent_bonds()`
+- `NeighborView` reshape: private `{ atom_id, bond_id, molecule }` + `.atom() -> AtomView` / `.bond() -> BondView` methods
+- Drop `data: &BondAst` field from NeighborView (callers route through `.bond()`)
+
+**Completion**: predicates callable; NeighborView calls in ops/ migrated. **Dependencies**: phases 1, 4. **Risk**: low.
+
+### Phase 12 — Validation tier-2 stubs filled in
+
+- `TotalCharge`, `TotalSpin`, `AromaticElectronCount` evaluators in `ConstraintValidator`
+- `SpinCouplingValidator` real implementation (currently stub)
+- `ConstraintValidator` cross-checks
+
+**Completion**: per-test molecules pass tier-2 validation. **Dependencies**: phases 1–6. **Risk**: low–medium (chemistry-dependent).
+
+### Phase 13 — Ops migration + proptest update
+
+- Migrate `ops/aromaticity/*`, `ops/valence/*`, `ops/transformer/*`, `ops/validator/*` to the new API surface
+- Update proptest generators and assertions for renamed types and new constraint variants
+- Verify all existing benchmarks still pass
+
+**Completion**: `cargo test --workspace --tests` green; benchmarks unchanged or improved. **Dependencies**: all earlier phases. **Risk**: medium.
+
+### Parallelization
+
+After phase 1, two tracks:
+
+- **Read-side**: phases 2 → 3 → 4 → 5 → 6 → 7 → 11
+- **Write-side**: phase 8 (once read-side has stabilized enough) → 9 → 10
+
+Phase 13 ops migration can begin incrementally as phase 2 lands, continuing through phases 3–7.
+
+### Rough effort estimate
+
+| Phase | Estimate |
+|---|---|
+| 1 | 1–2 days |
+| 2 | 2–3 days |
+| 3 | 1–2 days |
+| 4 | 2–3 days |
+| 5 | 3–5 days |
+| 6 | 2–3 days |
+| 7 | 1 day |
+| 8 | 1–2 weeks (subdivided) |
+| 9 | 3–5 days |
+| 10 | 2–4 days |
+| 11 | 1–2 days |
+| 12 | varies; chemistry-dependent |
+| 13 | 1–2 weeks |
+
+Net: roughly 6–10 weeks of focused work, parallelizable to ~4–6 weeks with two tracks.
+
+### Per-phase validation gate
+
+Each phase lands with:
+
+- New tests covering its additions
+- `cargo test --workspace --tests` green
+- No new clippy warnings
+- Ops modules either migrated (in their respective phases) or passing via temporary shims
+
+## AST-vs-API layering: parked considerations
+
+The ring-view discussion in §"Ring access" surfaced a broader question: what would a chemist-facing API tier look like, given that the previous attempt was unwound? This section preserves the design considerations for when the question becomes actionable. Nothing here is a current plan — the actionable space right now is the AST API itself (the operation taxonomy above).
+
+### State after the doc 92 restructure
+
+The chemist-facing wrappers (`Molecule`, `Pattern`) were deleted because the previous layering was unsettled — operations crossed back and forth between AST and API tiers without a principled separating line. The crates were split (`umol-ast` for the algebraic tier, `umol-graph` for everything else) to enforce a hard physical boundary while the design re-stabilizes. Current boundary:
+
+- **`umol-ast`** holds `MoleculeAst`, `AtomAst` and the entity ASTs, the constraint vocabulary, the DSL/EDN serialization, `Metadata`. No graph algorithms, no perception, no ring enumeration.
+- **`umol-graph`** holds `RingSet` / `RingEnumerator`, all `ops/*` (validators, resolvers, transformers, aromaticity perception, valence narrowing).
+- **No chemist-facing wrapper exists.** Parsers return `MoleculeAst`; ops take `&MoleculeAst` and `&mut MoleculeAst`.
+
+This is workable for the algebraic surface and is where progress happens at the moment.
+
+### What the wrappers would address (when they return)
+
+Current state: `MoleculeAst` holds a single-slot ring cache (`umol-ast/src/ast/molecule.rs:54`); other ground-only caches (`DistanceMatrix`, `BiconnectedComponents`, `MatchTarget`, `MorganTarget`, `Coordinate` annotations) have no home. Three concerns the wrappers would address:
+
+1. **Additional ground-only caches.** Adding more cache slots directly to `MoleculeAst` means every transient pattern, mid-resolve partial structure, and serialization payload pays for slots it never uses. The wrapper would carry the new slots; the existing ring slot on the AST may stay where it is or move into the wrapper at the same time, an open call.
+2. **The chemist's first-tier API** (the `parse_smiles → mol.morgan_fingerprint(2)` shape from §"API tiering") has no type to live on. Every call currently goes through raw `MoleculeAst`.
+3. **The Pattern role** (matcher target with well-formedness checks and matcher-side scaffolding caches) has no home. Patterns are currently raw `MoleculeAst` with `SubPattern` constraints.
+
+None of these is blocking now. (1) is fine until a second cache slot needs adding. (2) and (3) gate work that hasn't started (matcher port, Morgan, transformations).
+
+### Why the previous attempt failed
+
+Pre-restructure (per doc 92), `Molecule` / `Pattern` lived in `umol_graph::api` and held in-tree storage that overlapped with what the AST also stored. Operations migrated unprincipledly between tiers — a method might appear on `Molecule`, then later move to `MoleculeAst`, then later split back. The boundary was defined by "this needs caching" or "this is what users type" rather than by a structural rule about what kind of data the type owns. The result: bidirectional drift, duplicated state, no single source of truth.
+
+### Candidate separating line (for when the question becomes actionable)
+
+Sketch, not a plan:
+
+- **`MoleculeAst`** owns *facts authored by the user or producer* — the algebraic content. Atoms, bonds, relations, their feature data, constraints, metadata. Equality and hashing are over this content. Parsers produce, serializers consume, transformations rewrite.
+- **`Molecule`** owns *resolved interpretations* — facts plus the perception artifacts that interpret them under a specific model. `Arc<MoleculeInner>` with the `MoleculeAst` plus cache slots (added as the first consumer arrives, not speculatively per §"Cache slots on Molecule"). `is_ground()` required at construction.
+- **`Pattern`** owns *query interpretations* — facts plus matcher-side scaffolding. `is_ground()` not required.
+
+Pitfalls to avoid based on the previous attempt:
+
+- **Cache-ownership rule: topology-only on the AST, attribute-derived on the wrapper.** Topology is invariant across resolution (per §"What's stable vs. changing during resolution"); a cache that depends only on `(atoms, bonds)` is safe to live on `MoleculeAst` because every in-place mutation (`atom_mut`, `bond_mut`, narrowing, lift/inline) leaves it valid, and structural edits go through `MoleculeBuilder` which produces a fresh AST anyway. The existing single-slot ring cache fits this rule. Caches that depend on attribute concretion (Morgan fingerprint, packed `MatchTarget`, anything that bakes in element / charge / order) become invalid the moment a single attribute narrows, and belong on the wrapper where ground-ness is enforced. This rule is the operational version of principle 3 in the taxonomy.
+- **Caches opaque to AST equality.** `Molecule == Molecule` is `self.ast == other.ast`. The wrapper is sugar + cache; the AST is identity. (Already true today — `MoleculeAst::PartialEq` excludes the ring cache via custom impl.)
+- **Placement rule = what data does the method touch.** If an operation only reads the algebraic content, it goes on `MoleculeAst` (or its views). Wrapper methods consume cached views (`mol.morgan_fingerprint(r)`, `mol.find_matches(&pattern)`); topology-only caches stay reachable via the AST (`mol.rings(...)` and any future topology-derived cache).
+
+### Open questions to address when the time comes
+
+Not for now; preserved so they aren't re-discovered later.
+
+1. **Where the ring cache lives.** Default per the topology-vs-attribute rule above: stays on `MoleculeAst` (it's topology-only). `Molecule` carries no ring slot and forwards to `MoleculeAst::rings`. Revisit only if a concrete consumer surfaces that wants ground-only ring semantics distinct from raw-topology rings.
+2. **Solver return type.** `Resolver::resolve(&mut MoleculeAst, &ChemistryModel)` currently mutates the AST in place and returns `Solution`. If `Molecule` returns, the resolver might switch to `(&MoleculeAst, ...) -> Molecule` and transfer the ring set it computed during aromaticity perception. This is the cache-transfer mechanic in §"Cache-transfer mechanics".
+3. **Pattern wrapper timing.** `Pattern` carries no caches today (matcher is deleted). Likely deferred until matcher port lands.
+4. **Transformation re-resolution.** Transformations take `&Molecule` and return `Molecule` per §"Transformation ops". Cache slots in the result start empty. Reaffirm vs. transferring caches across rewrites (doc 80 line 371: no transfer).
+5. **`RingView` back-pointer if `RingSet` moves to `Molecule`.** Either `&Molecule` or `&MoleculeAst` would work; settled at that point.
 
 ## Invariants: essential vs model-dependent
 
