@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::iter;
 use std::ops::Index;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 pub use builder::MoleculeBuilder;
 use umol_graph_core::{FixedRelationSet, Graph, NodeId, RelationId, VarRelationSet};
@@ -18,7 +18,7 @@ use super::idx::{
 };
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
-use super::rings::{self, RingFamily, RingSet};
+use super::rings::{RingFamily, RingSet};
 use super::subgraph::MoleculeSubgraph;
 use super::views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
@@ -35,12 +35,16 @@ mod rewrite;
 /// itself only allows attribute mutation (`atom_mut`, `bond_mut`); structural
 /// edits go through `MoleculeBuilder` via [`MoleculeAst::edit`].
 ///
-/// Carries a single-slot last-request-wins ring cache (`rings(family,
-/// max_ring_size)`). Caching is sound because topology is invariant across
-/// every in-place mutation path (only attribute fields change). Structural
-/// edits go through the builder, which produces a fresh `MoleculeAst` with
-/// an empty cache.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Carries a single-slot canonical-rings cache (`OnceLock<RingSet>`) populated
+/// lazily on the first call to [`MoleculeAst::rings`]. The cache stores
+/// Vismara relevant cycles up to max ring size 22; non-canonical enumeration
+/// goes through [`MoleculeAst::rings_with`], which is uncached and returns
+/// owned. Topology is invariant across in-place attribute mutation, so the
+/// cache remains valid for the molecule's lifetime; structural edits go
+/// through the builder, which produces a fresh `MoleculeAst` with an empty
+/// cache. The cache slot is excluded from `PartialEq` / `Hash` so identity
+/// is independent of cache state.
+#[derive(Debug, Default)]
 pub struct MoleculeAst {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
@@ -50,43 +54,39 @@ pub struct MoleculeAst {
     multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
     noncovalent_bonds: Arc<FixedRelationSet<NoncovalentBondAst, 2>>,
     constraints: Constraints,
-    /// Single-slot ring cache; never participates in `PartialEq`/`Hash`.
-    ring_cache: RingCache,
+    rings_cache: OnceLock<RingSet>,
 }
 
-#[derive(Clone, Debug, Default)]
-struct RingCache(Option<Box<RingCacheEntry>>);
-
-#[derive(Clone, Debug)]
-struct RingCacheEntry {
-    family: RingFamily,
-    max_ring_size: usize,
-    rings: RingSet,
-}
-
-impl PartialEq for RingCache {
-    fn eq(&self, _other: &Self) -> bool {
-        true
-    }
-}
-
-impl Eq for RingCache {}
-
-impl Default for MoleculeAst {
-    fn default() -> Self {
+impl Clone for MoleculeAst {
+    fn clone(&self) -> Self {
         Self {
-            graph: Graph::default(),
-            atoms: Arc::new(Vec::new()),
-            bonds: Arc::new(Vec::new()),
-            dative_bonds: Arc::new(VarRelationSet::default()),
-            aromatic_systems: Arc::new(VarRelationSet::default()),
-            multicenter_bonds: Arc::new(VarRelationSet::default()),
-            noncovalent_bonds: Arc::new(FixedRelationSet::default()),
-            constraints: Constraints::new(),
-            ring_cache: RingCache::default(),
+            graph: self.graph.clone(),
+            atoms: self.atoms.clone(),
+            bonds: self.bonds.clone(),
+            dative_bonds: self.dative_bonds.clone(),
+            aromatic_systems: self.aromatic_systems.clone(),
+            multicenter_bonds: self.multicenter_bonds.clone(),
+            noncovalent_bonds: self.noncovalent_bonds.clone(),
+            constraints: self.constraints.clone(),
+            rings_cache: OnceLock::new(),
         }
     }
 }
+
+impl PartialEq for MoleculeAst {
+    fn eq(&self, other: &Self) -> bool {
+        self.graph == other.graph
+            && self.atoms == other.atoms
+            && self.bonds == other.bonds
+            && self.dative_bonds == other.dative_bonds
+            && self.aromatic_systems == other.aromatic_systems
+            && self.multicenter_bonds == other.multicenter_bonds
+            && self.noncovalent_bonds == other.noncovalent_bonds
+            && self.constraints == other.constraints
+    }
+}
+
+impl Eq for MoleculeAst {}
 
 impl AsRef<MoleculeAst> for MoleculeAst {
     fn as_ref(&self) -> &MoleculeAst {
@@ -194,7 +194,7 @@ impl MoleculeAst {
             multicenter_bonds: Arc::new(multicenter_bonds),
             noncovalent_bonds: Arc::new(noncovalent_bonds),
             constraints,
-            ring_cache: RingCache::default(),
+            rings_cache: OnceLock::new(),
         }
     }
 
@@ -218,7 +218,7 @@ impl MoleculeAst {
             multicenter_bonds,
             noncovalent_bonds,
             constraints,
-            ring_cache: RingCache::default(),
+            rings_cache: OnceLock::new(),
         }
     }
 
@@ -528,37 +528,24 @@ impl MoleculeAst {
                 .all(|id| self.noncovalent_bonds.data(id).is_ground())
     }
 
-    /// Cached ring enumeration. Single-slot last-request-wins: a call with
-    /// different `(family, max_ring_size)` than the previous one replaces the
-    /// stored result. Topology is invariant across in-place mutation paths,
-    /// so the cache stays valid for the molecule's lifetime; structural
-    /// edits go through the builder, which produces a fresh `MoleculeAst`.
-    pub fn rings(&mut self, family: RingFamily, max_ring_size: usize) -> &RingSet {
-        let stale = match self.ring_cache.0.as_deref() {
-            Some(entry) => entry.family != family || entry.max_ring_size != max_ring_size,
-            None => true,
-        };
-        if stale {
-            let rings = rings::enumerate_rings(&self.graph, family, max_ring_size, |_| true);
-            self.ring_cache.0 = Some(Box::new(RingCacheEntry {
-                family,
-                max_ring_size,
-                rings,
-            }));
-        }
-        &self.ring_cache.0.as_deref().unwrap().rings
+    /// Canonical ring set: Vismara relevant cycles up to max ring size 22,
+    /// applied to every atom. Cached in a single-slot `OnceLock` populated
+    /// lazily on first call; subsequent calls return the same borrow.
+    pub fn rings(&self) -> &RingSet {
+        self.rings_cache.get_or_init(|| {
+            RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph)
+        })
     }
 
-    /// Uncached ring enumeration with a custom atom filter. The cache slot
-    /// is not consulted or written; callers that want to amortize across
-    /// queries should use [`MoleculeAst::rings`] and filter at use-time.
-    pub fn enumerate_rings(
+    /// Ring enumeration with caller-specified family, maximum size, and
+    /// atom filter. Uncached; each call recomputes.
+    pub fn rings_with(
         &self,
         family: RingFamily,
         max_ring_size: usize,
         atom_filter: impl Fn(AtomId) -> bool,
     ) -> RingSet {
-        rings::enumerate_rings(&self.graph, family, max_ring_size, atom_filter)
+        RingSet::enumerate(family, max_ring_size, atom_filter, &self.graph)
     }
 
     pub fn atom_mut(&mut self, idx: AtomId) -> AtomViewMut<'_> {

@@ -1,6 +1,7 @@
 //! Atom-level AST fragments shared across crates.
 
 use std::mem;
+use std::ops::{Add, Div, Mul, Sub};
 
 use umol_shared::element::Element;
 
@@ -468,7 +469,7 @@ impl From<i64> for ImplicitHydrogensAst {
     }
 }
 
-impl std::ops::Add for ImplicitHydrogensAst {
+impl Add for ImplicitHydrogensAst {
     type Output = ImplicitHydrogensAst;
     fn add(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -478,7 +479,7 @@ impl std::ops::Add for ImplicitHydrogensAst {
     }
 }
 
-impl std::ops::Sub for ImplicitHydrogensAst {
+impl Sub for ImplicitHydrogensAst {
     type Output = ImplicitHydrogensAst;
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -488,7 +489,7 @@ impl std::ops::Sub for ImplicitHydrogensAst {
     }
 }
 
-impl std::ops::Mul for ImplicitHydrogensAst {
+impl Mul for ImplicitHydrogensAst {
     type Output = ImplicitHydrogensAst;
     fn mul(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
@@ -498,7 +499,7 @@ impl std::ops::Mul for ImplicitHydrogensAst {
     }
 }
 
-impl std::ops::Div for ImplicitHydrogensAst {
+impl Div for ImplicitHydrogensAst {
     type Output = ImplicitHydrogensAst;
     fn div(self, rhs: Self) -> Self::Output {
         match (self, rhs) {

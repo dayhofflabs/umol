@@ -323,7 +323,7 @@ mod tests {
     }
 
     fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {
-        ast.enumerate_rings(RingFamily::Simple, max_ring_size, |_| true)
+        ast.rings_with(RingFamily::Simple, max_ring_size, |_| true)
     }
 
     fn daylight_model() -> HueckelRuleAromaticity {

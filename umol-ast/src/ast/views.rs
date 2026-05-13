@@ -31,6 +31,7 @@ use super::idx::{
 use super::molecule::MoleculeAst;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
+use super::rings::{RingSet, RingView};
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
@@ -212,10 +213,77 @@ impl<'a> AtomView<'a> {
     }
 
     pub fn is_in_aromatic_system(&self) -> bool {
+        self.aromatic_system().is_some()
+    }
+
+    /// The aromatic system containing this atom, if any. Per-perception
+    /// design an atom belongs to at most one aromatic system; this
+    /// returns the first incident system.
+    pub fn aromatic_system(&self) -> Option<AromaticSystemView<'a>> {
         self.molecule
             .aromatic_systems_incident(self.id)
             .next()
-            .is_some()
+            .map(|id| self.molecule.aromatic_system(id))
+    }
+
+    pub fn dative_bonds(&self) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        molecule
+            .dative_bonds_incident(self.id)
+            .map(move |id| molecule.dative_bond(id))
+    }
+
+    pub fn multicenter_bonds(&self) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        molecule
+            .multicenter_bonds_incident(self.id)
+            .map(move |id| molecule.multicenter_bond(id))
+    }
+
+    pub fn noncovalent_bonds(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        molecule
+            .noncovalent_bonds_incident(self.id)
+            .map(move |id| molecule.noncovalent_bond(id))
+    }
+
+    /// True if this atom participates in any of the four overlay relations
+    /// (aromatic system, dative bond, multicenter bond, noncovalent bond).
+    /// Mirror of `MoleculeAst::has_overlays` scoped to a single atom; useful
+    /// as a pre-mutation predicate before structural removal.
+    pub fn is_in_overlays(&self) -> bool {
+        self.aromatic_system().is_some()
+            || self.dative_bonds().next().is_some()
+            || self.multicenter_bonds().next().is_some()
+            || self.noncovalent_bonds().next().is_some()
+    }
+
+    /// True if this atom belongs to any ring in the molecule's canonical
+    /// ring set (Vismara relevant cycles, max ring size 22). Uses the
+    /// molecule's cached canonical `RingSet`.
+    pub fn is_in_ring(&self) -> bool {
+        self.molecule.rings().contains_atom(self.id)
+    }
+
+    /// True if this atom appears in any ring of the supplied set.
+    pub fn is_in_ring_from(&self, rings: &RingSet) -> bool {
+        rings.contains_atom(self.id)
+    }
+
+    /// Rings containing this atom drawn from the molecule's canonical
+    /// `RingSet` (Vismara relevant cycles, max ring size 22).
+    pub fn rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
+        let id = self.id;
+        self.molecule
+            .rings()
+            .iter()
+            .filter(move |v| v.atoms().contains(&id))
+    }
+
+    /// Rings from the supplied set that contain this atom.
+    pub fn rings_from<'r>(&self, rings: &'r RingSet) -> impl Iterator<Item = RingView<'r>> + 'r {
+        let id = self.id;
+        rings.iter().filter(move |v| v.atoms().contains(&id))
     }
 
     /// Sum of per-atom contributions across incident multicenter bonds.
@@ -232,7 +300,6 @@ impl<'a> AtomView<'a> {
         }
         Some(sum)
     }
-
 }
 
 /// Mutable borrowed view of an atom.
@@ -301,7 +368,6 @@ pub struct BondView<'a> {
     pub id: BondId,
     atoms: [AtomId; 2],
     pub ast: &'a BondAst,
-    #[allow(dead_code)]
     molecule: &'a MoleculeAst,
 }
 
@@ -329,6 +395,48 @@ impl<'a> BondView<'a> {
     /// The two atoms incident to this bond.
     pub fn atoms(&self) -> [AtomId; 2] {
         self.atoms
+    }
+
+    /// The aromatic system this bond participates in, if any. A bond is in
+    /// an aromatic system iff both endpoints belong to that system.
+    pub fn aromatic_system(&self) -> Option<AromaticSystemView<'a>> {
+        let [a, b] = self.atoms;
+        self.molecule
+            .aromatic_systems_incident(a)
+            .map(|id| self.molecule.aromatic_system(id))
+            .find(|sys| sys.atoms().any(|x| x == b))
+    }
+
+    pub fn is_in_aromatic_system(&self) -> bool {
+        self.aromatic_system().is_some()
+    }
+
+    /// True if this bond belongs to any ring in the molecule's canonical
+    /// ring set (Vismara relevant cycles, max ring size 22). Uses the
+    /// molecule's cached canonical `RingSet`.
+    pub fn is_in_ring(&self) -> bool {
+        self.molecule.rings().contains_bond(self.id)
+    }
+
+    /// True if this bond appears in any ring of the supplied set.
+    pub fn is_in_ring_from(&self, rings: &RingSet) -> bool {
+        rings.contains_bond(self.id)
+    }
+
+    /// Rings containing this bond drawn from the molecule's canonical
+    /// `RingSet` (Vismara relevant cycles, max ring size 22).
+    pub fn rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
+        let id = self.id;
+        self.molecule
+            .rings()
+            .iter()
+            .filter(move |v| v.bonds().contains(&id))
+    }
+
+    /// Rings from the supplied set that contain this bond.
+    pub fn rings_from<'r>(&self, rings: &'r RingSet) -> impl Iterator<Item = RingView<'r>> + 'r {
+        let id = self.id;
+        rings.iter().filter(move |v| v.bonds().contains(&id))
     }
 }
 
@@ -914,6 +1022,7 @@ mod tests {
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ast::rings::RingFamily;
     use crate::ast::value::ValueAst;
     use crate::mol;
 
@@ -1149,6 +1258,148 @@ mod tests {
     }
 
     #[rstest]
+    #[case::participant(AtomId(0), Some(AromaticSystemId(0)))]
+    #[case::not_participant(AtomId(3), None)]
+    fn test_atom_view_aromatic_system(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Option<AromaticSystemId>,
+    ) {
+        let id = molecule.atom(atom).aromatic_system().map(|v| v.id);
+        assert_eq!(id, expected);
+    }
+
+    #[rstest]
+    #[case::donor(AtomId(2), vec![DativeBondId(0)])]
+    #[case::acceptor(AtomId(3), vec![DativeBondId(0)])]
+    #[case::uninvolved(AtomId(0), vec![])]
+    fn test_atom_view_dative_bonds(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<DativeBondId>,
+    ) {
+        let ids: Vec<DativeBondId> = molecule.atom(atom).dative_bonds().map(|v| v.id).collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::participant(AtomId(0), vec![MulticenterBondId(0)])]
+    #[case::uninvolved(AtomId(3), vec![])]
+    fn test_atom_view_multicenter_bonds(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<MulticenterBondId>,
+    ) {
+        let ids: Vec<MulticenterBondId> =
+            molecule.atom(atom).multicenter_bonds().map(|v| v.id).collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::endpoint_0(AtomId(0), vec![NoncovalentBondId(0)])]
+    #[case::endpoint_3(AtomId(3), vec![NoncovalentBondId(0)])]
+    #[case::uninvolved(AtomId(1), vec![])]
+    fn test_atom_view_noncovalent_bonds(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<NoncovalentBondId>,
+    ) {
+        let ids: Vec<NoncovalentBondId> =
+            molecule.atom(atom).noncovalent_bonds().map(|v| v.id).collect();
+        assert_eq!(ids, expected);
+    }
+
+    /// Cyclohexane with one chain atom: 0-1-2-3-4-5-0 closing the ring, plus 0-6 dangling.
+    #[fixture]
+    fn ring_with_chain() -> MoleculeAst {
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C); 7],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(3), AtomId(4), BondAst::from_order(1)),
+                (AtomId(4), AtomId(5), BondAst::from_order(1)),
+                (AtomId(5), AtomId(0), BondAst::from_order(1)),
+                (AtomId(0), AtomId(6), BondAst::from_order(1)),
+            ],
+        )
+    }
+
+    #[rstest]
+    #[case::ring_atom_0(AtomId(0), true)]
+    #[case::ring_atom_3(AtomId(3), true)]
+    #[case::ring_atom_5(AtomId(5), true)]
+    #[case::chain_atom_6(AtomId(6), false)]
+    fn test_atom_view_is_in_ring(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).is_in_ring(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), true)]
+    #[case::chain_atom(AtomId(6), false)]
+    fn test_atom_view_is_in_ring_from(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        let rings = ring_with_chain.rings_with(RingFamily::Relevant, 22, |_| true);
+        assert_eq!(ring_with_chain.atom(atom).is_in_ring_from(&rings), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), 1)]
+    #[case::chain_atom(AtomId(6), 0)]
+    fn test_atom_view_rings_from(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected_count: usize,
+    ) {
+        let rings = ring_with_chain.rings_with(RingFamily::Relevant, 22, |_| true);
+        let count = ring_with_chain.atom(atom).rings_from(&rings).count();
+        assert_eq!(count, expected_count);
+    }
+
+    #[rstest]
+    #[case::aromatic_and_multicenter(molecule(), AtomId(0), true)]
+    #[case::aromatic_only_in_rich(molecule(), AtomId(1), true)]
+    #[case::dative_donor(molecule(), AtomId(2), true)]
+    #[case::dative_acceptor(molecule(), AtomId(3), true)]
+    #[case::bare_atom_0(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+        AtomId(0),
+        false,
+    )]
+    #[case::bare_atom_1(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+        AtomId(1),
+        false,
+    )]
+    fn test_atom_view_is_in_overlays(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(mol.atom(atom).is_in_overlays(), expected);
+    }
+
+    #[rstest]
     fn test_atom_view_aromatic_valence_constraint() {
         let mut atom = AtomAst::from_element(Element::C);
         atom.constraints.add(AtomConstraint::aromatic_valence(
@@ -1262,6 +1513,68 @@ mod tests {
     #[rstest]
     fn test_bond_view_atoms(molecule: MoleculeAst) {
         assert_eq!(molecule.bond(BondId(1)).atoms(), [AtomId(1), AtomId(2)]);
+    }
+
+    #[rstest]
+    #[case::both_endpoints_aromatic(BondId(0), Some(AromaticSystemId(0)))]
+    #[case::both_endpoints_aromatic_alt(BondId(1), Some(AromaticSystemId(0)))]
+    #[case::one_endpoint_outside(BondId(2), None)]
+    fn test_bond_view_aromatic_system(
+        molecule: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: Option<AromaticSystemId>,
+    ) {
+        let id = molecule.bond(bond).aromatic_system().map(|v| v.id);
+        assert_eq!(id, expected);
+    }
+
+    #[rstest]
+    #[case::both_endpoints_aromatic(BondId(0), true)]
+    #[case::both_endpoints_aromatic_alt(BondId(1), true)]
+    #[case::one_endpoint_outside(BondId(2), false)]
+    fn test_bond_view_is_in_aromatic_system(
+        molecule: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(molecule.bond(bond).is_in_aromatic_system(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_bond_0_1(BondId(0), true)]
+    #[case::ring_bond_5_0(BondId(5), true)]
+    #[case::chain_bond_0_6(BondId(6), false)]
+    fn test_bond_view_is_in_ring(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(ring_with_chain.bond(bond).is_in_ring(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_bond(BondId(0), true)]
+    #[case::chain_bond(BondId(6), false)]
+    fn test_bond_view_is_in_ring_from(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: bool,
+    ) {
+        let rings = ring_with_chain.rings_with(RingFamily::Relevant, 22, |_| true);
+        assert_eq!(ring_with_chain.bond(bond).is_in_ring_from(&rings), expected);
+    }
+
+    #[rstest]
+    #[case::ring_bond(BondId(0), 1)]
+    #[case::chain_bond(BondId(6), 0)]
+    fn test_bond_view_rings_from(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected_count: usize,
+    ) {
+        let rings = ring_with_chain.rings_with(RingFamily::Relevant, 22, |_| true);
+        let count = ring_with_chain.bond(bond).rings_from(&rings).count();
+        assert_eq!(count, expected_count);
     }
 
     // --- DativeBondViews ---

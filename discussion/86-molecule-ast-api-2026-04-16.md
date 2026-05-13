@@ -1145,17 +1145,15 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 
 **Completion**: arithmetic tests cover collapse; existing valence computations migrated. **Dependencies**: phases 1, 2. **Risk**: low. **Done**
 
-### Phase 4 — Cross-entity navigation + RingSet back-pointer
+### Phase 4 — Cross-entity navigation
 
-- `RingSet` carries `&MoleculeAst` back-pointer
-- `RingView` carries `&RingSet` back-pointer
 - `atom_view.aromatic_system() -> Option<AromaticSystemView>` (singular)
 - `atom_view.dative_bonds()`, `multicenter_bonds()`, `noncovalent_bonds()` returning view iterators
 - `atom_view.rings()`, `bond_view.rings()` returning `Iterator<RingView>`
 - `atom_view.is_in_ring()`, `is_in_aromatic_system()`, `is_in_overlays()`
 - `bond_view.is_in_aromatic_system()`, `aromatic_system()`
 
-**Completion**: all navigation methods callable; ops migration shows reverse navigation works. **Dependencies**: phase 1. **Risk**: low–medium.
+**Completion**: all navigation methods callable; ops migration shows reverse navigation works. **Dependencies**: phase 1. **Risk**: low–medium. **Done**
 
 ### Phase 5 — Derived readers (atom + bond + relation views)
 

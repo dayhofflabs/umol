@@ -89,7 +89,7 @@ impl AromaticityPerception {
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
         let (family, max_ring_size) = self.ring_request();
-        let rings = ast.rings(family, max_ring_size).clone();
+        let rings = ast.rings_with(family, max_ring_size, |_| true);
 
         let systems = match self {
             Self::HueckelRule(m) => m.find_from_rings(ast, &rings, &electrons_at),

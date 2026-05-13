@@ -196,7 +196,7 @@ mod tests {
     }
 
     fn enumerate_induced(ast: &MoleculeAst) -> RingSet {
-        ast.enumerate_rings(RingFamily::Simple, 6, |_| true)
+        ast.rings_with(RingFamily::Simple, 6, |_| true)
     }
 
     fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingId> {

@@ -1011,52 +1011,52 @@ fn test_molecule_builder_remove_empty_is_noop(#[from(rich_molecule)] ast: Molecu
 #[case::chain(chain(5), 10, 0)]
 #[case::empty(MoleculeAst::default(), 10, 0)]
 fn test_molecule_ast_rings(
-    #[case] mut ast: MoleculeAst,
+    #[case] ast: MoleculeAst,
     #[case] max_ring_size: usize,
     #[case] expected: usize,
 ) {
-    let rs = ast.rings(RingFamily::Simple, max_ring_size);
+    let rs = ast.rings_with(RingFamily::Simple, max_ring_size, |_| true);
     assert_eq!(rs.count(), expected);
 }
 
 #[test]
 fn test_molecule_ast_enumerate_rings_atom_filter() {
     let ast = ring(6);
-    let rs = ast.enumerate_rings(RingFamily::Simple, 10, |a| a.0 < 3);
+    let rs = ast.rings_with(RingFamily::Simple, 10, |a| a.0 < 3);
     assert_eq!(rs.count(), 0);
 }
 
 #[test]
 fn test_molecule_ast_rings_induced() {
-    let mut ast = mol!(r#"{
+    let ast = mol!(r#"{
         :atoms ["C" "C" "C" "C"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]
     }"#);
-    let simple_count = ast.rings(RingFamily::Simple, 4).count();
-    let induced_count = ast.rings(RingFamily::Relevant, 4).count();
+    let simple_count = ast.rings_with(RingFamily::Simple, 4, |_| true).count();
+    let induced_count = ast.rings_with(RingFamily::Relevant, 4, |_| true).count();
     assert_eq!(simple_count, 4);
     assert_eq!(induced_count, 4);
 }
 
 #[test]
 fn test_molecule_ast_rings_induced_naphthalene() {
-    let mut ast = mol!(r#"{
+    let ast = mol!(r#"{
         :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
         :bonds [
             [0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
             [3 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]
         ]
     }"#);
-    let simple_count = ast.rings(RingFamily::Simple, 10).count();
+    let simple_count = ast.rings_with(RingFamily::Simple, 10, |_| true).count();
     assert_eq!(simple_count, 2);
-    let induced_count = ast.rings(RingFamily::Relevant, 10).count();
+    let induced_count = ast.rings_with(RingFamily::Relevant, 10, |_| true).count();
     assert_eq!(induced_count, 2);
 }
 
 #[test]
 fn test_rings_membership() {
-    let mut ast = ring(6);
-    let rs = ast.rings(RingFamily::Simple, 6);
+    let ast = ring(6);
+    let rs = ast.rings_with(RingFamily::Simple, 6, |_| true);
     assert!(rs.contains_atom(AtomId(0)));
     assert!(rs.contains_bond(BondId(0)));
     assert_eq!(rs.atom_smallest_ring_size(AtomId(0)), Some(6));
