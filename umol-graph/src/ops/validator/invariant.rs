@@ -59,7 +59,7 @@ impl ElectronInvariantValidator {
 
             let valence: i64 = match (view.constraints().valence(), view.valence()) {
                 (ValueAst::Lit(v), _) if v >= 0 => v,
-                (ValueAst::Undetermined, Some(t)) => t as i64,
+                (ValueAst::Undetermined, ValueAst::Lit(t)) if t >= 0 => t,
                 _ => {
                     any_undetermined = true;
                     continue;
@@ -68,7 +68,7 @@ impl ElectronInvariantValidator {
             let donated_pairs: i64 =
                 match (view.constraints().donated_pairs(), view.donated_pairs()) {
                     (ValueAst::Lit(v), _) if v >= 0 => v,
-                    (ValueAst::Undetermined, Some(t)) => t as i64,
+                    (ValueAst::Undetermined, ValueAst::Lit(t)) if t >= 0 => t,
                     _ => {
                         any_undetermined = true;
                         continue;
@@ -77,7 +77,7 @@ impl ElectronInvariantValidator {
             let accepted_pairs: i64 =
                 match (view.constraints().accepted_pairs(), view.accepted_pairs()) {
                     (ValueAst::Lit(v), _) if v >= 0 => v,
-                    (ValueAst::Undetermined, Some(t)) => t as i64,
+                    (ValueAst::Undetermined, ValueAst::Lit(t)) if t >= 0 => t,
                     _ => {
                         any_undetermined = true;
                         continue;
@@ -89,7 +89,7 @@ impl ElectronInvariantValidator {
             ) {
                 (AromaticValenceAst::Aromatic(ValueAst::Lit(v)), _) if v >= 0 => v,
                 (AromaticValenceAst::NotAromatic, _) => 0,
-                (AromaticValenceAst::Undetermined, Some(t)) => t as i64,
+                (AromaticValenceAst::Undetermined, ValueAst::Lit(t)) if t >= 0 => t,
                 _ => {
                     any_undetermined = true;
                     continue;
@@ -101,7 +101,7 @@ impl ElectronInvariantValidator {
             ) {
                 (MulticenterValenceAst::Multicenter(ValueAst::Lit(v)), _) if v >= 0 => v,
                 (MulticenterValenceAst::NotMulticenter, _) => 0,
-                (MulticenterValenceAst::Undetermined, Some(t)) => t as i64,
+                (MulticenterValenceAst::Undetermined, ValueAst::Lit(t)) if t >= 0 => t,
                 _ => {
                     any_undetermined = true;
                     continue;

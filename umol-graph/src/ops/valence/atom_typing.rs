@@ -10,8 +10,8 @@ use umol_shared::element::Element;
 
 use crate::ops::valence::registry::AtomTypeRegistry;
 use crate::ops::valence::shared::{
-    atom_dative_counts, atom_is_aromatic, atom_sigma_valence, base_atom_compatible,
-    charge_or_zero, infer_normal_implicit_hydrogens, lift_constraints, narrow_atom,
+    atom_dative_counts, atom_is_aromatic, base_atom_compatible, charge_or_zero,
+    infer_normal_implicit_hydrogens, lift_constraints, narrow_atom,
     pattern_constraints_compatible, AtomCandidate,
 };
 
@@ -49,7 +49,7 @@ impl AtomTypingValenceResolver {
             let ElementAst::Lit(element) = view.ast.element else {
                 continue;
             };
-            if atom_sigma_valence(&view).is_none() {
+            if view.valence().literal().and_then(|n| u8::try_from(n).ok()).is_none() {
                 continue;
             }
 
@@ -76,7 +76,7 @@ impl AtomTypingValenceResolver {
 
     fn candidates_for(&self, view: &AtomView<'_>, element: Element) -> Vec<AtomCandidate> {
         let atom = view.ast;
-        let valence = match atom_sigma_valence(view) {
+        let valence = match view.valence().literal().and_then(|n| u8::try_from(n).ok()) {
             Some(v) => v,
             None => return Vec::new(),
         };

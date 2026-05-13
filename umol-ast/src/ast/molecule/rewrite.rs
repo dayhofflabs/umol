@@ -78,38 +78,38 @@ impl MoleculeAst {
 
         // Phase 1: add R\K bonds
         for bv in rhs.bonds().iter() {
-            let in_k = r_to_l.contains_key(&bv.atoms()[0])
-                && r_to_l.contains_key(&bv.atoms()[1])
+            let in_k = r_to_l.contains_key(&bv.atom_ids()[0])
+                && r_to_l.contains_key(&bv.atom_ids()[1])
                 && lhs
-                    .connecting_bond(r_to_l[&bv.atoms()[0]], r_to_l[&bv.atoms()[1]])
+                    .bonds().connecting_id(r_to_l[&bv.atom_ids()[0]], r_to_l[&bv.atom_ids()[1]])
                     .is_some();
             if !in_k {
-                builder.add_bond(r_to_g[&bv.atoms()[0]], r_to_g[&bv.atoms()[1]], bv.ast.clone());
+                builder.add_bond(r_to_g[&bv.atom_ids()[0]], r_to_g[&bv.atom_ids()[1]], bv.ast.clone());
             }
         }
 
         // Phase 1: add R\K dative bonds
         for dv in rhs.dative_bonds().iter() {
-            let r_parts: Vec<AtomId> = dv.atoms().collect();
+            let r_parts: Vec<AtomId> = dv.atom_ids().collect();
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomId> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.connecting_dative_bond(l_parts.iter().copied()).is_some()
+                lhs.dative_bonds().connecting_id(l_parts.iter().copied()).is_some()
             };
             if !in_k {
-                let g_donors: Vec<AtomId> = dv.donors().map(|d| r_to_g[&d]).collect();
-                let g_acceptor = r_to_g[&dv.acceptor];
+                let g_donors: Vec<AtomId> = dv.donor_ids().map(|d| r_to_g[&d]).collect();
+                let g_acceptor = r_to_g[&dv.acceptor_id];
                 builder.add_dative_bond(g_donors, g_acceptor, dv.ast.clone());
             }
         }
 
         // Phase 1: add R\K aromatic systems
         for av in rhs.aromatic_systems().iter() {
-            let r_parts: Vec<AtomId> = av.atoms().collect();
+            let r_parts: Vec<AtomId> = av.atom_ids().collect();
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomId> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.connecting_aromatic_system(l_parts.iter().copied()).is_some()
+                lhs.aromatic_systems().connecting_id(l_parts.iter().copied()).is_some()
             };
             if !in_k {
                 let g_parts: Vec<AtomId> = r_parts.iter().map(|a| r_to_g[a]).collect();
@@ -119,11 +119,11 @@ impl MoleculeAst {
 
         // Phase 1: add R\K multicenter bonds
         for mv in rhs.multicenter_bonds().iter() {
-            let r_parts: Vec<AtomId> = mv.atoms().collect();
+            let r_parts: Vec<AtomId> = mv.atom_ids().collect();
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomId> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.connecting_multicenter_bond(l_parts.iter().copied()).is_some()
+                lhs.multicenter_bonds().connecting_id(l_parts.iter().copied()).is_some()
             };
             if !in_k {
                 let g_parts: Vec<AtomId> = r_parts.iter().map(|a| r_to_g[a]).collect();
@@ -133,14 +133,15 @@ impl MoleculeAst {
 
         // Phase 1: add R\K noncovalent bonds
         for nv in rhs.noncovalent_bonds().iter() {
-            let in_k = r_to_l.contains_key(&nv.atoms()[0])
-                && r_to_l.contains_key(&nv.atoms()[1])
+            let [a, b] = nv.atom_ids();
+            let in_k = r_to_l.contains_key(&a)
+                && r_to_l.contains_key(&b)
                 && lhs
-                    .connecting_noncovalent_bond(r_to_l[&nv.atoms()[0]], r_to_l[&nv.atoms()[1]])
+                    .noncovalent_bonds().connecting_id(r_to_l[&a], r_to_l[&b])
                     .is_some();
             if !in_k {
                 builder.add_noncovalent_bond(
-                    [r_to_g[&nv.atoms()[0]], r_to_g[&nv.atoms()[1]]],
+                    [r_to_g[&a], r_to_g[&b]],
                     nv.ast.clone(),
                 );
             }
@@ -154,15 +155,15 @@ impl MoleculeAst {
 
         // Phase 2: update K bond attributes from R
         for bv in rhs.bonds().iter() {
-            if !r_to_l.contains_key(&bv.atoms()[0]) || !r_to_l.contains_key(&bv.atoms()[1]) {
+            if !r_to_l.contains_key(&bv.atom_ids()[0]) || !r_to_l.contains_key(&bv.atom_ids()[1]) {
                 continue;
             }
-            let l_src = r_to_l[&bv.atoms()[0]];
-            let l_tgt = r_to_l[&bv.atoms()[1]];
-            if lhs.connecting_bond(l_src, l_tgt).is_none() {
+            let l_src = r_to_l[&bv.atom_ids()[0]];
+            let l_tgt = r_to_l[&bv.atom_ids()[1]];
+            if lhs.bonds().connecting_id(l_src, l_tgt).is_none() {
                 continue;
             }
-            if let Some(g_bond) = self.connecting_bond(r_to_g[&bv.atoms()[0]], r_to_g[&bv.atoms()[1]]) {
+            if let Some(g_bond) = self.bonds().connecting_id(r_to_g[&bv.atom_ids()[0]], r_to_g[&bv.atom_ids()[1]]) {
                 *builder.bond_mut(g_bond) = bv.ast.clone();
             }
         }
@@ -170,18 +171,18 @@ impl MoleculeAst {
         // Phase 3: remove L\K dative bonds
         let mut remove_dative: Vec<DativeBondId> = Vec::new();
         for dv in lhs.dative_bonds().iter() {
-            let l_parts: Vec<AtomId> = dv.atoms().collect();
+            let l_parts: Vec<AtomId> = dv.atom_ids().collect();
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts: Option<HashSet<AtomId>> =
                     l_parts.iter().map(|a| l_to_r.get(a).copied()).collect();
-                r_parts.is_some_and(|rp| rhs.connecting_dative_bond(rp.iter().copied()).is_some())
+                r_parts.is_some_and(|rp| rhs.dative_bonds().connecting_id(rp.iter().copied()).is_some())
             };
             if !in_k {
                 let g_parts: Option<HashSet<AtomId>> =
                     l_parts.iter().map(|a| l_to_g.get(a).copied()).collect();
                 if let Some(gp) = g_parts {
-                    if let Some(g_idx) = self.connecting_dative_bond(gp.iter().copied()) {
+                    if let Some(g_idx) = self.dative_bonds().connecting_id(gp.iter().copied()) {
                         remove_dative.push(g_idx);
                     }
                 }
@@ -194,16 +195,16 @@ impl MoleculeAst {
         // Phase 3: remove L\K aromatic systems
         let mut remove_aromatic: Vec<AromaticSystemId> = Vec::new();
         for av in lhs.aromatic_systems().iter() {
-            let l_parts: Vec<AtomId> = av.atoms().collect();
+            let l_parts: Vec<AtomId> = av.atom_ids().collect();
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts = map_participants(l_parts.iter().copied(), &l_to_r);
-                r_parts.is_some_and(|rp| rhs.connecting_aromatic_system(rp.iter().copied()).is_some())
+                r_parts.is_some_and(|rp| rhs.aromatic_systems().connecting_id(rp.iter().copied()).is_some())
             };
             if !in_k {
                 let g_parts = map_participants(l_parts.iter().copied(), &l_to_g);
                 if let Some(gp) = g_parts {
-                    if let Some(g_idx) = self.connecting_aromatic_system(gp.iter().copied()) {
+                    if let Some(g_idx) = self.aromatic_systems().connecting_id(gp.iter().copied()) {
                         remove_aromatic.push(g_idx);
                     }
                 }
@@ -216,16 +217,16 @@ impl MoleculeAst {
         // Phase 3: remove L\K multicenter bonds
         let mut remove_multicenter: Vec<MulticenterBondId> = Vec::new();
         for mv in lhs.multicenter_bonds().iter() {
-            let l_parts: Vec<AtomId> = mv.atoms().collect();
+            let l_parts: Vec<AtomId> = mv.atom_ids().collect();
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts = map_participants(l_parts.iter().copied(), &l_to_r);
-                r_parts.is_some_and(|rp| rhs.connecting_multicenter_bond(rp.iter().copied()).is_some())
+                r_parts.is_some_and(|rp| rhs.multicenter_bonds().connecting_id(rp.iter().copied()).is_some())
             };
             if !in_k {
                 let g_parts = map_participants(l_parts.iter().copied(), &l_to_g);
                 if let Some(gp) = g_parts {
-                    if let Some(g_idx) = self.connecting_multicenter_bond(gp.iter().copied()) {
+                    if let Some(g_idx) = self.multicenter_bonds().connecting_id(gp.iter().copied()) {
                         remove_multicenter.push(g_idx);
                     }
                 }
@@ -238,15 +239,16 @@ impl MoleculeAst {
         // Phase 3: remove L\K noncovalent bonds
         let mut remove_noncovalent: Vec<NoncovalentBondId> = Vec::new();
         for nv in lhs.noncovalent_bonds().iter() {
-            let in_k = k_l.contains(&nv.atoms()[0])
-                && k_l.contains(&nv.atoms()[1])
+            let [a, b] = nv.atom_ids();
+            let in_k = k_l.contains(&a)
+                && k_l.contains(&b)
                 && rhs
-                    .connecting_noncovalent_bond(l_to_r[&nv.atoms()[0]], l_to_r[&nv.atoms()[1]])
+                    .noncovalent_bonds().connecting_id(l_to_r[&a], l_to_r[&b])
                     .is_some();
             if !in_k {
-                if let (Some(&ga), Some(&gb)) = (l_to_g.get(&nv.atoms()[0]), l_to_g.get(&nv.atoms()[1]))
+                if let (Some(&ga), Some(&gb)) = (l_to_g.get(&a), l_to_g.get(&b))
                 {
-                    if let Some(g_idx) = self.connecting_noncovalent_bond(ga, gb) {
+                    if let Some(g_idx) = self.noncovalent_bonds().connecting_id(ga, gb) {
                         remove_noncovalent.push(g_idx);
                     }
                 }
@@ -265,14 +267,14 @@ impl MoleculeAst {
 
         let mut remove_bonds_g: Vec<BondId> = Vec::new();
         for bv in lhs.bonds().iter() {
-            let in_k = k_l.contains(&bv.atoms()[0])
-                && k_l.contains(&bv.atoms()[1])
+            let in_k = k_l.contains(&bv.atom_ids()[0])
+                && k_l.contains(&bv.atom_ids()[1])
                 && rhs
-                    .connecting_bond(l_to_r[&bv.atoms()[0]], l_to_r[&bv.atoms()[1]])
+                    .bonds().connecting_id(l_to_r[&bv.atom_ids()[0]], l_to_r[&bv.atom_ids()[1]])
                     .is_some();
             if !in_k {
-                if let (Some(&gs), Some(&gt_)) = (l_to_g.get(&bv.atoms()[0]), l_to_g.get(&bv.atoms()[1])) {
-                    if let Some(g_bond) = self.connecting_bond(gs, gt_) {
+                if let (Some(&gs), Some(&gt_)) = (l_to_g.get(&bv.atom_ids()[0]), l_to_g.get(&bv.atom_ids()[1])) {
+                    if let Some(g_bond) = self.bonds().connecting_id(gs, gt_) {
                         remove_bonds_g.push(g_bond);
                     }
                 }

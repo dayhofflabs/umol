@@ -1160,8 +1160,9 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 - Atom-side: `valence`, `total_valence`, `degree`, `total_degree`, `heavy_atom_degree`, `heavy_atom_valence`, `ring_count`, `ring_size`, `ring_degree`, `ring_valence`, `multicenter_degree`, `aromatic_valence`, `multicenter_valence`, `donated_pairs`, `accepted_pairs`, `total_hydrogens`
 - Bond-side: `is_in_ring`, `ring_count`, `ring_size`, `is_in_aromatic_system`, `endpoints()`, `atoms()` (view-yielding)
 - Relation views: `electron_count()`, `atom_count()`, `bond_count()`, `overlapping_*`
+- Add `*_ids()` accessors for constituent atoms/bonds.
 
-**Completion**: each reader has a test; existing ops behavior unchanged. **Dependencies**: phases 1, 2, 3, 4. **Risk**: medium.
+**Completion**: each reader has a test; existing ops behavior unchanged. **Dependencies**: phases 1, 2, 3, 4. **Risk**: medium. **Done**
 
 ### Phase 6 — New constraint variants + DSL surface
 

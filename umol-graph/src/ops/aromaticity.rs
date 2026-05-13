@@ -146,7 +146,7 @@ impl AromaticityPerception {
 
         let bond_ids: Vec<BondId> = new_indices
             .iter()
-            .flat_map(|&idx| ast.aromatic_system(idx).bonds().collect::<Vec<_>>())
+            .flat_map(|&idx| ast.aromatic_system(idx).bond_ids().collect::<Vec<_>>())
             .collect();
         for bond_id in bond_ids {
             let bond = ast.bond_mut(bond_id);
@@ -208,7 +208,7 @@ pub(crate) fn electrons_from_aromatic_constraint(view: &AtomView<'_>) -> Option<
 ///
 /// Spin is not modified.
 fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemId) {
-    let atoms: Vec<AtomId> = ast.aromatic_system(system_idx).atoms().collect();
+    let atoms: Vec<AtomId> = ast.aromatic_system(system_idx).atom_ids().collect();
     let Some(element) = monoelement(ast, &atoms) else {
         return;
     };
@@ -370,7 +370,7 @@ mod tests {
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 1);
         let system = ast.aromatic_system(AromaticSystemId(0));
-        let atoms: Vec<AtomId> = system.atoms().collect();
+        let atoms: Vec<AtomId> = system.atom_ids().collect();
         assert_eq!(atoms.len(), 6);
         let aromatic_bond_count = ast
             .bonds()

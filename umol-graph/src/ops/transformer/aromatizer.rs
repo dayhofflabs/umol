@@ -134,7 +134,7 @@ mod tests {
             .unwrap();
         assert_eq!(ast.aromatic_systems().count(), 1);
         let view = ast.aromatic_system(AromaticSystemId(0));
-        let atoms: Vec<AtomId> = view.atoms().collect();
+        let atoms: Vec<AtomId> = view.atom_ids().collect();
         assert_eq!(atoms.len(), 6);
         let aromatic_bond_count = ast
             .bonds()

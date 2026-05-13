@@ -65,7 +65,7 @@ impl AromaticityValidator {
             .aromatic_systems()
             .iter()
             .map(|view| {
-                let mut atoms: Vec<AtomId> = view.atoms().collect();
+                let mut atoms: Vec<AtomId> = view.atom_ids().collect();
                 atoms.sort_unstable();
                 atoms
             })

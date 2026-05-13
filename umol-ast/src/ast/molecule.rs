@@ -297,99 +297,6 @@ impl MoleculeAst {
         self.noncovalent_bonds().get(idx)
     }
 
-    pub fn connecting_bond(&self, a: AtomId, b: AtomId) -> Option<BondId> {
-        self.graph
-            .find_edge(NodeId::from(a), NodeId::from(b))
-            .map(BondId::from)
-    }
-
-    pub fn connecting_dative_bond(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<DativeBondId> {
-        let atoms: HashSet<AtomId> = atoms.into_iter().collect();
-        let &first = atoms.iter().next()?;
-        self.dative_bonds_incident(first).find(|&idx| {
-            let v = self.dative_bond(idx);
-            let parts: HashSet<AtomId> = v.atoms().collect();
-            parts == atoms
-        })
-    }
-
-    pub fn connecting_noncovalent_bond(
-        &self,
-        a: AtomId,
-        b: AtomId,
-    ) -> Option<NoncovalentBondId> {
-        self.noncovalent_bonds_incident(a).find(|&idx| {
-            let v = self.noncovalent_bond(idx);
-            (v.atoms()[0] == a && v.atoms()[1] == b) || (v.atoms()[0] == b && v.atoms()[1] == a)
-        })
-    }
-
-    pub fn connecting_aromatic_system(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<AromaticSystemId> {
-        let atoms: HashSet<AtomId> = atoms.into_iter().collect();
-        let &first = atoms.iter().next()?;
-        self.aromatic_systems_incident(first).find(|&idx| {
-            let v = self.aromatic_system(idx);
-            let parts: HashSet<AtomId> = v.atoms().collect();
-            parts == atoms
-        })
-    }
-
-    pub fn connecting_multicenter_bond(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<MulticenterBondId> {
-        let atoms: HashSet<AtomId> = atoms.into_iter().collect();
-        let &first = atoms.iter().next()?;
-        self.multicenter_bonds_incident(first).find(|&idx| {
-            let v = self.multicenter_bond(idx);
-            let parts: HashSet<AtomId> = v.atoms().collect();
-            parts == atoms
-        })
-    }
-
-    pub fn dative_bonds_incident(&self, atom: AtomId) -> impl Iterator<Item = DativeBondId> + '_ {
-        self.dative_bonds
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| DativeBondId::from(rid))
-    }
-
-    pub fn aromatic_systems_incident(
-        &self,
-        atom: AtomId,
-    ) -> impl Iterator<Item = AromaticSystemId> + '_ {
-        self.aromatic_systems
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| AromaticSystemId::from(rid))
-    }
-
-    pub fn multicenter_bonds_incident(
-        &self,
-        atom: AtomId,
-    ) -> impl Iterator<Item = MulticenterBondId> + '_ {
-        self.multicenter_bonds
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| MulticenterBondId::from(rid))
-    }
-
-    pub fn noncovalent_bonds_incident(
-        &self,
-        atom: AtomId,
-    ) -> impl Iterator<Item = NoncovalentBondId> + '_ {
-        self.noncovalent_bonds
-            .incident(NodeId::from(atom))
-            .iter()
-            .map(|&rid| NoncovalentBondId::from(rid))
-    }
-
     pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeSubgraph {
         let keep: HashSet<AtomId> = atoms.iter().copied().collect();
         let remove_atoms: Vec<AtomId> = (0..self.atoms().count())
@@ -399,7 +306,7 @@ impl MoleculeAst {
         let remove_bonds: Vec<BondId> = self
             .bonds()
             .iter()
-            .filter(|b| !keep.contains(&b.atoms()[0]) || !keep.contains(&b.atoms()[1]))
+            .filter(|b| !keep.contains(&b.atom_ids()[0]) || !keep.contains(&b.atom_ids()[1]))
             .map(|b| b.id)
             .collect();
         let mut builder = self.edit();
@@ -440,71 +347,6 @@ impl MoleculeAst {
             multicenter_bond_map,
             noncovalent_bond_map,
         }
-    }
-
-    pub fn induced_bonds(&self, atoms: &[AtomId]) -> Vec<BondId> {
-        let mut nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        nodes.sort_unstable();
-        self.graph
-            .induced_edges(&nodes)
-            .map(BondId::from)
-            .collect()
-    }
-
-    pub fn induced_dative_bonds(&self, atoms: &[AtomId]) -> Vec<DativeBondId> {
-        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.dative_bonds
-            .relation_ids()
-            .filter(|&rid| {
-                self.dative_bonds
-                    .participants(rid)
-                    .iter()
-                    .all(|p| set.contains(p))
-            })
-            .map(DativeBondId::from)
-            .collect()
-    }
-
-    pub fn induced_aromatic_systems(&self, atoms: &[AtomId]) -> Vec<AromaticSystemId> {
-        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.aromatic_systems
-            .relation_ids()
-            .filter(|&rid| {
-                self.aromatic_systems
-                    .participants(rid)
-                    .iter()
-                    .all(|p| set.contains(p))
-            })
-            .map(AromaticSystemId::from)
-            .collect()
-    }
-
-    pub fn induced_multicenter_bonds(&self, atoms: &[AtomId]) -> Vec<MulticenterBondId> {
-        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.multicenter_bonds
-            .relation_ids()
-            .filter(|&rid| {
-                self.multicenter_bonds
-                    .participants(rid)
-                    .iter()
-                    .all(|p| set.contains(p))
-            })
-            .map(MulticenterBondId::from)
-            .collect()
-    }
-
-    pub fn induced_noncovalent_bonds(&self, atoms: &[AtomId]) -> Vec<NoncovalentBondId> {
-        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.noncovalent_bonds
-            .relation_ids()
-            .filter(|&rid| {
-                self.noncovalent_bonds
-                    .participants(rid)
-                    .iter()
-                    .all(|p| set.contains(p))
-            })
-            .map(NoncovalentBondId::from)
-            .collect()
     }
 
     pub fn is_ground(&self) -> bool {

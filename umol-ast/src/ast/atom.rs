@@ -463,6 +463,21 @@ impl From<ValueAst> for ImplicitHydrogensAst {
     }
 }
 
+impl From<ImplicitHydrogensAst> for ValueAst {
+    /// `Normal` (the "compute via valence model" placeholder) collapses to
+    /// `Undetermined`; all other variants pass through structurally.
+    fn from(h: ImplicitHydrogensAst) -> Self {
+        match h {
+            ImplicitHydrogensAst::Undetermined | ImplicitHydrogensAst::Normal => {
+                ValueAst::Undetermined
+            }
+            ImplicitHydrogensAst::Lit(n) => ValueAst::Lit(n),
+            ImplicitHydrogensAst::LitSet(s) => ValueAst::LitSet(s),
+            ImplicitHydrogensAst::Expr(e) => ValueAst::Expr(e),
+        }
+    }
+}
+
 impl From<i64> for ImplicitHydrogensAst {
     fn from(value: i64) -> Self {
         Self::Lit(value)

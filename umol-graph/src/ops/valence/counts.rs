@@ -9,7 +9,7 @@ use umol_ast::ast::{
 use umol_shared::element::Element;
 
 use crate::ops::valence::shared::{
-    aromatic_pi_pinned, atom_is_aromatic, atom_sigma_valence, charge_or_zero,
+    aromatic_pi_pinned, atom_is_aromatic, charge_or_zero,
     infer_normal_aromatic_implicit_hydrogens, lift_constraints, narrow_atom, try_build_candidate,
     AtomCandidate,
 };
@@ -50,7 +50,7 @@ impl CountsValenceResolver {
             let ElementAst::Lit(element) = view.ast.element else {
                 continue;
             };
-            let Some(valence) = atom_sigma_valence(&view) else {
+            let Some(valence) = view.valence().literal().and_then(|n| u8::try_from(n).ok()) else {
                 continue;
             };
 

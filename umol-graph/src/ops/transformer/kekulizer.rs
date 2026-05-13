@@ -120,8 +120,8 @@ impl Kekulizer {
         let mut plans = Vec::with_capacity(ast.aromatic_systems().count());
         for view in ast.aromatic_systems().iter() {
             let system_idx = view.id;
-            let atoms: Vec<AtomId> = view.atoms().collect();
-            let bonds: Vec<BondId> = view.bonds().collect();
+            let atoms: Vec<AtomId> = view.atom_ids().collect();
+            let bonds: Vec<BondId> = view.bond_ids().collect();
 
             let atom_to_node: HashMap<AtomId, u32> = atoms
                 .iter()
@@ -132,7 +132,7 @@ impl Kekulizer {
                 .iter()
                 .map(|&bid| {
                     let bond = ast.bond(bid);
-                    [atom_to_node[&bond.atoms()[0]], atom_to_node[&bond.atoms()[1]]]
+                    [atom_to_node[&bond.atom_ids()[0]], atom_to_node[&bond.atom_ids()[1]]]
                 })
                 .collect();
             let subgraph = Graph::new(atoms.len(), &local_edges);

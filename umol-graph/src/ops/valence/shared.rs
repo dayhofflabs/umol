@@ -149,7 +149,9 @@ fn atom_constraint_holds(
         AtomConstraint::AromaticValence(query) => {
             let actual_is_aromatic = atom_is_aromatic(view);
             let actual_pi: Option<u8> = if view.is_in_aromatic_system() {
-                view.aromatic_valence().and_then(|v| u8::try_from(v).ok())
+                view.aromatic_valence()
+                    .literal()
+                    .and_then(|n| u8::try_from(n).ok())
             } else {
                 aromatic_pi_pinned(view.ast)
             };
@@ -166,7 +168,8 @@ fn atom_constraint_holds(
         AtomConstraint::MulticenterValence(query) => {
             let actual = view
                 .multicenter_valence()
-                .and_then(|v| u8::try_from(v).ok());
+                .literal()
+                .and_then(|n| u8::try_from(n).ok());
             match query {
                 MulticenterValenceAst::NotMulticenter => actual == Some(0),
                 MulticenterValenceAst::Multicenter(ValueAst::Undetermined) => {
@@ -348,21 +351,17 @@ fn narrowable(existing: &AtomConstraint, new_c: &AtomConstraint) -> bool {
     )
 }
 
-/// σ-bond order sum, restricted to the value the legacy resolver used — the
-/// AtomView aggregate over neighbors. Returns `None` for non-ground bond
-/// orders.
-pub fn atom_sigma_valence(view: &AtomView<'_>) -> Option<u8> {
-    let v = view.valence()?;
-    u8::try_from(v).ok()
-}
-
 /// Donor/acceptor pair counts on incident dative bonds. Either component is
 /// `None` if any contributing dative's `order` is non-ground (or if the donor
 /// side aggregates over multi-donor datives, which have no per-atom share).
 pub fn atom_dative_counts(view: &AtomView<'_>) -> (Option<u8>, Option<u8>) {
     (
-        view.donated_pairs().and_then(|v| u8::try_from(v).ok()),
-        view.accepted_pairs().and_then(|v| u8::try_from(v).ok()),
+        view.donated_pairs()
+            .literal()
+            .and_then(|n| u8::try_from(n).ok()),
+        view.accepted_pairs()
+            .literal()
+            .and_then(|n| u8::try_from(n).ok()),
     )
 }
 

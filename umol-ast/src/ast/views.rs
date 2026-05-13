@@ -5,6 +5,7 @@
 //! types group per-relation accessors (`count`, `ids`, `iter`, `get`,
 //! and `Index`) without burying them on `MoleculeAst` itself.
 
+use std::collections::HashSet;
 use std::ops::Index;
 
 use umol_graph_core::{
@@ -13,6 +14,7 @@ use umol_graph_core::{
     MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, RelationId, ShortestCycleAlgorithm,
     SubgraphIsomorphismAlgorithm, VarRelationSet,
 };
+use umol_shared::element::Element;
 
 use super::automorphism::AtomAutomorphism;
 use super::matching::BondMatching;
@@ -142,74 +144,68 @@ impl<'a> AtomView<'a> {
         self.molecule.neighbors(self.id)
     }
 
-    /// Localized valence summed from incident bond orders. `None` if any incident
-    /// bond's order is not a non-negative `Lit`.
-    pub fn valence(&self) -> Option<u32> {
-        let mut sum: u32 = 0;
-        for n in self.molecule.neighbors(self.id) {
-            match n.ast.order {
-                ValueAst::Lit(v) if v >= 0 => sum += v as u32,
-                _ => return None,
-            }
-        }
-        Some(sum)
+    /// IDs of incident localized bonds, in iteration order of `neighbors`.
+    pub fn bond_ids(&self) -> impl Iterator<Item = BondId> + 'a {
+        self.molecule.neighbors(self.id).map(|n| n.bond)
+    }
+
+    /// Localized valence: sum of incident `Bond.order` values. Returns
+    /// `ValueAst::Lit(n)` when every incident bond order is `Lit`; collapses
+    /// to `Undetermined` if any bond order is non-`Lit`.
+    pub fn valence(&self) -> ValueAst {
+        self.neighbors()
+            .map(|n| n.ast.order.clone())
+            .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
 
     /// Sum of `order` over incident dative bonds where this atom is the sole
-    /// donor (i.e. the dative is single-donor). Multi-donor datives contribute
-    /// nothing per individual donor atom — the donated pair is collective and
-    /// has no well-defined per-atom share. `None` if any contributing dative's
-    /// `order` is not a non-negative `Lit`.
-    pub fn donated_pairs(&self) -> Option<u32> {
-        let mut sum: u32 = 0;
-        for id in self.molecule.dative_bonds_incident(self.id) {
-            let view = self.molecule.dative_bond(id);
-            let donors: Vec<_> = view.donors().collect();
-            if donors.len() != 1 || donors[0] != self.id {
+    /// donor (multi-donor datives contribute nothing per individual donor —
+    /// the donated pair is collective and has no well-defined per-atom
+    /// share). Returns `ValueAst::Lit(0)` when this atom donates to no
+    /// single-donor dative bonds; collapses to `Undetermined` if any
+    /// contributing dative's `order` is non-`Lit`.
+    pub fn donated_pairs(&self) -> ValueAst {
+        let mut sum = ValueAst::Lit(0);
+        for view in self.dative_bonds() {
+            let donor_ids: Vec<AtomId> = view.donor_ids().collect();
+            if donor_ids.len() != 1 || donor_ids[0] != self.id {
                 continue;
             }
-            match view.ast.order {
-                ValueAst::Lit(v) if v >= 0 => sum += v as u32,
-                _ => return None,
-            }
+            sum = sum + view.ast.order.clone();
         }
-        Some(sum)
+        sum
     }
 
     /// Sum of `order` over incident dative bonds where this atom is the
-    /// acceptor. `None` if any contributing dative's `order` is not a
-    /// non-negative `Lit`.
-    pub fn accepted_pairs(&self) -> Option<u32> {
-        let mut sum: u32 = 0;
-        for id in self.molecule.dative_bonds_incident(self.id) {
-            let view = self.molecule.dative_bond(id);
-            if view.acceptor != self.id {
+    /// acceptor. Returns `ValueAst::Lit(0)` when this atom is not an
+    /// acceptor; collapses to `Undetermined` if any contributing dative's
+    /// `order` is non-`Lit`.
+    pub fn accepted_pairs(&self) -> ValueAst {
+        let mut sum = ValueAst::Lit(0);
+        for view in self.dative_bonds() {
+            if view.acceptor_id != self.id {
                 continue;
             }
-            match view.ast.order {
-                ValueAst::Lit(v) if v >= 0 => sum += v as u32,
-                _ => return None,
-            }
+            sum = sum + view.ast.order.clone();
         }
-        Some(sum)
+        sum
     }
 
-    /// π contribution from the aromatic system this atom belongs to.
-    /// `Some(0)` if the atom is not in any aromatic system. `None` if the
-    /// recorded contribution is not a non-negative `Lit`.
-    ///
-    /// An atom belongs to at most one aromatic system; the first incident
-    /// system is consulted.
-    pub fn aromatic_valence(&self) -> Option<u32> {
-        let Some(sys_id) = self.molecule.aromatic_systems_incident(self.id).next() else {
-            return Some(0);
+    /// Electron contribution from the aromatic system this atom belongs to.
+    /// `ValueAst::Lit(0)` if the atom is not in any aromatic system;
+    /// `Undetermined` if the system's per-atom electron count is non-`Lit`.
+    pub fn aromatic_valence(&self) -> ValueAst {
+        let Some(sys) = self.aromatic_system() else {
+            return ValueAst::Lit(0);
         };
-        let view = self.molecule.aromatic_system(sys_id);
-        let pos = view.atoms().position(|a| a == self.id)?;
-        match view.ast.electrons.get(pos)? {
-            ValueAst::Lit(v) if *v >= 0 => Some(*v as u32),
-            _ => None,
-        }
+        let Some(pos) = sys.atom_ids().position(|a| a == self.id) else {
+            return ValueAst::Undetermined;
+        };
+        sys.ast
+            .electrons
+            .get(pos)
+            .cloned()
+            .unwrap_or(ValueAst::Undetermined)
     }
 
     pub fn is_in_aromatic_system(&self) -> bool {
@@ -220,31 +216,36 @@ impl<'a> AtomView<'a> {
     /// design an atom belongs to at most one aromatic system; this
     /// returns the first incident system.
     pub fn aromatic_system(&self) -> Option<AromaticSystemView<'a>> {
-        self.molecule
-            .aromatic_systems_incident(self.id)
-            .next()
+        self.aromatic_system_id()
             .map(|id| self.molecule.aromatic_system(id))
     }
 
+    pub fn aromatic_system_id(&self) -> Option<AromaticSystemId> {
+        self.molecule.aromatic_systems().incident_ids(self.id).next()
+    }
+
     pub fn dative_bonds(&self) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
-        let molecule = self.molecule;
-        molecule
-            .dative_bonds_incident(self.id)
-            .map(move |id| molecule.dative_bond(id))
+        self.molecule.dative_bonds().incident(self.id)
+    }
+
+    pub fn dative_bond_ids(&self) -> impl Iterator<Item = DativeBondId> + 'a {
+        self.molecule.dative_bonds().incident_ids(self.id)
     }
 
     pub fn multicenter_bonds(&self) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
-        let molecule = self.molecule;
-        molecule
-            .multicenter_bonds_incident(self.id)
-            .map(move |id| molecule.multicenter_bond(id))
+        self.molecule.multicenter_bonds().incident(self.id)
+    }
+
+    pub fn multicenter_bond_ids(&self) -> impl Iterator<Item = MulticenterBondId> + 'a {
+        self.molecule.multicenter_bonds().incident_ids(self.id)
     }
 
     pub fn noncovalent_bonds(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
-        let molecule = self.molecule;
-        molecule
-            .noncovalent_bonds_incident(self.id)
-            .map(move |id| molecule.noncovalent_bond(id))
+        self.molecule.noncovalent_bonds().incident(self.id)
+    }
+
+    pub fn noncovalent_bond_ids(&self) -> impl Iterator<Item = NoncovalentBondId> + 'a {
+        self.molecule.noncovalent_bonds().incident_ids(self.id)
     }
 
     /// True if this atom participates in any of the four overlay relations
@@ -287,18 +288,145 @@ impl<'a> AtomView<'a> {
     }
 
     /// Sum of per-atom contributions across incident multicenter bonds.
-    /// `None` if any contribution is not a non-negative `Lit`.
-    pub fn multicenter_valence(&self) -> Option<u32> {
-        let mut sum: u32 = 0;
-        for mc_id in self.molecule.multicenter_bonds_incident(self.id) {
-            let view = self.molecule.multicenter_bond(mc_id);
-            let pos = view.atoms().position(|a| a == self.id)?;
-            match view.ast.electrons.get(pos)? {
-                ValueAst::Lit(v) if *v >= 0 => sum += *v as u32,
-                _ => return None,
-            }
+    /// `ValueAst::Lit(0)` when not in any multicenter bond; collapses to
+    /// `Undetermined` if any contribution is non-`Lit`.
+    pub fn multicenter_valence(&self) -> ValueAst {
+        let mut sum = ValueAst::Lit(0);
+        for view in self.multicenter_bonds() {
+            let Some(pos) = view.atom_ids().position(|a| a == self.id) else {
+                return ValueAst::Undetermined;
+            };
+            let term = view
+                .ast
+                .electrons
+                .get(pos)
+                .cloned()
+                .unwrap_or(ValueAst::Undetermined);
+            sum = sum + term;
         }
-        Some(sum)
+        sum
+    }
+
+    /// Count of incident localized bonds, each weighted 1. Always `Lit`.
+    pub fn degree(&self) -> ValueAst {
+        ValueAst::Lit(self.neighbors().count() as i64)
+    }
+
+    /// `degree` + `implicit_hydrogens` + `multicenter_degree`. Collapses to
+    /// `Undetermined` if any term is non-`Lit`.
+    pub fn total_degree(&self) -> ValueAst {
+        self.degree()
+            + ValueAst::from(self.ast.implicit_hydrogens.clone())
+            + self.multicenter_degree()
+    }
+
+    /// Count of incident localized bonds whose neighbor is not a literal
+    /// hydrogen atom (Element::H). Always `Lit`; non-`Lit` neighbor
+    /// elements count as heavy (i.e., not filtered out).
+    pub fn heavy_atom_degree(&self) -> ValueAst {
+        let count = self
+            .neighbors()
+            .filter(|n| {
+                !matches!(
+                    self.molecule.atom(n.atom).ast.element,
+                    ElementAst::Lit(Element::H),
+                )
+            })
+            .count();
+        ValueAst::Lit(count as i64)
+    }
+
+    /// `valence` over incident bonds whose neighbor is not a literal
+    /// hydrogen. Collapses to `Undetermined` if any contributing bond order
+    /// is non-`Lit`.
+    pub fn heavy_atom_valence(&self) -> ValueAst {
+        self.neighbors()
+            .filter(|n| {
+                !matches!(
+                    self.molecule.atom(n.atom).ast.element,
+                    ElementAst::Lit(Element::H),
+                )
+            })
+            .map(|n| n.ast.order.clone())
+            .fold(ValueAst::Lit(0), |acc, order| acc + order)
+    }
+
+    /// Explicit hydrogens (incident neighbors with `Element::H`) plus
+    /// `implicit_hydrogens`. Collapses to `Undetermined` if `implicit_hydrogens`
+    /// is non-`Lit` (including `Normal`).
+    pub fn total_hydrogens(&self) -> ValueAst {
+        let explicit = self
+            .neighbors()
+            .filter(|n| {
+                matches!(
+                    self.molecule.atom(n.atom).ast.element,
+                    ElementAst::Lit(Element::H),
+                )
+            })
+            .count() as i64;
+        ValueAst::Lit(explicit) + ValueAst::from(self.ast.implicit_hydrogens.clone())
+    }
+
+    /// Full electron-sharing sum at this atom:
+    /// `valence + implicit_hydrogens + aromatic_valence + multicenter_valence`.
+    /// Diverges from SMARTS `v<n>` for aromatic lone-pair donors (pyrrole N,
+    /// furan O) which contribute the donated pair via `aromatic_valence`.
+    pub fn total_valence(&self) -> ValueAst {
+        self.valence()
+            + ValueAst::from(self.ast.implicit_hydrogens.clone())
+            + self.aromatic_valence()
+            + self.multicenter_valence()
+    }
+
+    /// Count of multicenter co-participants across all incident multicenter
+    /// bonds. Per the no-overlap structural rule these are not localized-
+    /// bond neighbors. Always `Lit`.
+    pub fn multicenter_degree(&self) -> ValueAst {
+        let count: usize = self
+            .multicenter_bonds()
+            .map(|mc| mc.ast.electrons.len().saturating_sub(1))
+            .sum();
+        ValueAst::Lit(count as i64)
+    }
+
+    /// Count of canonical rings (Vismara / max ring size 22) containing
+    /// this atom. Always `Lit`.
+    pub fn ring_count(&self) -> ValueAst {
+        ValueAst::Lit(self.rings().count() as i64)
+    }
+
+    /// Sizes of canonical rings containing this atom, in iteration order.
+    /// Multi-valued: an atom in fused rings yields one size per ring.
+    pub fn ring_size(&self) -> impl Iterator<Item = usize> + 'a {
+        self.rings().map(|r| r.len())
+    }
+
+    /// Smallest containing canonical ring size, or `None` if not in any
+    /// ring. Chemistry-classification helper; not the constraint
+    /// counterpart of `RingSize` (which uses interpretation B — "in some
+    /// ring of size n").
+    pub fn smallest_ring_size(&self) -> Option<usize> {
+        self.ring_size().min()
+    }
+
+    /// Count of incident bonds that participate in any canonical ring.
+    /// Always `Lit`.
+    pub fn ring_degree(&self) -> ValueAst {
+        let count = self
+            .neighbors()
+            .filter(|n| self.molecule.bond(n.bond).is_in_ring())
+            .count();
+        ValueAst::Lit(count as i64)
+    }
+
+    /// Sum of bond orders of incident bonds that participate in any
+    /// canonical ring. Collapses to `Undetermined` if any contributing
+    /// bond's `order` is non-`Lit`.
+    pub fn ring_valence(&self) -> ValueAst {
+        self.neighbors()
+            .filter(|n| self.molecule.bond(n.bond).is_in_ring())
+            .map(|n| n.ast.order.clone())
+            .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
 }
 
@@ -353,6 +481,35 @@ impl<'a> BondViews<'a> {
             molecule: self.molecule,
         }
     }
+
+    /// ID of the bond between `a` and `b`, if any.
+    pub fn connecting_id(&self, a: AtomId, b: AtomId) -> Option<BondId> {
+        self.molecule
+            .raw_graph()
+            .find_edge(NodeId::from(a), NodeId::from(b))
+            .map(BondId::from)
+    }
+
+    /// View of the bond between `a` and `b`, if any.
+    pub fn connecting(&self, a: AtomId, b: AtomId) -> Option<BondView<'a>> {
+        self.connecting_id(a, b).map(|id| self.get(id))
+    }
+
+    /// IDs of bonds whose both endpoints lie in `atoms`.
+    pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<BondId> {
+        let mut nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
+        nodes.sort_unstable();
+        self.molecule
+            .raw_graph()
+            .induced_edges(&nodes)
+            .map(BondId::from)
+            .collect()
+    }
+
+    /// Views of bonds whose both endpoints lie in `atoms`.
+    pub fn induced(&self, atoms: &[AtomId]) -> Vec<BondView<'a>> {
+        self.induced_ids(atoms).into_iter().map(|id| self.get(id)).collect()
+    }
 }
 
 impl<'a> Index<BondId> for BondViews<'a> {
@@ -392,9 +549,16 @@ impl<'a> BondView<'a> {
         &self.ast.constraints
     }
 
-    /// The two atoms incident to this bond.
-    pub fn atoms(&self) -> [AtomId; 2] {
+    /// The two atom indices incident to this bond.
+    pub fn atom_ids(&self) -> [AtomId; 2] {
         self.atoms
+    }
+
+    /// Views of the two atoms incident to this bond.
+    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+        let molecule = self.molecule;
+        let [a, b] = self.atoms;
+        [a, b].into_iter().map(move |id| molecule.atom(id))
     }
 
     /// The aromatic system this bond participates in, if any. A bond is in
@@ -402,9 +566,9 @@ impl<'a> BondView<'a> {
     pub fn aromatic_system(&self) -> Option<AromaticSystemView<'a>> {
         let [a, b] = self.atoms;
         self.molecule
-            .aromatic_systems_incident(a)
-            .map(|id| self.molecule.aromatic_system(id))
-            .find(|sys| sys.atoms().any(|x| x == b))
+            .aromatic_systems()
+            .incident(a)
+            .find(|sys| sys.atom_ids().any(|x| x == b))
     }
 
     pub fn is_in_aromatic_system(&self) -> bool {
@@ -437,6 +601,19 @@ impl<'a> BondView<'a> {
     pub fn rings_from<'r>(&self, rings: &'r RingSet) -> impl Iterator<Item = RingView<'r>> + 'r {
         let id = self.id;
         rings.iter().filter(move |v| v.bonds().contains(&id))
+    }
+
+    /// Count of canonical rings (Vismara / max ring size 22) containing
+    /// this bond. Always `Lit`.
+    pub fn ring_count(&self) -> ValueAst {
+        ValueAst::Lit(self.rings().count() as i64)
+    }
+
+    /// Sizes of canonical rings containing this bond, in iteration order.
+    /// Multi-valued: a bond shared between fused rings yields one size per
+    /// ring.
+    pub fn ring_size(&self) -> impl Iterator<Item = usize> + 'a {
+        self.rings().map(|r| r.len())
     }
 }
 
@@ -485,11 +662,11 @@ impl<'a> DativeBondViews<'a> {
         set.relation_ids().map(move |rid| {
             let atoms = set.participants(rid);
             let ast = set.data(rid);
-            let acceptor = AtomId::from(atoms[ast.acceptor_slot as usize]);
+            let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
             DativeBondView {
                 id: DativeBondId::from(rid),
                 ast,
-                acceptor,
+                acceptor_id,
                 atoms,
                 molecule,
             }
@@ -500,14 +677,80 @@ impl<'a> DativeBondViews<'a> {
         let rid = RelationId::from(id);
         let atoms = self.set.participants(rid);
         let ast = self.set.data(rid);
-        let acceptor = AtomId::from(atoms[ast.acceptor_slot as usize]);
+        let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
         DativeBondView {
             id,
             ast,
-            acceptor,
+            acceptor_id,
             atoms,
             molecule: self.molecule,
         }
+    }
+
+    /// IDs of dative bonds incident on `atom`.
+    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = DativeBondId> + 'a {
+        self.set
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&rid| DativeBondId::from(rid))
+    }
+
+    /// Views of dative bonds incident on `atom`.
+    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.set;
+        self.incident_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            let atoms = set.participants(rid);
+            let ast = set.data(rid);
+            let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
+            DativeBondView { id, ast, acceptor_id, atoms, molecule }
+        })
+    }
+
+    /// ID of the dative bond whose participant set equals `atoms`, if any.
+    pub fn connecting_id(
+        &self,
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<DativeBondId> {
+        let target: HashSet<AtomId> = atoms.into_iter().collect();
+        let &first = target.iter().next()?;
+        self.incident_ids(first).find(|&id| {
+            let parts: HashSet<AtomId> =
+                self.set.participants(RelationId::from(id))
+                    .iter()
+                    .map(|&n| AtomId::from(n))
+                    .collect();
+            parts == target
+        })
+    }
+
+    /// View of the dative bond whose participant set equals `atoms`, if any.
+    pub fn connecting(
+        &self,
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<DativeBondView<'a>> {
+        self.connecting_id(atoms).map(|id| self.get(id))
+    }
+
+    /// IDs of dative bonds whose participants all lie in `atoms`.
+    pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<DativeBondId> {
+        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
+        self.set
+            .relation_ids()
+            .filter(|&rid| {
+                self.set
+                    .participants(rid)
+                    .iter()
+                    .all(|p| set.contains(p))
+            })
+            .map(DativeBondId::from)
+            .collect()
+    }
+
+    /// Views of dative bonds whose participants all lie in `atoms`.
+    pub fn induced(&self, atoms: &[AtomId]) -> Vec<DativeBondView<'a>> {
+        self.induced_ids(atoms).into_iter().map(|id| self.get(id)).collect()
     }
 }
 
@@ -524,10 +767,9 @@ impl<'a> Index<DativeBondId> for DativeBondViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct DativeBondView<'a> {
     pub id: DativeBondId,
-    pub acceptor: AtomId,
+    pub acceptor_id: AtomId,
     atoms: &'a [NodeId],
     pub ast: &'a DativeBondAst,
-    #[allow(dead_code)]
     molecule: &'a MoleculeAst,
 }
 
@@ -548,18 +790,41 @@ impl<'a> DativeBondView<'a> {
     }
 
     /// All atoms in this dative bond (donors + acceptor), sorted by `AtomId`.
-    pub fn atoms(&self) -> impl Iterator<Item = AtomId> + '_ {
+    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 
-    /// Donor atoms (participants minus the acceptor slot).
-    pub fn donors(&self) -> impl Iterator<Item = AtomId> + '_ {
+    /// Views of all atoms in this dative bond (donors + acceptor).
+    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+        let molecule = self.molecule;
+        self.atoms
+            .iter()
+            .map(move |&n| molecule.atom(AtomId::from(n)))
+    }
+
+    /// Donor atom ids (participants minus the acceptor slot).
+    pub fn donor_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         let acceptor_slot = self.ast.acceptor_slot as usize;
         self.atoms
             .iter()
             .enumerate()
             .filter(move |(i, _)| *i != acceptor_slot)
             .map(|(_, &n)| AtomId::from(n))
+    }
+
+    /// Donor atom views (participants minus the acceptor slot).
+    pub fn donors(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+        let molecule = self.molecule;
+        self.donor_ids().map(move |id| molecule.atom(id))
+    }
+
+    /// View of the acceptor atom.
+    pub fn acceptor(&self) -> AtomView<'a> {
+        self.molecule.atom(self.acceptor_id)
+    }
+
+    pub fn atom_count(&self) -> usize {
+        self.atoms.len()
     }
 }
 
@@ -603,6 +868,69 @@ impl<'a> AromaticSystemViews<'a> {
             molecule: self.molecule,
         }
     }
+
+    /// IDs of aromatic systems incident on `atom`.
+    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = AromaticSystemId> + 'a {
+        self.set
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&rid| AromaticSystemId::from(rid))
+    }
+
+    /// Views of aromatic systems incident on `atom`.
+    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = AromaticSystemView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.set;
+        self.incident_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            AromaticSystemView { id, ast: set.data(rid), atoms: set.participants(rid), molecule }
+        })
+    }
+
+    /// ID of the aromatic system whose atom set equals `atoms`, if any.
+    pub fn connecting_id(
+        &self,
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<AromaticSystemId> {
+        let target: HashSet<AtomId> = atoms.into_iter().collect();
+        let &first = target.iter().next()?;
+        self.incident_ids(first).find(|&id| {
+            let parts: HashSet<AtomId> =
+                self.set.participants(RelationId::from(id))
+                    .iter()
+                    .map(|&n| AtomId::from(n))
+                    .collect();
+            parts == target
+        })
+    }
+
+    /// View of the aromatic system whose atom set equals `atoms`, if any.
+    pub fn connecting(
+        &self,
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<AromaticSystemView<'a>> {
+        self.connecting_id(atoms).map(|id| self.get(id))
+    }
+
+    /// IDs of aromatic systems whose atoms all lie in `atoms`.
+    pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<AromaticSystemId> {
+        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
+        self.set
+            .relation_ids()
+            .filter(|&rid| {
+                self.set
+                    .participants(rid)
+                    .iter()
+                    .all(|p| set.contains(p))
+            })
+            .map(AromaticSystemId::from)
+            .collect()
+    }
+
+    /// Views of aromatic systems whose atoms all lie in `atoms`.
+    pub fn induced(&self, atoms: &[AtomId]) -> Vec<AromaticSystemView<'a>> {
+        self.induced_ids(atoms).into_iter().map(|id| self.get(id)).collect()
+    }
 }
 
 impl<'a> Index<AromaticSystemId> for AromaticSystemViews<'a> {
@@ -644,15 +972,92 @@ impl<'a> AromaticSystemView<'a> {
         &self.ast.constraints
     }
 
-    pub fn atoms(&self) -> impl Iterator<Item = AtomId> + '_ {
+    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 
-    pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+        let molecule = self.molecule;
+        self.atoms
+            .iter()
+            .map(move |&n| molecule.atom(AtomId::from(n)))
+    }
+
+    pub fn bond_ids(&self) -> impl Iterator<Item = BondId> + 'a {
         self.molecule
             .raw_graph()
             .induced_edges(self.atoms)
             .map(BondId::from)
+    }
+
+    pub fn bonds(&self) -> impl Iterator<Item = BondView<'a>> + 'a {
+        let molecule = self.molecule;
+        self.molecule
+            .raw_graph()
+            .induced_edges(self.atoms)
+            .map(move |edge| molecule.bond(BondId::from(edge)))
+    }
+
+    /// Sum of per-atom electron contributions on this aromatic system.
+    /// `Lit(n)` when every entry is `Lit`; collapses to `Undetermined` if
+    /// any entry is non-`Lit`.
+    pub fn electron_count(&self) -> ValueAst {
+        self.ast
+            .electrons
+            .iter()
+            .cloned()
+            .fold(ValueAst::Lit(0), |acc, e| acc + e)
+    }
+
+    pub fn atom_count(&self) -> usize {
+        self.atoms.len()
+    }
+
+    pub fn bond_count(&self) -> usize {
+        self.bond_ids().count()
+    }
+
+    /// Atom views for atoms in this system that also appear in `subset`.
+    pub fn overlapping_atoms<'s>(
+        &self,
+        subset: &'s [AtomId],
+    ) -> impl Iterator<Item = AtomView<'a>> + 's
+    where
+        'a: 's,
+    {
+        let molecule = self.molecule;
+        self.atoms
+            .iter()
+            .map(|&n| AtomId::from(n))
+            .filter(move |a| subset.contains(a))
+            .map(move |id| molecule.atom(id))
+    }
+
+    /// Bond views for bonds in this system that also appear in `subset`.
+    pub fn overlapping_bonds<'s>(
+        &self,
+        subset: &'s [BondId],
+    ) -> impl Iterator<Item = BondView<'a>> + 's
+    where
+        'a: 's,
+    {
+        let molecule = self.molecule;
+        self.molecule
+            .raw_graph()
+            .induced_edges(self.atoms)
+            .map(BondId::from)
+            .filter(move |b| subset.contains(b))
+            .map(move |id| molecule.bond(id))
+    }
+
+    /// Rings from the molecule's canonical `RingSet` that share at least
+    /// one atom with this aromatic system.
+    pub fn overlapping_rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
+        let atoms: Vec<AtomId> = self.atoms.iter().map(|&n| AtomId::from(n)).collect();
+        self.molecule
+            .rings()
+            .iter()
+            .filter(move |r| r.atoms().iter().any(|a| atoms.contains(a)))
     }
 }
 
@@ -696,6 +1101,69 @@ impl<'a> MulticenterBondViews<'a> {
             molecule: self.molecule,
         }
     }
+
+    /// IDs of multicenter bonds incident on `atom`.
+    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = MulticenterBondId> + 'a {
+        self.set
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&rid| MulticenterBondId::from(rid))
+    }
+
+    /// Views of multicenter bonds incident on `atom`.
+    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.set;
+        self.incident_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            MulticenterBondView { id, ast: set.data(rid), atoms: set.participants(rid), molecule }
+        })
+    }
+
+    /// ID of the multicenter bond whose participant set equals `atoms`, if any.
+    pub fn connecting_id(
+        &self,
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<MulticenterBondId> {
+        let target: HashSet<AtomId> = atoms.into_iter().collect();
+        let &first = target.iter().next()?;
+        self.incident_ids(first).find(|&id| {
+            let parts: HashSet<AtomId> =
+                self.set.participants(RelationId::from(id))
+                    .iter()
+                    .map(|&n| AtomId::from(n))
+                    .collect();
+            parts == target
+        })
+    }
+
+    /// View of the multicenter bond whose participant set equals `atoms`, if any.
+    pub fn connecting(
+        &self,
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<MulticenterBondView<'a>> {
+        self.connecting_id(atoms).map(|id| self.get(id))
+    }
+
+    /// IDs of multicenter bonds whose participants all lie in `atoms`.
+    pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<MulticenterBondId> {
+        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
+        self.set
+            .relation_ids()
+            .filter(|&rid| {
+                self.set
+                    .participants(rid)
+                    .iter()
+                    .all(|p| set.contains(p))
+            })
+            .map(MulticenterBondId::from)
+            .collect()
+    }
+
+    /// Views of multicenter bonds whose participants all lie in `atoms`.
+    pub fn induced(&self, atoms: &[AtomId]) -> Vec<MulticenterBondView<'a>> {
+        self.induced_ids(atoms).into_iter().map(|id| self.get(id)).collect()
+    }
 }
 
 impl<'a> Index<MulticenterBondId> for MulticenterBondViews<'a> {
@@ -737,8 +1205,46 @@ impl<'a> MulticenterBondView<'a> {
         &self.ast.constraints
     }
 
-    pub fn atoms(&self) -> impl Iterator<Item = AtomId> + '_ {
+    pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         self.atoms.iter().map(|&n| AtomId::from(n))
+    }
+
+    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+        let molecule = self.molecule;
+        self.atoms
+            .iter()
+            .map(move |&n| molecule.atom(AtomId::from(n)))
+    }
+
+    /// Sum of per-atom electron contributions on this multicenter bond.
+    /// `Lit(n)` when every entry is `Lit`; collapses to `Undetermined` if
+    /// any entry is non-`Lit`.
+    pub fn electron_count(&self) -> ValueAst {
+        self.ast
+            .electrons
+            .iter()
+            .cloned()
+            .fold(ValueAst::Lit(0), |acc, e| acc + e)
+    }
+
+    pub fn atom_count(&self) -> usize {
+        self.atoms.len()
+    }
+
+    /// Atom views for atoms in this multicenter bond that also appear in `subset`.
+    pub fn overlapping_atoms<'s>(
+        &self,
+        subset: &'s [AtomId],
+    ) -> impl Iterator<Item = AtomView<'a>> + 's
+    where
+        'a: 's,
+    {
+        let molecule = self.molecule;
+        self.atoms
+            .iter()
+            .map(|&n| AtomId::from(n))
+            .filter(move |a| subset.contains(a))
+            .map(move |id| molecule.atom(id))
     }
 }
 
@@ -789,6 +1295,65 @@ impl<'a> NoncovalentBondViews<'a> {
             molecule: self.molecule,
         }
     }
+
+    /// IDs of noncovalent bonds incident on `atom`.
+    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = NoncovalentBondId> + 'a {
+        self.set
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&rid| NoncovalentBondId::from(rid))
+    }
+
+    /// Views of noncovalent bonds incident on `atom`.
+    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.set;
+        self.incident_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            let parts = set.participants(rid);
+            NoncovalentBondView {
+                id,
+                ast: set.data(rid),
+                atoms: [AtomId::from(parts[0]), AtomId::from(parts[1])],
+                molecule,
+            }
+        })
+    }
+
+    /// ID of the noncovalent bond between `a` and `b`, if any.
+    pub fn connecting_id(&self, a: AtomId, b: AtomId) -> Option<NoncovalentBondId> {
+        self.incident_ids(a).find(|&id| {
+            let parts = self.set.participants(RelationId::from(id));
+            let x = AtomId::from(parts[0]);
+            let y = AtomId::from(parts[1]);
+            (x == a && y == b) || (x == b && y == a)
+        })
+    }
+
+    /// View of the noncovalent bond between `a` and `b`, if any.
+    pub fn connecting(&self, a: AtomId, b: AtomId) -> Option<NoncovalentBondView<'a>> {
+        self.connecting_id(a, b).map(|id| self.get(id))
+    }
+
+    /// IDs of noncovalent bonds whose endpoints both lie in `atoms`.
+    pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<NoncovalentBondId> {
+        let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
+        self.set
+            .relation_ids()
+            .filter(|&rid| {
+                self.set
+                    .participants(rid)
+                    .iter()
+                    .all(|p| set.contains(p))
+            })
+            .map(NoncovalentBondId::from)
+            .collect()
+    }
+
+    /// Views of noncovalent bonds whose endpoints both lie in `atoms`.
+    pub fn induced(&self, atoms: &[AtomId]) -> Vec<NoncovalentBondView<'a>> {
+        self.induced_ids(atoms).into_iter().map(|id| self.get(id)).collect()
+    }
 }
 
 impl<'a> Index<NoncovalentBondId> for NoncovalentBondViews<'a> {
@@ -804,7 +1369,6 @@ pub struct NoncovalentBondView<'a> {
     pub id: NoncovalentBondId,
     atoms: [AtomId; 2],
     pub ast: &'a NoncovalentBondAst,
-    #[allow(dead_code)]
     molecule: &'a MoleculeAst,
 }
 
@@ -819,9 +1383,15 @@ impl<'a> NoncovalentBondView<'a> {
         &self.ast.constraints
     }
 
-    /// The two atoms in this noncovalent interaction.
-    pub fn atoms(&self) -> [AtomId; 2] {
+    /// The two atom ids in this noncovalent interaction.
+    pub fn atom_ids(&self) -> [AtomId; 2] {
         self.atoms
+    }
+
+    /// Views of the two atoms in this noncovalent interaction.
+    pub fn atoms(&self) -> [AtomView<'a>; 2] {
+        let [a, b] = self.atoms;
+        [self.molecule.atom(a), self.molecule.atom(b)]
     }
 }
 
@@ -1125,19 +1695,37 @@ mod tests {
     }
 
     #[rstest]
-    #[case::no_incident(AtomId(3), Some(0))]
-    #[case::single(AtomId(0), Some(1))]
-    #[case::three_around_center(AtomId(1), Some(3))]
-    #[case::double(AtomId(2), Some(2))]
-    fn test_atom_view_valence(#[case] center: AtomId, #[case] expected: Option<u32>) {
-        let molecule = mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#);
+    #[case::no_incident(
+        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        AtomId(3),
+        ValueAst::Lit(0),
+    )]
+    #[case::single(
+        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(1),
+    )]
+    #[case::three_around_center(
+        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        AtomId(1),
+        ValueAst::Lit(3),
+    )]
+    #[case::double(
+        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        AtomId(2),
+        ValueAst::Lit(2),
+    )]
+    #[case::undetermined_bond(
+        mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0),
+        ValueAst::Undetermined,
+    )]
+    fn test_atom_view_valence(
+        #[case] molecule: MoleculeAst,
+        #[case] center: AtomId,
+        #[case] expected: ValueAst,
+    ) {
         assert_eq!(molecule.atom(center).valence(), expected);
-    }
-
-    #[rstest]
-    fn test_atom_view_valence_undetermined() {
-        let molecule = mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#);
-        assert_eq!(molecule.atom(AtomId(0)).valence(), None);
     }
 
     #[rstest]
@@ -1156,9 +1744,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::donor(AtomId(0), Some(1))]
-    #[case::acceptor(AtomId(1), Some(0))]
-    fn test_atom_view_donated_pairs(#[case] atom: AtomId, #[case] expected: Option<u32>) {
+    #[case::donor(AtomId(0), ValueAst::Lit(1))]
+    #[case::acceptor(AtomId(1), ValueAst::Lit(0))]
+    fn test_atom_view_donated_pairs(#[case] atom: AtomId, #[case] expected: ValueAst) {
         let molecule = MoleculeAst::from_parts(
             vec![
                 AtomAst::from_element(Element::N),
@@ -1186,9 +1774,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::donor(AtomId(0), Some(0))]
-    #[case::acceptor(AtomId(1), Some(1))]
-    fn test_atom_view_accepted_pairs(#[case] atom: AtomId, #[case] expected: Option<u32>) {
+    #[case::donor(AtomId(0), ValueAst::Lit(0))]
+    #[case::acceptor(AtomId(1), ValueAst::Lit(1))]
+    fn test_atom_view_accepted_pairs(#[case] atom: AtomId, #[case] expected: ValueAst) {
         let molecule = MoleculeAst::from_parts(
             vec![
                 AtomAst::from_element(Element::N),
@@ -1216,34 +1804,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::lit(ValueAst::Lit(2), Some(2))]
-    #[case::undetermined(ValueAst::Undetermined, None)]
-    fn test_atom_view_aromatic_valence(
-        #[case] entry: ValueAst,
-        #[case] expected: Option<u32>,
-    ) {
-        let molecule = MoleculeAst::from_parts(
-            vec![
-                AtomAst::from_element(Element::C),
-                AtomAst::from_element(Element::C),
-            ],
-            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
-            vec![],
-            vec![(
-                vec![AtomId(0), AtomId(1)],
-                AromaticSystemAst::new(vec![entry, ValueAst::Lit(1)]),
-            )],
-            vec![],
-            vec![],
-            Constraints::default(),
-        );
-        assert_eq!(molecule.atom(AtomId(0)).aromatic_valence(), expected);
-    }
-
-    #[rstest]
     fn test_atom_view_aromatic_valence_not_in_system() {
         let molecule = mol!(r#"{:atoms ["C"] :bonds []}"#);
-        assert_eq!(molecule.atom(AtomId(0)).aromatic_valence(), Some(0));
+        assert_eq!(molecule.atom(AtomId(0)).aromatic_valence(), ValueAst::Lit(0));
     }
 
     #[rstest]
@@ -1413,21 +1976,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::single_bond(vec![(vec![AtomId(0), AtomId(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)])], Some(2))]
+    #[case::single_bond(
+        vec![(vec![AtomId(0), AtomId(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)])],
+        ValueAst::Lit(2),
+    )]
     #[case::two_bonds(
         vec![
             (vec![AtomId(0), AtomId(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)]),
             (vec![AtomId(0), AtomId(2)], vec![ValueAst::Lit(1), ValueAst::Lit(1)]),
         ],
-        Some(3),
+        ValueAst::Lit(3),
     )]
     #[case::undetermined_aborts(
         vec![(vec![AtomId(0), AtomId(1)], vec![ValueAst::Undetermined, ValueAst::Lit(2)])],
-        None,
+        ValueAst::Undetermined,
     )]
     fn test_atom_view_multicenter_valence(
         #[case] bonds: Vec<(Vec<AtomId>, Vec<ValueAst>)>,
-        #[case] expected: Option<u32>,
+        #[case] expected: ValueAst,
     ) {
         let multicenter: Vec<_> = bonds
             .into_iter()
@@ -1462,6 +2028,207 @@ mod tests {
         );
     }
 
+    #[rstest]
+    #[case::ethane_carbon(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#), AtomId(0), ValueAst::Lit(1))]
+    #[case::ethene_carbon(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#), AtomId(0), ValueAst::Lit(1))]
+    #[case::three_bonds(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#), AtomId(0), ValueAst::Lit(3))]
+    fn test_atom_view_degree(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(mol.atom(atom).degree(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_total_degree() {
+        // Methane: 0 incident bonds in graph + implicit_h=4 + no multicenter.
+        let molecule = mol!(r#"{:atoms ["C#h4"] :bonds []}"#);
+        assert_eq!(
+            molecule.atom(AtomId(0)).total_degree(),
+            ValueAst::Lit(4),
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_total_degree_undetermined() {
+        // implicit_hydrogens = Normal (placeholder) collapses to Undetermined.
+        let molecule = mol!(r#"{:atoms ["C#h="] :bonds []}"#);
+        assert_eq!(
+            molecule.atom(AtomId(0)).total_degree(),
+            ValueAst::Undetermined,
+        );
+    }
+
+    #[rstest]
+    #[case::all_heavy(
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(2),
+    )]
+    #[case::one_h_neighbor(
+        mol!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(1),
+    )]
+    fn test_atom_view_heavy_atom_degree(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(mol.atom(atom).heavy_atom_degree(), expected);
+    }
+
+    #[rstest]
+    #[case::all_heavy(
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "2"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(3),
+    )]
+    #[case::skips_h(
+        mol!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "2"] [0 2 "1"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(2),
+    )]
+    fn test_atom_view_heavy_atom_valence(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(mol.atom(atom).heavy_atom_valence(), expected);
+    }
+
+    #[rstest]
+    #[case::implicit_only(
+        mol!(r#"{:atoms ["C#h4"] :bonds []}"#),
+        AtomId(0),
+        ValueAst::Lit(4),
+    )]
+    #[case::implicit_and_explicit(
+        mol!(r#"{:atoms ["C#h2" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(4),
+    )]
+    #[case::implicit_normal_collapses(
+        mol!(r#"{:atoms ["C#h="] :bonds []}"#),
+        AtomId(0),
+        ValueAst::Undetermined,
+    )]
+    fn test_atom_view_total_hydrogens(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(mol.atom(atom).total_hydrogens(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_total_valence_sum_of_terms() {
+        // Methane with implicit_h=4: valence=0, implicit=4, aromatic=0,
+        // multicenter=0 → total=4.
+        let molecule = mol!(r#"{:atoms ["C#h4"] :bonds []}"#);
+        assert_eq!(
+            molecule.atom(AtomId(0)).total_valence(),
+            ValueAst::Lit(4),
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_total_valence_implicit_normal_collapses() {
+        let molecule = mol!(r#"{:atoms ["C#h="] :bonds []}"#);
+        assert_eq!(
+            molecule.atom(AtomId(0)).total_valence(),
+            ValueAst::Undetermined,
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_multicenter_degree() {
+        // 3-atom multicenter bond: atom 0's multicenter_degree = co-participant
+        // count = 2.
+        let molecule = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::new(vec![
+                    ValueAst::Lit(2),
+                    ValueAst::Lit(2),
+                    ValueAst::Lit(2),
+                ]),
+            )],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(
+            molecule.atom(AtomId(0)).multicenter_degree(),
+            ValueAst::Lit(2),
+        );
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(1))]
+    #[case::ring_atom_alt(AtomId(3), ValueAst::Lit(1))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_atom_view_ring_count(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).ring_count(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), vec![6])]
+    #[case::chain_atom(AtomId(6), vec![])]
+    fn test_atom_view_ring_size(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<usize>,
+    ) {
+        let sizes: Vec<_> = ring_with_chain.atom(atom).ring_size().collect();
+        assert_eq!(sizes, expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), Some(6))]
+    #[case::chain_atom(AtomId(6), None)]
+    fn test_atom_view_smallest_ring_size(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Option<usize>,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).smallest_ring_size(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(2))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_atom_view_ring_degree(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).ring_degree(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(2))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_atom_view_ring_valence(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).ring_valence(), expected);
+    }
+
     // --- BondViews ---
 
     #[rstest]
@@ -1482,7 +2249,7 @@ mod tests {
         let collected: Vec<(BondId, [AtomId; 2], BondAst)> = molecule
             .bonds()
             .iter()
-            .map(|v| (v.id, v.atoms(), v.ast.clone()))
+            .map(|v| (v.id, v.atom_ids(), v.ast.clone()))
             .collect();
         assert_eq!(
             collected,
@@ -1498,7 +2265,7 @@ mod tests {
     fn test_bond_views_get(molecule: MoleculeAst) {
         let view = molecule.bonds().get(BondId(1));
         assert_eq!(view.id, BondId(1));
-        assert_eq!(view.atoms(), [AtomId(1), AtomId(2)]);
+        assert_eq!(view.atom_ids(), [AtomId(1), AtomId(2)]);
         assert_eq!(*view.ast, BondAst::from_order(2));
     }
 
@@ -1511,8 +2278,14 @@ mod tests {
     // --- BondView ---
 
     #[rstest]
+    fn test_bond_view_atom_ids(molecule: MoleculeAst) {
+        assert_eq!(molecule.bond(BondId(1)).atom_ids(), [AtomId(1), AtomId(2)]);
+    }
+
+    #[rstest]
     fn test_bond_view_atoms(molecule: MoleculeAst) {
-        assert_eq!(molecule.bond(BondId(1)).atoms(), [AtomId(1), AtomId(2)]);
+        let ids: Vec<AtomId> = molecule.bond(BondId(1)).atoms().map(|a| a.id).collect();
+        assert_eq!(ids, vec![AtomId(1), AtomId(2)]);
     }
 
     #[rstest]
@@ -1577,6 +2350,29 @@ mod tests {
         assert_eq!(count, expected_count);
     }
 
+    #[rstest]
+    #[case::ring_bond(BondId(0), ValueAst::Lit(1))]
+    #[case::chain_bond(BondId(6), ValueAst::Lit(0))]
+    fn test_bond_view_ring_count(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.bond(bond).ring_count(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_bond(BondId(0), vec![6])]
+    #[case::chain_bond(BondId(6), vec![])]
+    fn test_bond_view_ring_size(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: Vec<usize>,
+    ) {
+        let sizes: Vec<_> = ring_with_chain.bond(bond).ring_size().collect();
+        assert_eq!(sizes, expected);
+    }
+
     // --- DativeBondViews ---
 
     #[rstest]
@@ -1597,7 +2393,7 @@ mod tests {
         let collected: Vec<(DativeBondId, AtomId, DativeBondAst)> = molecule
             .dative_bonds()
             .iter()
-            .map(|v| (v.id, v.acceptor, v.ast.clone()))
+            .map(|v| (v.id, v.acceptor_id, v.ast.clone()))
             .collect();
         assert_eq!(
             collected,
@@ -1613,7 +2409,7 @@ mod tests {
     fn test_dative_bond_views_get(molecule: MoleculeAst) {
         let view = molecule.dative_bonds().get(DativeBondId(0));
         assert_eq!(view.id, DativeBondId(0));
-        assert_eq!(view.acceptor, AtomId(3));
+        assert_eq!(view.acceptor_id, AtomId(3));
     }
 
     #[rstest]
@@ -1625,30 +2421,63 @@ mod tests {
     // --- DativeBondView ---
 
     #[rstest]
-    fn test_dative_bond_view_atoms(molecule: MoleculeAst) {
+    fn test_dative_bond_view_atom_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
                 .dative_bond(DativeBondId(0))
-                .atoms()
+                .atom_ids()
                 .collect::<Vec<_>>(),
             vec![AtomId(2), AtomId(3)],
         );
     }
 
     #[rstest]
-    fn test_dative_bond_view_donors(molecule: MoleculeAst) {
+    fn test_dative_bond_view_donor_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
                 .dative_bond(DativeBondId(0))
-                .donors()
+                .donor_ids()
                 .collect::<Vec<_>>(),
             vec![AtomId(2)],
         );
     }
 
     #[rstest]
+    fn test_dative_bond_view_acceptor_id(molecule: MoleculeAst) {
+        assert_eq!(molecule.dative_bond(DativeBondId(0)).acceptor_id, AtomId(3));
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_atoms(molecule: MoleculeAst) {
+        let ids: Vec<AtomId> = molecule
+            .dative_bond(DativeBondId(0))
+            .atoms()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![AtomId(2), AtomId(3)]);
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_donors(molecule: MoleculeAst) {
+        let ids: Vec<AtomId> = molecule
+            .dative_bond(DativeBondId(0))
+            .donors()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![AtomId(2)]);
+    }
+
+    #[rstest]
     fn test_dative_bond_view_acceptor(molecule: MoleculeAst) {
-        assert_eq!(molecule.dative_bond(DativeBondId(0)).acceptor, AtomId(3));
+        assert_eq!(
+            molecule.dative_bond(DativeBondId(0)).acceptor().id,
+            AtomId(3),
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_atom_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.dative_bond(DativeBondId(0)).atom_count(), 2);
     }
 
     // --- AromaticSystemViews ---
@@ -1671,7 +2500,7 @@ mod tests {
         let collected: Vec<(AromaticSystemId, Vec<AtomId>)> = molecule
             .aromatic_systems()
             .iter()
-            .map(|v| (v.id, v.atoms().collect()))
+            .map(|v| (v.id, v.atom_ids().collect()))
             .collect();
         assert_eq!(
             collected,
@@ -1687,7 +2516,7 @@ mod tests {
         let view = molecule.aromatic_systems().get(AromaticSystemId(0));
         assert_eq!(view.id, AromaticSystemId(0));
         assert_eq!(
-            view.atoms().collect::<Vec<_>>(),
+            view.atom_ids().collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
         );
     }
@@ -1700,25 +2529,107 @@ mod tests {
     // --- AromaticSystemView ---
 
     #[rstest]
-    fn test_aromatic_system_view_atoms(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_atom_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
                 .aromatic_system(AromaticSystemId(0))
-                .atoms()
+                .atom_ids()
                 .collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
         );
     }
 
     #[rstest]
-    fn test_aromatic_system_view_bonds(molecule: MoleculeAst) {
+    fn test_aromatic_system_view_bond_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
                 .aromatic_system(AromaticSystemId(0))
-                .bonds()
+                .bond_ids()
                 .collect::<Vec<_>>(),
             vec![BondId(0), BondId(1)],
         );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_atoms(molecule: MoleculeAst) {
+        let ids: Vec<AtomId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .atoms()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![AtomId(0), AtomId(1), AtomId(2)]);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_bonds(molecule: MoleculeAst) {
+        let ids: Vec<BondId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .bonds()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![BondId(0), BondId(1)]);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_electron_count(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.aromatic_system(AromaticSystemId(0)).electron_count(),
+            ValueAst::Lit(0),
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_atom_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.aromatic_system(AromaticSystemId(0)).atom_count(), 3);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_bond_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.aromatic_system(AromaticSystemId(0)).bond_count(), 2);
+    }
+
+    #[rstest]
+    #[case::two_in(vec![AtomId(0), AtomId(1)], vec![AtomId(0), AtomId(1)])]
+    #[case::all_in(vec![AtomId(0), AtomId(1), AtomId(2)], vec![AtomId(0), AtomId(1), AtomId(2)])]
+    #[case::disjoint(vec![AtomId(3)], vec![])]
+    fn test_aromatic_system_view_overlapping_atoms(
+        molecule: MoleculeAst,
+        #[case] subset: Vec<AtomId>,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let ids: Vec<AtomId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .overlapping_atoms(&subset)
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::one(vec![BondId(0)], vec![BondId(0)])]
+    #[case::both(vec![BondId(0), BondId(1)], vec![BondId(0), BondId(1)])]
+    #[case::other(vec![BondId(2)], vec![])]
+    fn test_aromatic_system_view_overlapping_bonds(
+        molecule: MoleculeAst,
+        #[case] subset: Vec<BondId>,
+        #[case] expected: Vec<BondId>,
+    ) {
+        let ids: Vec<BondId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .overlapping_bonds(&subset)
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_overlapping_rings(molecule: MoleculeAst) {
+        let ids: Vec<usize> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .overlapping_rings()
+            .map(|r| r.len())
+            .collect();
+        assert_eq!(ids, Vec::<usize>::new());
     }
 
     // --- MulticenterBondViews ---
@@ -1741,7 +2652,7 @@ mod tests {
         let collected: Vec<(MulticenterBondId, Vec<AtomId>)> = molecule
             .multicenter_bonds()
             .iter()
-            .map(|v| (v.id, v.atoms().collect()))
+            .map(|v| (v.id, v.atom_ids().collect()))
             .collect();
         assert_eq!(
             collected,
@@ -1757,7 +2668,7 @@ mod tests {
         let view = molecule.multicenter_bonds().get(MulticenterBondId(0));
         assert_eq!(view.id, MulticenterBondId(0));
         assert_eq!(
-            view.atoms().collect::<Vec<_>>(),
+            view.atom_ids().collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
         );
     }
@@ -1770,14 +2681,57 @@ mod tests {
     // --- MulticenterBondView ---
 
     #[rstest]
-    fn test_multicenter_bond_view_atoms(molecule: MoleculeAst) {
+    fn test_multicenter_bond_view_atom_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
                 .multicenter_bond(MulticenterBondId(0))
-                .atoms()
+                .atom_ids()
                 .collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
         );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_view_atoms(molecule: MoleculeAst) {
+        let ids: Vec<AtomId> = molecule
+            .multicenter_bond(MulticenterBondId(0))
+            .atoms()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![AtomId(0), AtomId(1), AtomId(2)]);
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_view_electron_count(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.multicenter_bond(MulticenterBondId(0)).electron_count(),
+            ValueAst::Lit(0),
+        );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_view_atom_count(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.multicenter_bond(MulticenterBondId(0)).atom_count(),
+            3,
+        );
+    }
+
+    #[rstest]
+    #[case::two_in(vec![AtomId(0), AtomId(1)], vec![AtomId(0), AtomId(1)])]
+    #[case::all_in(vec![AtomId(0), AtomId(1), AtomId(2)], vec![AtomId(0), AtomId(1), AtomId(2)])]
+    #[case::disjoint(vec![AtomId(3)], vec![])]
+    fn test_multicenter_bond_view_overlapping_atoms(
+        molecule: MoleculeAst,
+        #[case] subset: Vec<AtomId>,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let ids: Vec<AtomId> = molecule
+            .multicenter_bond(MulticenterBondId(0))
+            .overlapping_atoms(&subset)
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, expected);
     }
 
     // --- NoncovalentBondViews ---
@@ -1800,7 +2754,7 @@ mod tests {
         let collected: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondAst)> = molecule
             .noncovalent_bonds()
             .iter()
-            .map(|v| (v.id, v.atoms(), v.ast.clone()))
+            .map(|v| (v.id, v.atom_ids(), v.ast.clone()))
             .collect();
         assert_eq!(
             collected,
@@ -1816,7 +2770,7 @@ mod tests {
     fn test_noncovalent_bond_views_get(molecule: MoleculeAst) {
         let view = molecule.noncovalent_bonds().get(NoncovalentBondId(0));
         assert_eq!(view.id, NoncovalentBondId(0));
-        assert_eq!(view.atoms(), [AtomId(0), AtomId(3)]);
+        assert_eq!(view.atom_ids(), [AtomId(0), AtomId(3)]);
     }
 
     #[rstest]
@@ -1827,13 +2781,22 @@ mod tests {
     // --- NoncovalentBondView ---
 
     #[rstest]
-    fn test_noncovalent_bond_view_atoms(molecule: MoleculeAst) {
+    fn test_noncovalent_bond_view_atom_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
                 .noncovalent_bond(NoncovalentBondId(0))
-                .atoms(),
+                .atom_ids(),
             [AtomId(0), AtomId(3)],
         );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_view_atoms(molecule: MoleculeAst) {
+        let ids = molecule
+            .noncovalent_bond(NoncovalentBondId(0))
+            .atoms()
+            .map(|v| v.id);
+        assert_eq!(ids, [AtomId(0), AtomId(3)]);
     }
 
     // --- NeighborView ---

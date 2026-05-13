@@ -746,8 +746,8 @@ fn render_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
         .iter()
         .map(|view| {
             let bond_edn = BondDsl::from_ref(view.ast).to_edn();
-            let a = render_atom_ref(view.atoms()[0], meta);
-            let b = render_atom_ref(view.atoms()[1], meta);
+            let a = render_atom_ref(view.atom_ids()[0], meta);
+            let b = render_atom_ref(view.atom_ids()[1], meta);
             match meta.bond_id(view.id) {
                 Some(id) => {
                     let mut m = EdnMap::with_capacity(4);
@@ -779,7 +779,7 @@ fn render_dative(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            let donors: Vec<AtomId> = view.donors().collect();
+            let donors: Vec<AtomId> = view.donor_ids().collect();
             let donor_edn = if donors.len() == 1 {
                 render_atom_ref(donors[0], meta)
             } else {
@@ -794,7 +794,7 @@ fn render_dative(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
             m.insert(Edn::keyword("donor"), donor_edn);
             m.insert(
                 Edn::keyword("acceptor"),
-                render_atom_ref(view.acceptor, meta),
+                render_atom_ref(view.acceptor_id, meta),
             );
             m.insert(
                 Edn::keyword("type"),
@@ -818,7 +818,7 @@ fn render_aromatic(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            let atoms: Vec<Edn<'static>> = view.atoms().map(|a| render_atom_ref(a, meta)).collect();
+            let atoms: Vec<Edn<'static>> = view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
             if !view.ast.electrons.is_empty() {
                 m.insert(
@@ -848,7 +848,7 @@ fn render_multicenter(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            let atoms: Vec<Edn<'static>> = view.atoms().map(|a| render_atom_ref(a, meta)).collect();
+            let atoms: Vec<Edn<'static>> = view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
             if !view.ast.electrons.is_empty() {
                 m.insert(
@@ -886,8 +886,9 @@ fn render_noncovalent(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            m.insert(Edn::keyword("a"), render_atom_ref(view.atoms()[0], meta));
-            m.insert(Edn::keyword("b"), render_atom_ref(view.atoms()[1], meta));
+            let [a, b] = view.atom_ids();
+            m.insert(Edn::keyword("a"), render_atom_ref(a, meta));
+            m.insert(Edn::keyword("b"), render_atom_ref(b, meta));
             m.insert(
                 Edn::keyword("type"),
                 NoncovalentBondDsl::from_ref(view.ast).to_edn(),
