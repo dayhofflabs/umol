@@ -57,51 +57,51 @@ impl ElectronInvariantValidator {
             };
             let valence_electrons = element.valence_electrons() as i64;
 
-            let valence: i64 = match (view.valence_constraint(), view.valence()) {
-                (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
-                (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
+            let valence: i64 = match (view.constraints().valence(), view.valence()) {
+                (ValueAst::Lit(v), _) if v >= 0 => v,
+                (ValueAst::Undetermined, Some(t)) => t as i64,
                 _ => {
                     any_undetermined = true;
                     continue;
                 }
             };
             let donated_pairs: i64 =
-                match (view.donated_pairs_constraint(), view.donated_pairs()) {
-                    (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
-                    (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
+                match (view.constraints().donated_pairs(), view.donated_pairs()) {
+                    (ValueAst::Lit(v), _) if v >= 0 => v,
+                    (ValueAst::Undetermined, Some(t)) => t as i64,
                     _ => {
                         any_undetermined = true;
                         continue;
                     }
                 };
             let accepted_pairs: i64 =
-                match (view.accepted_pairs_constraint(), view.accepted_pairs()) {
-                    (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
-                    (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
+                match (view.constraints().accepted_pairs(), view.accepted_pairs()) {
+                    (ValueAst::Lit(v), _) if v >= 0 => v,
+                    (ValueAst::Undetermined, Some(t)) => t as i64,
                     _ => {
                         any_undetermined = true;
                         continue;
                     }
                 };
             let aromatic_valence: i64 = match (
-                view.aromatic_valence_constraint(),
+                view.constraints().aromatic_valence(),
                 view.aromatic_valence(),
             ) {
-                (Some(AromaticValenceAst::Aromatic(ValueAst::Lit(v))), _) if *v >= 0 => *v,
-                (Some(AromaticValenceAst::NotAromatic), _) => 0,
-                (None | Some(AromaticValenceAst::Undetermined), Some(t)) => t as i64,
+                (AromaticValenceAst::Aromatic(ValueAst::Lit(v)), _) if v >= 0 => v,
+                (AromaticValenceAst::NotAromatic, _) => 0,
+                (AromaticValenceAst::Undetermined, Some(t)) => t as i64,
                 _ => {
                     any_undetermined = true;
                     continue;
                 }
             };
             let multicenter_valence: i64 = match (
-                view.multicenter_valence_constraint(),
+                view.constraints().multicenter_valence(),
                 view.multicenter_valence(),
             ) {
-                (Some(MulticenterValenceAst::Multicenter(ValueAst::Lit(v))), _) if *v >= 0 => *v,
-                (Some(MulticenterValenceAst::NotMulticenter), _) => 0,
-                (None | Some(MulticenterValenceAst::Undetermined), Some(t)) => t as i64,
+                (MulticenterValenceAst::Multicenter(ValueAst::Lit(v)), _) if v >= 0 => v,
+                (MulticenterValenceAst::NotMulticenter, _) => 0,
+                (MulticenterValenceAst::Undetermined, Some(t)) => t as i64,
                 _ => {
                     any_undetermined = true;
                     continue;

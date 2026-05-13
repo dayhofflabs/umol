@@ -32,9 +32,12 @@ impl BondConstraint {
         self.into()
     }
 
-    /// Every `BondConstraint` variant is single-valued per bond.
+    /// `false` for variants that may legitimately appear multiple times on
+    /// the same bond (currently only `RingSize`, where a bond shared between
+    /// fused rings satisfies multiple ring-size assertions simultaneously).
+    /// `true` for variants that are single-valued per bond.
     pub fn is_unique(&self) -> bool {
-        true
+        self.kind() != BondConstraintKind::RingSize
     }
 
     /// `Aromatic` is a flag with no value. `RingCount` / `RingSize` are
@@ -93,6 +96,28 @@ impl BondConstraints {
         self.0.iter_mut().find(|c| c.kind() == kind)
     }
 
+    pub fn aromatic(&self) -> bool {
+        self.contains(BondConstraintKind::Aromatic)
+    }
+
+    pub fn ring_count(&self) -> ValueAst {
+        match self.get(BondConstraintKind::RingCount) {
+            Some(BondConstraint::RingCount(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    /// Multi-valued ring-size assertions; a bond shared between fused rings
+    /// may carry several. Iterator yields entries in insertion order; empty
+    /// if none.
+    pub fn ring_sizes(&self) -> impl Iterator<Item = &ValueAst> {
+        self.get_all(BondConstraintKind::RingSize)
+            .filter_map(|c| match c {
+                BondConstraint::RingSize(v) => Some(v),
+                _ => None,
+            })
+    }
+
     pub fn iter(&self) -> Iter<'_, BondConstraint> {
         self.0.iter()
     }
@@ -137,6 +162,26 @@ impl BondConstraints {
     pub fn remove(&mut self, kind: BondConstraintKind) -> Option<BondConstraint> {
         let pos = self.0.iter().position(|c| c.kind() == kind)?;
         Some(self.0.remove(pos))
+    }
+
+    /// Iterate over every entry of `kind`. Single-valued kinds yield at most
+    /// one entry; multi-valued (`RingSize`) may yield several.
+    pub fn get_all(&self, kind: BondConstraintKind) -> impl Iterator<Item = &BondConstraint> {
+        self.0.iter().filter(move |c| c.kind() == kind)
+    }
+
+    /// Remove every entry of `kind`, returning them in insertion order.
+    pub fn remove_all(&mut self, kind: BondConstraintKind) -> Vec<BondConstraint> {
+        let mut out = Vec::new();
+        self.0.retain(|c| {
+            if c.kind() == kind {
+                out.push(c.clone());
+                false
+            } else {
+                true
+            }
+        });
+        out
     }
 
     /// No-op: no `BondConstraint` variant carries an entity index.
@@ -206,11 +251,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic)]
-    #[case::ring_count(BondConstraint::ring_count(1))]
-    #[case::ring_size(BondConstraint::ring_size(6))]
-    fn test_bond_constraint_is_unique(#[case] c: BondConstraint) {
-        assert!(c.is_unique());
+    #[case::aromatic(BondConstraint::Aromatic, true)]
+    #[case::ring_count(BondConstraint::ring_count(1), true)]
+    #[case::ring_size(BondConstraint::ring_size(6), false)]
+    fn test_bond_constraint_is_unique(#[case] c: BondConstraint, #[case] expected: bool) {
+        assert_eq!(c.is_unique(), expected);
     }
 
     #[rustfmt::skip]

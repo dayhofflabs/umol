@@ -421,10 +421,9 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
                 apply_spin_pair(&mut ast.spin, sp, ParseError::DuplicateAtomPredicate)?;
             }
             AtomPredicate::Constraint(c) => {
-                let kind = c.kind();
-                if ast.constraints.contains(kind) {
+                if c.is_unique() && ast.constraints.contains(c.kind()) {
                     return Err(ParseError::DuplicateAtomPredicate(
-                        constraint_tag(kind).to_string(),
+                        constraint_tag(c.kind()).to_string(),
                     ));
                 }
                 ast.constraints.add(c);

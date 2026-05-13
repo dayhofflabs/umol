@@ -18,10 +18,11 @@ use super::automorphism::AtomAutomorphism;
 use super::matching::BondMatching;
 
 use super::aromatic::AromaticSystemAst;
-use super::atom::AtomAst;
+use super::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use super::bond::BondAst;
 use super::constraint::{
-    AromaticValenceAst, AtomConstraint, AtomConstraintKind, MulticenterValenceAst,
+    AromaticSystemConstraints, AtomConstraints, BondConstraints, DativeBondConstraints,
+    MulticenterBondConstraints, NoncovalentBondConstraints,
 };
 use super::dative::DativeBondAst;
 use super::idx::{
@@ -29,7 +30,8 @@ use super::idx::{
 };
 use super::molecule::MoleculeAst;
 use super::multicenter::MulticenterBondAst;
-use super::noncovalent::NoncovalentBondAst;
+use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
+use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
 /// Namespace accessor for atom views on a `MoleculeAst`. Provides `count`,
@@ -96,6 +98,41 @@ pub struct AtomView<'a> {
 }
 
 impl<'a> AtomView<'a> {
+    #[inline]
+    pub fn element(&self) -> &'a ElementAst {
+        &self.ast.element
+    }
+
+    #[inline]
+    pub fn isotope_mass(&self) -> &'a IsotopeAst {
+        &self.ast.isotope_mass
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &'a ValueAst {
+        &self.ast.charge
+    }
+
+    #[inline]
+    pub fn implicit_hydrogens(&self) -> &'a ImplicitHydrogensAst {
+        &self.ast.implicit_hydrogens
+    }
+
+    #[inline]
+    pub fn lone_pairs(&self) -> &'a ValueAst {
+        &self.ast.lone_pairs
+    }
+
+    #[inline]
+    pub fn spin(&self) -> &'a SpinStateAst {
+        &self.ast.spin
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &'a AtomConstraints {
+        &self.ast.constraints
+    }
+
     /// Iterator over incident bonds and their neighbor atoms. Equivalent to
     /// `self.molecule.neighbors(self.id)` but exposed on the view so closures
     /// that take `&AtomView` (e.g. perception electron-counting) can inspect
@@ -115,14 +152,6 @@ impl<'a> AtomView<'a> {
             }
         }
         Some(sum)
-    }
-
-    /// Localized valence constraint, if asserted.
-    pub fn valence_constraint(&self) -> Option<&'a ValueAst> {
-        atom_constraint_value(self.ast, AtomConstraintKind::Valence, |c| match c {
-            AtomConstraint::Valence(v) => Some(v),
-            _ => None,
-        })
     }
 
     /// Sum of `order` over incident dative bonds where this atom is the sole
@@ -146,13 +175,6 @@ impl<'a> AtomView<'a> {
         Some(sum)
     }
 
-    pub fn donated_pairs_constraint(&self) -> Option<&'a ValueAst> {
-        atom_constraint_value(self.ast, AtomConstraintKind::DonatedPairs, |c| match c {
-            AtomConstraint::DonatedPairs(v) => Some(v),
-            _ => None,
-        })
-    }
-
     /// Sum of `order` over incident dative bonds where this atom is the
     /// acceptor. `None` if any contributing dative's `order` is not a
     /// non-negative `Lit`.
@@ -169,13 +191,6 @@ impl<'a> AtomView<'a> {
             }
         }
         Some(sum)
-    }
-
-    pub fn accepted_pairs_constraint(&self) -> Option<&'a ValueAst> {
-        atom_constraint_value(self.ast, AtomConstraintKind::AcceptedPairs, |c| match c {
-            AtomConstraint::AcceptedPairs(v) => Some(v),
-            _ => None,
-        })
     }
 
     /// π contribution from the aromatic system this atom belongs to.
@@ -203,17 +218,6 @@ impl<'a> AtomView<'a> {
             .is_some()
     }
 
-    pub fn aromatic_valence_constraint(&self) -> Option<&'a AromaticValenceAst> {
-        atom_constraint_value(
-            self.ast,
-            AtomConstraintKind::AromaticValence,
-            |c| match c {
-                AtomConstraint::AromaticValence(v) => Some(v),
-                _ => None,
-            },
-        )
-    }
-
     /// Sum of per-atom contributions across incident multicenter bonds.
     /// `None` if any contribution is not a non-negative `Lit`.
     pub fn multicenter_valence(&self) -> Option<u32> {
@@ -229,24 +233,6 @@ impl<'a> AtomView<'a> {
         Some(sum)
     }
 
-    pub fn multicenter_valence_constraint(&self) -> Option<&'a MulticenterValenceAst> {
-        atom_constraint_value(
-            self.ast,
-            AtomConstraintKind::MulticenterValence,
-            |c| match c {
-                AtomConstraint::MulticenterValence(v) => Some(v),
-                _ => None,
-            },
-        )
-    }
-}
-
-fn atom_constraint_value<'a, T>(
-    atom: &'a AtomAst,
-    kind: AtomConstraintKind,
-    extract: impl FnOnce(&'a AtomConstraint) -> Option<&'a T>,
-) -> Option<&'a T> {
-    extract(atom.constraints.get(kind)?)
 }
 
 /// Mutable borrowed view of an atom.
@@ -320,6 +306,26 @@ pub struct BondView<'a> {
 }
 
 impl<'a> BondView<'a> {
+    #[inline]
+    pub fn order(&self) -> &'a ValueAst {
+        &self.ast.order
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &'a ValueAst {
+        &self.ast.charge
+    }
+
+    #[inline]
+    pub fn spin(&self) -> &'a SpinStateAst {
+        &self.ast.spin
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &'a BondConstraints {
+        &self.ast.constraints
+    }
+
     /// The two atoms incident to this bond.
     pub fn atoms(&self) -> [AtomId; 2] {
         self.atoms
@@ -418,6 +424,21 @@ pub struct DativeBondView<'a> {
 }
 
 impl<'a> DativeBondView<'a> {
+    #[inline]
+    pub fn acceptor_slot(&self) -> u8 {
+        self.ast.acceptor_slot
+    }
+
+    #[inline]
+    pub fn order(&self) -> &'a ValueAst {
+        &self.ast.order
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &'a DativeBondConstraints {
+        &self.ast.constraints
+    }
+
     /// All atoms in this dative bond (donors + acceptor), sorted by `AtomId`.
     pub fn atoms(&self) -> impl Iterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
@@ -495,6 +516,26 @@ pub struct AromaticSystemView<'a> {
 }
 
 impl<'a> AromaticSystemView<'a> {
+    #[inline]
+    pub fn electrons(&self) -> &'a [ValueAst] {
+        &self.ast.electrons
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &'a ValueAst {
+        &self.ast.charge
+    }
+
+    #[inline]
+    pub fn spin(&self) -> &'a SpinStateAst {
+        &self.ast.spin
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &'a AromaticSystemConstraints {
+        &self.ast.constraints
+    }
+
     pub fn atoms(&self) -> impl Iterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
@@ -568,6 +609,26 @@ pub struct MulticenterBondView<'a> {
 }
 
 impl<'a> MulticenterBondView<'a> {
+    #[inline]
+    pub fn electrons(&self) -> &'a [ValueAst] {
+        &self.ast.electrons
+    }
+
+    #[inline]
+    pub fn charge(&self) -> &'a ValueAst {
+        &self.ast.charge
+    }
+
+    #[inline]
+    pub fn spin(&self) -> &'a SpinStateAst {
+        &self.ast.spin
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &'a MulticenterBondConstraints {
+        &self.ast.constraints
+    }
+
     pub fn atoms(&self) -> impl Iterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
@@ -640,6 +701,16 @@ pub struct NoncovalentBondView<'a> {
 }
 
 impl<'a> NoncovalentBondView<'a> {
+    #[inline]
+    pub fn kind(&self) -> &'a NoncovalentBondKindAst {
+        &self.ast.kind
+    }
+
+    #[inline]
+    pub fn constraints(&self) -> &'a NoncovalentBondConstraints {
+        &self.ast.constraints
+    }
+
     /// The two atoms in this noncovalent interaction.
     pub fn atoms(&self) -> [AtomId; 2] {
         self.atoms
@@ -836,7 +907,9 @@ mod tests {
     use super::*;
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::{AtomConstraint, Constraints};
+    use crate::ast::constraint::{
+        AromaticValenceAst, AtomConstraint, Constraints, MulticenterValenceAst,
+    };
     use crate::ast::dative::DativeBondAst;
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
@@ -959,19 +1032,18 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_view_valence_constraint() {
+    #[case::with_constraint(Some(AtomConstraint::valence(4)), ValueAst::Lit(4))]
+    #[case::absent(None, ValueAst::Undetermined)]
+    fn test_atom_view_valence_constraint(
+        #[case] constraint: Option<AtomConstraint>,
+        #[case] expected: ValueAst,
+    ) {
         let mut atom = AtomAst::from_element(Element::C);
-        atom.constraints.add(AtomConstraint::valence(4));
+        if let Some(c) = constraint {
+            atom.constraints.add(c);
+        }
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
-        assert_eq!(
-            molecule.atom(AtomId(0)).valence_constraint(),
-            Some(&ValueAst::Lit(4)),
-        );
-    }
-
-    #[rstest]
-    fn test_atom_view_valence_constraint_absent(molecule: MoleculeAst) {
-        assert!(molecule.atom(AtomId(0)).valence_constraint().is_none());
+        assert_eq!(molecule.atom(AtomId(0)).constraints().valence(), expected);
     }
 
     #[rstest]
@@ -999,8 +1071,8 @@ mod tests {
         atom.constraints.add(AtomConstraint::donated_pairs(1));
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
-            molecule.atom(AtomId(0)).donated_pairs_constraint(),
-            Some(&ValueAst::Lit(1)),
+            molecule.atom(AtomId(0)).constraints().donated_pairs(),
+            ValueAst::Lit(1),
         );
     }
 
@@ -1029,8 +1101,8 @@ mod tests {
         atom.constraints.add(AtomConstraint::accepted_pairs(2));
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
-            molecule.atom(AtomId(0)).accepted_pairs_constraint(),
-            Some(&ValueAst::Lit(2)),
+            molecule.atom(AtomId(0)).constraints().accepted_pairs(),
+            ValueAst::Lit(2),
         );
     }
 
@@ -1084,8 +1156,8 @@ mod tests {
         ));
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
-            molecule.atom(AtomId(0)).aromatic_valence_constraint(),
-            Some(&AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
+            molecule.atom(AtomId(0)).constraints().aromatic_valence(),
+            AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
         );
     }
 
@@ -1134,8 +1206,8 @@ mod tests {
         ));
         let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
         assert_eq!(
-            molecule.atom(AtomId(0)).multicenter_valence_constraint(),
-            Some(&MulticenterValenceAst::Multicenter(ValueAst::Lit(2))),
+            molecule.atom(AtomId(0)).constraints().multicenter_valence(),
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
         );
     }
 

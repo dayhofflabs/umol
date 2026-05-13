@@ -86,6 +86,13 @@ impl AromaticSystemConstraints {
         self.0.iter_mut().find(|c| c.kind() == kind)
     }
 
+    pub fn electron_count(&self) -> ValueAst {
+        match self.get(AromaticSystemConstraintKind::ElectronCount) {
+            Some(AromaticSystemConstraint::ElectronCount(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
     pub fn iter(&self) -> Iter<'_, AromaticSystemConstraint> {
         self.0.iter()
     }
@@ -131,6 +138,32 @@ impl AromaticSystemConstraints {
     ) -> Option<AromaticSystemConstraint> {
         let pos = self.0.iter().position(|c| c.kind() == kind)?;
         Some(self.0.remove(pos))
+    }
+
+    /// Iterate over every entry of `kind`. Currently every variant is
+    /// single-valued so this yields at most one entry.
+    pub fn get_all(
+        &self,
+        kind: AromaticSystemConstraintKind,
+    ) -> impl Iterator<Item = &AromaticSystemConstraint> {
+        self.0.iter().filter(move |c| c.kind() == kind)
+    }
+
+    /// Remove every entry of `kind`, returning them in insertion order.
+    pub fn remove_all(
+        &mut self,
+        kind: AromaticSystemConstraintKind,
+    ) -> Vec<AromaticSystemConstraint> {
+        let mut out = Vec::new();
+        self.0.retain(|c| {
+            if c.kind() == kind {
+                out.push(c.clone());
+                false
+            } else {
+                true
+            }
+        });
+        out
     }
 
     pub fn remap(self, remap: &IdRemapping) -> Self {

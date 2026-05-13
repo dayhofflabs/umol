@@ -265,10 +265,11 @@ fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(),
             }
             BondPredicate::Constraint(c) => {
                 let tag = constraint_tag(&c);
-                if ast
-                    .constraints
-                    .iter()
-                    .any(|existing| constraint_tag(existing) == tag)
+                if c.is_unique()
+                    && ast
+                        .constraints
+                        .iter()
+                        .any(|existing| constraint_tag(existing) == tag)
                 {
                     return Err(ParseError::DuplicateBondPredicate(tag.to_string()));
                 }

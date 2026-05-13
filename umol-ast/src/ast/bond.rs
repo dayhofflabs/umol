@@ -147,10 +147,19 @@ mod tests {
             ]) })]
     #[case::with_constraint_replaces_same_kind(
         BondAst::from_order(1)
+            .with_constraint(BondConstraint::ring_count(1))
+            .with_constraint(BondConstraint::ring_count(2)),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: BondConstraints::from(BondConstraint::ring_count(2)) })]
+    #[case::with_constraint_appends_multi_valued_ring_size(
+        BondAst::from_order(1)
             .with_constraint(BondConstraint::ring_size(5))
             .with_constraint(BondConstraint::ring_size(6)),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::ring_size(6)) })]
+            constraints: BondConstraints::from_iter([
+                BondConstraint::ring_size(5),
+                BondConstraint::ring_size(6),
+            ]) })]
     fn test_bond_ast_with_methods(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
     }

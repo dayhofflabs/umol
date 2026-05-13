@@ -98,6 +98,24 @@ impl DativeBondConstraints {
         self.0.iter_mut().find(|c| c.kind() == kind)
     }
 
+    pub fn aromatic(&self) -> bool {
+        self.contains(DativeBondConstraintKind::Aromatic)
+    }
+
+    pub fn ring_count(&self) -> ValueAst {
+        match self.get(DativeBondConstraintKind::RingCount) {
+            Some(DativeBondConstraint::RingCount(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn ring_size(&self) -> ValueAst {
+        match self.get(DativeBondConstraintKind::RingSize) {
+            Some(DativeBondConstraint::RingSize(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
     pub fn iter(&self) -> Iter<'_, DativeBondConstraint> {
         self.0.iter()
     }
@@ -139,6 +157,29 @@ impl DativeBondConstraints {
     pub fn remove(&mut self, kind: DativeBondConstraintKind) -> Option<DativeBondConstraint> {
         let pos = self.0.iter().position(|c| c.kind() == kind)?;
         Some(self.0.remove(pos))
+    }
+
+    /// Iterate over every entry of `kind`. Currently every variant is
+    /// single-valued so this yields at most one entry.
+    pub fn get_all(
+        &self,
+        kind: DativeBondConstraintKind,
+    ) -> impl Iterator<Item = &DativeBondConstraint> {
+        self.0.iter().filter(move |c| c.kind() == kind)
+    }
+
+    /// Remove every entry of `kind`, returning them in insertion order.
+    pub fn remove_all(&mut self, kind: DativeBondConstraintKind) -> Vec<DativeBondConstraint> {
+        let mut out = Vec::new();
+        self.0.retain(|c| {
+            if c.kind() == kind {
+                out.push(c.clone());
+                false
+            } else {
+                true
+            }
+        });
+        out
     }
 
     pub fn remap(self, remap: &IdRemapping) -> Self {

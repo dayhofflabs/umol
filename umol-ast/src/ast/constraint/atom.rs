@@ -77,6 +77,14 @@ impl AtomConstraint {
         self.into()
     }
 
+    /// `false` for variants that may legitimately appear multiple times on
+    /// the same atom (currently only `RingSize`, where an atom in fused
+    /// rings satisfies multiple ring-size assertions simultaneously). `true`
+    /// for variants that are single-valued per atom.
+    pub fn is_unique(&self) -> bool {
+        self.kind() != AtomConstraintKind::RingSize
+    }
+
     pub fn is_undetermined(&self) -> bool {
         match self {
             Self::Valence(v)
@@ -208,13 +216,106 @@ impl AtomConstraints {
         }
     }
 
-    /// Insert a constraint at its kind's sorted position, returning the
-    /// previous entry of the same kind if any. Every `AtomConstraintKind` is
-    /// single-valued per atom, so `add` always replaces same-kind entries
-    /// (last-wins).
+    pub fn valence(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::Valence) {
+            Some(AtomConstraint::Valence(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn degree(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::Degree) {
+            Some(AtomConstraint::Degree(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn total_degree(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::TotalDegree) {
+            Some(AtomConstraint::TotalDegree(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn ring_degree(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::RingDegree) {
+            Some(AtomConstraint::RingDegree(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn total_hydrogens(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::TotalHydrogens) {
+            Some(AtomConstraint::TotalHydrogens(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn donated_pairs(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::DonatedPairs) {
+            Some(AtomConstraint::DonatedPairs(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn accepted_pairs(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::AcceptedPairs) {
+            Some(AtomConstraint::AcceptedPairs(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn ring_count(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::RingCount) {
+            Some(AtomConstraint::RingCount(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn aromatic_valence(&self) -> AromaticValenceAst {
+        match self.get(AtomConstraintKind::AromaticValence) {
+            Some(AtomConstraint::AromaticValence(v)) => v.clone(),
+            _ => AromaticValenceAst::Undetermined,
+        }
+    }
+
+    pub fn multicenter_valence(&self) -> MulticenterValenceAst {
+        match self.get(AtomConstraintKind::MulticenterValence) {
+            Some(AtomConstraint::MulticenterValence(v)) => v.clone(),
+            _ => MulticenterValenceAst::Undetermined,
+        }
+    }
+
+    /// Multi-valued ring-size assertions; an atom in fused rings may carry
+    /// several. Iterator yields entries in store order; empty if none.
+    pub fn ring_sizes(&self) -> impl Iterator<Item = &ValueAst> {
+        self.get_all(AtomConstraintKind::RingSize)
+            .filter_map(|c| match c {
+                AtomConstraint::RingSize(v) => Some(v),
+                _ => None,
+            })
+    }
+
+    /// Insert a constraint per the per-variant cardinality policy. Single-
+    /// valued kinds (`AtomConstraint::is_unique` → true) replace any
+    /// existing entry of the same kind, last-wins; multi-valued kinds append
+    /// after the existing cluster of that kind, preserving the sorted-by-
+    /// kind invariant. Returns the replaced entry if a unique-kind same-kind
+    /// entry existed; `None` for the append path.
     pub fn add(&mut self, constraint: AtomConstraint) -> Option<AtomConstraint> {
         match self.find(constraint.kind()) {
-            Ok(i) => Some(replace(&mut self.entries[i], constraint)),
+            Ok(i) => {
+                if constraint.is_unique() {
+                    Some(replace(&mut self.entries[i], constraint))
+                } else {
+                    let after = self.entries[i..]
+                        .iter()
+                        .take_while(|c| c.kind() == constraint.kind())
+                        .count();
+                    self.entries.insert(i + after, constraint);
+                    None
+                }
+            }
             Err(i) => {
                 self.entries.insert(i, constraint);
                 None
@@ -247,6 +348,29 @@ impl AtomConstraints {
 
     pub fn remove(&mut self, kind: AtomConstraintKind) -> Option<AtomConstraint> {
         self.find(kind).ok().map(|i| self.entries.remove(i))
+    }
+
+    /// Iterate over every entry of `kind`. Single-valued kinds yield at most
+    /// one entry; multi-valued (`RingSize`) may yield several.
+    pub fn get_all(&self, kind: AtomConstraintKind) -> impl Iterator<Item = &AtomConstraint> {
+        let start = self.find(kind).unwrap_or_else(|i| i);
+        self.entries[start..]
+            .iter()
+            .take_while(move |c| c.kind() == kind)
+    }
+
+    /// Remove every entry of `kind`, returning them in store order. Single-
+    /// valued kinds drain at most one entry.
+    pub fn remove_all(&mut self, kind: AtomConstraintKind) -> Vec<AtomConstraint> {
+        let start = match self.find(kind) {
+            Ok(i) => i,
+            Err(_) => return Vec::new(),
+        };
+        let end = start + self.entries[start..]
+            .iter()
+            .take_while(|c| c.kind() == kind)
+            .count();
+        self.entries.drain(start..end).collect()
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &AtomConstraint> {
