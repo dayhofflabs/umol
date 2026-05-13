@@ -74,12 +74,12 @@ impl Transformer for Aromatizer {
 /// - Anything else (sp³ C, two or more double bonds, undetermined data) →
 ///   `None`, marking the atom as not aromatic-eligible.
 pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
-    let ElementAst::Lit(element) = view.data.element else {
+    let ElementAst::Lit(element) = view.ast.element else {
         return None;
     };
     let double_count = view
         .neighbors()
-        .filter(|n| matches!(n.data.order, ValueAst::Lit(2)))
+        .filter(|n| matches!(n.ast.order, ValueAst::Lit(2)))
         .count();
     match double_count {
         1 => Some(1),
@@ -87,7 +87,7 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
             Element::N | Element::O | Element::S | Element::Se | Element::P | Element::As => {
                 Some(2)
             }
-            Element::C if matches!(view.data.charge, ValueAst::Lit(1)) => Some(0),
+            Element::C if matches!(view.ast.charge, ValueAst::Lit(1)) => Some(0),
             _ => None,
         },
         _ => None,
@@ -98,7 +98,7 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticSystemIdx, AtomAst, AtomIdx, BondAst, BondConstraintKind,
+        AromaticSystemId, AtomAst, AtomId, BondAst, BondConstraintKind,
         MoleculeAst, SpinStateAst,
     };
     use umol_shared::element::Element;
@@ -117,7 +117,7 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| {
                 let order = if i % 2 == 0 { 2 } else { 1 };
-                (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(order))
+                (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(order))
             })
             .collect();
         MoleculeAst::from_atoms_and_bonds(
@@ -133,14 +133,14 @@ mod tests {
             .transform_into(&mut ast)
             .unwrap();
         assert_eq!(ast.aromatic_systems().count(), 1);
-        let view = ast.aromatic_system(AromaticSystemIdx(0));
-        let atoms: Vec<AtomIdx> = view.atoms().collect();
+        let view = ast.aromatic_system(AromaticSystemId(0));
+        let atoms: Vec<AtomId> = view.atoms().collect();
         assert_eq!(atoms.len(), 6);
         let aromatic_bond_count = ast
             .bonds()
             .iter()
             .filter(|view| {
-                view.data
+                view.ast
                     .constraints
                     .iter()
                     .any(|c| c.kind() == BondConstraintKind::Aromatic)

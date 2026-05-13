@@ -2,20 +2,20 @@
 
 use thiserror::Error;
 
-use super::idx::AtomIdx;
+use super::idx::AtomId;
 
 /// Error raised by `MoleculeAst::rewrite` when the L / R / assignment
 /// triple is not self-consistent.
 #[derive(Clone, Debug, PartialEq, Error)]
 pub enum RewriteError {
     #[error("dangling edge: atom {atom} -> neighbor {neighbor} not in L")]
-    DanglingEdge { atom: AtomIdx, neighbor: AtomIdx },
+    DanglingEdge { atom: AtomId, neighbor: AtomId },
     #[error("dangling relation at atom {atom}")]
-    DanglingRelation { atom: AtomIdx },
+    DanglingRelation { atom: AtomId },
     #[error("LHS atom {0} not in assignment")]
-    UnmappedLhsAtom(AtomIdx),
+    UnmappedLhsAtom(AtomId),
     #[error("assignment atom {0} not in target")]
-    UnmappedAssignmentAtom(AtomIdx),
+    UnmappedAssignmentAtom(AtomId),
 }
 
 /// Error raised by `Expr::evaluate` / `Expr::evaluate_bool` when the

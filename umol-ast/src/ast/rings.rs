@@ -7,13 +7,13 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use umol_graph_core::{BiconnectedComponentsAlgorithm, CycleEnumerationAlgorithm, Graph, NodeId};
 
-use super::idx::{AtomIdx, BondIdx};
+use super::idx::{AtomId, BondId};
 
 /// Index of a ring within a `RingSet`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct RingIdx(pub u32);
+pub struct RingId(pub u32);
 
-impl RingIdx {
+impl RingId {
     pub fn index(self) -> usize {
         self.0 as usize
     }
@@ -21,12 +21,12 @@ impl RingIdx {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Ring {
-    atoms: Vec<AtomIdx>,
-    bonds: Vec<BondIdx>,
+    atoms: Vec<AtomId>,
+    bonds: Vec<BondId>,
 }
 
 impl Ring {
-    fn new(atoms: Vec<AtomIdx>, bonds: Vec<BondIdx>) -> Option<Self> {
+    fn new(atoms: Vec<AtomId>, bonds: Vec<BondId>) -> Option<Self> {
         if atoms.len() < 3 || atoms.len() != bonds.len() {
             return None;
         }
@@ -46,17 +46,17 @@ fn intersection<T: Copy + Eq>(a: &[T], b: &[T]) -> Vec<T> {
 /// Borrowed view of a ring: its index plus atom and bond membership.
 #[derive(Debug, Clone, Copy)]
 pub struct RingView<'a> {
-    pub idx: RingIdx,
-    atoms: &'a [AtomIdx],
-    bonds: &'a [BondIdx],
+    pub id: RingId,
+    atoms: &'a [AtomId],
+    bonds: &'a [BondId],
 }
 
 impl<'a> RingView<'a> {
-    pub fn atoms(&self) -> &'a [AtomIdx] {
+    pub fn atoms(&self) -> &'a [AtomId] {
         self.atoms
     }
 
-    pub fn bonds(&self) -> &'a [BondIdx] {
+    pub fn bonds(&self) -> &'a [BondId] {
         self.bonds
     }
 
@@ -68,11 +68,11 @@ impl<'a> RingView<'a> {
         self.atoms.is_empty()
     }
 
-    pub fn shared_atoms(&self, other: &RingView<'_>) -> Vec<AtomIdx> {
+    pub fn shared_atoms(&self, other: &RingView<'_>) -> Vec<AtomId> {
         intersection(self.atoms, other.atoms)
     }
 
-    pub fn shared_bonds(&self, other: &RingView<'_>) -> Vec<BondIdx> {
+    pub fn shared_bonds(&self, other: &RingView<'_>) -> Vec<BondId> {
         intersection(self.bonds, other.bonds)
     }
 }
@@ -90,11 +90,12 @@ pub enum RingRelation {
 }
 
 /// Selection of which cycle family to enumerate: `Simple` for the minimum
-/// cycle basis, `Induced` for the relevant-cycle (Vismara) set.
+/// cycle basis, `Relevant` for the Vismara relevant-cycle set (the union of
+/// all minimum cycle bases — unique and ordering-independent).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RingFamily {
     Simple,
-    Induced,
+    Relevant,
 }
 
 /// Collection of rings for a `MoleculeAst`, with atom/bond → ring reverse
@@ -104,8 +105,8 @@ pub struct RingSet {
     family: RingFamily,
     max_ring_size: usize,
     rings: Vec<Ring>,
-    atom_to_rings: BTreeMap<AtomIdx, Vec<RingIdx>>,
-    bond_to_rings: BTreeMap<BondIdx, Vec<RingIdx>>,
+    atom_to_rings: BTreeMap<AtomId, Vec<RingId>>,
+    bond_to_rings: BTreeMap<BondId, Vec<RingId>>,
     ring_graph: RingGraph,
 }
 
@@ -132,10 +133,10 @@ impl RingSet {
             return empty;
         }
 
-        let mut atom_to_rings: BTreeMap<AtomIdx, Vec<RingIdx>> = BTreeMap::new();
-        let mut bond_to_rings: BTreeMap<BondIdx, Vec<RingIdx>> = BTreeMap::new();
-        for (idx, ring) in rings.iter().enumerate() {
-            let ring_idx = RingIdx(idx as u32);
+        let mut atom_to_rings: BTreeMap<AtomId, Vec<RingId>> = BTreeMap::new();
+        let mut bond_to_rings: BTreeMap<BondId, Vec<RingId>> = BTreeMap::new();
+        for (id, ring) in rings.iter().enumerate() {
+            let ring_idx = RingId(id as u32);
             for &atom in &ring.atoms {
                 atom_to_rings.entry(atom).or_default().push(ring_idx);
             }
@@ -168,59 +169,59 @@ impl RingSet {
         self.rings.len()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = RingIdx> {
-        (0..self.rings.len()).map(|i| RingIdx(i as u32))
+    pub fn ids(&self) -> impl Iterator<Item = RingId> {
+        (0..self.rings.len()).map(|i| RingId(i as u32))
     }
 
     pub fn iter(&self) -> impl Iterator<Item = RingView<'_>> {
         self.rings.iter().enumerate().map(|(i, r)| RingView {
-            idx: RingIdx(i as u32),
+            id: RingId(i as u32),
             atoms: &r.atoms,
             bonds: &r.bonds,
         })
     }
 
-    pub fn get(&self, idx: RingIdx) -> Option<RingView<'_>> {
-        let r = self.rings.get(idx.index())?;
+    pub fn get(&self, id: RingId) -> Option<RingView<'_>> {
+        let r = self.rings.get(id.index())?;
         Some(RingView {
-            idx,
+            id,
             atoms: &r.atoms,
             bonds: &r.bonds,
         })
     }
 
-    pub fn shared_atoms(&self, a: RingIdx, b: RingIdx) -> Vec<AtomIdx> {
+    pub fn shared_atoms(&self, a: RingId, b: RingId) -> Vec<AtomId> {
         let (Some(ra), Some(rb)) = (self.rings.get(a.index()), self.rings.get(b.index())) else {
             return Vec::new();
         };
         intersection(&ra.atoms, &rb.atoms)
     }
 
-    pub fn shared_bonds(&self, a: RingIdx, b: RingIdx) -> Vec<BondIdx> {
+    pub fn shared_bonds(&self, a: RingId, b: RingId) -> Vec<BondId> {
         let (Some(ra), Some(rb)) = (self.rings.get(a.index()), self.rings.get(b.index())) else {
             return Vec::new();
         };
         intersection(&ra.bonds, &rb.bonds)
     }
 
-    pub fn relation(&self, a: RingIdx, b: RingIdx) -> RingRelation {
+    pub fn relation(&self, a: RingId, b: RingId) -> RingRelation {
         self.ring_graph.relation(a, b)
     }
 
-    pub fn are_spiro(&self, a: RingIdx, b: RingIdx) -> bool {
+    pub fn are_spiro(&self, a: RingId, b: RingId) -> bool {
         self.relation(a, b) == RingRelation::Spiro
     }
 
-    pub fn are_fused(&self, a: RingIdx, b: RingIdx) -> bool {
+    pub fn are_fused(&self, a: RingId, b: RingId) -> bool {
         self.relation(a, b) == RingRelation::Fused
     }
 
-    pub fn are_bridged(&self, a: RingIdx, b: RingIdx) -> bool {
+    pub fn are_bridged(&self, a: RingId, b: RingId) -> bool {
         self.relation(a, b) == RingRelation::Bridged
     }
 
-    pub fn spiro_neighbors(&self, i: RingIdx) -> Vec<RingIdx> {
-        let mut result: Vec<RingIdx> = self
+    pub fn spiro_neighbors(&self, i: RingId) -> Vec<RingId> {
+        let mut result: Vec<RingId> = self
             .ring_graph
             .neighbors(i)
             .into_iter()
@@ -230,8 +231,8 @@ impl RingSet {
         result
     }
 
-    pub fn fused_neighbors(&self, i: RingIdx) -> Vec<RingIdx> {
-        let mut result: Vec<RingIdx> = self
+    pub fn fused_neighbors(&self, i: RingId) -> Vec<RingId> {
+        let mut result: Vec<RingId> = self
             .ring_graph
             .neighbors(i)
             .into_iter()
@@ -241,8 +242,8 @@ impl RingSet {
         result
     }
 
-    pub fn bridged_neighbors(&self, i: RingIdx) -> Vec<RingIdx> {
-        let mut result: Vec<RingIdx> = self
+    pub fn bridged_neighbors(&self, i: RingId) -> Vec<RingId> {
+        let mut result: Vec<RingId> = self
             .ring_graph
             .neighbors(i)
             .into_iter()
@@ -252,9 +253,9 @@ impl RingSet {
         result
     }
 
-    pub fn fused_components(&self) -> Vec<Vec<RingIdx>> {
-        let mut visited: HashSet<RingIdx> = HashSet::new();
-        let mut components: Vec<Vec<RingIdx>> = Vec::new();
+    pub fn fused_components(&self) -> Vec<Vec<RingId>> {
+        let mut visited: HashSet<RingId> = HashSet::new();
+        let mut components: Vec<Vec<RingId>> = Vec::new();
 
         for ring in self.ids() {
             if visited.contains(&ring) {
@@ -267,13 +268,13 @@ impl RingSet {
             components.push(component);
         }
 
-        components.sort_by_key(|component| component.first().copied().map(RingIdx::index));
+        components.sort_by_key(|component| component.first().copied().map(RingId::index));
         components
     }
 
-    pub fn fused_component(&self, root: RingIdx) -> Vec<RingIdx> {
-        let mut visited: HashSet<RingIdx> = HashSet::new();
-        let mut queue: VecDeque<RingIdx> = VecDeque::new();
+    pub fn fused_component(&self, root: RingId) -> Vec<RingId> {
+        let mut visited: HashSet<RingId> = HashSet::new();
+        let mut queue: VecDeque<RingId> = VecDeque::new();
         queue.push_back(root);
         visited.insert(root);
 
@@ -285,16 +286,16 @@ impl RingSet {
             }
         }
 
-        let mut result: Vec<RingIdx> = visited.into_iter().collect();
+        let mut result: Vec<RingId> = visited.into_iter().collect();
         result.sort_unstable();
         result
     }
 
-    pub fn contains_atom(&self, atom: AtomIdx) -> bool {
+    pub fn contains_atom(&self, atom: AtomId) -> bool {
         self.atom_to_rings.contains_key(&atom)
     }
 
-    pub fn atom_smallest_ring_size(&self, atom: AtomIdx) -> Option<usize> {
+    pub fn atom_smallest_ring_size(&self, atom: AtomId) -> Option<usize> {
         self.atom_to_rings.get(&atom).and_then(|ring_indices| {
             ring_indices
                 .iter()
@@ -303,11 +304,11 @@ impl RingSet {
         })
     }
 
-    pub fn contains_bond(&self, bond: BondIdx) -> bool {
+    pub fn contains_bond(&self, bond: BondId) -> bool {
         self.bond_to_rings.contains_key(&bond)
     }
 
-    pub fn bond_smallest_ring_size(&self, bond: BondIdx) -> Option<usize> {
+    pub fn bond_smallest_ring_size(&self, bond: BondId) -> Option<usize> {
         self.bond_to_rings.get(&bond).and_then(|ring_indices| {
             ring_indices
                 .iter()
@@ -324,8 +325,8 @@ impl RingSet {
 /// Edge in a `RingGraph`: the two rings it connects and their relation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RingGraphEdge {
-    pub source: RingIdx,
-    pub target: RingIdx,
+    pub source: RingId,
+    pub target: RingId,
     pub relation: RingRelation,
 }
 
@@ -335,14 +336,14 @@ pub struct RingGraphEdge {
 #[derive(Debug, Clone)]
 pub struct RingGraph {
     edges: Vec<RingGraphEdge>,
-    neighbors: Vec<Vec<(RingIdx, RingRelation)>>,
+    neighbors: Vec<Vec<(RingId, RingRelation)>>,
 }
 
 impl RingGraph {
     fn from_ring_list(rings: &[Ring]) -> Self {
         let mut edges = Vec::new();
         let mut neighbors = vec![Vec::new(); rings.len()];
-        let indices: Vec<RingIdx> = (0..rings.len()).map(|i| RingIdx(i as u32)).collect();
+        let indices: Vec<RingId> = (0..rings.len()).map(|i| RingId(i as u32)).collect();
         for (i, &a) in indices.iter().enumerate() {
             for &b in &indices[i + 1..] {
                 let relation = classify_ring_relation(&rings[a.index()], &rings[b.index()]);
@@ -360,7 +361,7 @@ impl RingGraph {
         }
         edges.sort_by_key(|e| (e.source, e.target, e.relation as u8));
         for n in &mut neighbors {
-            n.sort_by_key(|(idx, rel)| (*idx, *rel as u8));
+            n.sort_by_key(|(id, rel)| (*id, *rel as u8));
         }
         Self { edges, neighbors }
     }
@@ -369,14 +370,14 @@ impl RingGraph {
         &self.edges
     }
 
-    pub fn neighbors(&self, ring: RingIdx) -> Vec<(RingIdx, RingRelation)> {
+    pub fn neighbors(&self, ring: RingId) -> Vec<(RingId, RingRelation)> {
         self.neighbors
             .get(ring.index())
             .cloned()
             .unwrap_or_default()
     }
 
-    pub fn relation(&self, a: RingIdx, b: RingIdx) -> RingRelation {
+    pub fn relation(&self, a: RingId, b: RingId) -> RingRelation {
         if a == b {
             return RingRelation::Identical;
         }
@@ -385,7 +386,7 @@ impl RingGraph {
             .and_then(|neighbors| {
                 neighbors
                     .iter()
-                    .find_map(|(idx, rel)| (*idx == b).then_some(*rel))
+                    .find_map(|(id, rel)| (*id == b).then_some(*rel))
             })
             .unwrap_or(RingRelation::Disjoint)
     }
@@ -445,11 +446,11 @@ pub(crate) fn enumerate_rings(
     graph: &Graph,
     family: RingFamily,
     max_ring_size: usize,
-    atom_filter: impl Fn(AtomIdx) -> bool,
+    atom_filter: impl Fn(AtomId) -> bool,
 ) -> RingSet {
     let filtered_nodes: Vec<NodeId> = graph
         .node_ids()
-        .filter(|&n| atom_filter(AtomIdx::from(n)))
+        .filter(|&n| atom_filter(AtomId::from(n)))
         .collect();
 
     let use_subgraph = filtered_nodes.len() < graph.node_count();
@@ -474,16 +475,16 @@ pub(crate) fn enumerate_rings(
         let component_rings: Vec<Ring> = raw_cycles
             .into_iter()
             .filter(|cycle| match family {
-                RingFamily::Induced => is_induced_cycle(&comp_sub.graph, cycle),
+                RingFamily::Relevant => is_induced_cycle(&comp_sub.graph, cycle),
                 RingFamily::Simple => true,
             })
             .filter_map(|cycle| {
-                let ring_atoms: Vec<AtomIdx> = cycle
+                let ring_atoms: Vec<AtomId> = cycle
                     .iter()
                     .map(|&local| {
                         let sub_node = comp_sub.node_map[local.index()];
                         let orig_node = node_map[sub_node.index()];
-                        AtomIdx::from(orig_node)
+                        AtomId::from(orig_node)
                     })
                     .collect();
                 let n = ring_atoms.len();
@@ -492,7 +493,7 @@ pub(crate) fn enumerate_rings(
                     let a_orig = NodeId::from(ring_atoms[i]);
                     let b_orig = NodeId::from(ring_atoms[(i + 1) % n]);
                     let edge = graph.find_edge(a_orig, b_orig)?;
-                    ring_bonds.push(BondIdx::from(edge));
+                    ring_bonds.push(BondId::from(edge));
                 }
                 Ring::new(ring_atoms, ring_bonds)
             })
@@ -513,8 +514,8 @@ mod tests {
 
     fn ring_of(atoms: &[u32], bonds: &[u32]) -> Ring {
         Ring::new(
-            atoms.iter().copied().map(AtomIdx).collect(),
-            bonds.iter().copied().map(BondIdx).collect(),
+            atoms.iter().copied().map(AtomId).collect(),
+            bonds.iter().copied().map(BondId).collect(),
         )
         .expect("valid ring")
     }
@@ -533,34 +534,34 @@ mod tests {
 
     #[rstest]
     #[case::valid_triangle(
-        vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
-        vec![BondIdx(0), BondIdx(1), BondIdx(2)],
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        vec![BondId(0), BondId(1), BondId(2)],
         true,
     )]
     #[case::too_small(
-        vec![AtomIdx(0), AtomIdx(1)],
-        vec![BondIdx(0), BondIdx(1)],
+        vec![AtomId(0), AtomId(1)],
+        vec![BondId(0), BondId(1)],
         false,
     )]
     #[case::empty(vec![], vec![], false)]
     #[case::atom_bond_len_mismatch(
-        vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
-        vec![BondIdx(0), BondIdx(1)],
+        vec![AtomId(0), AtomId(1), AtomId(2)],
+        vec![BondId(0), BondId(1)],
         false,
     )]
     fn test_ring_new(
-        #[case] atoms: Vec<AtomIdx>,
-        #[case] bonds: Vec<BondIdx>,
+        #[case] atoms: Vec<AtomId>,
+        #[case] bonds: Vec<BondId>,
         #[case] valid: bool,
     ) {
         assert_eq!(Ring::new(atoms, bonds).is_some(), valid);
     }
 
     #[rstest]
-    #[case(RingIdx(0), 0)]
-    #[case(RingIdx(7), 7)]
-    fn test_ring_idx_index(#[case] idx: RingIdx, #[case] expected: usize) {
-        assert_eq!(idx.index(), expected);
+    #[case(RingId(0), 0)]
+    #[case(RingId(7), 7)]
+    fn test_ring_idx_index(#[case] id: RingId, #[case] expected: usize) {
+        assert_eq!(id.index(), expected);
     }
 
     #[rstest]
@@ -658,26 +659,26 @@ mod tests {
         assert_eq!(set.family(), RingFamily::Simple);
         assert_eq!(set.max_ring_size(), 0);
         assert_eq!(set.count(), 0);
-        assert_eq!(set.ids().collect::<Vec<_>>(), Vec::<RingIdx>::new());
+        assert_eq!(set.ids().collect::<Vec<_>>(), Vec::<RingId>::new());
         assert_eq!(set.iter().count(), 0);
-        assert!(set.get(RingIdx(0)).is_none());
-        assert!(!set.contains_atom(AtomIdx(0)));
-        assert!(!set.contains_bond(BondIdx(0)));
-        assert_eq!(set.atom_smallest_ring_size(AtomIdx(0)), None);
-        assert_eq!(set.bond_smallest_ring_size(BondIdx(0)), None);
+        assert!(set.get(RingId(0)).is_none());
+        assert!(!set.contains_atom(AtomId(0)));
+        assert!(!set.contains_bond(BondId(0)));
+        assert_eq!(set.atom_smallest_ring_size(AtomId(0)), None);
+        assert_eq!(set.bond_smallest_ring_size(BondId(0)), None);
         assert_eq!(
-            set.shared_atoms(RingIdx(0), RingIdx(1)),
-            Vec::<AtomIdx>::new()
+            set.shared_atoms(RingId(0), RingId(1)),
+            Vec::<AtomId>::new()
         );
         assert_eq!(
-            set.shared_bonds(RingIdx(0), RingIdx(1)),
-            Vec::<BondIdx>::new()
+            set.shared_bonds(RingId(0), RingId(1)),
+            Vec::<BondId>::new()
         );
         assert_eq!(set.graph().edges(), &[]);
     }
 
     #[rstest]
-    #[case(RingFamily::Induced)]
+    #[case(RingFamily::Relevant)]
     #[case(RingFamily::Simple)]
     fn test_ring_set_from_rings_empty_preserves_family(#[case] family: RingFamily) {
         let set = RingSet::from_rings(family, 5, vec![]);
@@ -691,43 +692,43 @@ mod tests {
         assert_eq!(triangle_set.family(), RingFamily::Simple);
         assert_eq!(triangle_set.max_ring_size(), 6);
         assert_eq!(triangle_set.count(), 1);
-        assert_eq!(triangle_set.ids().collect::<Vec<_>>(), vec![RingIdx(0)]);
-        let views: Vec<RingIdx> = triangle_set.iter().map(|v| v.idx).collect();
-        assert_eq!(views, vec![RingIdx(0)]);
+        assert_eq!(triangle_set.ids().collect::<Vec<_>>(), vec![RingId(0)]);
+        let views: Vec<RingId> = triangle_set.iter().map(|v| v.id).collect();
+        assert_eq!(views, vec![RingId(0)]);
     }
 
     #[rstest]
     fn test_ring_set_get_out_of_range(triangle_set: RingSet) {
-        assert!(triangle_set.get(RingIdx(99)).is_none());
+        assert!(triangle_set.get(RingId(99)).is_none());
     }
 
     #[rstest]
     fn test_ring_view_accessors(triangle_set: RingSet) {
-        let view = triangle_set.get(RingIdx(0)).unwrap();
-        assert_eq!(view.atoms(), &[AtomIdx(0), AtomIdx(1), AtomIdx(2)]);
-        assert_eq!(view.bonds(), &[BondIdx(0), BondIdx(1), BondIdx(2)]);
+        let view = triangle_set.get(RingId(0)).unwrap();
+        assert_eq!(view.atoms(), &[AtomId(0), AtomId(1), AtomId(2)]);
+        assert_eq!(view.bonds(), &[BondId(0), BondId(1), BondId(2)]);
         assert_eq!(view.len(), 3);
         assert!(!view.is_empty());
     }
 
     #[rstest]
     fn test_ring_view_shared_atoms_and_bonds(fused_pair: RingSet) {
-        let va = fused_pair.get(RingIdx(0)).unwrap();
-        let vb = fused_pair.get(RingIdx(1)).unwrap();
-        assert_eq!(va.shared_atoms(&vb), vec![AtomIdx(1), AtomIdx(2)]);
-        assert_eq!(va.shared_bonds(&vb), vec![BondIdx(1)]);
+        let va = fused_pair.get(RingId(0)).unwrap();
+        let vb = fused_pair.get(RingId(1)).unwrap();
+        assert_eq!(va.shared_atoms(&vb), vec![AtomId(1), AtomId(2)]);
+        assert_eq!(va.shared_bonds(&vb), vec![BondId(1)]);
     }
 
     #[rstest]
     fn test_ring_set_membership(triangle_set: RingSet) {
-        assert!(triangle_set.contains_atom(AtomIdx(0)));
-        assert!(!triangle_set.contains_atom(AtomIdx(99)));
-        assert!(triangle_set.contains_bond(BondIdx(1)));
-        assert!(!triangle_set.contains_bond(BondIdx(99)));
-        assert_eq!(triangle_set.atom_smallest_ring_size(AtomIdx(0)), Some(3));
-        assert_eq!(triangle_set.atom_smallest_ring_size(AtomIdx(99)), None);
-        assert_eq!(triangle_set.bond_smallest_ring_size(BondIdx(0)), Some(3));
-        assert_eq!(triangle_set.bond_smallest_ring_size(BondIdx(99)), None);
+        assert!(triangle_set.contains_atom(AtomId(0)));
+        assert!(!triangle_set.contains_atom(AtomId(99)));
+        assert!(triangle_set.contains_bond(BondId(1)));
+        assert!(!triangle_set.contains_bond(BondId(99)));
+        assert_eq!(triangle_set.atom_smallest_ring_size(AtomId(0)), Some(3));
+        assert_eq!(triangle_set.atom_smallest_ring_size(AtomId(99)), None);
+        assert_eq!(triangle_set.bond_smallest_ring_size(BondId(0)), Some(3));
+        assert_eq!(triangle_set.bond_smallest_ring_size(BondId(99)), None);
     }
 
     #[rstest]
@@ -736,35 +737,35 @@ mod tests {
         let r_small = ring_of(&[1, 2, 3], &[0, 1, 2]);
         let r_large = ring_of(&[1, 4, 5, 6, 7, 8], &[3, 4, 5, 6, 7, 8]);
         let set = RingSet::from_rings(RingFamily::Simple, 10, vec![r_small, r_large]);
-        assert_eq!(set.atom_smallest_ring_size(AtomIdx(1)), Some(3));
-        assert_eq!(set.atom_smallest_ring_size(AtomIdx(4)), Some(6));
+        assert_eq!(set.atom_smallest_ring_size(AtomId(1)), Some(3));
+        assert_eq!(set.atom_smallest_ring_size(AtomId(4)), Some(6));
     }
 
     #[rstest]
     fn test_ring_set_shared_oob_returns_empty(triangle_set: RingSet) {
         assert_eq!(
-            triangle_set.shared_atoms(RingIdx(0), RingIdx(99)),
-            Vec::<AtomIdx>::new(),
+            triangle_set.shared_atoms(RingId(0), RingId(99)),
+            Vec::<AtomId>::new(),
         );
         assert_eq!(
-            triangle_set.shared_bonds(RingIdx(0), RingIdx(99)),
-            Vec::<BondIdx>::new(),
+            triangle_set.shared_bonds(RingId(0), RingId(99)),
+            Vec::<BondId>::new(),
         );
         assert_eq!(
-            triangle_set.shared_atoms(RingIdx(99), RingIdx(0)),
-            Vec::<AtomIdx>::new(),
+            triangle_set.shared_atoms(RingId(99), RingId(0)),
+            Vec::<AtomId>::new(),
         );
     }
 
     #[rstest]
     fn test_ring_set_shared_hits(fused_pair: RingSet) {
         assert_eq!(
-            fused_pair.shared_atoms(RingIdx(0), RingIdx(1)),
-            vec![AtomIdx(1), AtomIdx(2)],
+            fused_pair.shared_atoms(RingId(0), RingId(1)),
+            vec![AtomId(1), AtomId(2)],
         );
         assert_eq!(
-            fused_pair.shared_bonds(RingIdx(0), RingIdx(1)),
-            vec![BondIdx(1)],
+            fused_pair.shared_bonds(RingId(0), RingId(1)),
+            vec![BondId(1)],
         );
     }
 
@@ -773,21 +774,21 @@ mod tests {
     #[case::spiro(spiro_pair(), RingRelation::Spiro)]
     #[case::bridged(bridged_pair(), RingRelation::Bridged)]
     fn test_ring_set_relation_by_kind(#[case] set: RingSet, #[case] expected: RingRelation) {
-        assert_eq!(set.relation(RingIdx(0), RingIdx(1)), expected);
+        assert_eq!(set.relation(RingId(0), RingId(1)), expected);
         assert_eq!(
-            set.relation(RingIdx(0), RingIdx(0)),
+            set.relation(RingId(0), RingId(0)),
             RingRelation::Identical
         );
         assert_eq!(
-            set.are_fused(RingIdx(0), RingIdx(1)),
+            set.are_fused(RingId(0), RingId(1)),
             expected == RingRelation::Fused,
         );
         assert_eq!(
-            set.are_spiro(RingIdx(0), RingIdx(1)),
+            set.are_spiro(RingId(0), RingId(1)),
             expected == RingRelation::Spiro,
         );
         assert_eq!(
-            set.are_bridged(RingIdx(0), RingIdx(1)),
+            set.are_bridged(RingId(0), RingId(1)),
             expected == RingRelation::Bridged,
         );
     }
@@ -797,10 +798,10 @@ mod tests {
     #[case::spiro(spiro_pair(), RingRelation::Spiro)]
     #[case::bridged(bridged_pair(), RingRelation::Bridged)]
     fn test_ring_set_neighbors_by_kind(#[case] set: RingSet, #[case] expected_kind: RingRelation) {
-        let hit = vec![RingIdx(1)];
-        let miss = Vec::<RingIdx>::new();
+        let hit = vec![RingId(1)];
+        let miss = Vec::<RingId>::new();
         assert_eq!(
-            set.fused_neighbors(RingIdx(0)),
+            set.fused_neighbors(RingId(0)),
             if expected_kind == RingRelation::Fused {
                 hit.clone()
             } else {
@@ -808,7 +809,7 @@ mod tests {
             },
         );
         assert_eq!(
-            set.spiro_neighbors(RingIdx(0)),
+            set.spiro_neighbors(RingId(0)),
             if expected_kind == RingRelation::Spiro {
                 hit.clone()
             } else {
@@ -816,7 +817,7 @@ mod tests {
             },
         );
         assert_eq!(
-            set.bridged_neighbors(RingIdx(0)),
+            set.bridged_neighbors(RingId(0)),
             if expected_kind == RingRelation::Bridged {
                 hit
             } else {
@@ -827,7 +828,7 @@ mod tests {
 
     #[rstest]
     fn test_ring_set_fused_component_single(triangle_set: RingSet) {
-        assert_eq!(triangle_set.fused_component(RingIdx(0)), vec![RingIdx(0)]);
+        assert_eq!(triangle_set.fused_component(RingId(0)), vec![RingId(0)]);
     }
 
     #[rstest]
@@ -838,7 +839,7 @@ mod tests {
         let set = RingSet::from_rings(RingFamily::Simple, 10, vec![r1, r2, r3]);
         assert_eq!(
             set.fused_components(),
-            vec![vec![RingIdx(0), RingIdx(1)], vec![RingIdx(2)]],
+            vec![vec![RingId(0), RingId(1)], vec![RingId(2)]],
         );
     }
 
@@ -848,33 +849,33 @@ mod tests {
         assert_eq!(
             graph.edges(),
             &[RingGraphEdge {
-                source: RingIdx(0),
-                target: RingIdx(1),
+                source: RingId(0),
+                target: RingId(1),
                 relation: RingRelation::Fused,
             }],
         );
         assert_eq!(
-            graph.neighbors(RingIdx(0)),
-            vec![(RingIdx(1), RingRelation::Fused)],
+            graph.neighbors(RingId(0)),
+            vec![(RingId(1), RingRelation::Fused)],
         );
         assert_eq!(
-            graph.neighbors(RingIdx(1)),
-            vec![(RingIdx(0), RingRelation::Fused)],
+            graph.neighbors(RingId(1)),
+            vec![(RingId(0), RingRelation::Fused)],
         );
         assert_eq!(
-            graph.neighbors(RingIdx(99)),
-            Vec::<(RingIdx, RingRelation)>::new(),
+            graph.neighbors(RingId(99)),
+            Vec::<(RingId, RingRelation)>::new(),
         );
     }
 
     #[rstest]
-    #[case::self_is_identical(RingIdx(0), RingIdx(0), RingRelation::Identical)]
-    #[case::oob_first(RingIdx(99), RingIdx(0), RingRelation::Disjoint)]
-    #[case::oob_second(RingIdx(0), RingIdx(99), RingRelation::Disjoint)]
+    #[case::self_is_identical(RingId(0), RingId(0), RingRelation::Identical)]
+    #[case::oob_first(RingId(99), RingId(0), RingRelation::Disjoint)]
+    #[case::oob_second(RingId(0), RingId(99), RingRelation::Disjoint)]
     fn test_ring_graph_relation_edges(
         triangle_set: RingSet,
-        #[case] a: RingIdx,
-        #[case] b: RingIdx,
+        #[case] a: RingId,
+        #[case] b: RingId,
         #[case] expected: RingRelation,
     ) {
         assert_eq!(triangle_set.graph().relation(a, b), expected);
@@ -885,21 +886,21 @@ mod tests {
         Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
         RingFamily::Simple,
         10,
-        |_: AtomIdx| true,
+        |_: AtomId| true,
         1,
     )]
     #[case::filter_breaks_cycle(
         Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]),
         RingFamily::Simple,
         10,
-        |a: AtomIdx| a.0 != 5,
+        |a: AtomId| a.0 != 5,
         0,
     )]
     fn test_enumerate_rings_count(
         #[case] graph: Graph,
         #[case] family: RingFamily,
         #[case] max_ring_size: usize,
-        #[case] atom_filter: fn(AtomIdx) -> bool,
+        #[case] atom_filter: fn(AtomId) -> bool,
         #[case] expected_count: usize,
     ) {
         let set = enumerate_rings(&graph, family, max_ring_size, atom_filter);
@@ -912,7 +913,7 @@ mod tests {
         // 4-cycles plus four 3-cycles; Induced keeps only the 3-cycles.
         let graph = Graph::new(4, &[[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]]);
         let simple = enumerate_rings(&graph, RingFamily::Simple, 4, |_| true);
-        let induced = enumerate_rings(&graph, RingFamily::Induced, 4, |_| true);
+        let induced = enumerate_rings(&graph, RingFamily::Relevant, 4, |_| true);
         assert!(simple.count() >= induced.count());
         for view in induced.iter() {
             assert_eq!(view.len(), 3);

@@ -5,7 +5,7 @@ use std::mem::{self, replace};
 use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
-use super::super::remap::IdxRemapping;
+use super::super::remap::IdRemapping;
 use super::super::value::ValueAst;
 
 /// Atom-scope constraint: a predicate that pattern-matches a single atom
@@ -21,8 +21,8 @@ pub enum AtomConstraint {
     DonatedPairs(ValueAst),
     AcceptedPairs(ValueAst),
     Degree(ValueAst),
-    Connectivity(ValueAst),
-    RingConnectivity(ValueAst),
+    TotalDegree(ValueAst),
+    RingDegree(ValueAst),
     TotalHydrogens(ValueAst),
     RingCount(ValueAst),
     RingSize(ValueAst),
@@ -53,12 +53,12 @@ impl AtomConstraint {
         Self::Degree(v.into())
     }
 
-    pub fn connectivity(v: impl Into<ValueAst>) -> Self {
-        Self::Connectivity(v.into())
+    pub fn total_degree(v: impl Into<ValueAst>) -> Self {
+        Self::TotalDegree(v.into())
     }
 
-    pub fn ring_connectivity(v: impl Into<ValueAst>) -> Self {
-        Self::RingConnectivity(v.into())
+    pub fn ring_degree(v: impl Into<ValueAst>) -> Self {
+        Self::RingDegree(v.into())
     }
 
     pub fn total_hydrogens(v: impl Into<ValueAst>) -> Self {
@@ -83,8 +83,8 @@ impl AtomConstraint {
             | Self::DonatedPairs(v)
             | Self::AcceptedPairs(v)
             | Self::Degree(v)
-            | Self::Connectivity(v)
-            | Self::RingConnectivity(v)
+            | Self::TotalDegree(v)
+            | Self::RingDegree(v)
             | Self::TotalHydrogens(v)
             | Self::RingCount(v)
             | Self::RingSize(v) => v.is_undetermined(),
@@ -103,8 +103,8 @@ impl AtomConstraint {
             Self::DonatedPairs(v) => Self::DonatedPairs(v.simplify()),
             Self::AcceptedPairs(v) => Self::AcceptedPairs(v.simplify()),
             Self::Degree(v) => Self::Degree(v.simplify()),
-            Self::Connectivity(v) => Self::Connectivity(v.simplify()),
-            Self::RingConnectivity(v) => Self::RingConnectivity(v.simplify()),
+            Self::TotalDegree(v) => Self::TotalDegree(v.simplify()),
+            Self::RingDegree(v) => Self::RingDegree(v.simplify()),
             Self::TotalHydrogens(v) => Self::TotalHydrogens(v.simplify()),
             Self::RingCount(v) => Self::RingCount(v.simplify()),
             Self::RingSize(v) => Self::RingSize(v.simplify()),
@@ -258,7 +258,7 @@ impl AtomConstraints {
     }
 
     /// No-op: no `AtomConstraint` variant carries an entity index.
-    pub fn remap(self, _remap: &IdxRemapping) -> Self {
+    pub fn remap(self, _remap: &IdRemapping) -> Self {
         self
     }
 
@@ -313,8 +313,8 @@ mod tests {
     #[case::donated_pairs(AtomConstraint::donated_pairs(1), AtomConstraint::DonatedPairs(ValueAst::Lit(1)))]
     #[case::accepted_pairs(AtomConstraint::accepted_pairs(2), AtomConstraint::AcceptedPairs(ValueAst::Lit(2)))]
     #[case::degree(AtomConstraint::degree(3), AtomConstraint::Degree(ValueAst::Lit(3)))]
-    #[case::connectivity(AtomConstraint::connectivity(4), AtomConstraint::Connectivity(ValueAst::Lit(4)))]
-    #[case::ring_connectivity(AtomConstraint::ring_connectivity(2), AtomConstraint::RingConnectivity(ValueAst::Lit(2)))]
+    #[case::total_degree(AtomConstraint::total_degree(4), AtomConstraint::TotalDegree(ValueAst::Lit(4)))]
+    #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraint::RingDegree(ValueAst::Lit(2)))]
     #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraint::TotalHydrogens(ValueAst::Lit(3)))]
     #[case::ring_count(AtomConstraint::ring_count(1), AtomConstraint::RingCount(ValueAst::Lit(1)))]
     #[case::ring_size(AtomConstraint::ring_size(6), AtomConstraint::RingSize(ValueAst::Lit(6)))]
@@ -341,8 +341,8 @@ mod tests {
     #[case::donated_pairs(AtomConstraint::donated_pairs(1), AtomConstraintKind::DonatedPairs)]
     #[case::accepted_pairs(AtomConstraint::accepted_pairs(2), AtomConstraintKind::AcceptedPairs)]
     #[case::degree(AtomConstraint::degree(3), AtomConstraintKind::Degree)]
-    #[case::connectivity(AtomConstraint::connectivity(4), AtomConstraintKind::Connectivity)]
-    #[case::ring_connectivity(AtomConstraint::ring_connectivity(2), AtomConstraintKind::RingConnectivity)]
+    #[case::total_degree(AtomConstraint::total_degree(4), AtomConstraintKind::TotalDegree)]
+    #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraintKind::RingDegree)]
     #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraintKind::TotalHydrogens)]
     #[case::ring_count(AtomConstraint::ring_count(1), AtomConstraintKind::RingCount)]
     #[case::ring_size(AtomConstraint::ring_size(6), AtomConstraintKind::RingSize)]
@@ -722,7 +722,7 @@ mod tests {
     fn test_atom_constraints_remap() {
         let cs =
             AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
-        let remap = IdxRemapping::new(
+        let remap = IdRemapping::new(
             umol_graph_core::Remapping {
                 removed_nodes: vec![0, 1, 2],
                 removed_edges: vec![0],

@@ -20,11 +20,11 @@ use super::super::bond::BondAst;
 use super::super::constraint::{Constraint, Constraints};
 use super::super::dative::DativeBondAst;
 use super::super::idx::{
-    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::NoncovalentBondAst;
-use super::super::remap::IdxRemapping;
+use super::super::remap::IdRemapping;
 use super::MoleculeAst;
 
 enum FixedSetStorage<R, const N: usize> {
@@ -269,24 +269,24 @@ impl MoleculeBuilder {
         }
     }
 
-    pub fn add_atom(&mut self, atom: AtomAst) -> AtomIdx {
+    pub fn add_atom(&mut self, atom: AtomAst) -> AtomId {
         let id = self.graph.add_node();
         Arc::make_mut(&mut self.atoms).push(atom);
-        AtomIdx::from(id)
+        AtomId::from(id)
     }
 
-    pub fn add_bond(&mut self, src: AtomIdx, tgt: AtomIdx, bond: BondAst) -> BondIdx {
+    pub fn add_bond(&mut self, src: AtomId, tgt: AtomId, bond: BondAst) -> BondId {
         let id = self.graph.add_edge(NodeId::from(src), NodeId::from(tgt));
         Arc::make_mut(&mut self.bonds).push(bond);
-        BondIdx::from(id)
+        BondId::from(id)
     }
 
     pub fn add_dative_bond(
         &mut self,
-        donors: Vec<AtomIdx>,
-        acceptor: AtomIdx,
+        donors: Vec<AtomId>,
+        acceptor: AtomId,
         mut bond: DativeBondAst,
-    ) -> DativeBondIdx {
+    ) -> DativeBondId {
         let acceptor_node = NodeId::from(acceptor);
         let mut participants: Vec<NodeId> = donors
             .into_iter()
@@ -300,38 +300,38 @@ impl MoleculeBuilder {
             .expect("acceptor must appear in participants");
         bond.acceptor_slot = slot as u8;
         let i = self.dative_bonds.push(participants, bond);
-        DativeBondIdx(i)
+        DativeBondId(i)
     }
 
     pub fn add_aromatic_system(
         &mut self,
-        atoms: Vec<AtomIdx>,
+        atoms: Vec<AtomId>,
         data: AromaticSystemAst,
-    ) -> AromaticSystemIdx {
+    ) -> AromaticSystemId {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         let i = self.aromatic_systems.push(nodes, data);
-        AromaticSystemIdx(i)
+        AromaticSystemId(i)
     }
 
     pub fn add_multicenter_bond(
         &mut self,
-        atoms: Vec<AtomIdx>,
+        atoms: Vec<AtomId>,
         data: MulticenterBondAst,
-    ) -> MulticenterBondIdx {
+    ) -> MulticenterBondId {
         let nodes: Vec<NodeId> = atoms.into_iter().map(NodeId::from).collect();
         let i = self.multicenter_bonds.push(nodes, data);
-        MulticenterBondIdx(i)
+        MulticenterBondId(i)
     }
 
     pub fn add_noncovalent_bond(
         &mut self,
-        ends: [AtomIdx; 2],
+        ends: [AtomId; 2],
         bond: NoncovalentBondAst,
-    ) -> NoncovalentBondIdx {
+    ) -> NoncovalentBondId {
         let i = self
             .noncovalent_bonds
             .push([NodeId::from(ends[0]), NodeId::from(ends[1])], bond);
-        NoncovalentBondIdx(i)
+        NoncovalentBondId(i)
     }
 
     /// Add a molecule-level constraint (molecule-scope predicate or
@@ -343,15 +343,15 @@ impl MoleculeBuilder {
 
     // -- Attribute mutation ---------------------------------------------------
 
-    pub fn atom_mut(&mut self, idx: AtomIdx) -> &mut AtomAst {
+    pub fn atom_mut(&mut self, idx: AtomId) -> &mut AtomAst {
         &mut Arc::make_mut(&mut self.atoms)[idx.index()]
     }
 
-    pub fn bond_mut(&mut self, idx: BondIdx) -> &mut BondAst {
+    pub fn bond_mut(&mut self, idx: BondId) -> &mut BondAst {
         &mut Arc::make_mut(&mut self.bonds)[idx.index()]
     }
 
-    pub fn dative_bond_mut(&mut self, idx: DativeBondIdx) -> &mut DativeBondAst {
+    pub fn dative_bond_mut(&mut self, idx: DativeBondId) -> &mut DativeBondAst {
         self.dative_bonds.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.dative_bonds else {
             unreachable!()
@@ -359,7 +359,7 @@ impl MoleculeBuilder {
         &mut vec[idx.index()].1
     }
 
-    pub fn aromatic_system_mut(&mut self, idx: AromaticSystemIdx) -> &mut AromaticSystemAst {
+    pub fn aromatic_system_mut(&mut self, idx: AromaticSystemId) -> &mut AromaticSystemAst {
         self.aromatic_systems.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.aromatic_systems else {
             unreachable!()
@@ -367,7 +367,7 @@ impl MoleculeBuilder {
         &mut vec[idx.index()].1
     }
 
-    pub fn multicenter_bond_mut(&mut self, idx: MulticenterBondIdx) -> &mut MulticenterBondAst {
+    pub fn multicenter_bond_mut(&mut self, idx: MulticenterBondId) -> &mut MulticenterBondAst {
         self.multicenter_bonds.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.multicenter_bonds else {
             unreachable!()
@@ -375,7 +375,7 @@ impl MoleculeBuilder {
         &mut vec[idx.index()].1
     }
 
-    pub fn noncovalent_bond_mut(&mut self, idx: NoncovalentBondIdx) -> &mut NoncovalentBondAst {
+    pub fn noncovalent_bond_mut(&mut self, idx: NoncovalentBondId) -> &mut NoncovalentBondAst {
         self.noncovalent_bonds.materialize();
         let FixedSetStorage::Mutable(vec) = &mut self.noncovalent_bonds else {
             unreachable!()
@@ -389,10 +389,10 @@ impl MoleculeBuilder {
 
     // -- Relation removal -----------------------------------------------------
 
-    pub fn remove_dative_bonds(&mut self, indices: &[DativeBondIdx]) {
+    pub fn remove_dative_bonds(&mut self, indices: &[DativeBondId]) {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.dative_bonds.remove_indices(&raw);
-        let idx_remap = IdxRemapping::new(
+        let idx_remap = IdRemapping::new(
             Remapping {
                 removed_nodes: Vec::new(),
                 removed_edges: Vec::new(),
@@ -405,10 +405,10 @@ impl MoleculeBuilder {
         self.constraints.remap(&idx_remap);
     }
 
-    pub fn remove_aromatic_systems(&mut self, indices: &[AromaticSystemIdx]) {
+    pub fn remove_aromatic_systems(&mut self, indices: &[AromaticSystemId]) {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.aromatic_systems.remove_indices(&raw);
-        let idx_remap = IdxRemapping::new(
+        let idx_remap = IdRemapping::new(
             Remapping {
                 removed_nodes: Vec::new(),
                 removed_edges: Vec::new(),
@@ -421,10 +421,10 @@ impl MoleculeBuilder {
         self.constraints.remap(&idx_remap);
     }
 
-    pub fn remove_multicenter_bonds(&mut self, indices: &[MulticenterBondIdx]) {
+    pub fn remove_multicenter_bonds(&mut self, indices: &[MulticenterBondId]) {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.multicenter_bonds.remove_indices(&raw);
-        let idx_remap = IdxRemapping::new(
+        let idx_remap = IdRemapping::new(
             Remapping {
                 removed_nodes: Vec::new(),
                 removed_edges: Vec::new(),
@@ -437,10 +437,10 @@ impl MoleculeBuilder {
         self.constraints.remap(&idx_remap);
     }
 
-    pub fn remove_noncovalent_bonds(&mut self, indices: &[NoncovalentBondIdx]) {
+    pub fn remove_noncovalent_bonds(&mut self, indices: &[NoncovalentBondId]) {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.noncovalent_bonds.remove_indices(&raw);
-        let idx_remap = IdxRemapping::new(
+        let idx_remap = IdRemapping::new(
             Remapping {
                 removed_nodes: Vec::new(),
                 removed_edges: Vec::new(),
@@ -455,7 +455,7 @@ impl MoleculeBuilder {
 
     // -- Topological removal --------------------------------------------------
 
-    pub fn remove(&mut self, atoms: &[AtomIdx], bonds: &[BondIdx]) -> IdxRemapping {
+    pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> IdRemapping {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();
         let remap = self.graph.remove(&nodes, &edges);
@@ -494,7 +494,7 @@ impl MoleculeBuilder {
         );
         self.noncovalent_bonds = noncovalent.apply_remapping(&remap);
 
-        let idx_remap = IdxRemapping::new(
+        let idx_remap = IdRemapping::new(
             remap,
             removed_dative,
             removed_aromatic,

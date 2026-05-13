@@ -21,8 +21,8 @@ pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
 pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemAst, AromaticSystemIdx, AromaticValenceAst, AtomConstraint, AtomConstraintKind,
-    AtomIdx, AtomView, BondConstraint, BondIdx, ElementAst, ImplicitHydrogensAst, MoleculeAst,
+    AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AtomConstraint, AtomConstraintKind,
+    AtomId, AtomView, BondConstraint, BondId, ElementAst, ImplicitHydrogensAst, MoleculeAst,
     RingFamily, ValueAst,
 };
 use umol_shared::element::Element;
@@ -82,7 +82,7 @@ impl AromaticityPerception {
         ast: &mut MoleculeAst,
         electrons_at: F,
     ) -> Result<
-        Solution<Vec<(Vec<AtomIdx>, AromaticSystemAst)>, AromaticityContradiction>,
+        Solution<Vec<(Vec<AtomId>, AromaticSystemAst)>, AromaticityContradiction>,
         AromaticityError,
     >
     where
@@ -128,13 +128,13 @@ impl AromaticityPerception {
     pub fn add_systems(
         &self,
         ast: &mut MoleculeAst,
-        systems: Vec<(Vec<AtomIdx>, AromaticSystemAst)>,
+        systems: Vec<(Vec<AtomId>, AromaticSystemAst)>,
     ) {
         if systems.is_empty() {
             return;
         }
         let mut builder = ast.edit();
-        let new_indices: Vec<AromaticSystemIdx> = systems
+        let new_indices: Vec<AromaticSystemId> = systems
             .into_iter()
             .map(|(atoms, system_ast)| builder.add_aromatic_system(atoms, system_ast))
             .collect();
@@ -144,13 +144,13 @@ impl AromaticityPerception {
             equalize_charges(ast, idx);
         }
 
-        let bond_ids: Vec<BondIdx> = new_indices
+        let bond_ids: Vec<BondId> = new_indices
             .iter()
             .flat_map(|&idx| ast.aromatic_system(idx).bonds().collect::<Vec<_>>())
             .collect();
         for bond_id in bond_ids {
             let bond = ast.bond_mut(bond_id);
-            bond.data.constraints.add(BondConstraint::Aromatic);
+            bond.ast.constraints.add(BondConstraint::Aromatic);
         }
     }
 
@@ -167,7 +167,7 @@ impl AromaticityPerception {
 /// the `AromaticValence::Aromatic(Lit(n))` constraint. Returns `None` if
 /// the constraint is missing or non-numeric.
 pub(crate) fn electrons_from_aromatic_constraint(view: &AtomView<'_>) -> Option<u8> {
-    match view.data.constraints.get(AtomConstraintKind::AromaticValence)? {
+    match view.ast.constraints.get(AtomConstraintKind::AromaticValence)? {
         AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n)))
             if *n >= 0 =>
         {
@@ -207,20 +207,20 @@ pub(crate) fn electrons_from_aromatic_constraint(view: &AtomView<'_>) -> Option<
 ///   the heteroatom.
 ///
 /// Spin is not modified.
-fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemIdx) {
-    let atoms: Vec<AtomIdx> = ast.aromatic_system(system_idx).atoms().collect();
+fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemId) {
+    let atoms: Vec<AtomId> = ast.aromatic_system(system_idx).atoms().collect();
     let Some(element) = monoelement(ast, &atoms) else {
         return;
     };
     let v = element.valence_electrons() as i64;
 
-    let mut accumulated = match ast.aromatic_system(system_idx).data.charge {
+    let mut accumulated = match ast.aromatic_system(system_idx).ast.charge {
         ValueAst::Lit(c) => c,
         _ => 0,
     };
     for (i, atom_idx) in atoms.iter().copied().enumerate() {
         let view = ast.atom(atom_idx);
-        let atom = view.data;
+        let atom = view.ast;
         let lp = match atom.lone_pairs {
             ValueAst::Lit(n) => n,
             _ => continue,
@@ -238,7 +238,7 @@ fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemIdx) {
             ValueAst::Lit(c) => c,
             _ => continue,
         };
-        let e = match ast.aromatic_system(system_idx).data.electrons[i] {
+        let e = match ast.aromatic_system(system_idx).ast.electrons[i] {
             ValueAst::Lit(e) => e,
             _ => continue,
         };
@@ -247,7 +247,7 @@ fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemIdx) {
         }
         ast.aromatic_system_mut(system_idx).electrons[i] = ValueAst::Lit(k);
         accumulated += c;
-        let atom_mut = ast.atom_mut(atom_idx).data;
+        let atom_mut = ast.atom_mut(atom_idx).ast;
         atom_mut.charge = ValueAst::Lit(0);
         atom_mut.constraints.add(AtomConstraint::AromaticValence(
             AromaticValenceAst::Aromatic(ValueAst::Lit(k)),
@@ -259,14 +259,14 @@ fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemIdx) {
 /// Returns the shared element if every atom in `atoms` has a literal,
 /// matching element. `None` if any atom's element is undetermined or the
 /// system is heterogeneous.
-fn monoelement(ast: &MoleculeAst, atoms: &[AtomIdx]) -> Option<Element> {
+fn monoelement(ast: &MoleculeAst, atoms: &[AtomId]) -> Option<Element> {
     let mut iter = atoms.iter();
-    let first = match ast.atom(*iter.next()?).data.element {
+    let first = match ast.atom(*iter.next()?).ast.element {
         ElementAst::Lit(el) => el,
         _ => return None,
     };
     for &idx in iter {
-        match ast.atom(idx).data.element {
+        match ast.atom(idx).ast.element {
             ElementAst::Lit(el) if el == first => {}
             _ => return None,
         }
@@ -280,8 +280,8 @@ mod tests {
     use rstest::*;
     use umol_ast::mol_zeroed;
     use umol_ast::ast::{
-        AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind,
-        AtomIdx, BondAst, BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
+        AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind,
+        AtomId, BondAst, BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -295,8 +295,8 @@ mod tests {
         })
     }
 
-    fn aromatic_valence_lit(ast: &MoleculeAst, idx: AtomIdx) -> Option<i64> {
-        match ast.atom(idx).data.constraints.get(AtomConstraintKind::AromaticValence)? {
+    fn aromatic_valence_lit(ast: &MoleculeAst, idx: AtomId) -> Option<i64> {
+        match ast.atom(idx).ast.constraints.get(AtomConstraintKind::AromaticValence)? {
             AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n))) => {
                 Some(*n)
             }
@@ -317,7 +317,7 @@ mod tests {
     fn benzene() -> MoleculeAst {
         let atoms: Vec<AtomAst> = (0..6).map(|_| aromatic(Element::C, 1)).collect();
         let bonds: Vec<_> = (0..6)
-            .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(1)))
+            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
         MoleculeAst::from_atoms_and_bonds(
             atoms,
@@ -334,7 +334,7 @@ mod tests {
             aromatic(Element::C, 1),
         ];
         let bonds: Vec<_> = (0..5)
-            .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 5), BondAst::from_order(1)))
+            .map(|i| (AtomId(i), AtomId((i + 1) % 5), BondAst::from_order(1)))
             .collect();
         MoleculeAst::from_atoms_and_bonds(
             atoms,
@@ -369,14 +369,14 @@ mod tests {
         let solution = run_full(&perception, &mut ast);
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 1);
-        let system = ast.aromatic_system(AromaticSystemIdx(0));
-        let atoms: Vec<AtomIdx> = system.atoms().collect();
+        let system = ast.aromatic_system(AromaticSystemId(0));
+        let atoms: Vec<AtomId> = system.atoms().collect();
         assert_eq!(atoms.len(), 6);
         let aromatic_bond_count = ast
             .bonds()
             .iter()
             .filter(|view| {
-                view.data
+                view.ast
                     .constraints
                     .iter()
                     .any(|c| c.kind() == BondConstraintKind::Aromatic)
@@ -467,15 +467,15 @@ mod tests {
         };
         any_hueckel().add_systems(&mut ast, systems);
 
-        let system = ast.aromatic_system(AromaticSystemIdx(0));
-        assert_eq!(system.data.charge, ValueAst::Lit(system_charge));
+        let system = ast.aromatic_system(AromaticSystemId(0));
+        assert_eq!(system.ast.charge, ValueAst::Lit(system_charge));
         assert_eq!(
-            system.data.electrons,
+            system.ast.electrons,
             electrons.into_iter().map(ValueAst::Lit).collect::<Vec<_>>(),
         );
         for (i, (q, k)) in atom_charges.iter().zip(aromatic_valences.iter()).enumerate() {
-            let idx = AtomIdx(i as u32);
-            assert_eq!(ast.atom(idx).data.charge, ValueAst::Lit(*q));
+            let idx = AtomId(i as u32);
+            assert_eq!(ast.atom(idx).ast.charge, ValueAst::Lit(*q));
             assert_eq!(aromatic_valence_lit(&ast, idx), Some(*k));
         }
     }
@@ -488,7 +488,7 @@ mod tests {
         });
         let atoms: Vec<AtomAst> = (0..6).map(|_| AtomAst::from_element(Element::C)).collect();
         let bonds: Vec<_> = (0..6)
-            .map(|i| (AtomIdx(i), AtomIdx((i + 1) % 6), BondAst::from_order(1)))
+            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
         let mut ast = MoleculeAst::from_atoms_and_bonds(
             atoms,
@@ -498,7 +498,7 @@ mod tests {
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 0);
         let any_aromatic = ast.bonds().iter().any(|view| {
-            view.data
+            view.ast
                 .constraints
                 .iter()
                 .any(|c| c.kind() == BondConstraintKind::Aromatic)

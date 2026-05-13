@@ -109,12 +109,12 @@ impl Resolver {
 }
 
 fn molecule_all_ground(ast: &MoleculeAst) -> bool {
-    ast.atoms().iter().all(|v| v.data.is_ground())
-        && ast.bonds().iter().all(|v| v.data.is_ground())
-        && ast.dative_bonds().iter().all(|v| v.data.is_ground())
-        && ast.aromatic_systems().iter().all(|v| v.data.is_ground())
-        && ast.multicenter_bonds().iter().all(|v| v.data.is_ground())
-        && ast.noncovalent_bonds().iter().all(|v| v.data.is_ground())
+    ast.atoms().iter().all(|v| v.ast.is_ground())
+        && ast.bonds().iter().all(|v| v.ast.is_ground())
+        && ast.dative_bonds().iter().all(|v| v.ast.is_ground())
+        && ast.aromatic_systems().iter().all(|v| v.ast.is_ground())
+        && ast.multicenter_bonds().iter().all(|v| v.ast.is_ground())
+        && ast.noncovalent_bonds().iter().all(|v| v.ast.is_ground())
 }
 
 #[cfg(test)]

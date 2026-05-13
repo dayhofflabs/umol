@@ -2,10 +2,10 @@
 
 use umol_graph_core::{AutoGroupOrder, Automorphism, NodeId};
 
-use super::idx::AtomIdx;
+use super::idx::AtomId;
 
 /// Atom-level wrapper over `umol_graph_core::Automorphism`. Indexes the
-/// permutation in terms of `AtomIdx` rather than raw `NodeId`.
+/// permutation in terms of `AtomId` rather than raw `NodeId`.
 #[derive(Clone, Debug)]
 pub struct AtomAutomorphism(pub(crate) Automorphism);
 
@@ -18,19 +18,19 @@ impl AtomAutomorphism {
         self.0.orbit_count()
     }
 
-    pub fn orbit_of(&self, atom: AtomIdx) -> AtomIdx {
-        AtomIdx::from(self.0.orbit_of(NodeId::from(atom)))
+    pub fn orbit_of(&self, atom: AtomId) -> AtomId {
+        AtomId::from(self.0.orbit_of(NodeId::from(atom)))
     }
 
-    pub fn same_orbit(&self, a: AtomIdx, b: AtomIdx) -> bool {
+    pub fn same_orbit(&self, a: AtomId, b: AtomId) -> bool {
         self.0.same_orbit(NodeId::from(a), NodeId::from(b))
     }
 
-    pub fn canonical_labeling(&self) -> Vec<AtomIdx> {
+    pub fn canonical_labeling(&self) -> Vec<AtomId> {
         self.0
             .canonical_labeling()
             .iter()
-            .map(|&n| AtomIdx::from(n))
+            .map(|&n| AtomId::from(n))
             .collect()
     }
 
@@ -50,7 +50,7 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     
-    use crate::ast::idx::AtomIdx;
+    use crate::ast::idx::AtomId;
     use crate::ast::molecule::MoleculeAst;
 
     fn ring(n: usize) -> MoleculeAst {
@@ -58,8 +58,8 @@ mod tests {
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
-                    AtomIdx(i as u32),
-                    AtomIdx(((i + 1) % n) as u32),
+                    AtomId(i as u32),
+                    AtomId(((i + 1) % n) as u32),
                     BondAst::from_order(1),
                 )
             })
@@ -75,8 +75,8 @@ mod tests {
         let bonds: Vec<_> = (0..n.saturating_sub(1))
             .map(|i| {
                 (
-                    AtomIdx(i as u32),
-                    AtomIdx((i + 1) as u32),
+                    AtomId(i as u32),
+                    AtomId((i + 1) as u32),
                     BondAst::from_order(1),
                 )
             })
@@ -113,27 +113,27 @@ mod tests {
     fn test_atom_automorphism_orbit_of_agrees_within_orbit(hexagon: AtomAutomorphism) {
         // In a hexagon every atom is in the same orbit, so `orbit_of` must
         // return the same representative for every atom.
-        let rep = hexagon.orbit_of(AtomIdx(0));
+        let rep = hexagon.orbit_of(AtomId(0));
         for i in 1..6 {
-            assert_eq!(hexagon.orbit_of(AtomIdx(i)), rep);
+            assert_eq!(hexagon.orbit_of(AtomId(i)), rep);
         }
     }
 
     #[rstest]
     fn test_atom_automorphism_orbit_of_distinguishes_non_equivalent(chain_3: AtomAutomorphism) {
         // In C-C-C the center atom sits in a different orbit from the endpoints.
-        assert_ne!(chain_3.orbit_of(AtomIdx(0)), chain_3.orbit_of(AtomIdx(1)));
-        assert_eq!(chain_3.orbit_of(AtomIdx(0)), chain_3.orbit_of(AtomIdx(2)));
+        assert_ne!(chain_3.orbit_of(AtomId(0)), chain_3.orbit_of(AtomId(1)));
+        assert_eq!(chain_3.orbit_of(AtomId(0)), chain_3.orbit_of(AtomId(2)));
     }
 
     #[rstest]
-    #[case::hexagon_equivalent(hexagon(), AtomIdx(0), AtomIdx(3), true)]
-    #[case::chain_endpoints_equivalent(chain_3(), AtomIdx(0), AtomIdx(2), true)]
-    #[case::chain_endpoint_vs_middle(chain_3(), AtomIdx(0), AtomIdx(1), false)]
+    #[case::hexagon_equivalent(hexagon(), AtomId(0), AtomId(3), true)]
+    #[case::chain_endpoints_equivalent(chain_3(), AtomId(0), AtomId(2), true)]
+    #[case::chain_endpoint_vs_middle(chain_3(), AtomId(0), AtomId(1), false)]
     fn test_atom_automorphism_same_orbit(
         #[case] auto: AtomAutomorphism,
-        #[case] a: AtomIdx,
-        #[case] b: AtomIdx,
+        #[case] a: AtomId,
+        #[case] b: AtomId,
         #[case] expected: bool,
     ) {
         assert_eq!(auto.same_orbit(a, b), expected);
@@ -147,7 +147,7 @@ mod tests {
         sorted.sort_unstable();
         assert_eq!(
             sorted,
-            (0..6).map(|i| AtomIdx(i as u32)).collect::<Vec<_>>()
+            (0..6).map(|i| AtomId(i as u32)).collect::<Vec<_>>()
         );
     }
 

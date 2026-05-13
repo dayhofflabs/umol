@@ -1281,6 +1281,16 @@ Each phase lands with:
 - No new clippy warnings
 - Ops modules either migrated (in their respective phases) or passing via temporary shims
 
+### Critiques
+
+4. Edit::inverse semantics with symbolic refs unspecified. Doc says self-inverting (line 833) but symbolic New(usize) refs appear only inside Edit (line 852). What does Edit::inverse(&AddBond { a: AtomRef::New(0), b: AtomRef::New(1), ast }) return? Inverse must resolve refs against Action from the forward apply — otherwise the inverse is unusable outside the original batch context. Either state "inverse is only defined post-apply, after refs are resolved to ids" or carry the resolved Action alongside.
+
+5. Snapshot rollback doesn't cover panics during apply. §"Settled design choices" → "Rollback mechanism: snapshot at transaction start" is correct for Err returns. Panics inside apply leave the molecule with the snapshot uninstalled. The atomicity guarantee on line 884 needs a panic-handling line: either explicit catch_unwind at the transact boundary (poisons or restores), or document that panics during transact leave the molecule in an indeterminate state.
+
+6. Transaction<'_> read surface undefined. transact_with(|tx| ...) (line 864) needs tx to support inspection between applies (that's the only reason for closure form over data form). What methods does Transaction expose? If full view API, then views must work against mid-transaction state — what's the invariant guarantee? If only apply/validate, the closure form's value over data form drops.
+
+7. Cascade nesting termination unspecified. §"Settled design choices" allows Action::Cascaded recursion but doesn't state termination. Today, overlay removal cannot trigger overlay removal (overlays don't reference overlays), so depth ≤ 1 by construction. State this as a property of R3 with current overlay rules, or define what stops the recursion in the abstract case.
+
 ## AST-vs-API layering: parked considerations
 
 The ring-view discussion in §"Ring access" surfaced a broader question: what would a chemist-facing API tier look like, given that the previous attempt was unwound? This section preserves the design considerations for when the question becomes actionable. Nothing here is a current plan — the actionable space right now is the AST API itself (the operation taxonomy above).

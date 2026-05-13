@@ -14,7 +14,7 @@ use super::bond::BondAst;
 use super::constraint::{Constraint, Constraints};
 use super::dative::DativeBondAst;
 use super::idx::{
-    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
@@ -104,7 +104,7 @@ impl MoleculeAst {
     /// Common shape: atoms plus pairwise bonds, no relations or constraints.
     pub fn from_atoms_and_bonds(
         atoms: Vec<AtomAst>,
-        bonds: Vec<(AtomIdx, AtomIdx, BondAst)>,
+        bonds: Vec<(AtomId, AtomId, BondAst)>,
     ) -> Self {
         Self::from_parts(
             atoms,
@@ -131,11 +131,11 @@ impl MoleculeAst {
     #[allow(clippy::too_many_arguments)]
     pub fn from_parts(
         atoms: Vec<AtomAst>,
-        bonds: Vec<(AtomIdx, AtomIdx, BondAst)>,
-        dative: Vec<(Vec<AtomIdx>, AtomIdx, DativeBondAst)>,
-        aromatic: Vec<(Vec<AtomIdx>, AromaticSystemAst)>,
-        multicenter: Vec<(Vec<AtomIdx>, MulticenterBondAst)>,
-        noncovalent: Vec<(AtomIdx, AtomIdx, NoncovalentBondAst)>,
+        bonds: Vec<(AtomId, AtomId, BondAst)>,
+        dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)>,
+        aromatic: Vec<(Vec<AtomId>, AromaticSystemAst)>,
+        multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)>,
+        noncovalent: Vec<(AtomId, AtomId, NoncovalentBondAst)>,
         constraints: Constraints,
     ) -> Self {
         let node_count = atoms.len();
@@ -222,27 +222,27 @@ impl MoleculeAst {
         }
     }
 
-    /// AtomIdx/BondIdx-typed adapter exposing the pure-graph algorithms.
+    /// AtomId/BondId-typed adapter exposing the pure-graph algorithms.
     pub fn graph(&self) -> GraphView<'_> {
         GraphView::new(&self.graph)
     }
 
     /// Raw underlying graph with `NodeId` / `EdgeId` types. Escape hatch
     /// for code that needs the graph-core API directly; use [`Self::graph`]
-    /// for AtomIdx/BondIdx-typed access.
+    /// for AtomId/BondId-typed access.
     pub fn raw_graph(&self) -> &Graph {
         &self.graph
     }
 
-    pub fn neighbors(&self, atom: AtomIdx) -> impl Iterator<Item = NeighborView<'_>> {
+    pub fn neighbors(&self, atom: AtomId) -> impl Iterator<Item = NeighborView<'_>> {
         let bonds = &self.bonds;
         self.graph
             .neighbors(NodeId::from(atom))
             .iter()
             .map(move |n| {
                 NeighborView::new(
-                    BondIdx::from(n.edge),
-                    AtomIdx::from(n.node),
+                    BondId::from(n.edge),
+                    AtomId::from(n.node),
                     &bonds[n.edge.index()],
                     self,
                 )
@@ -253,7 +253,7 @@ impl MoleculeAst {
         AtomViews::new(self, &self.atoms)
     }
 
-    pub fn atom(&self, idx: AtomIdx) -> AtomView<'_> {
+    pub fn atom(&self, idx: AtomId) -> AtomView<'_> {
         self.atoms().get(idx)
     }
 
@@ -261,7 +261,7 @@ impl MoleculeAst {
         BondViews::new(self, &self.bonds)
     }
 
-    pub fn bond(&self, idx: BondIdx) -> BondView<'_> {
+    pub fn bond(&self, idx: BondId) -> BondView<'_> {
         self.bonds().get(idx)
     }
 
@@ -269,7 +269,7 @@ impl MoleculeAst {
         DativeBondViews::new(self, &self.dative_bonds)
     }
 
-    pub fn dative_bond(&self, idx: DativeBondIdx) -> DativeBondView<'_> {
+    pub fn dative_bond(&self, idx: DativeBondId) -> DativeBondView<'_> {
         self.dative_bonds().get(idx)
     }
 
@@ -277,7 +277,7 @@ impl MoleculeAst {
         AromaticSystemViews::new(self, &self.aromatic_systems)
     }
 
-    pub fn aromatic_system(&self, idx: AromaticSystemIdx) -> AromaticSystemView<'_> {
+    pub fn aromatic_system(&self, idx: AromaticSystemId) -> AromaticSystemView<'_> {
         self.aromatic_systems().get(idx)
     }
 
@@ -285,7 +285,7 @@ impl MoleculeAst {
         MulticenterBondViews::new(self, &self.multicenter_bonds)
     }
 
-    pub fn multicenter_bond(&self, idx: MulticenterBondIdx) -> MulticenterBondView<'_> {
+    pub fn multicenter_bond(&self, idx: MulticenterBondId) -> MulticenterBondView<'_> {
         self.multicenter_bonds().get(idx)
     }
 
@@ -293,34 +293,34 @@ impl MoleculeAst {
         NoncovalentBondViews::new(self, &self.noncovalent_bonds)
     }
 
-    pub fn noncovalent_bond(&self, idx: NoncovalentBondIdx) -> NoncovalentBondView<'_> {
+    pub fn noncovalent_bond(&self, idx: NoncovalentBondId) -> NoncovalentBondView<'_> {
         self.noncovalent_bonds().get(idx)
     }
 
-    pub fn connecting_bond(&self, a: AtomIdx, b: AtomIdx) -> Option<BondIdx> {
+    pub fn connecting_bond(&self, a: AtomId, b: AtomId) -> Option<BondId> {
         self.graph
             .find_edge(NodeId::from(a), NodeId::from(b))
-            .map(BondIdx::from)
+            .map(BondId::from)
     }
 
     pub fn connecting_dative_bond(
         &self,
-        atoms: impl IntoIterator<Item = AtomIdx>,
-    ) -> Option<DativeBondIdx> {
-        let atoms: HashSet<AtomIdx> = atoms.into_iter().collect();
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<DativeBondId> {
+        let atoms: HashSet<AtomId> = atoms.into_iter().collect();
         let &first = atoms.iter().next()?;
         self.dative_bonds_incident(first).find(|&idx| {
             let v = self.dative_bond(idx);
-            let parts: HashSet<AtomIdx> = v.atoms().collect();
+            let parts: HashSet<AtomId> = v.atoms().collect();
             parts == atoms
         })
     }
 
     pub fn connecting_noncovalent_bond(
         &self,
-        a: AtomIdx,
-        b: AtomIdx,
-    ) -> Option<NoncovalentBondIdx> {
+        a: AtomId,
+        b: AtomId,
+    ) -> Option<NoncovalentBondId> {
         self.noncovalent_bonds_incident(a).find(|&idx| {
             let v = self.noncovalent_bond(idx);
             (v.atoms()[0] == a && v.atoms()[1] == b) || (v.atoms()[0] == b && v.atoms()[1] == a)
@@ -329,105 +329,105 @@ impl MoleculeAst {
 
     pub fn connecting_aromatic_system(
         &self,
-        atoms: impl IntoIterator<Item = AtomIdx>,
-    ) -> Option<AromaticSystemIdx> {
-        let atoms: HashSet<AtomIdx> = atoms.into_iter().collect();
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<AromaticSystemId> {
+        let atoms: HashSet<AtomId> = atoms.into_iter().collect();
         let &first = atoms.iter().next()?;
         self.aromatic_systems_incident(first).find(|&idx| {
             let v = self.aromatic_system(idx);
-            let parts: HashSet<AtomIdx> = v.atoms().collect();
+            let parts: HashSet<AtomId> = v.atoms().collect();
             parts == atoms
         })
     }
 
     pub fn connecting_multicenter_bond(
         &self,
-        atoms: impl IntoIterator<Item = AtomIdx>,
-    ) -> Option<MulticenterBondIdx> {
-        let atoms: HashSet<AtomIdx> = atoms.into_iter().collect();
+        atoms: impl IntoIterator<Item = AtomId>,
+    ) -> Option<MulticenterBondId> {
+        let atoms: HashSet<AtomId> = atoms.into_iter().collect();
         let &first = atoms.iter().next()?;
         self.multicenter_bonds_incident(first).find(|&idx| {
             let v = self.multicenter_bond(idx);
-            let parts: HashSet<AtomIdx> = v.atoms().collect();
+            let parts: HashSet<AtomId> = v.atoms().collect();
             parts == atoms
         })
     }
 
-    pub fn dative_bonds_incident(&self, atom: AtomIdx) -> impl Iterator<Item = DativeBondIdx> + '_ {
+    pub fn dative_bonds_incident(&self, atom: AtomId) -> impl Iterator<Item = DativeBondId> + '_ {
         self.dative_bonds
             .incident(NodeId::from(atom))
             .iter()
-            .map(|&rid| DativeBondIdx::from(rid))
+            .map(|&rid| DativeBondId::from(rid))
     }
 
     pub fn aromatic_systems_incident(
         &self,
-        atom: AtomIdx,
-    ) -> impl Iterator<Item = AromaticSystemIdx> + '_ {
+        atom: AtomId,
+    ) -> impl Iterator<Item = AromaticSystemId> + '_ {
         self.aromatic_systems
             .incident(NodeId::from(atom))
             .iter()
-            .map(|&rid| AromaticSystemIdx::from(rid))
+            .map(|&rid| AromaticSystemId::from(rid))
     }
 
     pub fn multicenter_bonds_incident(
         &self,
-        atom: AtomIdx,
-    ) -> impl Iterator<Item = MulticenterBondIdx> + '_ {
+        atom: AtomId,
+    ) -> impl Iterator<Item = MulticenterBondId> + '_ {
         self.multicenter_bonds
             .incident(NodeId::from(atom))
             .iter()
-            .map(|&rid| MulticenterBondIdx::from(rid))
+            .map(|&rid| MulticenterBondId::from(rid))
     }
 
     pub fn noncovalent_bonds_incident(
         &self,
-        atom: AtomIdx,
-    ) -> impl Iterator<Item = NoncovalentBondIdx> + '_ {
+        atom: AtomId,
+    ) -> impl Iterator<Item = NoncovalentBondId> + '_ {
         self.noncovalent_bonds
             .incident(NodeId::from(atom))
             .iter()
-            .map(|&rid| NoncovalentBondIdx::from(rid))
+            .map(|&rid| NoncovalentBondId::from(rid))
     }
 
-    pub fn induced_subgraph(&self, atoms: &[AtomIdx]) -> MoleculeSubgraph {
-        let keep: HashSet<AtomIdx> = atoms.iter().copied().collect();
-        let remove_atoms: Vec<AtomIdx> = (0..self.atoms().count())
-            .map(AtomIdx::from)
+    pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeSubgraph {
+        let keep: HashSet<AtomId> = atoms.iter().copied().collect();
+        let remove_atoms: Vec<AtomId> = (0..self.atoms().count())
+            .map(AtomId::from)
             .filter(|a| !keep.contains(a))
             .collect();
-        let remove_bonds: Vec<BondIdx> = self
+        let remove_bonds: Vec<BondId> = self
             .bonds()
             .iter()
             .filter(|b| !keep.contains(&b.atoms()[0]) || !keep.contains(&b.atoms()[1]))
-            .map(|b| b.idx)
+            .map(|b| b.id)
             .collect();
         let mut builder = self.edit();
         let remap = builder.remove(&remove_atoms, &remove_bonds);
         let ast = builder.build();
 
-        let atom_map: Vec<AtomIdx> = (0..self.atoms().count())
-            .map(AtomIdx::from)
+        let atom_map: Vec<AtomId> = (0..self.atoms().count())
+            .map(AtomId::from)
             .filter(|&a| remap.atom(a).is_some())
             .collect();
-        let bond_map: Vec<BondIdx> = (0..self.bonds().count())
-            .map(BondIdx::from)
+        let bond_map: Vec<BondId> = (0..self.bonds().count())
+            .map(BondId::from)
             .filter(|&b| remap.bond(b).is_some())
             .collect();
-        let dative_bond_map: Vec<DativeBondIdx> = (0..self.dative_bonds().count())
-            .map(DativeBondIdx::from)
+        let dative_bond_map: Vec<DativeBondId> = (0..self.dative_bonds().count())
+            .map(DativeBondId::from)
             .filter(|&d| remap.dative_bond(d).is_some())
             .collect();
-        let aromatic_system_map: Vec<AromaticSystemIdx> = (0..self.aromatic_systems().count())
-            .map(AromaticSystemIdx::from)
+        let aromatic_system_map: Vec<AromaticSystemId> = (0..self.aromatic_systems().count())
+            .map(AromaticSystemId::from)
             .filter(|&a| remap.aromatic_system(a).is_some())
             .collect();
-        let multicenter_bond_map: Vec<MulticenterBondIdx> = (0..self.multicenter_bonds().count())
-            .map(MulticenterBondIdx::from)
+        let multicenter_bond_map: Vec<MulticenterBondId> = (0..self.multicenter_bonds().count())
+            .map(MulticenterBondId::from)
             .filter(|&m| remap.multicenter_bond(m).is_some())
             .collect();
-        let noncovalent_bond_map: Vec<NoncovalentBondIdx> = (0..self.noncovalent_bonds().count())
-            .map(NoncovalentBondIdx::from)
+        let noncovalent_bond_map: Vec<NoncovalentBondId> = (0..self.noncovalent_bonds().count())
+            .map(NoncovalentBondId::from)
             .filter(|&n| remap.noncovalent_bond(n).is_some())
             .collect();
 
@@ -442,16 +442,16 @@ impl MoleculeAst {
         }
     }
 
-    pub fn induced_bonds(&self, atoms: &[AtomIdx]) -> Vec<BondIdx> {
+    pub fn induced_bonds(&self, atoms: &[AtomId]) -> Vec<BondId> {
         let mut nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         nodes.sort_unstable();
         self.graph
             .induced_edges(&nodes)
-            .map(BondIdx::from)
+            .map(BondId::from)
             .collect()
     }
 
-    pub fn induced_dative_bonds(&self, atoms: &[AtomIdx]) -> Vec<DativeBondIdx> {
+    pub fn induced_dative_bonds(&self, atoms: &[AtomId]) -> Vec<DativeBondId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.dative_bonds
             .relation_ids()
@@ -461,11 +461,11 @@ impl MoleculeAst {
                     .iter()
                     .all(|p| set.contains(p))
             })
-            .map(DativeBondIdx::from)
+            .map(DativeBondId::from)
             .collect()
     }
 
-    pub fn induced_aromatic_systems(&self, atoms: &[AtomIdx]) -> Vec<AromaticSystemIdx> {
+    pub fn induced_aromatic_systems(&self, atoms: &[AtomId]) -> Vec<AromaticSystemId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.aromatic_systems
             .relation_ids()
@@ -475,11 +475,11 @@ impl MoleculeAst {
                     .iter()
                     .all(|p| set.contains(p))
             })
-            .map(AromaticSystemIdx::from)
+            .map(AromaticSystemId::from)
             .collect()
     }
 
-    pub fn induced_multicenter_bonds(&self, atoms: &[AtomIdx]) -> Vec<MulticenterBondIdx> {
+    pub fn induced_multicenter_bonds(&self, atoms: &[AtomId]) -> Vec<MulticenterBondId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.multicenter_bonds
             .relation_ids()
@@ -489,11 +489,11 @@ impl MoleculeAst {
                     .iter()
                     .all(|p| set.contains(p))
             })
-            .map(MulticenterBondIdx::from)
+            .map(MulticenterBondId::from)
             .collect()
     }
 
-    pub fn induced_noncovalent_bonds(&self, atoms: &[AtomIdx]) -> Vec<NoncovalentBondIdx> {
+    pub fn induced_noncovalent_bonds(&self, atoms: &[AtomId]) -> Vec<NoncovalentBondId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.noncovalent_bonds
             .relation_ids()
@@ -503,7 +503,7 @@ impl MoleculeAst {
                     .iter()
                     .all(|p| set.contains(p))
             })
-            .map(NoncovalentBondIdx::from)
+            .map(NoncovalentBondId::from)
             .collect()
     }
 
@@ -556,31 +556,31 @@ impl MoleculeAst {
         &self,
         family: RingFamily,
         max_ring_size: usize,
-        atom_filter: impl Fn(AtomIdx) -> bool,
+        atom_filter: impl Fn(AtomId) -> bool,
     ) -> RingSet {
         rings::enumerate_rings(&self.graph, family, max_ring_size, atom_filter)
     }
 
-    pub fn atom_mut(&mut self, idx: AtomIdx) -> AtomViewMut<'_> {
-        let data = &mut Arc::make_mut(&mut self.atoms)[idx.index()];
-        AtomViewMut { idx, data }
+    pub fn atom_mut(&mut self, idx: AtomId) -> AtomViewMut<'_> {
+        let ast = &mut Arc::make_mut(&mut self.atoms)[idx.index()];
+        AtomViewMut { id: idx, ast }
     }
 
     pub fn atoms_mut(&mut self) -> impl Iterator<Item = &mut AtomAst> {
         Arc::make_mut(&mut self.atoms).iter_mut()
     }
 
-    pub fn bond_mut(&mut self, idx: BondIdx) -> BondViewMut<'_> {
+    pub fn bond_mut(&mut self, idx: BondId) -> BondViewMut<'_> {
         let [s, t] = self.graph.edge_endpoints(idx.into());
         let data = &mut Arc::make_mut(&mut self.bonds)[idx.index()];
-        BondViewMut::new(idx, [AtomIdx::from(s), AtomIdx::from(t)], data)
+        BondViewMut::new(idx, [AtomId::from(s), AtomId::from(t)], data)
     }
 
     pub fn bonds_mut(&mut self) -> impl Iterator<Item = &mut BondAst> {
         Arc::make_mut(&mut self.bonds).iter_mut()
     }
 
-    pub fn dative_bond_mut(&mut self, idx: DativeBondIdx) -> &mut DativeBondAst {
+    pub fn dative_bond_mut(&mut self, idx: DativeBondId) -> &mut DativeBondAst {
         Arc::make_mut(&mut self.dative_bonds).data_mut(RelationId::from(idx))
     }
 
@@ -588,7 +588,7 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.dative_bonds).data_iter_mut()
     }
 
-    pub fn aromatic_system_mut(&mut self, idx: AromaticSystemIdx) -> &mut AromaticSystemAst {
+    pub fn aromatic_system_mut(&mut self, idx: AromaticSystemId) -> &mut AromaticSystemAst {
         Arc::make_mut(&mut self.aromatic_systems).data_mut(RelationId::from(idx))
     }
 
@@ -596,7 +596,7 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.aromatic_systems).data_iter_mut()
     }
 
-    pub fn multicenter_bond_mut(&mut self, idx: MulticenterBondIdx) -> &mut MulticenterBondAst {
+    pub fn multicenter_bond_mut(&mut self, idx: MulticenterBondId) -> &mut MulticenterBondAst {
         Arc::make_mut(&mut self.multicenter_bonds).data_mut(RelationId::from(idx))
     }
 
@@ -604,7 +604,7 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.multicenter_bonds).data_iter_mut()
     }
 
-    pub fn noncovalent_bond_mut(&mut self, idx: NoncovalentBondIdx) -> &mut NoncovalentBondAst {
+    pub fn noncovalent_bond_mut(&mut self, idx: NoncovalentBondId) -> &mut NoncovalentBondAst {
         Arc::make_mut(&mut self.noncovalent_bonds).data_mut(RelationId::from(idx))
     }
 
@@ -662,37 +662,37 @@ impl MoleculeAst {
 
         let mut additions: Vec<Constraint> = Vec::new();
         for i in 0..atom_count {
-            let idx = AtomIdx::from(i);
-            for c in self.atom_mut(idx).data.constraints.take() {
+            let idx = AtomId::from(i);
+            for c in self.atom_mut(idx).ast.constraints.take() {
                 additions.push(Constraint::Atom(idx, c));
             }
         }
         for i in 0..bond_count {
-            let idx = BondIdx::from(i);
-            for c in self.bond_mut(idx).data.constraints.take() {
+            let idx = BondId::from(i);
+            for c in self.bond_mut(idx).ast.constraints.take() {
                 additions.push(Constraint::Bond(idx, c));
             }
         }
         for i in 0..dative_count {
-            let idx = DativeBondIdx::from(i);
+            let idx = DativeBondId::from(i);
             for c in self.dative_bond_mut(idx).constraints.take() {
                 additions.push(Constraint::DativeBond(idx, c));
             }
         }
         for i in 0..aromatic_count {
-            let idx = AromaticSystemIdx::from(i);
+            let idx = AromaticSystemId::from(i);
             for c in self.aromatic_system_mut(idx).constraints.take() {
                 additions.push(Constraint::AromaticSystem(idx, c));
             }
         }
         for i in 0..multicenter_count {
-            let idx = MulticenterBondIdx::from(i);
+            let idx = MulticenterBondId::from(i);
             for c in self.multicenter_bond_mut(idx).constraints.take() {
                 additions.push(Constraint::MulticenterBond(idx, c));
             }
         }
         for i in 0..noncovalent_count {
-            let idx = NoncovalentBondIdx::from(i);
+            let idx = NoncovalentBondId::from(i);
             for c in self.noncovalent_bond_mut(idx).constraints.take() {
                 additions.push(Constraint::NoncovalentBond(idx, c));
             }
@@ -718,10 +718,10 @@ impl MoleculeAst {
         for c in entries {
             match c {
                 Constraint::Atom(idx, inner) => {
-                    self.atom_mut(idx).data.constraints.add(inner);
+                    self.atom_mut(idx).ast.constraints.add(inner);
                 }
                 Constraint::Bond(idx, inner) => {
-                    self.bond_mut(idx).data.constraints.add(inner);
+                    self.bond_mut(idx).ast.constraints.add(inner);
                 }
                 Constraint::DativeBond(idx, inner) => {
                     self.dative_bond_mut(idx).constraints.add(inner);
@@ -759,44 +759,44 @@ impl MoleculeAst {
     }
 }
 
-impl Index<AtomIdx> for MoleculeAst {
+impl Index<AtomId> for MoleculeAst {
     type Output = AtomAst;
-    fn index(&self, idx: AtomIdx) -> &AtomAst {
+    fn index(&self, idx: AtomId) -> &AtomAst {
         &self.atoms[idx.index()]
     }
 }
 
-impl Index<BondIdx> for MoleculeAst {
+impl Index<BondId> for MoleculeAst {
     type Output = BondAst;
-    fn index(&self, idx: BondIdx) -> &BondAst {
+    fn index(&self, idx: BondId) -> &BondAst {
         &self.bonds[idx.index()]
     }
 }
 
-impl Index<DativeBondIdx> for MoleculeAst {
+impl Index<DativeBondId> for MoleculeAst {
     type Output = DativeBondAst;
-    fn index(&self, idx: DativeBondIdx) -> &DativeBondAst {
+    fn index(&self, idx: DativeBondId) -> &DativeBondAst {
         self.dative_bonds.data(RelationId::from(idx))
     }
 }
 
-impl Index<AromaticSystemIdx> for MoleculeAst {
+impl Index<AromaticSystemId> for MoleculeAst {
     type Output = AromaticSystemAst;
-    fn index(&self, idx: AromaticSystemIdx) -> &AromaticSystemAst {
+    fn index(&self, idx: AromaticSystemId) -> &AromaticSystemAst {
         self.aromatic_systems.data(RelationId::from(idx))
     }
 }
 
-impl Index<MulticenterBondIdx> for MoleculeAst {
+impl Index<MulticenterBondId> for MoleculeAst {
     type Output = MulticenterBondAst;
-    fn index(&self, idx: MulticenterBondIdx) -> &MulticenterBondAst {
+    fn index(&self, idx: MulticenterBondId) -> &MulticenterBondAst {
         self.multicenter_bonds.data(RelationId::from(idx))
     }
 }
 
-impl Index<NoncovalentBondIdx> for MoleculeAst {
+impl Index<NoncovalentBondId> for MoleculeAst {
     type Output = NoncovalentBondAst;
-    fn index(&self, idx: NoncovalentBondIdx) -> &NoncovalentBondAst {
+    fn index(&self, idx: NoncovalentBondId) -> &NoncovalentBondAst {
         self.noncovalent_bonds.data(RelationId::from(idx))
     }
 }

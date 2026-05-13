@@ -4,7 +4,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomIdx, MoleculeAst,
+    AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId, MoleculeAst,
     MulticenterValenceAst, ValueAst,
 };
 
@@ -17,7 +17,7 @@ pub struct ElectronInvariantValidator;
 pub enum ElectronInvariantContradiction {
     #[error("atom {atom:?}: orbital count {orbital_count} != electron count {electron_count}")]
     AtomInvariantMismatch {
-        atom: AtomIdx,
+        atom: AtomId,
         orbital_count: i64,
         electron_count: i64,
     },
@@ -34,7 +34,7 @@ impl ElectronInvariantValidator {
         let ast = ast.as_ref();
         let mut any_undetermined = false;
         for view in ast.atoms().iter() {
-            let atom = view.data;
+            let atom = view.ast;
             let Some(element) = atom.element.literal() else {
                 any_undetermined = true;
                 continue;
@@ -57,7 +57,7 @@ impl ElectronInvariantValidator {
             };
             let valence_electrons = element.valence_electrons() as i64;
 
-            let valence: i64 = match (view.valence_constraint(), view.bond_order_sum()) {
+            let valence: i64 = match (view.valence_constraint(), view.valence()) {
                 (Some(ValueAst::Lit(v)), _) if *v >= 0 => *v,
                 (None | Some(ValueAst::Undetermined), Some(t)) => t as i64,
                 _ => {
@@ -85,7 +85,7 @@ impl ElectronInvariantValidator {
                 };
             let aromatic_valence: i64 = match (
                 view.aromatic_valence_constraint(),
-                view.aromatic_contribution(),
+                view.aromatic_valence(),
             ) {
                 (Some(AromaticValenceAst::Aromatic(ValueAst::Lit(v))), _) if *v >= 0 => *v,
                 (Some(AromaticValenceAst::NotAromatic), _) => 0,
@@ -97,7 +97,7 @@ impl ElectronInvariantValidator {
             };
             let multicenter_valence: i64 = match (
                 view.multicenter_valence_constraint(),
-                view.multicenter_contribution(),
+                view.multicenter_valence(),
             ) {
                 (Some(MulticenterValenceAst::Multicenter(ValueAst::Lit(v))), _) if *v >= 0 => *v,
                 (Some(MulticenterValenceAst::NotMulticenter), _) => 0,
@@ -127,7 +127,7 @@ impl ElectronInvariantValidator {
             if orbital_count != electron_count {
                 return Ok(Solution::Contradictory(
                     ElectronInvariantContradiction::AtomInvariantMismatch {
-                        atom: view.idx,
+                        atom: view.id,
                         orbital_count,
                         electron_count,
                     },
@@ -224,7 +224,7 @@ impl ElectronInvariantValidator {
         } else {
             Ok(Solution::Contradictory(
                 ElectronInvariantContradiction::AtomInvariantMismatch {
-                    atom: AtomIdx(0),
+                    atom: AtomId(0),
                     orbital_count,
                     electron_count,
                 },
@@ -237,7 +237,7 @@ impl ElectronInvariantValidator {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst, SpinStateAst,
+        AtomAst, AtomId, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst, SpinStateAst,
     };
     use umol_shared::element::Element;
 
@@ -261,7 +261,7 @@ mod tests {
         let ch3_b = ch3_a.clone();
         MoleculeAst::from_parts(
             vec![ch3_a, ch3_b],
-            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             vec![],
             vec![],
             vec![],

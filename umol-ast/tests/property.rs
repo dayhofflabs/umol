@@ -11,13 +11,13 @@ use proptest::prelude::*;
 use rstest::rstest;
 use umol_ast::ast::{
     ArithOp, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
-    AromaticSystemConstraints, AromaticSystemIdx, AromaticValenceAst, AtomAst, AtomConstraint,
-    AtomConstraintKind, AtomConstraints, AtomIdx, BondAst, BondConstraint, BondConstraintKind,
-    BondConstraints, BondIdx, Constraint, Constraints, DativeBondAst, DativeBondConstraint,
-    DativeBondConstraintKind, DativeBondConstraints, DativeBondIdx, ElementAst, Expr,
+    AromaticSystemConstraints, AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint,
+    AtomConstraintKind, AtomConstraints, AtomId, BondAst, BondConstraint, BondConstraintKind,
+    BondConstraints, BondId, Constraint, Constraints, DativeBondAst, DativeBondConstraint,
+    DativeBondConstraintKind, DativeBondConstraints, DativeBondId, ElementAst, Expr,
     ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
     MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
-    MulticenterBondIdx, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondIdx,
+    MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
     NoncovalentBondKind, NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst,
     SubPatternAnchor, ValueAst,
 };
@@ -341,8 +341,8 @@ fn atom_constraint_strategy() -> BoxedStrategy<AtomConstraint> {
         constraint_inner_value_strategy(0..=4).prop_map(AtomConstraint::DonatedPairs),
         constraint_inner_value_strategy(0..=4).prop_map(AtomConstraint::AcceptedPairs),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Degree),
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Connectivity),
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingConnectivity),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::TotalDegree),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingDegree),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::TotalHydrogens),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingCount),
         constraint_inner_value_strategy(3..=10).prop_map(AtomConstraint::RingSize),
@@ -607,7 +607,7 @@ fn distinct_atoms_strategy(
     atom_count: usize,
     min_k: usize,
     max_k: usize,
-) -> BoxedStrategy<Vec<AtomIdx>> {
+) -> BoxedStrategy<Vec<AtomId>> {
     if atom_count < min_k {
         return Just(Vec::new()).boxed();
     }
@@ -626,7 +626,7 @@ fn distinct_atoms_strategy(
                     i += 1;
                 }
                 v.sort_unstable();
-                v.into_iter().map(AtomIdx).collect()
+                v.into_iter().map(AtomId).collect()
             })
         })
         .boxed()
@@ -651,7 +651,7 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
             let bonds_full: Vec<_> = edges
                 .iter()
                 .zip(bonds)
-                .map(|(&[a, b], bond)| (AtomIdx(a), AtomIdx(b), bond))
+                .map(|(&[a, b], bond)| (AtomId(a), AtomId(b), bond))
                 .collect();
 
             let dative_count_max = (atom_count / 2).min(2);
@@ -763,28 +763,28 @@ impl ConstraintCounts {
     }
 }
 
-fn atom_idx_strategy(atom_count: usize) -> BoxedStrategy<AtomIdx> {
-    (0u32..atom_count as u32).prop_map(AtomIdx).boxed()
+fn atom_idx_strategy(atom_count: usize) -> BoxedStrategy<AtomId> {
+    (0u32..atom_count as u32).prop_map(AtomId).boxed()
 }
 
-fn bond_idx_strategy(bond_count: usize) -> BoxedStrategy<BondIdx> {
-    (0u32..bond_count as u32).prop_map(BondIdx).boxed()
+fn bond_idx_strategy(bond_count: usize) -> BoxedStrategy<BondId> {
+    (0u32..bond_count as u32).prop_map(BondId).boxed()
 }
 
-fn dative_bond_idx_strategy(count: usize) -> BoxedStrategy<DativeBondIdx> {
-    (0u32..count as u32).prop_map(DativeBondIdx).boxed()
+fn dative_bond_idx_strategy(count: usize) -> BoxedStrategy<DativeBondId> {
+    (0u32..count as u32).prop_map(DativeBondId).boxed()
 }
 
-fn aromatic_system_idx_strategy(count: usize) -> BoxedStrategy<AromaticSystemIdx> {
-    (0u32..count as u32).prop_map(AromaticSystemIdx).boxed()
+fn aromatic_system_idx_strategy(count: usize) -> BoxedStrategy<AromaticSystemId> {
+    (0u32..count as u32).prop_map(AromaticSystemId).boxed()
 }
 
-fn multicenter_bond_idx_strategy(count: usize) -> BoxedStrategy<MulticenterBondIdx> {
-    (0u32..count as u32).prop_map(MulticenterBondIdx).boxed()
+fn multicenter_bond_idx_strategy(count: usize) -> BoxedStrategy<MulticenterBondId> {
+    (0u32..count as u32).prop_map(MulticenterBondId).boxed()
 }
 
-fn noncovalent_bond_idx_strategy(count: usize) -> BoxedStrategy<NoncovalentBondIdx> {
-    (0u32..count as u32).prop_map(NoncovalentBondIdx).boxed()
+fn noncovalent_bond_idx_strategy(count: usize) -> BoxedStrategy<NoncovalentBondId> {
+    (0u32..count as u32).prop_map(NoncovalentBondId).boxed()
 }
 
 /// Non-recursive constraint leaves: every value-only and relational
@@ -1110,28 +1110,28 @@ fn sub_pattern_anchor_strategy(
         .prop_map(|(a, b, d, ar, mc, nc)| {
             let mut anchor = SubPatternAnchor::new();
             for i in 0..a {
-                anchor.push_atom(AtomIdx(i as u32), AtomIdx(i as u32));
+                anchor.push_atom(AtomId(i as u32), AtomId(i as u32));
             }
             for i in 0..b {
-                anchor.push_bond(BondIdx(i as u32), BondIdx(i as u32));
+                anchor.push_bond(BondId(i as u32), BondId(i as u32));
             }
             for i in 0..d {
-                anchor.push_dative_bond(DativeBondIdx(i as u32), DativeBondIdx(i as u32));
+                anchor.push_dative_bond(DativeBondId(i as u32), DativeBondId(i as u32));
             }
             for i in 0..ar {
                 anchor
-                    .push_aromatic_system(AromaticSystemIdx(i as u32), AromaticSystemIdx(i as u32));
+                    .push_aromatic_system(AromaticSystemId(i as u32), AromaticSystemId(i as u32));
             }
             for i in 0..mc {
                 anchor.push_multicenter_bond(
-                    MulticenterBondIdx(i as u32),
-                    MulticenterBondIdx(i as u32),
+                    MulticenterBondId(i as u32),
+                    MulticenterBondId(i as u32),
                 );
             }
             for i in 0..nc {
                 anchor.push_noncovalent_bond(
-                    NoncovalentBondIdx(i as u32),
-                    NoncovalentBondIdx(i as u32),
+                    NoncovalentBondId(i as u32),
+                    NoncovalentBondId(i as u32),
                 );
             }
             anchor
@@ -1202,23 +1202,23 @@ fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
             let mut meta = Metadata::new();
             for (i, slot) in atoms.iter().enumerate() {
                 if slot.is_some() {
-                    meta.set_atom_id(AtomIdx(i as u32), format!("atom{i}"));
+                    meta.set_atom_id(AtomId(i as u32), format!("atom{i}"));
                 }
             }
             for (i, slot) in bonds.iter().enumerate() {
                 if slot.is_some() {
-                    meta.set_bond_id(BondIdx(i as u32), format!("bond{i}"));
+                    meta.set_bond_id(BondId(i as u32), format!("bond{i}"));
                 }
             }
             for (i, slot) in datives.iter().enumerate() {
                 if slot.is_some() {
-                    meta.set_dative_bond_id(DativeBondIdx(i as u32), format!("dative{i}"));
+                    meta.set_dative_bond_id(DativeBondId(i as u32), format!("dative{i}"));
                 }
             }
             for (i, slot) in aromatics.iter().enumerate() {
                 if slot.is_some() {
                     meta.set_aromatic_system_id(
-                        AromaticSystemIdx(i as u32),
+                        AromaticSystemId(i as u32),
                         format!("aromatic{i}"),
                     );
                 }
@@ -1226,7 +1226,7 @@ fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
             for (i, slot) in multicenters.iter().enumerate() {
                 if slot.is_some() {
                     meta.set_multicenter_bond_id(
-                        MulticenterBondIdx(i as u32),
+                        MulticenterBondId(i as u32),
                         format!("multicenter{i}"),
                     );
                 }
@@ -1234,7 +1234,7 @@ fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
             for (i, slot) in noncovalents.iter().enumerate() {
                 if slot.is_some() {
                     meta.set_noncovalent_bond_id(
-                        NoncovalentBondIdx(i as u32),
+                        NoncovalentBondId(i as u32),
                         format!("noncovalent{i}"),
                     );
                 }
@@ -1345,22 +1345,22 @@ proptest! {
         let mut a = ast;
         a.lift_constraints();
         for view in a.atoms().iter() {
-            prop_assert!(view.data.constraints.is_empty());
+            prop_assert!(view.ast.constraints.is_empty());
         }
         for view in a.bonds().iter() {
-            prop_assert!(view.data.constraints.is_empty());
+            prop_assert!(view.ast.constraints.is_empty());
         }
         for view in a.dative_bonds().iter() {
-            prop_assert!(view.data.constraints.is_empty());
+            prop_assert!(view.ast.constraints.is_empty());
         }
         for view in a.aromatic_systems().iter() {
-            prop_assert!(view.data.constraints.is_empty());
+            prop_assert!(view.ast.constraints.is_empty());
         }
         for view in a.multicenter_bonds().iter() {
-            prop_assert!(view.data.constraints.is_empty());
+            prop_assert!(view.ast.constraints.is_empty());
         }
         for view in a.noncovalent_bonds().iter() {
-            prop_assert!(view.data.constraints.is_empty());
+            prop_assert!(view.ast.constraints.is_empty());
         }
     }
 
@@ -1396,12 +1396,12 @@ proptest! {
     fn test_inline_deposits_leaves_into_entities(
         ast in molecule_ast_with_constraints_strategy(),
     ) {
-        let mut atom_kinds: HashSet<(AtomIdx, AtomConstraintKind)> = HashSet::new();
-        let mut bond_kinds: HashSet<(BondIdx, BondConstraintKind)> = HashSet::new();
-        let mut dative_kinds: HashSet<(DativeBondIdx, DativeBondConstraintKind)> = HashSet::new();
-        let mut aromatic_kinds: HashSet<(AromaticSystemIdx, AromaticSystemConstraintKind)> =
+        let mut atom_kinds: HashSet<(AtomId, AtomConstraintKind)> = HashSet::new();
+        let mut bond_kinds: HashSet<(BondId, BondConstraintKind)> = HashSet::new();
+        let mut dative_kinds: HashSet<(DativeBondId, DativeBondConstraintKind)> = HashSet::new();
+        let mut aromatic_kinds: HashSet<(AromaticSystemId, AromaticSystemConstraintKind)> =
             HashSet::new();
-        let mut multicenter_kinds: HashSet<(MulticenterBondIdx, MulticenterBondConstraintKind)> =
+        let mut multicenter_kinds: HashSet<(MulticenterBondId, MulticenterBondConstraintKind)> =
             HashSet::new();
         for c in ast.constraints().iter() {
             match c {
@@ -1605,8 +1605,8 @@ proptest! {
 #[case::donated_pairs(AtomConstraint::DonatedPairs(ValueAst::Undetermined))]
 #[case::accepted_pairs(AtomConstraint::AcceptedPairs(ValueAst::Undetermined))]
 #[case::degree(AtomConstraint::Degree(ValueAst::Undetermined))]
-#[case::connectivity(AtomConstraint::Connectivity(ValueAst::Undetermined))]
-#[case::ring_connectivity(AtomConstraint::RingConnectivity(ValueAst::Undetermined))]
+#[case::total_degree(AtomConstraint::TotalDegree(ValueAst::Undetermined))]
+#[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Undetermined))]
 #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Undetermined))]
 #[case::ring_count(AtomConstraint::RingCount(ValueAst::Undetermined))]
 #[case::ring_size(AtomConstraint::RingSize(ValueAst::Undetermined))]
@@ -1633,7 +1633,7 @@ fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
     let atoms = vec![AtomAst::default(), AtomAst::default()];
     let mut cs = Constraints::new();
     cs.push(Constraint::Atom(
-        AtomIdx(0),
+        AtomId(0),
         AtomConstraint::Valence(ValueAst::Lit(4)),
     ));
     let ast = MoleculeAst::from_parts(
@@ -1647,7 +1647,7 @@ fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
     );
 
     let mut metadata = Metadata::new();
-    metadata.set_atom_id(AtomIdx(0), "carbon".to_string());
+    metadata.set_atom_id(AtomId(0), "carbon".to_string());
 
     let dsl = MoleculeDsl::from_parts(ast, metadata);
     let rendered = dsl.to_edn().to_string();

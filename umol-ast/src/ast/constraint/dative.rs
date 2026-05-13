@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 
 use strum::EnumDiscriminants;
 
-use super::super::remap::IdxRemapping;
+use super::super::remap::IdRemapping;
 use super::super::value::ValueAst;
 
 /// Dative-bond-scope constraint. Held inline on `DativeBondAst` via
@@ -58,7 +58,7 @@ impl DativeBondConstraint {
         }
     }
 
-    pub fn remap(self, _remap: &IdxRemapping) -> Option<Self> {
+    pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
     }
@@ -141,7 +141,7 @@ impl DativeBondConstraints {
         Some(self.0.remove(pos))
     }
 
-    pub fn remap(self, remap: &IdxRemapping) -> Self {
+    pub fn remap(self, remap: &IdRemapping) -> Self {
         Self(self.0.into_iter().filter_map(|c| c.remap(remap)).collect())
     }
 }
@@ -475,7 +475,7 @@ mod tests {
             DativeBondConstraint::Aromatic,
             DativeBondConstraint::ring_size(6),
         ]);
-        let remap = IdxRemapping::new(
+        let remap = IdRemapping::new(
             umol_graph_core::Remapping {
                 removed_nodes: vec![1],
                 removed_edges: vec![1],

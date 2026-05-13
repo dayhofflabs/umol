@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 
 use strum::EnumDiscriminants;
 
-use super::super::remap::IdxRemapping;
+use super::super::remap::IdRemapping;
 use super::super::value::ValueAst;
 
 /// Localized bond constraint. Held inline on `BondAst` via
@@ -140,7 +140,7 @@ impl BondConstraints {
     }
 
     /// No-op: no `BondConstraint` variant carries an entity index.
-    pub fn remap(self, _remap: &IdxRemapping) -> Self {
+    pub fn remap(self, _remap: &IdRemapping) -> Self {
         self
     }
 }
@@ -469,7 +469,7 @@ mod tests {
     fn test_bond_constraints_remap() {
         let cs =
             BondConstraints::from_iter([BondConstraint::Aromatic, BondConstraint::ring_size(6)]);
-        let remap = IdxRemapping::new(
+        let remap = IdRemapping::new(
             Remapping {
                 removed_nodes: vec![0, 1, 2],
                 removed_edges: vec![0, 1],

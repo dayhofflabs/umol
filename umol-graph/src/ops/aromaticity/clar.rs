@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 
 use umol_ast::ast::{
-    AromaticSystemAst, AtomIdx, AtomView, ElementAst, MoleculeAst, RingIdx, RingSet, SpinStateAst,
+    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, SpinStateAst,
     ValueAst,
 };
 use umol_graph_core::Graph;
@@ -31,12 +31,12 @@ impl ClarAromaticity {
         ast: &MoleculeAst,
         rings: &RingSet,
         electrons_at: &F,
-    ) -> Result<Vec<(Vec<AtomIdx>, AromaticSystemAst)>, ClarError>
+    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemAst)>, ClarError>
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
         let has_non_benzenoid = ast.atoms().iter().any(|view| {
-            !matches!(view.data.element, ElementAst::Lit(Element::C))
+            !matches!(view.ast.element, ElementAst::Lit(Element::C))
                 && electrons_at(&view).is_some()
         });
         if has_non_benzenoid {
@@ -46,7 +46,7 @@ impl ClarAromaticity {
             ));
         }
 
-        let sextet_indices: Vec<RingIdx> = rings
+        let sextet_indices: Vec<RingId> = rings
             .ids()
             .filter(|&i| {
                 let Some(cycle) = rings.get(i) else {
@@ -55,7 +55,7 @@ impl ClarAromaticity {
                 cycle.len() == 6
                     && cycle.atoms().iter().all(|&atom| {
                         let a = ast.atom(atom);
-                        matches!(a.data.element, ElementAst::Lit(Element::C))
+                        matches!(a.ast.element, ElementAst::Lit(Element::C))
                             && electrons_at(&a).is_some()
                     })
             })
@@ -70,13 +70,13 @@ impl ClarAromaticity {
             return Ok(Vec::new());
         }
 
-        let selected_atoms: HashSet<AtomIdx> = best_sextet_indices
+        let selected_atoms: HashSet<AtomId> = best_sextet_indices
             .iter()
             .filter_map(|&i| rings.get(i))
             .flat_map(|r| r.atoms().iter().copied())
             .collect();
 
-        let mut atoms: Vec<AtomIdx> = selected_atoms.into_iter().collect();
+        let mut atoms: Vec<AtomId> = selected_atoms.into_iter().collect();
         atoms.sort_unstable();
 
         let electrons: Vec<ValueAst> = atoms
@@ -96,12 +96,12 @@ impl ClarAromaticity {
     }
 }
 
-fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIdx]) -> Vec<RingIdx> {
+fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingId]) -> Vec<RingId> {
     if candidates.is_empty() {
         return Vec::new();
     }
 
-    let candidate_atoms: Vec<HashSet<AtomIdx>> = candidates
+    let candidate_atoms: Vec<HashSet<AtomId>> = candidates
         .iter()
         .map(|&ring_idx| {
             rings
@@ -134,8 +134,8 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingIdx]) -> Vec<RingI
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, ElementAst,
-        MoleculeAst, RingFamily, RingIdx, ValueAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst,
+        MoleculeAst, RingFamily, RingId, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -171,8 +171,8 @@ mod tests {
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
-                    AtomIdx(i as u32),
-                    AtomIdx(((i + 1) % n) as u32),
+                    AtomId(i as u32),
+                    AtomId(((i + 1) % n) as u32),
                     BondAst::from_order(1),
                 )
             })
@@ -187,7 +187,7 @@ mod tests {
         let atoms = apply_pi(specs);
         let bonds: Vec<_> = edges
             .iter()
-            .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
+            .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
         MoleculeAst::from_atoms_and_bonds(
             atoms,
@@ -199,14 +199,14 @@ mod tests {
         ast.enumerate_rings(RingFamily::Simple, 6, |_| true)
     }
 
-    fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingIdx> {
+    fn hex_ring_indices(ast: &MoleculeAst, ring_info: &RingSet) -> Vec<RingId> {
         ring_info
             .ids()
             .filter(|&i| {
                 ring_info.get(i).is_some_and(|cycle| {
                     cycle.len() == 6
                         && cycle.atoms().iter().all(|&atom| {
-                            matches!(ast.atom(atom).data.element, ElementAst::Lit(Element::C))
+                            matches!(ast.atom(atom).ast.element, ElementAst::Lit(Element::C))
                         })
                 })
             })
@@ -291,8 +291,8 @@ mod tests {
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
         if let Some((system_atoms_vec, _)) = systems.first() {
-            let system_atoms: HashSet<AtomIdx> = system_atoms_vec.iter().copied().collect();
-            let expected_atoms: HashSet<AtomIdx> =
+            let system_atoms: HashSet<AtomId> = system_atoms_vec.iter().copied().collect();
+            let expected_atoms: HashSet<AtomId> =
                 select_disjoint_sextets(&rings, &hex_ring_indices(&ast, &rings))
                     .into_iter()
                     .filter_map(|idx| rings.get(idx))

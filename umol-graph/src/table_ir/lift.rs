@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, BondConstraint, Constraints,
+    AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
     DativeBondAst, ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterBondAst,
     NoncovalentBondAst, NoncovalentBondKind, SpinStateAst, TryIntoAst, ValueAst,
 };
@@ -43,11 +43,11 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             .collect::<Result<_, _>>()?;
 
         let mut regular = Vec::new();
-        let mut dative: Vec<(Vec<AtomIdx>, AtomIdx, DativeBondAst)> = Vec::new();
+        let mut dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
         let mut noncovalent = Vec::new();
         for b in &self.bonds {
-            let a_idx = AtomIdx(b.atoms.first());
-            let b_idx = AtomIdx(b.atoms.second());
+            let a_idx = AtomId(b.atoms.first());
+            let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
                 noncovalent.push((a_idx, b_idx, NoncovalentBondAst::from_kind(kind)));
             } else if let Some(donation) = b.donation {
@@ -66,16 +66,16 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             }
         }
 
-        let multicenter: Vec<(Vec<AtomIdx>, MulticenterBondAst)> = self
+        let multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)> = self
             .multicenter_bonds
             .iter()
             .map(|mc| {
                 let mut seen = HashSet::new();
-                let atoms: Vec<AtomIdx> = mc
+                let atoms: Vec<AtomId> = mc
                     .all_atoms()
                     .into_iter()
                     .filter(|a| seen.insert(*a))
-                    .map(AtomIdx)
+                    .map(AtomId)
                     .collect();
                 let n = atoms.len();
                 (
@@ -238,7 +238,7 @@ fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::BondIdx;
+    use umol_ast::ast::BondId;
     use umol_shared::element::Element;
 
     use super::*;
@@ -259,7 +259,7 @@ mod tests {
         let mol = methane_table();
         let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
         assert_eq!(ast.atoms().count(), 1);
-        let atom = ast.atom(AtomIdx(0)).data;
+        let atom = ast.atom(AtomId(0)).ast;
         assert_eq!(atom.element, ElementAst::Lit(Element::C));
         assert!(matches!(
             atom.implicit_hydrogens,
@@ -274,7 +274,7 @@ mod tests {
         mol.atoms.push(TableAtom::from_element(Element::C));
         mol.bonds.push(TableBond::new(0, 1, TableBondOrder::Double));
         let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
-        let bond = ast.bond(BondIdx(0)).data;
+        let bond = ast.bond(BondId(0)).ast;
         assert!(matches!(bond.order, ValueAst::Lit(2)));
     }
 
@@ -286,7 +286,7 @@ mod tests {
         mol.bonds
             .push(TableBond::new(0, 1, TableBondOrder::Aromatic));
         let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
-        let bond = ast.bond(BondIdx(0)).data;
+        let bond = ast.bond(BondId(0)).ast;
         // Definite-aromatic lifts to Kekulé σ-order 1 plus the Aromatic
         // constraint, rendering as `1#a`.
         assert!(matches!(bond.order, ValueAst::Lit(1)));

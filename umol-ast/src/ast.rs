@@ -36,15 +36,15 @@ pub use constraint::{
 pub use dative::DativeBondAst;
 pub use error::{EvaluationError, RewriteError};
 pub use idx::{
-    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 pub use matching::BondMatching;
 pub use molecule::{MoleculeAst, MoleculeBuilder};
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use reaction::{Assignment, ReactionRuleAst};
-pub use remap::IdxRemapping;
-pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingIdx, RingRelation, RingSet, RingView};
+pub use remap::IdRemapping;
+pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use subgraph::MoleculeSubgraph;
 pub use traits::{FromAst, IntoAst, TryFromAst, TryIntoAst};

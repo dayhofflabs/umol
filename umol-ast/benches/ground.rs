@@ -16,7 +16,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
-    ArithOp, AtomAst, AtomConstraint, AtomIdx, BondAst, ElementAst, Expr, ImplicitHydrogensAst,
+    ArithOp, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, Expr, ImplicitHydrogensAst,
     IntoAst, IsotopeAst, MoleculeAst, RelOp, SpinStateAst, ValueAst,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
@@ -40,12 +40,12 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
     // is_arithmetic()).
     let mut ast = indole_ground();
     let mut b = ast.edit();
-    b.atom_mut(AtomIdx(0)).charge = ValueAst::Expr(Expr::Rel(
+    b.atom_mut(AtomId(0)).charge = ValueAst::Expr(Expr::Rel(
         Box::new(Expr::Var("c".into())),
         RelOp::Eq,
         Box::new(Expr::Lit(0)),
     ));
-    b.atom_mut(AtomIdx(2)).lone_pairs =
+    b.atom_mut(AtomId(2)).lone_pairs =
         ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("n".into())), vec![0, 1, 2]));
     ast = b.build();
     ast
@@ -90,7 +90,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             })
         })
         .collect();
-    let bonds: Vec<(AtomIdx, AtomIdx, BondAst)> = (0..19)
+    let bonds: Vec<(AtomId, AtomId, BondAst)> = (0..19)
         .map(|i| {
             let bond = BondAst {
                 order: arith(),
@@ -98,7 +98,7 @@ fn arith_expr_heavy() -> MoleculeAst {
                 spin: SpinStateAst::default(),
                 constraints: Default::default(),
             };
-            (AtomIdx(i as u32), AtomIdx(i as u32 + 1), bond)
+            (AtomId(i as u32), AtomId(i as u32 + 1), bond)
         })
         .collect();
     MoleculeAst::from_atoms_and_bonds(

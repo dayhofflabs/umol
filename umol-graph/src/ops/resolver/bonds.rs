@@ -47,7 +47,7 @@ impl BondsResolver {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AtomAst, AtomIdx, BondAst, BondIdx, Constraints, MoleculeAst, SpinStateAst, ValueAst,
+        AtomAst, AtomId, BondAst, BondId, Constraints, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -62,7 +62,7 @@ mod tests {
                 AtomAst::from_element(Element::C),
                 AtomAst::from_element(Element::C),
             ],
-            vec![(AtomIdx(0), AtomIdx(1), bond)],
+            vec![(AtomId(0), AtomId(1), bond)],
             vec![],
             vec![],
             vec![],
@@ -75,7 +75,7 @@ mod tests {
     fn test_bonds_resolver_fills_undetermined_charge_and_spin() {
         let mut ast = one_bond(ValueAst::Undetermined, SpinStateAst::default());
         BondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = ast.bond(BondIdx(0)).data;
+        let bond = ast.bond(BondId(0)).ast;
         assert_eq!(bond.charge, ValueAst::Lit(0));
         assert_eq!(bond.spin, SpinStateAst::closed_shell());
     }
@@ -84,7 +84,7 @@ mod tests {
     fn test_bonds_resolver_preserves_existing_charge() {
         let mut ast = one_bond(ValueAst::Lit(1), SpinStateAst::default());
         BondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = ast.bond(BondIdx(0)).data;
+        let bond = ast.bond(BondId(0)).ast;
         assert_eq!(bond.charge, ValueAst::Lit(1));
     }
 
@@ -93,7 +93,7 @@ mod tests {
         let partial = SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined };
         let mut ast = one_bond(ValueAst::Undetermined, partial.clone());
         BondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = ast.bond(BondIdx(0)).data;
+        let bond = ast.bond(BondId(0)).ast;
         assert_eq!(bond.spin, partial);
     }
 }

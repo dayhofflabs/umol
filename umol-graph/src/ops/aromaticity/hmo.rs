@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use nalgebra::{DMatrix, SymmetricEigen};
 use umol_ast::ast::{
-    AromaticSystemAst, AtomIdx, AtomView, ElementAst, MoleculeAst, RingSet, SpinStateAst, ValueAst,
+    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, SpinStateAst, ValueAst,
 };
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 use umol_shared::element::Element;
@@ -59,22 +59,22 @@ impl HmoAromaticity {
         ast: &MoleculeAst,
         rings: &RingSet,
         electrons_at: &F,
-    ) -> Result<Vec<(Vec<AtomIdx>, AromaticSystemAst)>, HmoError>
+    ) -> Result<Vec<(Vec<AtomId>, AromaticSystemAst)>, HmoError>
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let pi_atoms: Vec<AtomIdx> = ast
+        let pi_atoms: Vec<AtomId> = ast
             .atoms()
             .iter()
             .filter_map(|view| {
-                let element = match view.data.element {
+                let element = match view.ast.element {
                     ElementAst::Lit(e) => e,
                     _ => return None,
                 };
                 if !self.is_element_supported(element) {
                     return None;
                 }
-                electrons_at(&view).map(|_| view.idx)
+                electrons_at(&view).map(|_| view.id)
             })
             .collect();
 
@@ -82,10 +82,10 @@ impl HmoAromaticity {
             return Ok(Vec::new());
         }
 
-        let pi_set: HashSet<AtomIdx> = pi_atoms.iter().copied().collect();
+        let pi_set: HashSet<AtomId> = pi_atoms.iter().copied().collect();
 
-        let mut visited: HashSet<AtomIdx> = HashSet::new();
-        let mut components: Vec<Vec<AtomIdx>> = Vec::new();
+        let mut visited: HashSet<AtomId> = HashSet::new();
+        let mut components: Vec<Vec<AtomId>> = Vec::new();
         for &atom in &pi_atoms {
             if visited.contains(&atom) {
                 continue;
@@ -148,13 +148,13 @@ impl HmoAromaticity {
     pub(crate) fn build_calculator<F>(
         &self,
         ast: &MoleculeAst,
-        pi_atoms: &[AtomIdx],
+        pi_atoms: &[AtomId],
         electrons_at: &F,
     ) -> Result<HmoCalculator, HmoError>
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let atom_to_idx: HashMap<AtomIdx, usize> =
+        let atom_to_idx: HashMap<AtomId, usize> =
             pi_atoms.iter().enumerate().map(|(i, &a)| (a, i)).collect();
 
         let mut h_values = Vec::with_capacity(pi_atoms.len());
@@ -162,7 +162,7 @@ impl HmoAromaticity {
         let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(pi_atoms.len());
         for &atom in pi_atoms {
             let view = ast.atom(atom);
-            let element = match view.data.element {
+            let element = match view.ast.element {
                 ElementAst::Lit(e) => e,
                 _ => {
                     return Err(HmoError::UndeterminedAtom(
@@ -209,7 +209,7 @@ impl HmoAromaticity {
 }
 
 pub(crate) struct HmoCalculator {
-    pi_atoms: Vec<AtomIdx>,
+    pi_atoms: Vec<AtomId>,
     electron_count: u32,
     h_values: Vec<f64>,
     bonds: Vec<(usize, usize, f64)>,
@@ -217,7 +217,7 @@ pub(crate) struct HmoCalculator {
 
 impl HmoCalculator {
     fn new(
-        pi_atoms: Vec<AtomIdx>,
+        pi_atoms: Vec<AtomId>,
         electron_count: u32,
         h_values: Vec<f64>,
         bonds: Vec<(usize, usize, f64)>,
@@ -298,7 +298,7 @@ impl HmoCalculator {
             }
         }
 
-        let mut bond_orders: BTreeMap<(AtomIdx, AtomIdx), f64> = BTreeMap::new();
+        let mut bond_orders: BTreeMap<(AtomId, AtomId), f64> = BTreeMap::new();
         for &(i, j, _) in &self.bonds {
             let (a, b) = if self.pi_atoms[i] < self.pi_atoms[j] {
                 (self.pi_atoms[i], self.pi_atoms[j])
@@ -319,10 +319,10 @@ impl HmoCalculator {
 
 #[derive(Debug)]
 pub struct HmoOutput {
-    pub atom_indices: Vec<AtomIdx>,
+    pub atom_indices: Vec<AtomId>,
     pub delocalization_energy: f64,
     pub electron_count: u32,
-    pub bond_orders: BTreeMap<(AtomIdx, AtomIdx), f64>,
+    pub bond_orders: BTreeMap<(AtomId, AtomId), f64>,
 }
 
 #[cfg(test)]
@@ -330,7 +330,7 @@ mod tests {
     use float_cmp::*;
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, MoleculeAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, MoleculeAst,
         RingFamily, ValueAst,
     };
     use umol_shared::element::Element;
@@ -363,8 +363,8 @@ mod tests {
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
-                    AtomIdx(i as u32),
-                    AtomIdx(((i + 1) % n) as u32),
+                    AtomId(i as u32),
+                    AtomId(((i + 1) % n) as u32),
                     BondAst::from_order(1),
                 )
             })
@@ -379,7 +379,7 @@ mod tests {
         let atoms = apply_pi(specs);
         let bonds: Vec<_> = edges
             .iter()
-            .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
+            .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
         MoleculeAst::from_atoms_and_bonds(
             atoms,
@@ -388,7 +388,7 @@ mod tests {
     }
 
     fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
-        let atoms: Vec<AtomIdx> = (0..ast.atoms().count() as u32).map(AtomIdx).collect();
+        let atoms: Vec<AtomId> = (0..ast.atoms().count() as u32).map(AtomId).collect();
         model
             .build_calculator(ast, &atoms, &electrons_from_aromatic_constraint)
             .unwrap()
@@ -556,7 +556,7 @@ mod tests {
 
     #[rstest]
     fn test_hmo_aromaticity_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
-        let atoms: Vec<AtomIdx> = (0..pyridine.atoms().count() as u32).map(AtomIdx).collect();
+        let atoms: Vec<AtomId> = (0..pyridine.atoms().count() as u32).map(AtomId).collect();
         let calc = hmo_model
             .build_calculator(&pyridine, &atoms, &electrons_from_aromatic_constraint)
             .unwrap();

@@ -290,7 +290,7 @@ mod tests {
 
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraint, AtomAst,
-        AtomConstraint, AtomIdx, BondAst, BondConstraint, Constraints,
+        AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
         DativeBondAst, DativeBondConstraint, MoleculeAst,
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, ValueAst,
     };
@@ -302,11 +302,11 @@ mod tests {
     #[case::empty("{}", MoleculeAst::default())]
     #[case::carbon_oxygen(r#"{:atoms ["C #h2" "O"] :bonds [[0 1 "2"]]}"#,
         MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomAst::from_element(Element::O)],
-        vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(2))]))]
+        vec![(AtomId(0), AtomId(1), BondAst::from_order(2))]))]
     #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic [{:atoms [0 1 2] :electrons [1 1 1] :type "#e3"}]}"##,
         MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
-            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1)), (AtomIdx(1), AtomIdx(2), BondAst::from_order(1)), (AtomIdx(2), AtomIdx(0), BondAst::from_order(1))],
-            vec![], vec![(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
+            vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemAst::new(vec![ValueAst::Lit(1); 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
             vec![], vec![], Constraints::default()))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
@@ -327,7 +327,7 @@ mod tests {
         MoleculeDsl::from_parts(
             MoleculeAst::from_atoms_and_bonds(
                 vec![AtomAst::from_element(Element::C); 2],
-                vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+                vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             ),
             Metadata::new().with_atom_alias("c", "C".parse::<AtomDsl>().unwrap()),
         ),
@@ -339,7 +339,7 @@ mod tests {
                 vec![AtomAst::from_element(Element::C); 2],
                 vec![],
             ),
-            Metadata::new().with_atom_id(AtomIdx(0), "a").with_atom_id(AtomIdx(1), "b"),
+            Metadata::new().with_atom_id(AtomId(0), "a").with_atom_id(AtomId(1), "b"),
         ),
     )]
     fn test_dsl_macro(#[case] input: &str, #[case] expected: MoleculeDsl) {

@@ -3,7 +3,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, AtomView, ElementAst,
+    AromaticValenceAst, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst,
     ImplicitHydrogensAst, MoleculeAst, ValueAst,
 };
 use umol_shared::element::Element;
@@ -25,7 +25,7 @@ pub struct CountsValenceResolver {
 pub enum CountsError {
     #[error("no valid valence state for {atom:?} (element {element}, charge {charge}, valence {valence})")]
     NoValidValenceState {
-        atom: AtomIdx,
+        atom: AtomId,
         element: Element,
         charge: i8,
         valence: u8,
@@ -42,12 +42,12 @@ impl CountsValenceResolver {
 
     pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), CountsError> {
         for i in 0..ast.atoms().count() as u32 {
-            let idx = AtomIdx(i);
+            let idx = AtomId(i);
             let view = ast.atom(idx);
-            if view.data.is_ground() {
+            if view.ast.is_ground() {
                 continue;
             }
-            let ElementAst::Lit(element) = view.data.element else {
+            let ElementAst::Lit(element) = view.ast.element else {
                 continue;
             };
             let Some(valence) = atom_sigma_valence(&view) else {
@@ -60,13 +60,13 @@ impl CountsValenceResolver {
                     return Err(CountsError::NoValidValenceState {
                         atom: idx,
                         element,
-                        charge: charge_or_zero(view.data),
+                        charge: charge_or_zero(view.ast),
                         valence,
                     });
                 }
                 1 => {
                     let cand = candidates.into_iter().next().unwrap();
-                    let atom_mut = ast.atom_mut(idx).data;
+                    let atom_mut = ast.atom_mut(idx).ast;
                     narrow_atom(atom_mut, &cand.ast);
                     lift_constraints(atom_mut, &cand.lifted);
                 }
@@ -82,7 +82,7 @@ impl CountsValenceResolver {
         element: Element,
         valence: u8,
     ) -> Vec<AtomCandidate> {
-        let atom = view.data;
+        let atom = view.ast;
         let charge = charge_or_zero(atom);
         let entry = match self.table.entry(element) {
             Some(e) => e,
@@ -209,7 +209,7 @@ mod tests {
     use rstest::*;
     use umol_ast::{mol, mol_zeroed};
     use umol_ast::ast::{
-        AtomAst, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst,
+        AtomAst, AtomId, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst,
     };
     use umol_shared::element::Element;
 
@@ -229,7 +229,7 @@ mod tests {
         b.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
         MoleculeAst::from_parts(
             vec![a, b],
-            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             vec![],
             vec![],
             vec![],
@@ -252,7 +252,7 @@ mod tests {
         let resolver = CountsValenceResolver::new(table, true);
         let mut ast = carbon_methane_with_undetermined();
         resolver.resolve(&mut ast).unwrap();
-        let atom = ast.atom(AtomIdx(0)).data;
+        let atom = ast.atom(AtomId(0)).ast;
         assert!(matches!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(4)));
     }
 
@@ -263,7 +263,7 @@ mod tests {
         let mut ast = ethane();
         resolver.resolve(&mut ast).unwrap();
         for i in 0..2 {
-            let atom = ast.atom(AtomIdx(i)).data;
+            let atom = ast.atom(AtomId(i)).ast;
             assert!(matches!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(3)));
         }
     }

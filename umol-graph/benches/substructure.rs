@@ -14,7 +14,7 @@ use umol_graph::api::pattern::MoleculePattern;
 use umol_graph::ast::atom::AtomAst;
 use umol_graph::ast::bond::BondAst;
 use umol_graph::ast::molecule::MoleculeAst;
-use umol_graph::ast::AtomIdx;
+use umol_graph::ast::AtomId;
 use umol_graph::io::smiles::parse_smiles;
 use umol_graph::ops::matcher::Matcher;
 use umol_shared::element::Element;
@@ -64,9 +64,9 @@ fn a(e: Element) -> AtomAst {
 }
 
 fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> MoleculePattern {
-    let bond_list: Vec<(AtomIdx, AtomIdx, BondAst)> = bonds
+    let bond_list: Vec<(AtomId, AtomId, BondAst)> = bonds
         .into_iter()
-        .map(|(s, t, b)| (AtomIdx(s as u32), AtomIdx(t as u32), b))
+        .map(|(s, t, b)| (AtomId(s as u32), AtomId(t as u32), b))
         .collect();
     let ast = MoleculeAst::from_parts(atoms, bond_list, vec![], vec![], vec![], vec![], vec![]);
     MoleculePattern::new(ast)

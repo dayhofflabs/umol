@@ -3,7 +3,7 @@
 use std::mem;
 use std::slice::Iter;
 
-use super::super::remap::IdxRemapping;
+use super::super::remap::IdRemapping;
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
@@ -19,7 +19,7 @@ impl NoncovalentBondConstraint {
         match *self {}
     }
 
-    pub fn remap(self, _remap: &IdxRemapping) -> Option<Self> {
+    pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
         match self {}
     }
 }
@@ -71,7 +71,7 @@ impl NoncovalentBondConstraints {
     /// simplify. Kept for API symmetry with the inhabited containers.
     pub fn simplify_each(&mut self) {}
 
-    pub fn remap(self, _remap: &IdxRemapping) -> Self {
+    pub fn remap(self, _remap: &IdRemapping) -> Self {
         self
     }
 }
@@ -142,7 +142,7 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_constraints_remap() {
         let cs = NoncovalentBondConstraints::new();
-        let remap = IdxRemapping::new(
+        let remap = IdRemapping::new(
             Remapping {
                 removed_nodes: Vec::new(),
                 removed_edges: Vec::new(),

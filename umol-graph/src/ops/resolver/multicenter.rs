@@ -43,7 +43,7 @@ impl MulticenterBondsResolver {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AtomAst, AtomIdx, Constraints, MoleculeAst, MulticenterBondAst, MulticenterBondIdx,
+        AtomAst, AtomId, Constraints, MoleculeAst, MulticenterBondAst, MulticenterBondId,
         SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
@@ -63,7 +63,7 @@ mod tests {
             vec![],
             vec![],
             vec![],
-            vec![(vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)], bond)],
+            vec![(vec![AtomId(0), AtomId(1), AtomId(2)], bond)],
             vec![],
             Constraints::default(),
         )
@@ -73,7 +73,7 @@ mod tests {
     fn test_multicenter_bonds_resolver_fills_undetermined() {
         let mut ast = one_multicenter(ValueAst::Undetermined, SpinStateAst::default());
         MulticenterBondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = &ast[MulticenterBondIdx(0)];
+        let bond = &ast[MulticenterBondId(0)];
         assert_eq!(bond.charge, ValueAst::Lit(0));
         assert_eq!(bond.spin, SpinStateAst::closed_shell());
     }
@@ -82,7 +82,7 @@ mod tests {
     fn test_multicenter_bonds_resolver_preserves_existing_charge() {
         let mut ast = one_multicenter(ValueAst::Lit(-1), SpinStateAst::default());
         MulticenterBondsResolver::new().resolve(&mut ast).unwrap();
-        let bond = &ast[MulticenterBondIdx(0)];
+        let bond = &ast[MulticenterBondId(0)];
         assert_eq!(bond.charge, ValueAst::Lit(-1));
     }
 }

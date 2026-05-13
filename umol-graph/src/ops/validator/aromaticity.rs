@@ -5,7 +5,7 @@
 //! already carries one or more `AromaticSystemAst` entries.
 
 use thiserror::Error;
-use umol_ast::ast::{AtomIdx, MoleculeAst};
+use umol_ast::ast::{AtomId, MoleculeAst};
 
 use crate::ops::aromaticity::{
     electrons_from_aromatic_constraint, AromaticityContradiction, AromaticityError,
@@ -32,8 +32,8 @@ pub enum AromaticityValidatorContradiction {
     },
     #[error("aromatic system atoms differ: AST {ast_atoms:?}, perception {perception_atoms:?}")]
     AtomsMismatch {
-        ast_atoms: Vec<AtomIdx>,
-        perception_atoms: Vec<AtomIdx>,
+        ast_atoms: Vec<AtomId>,
+        perception_atoms: Vec<AtomId>,
     },
 }
 
@@ -61,11 +61,11 @@ impl AromaticityValidator {
             }
         };
 
-        let ast_systems: Vec<Vec<AtomIdx>> = ast
+        let ast_systems: Vec<Vec<AtomId>> = ast
             .aromatic_systems()
             .iter()
             .map(|view| {
-                let mut atoms: Vec<AtomIdx> = view.atoms().collect();
+                let mut atoms: Vec<AtomId> = view.atoms().collect();
                 atoms.sort_unstable();
                 atoms
             })
@@ -125,8 +125,8 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| {
                 (
-                    AtomIdx(i),
-                    AtomIdx((i + 1) % 6),
+                    AtomId(i),
+                    AtomId((i + 1) % 6),
                     BondAst::from_order(1),
                 )
             })

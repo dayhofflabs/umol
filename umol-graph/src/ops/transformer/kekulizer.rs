@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemIdx, AtomConstraintKind, AtomIdx, BondConstraintKind, BondIdx, MoleculeAst,
+    AromaticSystemId, AtomConstraintKind, AtomId, BondConstraintKind, BondId, MoleculeAst,
     ValueAst,
 };
 use umol_graph_core::{EdgeId, Graph, NodeId, PerfectMatchingAlgorithm};
@@ -25,7 +25,7 @@ use crate::ops::transformer::Transformer;
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum KekulizerError {
     #[error("no perfect matching exists for aromatic system {0:?}")]
-    NoMatching(AromaticSystemIdx),
+    NoMatching(AromaticSystemId),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,11 +48,11 @@ impl Default for KekulizationModel {
 #[derive(Clone, Debug)]
 pub struct Kekulizer {
     model: KekulizationModel,
-    node_order: Vec<AtomIdx>,
+    node_order: Vec<AtomId>,
 }
 
 impl Kekulizer {
-    pub fn new(model: KekulizationModel, node_order: Vec<AtomIdx>) -> Self {
+    pub fn new(model: KekulizationModel, node_order: Vec<AtomId>) -> Self {
         Self { model, node_order }
     }
 }
@@ -73,25 +73,25 @@ impl Transformer for Kekulizer {
         // Pass 1: bond-order writes and Aromatic-constraint stripping.
         for plan in &plans {
             for &bid in &plan.matched_bonds {
-                let bond = ast.bond_mut(bid).data;
+                let bond = ast.bond_mut(bid).ast;
                 bond.order = ValueAst::Lit(2);
                 bond.constraints
                     .retain(|c| c.kind() != BondConstraintKind::Aromatic);
             }
             for &bid in &plan.unmatched_bonds {
-                let bond = ast.bond_mut(bid).data;
+                let bond = ast.bond_mut(bid).ast;
                 bond.order = ValueAst::Lit(1);
                 bond.constraints
                     .retain(|c| c.kind() != BondConstraintKind::Aromatic);
             }
             for &aidx in &plan.atoms {
-                let atom = ast.atom_mut(aidx).data;
+                let atom = ast.atom_mut(aidx).ast;
                 atom.constraints.remove(AtomConstraintKind::AromaticValence);
             }
         }
 
         // Pass 2: drop the aromatic system entries via the builder.
-        let to_remove: Vec<AromaticSystemIdx> = plans.iter().map(|p| p.system_idx).collect();
+        let to_remove: Vec<AromaticSystemId> = plans.iter().map(|p| p.system_idx).collect();
         let mut builder = ast.edit();
         builder.remove_aromatic_systems(&to_remove);
         *ast = builder.build();
@@ -108,10 +108,10 @@ impl Transformer for Kekulizer {
 }
 
 struct SystemPlan {
-    system_idx: AromaticSystemIdx,
-    atoms: Vec<AtomIdx>,
-    matched_bonds: Vec<BondIdx>,
-    unmatched_bonds: Vec<BondIdx>,
+    system_idx: AromaticSystemId,
+    atoms: Vec<AtomId>,
+    matched_bonds: Vec<BondId>,
+    unmatched_bonds: Vec<BondId>,
 }
 
 impl Kekulizer {
@@ -119,11 +119,11 @@ impl Kekulizer {
     fn plan_systems(&self, ast: &MoleculeAst) -> Result<Vec<SystemPlan>, KekulizerError> {
         let mut plans = Vec::with_capacity(ast.aromatic_systems().count());
         for view in ast.aromatic_systems().iter() {
-            let system_idx = view.idx;
-            let atoms: Vec<AtomIdx> = view.atoms().collect();
-            let bonds: Vec<BondIdx> = view.bonds().collect();
+            let system_idx = view.id;
+            let atoms: Vec<AtomId> = view.atoms().collect();
+            let bonds: Vec<BondId> = view.bonds().collect();
 
-            let atom_to_node: HashMap<AtomIdx, u32> = atoms
+            let atom_to_node: HashMap<AtomId, u32> = atoms
                 .iter()
                 .enumerate()
                 .map(|(i, &a)| (a, i as u32))
@@ -173,7 +173,7 @@ impl Kekulizer {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst,
+        AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst,
         BondConstraint, Constraints, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
@@ -196,10 +196,10 @@ mod tests {
         for i in 0..6 {
             let mut bond = BondAst::from_order(1);
             bond.constraints.add(BondConstraint::Aromatic);
-            bonds.push((AtomIdx(i), AtomIdx((i + 1) % 6), bond));
+            bonds.push((AtomId(i), AtomId((i + 1) % 6), bond));
         }
         let system = AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]);
-        let aromatic_systems = vec![((0..6).map(AtomIdx).collect(), system)];
+        let aromatic_systems = vec![((0..6).map(AtomId).collect(), system)];
         MoleculeAst::from_parts(
             atoms,
             bonds,
@@ -211,8 +211,8 @@ mod tests {
         )
     }
 
-    fn ascending(n: u32) -> Vec<AtomIdx> {
-        (0..n).map(AtomIdx).collect()
+    fn ascending(n: u32) -> Vec<AtomId> {
+        (0..n).map(AtomId).collect()
     }
 
     #[rstest]
@@ -226,7 +226,7 @@ mod tests {
         let orders: Vec<i64> = ast
             .bonds()
             .iter()
-            .map(|view| match view.data.order {
+            .map(|view| match view.ast.order {
                 ValueAst::Lit(n) => n,
                 _ => -1,
             })
@@ -239,7 +239,7 @@ mod tests {
 
         for view in ast.bonds().iter() {
             let has_aromatic = view
-                .data
+                .ast
                 .constraints
                 .iter()
                 .any(|c| c.kind() == BondConstraintKind::Aromatic);
@@ -248,7 +248,7 @@ mod tests {
 
         for view in ast.atoms().iter() {
             let has_av = view
-                .data
+                .ast
                 .constraints
                 .iter()
                 .any(|c| c.kind() == AtomConstraintKind::AromaticValence);
@@ -260,7 +260,7 @@ mod tests {
     fn test_kekulize_no_aromatic_systems_is_noop() {
         let mut ast = MoleculeAst::from_atoms_and_bonds(
             vec![AtomAst::from_element(Element::C); 2],
-            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
         );
         let original = ast.clone();
         Kekulizer::new(KekulizationModel::default(), ascending(2))
@@ -278,10 +278,10 @@ mod tests {
         for i in 0..5 {
             let mut bond = BondAst::from_order(1);
             bond.constraints.add(BondConstraint::Aromatic);
-            bonds.push((AtomIdx(i), AtomIdx((i + 1) % 5), bond));
+            bonds.push((AtomId(i), AtomId((i + 1) % 5), bond));
         }
         let system = AromaticSystemAst::new(vec![ValueAst::Lit(1); 5]);
-        let aromatic_systems = vec![((0..5).map(AtomIdx).collect(), system)];
+        let aromatic_systems = vec![((0..5).map(AtomId).collect(), system)];
         let mut ast = MoleculeAst::from_parts(
             atoms,
             bonds,

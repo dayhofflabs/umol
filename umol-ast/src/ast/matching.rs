@@ -2,16 +2,16 @@
 
 use umol_graph_core::{Matching, NodeId};
 
-use super::idx::{AtomIdx, BondIdx};
+use super::idx::{AtomId, BondId};
 
 /// Bond-level wrapper over `umol_graph_core::Matching`. Exposes matched
-/// bonds and matched-atom membership in terms of `AtomIdx` / `BondIdx`.
+/// bonds and matched-atom membership in terms of `AtomId` / `BondId`.
 #[derive(Clone, Debug)]
 pub struct BondMatching(pub(crate) Matching);
 
 impl BondMatching {
-    pub fn bonds(&self) -> impl Iterator<Item = BondIdx> + '_ {
-        self.0.edges().iter().map(|&e| BondIdx::from(e))
+    pub fn bonds(&self) -> impl Iterator<Item = BondId> + '_ {
+        self.0.edges().iter().map(|&e| BondId::from(e))
     }
 
     pub fn size(&self) -> usize {
@@ -22,11 +22,11 @@ impl BondMatching {
         self.0.is_perfect(atom_count)
     }
 
-    pub fn mate(&self, atom: AtomIdx) -> Option<AtomIdx> {
-        self.0.mate(NodeId::from(atom)).map(AtomIdx::from)
+    pub fn mate(&self, atom: AtomId) -> Option<AtomId> {
+        self.0.mate(NodeId::from(atom)).map(AtomId::from)
     }
 
-    pub fn is_matched(&self, atom: AtomIdx) -> bool {
+    pub fn is_matched(&self, atom: AtomId) -> bool {
         self.0.is_matched(NodeId::from(atom))
     }
 }
@@ -49,8 +49,8 @@ mod tests {
         let bonds: Vec<_> = (0..n.saturating_sub(1))
             .map(|i| {
                 (
-                    AtomIdx(i as u32),
-                    AtomIdx((i + 1) as u32),
+                    AtomId(i as u32),
+                    AtomId((i + 1) as u32),
                     BondAst::from_order(1),
                 )
             })
@@ -66,8 +66,8 @@ mod tests {
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
-                    AtomIdx(i as u32),
-                    AtomIdx(((i + 1) % n) as u32),
+                    AtomId(i as u32),
+                    AtomId(((i + 1) % n) as u32),
                     BondAst::from_order(1),
                 )
             })
@@ -97,7 +97,7 @@ mod tests {
 
     #[rstest]
     fn test_bond_matching_bonds_enumerates_matched_edges(chain_4_matching: BondMatching) {
-        let bonds: Vec<BondIdx> = chain_4_matching.bonds().collect();
+        let bonds: Vec<BondId> = chain_4_matching.bonds().collect();
         assert_eq!(bonds.len(), 2);
         // All bond indices are < bond count of chain(4) == 3.
         for b in bonds {
@@ -120,11 +120,11 @@ mod tests {
     #[rstest]
     fn test_bond_matching_mate_and_is_matched(chain_4_matching: BondMatching) {
         for i in 0..4 {
-            assert!(chain_4_matching.is_matched(AtomIdx(i)));
-            let mate = chain_4_matching.mate(AtomIdx(i)).unwrap();
-            assert_ne!(mate, AtomIdx(i));
+            assert!(chain_4_matching.is_matched(AtomId(i)));
+            let mate = chain_4_matching.mate(AtomId(i)).unwrap();
+            assert_ne!(mate, AtomId(i));
             // Matching is symmetric.
-            assert_eq!(chain_4_matching.mate(mate), Some(AtomIdx(i)));
+            assert_eq!(chain_4_matching.mate(mate), Some(AtomId(i)));
         }
     }
 
@@ -134,7 +134,7 @@ mod tests {
         // atom 0 has no mate.
         let ast = chain(1);
         let m = ast.graph().maximum_matching(MaxMatchingAlgorithm::Edmonds);
-        assert!(!m.is_matched(AtomIdx(0)));
-        assert_eq!(m.mate(AtomIdx(0)), None);
+        assert!(!m.is_matched(AtomId(0)));
+        assert_eq!(m.mate(AtomId(0)), None);
     }
 }

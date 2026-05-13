@@ -134,7 +134,7 @@ impl Validator {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst, AtomConstraint, AtomIdx, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst,
+        AtomAst, AtomConstraint, AtomId, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst,
         SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
@@ -159,7 +159,7 @@ mod tests {
         let ch3_b = ch3_a.clone();
         MoleculeAst::from_parts(
             vec![ch3_a, ch3_b],
-            vec![(AtomIdx(0), AtomIdx(1), BondAst::from_order(1))],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             vec![],
             vec![],
             vec![],

@@ -51,7 +51,7 @@ fn aromatic_system_length_check(
     view: &AromaticSystemView<'_>,
 ) -> Option<EntityStructureContradiction> {
     let atoms_len = view.atoms().count();
-    let electrons_len = view.data.electrons.len();
+    let electrons_len = view.ast.electrons.len();
     if electrons_len != 0 && electrons_len != atoms_len {
         Some(
             EntityStructureContradiction::AromaticSystemElectronsLengthMismatch {
@@ -68,7 +68,7 @@ fn multicenter_length_check(
     view: &MulticenterBondView<'_>,
 ) -> Option<EntityStructureContradiction> {
     let atoms_len = view.atoms().count();
-    let electrons_len = view.data.electrons.len();
+    let electrons_len = view.ast.electrons.len();
     if electrons_len != 0 && electrons_len != atoms_len {
         Some(
             EntityStructureContradiction::MulticenterElectronsLengthMismatch {
@@ -85,7 +85,7 @@ fn multicenter_length_check(
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AromaticSystemAst, AtomAst, AtomIdx, Constraints, MoleculeAst, MulticenterBondAst,
+        AromaticSystemAst, AtomAst, AtomId, Constraints, MoleculeAst, MulticenterBondAst,
         ValueAst,
     };
     use umol_shared::element::Element;
@@ -100,7 +100,7 @@ mod tests {
             AtomAst::from_element(Element::C),
         ];
         let aromatic = vec![(
-            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+            vec![AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemAst::new(vec![ValueAst::Lit(1), ValueAst::Lit(1)]),
         )];
         let ast = MoleculeAst::from_parts(
@@ -133,7 +133,7 @@ mod tests {
             AtomAst::from_element(Element::H),
         ];
         let multicenter = vec![(
-            vec![AtomIdx(0), AtomIdx(1), AtomIdx(2)],
+            vec![AtomId(0), AtomId(1), AtomId(2)],
             MulticenterBondAst::new(vec![ValueAst::Lit(1)]),
         )];
         let ast = MoleculeAst::from_parts(
@@ -164,7 +164,7 @@ mod tests {
             AtomAst::from_element(Element::C),
             AtomAst::from_element(Element::C),
         ];
-        let aromatic = vec![(vec![AtomIdx(0), AtomIdx(1)], AromaticSystemAst::default())];
+        let aromatic = vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())];
         let ast = MoleculeAst::from_parts(
             atoms,
             vec![],

@@ -193,8 +193,8 @@ fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
         AtomConstraintKind::AromaticValence => "#a",
         AtomConstraintKind::MulticenterValence => "#m",
         AtomConstraintKind::Degree => "#D",
-        AtomConstraintKind::Connectivity => "#X",
-        AtomConstraintKind::RingConnectivity => "#x",
+        AtomConstraintKind::TotalDegree => "#X",
+        AtomConstraintKind::RingDegree => "#x",
         AtomConstraintKind::TotalHydrogens => "#H",
         AtomConstraintKind::RingCount => "#R",
         AtomConstraintKind::RingSize => "#r",
@@ -248,10 +248,10 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
             .map(|v| AtomPredicate::Constraint(AtomConstraint::Degree(v)))
             .parse_next(i),
         "#X" => optional_value
-            .map(|v| AtomPredicate::Constraint(AtomConstraint::Connectivity(v)))
+            .map(|v| AtomPredicate::Constraint(AtomConstraint::TotalDegree(v)))
             .parse_next(i),
         "#x" => optional_value
-            .map(|v| AtomPredicate::Constraint(AtomConstraint::RingConnectivity(v)))
+            .map(|v| AtomPredicate::Constraint(AtomConstraint::RingDegree(v)))
             .parse_next(i),
         "#H" => optional_value
             .map(|v| AtomPredicate::Constraint(AtomConstraint::TotalHydrogens(v)))
@@ -562,8 +562,8 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
             }
         },
         AtomConstraint::Degree(v) => fmt_value_field_required(f, "#D", v),
-        AtomConstraint::Connectivity(v) => fmt_value_field_required(f, "#X", v),
-        AtomConstraint::RingConnectivity(v) => fmt_value_field_required(f, "#x", v),
+        AtomConstraint::TotalDegree(v) => fmt_value_field_required(f, "#X", v),
+        AtomConstraint::RingDegree(v) => fmt_value_field_required(f, "#x", v),
         AtomConstraint::TotalHydrogens(v) => fmt_value_field_required(f, "#H", v),
         AtomConstraint::RingCount(v) => fmt_ring_count(f, v),
         AtomConstraint::RingSize(v) => fmt_value_field_required(f, "#r", v),
@@ -675,8 +675,8 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                 }
             }
             AtomConstraintKind::Degree
-            | AtomConstraintKind::Connectivity
-            | AtomConstraintKind::RingConnectivity
+            | AtomConstraintKind::TotalDegree
+            | AtomConstraintKind::RingDegree
             | AtomConstraintKind::TotalHydrogens
             | AtomConstraintKind::RingCount
             | AtomConstraintKind::RingSize => {
@@ -816,8 +816,8 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                 AromaticValenceDefault::Required => {}
             },
             AtomConstraintKind::Degree
-            | AtomConstraintKind::Connectivity
-            | AtomConstraintKind::RingConnectivity
+            | AtomConstraintKind::TotalDegree
+            | AtomConstraintKind::RingDegree
             | AtomConstraintKind::TotalHydrogens
             | AtomConstraintKind::RingCount
             | AtomConstraintKind::RingSize => {
@@ -1023,11 +1023,11 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
                 AtomConstraint::AcceptedPairs(ValueDsl::from_edn(v)?.into_ast(&()))
             }
             "degree" => AtomConstraint::Degree(ValueDsl::from_edn(v)?.into_ast(&())),
-            "connectivity" => {
-                AtomConstraint::Connectivity(ValueDsl::from_edn(v)?.into_ast(&()))
+            "total-degree" => {
+                AtomConstraint::TotalDegree(ValueDsl::from_edn(v)?.into_ast(&()))
             }
-            "ring-connectivity" => {
-                AtomConstraint::RingConnectivity(ValueDsl::from_edn(v)?.into_ast(&()))
+            "ring-degree" => {
+                AtomConstraint::RingDegree(ValueDsl::from_edn(v)?.into_ast(&()))
             }
             "total-hydrogens" => {
                 AtomConstraint::TotalHydrogens(ValueDsl::from_edn(v)?.into_ast(&()))
@@ -1072,11 +1072,11 @@ impl ToEdn for AtomConstraintDsl {
             AtomConstraint::Degree(v) => {
                 single_key_map("degree", ValueDsl::from_ast(v, &()).to_edn())
             }
-            AtomConstraint::Connectivity(v) => {
-                single_key_map("connectivity", ValueDsl::from_ast(v, &()).to_edn())
+            AtomConstraint::TotalDegree(v) => {
+                single_key_map("total-degree", ValueDsl::from_ast(v, &()).to_edn())
             }
-            AtomConstraint::RingConnectivity(v) => single_key_map(
-                "ring-connectivity",
+            AtomConstraint::RingDegree(v) => single_key_map(
+                "ring-degree",
                 ValueDsl::from_ast(v, &()).to_edn(),
             ),
             AtomConstraint::TotalHydrogens(v) => single_key_map(
@@ -1200,8 +1200,8 @@ mod tests {
     #[case::multicenter_one("C#m", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(1)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multicenter("C#m2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(2)))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::degree("C#D2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::Degree(ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::connectivity("C#X3", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::Connectivity(ValueAst::Lit(3))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_connectivity("C#x2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingConnectivity(ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::total_degree("C#X3", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::TotalDegree(ValueAst::Lit(3))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::ring_degree("C#x2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingDegree(ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::total_hydrogens("C#H1", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::TotalHydrogens(ValueAst::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_bare("C#R", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_undetermined("C#R*", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1265,8 +1265,8 @@ mod tests {
     #[case::donated("C#d*", "C")]
     #[case::accepted("C#t*", "C")]
     #[case::degree("C#D*", "C")]
-    #[case::connectivity("C#X*", "C")]
-    #[case::ring_connectivity("C#x*", "C")]
+    #[case::total_degree("C#X*", "C")]
+    #[case::ring_degree("C#x*", "C")]
     #[case::total_h("C#H*", "C")]
     #[case::ring_count("C#R*", "C")]
     #[case::ring_size("C#r*", "C")]
@@ -1370,9 +1370,9 @@ mod tests {
     #[case::multicenter("#m2", AtomPredicate::Constraint(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(2)))))]
     #[case::degree("#D2", AtomPredicate::Constraint(AtomConstraint::Degree(ValueAst::Lit(2))))]
     #[case::degree_omit("#D", AtomPredicate::Constraint(AtomConstraint::Degree(ValueAst::Lit(1))))]
-    #[case::connectivity("#X3", AtomPredicate::Constraint(AtomConstraint::Connectivity(ValueAst::Lit(3))))]
-    #[case::ring_connectivity("#x2", AtomPredicate::Constraint(AtomConstraint::RingConnectivity(ValueAst::Lit(2))))]
-    #[case::ring_connectivity_omit("#x", AtomPredicate::Constraint(AtomConstraint::RingConnectivity(ValueAst::Lit(1))))]
+    #[case::total_degree("#X3", AtomPredicate::Constraint(AtomConstraint::TotalDegree(ValueAst::Lit(3))))]
+    #[case::ring_degree("#x2", AtomPredicate::Constraint(AtomConstraint::RingDegree(ValueAst::Lit(2))))]
+    #[case::ring_degree_omit("#x", AtomPredicate::Constraint(AtomConstraint::RingDegree(ValueAst::Lit(1))))]
     #[case::total_hydrogens("#H1", AtomPredicate::Constraint(AtomConstraint::TotalHydrogens(ValueAst::Lit(1))))]
     #[case::ring_bare("#R", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Lit(1))))]
     #[case::ring_undetermined("#R*", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Undetermined)))]
@@ -1524,8 +1524,8 @@ mod tests {
     #[case::valence_undetermined(AtomConstraint::Valence(ValueAst::Undetermined), "{:valence :undetermined}")]
     #[case::valence_set(AtomConstraint::Valence(ValueAst::LitSet(vec![3, 4])), "{:valence [3 4]}")]
     #[case::degree(AtomConstraint::Degree(ValueAst::Lit(3)), "{:degree 3}")]
-    #[case::connectivity(AtomConstraint::Connectivity(ValueAst::Lit(4)), "{:connectivity 4}")]
-    #[case::ring_connectivity(AtomConstraint::RingConnectivity(ValueAst::Lit(2)), "{:ring-connectivity 2}")]
+    #[case::total_degree(AtomConstraint::TotalDegree(ValueAst::Lit(4)), "{:total-degree 4}")]
+    #[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Lit(2)), "{:ring-degree 2}")]
     #[case::total_h(AtomConstraint::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
     #[case::ring_count(AtomConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
     #[case::ring_size(AtomConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]

@@ -21,9 +21,9 @@
 //!   quantified over the matching participants.
 
 use super::super::idx::{
-    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
-use super::super::remap::IdxRemapping;
+use super::super::remap::IdRemapping;
 use super::atom::AtomConstraint;
 
 /// Cross-entity constraint relating one DAMN entity (dative bond, aromatic
@@ -35,23 +35,23 @@ use super::atom::AtomConstraint;
 pub enum RelationalConstraint {
     // region: Dative bond
     /// The donor end of dative bond `bond` is `atom`.
-    DativeBondDonor { bond: DativeBondIdx, atom: AtomIdx },
+    DativeBondDonor { bond: DativeBondId, atom: AtomId },
     /// The acceptor end of dative bond `bond` is `atom`.
-    DativeBondAcceptor { bond: DativeBondIdx, atom: AtomIdx },
+    DativeBondAcceptor { bond: DativeBondId, atom: AtomId },
     /// Dative bond `dative` is parallel to a localized bond `parallel`
     /// (same atom pair).
     DativeBondParallels {
-        dative: DativeBondIdx,
-        parallel: BondIdx,
+        dative: DativeBondId,
+        parallel: BondId,
     },
     /// The donor end of dative bond `bond` satisfies `predicate`.
     DativeBondDonorSatisfies {
-        bond: DativeBondIdx,
+        bond: DativeBondId,
         predicate: Box<AtomConstraint>,
     },
     /// The acceptor end of dative bond `bond` satisfies `predicate`.
     DativeBondAcceptorSatisfies {
-        bond: DativeBondIdx,
+        bond: DativeBondId,
         predicate: Box<AtomConstraint>,
     },
 
@@ -60,28 +60,28 @@ pub enum RelationalConstraint {
     // region: Aromatic system
     /// Aromatic system `system` consists of exactly `atoms` (as a set).
     AromaticSystemAtoms {
-        system: AromaticSystemIdx,
-        atoms: Vec<AtomIdx>,
+        system: AromaticSystemId,
+        atoms: Vec<AtomId>,
     },
     /// `atom` is one of the atoms participating in aromatic system `system`.
     AromaticSystemContains {
-        system: AromaticSystemIdx,
-        atom: AtomIdx,
+        system: AromaticSystemId,
+        atom: AtomId,
     },
     /// Every atom in `atoms` participates in aromatic system `system`
     /// (set inclusion, not equality).
     AromaticSystemContainsAll {
-        system: AromaticSystemIdx,
-        atoms: Vec<AtomIdx>,
+        system: AromaticSystemId,
+        atoms: Vec<AtomId>,
     },
     /// Every atom of aromatic system `system` satisfies `predicate`.
     AromaticSystemAllAtoms {
-        system: AromaticSystemIdx,
+        system: AromaticSystemId,
         predicate: Box<AtomConstraint>,
     },
     /// At least one atom of aromatic system `system` satisfies `predicate`.
     AromaticSystemAnyAtom {
-        system: AromaticSystemIdx,
+        system: AromaticSystemId,
         predicate: Box<AtomConstraint>,
     },
 
@@ -90,29 +90,29 @@ pub enum RelationalConstraint {
     // region: Multicenter bond
     /// Multicenter bond `bond` consists of exactly `atoms` (as a set).
     MulticenterBondAtoms {
-        bond: MulticenterBondIdx,
-        atoms: Vec<AtomIdx>,
+        bond: MulticenterBondId,
+        atoms: Vec<AtomId>,
     },
     /// `atom` is one of the participants in multicenter bond `bond`.
     MulticenterBondContains {
-        bond: MulticenterBondIdx,
-        atom: AtomIdx,
+        bond: MulticenterBondId,
+        atom: AtomId,
     },
     /// Every atom in `atoms` participates in multicenter bond `bond`.
     MulticenterBondContainsAll {
-        bond: MulticenterBondIdx,
-        atoms: Vec<AtomIdx>,
+        bond: MulticenterBondId,
+        atoms: Vec<AtomId>,
     },
     /// Every participating atom of multicenter bond `bond` satisfies
     /// `predicate`.
     MulticenterBondAllAtoms {
-        bond: MulticenterBondIdx,
+        bond: MulticenterBondId,
         predicate: Box<AtomConstraint>,
     },
     /// At least one participating atom of multicenter bond `bond` satisfies
     /// `predicate`.
     MulticenterBondAnyAtom {
-        bond: MulticenterBondIdx,
+        bond: MulticenterBondId,
         predicate: Box<AtomConstraint>,
     },
 
@@ -121,20 +121,20 @@ pub enum RelationalConstraint {
     // region: Noncovalent bond
     /// Noncovalent bond `bond` connects exactly the pair `atoms` (unordered).
     NoncovalentBondEnds {
-        bond: NoncovalentBondIdx,
-        atoms: [AtomIdx; 2],
+        bond: NoncovalentBondId,
+        atoms: [AtomId; 2],
     },
     /// `atom` is one of the two endpoints of noncovalent bond `bond`.
     NoncovalentBondContains {
-        bond: NoncovalentBondIdx,
-        atom: AtomIdx,
+        bond: NoncovalentBondId,
+        atom: AtomId,
     },
     /// The two endpoints of noncovalent bond `bond` satisfy `predicates[0]`
     /// and `predicates[1]` respectively. Order is not symmetric: the bond
     /// stores its endpoints as an unordered pair, but each predicate is
     /// associated with one specific slot.
     NoncovalentBondEndsSatisfy {
-        bond: NoncovalentBondIdx,
+        bond: NoncovalentBondId,
         predicates: [Box<AtomConstraint>; 2],
     },
     // endregion: Noncovalent bond
@@ -194,7 +194,7 @@ impl RelationalConstraint {
 
     /// Remap all indices this constraint carries. Returns `None` if any
     /// referenced entity has been removed by the remapping.
-    pub fn remap(self, remap: &IdxRemapping) -> Option<Self> {
+    pub fn remap(self, remap: &IdRemapping) -> Option<Self> {
         Some(match self {
             Self::DativeBondDonor { bond, atom } => Self::DativeBondDonor {
                 bond: remap.dative_bond(bond)?,
@@ -312,8 +312,8 @@ mod tests {
         removed_aromatic: Vec<u32>,
         removed_multicenter: Vec<u32>,
         removed_noncovalent: Vec<u32>,
-    ) -> IdxRemapping {
-        IdxRemapping::new(
+    ) -> IdRemapping {
+        IdRemapping::new(
             Remapping {
                 removed_nodes,
                 removed_edges,
@@ -331,103 +331,103 @@ mod tests {
 
     /// Drop atom 1; drop dative 0; preserve other entities. Indices above
     /// the removed slot shift down by one.
-    fn one_atom_one_dative() -> IdxRemapping {
+    fn one_atom_one_dative() -> IdRemapping {
         remapping(vec![1], vec![], vec![0], vec![], vec![], vec![])
     }
 
     /// Drop bond 0; preserve other entities.
-    fn drop_bond0() -> IdxRemapping {
+    fn drop_bond0() -> IdRemapping {
         remapping(vec![], vec![0], vec![], vec![], vec![], vec![])
     }
 
     /// Drop aromatic system 0.
-    fn drop_aromatic0() -> IdxRemapping {
+    fn drop_aromatic0() -> IdRemapping {
         remapping(vec![], vec![], vec![], vec![0], vec![], vec![])
     }
 
     /// Drop multicenter bond 0.
-    fn drop_multicenter0() -> IdxRemapping {
+    fn drop_multicenter0() -> IdRemapping {
         remapping(vec![], vec![], vec![], vec![], vec![0], vec![])
     }
 
     /// Drop noncovalent bond 0.
-    fn drop_noncovalent0() -> IdxRemapping {
+    fn drop_noncovalent0() -> IdRemapping {
         remapping(vec![], vec![], vec![], vec![], vec![], vec![0])
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::dative_donor_shifts(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(1), atom: AtomIdx(2) },
-        one_atom_one_dative(), Some(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(0), atom: AtomIdx(1) }))]
-    #[case::dative_donor_drops_when_atom_removed(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(1), atom: AtomIdx(1) },
+    #[case::dative_donor_shifts(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(2) },
+        one_atom_one_dative(), Some(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(1) }))]
+    #[case::dative_donor_drops_when_atom_removed(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(1) },
         one_atom_one_dative(), None)]
-    #[case::dative_donor_drops_when_bond_removed(RelationalConstraint::DativeBondDonor { bond: DativeBondIdx(0), atom: AtomIdx(2) },
+    #[case::dative_donor_drops_when_bond_removed(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(2) },
         one_atom_one_dative(), None)]
-    #[case::dative_acceptor_shifts(RelationalConstraint::DativeBondAcceptor { bond: DativeBondIdx(1), atom: AtomIdx(2) },
-        one_atom_one_dative(), Some(RelationalConstraint::DativeBondAcceptor { bond: DativeBondIdx(0), atom: AtomIdx(1) }))]
-    #[case::dative_parallels_shifts(RelationalConstraint::DativeBondParallels { dative: DativeBondIdx(1), parallel: BondIdx(2) },
-        one_atom_one_dative(), Some(RelationalConstraint::DativeBondParallels { dative: DativeBondIdx(0), parallel: BondIdx(2) }))]
-    #[case::dative_parallels_drops_when_bond_removed(RelationalConstraint::DativeBondParallels { dative: DativeBondIdx(0), parallel: BondIdx(0) },
+    #[case::dative_acceptor_shifts(RelationalConstraint::DativeBondAcceptor { bond: DativeBondId(1), atom: AtomId(2) },
+        one_atom_one_dative(), Some(RelationalConstraint::DativeBondAcceptor { bond: DativeBondId(0), atom: AtomId(1) }))]
+    #[case::dative_parallels_shifts(RelationalConstraint::DativeBondParallels { dative: DativeBondId(1), parallel: BondId(2) },
+        one_atom_one_dative(), Some(RelationalConstraint::DativeBondParallels { dative: DativeBondId(0), parallel: BondId(2) }))]
+    #[case::dative_parallels_drops_when_bond_removed(RelationalConstraint::DativeBondParallels { dative: DativeBondId(0), parallel: BondId(0) },
         drop_bond0(), None)]
-    #[case::dative_donor_satisfies_shifts(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondIdx(1), predicate: val_pred() },
-        one_atom_one_dative(), Some(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondIdx(0), predicate: val_pred() }))]
-    #[case::dative_acceptor_satisfies_shifts(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondIdx(1), predicate: val_pred() },
-        one_atom_one_dative(), Some(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondIdx(0), predicate: val_pred() }))]
-    #[case::aromatic_atoms_shifts(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemIdx(1), atoms: vec![AtomIdx(0), AtomIdx(2)] },
-        remapping(vec![1], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemIdx(0),
-        atoms: vec![AtomIdx(0), AtomIdx(1)] }))]
-    #[case::aromatic_atoms_drops_when_atom_removed(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemIdx(0), atoms: vec![AtomIdx(1), AtomIdx(2)] },
+    #[case::dative_donor_satisfies_shifts(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondId(1), predicate: val_pred() },
+        one_atom_one_dative(), Some(RelationalConstraint::DativeBondDonorSatisfies { bond: DativeBondId(0), predicate: val_pred() }))]
+    #[case::dative_acceptor_satisfies_shifts(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondId(1), predicate: val_pred() },
+        one_atom_one_dative(), Some(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondId(0), predicate: val_pred() }))]
+    #[case::aromatic_atoms_shifts(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(1), atoms: vec![AtomId(0), AtomId(2)] },
+        remapping(vec![1], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0),
+        atoms: vec![AtomId(0), AtomId(1)] }))]
+    #[case::aromatic_atoms_drops_when_atom_removed(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0), atoms: vec![AtomId(1), AtomId(2)] },
         remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
-    #[case::aromatic_atoms_drops_when_system_removed(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemIdx(0), atoms: vec![AtomIdx(0)] },
+    #[case::aromatic_atoms_drops_when_system_removed(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0), atoms: vec![AtomId(0)] },
         drop_aromatic0(), None)]
-    #[case::aromatic_contains_shifts(RelationalConstraint::AromaticSystemContains { system: AromaticSystemIdx(1), atom: AtomIdx(2) },
-        remapping(vec![1], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemContains { system: AromaticSystemIdx(0), atom: AtomIdx(1) }))]
-    #[case::aromatic_contains_all_shifts(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemIdx(0), atoms: vec![AtomIdx(0), AtomIdx(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemIdx(0),
-        atoms: vec![AtomIdx(0), AtomIdx(1)] }))]
-    #[case::aromatic_contains_all_drops_when_atom_removed(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemIdx(0), atoms: vec![AtomIdx(1)] },
+    #[case::aromatic_contains_shifts(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(1), atom: AtomId(2) },
+        remapping(vec![1], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(1) }))]
+    #[case::aromatic_contains_all_shifts(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemId(0), atoms: vec![AtomId(0), AtomId(2)] },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemId(0),
+        atoms: vec![AtomId(0), AtomId(1)] }))]
+    #[case::aromatic_contains_all_drops_when_atom_removed(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemId(0), atoms: vec![AtomId(1)] },
         remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
-    #[case::aromatic_all_atoms_shifts(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemIdx(1), predicate: val_pred() },
+    #[case::aromatic_all_atoms_shifts(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemId(1), predicate: val_pred() },
         remapping(vec![], vec![], vec![], vec![0], vec![], vec![]),
-        Some(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemIdx(0), predicate: val_pred() }))]
-    #[case::aromatic_any_atom_shifts(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemIdx(1), predicate: val_pred() },
-        remapping(vec![], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemIdx(0), predicate: val_pred() }))]
-    #[case::multicenter_atoms_shifts(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondIdx(1), atoms: vec![AtomIdx(0), AtomIdx(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![0], vec![]), Some(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondIdx(0),
-        atoms: vec![AtomIdx(0), AtomIdx(1)] }))]
-    #[case::multicenter_atoms_drops_when_atom_removed(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondIdx(0), atoms: vec![AtomIdx(1)] },
+        Some(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemId(0), predicate: val_pred() }))]
+    #[case::aromatic_any_atom_shifts(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemId(1), predicate: val_pred() },
+        remapping(vec![], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemId(0), predicate: val_pred() }))]
+    #[case::multicenter_atoms_shifts(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(1), atoms: vec![AtomId(0), AtomId(2)] },
+        remapping(vec![1], vec![], vec![], vec![], vec![0], vec![]), Some(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0),
+        atoms: vec![AtomId(0), AtomId(1)] }))]
+    #[case::multicenter_atoms_drops_when_atom_removed(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0), atoms: vec![AtomId(1)] },
         remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
-    #[case::multicenter_atoms_drops_when_bond_removed(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondIdx(0), atoms: vec![AtomIdx(0)] },
+    #[case::multicenter_atoms_drops_when_bond_removed(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0), atoms: vec![AtomId(0)] },
         drop_multicenter0(), None)]
-    #[case::multicenter_contains_shifts(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondIdx(1), atom: AtomIdx(2) },
-        remapping(vec![1], vec![], vec![], vec![], vec![0], vec![]), Some(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondIdx(0), atom: AtomIdx(1) }))]
-    #[case::multicenter_contains_all_shifts(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondIdx(0), atoms: vec![AtomIdx(0), AtomIdx(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondIdx(0),
-        atoms: vec![AtomIdx(0), AtomIdx(1)] }))]
-    #[case::multicenter_contains_all_drops_when_atom_removed(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondIdx(0), atoms: vec![AtomIdx(1)] },
+    #[case::multicenter_contains_shifts(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondId(1), atom: AtomId(2) },
+        remapping(vec![1], vec![], vec![], vec![], vec![0], vec![]), Some(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondId(0), atom: AtomId(1) }))]
+    #[case::multicenter_contains_all_shifts(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0), atoms: vec![AtomId(0), AtomId(2)] },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0),
+        atoms: vec![AtomId(0), AtomId(1)] }))]
+    #[case::multicenter_contains_all_drops_when_atom_removed(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0), atoms: vec![AtomId(1)] },
         remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
-    #[case::multicenter_all_atoms_shifts(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondIdx(1), predicate: val_pred() },
+    #[case::multicenter_all_atoms_shifts(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondId(1), predicate: val_pred() },
         remapping(vec![], vec![], vec![], vec![], vec![0], vec![]),
-        Some(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondIdx(0), predicate: val_pred() }))]
-    #[case::multicenter_any_atom_shifts(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondIdx(1), predicate: val_pred() },
+        Some(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondId(0), predicate: val_pred() }))]
+    #[case::multicenter_any_atom_shifts(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondId(1), predicate: val_pred() },
         remapping(vec![], vec![], vec![], vec![], vec![0], vec![]),
-        Some(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondIdx(0), predicate: val_pred() }))]
-    #[case::noncovalent_ends_shifts(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondIdx(1), atoms: [AtomIdx(0), AtomIdx(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![0]), Some(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondIdx(0),
-        atoms: [AtomIdx(0), AtomIdx(1)] }))]
-    #[case::noncovalent_ends_drops_when_atom_removed(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondIdx(0), atoms: [AtomIdx(0), AtomIdx(1)] },
+        Some(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondId(0), predicate: val_pred() }))]
+    #[case::noncovalent_ends_shifts(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(1), atoms: [AtomId(0), AtomId(2)] },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![0]), Some(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0),
+        atoms: [AtomId(0), AtomId(1)] }))]
+    #[case::noncovalent_ends_drops_when_atom_removed(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)] },
         remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
-    #[case::noncovalent_ends_drops_when_bond_removed(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondIdx(0), atoms: [AtomIdx(0), AtomIdx(1)] },
+    #[case::noncovalent_ends_drops_when_bond_removed(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)] },
         drop_noncovalent0(), None)]
-    #[case::noncovalent_contains_shifts(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondIdx(1), atom: AtomIdx(2) },
+    #[case::noncovalent_contains_shifts(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondId(1), atom: AtomId(2) },
         remapping(vec![1], vec![], vec![], vec![], vec![], vec![0]),
-        Some(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondIdx(0), atom: AtomIdx(1) }))]
-    #[case::noncovalent_ends_satisfy_shifts(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondIdx(1), predicates: [val_pred(), val_pred()] },
-        remapping(vec![], vec![], vec![], vec![], vec![], vec![0]), Some(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondIdx(0),
+        Some(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondId(0), atom: AtomId(1) }))]
+    #[case::noncovalent_ends_satisfy_shifts(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(1), predicates: [val_pred(), val_pred()] },
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![0]), Some(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
         predicates: [val_pred(), val_pred()] }))]
     fn test_relational_constraint_remap(
         #[case] input: RelationalConstraint,
-        #[case] remap: IdxRemapping,
+        #[case] remap: IdRemapping,
         #[case] expected: Option<RelationalConstraint>,
     ) {
         assert_eq!(input.remap(&remap), expected);

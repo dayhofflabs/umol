@@ -1,7 +1,7 @@
 //! Induced molecule subgraph with index maps.
 
 use super::idx::{
-    AromaticSystemIdx, AtomIdx, BondIdx, DativeBondIdx, MulticenterBondIdx, NoncovalentBondIdx,
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::molecule::MoleculeAst;
 
@@ -10,10 +10,10 @@ use super::molecule::MoleculeAst;
 #[derive(Clone, Debug)]
 pub struct MoleculeSubgraph {
     pub ast: MoleculeAst,
-    pub atom_map: Vec<AtomIdx>,
-    pub bond_map: Vec<BondIdx>,
-    pub dative_bond_map: Vec<DativeBondIdx>,
-    pub aromatic_system_map: Vec<AromaticSystemIdx>,
-    pub multicenter_bond_map: Vec<MulticenterBondIdx>,
-    pub noncovalent_bond_map: Vec<NoncovalentBondIdx>,
+    pub atom_map: Vec<AtomId>,
+    pub bond_map: Vec<BondId>,
+    pub dative_bond_map: Vec<DativeBondId>,
+    pub aromatic_system_map: Vec<AromaticSystemId>,
+    pub multicenter_bond_map: Vec<MulticenterBondId>,
+    pub noncovalent_bond_map: Vec<NoncovalentBondId>,
 }

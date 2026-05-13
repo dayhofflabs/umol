@@ -3,7 +3,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AtomAst, AtomConstraint, AtomIdx, AtomView, ElementAst, ImplicitHydrogensAst, MoleculeAst,
+    AtomAst, AtomConstraint, AtomId, AtomView, ElementAst, ImplicitHydrogensAst, MoleculeAst,
     ValueAst,
 };
 use umol_shared::element::Element;
@@ -24,7 +24,7 @@ pub struct AtomTypingValenceResolver {
 pub enum AtomTypingError {
     #[error("no atom-typing match for {atom:?} (element {element}, charge {charge})")]
     NoMatchingPattern {
-        atom: AtomIdx,
+        atom: AtomId,
         element: Element,
         charge: i8,
     },
@@ -41,12 +41,12 @@ impl AtomTypingValenceResolver {
     /// without contradiction.
     pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), AtomTypingError> {
         for i in 0..ast.atoms().count() as u32 {
-            let idx = AtomIdx(i);
+            let idx = AtomId(i);
             let view = ast.atom(idx);
-            if view.data.is_ground() {
+            if view.ast.is_ground() {
                 continue;
             }
-            let ElementAst::Lit(element) = view.data.element else {
+            let ElementAst::Lit(element) = view.ast.element else {
                 continue;
             };
             if atom_sigma_valence(&view).is_none() {
@@ -59,12 +59,12 @@ impl AtomTypingValenceResolver {
                     return Err(AtomTypingError::NoMatchingPattern {
                         atom: idx,
                         element,
-                        charge: charge_or_zero(view.data),
+                        charge: charge_or_zero(view.ast),
                     });
                 }
                 1 => {
                     let cand = candidates.into_iter().next().unwrap();
-                    let atom_mut = ast.atom_mut(idx).data;
+                    let atom_mut = ast.atom_mut(idx).ast;
                     narrow_atom(atom_mut, &cand.ast);
                     lift_constraints(atom_mut, &cand.lifted);
                 }
@@ -75,7 +75,7 @@ impl AtomTypingValenceResolver {
     }
 
     fn candidates_for(&self, view: &AtomView<'_>, element: Element) -> Vec<AtomCandidate> {
-        let atom = view.data;
+        let atom = view.ast;
         let valence = match atom_sigma_valence(view) {
             Some(v) => v,
             None => return Vec::new(),

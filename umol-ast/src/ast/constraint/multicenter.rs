@@ -6,7 +6,7 @@ use std::vec::IntoIter;
 
 use strum::EnumDiscriminants;
 
-use super::super::remap::IdxRemapping;
+use super::super::remap::IdRemapping;
 use super::super::value::ValueAst;
 
 /// Multicenter-bond-scope constraint. Held inline on `MulticenterBondAst` via
@@ -45,7 +45,7 @@ impl MulticenterBondConstraint {
         }
     }
 
-    pub fn remap(self, _remap: &IdxRemapping) -> Option<Self> {
+    pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
     }
@@ -133,7 +133,7 @@ impl MulticenterBondConstraints {
         Some(self.0.remove(pos))
     }
 
-    pub fn remap(self, remap: &IdxRemapping) -> Self {
+    pub fn remap(self, remap: &IdRemapping) -> Self {
         Self(self.0.into_iter().filter_map(|c| c.remap(remap)).collect())
     }
 }
@@ -407,7 +407,7 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_constraints_remap() {
         let cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
-        let remap = IdxRemapping::new(
+        let remap = IdRemapping::new(
             Remapping {
                 removed_nodes: vec![0, 1],
                 removed_edges: vec![0],

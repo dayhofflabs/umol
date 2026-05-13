@@ -3,12 +3,12 @@
 //! Filters candidate atoms by element scope and the per-atom aromatic-valence
 //! constraint, enumerates rings within configured bounds, checks the Hueckel
 //! 4n+2 rule on individual and fused ring combinations, and produces aromatic
-//! system tuples `(Vec<AtomIdx>, AromaticSystemAst)` ready for `MoleculeAst::edit`.
+//! system tuples `(Vec<AtomId>, AromaticSystemAst)` ready for `MoleculeAst::edit`.
 
 use std::collections::{HashMap, HashSet};
 
 use umol_ast::ast::{
-    AromaticSystemAst, AtomIdx, AtomView, ElementAst, MoleculeAst, RingIdx, RingSet, RingView,
+    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, RingView,
     SpinStateAst, ValueAst,
 };
 use umol_graph_core::UnionFind;
@@ -34,11 +34,11 @@ impl HueckelRuleAromaticity {
         ast: &MoleculeAst,
         rings: &RingSet,
         electrons_at: &F,
-    ) -> Vec<(Vec<AtomIdx>, AromaticSystemAst)>
+    ) -> Vec<(Vec<AtomId>, AromaticSystemAst)>
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let eligible_cycles: Vec<RingIdx> = rings
+        let eligible_cycles: Vec<RingId> = rings
             .ids()
             .filter(|&i| {
                 rings
@@ -47,13 +47,13 @@ impl HueckelRuleAromaticity {
             })
             .collect();
 
-        let mut aromatic_atom_sets: Vec<HashSet<AtomIdx>> = Vec::new();
+        let mut aromatic_atom_sets: Vec<HashSet<AtomId>> = Vec::new();
 
         for &cycle_idx in &eligible_cycles {
             let Some(ring) = rings.get(cycle_idx) else {
                 continue;
             };
-            let ring_atoms: Vec<AtomIdx> = ring.atoms().to_vec();
+            let ring_atoms: Vec<AtomId> = ring.atoms().to_vec();
             if let Some(electrons) = ring_electron_count(ast, &ring_atoms, electrons_at) {
                 if check_4n_plus_2(electrons) {
                     aromatic_atom_sets.push(ring_atoms.into_iter().collect());
@@ -64,7 +64,7 @@ impl HueckelRuleAromaticity {
         if self.ring_limits.include_fused {
             let fused_systems = self.enumerate_fused_combinations(rings, &eligible_cycles);
             for atoms in fused_systems {
-                let atom_vec: Vec<AtomIdx> = atoms.iter().copied().collect();
+                let atom_vec: Vec<AtomId> = atoms.iter().copied().collect();
                 if let Some(electrons) = ring_electron_count(ast, &atom_vec, electrons_at) {
                     if check_4n_plus_2(electrons) {
                         aromatic_atom_sets.push(atoms);
@@ -77,7 +77,7 @@ impl HueckelRuleAromaticity {
 
         let mut candidates = Vec::new();
         for atom_set in merged {
-            let mut atoms: Vec<AtomIdx> = atom_set.into_iter().collect();
+            let mut atoms: Vec<AtomId> = atom_set.into_iter().collect();
             atoms.sort_unstable();
 
             let mut electrons: Vec<ValueAst> = Vec::with_capacity(atoms.len());
@@ -105,12 +105,12 @@ impl HueckelRuleAromaticity {
         candidates
     }
 
-    fn is_atom_eligible<F>(&self, ast: &MoleculeAst, atom: AtomIdx, electrons_at: &F) -> bool
+    fn is_atom_eligible<F>(&self, ast: &MoleculeAst, atom: AtomId, electrons_at: &F) -> bool
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
         let view = ast.atom(atom);
-        let element = match view.data.element {
+        let element = match view.ast.element {
             ElementAst::Lit(e) => e,
             _ => return false,
         };
@@ -136,23 +136,23 @@ impl HueckelRuleAromaticity {
     fn enumerate_fused_combinations(
         &self,
         rings: &RingSet,
-        eligible: &[RingIdx],
-    ) -> Vec<HashSet<AtomIdx>> {
+        eligible: &[RingId],
+    ) -> Vec<HashSet<AtomId>> {
         let max_combo = self.ring_limits.max_fused_combination;
         if max_combo < 2 {
             return Vec::new();
         }
 
-        let eligible_set: HashSet<RingIdx> = eligible.iter().copied().collect();
-        let mut results: Vec<HashSet<AtomIdx>> = Vec::new();
-        let mut seen_combos: HashSet<Vec<RingIdx>> = HashSet::new();
+        let eligible_set: HashSet<RingId> = eligible.iter().copied().collect();
+        let mut results: Vec<HashSet<AtomId>> = Vec::new();
+        let mut seen_combos: HashSet<Vec<RingId>> = HashSet::new();
 
         'outer: for &start in eligible {
-            let mut stack: Vec<(Vec<RingIdx>, HashSet<AtomIdx>)> = Vec::new();
+            let mut stack: Vec<(Vec<RingId>, HashSet<AtomId>)> = Vec::new();
             let Some(start_ring) = rings.get(start) else {
                 continue;
             };
-            let start_atoms: HashSet<AtomIdx> = start_ring.atoms().iter().copied().collect();
+            let start_atoms: HashSet<AtomId> = start_ring.atoms().iter().copied().collect();
             stack.push((vec![start], start_atoms));
 
             while let Some((combo, atoms)) = stack.pop() {
@@ -201,7 +201,7 @@ fn check_4n_plus_2(electron_count: u32) -> bool {
     (electron_count - 2).is_multiple_of(4)
 }
 
-fn ring_electron_count<F>(ast: &MoleculeAst, atoms: &[AtomIdx], electrons_at: &F) -> Option<u32>
+fn ring_electron_count<F>(ast: &MoleculeAst, atoms: &[AtomId], electrons_at: &F) -> Option<u32>
 where
     F: Fn(&AtomView<'_>) -> Option<u8>,
 {
@@ -212,7 +212,7 @@ where
     Some(total)
 }
 
-fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomIdx>]) -> Vec<HashSet<AtomIdx>> {
+fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomId>]) -> Vec<HashSet<AtomId>> {
     if aromatic_systems.is_empty() {
         return Vec::new();
     }
@@ -235,7 +235,7 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomIdx>]) -> Vec<HashS
 
     let mut result = Vec::new();
     for (_, members) in groups {
-        let mut merged_atoms: HashSet<AtomIdx> = HashSet::new();
+        let mut merged_atoms: HashSet<AtomId> = HashSet::new();
         for &idx in &members {
             merged_atoms.extend(aromatic_systems[idx].iter());
         }
@@ -249,7 +249,7 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomIdx>]) -> Vec<HashS
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomIdx, BondAst, ElementAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst,
         MoleculeAst, RingFamily, ValueAst,
     };
 
@@ -297,8 +297,8 @@ mod tests {
         let bonds: Vec<_> = (0..n)
             .map(|i| {
                 (
-                    AtomIdx(i as u32),
-                    AtomIdx(((i + 1) % n) as u32),
+                    AtomId(i as u32),
+                    AtomId(((i + 1) % n) as u32),
                     BondAst::from_order(1),
                 )
             })
@@ -313,7 +313,7 @@ mod tests {
     fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
         let bonds: Vec<_> = edges
             .iter()
-            .map(|&(a, b)| (AtomIdx(a as u32), AtomIdx(b as u32), BondAst::from_order(1)))
+            .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
         let atoms = apply_pi(specs);
         MoleculeAst::from_atoms_and_bonds(
@@ -508,7 +508,7 @@ mod tests {
         ])
     }
 
-    fn electron_total(system: &(Vec<AtomIdx>, AromaticSystemAst)) -> i64 {
+    fn electron_total(system: &(Vec<AtomId>, AromaticSystemAst)) -> i64 {
         system
             .1
             .electrons
