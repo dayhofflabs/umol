@@ -468,6 +468,46 @@ impl From<i64> for ImplicitHydrogensAst {
     }
 }
 
+impl std::ops::Add for ImplicitHydrogensAst {
+    type Output = ImplicitHydrogensAst;
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a + b),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
+impl std::ops::Sub for ImplicitHydrogensAst {
+    type Output = ImplicitHydrogensAst;
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a - b),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
+impl std::ops::Mul for ImplicitHydrogensAst {
+    type Output = ImplicitHydrogensAst;
+    fn mul(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a * b),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
+impl std::ops::Div for ImplicitHydrogensAst {
+    type Output = ImplicitHydrogensAst;
+    fn div(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a / b),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -865,5 +905,84 @@ mod tests {
     #[case::expr_var(ImplicitHydrogensAst::Expr(Expr::Var("h".into())))]
     fn test_implicit_hydrogens_ast_simplify_identity(#[case] input: ImplicitHydrogensAst) {
         assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(
+        ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Lit(1),
+        ImplicitHydrogensAst::Lit(3),
+    )]
+    #[case::normal_collapses(
+        ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Lit(1),
+        ImplicitHydrogensAst::Undetermined,
+    )]
+    #[case::undetermined_collapses(
+        ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Undetermined,
+        ImplicitHydrogensAst::Undetermined,
+    )]
+    fn test_implicit_hydrogens_ast_add(
+        #[case] lhs: ImplicitHydrogensAst,
+        #[case] rhs: ImplicitHydrogensAst,
+        #[case] expected: ImplicitHydrogensAst,
+    ) {
+        assert_eq!(lhs + rhs, expected);
+    }
+
+    #[rstest]
+    #[case::lit_lit(
+        ImplicitHydrogensAst::Lit(5), ImplicitHydrogensAst::Lit(2),
+        ImplicitHydrogensAst::Lit(3),
+    )]
+    #[case::normal_collapses(
+        ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Lit(1),
+        ImplicitHydrogensAst::Undetermined,
+    )]
+    fn test_implicit_hydrogens_ast_sub(
+        #[case] lhs: ImplicitHydrogensAst,
+        #[case] rhs: ImplicitHydrogensAst,
+        #[case] expected: ImplicitHydrogensAst,
+    ) {
+        assert_eq!(lhs - rhs, expected);
+    }
+
+    #[rstest]
+    #[case::lit_lit(
+        ImplicitHydrogensAst::Lit(3), ImplicitHydrogensAst::Lit(4),
+        ImplicitHydrogensAst::Lit(12),
+    )]
+    #[case::normal_collapses(
+        ImplicitHydrogensAst::Lit(3), ImplicitHydrogensAst::Normal,
+        ImplicitHydrogensAst::Undetermined,
+    )]
+    fn test_implicit_hydrogens_ast_mul(
+        #[case] lhs: ImplicitHydrogensAst,
+        #[case] rhs: ImplicitHydrogensAst,
+        #[case] expected: ImplicitHydrogensAst,
+    ) {
+        assert_eq!(lhs * rhs, expected);
+    }
+
+    #[rstest]
+    #[case::lit_lit(
+        ImplicitHydrogensAst::Lit(10), ImplicitHydrogensAst::Lit(2),
+        ImplicitHydrogensAst::Lit(5),
+    )]
+    #[case::normal_collapses(
+        ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Lit(2),
+        ImplicitHydrogensAst::Undetermined,
+    )]
+    fn test_implicit_hydrogens_ast_div(
+        #[case] lhs: ImplicitHydrogensAst,
+        #[case] rhs: ImplicitHydrogensAst,
+        #[case] expected: ImplicitHydrogensAst,
+    ) {
+        assert_eq!(lhs / rhs, expected);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_implicit_hydrogens_ast_div_by_zero_panics() {
+        let _ = ImplicitHydrogensAst::Lit(5) / ImplicitHydrogensAst::Lit(0);
     }
 }

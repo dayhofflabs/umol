@@ -1,6 +1,7 @@
 //! Value AST.
 
 use std::collections::HashMap;
+use std::ops::{Add, Div, Mul, Sub};
 
 use umol_shared::spin::SpinMultiplicity;
 
@@ -167,6 +168,46 @@ impl ValueAst {
                     }
                 }
             }
+        }
+    }
+}
+
+impl Add for ValueAst {
+    type Output = ValueAst;
+    fn add(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a + b),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
+impl Sub for ValueAst {
+    type Output = ValueAst;
+    fn sub(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a - b),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
+impl Mul for ValueAst {
+    type Output = ValueAst;
+    fn mul(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a * b),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
+impl Div for ValueAst {
+    type Output = ValueAst;
+    fn div(self, rhs: Self) -> Self::Output {
+        match (self, rhs) {
+            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a / b),
+            _ => Self::Undetermined,
         }
     }
 }
@@ -696,4 +737,48 @@ mod tests {
     }
 
     // endregion: simplify
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(ValueAst::Lit(2), ValueAst::Lit(3), ValueAst::Lit(5))]
+    #[case::lit_negative(ValueAst::Lit(1), ValueAst::Lit(-4), ValueAst::Lit(-3))]
+    #[case::lit_undetermined(ValueAst::Lit(2), ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::undetermined_lit(ValueAst::Undetermined, ValueAst::Lit(2), ValueAst::Undetermined)]
+    #[case::litset_lit(ValueAst::LitSet(vec![1, 2]), ValueAst::Lit(3), ValueAst::Undetermined)]
+    #[case::lit_expr(ValueAst::Lit(2), ValueAst::Expr(Expr::Var("x".into())), ValueAst::Undetermined)]
+    fn test_value_ast_add(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(lhs + rhs, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(ValueAst::Lit(5), ValueAst::Lit(3), ValueAst::Lit(2))]
+    #[case::lit_negative_result(ValueAst::Lit(1), ValueAst::Lit(4), ValueAst::Lit(-3))]
+    #[case::lit_undetermined(ValueAst::Lit(5), ValueAst::Undetermined, ValueAst::Undetermined)]
+    fn test_value_ast_sub(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(lhs - rhs, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(ValueAst::Lit(4), ValueAst::Lit(3), ValueAst::Lit(12))]
+    #[case::lit_undetermined(ValueAst::Lit(4), ValueAst::Undetermined, ValueAst::Undetermined)]
+    fn test_value_ast_mul(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(lhs * rhs, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(ValueAst::Lit(10), ValueAst::Lit(3), ValueAst::Lit(3))]
+    #[case::lit_undetermined(ValueAst::Lit(10), ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::undetermined_lit_zero(ValueAst::Undetermined, ValueAst::Lit(0), ValueAst::Undetermined)]
+    fn test_value_ast_div(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(lhs / rhs, expected);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_value_ast_div_by_zero_panics() {
+        let _ = ValueAst::Lit(5) / ValueAst::Lit(0);
+    }
 }

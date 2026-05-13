@@ -1124,7 +1124,7 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 - Reader renames: `bond_order_sum → valence`, `connectivity → total_degree`, `aromatic_contribution → aromatic_valence`, `multicenter_contribution → multicenter_valence`
 - Constraint variant renames: `Connectivity → TotalDegree`, `RingConnectivity → RingDegree`
 
-**Completion**: `cargo test --workspace --tests` green. **Dependencies**: none. **Risk**: low.
+**Completion**: `cargo test --workspace --tests` green. **Dependencies**: none. **Risk**: low. **Done**
 
 ### Phase 2 — Per-field accessors + per-kind constraint accessors
 
@@ -1134,7 +1134,7 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 - Multi-valued `add()` path mirroring `AromaticSystemConstraints`
 - Plural `ring_sizes()` accessor (multi-valued) + `get_all(kind)` / `remove_all(kind)` generics
 
-**Completion**: new accessors callable; tests cover per-kind accessors and multi-valued add semantics. **Dependencies**: phase 1. **Risk**: low.
+**Completion**: new accessors callable; tests cover per-kind accessors and multi-valued add semantics. **Dependencies**: phase 1. **Risk**: low. **Done**
 
 ### Phase 3 — `ValueAst` arithmetic + Undetermined unification
 
@@ -1143,7 +1143,7 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 - Per-kind constraint accessors return `ValueAst` (Undetermined ≡ no constraint)
 - Update existing call sites in `ops/*` to use the new operator surface
 
-**Completion**: arithmetic tests cover collapse; existing valence computations migrated. **Dependencies**: phases 1, 2. **Risk**: low.
+**Completion**: arithmetic tests cover collapse; existing valence computations migrated. **Dependencies**: phases 1, 2. **Risk**: low. **Done**
 
 ### Phase 4 — Cross-entity navigation + RingSet back-pointer
 
