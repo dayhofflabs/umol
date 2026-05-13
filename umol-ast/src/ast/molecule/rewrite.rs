@@ -150,7 +150,7 @@ impl MoleculeAst {
         // Phase 2: update K atom attributes from R
         for &(_, r_atom) in &rule.atom_map {
             let g_atom = r_to_g[&r_atom];
-            *builder.atom_mut(g_atom) = rhs[r_atom].clone();
+            *builder.atom_mut(g_atom).ast = rhs[r_atom].clone();
         }
 
         // Phase 2: update K bond attributes from R
@@ -164,7 +164,7 @@ impl MoleculeAst {
                 continue;
             }
             if let Some(g_bond) = self.bonds().connecting_id(r_to_g[&bv.atom_ids()[0]], r_to_g[&bv.atom_ids()[1]]) {
-                *builder.bond_mut(g_bond) = bv.ast.clone();
+                *builder.bond_mut(g_bond).ast = bv.ast.clone();
             }
         }
 

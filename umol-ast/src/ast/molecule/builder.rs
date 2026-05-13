@@ -25,8 +25,15 @@ use super::super::idx::{
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::NoncovalentBondAst;
 use super::super::remap::IdRemapping;
+use super::super::views::{
+    AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AtomBuilderView, AtomBuilderViewMut,
+    BondBuilderView, BondBuilderViewMut, DativeBondBuilderView, DativeBondBuilderViewMut,
+    MulticenterBondBuilderView, MulticenterBondBuilderViewMut, NoncovalentBondBuilderView,
+    NoncovalentBondBuilderViewMut,
+};
 use super::MoleculeAst;
 
+#[derive(Clone)]
 enum FixedSetStorage<R, const N: usize> {
     Shared(Arc<FixedRelationSet<R, N>>),
     Mutable(Vec<([NodeId; N], R)>),
@@ -117,6 +124,7 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
     }
 }
 
+#[derive(Clone)]
 enum VarSetStorage<R> {
     Shared(Arc<VarRelationSet<R>>),
     Mutable(Vec<(Vec<NodeId>, R)>),
@@ -234,6 +242,7 @@ fn var_relation_removed<R: Clone>(storage: &VarSetStorage<R>, remap: &Remapping)
 /// relations (dative, aromatic, multicenter, noncovalent), then finalizes
 /// into an immutable `MoleculeAst`. Supports incremental removal with
 /// index remapping via `remove`.
+#[derive(Clone)]
 pub struct MoleculeBuilder {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
@@ -341,50 +350,202 @@ impl MoleculeBuilder {
         self.constraints.push(c);
     }
 
-    // -- Attribute mutation ---------------------------------------------------
+    // -- Attribute access -----------------------------------------------------
 
-    pub fn atom_mut(&mut self, idx: AtomId) -> &mut AtomAst {
-        &mut Arc::make_mut(&mut self.atoms)[idx.index()]
+    pub fn atom(&self, idx: AtomId) -> AtomBuilderView<'_> {
+        AtomBuilderView { id: idx, ast: &self.atoms[idx.index()] }
     }
 
-    pub fn bond_mut(&mut self, idx: BondId) -> &mut BondAst {
-        &mut Arc::make_mut(&mut self.bonds)[idx.index()]
+    pub fn atom_mut(&mut self, idx: AtomId) -> AtomBuilderViewMut<'_> {
+        let ast = &mut Arc::make_mut(&mut self.atoms)[idx.index()];
+        AtomBuilderViewMut { id: idx, ast }
     }
 
-    pub fn dative_bond_mut(&mut self, idx: DativeBondId) -> &mut DativeBondAst {
+    pub fn bond(&self, idx: BondId) -> BondBuilderView<'_> {
+        let endpoints = self.graph.edge_endpoints(EdgeId::from(idx));
+        let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
+        BondBuilderView { id: idx, ast: &self.bonds[idx.index()], atoms }
+    }
+
+    pub fn bond_mut(&mut self, idx: BondId) -> BondBuilderViewMut<'_> {
+        let endpoints = self.graph.edge_endpoints(EdgeId::from(idx));
+        let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
+        let ast = &mut Arc::make_mut(&mut self.bonds)[idx.index()];
+        BondBuilderViewMut { id: idx, ast, atoms }
+    }
+
+    pub fn dative_bond(&self, idx: DativeBondId) -> DativeBondBuilderView<'_> {
+        match &self.dative_bonds {
+            VarSetStorage::Shared(arc) => {
+                let rid = RelationId(idx.0);
+                let atoms = arc.participants(rid);
+                let ast = arc.data(rid);
+                let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
+                DativeBondBuilderView { id: idx, ast, atoms, acceptor_id }
+            }
+            VarSetStorage::Mutable(vec) => {
+                let entry = &vec[idx.index()];
+                let acceptor_id = AtomId::from(entry.0[entry.1.acceptor_slot as usize]);
+                DativeBondBuilderView {
+                    id: idx,
+                    ast: &entry.1,
+                    atoms: &entry.0,
+                    acceptor_id,
+                }
+            }
+        }
+    }
+
+    pub fn dative_bond_mut(&mut self, idx: DativeBondId) -> DativeBondBuilderViewMut<'_> {
         self.dative_bonds.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.dative_bonds else {
             unreachable!()
         };
-        &mut vec[idx.index()].1
+        let entry = &mut vec[idx.index()];
+        let acceptor_id = AtomId::from(entry.0[entry.1.acceptor_slot as usize]);
+        DativeBondBuilderViewMut {
+            id: idx,
+            atoms: &entry.0,
+            ast: &mut entry.1,
+            acceptor_id,
+        }
     }
 
-    pub fn aromatic_system_mut(&mut self, idx: AromaticSystemId) -> &mut AromaticSystemAst {
+    pub fn aromatic_system(&self, idx: AromaticSystemId) -> AromaticSystemBuilderView<'_> {
+        match &self.aromatic_systems {
+            VarSetStorage::Shared(arc) => {
+                let rid = RelationId(idx.0);
+                AromaticSystemBuilderView {
+                    id: idx,
+                    ast: arc.data(rid),
+                    atoms: arc.participants(rid),
+                }
+            }
+            VarSetStorage::Mutable(vec) => {
+                let entry = &vec[idx.index()];
+                AromaticSystemBuilderView { id: idx, ast: &entry.1, atoms: &entry.0 }
+            }
+        }
+    }
+
+    pub fn aromatic_system_mut(
+        &mut self,
+        idx: AromaticSystemId,
+    ) -> AromaticSystemBuilderViewMut<'_> {
         self.aromatic_systems.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.aromatic_systems else {
             unreachable!()
         };
-        &mut vec[idx.index()].1
+        let entry = &mut vec[idx.index()];
+        AromaticSystemBuilderViewMut {
+            id: idx,
+            atoms: &entry.0,
+            ast: &mut entry.1,
+        }
     }
 
-    pub fn multicenter_bond_mut(&mut self, idx: MulticenterBondId) -> &mut MulticenterBondAst {
+    pub fn multicenter_bond(&self, idx: MulticenterBondId) -> MulticenterBondBuilderView<'_> {
+        match &self.multicenter_bonds {
+            VarSetStorage::Shared(arc) => {
+                let rid = RelationId(idx.0);
+                MulticenterBondBuilderView {
+                    id: idx,
+                    ast: arc.data(rid),
+                    atoms: arc.participants(rid),
+                }
+            }
+            VarSetStorage::Mutable(vec) => {
+                let entry = &vec[idx.index()];
+                MulticenterBondBuilderView { id: idx, ast: &entry.1, atoms: &entry.0 }
+            }
+        }
+    }
+
+    pub fn multicenter_bond_mut(
+        &mut self,
+        idx: MulticenterBondId,
+    ) -> MulticenterBondBuilderViewMut<'_> {
         self.multicenter_bonds.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.multicenter_bonds else {
             unreachable!()
         };
-        &mut vec[idx.index()].1
+        let entry = &mut vec[idx.index()];
+        MulticenterBondBuilderViewMut {
+            id: idx,
+            atoms: &entry.0,
+            ast: &mut entry.1,
+        }
     }
 
-    pub fn noncovalent_bond_mut(&mut self, idx: NoncovalentBondId) -> &mut NoncovalentBondAst {
+    pub fn noncovalent_bond(&self, idx: NoncovalentBondId) -> NoncovalentBondBuilderView<'_> {
+        match &self.noncovalent_bonds {
+            FixedSetStorage::Shared(arc) => {
+                let rid = RelationId(idx.0);
+                let parts = arc.participants(rid);
+                NoncovalentBondBuilderView {
+                    id: idx,
+                    ast: arc.data(rid),
+                    atoms: [AtomId::from(parts[0]), AtomId::from(parts[1])],
+                }
+            }
+            FixedSetStorage::Mutable(vec) => {
+                let entry = &vec[idx.index()];
+                NoncovalentBondBuilderView {
+                    id: idx,
+                    ast: &entry.1,
+                    atoms: [AtomId::from(entry.0[0]), AtomId::from(entry.0[1])],
+                }
+            }
+        }
+    }
+
+    pub fn noncovalent_bond_mut(
+        &mut self,
+        idx: NoncovalentBondId,
+    ) -> NoncovalentBondBuilderViewMut<'_> {
         self.noncovalent_bonds.materialize();
         let FixedSetStorage::Mutable(vec) = &mut self.noncovalent_bonds else {
             unreachable!()
         };
-        &mut vec[idx.index()].1
+        let entry = &mut vec[idx.index()];
+        let atoms = [AtomId::from(entry.0[0]), AtomId::from(entry.0[1])];
+        NoncovalentBondBuilderViewMut {
+            id: idx,
+            ast: &mut entry.1,
+            atoms,
+        }
+    }
+
+    pub fn constraints(&self) -> &Constraints {
+        &self.constraints
     }
 
     pub fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
+    }
+
+    pub fn atom_count(&self) -> usize {
+        self.atoms.len()
+    }
+
+    pub fn bond_count(&self) -> usize {
+        self.bonds.len()
+    }
+
+    pub fn dative_bond_count(&self) -> usize {
+        self.dative_bonds.relation_count()
+    }
+
+    pub fn aromatic_system_count(&self) -> usize {
+        self.aromatic_systems.relation_count()
+    }
+
+    pub fn multicenter_bond_count(&self) -> usize {
+        self.multicenter_bonds.relation_count()
+    }
+
+    pub fn noncovalent_bond_count(&self) -> usize {
+        self.noncovalent_bonds.relation_count()
     }
 
     // -- Relation removal -----------------------------------------------------

@@ -154,6 +154,10 @@ impl Constraints {
         self.0.push(c);
     }
 
+    pub fn remove_at(&mut self, position: usize) -> Constraint {
+        self.0.remove(position)
+    }
+
     pub fn retain(&mut self, mut f: impl FnMut(&Constraint) -> bool) {
         self.0.retain(|c| f(c));
     }

@@ -164,6 +164,18 @@ impl BondConstraints {
         Some(self.0.remove(pos))
     }
 
+    /// Remove the first entry exactly equal to `constraint`. Returns the
+    /// removed entry if found; otherwise `None`.
+    pub fn remove_entry(&mut self, constraint: &BondConstraint) -> Option<BondConstraint> {
+        let pos = self.0.iter().position(|c| c == constraint)?;
+        Some(self.0.remove(pos))
+    }
+
+    /// True if any entry exactly equals `constraint`.
+    pub fn contains_entry(&self, constraint: &BondConstraint) -> bool {
+        self.0.iter().any(|c| c == constraint)
+    }
+
     /// Iterate over every entry of `kind`. Single-valued kinds yield at most
     /// one entry; multi-valued (`RingSize`) may yield several.
     pub fn get_all(&self, kind: BondConstraintKind) -> impl Iterator<Item = &BondConstraint> {

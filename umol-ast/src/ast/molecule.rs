@@ -28,6 +28,7 @@ use super::views::{
 
 mod builder;
 mod rewrite;
+pub(super) mod transact;
 
 /// Molecule AST: structural representation of a molecule (ground or pattern).
 ///

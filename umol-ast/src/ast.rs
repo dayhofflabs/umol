@@ -6,6 +6,7 @@ pub(crate) mod automorphism;
 pub(crate) mod bond;
 pub(crate) mod constraint;
 pub(crate) mod dative;
+pub(crate) mod edit;
 pub(crate) mod error;
 pub(crate) mod idx;
 pub(crate) mod matching;
@@ -34,12 +35,19 @@ pub use constraint::{
     NoncovalentBondConstraint, NoncovalentBondConstraints, RelationalConstraint, SubPatternAnchor,
 };
 pub use dative::DativeBondAst;
+pub use edit::{
+    Action, AromaticSystemFieldChange, AromaticSystemRef, AtomFieldChange, AtomRef,
+    BondFieldChange, BondRef, DativeBondFieldChange, DativeBondRef, Edit,
+    MulticenterBondFieldChange, MulticenterBondRef, NoncovalentBondFieldChange,
+    NoncovalentBondRef,
+};
 pub use error::{EvaluationError, RewriteError};
 pub use idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 pub use matching::BondMatching;
 pub use molecule::{MoleculeAst, MoleculeBuilder};
+pub use molecule::transact::TransactionError;
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use reaction::{Assignment, ReactionRuleAst};

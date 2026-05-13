@@ -40,12 +40,12 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
     // is_arithmetic()).
     let mut ast = indole_ground();
     let mut b = ast.edit();
-    b.atom_mut(AtomId(0)).charge = ValueAst::Expr(Expr::Rel(
+    b.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Expr::Rel(
         Box::new(Expr::Var("c".into())),
         RelOp::Eq,
         Box::new(Expr::Lit(0)),
     ));
-    b.atom_mut(AtomId(2)).lone_pairs =
+    b.atom_mut(AtomId(2)).ast.lone_pairs =
         ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("n".into())), vec![0, 1, 2]));
     ast = b.build();
     ast

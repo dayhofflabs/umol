@@ -23,7 +23,7 @@ use super::super::idx::{
 };
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
-use super::super::rings::RingFamily;
+use super::super::rings::{RingFamily, RingSet};
 use super::super::spin::SpinStateAst;
 use super::super::value::{Expr, ValueAst};
 use super::MoleculeAst;
@@ -1063,7 +1063,7 @@ fn test_molecule_builder_remove_noncovalent_bonds(#[from(rich_molecule)] ast: Mo
 #[rstest]
 fn test_molecule_builder_atom_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
-    b.atom_mut(AtomId(0)).element = ElementAst::Lit(Element::N);
+    b.atom_mut(AtomId(0)).ast.element = ElementAst::Lit(Element::N);
     let result = b.build();
     assert_eq!(result[AtomId(0)].element, ElementAst::Lit(Element::N));
     assert_eq!(ast[AtomId(0)].element, ElementAst::Lit(Element::C));
@@ -1072,7 +1072,7 @@ fn test_molecule_builder_atom_mut(#[from(rich_molecule)] ast: MoleculeAst) {
 #[rstest]
 fn test_molecule_builder_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
-    b.bond_mut(BondId(0)).order = ValueAst::Lit(3);
+    b.bond_mut(BondId(0)).ast.order = ValueAst::Lit(3);
     let result = b.build();
     assert_eq!(result[BondId(0)].order, ValueAst::Lit(3));
     assert_eq!(ast[BondId(0)].order, ValueAst::Lit(1));
@@ -1082,6 +1082,7 @@ fn test_molecule_builder_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
 fn test_molecule_builder_atom_constraint_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.atom_mut(AtomId(0))
+        .ast
         .constraints
         .add(AtomConstraint::Degree(ValueAst::Lit(2)));
     let result = b.build();
@@ -1152,6 +1153,7 @@ fn test_molecule_builder_push_constraint_and_constraints_mut(
 fn test_molecule_builder_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.dative_bond_mut(DativeBondId(0))
+        .ast
         .constraints
         .add(DativeBondConstraint::RingSize(ValueAst::Lit(5)));
     let result = b.build();
@@ -1162,7 +1164,7 @@ fn test_molecule_builder_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst
 #[rstest]
 fn test_molecule_builder_aromatic_system_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
-    b.aromatic_system_mut(AromaticSystemId(0)).charge = ValueAst::Lit(0);
+    b.aromatic_system_mut(AromaticSystemId(0)).ast.charge = ValueAst::Lit(0);
     let result = b.build();
     assert_eq!(result[AromaticSystemId(0)].charge, ValueAst::Lit(0));
 }
@@ -1170,7 +1172,7 @@ fn test_molecule_builder_aromatic_system_mut(#[from(rich_molecule)] ast: Molecul
 #[rstest]
 fn test_molecule_builder_multicenter_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
-    b.multicenter_bond_mut(MulticenterBondId(0)).electrons =
+    b.multicenter_bond_mut(MulticenterBondId(0)).ast.electrons =
         vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)];
     let result = b.build();
     assert_eq!(
@@ -1182,7 +1184,7 @@ fn test_molecule_builder_multicenter_bond_mut(#[from(rich_molecule)] ast: Molecu
 #[rstest]
 fn test_molecule_builder_noncovalent_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
-    b.noncovalent_bond_mut(NoncovalentBondId(0)).kind =
+    b.noncovalent_bond_mut(NoncovalentBondId(0)).ast.kind =
         NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic);
     let result = b.build();
     assert_eq!(
@@ -1220,10 +1222,37 @@ fn test_molecule_ast_rings(
 }
 
 #[test]
-fn test_molecule_ast_enumerate_rings_atom_filter() {
+fn test_molecule_ast_rings_with_atom_filter() {
     let ast = ring(6);
     let rs = ast.rings_with(RingFamily::Simple, 10, |a| a.0 < 3);
     assert_eq!(rs.count(), 0);
+}
+
+#[test]
+fn test_molecule_ast_rings_returns_same_slot() {
+    let ast = ring(6);
+    let first: *const RingSet = ast.rings();
+    let second: *const RingSet = ast.rings();
+    assert_eq!(first, second);
+}
+
+#[test]
+fn test_molecule_ast_rings_cache_survives_attribute_mutation() {
+    let mut ast = ring(6);
+    let first: *const RingSet = ast.rings();
+    ast.atom_mut(AtomId(0)).ast.charge = ValueAst::Lit(1);
+    let second: *const RingSet = ast.rings();
+    assert_eq!(first, second);
+}
+
+#[test]
+fn test_molecule_ast_rings_cache_reset_after_build() {
+    let ast = ring(6);
+    let count_before = ast.rings().count();
+    let mut b = ast.edit();
+    b.atom_mut(AtomId(0)).ast.element = ElementAst::Lit(Element::N);
+    let next = b.build();
+    assert_eq!(next.rings().count(), count_before);
 }
 
 #[test]

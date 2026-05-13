@@ -1173,7 +1173,7 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 - Multi-valued DSL `#r5#r6` (parser exempt from duplicate-detection for non-unique kinds)
 - Multi-valued EDN preserved: vector under kind already means LitSet; conjunction via multiple molecule-list entries or repeated DSL predicates
 
-**Completion**: proptest roundtrips for each new symbol. **Dependencies**: phases 1, 2, 5. **Risk**: medium.
+**Completion**: proptest roundtrips for each new symbol. **Dependencies**: phases 1, 2, 5. **Risk**: medium. **Done**
 
 ### Phase 7 — Ring access redesign
 
@@ -1182,16 +1182,16 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 - View-side sugar: canonical `is_in_ring`, `rings`, `ring_count`, `ring_size` already added in phases 4+5
 - Parametric `*_from(&RingSet)` variants
 
-**Completion**: ring access tests pass; cache behavior verified single-slot. **Dependencies**: phases 1, 4. **Risk**: low.
+**Completion**: ring access tests pass; cache behavior verified single-slot. **Dependencies**: phases 1, 4. **Risk**: low. **Done**
 
 ### Phase 8 — Edit vocabulary + transaction primitive
 
 Largest single phase; subdivided.
 
-- **8a** `Edit` enum core variants (Add/Remove for atoms and bonds; SetAtomField for common fields)
-- **8b** `Action` enum + `*Ref` enums (AtomRef, BondRef, four overlay refs)
-- **8c** `*FieldChange` enums for each entity kind
-- **8d** `MoleculeBuilder::transact(Vec<Edit>) -> Result<Vec<Action>, TransactionError>` (snapshot rollback)
+- **8a** `Edit` enum core variants (Add/Remove for atoms and bonds; SetAtomField for common fields) **Done**
+- **8b** `Action` enum + `*Ref` enums (AtomRef, BondRef, four overlay refs) **Done**
+- **8c** `*FieldChange` enums for each entity kind **Done**
+- **8d** `MoleculeBuilder::transact(Vec<Edit>) -> Result<Vec<Action>, TransactionError>` (snapshot rollback); `Edit::inverse` signature becomes `(self, action: &Action) -> Edit` so `AddX` inverses can substitute the realized id (per "`Edit::AddX::inverse()` requires the realized `Action`" below)
 - **8e** `transact_with(F)` closure form
 - **8f** `transact_unchecked` escape hatch
 - **8g** `tx.validate()` hook
@@ -1280,15 +1280,15 @@ Each phase lands with:
 - No new clippy warnings
 - Ops modules either migrated (in their respective phases) or passing via temporary shims
 
-### Critiques
+### `Edit::AddX::inverse()` requires the realized `Action`
 
-4. Edit::inverse semantics with symbolic refs unspecified. Doc says self-inverting (line 833) but symbolic New(usize) refs appear only inside Edit (line 852). What does Edit::inverse(&AddBond { a: AtomRef::New(0), b: AtomRef::New(1), ast }) return? Inverse must resolve refs against Action from the forward apply — otherwise the inverse is unusable outside the original batch context. Either state "inverse is only defined post-apply, after refs are resolved to ids" or carry the resolved Action alongside.
+`Edit::inverse(self) -> Self` is structured as a pure function on the `Edit` value. For `SetXField`, `RemoveX`, `Push/PopMoleculeConstraint`, etc., the inverse is determined by the variant's own fields (swap `old`/`new`; flip `Add`↔`Remove` carrying the same `ast`+`idx`). For `Edit::AddX` variants the inverse is `Edit::RemoveX { idx, ast, ... }`, where `idx` is the entity id allocated at apply time and known only after `transact` runs.
 
-5. Snapshot rollback doesn't cover panics during apply. §"Settled design choices" → "Rollback mechanism: snapshot at transaction start" is correct for Err returns. Panics inside apply leave the molecule with the snapshot uninstalled. The atomicity guarantee on line 884 needs a panic-handling line: either explicit catch_unwind at the transact boundary (poisons or restores), or document that panics during transact leave the molecule in an indeterminate state.
+`Action` carries the id that `Edit` cannot: `AtomAdded(AtomId)`, `BondAdded(BondId)`, etc. The actions vector returned by `transact` is parallel to the input edits (one `Action` per applied `Edit`), so `(Edit, Action)` pairs are recoverable by position.
 
-6. Transaction<'_> read surface undefined. transact_with(|tx| ...) (line 864) needs tx to support inspection between applies (that's the only reason for closure form over data form). What methods does Transaction expose? If full view API, then views must work against mid-transaction state — what's the invariant guarantee? If only apply/validate, the closure form's value over data form drops.
+**Resolution:** the signature becomes `Edit::inverse(self, action: &Action) -> Edit`. The `AddX` arms read the id from `action`; the other arms ignore `action` and produce the same inverse they do today. Pure, total, no placeholders.
 
-7. Cascade nesting termination unspecified. §"Settled design choices" allows Action::Cascaded recursion but doesn't state termination. Today, overlay removal cannot trigger overlay removal (overlays don't reference overlays), so depth ≤ 1 by construction. State this as a property of R3 with current overlay rules, or define what stops the recursion in the abstract case.
+`transact` does **not** eagerly return an inverse list. Inverting a transaction is uncommon; callers that need it zip `edits` with the returned `actions` and map over the primitive on demand.
 
 ## AST-vs-API layering: parked considerations
 

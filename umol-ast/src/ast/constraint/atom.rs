@@ -378,6 +378,18 @@ impl AtomConstraints {
         self.find(kind).ok().map(|i| self.entries.remove(i))
     }
 
+    /// Remove the first entry exactly equal to `constraint`. Returns the
+    /// removed entry if found; otherwise `None`.
+    pub fn remove_entry(&mut self, constraint: &AtomConstraint) -> Option<AtomConstraint> {
+        let pos = self.entries.iter().position(|c| c == constraint)?;
+        Some(self.entries.remove(pos))
+    }
+
+    /// True if any entry exactly equals `constraint`.
+    pub fn contains_entry(&self, constraint: &AtomConstraint) -> bool {
+        self.entries.iter().any(|c| c == constraint)
+    }
+
     /// Iterate over every entry of `kind`. Single-valued kinds yield at most
     /// one entry; multi-valued (`RingSize`) may yield several.
     pub fn get_all(&self, kind: AtomConstraintKind) -> impl Iterator<Item = &AtomConstraint> {
