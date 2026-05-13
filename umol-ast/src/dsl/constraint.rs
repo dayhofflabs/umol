@@ -427,6 +427,7 @@ pub(super) fn read_atom_constraint_dsl(
     let key = read_single_key_map_header(de)?;
     let c = match key.as_str() {
         "valence" => AtomConstraint::Valence(read_value_dsl(de)?.into_ast(&())),
+        "total-valence" => AtomConstraint::TotalValence(read_value_dsl(de)?.into_ast(&())),
         "aromatic-valence" => {
             AtomConstraint::AromaticValence(read_aromatic_valence_dsl(de)?.into_ast(&()))
         }
@@ -441,6 +442,9 @@ pub(super) fn read_atom_constraint_dsl(
         "total-degree" => AtomConstraint::TotalDegree(read_value_dsl(de)?.into_ast(&())),
         "ring-degree" => {
             AtomConstraint::RingDegree(read_value_dsl(de)?.into_ast(&()))
+        }
+        "ring-valence" => {
+            AtomConstraint::RingValence(read_value_dsl(de)?.into_ast(&()))
         }
         "total-hydrogens" => {
             AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&()))
@@ -2205,6 +2209,8 @@ mod tests {
     #[case::degree(AtomConstraint::Degree(ValueAst::Lit(3)), "{:degree 3}")]
     #[case::total_degree(AtomConstraint::TotalDegree(ValueAst::Lit(4)), "{:total-degree 4}")]
     #[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Lit(2)), "{:ring-degree 2}")]
+    #[case::ring_valence(AtomConstraint::RingValence(ValueAst::Lit(3)), "{:ring-valence 3}")]
+    #[case::total_valence(AtomConstraint::TotalValence(ValueAst::Lit(5)), "{:total-valence 5}")]
     #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
     #[case::ring_count(AtomConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
     #[case::ring_size(AtomConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]

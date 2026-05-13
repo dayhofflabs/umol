@@ -44,6 +44,7 @@ pub(crate) fn ring_count(i: &mut &str) -> PResult<ValueAst> {
                 RelOp::Ge,
                 Box::new(Expr::Lit(1)),
             ))),
+            "!".value(ValueAst::Lit(0)),
             empty.value(ValueAst::Lit(1)),
         )),
     )
@@ -153,6 +154,7 @@ pub(crate) fn fmt_ring_count(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::R
     }
     match v {
         ValueAst::Undetermined => Ok(()),
+        ValueAst::Lit(0) => write!(f, "#R!"),
         ValueAst::Lit(1) => write!(f, "#R"),
         ValueAst::Lit(n) => write!(f, "#R{}", n),
         v => {
@@ -301,10 +303,30 @@ mod tests {
     #[case::lit("4", ValueAst::Lit(4))]
     #[case::undetermined("*", ValueAst::Undetermined)]
     #[case::plus_sugar("+", ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))]
+    #[case::bang_sugar("!", ValueAst::Lit(0))]
+    #[case::zero_numeric("0", ValueAst::Lit(0))]
     #[case::lit_set("{2,3}", ValueAst::LitSet(vec![2, 3]))]
     fn test_ring_count(#[case] input: &str, #[case] expected: ValueAst) {
         let result = ring_count.parse(input).unwrap();
         assert_eq!(result, expected);
+    }
+
+    #[rstest]
+    #[case::zero_renders_bang(ValueAst::Lit(0), "#R!")]
+    #[case::one_renders_bare(ValueAst::Lit(1), "#R")]
+    #[case::two(ValueAst::Lit(2), "#R2")]
+    #[case::plus_renders_plus(
+        ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))),
+        "#R+",
+    )]
+    fn test_fmt_ring_count(#[case] v: ValueAst, #[case] expected: &str) {
+        struct W<'a>(&'a ValueAst);
+        impl<'a> fmt::Display for W<'a> {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                fmt_ring_count(f, self.0)
+            }
+        }
+        assert_eq!(W(&v).to_string(), expected);
     }
 
     #[rustfmt::skip]

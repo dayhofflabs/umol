@@ -338,11 +338,13 @@ fn multicenter_valence_ast_strategy() -> impl Strategy<Value = MulticenterValenc
 fn atom_constraint_strategy() -> BoxedStrategy<AtomConstraint> {
     prop_oneof![
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Valence),
+        constraint_inner_value_strategy(0..=8).prop_map(AtomConstraint::TotalValence),
         constraint_inner_value_strategy(0..=4).prop_map(AtomConstraint::DonatedPairs),
         constraint_inner_value_strategy(0..=4).prop_map(AtomConstraint::AcceptedPairs),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::Degree),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::TotalDegree),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingDegree),
+        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingValence),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::TotalHydrogens),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingCount),
         constraint_inner_value_strategy(3..=10).prop_map(AtomConstraint::RingSize),
@@ -1602,11 +1604,13 @@ proptest! {
 /// AromaticValence / MulticenterValence formatters can't slip through.
 #[rstest]
 #[case::valence(AtomConstraint::Valence(ValueAst::Undetermined))]
+#[case::total_valence(AtomConstraint::TotalValence(ValueAst::Undetermined))]
 #[case::donated_pairs(AtomConstraint::DonatedPairs(ValueAst::Undetermined))]
 #[case::accepted_pairs(AtomConstraint::AcceptedPairs(ValueAst::Undetermined))]
 #[case::degree(AtomConstraint::Degree(ValueAst::Undetermined))]
 #[case::total_degree(AtomConstraint::TotalDegree(ValueAst::Undetermined))]
 #[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Undetermined))]
+#[case::ring_valence(AtomConstraint::RingValence(ValueAst::Undetermined))]
 #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Undetermined))]
 #[case::ring_count(AtomConstraint::RingCount(ValueAst::Undetermined))]
 #[case::ring_size(AtomConstraint::RingSize(ValueAst::Undetermined))]

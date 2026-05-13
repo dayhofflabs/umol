@@ -16,6 +16,7 @@ use super::super::value::ValueAst;
 #[repr(u8)]
 pub enum AtomConstraint {
     Valence(ValueAst),
+    TotalValence(ValueAst),
     AromaticValence(AromaticValenceAst),
     MulticenterValence(MulticenterValenceAst),
     DonatedPairs(ValueAst),
@@ -23,6 +24,7 @@ pub enum AtomConstraint {
     Degree(ValueAst),
     TotalDegree(ValueAst),
     RingDegree(ValueAst),
+    RingValence(ValueAst),
     TotalHydrogens(ValueAst),
     RingCount(ValueAst),
     RingSize(ValueAst),
@@ -31,6 +33,10 @@ pub enum AtomConstraint {
 impl AtomConstraint {
     pub fn valence(v: impl Into<ValueAst>) -> Self {
         Self::Valence(v.into())
+    }
+
+    pub fn total_valence(v: impl Into<ValueAst>) -> Self {
+        Self::TotalValence(v.into())
     }
 
     pub fn aromatic_valence(v: AromaticValenceAst) -> Self {
@@ -61,6 +67,10 @@ impl AtomConstraint {
         Self::RingDegree(v.into())
     }
 
+    pub fn ring_valence(v: impl Into<ValueAst>) -> Self {
+        Self::RingValence(v.into())
+    }
+
     pub fn total_hydrogens(v: impl Into<ValueAst>) -> Self {
         Self::TotalHydrogens(v.into())
     }
@@ -88,11 +98,13 @@ impl AtomConstraint {
     pub fn is_undetermined(&self) -> bool {
         match self {
             Self::Valence(v)
+            | Self::TotalValence(v)
             | Self::DonatedPairs(v)
             | Self::AcceptedPairs(v)
             | Self::Degree(v)
             | Self::TotalDegree(v)
             | Self::RingDegree(v)
+            | Self::RingValence(v)
             | Self::TotalHydrogens(v)
             | Self::RingCount(v)
             | Self::RingSize(v) => v.is_undetermined(),
@@ -106,6 +118,7 @@ impl AtomConstraint {
     pub fn simplify(self) -> Self {
         match self {
             Self::Valence(v) => Self::Valence(v.simplify()),
+            Self::TotalValence(v) => Self::TotalValence(v.simplify()),
             Self::AromaticValence(c) => Self::AromaticValence(c.simplify()),
             Self::MulticenterValence(c) => Self::MulticenterValence(c.simplify()),
             Self::DonatedPairs(v) => Self::DonatedPairs(v.simplify()),
@@ -113,6 +126,7 @@ impl AtomConstraint {
             Self::Degree(v) => Self::Degree(v.simplify()),
             Self::TotalDegree(v) => Self::TotalDegree(v.simplify()),
             Self::RingDegree(v) => Self::RingDegree(v.simplify()),
+            Self::RingValence(v) => Self::RingValence(v.simplify()),
             Self::TotalHydrogens(v) => Self::TotalHydrogens(v.simplify()),
             Self::RingCount(v) => Self::RingCount(v.simplify()),
             Self::RingSize(v) => Self::RingSize(v.simplify()),
@@ -223,6 +237,13 @@ impl AtomConstraints {
         }
     }
 
+    pub fn total_valence(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::TotalValence) {
+            Some(AtomConstraint::TotalValence(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
     pub fn degree(&self) -> ValueAst {
         match self.get(AtomConstraintKind::Degree) {
             Some(AtomConstraint::Degree(v)) => v.clone(),
@@ -240,6 +261,13 @@ impl AtomConstraints {
     pub fn ring_degree(&self) -> ValueAst {
         match self.get(AtomConstraintKind::RingDegree) {
             Some(AtomConstraint::RingDegree(v)) => v.clone(),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn ring_valence(&self) -> ValueAst {
+        match self.get(AtomConstraintKind::RingValence) {
+            Some(AtomConstraint::RingValence(v)) => v.clone(),
             _ => ValueAst::Undetermined,
         }
     }
@@ -434,11 +462,13 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::valence(AtomConstraint::valence(4), AtomConstraint::Valence(ValueAst::Lit(4)))]
+    #[case::total_valence(AtomConstraint::total_valence(5), AtomConstraint::TotalValence(ValueAst::Lit(5)))]
     #[case::donated_pairs(AtomConstraint::donated_pairs(1), AtomConstraint::DonatedPairs(ValueAst::Lit(1)))]
     #[case::accepted_pairs(AtomConstraint::accepted_pairs(2), AtomConstraint::AcceptedPairs(ValueAst::Lit(2)))]
     #[case::degree(AtomConstraint::degree(3), AtomConstraint::Degree(ValueAst::Lit(3)))]
     #[case::total_degree(AtomConstraint::total_degree(4), AtomConstraint::TotalDegree(ValueAst::Lit(4)))]
     #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraint::RingDegree(ValueAst::Lit(2)))]
+    #[case::ring_valence(AtomConstraint::ring_valence(3), AtomConstraint::RingValence(ValueAst::Lit(3)))]
     #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraint::TotalHydrogens(ValueAst::Lit(3)))]
     #[case::ring_count(AtomConstraint::ring_count(1), AtomConstraint::RingCount(ValueAst::Lit(1)))]
     #[case::ring_size(AtomConstraint::ring_size(6), AtomConstraint::RingSize(ValueAst::Lit(6)))]
@@ -460,6 +490,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::valence(AtomConstraint::valence(4), AtomConstraintKind::Valence)]
+    #[case::total_valence(AtomConstraint::total_valence(5), AtomConstraintKind::TotalValence)]
     #[case::aromatic_valence(AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic), AtomConstraintKind::AromaticValence)]
     #[case::multicenter_valence(AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined), AtomConstraintKind::MulticenterValence)]
     #[case::donated_pairs(AtomConstraint::donated_pairs(1), AtomConstraintKind::DonatedPairs)]
@@ -467,6 +498,7 @@ mod tests {
     #[case::degree(AtomConstraint::degree(3), AtomConstraintKind::Degree)]
     #[case::total_degree(AtomConstraint::total_degree(4), AtomConstraintKind::TotalDegree)]
     #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraintKind::RingDegree)]
+    #[case::ring_valence(AtomConstraint::ring_valence(3), AtomConstraintKind::RingValence)]
     #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraintKind::TotalHydrogens)]
     #[case::ring_count(AtomConstraint::ring_count(1), AtomConstraintKind::RingCount)]
     #[case::ring_size(AtomConstraint::ring_size(6), AtomConstraintKind::RingSize)]

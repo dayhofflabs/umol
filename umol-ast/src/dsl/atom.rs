@@ -188,6 +188,7 @@ fn is_set(v: &ValueAst) -> bool {
 fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
     match kind {
         AtomConstraintKind::Valence => "#v",
+        AtomConstraintKind::TotalValence => "#V",
         AtomConstraintKind::DonatedPairs => "#d",
         AtomConstraintKind::AcceptedPairs => "#t",
         AtomConstraintKind::AromaticValence => "#a",
@@ -195,6 +196,7 @@ fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
         AtomConstraintKind::Degree => "#D",
         AtomConstraintKind::TotalDegree => "#X",
         AtomConstraintKind::RingDegree => "#x",
+        AtomConstraintKind::RingValence => "#y",
         AtomConstraintKind::TotalHydrogens => "#H",
         AtomConstraintKind::RingCount => "#R",
         AtomConstraintKind::RingSize => "#r",
@@ -232,6 +234,9 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
         "#v" => optional_value
             .map(|v| AtomPredicate::Constraint(AtomConstraint::Valence(v)))
             .parse_next(i),
+        "#V" => optional_value
+            .map(|v| AtomPredicate::Constraint(AtomConstraint::TotalValence(v)))
+            .parse_next(i),
         "#d" => optional_value
             .map(|v| AtomPredicate::Constraint(AtomConstraint::DonatedPairs(v)))
             .parse_next(i),
@@ -252,6 +257,9 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
             .parse_next(i),
         "#x" => optional_value
             .map(|v| AtomPredicate::Constraint(AtomConstraint::RingDegree(v)))
+            .parse_next(i),
+        "#y" => optional_value
+            .map(|v| AtomPredicate::Constraint(AtomConstraint::RingValence(v)))
             .parse_next(i),
         "#H" => optional_value
             .map(|v| AtomPredicate::Constraint(AtomConstraint::TotalHydrogens(v)))
@@ -563,6 +571,8 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
         AtomConstraint::Degree(v) => fmt_value_field_required(f, "#D", v),
         AtomConstraint::TotalDegree(v) => fmt_value_field_required(f, "#X", v),
         AtomConstraint::RingDegree(v) => fmt_value_field_required(f, "#x", v),
+        AtomConstraint::RingValence(v) => fmt_value_field_required(f, "#y", v),
+        AtomConstraint::TotalValence(v) => fmt_value_field_required(f, "#V", v),
         AtomConstraint::TotalHydrogens(v) => fmt_value_field_required(f, "#H", v),
         AtomConstraint::RingCount(v) => fmt_ring_count(f, v),
         AtomConstraint::RingSize(v) => fmt_value_field_required(f, "#r", v),
@@ -673,9 +683,11 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                     }
                 }
             }
-            AtomConstraintKind::Degree
+            AtomConstraintKind::TotalValence
+            | AtomConstraintKind::Degree
             | AtomConstraintKind::TotalDegree
             | AtomConstraintKind::RingDegree
+            | AtomConstraintKind::RingValence
             | AtomConstraintKind::TotalHydrogens
             | AtomConstraintKind::RingCount
             | AtomConstraintKind::RingSize => {
@@ -814,9 +826,11 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                 }
                 AromaticValenceDefault::Required => {}
             },
-            AtomConstraintKind::Degree
+            AtomConstraintKind::TotalValence
+            | AtomConstraintKind::Degree
             | AtomConstraintKind::TotalDegree
             | AtomConstraintKind::RingDegree
+            | AtomConstraintKind::RingValence
             | AtomConstraintKind::TotalHydrogens
             | AtomConstraintKind::RingCount
             | AtomConstraintKind::RingSize => {
@@ -1009,6 +1023,9 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
         };
         let c = match key.name() {
             "valence" => AtomConstraint::Valence(ValueDsl::from_edn(v)?.into_ast(&())),
+            "total-valence" => {
+                AtomConstraint::TotalValence(ValueDsl::from_edn(v)?.into_ast(&()))
+            }
             "aromatic-valence" => AtomConstraint::AromaticValence(
                 AromaticValenceDsl::from_edn(v)?.into_ast(&()),
             ),
@@ -1027,6 +1044,9 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             }
             "ring-degree" => {
                 AtomConstraint::RingDegree(ValueDsl::from_edn(v)?.into_ast(&()))
+            }
+            "ring-valence" => {
+                AtomConstraint::RingValence(ValueDsl::from_edn(v)?.into_ast(&()))
             }
             "total-hydrogens" => {
                 AtomConstraint::TotalHydrogens(ValueDsl::from_edn(v)?.into_ast(&()))
@@ -1052,6 +1072,9 @@ impl ToEdn for AtomConstraintDsl {
             AtomConstraint::Valence(v) => {
                 single_key_map("valence", ValueDsl::from_ast(v, &()).to_edn())
             }
+            AtomConstraint::TotalValence(v) => {
+                single_key_map("total-valence", ValueDsl::from_ast(v, &()).to_edn())
+            }
             AtomConstraint::AromaticValence(c) => single_key_map(
                 "aromatic-valence",
                 AromaticValenceDsl::from_ast(c, &()).to_edn(),
@@ -1076,6 +1099,10 @@ impl ToEdn for AtomConstraintDsl {
             }
             AtomConstraint::RingDegree(v) => single_key_map(
                 "ring-degree",
+                ValueDsl::from_ast(v, &()).to_edn(),
+            ),
+            AtomConstraint::RingValence(v) => single_key_map(
+                "ring-valence",
                 ValueDsl::from_ast(v, &()).to_edn(),
             ),
             AtomConstraint::TotalHydrogens(v) => single_key_map(
@@ -1201,11 +1228,16 @@ mod tests {
     #[case::degree("C#D2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::Degree(ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::total_degree("C#X3", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::TotalDegree(ValueAst::Lit(3))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_degree("C#x2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingDegree(ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::ring_valence("C#y3", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingValence(ValueAst::Lit(3))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::total_valence("C#V5", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::TotalValence(ValueAst::Lit(5))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::total_hydrogens("C#H1", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::TotalHydrogens(ValueAst::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_bare("C#R", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_undetermined("C#R*", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_plus("C#R+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::ring_bang("C#R!", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::ring_zero("C#R0", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_count("C#R2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::ring_size_conj("C#r5#r6", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingSize(ValueAst::Lit(5)), AtomConstraint::RingSize(ValueAst::Lit(6))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     fn test_parse_atom(#[case] input: &str, #[case] expected: AtomDsl) {
         let result = atom.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -1216,7 +1248,7 @@ mod tests {
     #[rstest]
     #[case::empty("", ParseError::ExpectedElement)]
     #[case::no_element("#h3", ParseError::ExpectedElement)]
-    #[case::unknown_pred("C#y", ParseError::UnknownAtomPredicate("#y".to_string()))]
+    #[case::unknown_pred("C#z", ParseError::UnknownAtomPredicate("#z".to_string()))]
     #[case::dup_h("C#h3#h2", ParseError::DuplicateAtomPredicate("#h".to_string()))]
     #[case::dup_charge("C#c+#c-", ParseError::DuplicateAtomPredicate("#c".to_string()))]
     #[case::dup_valence("C#v3#v4", ParseError::DuplicateAtomPredicate("#v".to_string()))]
@@ -1248,7 +1280,9 @@ mod tests {
     #[case::multicenter_omit("C#m")]
     #[case::ring_bare("C#R")]
     #[case::ring_plus("C#R+")]
+    #[case::ring_bang("C#R!")]
     #[case::ring_count("C#R2")]
+    #[case::ring_size_conj("C#r5#r6")]
     fn test_atom_display_roundtrip(#[case] input: &str) {
         let parsed = atom.parse(input).unwrap();
         assert_eq!(parsed.to_string(), input);
@@ -1266,6 +1300,8 @@ mod tests {
     #[case::degree("C#D*", "C")]
     #[case::total_degree("C#X*", "C")]
     #[case::ring_degree("C#x*", "C")]
+    #[case::ring_valence("C#y*", "C")]
+    #[case::total_valence("C#V*", "C")]
     #[case::total_h("C#H*", "C")]
     #[case::ring_count("C#R*", "C")]
     #[case::ring_size("C#r*", "C")]
@@ -1353,6 +1389,10 @@ mod tests {
     #[case::multiplicity("#s3", AtomPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Lit(3))))]
     #[case::multiplicity_omit("#s", AtomPredicate::Spin(SpinPredicate::Multiplicity(ValueAst::Lit(1))))]
     #[case::valence("#v4", AtomPredicate::Constraint(AtomConstraint::Valence(ValueAst::Lit(4))))]
+    #[case::total_valence("#V5", AtomPredicate::Constraint(AtomConstraint::TotalValence(ValueAst::Lit(5))))]
+    #[case::total_valence_omit("#V", AtomPredicate::Constraint(AtomConstraint::TotalValence(ValueAst::Lit(1))))]
+    #[case::ring_valence("#y2", AtomPredicate::Constraint(AtomConstraint::RingValence(ValueAst::Lit(2))))]
+    #[case::ring_valence_omit("#y", AtomPredicate::Constraint(AtomConstraint::RingValence(ValueAst::Lit(1))))]
     #[case::donated_pairs("#d1", AtomPredicate::Constraint(AtomConstraint::DonatedPairs(ValueAst::Lit(1))))]
     #[case::accepted_pairs("#t1", AtomPredicate::Constraint(AtomConstraint::AcceptedPairs(ValueAst::Lit(1))))]
     #[case::ring_size("#r6", AtomPredicate::Constraint(AtomConstraint::RingSize(ValueAst::Lit(6))))]
@@ -1525,6 +1565,8 @@ mod tests {
     #[case::degree(AtomConstraint::Degree(ValueAst::Lit(3)), "{:degree 3}")]
     #[case::total_degree(AtomConstraint::TotalDegree(ValueAst::Lit(4)), "{:total-degree 4}")]
     #[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Lit(2)), "{:ring-degree 2}")]
+    #[case::ring_valence(AtomConstraint::RingValence(ValueAst::Lit(3)), "{:ring-valence 3}")]
+    #[case::total_valence(AtomConstraint::TotalValence(ValueAst::Lit(5)), "{:total-valence 5}")]
     #[case::total_h(AtomConstraint::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
     #[case::ring_count(AtomConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
     #[case::ring_size(AtomConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
@@ -1535,6 +1577,7 @@ mod tests {
     #[case::multicenter_not(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
     #[case::multicenter_value(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
     #[case::valence_expr(AtomConstraint::Valence(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))))), "{:valence \"?h >= 1\"}")]
+    #[case::ring_size_litset(AtomConstraint::RingSize(ValueAst::LitSet(vec![5, 6])), "{:ring-size [5 6]}")]
     fn test_atom_constraint_dsl_roundtrip(#[case] input: AtomConstraint, #[case] edn_source: &str) {
         let dsl = AtomConstraintDsl::from_ast(&input, &());
         let edn = dsl.to_edn();
