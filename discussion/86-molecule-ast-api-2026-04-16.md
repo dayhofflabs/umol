@@ -1381,7 +1381,7 @@ Implementation detail:
 - For relation ids, use the same dense inverse over the relation-specific removed-id lists already carried by `IdRemapping`.
 - Keep these helpers pure and unit-tested before using them inside rollback.
 
-##### Step 5 — Add `ConstraintUpdate`
+##### Step 5 — Add `ConstraintUpdate` **Done**
 
 Add patch-based restoration for molecule-level constraints:
 

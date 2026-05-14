@@ -5,6 +5,7 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
+use super::super::edit::{ConstraintUpdate, DroppedConstraint, RewrittenConstraint};
 use super::super::idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
@@ -177,6 +178,33 @@ impl Constraints {
             .into_iter()
             .filter_map(|c| c.remap(remap))
             .collect();
+    }
+
+    /// Remap entity indices and return the patch needed to restore or inspect
+    /// constraints that were dropped or rewritten by the remap.
+    pub fn remap_with_update(&mut self, remap: &IdRemapping) -> ConstraintUpdate {
+        let mut update = ConstraintUpdate::default();
+        let mut next = Vec::new();
+        for (position, constraint) in mem::take(&mut self.0).into_iter().enumerate() {
+            match constraint.clone().remap(remap) {
+                Some(mapped) => {
+                    if mapped != constraint {
+                        update.rewritten.push(RewrittenConstraint {
+                            position,
+                            old: constraint,
+                            new: mapped.clone(),
+                        });
+                    }
+                    next.push(mapped);
+                }
+                None => update.dropped.push(DroppedConstraint {
+                    position,
+                    constraint,
+                }),
+            }
+        }
+        self.0 = next;
+        update
     }
 
     /// Simplify every contained constraint's value(s) in place by
@@ -869,6 +897,55 @@ mod tests {
         }
         cs.remap(&remap);
         assert_eq!(cs.as_slice(), expected.as_slice());
+    }
+
+    #[rstest]
+    fn test_constraints_remap_with_update() {
+        let mut cs = Constraints::new();
+        cs.push(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)));
+        cs.push(Constraint::Atom(AtomId(1), AtomConstraint::degree(3)));
+        cs.push(Constraint::Bond(BondId(2), BondConstraint::ring_size(6)));
+        cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
+            atoms: Some(vec![AtomId(0), AtomId(2)]),
+        }));
+
+        let update = cs.remap_with_update(&idx_remapping(vec![1], vec![1]));
+
+        assert_eq!(
+            cs.as_slice(),
+            &[
+                Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+                Constraint::Bond(BondId(1), BondConstraint::ring_size(6)),
+                Constraint::Molecule(MoleculeConstraint::Connected {
+                    atoms: Some(vec![AtomId(0), AtomId(1)]),
+                }),
+            ],
+        );
+        assert_eq!(
+            update,
+            ConstraintUpdate {
+                dropped: vec![DroppedConstraint {
+                    position: 1,
+                    constraint: Constraint::Atom(AtomId(1), AtomConstraint::degree(3)),
+                }],
+                rewritten: vec![
+                    RewrittenConstraint {
+                        position: 2,
+                        old: Constraint::Bond(BondId(2), BondConstraint::ring_size(6)),
+                        new: Constraint::Bond(BondId(1), BondConstraint::ring_size(6)),
+                    },
+                    RewrittenConstraint {
+                        position: 3,
+                        old: Constraint::Molecule(MoleculeConstraint::Connected {
+                            atoms: Some(vec![AtomId(0), AtomId(2)]),
+                        }),
+                        new: Constraint::Molecule(MoleculeConstraint::Connected {
+                            atoms: Some(vec![AtomId(0), AtomId(1)]),
+                        }),
+                    },
+                ],
+            },
+        );
     }
 
     #[rstest]
