@@ -9,7 +9,7 @@
 use thiserror::Error;
 
 use super::super::edit::{
-    Action, AromaticSystemFieldChange, AromaticSystemRef, AtomFieldChange, AtomRef,
+    Action, AddBond, AromaticSystemFieldChange, AromaticSystemRef, AtomFieldChange, AtomRef,
     BondFieldChange, BondRef, DativeBondFieldChange, DativeBondRef, Edit,
     MulticenterBondFieldChange, MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef,
 };
@@ -87,35 +87,48 @@ impl MoleculeBuilder {
         actions: &[Action],
     ) -> Result<Action, TransactionError> {
         match edit {
-            Edit::AddAtom { ast } => Ok(Action::AtomAdded(self.add_atom(ast))),
-            Edit::RemoveAtom { idx, ast } => {
-                let id = resolve_atom_ref(idx, actions)?;
-                if id.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
-                if self.atom(id).ast != &ast {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                self.remove(&[id], &[]);
-                Ok(Action::Done)
+            Edit::AddAtoms { atoms } => {
+                let ids = atoms
+                    .into_iter()
+                    .map(|ast| self.add_atom(ast))
+                    .collect();
+                Ok(Action::AtomsAdded(ids))
             }
-            Edit::AddBond { a, b, ast } => {
-                let a = resolve_atom_ref(a, actions)?;
-                if a.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
-                let b = resolve_atom_ref(b, actions)?;
-                if b.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
-                Ok(Action::BondAdded(self.add_bond(a, b, ast)))
-            }
-            Edit::RemoveBond { idx, endpoints, ast } => {
-                let id = resolve_bond_ref(idx, actions)?;
-                if id.index() >= self.bond_count() { return Err(TransactionError::IdOutOfRange("bond")); }
-                let saved_endpoints = [
-                    resolve_atom_ref(endpoints[0].clone(), actions)?,
-                    resolve_atom_ref(endpoints[1].clone(), actions)?,
-                ];
-                let view = self.bond(id);
-                if view.ast != &ast || view.atoms != saved_endpoints {
-                    return Err(TransactionError::OldStateMismatch);
+            Edit::AddBonds { bonds } => {
+                let mut ids = Vec::with_capacity(bonds.len());
+                for AddBond { a, b, ast } in bonds {
+                    let a = resolve_atom_ref(a, actions)?;
+                    if a.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                    let b = resolve_atom_ref(b, actions)?;
+                    if b.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                    ids.push(self.add_bond(a, b, ast));
                 }
-                self.remove(&[], &[id]);
+                Ok(Action::BondsAdded(ids))
+            }
+            Edit::RemoveTopology { atoms, bonds } => {
+                let atoms: Vec<AtomId> = atoms
+                    .into_iter()
+                    .map(|idx| {
+                        let id = resolve_atom_ref(idx, actions)?;
+                        if id.index() >= self.atom_count() {
+                            return Err(TransactionError::IdOutOfRange("atom"));
+                        }
+                        Ok(id)
+                    })
+                    .collect::<Result<_, _>>()?;
+                let bonds: Vec<BondId> = bonds
+                    .into_iter()
+                    .map(|idx| {
+                        let id = resolve_bond_ref(idx, actions)?;
+                        if id.index() >= self.bond_count() {
+                            return Err(TransactionError::IdOutOfRange("bond"));
+                        }
+                        Ok(id)
+                    })
+                    .collect::<Result<_, _>>()?;
+                if !atoms.is_empty() || !bonds.is_empty() {
+                    self.remove(&atoms, &bonds);
+                }
                 Ok(Action::Done)
             }
             Edit::SetAtomField { idx, change } => {
@@ -754,16 +767,25 @@ fn resolve_atom_ref(r: AtomRef, actions: &[Action]) -> Result<AtomId, Transactio
     match r {
         AtomRef::Id(id) => Ok(id),
         AtomRef::New(n) => {
-            let action = actions
-                .get(n)
-                .ok_or(TransactionError::RefOutOfRange(n, actions.len()))?;
-            match action {
-                Action::AtomAdded(id) => Ok(*id),
-                _ => Err(TransactionError::RefTypeMismatch {
-                    expected: "AtomAdded",
-                    got: action_name(action),
-                }),
+            let mut seen = 0usize;
+            for action in actions {
+                match action {
+                    Action::AtomsAdded(ids) => {
+                        if n < seen + ids.len() {
+                            return Ok(ids[n - seen]);
+                        }
+                        seen += ids.len();
+                    }
+                    Action::AtomAdded(id) => {
+                        if n == seen {
+                            return Ok(*id);
+                        }
+                        seen += 1;
+                    }
+                    _ => {}
+                }
             }
+            Err(TransactionError::RefOutOfRange(n, seen))
         }
     }
 }
@@ -772,16 +794,25 @@ fn resolve_bond_ref(r: BondRef, actions: &[Action]) -> Result<BondId, Transactio
     match r {
         BondRef::Id(id) => Ok(id),
         BondRef::New(n) => {
-            let action = actions
-                .get(n)
-                .ok_or(TransactionError::RefOutOfRange(n, actions.len()))?;
-            match action {
-                Action::BondAdded(id) => Ok(*id),
-                _ => Err(TransactionError::RefTypeMismatch {
-                    expected: "BondAdded",
-                    got: action_name(action),
-                }),
+            let mut seen = 0usize;
+            for action in actions {
+                match action {
+                    Action::BondsAdded(ids) => {
+                        if n < seen + ids.len() {
+                            return Ok(ids[n - seen]);
+                        }
+                        seen += ids.len();
+                    }
+                    Action::BondAdded(id) => {
+                        if n == seen {
+                            return Ok(*id);
+                        }
+                        seen += 1;
+                    }
+                    _ => {}
+                }
             }
+            Err(TransactionError::RefOutOfRange(n, seen))
         }
     }
 }
@@ -872,6 +903,8 @@ fn resolve_noncovalent_bond_ref(
 
 fn action_name(a: &Action) -> &'static str {
     match a {
+        Action::AtomsAdded(_) => "AtomsAdded",
+        Action::BondsAdded(_) => "BondsAdded",
         Action::AtomAdded(_) => "AtomAdded",
         Action::BondAdded(_) => "BondAdded",
         Action::AromaticSystemAdded(_) => "AromaticSystemAdded",
@@ -928,11 +961,9 @@ mod tests {
     #[rstest]
     fn test_molecule_builder_transact_add_atom(mut empty: MoleculeBuilder) {
         let actions = empty
-            .transact(vec![Edit::AddAtom {
-                ast: AtomAst::from_element(Element::C),
-            }])
+            .transact(vec![Edit::add_atom(AtomAst::from_element(Element::C))])
             .unwrap();
-        assert_eq!(actions, vec![Action::AtomAdded(AtomId(0))]);
+        assert_eq!(actions, vec![Action::AtomsAdded(vec![AtomId(0)])]);
         let built = empty.build();
         assert_eq!(built.atoms().count(), 1);
         assert_eq!(built.atom(AtomId(0)).ast.element, ElementAst::Lit(Element::C));
@@ -942,21 +973,20 @@ mod tests {
     fn test_molecule_builder_transact_add_bond_via_new_ref(mut empty: MoleculeBuilder) {
         let actions = empty
             .transact(vec![
-                Edit::AddAtom { ast: AtomAst::from_element(Element::C) },
-                Edit::AddAtom { ast: AtomAst::from_element(Element::C) },
-                Edit::AddBond {
-                    a: AtomRef::New(0),
-                    b: AtomRef::New(1),
-                    ast: BondAst::from_order(1),
+                Edit::AddAtoms {
+                    atoms: vec![
+                        AtomAst::from_element(Element::C),
+                        AtomAst::from_element(Element::C),
+                    ],
                 },
+                Edit::add_bond(AtomRef::New(0), AtomRef::New(1), BondAst::from_order(1)),
             ])
             .unwrap();
         assert_eq!(
             actions,
             vec![
-                Action::AtomAdded(AtomId(0)),
-                Action::AtomAdded(AtomId(1)),
-                Action::BondAdded(BondId(0)),
+                Action::AtomsAdded(vec![AtomId(0), AtomId(1)]),
+                Action::BondsAdded(vec![BondId(0)]),
             ]
         );
     }
@@ -967,11 +997,8 @@ mod tests {
         // already-applied AddAtom on edit 1.
         let err = one_atom
             .transact(vec![
-                Edit::AddAtom { ast: AtomAst::from_element(Element::N) },
-                Edit::RemoveAtom {
-                    idx: AtomRef::Id(AtomId(99)),
-                    ast: AtomAst::default(),
-                },
+                Edit::add_atom(AtomAst::from_element(Element::N)),
+                Edit::remove_atom(AtomRef::Id(AtomId(99))),
             ])
             .unwrap_err();
         assert_eq!(err, TransactionError::IdOutOfRange("atom"));
@@ -1009,23 +1036,19 @@ mod tests {
 
     #[rstest]
     #[case::ref_out_of_range(
-        vec![Edit::AddBond {
-            a: AtomRef::New(5),
-            b: AtomRef::New(6),
-            ast: BondAst::default(),
-        }],
+        vec![Edit::add_bond(
+            AtomRef::New(5),
+            AtomRef::New(6),
+            BondAst::default(),
+        )],
         TransactionError::RefOutOfRange(5, 0),
     )]
     #[case::ref_type_mismatch(
         vec![
-            Edit::AddAtom { ast: AtomAst::from_element(Element::C) },
-            Edit::RemoveBond {
-                idx: BondRef::New(0),
-                endpoints: [AtomRef::New(0), AtomRef::New(0)],
-                ast: BondAst::default(),
-            },
+            Edit::add_atom(AtomAst::from_element(Element::C)),
+            Edit::remove_bond(BondRef::New(0)),
         ],
-        TransactionError::RefTypeMismatch { expected: "BondAdded", got: "AtomAdded" },
+        TransactionError::RefOutOfRange(0, 0),
     )]
     fn test_molecule_builder_transact_new_ref_error(
         mut empty: MoleculeBuilder,
@@ -1190,31 +1213,24 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_transact_remove_atom_ast_mismatch_error(
+    fn test_molecule_builder_transact_remove_topology_atom_error(
         mut one_atom: MoleculeBuilder,
     ) {
         let err = one_atom
-            .transact(vec![Edit::RemoveAtom {
-                idx: AtomRef::Id(AtomId(0)),
-                ast: AtomAst::from_element(Element::N), // wrong: actual is C
-            }])
+            .transact(vec![Edit::remove_atom(AtomRef::Id(AtomId(9)))])
             .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
+        assert_eq!(err, TransactionError::IdOutOfRange("atom"));
         assert_eq!(one_atom.atom_count(), 1);
     }
 
     #[rstest]
-    fn test_molecule_builder_transact_remove_bond_ast_mismatch_error(
+    fn test_molecule_builder_transact_remove_topology_bond_error(
         mut diatomic: MoleculeBuilder,
     ) {
         let err = diatomic
-            .transact(vec![Edit::RemoveBond {
-                idx: BondRef::Id(BondId(0)),
-                endpoints: [AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
-                ast: BondAst::from_order(2), // wrong: actual is 1
-            }])
+            .transact(vec![Edit::remove_bond(BondRef::Id(BondId(9)))])
             .unwrap_err();
-        assert_eq!(err, TransactionError::OldStateMismatch);
+        assert_eq!(err, TransactionError::IdOutOfRange("bond"));
         assert_eq!(diatomic.bond_count(), 1);
     }
 
@@ -1649,6 +1665,76 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))],
         );
+    }
+
+    #[cfg(any())]
+    mod phase8_undo_contract_tests {
+        use super::*;
+
+        #[fixture]
+        fn triatomic_with_overlays() -> MoleculeBuilder {
+            let mut b = MoleculeAst::default().edit();
+            b.add_atom(AtomAst::from_element(Element::C));
+            b.add_atom(AtomAst::from_element(Element::N));
+            b.add_atom(AtomAst::from_element(Element::O));
+            b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
+            b.add_bond(AtomId(1), AtomId(2), BondAst::from_order(1));
+            b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1));
+            b.add_aromatic_system(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemAst::default(),
+            );
+            b.add_multicenter_bond(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::default(),
+            );
+            b.add_noncovalent_bond(
+                [AtomId(0), AtomId(2)],
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            );
+            b
+        }
+
+        #[rstest]
+        fn test_transaction_rollback(mut triatomic_with_overlays: MoleculeBuilder) {
+            let before = triatomic_with_overlays.clone().build();
+            let tx = triatomic_with_overlays
+                .transact(vec![Edit::RemoveTopology {
+                    atoms: vec![AtomRef::Id(AtomId(1))],
+                    bonds: vec![],
+                }])
+                .unwrap();
+            tx.rollback(&mut triatomic_with_overlays).unwrap();
+            assert_eq!(triatomic_with_overlays.build(), before);
+        }
+
+        #[rstest]
+        fn test_transaction_rollback_cascaded_overlays(
+            mut triatomic_with_overlays: MoleculeBuilder,
+        ) {
+            let tx = triatomic_with_overlays
+                .transact(vec![Edit::RemoveTopology {
+                    atoms: vec![AtomRef::Id(AtomId(0))],
+                    bonds: vec![],
+                }])
+                .unwrap();
+            let [Undo::RestoreTopology { overlays, .. }] = tx.undos() else {
+                panic!("RemoveTopology should produce one topology-restore undo")
+            };
+            assert_eq!(overlays.dative_bonds.len(), 1);
+            assert_eq!(overlays.aromatic_systems.len(), 1);
+            assert_eq!(overlays.multicenter_bonds.len(), 1);
+            assert_eq!(overlays.noncovalent_bonds.len(), 1);
+        }
+
+        #[rstest]
+        fn test_molecule_builder_transact_unchecked(mut empty: MoleculeBuilder) {
+            empty.transact_unchecked(vec![Edit::AddAtoms {
+                atoms: vec![AtomAst::from_element(Element::C)],
+            }]);
+            assert_eq!(empty.atom_count(), 1);
+            assert_eq!(empty.atom(AtomId(0)).ast.element, ElementAst::Lit(Element::C));
+        }
     }
 }
 

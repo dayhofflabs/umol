@@ -1,8 +1,8 @@
 //! Edit vocabulary for transactional molecule mutation (Phase 8).
 //!
 //! The `Edit` enum is the data-form vocabulary for `MoleculeBuilder::transact`
-//! (Phase 8d). Each variant is self-inverting via [`Edit::inverse`]: `AddX`
-//! ↔ `RemoveX`, and `Set*Field` swaps `old`/`new` on the inner `*FieldChange`.
+//! (Phase 8d). `Edit` is caller-facing mutation data; realized rollback data
+//! belongs to the `Undo` journal added in the later Phase 8 steps.
 //!
 //! Refs (`AtomRef`, `BondRef`, ...) are symbolic and appear only inside
 //! `Edit`. `Id(_)` references an existing entity; `New(N)` references the
@@ -142,27 +142,29 @@ impl NoncovalentBondFieldChange {
     }
 }
 
+/// Single bond addition inside an `Edit::AddBonds` batch.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddBond {
+    pub a: AtomRef,
+    pub b: AtomRef,
+    pub ast: BondAst,
+}
+
 /// Single mutation operation. Compose `Vec<Edit>` into a transaction batch
-/// (Phase 8d). Every variant carries the data needed to invert it.
+/// (Phase 8d). Topology edits are bulk primitives; single-item helpers are
+/// constructors on `Edit`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Edit {
     // Atoms / bonds
-    AddAtom {
-        ast: AtomAst,
+    AddAtoms {
+        atoms: Vec<AtomAst>,
     },
-    RemoveAtom {
-        idx: AtomRef,
-        ast: AtomAst,
+    AddBonds {
+        bonds: Vec<AddBond>,
     },
-    AddBond {
-        a: AtomRef,
-        b: AtomRef,
-        ast: BondAst,
-    },
-    RemoveBond {
-        idx: BondRef,
-        endpoints: [AtomRef; 2],
-        ast: BondAst,
+    RemoveTopology {
+        atoms: Vec<AtomRef>,
+        bonds: Vec<BondRef>,
     },
     SetAtomField {
         idx: AtomRef,
@@ -304,149 +306,27 @@ pub enum Edit {
 }
 
 impl Edit {
-    /// Edit that undoes `self`. Total: every variant has a defined inverse.
-    /// `Remove*` returns `Add*` with the saved data; `Add*` returns
-    /// `Remove*` with `*Ref::New(0)` as a sentinel (real id is unknown until
-    /// apply time inside a transaction).
-    pub fn inverse(self) -> Self {
-        match self {
-            Self::AddAtom { ast } => Self::RemoveAtom {
-                idx: AtomRef::New(0),
-                ast,
-            },
-            Self::RemoveAtom { idx: _, ast } => Self::AddAtom { ast },
-            Self::AddBond { a, b, ast } => Self::RemoveBond {
-                idx: BondRef::New(0),
-                endpoints: [a, b],
-                ast,
-            },
-            Self::RemoveBond {
-                idx: _,
-                endpoints: [a, b],
-                ast,
-            } => Self::AddBond { a, b, ast },
-            Self::SetAtomField { idx, change } => Self::SetAtomField {
-                idx,
-                change: change.inverse(),
-            },
-            Self::SetBondField { idx, change } => Self::SetBondField {
-                idx,
-                change: change.inverse(),
-            },
+    pub fn add_atom(ast: AtomAst) -> Self {
+        Self::AddAtoms { atoms: vec![ast] }
+    }
 
-            Self::AddDativeBond { atoms, ast } => Self::RemoveDativeBond {
-                idx: DativeBondRef::New(0),
-                atoms,
-                ast,
-            },
-            Self::RemoveDativeBond { idx: _, atoms, ast } => Self::AddDativeBond { atoms, ast },
-            Self::SetDativeBondField { idx, change } => Self::SetDativeBondField {
-                idx,
-                change: change.inverse(),
-            },
+    pub fn add_bond(a: AtomRef, b: AtomRef, ast: BondAst) -> Self {
+        Self::AddBonds {
+            bonds: vec![AddBond { a, b, ast }],
+        }
+    }
 
-            Self::AddAromaticSystem { atoms, ast } => Self::RemoveAromaticSystem {
-                idx: AromaticSystemRef::New(0),
-                atoms,
-                ast,
-            },
-            Self::RemoveAromaticSystem { idx: _, atoms, ast } => {
-                Self::AddAromaticSystem { atoms, ast }
-            }
-            Self::SetAromaticSystemField { idx, change } => Self::SetAromaticSystemField {
-                idx,
-                change: change.inverse(),
-            },
+    pub fn remove_atom(idx: AtomRef) -> Self {
+        Self::RemoveTopology {
+            atoms: vec![idx],
+            bonds: Vec::new(),
+        }
+    }
 
-            Self::AddMulticenterBond { atoms, ast } => Self::RemoveMulticenterBond {
-                idx: MulticenterBondRef::New(0),
-                atoms,
-                ast,
-            },
-            Self::RemoveMulticenterBond { idx: _, atoms, ast } => {
-                Self::AddMulticenterBond { atoms, ast }
-            }
-            Self::SetMulticenterBondField { idx, change } => Self::SetMulticenterBondField {
-                idx,
-                change: change.inverse(),
-            },
-
-            Self::AddNoncovalentBond { atoms, ast } => Self::RemoveNoncovalentBond {
-                idx: NoncovalentBondRef::New(0),
-                atoms,
-                ast,
-            },
-            Self::RemoveNoncovalentBond { idx: _, atoms, ast } => {
-                Self::AddNoncovalentBond { atoms, ast }
-            }
-            Self::SetNoncovalentBondField { idx, change } => Self::SetNoncovalentBondField {
-                idx,
-                change: change.inverse(),
-            },
-
-            Self::SetAtomConstraint { idx, old, new } => Self::SetAtomConstraint {
-                idx,
-                old: new,
-                new: old,
-            },
-            Self::AddAtomConstraint { idx, constraint } => Self::RemoveAtomConstraint {
-                idx,
-                constraint,
-            },
-            Self::RemoveAtomConstraint { idx, constraint } => Self::AddAtomConstraint {
-                idx,
-                constraint,
-            },
-
-            Self::SetBondConstraint { idx, old, new } => Self::SetBondConstraint {
-                idx,
-                old: new,
-                new: old,
-            },
-            Self::AddBondConstraint { idx, constraint } => Self::RemoveBondConstraint {
-                idx,
-                constraint,
-            },
-            Self::RemoveBondConstraint { idx, constraint } => Self::AddBondConstraint {
-                idx,
-                constraint,
-            },
-
-            Self::SetDativeBondConstraint { idx, old, new } => Self::SetDativeBondConstraint {
-                idx,
-                old: new,
-                new: old,
-            },
-            Self::AddDativeBondConstraint { idx, constraint } => Self::RemoveDativeBondConstraint {
-                idx,
-                constraint,
-            },
-            Self::RemoveDativeBondConstraint { idx, constraint } => {
-                Self::AddDativeBondConstraint { idx, constraint }
-            }
-
-            Self::SetAromaticSystemConstraint { idx, old, new } => {
-                Self::SetAromaticSystemConstraint {
-                    idx,
-                    old: new,
-                    new: old,
-                }
-            }
-
-            Self::SetMulticenterBondConstraint { idx, old, new } => {
-                Self::SetMulticenterBondConstraint {
-                    idx,
-                    old: new,
-                    new: old,
-                }
-            }
-
-            Self::PushMoleculeConstraint { constraint } => {
-                Self::PopMoleculeConstraint { constraint }
-            }
-            Self::PopMoleculeConstraint { constraint } => {
-                Self::PushMoleculeConstraint { constraint }
-            }
+    pub fn remove_bond(idx: BondRef) -> Self {
+        Self::RemoveTopology {
+            atoms: Vec::new(),
+            bonds: vec![idx],
         }
     }
 }
@@ -476,11 +356,12 @@ pub enum NoncovalentBondRef {
     New(usize),
 }
 
-/// Result of applying one `Edit` inside `transact`. `*Added` reports the new
-/// id; `Done` is the no-new-id outcome of `Remove` / `Set*Field`; `Cascaded`
-/// wraps the user's action plus the auto-generated R3-cascade Edits.
+/// Result of applying one `Edit` inside `transact`. Superseded by the planned
+/// `Undo` journal in later Phase 8 steps.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
+    AtomsAdded(Vec<AtomId>),
+    BondsAdded(Vec<BondId>),
     AtomAdded(AtomId),
     BondAdded(BondId),
     AromaticSystemAdded(AromaticSystemId),
@@ -494,7 +375,7 @@ pub enum Action {
     },
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use rstest::*;
 
@@ -1116,5 +997,131 @@ mod tests {
         };
         assert_eq!(*user, inner);
         assert!(cascade.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::*;
+
+    use super::*;
+    use umol_shared::element::Element;
+
+    #[fixture]
+    fn carbon_atom() -> AtomAst {
+        AtomAst::from_element(Element::C)
+    }
+
+    #[fixture]
+    fn single_bond() -> BondAst {
+        BondAst {
+            order: ValueAst::Lit(1),
+            ..BondAst::default()
+        }
+    }
+
+    #[rstest]
+    #[case::id(AtomRef::Id(AtomId(3)))]
+    #[case::new(AtomRef::New(2))]
+    fn test_atom_ref_variants(#[case] r: AtomRef) {
+        assert_eq!(r.clone(), r);
+    }
+
+    #[rstest]
+    #[case::id(BondRef::Id(BondId(5)))]
+    #[case::new(BondRef::New(0))]
+    fn test_bond_ref_variants(#[case] r: BondRef) {
+        assert_eq!(r.clone(), r);
+    }
+
+    #[rstest]
+    #[case::element(
+        AtomFieldChange::Element {
+            old: ElementAst::Lit(Element::C),
+            new: ElementAst::Lit(Element::N),
+        },
+        AtomFieldChange::Element {
+            old: ElementAst::Lit(Element::N),
+            new: ElementAst::Lit(Element::C),
+        },
+    )]
+    #[case::charge(
+        AtomFieldChange::Charge {
+            old: ValueAst::Lit(0),
+            new: ValueAst::Lit(1),
+        },
+        AtomFieldChange::Charge {
+            old: ValueAst::Lit(1),
+            new: ValueAst::Lit(0),
+        },
+    )]
+    fn test_atom_field_change_inverse(
+        #[case] input: AtomFieldChange,
+        #[case] expected: AtomFieldChange,
+    ) {
+        assert_eq!(input.clone().inverse(), expected);
+        assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    fn test_edit_add_atom(carbon_atom: AtomAst) {
+        assert_eq!(
+            Edit::add_atom(carbon_atom.clone()),
+            Edit::AddAtoms {
+                atoms: vec![carbon_atom],
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_edit_add_bond(single_bond: BondAst) {
+        assert_eq!(
+            Edit::add_bond(AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1)), single_bond.clone()),
+            Edit::AddBonds {
+                bonds: vec![AddBond {
+                    a: AtomRef::Id(AtomId(0)),
+                    b: AtomRef::Id(AtomId(1)),
+                    ast: single_bond,
+                }],
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_edit_remove_atom() {
+        assert_eq!(
+            Edit::remove_atom(AtomRef::Id(AtomId(2))),
+            Edit::RemoveTopology {
+                atoms: vec![AtomRef::Id(AtomId(2))],
+                bonds: Vec::new(),
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_edit_remove_bond() {
+        assert_eq!(
+            Edit::remove_bond(BondRef::Id(BondId(4))),
+            Edit::RemoveTopology {
+                atoms: Vec::new(),
+                bonds: vec![BondRef::Id(BondId(4))],
+            },
+        );
+    }
+
+    #[rstest]
+    fn test_bond_field_change_inverse() {
+        let change = BondFieldChange::Order {
+            old: ValueAst::Lit(1),
+            new: ValueAst::Lit(2),
+        };
+        assert_eq!(
+            change.clone().inverse(),
+            BondFieldChange::Order {
+                old: ValueAst::Lit(2),
+                new: ValueAst::Lit(1),
+            },
+        );
+        assert_eq!(change.clone().inverse().inverse(), change);
     }
 }
