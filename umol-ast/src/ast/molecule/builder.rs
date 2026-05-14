@@ -344,18 +344,31 @@ impl MoleculeBuilder {
         }
     }
 
+    /// Append an atom directly to the builder.
+    ///
+    /// This is a low-level, non-transactional construction primitive. Use
+    /// `transact` for checked atomic edits or `transact_unchecked` for trusted
+    /// generated edit batches.
     pub fn add_atom(&mut self, atom: AtomAst) -> AtomId {
         let id = self.graph.add_node();
         Arc::make_mut(&mut self.atoms).push(atom);
         AtomId::from(id)
     }
 
+    /// Append a localized bond directly to the builder.
+    ///
+    /// This is a low-level, non-transactional construction primitive. It
+    /// assumes `src` and `tgt` are valid atom ids in the current dense layout.
     pub fn add_bond(&mut self, src: AtomId, tgt: AtomId, bond: BondAst) -> BondId {
         let id = self.graph.add_edge(NodeId::from(src), NodeId::from(tgt));
         Arc::make_mut(&mut self.bonds).push(bond);
         BondId::from(id)
     }
 
+    /// Append a dative-bond overlay directly to the builder.
+    ///
+    /// The participant list is sorted into dense atom-id order and the
+    /// acceptor slot is normalized into that sorted representation.
     pub fn add_dative_bond(
         &mut self,
         donors: Vec<AtomId>,
@@ -378,6 +391,7 @@ impl MoleculeBuilder {
         DativeBondId(i)
     }
 
+    /// Append an aromatic-system overlay directly to the builder.
     pub fn add_aromatic_system(
         &mut self,
         atoms: Vec<AtomId>,
@@ -388,6 +402,7 @@ impl MoleculeBuilder {
         AromaticSystemId(i)
     }
 
+    /// Append a multicenter-bond overlay directly to the builder.
     pub fn add_multicenter_bond(
         &mut self,
         atoms: Vec<AtomId>,
@@ -398,6 +413,7 @@ impl MoleculeBuilder {
         MulticenterBondId(i)
     }
 
+    /// Append a noncovalent-bond overlay directly to the builder.
     pub fn add_noncovalent_bond(
         &mut self,
         ends: [AtomId; 2],
@@ -417,6 +433,9 @@ impl MoleculeBuilder {
     }
 
     // -- Attribute access -----------------------------------------------------
+    //
+    // Mutable views edit entity data in place. Structural add/remove stays on
+    // the builder itself because dense removal can remap many unrelated ids.
 
     pub fn atom(&self, idx: AtomId) -> AtomBuilderView<'_> {
         AtomBuilderView {
@@ -640,6 +659,10 @@ impl MoleculeBuilder {
 
     // -- Relation removal -----------------------------------------------------
 
+    /// Remove dative-bond overlays directly from the builder.
+    ///
+    /// This is a low-level dense removal primitive. It remaps molecule-level
+    /// constraints but does not build rollback data.
     pub fn remove_dative_bonds(&mut self, indices: &[DativeBondId]) {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.dative_bonds.remove_indices(&raw);
@@ -656,6 +679,10 @@ impl MoleculeBuilder {
         self.constraints.remap(&idx_remap);
     }
 
+    /// Remove aromatic-system overlays directly from the builder.
+    ///
+    /// This is a low-level dense removal primitive. It remaps molecule-level
+    /// constraints but does not build rollback data.
     pub fn remove_aromatic_systems(&mut self, indices: &[AromaticSystemId]) {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.aromatic_systems.remove_indices(&raw);
@@ -672,6 +699,10 @@ impl MoleculeBuilder {
         self.constraints.remap(&idx_remap);
     }
 
+    /// Remove multicenter-bond overlays directly from the builder.
+    ///
+    /// This is a low-level dense removal primitive. It remaps molecule-level
+    /// constraints but does not build rollback data.
     pub fn remove_multicenter_bonds(&mut self, indices: &[MulticenterBondId]) {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.multicenter_bonds.remove_indices(&raw);
@@ -688,6 +719,10 @@ impl MoleculeBuilder {
         self.constraints.remap(&idx_remap);
     }
 
+    /// Remove noncovalent-bond overlays directly from the builder.
+    ///
+    /// This is a low-level dense removal primitive. It remaps molecule-level
+    /// constraints but does not build rollback data.
     pub fn remove_noncovalent_bonds(&mut self, indices: &[NoncovalentBondId]) {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.noncovalent_bonds.remove_indices(&raw);
@@ -706,6 +741,14 @@ impl MoleculeBuilder {
 
     // -- Topological removal --------------------------------------------------
 
+    /// Remove topology directly from the builder and return the forward remap.
+    ///
+    /// This is the low-level dense topology-removal primitive. It removes the
+    /// requested atoms and bonds, cascades relations whose participants were
+    /// removed, remaps molecule-level constraints, and returns the forward
+    /// `IdRemapping` for downstream id holders. It does not build rollback
+    /// data; checked transactions capture the removed payloads before calling
+    /// this method.
     pub fn remove(&mut self, atoms: &[AtomId], bonds: &[BondId]) -> IdRemapping {
         let nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         let edges: Vec<EdgeId> = bonds.iter().map(|&b| EdgeId::from(b)).collect();

@@ -1514,7 +1514,7 @@ Rules:
 
 Unchecked `RemoveTopology` can call the low-level dense removal directly after resolving ids; it does not compute `ConstraintUpdate` except for whatever constraint remapping the builder already performs.
 
-##### Step 10 — Reconcile low-level builder APIs
+##### Step 10 — Reconcile low-level builder APIs **Done**
 
 Keep low-level builder primitives where they are useful internally:
 
@@ -1522,6 +1522,8 @@ Keep low-level builder primitives where they are useful internally:
 - `remove(&[AtomId], &[BondId]) -> IdRemapping`
 - overlay `remove_*`
 - `atom_mut`, `bond_mut`, relation mut views
+
+Direct builder methods are preferred for structural removal. Do not add `entity_mut().remove()`; mutable views edit entity fields/constraints, while removal belongs to the owning builder because dense deletion can remap many unrelated ids.
 
 Document that these are non-transactional builder operations. Higher-level atomic mutation goes through `transact`; generated DPO paths may use `transact_unchecked`.
 
