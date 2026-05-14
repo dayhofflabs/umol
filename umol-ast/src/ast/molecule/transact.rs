@@ -142,6 +142,381 @@ impl MoleculeBuilder {
         Ok(Transaction::new(journal))
     }
 
+    pub fn transact_unchecked(&mut self, edits: Vec<Edit>) {
+        let mut created = CreatedEntities::default();
+        for edit in edits {
+            if let Err(e) = self.apply_edit_unchecked(edit, &mut created) {
+                panic!("invalid unchecked transaction edit: {e}");
+            }
+        }
+    }
+
+    fn apply_edit_unchecked(
+        &mut self,
+        edit: Edit,
+        created: &mut CreatedEntities,
+    ) -> Result<(), TransactionError> {
+        match edit {
+            Edit::AddAtoms { atoms } => {
+                for atom in atoms {
+                    let id = self.add_atom(atom);
+                    created.push(CreatedEntity::Atom(id));
+                }
+                Ok(())
+            }
+            Edit::AddBonds { bonds } => {
+                for AddBond { a, b, ast } in bonds {
+                    let a = resolve_atom_ref(a, created)?;
+                    if a.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
+                    let b = resolve_atom_ref(b, created)?;
+                    if b.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
+                    let id = self.add_bond(a, b, ast);
+                    created.push(CreatedEntity::Bond(id));
+                }
+                Ok(())
+            }
+            Edit::RemoveTopology { atoms, bonds } => {
+                let atoms: Vec<AtomId> = atoms
+                    .into_iter()
+                    .map(|idx| {
+                        let id = resolve_atom_ref(idx, created)?;
+                        if id.index() >= self.atom_count() {
+                            return Err(TransactionError::IdOutOfRange("atom"));
+                        }
+                        Ok(id)
+                    })
+                    .collect::<Result<_, _>>()?;
+                let bonds: Vec<BondId> = bonds
+                    .into_iter()
+                    .map(|idx| {
+                        let id = resolve_bond_ref(idx, created)?;
+                        if id.index() >= self.bond_count() {
+                            return Err(TransactionError::IdOutOfRange("bond"));
+                        }
+                        Ok(id)
+                    })
+                    .collect::<Result<_, _>>()?;
+                self.remove(&atoms, &bonds);
+                Ok(())
+            }
+            Edit::SetAtomField { idx, change } => {
+                let id = resolve_atom_ref(idx, created)?;
+                if id.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                self.apply_set_atom_field(id, change)
+            }
+            Edit::SetBondField { idx, change } => {
+                let id = resolve_bond_ref(idx, created)?;
+                if id.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
+                self.apply_set_bond_field(id, change)
+            }
+            Edit::AddDativeBond { atoms, ast } => {
+                let resolved: Vec<AtomId> = atoms
+                    .into_iter()
+                    .map(|r| resolve_atom_ref(r, created))
+                    .collect::<Result<_, _>>()?;
+                for a in &resolved {
+                    if a.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
+                }
+                let (acceptor, donors) =
+                    resolved
+                        .split_last()
+                        .ok_or(TransactionError::MalformedEdit(
+                            "AddDativeBond requires at least one participant atom",
+                        ))?;
+                let id = self.add_dative_bond(donors.to_vec(), *acceptor, ast);
+                created.push(CreatedEntity::DativeBond(id));
+                Ok(())
+            }
+            Edit::RemoveDativeBond { idx, atoms, ast } => {
+                let id = resolve_dative_bond_ref(idx, created)?;
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
+                let saved_atoms: Vec<AtomId> = atoms
+                    .iter()
+                    .map(|r| resolve_atom_ref(r.clone(), created))
+                    .collect::<Result<_, _>>()?;
+                let view = self.dative_bond(id);
+                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                if view.ast != &ast || current_atoms != saved_atoms {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                self.remove_dative_bonds(&[id]);
+                Ok(())
+            }
+            Edit::SetDativeBondField { idx, change } => {
+                let id = resolve_dative_bond_ref(idx, created)?;
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
+                self.apply_set_dative_bond_field(id, change)
+            }
+            Edit::AddAromaticSystem { atoms, ast } => {
+                let resolved: Vec<AtomId> = atoms
+                    .into_iter()
+                    .map(|r| resolve_atom_ref(r, created))
+                    .collect::<Result<_, _>>()?;
+                for a in &resolved {
+                    if a.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
+                }
+                let id = self.add_aromatic_system(resolved, ast);
+                created.push(CreatedEntity::AromaticSystem(id));
+                Ok(())
+            }
+            Edit::RemoveAromaticSystem { idx, atoms, ast } => {
+                let id = resolve_aromatic_system_ref(idx, created)?;
+                if id.index() >= self.aromatic_system_count() {
+                    return Err(TransactionError::IdOutOfRange("aromatic system"));
+                }
+                let saved_atoms: Vec<AtomId> = atoms
+                    .iter()
+                    .map(|r| resolve_atom_ref(r.clone(), created))
+                    .collect::<Result<_, _>>()?;
+                let view = self.aromatic_system(id);
+                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                if view.ast != &ast || current_atoms != saved_atoms {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                self.remove_aromatic_systems(&[id]);
+                Ok(())
+            }
+            Edit::SetAromaticSystemField { idx, change } => {
+                let id = resolve_aromatic_system_ref(idx, created)?;
+                if id.index() >= self.aromatic_system_count() {
+                    return Err(TransactionError::IdOutOfRange("aromatic system"));
+                }
+                self.apply_set_aromatic_system_field(id, change)
+            }
+            Edit::AddMulticenterBond { atoms, ast } => {
+                let resolved: Vec<AtomId> = atoms
+                    .into_iter()
+                    .map(|r| resolve_atom_ref(r, created))
+                    .collect::<Result<_, _>>()?;
+                for a in &resolved {
+                    if a.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
+                }
+                let id = self.add_multicenter_bond(resolved, ast);
+                created.push(CreatedEntity::MulticenterBond(id));
+                Ok(())
+            }
+            Edit::RemoveMulticenterBond { idx, atoms, ast } => {
+                let id = resolve_multicenter_bond_ref(idx, created)?;
+                if id.index() >= self.multicenter_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("multicenter bond"));
+                }
+                let saved_atoms: Vec<AtomId> = atoms
+                    .iter()
+                    .map(|r| resolve_atom_ref(r.clone(), created))
+                    .collect::<Result<_, _>>()?;
+                let view = self.multicenter_bond(id);
+                let current_atoms: Vec<AtomId> = view.atom_ids().collect();
+                if view.ast != &ast || current_atoms != saved_atoms {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                self.remove_multicenter_bonds(&[id]);
+                Ok(())
+            }
+            Edit::SetMulticenterBondField { idx, change } => {
+                let id = resolve_multicenter_bond_ref(idx, created)?;
+                if id.index() >= self.multicenter_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("multicenter bond"));
+                }
+                self.apply_set_multicenter_bond_field(id, change)
+            }
+            Edit::AddNoncovalentBond { atoms, ast } => {
+                let a = resolve_atom_ref(atoms[0].clone(), created)?;
+                let b = resolve_atom_ref(atoms[1].clone(), created)?;
+                if a.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                if b.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                let id = self.add_noncovalent_bond([a, b], ast);
+                created.push(CreatedEntity::NoncovalentBond(id));
+                Ok(())
+            }
+            Edit::RemoveNoncovalentBond { idx, atoms, ast } => {
+                let id = resolve_noncovalent_bond_ref(idx, created)?;
+                if id.index() >= self.noncovalent_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+                }
+                let saved_atoms = [
+                    resolve_atom_ref(atoms[0].clone(), created)?,
+                    resolve_atom_ref(atoms[1].clone(), created)?,
+                ];
+                let view = self.noncovalent_bond(id);
+                if view.ast != &ast || view.atoms != saved_atoms {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                self.remove_noncovalent_bonds(&[id]);
+                Ok(())
+            }
+            Edit::SetNoncovalentBondField { idx, change } => {
+                let id = resolve_noncovalent_bond_ref(idx, created)?;
+                if id.index() >= self.noncovalent_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+                }
+                self.apply_set_noncovalent_bond_field(id, change)
+            }
+            Edit::SetAtomConstraint { idx, old, new } => {
+                let id = resolve_atom_ref(idx, created)?;
+                if id.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                self.apply_set_atom_constraint(id, old, new)
+            }
+            Edit::AddAtomConstraint { idx, constraint } => {
+                let id = resolve_atom_ref(idx, created)?;
+                if id.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                if constraint.is_unique() {
+                    return Err(TransactionError::KindShapeMismatch);
+                }
+                let cs = &mut self.atom_mut(id).ast.constraints;
+                if cs.contains_entry(&constraint) {
+                    return Err(TransactionError::DuplicateEntry);
+                }
+                cs.add(constraint);
+                Ok(())
+            }
+            Edit::RemoveAtomConstraint { idx, constraint } => {
+                let id = resolve_atom_ref(idx, created)?;
+                if id.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                if constraint.is_unique() {
+                    return Err(TransactionError::KindShapeMismatch);
+                }
+                self.atom_mut(id)
+                    .ast
+                    .constraints
+                    .remove_entry(&constraint)
+                    .ok_or(TransactionError::MissingEntry)?;
+                Ok(())
+            }
+            Edit::SetBondConstraint { idx, old, new } => {
+                let id = resolve_bond_ref(idx, created)?;
+                if id.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
+                self.apply_set_bond_constraint(id, old, new)
+            }
+            Edit::AddBondConstraint { idx, constraint } => {
+                let id = resolve_bond_ref(idx, created)?;
+                if id.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
+                if constraint.is_unique() {
+                    return Err(TransactionError::KindShapeMismatch);
+                }
+                let cs = &mut self.bond_mut(id).ast.constraints;
+                if cs.contains_entry(&constraint) {
+                    return Err(TransactionError::DuplicateEntry);
+                }
+                cs.add(constraint);
+                Ok(())
+            }
+            Edit::RemoveBondConstraint { idx, constraint } => {
+                let id = resolve_bond_ref(idx, created)?;
+                if id.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
+                if constraint.is_unique() {
+                    return Err(TransactionError::KindShapeMismatch);
+                }
+                self.bond_mut(id)
+                    .ast
+                    .constraints
+                    .remove_entry(&constraint)
+                    .ok_or(TransactionError::MissingEntry)?;
+                Ok(())
+            }
+            Edit::SetDativeBondConstraint { idx, old, new } => {
+                let id = resolve_dative_bond_ref(idx, created)?;
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
+                self.apply_set_dative_bond_constraint(id, old, new)
+            }
+            Edit::AddDativeBondConstraint { idx, constraint } => {
+                let id = resolve_dative_bond_ref(idx, created)?;
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
+                if constraint.is_unique() {
+                    return Err(TransactionError::KindShapeMismatch);
+                }
+                let cs = &mut self.dative_bond_mut(id).ast.constraints;
+                if cs.contains_entry(&constraint) {
+                    return Err(TransactionError::DuplicateEntry);
+                }
+                cs.add(constraint);
+                Ok(())
+            }
+            Edit::RemoveDativeBondConstraint { idx, constraint } => {
+                let id = resolve_dative_bond_ref(idx, created)?;
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
+                if constraint.is_unique() {
+                    return Err(TransactionError::KindShapeMismatch);
+                }
+                self.dative_bond_mut(id)
+                    .ast
+                    .constraints
+                    .remove_entry(&constraint)
+                    .ok_or(TransactionError::MissingEntry)?;
+                Ok(())
+            }
+            Edit::SetAromaticSystemConstraint { idx, old, new } => {
+                let id = resolve_aromatic_system_ref(idx, created)?;
+                if id.index() >= self.aromatic_system_count() {
+                    return Err(TransactionError::IdOutOfRange("aromatic system"));
+                }
+                self.apply_set_aromatic_system_constraint(id, old, new)
+            }
+            Edit::SetMulticenterBondConstraint { idx, old, new } => {
+                let id = resolve_multicenter_bond_ref(idx, created)?;
+                if id.index() >= self.multicenter_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("multicenter bond"));
+                }
+                self.apply_set_multicenter_bond_constraint(id, old, new)
+            }
+            Edit::PushMoleculeConstraint { constraint } => {
+                self.push_constraint(constraint);
+                Ok(())
+            }
+            Edit::PopMoleculeConstraint { constraint } => {
+                let list = self.constraints_mut();
+                let last_index = list
+                    .len()
+                    .checked_sub(1)
+                    .ok_or(TransactionError::OldStateMismatch)?;
+                if list.as_slice()[last_index] != constraint {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                list.remove_at(last_index);
+                Ok(())
+            }
+        }
+    }
+
     fn apply_edit(
         &mut self,
         edit: Edit,
@@ -2267,7 +2642,6 @@ mod tests {
             assert_eq!(overlays.noncovalent_bonds.len(), 1);
         }
 
-        #[cfg(any())]
         #[rstest]
         fn test_molecule_builder_transact_unchecked(mut empty: MoleculeBuilder) {
             empty.transact_unchecked(vec![Edit::AddAtoms {
@@ -2278,6 +2652,12 @@ mod tests {
                 empty.atom(AtomId(0)).ast.element,
                 ElementAst::Lit(Element::C)
             );
+        }
+
+        #[rstest]
+        #[should_panic(expected = "invalid unchecked transaction edit")]
+        fn test_molecule_builder_transact_unchecked_error(mut empty: MoleculeBuilder) {
+            empty.transact_unchecked(vec![Edit::remove_atom(AtomRef::Id(AtomId(0)))]);
         }
     }
 }

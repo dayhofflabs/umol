@@ -1500,7 +1500,7 @@ Rules:
 
 Core tests should assert equality after every rollback, not only final counts.
 
-##### Step 9 — Implement unchecked apply as a separate path
+##### Step 9 — Implement unchecked apply as a separate path **Done**
 
 Add `transact_unchecked(Vec<Edit>) -> ()` with direct, non-journaled application.
 
