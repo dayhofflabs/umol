@@ -128,7 +128,6 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
         vec.truncate(dst);
     }
 
-    #[allow(dead_code)]
     fn entries(&self) -> Vec<([NodeId; N], R)> {
         match self {
             FixedSetStorage::Shared(arc) => (0..arc.relation_count())
@@ -230,7 +229,6 @@ impl<R: Clone> VarSetStorage<R> {
         vec.truncate(dst);
     }
 
-    #[allow(dead_code)]
     fn entries(&self) -> Vec<(Vec<NodeId>, R)> {
         match self {
             VarSetStorage::Shared(arc) => (0..arc.relation_count())
@@ -269,27 +267,6 @@ fn var_relation_removed<R: Clone>(storage: &VarSetStorage<R>, remap: &Remapping)
     removed
 }
 
-#[allow(dead_code)]
-fn relation_undo_remapping(
-    removed_dative: Vec<u32>,
-    removed_aromatic: Vec<u32>,
-    removed_multicenter: Vec<u32>,
-    removed_noncovalent: Vec<u32>,
-) -> UndoRemapping {
-    IdRemapping::new(
-        Remapping {
-            removed_nodes: Vec::new(),
-            removed_edges: Vec::new(),
-        },
-        removed_dative,
-        removed_aromatic,
-        removed_multicenter,
-        removed_noncovalent,
-    )
-    .undo_remapping()
-}
-
-#[allow(dead_code)]
 fn restore_participants(parts: Vec<NodeId>, undo_remapping: &UndoRemapping) -> Vec<NodeId> {
     parts
         .into_iter()
@@ -799,14 +776,12 @@ impl MoleculeBuilder {
         idx_remap
     }
 
-    #[allow(dead_code)]
     pub(super) fn remove_added_topology(&mut self, atoms: &[AddedAtom], bonds: &[AddedBond]) {
         let atom_ids: Vec<AtomId> = atoms.iter().map(|a| a.id).collect();
         let bond_ids: Vec<BondId> = bonds.iter().map(|b| b.id).collect();
         self.remove(&atom_ids, &bond_ids);
     }
 
-    #[allow(dead_code)]
     pub(super) fn restore_topology(
         &mut self,
         atoms: Vec<RemovedAtom>,
@@ -824,12 +799,10 @@ impl MoleculeBuilder {
         constraint_update.rollback_into(&mut self.constraints);
     }
 
-    #[allow(dead_code)]
     pub(super) fn remove_added_dative_bond(&mut self, added: &AddedDativeBond) {
         self.remove_dative_bonds(&[added.id]);
     }
 
-    #[allow(dead_code)]
     pub(super) fn restore_dative_bond(
         &mut self,
         removed: RemovedDativeBond,
@@ -838,12 +811,10 @@ impl MoleculeBuilder {
         self.restore_dative_bonds(vec![removed], undo_remapping);
     }
 
-    #[allow(dead_code)]
     pub(super) fn remove_added_aromatic_system(&mut self, added: &AddedAromaticSystem) {
         self.remove_aromatic_systems(&[added.id]);
     }
 
-    #[allow(dead_code)]
     pub(super) fn restore_aromatic_system(
         &mut self,
         removed: RemovedAromaticSystem,
@@ -852,12 +823,10 @@ impl MoleculeBuilder {
         self.restore_aromatic_systems(vec![removed], undo_remapping);
     }
 
-    #[allow(dead_code)]
     pub(super) fn remove_added_multicenter_bond(&mut self, added: &AddedMulticenterBond) {
         self.remove_multicenter_bonds(&[added.id]);
     }
 
-    #[allow(dead_code)]
     pub(super) fn restore_multicenter_bond(
         &mut self,
         removed: RemovedMulticenterBond,
@@ -866,12 +835,10 @@ impl MoleculeBuilder {
         self.restore_multicenter_bonds(vec![removed], undo_remapping);
     }
 
-    #[allow(dead_code)]
     pub(super) fn remove_added_noncovalent_bond(&mut self, added: &AddedNoncovalentBond) {
         self.remove_noncovalent_bonds(&[added.id]);
     }
 
-    #[allow(dead_code)]
     pub(super) fn restore_noncovalent_bond(
         &mut self,
         removed: RemovedNoncovalentBond,
@@ -1117,7 +1084,8 @@ mod tests {
         };
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
-        let undo = relation_undo_remapping(vec![removed.id.0], Vec::new(), Vec::new(), Vec::new());
+        let undo = IdRemapping::relations(vec![removed.id.0], Vec::new(), Vec::new(), Vec::new())
+            .undo_remapping();
         b.restore_dative_bond(removed, &undo);
 
         assert_eq!(b.build(), expected);

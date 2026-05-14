@@ -32,6 +32,37 @@ pub struct UndoRemapping {
 }
 
 impl IdRemapping {
+    pub fn empty() -> Self {
+        Self::new(
+            Remapping {
+                removed_nodes: Vec::new(),
+                removed_edges: Vec::new(),
+            },
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        )
+    }
+
+    pub fn relations(
+        removed_dative_bonds: Vec<u32>,
+        removed_aromatic_systems: Vec<u32>,
+        removed_multicenter_bonds: Vec<u32>,
+        removed_noncovalent_bonds: Vec<u32>,
+    ) -> Self {
+        Self::new(
+            Remapping {
+                removed_nodes: Vec::new(),
+                removed_edges: Vec::new(),
+            },
+            removed_dative_bonds,
+            removed_aromatic_systems,
+            removed_multicenter_bonds,
+            removed_noncovalent_bonds,
+        )
+    }
+
     pub fn new(
         graph: Remapping,
         mut removed_dative_bonds: Vec<u32>,

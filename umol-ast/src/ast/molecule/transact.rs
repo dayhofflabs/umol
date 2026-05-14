@@ -1,4 +1,4 @@
-//! Transactional `Edit` application on `MoleculeBuilder` (Phase 8d).
+//! Transactional `Edit` application on `MoleculeBuilder`.
 //!
 //! `transact(edits)` applies each `Edit` in order, records realized `Undo`
 //! entries, and either returns a rollback-capable `Transaction` or reverse-
@@ -17,7 +17,7 @@ use super::super::edit::{
 use super::super::idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
-use super::super::remap::{IdRemapping, UndoRemapping};
+use super::super::remap::IdRemapping;
 use super::MoleculeBuilder;
 
 #[derive(Debug, Error, PartialEq, Eq, Clone)]
@@ -26,8 +26,7 @@ pub enum TransactionError {
     #[error("symbolic ref points past end of action list: New({0}) with {1} actions so far")]
     RefOutOfRange(usize, usize),
 
-    /// `Ref::New(N)` references an earlier edit, but that edit's Action is
-    /// the wrong shape (e.g., `AtomRef::New(N)` where edit N was `AddBond`).
+    /// `Ref::New(N)` references an earlier created entity with the wrong type.
     #[error("symbolic ref type mismatch: expected {expected}, got {got}")]
     RefTypeMismatch {
         expected: &'static str,
@@ -100,6 +99,19 @@ enum CreatedEntity {
     AromaticSystem(AromaticSystemId),
     MulticenterBond(MulticenterBondId),
     NoncovalentBond(NoncovalentBondId),
+}
+
+impl CreatedEntity {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Atom(_) => "Atom",
+            Self::Bond(_) => "Bond",
+            Self::DativeBond(_) => "DativeBond",
+            Self::AromaticSystem(_) => "AromaticSystem",
+            Self::MulticenterBond(_) => "MulticenterBond",
+            Self::NoncovalentBond(_) => "NoncovalentBond",
+        }
+    }
 }
 
 #[derive(Default)]
@@ -586,7 +598,7 @@ impl MoleculeBuilder {
                 let remapping = if !atoms.is_empty() || !bonds.is_empty() {
                     self.remove(&atoms, &bonds)
                 } else {
-                    empty_remapping()
+                    IdRemapping::empty()
                 };
                 let mut constraints = pre_constraints;
                 let constraint_update = constraints.remap_with_update(&remapping);
@@ -671,12 +683,13 @@ impl MoleculeBuilder {
                 self.remove_dative_bonds(&[id]);
                 Ok(Undo::RestoreRemovedDativeBond {
                     removed,
-                    undo_remapping: relation_undo_remapping(
+                    undo_remapping: IdRemapping::relations(
                         vec![id.0],
                         Vec::new(),
                         Vec::new(),
                         Vec::new(),
-                    ),
+                    )
+                    .undo_remapping(),
                 })
             }
             Edit::SetDativeBondField { idx, change } => {
@@ -732,12 +745,13 @@ impl MoleculeBuilder {
                 self.remove_aromatic_systems(&[id]);
                 Ok(Undo::RestoreRemovedAromaticSystem {
                     removed,
-                    undo_remapping: relation_undo_remapping(
+                    undo_remapping: IdRemapping::relations(
                         Vec::new(),
                         vec![id.0],
                         Vec::new(),
                         Vec::new(),
-                    ),
+                    )
+                    .undo_remapping(),
                 })
             }
             Edit::SetAromaticSystemField { idx, change } => {
@@ -793,12 +807,13 @@ impl MoleculeBuilder {
                 self.remove_multicenter_bonds(&[id]);
                 Ok(Undo::RestoreRemovedMulticenterBond {
                     removed,
-                    undo_remapping: relation_undo_remapping(
+                    undo_remapping: IdRemapping::relations(
                         Vec::new(),
                         Vec::new(),
                         vec![id.0],
                         Vec::new(),
-                    ),
+                    )
+                    .undo_remapping(),
                 })
             }
             Edit::SetMulticenterBondField { idx, change } => {
@@ -852,12 +867,13 @@ impl MoleculeBuilder {
                 self.remove_noncovalent_bonds(&[id]);
                 Ok(Undo::RestoreRemovedNoncovalentBond {
                     removed,
-                    undo_remapping: relation_undo_remapping(
+                    undo_remapping: IdRemapping::relations(
                         Vec::new(),
                         Vec::new(),
                         Vec::new(),
                         vec![id.0],
-                    ),
+                    )
+                    .undo_remapping(),
                 })
             }
             Edit::SetNoncovalentBondField { idx, change } => {
@@ -1538,7 +1554,7 @@ fn resolve_atom_ref(r: AtomRef, created: &CreatedEntities) -> Result<AtomId, Tra
             CreatedEntity::Atom(id) => Ok(id),
             other => Err(TransactionError::RefTypeMismatch {
                 expected: "Atom",
-                got: created_entity_name(other),
+                got: other.name(),
             }),
         },
     }
@@ -1551,7 +1567,7 @@ fn resolve_bond_ref(r: BondRef, created: &CreatedEntities) -> Result<BondId, Tra
             CreatedEntity::Bond(id) => Ok(id),
             other => Err(TransactionError::RefTypeMismatch {
                 expected: "Bond",
-                got: created_entity_name(other),
+                got: other.name(),
             }),
         },
     }
@@ -1567,7 +1583,7 @@ fn resolve_dative_bond_ref(
             CreatedEntity::DativeBond(id) => Ok(id),
             other => Err(TransactionError::RefTypeMismatch {
                 expected: "DativeBond",
-                got: created_entity_name(other),
+                got: other.name(),
             }),
         },
     }
@@ -1583,7 +1599,7 @@ fn resolve_aromatic_system_ref(
             CreatedEntity::AromaticSystem(id) => Ok(id),
             other => Err(TransactionError::RefTypeMismatch {
                 expected: "AromaticSystem",
-                got: created_entity_name(other),
+                got: other.name(),
             }),
         },
     }
@@ -1599,7 +1615,7 @@ fn resolve_multicenter_bond_ref(
             CreatedEntity::MulticenterBond(id) => Ok(id),
             other => Err(TransactionError::RefTypeMismatch {
                 expected: "MulticenterBond",
-                got: created_entity_name(other),
+                got: other.name(),
             }),
         },
     }
@@ -1615,20 +1631,9 @@ fn resolve_noncovalent_bond_ref(
             CreatedEntity::NoncovalentBond(id) => Ok(id),
             other => Err(TransactionError::RefTypeMismatch {
                 expected: "NoncovalentBond",
-                got: created_entity_name(other),
+                got: other.name(),
             }),
         },
-    }
-}
-
-fn created_entity_name(entity: CreatedEntity) -> &'static str {
-    match entity {
-        CreatedEntity::Atom(_) => "Atom",
-        CreatedEntity::Bond(_) => "Bond",
-        CreatedEntity::DativeBond(_) => "DativeBond",
-        CreatedEntity::AromaticSystem(_) => "AromaticSystem",
-        CreatedEntity::MulticenterBond(_) => "MulticenterBond",
-        CreatedEntity::NoncovalentBond(_) => "NoncovalentBond",
     }
 }
 
@@ -1700,38 +1705,6 @@ impl MoleculeBuilder {
         }
         Ok(())
     }
-}
-
-fn empty_remapping() -> IdRemapping {
-    IdRemapping::new(
-        umol_graph_core::Remapping {
-            removed_nodes: Vec::new(),
-            removed_edges: Vec::new(),
-        },
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    )
-}
-
-fn relation_undo_remapping(
-    removed_dative: Vec<u32>,
-    removed_aromatic: Vec<u32>,
-    removed_multicenter: Vec<u32>,
-    removed_noncovalent: Vec<u32>,
-) -> UndoRemapping {
-    IdRemapping::new(
-        umol_graph_core::Remapping {
-            removed_nodes: Vec::new(),
-            removed_edges: Vec::new(),
-        },
-        removed_dative,
-        removed_aromatic,
-        removed_multicenter,
-        removed_noncovalent,
-    )
-    .undo_remapping()
 }
 
 #[cfg(test)]
@@ -2522,24 +2495,48 @@ mod tests {
             b
         }
 
-        #[rstest]
-        fn test_transaction_rollback(mut triatomic_with_overlays: MoleculeBuilder) {
-            let before = triatomic_with_overlays.clone().build();
-            let tx = triatomic_with_overlays
-                .transact(vec![Edit::RemoveTopology {
-                    atoms: vec![AtomRef::Id(AtomId(1))],
-                    bonds: vec![],
-                }])
-                .unwrap();
-            tx.rollback(&mut triatomic_with_overlays).unwrap();
-            assert_eq!(triatomic_with_overlays.build(), before);
+        enum RollbackCase {
+            RemoveTopology,
+            AddTopology,
+            Field,
+            AddOverlay,
+            RemoveOverlay,
+            Constraint,
         }
 
         #[rstest]
-        fn test_transaction_rollback_add_topology(mut empty: MoleculeBuilder) {
-            let before = empty.clone().build();
-            let tx = empty
-                .transact(vec![
+        #[case::remove_topology(RollbackCase::RemoveTopology)]
+        #[case::add_topology(RollbackCase::AddTopology)]
+        #[case::field(RollbackCase::Field)]
+        #[case::add_overlay(RollbackCase::AddOverlay)]
+        #[case::remove_overlay(RollbackCase::RemoveOverlay)]
+        #[case::constraint(RollbackCase::Constraint)]
+        fn test_transaction_rollback(#[case] case: RollbackCase) {
+            let mut builder = match case {
+                RollbackCase::AddTopology => MoleculeAst::default().edit(),
+                RollbackCase::Field | RollbackCase::Constraint => {
+                    let mut b = MoleculeAst::default().edit();
+                    b.add_atom(AtomAst::from_element(Element::C));
+                    b
+                }
+                RollbackCase::AddOverlay => {
+                    let mut b = MoleculeAst::default().edit();
+                    b.add_atom(AtomAst::from_element(Element::C));
+                    b.add_atom(AtomAst::from_element(Element::C));
+                    b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
+                    b
+                }
+                RollbackCase::RemoveTopology | RollbackCase::RemoveOverlay => {
+                    triatomic_with_overlays()
+                }
+            };
+            let before = builder.clone().build();
+            let edits = match case {
+                RollbackCase::RemoveTopology => vec![Edit::RemoveTopology {
+                    atoms: vec![AtomRef::Id(AtomId(1))],
+                    bonds: vec![],
+                }],
+                RollbackCase::AddTopology => vec![
                     Edit::AddAtoms {
                         atoms: vec![
                             AtomAst::from_element(Element::C),
@@ -2547,52 +2544,19 @@ mod tests {
                         ],
                     },
                     Edit::add_bond(AtomRef::New(0), AtomRef::New(1), BondAst::from_order(2)),
-                ])
-                .unwrap();
-
-            tx.rollback(&mut empty).unwrap();
-
-            assert_eq!(empty.build(), before);
-        }
-
-        #[rstest]
-        fn test_transaction_rollback_field(mut one_atom: MoleculeBuilder) {
-            let before = one_atom.clone().build();
-            let tx = one_atom
-                .transact(vec![Edit::SetAtomField {
+                ],
+                RollbackCase::Field => vec![Edit::SetAtomField {
                     idx: AtomRef::Id(AtomId(0)),
                     change: AtomFieldChange::Charge {
                         old: ValueAst::default(),
                         new: ValueAst::Lit(1),
                     },
-                }])
-                .unwrap();
-
-            tx.rollback(&mut one_atom).unwrap();
-
-            assert_eq!(one_atom.build(), before);
-        }
-
-        #[rstest]
-        fn test_transaction_rollback_overlay(mut diatomic: MoleculeBuilder) {
-            let before = diatomic.clone().build();
-            let tx = diatomic
-                .transact(vec![Edit::AddDativeBond {
+                }],
+                RollbackCase::AddOverlay => vec![Edit::AddDativeBond {
                     atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
                     ast: DativeBondAst::from_order(1),
-                }])
-                .unwrap();
-
-            tx.rollback(&mut diatomic).unwrap();
-
-            assert_eq!(diatomic.build(), before);
-        }
-
-        #[rstest]
-        fn test_transaction_rollback_remove_overlay(mut triatomic_with_overlays: MoleculeBuilder) {
-            let before = triatomic_with_overlays.clone().build();
-            let tx = triatomic_with_overlays
-                .transact(vec![Edit::RemoveDativeBond {
+                }],
+                RollbackCase::RemoveOverlay => vec![Edit::RemoveDativeBond {
                     idx: DativeBondRef::Id(DativeBondId(0)),
                     atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
                     ast: DativeBondAst {
@@ -2600,27 +2564,15 @@ mod tests {
                         order: ValueAst::Lit(1),
                         constraints: Default::default(),
                     },
-                }])
-                .unwrap();
-
-            tx.rollback(&mut triatomic_with_overlays).unwrap();
-
-            assert_eq!(triatomic_with_overlays.build(), before);
-        }
-
-        #[rstest]
-        fn test_transaction_rollback_constraint(mut one_atom: MoleculeBuilder) {
-            let before = one_atom.clone().build();
-            let tx = one_atom
-                .transact(vec![Edit::AddAtomConstraint {
+                }],
+                RollbackCase::Constraint => vec![Edit::AddAtomConstraint {
                     idx: AtomRef::Id(AtomId(0)),
                     constraint: AtomConstraint::ring_size(5),
-                }])
-                .unwrap();
-
-            tx.rollback(&mut one_atom).unwrap();
-
-            assert_eq!(one_atom.build(), before);
+                }],
+            };
+            let tx = builder.transact(edits).unwrap();
+            tx.rollback(&mut builder).unwrap();
+            assert_eq!(builder.build(), before);
         }
 
         #[rstest]
