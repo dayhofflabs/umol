@@ -596,6 +596,7 @@ pub enum Undo {
         change: NoncovalentBondFieldChange,
     },
     ApplyConstraintUpdate(ConstraintUpdate),
+    ApplyEdit(Box<Edit>),
 }
 
 impl Undo {

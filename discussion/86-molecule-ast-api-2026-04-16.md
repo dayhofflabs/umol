@@ -1410,7 +1410,7 @@ Preferred implementation path:
 
 Do not snapshot the whole `Constraints` list as the normal path.
 
-##### Step 5a — Directional update/remap APIs
+##### Step 5a — Directional update/remap APIs **Done**
 
 Step 6 exposed two small refinements before the restore helpers become load-bearing transaction code:
 
@@ -1423,7 +1423,7 @@ Step 6 exposed two small refinements before the restore helpers become load-bear
 
 This step should happen before Step 6 is wired into `transact`, but it does not require expanding the caller-facing mutation vocabulary.
 
-##### Step 6 — Add private dense restore operations
+##### Step 6 — Add private dense restore operations **Done**
 
 Add private builder methods in `umol-ast/src/ast/molecule/builder.rs` or a private helper module:
 
@@ -1445,7 +1445,7 @@ Restoring topology rebuilds dense storage rather than inserting into vectors in 
 
 These helpers must be private. They are not mutation API.
 
-##### Step 7 — Implement checked apply
+##### Step 7 — Implement checked apply **Done**
 
 In `umol-ast/src/ast/molecule/transact.rs`, replace snapshot rollback with journaled apply:
 
