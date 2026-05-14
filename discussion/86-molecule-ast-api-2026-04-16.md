@@ -1529,7 +1529,7 @@ Document that these are non-transactional builder operations. Higher-level atomi
 
 Do not force all convenience methods through checked `transact` if doing so would allocate `Undo` for simple builder construction.
 
-##### Step 11 — Test gates
+##### Step 11 — Test gates **Done**
 
 Minimum focused tests for Phase 8 completion:
 
