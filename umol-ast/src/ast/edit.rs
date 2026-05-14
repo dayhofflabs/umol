@@ -19,6 +19,7 @@ use super::dative::DativeBondAst;
 use super::idx::{AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId};
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
+use super::remap::{IdRemapping, UndoRemapping};
 use super::spin::SpinStateAst;
 use super::value::ValueAst;
 
@@ -354,6 +355,180 @@ pub enum MulticenterBondRef {
 pub enum NoncovalentBondRef {
     Id(NoncovalentBondId),
     New(usize),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedAtom {
+    pub id: AtomId,
+    pub ast: AtomAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedBond {
+    pub id: BondId,
+    pub endpoints: [AtomId; 2],
+    pub ast: BondAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedAtom {
+    pub id: AtomId,
+    pub ast: AtomAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedBond {
+    pub id: BondId,
+    pub endpoints: [AtomId; 2],
+    pub ast: BondAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedDativeBond {
+    pub id: DativeBondId,
+    pub atoms: Vec<AtomId>,
+    pub ast: DativeBondAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedDativeBond {
+    pub id: DativeBondId,
+    pub atoms: Vec<AtomId>,
+    pub ast: DativeBondAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedAromaticSystem {
+    pub id: AromaticSystemId,
+    pub atoms: Vec<AtomId>,
+    pub ast: AromaticSystemAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedAromaticSystem {
+    pub id: AromaticSystemId,
+    pub atoms: Vec<AtomId>,
+    pub ast: AromaticSystemAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedMulticenterBond {
+    pub id: MulticenterBondId,
+    pub atoms: Vec<AtomId>,
+    pub ast: MulticenterBondAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedMulticenterBond {
+    pub id: MulticenterBondId,
+    pub atoms: Vec<AtomId>,
+    pub ast: MulticenterBondAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedNoncovalentBond {
+    pub id: NoncovalentBondId,
+    pub atoms: [AtomId; 2],
+    pub ast: NoncovalentBondAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedNoncovalentBond {
+    pub id: NoncovalentBondId,
+    pub atoms: [AtomId; 2],
+    pub ast: NoncovalentBondAst,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RemovedOverlays {
+    pub dative_bonds: Vec<RemovedDativeBond>,
+    pub aromatic_systems: Vec<RemovedAromaticSystem>,
+    pub multicenter_bonds: Vec<RemovedMulticenterBond>,
+    pub noncovalent_bonds: Vec<RemovedNoncovalentBond>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DroppedConstraint {
+    pub position: usize,
+    pub constraint: Constraint,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RewrittenConstraint {
+    pub position: usize,
+    pub old: Constraint,
+    pub new: Constraint,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ConstraintUpdate {
+    pub dropped: Vec<DroppedConstraint>,
+    pub rewritten: Vec<RewrittenConstraint>,
+}
+
+impl ConstraintUpdate {
+    pub fn is_empty(&self) -> bool {
+        self.dropped.is_empty() && self.rewritten.is_empty()
+    }
+}
+
+/// Realized rollback operation produced by the checked transaction path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Undo {
+    RemoveAddedTopology {
+        atoms: Vec<AddedAtom>,
+        bonds: Vec<AddedBond>,
+    },
+    RestoreTopology {
+        atoms: Vec<RemovedAtom>,
+        bonds: Vec<RemovedBond>,
+        overlays: RemovedOverlays,
+        remapping: IdRemapping,
+        undo_remapping: UndoRemapping,
+        constraint_update: ConstraintUpdate,
+    },
+    RemoveAddedDativeBond(AddedDativeBond),
+    RestoreRemovedDativeBond(RemovedDativeBond),
+    RemoveAddedAromaticSystem(AddedAromaticSystem),
+    RestoreRemovedAromaticSystem(RemovedAromaticSystem),
+    RemoveAddedMulticenterBond(AddedMulticenterBond),
+    RestoreRemovedMulticenterBond(RemovedMulticenterBond),
+    RemoveAddedNoncovalentBond(AddedNoncovalentBond),
+    RestoreRemovedNoncovalentBond(RemovedNoncovalentBond),
+    SetAtomField {
+        id: AtomId,
+        change: AtomFieldChange,
+    },
+    SetBondField {
+        id: BondId,
+        change: BondFieldChange,
+    },
+    SetDativeBondField {
+        id: DativeBondId,
+        change: DativeBondFieldChange,
+    },
+    SetAromaticSystemField {
+        id: AromaticSystemId,
+        change: AromaticSystemFieldChange,
+    },
+    SetMulticenterBondField {
+        id: MulticenterBondId,
+        change: MulticenterBondFieldChange,
+    },
+    SetNoncovalentBondField {
+        id: NoncovalentBondId,
+        change: NoncovalentBondFieldChange,
+    },
+    ApplyConstraintUpdate(ConstraintUpdate),
+}
+
+impl Undo {
+    pub fn id_remapping(&self) -> Option<&IdRemapping> {
+        match self {
+            Self::RestoreTopology { remapping, .. } => Some(remapping),
+            _ => None,
+        }
+    }
 }
 
 /// Result of applying one `Edit` inside `transact`. Superseded by the planned

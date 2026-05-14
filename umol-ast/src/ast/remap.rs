@@ -23,6 +23,14 @@ pub struct IdRemapping {
     removed_noncovalent_bonds: Vec<u32>,
 }
 
+/// Inverse view of an [`IdRemapping`] for rollback. Translates surviving
+/// post-removal ids back into the pre-removal coordinate system; removed ids
+/// are restored from the explicit `Undo` payloads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UndoRemapping {
+    forward: IdRemapping,
+}
+
 impl IdRemapping {
     pub fn new(
         graph: Remapping,
@@ -67,6 +75,42 @@ impl IdRemapping {
     pub fn graph(&self) -> &Remapping {
         &self.graph
     }
+
+    pub fn undo_remapping(&self) -> UndoRemapping {
+        UndoRemapping {
+            forward: self.clone(),
+        }
+    }
+}
+
+impl UndoRemapping {
+    pub fn forward(&self) -> &IdRemapping {
+        &self.forward
+    }
+
+    pub fn atom(&self, idx: AtomId) -> AtomId {
+        AtomId(unmap_dense(&self.forward.graph.removed_nodes, idx.0))
+    }
+
+    pub fn bond(&self, idx: BondId) -> BondId {
+        BondId(unmap_dense(&self.forward.graph.removed_edges, idx.0))
+    }
+
+    pub fn dative_bond(&self, idx: DativeBondId) -> DativeBondId {
+        DativeBondId(unmap_dense(&self.forward.removed_dative_bonds, idx.0))
+    }
+
+    pub fn aromatic_system(&self, idx: AromaticSystemId) -> AromaticSystemId {
+        AromaticSystemId(unmap_dense(&self.forward.removed_aromatic_systems, idx.0))
+    }
+
+    pub fn multicenter_bond(&self, idx: MulticenterBondId) -> MulticenterBondId {
+        MulticenterBondId(unmap_dense(&self.forward.removed_multicenter_bonds, idx.0))
+    }
+
+    pub fn noncovalent_bond(&self, idx: NoncovalentBondId) -> NoncovalentBondId {
+        NoncovalentBondId(unmap_dense(&self.forward.removed_noncovalent_bonds, idx.0))
+    }
 }
 
 fn remap_relation(removed: &[u32], old: u32) -> Option<u32> {
@@ -75,4 +119,15 @@ fn remap_relation(removed: &[u32], old: u32) -> Option<u32> {
     }
     let shift = removed.partition_point(|&r| r < old);
     Some(old - shift as u32)
+}
+
+fn unmap_dense(removed: &[u32], post: u32) -> u32 {
+    let mut old = post;
+    loop {
+        let next = post + removed.partition_point(|&r| r <= old) as u32;
+        if next == old {
+            return old;
+        }
+        old = next;
+    }
 }

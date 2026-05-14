@@ -1282,7 +1282,7 @@ Largest single phase; 8a-c are implemented from the first pass, but 8d+ are revi
 
 Implementation order is load-bearing. Land the data model and pure remapping helpers before touching transaction application; then add the checked path; then add the no-journal unchecked path.
 
-##### Step 1 — Preserve first-pass coverage before rewrite
+##### Step 1 — Preserve first-pass coverage before rewrite **Done**
 
 - Keep the existing 8a-c tests as migration scaffolding while changing types.
 - Add failing tests that describe the new contract before replacing the old snapshot transaction:
@@ -1291,7 +1291,7 @@ Implementation order is load-bearing. Land the data model and pure remapping hel
   - `transact_unchecked` applies a valid generated edit stream without returning a `Transaction`
 - Do not add compatibility shims for the old `Action` API; Phase 8 is not a shipped public surface.
 
-##### Step 2 — Revise `Edit` in `umol-ast/src/ast/edit.rs`
+##### Step 2 — Revise `Edit` in `umol-ast/src/ast/edit.rs` **Done**
 
 - Replace topology single variants with bulk primitives:
   - `AddAtoms { atoms: Vec<AtomAst> }`
@@ -1310,7 +1310,7 @@ Implementation order is load-bearing. Land the data model and pure remapping hel
 - Add constructors for single-item ergonomics, e.g. `Edit::add_atom(ast)`, `Edit::add_bond(a, b, ast)`, `Edit::remove_atom(idx)`, `Edit::remove_bond(idx)`, all producing bulk topology variants.
 - Preserve `AtomRef`, `BondRef`, and overlay refs; `New(usize)` indexes the created-entity table, not the undo vector.
 
-##### Step 3 — Add transaction and undo data types
+##### Step 3 — Add transaction and undo data types **Done**
 
 Add the new public transaction surface:
 

@@ -11,7 +11,8 @@ use thiserror::Error;
 use super::super::edit::{
     Action, AddBond, AromaticSystemFieldChange, AromaticSystemRef, AtomFieldChange, AtomRef,
     BondFieldChange, BondRef, DativeBondFieldChange, DativeBondRef, Edit,
-    MulticenterBondFieldChange, MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef,
+    MulticenterBondFieldChange, MulticenterBondRef, NoncovalentBondFieldChange,
+    NoncovalentBondRef, Undo,
 };
 use super::super::idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -60,6 +61,22 @@ pub enum TransactionError {
     /// participants).
     #[error("malformed edit: {0}")]
     MalformedEdit(&'static str),
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Transaction {
+    undo: Vec<Undo>,
+}
+
+impl Transaction {
+    pub fn new(undo: Vec<Undo>) -> Self {
+        Self { undo }
+    }
+
+    pub fn undos(&self) -> &[Undo] {
+        &self.undo
+    }
+
 }
 
 impl MoleculeBuilder {

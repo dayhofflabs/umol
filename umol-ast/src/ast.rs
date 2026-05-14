@@ -36,10 +36,13 @@ pub use constraint::{
 };
 pub use dative::DativeBondAst;
 pub use edit::{
-    Action, AromaticSystemFieldChange, AromaticSystemRef, AtomFieldChange, AtomRef,
-    BondFieldChange, BondRef, DativeBondFieldChange, DativeBondRef, Edit,
-    MulticenterBondFieldChange, MulticenterBondRef, NoncovalentBondFieldChange,
-    NoncovalentBondRef,
+    Action, AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond,
+    AddedMulticenterBond, AddedNoncovalentBond, AromaticSystemFieldChange, AromaticSystemRef,
+    AtomFieldChange, AtomRef, BondFieldChange, BondRef, ConstraintUpdate,
+    DativeBondFieldChange, DativeBondRef, DroppedConstraint, Edit, MulticenterBondFieldChange,
+    MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem,
+    RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
+    RemovedOverlays, RewrittenConstraint, Undo,
 };
 pub use error::{EvaluationError, RewriteError};
 pub use idx::{
@@ -47,11 +50,11 @@ pub use idx::{
 };
 pub use matching::BondMatching;
 pub use molecule::{MoleculeAst, MoleculeBuilder};
-pub use molecule::transact::TransactionError;
+pub use molecule::transact::{Transaction, TransactionError};
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use reaction::{Assignment, ReactionRuleAst};
-pub use remap::IdRemapping;
+pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use subgraph::MoleculeSubgraph;
