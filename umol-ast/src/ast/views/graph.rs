@@ -3,8 +3,8 @@
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     CycleEnumerationAlgorithm, EdgeId, Graph, MatchingEnumerationAlgorithm,
-    MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
-    SubgraphIsomorphismAlgorithm,
+    MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, PerfectMatchingAlgorithm,
+    ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
 use super::super::automorphism::AtomAutomorphism;
@@ -98,6 +98,17 @@ impl<'a> GraphView<'a> {
 
     pub fn maximum_matching(&self, alg: MaxMatchingAlgorithm) -> BondMatching {
         BondMatching(self.graph.maximum_matching(alg))
+    }
+
+    pub fn perfect_matching_in(
+        &self,
+        atoms: &[AtomId],
+        alg: PerfectMatchingAlgorithm,
+    ) -> Option<BondMatching> {
+        let nodes: Vec<NodeId> = atoms.iter().copied().map(NodeId::from).collect();
+        self.graph
+            .perfect_matching_in(&nodes, alg)
+            .map(BondMatching)
     }
 
     pub fn enumerate_perfect_matchings(

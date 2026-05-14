@@ -11,13 +11,13 @@
 //! construction time and is the caller's responsibility (e.g., from a
 //! nauty/Traces canonical labeling).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemId, AtomConstraintKind, AtomId, BondConstraintKind, BondId, MoleculeAst, ValueAst,
 };
-use umol_graph_core::{EdgeId, Graph, NodeId, PerfectMatchingAlgorithm};
+use umol_graph_core::PerfectMatchingAlgorithm;
 
 use crate::ops::transformer::Transformer;
 
@@ -121,44 +121,25 @@ impl Kekulizer {
             let system_idx = view.id;
             let atoms: Vec<AtomId> = view.atom_ids().collect();
             let bonds: Vec<BondId> = view.bond_ids().collect();
+            let system_atoms: HashSet<AtomId> = atoms.iter().copied().collect();
 
-            let atom_to_node: HashMap<AtomId, u32> = atoms
-                .iter()
-                .enumerate()
-                .map(|(i, &a)| (a, i as u32))
-                .collect();
-            let local_edges: Vec<[u32; 2]> = bonds
-                .iter()
-                .map(|&bid| {
-                    let bond = ast.bond(bid);
-                    [
-                        atom_to_node[&bond.atom_ids()[0]],
-                        atom_to_node[&bond.atom_ids()[1]],
-                    ]
-                })
-                .collect();
-            let subgraph = Graph::new(atoms.len(), &local_edges);
-
-            let local_order: Vec<NodeId> = self
+            let system_order: Vec<AtomId> = self
                 .node_order
                 .iter()
-                .filter_map(|aidx| atom_to_node.get(aidx).map(|&n| NodeId(n)))
+                .copied()
+                .filter(|a| system_atoms.contains(a))
                 .collect();
 
-            let matching = subgraph
-                .perfect_matching(&local_order, self.model.algorithm)
-                .ok_or(KekulizerError::NoMatching(system_idx))?;
-
-            let matched_local: HashSet<EdgeId> = matching.edges().iter().copied().collect();
-            let mut matched_bonds = Vec::new();
-            let mut unmatched_bonds = Vec::new();
-            for (i, &bid) in bonds.iter().enumerate() {
-                if matched_local.contains(&EdgeId(i as u32)) {
-                    matched_bonds.push(bid);
-                } else {
-                    unmatched_bonds.push(bid);
-                }
-            }
+            let matched: HashSet<BondId> = ast
+                .graph()
+                .perfect_matching_in(&system_order, self.model.algorithm)
+                .ok_or(KekulizerError::NoMatching(system_idx))?
+                .bonds()
+                .collect();
+            let (matched_bonds, unmatched_bonds): (Vec<BondId>, Vec<BondId>) = bonds
+                .iter()
+                .copied()
+                .partition(|b| matched.contains(b));
 
             plans.push(SystemPlan {
                 system_idx,
