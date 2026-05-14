@@ -2161,6 +2161,94 @@ mod tests {
         }
 
         #[rstest]
+        fn test_transaction_rollback_add_topology(mut empty: MoleculeBuilder) {
+            let before = empty.clone().build();
+            let tx = empty
+                .transact(vec![
+                    Edit::AddAtoms {
+                        atoms: vec![
+                            AtomAst::from_element(Element::C),
+                            AtomAst::from_element(Element::O),
+                        ],
+                    },
+                    Edit::add_bond(AtomRef::New(0), AtomRef::New(1), BondAst::from_order(2)),
+                ])
+                .unwrap();
+
+            tx.rollback(&mut empty).unwrap();
+
+            assert_eq!(empty.build(), before);
+        }
+
+        #[rstest]
+        fn test_transaction_rollback_field(mut one_atom: MoleculeBuilder) {
+            let before = one_atom.clone().build();
+            let tx = one_atom
+                .transact(vec![Edit::SetAtomField {
+                    idx: AtomRef::Id(AtomId(0)),
+                    change: AtomFieldChange::Charge {
+                        old: ValueAst::default(),
+                        new: ValueAst::Lit(1),
+                    },
+                }])
+                .unwrap();
+
+            tx.rollback(&mut one_atom).unwrap();
+
+            assert_eq!(one_atom.build(), before);
+        }
+
+        #[rstest]
+        fn test_transaction_rollback_overlay(mut diatomic: MoleculeBuilder) {
+            let before = diatomic.clone().build();
+            let tx = diatomic
+                .transact(vec![Edit::AddDativeBond {
+                    atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    ast: DativeBondAst::from_order(1),
+                }])
+                .unwrap();
+
+            tx.rollback(&mut diatomic).unwrap();
+
+            assert_eq!(diatomic.build(), before);
+        }
+
+        #[rstest]
+        fn test_transaction_rollback_remove_overlay(mut triatomic_with_overlays: MoleculeBuilder) {
+            let before = triatomic_with_overlays.clone().build();
+            let tx = triatomic_with_overlays
+                .transact(vec![Edit::RemoveDativeBond {
+                    idx: DativeBondRef::Id(DativeBondId(0)),
+                    atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
+                    ast: DativeBondAst {
+                        acceptor_slot: 1,
+                        order: ValueAst::Lit(1),
+                        constraints: Default::default(),
+                    },
+                }])
+                .unwrap();
+
+            tx.rollback(&mut triatomic_with_overlays).unwrap();
+
+            assert_eq!(triatomic_with_overlays.build(), before);
+        }
+
+        #[rstest]
+        fn test_transaction_rollback_constraint(mut one_atom: MoleculeBuilder) {
+            let before = one_atom.clone().build();
+            let tx = one_atom
+                .transact(vec![Edit::AddAtomConstraint {
+                    idx: AtomRef::Id(AtomId(0)),
+                    constraint: AtomConstraint::ring_size(5),
+                }])
+                .unwrap();
+
+            tx.rollback(&mut one_atom).unwrap();
+
+            assert_eq!(one_atom.build(), before);
+        }
+
+        #[rstest]
         fn test_transaction_rollback_cascaded_overlays(
             mut triatomic_with_overlays: MoleculeBuilder,
         ) {

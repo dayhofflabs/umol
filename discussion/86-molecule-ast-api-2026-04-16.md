@@ -1487,7 +1487,7 @@ Journaled apply rules:
 
 `CreatedEntities` records realized ids for every created entity in edit order. It is separate from `Vec<Undo>` so future undo merging does not break `Ref::New`.
 
-##### Step 8 — Implement rollback
+##### Step 8 — Implement rollback **Done**
 
 `Transaction::rollback(self, builder)` reverse-iterates `undo`.
 
