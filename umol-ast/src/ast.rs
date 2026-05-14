@@ -17,7 +17,7 @@ pub(crate) mod reaction;
 pub(crate) mod remap;
 pub(crate) mod rings;
 pub(crate) mod spin;
-pub(crate) mod subgraph;
+pub(crate) mod embedding;
 pub(crate) mod traits;
 pub(crate) mod value;
 pub(crate) mod views;
@@ -57,7 +57,7 @@ pub use reaction::{Assignment, ReactionRuleAst};
 pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
-pub use subgraph::MoleculeSubgraph;
+pub use embedding::Embedding;
 pub use traits::{FromAst, IntoAst, TryFromAst, TryIntoAst};
 pub use value::{ArithOp, Bindings, Expr, RelOp, ValueAst};
 pub use views::{

@@ -19,7 +19,7 @@ use super::idx::{
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::rings::{RingFamily, RingSet};
-use super::subgraph::MoleculeSubgraph;
+use super::embedding::Embedding;
 use super::views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, GraphView, MulticenterBondView,
@@ -298,7 +298,7 @@ impl MoleculeAst {
         self.noncovalent_bonds().get(idx)
     }
 
-    pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeSubgraph {
+    pub fn induced_subgraph(&self, atoms: &[AtomId]) -> Embedding {
         let keep: HashSet<AtomId> = atoms.iter().copied().collect();
         let remove_atoms: Vec<AtomId> = (0..self.atoms().count())
             .map(AtomId::from)
@@ -339,7 +339,7 @@ impl MoleculeAst {
             .filter(|&n| remap.noncovalent_bond(n).is_some())
             .collect();
 
-        MoleculeSubgraph {
+        Embedding::new(
             ast,
             atom_map,
             bond_map,
@@ -347,7 +347,7 @@ impl MoleculeAst {
             aromatic_system_map,
             multicenter_bond_map,
             noncovalent_bond_map,
-        }
+        )
     }
 
     pub fn is_ground(&self) -> bool {

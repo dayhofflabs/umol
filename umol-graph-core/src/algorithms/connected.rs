@@ -14,6 +14,19 @@ impl Graph {
         }
     }
 
+    /// Connected components restricted to `nodes`. Edges to nodes outside
+    /// `nodes` are ignored. Component discovery order follows `nodes`; within
+    /// each component, node ids are sorted.
+    pub fn connected_components_in(
+        &self,
+        nodes: &[NodeId],
+        alg: ConnectedComponentsAlgorithm,
+    ) -> Vec<Vec<NodeId>> {
+        match alg {
+            ConnectedComponentsAlgorithm::Bfs => self.connected_components_in_bfs(nodes),
+        }
+    }
+
     // BFS flood fill. O(V+E).
     fn connected_components_bfs(&self) -> Vec<Vec<NodeId>> {
         let mut visited = vec![false; self.node_bound()];
@@ -31,6 +44,39 @@ impl Graph {
                 component.push(current);
                 for neighbor in self.neighbors(current) {
                     if !visited[neighbor.node.index()] {
+                        visited[neighbor.node.index()] = true;
+                        stack.push(neighbor.node);
+                    }
+                }
+            }
+
+            component.sort_unstable();
+            components.push(component);
+        }
+
+        components
+    }
+
+    fn connected_components_in_bfs(&self, nodes: &[NodeId]) -> Vec<Vec<NodeId>> {
+        let mut in_subset = vec![false; self.node_bound()];
+        for &node in nodes {
+            in_subset[node.index()] = true;
+        }
+        let mut visited = vec![false; self.node_bound()];
+        let mut components = Vec::new();
+
+        for &node in nodes {
+            if visited[node.index()] {
+                continue;
+            }
+            let mut component = Vec::new();
+            let mut stack = vec![node];
+            visited[node.index()] = true;
+
+            while let Some(current) = stack.pop() {
+                component.push(current);
+                for neighbor in self.neighbors(current) {
+                    if in_subset[neighbor.node.index()] && !visited[neighbor.node.index()] {
                         visited[neighbor.node.index()] = true;
                         stack.push(neighbor.node);
                     }
@@ -70,5 +116,41 @@ mod tests {
     ) {
         let g = Graph::new(node_count, &edges);
         assert_eq!(g.connected_components(Bfs), expected);
+    }
+
+    #[rstest]
+    #[case::empty_subset(4, vec![[0, 1], [2, 3]], vec![], vec![])]
+    #[case::full_subset(
+        4,
+        vec![[0, 1], [2, 3]],
+        vec![n(0), n(1), n(2), n(3)],
+        vec![vec![n(0), n(1)], vec![n(2), n(3)]]
+    )]
+    #[case::split_path_by_excluding_middle(
+        4,
+        vec![[0, 1], [1, 2], [2, 3]],
+        vec![n(0), n(1), n(3)],
+        vec![vec![n(0), n(1)], vec![n(3)]]
+    )]
+    #[case::single_component_of_two(
+        4,
+        vec![[0, 1], [2, 3]],
+        vec![n(2), n(3)],
+        vec![vec![n(2), n(3)]]
+    )]
+    #[case::isolated_subset_of_triangle(
+        3,
+        vec![[0, 1], [1, 2], [0, 2]],
+        vec![n(0), n(2)],
+        vec![vec![n(0), n(2)]]
+    )]
+    fn test_graph_connected_components_in(
+        #[case] node_count: usize,
+        #[case] edges: Vec<[u32; 2]>,
+        #[case] subset: Vec<NodeId>,
+        #[case] expected: Vec<Vec<NodeId>>,
+    ) {
+        let g = Graph::new(node_count, &edges);
+        assert_eq!(g.connected_components_in(&subset, Bfs), expected);
     }
 }

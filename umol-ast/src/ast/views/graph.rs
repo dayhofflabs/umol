@@ -37,6 +37,19 @@ impl<'a> GraphView<'a> {
             .collect()
     }
 
+    pub fn connected_components_in(
+        &self,
+        atoms: &[AtomId],
+        alg: ConnectedComponentsAlgorithm,
+    ) -> Vec<Vec<AtomId>> {
+        let nodes: Vec<NodeId> = atoms.iter().copied().map(NodeId::from).collect();
+        self.graph
+            .connected_components_in(&nodes, alg)
+            .into_iter()
+            .map(|c| c.into_iter().map(AtomId::from).collect())
+            .collect()
+    }
+
     pub fn biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
         self.graph
             .biconnected_components(alg)

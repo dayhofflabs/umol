@@ -715,8 +715,8 @@ Pairwise ring-vs-ring and molecule-level entries:
 |---|---|---|---|---|
 | `RingSet::relation`, `are_spiro/fused/bridged`, `*_neighbors`, `fused_component(s)`, `shared_atoms`, `shared_bonds` | **Impl** | **none** (procedural-only by design) | — | aromaticity-perception internal; no SMARTS analog — see §"Procedural vs declarative split" |
 | Total charge / spin | **Designed (constraint propagator stubs)** | `TotalCharge`, `TotalSpin` | `ValueAst` / `SpinStateAst` | propagators stubbed in `ConstraintValidator` per §"Outstanding" |
-| `mol.connecting_bond(a: AtomId, b: AtomId) -> Option<BondView<'_>>` | **Open** | — | `Option<BondView>` | atoms-in, bond-out; renamed from `bond_between` for modifier-entity consistency. `_id` companion: `mol.connecting_bond_id(a, b) -> Option<BondId>` |
-| `mol.induced_bonds(atoms: &[AtomId]) -> impl Iterator<Item = BondView<'_>>` | **Impl (return-type pending)** | — | `Iterator<BondView>` | both endpoints in subset; currently returns `Vec<BondId>`, migrating to views per P1. `_ids` companion: `mol.induced_bond_ids(atoms) -> Vec<BondId>` |
+| `bonds().connecting(a: AtomId, b: AtomId) -> Option<BondView<'_>>` | **Impl** | — | `Option<BondView>` | atoms-in, bond-out; lives on `BondViews`, not `MoleculeAst`. `_id` companion: `bonds().connecting_id(a, b) -> Option<BondId>` |
+| `bonds().induced(atoms: &[AtomId]) -> Vec<BondView<'_>>` | **Impl** | — | `Vec<BondView>` | both endpoints in subset; lives on `BondViews`. `_ids` companion: `bonds().induced_ids(atoms) -> Vec<BondId>` |
 
 ##### Comparison idiom
 
@@ -988,8 +988,8 @@ The convenience wrapper for this pattern (a single method that takes an overlay-
 
 | Operation | State | Notes |
 |---|---|---|
-| `induced_subgraph(&[AtomId]) -> (MoleculeAst, Vec<Edit>)` | **Designed** (doc 90) | not impl; the `MoleculeAst` is the extracted subgraph as a standalone molecule; the `Vec<Edit>` describes side effects relative to the parent (overlay drops, etc.) per the Edit-language convention. Naturally consumed by callers who want to log / replay / invert the extraction |
-| `induced_bonds(&[AtomId]) -> impl Iterator<Item = BondView<'_>>` | **Impl (return-type pending)** | lighter alternative when only the bond list is needed; used by `AromaticSystemView` and `ops/transformer/kekulizer.rs`. Returns views per P1; `_ids` companion `induced_bond_ids(atoms) -> Vec<BondId>` for raw-index access |
+| `induced_subgraph(&[AtomId]) -> Embedding` | **Impl** | `Embedding` carries the extracted `MoleculeAst` plus per-entity-type new→old maps. `embedding.ast()` / `into_ast()` for the standalone sub-AST; `embedding.edits(parent)` derives the `Vec<Edit>` (a single `RemoveTopology` over the complement). The same type will be produced by subgraph isomorphism matching when that lands |
+| `bonds().induced(&[AtomId]) -> Vec<BondView<'_>>` | **Impl** | on `BondViews`; lighter alternative when only the bond list is needed; used by `AromaticSystemView` and `ops/transformer/kekulizer.rs`. `_ids` companion `bonds().induced_ids(atoms) -> Vec<BondId>` for raw-index access |
 | Dense atom-ordering projection (atom → 0..n_subset map) | **Open** | hand-rolled `HashMap<AtomId, usize>` in matrix-building code (`hmo.rs:157`); decision needed: returned from `induced_subgraph` or separate primitive |
 
 #### Index-space conversions
@@ -997,7 +997,7 @@ The convenience wrapper for this pattern (a single method that takes an overlay-
 | Operation | State | Notes |
 |---|---|---|
 | `IdRemapping` (returned by `MoleculeBuilder::remove`) | **Impl** | old → new for all six relation kinds |
-| Subgraph remapping (returned by `induced_subgraph`) | **Designed** (shape unsettled — see doc 90) | should it return `MoleculeSubgraph` carrying both directions or `(MoleculeAst, IdRemapping)`? Open |
+| Subgraph remapping (returned by `induced_subgraph`) | **Impl** | `Embedding` carries new→old maps for all six entity kinds; same type intended for future subgraph isomorphism results |
 | Constraint remapping under structural edit | **Impl** | piggy-backs on `IdRemapping` |
 
 #### Pattern-vs-ground scope per operation
@@ -1047,8 +1047,8 @@ Operations the AST does not surface; they live on higher tiers (`Molecule`) or i
 The Open rows above represent real recurring needs from the ops survey or doc 90 that have not been designed. Concretely, before the next round of MoleculeAst API work:
 
 1. **Cross-entity reverse navigation** (atom → containing relations) — recurring scan in valence and aromaticity ops; modest design.
-2. **`bond_between(a, b)`**, **`connected_components()`**, **`induced_bonds(&[AtomId])`** — adjacency-convenience the ops repeatedly hand-rolls.
-3. **`induced_subgraph` shape** — designed in doc 90; impl + return type (`MoleculeSubgraph` vs. `(MoleculeAst, IdRemapping)`) unsettled.
+2. **Adjacency-convenience** — `bonds().connecting(a, b)` and `bonds().induced(atoms)` settled and impl on `BondViews`; `GraphView::connected_components(alg)` impl; `connected_components_in(atoms)` pending.
+3. **`induced_subgraph` shape** — settled as `Embedding`; impl on `MoleculeAst`.
 4. **Internal relation mutators** — settled. Express as a `Remove*` + `Add*` Edit pair inside a transaction; no dedicated in-place API. See §"Internal relation mutators".
 5. **Cascade behavior of topology removal** — settled as R3 (cascade-and-record). `RemoveTopology` drops invalid overlays; realized `Undo` records the dropped overlay payloads, remaps, and constraint updates needed for rollback. `atom_view.is_in_overlays()` umbrella predicate to land at the same time.
 6. **`ring_count_at`** + `RingCount(ValueAst)` constraint — designed, not impl.
@@ -1259,22 +1259,22 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 
 **Completion**: ring access tests pass; cache behavior verified single-slot. **Dependencies**: phases 1, 4. **Risk**: low. **Done**
 
-### Phase 8 — Edit vocabulary + transaction primitive
+### Phase 8 — Edit vocabulary + transaction primitive **Done**
 
 Largest single phase; 8a-c are implemented from the first pass, but 8d+ are revised by §"Mutation API revision: undo-journal transactions".
 
 - **8a** `Edit` enum core variants (Add/Remove for atoms and bonds; SetAtomField for common fields) **Done**
 - **8b** `Action` enum + `*Ref` enums (AtomRef, BondRef, four overlay refs) **Done**; `Action` is superseded by `Undo` in 8e.
 - **8c** `*FieldChange` enums for each entity kind **Done**
-- **8d** Revise `Edit` around bulk topology primitives: `AddAtoms`, `AddBonds`, `RemoveTopology`; keep single topology helpers as sugar; keep overlay edits single-item for now.
-- **8e** Replace `Action` with `Undo`; add `Transaction`, `UndoRemapping`, `ConstraintUpdate`, and removed-entity payload structs.
-- **8f** Add private dense restore machinery on `MoleculeBuilder` for rollback: restore-at-old-id topology, restore overlay relations, inverse-remap constraints, and apply `ConstraintUpdate`.
-- **8g** Implement checked `MoleculeBuilder::transact(Vec<Edit>) -> Result<Transaction, TransactionError>` with realized undo journaling and reverse-replay rollback on failure.
-- **8h** Implement non-journaled `MoleculeBuilder::transact_unchecked(Vec<Edit>) -> ()` as a separate direct-apply path; panic on invalid generated edits; do not construct `Undo`.
-- **8i** Integrate topology cascade: `RemoveTopology` removes incident bonds and overlays as needed; realized `Undo` records cascades rather than reporting `Action::Cascaded`.
-- **8j** Expose per-undo `IdRemapping` for downstream consumers holding ids; defer aggregate remapping and undo-entry merging.
-- **8k** Existing convenience methods (`add_atom`, `add_bond`, `remove`, relation mutators) remain low-level builder primitives or are reimplemented as sugar over the appropriate checked/unchecked edit paths where atomicity is required.
-- **8l** Test rollback invariant across dense non-tail removals, DPO-style bulk edits, cascaded overlay removal, constraint updates, `Ref::New` resolution, and unchecked panic behavior.
+- **8d** Revise `Edit` around bulk topology primitives: `AddAtoms`, `AddBonds`, `RemoveTopology`; keep single topology helpers as sugar; keep overlay edits single-item for now. **Done**
+- **8e** Replace `Action` with `Undo`; add `Transaction`, `UndoRemapping`, `ConstraintUpdate`, and removed-entity payload structs. **Done**
+- **8f** Add private dense restore machinery on `MoleculeBuilder` for rollback: restore-at-old-id topology, restore overlay relations, inverse-remap constraints, and apply `ConstraintUpdate`. **Done**
+- **8g** Implement checked `MoleculeBuilder::transact(Vec<Edit>) -> Result<Transaction, TransactionError>` with realized undo journaling and reverse-replay rollback on failure. **Done**
+- **8h** Implement non-journaled `MoleculeBuilder::transact_unchecked(Vec<Edit>) -> ()` as a separate direct-apply path; panic on invalid generated edits; do not construct `Undo`. **Done**
+- **8i** Integrate topology cascade: `RemoveTopology` removes incident bonds and overlays as needed; realized `Undo` records cascades rather than reporting `Action::Cascaded`. **Done**
+- **8j** Expose per-undo `IdRemapping` for downstream consumers holding ids; defer aggregate remapping and undo-entry merging. **Done**
+- **8k** Existing convenience methods (`add_atom`, `add_bond`, `remove`, relation mutators) remain low-level builder primitives or are reimplemented as sugar over the appropriate checked/unchecked edit paths where atomicity is required. **Done**
+- **8l** Test rollback invariant across dense non-tail removals, DPO-style bulk edits, cascaded overlay removal, constraint updates, `Ref::New` resolution, and unchecked panic behavior. **Done**; proptests behind the `proptest` feature gate cover randomized transaction cases.
 
 **Completion**: full Edit/Undo vocab covered; checked transaction tests prove atomicity without snapshots; unchecked path avoids undo allocation; DPO-style bulk add/remove works. **Dependencies**: phases 1–7 for data structures. **Risk**: high (dense restore correctness, constraint patching, cascade behavior).
 
@@ -1553,28 +1553,28 @@ Property-style tests can come after the focused cases:
 - generate small molecules, remove arbitrary atom/bond subsets through checked `transact`, then rollback and assert exact equality
 - compare checked `transact` and `transact_unchecked` final states for known-valid edit batches
 
-##### Step 12 — Migration cleanup
+##### Step 12 — Migration cleanup **Done**
 
 - Remove `Action` once all tests and call sites are migrated to `Undo`.
 - Remove old `Edit::inverse` tests.
 - Update doc examples and discussion references from `Action::Cascaded` to `Undo::RestoreTopology`.
 - Run `cargo test -p umol-ast --tests`; then `cargo test --workspace --tests` after downstream call sites are migrated.
 
-### Phase 9 — Mutation API completion
+### Phase 9 — Mutation API completion **Done**
 
-- `MoleculeBuilder::atom_mut(id) -> AtomViewMut` etc. for all entity kinds (DPO Phase-2)
-- `MoleculeBuilder::remove_*` overlay-mutators wired in (DPO Phase-3)
-- Internal relation mutation via Edit batch (no new API; documented usage pattern)
-- `atom.is_in_overlays()` umbrella predicate
+- `MoleculeBuilder::atom_mut(id) -> AtomBuilderViewMut` etc. for all entity kinds (DPO Phase-2) **Done**
+- `MoleculeBuilder::remove_*` overlay-mutators wired in (DPO Phase-3) **Done**
+- Internal relation mutation via Edit batch (no new API; documented usage pattern) **Done**
+- `atom.is_in_overlays()` umbrella predicate **Done**
 
-**Completion**: reaction-rule application end-to-end on a simple example. **Dependencies**: phase 8. **Risk**: medium.
+**Completion**: reaction-rule application end-to-end on a simple example — gated by DPO transformer in `umol-graph/ops/transformer/`, which is not yet present (only `aromatizer.rs` and `kekulizer.rs` exist there). The `umol-ast` surface required for it is in place. **Dependencies**: phase 8. **Risk**: medium.
 
-### Phase 10 — Subgraph + projection
+### Phase 10 — Subgraph + projection **Done**
 
-- `induced_subgraph(atoms) -> (MoleculeAst, Vec<Edit>)`
-- `induced_bonds(atoms) -> Iterator<BondView>` (return-type migration to P1)
-- `GraphView::connected_components(alg)`, `connected_components_in(atoms)`
-- `mol.connecting_bond(a, b) -> Option<BondView>` (renamed from `bond_between`)
+- `induced_subgraph(atoms) -> Embedding` **Done**; `Embedding` carries the extracted `MoleculeAst`, six new→old maps, `ast()`/`into_ast()` accessors, and `edits(parent) -> Vec<Edit>` for the derived `RemoveTopology`. Same type intended for future subgraph isomorphism results.
+- `bonds().induced(atoms) -> Vec<BondView>` / `bonds().induced_ids(atoms) -> Vec<BondId>` **Done** (on `BondViews`, not `MoleculeAst`)
+- `GraphView::connected_components(alg)` **Done**; `GraphView::connected_components_in(atoms, alg)` **Done**
+- `bonds().connecting(a, b) -> Option<BondView>` / `bonds().connecting_id(a, b) -> Option<BondId>` **Done** (on `BondViews`, not `MoleculeAst`)
 
 **Completion**: subgraph extraction works for kekulizer / HMO callers. **Dependencies**: phase 8 (uses Edit). **Risk**: medium.
 
