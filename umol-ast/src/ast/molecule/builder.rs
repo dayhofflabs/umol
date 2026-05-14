@@ -19,12 +19,17 @@ use super::super::atom::AtomAst;
 use super::super::bond::BondAst;
 use super::super::constraint::{Constraint, Constraints};
 use super::super::dative::DativeBondAst;
+use super::super::edit::{
+    AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
+    AddedNoncovalentBond, ConstraintUpdate, RemovedAromaticSystem, RemovedAtom, RemovedBond,
+    RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond, RemovedOverlays,
+};
 use super::super::idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::NoncovalentBondAst;
-use super::super::remap::IdRemapping;
+use super::super::remap::{IdRemapping, UndoRemapping};
 use super::super::views::{
     AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AtomBuilderView, AtomBuilderViewMut,
     BondBuilderView, BondBuilderViewMut, DativeBondBuilderView, DativeBondBuilderViewMut,
@@ -122,6 +127,19 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
         }
         vec.truncate(dst);
     }
+
+    #[allow(dead_code)]
+    fn entries(&self) -> Vec<([NodeId; N], R)> {
+        match self {
+            FixedSetStorage::Shared(arc) => (0..arc.relation_count())
+                .map(|i| {
+                    let rid = RelationId(i as u32);
+                    (*arc.participants(rid), arc.data(rid).clone())
+                })
+                .collect(),
+            FixedSetStorage::Mutable(vec) => vec.clone(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -211,6 +229,19 @@ impl<R: Clone> VarSetStorage<R> {
         }
         vec.truncate(dst);
     }
+
+    #[allow(dead_code)]
+    fn entries(&self) -> Vec<(Vec<NodeId>, R)> {
+        match self {
+            VarSetStorage::Shared(arc) => (0..arc.relation_count())
+                .map(|i| {
+                    let rid = RelationId(i as u32);
+                    (arc.participants(rid).to_vec(), arc.data(rid).clone())
+                })
+                .collect(),
+            VarSetStorage::Mutable(vec) => vec.clone(),
+        }
+    }
 }
 
 fn fixed_relation_removed<R: Clone, const N: usize>(
@@ -236,6 +267,41 @@ fn var_relation_removed<R: Clone>(storage: &VarSetStorage<R>, remap: &Remapping)
         }
     }
     removed
+}
+
+#[allow(dead_code)]
+fn relation_undo_remapping(
+    removed_dative: Vec<u32>,
+    removed_aromatic: Vec<u32>,
+    removed_multicenter: Vec<u32>,
+    removed_noncovalent: Vec<u32>,
+) -> UndoRemapping {
+    IdRemapping::new(
+        Remapping {
+            removed_nodes: Vec::new(),
+            removed_edges: Vec::new(),
+        },
+        removed_dative,
+        removed_aromatic,
+        removed_multicenter,
+        removed_noncovalent,
+    )
+    .undo_remapping()
+}
+
+#[allow(dead_code)]
+fn restore_participants(parts: Vec<NodeId>, undo_remapping: &UndoRemapping) -> Vec<NodeId> {
+    parts
+        .into_iter()
+        .map(|p| NodeId::from(undo_remapping.atom(AtomId::from(p))))
+        .collect()
+}
+
+fn restore_fixed_participants<const N: usize>(
+    parts: [NodeId; N],
+    undo_remapping: &UndoRemapping,
+) -> [NodeId; N] {
+    parts.map(|p| NodeId::from(undo_remapping.atom(AtomId::from(p))))
 }
 
 /// Mutable builder for a `MoleculeAst`. Accumulates atoms, bonds, and
@@ -690,6 +756,213 @@ impl MoleculeBuilder {
         idx_remap
     }
 
+    #[allow(dead_code)]
+    pub(super) fn remove_added_topology(&mut self, atoms: &[AddedAtom], bonds: &[AddedBond]) {
+        let atom_ids: Vec<AtomId> = atoms.iter().map(|a| a.id).collect();
+        let bond_ids: Vec<BondId> = bonds.iter().map(|b| b.id).collect();
+        self.remove(&atom_ids, &bond_ids);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn restore_topology(
+        &mut self,
+        atoms: Vec<RemovedAtom>,
+        bonds: Vec<RemovedBond>,
+        overlays: RemovedOverlays,
+        undo_remapping: &UndoRemapping,
+        constraint_update: ConstraintUpdate,
+    ) {
+        self.restore_atoms(atoms, undo_remapping);
+        self.restore_bonds(bonds, undo_remapping);
+        self.restore_dative_bonds(overlays.dative_bonds, undo_remapping);
+        self.restore_aromatic_systems(overlays.aromatic_systems, undo_remapping);
+        self.restore_multicenter_bonds(overlays.multicenter_bonds, undo_remapping);
+        self.restore_noncovalent_bonds(overlays.noncovalent_bonds, undo_remapping);
+        constraint_update.rollback_into(&mut self.constraints);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn remove_added_dative_bond(&mut self, added: &AddedDativeBond) {
+        self.remove_dative_bonds(&[added.id]);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn restore_dative_bond(
+        &mut self,
+        removed: RemovedDativeBond,
+        undo_remapping: &UndoRemapping,
+    ) {
+        self.restore_dative_bonds(vec![removed], undo_remapping);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn remove_added_aromatic_system(&mut self, added: &AddedAromaticSystem) {
+        self.remove_aromatic_systems(&[added.id]);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn restore_aromatic_system(
+        &mut self,
+        removed: RemovedAromaticSystem,
+        undo_remapping: &UndoRemapping,
+    ) {
+        self.restore_aromatic_systems(vec![removed], undo_remapping);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn remove_added_multicenter_bond(&mut self, added: &AddedMulticenterBond) {
+        self.remove_multicenter_bonds(&[added.id]);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn restore_multicenter_bond(
+        &mut self,
+        removed: RemovedMulticenterBond,
+        undo_remapping: &UndoRemapping,
+    ) {
+        self.restore_multicenter_bonds(vec![removed], undo_remapping);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn remove_added_noncovalent_bond(&mut self, added: &AddedNoncovalentBond) {
+        self.remove_noncovalent_bonds(&[added.id]);
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn restore_noncovalent_bond(
+        &mut self,
+        removed: RemovedNoncovalentBond,
+        undo_remapping: &UndoRemapping,
+    ) {
+        self.restore_noncovalent_bonds(vec![removed], undo_remapping);
+    }
+
+    fn restore_atoms(&mut self, removed: Vec<RemovedAtom>, undo_remapping: &UndoRemapping) {
+        let mut next = vec![None; self.atoms.len() + removed.len()];
+        for removed in removed {
+            next[removed.id.index()] = Some(removed.ast);
+        }
+        for (idx, atom) in self.atoms.iter().cloned().enumerate() {
+            let old = undo_remapping.atom(AtomId(idx as u32));
+            next[old.index()] = Some(atom);
+        }
+        self.atoms = Arc::new(next.into_iter().map(Option::unwrap).collect());
+    }
+
+    fn restore_bonds(&mut self, removed: Vec<RemovedBond>, undo_remapping: &UndoRemapping) {
+        let mut old_endpoints: Vec<Option<[AtomId; 2]>> =
+            vec![None; self.bonds.len() + removed.len()];
+        let mut old_bonds: Vec<Option<BondAst>> = vec![None; self.bonds.len() + removed.len()];
+        for removed in removed {
+            old_endpoints[removed.id.index()] = Some(removed.endpoints);
+            old_bonds[removed.id.index()] = Some(removed.ast);
+        }
+        for (idx, bond) in self.bonds.iter().cloned().enumerate() {
+            let old_id = undo_remapping.bond(BondId(idx as u32));
+            let endpoints = self.graph.edge_endpoints(EdgeId(idx as u32));
+            old_endpoints[old_id.index()] = Some([
+                undo_remapping.atom(AtomId::from(endpoints[0])),
+                undo_remapping.atom(AtomId::from(endpoints[1])),
+            ]);
+            old_bonds[old_id.index()] = Some(bond);
+        }
+        let endpoints: Vec<[u32; 2]> = old_endpoints
+            .into_iter()
+            .map(|e| {
+                let e = e.unwrap();
+                [e[0].0, e[1].0]
+            })
+            .collect();
+        self.graph = Graph::new(self.atoms.len(), &endpoints);
+        self.bonds = Arc::new(old_bonds.into_iter().map(Option::unwrap).collect());
+    }
+
+    fn restore_dative_bonds(
+        &mut self,
+        removed: Vec<RemovedDativeBond>,
+        undo_remapping: &UndoRemapping,
+    ) {
+        let current = self.dative_bonds.entries();
+        let mut next = vec![None; current.len() + removed.len()];
+        for (idx, (parts, data)) in current.into_iter().enumerate() {
+            let old_id = undo_remapping.dative_bond(DativeBondId(idx as u32));
+            next[old_id.index()] = Some((restore_participants(parts, undo_remapping), data));
+        }
+        for removed in removed {
+            next[removed.id.index()] = Some((
+                removed.atoms.into_iter().map(NodeId::from).collect(),
+                removed.ast,
+            ));
+        }
+        self.dative_bonds = VarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
+    }
+
+    fn restore_aromatic_systems(
+        &mut self,
+        removed: Vec<RemovedAromaticSystem>,
+        undo_remapping: &UndoRemapping,
+    ) {
+        let current = self.aromatic_systems.entries();
+        let mut next = vec![None; current.len() + removed.len()];
+        for (idx, (parts, data)) in current.into_iter().enumerate() {
+            let old_id = undo_remapping.aromatic_system(AromaticSystemId(idx as u32));
+            next[old_id.index()] = Some((restore_participants(parts, undo_remapping), data));
+        }
+        for removed in removed {
+            next[removed.id.index()] = Some((
+                removed.atoms.into_iter().map(NodeId::from).collect(),
+                removed.ast,
+            ));
+        }
+        self.aromatic_systems =
+            VarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
+    }
+
+    fn restore_multicenter_bonds(
+        &mut self,
+        removed: Vec<RemovedMulticenterBond>,
+        undo_remapping: &UndoRemapping,
+    ) {
+        let current = self.multicenter_bonds.entries();
+        let mut next = vec![None; current.len() + removed.len()];
+        for (idx, (parts, data)) in current.into_iter().enumerate() {
+            let old_id = undo_remapping.multicenter_bond(MulticenterBondId(idx as u32));
+            next[old_id.index()] = Some((restore_participants(parts, undo_remapping), data));
+        }
+        for removed in removed {
+            next[removed.id.index()] = Some((
+                removed.atoms.into_iter().map(NodeId::from).collect(),
+                removed.ast,
+            ));
+        }
+        self.multicenter_bonds =
+            VarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
+    }
+
+    fn restore_noncovalent_bonds(
+        &mut self,
+        removed: Vec<RemovedNoncovalentBond>,
+        undo_remapping: &UndoRemapping,
+    ) {
+        let current = self.noncovalent_bonds.entries();
+        let mut next = vec![None; current.len() + removed.len()];
+        for (idx, (parts, data)) in current.into_iter().enumerate() {
+            let old_id = undo_remapping.noncovalent_bond(NoncovalentBondId(idx as u32));
+            next[old_id.index()] = Some((restore_fixed_participants(parts, undo_remapping), data));
+        }
+        for removed in removed {
+            next[removed.id.index()] = Some((
+                [
+                    NodeId::from(removed.atoms[0]),
+                    NodeId::from(removed.atoms[1]),
+                ],
+                removed.ast,
+            ));
+        }
+        self.noncovalent_bonds =
+            FixedSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
+    }
+
     pub fn build(self) -> MoleculeAst {
         MoleculeAst::from_arcs(
             self.graph,
@@ -701,5 +974,109 @@ impl MoleculeBuilder {
             self.noncovalent_bonds.into_arc(),
             self.constraints,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::*;
+    use umol_shared::element::Element;
+
+    use super::*;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::constraint::AtomConstraint;
+    use crate::ast::dative::DativeBondAst;
+    use crate::ast::DroppedConstraint;
+
+    #[fixture]
+    fn triatomic() -> MoleculeBuilder {
+        let mut b = MoleculeAst::default().edit();
+        b.add_atom(AtomAst::from_element(Element::C));
+        b.add_atom(AtomAst::from_element(Element::N));
+        b.add_atom(AtomAst::from_element(Element::O));
+        b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
+        b.add_bond(AtomId(1), AtomId(2), BondAst::from_order(2));
+        b
+    }
+
+    #[rstest]
+    fn test_molecule_builder_restore_topology(mut triatomic: MoleculeBuilder) {
+        let dropped_constraint = Constraint::Atom(AtomId(1), AtomConstraint::degree(3));
+        triatomic.push_constraint(dropped_constraint.clone());
+        let expected = triatomic.clone().build();
+        let removed_atoms = vec![RemovedAtom {
+            id: AtomId(1),
+            ast: triatomic.atom(AtomId(1)).ast.clone(),
+        }];
+        let removed_bonds = vec![
+            RemovedBond {
+                id: BondId(0),
+                endpoints: triatomic.bond(BondId(0)).atoms,
+                ast: triatomic.bond(BondId(0)).ast.clone(),
+            },
+            RemovedBond {
+                id: BondId(1),
+                endpoints: triatomic.bond(BondId(1)).atoms,
+                ast: triatomic.bond(BondId(1)).ast.clone(),
+            },
+        ];
+
+        let remap = triatomic.remove(&[AtomId(1)], &[]);
+        triatomic.restore_topology(
+            removed_atoms,
+            removed_bonds,
+            RemovedOverlays::default(),
+            &remap.undo_remapping(),
+            ConstraintUpdate {
+                dropped: vec![DroppedConstraint {
+                    position: 0,
+                    constraint: dropped_constraint,
+                }],
+                rewritten: Vec::new(),
+            },
+        );
+
+        assert_eq!(triatomic.build(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_remove_added_topology(mut triatomic: MoleculeBuilder) {
+        let expected = triatomic.clone().build();
+        let added_atom = AddedAtom {
+            id: triatomic.add_atom(AtomAst::from_element(Element::F)),
+            ast: AtomAst::from_element(Element::F),
+        };
+        let added_bond = AddedBond {
+            id: triatomic.add_bond(AtomId(2), added_atom.id, BondAst::from_order(1)),
+            endpoints: [AtomId(2), added_atom.id],
+            ast: BondAst::from_order(1),
+        };
+
+        triatomic.remove_added_topology(&[added_atom], &[added_bond]);
+
+        assert_eq!(triatomic.build(), expected);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_restore_dative_bond() {
+        let mut b = MoleculeAst::default().edit();
+        b.add_atom(AtomAst::from_element(Element::C));
+        b.add_atom(AtomAst::from_element(Element::N));
+        b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1));
+        b.add_dative_bond(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(2));
+        let expected = b.clone().build();
+        let view = b.dative_bond(DativeBondId(0));
+        let removed = RemovedDativeBond {
+            id: DativeBondId(0),
+            atoms: view.atom_ids().collect(),
+            ast: view.ast.clone(),
+        };
+
+        b.remove_dative_bonds(&[DativeBondId(0)]);
+        let undo = relation_undo_remapping(vec![removed.id.0], Vec::new(), Vec::new(), Vec::new());
+        b.restore_dative_bond(removed, &undo);
+
+        assert_eq!(b.build(), expected);
     }
 }

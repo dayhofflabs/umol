@@ -1410,6 +1410,19 @@ Preferred implementation path:
 
 Do not snapshot the whole `Constraints` list as the normal path.
 
+##### Step 5a — Directional update/remap APIs
+
+Step 6 exposed two small refinements before the restore helpers become load-bearing transaction code:
+
+- Add rollback-facing methods on `ConstraintUpdate`, e.g. `rollback_into(&mut Constraints)`, so the direction is explicit. `ConstraintUpdate` records the forward effects of a remap; rollback applies the inverse.
+- Add explicit relation-remap context for single relation restore undos. Either:
+  - make `RestoreRemovedDativeBond` / `RestoreRemovedAromaticSystem` / etc. carry the relation-only `UndoRemapping`, or
+  - add a small relation-only remap payload alongside the removed relation payload.
+- Update the single-relation `Undo` variants to use that explicit context instead of letting builder restore helpers synthesize ad hoc remappings from the removed id.
+- Keep public `Edit` unchanged; this is a realized-undo/private-restore refinement.
+
+This step should happen before Step 6 is wired into `transact`, but it does not require expanding the caller-facing mutation vocabulary.
+
 ##### Step 6 — Add private dense restore operations
 
 Add private builder methods in `umol-ast/src/ast/molecule/builder.rs` or a private helper module:

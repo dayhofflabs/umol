@@ -949,6 +949,35 @@ mod tests {
     }
 
     #[rstest]
+    fn test_constraint_update_rollback_into() {
+        let mut cs = Constraints::new();
+        cs.push(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)));
+        cs.push(Constraint::Bond(BondId(1), BondConstraint::ring_size(6)));
+
+        ConstraintUpdate {
+            dropped: vec![DroppedConstraint {
+                position: 1,
+                constraint: Constraint::Atom(AtomId(1), AtomConstraint::degree(3)),
+            }],
+            rewritten: vec![RewrittenConstraint {
+                position: 2,
+                old: Constraint::Bond(BondId(2), BondConstraint::ring_size(6)),
+                new: Constraint::Bond(BondId(1), BondConstraint::ring_size(6)),
+            }],
+        }
+        .rollback_into(&mut cs);
+
+        assert_eq!(
+            cs.as_slice(),
+            &[
+                Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+                Constraint::Atom(AtomId(1), AtomConstraint::degree(3)),
+                Constraint::Bond(BondId(2), BondConstraint::ring_size(6)),
+            ],
+        );
+    }
+
+    #[rstest]
     fn test_constraints_simplify_each() {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(

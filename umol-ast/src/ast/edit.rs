@@ -12,8 +12,8 @@ use super::aromatic::AromaticSystemAst;
 use super::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
 use super::bond::BondAst;
 use super::constraint::{
-    AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, DativeBondConstraint,
-    MulticenterBondConstraint,
+    AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, Constraints,
+    DativeBondConstraint, MulticenterBondConstraint,
 };
 use super::dative::DativeBondAst;
 use super::idx::{
@@ -520,6 +520,20 @@ impl ConstraintUpdate {
     pub fn is_empty(&self) -> bool {
         self.dropped.is_empty() && self.rewritten.is_empty()
     }
+
+    pub fn rollback_into(self, constraints: &mut Constraints) {
+        let mut items = constraints.take();
+        for rewritten in self.rewritten {
+            if let Some(pos) = items.iter().position(|c| *c == rewritten.new) {
+                items[pos] = rewritten.old;
+            }
+        }
+        for dropped in self.dropped {
+            let position = dropped.position.min(items.len());
+            items.insert(position, dropped.constraint);
+        }
+        *constraints = items.into_iter().collect();
+    }
 }
 
 /// Realized rollback operation produced by the checked transaction path.
@@ -538,13 +552,25 @@ pub enum Undo {
         constraint_update: ConstraintUpdate,
     },
     RemoveAddedDativeBond(AddedDativeBond),
-    RestoreRemovedDativeBond(RemovedDativeBond),
+    RestoreRemovedDativeBond {
+        removed: RemovedDativeBond,
+        undo_remapping: UndoRemapping,
+    },
     RemoveAddedAromaticSystem(AddedAromaticSystem),
-    RestoreRemovedAromaticSystem(RemovedAromaticSystem),
+    RestoreRemovedAromaticSystem {
+        removed: RemovedAromaticSystem,
+        undo_remapping: UndoRemapping,
+    },
     RemoveAddedMulticenterBond(AddedMulticenterBond),
-    RestoreRemovedMulticenterBond(RemovedMulticenterBond),
+    RestoreRemovedMulticenterBond {
+        removed: RemovedMulticenterBond,
+        undo_remapping: UndoRemapping,
+    },
     RemoveAddedNoncovalentBond(AddedNoncovalentBond),
-    RestoreRemovedNoncovalentBond(RemovedNoncovalentBond),
+    RestoreRemovedNoncovalentBond {
+        removed: RemovedNoncovalentBond,
+        undo_remapping: UndoRemapping,
+    },
     SetAtomField {
         id: AtomId,
         change: AtomFieldChange,
