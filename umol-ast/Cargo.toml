@@ -14,9 +14,17 @@ keywords = [
 ]
 description = "DSL and AST layers for umol molecular representation."
 autobenches = false
+autotests = false
 
 [lib]
 bench = false
+
+[[test]]
+name = "property"
+required-features = ["proptest"]
+
+[features]
+proptest = []
 
 [dependencies]
 bimap = "0.6.3"

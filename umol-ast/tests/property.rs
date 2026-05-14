@@ -10,16 +10,16 @@ use std::ops::RangeInclusive;
 use proptest::prelude::*;
 use rstest::rstest;
 use umol_ast::ast::{
-    ArithOp, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
+    AddBond, ArithOp, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
     AromaticSystemConstraints, AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint,
-    AtomConstraintKind, AtomConstraints, AtomId, BondAst, BondConstraint, BondConstraintKind,
-    BondConstraints, BondId, Constraint, Constraints, DativeBondAst, DativeBondConstraint,
-    DativeBondConstraintKind, DativeBondConstraints, DativeBondId, ElementAst, Expr,
-    ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
-    MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
-    MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
-    NoncovalentBondKind, NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst,
-    SubPatternAnchor, ValueAst,
+    AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst, BondConstraint,
+    BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, Constraint, Constraints,
+    DativeBondAst, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
+    DativeBondId, Edit, ElementAst, Expr, ImplicitHydrogensAst, IsotopeAst, MoleculeAst,
+    MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraint,
+    MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterBondId,
+    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind,
+    NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst, SubPatternAnchor, ValueAst,
 };
 use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
@@ -1270,6 +1270,188 @@ fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
     })
 }
 
+fn transaction_atom_count_strategy() -> impl Strategy<Value = usize> {
+    1usize..=6
+}
+
+fn transaction_atoms(count: usize) -> Vec<AtomAst> {
+    (0..count)
+        .map(|idx| {
+            let element = ELEMENTS[idx % ELEMENTS.len()];
+            AtomAst::from_element(element)
+        })
+        .collect()
+}
+
+fn transaction_path_bonds(count: usize) -> Vec<AddBond> {
+    (0..count.saturating_sub(1))
+        .map(|idx| {
+            Edit::add_bond(
+                AtomRef::New(idx),
+                AtomRef::New(idx + 1),
+                BondAst::from_order((idx % 3 + 1) as u8),
+            )
+        })
+        .map(|edit| match edit {
+            Edit::AddBonds { mut bonds } => bonds.remove(0),
+            _ => unreachable!(),
+        })
+        .collect()
+}
+
+fn transaction_path_molecule(count: usize) -> MoleculeAst {
+    let atoms = transaction_atoms(count);
+    let bonds = (0..count.saturating_sub(1))
+        .map(|idx| {
+            (
+                AtomId(idx as u32),
+                AtomId((idx + 1) as u32),
+                BondAst::from_order((idx % 3 + 1) as u8),
+            )
+        })
+        .collect();
+    MoleculeAst::from_atoms_and_bonds(atoms, bonds)
+}
+
+fn transaction_add_path_edits(count: usize) -> Vec<Edit> {
+    vec![
+        Edit::AddAtoms {
+            atoms: transaction_atoms(count),
+        },
+        Edit::AddBonds {
+            bonds: transaction_path_bonds(count),
+        },
+    ]
+}
+
+#[derive(Clone, Debug)]
+enum TransactionCase {
+    AddPath {
+        count: usize,
+    },
+    RemoveAtom {
+        count: usize,
+        idx: usize,
+    },
+    RemoveBond {
+        count: usize,
+        idx: usize,
+    },
+    SetAtomCharge {
+        count: usize,
+        idx: usize,
+        charge: i64,
+    },
+    SetBondOrder {
+        count: usize,
+        idx: usize,
+        order: u8,
+    },
+    AddAtomConstraint {
+        count: usize,
+        idx: usize,
+        size: i64,
+    },
+    AddDativeBond {
+        count: usize,
+        donor: usize,
+        acceptor: usize,
+    },
+}
+
+impl TransactionCase {
+    fn base(&self) -> MoleculeAst {
+        match self {
+            Self::AddPath { .. } => MoleculeAst::default(),
+            Self::RemoveAtom { count, .. }
+            | Self::RemoveBond { count, .. }
+            | Self::SetAtomCharge { count, .. }
+            | Self::SetBondOrder { count, .. }
+            | Self::AddAtomConstraint { count, .. }
+            | Self::AddDativeBond { count, .. } => transaction_path_molecule(*count),
+        }
+    }
+
+    fn edits(&self) -> Vec<Edit> {
+        match self {
+            Self::AddPath { count } => transaction_add_path_edits(*count),
+            Self::RemoveAtom { count, idx } => {
+                vec![Edit::remove_atom(AtomRef::Id(AtomId((idx % count) as u32)))]
+            }
+            Self::RemoveBond { count, idx } => vec![Edit::remove_bond(BondRef::Id(BondId(
+                (idx % (count - 1)) as u32,
+            )))],
+            Self::SetAtomCharge { count, idx, charge } => {
+                vec![Edit::SetAtomField {
+                    idx: AtomRef::Id(AtomId((idx % count) as u32)),
+                    change: AtomFieldChange::Charge {
+                        old: ValueAst::default(),
+                        new: ValueAst::Lit(*charge),
+                    },
+                }]
+            }
+            Self::SetBondOrder { count, idx, order } => {
+                let bond_idx = idx % (count - 1);
+                vec![Edit::SetBondField {
+                    idx: BondRef::Id(BondId(bond_idx as u32)),
+                    change: BondFieldChange::Order {
+                        old: ValueAst::Lit((bond_idx % 3 + 1) as i64),
+                        new: ValueAst::Lit(*order as i64),
+                    },
+                }]
+            }
+            Self::AddAtomConstraint { count, idx, size } => {
+                vec![Edit::AddAtomConstraint {
+                    idx: AtomRef::Id(AtomId((idx % count) as u32)),
+                    constraint: AtomConstraint::ring_size(*size),
+                }]
+            }
+            Self::AddDativeBond {
+                count,
+                donor,
+                acceptor,
+            } => {
+                let donor = donor % count;
+                let mut acceptor = acceptor % count;
+                if acceptor == donor {
+                    acceptor = (acceptor + 1) % count;
+                }
+                vec![Edit::AddDativeBond {
+                    atoms: vec![
+                        AtomRef::Id(AtomId(donor as u32)),
+                        AtomRef::Id(AtomId(acceptor as u32)),
+                    ],
+                    ast: DativeBondAst::from_order(1),
+                }]
+            }
+        }
+    }
+}
+
+fn transaction_case_strategy() -> impl Strategy<Value = TransactionCase> {
+    prop_oneof![
+        transaction_atom_count_strategy().prop_map(|count| TransactionCase::AddPath { count }),
+        (1usize..=6, 0usize..6).prop_map(|(count, idx)| TransactionCase::RemoveAtom { count, idx }),
+        (2usize..=6, 0usize..5).prop_map(|(count, idx)| TransactionCase::RemoveBond { count, idx }),
+        (1usize..=6, 0usize..6, -3i64..=3).prop_map(|(count, idx, charge)| {
+            TransactionCase::SetAtomCharge { count, idx, charge }
+        }),
+        (2usize..=6, 0usize..5, 1u8..=3).prop_map(|(count, idx, order)| {
+            TransactionCase::SetBondOrder { count, idx, order }
+        }),
+        (1usize..=6, 0usize..6, 3i64..=8).prop_map(|(count, idx, size)| {
+            TransactionCase::AddAtomConstraint { count, idx, size }
+        }),
+        (2usize..=6, 0usize..6, 0usize..6).prop_map(|(count, donor, acceptor)| {
+            TransactionCase::AddDativeBond {
+                count,
+                donor,
+                acceptor,
+            }
+        }),
+    ]
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1000))]
 
@@ -1375,6 +1557,36 @@ proptest! {
         for view in a.noncovalent_bonds().iter() {
             prop_assert!(view.ast.constraints.is_empty());
         }
+    }
+
+    #[test]
+    fn test_molecule_builder_transact_rollback(
+        case in transaction_case_strategy(),
+    ) {
+        let mut builder = case.base().edit();
+        let before = builder.clone().build();
+        let tx = builder
+            .transact(case.edits())
+            .map_err(|e| TestCaseError::fail(format!("transact failed: {e}")))?;
+
+        tx.rollback(&mut builder)
+            .map_err(|e| TestCaseError::fail(format!("rollback failed: {e}")))?;
+
+        prop_assert_eq!(builder.build(), before);
+    }
+
+    #[test]
+    fn test_molecule_builder_transact_unchecked(case in transaction_case_strategy()) {
+        let edits = case.edits();
+        let mut checked = case.base().edit();
+        checked
+            .transact(edits.clone())
+            .map_err(|e| TestCaseError::fail(format!("checked transact failed: {e}")))?;
+
+        let mut unchecked = case.base().edit();
+        unchecked.transact_unchecked(edits);
+
+        prop_assert_eq!(unchecked.build(), checked.build());
     }
 
     /// `inline_constraints` removes every TOP-LEVEL inline-capable narrow
