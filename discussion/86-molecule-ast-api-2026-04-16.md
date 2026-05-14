@@ -283,14 +283,14 @@ Marker constraints (those without a value payload — `BondConstraint::Aromatic`
 - **`ImplicitHydrogensAst`** gets the same arithmetic and collapse rule. `Normal` (the "default-implicit-H" meta-state) collapses to `Undetermined` under arithmetic, identical to bare `Undetermined`.
 - **`IsotopeAst`** does *not* get arithmetic. Isotope masses behave more like enum tags than numerics — adding mass numbers across atoms is meaningless outside nuclear chemistry, which is out of scope. Revisit if nuclear chemistry becomes a real consumer.
 
-**6. Mutation goes through an `Edit` vocabulary; transactions are the load-bearing primitive.** Every primitive mutation is one variant of an `Edit` enum; every batch is a `Vec<Edit>`; every mutation goes through `MoleculeBuilder::transact(Vec<Edit>) -> Result<Vec<Action>, TransactionError>` (data form) or `transact_with(|tx| ...)` (closure form for procedural logic). Per-method convenience APIs (`add_atom`, `remove`, `atom_mut`, etc.) become sugar over `transact`.
+**6. Mutation goes through an `Edit` vocabulary; checked transactions are the load-bearing primitive.** Caller-facing mutations compose as `Vec<Edit>`. Checked mutation goes through `MoleculeBuilder::transact(Vec<Edit>) -> Result<Transaction, TransactionError>`, which records realized `Undo` entries and rolls back by reverse replay on failure. `transact_unchecked(Vec<Edit>) -> ()` is the separate no-journal path for generated edits known to be correct.
 
 This buys five capabilities that direct-mutation can't:
 
 - **Atomicity**: a batch either applies entirely or rolls back (no partial-mutation states for callers to clean up).
 - **Transient invariant violation**: intermediate states inside a transaction can be temporarily tier-1-invalid (DPO needs this — between L\\K removal and R\\K addition the molecule is structurally incomplete).
-- **Reified cascade**: cascade Edits induced by R3 (overlay-removal cascade) become part of the same transaction; rollback undoes them.
-- **Serializable / replayable / undoable mutation**: every Edit is self-inverting (carries `old` data needed to reverse it, per doc 43); reaction rules become pure data (LHS pattern + Vec<Edit>); inverse generation is trivial.
+- **Reified cascade**: overlay-removal cascades induced by topology removal are recorded in realized `Undo`; rollback undoes them.
+- **Serializable / replayable / undoable mutation**: `Edit` remains pure caller-facing mutation data; checked application produces the realized `Undo` data needed for exact rollback.
 - **Validation gate**: tier-1 invariants checked on commit, not per-Edit.
 
 Detail design lives under §"Mutation operations" → §"Edit vocabulary and transactions"; doc 43 has the prior-art patch design that this builds on.
@@ -312,7 +312,7 @@ Captured for reference after the long naming pass. Most rules emerge from decisi
 - **Views by default; `_id` / `_ids` suffix for index-returning companions.** `mol.connecting_bond(a, b) -> Option<BondView>`; companion `mol.connecting_bond_id(a, b) -> Option<BondId>`. Collections: `relation_view.atoms() -> Iterator<AtomView>`; companion `relation_view.atom_ids() -> &[AtomId]`. The default is the chaining-friendly form; index access is the explicit opt-in.
 - **`Option<T>` for at-most-one results.** Used where the data model enforces the constraint (per-atom `aromatic_system()`, `connecting_bond(a, b)`). Iterator-returning methods naturally cover 0–* arities; `Option` for 0–1 makes the constraint legible from the signature.
 - **`Iterator<T>` for collections** (0–* including 0–1 when the data model doesn't enforce uniqueness).
-- **`Vec<T>` only when allocation is integral to the operation** (e.g., `transact(Vec<Edit>) -> Vec<Action>`). Otherwise prefer `impl Iterator<Item = T>` for laziness.
+- **`Vec<T>` only when allocation is integral to the operation** (e.g., `transact(Vec<Edit>) -> Transaction`). Otherwise prefer `impl Iterator<Item = T>` for laziness.
 
 #### Suffix conventions
 
@@ -793,46 +793,22 @@ Entity ids (`atom0`, `bond1`, ...) and atom aliases (`al0` → `AtomAst`) are su
 
 ### Mutation operations
 
-Per principle 6, the load-bearing mutation primitive is `MoleculeBuilder::transact(Vec<Edit>)`. The tables in the subsections below describe the operations *semantically*; in the implementation they're sugar over Edit. The "Edit vocabulary" subsection below sets out the unified shape.
+Per principle 6, the load-bearing checked mutation primitive is `MoleculeBuilder::transact(Vec<Edit>) -> Result<Transaction, TransactionError>`. The tables in the subsections below describe the operations *semantically*; in the implementation, user-facing mutation sugar routes through the `Edit` vocabulary where atomicity or rollback matters. The detailed revised transaction design lives in §"Mutation API revision: undo-journal transactions".
 
 #### Edit vocabulary and transactions
 
-##### Edit enum (sketch)
+This subsection is the semantic summary. The older self-inverting-`Edit` / `Action` / snapshot design was superseded during the Phase-8 revision.
 
-```rust
-enum Edit {
-    // -- atoms / bonds
-    AddAtom { ast: AtomAst },
-    RemoveAtom { idx: AtomRef, ast: AtomAst },          // ast carried for inverse
-    SetAtomField { idx: AtomRef, field: AtomField, old: ?, new: ? },
-        // ↑ field-typed-variants vs field-enum: open, see below
+Current shape:
 
-    AddBond { a: AtomRef, b: AtomRef, ast: BondAst },
-    RemoveBond { idx: BondRef, endpoints: [AtomRef; 2], ast: BondAst },
-    SetBondField { idx: BondRef, field: BondField, old: ?, new: ? },
-
-    // -- overlays (uniform shape across the four kinds)
-    AddAromaticSystem { atoms: Vec<AtomRef>, ast: AromaticSystemAst },
-    RemoveAromaticSystem { idx: AromaticSystemRef, atoms: Vec<AtomRef>, ast: AromaticSystemAst },
-    SetAromaticSystemField { idx: AromaticSystemRef, field: AromaticSystemField, old: ?, new: ? },
-    // ... DativeBond, MulticenterBond, NoncovalentBond analogs
-
-    // -- constraints (entity-inline; per principle 5, set-via-named-kind)
-    SetAtomConstraint { idx: AtomRef, kind: AtomConstraintKind, old: ValueAst, new: ValueAst },
-    // ... per entity kind for value-bearing kinds
-    SetBondAromaticConstraint { idx: BondRef, old: bool, new: bool },  // marker constraint
-
-    // -- constraints (molecule-list)
-    PushMoleculeConstraint { c: Constraint },
-    RemoveMoleculeConstraint { position: usize, c: Constraint },
-}
-```
-
-Three properties (per doc 43):
-
-- **Self-inverting**: every `Remove*` carries the AST data needed to restore the entity; every `Set*` carries `old` and `new`. `Edit::inverse(&self) -> Edit` is total.
-- **Operation-level granularity**: per-field setters, not whole-entity replacements (matches per-field-accessor decision).
-- **Composable**: concatenate `Vec<Edit>`; transactions provide atomicity.
+- `Edit` is caller-facing and composable.
+- Bulk topology variants are primitive: `AddAtoms`, `AddBonds`, `RemoveTopology`.
+- Single atom/bond additions and removals are sugar over the bulk variants.
+- Overlay relation edits remain single-item for now.
+- `Undo` is the realized physical rollback vocabulary.
+- `Transaction` wraps `Vec<Undo>` and rollback consumes it.
+- Checked `transact` records `Undo` and reverse-replays on failure.
+- `transact_unchecked` is a separate no-journal, panic-on-invalid path for known-correct generated edits.
 
 ##### Symbolic refs (intra-batch dependency)
 
@@ -847,35 +823,23 @@ enum MulticenterBondRef { Id(MulticenterBondId), New(usize) }
 enum NoncovalentBondRef { Id(NoncovalentBondId), New(usize) }
 ```
 
-Resolution at apply time: `Id(_)` used directly; `New(N)` resolved against `Action` of the Nth edit in this batch. Type mismatch (e.g., `AtomRef::New(N)` where edit N is `AddBond`, not `AddAtom`) fails the transaction.
+Resolution at apply time: `Id(_)` is used directly; `New(N)` resolves against an applicator-maintained created-entity table. Type mismatch (e.g., `AtomRef::New(N)` where created entity N is a bond, not an atom) fails checked `transact` and panics in `transact_unchecked`.
 
-Refs appear *only* inside `Edit`. `Action`, view methods, cascade Edits, and inverse Edits all use absolute `*Id` types.
+Refs appear only inside `Edit`. `Undo`, view methods, remapping methods, and restore payloads use absolute `*Id` types.
 
 ##### Transaction API
 
 ```rust
 impl MoleculeBuilder {
-    // Data form: primary; pre-computed Edit list with symbolic refs for intra-batch deps
     pub fn transact(&mut self, edits: Vec<Edit>)
-        -> Result<Vec<Action>, TransactionError>;
+        -> Result<Transaction, TransactionError>;
 
-    // Closure form (sugar): for procedural logic, branching, or edits whose existence
-    // depends on inspecting state between earlier applications
-    pub fn transact_with<F, R, E>(&mut self, f: F) -> Result<R, E>
-    where
-        F: FnOnce(&mut Transaction<'_>) -> Result<R, E>,
-        E: From<TransactionError>;
+    pub fn transact_unchecked(&mut self, edits: Vec<Edit>);
 }
 
-enum Action {
-    AtomAdded(AtomId),
-    BondAdded(BondId),
-    AromaticSystemAdded(AromaticSystemId),
-    DativeBondAdded(DativeBondId),
-    MulticenterBondAdded(MulticenterBondId),
-    NoncovalentBondAdded(NoncovalentBondId),
-    Done,             // for Set / Remove edits that yield no new index
-    Cascaded { user: Box<Action>, cascade: Vec<Edit> },
+impl Transaction {
+    pub fn rollback(self, builder: &mut MoleculeBuilder) -> Result<(), TransactionError>;
+    pub fn undos(&self) -> &[Undo];
 }
 ```
 
@@ -883,8 +847,8 @@ Semantics:
 
 - **Atomic**: success → all edits applied; failure → state restored to pre-transaction.
 - **Validation timing**: tier-1 invariants checked on commit; intermediate states inside a transaction may transiently violate them.
-- **Cascade integration**: R3-cascade Edits (overlay drops on atom/bond removal) become part of the transaction; rollback undoes cascades. The cascade Edit list is reported via `Action::Cascaded { user, cascade }`.
-- **Closure form is sugar**: `transact(edits)` is `transact_with(|tx| { for e in edits { tx.apply(e)?; } Ok(()) })`. Either is fine to call from outside; closure form just adds the option of procedural logic between applications.
+- **Cascade integration**: `RemoveTopology` drops invalid overlays; the realized `Undo` records the dropped overlays for rollback.
+- **Rollback invariant**: reverse replay of each `Undo` restores the exact id coordinate system that existed before the corresponding forward edit.
 
 ##### Settled design choices
 
@@ -908,32 +872,30 @@ Semantics:
 
   Outer `Edit` stays manageable; per-field type discrimination preserved inside `*FieldChange`. Symmetric `BondFieldChange`, `DativeBondFieldChange`, `AromaticSystemFieldChange`, `MulticenterBondFieldChange`, `NoncovalentBondFieldChange` for the other entity kinds.
 
-- **Rollback mechanism: snapshot at transaction start.** `MoleculeAst` is mostly Arc-wrapped (per-relation `Vec`s, the CSR), so a clone is cheap; on rollback, the saved snapshot replaces the current state. Inverse-Edit replay deferred — possibly useful later for editor-style undo stacks outside transactions, but the transaction primitive itself uses snapshot-restore.
-
-- **Cascade nesting allowed.** `Action::Cascaded { user, cascade }` can recurse — a cascade Edit itself may trigger further cascades. For current overlay rules nesting is unlikely, but the recursive shape costs nothing and handles future edge cases.
+- **Rollback mechanism: realized `Undo` journal.** Checked `transact` records the payloads, remaps, cascades, and constraint updates needed to restore dense storage. It does not snapshot the whole molecule.
 
 - **Pre-commit validation hook.** `tx.validate() -> Result<(), Vec<Error>>` is callable at any point during a transaction; commit calls it implicitly before applying. Lets callers do "try this, check, decide whether to commit" workflows without forcing commit-only validation.
 
 ##### Cost model and batching guidance
 
-Per-transaction overhead breaks down as `1 × snapshot + N × apply + 1 × commit-validation` for an N-Edit transaction. None of these scale with N except the apply cost, which is the unavoidable cost of doing the mutations. Snapshot is cheap (Arc clone of `MoleculeAst`'s mostly-Arc-wrapped fields, ~100 ns); commit-validation is O(atoms+bonds+relations+constraints), µs scale.
+For checked `transact`, per-transaction overhead breaks down as `N × apply + N × undo-capture + 1 × commit-validation` for an N-Edit transaction. There is no whole-molecule snapshot. Undo-capture cost is proportional to the actual changed entities and any constraints affected by remapping.
 
 This means **per-Edit overhead amortizes to almost nothing as long as callers batch into transactions**. Hot-path callers (resolver, propagator loops) should aggregate mutations into one transaction per natural unit of work (one fixpoint iteration, one propagator pass) rather than wrapping each mutation in its own transaction. The natural batch boundary is whatever the caller's algorithm uses anyway.
 
-Pattern to avoid: `for narrowing in narrowings { mol.transact(vec![narrowing])? }` — pays N snapshots and N validations.
-Pattern to use: `mol.transact(narrowings.collect())?` — pays 1 snapshot and 1 validation regardless of N.
+Pattern to avoid: `for narrowing in narrowings { mol.transact(vec![narrowing])? }` — pays N validations and builds N transactions.
+Pattern to use: `mol.transact(narrowings.collect())?` — pays 1 validation and returns 1 transaction.
 
 ##### Unchecked escape hatch
 
-`MoleculeBuilder::transact_unchecked(Vec<Edit>) -> Result<Vec<Action>, ApplyError>` is a documented escape hatch that skips the commit-time validation pass. Intended for callers that produce known-correct batches by construction:
+`MoleculeBuilder::transact_unchecked(Vec<Edit>) -> ()` is a documented escape hatch that skips undo capture and rollback. Intended for callers that produce known-correct batches by construction:
 
 - Reaction rules whose RHS is verified at rule-definition time.
 - Built-in transformations (`kekulize`, `aromatize`) that compute the result and prove its correctness internally.
 - Test fixtures and replay paths from logged Edit sequences.
 
-The snapshot still happens (cheap; provides rollback against catastrophic apply errors like out-of-range indices). What's skipped is the structural validation pass at commit. The contract: caller asserts the resulting molecule is tier-1-valid; runtime does not check.
+The unchecked path is a separate implementation, not `transact(edits).unwrap()`. It constructs no `Undo`; invalid refs or failed preconditions panic. The contract: caller asserts the edit stream is correct and the resulting molecule is tier-1-valid.
 
-Not the load-bearing primitive — `transact` is the default. `transact_unchecked` exists for the small slice of callers where commit-validation cost is measured to matter and where correctness can be argued at the rule / transform level.
+Not the load-bearing primitive — checked `transact` is the default. `transact_unchecked` exists for the small slice of callers where correctness can be argued at the rule / transform level and undo allocation is avoidable.
 
 #### Entity feature attribute mutators
 
@@ -955,7 +917,7 @@ Topology edits via `MoleculeBuilder` with copy-on-write of the Arc-shared CSR. C
 |---|---|---|
 | `MoleculeBuilder::add_atom() -> AtomId` | **Impl** | |
 | `MoleculeBuilder::add_bond(a, b, BondAst) -> BondId` | **Impl** | |
-| `MoleculeBuilder::remove(&[AtomId], &[BondId]) -> Result<Vec<Action>, TransactionError>` | **Sugar over `transact`** | batched; sugar over `transact(vec![Edit::RemoveAtom { ... }, Edit::RemoveBond { ... }])`; cascade Edits surface via `Action::Cascaded { user, cascade }` per §"Edit vocabulary and transactions" |
+| `MoleculeBuilder::remove(&[AtomId], &[BondId]) -> IdRemapping` | **Impl** | low-level dense removal primitive; transaction rollback captures the richer removed payloads and `ConstraintUpdate` before calling it |
 | `MoleculeBuilder::remove_atom(AtomId)`, `remove_bond(BondId)` | **Impl** | sugar over `remove` |
 
 ##### Cascade semantics on `MoleculeBuilder::remove`
@@ -966,7 +928,7 @@ Topology edits via `MoleculeBuilder` with copy-on-write of the Arc-shared CSR. C
 - Silent re-perception would conflate caller-asserted aromaticity with algorithm-detected aromaticity, losing the user's intent.
 - "Refuse" would force every reaction / DPO call to do an upfront overlay-cleanup pass, which is friction without benefit when the caller knows what they're doing.
 
-The chosen middle ground (R3 from the cascade-options table): execute the cascade but report what was dropped, so callers can re-add or log explicitly.
+The chosen middle ground (R3 from the cascade-options table): execute the cascade but record what was dropped, so checked transactions can roll it back and callers inspecting `Undo` can see what changed.
 
 What gets dropped:
 
@@ -975,9 +937,9 @@ What gets dropped:
 | Atom removed | every overlay whose participant list contains that atom (all four overlay types) |
 | Bond removed | every aromatic system whose `bonds()` includes that bond — *only* aromatic systems, since multicenter/noncovalent overlays don't share localized bonds (provisional structural rule, §"Terminology"), and dative bonds coexist independently of localized bonds |
 
-Return type: cascade is reported as Edit data per §"Edit vocabulary and transactions". A `Edit::RemoveAtom` (or `RemoveBond`) inside a transaction yields `Action::Cascaded { user: Done, cascade: Vec<Edit> }` where the cascade list contains `Edit::RemoveAromaticSystem { ... }` / `Edit::RemoveDativeBond { ... }` / etc. for every overlay dropped. Callers who don't care about cascade can ignore the variant; the molecule is still tier-1-valid post-removal. Callers that *do* care (logging, undo stacks, replay) get the cascade as a uniform `Vec<Edit>` they can replay or invert.
+Return type: cascade is reported through the realized `Undo` for `RemoveTopology`. The undo entry stores the dropped overlay payloads, the forward `IdRemapping`, the `UndoRemapping`, and the `ConstraintUpdate` needed to restore the previous dense coordinate system.
 
-Index remapping (old→new atom/bond indices after the removal) lives separately in `Vec<Action>` ordering plus the `*Added` / `Done` variants — the historical `IdRemapping` struct is subsumed.
+Index remapping (old→new atom/bond indices after the removal) remains `IdRemapping`, primarily for downstream consumers that hold ids.
 
 ##### Pre-mutation predicate
 
@@ -1088,7 +1050,7 @@ The Open rows above represent real recurring needs from the ops survey or doc 90
 2. **`bond_between(a, b)`**, **`connected_components()`**, **`induced_bonds(&[AtomId])`** — adjacency-convenience the ops repeatedly hand-rolls.
 3. **`induced_subgraph` shape** — designed in doc 90; impl + return type (`MoleculeSubgraph` vs. `(MoleculeAst, IdRemapping)`) unsettled.
 4. **Internal relation mutators** — settled. Express as a `Remove*` + `Add*` Edit pair inside a transaction; no dedicated in-place API. See §"Internal relation mutators".
-5. **Cascade behavior of `MoleculeBuilder::remove`** — settled as R3 (cascade-and-report). Cascade Edits returned via `Action::Cascaded { user, cascade }` per §"Edit vocabulary and transactions"; replaces the earlier `RemoveOutcome` struct. `atom_view.is_in_overlays()` umbrella predicate to land at the same time.
+5. **Cascade behavior of topology removal** — settled as R3 (cascade-and-record). `RemoveTopology` drops invalid overlays; realized `Undo` records the dropped overlay payloads, remaps, and constraint updates needed for rollback. `atom_view.is_in_overlays()` umbrella predicate to land at the same time.
 6. **`ring_count_at`** + `RingCount(ValueAst)` constraint — designed, not impl.
 7. **Iteration-order contracts** — implicit; should be documented on each iterator-returning method.
 8. **Constraint find-by-kind / find-by-idx queries** — recurring `for c in mol.constraints().iter() { match c { ... } }` pattern.
@@ -1103,10 +1065,123 @@ The Open rows above represent real recurring needs from the ops survey or doc 90
 17. **`NeighborView` reshape** — all-private-fields shape: `{ atom_idx, bond_idx, molecule }` with `nbr.atom() -> AtomView` and `nbr.bond() -> BondView` accessor methods. Indices accessible via `nbr.atom().idx`. View construction lazy; cached `data: &BondAst` field dropped (callers go through `.bond()` accessor).
 18. **Molecule-scope state predicates** — `is_empty`, `has_constraints`, `has_overlays` (topology-only check), plus per-overlay `has_dative_bonds` / `has_aromatic_systems` / `has_multicenter_bonds` / `has_noncovalent_bonds`. `is_ground` already impl. See §"Molecule-scope state predicates".
 19. **Terminology**: "overlays" adopted as the umbrella term for the four typed n-ary relations (`DativeBond`, `AromaticSystem`, `MulticenterBond`, `NoncovalentBond`). Codebase-internal usage; documented in §"Terminology".
-20. **Edit vocabulary** (principle 6) — `Edit` enum with one variant per primitive mutation, self-inverting (`Remove*` carries the AST data, `Set*` carries `old`/`new`); ~30–40 variants. `AtomRef`/`BondRef`/four overlay Refs with `Id(_)` and `New(usize)` variants for intra-batch dependency. `Action` enum with `*Added(*Id)` / `Done` / `Cascaded { user, cascade }` variants. See §"Edit vocabulary and transactions".
-21. **Transaction primitive** — `MoleculeBuilder::transact(Vec<Edit>) -> Result<Vec<Action>, TransactionError>` (data form, primary) plus `transact_with(F)` (closure form, sugar). Atomic, on-commit validation, R3-cascade integrated. `transact_unchecked` documented escape hatch for known-correct-by-construction batches (reactions, built-in transformations) — skips commit validation only. Existing convenience methods (`add_atom`, `remove`, `atom_mut`) become sugar over `transact`. Batching guidance: hot-path callers (resolver, propagators) aggregate mutations into one transaction per natural unit of work; per-Edit overhead amortizes to nothing.
-22. **Field-typed `Set*` Edit variants** — per-field variants (`SetAtomCharge`, `SetAtomElement`, ...) vs single `SetAtomField { field: AtomField }` enum-dispatched. Per-field is type-safe but explodes variant count; field-enum loses type discrimination. Open. See §"Edit vocabulary and transactions" → Open design questions.
-23. **Rollback mechanism** — snapshot-restore (Arc-share is cheap at our scale) vs inverse-Edit replay (smaller memory, more impl work). Open.
+20. **Edit vocabulary** (principle 6) — `Edit` enum with bulk topology primitives (`AddAtoms`, `AddBonds`, `RemoveTopology`) plus single-item sugar; overlay edits remain single-item unless a concrete bulk need appears. `AtomRef`/`BondRef`/four overlay Refs with `Id(_)` and `New(usize)` variants remain the intra-batch dependency mechanism. See §"Mutation API revision: undo-journal transactions".
+21. **Transaction primitive** — `MoleculeBuilder::transact(Vec<Edit>) -> Result<Transaction, TransactionError>` is the checked, atomic, undo-journaled path. It returns a `Transaction` wrapper over realized `Undo` entries; rollback consumes the wrapper and reverse-replays the journal. `transact_unchecked(Vec<Edit>) -> ()` is a separate implementation for known-correct generated edits: no `Undo` allocation, no rollback capability, panic on invalid input.
+22. **Field-typed `Set*` Edit variants** — settled as field-change enums (`SetAtomField { change: AtomFieldChange }`, etc.) rather than per-field top-level variants. The current 8c field-change enums are kept and extended as needed.
+23. **Rollback mechanism** — settled as inverse replay over realized `Undo`, not molecule snapshot restore. Dense storage remains canonical; removals record `IdRemapping`, `UndoRemapping`, removed payloads, and `ConstraintUpdate` so reverse replay restores the exact previous id coordinate system.
+
+### Mutation API revision: undo-journal transactions
+
+Phase 8a-c have already landed the first edit vocabulary pass: `Edit`, `Action`, symbolic refs, and field-change enums. The remaining Phase 8 work revises the transaction core before later mutation phases build on it. The revision replaces snapshot rollback and `Action` with a realized undo journal that can restore dense storage without tombstones or globally stable ids.
+
+#### Core split
+
+- `Edit` is the caller-facing requested mutation vocabulary.
+- `Undo` is the realized physical journal vocabulary.
+- `Transaction` is an opaque wrapper around `Vec<Undo>`; rollback consumes it so individual undo entries are not applied out of order.
+- `IdRemapping` remains the forward public remap for downstream consumers that hold ids.
+- `UndoRemapping` is the inverse/restoration view used by rollback, with `atom()`, `bond()`, and relation methods as needed.
+
+The central rollback invariant:
+
+> When rolling back in reverse order, undoing action `i + 1` must exactly restore the id coordinate system that existed immediately after action `i`.
+
+This is what makes dense storage compatible with inverse replay. Public `Edit` inverses are not enough: an append-only `AddAtom` cannot undo removal of a non-tail atom without changing ids. `Undo` is allowed to use private dense restore operations that are not exposed as normal edits.
+
+#### `Edit` vocabulary
+
+Bulk topology edits are the primitive shape because DPO naturally removes and adds sets of entities:
+
+- `AddAtoms(Vec<AtomAst>)`
+- `AddBonds(Vec<AddBond>)`, where `AddBond` carries `a: AtomRef`, `b: AtomRef`, and `ast: BondAst`
+- `RemoveTopology { atoms: Vec<AtomRef>, bonds: Vec<BondRef> }`
+
+Single-atom and single-bond add/remove calls are sugar over these bulk variants. Separate `RemoveAtom` / `RemoveBond` top-level variants are not needed for the core vocabulary.
+
+Overlay edits stay single-item for now:
+
+- `AddDativeBond`, `RemoveDativeBond`
+- `AddAromaticSystem`, `RemoveAromaticSystem`
+- `AddMulticenterBond`, `RemoveMulticenterBond`
+- `AddNoncovalentBond`, `RemoveNoncovalentBond`
+
+Bulk overlay edits can be added later if a concrete caller needs them. `RemoveTopology` still cascades overlays whose participants are removed, and that cascade is recorded in the realized `Undo`.
+
+Field and constraint edits use the already-landed field-change vocabulary:
+
+- `SetAtomField { idx: AtomRef, change: AtomFieldChange }`
+- `SetBondField { idx: BondRef, change: BondFieldChange }`
+- parallel overlay field changes
+- `Set*Constraint`, `Add*Constraint`, `Remove*Constraint`
+- molecule-level constraint push/pop or equivalent list edits
+
+`Ref::New(n)` resolution is an edit-application concern, not an undo-journal indexing concern. The transaction applicator should maintain a created-entity table for symbolic refs so future internal merging of undo entries does not require `Undo[n]` to correspond to `Edit[n]`.
+
+#### `Undo` vocabulary
+
+`Undo` records how to return from the post-edit state to the pre-edit state. It is not constrained to look like `Edit`.
+
+Required families:
+
+- remove added topology: ids and payloads for atoms/bonds appended by `AddAtoms` / `AddBonds`
+- restore removed topology: removed atoms, removed bonds, cascaded overlay removals, `IdRemapping`, `UndoRemapping`, and `ConstraintUpdate`
+- remove added overlay relation: realized id, participants, payload
+- restore removed overlay relation: original id, participants, payload, any relation-id remap, and `ConstraintUpdate`
+- field rollback: inverse `*FieldChange`
+- constraint rollback: `ConstraintUpdate`
+
+`IdRemapping` is exposed per relevant `Undo` entry. Aggregate remapping and undo-entry merging are deferred optimizations; bulk edit primitives make per-entry remaps acceptable for the first version.
+
+#### Constraint restoration
+
+`Constraints::remap` is lossy because constraints that reference removed entities are dropped. Rollback therefore needs a patch, not a snapshot:
+
+- `ConstraintUpdate` records constraints dropped or rewritten by a structural edit.
+- It should preserve original positions when that is naturally available and cheap.
+- Exact position preservation is a nice-to-have, not a semantic requirement: constraints are rendered deterministically, and non-unique entries of the same kind are conjunctive.
+
+The consistency rule is still patch-based restoration rather than whole-constraint-list snapshotting.
+
+#### Transaction APIs
+
+Checked path:
+
+```rust
+pub fn transact(&mut self, edits: Vec<Edit>) -> Result<Transaction, TransactionError>
+```
+
+`transact` applies edits in order, records realized `Undo`, and on failure rolls back by reverse-replaying the collected journal before returning the apply error. If rollback itself fails, surface a combined/internal rollback error rather than silently leaving partial state.
+
+Rollback:
+
+```rust
+impl Transaction {
+    pub fn rollback(self, builder: &mut MoleculeBuilder) -> Result<(), TransactionError>;
+    pub fn undos(&self) -> &[Undo];
+}
+```
+
+`undos()` is read-only inspection; mutation through individual undo entries is not part of the public API.
+
+Unchecked path:
+
+```rust
+pub fn transact_unchecked(&mut self, edits: Vec<Edit>)
+```
+
+`transact_unchecked` is for generated edit streams known to be correct, such as DPO and built-in transformations after their own prechecks. It has a separate non-journaled implementation, constructs no `Undo`, and panics on invalid refs or failed preconditions. It must not be implemented as `transact(edits).unwrap()`.
+
+#### Private restore machinery
+
+Rollback needs private builder operations that can rebuild dense storage into a previous coordinate system:
+
+- remove appended atoms/bonds/relations by realized id, validating expected payloads where useful
+- expand atoms/bonds through `UndoRemapping`
+- reinsert removed atoms and bonds at their original dense ids
+- restore cascaded overlay relations at their original relation ids
+- inverse-remap surviving constraints, then reapply `ConstraintUpdate`
+
+These operations remain private to `MoleculeBuilder`; exposing "insert at dense id" would let callers create invalid states.
 
 ## Implementation phases
 
@@ -1186,19 +1261,289 @@ rust-analyzer "rename symbol" sweeps plus a handful of manual edits.
 
 ### Phase 8 — Edit vocabulary + transaction primitive
 
-Largest single phase; subdivided.
+Largest single phase; 8a-c are implemented from the first pass, but 8d+ are revised by §"Mutation API revision: undo-journal transactions".
 
 - **8a** `Edit` enum core variants (Add/Remove for atoms and bonds; SetAtomField for common fields) **Done**
-- **8b** `Action` enum + `*Ref` enums (AtomRef, BondRef, four overlay refs) **Done**
+- **8b** `Action` enum + `*Ref` enums (AtomRef, BondRef, four overlay refs) **Done**; `Action` is superseded by `Undo` in 8e.
 - **8c** `*FieldChange` enums for each entity kind **Done**
-- **8d** `MoleculeBuilder::transact(Vec<Edit>) -> Result<Vec<Action>, TransactionError>` (snapshot rollback); `Edit::inverse` signature becomes `(self, action: &Action) -> Edit` so `AddX` inverses can substitute the realized id (per "`Edit::AddX::inverse()` requires the realized `Action`" below)
-- **8e** `transact_with(F)` closure form
-- **8f** `transact_unchecked` escape hatch
-- **8g** `tx.validate()` hook
-- **8h** R3 cascade in `Edit::RemoveAtom` / `Edit::RemoveBond`; `Action::Cascaded { user, cascade }` reporting
-- **8i** existing convenience methods (`add_atom`, `remove`, `atom_mut`) re-implemented as sugar over `transact`
+- **8d** Revise `Edit` around bulk topology primitives: `AddAtoms`, `AddBonds`, `RemoveTopology`; keep single topology helpers as sugar; keep overlay edits single-item for now.
+- **8e** Replace `Action` with `Undo`; add `Transaction`, `UndoRemapping`, `ConstraintUpdate`, and removed-entity payload structs.
+- **8f** Add private dense restore machinery on `MoleculeBuilder` for rollback: restore-at-old-id topology, restore overlay relations, inverse-remap constraints, and apply `ConstraintUpdate`.
+- **8g** Implement checked `MoleculeBuilder::transact(Vec<Edit>) -> Result<Transaction, TransactionError>` with realized undo journaling and reverse-replay rollback on failure.
+- **8h** Implement non-journaled `MoleculeBuilder::transact_unchecked(Vec<Edit>) -> ()` as a separate direct-apply path; panic on invalid generated edits; do not construct `Undo`.
+- **8i** Integrate topology cascade: `RemoveTopology` removes incident bonds and overlays as needed; realized `Undo` records cascades rather than reporting `Action::Cascaded`.
+- **8j** Expose per-undo `IdRemapping` for downstream consumers holding ids; defer aggregate remapping and undo-entry merging.
+- **8k** Existing convenience methods (`add_atom`, `add_bond`, `remove`, relation mutators) remain low-level builder primitives or are reimplemented as sugar over the appropriate checked/unchecked edit paths where atomicity is required.
+- **8l** Test rollback invariant across dense non-tail removals, DPO-style bulk edits, cascaded overlay removal, constraint updates, `Ref::New` resolution, and unchecked panic behavior.
 
-**Completion**: full Edit vocab covered; transaction tests cover atomicity, rollback, cascade, validation. **Dependencies**: phases 1–7 for data structures. **Risk**: high (~30+ variants, novel cascade behavior).
+**Completion**: full Edit/Undo vocab covered; checked transaction tests prove atomicity without snapshots; unchecked path avoids undo allocation; DPO-style bulk add/remove works. **Dependencies**: phases 1–7 for data structures. **Risk**: high (dense restore correctness, constraint patching, cascade behavior).
+
+#### Phase 8 implementation plan
+
+Implementation order is load-bearing. Land the data model and pure remapping helpers before touching transaction application; then add the checked path; then add the no-journal unchecked path.
+
+##### Step 1 — Preserve first-pass coverage before rewrite
+
+- Keep the existing 8a-c tests as migration scaffolding while changing types.
+- Add failing tests that describe the new contract before replacing the old snapshot transaction:
+  - removing a non-tail atom in a checked transaction and rolling back restores exact atom ids, bond ids, relation ids, and equality with the pre-transaction molecule
+  - `RemoveTopology` of one atom cascades incident bonds and overlays into the `Undo`
+  - `transact_unchecked` applies a valid generated edit stream without returning a `Transaction`
+- Do not add compatibility shims for the old `Action` API; Phase 8 is not a shipped public surface.
+
+##### Step 2 — Revise `Edit` in `umol-ast/src/ast/edit.rs`
+
+- Replace topology single variants with bulk primitives:
+  - `AddAtoms { atoms: Vec<AtomAst> }`
+  - `AddBonds { bonds: Vec<AddBond> }`
+  - `RemoveTopology { atoms: Vec<AtomRef>, bonds: Vec<BondRef> }`
+- Add small payload structs:
+  - `AddBond { a: AtomRef, b: AtomRef, ast: BondAst }`
+  - later, if needed, analogous payload structs for relation additions; do not add bulk overlay variants now.
+- Keep overlay relation variants single-item:
+  - `AddDativeBond` / `RemoveDativeBond`
+  - `AddAromaticSystem` / `RemoveAromaticSystem`
+  - `AddMulticenterBond` / `RemoveMulticenterBond`
+  - `AddNoncovalentBond` / `RemoveNoncovalentBond`
+- Keep `Set*Field`, `Set*Constraint`, `Add*Constraint`, `Remove*Constraint`, and molecule-constraint edits.
+- Remove `Edit::inverse`; rollback belongs to `Undo`.
+- Add constructors for single-item ergonomics, e.g. `Edit::add_atom(ast)`, `Edit::add_bond(a, b, ast)`, `Edit::remove_atom(idx)`, `Edit::remove_bond(idx)`, all producing bulk topology variants.
+- Preserve `AtomRef`, `BondRef`, and overlay refs; `New(usize)` indexes the created-entity table, not the undo vector.
+
+##### Step 3 — Add transaction and undo data types
+
+Add the new public transaction surface:
+
+```rust
+pub struct Transaction {
+    undo: Vec<Undo>,
+}
+
+impl Transaction {
+    pub fn rollback(self, builder: &mut MoleculeBuilder) -> Result<(), TransactionError>;
+    pub fn undos(&self) -> &[Undo];
+}
+```
+
+Replace `Action` with `Undo`:
+
+```rust
+pub enum Undo {
+    RemoveAddedTopology {
+        atoms: Vec<AddedAtom>,
+        bonds: Vec<AddedBond>,
+    },
+    RestoreTopology {
+        atoms: Vec<RemovedAtom>,
+        bonds: Vec<RemovedBond>,
+        overlays: RemovedOverlays,
+        remapping: IdRemapping,
+        undo_remapping: UndoRemapping,
+        constraint_update: ConstraintUpdate,
+    },
+    RemoveAddedDativeBond(AddedDativeBond),
+    RestoreRemovedDativeBond(RemovedDativeBond),
+    // same single-item pattern for aromatic, multicenter, noncovalent
+    SetAtomField { id: AtomId, change: AtomFieldChange },
+    SetBondField { id: BondId, change: BondFieldChange },
+    // same field pattern for overlays
+    ApplyConstraintUpdate(ConstraintUpdate),
+}
+```
+
+Payload structs carry realized ids plus enough data to validate rollback:
+
+- `AddedAtom { id, ast }`
+- `AddedBond { id, endpoints, ast }`
+- `RemovedAtom { id, ast }`
+- `RemovedBond { id, endpoints, ast }`
+- `Removed*Relation { id, participants, ast }`
+- `RemovedOverlays` groups cascaded dative, aromatic, multicenter, and noncovalent removals.
+
+Add `Undo::id_remapping() -> Option<&IdRemapping>` so downstream consumers can inspect per-undo forward remaps without needing to match every variant manually.
+
+##### Step 4 — Extend remapping support
+
+Keep `IdRemapping` as forward old-to-new mapping for downstream consumers.
+
+Add `UndoRemapping` as the rollback-side inverse view:
+
+- `UndoRemapping::from(&IdRemapping)` or `IdRemapping::undo_remapping()`
+- `atom(post: AtomId) -> AtomId`
+- `bond(post: BondId) -> BondId`
+- relation methods as needed
+
+`UndoRemapping` maps surviving current ids back into the pre-removal coordinate system. Removed ids are restored from the `Removed*` payloads, not looked up through `UndoRemapping`.
+
+Implementation detail:
+
+- For atom/bond ids, invert the dense "remove sorted ids and shift left" operation.
+- For relation ids, use the same dense inverse over the relation-specific removed-id lists already carried by `IdRemapping`.
+- Keep these helpers pure and unit-tested before using them inside rollback.
+
+##### Step 5 — Add `ConstraintUpdate`
+
+Add patch-based restoration for molecule-level constraints:
+
+```rust
+pub struct ConstraintUpdate {
+    dropped: Vec<DroppedConstraint>,
+    rewritten: Vec<RewrittenConstraint>,
+}
+```
+
+The exact internal shape can be tuned during implementation, but it must support:
+
+- constraints dropped because they referenced removed atoms, bonds, or relations
+- constraints rewritten by `IdRemapping`
+- inverse rewrite during rollback
+- original positions where cheaply available
+
+Preferred implementation path:
+
+- add a `Constraints::remap_with_update(&mut self, remap: &IdRemapping) -> ConstraintUpdate` helper
+- internally walk the original list with positions
+- for each constraint:
+  - if remap succeeds and the constraint changes, store a rewrite record
+  - if remap fails, store a dropped record
+- rollback inverse-remaps surviving constraints, then reinserts dropped constraints by recorded position when possible
+
+Do not snapshot the whole `Constraints` list as the normal path.
+
+##### Step 6 — Add private dense restore operations
+
+Add private builder methods in `umol-ast/src/ast/molecule/builder.rs` or a private helper module:
+
+- `restore_topology(removed_atoms, removed_bonds, removed_overlays, undo_remapping, constraint_update)`
+- `remove_added_topology(added_atoms, added_bonds)`
+- `restore_dative_bond(removed)`
+- `remove_added_dative_bond(added)`
+- same single-relation helpers for aromatic, multicenter, noncovalent
+
+Restoring topology rebuilds dense storage rather than inserting into vectors in place:
+
+- create a new atom vector of pre-removal length
+- place removed atoms at their original ids
+- map surviving current atoms back through `UndoRemapping`
+- rebuild graph endpoints in old bond-id order from surviving bonds plus removed bonds
+- rebuild bond data in old bond-id order
+- rebuild overlay relation sets in old relation-id order
+- restore molecule constraints through `ConstraintUpdate`
+
+These helpers must be private. They are not mutation API.
+
+##### Step 7 — Implement checked apply
+
+In `umol-ast/src/ast/molecule/transact.rs`, replace snapshot rollback with journaled apply:
+
+```rust
+pub fn transact(&mut self, edits: Vec<Edit>) -> Result<Transaction, TransactionError> {
+    let mut journal = Vec::new();
+    let mut created = CreatedEntities::new();
+    for edit in edits {
+        match self.apply_edit_journaled(edit, &mut created) {
+            Ok(undo) => {
+                created.record(&undo);
+                journal.push(undo);
+            }
+            Err(apply_error) => {
+                if let Err(rollback_error) = rollback_journal(self, journal) {
+                    return Err(TransactionError::RollbackFailed {
+                        apply: Box::new(apply_error),
+                        rollback: Box::new(rollback_error),
+                    });
+                }
+                return Err(apply_error);
+            }
+        }
+    }
+    Ok(Transaction { undo: journal })
+}
+```
+
+Actual error handling should preserve the original apply error unless rollback fails; if rollback fails, return a transaction error variant that carries both contexts or at least makes the rollback failure explicit.
+
+Journaled apply rules:
+
+- `AddAtoms`: apply as appends, record `Undo::RemoveAddedTopology`.
+- `AddBonds`: resolve refs through `CreatedEntities`, apply as appends, extend `RemoveAddedTopology` for the edit.
+- `RemoveTopology`: resolve refs, capture all removed payloads and constraints, call low-level dense `remove`, build `IdRemapping` and `UndoRemapping`, record `RestoreTopology`.
+- field edits: validate old value, set new value, record inverse field change.
+- constraint edits: validate precondition, mutate, record `ConstraintUpdate`.
+- overlay add/remove: record single-item added/removed relation undo.
+
+`CreatedEntities` records realized ids for every created entity in edit order. It is separate from `Vec<Undo>` so future undo merging does not break `Ref::New`.
+
+##### Step 8 — Implement rollback
+
+`Transaction::rollback(self, builder)` reverse-iterates `undo`.
+
+Rules:
+
+- rollback is allowed only through `Transaction`, not through public `Undo::apply`
+- each undo validates obvious preconditions before mutating when validation is cheap
+- rollback of a failed transaction and user-requested rollback use the same private function
+- after each undo, the id coordinate system must equal the system before that forward edit
+
+Core tests should assert equality after every rollback, not only final counts.
+
+##### Step 9 — Implement unchecked apply as a separate path
+
+Add `transact_unchecked(Vec<Edit>) -> ()` with direct, non-journaled application.
+
+Rules:
+
+- no `Undo` allocation
+- no removed-payload capture unless needed to perform the mutation itself
+- panic on invalid refs, out-of-range ids, or old-state mismatches
+- do not call `transact(...).unwrap()`
+- reuse small pure helpers for ref resolution if they do not force undo capture
+
+Unchecked `RemoveTopology` can call the low-level dense removal directly after resolving ids; it does not compute `ConstraintUpdate` except for whatever constraint remapping the builder already performs.
+
+##### Step 10 — Reconcile low-level builder APIs
+
+Keep low-level builder primitives where they are useful internally:
+
+- `add_atom`, `add_bond`, overlay `add_*`
+- `remove(&[AtomId], &[BondId]) -> IdRemapping`
+- overlay `remove_*`
+- `atom_mut`, `bond_mut`, relation mut views
+
+Document that these are non-transactional builder operations. Higher-level atomic mutation goes through `transact`; generated DPO paths may use `transact_unchecked`.
+
+Do not force all convenience methods through checked `transact` if doing so would allocate `Undo` for simple builder construction.
+
+##### Step 11 — Test gates
+
+Minimum focused tests for Phase 8 completion:
+
+- `test_molecule_builder_transact_add_atoms`
+- `test_molecule_builder_transact_add_bonds_new_refs`
+- `test_molecule_builder_transact_remove_topology`
+- `test_transaction_rollback`
+- `test_transaction_rollback_non_tail_atom`
+- `test_transaction_rollback_non_tail_bond`
+- `test_transaction_rollback_cascaded_overlays`
+- `test_transaction_rollback_constraint_update`
+- `test_molecule_builder_transact_error_rolls_back`
+- `test_molecule_builder_transact_unchecked`
+- `test_molecule_builder_transact_unchecked_error`
+- `test_undo_remapping_atom`
+- `test_undo_remapping_bond`
+- relation-id equivalents for overlay removals
+
+Property-style tests can come after the focused cases:
+
+- generate small molecules, remove arbitrary atom/bond subsets through checked `transact`, then rollback and assert exact equality
+- compare checked `transact` and `transact_unchecked` final states for known-valid edit batches
+
+##### Step 12 — Migration cleanup
+
+- Remove `Action` once all tests and call sites are migrated to `Undo`.
+- Remove old `Edit::inverse` tests.
+- Update doc examples and discussion references from `Action::Cascaded` to `Undo::RestoreTopology`.
+- Run `cargo test -p umol-ast --tests`; then `cargo test --workspace --tests` after downstream call sites are migrated.
 
 ### Phase 9 — Mutation API completion
 
@@ -1262,7 +1607,7 @@ Phase 13 ops migration can begin incrementally as phase 2 lands, continuing thro
 | 5 | 3–5 days |
 | 6 | 2–3 days |
 | 7 | 1 day |
-| 8 | 1–2 weeks (subdivided) |
+| 8 | 2–3 weeks (revised undo-journal design; subdivided) |
 | 9 | 3–5 days |
 | 10 | 2–4 days |
 | 11 | 1–2 days |
@@ -1280,15 +1625,13 @@ Each phase lands with:
 - No new clippy warnings
 - Ops modules either migrated (in their respective phases) or passing via temporary shims
 
-### `Edit::AddX::inverse()` requires the realized `Action`
+### `Undo` replaces `Action` for realized rollback
 
-`Edit::inverse(self) -> Self` is structured as a pure function on the `Edit` value. For `SetXField`, `RemoveX`, `Push/PopMoleculeConstraint`, etc., the inverse is determined by the variant's own fields (swap `old`/`new`; flip `Add`↔`Remove` carrying the same `ast`+`idx`). For `Edit::AddX` variants the inverse is `Edit::RemoveX { idx, ast, ... }`, where `idx` is the entity id allocated at apply time and known only after `transact` runs.
+The first Phase-8 pass used `Action` as a lightweight record of what happened (`*Added`, `Done`, `Cascaded`). That is enough to report realized ids, but not enough to roll back dense storage without a snapshot. Removing a non-tail atom or bond compacts ids; undoing that operation cannot be expressed as a normal append-only `Edit::AddX`.
 
-`Action` carries the id that `Edit` cannot: `AtomAdded(AtomId)`, `BondAdded(BondId)`, etc. The actions vector returned by `transact` is parallel to the input edits (one `Action` per applied `Edit`), so `(Edit, Action)` pairs are recoverable by position.
+**Resolution:** `Action` is replaced by `Undo`, a physical rollback journal entry. `Undo` records removed payloads, `IdRemapping`, `UndoRemapping`, cascaded overlay removals, and `ConstraintUpdate` as needed. `Transaction` wraps `Vec<Undo>` and rollback consumes the wrapper, reverse-replaying entries in order.
 
-**Resolution:** the signature becomes `Edit::inverse(self, action: &Action) -> Edit`. The `AddX` arms read the id from `action`; the other arms ignore `action` and produce the same inverse they do today. Pure, total, no placeholders.
-
-`transact` does **not** eagerly return an inverse list. Inverting a transaction is uncommon; callers that need it zip `edits` with the returned `actions` and map over the primitive on demand.
+`Edit` remains the caller-facing mutation vocabulary. It does not need to be self-inverting, and `Edit::inverse` is no longer part of the transaction design. The checked path builds `Undo`; the unchecked path applies trusted edits directly and builds no journal.
 
 ## AST-vs-API layering: parked considerations
 
