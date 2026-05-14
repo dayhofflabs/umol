@@ -197,12 +197,7 @@ impl SpinState {
 
 impl fmt::Display for SpinState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "#u{}#s{}",
-            self.unpaired,
-            u8::from(self.multiplicity)
-        )
+        write!(f, "#u{}#s{}", self.unpaired, u8::from(self.multiplicity))
     }
 }
 

@@ -22,7 +22,9 @@ use serde::Serialize;
 use umol_graph::io::smiles::config::SmilesIoConfig;
 use umol_graph::io::smiles::error::ParseError;
 use umol_graph::io::smiles::parse_extended_smiles_bytes_with;
-use umol_graph::io::smiles::parser::{parse_smiles_bytes_to_table_ir_with, parse_smiles_to_table_ir};
+use umol_graph::io::smiles::parser::{
+    parse_smiles_bytes_to_table_ir_with, parse_smiles_to_table_ir,
+};
 use umol_graph::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

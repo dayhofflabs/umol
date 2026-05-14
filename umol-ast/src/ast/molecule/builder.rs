@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 use umol_graph_core::{
-    EdgeId, FixedRelationSet, Graph, NodeId, Remapping, RelationId, VarRelationSet,
+    EdgeId, FixedRelationSet, Graph, NodeId, RelationId, Remapping, VarRelationSet,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -353,7 +353,10 @@ impl MoleculeBuilder {
     // -- Attribute access -----------------------------------------------------
 
     pub fn atom(&self, idx: AtomId) -> AtomBuilderView<'_> {
-        AtomBuilderView { id: idx, ast: &self.atoms[idx.index()] }
+        AtomBuilderView {
+            id: idx,
+            ast: &self.atoms[idx.index()],
+        }
     }
 
     pub fn atom_mut(&mut self, idx: AtomId) -> AtomBuilderViewMut<'_> {
@@ -364,14 +367,22 @@ impl MoleculeBuilder {
     pub fn bond(&self, idx: BondId) -> BondBuilderView<'_> {
         let endpoints = self.graph.edge_endpoints(EdgeId::from(idx));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
-        BondBuilderView { id: idx, ast: &self.bonds[idx.index()], atoms }
+        BondBuilderView {
+            id: idx,
+            ast: &self.bonds[idx.index()],
+            atoms,
+        }
     }
 
     pub fn bond_mut(&mut self, idx: BondId) -> BondBuilderViewMut<'_> {
         let endpoints = self.graph.edge_endpoints(EdgeId::from(idx));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
         let ast = &mut Arc::make_mut(&mut self.bonds)[idx.index()];
-        BondBuilderViewMut { id: idx, ast, atoms }
+        BondBuilderViewMut {
+            id: idx,
+            ast,
+            atoms,
+        }
     }
 
     pub fn dative_bond(&self, idx: DativeBondId) -> DativeBondBuilderView<'_> {
@@ -381,7 +392,12 @@ impl MoleculeBuilder {
                 let atoms = arc.participants(rid);
                 let ast = arc.data(rid);
                 let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
-                DativeBondBuilderView { id: idx, ast, atoms, acceptor_id }
+                DativeBondBuilderView {
+                    id: idx,
+                    ast,
+                    atoms,
+                    acceptor_id,
+                }
             }
             VarSetStorage::Mutable(vec) => {
                 let entry = &vec[idx.index()];
@@ -423,7 +439,11 @@ impl MoleculeBuilder {
             }
             VarSetStorage::Mutable(vec) => {
                 let entry = &vec[idx.index()];
-                AromaticSystemBuilderView { id: idx, ast: &entry.1, atoms: &entry.0 }
+                AromaticSystemBuilderView {
+                    id: idx,
+                    ast: &entry.1,
+                    atoms: &entry.0,
+                }
             }
         }
     }
@@ -456,7 +476,11 @@ impl MoleculeBuilder {
             }
             VarSetStorage::Mutable(vec) => {
                 let entry = &vec[idx.index()];
-                MulticenterBondBuilderView { id: idx, ast: &entry.1, atoms: &entry.0 }
+                MulticenterBondBuilderView {
+                    id: idx,
+                    ast: &entry.1,
+                    atoms: &entry.0,
+                }
             }
         }
     }

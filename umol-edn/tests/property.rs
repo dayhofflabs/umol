@@ -90,9 +90,9 @@ fn string_strategy() -> impl Strategy<Value = String> {
         // Non-ASCII Unicode strings.
         prop::collection::vec(
             prop_oneof![
-                Just('\u{00E9}'), // é
-                Just('\u{03B1}'), // α
-                Just('\u{4E16}'), // 世
+                Just('\u{00E9}'),  // é
+                Just('\u{03B1}'),  // α
+                Just('\u{4E16}'),  // 世
                 Just('\u{1F600}'), // 😀
                 (0x80u32..0x800u32).prop_filter_map("valid", char::from_u32),
             ],
@@ -120,7 +120,11 @@ fn edn_leaf() -> impl Strategy<Value = Edn<'static>> {
         (1u32..0x20u32)
             .prop_filter_map("not named", |cp| {
                 let c = char::from_u32(cp)?;
-                if matches!(c, '\n' | '\r' | '\t') { None } else { Some(c) }
+                if matches!(c, '\n' | '\r' | '\t') {
+                    None
+                } else {
+                    Some(c)
+                }
             })
             .prop_map(Edn::Char),
         string_strategy().prop_map(|s| Edn::Str(Cow::Owned(s))),

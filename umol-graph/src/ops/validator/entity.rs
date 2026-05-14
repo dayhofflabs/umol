@@ -85,8 +85,7 @@ fn multicenter_length_check(
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AromaticSystemAst, AtomAst, AtomId, Constraints, MoleculeAst, MulticenterBondAst,
-        ValueAst,
+        AromaticSystemAst, AtomAst, AtomId, Constraints, MoleculeAst, MulticenterBondAst, ValueAst,
     };
     use umol_shared::element::Element;
 

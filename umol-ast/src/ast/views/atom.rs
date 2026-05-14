@@ -43,14 +43,11 @@ impl<'a> AtomViews<'a> {
 
     pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> {
         let molecule = self.molecule;
-        self.atoms
-            .iter()
-            .enumerate()
-            .map(move |(i, ast)| AtomView {
-                id: AtomId(i as u32),
-                ast,
-                molecule,
-            })
+        self.atoms.iter().enumerate().map(move |(i, ast)| AtomView {
+            id: AtomId(i as u32),
+            ast,
+            molecule,
+        })
     }
 
     pub fn get(&self, id: AtomId) -> AtomView<'a> {
@@ -204,7 +201,10 @@ impl<'a> AtomView<'a> {
     }
 
     pub fn aromatic_system_id(&self) -> Option<AromaticSystemId> {
-        self.molecule.aromatic_systems().incident_ids(self.id).next()
+        self.molecule
+            .aromatic_systems()
+            .incident_ids(self.id)
+            .next()
     }
 
     pub fn dative_bonds(&self) -> impl Iterator<Item = DativeBondView<'a>> + 'a {

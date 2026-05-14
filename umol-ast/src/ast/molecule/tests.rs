@@ -246,7 +246,10 @@ fn test_molecule_ast_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     assert_eq!(dv.id, DativeBondId(0));
     assert_eq!(dv.acceptor_id, AtomId(3));
     assert_eq!(dv.donor_ids().collect::<Vec<_>>(), vec![AtomId(2)]);
-    assert_eq!(dv.atom_ids().collect::<Vec<_>>(), vec![AtomId(2), AtomId(3)]);
+    assert_eq!(
+        dv.atom_ids().collect::<Vec<_>>(),
+        vec![AtomId(2), AtomId(3)]
+    );
     assert_eq!(dv.ast.order, ValueAst::Lit(1));
 }
 
@@ -271,7 +274,10 @@ fn test_molecule_ast_aromatic_system(#[from(rich_molecule)] ast: MoleculeAst) {
         av.atom_ids().collect::<Vec<_>>(),
         vec![AtomId(0), AtomId(1), AtomId(2)]
     );
-    assert_eq!(av.bond_ids().collect::<Vec<_>>(), vec![BondId(0), BondId(1)]);
+    assert_eq!(
+        av.bond_ids().collect::<Vec<_>>(),
+        vec![BondId(0), BondId(1)]
+    );
 }
 
 #[rstest]
@@ -310,10 +316,7 @@ fn test_molecule_ast_multicenter_bonds(#[from(rich_molecule)] ast: MoleculeAst) 
         .collect();
     assert_eq!(
         projected,
-        vec![(
-            MulticenterBondId(0),
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-        )]
+        vec![(MulticenterBondId(0), vec![AtomId(0), AtomId(1), AtomId(2)],)]
     );
 }
 
@@ -495,7 +498,12 @@ fn test_bond_views_induced(
     #[case] atoms: Vec<AtomId>,
     #[case] expected: Vec<BondId>,
 ) {
-    let mut got: Vec<BondId> = ast.bonds().induced(&atoms).into_iter().map(|v| v.id).collect();
+    let mut got: Vec<BondId> = ast
+        .bonds()
+        .induced(&atoms)
+        .into_iter()
+        .map(|v| v.id)
+        .collect();
     got.sort_unstable();
     assert_eq!(got, expected);
 }
@@ -532,7 +540,12 @@ fn test_dative_bond_views_induced(
     #[case] atoms: Vec<AtomId>,
     #[case] expected: Vec<DativeBondId>,
 ) {
-    let got: Vec<DativeBondId> = ast.dative_bonds().induced(&atoms).into_iter().map(|v| v.id).collect();
+    let got: Vec<DativeBondId> = ast
+        .dative_bonds()
+        .induced(&atoms)
+        .into_iter()
+        .map(|v| v.id)
+        .collect();
     assert_eq!(got, expected);
 }
 
@@ -544,7 +557,11 @@ fn test_aromatic_system_views_incident(
     #[case] atom: AtomId,
     #[case] expected: Vec<AromaticSystemId>,
 ) {
-    let got: Vec<AromaticSystemId> = ast.aromatic_systems().incident(atom).map(|v| v.id).collect();
+    let got: Vec<AromaticSystemId> = ast
+        .aromatic_systems()
+        .incident(atom)
+        .map(|v| v.id)
+        .collect();
     assert_eq!(got, expected);
 }
 
@@ -559,7 +576,10 @@ fn test_aromatic_system_views_connecting(
     #[case] atoms: HashSet<AtomId>,
     #[case] expected: Option<AromaticSystemId>,
 ) {
-    assert_eq!(ast.aromatic_systems().connecting(atoms).map(|v| v.id), expected);
+    assert_eq!(
+        ast.aromatic_systems().connecting(atoms).map(|v| v.id),
+        expected
+    );
 }
 
 #[rstest]
@@ -587,8 +607,11 @@ fn test_multicenter_bond_views_incident(
     #[case] atom: AtomId,
     #[case] expected: Vec<MulticenterBondId>,
 ) {
-    let got: Vec<MulticenterBondId> =
-        ast.multicenter_bonds().incident(atom).map(|v| v.id).collect();
+    let got: Vec<MulticenterBondId> = ast
+        .multicenter_bonds()
+        .incident(atom)
+        .map(|v| v.id)
+        .collect();
     assert_eq!(got, expected);
 }
 
@@ -635,8 +658,11 @@ fn test_noncovalent_bond_views_incident(
     #[case] atom: AtomId,
     #[case] expected: Vec<NoncovalentBondId>,
 ) {
-    let got: Vec<NoncovalentBondId> =
-        ast.noncovalent_bonds().incident(atom).map(|v| v.id).collect();
+    let got: Vec<NoncovalentBondId> = ast
+        .noncovalent_bonds()
+        .incident(atom)
+        .map(|v| v.id)
+        .collect();
     assert_eq!(got, expected);
 }
 
@@ -744,10 +770,7 @@ fn chain(n: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_atoms_and_bonds(
-        atoms,
-        bonds,
-    )
+    MoleculeAst::from_atoms_and_bonds(atoms, bonds)
 }
 
 fn ring(n: usize) -> MoleculeAst {
@@ -761,10 +784,7 @@ fn ring(n: usize) -> MoleculeAst {
             )
         })
         .collect();
-    MoleculeAst::from_atoms_and_bonds(
-        atoms,
-        bonds,
-    )
+    MoleculeAst::from_atoms_and_bonds(atoms, bonds)
 }
 
 fn two_components() -> MoleculeAst {
@@ -802,7 +822,9 @@ fn test_molecule_ast_degree(
 #[case::two(two_components(), 2)]
 #[case::empty(MoleculeAst::default(), 0)]
 fn test_molecule_ast_connected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
-    let cc = ast.graph().connected_components(ConnectedComponentsAlgorithm::Bfs);
+    let cc = ast
+        .graph()
+        .connected_components(ConnectedComponentsAlgorithm::Bfs);
     assert_eq!(cc.len(), expected);
 }
 
@@ -810,7 +832,9 @@ fn test_molecule_ast_connected_components(#[case] ast: MoleculeAst, #[case] expe
 #[case::ring_6(ring(6), 1)]
 #[case::chain(chain(5), 0)]
 fn test_molecule_ast_biconnected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
-    let bcc = ast.graph().biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
+    let bcc = ast
+        .graph()
+        .biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
     assert_eq!(bcc.len(), expected);
 }
 
@@ -823,7 +847,8 @@ fn test_molecule_ast_shortest_cycle_through_bond(
     #[case] expected: Option<usize>,
 ) {
     assert_eq!(
-        ast.graph().shortest_cycle_through_bond(bond, ShortestCycleAlgorithm::Bfs),
+        ast.graph()
+            .shortest_cycle_through_bond(bond, ShortestCycleAlgorithm::Bfs),
         expected
     );
 }
@@ -837,7 +862,8 @@ fn test_molecule_ast_shortest_cycle_through_atom(
     #[case] expected: Option<usize>,
 ) {
     assert_eq!(
-        ast.graph().shortest_cycle_through_atom(atom, ShortestCycleAlgorithm::Bfs),
+        ast.graph()
+            .shortest_cycle_through_atom(atom, ShortestCycleAlgorithm::Bfs),
         expected
     );
 }
@@ -852,7 +878,9 @@ fn test_molecule_ast_enumerate_cycles(
     #[case] max_size: usize,
     #[case] expected: usize,
 ) {
-    let cycles = ast.graph().enumerate_cycles(max_size, CycleEnumerationAlgorithm::Vismara);
+    let cycles = ast
+        .graph()
+        .enumerate_cycles(max_size, CycleEnumerationAlgorithm::Vismara);
     assert_eq!(cycles.len(), expected);
 }
 
@@ -860,7 +888,9 @@ fn test_molecule_ast_enumerate_cycles(
 #[case::triangle(ring(3), 1)]
 #[case::chain_3(chain(3), 2)]
 fn test_molecule_ast_maximum_independent_set(#[case] ast: MoleculeAst, #[case] expected: usize) {
-    let mis = ast.graph().maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound);
+    let mis = ast
+        .graph()
+        .maximum_independent_set(MaxIndependentSetAlgorithm::BranchAndBound);
     assert_eq!(mis.len(), expected);
 }
 
@@ -888,7 +918,9 @@ fn test_molecule_ast_enumerate_perfect_matchings(
     #[case] ast: MoleculeAst,
     #[case] expected: usize,
 ) {
-    let ms = ast.graph().enumerate_perfect_matchings(MatchingEnumerationAlgorithm::BranchAndBound);
+    let ms = ast
+        .graph()
+        .enumerate_perfect_matchings(MatchingEnumerationAlgorithm::BranchAndBound);
     assert_eq!(ms.len(), expected);
     for m in &ms {
         assert!(m.is_perfect(ast.atoms().count()));
@@ -899,7 +931,9 @@ fn test_molecule_ast_enumerate_perfect_matchings(
 #[case::ring_6(ring(6), 1)]
 #[case::chain_3(chain(3), 2)]
 fn test_molecule_ast_automorphisms(#[case] ast: MoleculeAst, #[case] expected_orbits: usize) {
-    let auto = ast.graph().automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
+    let auto = ast
+        .graph()
+        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
     assert_eq!(auto.orbit_count(), expected_orbits);
     assert_eq!(auto.atom_count(), ast.atoms().count());
 }
@@ -907,7 +941,9 @@ fn test_molecule_ast_automorphisms(#[case] ast: MoleculeAst, #[case] expected_or
 #[test]
 fn test_atom_automorphism_same_orbit() {
     let ast = ring(6);
-    let auto = ast.graph().automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
+    let auto = ast
+        .graph()
+        .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty);
     assert!(auto.same_orbit(AtomId(0), AtomId(3)));
 }
 
@@ -1257,10 +1293,12 @@ fn test_molecule_ast_rings_cache_reset_after_build() {
 
 #[test]
 fn test_molecule_ast_rings_induced() {
-    let ast = mol!(r#"{
+    let ast = mol!(
+        r#"{
         :atoms ["C" "C" "C" "C"]
         :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [1 2 "1"] [1 3 "1"] [2 3 "1"]]
-    }"#);
+    }"#
+    );
     let simple_count = ast.rings_with(RingFamily::Simple, 4, |_| true).count();
     let induced_count = ast.rings_with(RingFamily::Relevant, 4, |_| true).count();
     assert_eq!(simple_count, 4);
@@ -1269,13 +1307,15 @@ fn test_molecule_ast_rings_induced() {
 
 #[test]
 fn test_molecule_ast_rings_induced_naphthalene() {
-    let ast = mol!(r#"{
+    let ast = mol!(
+        r#"{
         :atoms ["C" "C" "C" "C" "C" "C" "C" "C" "C" "C"]
         :bonds [
             [0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]
             [3 6 "1"] [6 7 "1"] [7 8 "1"] [8 9 "1"] [9 4 "1"]
         ]
-    }"#);
+    }"#
+    );
     let simple_count = ast.rings_with(RingFamily::Simple, 10, |_| true).count();
     assert_eq!(simple_count, 2);
     let induced_count = ast.rings_with(RingFamily::Relevant, 10, |_| true).count();
@@ -1882,8 +1922,10 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         atom.isotope_mass = IsotopeAst::Expr(Expr::Neg(Box::new(Expr::Lit(13))));
         atom.implicit_hydrogens = ImplicitHydrogensAst::Expr(Expr::Lit(3));
         atom.lone_pairs = ValueAst::Expr(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))));
-        atom.spin =
-            SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) };
+        atom.spin = SpinStateAst {
+            unpaired: ValueAst::Expr(Expr::Lit(0)),
+            multiplicity: ValueAst::Expr(Expr::Lit(1)),
+        };
         // And an inline atom constraint with a non-canonical Expr.
         atom.constraints
             .add(AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4))));
@@ -1895,8 +1937,10 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         let bond = ast.bond_mut(BondId(0)).ast;
         bond.order = ValueAst::Expr(Expr::Lit(1));
         bond.charge = ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(0))));
-        bond.spin =
-            SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) };
+        bond.spin = SpinStateAst {
+            unpaired: ValueAst::Expr(Expr::Lit(0)),
+            multiplicity: ValueAst::Expr(Expr::Lit(1)),
+        };
         bond.constraints
             .add(BondConstraint::RingCount(ValueAst::Expr(Expr::Lit(1))));
     }
@@ -1916,8 +1960,10 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
             ValueAst::Expr(Expr::Lit(1)),
             ValueAst::Expr(Expr::Lit(1)),
         ];
-        ar.spin =
-            SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) };
+        ar.spin = SpinStateAst {
+            unpaired: ValueAst::Expr(Expr::Lit(0)),
+            multiplicity: ValueAst::Expr(Expr::Lit(1)),
+        };
     }
 
     // Multicenter bond 0: same pattern, three member atoms.
@@ -1929,8 +1975,10 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
             ValueAst::Expr(Expr::Lit(1)),
             ValueAst::Expr(Expr::Lit(0)),
         ];
-        mc.spin =
-            SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) };
+        mc.spin = SpinStateAst {
+            unpaired: ValueAst::Expr(Expr::Lit(0)),
+            multiplicity: ValueAst::Expr(Expr::Lit(1)),
+        };
     }
 
     // Molecule-scope constraints: a ChargeSum, a Relational predicate,

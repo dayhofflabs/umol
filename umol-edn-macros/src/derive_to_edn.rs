@@ -39,7 +39,9 @@
 use heck::ToKebabCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, PathArguments, Type};
+use syn::{
+    Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, PathArguments, Type,
+};
 
 pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
     if has_container_attr(&input.attrs, "transparent") {
@@ -167,11 +169,11 @@ fn expand_enum(name: &syn::Ident, data: &DataEnum) -> Result<TokenStream2, syn::
                 }
             }
             Fields::Named(fields) => {
-                let parsed_fields: Vec<_> = fields
-                    .named
-                    .iter()
-                    .map(parse_field)
-                    .collect::<Result<Vec<_>, _>>()?;
+                let parsed_fields: Vec<_> = fields.named.iter().map(parse_field).collect::<Result<
+                    Vec<_>,
+                    _,
+                >>(
+                )?;
 
                 let mut field_refs = Vec::new();
                 let mut field_inserts = Vec::new();
@@ -253,7 +255,10 @@ fn expand_enum(name: &syn::Ident, data: &DataEnum) -> Result<TokenStream2, syn::
 fn expand_transparent(input: &DeriveInput) -> Result<TokenStream2, syn::Error> {
     let name = &input.ident;
     let accessor = match &input.data {
-        Data::Struct(DataStruct { fields: Fields::Named(named), .. }) => {
+        Data::Struct(DataStruct {
+            fields: Fields::Named(named),
+            ..
+        }) => {
             if named.named.len() != 1 {
                 return Err(syn::Error::new_spanned(
                     name,
@@ -263,7 +268,10 @@ fn expand_transparent(input: &DeriveInput) -> Result<TokenStream2, syn::Error> {
             let ident = named.named.first().unwrap().ident.as_ref().unwrap();
             quote! { &self.#ident }
         }
-        Data::Struct(DataStruct { fields: Fields::Unnamed(unnamed), .. }) => {
+        Data::Struct(DataStruct {
+            fields: Fields::Unnamed(unnamed),
+            ..
+        }) => {
             if unnamed.unnamed.len() != 1 {
                 return Err(syn::Error::new_spanned(
                     name,
@@ -329,7 +337,9 @@ fn parse_field(field: &Field) -> Result<FieldInfo, syn::Error> {
         .ok_or_else(|| syn::Error::new_spanned(field, "field must be named"))?;
 
     let attrs = FieldAttrs::parse(&field.attrs)?;
-    let key = attrs.rename.unwrap_or_else(|| ident.to_string().to_kebab_case());
+    let key = attrs
+        .rename
+        .unwrap_or_else(|| ident.to_string().to_kebab_case());
 
     let ser = if attrs.skip {
         FieldSer::Skip
@@ -378,7 +388,11 @@ impl FieldAttrs {
                 }
             })?;
         }
-        Ok(FieldAttrs { rename, skip, skip_if })
+        Ok(FieldAttrs {
+            rename,
+            skip,
+            skip_if,
+        })
     }
 }
 
@@ -396,5 +410,3 @@ fn is_option_type(ty: &Type) -> bool {
     }
     false
 }
-
-

@@ -15,11 +15,12 @@ pub mod valence;
 
 pub use aromaticity::AromaticityResolver;
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
-pub use multicenter::{MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver};
-pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
-
+pub use multicenter::{
+    MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
+};
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
+pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
 use crate::ops::config::ChemistryModel;
@@ -80,9 +81,9 @@ impl Resolver {
         match self.aromaticity.resolve(ast)? {
             Solution::Determined(()) | Solution::Underdetermined(()) => {}
             Solution::Contradictory(c) => {
-                return Ok(Solution::Contradictory(
-                    ResolverContradiction::Aromaticity(c),
-                ));
+                return Ok(Solution::Contradictory(ResolverContradiction::Aromaticity(
+                    c,
+                )));
             }
         }
         match self.bonds.resolve(ast)? {
@@ -120,12 +121,14 @@ fn molecule_all_ground(ast: &MoleculeAst) -> bool {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::mol_zeroed;
     use umol_ast::ast::MoleculeAst;
+    use umol_ast::mol_zeroed;
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ops::config::{AromaticityModel, ChemistryModel, ElementScope, RingLimits, ValenceModel};
+    use crate::ops::config::{
+        AromaticityModel, ChemistryModel, ElementScope, RingLimits, ValenceModel,
+    };
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
     fn ground_methane() -> MoleculeAst {
@@ -133,10 +136,12 @@ mod tests {
     }
 
     fn benzene_pinned() -> MoleculeAst {
-        mol_zeroed!(r#"{
+        mol_zeroed!(
+            r#"{
             :atoms ["C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
-        }"#)
+        }"#
+        )
     }
 
     fn counts_model() -> ChemistryModel {

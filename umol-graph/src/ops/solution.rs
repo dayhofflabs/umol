@@ -174,7 +174,10 @@ mod tests {
     #[rstest]
     fn test_solution_data_contradictory(contradictory: Solution<Payload, Mismatch>) {
         assert_eq!(contradictory.data(), None);
-        assert_eq!(contradictory.contradiction(), Some(&Mismatch::Reason("nope")));
+        assert_eq!(
+            contradictory.contradiction(),
+            Some(&Mismatch::Reason("nope"))
+        );
     }
 
     #[rstest]
@@ -226,9 +229,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_solution_map_contradictory_passes_through(
-        contradictory: Solution<Payload, Mismatch>,
-    ) {
+    fn test_solution_map_contradictory_passes_through(contradictory: Solution<Payload, Mismatch>) {
         let mapped = contradictory.map(|Payload(n)| Payload(n + 100));
         assert_eq!(mapped, Solution::Contradictory(Mismatch::Reason("nope")));
     }

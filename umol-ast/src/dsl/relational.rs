@@ -396,10 +396,7 @@ impl RelationalConstraintDsl {
                 let [a, b] = predicates;
                 RelationalConstraint::NoncovalentBondEndsSatisfy {
                     bond: bond.into_ast(counts.noncovalent_bond_count, meta)?,
-                    predicates: [
-                        Box::new(a.into_ast(&())),
-                        Box::new(b.into_ast(&())),
-                    ],
+                    predicates: [Box::new(a.into_ast(&())), Box::new(b.into_ast(&()))],
                 }
             }
         })

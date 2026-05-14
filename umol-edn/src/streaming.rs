@@ -7,8 +7,7 @@
 
 use std::borrow::Cow;
 use std::fmt;
-use std::str::from_utf8;
-use std::str::FromStr;
+use std::str::{from_utf8, FromStr};
 
 use crate::error::{DeError, EdnError, ParseError};
 use crate::parser::{is_symbol_char, is_symbol_start, validate_symbol};
@@ -461,10 +460,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     ///
     /// On failure, wraps the subgrammar error in `DeError::Subgrammar` with
     /// the byte offset of the string token in the outer EDN source.
-    pub fn read_subgrammar<T: FromStr>(
-        &mut self,
-        grammar: &'static str,
-    ) -> Result<T, EdnError>
+    pub fn read_subgrammar<T: FromStr>(&mut self, grammar: &'static str) -> Result<T, EdnError>
     where
         T::Err: fmt::Display,
     {
@@ -487,10 +483,7 @@ impl<'de> EdnStreamDeserializer<'de> {
     /// string literal handed to another grammar.
     ///
     /// [`read_subgrammar`]: Self::read_subgrammar
-    pub fn read_subgrammar_all<T: FromStr>(
-        &mut self,
-        grammar: &'static str,
-    ) -> Result<T, EdnError>
+    pub fn read_subgrammar_all<T: FromStr>(&mut self, grammar: &'static str) -> Result<T, EdnError>
     where
         T::Err: fmt::Display,
     {
@@ -583,10 +576,7 @@ mod tests {
     #[case::simple(":foo", "foo")]
     #[case::with_ws("  :bar", "bar")]
     #[case::namespaced(":ns/name", "ns/name")]
-    fn test_edn_stream_deserializer_read_keyword_name(
-        #[case] input: &str,
-        #[case] expected: &str,
-    ) {
+    fn test_edn_stream_deserializer_read_keyword_name(#[case] input: &str, #[case] expected: &str) {
         let mut d = EdnStreamDeserializer::new(input);
         assert_eq!(d.read_keyword_name().unwrap().as_ref(), expected);
     }
@@ -656,7 +646,6 @@ mod tests {
         assert_eq!(d.read_i64().unwrap(), expected);
     }
 
-
     #[rstest]
     #[case::number("123")]
     #[case::boolean("true")]
@@ -696,10 +685,7 @@ mod tests {
     #[case::vector("[1 2] rest", "[1 2]")]
     #[case::boolean("  true rest", "true")]
     #[case::string(r#""hi" rest"#, r#""hi""#)]
-    fn test_edn_stream_deserializer_read_value_slice(
-        #[case] input: &str,
-        #[case] expected: &str,
-    ) {
+    fn test_edn_stream_deserializer_read_value_slice(#[case] input: &str, #[case] expected: &str) {
         let mut d = EdnStreamDeserializer::new(input);
         assert_eq!(d.read_value_slice().unwrap(), expected);
     }
@@ -715,7 +701,13 @@ mod tests {
     fn test_edn_stream_deserializer_read_subgrammar_error() {
         let mut d = EdnStreamDeserializer::new(r#""not_a_number""#);
         let err = d.read_subgrammar::<i64>("test").unwrap_err();
-        assert!(matches!(err, EdnError::De(DeError::Subgrammar { grammar: "test", .. })));
+        assert!(matches!(
+            err,
+            EdnError::De(DeError::Subgrammar {
+                grammar: "test",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -804,5 +796,4 @@ mod tests {
         let mut d = EdnStreamDeserializer::new(input);
         assert!(d.read_string_or_keyword().is_err());
     }
-
 }

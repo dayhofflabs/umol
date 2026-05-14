@@ -11,8 +11,8 @@ use umol_shared::element::Element;
 use crate::ops::valence::registry::AtomTypeRegistry;
 use crate::ops::valence::shared::{
     atom_dative_counts, atom_is_aromatic, base_atom_compatible, charge_or_zero,
-    infer_normal_implicit_hydrogens, lift_constraints, narrow_atom,
-    pattern_constraints_compatible, AtomCandidate,
+    infer_normal_implicit_hydrogens, lift_constraints, narrow_atom, pattern_constraints_compatible,
+    AtomCandidate,
 };
 
 #[derive(Clone, Debug)]
@@ -49,7 +49,12 @@ impl AtomTypingValenceResolver {
             let ElementAst::Lit(element) = view.ast.element else {
                 continue;
             };
-            if view.valence().literal().and_then(|n| u8::try_from(n).ok()).is_none() {
+            if view
+                .valence()
+                .literal()
+                .and_then(|n| u8::try_from(n).ok())
+                .is_none()
+            {
                 continue;
             }
 
@@ -90,7 +95,8 @@ impl AtomTypingValenceResolver {
         let implicit_h_constraint = match &atom.implicit_hydrogens {
             ImplicitHydrogensAst::Lit(n) => Some(*n as u8),
             ImplicitHydrogensAst::Normal => {
-                let Some(h) = infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
+                let Some(h) =
+                    infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
                 else {
                     return Vec::new();
                 };
@@ -146,8 +152,8 @@ fn collect_pattern_constraints(pattern: &AtomAst) -> Vec<AtomConstraint> {
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::{mol, mol_zeroed};
     use umol_ast::ast::MoleculeAst;
+    use umol_ast::{mol, mol_zeroed};
 
     use super::*;
     use crate::registry;

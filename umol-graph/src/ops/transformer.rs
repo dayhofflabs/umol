@@ -9,7 +9,6 @@ pub mod kekulizer;
 
 pub use aromatizer::{Aromatizer, AromatizerError};
 pub use kekulizer::{KekulizationModel, Kekulizer, KekulizerError};
-
 use umol_ast::ast::MoleculeAst;
 
 pub trait Transformer {

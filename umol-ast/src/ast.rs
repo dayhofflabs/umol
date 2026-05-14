@@ -38,10 +38,10 @@ pub use dative::DativeBondAst;
 pub use edit::{
     Action, AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond,
     AddedMulticenterBond, AddedNoncovalentBond, AromaticSystemFieldChange, AromaticSystemRef,
-    AtomFieldChange, AtomRef, BondFieldChange, BondRef, ConstraintUpdate,
-    DativeBondFieldChange, DativeBondRef, DroppedConstraint, Edit, MulticenterBondFieldChange,
-    MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem,
-    RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
+    AtomFieldChange, AtomRef, BondFieldChange, BondRef, ConstraintUpdate, DativeBondFieldChange,
+    DativeBondRef, DroppedConstraint, Edit, MulticenterBondFieldChange, MulticenterBondRef,
+    NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem, RemovedAtom,
+    RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
     RemovedOverlays, RewrittenConstraint, Undo,
 };
 pub use error::{EvaluationError, RewriteError};
@@ -49,8 +49,8 @@ pub use idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 pub use matching::BondMatching;
-pub use molecule::{MoleculeAst, MoleculeBuilder};
 pub use molecule::transact::{Transaction, TransactionError};
+pub use molecule::{MoleculeAst, MoleculeBuilder};
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 pub use reaction::{Assignment, ReactionRuleAst};

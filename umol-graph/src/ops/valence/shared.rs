@@ -2,8 +2,8 @@
 
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId, AtomView, BondAst,
-    ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterValenceAst,
-    SpinStateAst, ValueAst,
+    ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterValenceAst, SpinStateAst,
+    ValueAst,
 };
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
@@ -46,8 +46,12 @@ pub fn atom_is_aromatic(view: &AtomView<'_>) -> bool {
         return true;
     }
     matches!(
-        view.ast.constraints.get(AtomConstraintKind::AromaticValence),
-        Some(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(_)))
+        view.ast
+            .constraints
+            .get(AtomConstraintKind::AromaticValence),
+        Some(AtomConstraint::AromaticValence(
+            AromaticValenceAst::Aromatic(_)
+        ))
     )
 }
 
@@ -230,10 +234,7 @@ pub fn try_build_candidate(
 }
 
 fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u8, u8)> {
-    let fixed_unpaired = match (
-        ground_spin_state(&atom_ast.spin),
-        &atom_ast.spin.unpaired,
-    ) {
+    let fixed_unpaired = match (ground_spin_state(&atom_ast.spin), &atom_ast.spin.unpaired) {
         (Some(s), _) => Some(s.unpaired()),
         (None, ValueAst::Lit(u)) => Some(*u as u8),
         _ => None,
@@ -383,11 +384,11 @@ pub fn atom_view<'a>(ast: &'a MoleculeAst, idx: AtomId) -> AtomView<'a> {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::mol;
     use umol_ast::ast::{
         AromaticSystemAst, AromaticValenceAst, AtomAst, AtomConstraint, AtomId, Constraints,
         MoleculeAst, MulticenterBondAst, MulticenterValenceAst, ValueAst,
     };
+    use umol_ast::mol;
     use umol_shared::element::Element;
 
     use super::*;
@@ -400,10 +401,7 @@ mod tests {
         let atoms: Vec<AtomAst> = (0..atom_count)
             .map(|_| AtomAst::from_element(Element::Xe))
             .collect();
-        let multicenter = vec![(
-            multicenter_atoms,
-            MulticenterBondAst::new(electrons),
-        )];
+        let multicenter = vec![(multicenter_atoms, MulticenterBondAst::new(electrons))];
         MoleculeAst::from_parts(
             atoms,
             vec![],
@@ -423,10 +421,7 @@ mod tests {
         let atoms: Vec<AtomAst> = (0..atom_count)
             .map(|_| AtomAst::from_element(Element::C))
             .collect();
-        let aromatic = vec![(
-            aromatic_atoms,
-            AromaticSystemAst::new(electrons),
-        )];
+        let aromatic = vec![(aromatic_atoms, AromaticSystemAst::new(electrons))];
         MoleculeAst::from_parts(
             atoms,
             vec![],
@@ -446,7 +441,7 @@ mod tests {
     #[case::not_multicenter_on_bare(
         bare_molecule(),
         AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
-        true,
+        true
     )]
     #[case::not_multicenter_on_participant(
         molecule_with_multicenter(
@@ -486,8 +481,10 @@ mod tests {
     )]
     #[case::multicenter_undetermined_on_bare(
         bare_molecule(),
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Undetermined)),
-        false,
+        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(
+            ValueAst::Undetermined
+        )),
+        false
     )]
     fn test_atom_constraint_holds_multicenter_valence(
         #[case] ast: MoleculeAst,
@@ -495,10 +492,7 @@ mod tests {
         #[case] expected: bool,
     ) {
         let view = ast.atom(AtomId(0));
-        assert_eq!(
-            atom_constraint_holds(&view, &constraint, 0, 0, 0),
-            expected
-        );
+        assert_eq!(atom_constraint_holds(&view, &constraint, 0, 0, 0), expected);
     }
 
     #[rstest]
@@ -523,7 +517,7 @@ mod tests {
     #[case::not_aromatic_on_bare(
         bare_molecule(),
         AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
-        true,
+        true
     )]
     #[case::not_aromatic_on_member(
         molecule_with_aromatic(
@@ -540,9 +534,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         let view = ast.atom(AtomId(0));
-        assert_eq!(
-            atom_constraint_holds(&view, &constraint, 0, 0, 0),
-            expected
-        );
+        assert_eq!(atom_constraint_holds(&view, &constraint, 0, 0, 0), expected);
     }
 }

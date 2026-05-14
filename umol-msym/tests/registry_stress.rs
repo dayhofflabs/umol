@@ -33,7 +33,10 @@ fn verify_group(pg: &'static PointGroup, name: &str, order: usize) {
 
     // Totally symmetric irrep
     let ts = pg.totally_symmetric_irrep();
-    assert!(ts.totally_symmetric(), "{name}: totally_symmetric() is false");
+    assert!(
+        ts.totally_symmetric(),
+        "{name}: totally_symmetric() is false"
+    );
 
     // Row orthogonality
     let h = order as f64;

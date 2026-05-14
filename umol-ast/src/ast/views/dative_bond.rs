@@ -94,10 +94,7 @@ impl<'a> DativeBondViews<'a> {
     }
 
     /// ID of the dative bond whose participant set equals `atoms`, if any.
-    pub fn connecting_id(
-        &self,
-        atoms: impl IntoIterator<Item = AtomId>,
-    ) -> Option<DativeBondId> {
+    pub fn connecting_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<DativeBondId> {
         let target: HashSet<AtomId> = atoms.into_iter().collect();
         let &first = target.iter().next()?;
         self.incident_ids(first).find(|&id| {
@@ -124,12 +121,7 @@ impl<'a> DativeBondViews<'a> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.set
             .relation_ids()
-            .filter(|&rid| {
-                self.set
-                    .participants(rid)
-                    .iter()
-                    .all(|p| set.contains(p))
-            })
+            .filter(|&rid| self.set.participants(rid).iter().all(|p| set.contains(p)))
             .map(DativeBondId::from)
             .collect()
     }

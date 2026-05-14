@@ -695,5 +695,4 @@ mod tests {
         assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
         assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
     }
-
 }

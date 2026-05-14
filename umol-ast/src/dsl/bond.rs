@@ -68,10 +68,9 @@ impl<'de> FromEdn<'de> for BondDsl {
         match edn {
             Edn::Str(s) => s.parse().map_err(|e| DeError::subgrammar("bond", e)),
             Edn::Keyword(k) => {
-                let s = expand_bond_keyword(k.name()).ok_or_else(|| DeError::Custom(format!(
-                    "unknown bond keyword :{}",
-                    k.name()
-                )))?;
+                let s = expand_bond_keyword(k.name()).ok_or_else(|| {
+                    DeError::Custom(format!("unknown bond keyword :{}", k.name()))
+                })?;
                 s.parse().map_err(|e| DeError::subgrammar("bond", e))
             }
             other => Err(DeError::TypeMismatch {
@@ -143,7 +142,6 @@ fn bond_keyword_for(ast: &BondAst) -> Option<&'static str> {
 
 impl FromAst<BondAst> for BondDsl {
     type Ctx = BondDefaults;
-
 
     fn from_ast(ast: &BondAst, cfg: &Self::Ctx) -> Self {
         let mut out = ast.clone();
@@ -370,7 +368,6 @@ pub struct BondConstraintDsl(pub BondConstraint);
 impl FromAst<BondConstraint> for BondConstraintDsl {
     type Ctx = ();
 
-
     fn from_ast(ast: &BondConstraint, _ctx: &Self::Ctx) -> Self {
         Self(ast.clone())
     }
@@ -378,7 +375,6 @@ impl FromAst<BondConstraint> for BondConstraintDsl {
 
 impl IntoAst<BondConstraint> for BondConstraintDsl {
     type Ctx = ();
-
 
     fn into_ast(self, _ctx: &Self::Ctx) -> BondConstraint {
         self.0
@@ -402,9 +398,9 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                     "ring-count" => BondConstraint::RingCount(
                         super::value::ValueDsl::from_edn(v)?.into_ast(&()),
                     ),
-                    "ring-size" => BondConstraint::RingSize(
-                        super::value::ValueDsl::from_edn(v)?.into_ast(&()),
-                    ),
+                    "ring-size" => {
+                        BondConstraint::RingSize(super::value::ValueDsl::from_edn(v)?.into_ast(&()))
+                    }
                     other => {
                         return Err(DeError::UnknownField {
                             key: other.to_string(),

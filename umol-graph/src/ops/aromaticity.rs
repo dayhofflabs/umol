@@ -167,7 +167,11 @@ impl AromaticityPerception {
 /// the `AromaticValence::Aromatic(Lit(n))` constraint. Returns `None` if
 /// the constraint is missing or non-numeric.
 pub(crate) fn electrons_from_aromatic_constraint(view: &AtomView<'_>) -> Option<u8> {
-    match view.ast.constraints.get(AtomConstraintKind::AromaticValence)? {
+    match view
+        .ast
+        .constraints
+        .get(AtomConstraintKind::AromaticValence)?
+    {
         AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n)))
             if *n >= 0 =>
         {
@@ -274,15 +278,14 @@ fn monoelement(ast: &MoleculeAst, atoms: &[AtomId]) -> Option<Element> {
     Some(first)
 }
 
-
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::mol_zeroed;
     use umol_ast::ast::{
-        AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind,
-        AtomId, BondAst, BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
+        AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId,
+        BondAst, BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
     };
+    use umol_ast::mol_zeroed;
     use umol_shared::element::Element;
 
     use super::*;
@@ -296,7 +299,12 @@ mod tests {
     }
 
     fn aromatic_valence_lit(ast: &MoleculeAst, idx: AtomId) -> Option<i64> {
-        match ast.atom(idx).ast.constraints.get(AtomConstraintKind::AromaticValence)? {
+        match ast
+            .atom(idx)
+            .ast
+            .constraints
+            .get(AtomConstraintKind::AromaticValence)?
+        {
             AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n))) => {
                 Some(*n)
             }
@@ -319,10 +327,7 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn pyrrole() -> MoleculeAst {
@@ -336,10 +341,7 @@ mod tests {
         let bonds: Vec<_> = (0..5)
             .map(|i| (AtomId(i), AtomId((i + 1) % 5), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn run_full(
@@ -473,7 +475,11 @@ mod tests {
             system.ast.electrons,
             electrons.into_iter().map(ValueAst::Lit).collect::<Vec<_>>(),
         );
-        for (i, (q, k)) in atom_charges.iter().zip(aromatic_valences.iter()).enumerate() {
+        for (i, (q, k)) in atom_charges
+            .iter()
+            .zip(aromatic_valences.iter())
+            .enumerate()
+        {
             let idx = AtomId(i as u32);
             assert_eq!(ast.atom(idx).ast.charge, ValueAst::Lit(*q));
             assert_eq!(aromatic_valence_lit(&ast, idx), Some(*k));
@@ -490,10 +496,7 @@ mod tests {
         let bonds: Vec<_> = (0..6)
             .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        let mut ast = MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        );
+        let mut ast = MoleculeAst::from_atoms_and_bonds(atoms, bonds);
         let solution = run_full(&perception, &mut ast);
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 0);

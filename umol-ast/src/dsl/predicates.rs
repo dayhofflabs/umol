@@ -258,7 +258,10 @@ mod tests {
         #[default(ValueAst::Undetermined)] unpaired: ValueAst,
         #[default(ValueAst::Undetermined)] multiplicity: ValueAst,
     ) -> SpinStateAst {
-        SpinStateAst { unpaired, multiplicity }
+        SpinStateAst {
+            unpaired,
+            multiplicity,
+        }
     }
 
     #[rustfmt::skip]

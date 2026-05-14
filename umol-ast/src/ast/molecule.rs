@@ -375,9 +375,8 @@ impl MoleculeAst {
     /// applied to every atom. Cached in a single-slot `OnceLock` populated
     /// lazily on first call; subsequent calls return the same borrow.
     pub fn rings(&self) -> &RingSet {
-        self.rings_cache.get_or_init(|| {
-            RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph)
-        })
+        self.rings_cache
+            .get_or_init(|| RingSet::enumerate(RingFamily::Relevant, 22, |_| true, &self.graph))
     }
 
     /// Ring enumeration with caller-specified family, maximum size, and

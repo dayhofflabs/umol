@@ -90,7 +90,10 @@ mod tests {
 
     #[rstest]
     fn test_bonds_resolver_preserves_partial_spin() {
-        let partial = SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined };
+        let partial = SpinStateAst {
+            unpaired: ValueAst::Lit(2),
+            multiplicity: ValueAst::Undetermined,
+        };
         let mut ast = one_bond(ValueAst::Undetermined, partial.clone());
         BondsResolver::new().resolve(&mut ast).unwrap();
         let bond = ast.bond(BondId(0)).ast;

@@ -3,17 +3,17 @@
 use std::collections::HashMap;
 
 use nalgebra::{DMatrix, DVector, Vector3};
+use umol_msym::{
+    compute_salcs as compute_salcs_raw, detect_symmetry,
+    generate_symmetry_images as generate_image_centers, group,
+    lower_symmetry as lower_symmetry_centers, symmetrize as symmetrize_centers, BasisFunction,
+    BasisKind, CartesianAxis, EquivalenceSet, Irrep, MatrixRep, MsymError, PointGroup, SalcBasis,
+    SchoenfliesSymbol, SymmetryCenter, Thresholds,
+};
 use umol_shared::element::Element;
 use umol_shared::spin::SpinMultiplicity;
 use umol_shared::units::angle::Angle;
 use umol_shared::units::length::Length;
-use umol_msym::{
-    compute_salcs as compute_salcs_raw, detect_symmetry, group,
-    generate_symmetry_images as generate_image_centers,
-    lower_symmetry as lower_symmetry_centers, symmetrize as symmetrize_centers, BasisFunction,
-    BasisKind, CartesianAxis, EquivalenceSet, Irrep, MsymError,
-    MatrixRep, PointGroup, SalcBasis, SchoenfliesSymbol, SymmetryCenter, Thresholds,
-};
 
 use crate::coordinates::Coordinates;
 
@@ -364,7 +364,9 @@ impl Molecule {
         }
 
         // Step 2: reduce
-        let gamma_total = group.reduce(&gamma_3n).expect("valid 3N representation characters");
+        let gamma_total = group
+            .reduce(&gamma_3n)
+            .expect("valid 3N representation characters");
         let gamma_trans = group.translation_irreps();
         let gamma_rot = group.rotation_irreps();
         let gamma_vib = subtract_irrep_reps(&gamma_total, &gamma_trans, &gamma_rot);
@@ -1288,7 +1290,9 @@ mod tests {
         #[case] target: SchoenfliesSymbol,
         #[case] expected_name: &str,
     ) {
-        let m = symmetric_water().perceive_symmetry(Thresholds::default()).unwrap();
+        let m = symmetric_water()
+            .perceive_symmetry(Thresholds::default())
+            .unwrap();
         assert_eq!(m.point_group().to_string(), "C2v");
 
         let result = m.lower_symmetry(target, Thresholds::default()).unwrap();
@@ -1305,7 +1309,9 @@ mod tests {
         #[case] target: SchoenfliesSymbol,
         #[case] expected_name: &str,
     ) {
-        let m = symmetric_methane().perceive_symmetry(Thresholds::default()).unwrap();
+        let m = symmetric_methane()
+            .perceive_symmetry(Thresholds::default())
+            .unwrap();
         assert_eq!(m.point_group().to_string(), "Td");
 
         let result = m.lower_symmetry(target, Thresholds::default()).unwrap();

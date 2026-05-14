@@ -1362,7 +1362,7 @@ Payload structs carry realized ids plus enough data to validate rollback:
 
 Add `Undo::id_remapping() -> Option<&IdRemapping>` so downstream consumers can inspect per-undo forward remaps without needing to match every variant manually.
 
-##### Step 4 — Extend remapping support
+##### Step 4 — Extend remapping support **Done**
 
 Keep `IdRemapping` as forward old-to-new mapping for downstream consumers.
 

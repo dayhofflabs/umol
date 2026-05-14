@@ -93,8 +93,8 @@ impl ValenceTable {
     }
 
     pub fn from_toml_str(input: &str) -> Result<Self, ConfigError> {
-        let parsed: BTreeMap<String, ValenceEntryToml> = toml::from_str(input)
-            .map_err(|e| ConfigError::InvalidValenceTable(e.to_string()))?;
+        let parsed: BTreeMap<String, ValenceEntryToml> =
+            toml::from_str(input).map_err(|e| ConfigError::InvalidValenceTable(e.to_string()))?;
         let mut entries = BTreeMap::new();
         for (symbol, entry) in parsed {
             let element: Element = symbol.parse().map_err(|_| {

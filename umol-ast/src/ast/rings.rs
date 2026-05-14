@@ -489,7 +489,6 @@ fn is_induced_cycle(graph: &Graph, cycle: &[NodeId]) -> bool {
     true
 }
 
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -660,11 +659,7 @@ mod tests {
         vec![BondId(0), BondId(1)],
         false,
     )]
-    fn test_ring_new(
-        #[case] atoms: Vec<AtomId>,
-        #[case] bonds: Vec<BondId>,
-        #[case] valid: bool,
-    ) {
+    fn test_ring_new(#[case] atoms: Vec<AtomId>, #[case] bonds: Vec<BondId>, #[case] valid: bool) {
         assert_eq!(Ring::new(atoms, bonds).is_some(), valid);
     }
 

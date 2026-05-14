@@ -15,8 +15,7 @@ use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemId, AtomConstraintKind, AtomId, BondConstraintKind, BondId, MoleculeAst,
-    ValueAst,
+    AromaticSystemId, AtomConstraintKind, AtomId, BondConstraintKind, BondId, MoleculeAst, ValueAst,
 };
 use umol_graph_core::{EdgeId, Graph, NodeId, PerfectMatchingAlgorithm};
 
@@ -132,7 +131,10 @@ impl Kekulizer {
                 .iter()
                 .map(|&bid| {
                     let bond = ast.bond(bid);
-                    [atom_to_node[&bond.atom_ids()[0]], atom_to_node[&bond.atom_ids()[1]]]
+                    [
+                        atom_to_node[&bond.atom_ids()[0]],
+                        atom_to_node[&bond.atom_ids()[1]],
+                    ]
                 })
                 .collect();
             let subgraph = Graph::new(atoms.len(), &local_edges);
@@ -292,11 +294,8 @@ mod tests {
             Constraints::default(),
         );
 
-        let result = Kekulizer::new(KekulizationModel::default(), ascending(5))
-            .transform_into(&mut ast);
-        assert!(matches!(
-            result,
-            Err(KekulizerError::NoMatching(_))
-        ));
+        let result =
+            Kekulizer::new(KekulizationModel::default(), ascending(5)).transform_into(&mut ast);
+        assert!(matches!(result, Err(KekulizerError::NoMatching(_))));
     }
 }

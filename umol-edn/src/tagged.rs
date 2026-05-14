@@ -63,10 +63,7 @@ where
     T: ToEdn,
 {
     fn to_edn(&self) -> Edn<'static> {
-        Edn::Tagged(
-            Cow::Owned(self.tag.clone()),
-            Box::new(self.value.to_edn()),
-        )
+        Edn::Tagged(Cow::Owned(self.tag.clone()), Box::new(self.value.to_edn()))
     }
 }
 

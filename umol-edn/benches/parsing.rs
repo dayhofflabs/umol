@@ -121,9 +121,7 @@ fn bench_parse_collections(c: &mut Criterion) {
     group.bench_function("comment_heavy", |b| {
         b.iter(|| read_string(black_box(&comments)))
     });
-    group.bench_function("set_50", |b| {
-        b.iter(|| read_string(black_box(&set)))
-    });
+    group.bench_function("set_50", |b| b.iter(|| read_string(black_box(&set))));
     group.finish();
 }
 
@@ -160,9 +158,8 @@ fn bench_display(c: &mut Criterion) {
         b.iter(|| black_box(&edn_large).to_string_with(&fmt))
     });
 
-    let escape_heavy = Edn::Str(
-        "line1\nline2\nline3\ttab\there\r\nquote\"end\\back\nmore\tescapes\n".into(),
-    );
+    let escape_heavy =
+        Edn::Str("line1\nline2\nline3\ttab\there\r\nquote\"end\\back\nmore\tescapes\n".into());
     group.bench_function("string_escape_heavy", |b| {
         b.iter(|| black_box(&escape_heavy).to_string())
     });

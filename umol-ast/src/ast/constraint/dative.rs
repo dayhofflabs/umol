@@ -160,7 +160,10 @@ impl DativeBondConstraints {
     }
 
     /// Remove the first entry exactly equal to `constraint`.
-    pub fn remove_entry(&mut self, constraint: &DativeBondConstraint) -> Option<DativeBondConstraint> {
+    pub fn remove_entry(
+        &mut self,
+        constraint: &DativeBondConstraint,
+    ) -> Option<DativeBondConstraint> {
         let pos = self.0.iter().position(|c| c == constraint)?;
         Some(self.0.remove(pos))
     }

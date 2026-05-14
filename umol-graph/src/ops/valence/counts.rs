@@ -9,9 +9,8 @@ use umol_ast::ast::{
 use umol_shared::element::Element;
 
 use crate::ops::valence::shared::{
-    aromatic_pi_pinned, atom_is_aromatic, charge_or_zero,
-    infer_normal_aromatic_implicit_hydrogens, lift_constraints, narrow_atom, try_build_candidate,
-    AtomCandidate,
+    aromatic_pi_pinned, atom_is_aromatic, charge_or_zero, infer_normal_aromatic_implicit_hydrogens,
+    lift_constraints, narrow_atom, try_build_candidate, AtomCandidate,
 };
 use crate::ops::valence::table::ValenceTable;
 
@@ -207,10 +206,8 @@ fn build_aromatic_candidates(
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_ast::ast::{AtomAst, AtomId, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst};
     use umol_ast::{mol, mol_zeroed};
-    use umol_ast::ast::{
-        AtomAst, AtomId, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst,
-    };
     use umol_shared::element::Element;
 
     use super::*;
@@ -253,7 +250,10 @@ mod tests {
         let mut ast = carbon_methane_with_undetermined();
         resolver.resolve(&mut ast).unwrap();
         let atom = ast.atom(AtomId(0)).ast;
-        assert!(matches!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(4)));
+        assert!(matches!(
+            atom.implicit_hydrogens,
+            ImplicitHydrogensAst::Lit(4)
+        ));
     }
 
     #[rstest]
@@ -264,7 +264,10 @@ mod tests {
         resolver.resolve(&mut ast).unwrap();
         for i in 0..2 {
             let atom = ast.atom(AtomId(i)).ast;
-            assert!(matches!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(3)));
+            assert!(matches!(
+                atom.implicit_hydrogens,
+                ImplicitHydrogensAst::Lit(3)
+            ));
         }
     }
 
@@ -275,10 +278,7 @@ mod tests {
         let table = valence_table! { C => [4] };
         let resolver = CountsValenceResolver::new(table, true);
         let si = AtomAst::from_element(Element::Si);
-        let mut ast = MoleculeAst::from_atoms_and_bonds(
-            vec![si],
-            vec![],
-        );
+        let mut ast = MoleculeAst::from_atoms_and_bonds(vec![si], vec![]);
         let err = resolver.resolve(&mut ast).unwrap_err();
         assert!(matches!(
             err,

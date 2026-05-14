@@ -66,8 +66,7 @@ impl AtomTypeRegistry {
         let mut buf = String::new();
         for ((element, charge), atoms) in &self.atom_types {
             let _ = write!(buf, "{},{:?}:", element, charge);
-            let mut atom_strs: Vec<String> =
-                atoms.iter().map(|a| format!("{:?}", a)).collect();
+            let mut atom_strs: Vec<String> = atoms.iter().map(|a| format!("{:?}", a)).collect();
             atom_strs.sort();
             for s in &atom_strs {
                 let _ = write!(buf, "{},", s);
@@ -241,11 +240,15 @@ mod tests {
 "#;
         let registry = AtomTypeRegistry::from_toml_str(input).unwrap();
         assert_eq!(
-            registry.patterns_for_element_and_charge(Element::C, 0).len(),
+            registry
+                .patterns_for_element_and_charge(Element::C, 0)
+                .len(),
             1
         );
         assert_eq!(
-            registry.patterns_for_element_and_charge(Element::O, -1).len(),
+            registry
+                .patterns_for_element_and_charge(Element::O, -1)
+                .len(),
             1
         );
         assert!(!registry.content_hash_hex().is_empty());

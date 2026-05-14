@@ -8,7 +8,7 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-
+use umol_ast::ast::value::ValueAst;
 use umol_graph::api::molecule::Molecule;
 use umol_graph::api::pattern::MoleculePattern;
 use umol_graph::ast::atom::AtomAst;
@@ -18,7 +18,6 @@ use umol_graph::ast::AtomId;
 use umol_graph::io::smiles::parse_smiles;
 use umol_graph::ops::matcher::Matcher;
 use umol_shared::element::Element;
-use umol_ast::ast::value::ValueAst;
 
 fn load_smiles() -> Vec<String> {
     let data_dir = concat!(
@@ -29,11 +28,7 @@ fn load_smiles() -> Vec<String> {
     for entry in walkdir::WalkDir::new(data_dir)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .map_or(false, |ext| ext == "smiles")
-        })
+        .filter(|e| e.path().extension().map_or(false, |ext| ext == "smiles"))
     {
         let content = std::fs::read_to_string(entry.path()).unwrap();
         if let Some(s) = content.lines().nth(1) {
@@ -74,7 +69,13 @@ fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> Molecule
 
 fn pattern_branched() -> MoleculePattern {
     pattern(
-        vec![a(Element::C), a(Element::C), a(Element::C), a(Element::C), a(Element::N)],
+        vec![
+            a(Element::C),
+            a(Element::C),
+            a(Element::C),
+            a(Element::C),
+            a(Element::N),
+        ],
         vec![(0, 1, wb()), (0, 2, wb()), (2, 3, wb()), (2, 4, wb())],
     )
 }
@@ -82,13 +83,21 @@ fn pattern_branched() -> MoleculePattern {
 fn pattern_phenol() -> MoleculePattern {
     pattern(
         vec![
-            a(Element::C), a(Element::C), a(Element::C),
-            a(Element::C), a(Element::C), a(Element::C),
+            a(Element::C),
+            a(Element::C),
+            a(Element::C),
+            a(Element::C),
+            a(Element::C),
+            a(Element::C),
             a(Element::O),
         ],
         vec![
-            (0, 1, wb()), (1, 2, wb()), (2, 3, wb()),
-            (3, 4, wb()), (4, 5, wb()), (5, 0, wb()),
+            (0, 1, wb()),
+            (1, 2, wb()),
+            (2, 3, wb()),
+            (3, 4, wb()),
+            (4, 5, wb()),
+            (5, 0, wb()),
             (5, 6, wb()),
         ],
     )
@@ -101,9 +110,15 @@ fn pattern_bicyclic() -> MoleculePattern {
     pattern(
         (0..9).map(|_| a(Element::C)).collect(),
         vec![
-            (0, 1, wb()), (1, 2, wb()), (2, 3, wb()),
-            (3, 4, wb()), (4, 5, wb()), (1, 5, wb()),
-            (5, 6, wb()), (6, 7, wb()), (7, 8, wb()),
+            (0, 1, wb()),
+            (1, 2, wb()),
+            (2, 3, wb()),
+            (3, 4, wb()),
+            (4, 5, wb()),
+            (1, 5, wb()),
+            (5, 6, wb()),
+            (6, 7, wb()),
+            (7, 8, wb()),
             (8, 0, wb()),
         ],
     )

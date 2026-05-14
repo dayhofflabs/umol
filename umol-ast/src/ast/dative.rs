@@ -175,12 +175,12 @@ mod tests {
     #[case::pattern_wildcard_matches(
         DativeBondAst::new(ValueAst::Undetermined),
         DativeBondAst::from_order(2),
-        true,
+        true
     )]
     #[case::pattern_more_specific(
         DativeBondAst::from_order(2),
         DativeBondAst::new(ValueAst::Undetermined),
-        false,
+        false
     )]
     fn test_dative_bond_ast_matches(
         #[case] pattern: DativeBondAst,

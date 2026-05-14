@@ -8,6 +8,7 @@ use indexmap::IndexMap;
 use nom::character::complete::multispace0;
 use nom::sequence::terminated;
 use nom::{Err, Parser};
+use umol_ast::ast::{MoleculeAst, TryIntoAst};
 
 use self::accumulator::PropertyAccumulator;
 use self::atom::{atom_block, extended_atom_block};
@@ -32,7 +33,6 @@ use crate::position::Point3D;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
 use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
-use umol_ast::ast::{MoleculeAst, TryIntoAst};
 
 mod accumulator;
 mod atom;

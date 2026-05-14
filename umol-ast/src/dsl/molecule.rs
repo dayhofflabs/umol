@@ -23,7 +23,7 @@ use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer
 
 use super::aromatic::AromaticSystemDsl;
 use super::atom::AtomDsl;
-use super::bond::{BondDsl, expand_bond_keyword};
+use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{
     eof_err, missing, read_atom_ref, read_constraints_dsl, read_map, read_vec,
@@ -34,7 +34,6 @@ use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
 use super::value::ValueDsl;
-use crate::ast::value::ValueAst;
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
@@ -46,6 +45,7 @@ use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::noncovalent::NoncovalentBondAst;
 use crate::ast::traits::{FromAst, IntoAst};
+use crate::ast::value::ValueAst;
 
 /// Surface-form metadata paired with a `MoleculeAst`. Records atom ids,
 /// per-entity ids, and the atom-alias table. Never drifts onto a different
@@ -143,8 +143,7 @@ impl Metadata {
     /// atom-dsl displaces its prior name. Callers that need collision
     /// detection check upstream.
     pub fn add_atom_alias(&mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) {
-        self.atom_aliases
-            .insert(name.into(), Box::new(atom.into()));
+        self.atom_aliases.insert(name.into(), Box::new(atom.into()));
     }
 
     pub fn with_atom_id(mut self, idx: AtomId, name: impl Into<String>) -> Self {
@@ -189,11 +188,7 @@ impl Metadata {
         self
     }
 
-    pub fn with_atom_alias(
-        mut self,
-        name: impl Into<String>,
-        atom: impl Into<AtomDsl>,
-    ) -> Self {
+    pub fn with_atom_alias(mut self, name: impl Into<String>, atom: impl Into<AtomDsl>) -> Self {
         self.add_atom_alias(name, atom);
         self
     }
@@ -388,10 +383,8 @@ fn read_bond_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<BondDsl, EdnError
     let text: Cow<'_, str> = match byte {
         b':' => {
             let name = de.read_keyword_name()?;
-            let expanded =
-                expand_bond_keyword(name.as_ref()).ok_or_else(|| {
-                    DeError::Custom(format!("unknown bond keyword :{}", name))
-                })?;
+            let expanded = expand_bond_keyword(name.as_ref())
+                .ok_or_else(|| DeError::Custom(format!("unknown bond keyword :{}", name)))?;
             Cow::Borrowed(expanded)
         }
         _ => de.read_string()?,
@@ -406,9 +399,8 @@ fn read_dative_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<DativeBondDsl, 
     let text: Cow<'_, str> = match byte {
         b':' => {
             let name = de.read_keyword_name()?;
-            let expanded = super::dative::expand_dative_keyword(name.as_ref()).ok_or_else(
-                || DeError::Custom(format!("unknown dative keyword :{}", name)),
-            )?;
+            let expanded = super::dative::expand_dative_keyword(name.as_ref())
+                .ok_or_else(|| DeError::Custom(format!("unknown dative keyword :{}", name)))?;
             Cow::Borrowed(expanded)
         }
         _ => de.read_string()?,
@@ -818,7 +810,8 @@ fn render_aromatic(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            let atoms: Vec<Edn<'static>> = view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
+            let atoms: Vec<Edn<'static>> =
+                view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
             if !view.ast.electrons.is_empty() {
                 m.insert(
@@ -828,7 +821,9 @@ fn render_aromatic(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
             }
             m.insert(
                 Edn::keyword("type"),
-                Edn::Str(Cow::Owned(AromaticSystemDsl::from_ref(view.ast).to_string())),
+                Edn::Str(Cow::Owned(
+                    AromaticSystemDsl::from_ref(view.ast).to_string(),
+                )),
             );
             Edn::Map(m)
         })
@@ -848,7 +843,8 @@ fn render_multicenter(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            let atoms: Vec<Edn<'static>> = view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
+            let atoms: Vec<Edn<'static>> =
+                view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
             if !view.ast.electrons.is_empty() {
                 m.insert(
@@ -858,7 +854,9 @@ fn render_multicenter(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
             }
             m.insert(
                 Edn::keyword("type"),
-                Edn::Str(Cow::Owned(MulticenterBondDsl::from_ref(view.ast).to_string())),
+                Edn::Str(Cow::Owned(
+                    MulticenterBondDsl::from_ref(view.ast).to_string(),
+                )),
             );
             Edn::Map(m)
         })
@@ -1451,12 +1449,12 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::{dsl, mol};
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint};
     use crate::ast::spin::SpinStateAst;
     use crate::ast::value::ValueAst;
+    use crate::{dsl, mol};
 
     #[rstest]
     fn test_metadata_new() {
@@ -1962,7 +1960,9 @@ mod tests {
             }));
         let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
         let edn = dsl.to_edn();
-        let Edn::Map(m) = &edn else { panic!("expected map") };
+        let Edn::Map(m) = &edn else {
+            panic!("expected map")
+        };
         assert!(
             m.get_keyword("constraints").is_none(),
             "vacuous ChargeSum should not surface as :constraints, got {:?}",
@@ -1973,7 +1973,10 @@ mod tests {
     #[rstest]
     fn test_molecule_dsl_render_elides_vacuous_bond_order_sum() {
         let mut ast = MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C), AtomAst::from_element(Element::C)],
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
             vec![],
             vec![],
@@ -1988,7 +1991,9 @@ mod tests {
             }));
         let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
         let edn = dsl.to_edn();
-        let Edn::Map(m) = &edn else { panic!("expected map") };
+        let Edn::Map(m) = &edn else {
+            panic!("expected map")
+        };
         assert!(m.get_keyword("constraints").is_none());
     }
 
@@ -2010,7 +2015,9 @@ mod tests {
             }));
         let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
         let edn = dsl.to_edn();
-        let Edn::Map(m) = &edn else { panic!("expected map") };
+        let Edn::Map(m) = &edn else {
+            panic!("expected map")
+        };
         assert!(m.get_keyword("constraints").is_none());
     }
 
@@ -2040,9 +2047,15 @@ mod tests {
             }));
         let dsl = MoleculeDsl::from_parts(ast, Metadata::default());
         let edn = dsl.to_edn();
-        let Edn::Map(m) = &edn else { panic!("expected map") };
-        let cs = m.get_keyword("constraints").expect("constraints key present");
-        let Edn::Vector(v) = cs else { panic!("expected vec") };
+        let Edn::Map(m) = &edn else {
+            panic!("expected map")
+        };
+        let cs = m
+            .get_keyword("constraints")
+            .expect("constraints key present");
+        let Edn::Vector(v) = cs else {
+            panic!("expected vec")
+        };
         assert_eq!(v.len(), 1, "only the non-vacuous ChargeSum should survive");
     }
 
@@ -2088,8 +2101,7 @@ mod tests {
         let (ast, _meta) = dsl.into_parts();
 
         // Canonical render: positional refs only.
-        let canonical_source =
-            r##"{:atoms ["C" "C"] :bonds [[0 1 :single]]
+        let canonical_source = r##"{:atoms ["C" "C"] :bonds [[0 1 :single]]
                  :constraints [{:atom [0 {:valence 4}]}
                                {:bond [0 :aromatic]}]}"##;
         assert_eq!(ast.to_edn(), read_string(canonical_source).unwrap());
@@ -2211,18 +2223,18 @@ mod tests {
     #[rstest]
     fn test_molecule_dsl_aromatic_atom_out_of_range_errors() {
         let edn =
-            read_string(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 5] :type ""}]}"##).unwrap();
+            read_string(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 5] :type ""}]}"##)
+                .unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }
 
     #[rstest]
     fn test_molecule_dsl_dative_unknown_donor_id_errors() {
-        let edn =
-            read_string(
-                r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor :nope :acceptor 1 :type :single}]}"##,
-            )
-            .unwrap();
+        let edn = read_string(
+            r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor :nope :acceptor 1 :type :single}]}"##,
+        )
+        .unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }

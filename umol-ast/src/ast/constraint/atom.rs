@@ -406,10 +406,11 @@ impl AtomConstraints {
             Ok(i) => i,
             Err(_) => return Vec::new(),
         };
-        let end = start + self.entries[start..]
-            .iter()
-            .take_while(|c| c.kind() == kind)
-            .count();
+        let end = start
+            + self.entries[start..]
+                .iter()
+                .take_while(|c| c.kind() == kind)
+                .count();
         self.entries.drain(start..end).collect()
     }
 

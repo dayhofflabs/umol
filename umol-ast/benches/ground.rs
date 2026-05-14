@@ -77,7 +77,10 @@ fn arith_expr_heavy() -> MoleculeAst {
         charge: arith(),
         implicit_hydrogens: ImplicitHydrogensAst::Expr(Expr::Neg(Box::new(Expr::Lit(1)))),
         lone_pairs: arith(),
-        spin: SpinStateAst { unpaired: arith(), multiplicity: arith() },
+        spin: SpinStateAst {
+            unpaired: arith(),
+            multiplicity: arith(),
+        },
         constraints: Default::default(),
     };
     let atoms: Vec<AtomAst> = (0..20)
@@ -101,10 +104,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             (AtomId(i as u32), AtomId(i as u32 + 1), bond)
         })
         .collect();
-    MoleculeAst::from_atoms_and_bonds(
-        atoms,
-        bonds,
-    )
+    MoleculeAst::from_atoms_and_bonds(atoms, bonds)
 }
 
 // Silence `unused` warnings on pre-switch build: `AtomConstraint` is kept

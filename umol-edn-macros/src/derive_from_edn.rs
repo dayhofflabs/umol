@@ -43,7 +43,9 @@
 use heck::ToKebabCase;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, PathArguments, Type};
+use syn::{
+    Data, DataEnum, DataStruct, DeriveInput, Field, Fields, GenericArgument, PathArguments, Type,
+};
 
 pub fn expand(input: DeriveInput) -> Result<TokenStream2, syn::Error> {
     let container = ContainerAttrs::parse(&input.attrs)?;
@@ -771,7 +773,10 @@ fn expand_mixed_enum(
 fn expand_transparent(input: &DeriveInput) -> Result<TokenStream2, syn::Error> {
     let name = &input.ident;
     let (inner_ty, constructor) = match &input.data {
-        Data::Struct(DataStruct { fields: Fields::Named(named), .. }) => {
+        Data::Struct(DataStruct {
+            fields: Fields::Named(named),
+            ..
+        }) => {
             if named.named.len() != 1 {
                 return Err(syn::Error::new_spanned(
                     name,
@@ -782,14 +787,20 @@ fn expand_transparent(input: &DeriveInput) -> Result<TokenStream2, syn::Error> {
             let ident = field.ident.as_ref().unwrap();
             (&field.ty, quote! { Self { #ident: __inner } })
         }
-        Data::Struct(DataStruct { fields: Fields::Unnamed(unnamed), .. }) => {
+        Data::Struct(DataStruct {
+            fields: Fields::Unnamed(unnamed),
+            ..
+        }) => {
             if unnamed.unnamed.len() != 1 {
                 return Err(syn::Error::new_spanned(
                     name,
                     "transparent requires exactly one field",
                 ));
             }
-            (&unnamed.unnamed.first().unwrap().ty, quote! { Self(__inner) })
+            (
+                &unnamed.unnamed.first().unwrap().ty,
+                quote! { Self(__inner) },
+            )
         }
         _ => {
             return Err(syn::Error::new_spanned(
@@ -858,7 +869,11 @@ impl ContainerAttrs {
                 "transparent cannot be combined with other container attributes",
             ));
         }
-        Ok(ContainerAttrs { transparent, deny_unknown_fields, default })
+        Ok(ContainerAttrs {
+            transparent,
+            deny_unknown_fields,
+            default,
+        })
     }
 }
 
@@ -890,7 +905,9 @@ fn parse_field_with(field: &Field, container_default: bool) -> Result<FieldInfo,
         .ok_or_else(|| syn::Error::new_spanned(field, "field must be named"))?;
 
     let attrs = FieldAttrs::parse(&field.attrs)?;
-    let key = attrs.rename.unwrap_or_else(|| ident.to_string().to_kebab_case());
+    let key = attrs
+        .rename
+        .unwrap_or_else(|| ident.to_string().to_kebab_case());
 
     let kind = if attrs.skip {
         FieldKind::Skip(field.ty.clone())
@@ -940,7 +957,11 @@ impl FieldAttrs {
                 }
             })?;
         }
-        Ok(FieldAttrs { rename, default, skip })
+        Ok(FieldAttrs {
+            rename,
+            default,
+            skip,
+        })
     }
 }
 
@@ -959,5 +980,3 @@ fn inner_of<'a>(ty: &'a Type, wrapper: &str) -> Option<&'a Type> {
     }
     None
 }
-
-

@@ -49,7 +49,6 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    
     use crate::ast::idx::AtomId;
     use crate::ast::molecule::MoleculeAst;
 
@@ -64,10 +63,7 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn chain(n: usize) -> MoleculeAst {
@@ -81,20 +77,21 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     #[fixture]
     fn hexagon() -> AtomAutomorphism {
-        ring(6).graph().automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
+        ring(6)
+            .graph()
+            .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
     }
 
     #[fixture]
     fn chain_3() -> AtomAutomorphism {
-        chain(3).graph().automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
+        chain(3)
+            .graph()
+            .automorphisms(|_| 0u8, AutomorphismAlgorithm::Nauty)
     }
 
     #[rstest]
@@ -145,10 +142,7 @@ mod tests {
         assert_eq!(labeling.len(), 6);
         let mut sorted = labeling.clone();
         sorted.sort_unstable();
-        assert_eq!(
-            sorted,
-            (0..6).map(|i| AtomId(i as u32)).collect::<Vec<_>>()
-        );
+        assert_eq!(sorted, (0..6).map(|i| AtomId(i as u32)).collect::<Vec<_>>());
     }
 
     #[rstest]

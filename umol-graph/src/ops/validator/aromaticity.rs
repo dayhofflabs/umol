@@ -101,8 +101,7 @@ impl AromaticityValidator {
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, BondAst, MoleculeAst,
-        SpinStateAst, ValueAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, BondAst, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -123,18 +122,9 @@ mod tests {
     fn benzene() -> MoleculeAst {
         let atoms: Vec<AtomAst> = (0..6).map(|_| aromatic(Element::C, 1)).collect();
         let bonds: Vec<_> = (0..6)
-            .map(|i| {
-                (
-                    AtomId(i),
-                    AtomId((i + 1) % 6),
-                    BondAst::from_order(1),
-                )
-            })
+            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn carbon_only() -> AromaticityModel {

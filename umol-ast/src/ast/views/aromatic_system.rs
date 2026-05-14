@@ -113,12 +113,7 @@ impl<'a> AromaticSystemViews<'a> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.set
             .relation_ids()
-            .filter(|&rid| {
-                self.set
-                    .participants(rid)
-                    .iter()
-                    .all(|p| set.contains(p))
-            })
+            .filter(|&rid| self.set.participants(rid).iter().all(|p| set.contains(p)))
             .map(AromaticSystemId::from)
             .collect()
     }

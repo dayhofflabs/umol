@@ -23,7 +23,12 @@ impl MulticenterBondAst {
     }
 
     pub fn from_electrons(electrons: Vec<u8>) -> Self {
-        Self::new(electrons.into_iter().map(|n| ValueAst::Lit(n as i64)).collect())
+        Self::new(
+            electrons
+                .into_iter()
+                .map(|n| ValueAst::Lit(n as i64))
+                .collect(),
+        )
     }
 
     pub fn with_electrons(mut self, electrons: Vec<ValueAst>) -> Self {
@@ -296,9 +301,9 @@ mod tests {
             electrons: vec![ValueAst::Expr(Expr::Lit(1))],
             charge: ValueAst::Expr(Expr::Lit(0)),
             spin: SpinStateAst::default(),
-            constraints: MulticenterBondConstraints::from(MulticenterBondConstraint::ElectronCount(
-                ValueAst::Expr(Expr::Lit(2)),
-            )),
+            constraints: MulticenterBondConstraints::from(
+                MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Expr::Lit(2))),
+            ),
         };
         bond.simplify_values();
         assert_eq!(

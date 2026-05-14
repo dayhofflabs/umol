@@ -8,7 +8,9 @@ use crate::thresholds::COMPLEX_IRREP_NORM;
 
 #[derive(Debug, Clone)]
 pub(crate) enum ReductionData {
-    Finite { characters: Vec<f64> },
+    Finite {
+        characters: Vec<f64>,
+    },
     Linear {
         lambda: u32,
         sigma_v: Option<bool>,
@@ -76,7 +78,9 @@ impl Irrep {
 
     pub fn vertical_mirror_symmetric(&self) -> Option<bool> {
         match &self.data.reduction {
-            ReductionData::Linear { lambda, sigma_v, .. } if *lambda == 0 => *sigma_v,
+            ReductionData::Linear {
+                lambda, sigma_v, ..
+            } if *lambda == 0 => *sigma_v,
             _ => None,
         }
     }
@@ -111,7 +115,9 @@ impl Irrep {
 
     pub fn totally_symmetric(&self) -> bool {
         match &self.data.reduction {
-            ReductionData::Finite { characters } => characters.iter().all(|&c| (c - 1.0).abs() < 1e-10),
+            ReductionData::Finite { characters } => {
+                characters.iter().all(|&c| (c - 1.0).abs() < 1e-10)
+            }
             ReductionData::Linear {
                 lambda,
                 sigma_v,
@@ -246,11 +252,7 @@ mod tests {
     #[case::d2h_a1g("D2h", "A1g", Some(true))]
     #[case::d2h_b1u("D2h", "B1u", Some(false))]
     #[case::c2v_no_inversion("C2v", "A1", None)]
-    fn test_irrep_gerade(
-        #[case] group: &str,
-        #[case] irrep: &str,
-        #[case] expected: Option<bool>,
-    ) {
+    fn test_irrep_gerade(#[case] group: &str, #[case] irrep: &str, #[case] expected: Option<bool>) {
         let g = PointGroup::parse(group).unwrap();
         let ir = g.irrep(irrep).unwrap();
         assert_eq!(ir.gerade(), expected);
@@ -259,8 +261,14 @@ mod tests {
     #[rstest]
     fn test_irrep_vertical_mirror_symmetric_linear() {
         let g = group!(Coov);
-        assert_eq!(g.irrep("Σ+").unwrap().vertical_mirror_symmetric(), Some(true));
-        assert_eq!(g.irrep("Σ-").unwrap().vertical_mirror_symmetric(), Some(false));
+        assert_eq!(
+            g.irrep("Σ+").unwrap().vertical_mirror_symmetric(),
+            Some(true)
+        );
+        assert_eq!(
+            g.irrep("Σ-").unwrap().vertical_mirror_symmetric(),
+            Some(false)
+        );
         assert_eq!(g.irrep("Π").unwrap().vertical_mirror_symmetric(), None);
     }
 
@@ -271,11 +279,7 @@ mod tests {
     #[case::c5_e2("C5", "E2", true)]
     #[case::c3v_e_real("C3v", "E", false)]
     #[case::c2v_a1_1d("C2v", "A1", false)]
-    fn test_irrep_complex(
-        #[case] group: &str,
-        #[case] irrep: &str,
-        #[case] expected: bool,
-    ) {
+    fn test_irrep_complex(#[case] group: &str, #[case] irrep: &str, #[case] expected: bool) {
         let g = PointGroup::parse(group).unwrap();
         let ir = g.irrep(irrep).unwrap();
         assert_eq!(ir.complex(), expected);

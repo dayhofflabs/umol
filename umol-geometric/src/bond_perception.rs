@@ -3,9 +3,9 @@
 //! Assigns bond orders to atom pairs based on interatomic distances
 //! and valence constraints, using Lagrangian relaxation.
 
+use umol_params::covalent_radii::covalent_radii;
 use umol_shared::element::Element;
 use umol_shared::units::length::Length;
-use umol_params::covalent_radii::covalent_radii;
 
 use crate::algorithms::optimization::{
     lagrangian_relaxation, Constraint, LagrangianConfig, Variable,

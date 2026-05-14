@@ -431,24 +431,16 @@ pub(super) fn read_atom_constraint_dsl(
         "aromatic-valence" => {
             AtomConstraint::AromaticValence(read_aromatic_valence_dsl(de)?.into_ast(&()))
         }
-        "multicenter-valence" => AtomConstraint::MulticenterValence(
-            read_multicenter_valence_dsl(de)?.into_ast(&()),
-        ),
-        "donated-pairs" => AtomConstraint::DonatedPairs(read_value_dsl(de)?.into_ast(&())),
-        "accepted-pairs" => {
-            AtomConstraint::AcceptedPairs(read_value_dsl(de)?.into_ast(&()))
+        "multicenter-valence" => {
+            AtomConstraint::MulticenterValence(read_multicenter_valence_dsl(de)?.into_ast(&()))
         }
+        "donated-pairs" => AtomConstraint::DonatedPairs(read_value_dsl(de)?.into_ast(&())),
+        "accepted-pairs" => AtomConstraint::AcceptedPairs(read_value_dsl(de)?.into_ast(&())),
         "degree" => AtomConstraint::Degree(read_value_dsl(de)?.into_ast(&())),
         "total-degree" => AtomConstraint::TotalDegree(read_value_dsl(de)?.into_ast(&())),
-        "ring-degree" => {
-            AtomConstraint::RingDegree(read_value_dsl(de)?.into_ast(&()))
-        }
-        "ring-valence" => {
-            AtomConstraint::RingValence(read_value_dsl(de)?.into_ast(&()))
-        }
-        "total-hydrogens" => {
-            AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&()))
-        }
+        "ring-degree" => AtomConstraint::RingDegree(read_value_dsl(de)?.into_ast(&())),
+        "ring-valence" => AtomConstraint::RingValence(read_value_dsl(de)?.into_ast(&())),
+        "total-hydrogens" => AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&())),
         "ring-count" => AtomConstraint::RingCount(read_value_dsl(de)?.into_ast(&())),
         "ring-size" => AtomConstraint::RingSize(read_value_dsl(de)?.into_ast(&())),
         other => {
@@ -481,9 +473,7 @@ pub(super) fn read_bond_constraint_dsl(
         b'{' => {
             let key = read_single_key_map_header(de)?;
             let c = match key.as_str() {
-                "ring-count" => {
-                    BondConstraint::RingCount(read_value_dsl(de)?.into_ast(&()))
-                }
+                "ring-count" => BondConstraint::RingCount(read_value_dsl(de)?.into_ast(&())),
                 "ring-size" => BondConstraint::RingSize(read_value_dsl(de)?.into_ast(&())),
                 other => {
                     return Err(DeError::UnknownField {
@@ -526,9 +516,7 @@ pub(super) fn read_dative_bond_constraint_dsl(
                 "ring-count" => {
                     DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()))
                 }
-                "ring-size" => {
-                    DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&()))
-                }
+                "ring-size" => DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&())),
                 other => {
                     return Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -592,10 +580,7 @@ pub(super) fn read_multicenter_bond_constraint_dsl(
 pub(super) fn read_noncovalent_bond_constraint_dsl(
     _de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<NoncovalentBondConstraintDsl, EdnError> {
-    Err(DeError::Custom(
-        "no value-only noncovalent-bond constraints exist yet".to_string(),
-    )
-    .into())
+    Err(DeError::Custom("no value-only noncovalent-bond constraints exist yet".to_string()).into())
 }
 
 fn read_atom_ref_vec(de: &mut EdnStreamDeserializer<'_>) -> Result<Vec<AtomRef>, EdnError> {
@@ -1756,14 +1741,12 @@ impl ConstraintDsl {
         meta: &Metadata,
     ) -> Result<Constraint, ParseError> {
         Ok(match self {
-            Self::Atom(r, c) => Constraint::Atom(
-                r.into_ast(counts.atom_count, meta)?,
-                c.into_ast(&()),
-            ),
-            Self::Bond(r, c) => Constraint::Bond(
-                r.into_ast(counts.bond_count, meta)?,
-                c.into_ast(&()),
-            ),
+            Self::Atom(r, c) => {
+                Constraint::Atom(r.into_ast(counts.atom_count, meta)?, c.into_ast(&()))
+            }
+            Self::Bond(r, c) => {
+                Constraint::Bond(r.into_ast(counts.bond_count, meta)?, c.into_ast(&()))
+            }
             Self::DativeBond(r, c) => {
                 Constraint::DativeBond(r.into_ast(counts.dative_bond_count, meta)?, c.into_ast())
             }

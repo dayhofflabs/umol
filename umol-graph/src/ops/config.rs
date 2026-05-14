@@ -150,7 +150,10 @@ mod tests {
     fn test_chemistry_model_default() {
         let model = ChemistryModel::default();
         assert!(matches!(model.valence, ValenceModel::AtomTyping { .. }));
-        assert!(matches!(model.aromaticity, AromaticityModel::HueckelRule { .. }));
+        assert!(matches!(
+            model.aromaticity,
+            AromaticityModel::HueckelRule { .. }
+        ));
     }
 
     #[rstest]

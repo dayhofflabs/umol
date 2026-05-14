@@ -16,7 +16,9 @@ use super::constraint::{
     MulticenterBondConstraint,
 };
 use super::dative::DativeBondAst;
-use super::idx::{AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId};
+use super::idx::{
+    AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+};
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use super::remap::{IdRemapping, UndoRemapping};
@@ -42,12 +44,30 @@ pub enum BondRef {
 /// discriminant identifies the field; `old` and `new` carry the typed values.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomFieldChange {
-    Element { old: ElementAst, new: ElementAst },
-    IsotopeMass { old: IsotopeAst, new: IsotopeAst },
-    Charge { old: ValueAst, new: ValueAst },
-    ImplicitHydrogens { old: ImplicitHydrogensAst, new: ImplicitHydrogensAst },
-    LonePairs { old: ValueAst, new: ValueAst },
-    Spin { old: SpinStateAst, new: SpinStateAst },
+    Element {
+        old: ElementAst,
+        new: ElementAst,
+    },
+    IsotopeMass {
+        old: IsotopeAst,
+        new: IsotopeAst,
+    },
+    Charge {
+        old: ValueAst,
+        new: ValueAst,
+    },
+    ImplicitHydrogens {
+        old: ImplicitHydrogensAst,
+        new: ImplicitHydrogensAst,
+    },
+    LonePairs {
+        old: ValueAst,
+        new: ValueAst,
+    },
+    Spin {
+        old: SpinStateAst,
+        new: SpinStateAst,
+    },
 }
 
 impl AtomFieldChange {
@@ -66,9 +86,18 @@ impl AtomFieldChange {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BondFieldChange {
-    Order { old: ValueAst, new: ValueAst },
-    Charge { old: ValueAst, new: ValueAst },
-    Spin { old: SpinStateAst, new: SpinStateAst },
+    Order {
+        old: ValueAst,
+        new: ValueAst,
+    },
+    Charge {
+        old: ValueAst,
+        new: ValueAst,
+    },
+    Spin {
+        old: SpinStateAst,
+        new: SpinStateAst,
+    },
 }
 
 impl BondFieldChange {
@@ -98,9 +127,18 @@ impl DativeBondFieldChange {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AromaticSystemFieldChange {
-    Electrons { old: Vec<ValueAst>, new: Vec<ValueAst> },
-    Charge { old: ValueAst, new: ValueAst },
-    Spin { old: SpinStateAst, new: SpinStateAst },
+    Electrons {
+        old: Vec<ValueAst>,
+        new: Vec<ValueAst>,
+    },
+    Charge {
+        old: ValueAst,
+        new: ValueAst,
+    },
+    Spin {
+        old: SpinStateAst,
+        new: SpinStateAst,
+    },
 }
 
 impl AromaticSystemFieldChange {
@@ -115,9 +153,18 @@ impl AromaticSystemFieldChange {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MulticenterBondFieldChange {
-    Electrons { old: Vec<ValueAst>, new: Vec<ValueAst> },
-    Charge { old: ValueAst, new: ValueAst },
-    Spin { old: SpinStateAst, new: SpinStateAst },
+    Electrons {
+        old: Vec<ValueAst>,
+        new: Vec<ValueAst>,
+    },
+    Charge {
+        old: ValueAst,
+        new: ValueAst,
+    },
+    Spin {
+        old: SpinStateAst,
+        new: SpinStateAst,
+    },
 }
 
 impl MulticenterBondFieldChange {
@@ -132,7 +179,10 @@ impl MulticenterBondFieldChange {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NoncovalentBondFieldChange {
-    Kind { old: NoncovalentBondKindAst, new: NoncovalentBondKindAst },
+    Kind {
+        old: NoncovalentBondKindAst,
+        new: NoncovalentBondKindAst,
+    },
 }
 
 impl NoncovalentBondFieldChange {
@@ -553,11 +603,11 @@ pub enum Action {
 #[cfg(any())]
 mod tests {
     use rstest::*;
+    use umol_shared::element::Element;
 
     use super::*;
     use crate::ast::constraint::AtomConstraints;
     use crate::ast::value::Expr;
-    use umol_shared::element::Element;
 
     #[fixture]
     fn carbon_atom() -> AtomAst {
@@ -673,7 +723,9 @@ mod tests {
 
     #[rstest]
     fn test_edit_inverse_add_atom(carbon_atom: AtomAst) {
-        let edit = Edit::AddAtom { ast: carbon_atom.clone() };
+        let edit = Edit::AddAtom {
+            ast: carbon_atom.clone(),
+        };
         assert_eq!(
             edit.inverse(),
             Edit::RemoveAtom {
@@ -905,7 +957,11 @@ mod tests {
     fn test_edit_inverse_add_aromatic_system() {
         let ast = AromaticSystemAst::default();
         let edit = Edit::AddAromaticSystem {
-            atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1)), AtomRef::Id(AtomId(2))],
+            atoms: vec![
+                AtomRef::Id(AtomId(0)),
+                AtomRef::Id(AtomId(1)),
+                AtomRef::Id(AtomId(2)),
+            ],
             ast: ast.clone(),
         };
         assert_eq!(
@@ -965,10 +1021,14 @@ mod tests {
         let c = Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(1)]),
         });
-        let edit = Edit::PushMoleculeConstraint { constraint: c.clone() };
+        let edit = Edit::PushMoleculeConstraint {
+            constraint: c.clone(),
+        };
         assert_eq!(
             edit.clone().inverse(),
-            Edit::PopMoleculeConstraint { constraint: c.clone() }
+            Edit::PopMoleculeConstraint {
+                constraint: c.clone()
+            }
         );
         assert_eq!(edit.clone().inverse().inverse(), edit);
     }
@@ -979,7 +1039,9 @@ mod tests {
         let c = Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(1)]),
         });
-        let edit = Edit::PopMoleculeConstraint { constraint: c.clone() };
+        let edit = Edit::PopMoleculeConstraint {
+            constraint: c.clone(),
+        };
         assert_eq!(
             edit.inverse(),
             Edit::PushMoleculeConstraint { constraint: c }
@@ -1178,9 +1240,9 @@ mod tests {
 #[cfg(test)]
 mod tests {
     use rstest::*;
+    use umol_shared::element::Element;
 
     use super::*;
-    use umol_shared::element::Element;
 
     #[fixture]
     fn carbon_atom() -> AtomAst {
@@ -1251,7 +1313,11 @@ mod tests {
     #[rstest]
     fn test_edit_add_bond(single_bond: BondAst) {
         assert_eq!(
-            Edit::add_bond(AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1)), single_bond.clone()),
+            Edit::add_bond(
+                AtomRef::Id(AtomId(0)),
+                AtomRef::Id(AtomId(1)),
+                single_bond.clone()
+            ),
             Edit::AddBonds {
                 bonds: vec![AddBond {
                     a: AtomRef::Id(AtomId(0)),

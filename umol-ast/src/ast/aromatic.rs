@@ -23,7 +23,12 @@ impl AromaticSystemAst {
     }
 
     pub fn from_electrons(electrons: Vec<u8>) -> Self {
-        Self::new(electrons.into_iter().map(|n| ValueAst::Lit(n as i64)).collect())
+        Self::new(
+            electrons
+                .into_iter()
+                .map(|n| ValueAst::Lit(n as i64))
+                .collect(),
+        )
     }
 
     pub fn with_electrons(mut self, electrons: Vec<ValueAst>) -> Self {

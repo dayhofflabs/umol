@@ -390,7 +390,9 @@ fn test_transparent_named_from_edn() {
 
 #[test]
 fn test_transparent_named_to_edn() {
-    let l = Label { value: "hello".into() };
+    let l = Label {
+        value: "hello".into(),
+    };
     assert_eq!(l.to_edn().to_string(), r#""hello""#);
 }
 
@@ -618,7 +620,10 @@ fn test_struct_roundtrip_defaults_inflate() {
 
 #[test]
 fn test_renamed_struct_roundtrip() {
-    let r = Renamed { name: "a".into(), count: 5 };
+    let r = Renamed {
+        name: "a".into(),
+        count: 5,
+    };
     let back = Renamed::from_edn(&r.to_edn()).unwrap();
     assert_eq!(r, back);
 }
@@ -634,7 +639,11 @@ fn test_transparent_roundtrip_via_str() {
 #[test]
 fn test_skip_if_roundtrip() {
     // Non-zero score survives roundtrip
-    let r = Record { name: "a".into(), cached: 99, score: 5 };
+    let r = Record {
+        name: "a".into(),
+        cached: 99,
+        score: 5,
+    };
     let back = Record::from_edn(&r.to_edn()).unwrap();
     assert_eq!(back.name, "a");
     assert_eq!(back.cached, 0); // skip → always default
@@ -644,7 +653,11 @@ fn test_skip_if_roundtrip() {
 #[test]
 fn test_skip_if_without_default_is_lossy() {
     // score=0 is omitted by skip_if, but score is required on deser → error
-    let r = Record { name: "b".into(), cached: 0, score: 0 };
+    let r = Record {
+        name: "b".into(),
+        cached: 0,
+        score: 0,
+    };
     assert!(Record::from_edn(&r.to_edn()).is_err());
 }
 

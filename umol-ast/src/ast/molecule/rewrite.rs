@@ -32,8 +32,7 @@ impl MoleculeAst {
 
         let l_to_g: HashMap<AtomId, AtomId> = assignment.atoms.iter().copied().collect();
         let l_to_r: HashMap<AtomId, AtomId> = rule.atom_map.iter().copied().collect();
-        let r_to_l: HashMap<AtomId, AtomId> =
-            rule.atom_map.iter().map(|&(l, r)| (r, l)).collect();
+        let r_to_l: HashMap<AtomId, AtomId> = rule.atom_map.iter().map(|&(l, r)| (r, l)).collect();
 
         let k_l: HashSet<AtomId> = l_to_r.keys().copied().collect();
         let l_atoms_g: HashSet<AtomId> = l_to_g.values().copied().collect();
@@ -81,10 +80,15 @@ impl MoleculeAst {
             let in_k = r_to_l.contains_key(&bv.atom_ids()[0])
                 && r_to_l.contains_key(&bv.atom_ids()[1])
                 && lhs
-                    .bonds().connecting_id(r_to_l[&bv.atom_ids()[0]], r_to_l[&bv.atom_ids()[1]])
+                    .bonds()
+                    .connecting_id(r_to_l[&bv.atom_ids()[0]], r_to_l[&bv.atom_ids()[1]])
                     .is_some();
             if !in_k {
-                builder.add_bond(r_to_g[&bv.atom_ids()[0]], r_to_g[&bv.atom_ids()[1]], bv.ast.clone());
+                builder.add_bond(
+                    r_to_g[&bv.atom_ids()[0]],
+                    r_to_g[&bv.atom_ids()[1]],
+                    bv.ast.clone(),
+                );
             }
         }
 
@@ -94,7 +98,9 @@ impl MoleculeAst {
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomId> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.dative_bonds().connecting_id(l_parts.iter().copied()).is_some()
+                lhs.dative_bonds()
+                    .connecting_id(l_parts.iter().copied())
+                    .is_some()
             };
             if !in_k {
                 let g_donors: Vec<AtomId> = dv.donor_ids().map(|d| r_to_g[&d]).collect();
@@ -109,7 +115,9 @@ impl MoleculeAst {
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomId> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.aromatic_systems().connecting_id(l_parts.iter().copied()).is_some()
+                lhs.aromatic_systems()
+                    .connecting_id(l_parts.iter().copied())
+                    .is_some()
             };
             if !in_k {
                 let g_parts: Vec<AtomId> = r_parts.iter().map(|a| r_to_g[a]).collect();
@@ -123,7 +131,9 @@ impl MoleculeAst {
             let all_k = r_parts.iter().all(|a| r_to_l.contains_key(a));
             let in_k = all_k && {
                 let l_parts: HashSet<AtomId> = r_parts.iter().map(|a| r_to_l[a]).collect();
-                lhs.multicenter_bonds().connecting_id(l_parts.iter().copied()).is_some()
+                lhs.multicenter_bonds()
+                    .connecting_id(l_parts.iter().copied())
+                    .is_some()
             };
             if !in_k {
                 let g_parts: Vec<AtomId> = r_parts.iter().map(|a| r_to_g[a]).collect();
@@ -137,13 +147,11 @@ impl MoleculeAst {
             let in_k = r_to_l.contains_key(&a)
                 && r_to_l.contains_key(&b)
                 && lhs
-                    .noncovalent_bonds().connecting_id(r_to_l[&a], r_to_l[&b])
+                    .noncovalent_bonds()
+                    .connecting_id(r_to_l[&a], r_to_l[&b])
                     .is_some();
             if !in_k {
-                builder.add_noncovalent_bond(
-                    [r_to_g[&a], r_to_g[&b]],
-                    nv.ast.clone(),
-                );
+                builder.add_noncovalent_bond([r_to_g[&a], r_to_g[&b]], nv.ast.clone());
             }
         }
 
@@ -163,7 +171,10 @@ impl MoleculeAst {
             if lhs.bonds().connecting_id(l_src, l_tgt).is_none() {
                 continue;
             }
-            if let Some(g_bond) = self.bonds().connecting_id(r_to_g[&bv.atom_ids()[0]], r_to_g[&bv.atom_ids()[1]]) {
+            if let Some(g_bond) = self
+                .bonds()
+                .connecting_id(r_to_g[&bv.atom_ids()[0]], r_to_g[&bv.atom_ids()[1]])
+            {
                 *builder.bond_mut(g_bond).ast = bv.ast.clone();
             }
         }
@@ -176,7 +187,11 @@ impl MoleculeAst {
             let in_k = all_k && {
                 let r_parts: Option<HashSet<AtomId>> =
                     l_parts.iter().map(|a| l_to_r.get(a).copied()).collect();
-                r_parts.is_some_and(|rp| rhs.dative_bonds().connecting_id(rp.iter().copied()).is_some())
+                r_parts.is_some_and(|rp| {
+                    rhs.dative_bonds()
+                        .connecting_id(rp.iter().copied())
+                        .is_some()
+                })
             };
             if !in_k {
                 let g_parts: Option<HashSet<AtomId>> =
@@ -199,7 +214,11 @@ impl MoleculeAst {
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts = map_participants(l_parts.iter().copied(), &l_to_r);
-                r_parts.is_some_and(|rp| rhs.aromatic_systems().connecting_id(rp.iter().copied()).is_some())
+                r_parts.is_some_and(|rp| {
+                    rhs.aromatic_systems()
+                        .connecting_id(rp.iter().copied())
+                        .is_some()
+                })
             };
             if !in_k {
                 let g_parts = map_participants(l_parts.iter().copied(), &l_to_g);
@@ -221,12 +240,17 @@ impl MoleculeAst {
             let all_k = l_parts.iter().all(|a| k_l.contains(a));
             let in_k = all_k && {
                 let r_parts = map_participants(l_parts.iter().copied(), &l_to_r);
-                r_parts.is_some_and(|rp| rhs.multicenter_bonds().connecting_id(rp.iter().copied()).is_some())
+                r_parts.is_some_and(|rp| {
+                    rhs.multicenter_bonds()
+                        .connecting_id(rp.iter().copied())
+                        .is_some()
+                })
             };
             if !in_k {
                 let g_parts = map_participants(l_parts.iter().copied(), &l_to_g);
                 if let Some(gp) = g_parts {
-                    if let Some(g_idx) = self.multicenter_bonds().connecting_id(gp.iter().copied()) {
+                    if let Some(g_idx) = self.multicenter_bonds().connecting_id(gp.iter().copied())
+                    {
                         remove_multicenter.push(g_idx);
                     }
                 }
@@ -243,11 +267,11 @@ impl MoleculeAst {
             let in_k = k_l.contains(&a)
                 && k_l.contains(&b)
                 && rhs
-                    .noncovalent_bonds().connecting_id(l_to_r[&a], l_to_r[&b])
+                    .noncovalent_bonds()
+                    .connecting_id(l_to_r[&a], l_to_r[&b])
                     .is_some();
             if !in_k {
-                if let (Some(&ga), Some(&gb)) = (l_to_g.get(&a), l_to_g.get(&b))
-                {
+                if let (Some(&ga), Some(&gb)) = (l_to_g.get(&a), l_to_g.get(&b)) {
                     if let Some(g_idx) = self.noncovalent_bonds().connecting_id(ga, gb) {
                         remove_noncovalent.push(g_idx);
                     }
@@ -270,10 +294,13 @@ impl MoleculeAst {
             let in_k = k_l.contains(&bv.atom_ids()[0])
                 && k_l.contains(&bv.atom_ids()[1])
                 && rhs
-                    .bonds().connecting_id(l_to_r[&bv.atom_ids()[0]], l_to_r[&bv.atom_ids()[1]])
+                    .bonds()
+                    .connecting_id(l_to_r[&bv.atom_ids()[0]], l_to_r[&bv.atom_ids()[1]])
                     .is_some();
             if !in_k {
-                if let (Some(&gs), Some(&gt_)) = (l_to_g.get(&bv.atom_ids()[0]), l_to_g.get(&bv.atom_ids()[1])) {
+                if let (Some(&gs), Some(&gt_)) =
+                    (l_to_g.get(&bv.atom_ids()[0]), l_to_g.get(&bv.atom_ids()[1]))
+                {
                     if let Some(g_bond) = self.bonds().connecting_id(gs, gt_) {
                         remove_bonds_g.push(g_bond);
                     }

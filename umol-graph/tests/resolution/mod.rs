@@ -9,9 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use umol_ast::ast::{FromAst, IntoAst, MoleculeAst};
-use umol_ast::dsl::{
-    ImplicitHydrogensDefault, MoleculeDefaults, MoleculeDsl, MoleculeOverrides,
-};
+use umol_ast::dsl::{ImplicitHydrogensDefault, MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ops::config::{AromaticityModel, ChemistryModel, ValenceModel};
 use umol_graph::ops::resolver::Resolver;

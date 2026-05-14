@@ -41,7 +41,6 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    
     use crate::ast::molecule::MoleculeAst;
 
     fn chain(n: usize) -> MoleculeAst {
@@ -55,10 +54,7 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn ring(n: usize) -> MoleculeAst {
@@ -72,20 +68,21 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     #[fixture]
     fn chain_4_matching() -> BondMatching {
-        chain(4).graph().maximum_matching(MaxMatchingAlgorithm::Edmonds)
+        chain(4)
+            .graph()
+            .maximum_matching(MaxMatchingAlgorithm::Edmonds)
     }
 
     #[fixture]
     fn ring_6_matching() -> BondMatching {
-        ring(6).graph().maximum_matching(MaxMatchingAlgorithm::Edmonds)
+        ring(6)
+            .graph()
+            .maximum_matching(MaxMatchingAlgorithm::Edmonds)
     }
 
     #[rstest]

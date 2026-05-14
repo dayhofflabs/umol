@@ -7,14 +7,13 @@
 
 use std::collections::HashSet;
 
+use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, SpinStateAst,
     ValueAst,
 };
 use umol_graph_core::Graph;
 use umol_shared::element::Element;
-
-use thiserror::Error;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ClarError {
@@ -134,8 +133,8 @@ fn select_disjoint_sextets(rings: &RingSet, candidates: &[RingId]) -> Vec<RingId
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst,
-        MoleculeAst, RingFamily, RingId, ValueAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, MoleculeAst,
+        RingFamily, RingId, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -155,10 +154,9 @@ mod tests {
             .into_iter()
             .map(|(mut atom, pi)| {
                 if let Some(n) = pi {
-                    atom.constraints
-                        .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
-                            ValueAst::Lit(n),
-                        )));
+                    atom.constraints.add(AtomConstraint::AromaticValence(
+                        AromaticValenceAst::Aromatic(ValueAst::Lit(n)),
+                    ));
                 }
                 atom
             })
@@ -177,10 +175,7 @@ mod tests {
                 )
             })
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
@@ -189,10 +184,7 @@ mod tests {
             .iter()
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn enumerate_induced(ast: &MoleculeAst) -> RingSet {
@@ -287,7 +279,9 @@ mod tests {
     ) {
         let rings = enumerate_induced(&ast);
         let model = ClarAromaticity;
-        let systems = model.find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint).unwrap();
+        let systems = model
+            .find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint)
+            .unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
         if let Some((system_atoms_vec, _)) = systems.first() {
@@ -328,7 +322,9 @@ mod tests {
     fn test_clar_aromaticity_find_from_rings_error(#[case] ast: MoleculeAst) {
         let rings = enumerate_induced(&ast);
         let model = ClarAromaticity;
-        assert!(model.find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint).is_err());
+        assert!(model
+            .find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint)
+            .is_err());
     }
 
     #[rstest]

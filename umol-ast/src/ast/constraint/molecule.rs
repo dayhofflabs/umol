@@ -414,19 +414,11 @@ impl SubPatternAnchor {
         self.aromatic_systems.push((target, pattern));
     }
 
-    pub fn push_multicenter_bond(
-        &mut self,
-        target: MulticenterBondId,
-        pattern: MulticenterBondId,
-    ) {
+    pub fn push_multicenter_bond(&mut self, target: MulticenterBondId, pattern: MulticenterBondId) {
         self.multicenter_bonds.push((target, pattern));
     }
 
-    pub fn push_noncovalent_bond(
-        &mut self,
-        target: NoncovalentBondId,
-        pattern: NoncovalentBondId,
-    ) {
+    pub fn push_noncovalent_bond(&mut self, target: NoncovalentBondId, pattern: NoncovalentBondId) {
         self.noncovalent_bonds.push((target, pattern));
     }
 
@@ -1121,10 +1113,7 @@ mod tests {
         let remap = relation_remapping(vec![0], vec![1], vec![0], vec![2]);
         let mapped = a.remap(&remap).expect("all targets survive");
 
-        assert_eq!(
-            mapped.dative_bonds(),
-            &[(DativeBondId(1), DativeBondId(0))],
-        );
+        assert_eq!(mapped.dative_bonds(), &[(DativeBondId(1), DativeBondId(0))],);
         assert_eq!(
             mapped.aromatic_systems(),
             &[(AromaticSystemId(2), AromaticSystemId(1))],

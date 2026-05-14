@@ -947,12 +947,14 @@ mod tests {
 
     #[rstest]
     #[case::lit_lit(
-        ImplicitHydrogensAst::Lit(5), ImplicitHydrogensAst::Lit(2),
-        ImplicitHydrogensAst::Lit(3),
+        ImplicitHydrogensAst::Lit(5),
+        ImplicitHydrogensAst::Lit(2),
+        ImplicitHydrogensAst::Lit(3)
     )]
     #[case::normal_collapses(
-        ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Lit(1),
-        ImplicitHydrogensAst::Undetermined,
+        ImplicitHydrogensAst::Normal,
+        ImplicitHydrogensAst::Lit(1),
+        ImplicitHydrogensAst::Undetermined
     )]
     fn test_implicit_hydrogens_ast_sub(
         #[case] lhs: ImplicitHydrogensAst,
@@ -964,12 +966,14 @@ mod tests {
 
     #[rstest]
     #[case::lit_lit(
-        ImplicitHydrogensAst::Lit(3), ImplicitHydrogensAst::Lit(4),
-        ImplicitHydrogensAst::Lit(12),
+        ImplicitHydrogensAst::Lit(3),
+        ImplicitHydrogensAst::Lit(4),
+        ImplicitHydrogensAst::Lit(12)
     )]
     #[case::normal_collapses(
-        ImplicitHydrogensAst::Lit(3), ImplicitHydrogensAst::Normal,
-        ImplicitHydrogensAst::Undetermined,
+        ImplicitHydrogensAst::Lit(3),
+        ImplicitHydrogensAst::Normal,
+        ImplicitHydrogensAst::Undetermined
     )]
     fn test_implicit_hydrogens_ast_mul(
         #[case] lhs: ImplicitHydrogensAst,
@@ -981,12 +985,14 @@ mod tests {
 
     #[rstest]
     #[case::lit_lit(
-        ImplicitHydrogensAst::Lit(10), ImplicitHydrogensAst::Lit(2),
-        ImplicitHydrogensAst::Lit(5),
+        ImplicitHydrogensAst::Lit(10),
+        ImplicitHydrogensAst::Lit(2),
+        ImplicitHydrogensAst::Lit(5)
     )]
     #[case::normal_collapses(
-        ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Lit(2),
-        ImplicitHydrogensAst::Undetermined,
+        ImplicitHydrogensAst::Normal,
+        ImplicitHydrogensAst::Lit(2),
+        ImplicitHydrogensAst::Undetermined
     )]
     fn test_implicit_hydrogens_ast_div(
         #[case] lhs: ImplicitHydrogensAst,

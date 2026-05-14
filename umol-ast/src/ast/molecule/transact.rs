@@ -11,8 +11,8 @@ use thiserror::Error;
 use super::super::edit::{
     Action, AddBond, AromaticSystemFieldChange, AromaticSystemRef, AtomFieldChange, AtomRef,
     BondFieldChange, BondRef, DativeBondFieldChange, DativeBondRef, Edit,
-    MulticenterBondFieldChange, MulticenterBondRef, NoncovalentBondFieldChange,
-    NoncovalentBondRef, Undo,
+    MulticenterBondFieldChange, MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef,
+    Undo,
 };
 use super::super::idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -28,7 +28,10 @@ pub enum TransactionError {
     /// `Ref::New(N)` references an earlier edit, but that edit's Action is
     /// the wrong shape (e.g., `AtomRef::New(N)` where edit N was `AddBond`).
     #[error("symbolic ref type mismatch: expected {expected}, got {got}")]
-    RefTypeMismatch { expected: &'static str, got: &'static str },
+    RefTypeMismatch {
+        expected: &'static str,
+        got: &'static str,
+    },
 
     /// An id in the Edit references an entity that does not exist (out of
     /// range against current entity counts).
@@ -76,7 +79,6 @@ impl Transaction {
     pub fn undos(&self) -> &[Undo] {
         &self.undo
     }
-
 }
 
 impl MoleculeBuilder {
@@ -98,26 +100,23 @@ impl MoleculeBuilder {
         Ok(actions)
     }
 
-    fn apply_edit(
-        &mut self,
-        edit: Edit,
-        actions: &[Action],
-    ) -> Result<Action, TransactionError> {
+    fn apply_edit(&mut self, edit: Edit, actions: &[Action]) -> Result<Action, TransactionError> {
         match edit {
             Edit::AddAtoms { atoms } => {
-                let ids = atoms
-                    .into_iter()
-                    .map(|ast| self.add_atom(ast))
-                    .collect();
+                let ids = atoms.into_iter().map(|ast| self.add_atom(ast)).collect();
                 Ok(Action::AtomsAdded(ids))
             }
             Edit::AddBonds { bonds } => {
                 let mut ids = Vec::with_capacity(bonds.len());
                 for AddBond { a, b, ast } in bonds {
                     let a = resolve_atom_ref(a, actions)?;
-                    if a.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                    if a.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
                     let b = resolve_atom_ref(b, actions)?;
-                    if b.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                    if b.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
                     ids.push(self.add_bond(a, b, ast));
                 }
                 Ok(Action::BondsAdded(ids))
@@ -150,13 +149,17 @@ impl MoleculeBuilder {
             }
             Edit::SetAtomField { idx, change } => {
                 let id = resolve_atom_ref(idx, actions)?;
-                if id.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                if id.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
                 self.apply_set_atom_field(id, change)?;
                 Ok(Action::Done)
             }
             Edit::SetBondField { idx, change } => {
                 let id = resolve_bond_ref(idx, actions)?;
-                if id.index() >= self.bond_count() { return Err(TransactionError::IdOutOfRange("bond")); }
+                if id.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
                 self.apply_set_bond_field(id, change)?;
                 Ok(Action::Done)
             }
@@ -166,13 +169,16 @@ impl MoleculeBuilder {
                     .map(|r| resolve_atom_ref(r, actions))
                     .collect::<Result<_, _>>()?;
                 for a in &resolved {
-                    if a.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                    if a.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
                 }
-                let (acceptor, donors) = resolved
-                    .split_last()
-                    .ok_or(TransactionError::MalformedEdit(
-                        "AddDativeBond requires at least one participant atom",
-                    ))?;
+                let (acceptor, donors) =
+                    resolved
+                        .split_last()
+                        .ok_or(TransactionError::MalformedEdit(
+                            "AddDativeBond requires at least one participant atom",
+                        ))?;
                 Ok(Action::DativeBondAdded(self.add_dative_bond(
                     donors.to_vec(),
                     *acceptor,
@@ -181,7 +187,9 @@ impl MoleculeBuilder {
             }
             Edit::RemoveDativeBond { idx, atoms, ast } => {
                 let id = resolve_dative_bond_ref(idx, actions)?;
-                if id.index() >= self.dative_bond_count() { return Err(TransactionError::IdOutOfRange("dative bond")); }
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
                 let saved_atoms: Vec<AtomId> = atoms
                     .iter()
                     .map(|r| resolve_atom_ref(r.clone(), actions))
@@ -196,7 +204,9 @@ impl MoleculeBuilder {
             }
             Edit::SetDativeBondField { idx, change } => {
                 let id = resolve_dative_bond_ref(idx, actions)?;
-                if id.index() >= self.dative_bond_count() { return Err(TransactionError::IdOutOfRange("dative bond")); }
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
                 self.apply_set_dative_bond_field(id, change)?;
                 Ok(Action::Done)
             }
@@ -206,7 +216,9 @@ impl MoleculeBuilder {
                     .map(|r| resolve_atom_ref(r, actions))
                     .collect::<Result<_, _>>()?;
                 for a in &resolved {
-                    if a.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                    if a.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
                 }
                 Ok(Action::AromaticSystemAdded(
                     self.add_aromatic_system(resolved, ast),
@@ -214,7 +226,9 @@ impl MoleculeBuilder {
             }
             Edit::RemoveAromaticSystem { idx, atoms, ast } => {
                 let id = resolve_aromatic_system_ref(idx, actions)?;
-                if id.index() >= self.aromatic_system_count() { return Err(TransactionError::IdOutOfRange("aromatic system")); }
+                if id.index() >= self.aromatic_system_count() {
+                    return Err(TransactionError::IdOutOfRange("aromatic system"));
+                }
                 let saved_atoms: Vec<AtomId> = atoms
                     .iter()
                     .map(|r| resolve_atom_ref(r.clone(), actions))
@@ -229,7 +243,9 @@ impl MoleculeBuilder {
             }
             Edit::SetAromaticSystemField { idx, change } => {
                 let id = resolve_aromatic_system_ref(idx, actions)?;
-                if id.index() >= self.aromatic_system_count() { return Err(TransactionError::IdOutOfRange("aromatic system")); }
+                if id.index() >= self.aromatic_system_count() {
+                    return Err(TransactionError::IdOutOfRange("aromatic system"));
+                }
                 self.apply_set_aromatic_system_field(id, change)?;
                 Ok(Action::Done)
             }
@@ -239,7 +255,9 @@ impl MoleculeBuilder {
                     .map(|r| resolve_atom_ref(r, actions))
                     .collect::<Result<_, _>>()?;
                 for a in &resolved {
-                    if a.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                    if a.index() >= self.atom_count() {
+                        return Err(TransactionError::IdOutOfRange("atom"));
+                    }
                 }
                 Ok(Action::MulticenterBondAdded(
                     self.add_multicenter_bond(resolved, ast),
@@ -247,7 +265,9 @@ impl MoleculeBuilder {
             }
             Edit::RemoveMulticenterBond { idx, atoms, ast } => {
                 let id = resolve_multicenter_bond_ref(idx, actions)?;
-                if id.index() >= self.multicenter_bond_count() { return Err(TransactionError::IdOutOfRange("multicenter bond")); }
+                if id.index() >= self.multicenter_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("multicenter bond"));
+                }
                 let saved_atoms: Vec<AtomId> = atoms
                     .iter()
                     .map(|r| resolve_atom_ref(r.clone(), actions))
@@ -262,22 +282,30 @@ impl MoleculeBuilder {
             }
             Edit::SetMulticenterBondField { idx, change } => {
                 let id = resolve_multicenter_bond_ref(idx, actions)?;
-                if id.index() >= self.multicenter_bond_count() { return Err(TransactionError::IdOutOfRange("multicenter bond")); }
+                if id.index() >= self.multicenter_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("multicenter bond"));
+                }
                 self.apply_set_multicenter_bond_field(id, change)?;
                 Ok(Action::Done)
             }
             Edit::AddNoncovalentBond { atoms, ast } => {
                 let a = resolve_atom_ref(atoms[0].clone(), actions)?;
                 let b = resolve_atom_ref(atoms[1].clone(), actions)?;
-                if a.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
-                if b.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                if a.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                if b.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
                 Ok(Action::NoncovalentBondAdded(
                     self.add_noncovalent_bond([a, b], ast),
                 ))
             }
             Edit::RemoveNoncovalentBond { idx, atoms, ast } => {
                 let id = resolve_noncovalent_bond_ref(idx, actions)?;
-                if id.index() >= self.noncovalent_bond_count() { return Err(TransactionError::IdOutOfRange("noncovalent bond")); }
+                if id.index() >= self.noncovalent_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+                }
                 let saved_atoms = [
                     resolve_atom_ref(atoms[0].clone(), actions)?,
                     resolve_atom_ref(atoms[1].clone(), actions)?,
@@ -291,19 +319,25 @@ impl MoleculeBuilder {
             }
             Edit::SetNoncovalentBondField { idx, change } => {
                 let id = resolve_noncovalent_bond_ref(idx, actions)?;
-                if id.index() >= self.noncovalent_bond_count() { return Err(TransactionError::IdOutOfRange("noncovalent bond")); }
+                if id.index() >= self.noncovalent_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("noncovalent bond"));
+                }
                 self.apply_set_noncovalent_bond_field(id, change)?;
                 Ok(Action::Done)
             }
             Edit::SetAtomConstraint { idx, old, new } => {
                 let id = resolve_atom_ref(idx, actions)?;
-                if id.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                if id.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
                 self.apply_set_atom_constraint(id, old, new)?;
                 Ok(Action::Done)
             }
             Edit::AddAtomConstraint { idx, constraint } => {
                 let id = resolve_atom_ref(idx, actions)?;
-                if id.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                if id.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
                 if constraint.is_unique() {
                     return Err(TransactionError::KindShapeMismatch);
                 }
@@ -316,7 +350,9 @@ impl MoleculeBuilder {
             }
             Edit::RemoveAtomConstraint { idx, constraint } => {
                 let id = resolve_atom_ref(idx, actions)?;
-                if id.index() >= self.atom_count() { return Err(TransactionError::IdOutOfRange("atom")); }
+                if id.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
                 if constraint.is_unique() {
                     return Err(TransactionError::KindShapeMismatch);
                 }
@@ -327,13 +363,17 @@ impl MoleculeBuilder {
             }
             Edit::SetBondConstraint { idx, old, new } => {
                 let id = resolve_bond_ref(idx, actions)?;
-                if id.index() >= self.bond_count() { return Err(TransactionError::IdOutOfRange("bond")); }
+                if id.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
                 self.apply_set_bond_constraint(id, old, new)?;
                 Ok(Action::Done)
             }
             Edit::AddBondConstraint { idx, constraint } => {
                 let id = resolve_bond_ref(idx, actions)?;
-                if id.index() >= self.bond_count() { return Err(TransactionError::IdOutOfRange("bond")); }
+                if id.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
                 if constraint.is_unique() {
                     return Err(TransactionError::KindShapeMismatch);
                 }
@@ -346,7 +386,9 @@ impl MoleculeBuilder {
             }
             Edit::RemoveBondConstraint { idx, constraint } => {
                 let id = resolve_bond_ref(idx, actions)?;
-                if id.index() >= self.bond_count() { return Err(TransactionError::IdOutOfRange("bond")); }
+                if id.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
                 if constraint.is_unique() {
                     return Err(TransactionError::KindShapeMismatch);
                 }
@@ -357,13 +399,17 @@ impl MoleculeBuilder {
             }
             Edit::SetDativeBondConstraint { idx, old, new } => {
                 let id = resolve_dative_bond_ref(idx, actions)?;
-                if id.index() >= self.dative_bond_count() { return Err(TransactionError::IdOutOfRange("dative bond")); }
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
                 self.apply_set_dative_bond_constraint(id, old, new)?;
                 Ok(Action::Done)
             }
             Edit::AddDativeBondConstraint { idx, constraint } => {
                 let id = resolve_dative_bond_ref(idx, actions)?;
-                if id.index() >= self.dative_bond_count() { return Err(TransactionError::IdOutOfRange("dative bond")); }
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
                 if constraint.is_unique() {
                     return Err(TransactionError::KindShapeMismatch);
                 }
@@ -376,7 +422,9 @@ impl MoleculeBuilder {
             }
             Edit::RemoveDativeBondConstraint { idx, constraint } => {
                 let id = resolve_dative_bond_ref(idx, actions)?;
-                if id.index() >= self.dative_bond_count() { return Err(TransactionError::IdOutOfRange("dative bond")); }
+                if id.index() >= self.dative_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("dative bond"));
+                }
                 if constraint.is_unique() {
                     return Err(TransactionError::KindShapeMismatch);
                 }
@@ -387,13 +435,17 @@ impl MoleculeBuilder {
             }
             Edit::SetAromaticSystemConstraint { idx, old, new } => {
                 let id = resolve_aromatic_system_ref(idx, actions)?;
-                if id.index() >= self.aromatic_system_count() { return Err(TransactionError::IdOutOfRange("aromatic system")); }
+                if id.index() >= self.aromatic_system_count() {
+                    return Err(TransactionError::IdOutOfRange("aromatic system"));
+                }
                 self.apply_set_aromatic_system_constraint(id, old, new)?;
                 Ok(Action::Done)
             }
             Edit::SetMulticenterBondConstraint { idx, old, new } => {
                 let id = resolve_multicenter_bond_ref(idx, actions)?;
-                if id.index() >= self.multicenter_bond_count() { return Err(TransactionError::IdOutOfRange("multicenter bond")); }
+                if id.index() >= self.multicenter_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("multicenter bond"));
+                }
                 self.apply_set_multicenter_bond_constraint(id, old, new)?;
                 Ok(Action::Done)
             }
@@ -403,9 +455,10 @@ impl MoleculeBuilder {
             }
             Edit::PopMoleculeConstraint { constraint } => {
                 let list = self.constraints_mut();
-                let last_index = list.len().checked_sub(1).ok_or(
-                    TransactionError::OldStateMismatch,
-                )?;
+                let last_index = list
+                    .len()
+                    .checked_sub(1)
+                    .ok_or(TransactionError::OldStateMismatch)?;
                 if list.as_slice()[last_index] != constraint {
                     return Err(TransactionError::OldStateMismatch);
                 }
@@ -938,12 +991,12 @@ mod tests {
     use rstest::*;
     use umol_shared::element::Element;
 
+    use super::super::super::aromatic::AromaticSystemAst;
     use super::super::super::atom::{AtomAst, ElementAst};
     use super::super::super::bond::BondAst;
-    use super::super::super::aromatic::AromaticSystemAst;
     use super::super::super::constraint::{
-        AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint,
-        DativeBondConstraint, MoleculeConstraint, MulticenterBondConstraint,
+        AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, DativeBondConstraint,
+        MoleculeConstraint, MulticenterBondConstraint,
     };
     use super::super::super::dative::DativeBondAst;
     use super::super::super::multicenter::MulticenterBondAst;
@@ -983,7 +1036,10 @@ mod tests {
         assert_eq!(actions, vec![Action::AtomsAdded(vec![AtomId(0)])]);
         let built = empty.build();
         assert_eq!(built.atoms().count(), 1);
-        assert_eq!(built.atom(AtomId(0)).ast.element, ElementAst::Lit(Element::C));
+        assert_eq!(
+            built.atom(AtomId(0)).ast.element,
+            ElementAst::Lit(Element::C)
+        );
     }
 
     #[rstest]
@@ -1034,7 +1090,10 @@ mod tests {
             }])
             .unwrap();
         assert_eq!(actions, vec![Action::Done]);
-        assert_eq!(one_atom.build().atom(AtomId(0)).ast.charge, ValueAst::Lit(1));
+        assert_eq!(
+            one_atom.build().atom(AtomId(0)).ast.charge,
+            ValueAst::Lit(1)
+        );
     }
 
     #[rstest]
@@ -1090,7 +1149,13 @@ mod tests {
             ])
             .unwrap();
         let next = one_atom.build();
-        let cs: Vec<_> = next.atom(AtomId(0)).ast.constraints.iter().cloned().collect();
+        let cs: Vec<_> = next
+            .atom(AtomId(0))
+            .ast
+            .constraints
+            .iter()
+            .cloned()
+            .collect();
         assert_eq!(
             cs,
             vec![
@@ -1123,21 +1188,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::introduce(
-        None,
-        Some(AtomConstraint::valence(4)),
-        ValueAst::Lit(4),
-    )]
+    #[case::introduce(None, Some(AtomConstraint::valence(4)), ValueAst::Lit(4))]
     #[case::replace(
         Some(AtomConstraint::valence(3)),
         Some(AtomConstraint::valence(4)),
-        ValueAst::Lit(4),
+        ValueAst::Lit(4)
     )]
-    #[case::remove(
-        Some(AtomConstraint::valence(3)),
-        None,
-        ValueAst::Undetermined,
-    )]
+    #[case::remove(Some(AtomConstraint::valence(3)), None, ValueAst::Undetermined)]
     fn test_molecule_builder_transact_set_atom_constraint(
         mut one_atom: MoleculeBuilder,
         #[case] old: Option<AtomConstraint>,
@@ -1213,9 +1270,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_transact_pop_molecule_constraint_error(
-        mut empty: MoleculeBuilder,
-    ) {
+    fn test_molecule_builder_transact_pop_molecule_constraint_error(mut empty: MoleculeBuilder) {
         let c = Constraint::Molecule(MoleculeConstraint::Connected { atoms: None });
         empty.push_constraint(c.clone());
         let err = empty
@@ -1230,9 +1285,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_transact_remove_topology_atom_error(
-        mut one_atom: MoleculeBuilder,
-    ) {
+    fn test_molecule_builder_transact_remove_topology_atom_error(mut one_atom: MoleculeBuilder) {
         let err = one_atom
             .transact(vec![Edit::remove_atom(AtomRef::Id(AtomId(9)))])
             .unwrap_err();
@@ -1241,9 +1294,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_transact_remove_topology_bond_error(
-        mut diatomic: MoleculeBuilder,
-    ) {
+    fn test_molecule_builder_transact_remove_topology_bond_error(mut diatomic: MoleculeBuilder) {
         let err = diatomic
             .transact(vec![Edit::remove_bond(BondRef::Id(BondId(9)))])
             .unwrap_err();
@@ -1299,14 +1350,8 @@ mod tests {
         b.add_atom(AtomAst::from_element(Element::N));
         b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
         b.add_dative_bond(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1));
-        b.add_aromatic_system(
-            vec![AtomId(0), AtomId(1)],
-            AromaticSystemAst::default(),
-        );
-        b.add_multicenter_bond(
-            vec![AtomId(0), AtomId(1)],
-            MulticenterBondAst::default(),
-        );
+        b.add_aromatic_system(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default());
+        b.add_multicenter_bond(vec![AtomId(0), AtomId(1)], MulticenterBondAst::default());
         b.add_noncovalent_bond(
             [AtomId(0), AtomId(1)],
             NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
@@ -1592,9 +1637,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_molecule_builder_transact_remove_bond_constraint_error(
-        mut diatomic: MoleculeBuilder,
-    ) {
+    fn test_molecule_builder_transact_remove_bond_constraint_error(mut diatomic: MoleculeBuilder) {
         let err = diatomic
             .transact(vec![Edit::RemoveBondConstraint {
                 idx: BondRef::Id(BondId(0)),
@@ -1750,8 +1793,10 @@ mod tests {
                 atoms: vec![AtomAst::from_element(Element::C)],
             }]);
             assert_eq!(empty.atom_count(), 1);
-            assert_eq!(empty.atom(AtomId(0)).ast.element, ElementAst::Lit(Element::C));
+            assert_eq!(
+                empty.atom(AtomId(0)).ast.element,
+                ElementAst::Lit(Element::C)
+            );
         }
     }
 }
-

@@ -188,20 +188,18 @@ impl ElectronInvariantValidator {
             None | Some(AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined)) => 0,
             _ => return Ok(Solution::Underdetermined(())),
         };
-        let multicenter_valence: i64 =
-            match atom.constraints.get(AtomConstraintKind::MulticenterValence) {
-                Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(
-                    ValueAst::Lit(v),
-                ))) if *v >= 0 => *v,
-                Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter)) => {
-                    0
-                }
-                None
-                | Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined)) => {
-                    0
-                }
-                _ => return Ok(Solution::Underdetermined(())),
-            };
+        let multicenter_valence: i64 = match atom
+            .constraints
+            .get(AtomConstraintKind::MulticenterValence)
+        {
+            Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(
+                ValueAst::Lit(v),
+            ))) if *v >= 0 => *v,
+            Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter)) => 0,
+            None
+            | Some(AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined)) => 0,
+            _ => return Ok(Solution::Underdetermined(())),
+        };
 
         let aromatic_increment = if aromatic_valence == 1 { 1 } else { 0 };
         let orbital_count = unpaired

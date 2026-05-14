@@ -52,7 +52,9 @@ impl BasisFunction {
         bf: &ffi::msym_basis_function_t,
         elements_base: *const ffi::msym_element_t,
     ) -> Self {
-        let atom_index = unsafe { (bf.element as *const ffi::msym_element_t).offset_from(elements_base) as usize };
+        let atom_index = unsafe {
+            (bf.element as *const ffi::msym_element_t).offset_from(elements_base) as usize
+        };
         let rsh = unsafe { bf.f.rsh };
         let kind = if bf.type_ == ffi::MSYM_BASIS_TYPE_CARTESIAN {
             BasisKind::CartesianHarmonic
@@ -186,7 +188,11 @@ mod tests {
             m,
         };
         let name = bf.libmsym_name_bytes();
-        let s: String = name.iter().take_while(|&&b| b != 0).map(|&b| b as u8 as char).collect();
+        let s: String = name
+            .iter()
+            .take_while(|&&b| b != 0)
+            .map(|&b| b as u8 as char)
+            .collect();
         assert_eq!(s, expected);
     }
 }

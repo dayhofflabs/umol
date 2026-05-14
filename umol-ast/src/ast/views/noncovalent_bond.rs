@@ -103,12 +103,7 @@ impl<'a> NoncovalentBondViews<'a> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.set
             .relation_ids()
-            .filter(|&rid| {
-                self.set
-                    .participants(rid)
-                    .iter()
-                    .all(|p| set.contains(p))
-            })
+            .filter(|&rid| self.set.participants(rid).iter().all(|p| set.contains(p)))
             .map(NoncovalentBondId::from)
             .collect()
     }

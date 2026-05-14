@@ -249,14 +249,13 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomId>]) -> Vec<HashSe
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst,
-        MoleculeAst, RingFamily, ValueAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, MoleculeAst,
+        RingFamily, ValueAst,
     };
-
-    use crate::ops::aromaticity::electrons_from_aromatic_constraint;
     use umol_shared::element::Element;
 
     use super::*;
+    use crate::ops::aromaticity::electrons_from_aromatic_constraint;
 
     fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
         (AtomAst::from_element(element), Some(pi))
@@ -282,10 +281,9 @@ mod tests {
             .into_iter()
             .map(|(mut atom, pi)| {
                 if let Some(n) = pi {
-                    atom.constraints
-                        .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
-                            ValueAst::Lit(n),
-                        )));
+                    atom.constraints.add(AtomConstraint::AromaticValence(
+                        AromaticValenceAst::Aromatic(ValueAst::Lit(n)),
+                    ));
                 }
                 atom
             })
@@ -304,10 +302,7 @@ mod tests {
             })
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn make_fused(specs: Vec<(AtomAst, Option<i64>)>, edges: &[(usize, usize)]) -> MoleculeAst {
@@ -316,10 +311,7 @@ mod tests {
             .map(|&(a, b)| (AtomId(a as u32), AtomId(b as u32), BondAst::from_order(1)))
             .collect();
         let atoms = apply_pi(specs);
-        MoleculeAst::from_atoms_and_bonds(
-            atoms,
-            bonds,
-        )
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     fn enumerate_simple(ast: &MoleculeAst, max_ring_size: usize) -> RingSet {

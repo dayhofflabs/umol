@@ -289,9 +289,8 @@ mod tests {
     use umol_shared::element::Element;
 
     use crate::ast::{
-        AromaticSystemAst, AromaticSystemConstraint, AtomAst,
-        AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
-        DativeBondAst, DativeBondConstraint, MoleculeAst,
+        AromaticSystemAst, AromaticSystemConstraint, AtomAst, AtomConstraint, AtomId, BondAst,
+        BondConstraint, Constraints, DativeBondAst, DativeBondConstraint, MoleculeAst,
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, ValueAst,
     };
     use crate::dsl::molecule::Metadata;

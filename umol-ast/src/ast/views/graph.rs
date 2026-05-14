@@ -37,10 +37,7 @@ impl<'a> GraphView<'a> {
             .collect()
     }
 
-    pub fn biconnected_components(
-        &self,
-        alg: BiconnectedComponentsAlgorithm,
-    ) -> Vec<Vec<AtomId>> {
+    pub fn biconnected_components(&self, alg: BiconnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
         self.graph
             .biconnected_components(alg)
             .into_iter()

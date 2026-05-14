@@ -268,7 +268,10 @@ fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
     // DSL preserves spin fields field-wise. Physical (u, m) parity is a
     // tier-2 solver invariant, not a parse-time check, so any independent
     // pair must roundtrip.
-    (value_basic(0..=6), value_basic(1..=7)).prop_map(|(u, m)| SpinStateAst { unpaired: u, multiplicity: m })
+    (value_basic(0..=6), value_basic(1..=7)).prop_map(|(u, m)| SpinStateAst {
+        unpaired: u,
+        multiplicity: m,
+    })
 }
 
 /// `SpinStateAst` with at least one of `unpaired` / `multiplicity` not
@@ -276,7 +279,10 @@ fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
 /// where a fully-vacuous spin state would elide on render.
 fn non_vacuous_spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
     (value_basic(0..=6), value_basic(1..=7))
-        .prop_map(|(u, m)| SpinStateAst { unpaired: u, multiplicity: m })
+        .prop_map(|(u, m)| SpinStateAst {
+            unpaired: u,
+            multiplicity: m,
+        })
         .prop_filter("non-vacuous spin", |s| !s.is_undetermined())
 }
 
@@ -494,13 +500,13 @@ fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
         Just(ValueAst::Lit(3)),
         Just(ValueAst::Undetermined),
     ];
-    (order_strategy, dative_bond_constraints_strategy()).prop_map(
-        |(order, constraints)| DativeBondAst {
+    (order_strategy, dative_bond_constraints_strategy()).prop_map(|(order, constraints)| {
+        DativeBondAst {
             acceptor_slot: 0,
             order,
             constraints,
-        },
-    )
+        }
+    })
 }
 
 /// Optional `ElectronCount` constraint (the asserted total). The strategy
@@ -544,14 +550,14 @@ fn electron_count_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Va
 /// `electrons` vec is empty because the entity string carries no per-atom
 /// data; the `ElectronCount` constraint is exercised here via `#e<n>`.
 fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
-    (value_basic(-2..=2), optional_aromatic_electron_count()).prop_map(
-        |(charge, constraints)| AromaticSystemAst {
+    (value_basic(-2..=2), optional_aromatic_electron_count()).prop_map(|(charge, constraints)| {
+        AromaticSystemAst {
             electrons: Vec::new(),
             charge,
             spin: SpinStateAst::default(),
             constraints,
-        },
-    )
+        }
+    })
 }
 
 /// Atom-count-aware variant: generates an `AromaticSystemAst` whose
@@ -669,19 +675,21 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                 0..=dative_count_max,
             );
             let aromatics = prop::collection::vec(
-                distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3)))
-                    .prop_flat_map(|atoms| {
+                distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))).prop_flat_map(
+                    |atoms| {
                         let n = atoms.len();
                         (Just(atoms), aromatic_system_ast_for(n))
-                    }),
+                    },
+                ),
                 0..=aromatic_count_max,
             );
             let multicenters = prop::collection::vec(
-                distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3)))
-                    .prop_flat_map(|atoms| {
+                distinct_atoms_strategy(atom_count, 3, 4.min(atom_count.max(3))).prop_flat_map(
+                    |atoms| {
                         let n = atoms.len();
                         (Just(atoms), multicenter_bond_ast_for(n))
-                    }),
+                    },
+                ),
                 0..=multicenter_count_max,
             );
             let noncovalents = prop::collection::vec(
@@ -813,7 +821,10 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
         // Vacuous molecule-level constraints (Undetermined sum / fully
         // Undetermined spin) elide on render and would break round-trip;
         // restrict the value/spin strategies accordingly.
-        let molecule_charge_sum = (optional_atoms.clone(), constraint_inner_value_strategy(-3..=3))
+        let molecule_charge_sum = (
+            optional_atoms.clone(),
+            constraint_inner_value_strategy(-3..=3),
+        )
             .prop_map(|(atoms, sum)| {
                 Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms, sum })
             })
@@ -1121,8 +1132,7 @@ fn sub_pattern_anchor_strategy(
                 anchor.push_dative_bond(DativeBondId(i as u32), DativeBondId(i as u32));
             }
             for i in 0..ar {
-                anchor
-                    .push_aromatic_system(AromaticSystemId(i as u32), AromaticSystemId(i as u32));
+                anchor.push_aromatic_system(AromaticSystemId(i as u32), AromaticSystemId(i as u32));
             }
             for i in 0..mc {
                 anchor.push_multicenter_bond(
@@ -1200,62 +1210,63 @@ fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
         noncovalent_flags,
         alias_count,
     )
-        .prop_map(|(atoms, bonds, datives, aromatics, multicenters, noncovalents, n_aliases)| {
-            let mut meta = Metadata::new();
-            for (i, slot) in atoms.iter().enumerate() {
-                if slot.is_some() {
-                    meta.set_atom_id(AtomId(i as u32), format!("atom{i}"));
+        .prop_map(
+            |(atoms, bonds, datives, aromatics, multicenters, noncovalents, n_aliases)| {
+                let mut meta = Metadata::new();
+                for (i, slot) in atoms.iter().enumerate() {
+                    if slot.is_some() {
+                        meta.set_atom_id(AtomId(i as u32), format!("atom{i}"));
+                    }
                 }
-            }
-            for (i, slot) in bonds.iter().enumerate() {
-                if slot.is_some() {
-                    meta.set_bond_id(BondId(i as u32), format!("bond{i}"));
+                for (i, slot) in bonds.iter().enumerate() {
+                    if slot.is_some() {
+                        meta.set_bond_id(BondId(i as u32), format!("bond{i}"));
+                    }
                 }
-            }
-            for (i, slot) in datives.iter().enumerate() {
-                if slot.is_some() {
-                    meta.set_dative_bond_id(DativeBondId(i as u32), format!("dative{i}"));
+                for (i, slot) in datives.iter().enumerate() {
+                    if slot.is_some() {
+                        meta.set_dative_bond_id(DativeBondId(i as u32), format!("dative{i}"));
+                    }
                 }
-            }
-            for (i, slot) in aromatics.iter().enumerate() {
-                if slot.is_some() {
-                    meta.set_aromatic_system_id(
-                        AromaticSystemId(i as u32),
-                        format!("aromatic{i}"),
-                    );
+                for (i, slot) in aromatics.iter().enumerate() {
+                    if slot.is_some() {
+                        meta.set_aromatic_system_id(
+                            AromaticSystemId(i as u32),
+                            format!("aromatic{i}"),
+                        );
+                    }
                 }
-            }
-            for (i, slot) in multicenters.iter().enumerate() {
-                if slot.is_some() {
-                    meta.set_multicenter_bond_id(
-                        MulticenterBondId(i as u32),
-                        format!("multicenter{i}"),
-                    );
+                for (i, slot) in multicenters.iter().enumerate() {
+                    if slot.is_some() {
+                        meta.set_multicenter_bond_id(
+                            MulticenterBondId(i as u32),
+                            format!("multicenter{i}"),
+                        );
+                    }
                 }
-            }
-            for (i, slot) in noncovalents.iter().enumerate() {
-                if slot.is_some() {
-                    meta.set_noncovalent_bond_id(
-                        NoncovalentBondId(i as u32),
-                        format!("noncovalent{i}"),
-                    );
+                for (i, slot) in noncovalents.iter().enumerate() {
+                    if slot.is_some() {
+                        meta.set_noncovalent_bond_id(
+                            NoncovalentBondId(i as u32),
+                            format!("noncovalent{i}"),
+                        );
+                    }
                 }
-            }
-            for i in 0..n_aliases {
-                let atom = AtomAst::from_element(ALIAS_ELEMENTS[i]);
-                meta.add_atom_alias(format!("al{i}"), atom);
-            }
-            meta
-        })
+                for i in 0..n_aliases {
+                    let atom = AtomAst::from_element(ALIAS_ELEMENTS[i]);
+                    meta.add_atom_alias(format!("al{i}"), atom);
+                }
+                meta
+            },
+        )
         .boxed()
 }
 
 fn molecule_dsl_strategy() -> impl Strategy<Value = MoleculeDsl> {
     molecule_ast_with_constraints_strategy().prop_flat_map(|ast| {
         let counts = ConstraintCounts::from_ast(&ast);
-        metadata_for(counts).prop_map(move |metadata| {
-            MoleculeDsl::from_parts(ast.clone(), metadata)
-        })
+        metadata_for(counts)
+            .prop_map(move |metadata| MoleculeDsl::from_parts(ast.clone(), metadata))
     })
 }
 
@@ -1614,12 +1625,12 @@ proptest! {
 #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Undetermined))]
 #[case::ring_count(AtomConstraint::RingCount(ValueAst::Undetermined))]
 #[case::ring_size(AtomConstraint::RingSize(ValueAst::Undetermined))]
-#[case::aromatic_valence_undetermined(
-    AtomConstraint::AromaticValence(AromaticValenceAst::Undetermined)
-)]
-#[case::multicenter_valence_undetermined(
-    AtomConstraint::MulticenterValence(MulticenterValenceAst::Undetermined)
-)]
+#[case::aromatic_valence_undetermined(AtomConstraint::AromaticValence(
+    AromaticValenceAst::Undetermined
+))]
+#[case::multicenter_valence_undetermined(AtomConstraint::MulticenterValence(
+    MulticenterValenceAst::Undetermined
+))]
 fn test_atom_dsl_vacuous_constraint_renders_empty(#[case] vacuous: AtomConstraint) {
     let mut atom = AtomAst::default();
     atom.constraints.add(vacuous);

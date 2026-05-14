@@ -11,17 +11,17 @@ macro_rules! group {
     };
 }
 
-mod types;
-mod error;
-mod point_group;
 mod basis;
 pub(crate) mod context;
 mod detect;
+mod error;
 pub(crate) mod irrep;
 pub(crate) mod linear;
 mod matrix_rep;
+mod point_group;
 mod subgroup;
 mod thresholds;
+mod types;
 
 pub use basis::{BasisFunction, BasisKind, CartesianAxis, IrrepBasis, Salc, SalcBasis};
 pub use detect::{

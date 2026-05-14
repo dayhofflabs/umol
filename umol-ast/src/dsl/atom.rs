@@ -1023,37 +1023,23 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
         };
         let c = match key.name() {
             "valence" => AtomConstraint::Valence(ValueDsl::from_edn(v)?.into_ast(&())),
-            "total-valence" => {
-                AtomConstraint::TotalValence(ValueDsl::from_edn(v)?.into_ast(&()))
+            "total-valence" => AtomConstraint::TotalValence(ValueDsl::from_edn(v)?.into_ast(&())),
+            "aromatic-valence" => {
+                AtomConstraint::AromaticValence(AromaticValenceDsl::from_edn(v)?.into_ast(&()))
             }
-            "aromatic-valence" => AtomConstraint::AromaticValence(
-                AromaticValenceDsl::from_edn(v)?.into_ast(&()),
-            ),
             "multicenter-valence" => AtomConstraint::MulticenterValence(
                 MulticenterValenceDsl::from_edn(v)?.into_ast(&()),
             ),
-            "donated-pairs" => {
-                AtomConstraint::DonatedPairs(ValueDsl::from_edn(v)?.into_ast(&()))
-            }
-            "accepted-pairs" => {
-                AtomConstraint::AcceptedPairs(ValueDsl::from_edn(v)?.into_ast(&()))
-            }
+            "donated-pairs" => AtomConstraint::DonatedPairs(ValueDsl::from_edn(v)?.into_ast(&())),
+            "accepted-pairs" => AtomConstraint::AcceptedPairs(ValueDsl::from_edn(v)?.into_ast(&())),
             "degree" => AtomConstraint::Degree(ValueDsl::from_edn(v)?.into_ast(&())),
-            "total-degree" => {
-                AtomConstraint::TotalDegree(ValueDsl::from_edn(v)?.into_ast(&()))
-            }
-            "ring-degree" => {
-                AtomConstraint::RingDegree(ValueDsl::from_edn(v)?.into_ast(&()))
-            }
-            "ring-valence" => {
-                AtomConstraint::RingValence(ValueDsl::from_edn(v)?.into_ast(&()))
-            }
+            "total-degree" => AtomConstraint::TotalDegree(ValueDsl::from_edn(v)?.into_ast(&())),
+            "ring-degree" => AtomConstraint::RingDegree(ValueDsl::from_edn(v)?.into_ast(&())),
+            "ring-valence" => AtomConstraint::RingValence(ValueDsl::from_edn(v)?.into_ast(&())),
             "total-hydrogens" => {
                 AtomConstraint::TotalHydrogens(ValueDsl::from_edn(v)?.into_ast(&()))
             }
-            "ring-count" => {
-                AtomConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&()))
-            }
+            "ring-count" => AtomConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
             "ring-size" => AtomConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
             other => {
                 return Err(DeError::UnknownField {
@@ -1083,32 +1069,27 @@ impl ToEdn for AtomConstraintDsl {
                 "multicenter-valence",
                 MulticenterValenceDsl::from_ast(c, &()).to_edn(),
             ),
-            AtomConstraint::DonatedPairs(v) => single_key_map(
-                "donated-pairs",
-                ValueDsl::from_ast(v, &()).to_edn(),
-            ),
-            AtomConstraint::AcceptedPairs(v) => single_key_map(
-                "accepted-pairs",
-                ValueDsl::from_ast(v, &()).to_edn(),
-            ),
+            AtomConstraint::DonatedPairs(v) => {
+                single_key_map("donated-pairs", ValueDsl::from_ast(v, &()).to_edn())
+            }
+            AtomConstraint::AcceptedPairs(v) => {
+                single_key_map("accepted-pairs", ValueDsl::from_ast(v, &()).to_edn())
+            }
             AtomConstraint::Degree(v) => {
                 single_key_map("degree", ValueDsl::from_ast(v, &()).to_edn())
             }
             AtomConstraint::TotalDegree(v) => {
                 single_key_map("total-degree", ValueDsl::from_ast(v, &()).to_edn())
             }
-            AtomConstraint::RingDegree(v) => single_key_map(
-                "ring-degree",
-                ValueDsl::from_ast(v, &()).to_edn(),
-            ),
-            AtomConstraint::RingValence(v) => single_key_map(
-                "ring-valence",
-                ValueDsl::from_ast(v, &()).to_edn(),
-            ),
-            AtomConstraint::TotalHydrogens(v) => single_key_map(
-                "total-hydrogens",
-                ValueDsl::from_ast(v, &()).to_edn(),
-            ),
+            AtomConstraint::RingDegree(v) => {
+                single_key_map("ring-degree", ValueDsl::from_ast(v, &()).to_edn())
+            }
+            AtomConstraint::RingValence(v) => {
+                single_key_map("ring-valence", ValueDsl::from_ast(v, &()).to_edn())
+            }
+            AtomConstraint::TotalHydrogens(v) => {
+                single_key_map("total-hydrogens", ValueDsl::from_ast(v, &()).to_edn())
+            }
             AtomConstraint::RingCount(v) => {
                 single_key_map("ring-count", ValueDsl::from_ast(v, &()).to_edn())
             }

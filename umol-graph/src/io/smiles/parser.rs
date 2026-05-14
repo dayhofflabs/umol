@@ -9,6 +9,8 @@ mod builder;
 mod cx;
 mod utils;
 
+use umol_ast::ast::{MoleculeAst, TryIntoAst};
+
 use self::builder::{AtomData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use self::cx::{
     parse_cx_annotations, parse_extended_cx_annotations, split_reaction_cx_entries,
@@ -31,7 +33,6 @@ use crate::table_ir::{
     BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
     SourceFormat, WildcardAtom,
 };
-use umol_ast::ast::{MoleculeAst, TryIntoAst};
 
 /// Parse SMILES to a resolved [`MoleculeAst`] using default IO config and
 /// [`ChemistryModel::default`].

@@ -274,7 +274,10 @@ mod tests {
     #[rstest]
     fn test_atom_view_aromatic_valence_not_in_system() {
         let molecule = mol!(r#"{:atoms ["C"] :bonds []}"#);
-        assert_eq!(molecule.atom(AtomId(0)).aromatic_valence(), ValueAst::Lit(0));
+        assert_eq!(
+            molecule.atom(AtomId(0)).aromatic_valence(),
+            ValueAst::Lit(0)
+        );
     }
 
     #[rstest]
@@ -321,8 +324,11 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: Vec<MulticenterBondId>,
     ) {
-        let ids: Vec<MulticenterBondId> =
-            molecule.atom(atom).multicenter_bonds().map(|v| v.id).collect();
+        let ids: Vec<MulticenterBondId> = molecule
+            .atom(atom)
+            .multicenter_bonds()
+            .map(|v| v.id)
+            .collect();
         assert_eq!(ids, expected);
     }
 
@@ -335,8 +341,11 @@ mod tests {
         #[case] atom: AtomId,
         #[case] expected: Vec<NoncovalentBondId>,
     ) {
-        let ids: Vec<NoncovalentBondId> =
-            molecule.atom(atom).noncovalent_bonds().map(|v| v.id).collect();
+        let ids: Vec<NoncovalentBondId> = molecule
+            .atom(atom)
+            .noncovalent_bonds()
+            .map(|v| v.id)
+            .collect();
         assert_eq!(ids, expected);
     }
 
@@ -512,10 +521,7 @@ mod tests {
     fn test_atom_view_total_degree() {
         // Methane: 0 incident bonds in graph + implicit_h=4 + no multicenter.
         let molecule = mol!(r#"{:atoms ["C#h4"] :bonds []}"#);
-        assert_eq!(
-            molecule.atom(AtomId(0)).total_degree(),
-            ValueAst::Lit(4),
-        );
+        assert_eq!(molecule.atom(AtomId(0)).total_degree(), ValueAst::Lit(4),);
     }
 
     #[rstest]
@@ -595,10 +601,7 @@ mod tests {
         // Methane with implicit_h=4: valence=0, implicit=4, aromatic=0,
         // multicenter=0 → total=4.
         let molecule = mol!(r#"{:atoms ["C#h4"] :bonds []}"#);
-        assert_eq!(
-            molecule.atom(AtomId(0)).total_valence(),
-            ValueAst::Lit(4),
-        );
+        assert_eq!(molecule.atom(AtomId(0)).total_valence(), ValueAst::Lit(4),);
     }
 
     #[rstest]
@@ -625,11 +628,7 @@ mod tests {
             vec![],
             vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::new(vec![
-                    ValueAst::Lit(2),
-                    ValueAst::Lit(2),
-                    ValueAst::Lit(2),
-                ]),
+                MulticenterBondAst::new(vec![ValueAst::Lit(2), ValueAst::Lit(2), ValueAst::Lit(2)]),
             )],
             vec![],
             Constraints::default(),
@@ -972,10 +971,7 @@ mod tests {
             .collect();
         assert_eq!(
             collected,
-            vec![(
-                AromaticSystemId(0),
-                vec![AtomId(0), AtomId(1), AtomId(2)]
-            )],
+            vec![(AromaticSystemId(0), vec![AtomId(0), AtomId(1), AtomId(2)])],
         );
     }
 
@@ -1041,19 +1037,27 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_view_electron_count(molecule: MoleculeAst) {
         assert_eq!(
-            molecule.aromatic_system(AromaticSystemId(0)).electron_count(),
+            molecule
+                .aromatic_system(AromaticSystemId(0))
+                .electron_count(),
             ValueAst::Lit(0),
         );
     }
 
     #[rstest]
     fn test_aromatic_system_view_atom_count(molecule: MoleculeAst) {
-        assert_eq!(molecule.aromatic_system(AromaticSystemId(0)).atom_count(), 3);
+        assert_eq!(
+            molecule.aromatic_system(AromaticSystemId(0)).atom_count(),
+            3
+        );
     }
 
     #[rstest]
     fn test_aromatic_system_view_bond_count(molecule: MoleculeAst) {
-        assert_eq!(molecule.aromatic_system(AromaticSystemId(0)).bond_count(), 2);
+        assert_eq!(
+            molecule.aromatic_system(AromaticSystemId(0)).bond_count(),
+            2
+        );
     }
 
     #[rstest]
@@ -1124,10 +1128,7 @@ mod tests {
             .collect();
         assert_eq!(
             collected,
-            vec![(
-                MulticenterBondId(0),
-                vec![AtomId(0), AtomId(1), AtomId(2)],
-            )],
+            vec![(MulticenterBondId(0), vec![AtomId(0), AtomId(1), AtomId(2)],)],
         );
     }
 
@@ -1172,7 +1173,9 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_view_electron_count(molecule: MoleculeAst) {
         assert_eq!(
-            molecule.multicenter_bond(MulticenterBondId(0)).electron_count(),
+            molecule
+                .multicenter_bond(MulticenterBondId(0))
+                .electron_count(),
             ValueAst::Lit(0),
         );
     }
@@ -1251,9 +1254,7 @@ mod tests {
     #[rstest]
     fn test_noncovalent_bond_view_atom_ids(molecule: MoleculeAst) {
         assert_eq!(
-            molecule
-                .noncovalent_bond(NoncovalentBondId(0))
-                .atom_ids(),
+            molecule.noncovalent_bond(NoncovalentBondId(0)).atom_ids(),
             [AtomId(0), AtomId(3)],
         );
     }
