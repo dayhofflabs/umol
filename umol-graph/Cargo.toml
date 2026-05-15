@@ -34,7 +34,8 @@ name = "sdf_parsing"
 name = "smiles_parsing"
 
 [[test]]
-name = "smiles_proptest"
+name = "smiles_property"
+required-features = ["proptest"]
 
 [[bin]]
 name = "test_mol_file"
@@ -58,10 +59,7 @@ bench = false
 
 [features]
 conformance = []
-# Gate for the resolution conformance suite and benches that still depend on
-# `umol_graph::api`, `ast`, `dsl`, or the matcher (deferred). Removed once
-# the chemist-facing `Molecule` wrapper and the matcher port land.
-legacy = []
+proptest = []
 
 [dependencies]
 bitflags = "2.9.4"

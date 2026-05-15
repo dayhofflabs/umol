@@ -87,6 +87,37 @@ impl ValueAst {
         }
     }
 
+    /// `as_lit` as a `Result` for `?` propagation. The caller supplies the
+    /// error value used when this value is not ground.
+    #[inline]
+    pub fn as_lit_ok_or<E>(&self, err: E) -> Result<i64, E> {
+        self.as_lit().ok_or(err)
+    }
+
+    /// `as_lit` as a `Result`, with lazily-constructed error.
+    #[inline]
+    pub fn as_lit_ok_or_else<E, F: FnOnce() -> E>(&self, err: F) -> Result<i64, E> {
+        self.as_lit().ok_or_else(err)
+    }
+
+    /// Literal value if ground, else `default`.
+    #[inline]
+    pub fn as_lit_or(&self, default: i64) -> i64 {
+        self.as_lit().unwrap_or(default)
+    }
+
+    /// Literal value if ground, else `default()`.
+    #[inline]
+    pub fn as_lit_or_else<F: FnOnce() -> i64>(&self, default: F) -> i64 {
+        self.as_lit().unwrap_or_else(default)
+    }
+
+    /// Literal value if ground, panic with `msg` otherwise.
+    #[inline]
+    pub fn as_lit_expect(&self, msg: &str) -> i64 {
+        self.as_lit().expect(msg)
+    }
+
     pub fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -176,45 +207,56 @@ impl ValueAst {
     }
 }
 
-impl Add for ValueAst {
-    type Output = ValueAst;
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a + b),
-            _ => Self::Undetermined,
+// Arithmetic on `ValueAst` propagates `Undetermined`. Every binop has impls
+// for all four `(owned|ref) × (owned|ref)` combinations; the owned forms
+// delegate to the ref-ref form so the match is written once. Each binop
+// additionally accepts a bare `i64` on either side.
+macro_rules! impl_value_binop {
+    ($Op:ident, $op:ident, $lit_op:tt) => {
+        impl $Op<&ValueAst> for &ValueAst {
+            type Output = ValueAst;
+            fn $op(self, rhs: &ValueAst) -> ValueAst {
+                match (self, rhs) {
+                    (ValueAst::Lit(a), ValueAst::Lit(b)) => ValueAst::Lit(a $lit_op b),
+                    _ => ValueAst::Undetermined,
+                }
+            }
         }
-    }
+        impl $Op<ValueAst> for &ValueAst {
+            type Output = ValueAst;
+            fn $op(self, rhs: ValueAst) -> ValueAst { self.$op(&rhs) }
+        }
+        impl $Op<&ValueAst> for ValueAst {
+            type Output = ValueAst;
+            fn $op(self, rhs: &ValueAst) -> ValueAst { (&self).$op(rhs) }
+        }
+        impl $Op<ValueAst> for ValueAst {
+            type Output = ValueAst;
+            fn $op(self, rhs: ValueAst) -> ValueAst { (&self).$op(&rhs) }
+        }
+        impl $Op<i64> for &ValueAst {
+            type Output = ValueAst;
+            fn $op(self, rhs: i64) -> ValueAst { self.$op(&ValueAst::Lit(rhs)) }
+        }
+        impl $Op<i64> for ValueAst {
+            type Output = ValueAst;
+            fn $op(self, rhs: i64) -> ValueAst { (&self).$op(&ValueAst::Lit(rhs)) }
+        }
+        impl $Op<&ValueAst> for i64 {
+            type Output = ValueAst;
+            fn $op(self, rhs: &ValueAst) -> ValueAst { (&ValueAst::Lit(self)).$op(rhs) }
+        }
+        impl $Op<ValueAst> for i64 {
+            type Output = ValueAst;
+            fn $op(self, rhs: ValueAst) -> ValueAst { (&ValueAst::Lit(self)).$op(&rhs) }
+        }
+    };
 }
 
-impl Sub for ValueAst {
-    type Output = ValueAst;
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a - b),
-            _ => Self::Undetermined,
-        }
-    }
-}
-
-impl Mul for ValueAst {
-    type Output = ValueAst;
-    fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a * b),
-            _ => Self::Undetermined,
-        }
-    }
-}
-
-impl Div for ValueAst {
-    type Output = ValueAst;
-    fn div(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a / b),
-            _ => Self::Undetermined,
-        }
-    }
-}
+impl_value_binop!(Add, add, +);
+impl_value_binop!(Sub, sub, -);
+impl_value_binop!(Mul, mul, *);
+impl_value_binop!(Div, div, /);
 
 
 impl From<i64> for ValueAst {

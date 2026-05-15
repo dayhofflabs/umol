@@ -221,6 +221,36 @@ impl ElementAst {
         }
     }
 
+    /// `as_lit` as a `Result` for `?` propagation.
+    #[inline]
+    pub fn as_lit_ok_or<E>(&self, err: E) -> Result<Element, E> {
+        self.as_lit().ok_or(err)
+    }
+
+    /// `as_lit` as a `Result`, with lazily-constructed error.
+    #[inline]
+    pub fn as_lit_ok_or_else<E, F: FnOnce() -> E>(&self, err: F) -> Result<Element, E> {
+        self.as_lit().ok_or_else(err)
+    }
+
+    /// Literal value if ground, else `default`.
+    #[inline]
+    pub fn as_lit_or(&self, default: Element) -> Element {
+        self.as_lit().unwrap_or(default)
+    }
+
+    /// Literal value if ground, else `default()`.
+    #[inline]
+    pub fn as_lit_or_else<F: FnOnce() -> Element>(&self, default: F) -> Element {
+        self.as_lit().unwrap_or_else(default)
+    }
+
+    /// Literal value if ground, panic with `msg` otherwise.
+    #[inline]
+    pub fn as_lit_expect(&self, msg: &str) -> Element {
+        self.as_lit().expect(msg)
+    }
+
     pub fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -314,6 +344,36 @@ impl IsotopeAst {
         }
     }
 
+    /// `as_lit` as a `Result` for `?` propagation.
+    #[inline]
+    pub fn as_lit_ok_or<E>(&self, err: E) -> Result<u32, E> {
+        self.as_lit().ok_or(err)
+    }
+
+    /// `as_lit` as a `Result`, with lazily-constructed error.
+    #[inline]
+    pub fn as_lit_ok_or_else<E, F: FnOnce() -> E>(&self, err: F) -> Result<u32, E> {
+        self.as_lit().ok_or_else(err)
+    }
+
+    /// Literal value if ground, else `default`.
+    #[inline]
+    pub fn as_lit_or(&self, default: u32) -> u32 {
+        self.as_lit().unwrap_or(default)
+    }
+
+    /// Literal value if ground, else `default()`.
+    #[inline]
+    pub fn as_lit_or_else<F: FnOnce() -> u32>(&self, default: F) -> u32 {
+        self.as_lit().unwrap_or_else(default)
+    }
+
+    /// Literal value if ground, panic with `msg` otherwise.
+    #[inline]
+    pub fn as_lit_expect(&self, msg: &str) -> u32 {
+        self.as_lit().expect(msg)
+    }
+
     #[inline(never)]
     #[cold]
     fn as_lit_slow(&self) -> Option<u32> {
@@ -342,13 +402,15 @@ impl IsotopeAst {
         }
     }
 
-    fn as_value(&self) -> ValueAst {
+    /// `Natural` (natural isotopic abundance, no committed mass) collapses to
+    /// `Undetermined`; the integer arithmetic surface has no `Natural` slot.
+    /// All other variants pass through structurally.
+    pub fn as_value(&self) -> ValueAst {
         match self {
-            Self::Undetermined => ValueAst::Undetermined,
+            Self::Undetermined | Self::Natural => ValueAst::Undetermined,
             Self::Lit(n) => ValueAst::Lit(*n),
             Self::LitSet(s) => ValueAst::LitSet(s.clone()),
             Self::Expr(e) => ValueAst::Expr(e.clone()),
-            Self::Natural => unreachable!("Natural handled before as_value"),
         }
     }
 
@@ -447,6 +509,36 @@ impl ImplicitHydrogensAst {
         }
     }
 
+    /// `as_lit` as a `Result` for `?` propagation.
+    #[inline]
+    pub fn as_lit_ok_or<E>(&self, err: E) -> Result<i64, E> {
+        self.as_lit().ok_or(err)
+    }
+
+    /// `as_lit` as a `Result`, with lazily-constructed error.
+    #[inline]
+    pub fn as_lit_ok_or_else<E, F: FnOnce() -> E>(&self, err: F) -> Result<i64, E> {
+        self.as_lit().ok_or_else(err)
+    }
+
+    /// Literal value if ground, else `default`.
+    #[inline]
+    pub fn as_lit_or(&self, default: i64) -> i64 {
+        self.as_lit().unwrap_or(default)
+    }
+
+    /// Literal value if ground, else `default()`.
+    #[inline]
+    pub fn as_lit_or_else<F: FnOnce() -> i64>(&self, default: F) -> i64 {
+        self.as_lit().unwrap_or_else(default)
+    }
+
+    /// Literal value if ground, panic with `msg` otherwise.
+    #[inline]
+    pub fn as_lit_expect(&self, msg: &str) -> i64 {
+        self.as_lit().expect(msg)
+    }
+
     #[inline(never)]
     #[cold]
     fn as_lit_slow(&self) -> Option<i64> {
@@ -471,7 +563,10 @@ impl ImplicitHydrogensAst {
         }
     }
 
-    fn as_value(&self) -> ValueAst {
+    /// `Normal` (the "compute via valence model" placeholder) collapses to
+    /// `Undetermined`; the integer arithmetic surface has no `Normal` slot.
+    /// All other variants pass through structurally.
+    pub fn as_value(&self) -> ValueAst {
         match self {
             Self::Undetermined | Self::Normal => ValueAst::Undetermined,
             Self::Lit(n) => ValueAst::Lit(*n),

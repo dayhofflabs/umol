@@ -39,12 +39,15 @@ pub enum AromaticityContradiction {
     ClarNonBenzenoid(String),
 }
 
-/// Setup-level failure: parameter table or configuration gap. Returned in
-/// `Err`, never inside `Solution`.
+/// Setup-level failure: parameter table or configuration gap, or a
+/// post-resolver invariant violation (atom expected ground but isn't).
+/// Returned in `Err`, never inside `Solution`.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AromaticityError {
     #[error("hmo: missing parameters: {0}")]
     HmoMissingParameters(String),
+    #[error("atom {0:?} is not ground")]
+    NonGroundAtom(AtomId),
 }
 
 #[derive(Clone, Debug)]
@@ -139,7 +142,7 @@ impl AromaticityPerception {
         *ast = builder.build();
 
         for &idx in &new_indices {
-            equalize_charges(ast, idx);
+            let _ = equalize_charges(ast, idx);
         }
 
         let bond_ids: Vec<BondId> = new_indices
@@ -191,40 +194,35 @@ impl AromaticityPerception {
 ///   the heteroatom.
 ///
 /// Spin is not modified.
-/// TODO: Rewrite as fallible, Result<(), EqualizationError> return type
-/// Return error when non-ground
-fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemId) {
+fn equalize_charges(
+    ast: &mut MoleculeAst,
+    system_idx: AromaticSystemId,
+) -> Result<(), AromaticityError> {
     let atoms: Vec<AtomId> = ast.aromatic_system(system_idx).atom_ids().collect();
     let Some(element) = monoelement(ast, &atoms) else {
-        return;
+        return Ok(());
     };
-    let v = element.valence_electrons() as i64;
+    let v: ValueAst = (element.valence_electrons() as i64).into();
 
-    let mut accumulated = ast
-        .aromatic_system(system_idx)
-        .ast
-        .charge
-        .as_lit()
-        .unwrap_or(0);
+    // Phase 1: validate + compute. No mutations until every atom is ground.
+    let mut atom_updates = Vec::with_capacity(atoms.len());
     for (i, atom_idx) in atoms.iter().copied().enumerate() {
-        let view = ast.atom(atom_idx);
-        let atom = view.ast;
-        let Some(lp) = atom.lone_pairs.as_lit() else {
-            return;
-        };
-        let Some(implicit_h) = ValueAst::from(atom.implicit_hydrogens.clone()).as_lit() else {
-            return;
-        };
-        let Some(degree) = view.degree().as_lit() else {
-            return;
-        };
-        let k = v - (degree + implicit_h) - 2 * lp;
-        let Some(c) = atom.charge.as_lit() else {
-            return;
-        };
-        let Some(e) = ast.aromatic_system(system_idx).ast.electrons[i].as_lit() else {
-            return;
-        };
+        let atom = ast.atom(atom_idx);
+        let err = || AromaticityError::NonGroundAtom(atom_idx);
+        let k = &v - atom.degree() - atom.implicit_hydrogens().as_value() - 2 * atom.lone_pairs();
+        atom_updates.push((
+            i,
+            atom_idx,
+            atom.charge().as_lit_ok_or_else(err)?,
+            ast.aromatic_system(system_idx).ast.electrons[i].as_lit_ok_or_else(err)?,
+            k.as_lit_ok_or_else(err)?,
+        ));
+    }
+
+    // Phase 2: apply. All atoms are ground; the system charge fallback to 0
+    // covers the case where it's still Undetermined on a fresh system entry.
+    let mut accumulated = ast.aromatic_system(system_idx).charge().as_lit_or(0);
+    for (i, atom_idx, c, e, k) in atom_updates {
         if e == k {
             continue;
         }
@@ -237,6 +235,7 @@ fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemId) {
         ));
     }
     ast.aromatic_system_mut(system_idx).charge = ValueAst::Lit(accumulated);
+    Ok(())
 }
 
 /// Returns the shared element if every atom in `atoms` has a literal,

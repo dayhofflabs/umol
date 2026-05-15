@@ -81,9 +81,9 @@ fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
         1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::LitSet(v)
+            ValueAst::lit_set(v)
         }),
-        1 => top_expr_strategy().prop_map(ValueAst::Expr),
+        1 => top_expr_strategy().prop_map(ValueAst::expr),
     ]
 }
 
@@ -148,9 +148,9 @@ fn any_value_ast_strategy() -> BoxedStrategy<ValueAst> {
         prop::collection::vec(-10i64..=10, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::LitSet(v)
+            ValueAst::lit_set(v)
         }),
-        any_expr_strategy().prop_map(ValueAst::Expr),
+        any_expr_strategy().prop_map(ValueAst::expr),
     ]
     .boxed()
 }
@@ -244,9 +244,9 @@ fn isotope_strategy() -> impl Strategy<Value = IsotopeAst> {
         1 => prop::collection::vec(1i64..=250, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            IsotopeAst::LitSet(v)
+            IsotopeAst::lit_set(v)
         }),
-        1 => top_expr_strategy().prop_map(IsotopeAst::Expr),
+        1 => top_expr_strategy().prop_map(IsotopeAst::expr),
     ]
 }
 
@@ -258,9 +258,9 @@ fn implicit_hydrogens_strategy() -> impl Strategy<Value = ImplicitHydrogensAst> 
         1 => prop::collection::vec(0i64..=4, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ImplicitHydrogensAst::LitSet(v)
+            ImplicitHydrogensAst::lit_set(v)
         }),
-        1 => top_expr_strategy().prop_map(ImplicitHydrogensAst::Expr),
+        1 => top_expr_strategy().prop_map(ImplicitHydrogensAst::expr),
     ]
 }
 
@@ -300,7 +300,7 @@ fn constraint_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Value 
         1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::LitSet(v)
+            ValueAst::lit_set(v)
         }),
     ]
 }
@@ -315,7 +315,7 @@ fn constraint_inner_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<
         prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::LitSet(v)
+            ValueAst::lit_set(v)
         }),
     ]
 }
@@ -541,7 +541,7 @@ fn electron_count_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Va
         1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::LitSet(v)
+            ValueAst::lit_set(v)
         }),
     ]
 }
