@@ -1578,11 +1578,11 @@ Property-style tests can come after the focused cases:
 
 **Completion**: subgraph extraction works for kekulizer / HMO callers. **Dependencies**: phase 8 (uses Edit). **Risk**: medium.
 
-### Phase 11 — State predicates + small tail items
+### Phase 11 — State predicates + small tail items **Done**
 
-- `mol.is_empty()`, `has_constraints()`, `has_overlays()`, `has_dative_bonds()`, `has_aromatic_systems()`, `has_multicenter_bonds()`, `has_noncovalent_bonds()`
-- `NeighborView` reshape: private `{ atom_id, bond_id, molecule }` + `.atom() -> AtomView` / `.bond() -> BondView` methods
-- Drop `data: &BondAst` field from NeighborView (callers route through `.bond()`)
+- `mol.is_empty()`, `has_constraints()` (molecule-scope), `has_overlays()`, `has_dative_bonds()`, `has_aromatic_systems()`, `has_multicenter_bonds()`, `has_noncovalent_bonds()` **Done**
+- `NeighborView` reshape: private `{ atom_id, bond_id, molecule }` + `.atom() -> AtomView` / `.bond() -> BondView` methods; `atom_id()` / `bond_id()` accessors **Done**
+- Drop `ast: &BondAst` field from NeighborView; callers route through `.bond().ast` **Done** (aromatizer, rewrite, atom-view methods, tests migrated)
 
 **Completion**: predicates callable; NeighborView calls in ops/ migrated. **Dependencies**: phases 1, 4. **Risk**: low.
 

@@ -237,18 +237,10 @@ impl MoleculeAst {
     }
 
     pub fn neighbors(&self, atom: AtomId) -> impl Iterator<Item = NeighborView<'_>> {
-        let bonds = &self.bonds;
         self.graph
             .neighbors(NodeId::from(atom))
             .iter()
-            .map(move |n| {
-                NeighborView::new(
-                    BondId::from(n.edge),
-                    AtomId::from(n.node),
-                    &bonds[n.edge.index()],
-                    self,
-                )
-            })
+            .map(move |n| NeighborView::new(AtomId::from(n.node), BondId::from(n.edge), self))
     }
 
     pub fn atoms(&self) -> AtomViews<'_> {
@@ -456,6 +448,41 @@ impl MoleculeAst {
 
     pub fn constraints_mut(&mut self) -> &mut Constraints {
         &mut self.constraints
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.atoms.is_empty()
+    }
+
+    /// True if the molecule-scope `Constraints` tree is non-empty.
+    /// Per-entity constraint stores are not consulted.
+    pub fn has_constraints(&self) -> bool {
+        !self.constraints.is_empty()
+    }
+
+    pub fn has_dative_bonds(&self) -> bool {
+        self.dative_bonds.relation_count() > 0
+    }
+
+    pub fn has_aromatic_systems(&self) -> bool {
+        self.aromatic_systems.relation_count() > 0
+    }
+
+    pub fn has_multicenter_bonds(&self) -> bool {
+        self.multicenter_bonds.relation_count() > 0
+    }
+
+    pub fn has_noncovalent_bonds(&self) -> bool {
+        self.noncovalent_bonds.relation_count() > 0
+    }
+
+    /// True if any overlay (dative bond, aromatic system, multicenter bond,
+    /// noncovalent bond) is non-empty.
+    pub fn has_overlays(&self) -> bool {
+        self.has_dative_bonds()
+            || self.has_aromatic_systems()
+            || self.has_multicenter_bonds()
+            || self.has_noncovalent_bonds()
     }
 
     /// Recursively reduce every contained `ValueAst` to canonical form

@@ -46,10 +46,10 @@ impl MoleculeAst {
                 .get(&l_atom)
                 .ok_or(RewriteError::UnmappedLhsAtom(l_atom))?;
             for n in self.neighbors(g_atom) {
-                if !l_atoms_g.contains(&n.atom) {
+                if !l_atoms_g.contains(&n.atom_id()) {
                     return Err(RewriteError::DanglingEdge {
                         atom: g_atom,
-                        neighbor: n.atom,
+                        neighbor: n.atom_id(),
                     });
                 }
             }

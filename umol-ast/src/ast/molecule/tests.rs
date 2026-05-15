@@ -136,7 +136,7 @@ fn test_molecule_ast_neighbors(#[case] atom: AtomId, #[case] expected: Vec<(Atom
         vec![],
         Constraints::default(),
     );
-    let nbrs: Vec<(AtomId, BondId)> = ast.neighbors(atom).map(|n| (n.atom, n.bond)).collect();
+    let nbrs: Vec<(AtomId, BondId)> = ast.neighbors(atom).map(|n| (n.atom_id(), n.bond_id())).collect();
     assert_eq!(nbrs, expected);
 }
 
@@ -712,6 +712,56 @@ fn test_molecule_ast_atom(
     let av = ast.atom(idx);
     assert_eq!(av.id, idx);
     assert_eq!(av.ast.element, ElementAst::Lit(element));
+}
+
+#[rstest]
+fn test_molecule_ast_is_empty() {
+    assert!(MoleculeAst::default().is_empty());
+}
+
+#[rstest]
+fn test_molecule_ast_is_empty_rich(#[from(rich_molecule)] ast: MoleculeAst) {
+    assert!(!ast.is_empty());
+}
+
+#[rstest]
+fn test_molecule_ast_has_constraints_empty() {
+    assert!(!MoleculeAst::default().has_constraints());
+}
+
+#[rstest]
+fn test_molecule_ast_has_constraints_rich(#[from(rich_molecule)] ast: MoleculeAst) {
+    assert!(!ast.has_constraints());
+}
+
+#[rstest]
+fn test_molecule_ast_has_dative_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
+    assert!(ast.has_dative_bonds());
+}
+
+#[rstest]
+fn test_molecule_ast_has_aromatic_systems(#[from(rich_molecule)] ast: MoleculeAst) {
+    assert!(ast.has_aromatic_systems());
+}
+
+#[rstest]
+fn test_molecule_ast_has_multicenter_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
+    assert!(ast.has_multicenter_bonds());
+}
+
+#[rstest]
+fn test_molecule_ast_has_noncovalent_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
+    assert!(ast.has_noncovalent_bonds());
+}
+
+#[rstest]
+fn test_molecule_ast_has_overlays(#[from(rich_molecule)] ast: MoleculeAst) {
+    assert!(ast.has_overlays());
+}
+
+#[rstest]
+fn test_molecule_ast_has_overlays_empty() {
+    assert!(!MoleculeAst::default().has_overlays());
 }
 
 #[rstest]

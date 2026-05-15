@@ -1,33 +1,42 @@
 //! Neighbor view: yielded by `MoleculeAst::neighbors`.
 
-use super::super::bond::BondAst;
 use super::super::idx::{AtomId, BondId};
 use super::super::molecule::MoleculeAst;
+use super::atom::AtomView;
+use super::bond::BondView;
 
-/// Neighbor-side view of a bond: the atom on the other end (`atom`), the
-/// bond index, the bond data, and the parent `MoleculeAst` for navigation
-/// to the neighbor's full atom view. Yielded by `MoleculeAst::neighbors`.
+/// Neighbor-side view of a bond: the atom on the other end and the bond
+/// connecting it. Full `AtomView` / `BondView` lookups are deferred to
+/// `atom()` / `bond()`.
 #[derive(Clone, Copy, Debug)]
 pub struct NeighborView<'a> {
-    pub bond: BondId,
-    pub atom: AtomId,
-    pub ast: &'a BondAst,
-    #[allow(dead_code)]
+    atom_id: AtomId,
+    bond_id: BondId,
     molecule: &'a MoleculeAst,
 }
 
 impl<'a> NeighborView<'a> {
-    pub(crate) fn new(
-        bond: BondId,
-        atom: AtomId,
-        ast: &'a BondAst,
-        molecule: &'a MoleculeAst,
-    ) -> Self {
+    pub(crate) fn new(atom_id: AtomId, bond_id: BondId, molecule: &'a MoleculeAst) -> Self {
         Self {
-            bond,
-            atom,
-            ast,
+            atom_id,
+            bond_id,
             molecule,
         }
+    }
+
+    pub fn atom_id(&self) -> AtomId {
+        self.atom_id
+    }
+
+    pub fn bond_id(&self) -> BondId {
+        self.bond_id
+    }
+
+    pub fn atom(&self) -> AtomView<'a> {
+        self.molecule.atom(self.atom_id)
+    }
+
+    pub fn bond(&self) -> BondView<'a> {
+        self.molecule.bond(self.bond_id)
     }
 }

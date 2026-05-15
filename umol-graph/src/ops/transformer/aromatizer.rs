@@ -77,7 +77,7 @@ pub fn electrons_from_kekule(view: &AtomView<'_>) -> Option<u8> {
     };
     let double_count = view
         .neighbors()
-        .filter(|n| matches!(n.ast.order, ValueAst::Lit(2)))
+        .filter(|n| matches!(n.bond().ast.order, ValueAst::Lit(2)))
         .count();
     match double_count {
         1 => Some(1),

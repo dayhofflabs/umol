@@ -126,7 +126,7 @@ impl<'a> AtomView<'a> {
 
     /// IDs of incident localized bonds, in iteration order of `neighbors`.
     pub fn bond_ids(&self) -> impl Iterator<Item = BondId> + 'a {
-        self.molecule.neighbors(self.id).map(|n| n.bond)
+        self.molecule.neighbors(self.id).map(|n| n.bond_id())
     }
 
     /// Localized valence: sum of incident `Bond.order` values. Returns
@@ -134,7 +134,7 @@ impl<'a> AtomView<'a> {
     /// to `Undetermined` if any bond order is non-`Lit`.
     pub fn valence(&self) -> ValueAst {
         self.neighbors()
-            .map(|n| n.ast.order.clone())
+            .map(|n| n.bond().ast.order.clone())
             .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
 
@@ -309,12 +309,7 @@ impl<'a> AtomView<'a> {
     pub fn heavy_atom_degree(&self) -> ValueAst {
         let count = self
             .neighbors()
-            .filter(|n| {
-                !matches!(
-                    self.molecule.atom(n.atom).ast.element,
-                    ElementAst::Lit(Element::H),
-                )
-            })
+            .filter(|n| !matches!(n.atom().ast.element, ElementAst::Lit(Element::H)))
             .count();
         ValueAst::Lit(count as i64)
     }
@@ -324,13 +319,8 @@ impl<'a> AtomView<'a> {
     /// is non-`Lit`.
     pub fn heavy_atom_valence(&self) -> ValueAst {
         self.neighbors()
-            .filter(|n| {
-                !matches!(
-                    self.molecule.atom(n.atom).ast.element,
-                    ElementAst::Lit(Element::H),
-                )
-            })
-            .map(|n| n.ast.order.clone())
+            .filter(|n| !matches!(n.atom().ast.element, ElementAst::Lit(Element::H)))
+            .map(|n| n.bond().ast.order.clone())
             .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
 
@@ -340,12 +330,7 @@ impl<'a> AtomView<'a> {
     pub fn total_hydrogens(&self) -> ValueAst {
         let explicit = self
             .neighbors()
-            .filter(|n| {
-                matches!(
-                    self.molecule.atom(n.atom).ast.element,
-                    ElementAst::Lit(Element::H),
-                )
-            })
+            .filter(|n| matches!(n.atom().ast.element, ElementAst::Lit(Element::H)))
             .count() as i64;
         ValueAst::Lit(explicit) + ValueAst::from(self.ast.implicit_hydrogens.clone())
     }
@@ -397,7 +382,7 @@ impl<'a> AtomView<'a> {
     pub fn ring_degree(&self) -> ValueAst {
         let count = self
             .neighbors()
-            .filter(|n| self.molecule.bond(n.bond).is_in_ring())
+            .filter(|n| n.bond().is_in_ring())
             .count();
         ValueAst::Lit(count as i64)
     }
@@ -407,8 +392,8 @@ impl<'a> AtomView<'a> {
     /// bond's `order` is non-`Lit`.
     pub fn ring_valence(&self) -> ValueAst {
         self.neighbors()
-            .filter(|n| self.molecule.bond(n.bond).is_in_ring())
-            .map(|n| n.ast.order.clone())
+            .filter(|n| n.bond().is_in_ring())
+            .map(|n| n.bond().ast.order.clone())
             .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
 }

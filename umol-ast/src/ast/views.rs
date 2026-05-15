@@ -151,7 +151,7 @@ mod tests {
         let view = molecule.atom(AtomId(1));
         let collected: Vec<(BondId, AtomId, BondAst)> = view
             .neighbors()
-            .map(|n| (n.bond, n.atom, n.ast.clone()))
+            .map(|n| (n.bond_id(), n.atom_id(), n.bond().ast.clone()))
             .collect();
         assert_eq!(
             collected,
@@ -1274,7 +1274,7 @@ mod tests {
     fn test_neighbor_view_fields(molecule: MoleculeAst) {
         let collected: Vec<(BondId, AtomId, BondAst)> = molecule
             .neighbors(AtomId(2))
-            .map(|n| (n.bond, n.atom, n.ast.clone()))
+            .map(|n| (n.bond_id(), n.atom_id(), n.bond().ast.clone()))
             .collect();
         assert_eq!(
             collected,
