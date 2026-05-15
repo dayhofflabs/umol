@@ -7,6 +7,7 @@ use std::vec::IntoIter;
 use strum::EnumDiscriminants;
 
 use super::super::remap::IdRemapping;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 
 /// Multicenter-bond-scope constraint. Held inline on `MulticenterBondAst` via
@@ -212,10 +213,7 @@ mod tests {
     use crate::ast::value::Expr;
 
     #[rstest]
-    #[case::electron_count(
-        MulticenterBondConstraint::electron_count(2),
-        MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))
-    )]
+    #[case::electron_count(MulticenterBondConstraint::electron_count(2), MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)))]
     fn test_multicenter_bond_constraint_constructors(
         #[case] actual: MulticenterBondConstraint,
         #[case] expected: MulticenterBondConstraint,
@@ -224,10 +222,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::electron_count(
-        MulticenterBondConstraint::electron_count(2),
-        MulticenterBondConstraintKind::ElectronCount
-    )]
+    #[case::electron_count(MulticenterBondConstraint::electron_count(2), MulticenterBondConstraintKind::ElectronCount)]
     fn test_multicenter_bond_constraint_kind(
         #[case] c: MulticenterBondConstraint,
         #[case] expected: MulticenterBondConstraintKind,
@@ -252,10 +247,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case::folds_expr(
-        MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(2)))),
-        MulticenterBondConstraint::electron_count(2)
-    )]
+    #[case::folds_expr(MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(2)))), MulticenterBondConstraint::electron_count(2))]
     fn test_multicenter_bond_constraint_simplify(
         #[case] input: MulticenterBondConstraint,
         #[case] expected: MulticenterBondConstraint,
@@ -455,17 +447,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::single(
-        vec![MulticenterBondConstraint::electron_count(2)],
-        vec![MulticenterBondConstraint::electron_count(2)],
-    )]
-    #[case::same_kind_last_wins(
-        vec![
-            MulticenterBondConstraint::electron_count(2),
-            MulticenterBondConstraint::electron_count(4),
-        ],
-        vec![MulticenterBondConstraint::electron_count(4)],
-    )]
+    #[case::single(vec![MulticenterBondConstraint::electron_count(2)], vec![MulticenterBondConstraint::electron_count(2)])]
+    #[case::same_kind_last_wins(vec![MulticenterBondConstraint::electron_count(2), MulticenterBondConstraint::electron_count(4)],
+        vec![MulticenterBondConstraint::electron_count(4)])]
     #[case::empty(vec![], vec![])]
     fn test_multicenter_bond_constraints_from_iter(
         #[case] input: Vec<MulticenterBondConstraint>,

@@ -1606,7 +1606,7 @@ Property-style tests can come after the focused cases:
 
 Adds a `Lattice` trait covering the standard partial-order/lattice operations on AST refinement types, replaces the misnamed `narrow_atom`/`lift_constraints` flow in the valence resolvers with derived `Lattice` operations, and deletes `umol-graph/src/ops/valence/shared.rs` entirely.
 
-**Lattice trait** (`umol-ast/src/ast/lattice.rs`):
+**Lattice trait** (lives in `umol-ast/src/ast/traits.rs` alongside `AsLit`):
 
 - `Lattice` trait with `is_top`, `is_bottom`, `matches(&target)`, `meet(&other) -> Option<Self>`, `join(&other) -> Self`, `narrow_from(&mut self, &other) -> bool`, `widen_with(&mut self, &other) -> bool`
 - Implement on `ValueAst`, `IsotopeAst`, `ImplicitHydrogensAst`, `SpinStateAst`, `ElementAst`, `AromaticValenceAst`, `MulticenterValenceAst`
@@ -1678,12 +1678,13 @@ Sequencing chosen so each step lands independently with `cargo test --workspace 
 
 ##### Step 2 — `Lattice` trait + manual impls (value-type ASTs)
 
-- Create `umol-ast/src/ast/lattice.rs` with the `Lattice` trait surface
+- Add the `Lattice` trait to `umol-ast/src/ast/traits.rs` (alongside `AsLit`)
+- Trait surface: `is_undetermined`, `is_ground`, `meet`, `join` required; `narrow_from`, `widen_with` default impls derived from `meet`/`join` + `PartialEq`
+- Remove inherent `is_undetermined` / `is_ground` on each AST type — they become trait methods. Callers add `use Lattice;` to keep the call sites working
+- `matches` stays inherent-only — not in the trait
 - Manual impls for `ValueAst`, `IsotopeAst`, `ImplicitHydrogensAst`, `SpinStateAst`, `ElementAst`, `AromaticValenceAst`, `MulticenterValenceAst`
 - Exhaustive `meet`/`join` tests over variant cross-products — load-bearing correctness check
-- Inline `LitSet` first-occurrence dedup helper (private to `lattice.rs`)
-
-No callsite changes; trait surface only.
+- Inline `LitSet` first-occurrence dedup helper (private to `traits.rs`)
 
 ##### Step 3 — `Lattice` derive macro for struct types
 

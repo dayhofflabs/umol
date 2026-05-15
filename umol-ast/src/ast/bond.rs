@@ -4,6 +4,7 @@ use std::mem;
 
 use super::constraint::{BondConstraint, BondConstraints};
 use super::spin::SpinStateAst;
+use super::traits::Lattice;
 use super::value::ValueAst;
 
 /// Bond AST: structural representation of a bond plus bond-level constraints

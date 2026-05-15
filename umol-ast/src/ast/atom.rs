@@ -9,7 +9,7 @@ use super::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
 use super::spin::SpinStateAst;
-use super::traits::AsLit;
+use super::traits::{AsLit, Lattice};
 use super::value::Bindings;
 use super::value::{litset_is_ground, Expr, ValueAst};
 
@@ -209,18 +209,6 @@ impl From<Element> for ElementAst {
 }
 
 impl ElementAst {
-    pub fn is_ground(&self) -> bool {
-        match self {
-            Self::Lit(_) => true,
-            Self::Undetermined | Self::Ref(_) | Self::Bind { .. } => false,
-            Self::Set(s) => element_set_is_ground(s),
-        }
-    }
-
-    pub fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
-    }
-
     /// Pattern matches target iff every element the target admits is also
     /// admitted by the pattern (superset semantics).
     pub fn matches(&self, target: &Self) -> bool {
@@ -248,6 +236,101 @@ impl AsLit for ElementAst {
             Self::Lit(e) => Some(*e),
             Self::Undetermined | Self::Ref(_) | Self::Bind { .. } => None,
             Self::Set(s) => element_set_is_ground(s).then(|| s[0]),
+        }
+    }
+}
+
+impl Lattice for ElementAst {
+    #[inline]
+    fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
+    }
+
+    fn is_ground(&self) -> bool {
+        match self {
+            Self::Lit(_) => true,
+            Self::Undetermined | Self::Ref(_) | Self::Bind { .. } => false,
+            Self::Set(s) => element_set_is_ground(s),
+        }
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
+            (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
+            (Self::Lit(a), Self::Set(s)) | (Self::Set(s), Self::Lit(a)) => {
+                s.contains(a).then_some(Self::Lit(*a))
+            }
+            (Self::Set(s), Self::Set(t)) => {
+                let intersection: Vec<Element> =
+                    s.iter().filter(|x| t.contains(x)).copied().collect();
+                match intersection.len() {
+                    0 => None,
+                    1 => Some(Self::Lit(intersection[0])),
+                    _ => Some(Self::Set(intersection)),
+                }
+            }
+            (Self::Ref(a), Self::Ref(b)) if a == b => Some(Self::Ref(a.clone())),
+            (Self::Bind { id: a, set: s }, Self::Bind { id: b, set: t }) if a == b && s == t => {
+                Some(self.clone())
+            }
+            _ => None,
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
+            (Self::Lit(a), Self::Lit(b)) => {
+                if a == b {
+                    Self::Lit(*a)
+                } else {
+                    Self::Set(vec![*a, *b])
+                }
+            }
+            (Self::Lit(a), Self::Set(s)) => {
+                let mut v: Vec<Element> = Vec::with_capacity(s.len() + 1);
+                v.push(*a);
+                for &x in s.iter() {
+                    if x != *a {
+                        v.push(x);
+                    }
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::Set(v)
+                }
+            }
+            (Self::Set(s), Self::Lit(a)) => {
+                let mut v: Vec<Element> = s.clone();
+                if !v.contains(a) {
+                    v.push(*a);
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::Set(v)
+                }
+            }
+            (Self::Set(s), Self::Set(t)) => {
+                let mut v: Vec<Element> = s.clone();
+                for &x in t.iter() {
+                    if !v.contains(&x) {
+                        v.push(x);
+                    }
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::Set(v)
+                }
+            }
+            (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
+            (Self::Bind { id: a, set: s }, Self::Bind { id: b, set: t }) if a == b && s == t => {
+                self.clone()
+            }
+            _ => Self::Undetermined,
         }
     }
 }
@@ -295,17 +378,6 @@ impl IsotopeAst {
 
     /// Semantic ground: `Natural` and `Lit(_)` are the primary ground forms;
     /// `LitSet`/`Expr` delegate through the shared helpers so constant-valued
-    /// expressions and singleton sets are also ground. Same fast-path /
-    /// cold-slow-path split as [`ValueAst::is_ground`].
-    #[inline]
-    pub fn is_ground(&self) -> bool {
-        match self {
-            Self::Natural | Self::Lit(_) => true,
-            Self::Undetermined => false,
-            _ => self.is_ground_slow(),
-        }
-    }
-
     #[inline(never)]
     #[cold]
     fn is_ground_slow(&self) -> bool {
@@ -328,10 +400,6 @@ impl IsotopeAst {
                 .and_then(|n| u32::try_from(n).ok()),
             Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
         }
-    }
-
-    pub fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
     }
 
     pub fn matches(&self, target: &Self) -> bool {
@@ -401,6 +469,107 @@ impl AsLit for IsotopeAst {
     }
 }
 
+impl Lattice for IsotopeAst {
+    #[inline]
+    fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
+    }
+
+    /// `Natural` and ground numeric variants are bottom; `Undetermined` is
+    /// top. Singleton `LitSet` and ground `Expr` count as bottom via the
+    /// shared slow path.
+    #[inline]
+    fn is_ground(&self) -> bool {
+        match self {
+            Self::Natural | Self::Lit(_) => true,
+            Self::Undetermined => false,
+            _ => self.is_ground_slow(),
+        }
+    }
+
+    /// `Natural` is wider than the numeric variants (`Lit`, `LitSet`, `Expr`):
+    /// `meet(Natural, x) = x` for any non-`Undetermined` `x`. `Expr` only
+    /// meets with itself (syntactic equality) or `Undetermined`.
+    fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
+            (Self::Natural, Self::Natural) => Some(Self::Natural),
+            (Self::Natural, x) | (x, Self::Natural) => Some(x.clone()),
+            (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
+            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+                s.contains(a).then_some(Self::Lit(*a))
+            }
+            (Self::LitSet(s), Self::LitSet(t)) => {
+                let intersection: Vec<i64> =
+                    s.iter().filter(|x| t.contains(x)).copied().collect();
+                match intersection.len() {
+                    0 => None,
+                    1 => Some(Self::Lit(intersection[0])),
+                    _ => Some(Self::LitSet(Box::new(intersection))),
+                }
+            }
+            (Self::Expr(e), Self::Expr(f)) => (e == f).then(|| Self::Expr(e.clone())),
+            (Self::Expr(_), _) | (_, Self::Expr(_)) => None,
+        }
+    }
+
+    /// `Natural` is wider than the numeric variants: `join(Natural, x) =
+    /// Natural` for any non-`Undetermined` `x`.
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
+            (Self::Natural, _) | (_, Self::Natural) => Self::Natural,
+            (Self::Lit(a), Self::Lit(b)) => {
+                if a == b {
+                    Self::Lit(*a)
+                } else {
+                    Self::LitSet(Box::new(vec![*a, *b]))
+                }
+            }
+            (Self::Lit(a), Self::LitSet(s)) => {
+                let mut v: Vec<i64> = Vec::with_capacity(s.len() + 1);
+                v.push(*a);
+                for &x in s.iter() {
+                    if x != *a {
+                        v.push(x);
+                    }
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::LitSet(s), Self::Lit(a)) => {
+                let mut v: Vec<i64> = s.to_vec();
+                if !v.contains(a) {
+                    v.push(*a);
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::LitSet(s), Self::LitSet(t)) => {
+                let mut v: Vec<i64> = s.to_vec();
+                for &x in t.iter() {
+                    if !v.contains(&x) {
+                        v.push(x);
+                    }
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
 /// Implicit hydrogen expressions. `Normal` denotes the valence-model default
 /// (`#h=`); numeric variants mirror `ValueAst` and are flattened here to keep
 /// `Undetermined` as a single top-level state.
@@ -435,18 +604,6 @@ impl ImplicitHydrogensAst {
         Self::Expr(Box::new(e))
     }
 
-    /// Semantic ground: only `Lit(_)`, ground singleton `LitSet`, and ground
-    /// `Expr` count. `Normal` is **not** ground — it's a placeholder for
-    /// "compute via valence model"; the resolver lowers it to `Lit(n)`.
-    #[inline]
-    pub fn is_ground(&self) -> bool {
-        match self {
-            Self::Lit(_) => true,
-            Self::Normal | Self::Undetermined => false,
-            _ => self.is_ground_slow(),
-        }
-    }
-
     #[inline(never)]
     #[cold]
     fn is_ground_slow(&self) -> bool {
@@ -465,10 +622,6 @@ impl ImplicitHydrogensAst {
             Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
             Self::Lit(_) | Self::Normal | Self::Undetermined => unreachable!(),
         }
-    }
-
-    pub fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
     }
 
     pub fn matches(&self, target: &Self) -> bool {
@@ -591,6 +744,104 @@ impl AsLit for ImplicitHydrogensAst {
     }
 }
 
+impl Lattice for ImplicitHydrogensAst {
+    #[inline]
+    fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
+    }
+
+    /// Semantic ground: only `Lit(_)`, ground singleton `LitSet`, and ground
+    /// `Expr` count. `Normal` is **not** ground — it's a placeholder for
+    /// "compute via valence model"; the resolver lowers it to `Lit(n)`.
+    #[inline]
+    fn is_ground(&self) -> bool {
+        match self {
+            Self::Lit(_) => true,
+            Self::Normal | Self::Undetermined => false,
+            _ => self.is_ground_slow(),
+        }
+    }
+
+    /// `Normal` is wider than the numeric variants (mirror of `IsotopeAst`'s
+    /// `Natural`). `meet(Normal, x) = x` for any non-`Undetermined` `x`.
+    fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
+            (Self::Normal, Self::Normal) => Some(Self::Normal),
+            (Self::Normal, x) | (x, Self::Normal) => Some(x.clone()),
+            (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
+            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+                s.contains(a).then_some(Self::Lit(*a))
+            }
+            (Self::LitSet(s), Self::LitSet(t)) => {
+                let intersection: Vec<i64> =
+                    s.iter().filter(|x| t.contains(x)).copied().collect();
+                match intersection.len() {
+                    0 => None,
+                    1 => Some(Self::Lit(intersection[0])),
+                    _ => Some(Self::LitSet(Box::new(intersection))),
+                }
+            }
+            (Self::Expr(e), Self::Expr(f)) => (e == f).then(|| Self::Expr(e.clone())),
+            (Self::Expr(_), _) | (_, Self::Expr(_)) => None,
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
+            (Self::Normal, _) | (_, Self::Normal) => Self::Normal,
+            (Self::Lit(a), Self::Lit(b)) => {
+                if a == b {
+                    Self::Lit(*a)
+                } else {
+                    Self::LitSet(Box::new(vec![*a, *b]))
+                }
+            }
+            (Self::Lit(a), Self::LitSet(s)) => {
+                let mut v: Vec<i64> = Vec::with_capacity(s.len() + 1);
+                v.push(*a);
+                for &x in s.iter() {
+                    if x != *a {
+                        v.push(x);
+                    }
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::LitSet(s), Self::Lit(a)) => {
+                let mut v: Vec<i64> = s.to_vec();
+                if !v.contains(a) {
+                    v.push(*a);
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::LitSet(s), Self::LitSet(t)) => {
+                let mut v: Vec<i64> = s.to_vec();
+                for &x in t.iter() {
+                    if !v.contains(&x) {
+                        v.push(x);
+                    }
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
+            _ => Self::Undetermined,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -622,22 +873,10 @@ mod tests {
     #[case::with_spin_tuple(AtomAst::default().with_spin((0_u8, 1_u8)), AtomAst { spin: SpinStateAst::from((0_u8, 1_u8)), ..Default::default() })]
     #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)),
         AtomAst { constraints: AtomConstraints::from(AtomConstraint::valence(4)),..Default::default() })]
-    #[case::with_constraints_extends(
-        AtomAst::default()
-            .with_constraint(AtomConstraint::valence(4_i64))
-            .with_constraints([AtomConstraint::donated_pairs(1_i64), AtomConstraint::ring_size(6_i64)]),
-        AtomAst { constraints: AtomConstraints::from_iter([
-            AtomConstraint::valence(4),
-            AtomConstraint::donated_pairs(1),
-            AtomConstraint::ring_size(6),
-        ]), ..Default::default() },
-    )]
-    #[case::with_constraint_replaces_same_kind(
-        AtomAst::default()
-            .with_constraint(AtomConstraint::valence(3_i64))
-            .with_constraint(AtomConstraint::valence(4_i64)),
-        AtomAst { constraints: AtomConstraints::from(AtomConstraint::valence(4)), ..Default::default() },
-    )]
+    #[case::with_constraints_extends(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)).with_constraints([AtomConstraint::donated_pairs(1_i64), AtomConstraint::ring_size(6_i64)]),
+        AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::donated_pairs(1), AtomConstraint::ring_size(6)]), ..Default::default() })]
+    #[case::with_constraint_replaces_same_kind(AtomAst::default().with_constraint(AtomConstraint::valence(3_i64)).with_constraint(AtomConstraint::valence(4_i64)),
+        AtomAst { constraints: AtomConstraints::from(AtomConstraint::valence(4)), ..Default::default() })]
     fn test_atom_ast_with_methods(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
     }

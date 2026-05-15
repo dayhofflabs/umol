@@ -15,7 +15,7 @@ use umol_ast::ast::{
     AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst, BondConstraint,
     BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, Constraint, Constraints,
     DativeBondAst, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
-    DativeBondId, Edit, ElementAst, Expr, ImplicitHydrogensAst, IsotopeAst, MoleculeAst,
+    DativeBondId, Edit, ElementAst, Expr, ImplicitHydrogensAst, IsotopeAst, Lattice, MoleculeAst,
     MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraint,
     MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterBondId,
     MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind,

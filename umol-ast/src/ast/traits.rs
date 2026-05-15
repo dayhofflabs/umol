@@ -85,3 +85,52 @@ pub trait AsLit {
         self.as_lit().expect(msg)
     }
 }
+
+/// Refinement lattice on AST value types.
+///
+/// `Undetermined` is the top (most general / "any value"); fully ground
+/// concrete values are bottom (most specific). `meet` is the greatest lower
+/// bound (most specific common refinement; `None` when incompatible);
+/// `join` is the least upper bound (most general common generalization).
+///
+/// `narrow_from` and `widen_with` are the in-place counterparts of `meet`
+/// and `join`; both return `true` iff `self` actually changed.
+pub trait Lattice: Sized + Clone + PartialEq {
+    /// Top of the lattice — `self` carries no value information.
+    fn is_undetermined(&self) -> bool;
+
+    /// Bottom of the lattice — `self` resolves to a single concrete value.
+    fn is_ground(&self) -> bool;
+
+    /// Greatest lower bound. `None` when `self` and `other` are mutually
+    /// incompatible (no value can satisfy both).
+    fn meet(&self, other: &Self) -> Option<Self>;
+
+    /// Least upper bound. Total — incompatible pairs widen toward the
+    /// nearest common generalization (typically `Undetermined`).
+    fn join(&self, other: &Self) -> Self;
+
+    /// In-place `meet`. Returns `true` iff `self` actually changed. When
+    /// `self` and `other` are incompatible, leaves `self` unchanged and
+    /// returns `false`.
+    fn narrow_from(&mut self, other: &Self) -> bool {
+        match self.meet(other) {
+            Some(new) if new != *self => {
+                *self = new;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// In-place `join`. Returns `true` iff `self` actually changed.
+    fn widen_with(&mut self, other: &Self) -> bool {
+        let new = self.join(other);
+        if new != *self {
+            *self = new;
+            true
+        } else {
+            false
+        }
+    }
+}

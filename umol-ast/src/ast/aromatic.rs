@@ -4,6 +4,7 @@ use std::mem;
 
 use super::constraint::{AromaticSystemConstraint, AromaticSystemConstraints};
 use super::spin::SpinStateAst;
+use super::traits::Lattice;
 use super::value::ValueAst;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -184,35 +185,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::from_ground_electrons(
-        AromaticSystemAst::from_electrons(vec![1; 6]).into_ground(),
-        AromaticSystemAst {
-            electrons: vec![ValueAst::Lit(1); 6],
-            charge: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AromaticSystemConstraints::new(),
-        },
-    )]
-    #[case::preserves_set_charge(
-        AromaticSystemAst::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
-        AromaticSystemAst {
-            electrons: vec![ValueAst::Lit(1); 6],
-            charge: ValueAst::Lit(1),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AromaticSystemConstraints::new(),
-        },
-    )]
-    #[case::preserves_constraints(
-        AromaticSystemAst::from_electrons(vec![1; 6])
-            .with_constraint(AromaticSystemConstraint::electron_count(6))
-            .into_ground(),
-        AromaticSystemAst {
-            electrons: vec![ValueAst::Lit(1); 6],
-            charge: ValueAst::Lit(0),
-            spin: SpinStateAst::from((0_u8, 1_u8)),
-            constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)),
-        },
-    )]
+    #[case::from_ground_electrons(AromaticSystemAst::from_electrons(vec![1; 6]).into_ground(),
+        AromaticSystemAst { electrons: vec![ValueAst::Lit(1); 6], charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AromaticSystemConstraints::new() })]
+    #[case::preserves_set_charge(AromaticSystemAst::from_electrons(vec![1; 6]).with_charge(1_i64).into_ground(),
+        AromaticSystemAst { electrons: vec![ValueAst::Lit(1); 6], charge: ValueAst::Lit(1), spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AromaticSystemConstraints::new() })]
+    #[case::preserves_constraints(AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraint::electron_count(6)).into_ground(),
+        AromaticSystemAst { electrons: vec![ValueAst::Lit(1); 6], charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)) })]
     fn test_aromatic_system_ast_into_ground(
         #[case] actual: AromaticSystemAst,
         #[case] expected: AromaticSystemAst,
@@ -222,10 +203,7 @@ mod tests {
 
     #[rstest]
     #[case::from_electrons(AromaticSystemAst::from_electrons(vec![1; 6]))]
-    #[case::with_constraint(
-        AromaticSystemAst::from_electrons(vec![1; 6])
-            .with_constraint(AromaticSystemConstraint::electron_count(6))
-    )]
+    #[case::with_constraint(AromaticSystemAst::from_electrons(vec![1; 6]).with_constraint(AromaticSystemConstraint::electron_count(6)))]
     fn test_aromatic_system_ast_into_zeroed(#[case] system: AromaticSystemAst) {
         assert_eq!(system.clone().into_zeroed(), system.into_ground());
     }
@@ -235,21 +213,9 @@ mod tests {
     #[case::all_undetermined(AromaticSystemAst::default(), false)]
     #[case::charge_only(AromaticSystemAst::new(Vec::new()).with_charge(0), false)]
     #[case::ground_no_atoms(AromaticSystemAst::new(Vec::new()).with_charge(0).with_spin((0, 1)), true)]
-    #[case::all_ground_six(
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
-        true,
-    )]
-    #[case::one_undetermined_electron(
-        AromaticSystemAst::new(vec![ValueAst::Lit(1), ValueAst::Undetermined, ValueAst::Lit(1)])
-            .with_charge(0).with_spin((0, 1)),
-        false,
-    )]
-    #[case::ground_with_constraint(
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6])
-            .with_charge(0).with_spin((0, 1))
-            .with_constraint(AromaticSystemConstraint::electron_count(6)),
-        true,
-    )]
+    #[case::all_ground_six(AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)), true)]
+    #[case::one_undetermined_electron(AromaticSystemAst::new(vec![ValueAst::Lit(1), ValueAst::Undetermined, ValueAst::Lit(1)]).with_charge(0).with_spin((0, 1)), false)]
+    #[case::ground_with_constraint(AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)).with_constraint(AromaticSystemConstraint::electron_count(6)), true)]
     fn test_aromatic_system_ast_is_ground(
         #[case] ast: AromaticSystemAst,
         #[case] expected: bool,
@@ -260,31 +226,15 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::default_matches_default(AromaticSystemAst::default(), AromaticSystemAst::default(), true)]
-    #[case::default_matches_ground(
-        AromaticSystemAst::default(),
-        AromaticSystemAst::new(Vec::new()).with_charge(0).with_spin((0, 1)),
-        true,
-    )]
-    #[case::exact(
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
-        true,
-    )]
-    #[case::electrons_length_mismatch(
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 5]),
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
-        false,
-    )]
-    #[case::electrons_value_mismatch(
-        AromaticSystemAst::new(vec![ValueAst::Lit(2); 6]),
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
-        false,
-    )]
-    #[case::pattern_undetermined_electron_matches_lit(
-        AromaticSystemAst::new(vec![ValueAst::Undetermined; 6]),
-        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
-        true,
-    )]
+    #[case::default_matches_ground(AromaticSystemAst::default(), AromaticSystemAst::new(Vec::new()).with_charge(0).with_spin((0, 1)), true)]
+    #[case::exact(AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)), true)]
+    #[case::electrons_length_mismatch(AromaticSystemAst::new(vec![ValueAst::Lit(1); 5]),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)), false)]
+    #[case::electrons_value_mismatch(AromaticSystemAst::new(vec![ValueAst::Lit(2); 6]),
+        AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)), false)]
+    #[case::pattern_undetermined_electron_matches_lit(AromaticSystemAst::new(vec![ValueAst::Undetermined; 6]),
+      AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]).with_charge(0).with_spin((0, 1)), true)]
     fn test_aromatic_system_ast_matches(
         #[case] pattern: AromaticSystemAst,
         #[case] target: AromaticSystemAst,

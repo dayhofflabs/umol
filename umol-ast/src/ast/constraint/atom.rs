@@ -6,7 +6,7 @@ use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
 use super::super::remap::IdRemapping;
-use super::super::traits::AsLit;
+use super::super::traits::{AsLit, Lattice};
 use super::super::value::ValueAst;
 
 /// Atom-scope constraint: a predicate that pattern-matches a single atom
@@ -151,16 +151,47 @@ impl AromaticValenceAst {
         Self::Aromatic(v.into())
     }
 
-    pub fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
-    }
-
     /// Simplify the inner `ValueAst` of `Aromatic(_)`. Other variants are
     /// already canonical.
     pub fn simplify(self) -> Self {
         match self {
             Self::Aromatic(v) => Self::Aromatic(v.simplify()),
             other => other,
+        }
+    }
+}
+
+impl Lattice for AromaticValenceAst {
+    #[inline]
+    fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
+    }
+
+    fn is_ground(&self) -> bool {
+        match self {
+            Self::Undetermined => false,
+            Self::NotAromatic => true,
+            Self::Aromatic(v) => v.is_ground(),
+        }
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
+            (Self::NotAromatic, Self::NotAromatic) => Some(Self::NotAromatic),
+            (Self::NotAromatic, Self::Aromatic(_)) | (Self::Aromatic(_), Self::NotAromatic) => None,
+            (Self::Aromatic(a), Self::Aromatic(b)) => a.meet(b).map(Self::Aromatic),
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
+            (Self::NotAromatic, Self::NotAromatic) => Self::NotAromatic,
+            (Self::NotAromatic, Self::Aromatic(_)) | (Self::Aromatic(_), Self::NotAromatic) => {
+                Self::Undetermined
+            }
+            (Self::Aromatic(a), Self::Aromatic(b)) => Self::Aromatic(a.join(b)),
         }
     }
 }
@@ -195,16 +226,47 @@ impl MulticenterValenceAst {
         Self::Multicenter(v.into())
     }
 
-    pub fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
-    }
-
     /// Simplify the inner `ValueAst` of `Multicenter(_)`. Other variants
     /// are already canonical.
     pub fn simplify(self) -> Self {
         match self {
             Self::Multicenter(v) => Self::Multicenter(v.simplify()),
             other => other,
+        }
+    }
+}
+
+impl Lattice for MulticenterValenceAst {
+    #[inline]
+    fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
+    }
+
+    fn is_ground(&self) -> bool {
+        match self {
+            Self::Undetermined => false,
+            Self::NotMulticenter => true,
+            Self::Multicenter(v) => v.is_ground(),
+        }
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
+            (Self::NotMulticenter, Self::NotMulticenter) => Some(Self::NotMulticenter),
+            (Self::NotMulticenter, Self::Multicenter(_))
+            | (Self::Multicenter(_), Self::NotMulticenter) => None,
+            (Self::Multicenter(a), Self::Multicenter(b)) => a.meet(b).map(Self::Multicenter),
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
+            (Self::NotMulticenter, Self::NotMulticenter) => Self::NotMulticenter,
+            (Self::NotMulticenter, Self::Multicenter(_))
+            | (Self::Multicenter(_), Self::NotMulticenter) => Self::Undetermined,
+            (Self::Multicenter(a), Self::Multicenter(b)) => Self::Multicenter(a.join(b)),
         }
     }
 }

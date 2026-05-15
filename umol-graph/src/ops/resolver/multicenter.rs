@@ -5,7 +5,7 @@
 //! with a default.
 
 use thiserror::Error;
-use umol_ast::ast::{MoleculeAst, SpinStateAst, ValueAst};
+use umol_ast::ast::{Lattice, MoleculeAst, SpinStateAst, ValueAst};
 
 use crate::ops::solution::Solution;
 

@@ -12,6 +12,7 @@ use super::super::idx::{
 use super::super::molecule::MoleculeAst;
 use super::super::remap::IdRemapping;
 use super::super::spin::SpinStateAst;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic::AromaticSystemConstraint;
 use super::atom::AtomConstraint;

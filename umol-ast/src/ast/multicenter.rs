@@ -4,6 +4,7 @@ use std::mem;
 
 use super::constraint::{MulticenterBondConstraint, MulticenterBondConstraints};
 use super::spin::SpinStateAst;
+use super::traits::Lattice;
 use super::value::ValueAst;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

@@ -7,6 +7,7 @@ use std::vec::IntoIter;
 use strum::EnumDiscriminants;
 
 use super::super::remap::IdRemapping;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemAst` via

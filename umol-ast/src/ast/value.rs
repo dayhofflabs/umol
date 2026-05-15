@@ -6,7 +6,7 @@ use std::ops::{Add, Div, Mul, Sub};
 use umol_shared::spin::SpinMultiplicity;
 
 use super::error::EvaluationError;
-use super::traits::AsLit;
+use super::traits::{AsLit, Lattice};
 
 /// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`].
 pub type Bindings = HashMap<String, i64>;
@@ -40,22 +40,6 @@ impl ValueAst {
         Self::Expr(Box::new(e))
     }
 
-    /// The pattern denotes a single concrete integer. Semantic, not
-    /// syntactic: `Expr` that folds to a constant is ground, and a
-    /// `LitSet` of a single value (regardless of duplicates) is ground.
-    ///
-    /// Fast path — `Lit` and `Undetermined` dispatch with two tag compares
-    /// so the common case (a fully-lowered ground molecule) doesn't pay
-    /// for the `LitSet`/`Expr` logic.
-    #[inline]
-    pub fn is_ground(&self) -> bool {
-        match self {
-            Self::Lit(_) => true,
-            Self::Undetermined => false,
-            _ => self.is_ground_slow(),
-        }
-    }
-
     #[inline(never)]
     #[cold]
     fn is_ground_slow(&self) -> bool {
@@ -74,10 +58,6 @@ impl ValueAst {
             Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
             Self::Lit(_) | Self::Undetermined => unreachable!(),
         }
-    }
-
-    pub fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
     }
 
     /// Pattern matches target iff every integer target admits is also
@@ -169,7 +149,7 @@ impl AsLit for ValueAst {
     type Lit = i64;
 
     /// The single integer this value denotes when ground; `None` otherwise.
-    /// Aligned with [`Self::is_ground`]: `is_ground() == as_lit().is_some()`.
+    /// Aligned with [`Lattice::is_ground`]: `is_ground() == as_lit().is_some()`.
     /// Non-destructive — does not mutate or simplify in place.
     #[inline]
     fn as_lit(&self) -> Option<i64> {
@@ -177,6 +157,102 @@ impl AsLit for ValueAst {
             Self::Lit(n) => Some(*n),
             Self::Undetermined => None,
             _ => self.as_lit_slow(),
+        }
+    }
+}
+
+impl Lattice for ValueAst {
+    #[inline]
+    fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
+    }
+
+    /// The pattern denotes a single concrete integer. Semantic, not
+    /// syntactic: `Expr` that folds to a constant is ground, and a
+    /// `LitSet` of a single value (regardless of duplicates) is ground.
+    ///
+    /// Fast path — `Lit` and `Undetermined` dispatch with two tag compares
+    /// so the common case (a fully-lowered ground molecule) doesn't pay
+    /// for the `LitSet`/`Expr` logic.
+    #[inline]
+    fn is_ground(&self) -> bool {
+        match self {
+            Self::Lit(_) => true,
+            Self::Undetermined => false,
+            _ => self.is_ground_slow(),
+        }
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
+            (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
+            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+                s.contains(a).then_some(Self::Lit(*a))
+            }
+            (Self::LitSet(s), Self::LitSet(t)) => {
+                let intersection: Vec<i64> = s.iter().filter(|x| t.contains(x)).copied().collect();
+                match intersection.len() {
+                    0 => None,
+                    1 => Some(Self::Lit(intersection[0])),
+                    _ => Some(Self::LitSet(Box::new(intersection))),
+                }
+            }
+            (Self::Expr(e), Self::Expr(f)) => (e == f).then(|| Self::Expr(e.clone())),
+            (Self::Expr(_), _) | (_, Self::Expr(_)) => None,
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
+            (Self::Lit(a), Self::Lit(b)) => {
+                if a == b {
+                    Self::Lit(*a)
+                } else {
+                    Self::LitSet(Box::new(vec![*a, *b]))
+                }
+            }
+            (Self::Lit(a), Self::LitSet(s)) => {
+                let mut v: Vec<i64> = Vec::with_capacity(s.len() + 1);
+                v.push(*a);
+                for &x in s.iter() {
+                    if x != *a {
+                        v.push(x);
+                    }
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::LitSet(s), Self::Lit(a)) => {
+                let mut v: Vec<i64> = s.to_vec();
+                if !v.contains(a) {
+                    v.push(*a);
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::LitSet(s), Self::LitSet(t)) => {
+                let mut v: Vec<i64> = s.to_vec();
+                for &x in t.iter() {
+                    if !v.contains(&x) {
+                        v.push(x);
+                    }
+                }
+                if v.len() == 1 {
+                    Self::Lit(v[0])
+                } else {
+                    Self::LitSet(Box::new(v))
+                }
+            }
+            (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
+            _ => Self::Undetermined,
         }
     }
 }
@@ -760,5 +836,86 @@ mod tests {
     #[should_panic]
     fn test_value_ast_div_by_zero_panics() {
         let _ = ValueAst::Lit(5) / ValueAst::Lit(0);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und_und(ValueAst::Undetermined, ValueAst::Undetermined, Some(ValueAst::Undetermined))]
+    #[case::und_lit(ValueAst::Undetermined, ValueAst::Lit(3), Some(ValueAst::Lit(3)))]
+    #[case::lit_und(ValueAst::Lit(3), ValueAst::Undetermined, Some(ValueAst::Lit(3)))]
+    #[case::lit_lit_eq(ValueAst::Lit(3), ValueAst::Lit(3), Some(ValueAst::Lit(3)))]
+    #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), None)]
+    #[case::lit_litset_in(ValueAst::Lit(2), ValueAst::LitSet(Box::new(vec![1, 2, 3])), Some(ValueAst::Lit(2)))]
+    #[case::lit_litset_out(ValueAst::Lit(5), ValueAst::LitSet(Box::new(vec![1, 2, 3])), None)]
+    #[case::litset_lit_in(ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::Lit(2), Some(ValueAst::Lit(2)))]
+    #[case::litset_litset_multi(ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::LitSet(Box::new(vec![2, 3, 4])),
+        Some(ValueAst::LitSet(Box::new(vec![2, 3]))))]
+    #[case::litset_litset_singleton(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![2, 3])), Some(ValueAst::Lit(2)))]
+    #[case::litset_litset_empty(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![3, 4])), None)]
+    #[case::expr_expr_eq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))), Some(ValueAst::Expr(Box::new(Expr::Lit(5)))))]
+    #[case::expr_expr_neq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(6))), None)]
+    #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Lit(5), None)]
+    #[case::expr_und(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Undetermined, Some(ValueAst::Expr(Box::new(Expr::Var("x".into())))))]
+    fn test_value_ast_meet(
+        #[case] a: ValueAst,
+        #[case] b: ValueAst,
+        #[case] expected: Option<ValueAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und_und(ValueAst::Undetermined, ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::und_lit(ValueAst::Undetermined, ValueAst::Lit(3), ValueAst::Undetermined)]
+    #[case::lit_und(ValueAst::Lit(3), ValueAst::Undetermined, ValueAst::Undetermined)]
+    #[case::lit_lit_eq(ValueAst::Lit(3), ValueAst::Lit(3), ValueAst::Lit(3))]
+    #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), ValueAst::LitSet(Box::new(vec![3, 4])))]
+    #[case::lit_litset_in(ValueAst::Lit(2), ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::LitSet(Box::new(vec![2, 1, 3])))]
+    #[case::lit_litset_out(ValueAst::Lit(5), ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::LitSet(Box::new(vec![5, 1, 2, 3])))]
+    #[case::litset_lit_in(ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::Lit(2), ValueAst::LitSet(Box::new(vec![1, 2, 3])))]
+    #[case::litset_lit_out(ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::Lit(4), ValueAst::LitSet(Box::new(vec![1, 2, 3, 4])))]
+    #[case::litset_litset_overlap(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![2, 3])),
+        ValueAst::LitSet(Box::new(vec![1, 2, 3])))]
+    #[case::expr_expr_eq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))))]
+    #[case::expr_expr_neq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(6))), ValueAst::Undetermined)]
+    #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Lit(5), ValueAst::Undetermined)]
+    fn test_value_ast_join(
+        #[case] a: ValueAst,
+        #[case] b: ValueAst,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
+    }
+
+    #[rstest]
+    #[case::no_change(ValueAst::Lit(3), ValueAst::Lit(3), false, ValueAst::Lit(3))]
+    #[case::tighten(ValueAst::Undetermined, ValueAst::Lit(3), true, ValueAst::Lit(3))]
+    #[case::incompatible(ValueAst::Lit(3), ValueAst::Lit(4), false, ValueAst::Lit(3))]
+    fn test_value_ast_narrow_from(
+        #[case] mut target: ValueAst,
+        #[case] source: ValueAst,
+        #[case] expected_changed: bool,
+        #[case] expected_after: ValueAst,
+    ) {
+        let changed = target.narrow_from(&source);
+        assert_eq!(changed, expected_changed);
+        assert_eq!(target, expected_after);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::no_change(ValueAst::Lit(3), ValueAst::Lit(3), false, ValueAst::Lit(3))]
+    #[case::widen_to_set(ValueAst::Lit(3), ValueAst::Lit(4), true, ValueAst::LitSet(Box::new(vec![3, 4])))]
+    #[case::widen_to_top(ValueAst::Lit(3), ValueAst::Undetermined, true, ValueAst::Undetermined)]
+    fn test_value_ast_widen_with(
+        #[case] mut target: ValueAst,
+        #[case] source: ValueAst,
+        #[case] expected_changed: bool,
+        #[case] expected_after: ValueAst,
+    ) {
+        let changed = target.widen_with(&source);
+        assert_eq!(changed, expected_changed);
+        assert_eq!(target, expected_after);
     }
 }

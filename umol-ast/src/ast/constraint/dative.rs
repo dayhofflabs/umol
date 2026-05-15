@@ -7,6 +7,7 @@ use std::vec::IntoIter;
 use strum::EnumDiscriminants;
 
 use super::super::remap::IdRemapping;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 
 /// Dative-bond-scope constraint. Held inline on `DativeBondAst` via
@@ -393,34 +394,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fresh(
-        vec![DativeBondConstraint::Aromatic],
-        vec![None],
-        vec![DativeBondConstraint::Aromatic],
-    )]
-    #[case::replace_same_kind(
-        vec![DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_count(2)],
-        vec![None, Some(DativeBondConstraint::ring_count(1))],
-        vec![DativeBondConstraint::ring_count(2)],
-    )]
-    #[case::replace_unit_variant(
-        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::Aromatic],
-        vec![None, Some(DativeBondConstraint::Aromatic)],
-        vec![DativeBondConstraint::Aromatic],
-    )]
-    #[case::distinct_kinds(
-        vec![
-            DativeBondConstraint::Aromatic,
-            DativeBondConstraint::ring_count(1),
-            DativeBondConstraint::ring_size(6),
-        ],
-        vec![None, None, None],
-        vec![
-            DativeBondConstraint::Aromatic,
-            DativeBondConstraint::ring_count(1),
-            DativeBondConstraint::ring_size(6),
-        ],
-    )]
+    #[case::fresh(vec![DativeBondConstraint::Aromatic], vec![None], vec![DativeBondConstraint::Aromatic])]
+    #[case::replace_same_kind(vec![DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_count(2)],
+        vec![None, Some(DativeBondConstraint::ring_count(1))], vec![DativeBondConstraint::ring_count(2)])]
+    #[case::replace_unit_variant(vec![DativeBondConstraint::Aromatic, DativeBondConstraint::Aromatic],
+        vec![None, Some(DativeBondConstraint::Aromatic)], vec![DativeBondConstraint::Aromatic])]
+    #[case::distinct_kinds(vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_size(6)],
+        vec![None, None, None], vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_size(6)])]
     fn test_dative_bond_constraints_add(
         #[case] sequence: Vec<DativeBondConstraint>,
         #[case] expected_returns: Vec<Option<DativeBondConstraint>>,
@@ -434,10 +414,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::partial(
-        |c: &DativeBondConstraint| matches!(c, DativeBondConstraint::Aromatic | DativeBondConstraint::RingSize(_)),
-        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
-    )]
+    #[case::partial(|c: &DativeBondConstraint| matches!(c, DativeBondConstraint::Aromatic | DativeBondConstraint::RingSize(_)),
+        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)])]
     #[case::all_dropped(|_: &DativeBondConstraint| false, vec![])]
     fn test_dative_bond_constraints_retain(
         #[case] predicate: impl FnMut(&DativeBondConstraint) -> bool,
@@ -496,21 +474,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic_present(
-        DativeBondConstraintKind::Aromatic,
-        Some(DativeBondConstraint::Aromatic),
-        vec![DativeBondConstraint::ring_size(6)],
-    )]
-    #[case::ring_size_present(
-        DativeBondConstraintKind::RingSize,
-        Some(DativeBondConstraint::ring_size(6)),
-        vec![DativeBondConstraint::Aromatic],
-    )]
-    #[case::ring_count_absent(
-        DativeBondConstraintKind::RingCount,
-        None,
-        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)],
-    )]
+    #[case::aromatic_present(DativeBondConstraintKind::Aromatic, Some(DativeBondConstraint::Aromatic), vec![DativeBondConstraint::ring_size(6)])]
+    #[case::ring_size_present(DativeBondConstraintKind::RingSize, Some(DativeBondConstraint::ring_size(6)), vec![DativeBondConstraint::Aromatic])]
+    #[case::ring_count_absent(DativeBondConstraintKind::RingCount, None, vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_size(6)])]
     fn test_dative_bond_constraints_remove(
         #[case] kind: DativeBondConstraintKind,
         #[case] expected_returned: Option<DativeBondConstraint>,
@@ -545,14 +511,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::distinct(
-        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_count(1)],
-        vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_count(1)],
-    )]
-    #[case::same_kind_last_wins(
-        vec![DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_count(2)],
-        vec![DativeBondConstraint::ring_count(2)],
-    )]
+    #[case::distinct(vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_count(1)], vec![DativeBondConstraint::Aromatic, DativeBondConstraint::ring_count(1)])]
+    #[case::same_kind_last_wins(vec![DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_count(2)], vec![DativeBondConstraint::ring_count(2)])]
     #[case::empty(vec![], vec![])]
     fn test_dative_bond_constraints_from_iter(
         #[case] input: Vec<DativeBondConstraint>,

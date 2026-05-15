@@ -1,5 +1,4 @@
-//! Localized bond constraints.
-
+//! Localized bond constraints.  use std::mem;
 use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
@@ -7,6 +6,7 @@ use std::vec::IntoIter;
 use strum::EnumDiscriminants;
 
 use super::super::remap::IdRemapping;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 
 /// Localized bond constraint. Held inline on `BondAst` via

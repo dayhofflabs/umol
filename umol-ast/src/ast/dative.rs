@@ -3,6 +3,7 @@
 use std::mem;
 
 use super::constraint::{DativeBondConstraint, DativeBondConstraints};
+use super::traits::Lattice;
 use super::value::ValueAst;
 
 /// Dative bond: variable-arity coordinative bond with a designated acceptor
