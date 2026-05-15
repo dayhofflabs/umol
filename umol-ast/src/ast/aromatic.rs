@@ -313,33 +313,40 @@ mod tests {
     }
 
     #[rstest]
-    fn test_aromatic_system_ast_meet_both_default() {
-        let a = AromaticSystemAst::default();
-        let b = AromaticSystemAst::default();
-        assert_eq!(a.meet(&b), Some(AromaticSystemAst::default()));
+    #[case::both_default(
+        AromaticSystemAst::default(),
+        AromaticSystemAst::default(),
+        Some(AromaticSystemAst::default()),
+    )]
+    #[case::electrons_length_mismatch(
+        AromaticSystemAst::from_electrons(vec![1; 6]),
+        AromaticSystemAst::from_electrons(vec![1; 5]),
+        None,
+    )]
+    #[case::narrows_electrons(
+        AromaticSystemAst::new(vec![ValueAst::Undetermined; 3]),
+        AromaticSystemAst::from_electrons(vec![1; 3]),
+        Some(AromaticSystemAst::from_electrons(vec![1; 3])),
+    )]
+    fn test_aromatic_system_ast_meet(
+        #[case] a: AromaticSystemAst,
+        #[case] b: AromaticSystemAst,
+        #[case] expected: Option<AromaticSystemAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    fn test_aromatic_system_ast_meet_electrons_length_mismatch() {
-        let a = AromaticSystemAst::from_electrons(vec![1; 6]);
-        let b = AromaticSystemAst::from_electrons(vec![1; 5]);
-        assert_eq!(a.meet(&b), None);
-    }
-
-    #[rstest]
-    fn test_aromatic_system_ast_meet_narrows_electrons() {
-        let a = AromaticSystemAst::new(vec![ValueAst::Undetermined; 3]);
-        let b = AromaticSystemAst::from_electrons(vec![1; 3]);
-        assert_eq!(
-            a.meet(&b),
-            Some(AromaticSystemAst::from_electrons(vec![1; 3]))
-        );
-    }
-
-    #[rstest]
-    fn test_aromatic_system_ast_join_electrons_length_mismatch_widens_to_default() {
-        let a = AromaticSystemAst::from_electrons(vec![1; 6]);
-        let b = AromaticSystemAst::from_electrons(vec![1; 5]);
-        assert_eq!(a.join(&b), AromaticSystemAst::default());
+    #[case::electrons_length_mismatch_widens_to_default(
+        AromaticSystemAst::from_electrons(vec![1; 6]),
+        AromaticSystemAst::from_electrons(vec![1; 5]),
+        AromaticSystemAst::default(),
+    )]
+    fn test_aromatic_system_ast_join(
+        #[case] a: AromaticSystemAst,
+        #[case] b: AromaticSystemAst,
+        #[case] expected: AromaticSystemAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 }

@@ -288,33 +288,40 @@ mod tests {
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_meet_both_default() {
-        let a = NoncovalentBondAst::default();
-        let b = NoncovalentBondAst::default();
-        assert_eq!(a.meet(&b), Some(NoncovalentBondAst::default()));
+    #[case::both_default(
+        NoncovalentBondAst::default(),
+        NoncovalentBondAst::default(),
+        Some(NoncovalentBondAst::default()),
+    )]
+    #[case::kind_mismatch(
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond),
+        None,
+    )]
+    #[case::kind_narrows_from_undetermined(
+        NoncovalentBondAst::default(),
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        Some(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)),
+    )]
+    fn test_noncovalent_bond_ast_meet(
+        #[case] a: NoncovalentBondAst,
+        #[case] b: NoncovalentBondAst,
+        #[case] expected: Option<NoncovalentBondAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    fn test_noncovalent_bond_ast_meet_kind_mismatch() {
-        let a = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
-        let b = NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond);
-        assert_eq!(a.meet(&b), None);
-    }
-
-    #[rstest]
-    fn test_noncovalent_bond_ast_meet_kind_narrows_from_undetermined() {
-        let a = NoncovalentBondAst::default();
-        let b = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
-        assert_eq!(
-            a.meet(&b),
-            Some(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))
-        );
-    }
-
-    #[rstest]
-    fn test_noncovalent_bond_ast_join_kind_mismatch_widens_to_default() {
-        let a = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
-        let b = NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond);
-        assert_eq!(a.join(&b), NoncovalentBondAst::default());
+    #[case::kind_mismatch_widens_to_default(
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond),
+        NoncovalentBondAst::default(),
+    )]
+    fn test_noncovalent_bond_ast_join(
+        #[case] a: NoncovalentBondAst,
+        #[case] b: NoncovalentBondAst,
+        #[case] expected: NoncovalentBondAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 }

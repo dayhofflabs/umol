@@ -369,36 +369,40 @@ mod tests {
     }
 
     #[rstest]
-    fn test_multicenter_bond_ast_meet_both_default() {
-        let a = MulticenterBondAst::default();
-        let b = MulticenterBondAst::default();
-        assert_eq!(a.meet(&b), Some(MulticenterBondAst::default()));
+    #[case::both_default(
+        MulticenterBondAst::default(),
+        MulticenterBondAst::default(),
+        Some(MulticenterBondAst::default()),
+    )]
+    #[case::electrons_length_mismatch(
+        MulticenterBondAst::new(vec![ValueAst::Lit(2); 3]),
+        MulticenterBondAst::new(vec![ValueAst::Lit(2); 4]),
+        None,
+    )]
+    #[case::narrows_electrons(
+        MulticenterBondAst::new(vec![ValueAst::Undetermined, ValueAst::Lit(2)]),
+        MulticenterBondAst::new(vec![ValueAst::Lit(1), ValueAst::Lit(2)]),
+        Some(MulticenterBondAst::new(vec![ValueAst::Lit(1), ValueAst::Lit(2)])),
+    )]
+    fn test_multicenter_bond_ast_meet(
+        #[case] a: MulticenterBondAst,
+        #[case] b: MulticenterBondAst,
+        #[case] expected: Option<MulticenterBondAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    fn test_multicenter_bond_ast_meet_electrons_length_mismatch() {
-        let a = MulticenterBondAst::new(vec![ValueAst::Lit(2); 3]);
-        let b = MulticenterBondAst::new(vec![ValueAst::Lit(2); 4]);
-        assert_eq!(a.meet(&b), None);
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_ast_meet_narrows_electrons() {
-        let a = MulticenterBondAst::new(vec![ValueAst::Undetermined, ValueAst::Lit(2)]);
-        let b = MulticenterBondAst::new(vec![ValueAst::Lit(1), ValueAst::Lit(2)]);
-        assert_eq!(
-            a.meet(&b),
-            Some(MulticenterBondAst::new(vec![
-                ValueAst::Lit(1),
-                ValueAst::Lit(2),
-            ]))
-        );
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_ast_join_electrons_length_mismatch_widens_to_default() {
-        let a = MulticenterBondAst::new(vec![ValueAst::Lit(2); 3]);
-        let b = MulticenterBondAst::new(vec![ValueAst::Lit(2); 4]);
-        assert_eq!(a.join(&b), MulticenterBondAst::default());
+    #[case::electrons_length_mismatch_widens_to_default(
+        MulticenterBondAst::new(vec![ValueAst::Lit(2); 3]),
+        MulticenterBondAst::new(vec![ValueAst::Lit(2); 4]),
+        MulticenterBondAst::default(),
+    )]
+    fn test_multicenter_bond_ast_join(
+        #[case] a: MulticenterBondAst,
+        #[case] b: MulticenterBondAst,
+        #[case] expected: MulticenterBondAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 }

@@ -243,61 +243,36 @@ mod tests {
     }
 
     #[rstest]
-    fn test_dative_bond_ast_meet_both_default() {
-        let a = DativeBondAst::default();
-        let b = DativeBondAst::default();
-        assert_eq!(a.meet(&b), Some(DativeBondAst::default()));
+    #[case::both_default(DativeBondAst::default(), DativeBondAst::default(), Some(DativeBondAst::default()))]
+    #[case::acceptor_slot_mismatch(
+        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
+        DativeBondAst { acceptor_slot: 1, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
+        None,
+    )]
+    #[case::narrows_order(
+        DativeBondAst { acceptor_slot: 0, order: ValueAst::Undetermined, constraints: DativeBondConstraints::new() },
+        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
+        Some(DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() }),
+    )]
+    fn test_dative_bond_ast_meet(
+        #[case] a: DativeBondAst,
+        #[case] b: DativeBondAst,
+        #[case] expected: Option<DativeBondAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    fn test_dative_bond_ast_meet_acceptor_slot_mismatch() {
-        let a = DativeBondAst {
-            acceptor_slot: 0,
-            order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::new(),
-        };
-        let b = DativeBondAst {
-            acceptor_slot: 1,
-            order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::new(),
-        };
-        assert_eq!(a.meet(&b), None);
-    }
-
-    #[rstest]
-    fn test_dative_bond_ast_meet_narrows_order() {
-        let a = DativeBondAst {
-            acceptor_slot: 0,
-            order: ValueAst::Undetermined,
-            constraints: DativeBondConstraints::new(),
-        };
-        let b = DativeBondAst {
-            acceptor_slot: 0,
-            order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::new(),
-        };
-        assert_eq!(
-            a.meet(&b),
-            Some(DativeBondAst {
-                acceptor_slot: 0,
-                order: ValueAst::Lit(1),
-                constraints: DativeBondConstraints::new(),
-            })
-        );
-    }
-
-    #[rstest]
-    fn test_dative_bond_ast_join_acceptor_slot_mismatch_widens_to_default() {
-        let a = DativeBondAst {
-            acceptor_slot: 0,
-            order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::new(),
-        };
-        let b = DativeBondAst {
-            acceptor_slot: 1,
-            order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::new(),
-        };
-        assert_eq!(a.join(&b), DativeBondAst::default());
+    #[case::acceptor_slot_mismatch_widens_to_default(
+        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
+        DativeBondAst { acceptor_slot: 1, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
+        DativeBondAst::default(),
+    )]
+    fn test_dative_bond_ast_join(
+        #[case] a: DativeBondAst,
+        #[case] b: DativeBondAst,
+        #[case] expected: DativeBondAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 }

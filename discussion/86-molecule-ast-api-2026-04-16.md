@@ -1696,10 +1696,11 @@ Sequencing chosen so each step lands independently with `cargo test --workspace 
 - Container `is_undetermined`: every entry's value is `is_undetermined` (vacuous on empty); `meet`/`join` outputs prune undetermined-valued entries (canonical: no vacuous entries)
 - Tests: representative cross-product tests on `BondAst` (meet, join, narrow_from positive/negative cases); 8063 total tests pass
 
-##### Step 4 — `AtomConstraints::narrow_with(&other) -> bool`
+##### Step 4 — `AtomConstraints::narrow_with(&other) -> bool` **Done**
 
-- Bulk form: walks `other`'s constraints, per-kind narrows existing or adds new
-- Tests per constraint kind
+- Subsumed by Step 3's `Lattice` impl on `AtomConstraints`: `narrow_with` is the in-place version of `meet`, which is `Lattice::narrow_from` (default impl)
+- Added 14 tests per constraint kind (empty/empty, add new kind, narrows undetermined to lit, lit/lit match preserved, lit/lit mismatch → `None`, multi-kind combines, aromatic-valence narrows, aromatic-valence not vs aromatic → `None`, RingSize union, RingSize dedup, vacuous-entry pruning, `narrow_from` extends/no-change/contradiction-leaves-unchanged, `join` keeps shared kinds, `join` widens value)
+- Found and fixed a pre-existing bug in `AtomConstraints::get_all` and `remove_all`: they used `binary_search` (`find`) which can return any matching index in a multi-entry cluster (e.g., multiple `RingSize` entries). Switched to `partition_point` to find the leftmost cluster start.
 
 ##### Step 5 — `AtomView::satisfies(&AtomConstraint)`
 

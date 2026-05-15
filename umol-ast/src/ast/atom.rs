@@ -1352,54 +1352,60 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_ast_meet_both_default() {
-        let a = AtomAst::default();
-        let b = AtomAst::default();
-        assert_eq!(a.meet(&b), Some(AtomAst::default()));
+    #[case::both_default(AtomAst::default(), AtomAst::default(), Some(AtomAst::default()))]
+    #[case::element_mismatch(
+        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::N),
+        None,
+    )]
+    #[case::narrows_charge(
+        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::C).with_charge(1),
+        Some(AtomAst::from_element(Element::C).with_charge(1)),
+    )]
+    fn test_atom_ast_meet(
+        #[case] a: AtomAst,
+        #[case] b: AtomAst,
+        #[case] expected: Option<AtomAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    fn test_atom_ast_meet_element_mismatch() {
-        let a = AtomAst::from_element(Element::C);
-        let b = AtomAst::from_element(Element::N);
-        assert_eq!(a.meet(&b), None);
+    #[case::element_mismatch_widens(
+        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::N),
+        ElementAst::Set(vec![Element::C, Element::N]),
+    )]
+    fn test_atom_ast_join_element(
+        #[case] a: AtomAst,
+        #[case] b: AtomAst,
+        #[case] expected: ElementAst,
+    ) {
+        assert_eq!(a.join(&b).element, expected);
     }
 
     #[rstest]
-    fn test_atom_ast_meet_narrows_charge() {
-        let a = AtomAst::from_element(Element::C);
-        let b = AtomAst::from_element(Element::C).with_charge(1);
-        assert_eq!(
-            a.meet(&b),
-            Some(AtomAst::from_element(Element::C).with_charge(1))
-        );
-    }
-
-    #[rstest]
-    fn test_atom_ast_join_element_mismatch_widens() {
-        let a = AtomAst::from_element(Element::C);
-        let b = AtomAst::from_element(Element::N);
-        let result = a.join(&b);
-        assert_eq!(
-            result.element,
-            ElementAst::Set(vec![Element::C, Element::N])
-        );
-    }
-
-    #[rstest]
-    fn test_atom_ast_narrow_from_charge_change() {
-        let mut a = AtomAst::from_element(Element::C);
-        let b = AtomAst::from_element(Element::C).with_charge(1);
-        let changed = a.narrow_from(&b);
-        assert!(changed);
-        assert_eq!(a.charge, ValueAst::Lit(1));
-    }
-
-    #[rstest]
-    fn test_atom_ast_narrow_from_no_change() {
-        let mut a = AtomAst::from_element(Element::C);
-        let b = AtomAst::from_element(Element::C);
-        let changed = a.narrow_from(&b);
-        assert!(!changed);
+    #[case::charge_change(
+        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::C).with_charge(1),
+        true,
+        AtomAst::from_element(Element::C).with_charge(1),
+    )]
+    #[case::no_change(
+        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::C),
+        false,
+        AtomAst::from_element(Element::C),
+    )]
+    fn test_atom_ast_narrow_from(
+        #[case] mut target: AtomAst,
+        #[case] source: AtomAst,
+        #[case] expected_changed: bool,
+        #[case] expected_after: AtomAst,
+    ) {
+        let changed = target.narrow_from(&source);
+        assert_eq!(changed, expected_changed);
+        assert_eq!(target, expected_after);
     }
 }

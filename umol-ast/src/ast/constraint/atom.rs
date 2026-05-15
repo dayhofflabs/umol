@@ -484,7 +484,9 @@ impl AtomConstraints {
     /// Iterate over every entry of `kind`. Single-valued kinds yield at most
     /// one entry; multi-valued (`RingSize`) may yield several.
     pub fn get_all(&self, kind: AtomConstraintKind) -> impl Iterator<Item = &AtomConstraint> {
-        let start = self.find(kind).unwrap_or_else(|i| i);
+        let start = self
+            .entries
+            .partition_point(|c| (c.kind() as u8) < (kind as u8));
         self.entries[start..]
             .iter()
             .take_while(move |c| c.kind() == kind)
@@ -493,10 +495,9 @@ impl AtomConstraints {
     /// Remove every entry of `kind`, returning them in store order. Single-
     /// valued kinds drain at most one entry.
     pub fn remove_all(&mut self, kind: AtomConstraintKind) -> Vec<AtomConstraint> {
-        let start = match self.find(kind) {
-            Ok(i) => i,
-            Err(_) => return Vec::new(),
-        };
+        let start = self
+            .entries
+            .partition_point(|c| (c.kind() as u8) < (kind as u8));
         let end = start
             + self.entries[start..]
                 .iter()
@@ -1205,5 +1206,126 @@ mod tests {
                 AtomConstraint::donated_pairs(1),
             ]),
         );
+    }
+
+    #[rstest]
+    #[case::empty_empty(
+        AtomConstraints::new(),
+        AtomConstraints::new(),
+        Some(AtomConstraints::new()),
+    )]
+    #[case::adds_kind_from_other(
+        AtomConstraints::new(),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        Some(AtomConstraints::from_iter([AtomConstraint::valence(4)])),
+    )]
+    #[case::narrows_undetermined_to_lit(
+        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Undetermined)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        Some(AtomConstraints::from_iter([AtomConstraint::valence(4)])),
+    )]
+    #[case::lit_lit_match_preserved(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        Some(AtomConstraints::from_iter([AtomConstraint::valence(4)])),
+    )]
+    #[case::lit_lit_mismatch_none(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(3)]),
+        None,
+    )]
+    #[case::multi_kind_combines(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::degree(3)]),
+        Some(AtomConstraints::from_iter([
+            AtomConstraint::valence(4),
+            AtomConstraint::degree(3),
+        ])),
+    )]
+    #[case::aromatic_valence_narrows(
+        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::Undetermined)]),
+        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]),
+        Some(AtomConstraints::from_iter([
+            AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1)),
+        ])),
+    )]
+    #[case::aromatic_valence_not_vs_aromatic_none(
+        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic)]),
+        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]),
+        None,
+    )]
+    #[case::ring_size_unions(
+        AtomConstraints::from_iter([AtomConstraint::ring_size(5)]),
+        AtomConstraints::from_iter([AtomConstraint::ring_size(6)]),
+        Some(AtomConstraints::from_iter([
+            AtomConstraint::ring_size(5),
+            AtomConstraint::ring_size(6),
+        ])),
+    )]
+    #[case::ring_size_dedup(
+        AtomConstraints::from_iter([AtomConstraint::ring_size(5)]),
+        AtomConstraints::from_iter([AtomConstraint::ring_size(5)]),
+        Some(AtomConstraints::from_iter([AtomConstraint::ring_size(5)])),
+    )]
+    #[case::prunes_vacuous(
+        AtomConstraints::new(),
+        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Undetermined)]),
+        Some(AtomConstraints::new()),
+    )]
+    fn test_atom_constraints_meet(
+        #[case] a: AtomConstraints,
+        #[case] b: AtomConstraints,
+        #[case] expected: Option<AtomConstraints>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rstest]
+    #[case::extends_self(
+        AtomConstraints::new(),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        true,
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+    )]
+    #[case::no_change(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        false,
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+    )]
+    #[case::contradiction_leaves_self_unchanged(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(3)]),
+        false,
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+    )]
+    fn test_atom_constraints_narrow_from(
+        #[case] mut target: AtomConstraints,
+        #[case] source: AtomConstraints,
+        #[case] expected_changed: bool,
+        #[case] expected_after: AtomConstraints,
+    ) {
+        let changed = target.narrow_from(&source);
+        assert_eq!(changed, expected_changed);
+        assert_eq!(target, expected_after);
+    }
+
+    #[rstest]
+    #[case::keeps_only_shared_kinds(
+        AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(2)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+    )]
+    #[case::widens_value(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(3)]),
+        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::LitSet(Box::new(vec![4, 3])))]),
+    )]
+    fn test_atom_constraints_join(
+        #[case] a: AtomConstraints,
+        #[case] b: AtomConstraints,
+        #[case] expected: AtomConstraints,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 }

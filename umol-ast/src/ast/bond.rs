@@ -292,68 +292,46 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_ast_meet_both_default() {
-        let a = BondAst::default();
-        let b = BondAst::default();
-        assert_eq!(a.meet(&b), Some(BondAst::default()));
+    #[case::both_default(BondAst::default(), BondAst::default(), Some(BondAst::default()))]
+    #[case::narrows_field(
+        BondAst::from_order(2),
+        BondAst { order: ValueAst::Undetermined, charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() },
+        Some(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }),
+    )]
+    #[case::incompatible_order(BondAst::from_order(2), BondAst::from_order(3), None)]
+    fn test_bond_ast_meet(
+        #[case] a: BondAst,
+        #[case] b: BondAst,
+        #[case] expected: Option<BondAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
-    fn test_bond_ast_meet_narrows_field() {
-        let a = BondAst::from_order(2);
-        let b = BondAst {
-            order: ValueAst::Undetermined,
-            charge: ValueAst::Lit(1),
-            spin: SpinStateAst::default(),
-            constraints: BondConstraints::new(),
-        };
-        assert_eq!(
-            a.meet(&b),
-            Some(BondAst {
-                order: ValueAst::Lit(2),
-                charge: ValueAst::Lit(1),
-                spin: SpinStateAst::default(),
-                constraints: BondConstraints::new(),
-            })
-        );
+    #[case::widens_to_litset(
+        BondAst::from_order(2),
+        BondAst::from_order(3),
+        BondAst { order: ValueAst::LitSet(Box::new(vec![2, 3])), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
+    )]
+    fn test_bond_ast_join(
+        #[case] a: BondAst,
+        #[case] b: BondAst,
+        #[case] expected: BondAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 
     #[rstest]
-    fn test_bond_ast_meet_incompatible_order() {
-        let a = BondAst::from_order(2);
-        let b = BondAst::from_order(3);
-        assert_eq!(a.meet(&b), None);
-    }
-
-    #[rstest]
-    fn test_bond_ast_join_widens() {
-        let a = BondAst::from_order(2);
-        let b = BondAst::from_order(3);
-        assert_eq!(
-            a.join(&b),
-            BondAst {
-                order: ValueAst::LitSet(Box::new(vec![2, 3])),
-                charge: ValueAst::Undetermined,
-                spin: SpinStateAst::default(),
-                constraints: BondConstraints::new(),
-            }
-        );
-    }
-
-    #[rstest]
-    fn test_bond_ast_narrow_from_changed() {
-        let mut a = BondAst::default();
-        let b = BondAst::from_order(2);
-        let changed = a.narrow_from(&b);
-        assert!(changed);
-        assert_eq!(a.order, ValueAst::Lit(2));
-    }
-
-    #[rstest]
-    fn test_bond_ast_narrow_from_no_change() {
-        let mut a = BondAst::from_order(2);
-        let b = BondAst::from_order(2);
-        let changed = a.narrow_from(&b);
-        assert!(!changed);
+    #[case::changed(BondAst::default(), BondAst::from_order(2), true, BondAst::from_order(2))]
+    #[case::no_change(BondAst::from_order(2), BondAst::from_order(2), false, BondAst::from_order(2))]
+    fn test_bond_ast_narrow_from(
+        #[case] mut target: BondAst,
+        #[case] source: BondAst,
+        #[case] expected_changed: bool,
+        #[case] expected_after: BondAst,
+    ) {
+        let changed = target.narrow_from(&source);
+        assert_eq!(changed, expected_changed);
+        assert_eq!(target, expected_after);
     }
 }
