@@ -24,7 +24,7 @@ See `spec/umol-dsl-spec.md` for the normative DSL grammar. This README documents
 | multicenter bonds | `VarRelationSet<MulticenterBondAst>` | `MulticenterBondAst` |
 | noncovalent bonds | `FixedRelationSet<NoncovalentBondAst, 2>` | `NoncovalentBondAst` |
 
-Index types (`AtomIdx`, `BondIdx`, `DativeBondIdx`, `AromaticSystemIdx`, `MulticenterBondIdx`, `NoncovalentBondIdx`) are disjoint newtype wrappers over `NodeId` / `EdgeId` / `RelationId`.
+Index types (`AtomId`, `BondId`, `DativeBondId`, `AromaticSystemId`, `MulticenterBondId`, `NoncovalentBondId`) are disjoint newtype wrappers over `NodeId` / `EdgeId` / `RelationId`.
 
 ## AST is pure data
 

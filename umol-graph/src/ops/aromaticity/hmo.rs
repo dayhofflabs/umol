@@ -306,7 +306,6 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ops::aromaticity::electrons_from_aromatic_constraint;
 
     fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
         (AtomAst::from_element(element), Some(pi))
@@ -353,7 +352,12 @@ mod tests {
     fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
         let atoms: Vec<AtomId> = (0..ast.atoms().count() as u32).map(AtomId).collect();
         model
-            .build_calculator(ast, &atoms, &electrons_from_aromatic_constraint)
+            .build_calculator(ast, &atoms, &|v| {
+                match v.ast.constraints.aromatic_valence() {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                    _ => None,
+                }
+            })
             .unwrap()
             .solve()
     }
@@ -485,7 +489,12 @@ mod tests {
     ) {
         let ring_info = enumerate_simple(&ast);
         let systems = hmo_model
-            .find_from_rings(&ast, &ring_info, &electrons_from_aromatic_constraint)
+            .find_from_rings(&ast, &ring_info, &|v| {
+                match v.ast.constraints.aromatic_valence() {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                    _ => None,
+                }
+            })
             .unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
@@ -521,7 +530,12 @@ mod tests {
     fn test_hmo_aromaticity_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
         let atoms: Vec<AtomId> = (0..pyridine.atoms().count() as u32).map(AtomId).collect();
         let calc = hmo_model
-            .build_calculator(&pyridine, &atoms, &electrons_from_aromatic_constraint)
+            .build_calculator(&pyridine, &atoms, &|v| {
+                match v.ast.constraints.aromatic_valence() {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                    _ => None,
+                }
+            })
             .unwrap();
         let h = &calc.hamiltonian;
         assert_eq!(h.nrows(), 6);

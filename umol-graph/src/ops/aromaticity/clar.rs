@@ -139,7 +139,6 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ops::aromaticity::electrons_from_aromatic_constraint;
 
     fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
         (AtomAst::from_element(element), Some(pi))
@@ -280,7 +279,12 @@ mod tests {
         let rings = enumerate_induced(&ast);
         let model = ClarAromaticity;
         let systems = model
-            .find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint)
+            .find_from_rings(&ast, &rings, &|v| {
+                match v.ast.constraints.aromatic_valence() {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                    _ => None,
+                }
+            })
             .unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
@@ -323,7 +327,12 @@ mod tests {
         let rings = enumerate_induced(&ast);
         let model = ClarAromaticity;
         assert!(model
-            .find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint)
+            .find_from_rings(&ast, &rings, &|v| {
+                match v.ast.constraints.aromatic_valence() {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                    _ => None,
+                }
+            })
             .is_err());
     }
 

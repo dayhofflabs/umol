@@ -21,9 +21,8 @@ pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
 pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AtomConstraint, AtomConstraintKind,
-    AtomId, AtomView, BondConstraint, BondId, ElementAst, ImplicitHydrogensAst, MoleculeAst,
-    RingFamily, ValueAst,
+    AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AtomConstraint, AtomId, AtomView,
+    BondConstraint, BondId, ElementAst, MoleculeAst, RingFamily, ValueAst,
 };
 use umol_shared::element::Element;
 
@@ -73,10 +72,9 @@ impl AromaticityPerception {
     /// `&mut MoleculeAst` only so that the AST's ring cache can populate; no
     /// chemistry mutation happens here. The closure `electrons_at` returns
     /// each atom's π contribution if the atom is aromatic-eligible, else
-    /// `None`. Each caller passes a different closure: see
-    /// [`electrons_from_aromatic_constraint`] for the resolver / validator
-    /// case (reads `#a` from the atom constraints); the aromatizer derives π
-    /// from bond orders.
+    /// `None`. Resolver / validator callers read `#a` from the atom's
+    /// `aromatic_valence()` constraint; the aromatizer derives π from bond
+    /// orders.
     pub fn find_systems<F>(
         &self,
         ast: &mut MoleculeAst,
@@ -163,24 +161,6 @@ impl AromaticityPerception {
     }
 }
 
-/// Per-atom electron-counting closure for the resolver and validator: reads
-/// the `AromaticValence::Aromatic(Lit(n))` constraint. Returns `None` if
-/// the constraint is missing or non-numeric.
-pub(crate) fn electrons_from_aromatic_constraint(view: &AtomView<'_>) -> Option<u8> {
-    match view
-        .ast
-        .constraints
-        .get(AtomConstraintKind::AromaticValence)?
-    {
-        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n)))
-            if *n >= 0 =>
-        {
-            Some(*n as u8)
-        }
-        _ => None,
-    }
-}
-
 /// Charge-delocalization equalization on a single aromatic system already
 /// inserted into `ast`.
 ///
@@ -211,6 +191,8 @@ pub(crate) fn electrons_from_aromatic_constraint(view: &AtomView<'_>) -> Option<
 ///   the heteroatom.
 ///
 /// Spin is not modified.
+/// TODO: Rewrite as fallible, Result<(), EqualizationError> return type
+/// Return error when non-ground
 fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemId) {
     let atoms: Vec<AtomId> = ast.aromatic_system(system_idx).atom_ids().collect();
     let Some(element) = monoelement(ast, &atoms) else {
@@ -218,33 +200,30 @@ fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemId) {
     };
     let v = element.valence_electrons() as i64;
 
-    let mut accumulated = match ast.aromatic_system(system_idx).ast.charge {
-        ValueAst::Lit(c) => c,
-        _ => 0,
-    };
+    let mut accumulated = ast
+        .aromatic_system(system_idx)
+        .ast
+        .charge
+        .literal()
+        .unwrap_or(0);
     for (i, atom_idx) in atoms.iter().copied().enumerate() {
         let view = ast.atom(atom_idx);
         let atom = view.ast;
-        let lp = match atom.lone_pairs {
-            ValueAst::Lit(n) => n,
-            _ => continue,
+        let Some(lp) = atom.lone_pairs.literal() else {
+            return;
         };
-        // TODO: replace with `view.sigma_bond_count()` once the AtomView
-        // API is fleshed out — the inline `degree + implicit_h` reach-around
-        // is a stopgap.
-        let implicit_h = match atom.implicit_hydrogens {
-            ImplicitHydrogensAst::Lit(n) => n,
-            _ => 0,
+        let Some(implicit_h) = ValueAst::from(atom.implicit_hydrogens.clone()).literal() else {
+            return;
         };
-        let sigma_bonds = view.neighbors().count() as i64 + implicit_h;
-        let k = v - sigma_bonds - 2 * lp;
-        let c = match atom.charge {
-            ValueAst::Lit(c) => c,
-            _ => continue,
+        let Some(degree) = view.degree().literal() else {
+            return;
         };
-        let e = match ast.aromatic_system(system_idx).ast.electrons[i] {
-            ValueAst::Lit(e) => e,
-            _ => continue,
+        let k = v - (degree + implicit_h) - 2 * lp;
+        let Some(c) = atom.charge.literal() else {
+            return;
+        };
+        let Some(e) = ast.aromatic_system(system_idx).ast.electrons[i].literal() else {
+            return;
         };
         if e == k {
             continue;
@@ -349,7 +328,10 @@ mod tests {
         ast: &mut MoleculeAst,
     ) -> Solution<(), AromaticityContradiction> {
         let outcome = perception
-            .find_systems(ast, electrons_from_aromatic_constraint)
+            .find_systems(ast, |v| match v.ast.constraints.aromatic_valence() {
+                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                _ => None,
+            })
             .unwrap();
         match outcome {
             Solution::Determined(systems) => {
@@ -462,7 +444,10 @@ mod tests {
         #[case] aromatic_valences: Vec<i64>,
     ) {
         let outcome = any_hueckel()
-            .find_systems(&mut ast, electrons_from_aromatic_constraint)
+            .find_systems(&mut ast, |v| match v.ast.constraints.aromatic_valence() {
+                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                _ => None,
+            })
             .unwrap();
         let Solution::Determined(systems) = outcome else {
             panic!("expected Determined, got {outcome:?}");

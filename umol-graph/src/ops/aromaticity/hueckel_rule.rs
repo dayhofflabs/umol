@@ -255,7 +255,6 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ops::aromaticity::electrons_from_aromatic_constraint;
 
     fn aromatic(element: Element, pi: i64) -> (AtomAst, Option<i64>) {
         (AtomAst::from_element(element), Some(pi))
@@ -531,7 +530,12 @@ mod tests {
     ) {
         let rings = enumerate_simple(&ast, RingLimits::default().max_ring_size);
         let model = daylight_model();
-        let systems = model.find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint);
+        let systems = model.find_from_rings(&ast, &rings, &|v| {
+            match v.ast.constraints.aromatic_valence() {
+                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                _ => None,
+            }
+        });
         assert_eq!(systems.len(), 1);
         assert_eq!(systems[0].0.len(), expected_atoms);
         assert_eq!(electron_total(&systems[0]), expected_electrons);
@@ -548,18 +552,24 @@ mod tests {
         #[case] model: HueckelRuleAromaticity,
     ) {
         let rings = enumerate_simple(&ast, RingLimits::default().max_ring_size);
-        let systems = model.find_from_rings(&ast, &rings, &electrons_from_aromatic_constraint);
+        let systems = model.find_from_rings(&ast, &rings, &|v| {
+            match v.ast.constraints.aromatic_valence() {
+                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                _ => None,
+            }
+        });
         assert!(systems.is_empty());
     }
 
     #[rstest]
     fn test_hueckel_rule_find_from_rings_borazine_permissive(borazine: MoleculeAst) {
         let rings = enumerate_simple(&borazine, RingLimits::default().max_ring_size);
-        let systems = permissive_model().find_from_rings(
-            &borazine,
-            &rings,
-            &electrons_from_aromatic_constraint,
-        );
+        let systems = permissive_model().find_from_rings(&borazine, &rings, &|v| {
+            match v.ast.constraints.aromatic_valence() {
+                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                _ => None,
+            }
+        });
         assert_eq!(systems.len(), 1);
         assert_eq!(systems[0].0.len(), 6);
         assert_eq!(electron_total(&systems[0]), 6);
