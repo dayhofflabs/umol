@@ -2,8 +2,9 @@
 
 use std::mem;
 
-use umol_shared::spin::SpinState;
+use umol_shared::spin::{SpinMultiplicity, SpinState};
 
+use super::traits::AsLit;
 use super::value::ValueAst;
 
 /// Spin state: unpaired-electron count and multiplicity as independent
@@ -38,6 +39,7 @@ impl SpinStateAst {
         self.unpaired.matches(&target.unpaired) && self.multiplicity.matches(&target.multiplicity)
     }
 
+
     /// Simplify both `unpaired` and `multiplicity` in place via
     /// [`ValueAst::simplify`].
     pub fn simplify_values(&mut self) {
@@ -67,6 +69,23 @@ impl From<(u8, u8)> for SpinStateAst {
 impl From<SpinState> for SpinStateAst {
     fn from(state: SpinState) -> Self {
         (state.unpaired(), u8::from(state.multiplicity())).into()
+    }
+}
+
+impl AsLit for SpinStateAst {
+    type Lit = SpinState;
+
+    /// Concrete [`SpinState`] when both fields are `Lit` *and* the
+    /// `(unpaired, multiplicity)` pair satisfies physics parity. Strictly
+    /// narrower than [`is_ground`](SpinStateAst::is_ground), which checks
+    /// only that both fields are literal.
+    #[inline]
+    fn as_lit(&self) -> Option<SpinState> {
+        let (ValueAst::Lit(u), ValueAst::Lit(m)) = (&self.unpaired, &self.multiplicity) else {
+            return None;
+        };
+        let mult = SpinMultiplicity::from_repr(*m as u8)?;
+        SpinState::try_new(*u as u8, mult).ok()
     }
 }
 
@@ -107,6 +126,27 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::both_undetermined(SpinStateAst::default(), None)]
+    #[case::unpaired_lit_only(
+        SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
+        None,
+    )]
+    #[case::multiplicity_lit_only(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
+        None,
+    )]
+    #[case::valid_triplet((2_u8, 3_u8).into(), Some(spin!("#u2#s3")))]
+    #[case::valid_closed_shell((0_u8, 1_u8).into(), Some(SpinState::closed_shell()))]
+    #[case::parity_invalid((1_u8, 1_u8).into(), None)]
+    fn test_spin_state_ast_as_lit(
+        #[case] ast: SpinStateAst,
+        #[case] expected: Option<SpinState>,
+    ) {
+        assert_eq!(ast.as_lit(), expected);
     }
 
     #[test]

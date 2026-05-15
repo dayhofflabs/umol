@@ -21,8 +21,8 @@ pub use hmo::{HmoAromaticity, HmoError, HmoOutput};
 pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AtomConstraint, AtomId, AtomView,
-    BondConstraint, BondId, ElementAst, MoleculeAst, RingFamily, ValueAst,
+    AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AsLit, AtomConstraint, AtomId,
+    AtomView, BondConstraint, BondId, ElementAst, MoleculeAst, RingFamily, ValueAst,
 };
 use umol_shared::element::Element;
 

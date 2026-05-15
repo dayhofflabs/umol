@@ -4,7 +4,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId, MoleculeAst,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraintKind, AtomId, MoleculeAst,
     MulticenterValenceAst, ValueAst,
 };
 

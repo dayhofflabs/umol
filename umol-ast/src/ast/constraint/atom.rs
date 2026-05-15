@@ -6,6 +6,7 @@ use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
 use super::super::remap::IdRemapping;
+use super::super::traits::AsLit;
 use super::super::value::ValueAst;
 
 /// Atom-scope constraint: a predicate that pattern-matches a single atom
@@ -164,6 +165,20 @@ impl AromaticValenceAst {
     }
 }
 
+impl AsLit for AromaticValenceAst {
+    type Lit = i64;
+
+    /// Inner literal π count when `Aromatic(Lit(n))`; `None` for
+    /// `Undetermined`, `NotAromatic`, or `Aromatic` wrapping a non-literal.
+    #[inline]
+    fn as_lit(&self) -> Option<i64> {
+        match self {
+            Self::Aromatic(v) => v.as_lit(),
+            _ => None,
+        }
+    }
+}
+
 /// Multicenter-valence state of an atom: `Undetermined`, explicitly
 /// `NotMulticenter`, or participating in a multicenter bond with the given
 /// multicenter-valence count.
@@ -190,6 +205,20 @@ impl MulticenterValenceAst {
         match self {
             Self::Multicenter(v) => Self::Multicenter(v.simplify()),
             other => other,
+        }
+    }
+}
+
+impl AsLit for MulticenterValenceAst {
+    type Lit = i64;
+
+    /// Inner literal multicenter valence when `Multicenter(Lit(n))`; `None`
+    /// for `Undetermined`, `NotMulticenter`, or non-literal inner.
+    #[inline]
+    fn as_lit(&self) -> Option<i64> {
+        match self {
+            Self::Multicenter(v) => v.as_lit(),
+            _ => None,
         }
     }
 }
@@ -606,6 +635,22 @@ mod tests {
     }
 
     #[rstest]
+    #[case::undetermined(AromaticValenceAst::Undetermined, None)]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, None)]
+    #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), None)]
+    #[case::aromatic_lit(AromaticValenceAst::aromatic(3), Some(3))]
+    #[case::aromatic_expr_folds(
+        AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(Expr::Lit(2)))),
+        Some(2)
+    )]
+    fn test_aromatic_valence_ast_as_lit(
+        #[case] v: AromaticValenceAst,
+        #[case] expected: Option<i64>,
+    ) {
+        assert_eq!(v.as_lit(), expected);
+    }
+
+    #[rstest]
     #[case::aromatic_folds_expr(
         AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(Expr::Lit(2)))),
         AromaticValenceAst::aromatic(2)
@@ -646,6 +691,25 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(v.is_undetermined(), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(MulticenterValenceAst::Undetermined, None)]
+    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, None)]
+    #[case::multicenter_undetermined(
+        MulticenterValenceAst::Multicenter(ValueAst::Undetermined),
+        None
+    )]
+    #[case::multicenter_lit(MulticenterValenceAst::multicenter(2), Some(2))]
+    #[case::multicenter_expr_folds(
+        MulticenterValenceAst::Multicenter(ValueAst::Expr(Box::new(Expr::Lit(3)))),
+        Some(3)
+    )]
+    fn test_multicenter_valence_ast_as_lit(
+        #[case] v: MulticenterValenceAst,
+        #[case] expected: Option<i64>,
+    ) {
+        assert_eq!(v.as_lit(), expected);
     }
 
     #[rstest]

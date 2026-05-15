@@ -45,3 +45,43 @@ pub trait TryIntoAst<A>: Sized {
     type Error;
     fn try_into_ast(self, ctx: &Self::Ctx) -> Result<A, Self::Error>;
 }
+
+/// Literal extraction for AST types whose value space includes an
+/// `Undetermined` / non-literal branch. `as_lit` returns `Some(lit)` only
+/// when the AST is fully resolved to a concrete literal; the derived methods
+/// are pure pass-throughs to the corresponding `Option` combinators.
+pub trait AsLit {
+    /// Concrete literal type (e.g. `i64` for `ValueAst`, `Element` for
+    /// `ElementAst`, `SpinState` for `SpinStateAst`).
+    type Lit;
+
+    /// `Some(lit)` when the AST resolves to a concrete literal; `None` for
+    /// `Undetermined`, expression patterns, sets, sentinels, or physics-invalid
+    /// composites.
+    fn as_lit(&self) -> Option<Self::Lit>;
+
+    #[inline]
+    fn as_lit_ok_or<E>(&self, err: E) -> Result<Self::Lit, E> {
+        self.as_lit().ok_or(err)
+    }
+
+    #[inline]
+    fn as_lit_ok_or_else<E, F: FnOnce() -> E>(&self, err: F) -> Result<Self::Lit, E> {
+        self.as_lit().ok_or_else(err)
+    }
+
+    #[inline]
+    fn as_lit_or(&self, default: Self::Lit) -> Self::Lit {
+        self.as_lit().unwrap_or(default)
+    }
+
+    #[inline]
+    fn as_lit_or_else<F: FnOnce() -> Self::Lit>(&self, default: F) -> Self::Lit {
+        self.as_lit().unwrap_or_else(default)
+    }
+
+    #[inline]
+    fn as_lit_expect(&self, msg: &str) -> Self::Lit {
+        self.as_lit().expect(msg)
+    }
+}

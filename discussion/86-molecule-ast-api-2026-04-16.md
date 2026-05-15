@@ -1602,6 +1602,159 @@ Property-style tests can come after the focused cases:
 
 **Completion**: `cargo test --workspace --tests` green; benchmarks unchanged or improved. **Dependencies**: all earlier phases. **Risk**: medium.
 
+### Phase 14 — Lattice ops + valence resolver cleanup
+
+Adds a `Lattice` trait covering the standard partial-order/lattice operations on AST refinement types, replaces the misnamed `narrow_atom`/`lift_constraints` flow in the valence resolvers with derived `Lattice` operations, and deletes `umol-graph/src/ops/valence/shared.rs` entirely.
+
+**Lattice trait** (`umol-ast/src/ast/lattice.rs`):
+
+- `Lattice` trait with `is_top`, `is_bottom`, `matches(&target)`, `meet(&other) -> Option<Self>`, `join(&other) -> Self`, `narrow_from(&mut self, &other) -> bool`, `widen_with(&mut self, &other) -> bool`
+- Implement on `ValueAst`, `IsotopeAst`, `ImplicitHydrogensAst`, `SpinStateAst`, `ElementAst`, `AromaticValenceAst`, `MulticenterValenceAst`
+- `Undetermined` is top; ground variants are bottom; `Normal`/`Natural` sentinels sit between `Undetermined` and `Lit`
+- `meet(Lit, Lit) = Some(Lit)` iff equal; `meet(LitSet, Lit)` iff Lit ∈ Set; `meet(LitSet, LitSet)` returns normalized intersection
+- `LitSet` canonical form: first-occurrence preserving, in-place dedup on the `Vec<i64>`, no auxiliary structure
+- `Expr` only meets/joins with itself (syntactic equality) or `Undetermined`; no symbolic evaluation
+- `SpinStateAst::meet` is pure field-wise (no physics validation; matches the existing `is_ground` policy)
+- `#[derive(Lattice)]` proc-macro for struct types (`AtomAst`, `BondAst`, ...) generates field-by-field composition
+- `le()` deliberately omitted to avoid conflict with derived `PartialOrd` (which is structural); the underlying tension with derived `PartialOrd`/`Ord` on refinement types is parked for a follow-on cleanup
+
+**`AsLit` trait** (`umol-ast/src/ast/traits.rs`):
+
+- `pub trait AsLit { type Lit; fn as_lit(&self) -> Option<Self::Lit>; /* derived methods with defaults */ }`
+- Derived defaults: `as_lit_ok_or`, `as_lit_ok_or_else`, `as_lit_or`, `as_lit_or_else`, `as_lit_expect`
+- Implementations: `ValueAst → i64`, `ElementAst → Element`, `IsotopeAst → u32`, `ImplicitHydrogensAst → i64`, `SpinStateAst → SpinState` (physics-validated; strictly narrower than `is_ground`), `AromaticValenceAst → i64` (extracts inner of `Aromatic(_)`), `MulticenterValenceAst → i64` (same for `Multicenter(_)`)
+- Replaces the per-type inherent `as_lit_or*` family on the four existing types; eliminates ~50 lines of boilerplate
+
+**View additions** (`umol-ast/src/ast/views/atom.rs`):
+
+- `AtomView::satisfies(&AtomConstraint) -> bool` — view-side constraint check; computes valence/donated/accepted internally per call. `is_in_aromatic_system()` and the constraint-side aromatic check remain distinct predicates; the (~2) callsites in `shared.rs` that need "system OR declared" semantics inline the disjunction explicitly rather than going through a new method.
+
+**`NormalImplicitHydrogensTable`** (new config type):
+
+- Split `normal_valence` and `aromatic_normal_valence` out of `ValenceTable` into a new struct
+- Methods: `normal_valence_for(element, charge) -> Option<u8>`, `aromatic_normal_valence_for(element, charge) -> Option<u8>`, `infer(element, charge, valence, is_aromatic) -> Option<u8>`
+- `ValenceModel::AtomTyping { registry, normal_implicit_hydrogens }`
+- `ValenceModel::Counts { table, normal_implicit_hydrogens, allow_implicit_hydrogens }`
+- New TOML: `default-normal-implicit-hydrogens.toml`; `default-valence-table.toml` loses the two fields
+- `ValenceTable::compute_implicit_hydrogens` stays where it is (uses `allowed_valences`)
+
+**Delete `shared.rs`** — per-item disposition:
+
+- `charge_or_zero` → inline `atom.charge.as_lit_or(0) as i8`
+- `aromatic_pi_pinned` → `AromaticValenceAst::as_lit()` or `ValueAst::matches`
+- `atom_is_aromatic` → inline `view.is_in_aromatic_system() || matches!(view.constraints().aromatic_valence(), AromaticValenceAst::Aromatic(_))` at the (~2) sites that need this disjunction (counts.rs aromatic branch + inside `AtomView::satisfies` for `AromaticValence`)
+- `ground_spin_state` → `SpinStateAst::as_lit()`
+- `spin_state_undetermined` → existing `SpinStateAst::is_undetermined()`
+- `value_matches`, `spin_matches` → existing `matches` on each type
+- `base_atom_compatible` → three chained `matches` inline
+- `pattern_constraints_compatible` → `.iter().all(...)` inline
+- `atom_constraint_holds` → `AtomView::satisfies(&AtomConstraint)`
+- `narrow_value`, `narrow_atom` → `Lattice::narrow_from` (via derive on struct types)
+- `lift_constraints`, `narrow_atom_constraint`, `narrowable` → `AtomConstraints::narrow_with(&other: &AtomConstraints) -> bool` (bulk form)
+- `try_build_candidate`, `resolve_unpaired_lone_pairs` → private fns in `counts.rs` (counts-only consumers)
+- `atom_dative_counts` → inline at single callsite
+- `infer_normal_*_implicit_hydrogens` → `NormalImplicitHydrogensTable::infer`
+- `bond_order_lit`, `atom_view` → delete (dead code)
+- `AtomCandidate` → dissolved; `candidates_for` returns `Vec<AtomAst>` with constraints embedded in `.constraints`; callsite reduces to `atom_mut.narrow_from(&candidate)`
+- `atom_typing.rs` locals (`pattern_implicit_h_compatible`, `collect_pattern_constraints`) — kept in place for now; review in a follow-on pass
+
+**Error payloads**: `CountsError`/`AtomTypingError` carry `ValueAst` (charge/valence) directly; all ASTs derive `Debug`.
+
+**Tests**: existing `atom_constraint_holds` tests (shared.rs:440-538) move to `AtomView::satisfies` tests. New tests for `Lattice` impls — exhaustive variant cross-products for `meet`/`join` on `ValueAst`, sentinel-bearing types, and tagged sum types.
+
+**Completion**: `umol-graph/src/ops/valence/shared.rs` deleted; `Lattice` trait covers all value-type and entity ASTs; `cargo test --workspace --tests` green. **Dependencies**: phase 3 (`ValueAst` arithmetic), phase 13 (ops migration of `shared.rs` callers to the new API surface). **Risk**: medium-high — touches many AST types and both valence resolvers; lattice cross-product tables for `ValueAst` are the load-bearing correctness check.
+
+#### Phase 14 implementation plan
+
+Sequencing chosen so each step lands independently with `cargo test --workspace --tests` green and no temporary shims.
+
+##### Step 1 — `AsLit` trait + extensions
+
+- Add `AsLit` trait to `umol-ast/src/ast/traits.rs` with associated `type Lit`, required `fn as_lit(&self) -> Option<Self::Lit>`, and default impls for `as_lit_or` / `as_lit_or_else` / `as_lit_ok_or` / `as_lit_ok_or_else` / `as_lit_expect`
+- Convert the four existing inherent implementations (`ValueAst`, `ElementAst`, `IsotopeAst`, `ImplicitHydrogensAst`) to `AsLit` impls; remove the boilerplate inherent methods
+- Add `AsLit` impls for `SpinStateAst` (`type Lit = SpinState`, validates physics parity via `SpinState::try_new`), `AromaticValenceAst` (`type Lit = i64`, extracts inner of `Aromatic(_)`), `MulticenterValenceAst` (`type Lit = i64`)
+- Update consumer modules with `use umol_ast::ast::AsLit;` so the trait methods are in scope at call sites
+- Per-type unit tests covering the variant cross-product (including `SpinStateAst` parity-invalid case)
+
+##### Step 2 — `Lattice` trait + manual impls (value-type ASTs)
+
+- Create `umol-ast/src/ast/lattice.rs` with the `Lattice` trait surface
+- Manual impls for `ValueAst`, `IsotopeAst`, `ImplicitHydrogensAst`, `SpinStateAst`, `ElementAst`, `AromaticValenceAst`, `MulticenterValenceAst`
+- Exhaustive `meet`/`join` tests over variant cross-products — load-bearing correctness check
+- Inline `LitSet` first-occurrence dedup helper (private to `lattice.rs`)
+
+No callsite changes; trait surface only.
+
+##### Step 3 — `Lattice` derive macro for struct types
+
+- Add `#[derive(Lattice)]` proc-macro (in `umol-ast-macros` if it exists, otherwise new crate)
+- Apply to `AtomAst`, `BondAst`, `DativeBondAst`, `MulticenterBondAst`, `NoncovalentBondAst`, `AromaticSystemAst`
+- Tests: field-by-field meet/join; `narrow_from` returns "changed" correctly
+- Fallback if proc-macro infrastructure is missing: hand-rolled impls on the six entity types (~150 lines total)
+
+##### Step 4 — `AtomConstraints::narrow_with(&other) -> bool`
+
+- Bulk form: walks `other`'s constraints, per-kind narrows existing or adds new
+- Tests per constraint kind
+
+##### Step 5 — `AtomView::satisfies(&AtomConstraint)`
+
+- Computes valence/donated/accepted internally per call (no precomputed args)
+- Body inlines `view.is_in_aromatic_system() || matches!(...)` for the `AromaticValence` arm — no separate `is_aromatic` method
+- Port existing `atom_constraint_holds` tests (shared.rs:440–538) to this method
+
+At this point: all new surface in place; migration unblocked.
+
+##### Step 6 — Config split: `NormalImplicitHydrogensTable`
+
+- Create `umol-graph/src/ops/normal_implicit_hydrogens.rs`
+- Strip `normal_valence`, `aromatic_normal_valence` from `ValenceEntry`/`ValenceTable`
+- Update `ValenceModel` variants: `AtomTyping { registry, normal_implicit_hydrogens }`, `Counts { table, normal_implicit_hydrogens, allow_implicit_hydrogens }`
+- Split TOML: write `default-normal-implicit-hydrogens.toml`; strip the two fields from `default-valence-table.toml`
+- Re-resolve the static `LazyLock` defaults
+- Touch resolver constructors to accept the new table
+
+This temporarily breaks `shared.rs`'s `infer_normal_*` calls — those go away in Steps 7–8.
+
+##### Step 7 — Migrate `counts.rs`
+
+- Move `try_build_candidate`, `resolve_unpaired_lone_pairs` from `shared.rs` into `counts.rs` as private fns; rewrite their internal uses of `infer_normal_aromatic_implicit_hydrogens` to call `NormalImplicitHydrogensTable::infer`
+- Inline `atom_is_aromatic` at the aromatic-branch decision via the explicit disjunction
+- Inline `aromatic_pi_pinned` via `AromaticValenceAst::as_lit()`
+- Dissolve `AtomCandidate`: `candidates_for` returns `Vec<AtomAst>` with synthetic `Valence(Lit(v))`/`AromaticValence(Aromatic(Lit(a)))` constraints pushed into each candidate's `.constraints`
+- Callsite collapses to `atom_mut.narrow_from(&candidate)`
+- `CountsError::NoValidValenceState` carries `ValueAst` for charge/valence
+
+##### Step 8 — Migrate `atom_typing.rs`
+
+- Replace `pattern_constraints_compatible(view, constraints, v, d, a)` with `constraints.iter().all(|c| view.satisfies(c))` inline
+- Replace `base_atom_compatible(atom, pattern)` with three chained `matches` calls inline
+- Replace `atom_dative_counts(view)` with two `as_lit_*` calls inline at the single use site
+- Replace `infer_normal_implicit_hydrogens(...)` with `normal_implicit_hydrogens.infer(...)`
+- Dissolve `AtomCandidate`; callsite collapses to `atom_mut.narrow_from(&candidate)`
+- `AtomTypingError::NoMatchingPattern` carries `ValueAst` for charge
+- `pattern_implicit_h_compatible`, `collect_pattern_constraints` kept in place; flagged for a follow-on review pass
+
+##### Step 9 — Delete `shared.rs`
+
+- Remove `mod shared;` from `umol-graph/src/ops/valence.rs`
+- Delete `umol-graph/src/ops/valence/shared.rs`
+- `cargo test --workspace --tests`; `cargo build --workspace --all-targets`
+- Verify: `grep -rn "shared::" umol-graph/src/ops/valence/` returns empty
+
+##### Validation gates per step
+
+- Each step lands green: `cargo test --workspace --tests`, no new clippy warnings
+- Step 2 also: exhaustive variant cross-product tests for `meet`/`join` on `ValueAst` (foundation for everything else)
+- Step 5 also: regression tests confirm `satisfies` is behaviorally identical to `atom_constraint_holds` (ported from shared.rs)
+- Step 9 also: `grep` confirms zero `shared::` references remain
+
+##### Risks
+
+- **Lattice derive macro** (Step 3): if `umol-ast-macros` doesn't exist, this step doubles in scope (new proc-macro crate setup). Hand-rolled impls on the ~6 entity types is the fallback (~150 lines).
+- **TOML split** (Step 6): config file format change is breaking. Contained — only the two default TOML files are involved; no external consumers yet.
+- **`ImplicitHydrogensAst::Normal` sentinel in `meet`** (Step 2): semantic is `Normal ⊐ Lit(n)`, so `meet(Normal, Lit(n)) = Lit(n)` — assumes the H-demand table is consulted *elsewhere*, not at meet time. Worth a doc comment on the impl.
+
 ### Parallelization
 
 After phase 1, two tracks:
@@ -1628,8 +1781,9 @@ Phase 13 ops migration can begin incrementally as phase 2 lands, continuing thro
 | 11 | 1–2 days |
 | 12 | varies; chemistry-dependent |
 | 13 | 1–2 weeks |
+| 14 | 1–2 weeks |
 
-Net: roughly 6–10 weeks of focused work, parallelizable to ~4–6 weeks with two tracks.
+Net: roughly 7–12 weeks of focused work, parallelizable to ~5–7 weeks with two tracks.
 
 ### Per-phase validation gate
 
@@ -1765,6 +1919,24 @@ Direct consequence of the general-chemistry scope. RDKit conflates tier 2 and ti
 - **Aromatic electron-count rule.** "4n+2" is Hückel-specific. "Aromatic system has *some* integer electron count consistent with its atoms" is tier 2; "has *4n+2* electrons" is tier 3.
 
 Default both to tier 3 unless a use case forces stricter checks.
+
+### Ground-ness of variable-bearing AST forms
+
+Decision (Phase 14 / 2026-05-15): pattern variables (`Ref`, `Bind`, free `Var` inside an `Expr`) are **never ground**, regardless of whether their candidate set or expression body has collapsed to a single value. The `is_ground` / `as_lit` surface treats binding constructs as carrying an open variable role even when the value space has been narrowed.
+
+Concretely, applied consistently across all AST types:
+
+| Type | Variable/binding form | Ground? |
+|---|---|---|
+| `ValueAst` | `Expr(e)` where `e` contains a free `Var` | no — `evaluate_checked(&Bindings::new())` returns `None` |
+| `IsotopeAst` | `Expr(e)` with free `Var` | no — same slow path |
+| `ImplicitHydrogensAst` | `Expr(e)` with free `Var` | no — same slow path |
+| `ElementAst` | `Ref(_)` | no |
+| `ElementAst` | `Bind { id, set }` (any set size, including singleton) | no |
+
+Singleton non-binding sets *do* collapse: `ValueAst::LitSet([5])` and `ElementAst::Set([C])` are ground. The distinction is binding role (carries an `id` that downstream constraints may reference) vs. value enumeration (semantically a unary alternative).
+
+This is the conservative position. The alternative — singleton `Bind` ⇒ ground, mirroring `LitSet → Lit` — remains defensible and can be revisited if a use case demands it.
 
 ## Deferred
 

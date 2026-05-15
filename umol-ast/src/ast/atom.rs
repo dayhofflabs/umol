@@ -9,7 +9,9 @@ use super::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
 use super::spin::SpinStateAst;
-use super::value::{Expr, ValueAst};
+use super::traits::AsLit;
+use super::value::Bindings;
+use super::value::{litset_is_ground, Expr, ValueAst};
 
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
@@ -208,47 +210,11 @@ impl From<Element> for ElementAst {
 
 impl ElementAst {
     pub fn is_ground(&self) -> bool {
-        matches!(self, Self::Lit(_))
-    }
-
-    /// The element this value denotes when ground; `None` otherwise. Aligned
-    /// with [`Self::is_ground`].
-    #[inline]
-    pub fn as_lit(&self) -> Option<Element> {
         match self {
-            Self::Lit(e) => Some(*e),
-            _ => None,
+            Self::Lit(_) => true,
+            Self::Undetermined | Self::Ref(_) | Self::Bind { .. } => false,
+            Self::Set(s) => element_set_is_ground(s),
         }
-    }
-
-    /// `as_lit` as a `Result` for `?` propagation.
-    #[inline]
-    pub fn as_lit_ok_or<E>(&self, err: E) -> Result<Element, E> {
-        self.as_lit().ok_or(err)
-    }
-
-    /// `as_lit` as a `Result`, with lazily-constructed error.
-    #[inline]
-    pub fn as_lit_ok_or_else<E, F: FnOnce() -> E>(&self, err: F) -> Result<Element, E> {
-        self.as_lit().ok_or_else(err)
-    }
-
-    /// Literal value if ground, else `default`.
-    #[inline]
-    pub fn as_lit_or(&self, default: Element) -> Element {
-        self.as_lit().unwrap_or(default)
-    }
-
-    /// Literal value if ground, else `default()`.
-    #[inline]
-    pub fn as_lit_or_else<F: FnOnce() -> Element>(&self, default: F) -> Element {
-        self.as_lit().unwrap_or_else(default)
-    }
-
-    /// Literal value if ground, panic with `msg` otherwise.
-    #[inline]
-    pub fn as_lit_expect(&self, msg: &str) -> Element {
-        self.as_lit().expect(msg)
     }
 
     pub fn is_undetermined(&self) -> bool {
@@ -270,6 +236,26 @@ impl ElementAst {
                 Self::Set(ts) | Self::Bind { set: ts, .. },
             ) => ts.iter().all(|t| ps.contains(t)),
         }
+    }
+}
+
+impl AsLit for ElementAst {
+    type Lit = Element;
+
+    #[inline]
+    fn as_lit(&self) -> Option<Element> {
+        match self {
+            Self::Lit(e) => Some(*e),
+            Self::Undetermined | Self::Ref(_) | Self::Bind { .. } => None,
+            Self::Set(s) => element_set_is_ground(s).then(|| s[0]),
+        }
+    }
+}
+
+fn element_set_is_ground(s: &[Element]) -> bool {
+    match s {
+        [] => false,
+        [first, rest @ ..] => rest.iter().all(|x| x == first),
     }
 }
 
@@ -324,65 +310,21 @@ impl IsotopeAst {
     #[cold]
     fn is_ground_slow(&self) -> bool {
         match self {
-            Self::LitSet(s) => super::value::litset_is_ground(s),
+            Self::LitSet(s) => litset_is_ground(s),
             Self::Expr(e) => e.is_ground(),
             Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
         }
-    }
-
-    /// The mass number this value denotes when ground; `None` otherwise.
-    /// `Natural` returns `Some(0)` as the sentinel for "natural isotopic
-    /// abundance — no specific mass committed". Aligned with
-    /// [`Self::is_ground`].
-    #[inline]
-    pub fn as_lit(&self) -> Option<u32> {
-        match self {
-            Self::Natural => Some(0),
-            Self::Lit(n) => u32::try_from(*n).ok(),
-            Self::Undetermined => None,
-            _ => self.as_lit_slow(),
-        }
-    }
-
-    /// `as_lit` as a `Result` for `?` propagation.
-    #[inline]
-    pub fn as_lit_ok_or<E>(&self, err: E) -> Result<u32, E> {
-        self.as_lit().ok_or(err)
-    }
-
-    /// `as_lit` as a `Result`, with lazily-constructed error.
-    #[inline]
-    pub fn as_lit_ok_or_else<E, F: FnOnce() -> E>(&self, err: F) -> Result<u32, E> {
-        self.as_lit().ok_or_else(err)
-    }
-
-    /// Literal value if ground, else `default`.
-    #[inline]
-    pub fn as_lit_or(&self, default: u32) -> u32 {
-        self.as_lit().unwrap_or(default)
-    }
-
-    /// Literal value if ground, else `default()`.
-    #[inline]
-    pub fn as_lit_or_else<F: FnOnce() -> u32>(&self, default: F) -> u32 {
-        self.as_lit().unwrap_or_else(default)
-    }
-
-    /// Literal value if ground, panic with `msg` otherwise.
-    #[inline]
-    pub fn as_lit_expect(&self, msg: &str) -> u32 {
-        self.as_lit().expect(msg)
     }
 
     #[inline(never)]
     #[cold]
     fn as_lit_slow(&self) -> Option<u32> {
         match self {
-            Self::LitSet(s) => super::value::litset_is_ground(s)
+            Self::LitSet(s) => litset_is_ground(s)
                 .then(|| u32::try_from(s[0]).ok())
                 .flatten(),
             Self::Expr(e) => e
-                .evaluate_checked(&super::value::Bindings::new())
+                .evaluate_checked(&Bindings::new())
                 .and_then(|n| u32::try_from(n).ok()),
             Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
         }
@@ -442,6 +384,23 @@ impl From<i64> for IsotopeAst {
     }
 }
 
+impl AsLit for IsotopeAst {
+    type Lit = u32;
+
+    /// Mass number when ground; `None` otherwise. `Natural` returns
+    /// `Some(0)` as the sentinel for "natural isotopic abundance — no
+    /// specific mass committed".
+    #[inline]
+    fn as_lit(&self) -> Option<u32> {
+        match self {
+            Self::Natural => Some(0),
+            Self::Lit(n) => u32::try_from(*n).ok(),
+            Self::Undetermined => None,
+            _ => self.as_lit_slow(),
+        }
+    }
+}
+
 /// Implicit hydrogen expressions. `Normal` denotes the valence-model default
 /// (`#h=`); numeric variants mirror `ValueAst` and are flattened here to keep
 /// `Undetermined` as a single top-level state.
@@ -492,59 +451,18 @@ impl ImplicitHydrogensAst {
     #[cold]
     fn is_ground_slow(&self) -> bool {
         match self {
-            Self::LitSet(s) => super::value::litset_is_ground(s),
+            Self::LitSet(s) => litset_is_ground(s),
             Self::Expr(e) => e.is_ground(),
             Self::Lit(_) | Self::Normal | Self::Undetermined => unreachable!(),
         }
-    }
-
-    /// The single integer this value denotes when ground; `None` otherwise
-    /// (including `Normal`). Aligned with [`Self::is_ground`].
-    #[inline]
-    pub fn as_lit(&self) -> Option<i64> {
-        match self {
-            Self::Lit(n) => Some(*n),
-            Self::Normal | Self::Undetermined => None,
-            _ => self.as_lit_slow(),
-        }
-    }
-
-    /// `as_lit` as a `Result` for `?` propagation.
-    #[inline]
-    pub fn as_lit_ok_or<E>(&self, err: E) -> Result<i64, E> {
-        self.as_lit().ok_or(err)
-    }
-
-    /// `as_lit` as a `Result`, with lazily-constructed error.
-    #[inline]
-    pub fn as_lit_ok_or_else<E, F: FnOnce() -> E>(&self, err: F) -> Result<i64, E> {
-        self.as_lit().ok_or_else(err)
-    }
-
-    /// Literal value if ground, else `default`.
-    #[inline]
-    pub fn as_lit_or(&self, default: i64) -> i64 {
-        self.as_lit().unwrap_or(default)
-    }
-
-    /// Literal value if ground, else `default()`.
-    #[inline]
-    pub fn as_lit_or_else<F: FnOnce() -> i64>(&self, default: F) -> i64 {
-        self.as_lit().unwrap_or_else(default)
-    }
-
-    /// Literal value if ground, panic with `msg` otherwise.
-    #[inline]
-    pub fn as_lit_expect(&self, msg: &str) -> i64 {
-        self.as_lit().expect(msg)
     }
 
     #[inline(never)]
     #[cold]
     fn as_lit_slow(&self) -> Option<i64> {
         match self {
-            Self::LitSet(s) => super::value::litset_is_ground(s).then(|| s[0]),
-            Self::Expr(e) => e.evaluate_checked(&super::value::Bindings::new()),
+            Self::LitSet(s) => litset_is_ground(s).then(|| s[0]),
+            Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
             Self::Lit(_) | Self::Normal | Self::Undetermined => unreachable!(),
         }
     }
@@ -654,6 +572,21 @@ impl Div for ImplicitHydrogensAst {
         match (self, rhs) {
             (Self::Lit(a), Self::Lit(b)) => Self::Lit(a / b),
             _ => Self::Undetermined,
+        }
+    }
+}
+
+impl AsLit for ImplicitHydrogensAst {
+    type Lit = i64;
+
+    /// Hydrogen count when ground; `None` for `Undetermined` *and* for
+    /// `Normal` (which is a deferred lookup, not a literal).
+    #[inline]
+    fn as_lit(&self) -> Option<i64> {
+        match self {
+            Self::Lit(n) => Some(*n),
+            Self::Normal | Self::Undetermined => None,
+            _ => self.as_lit_slow(),
         }
     }
 }

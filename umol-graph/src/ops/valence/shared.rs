@@ -1,9 +1,9 @@
 //! Shared helpers for the AtomTyping and Counts valence resolvers.
 
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId, AtomView, BondAst,
-    ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterValenceAst, SpinStateAst,
-    ValueAst,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraintKind, AtomId, AtomView,
+    BondAst, ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterValenceAst,
+    SpinStateAst, ValueAst,
 };
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
