@@ -1702,11 +1702,14 @@ Sequencing chosen so each step lands independently with `cargo test --workspace 
 - Added 14 tests per constraint kind (empty/empty, add new kind, narrows undetermined to lit, lit/lit match preserved, lit/lit mismatch → `None`, multi-kind combines, aromatic-valence narrows, aromatic-valence not vs aromatic → `None`, RingSize union, RingSize dedup, vacuous-entry pruning, `narrow_from` extends/no-change/contradiction-leaves-unchanged, `join` keeps shared kinds, `join` widens value)
 - Found and fixed a pre-existing bug in `AtomConstraints::get_all` and `remove_all`: they used `binary_search` (`find`) which can return any matching index in a multi-entry cluster (e.g., multiple `RingSize` entries). Switched to `partition_point` to find the leftmost cluster start.
 
-##### Step 5 — `AtomView::satisfies(&AtomConstraint)`
+##### Step 5 — `AtomView::satisfies(&AtomConstraint)` **Done**
 
-- Computes valence/donated/accepted internally per call (no precomputed args)
-- Body inlines `view.is_in_aromatic_system() || matches!(...)` for the `AromaticValence` arm — no separate `is_aromatic` method
-- Port existing `atom_constraint_holds` tests (shared.rs:440–538) to this method
+- Added `AtomView::satisfies(&AtomConstraint) -> bool` in `views/atom.rs`
+- Uses `query.matches(&accessor)` (ValueAst's existing inherent `matches`) for the simple ValueAst-wrapping kinds (`Valence`, `DonatedPairs`, `AcceptedPairs`)
+- `AromaticValence` arm inlines the `in_system || declared_aromatic` disjunction (no `is_aromatic` method); uses `AromaticValenceAst::as_lit()` (from `AsLit`) to read the inner π count
+- `MulticenterValence` arm uses `ValueAst::as_lit()` to extract the multicenter valence
+- Preserves legacy semantics from `shared.rs::atom_constraint_holds` exactly, including: outer `Undetermined` query → `false`; permissive fallback for `Aromatic(Lit)` when actual π is non-ground; non-checked constraint kinds → `true`
+- Ported the 6 multicenter + 4 aromatic test cases from `shared.rs:440-538` to a single `test_atom_view_satisfies` table at `views/atom.rs`; 10 cases, all pass
 
 At this point: all new surface in place; migration unblocked.
 

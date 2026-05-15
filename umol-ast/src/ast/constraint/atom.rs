@@ -151,6 +151,20 @@ impl AromaticValenceAst {
         Self::Aromatic(v.into())
     }
 
+    /// Pattern matches target. `Undetermined` is a wildcard pattern.
+    /// `NotAromatic` and `Aromatic(_)` are mutually exclusive; an `Aromatic`
+    /// pattern recurses on the inner `ValueAst::matches`.
+    pub fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (Self::NotAromatic, Self::NotAromatic) => true,
+            (Self::NotAromatic, Self::Aromatic(_))
+            | (Self::Aromatic(_), Self::NotAromatic) => false,
+            (Self::Aromatic(p), Self::Aromatic(t)) => p.matches(t),
+        }
+    }
+
     /// Simplify the inner `ValueAst` of `Aromatic(_)`. Other variants are
     /// already canonical.
     pub fn simplify(self) -> Self {
@@ -224,6 +238,20 @@ pub enum MulticenterValenceAst {
 impl MulticenterValenceAst {
     pub fn multicenter(v: impl Into<ValueAst>) -> Self {
         Self::Multicenter(v.into())
+    }
+
+    /// Pattern matches target. `Undetermined` is a wildcard pattern.
+    /// `NotMulticenter` and `Multicenter(_)` are mutually exclusive; a
+    /// `Multicenter` pattern recurses on the inner `ValueAst::matches`.
+    pub fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (Self::NotMulticenter, Self::NotMulticenter) => true,
+            (Self::NotMulticenter, Self::Multicenter(_))
+            | (Self::Multicenter(_), Self::NotMulticenter) => false,
+            (Self::Multicenter(p), Self::Multicenter(t)) => p.matches(t),
+        }
     }
 
     /// Simplify the inner `ValueAst` of `Multicenter(_)`. Other variants
