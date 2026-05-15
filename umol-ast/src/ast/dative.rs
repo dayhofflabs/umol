@@ -79,10 +79,6 @@ impl DativeBondAst {
         self.into_ground()
     }
 
-    pub fn is_ground(&self) -> bool {
-        self.order.is_ground()
-    }
-
     /// `self` (pattern) matches `target` iff every admissible assignment of
     /// `target` is also admissible by `self`, checked field-wise on `order`.
     /// `acceptor_slot` is structural — equality is enforced by the matching
@@ -95,6 +91,41 @@ impl DativeBondAst {
     pub fn simplify_values(&mut self) {
         self.order = mem::take(&mut self.order).simplify();
         self.constraints.simplify_each();
+    }
+}
+
+impl Lattice for DativeBondAst {
+    fn is_undetermined(&self) -> bool {
+        self.order.is_undetermined() && self.constraints.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.order.is_ground() && self.constraints.is_ground()
+    }
+
+    /// `acceptor_slot` is a structural anchor (u8 equality required).
+    fn meet(&self, other: &Self) -> Option<Self> {
+        if self.acceptor_slot != other.acceptor_slot {
+            return None;
+        }
+        Some(Self {
+            acceptor_slot: self.acceptor_slot,
+            order: self.order.meet(&other.order)?,
+            constraints: self.constraints.meet(&other.constraints)?,
+        })
+    }
+
+    /// Mismatched `acceptor_slot` widens to `Self::default()` (entity-level
+    /// undetermined).
+    fn join(&self, other: &Self) -> Self {
+        if self.acceptor_slot != other.acceptor_slot {
+            return Self::default();
+        }
+        Self {
+            acceptor_slot: self.acceptor_slot,
+            order: self.order.join(&other.order),
+            constraints: self.constraints.join(&other.constraints),
+        }
     }
 }
 
@@ -209,5 +240,64 @@ mod tests {
                 constraints: DativeBondConstraints::from(DativeBondConstraint::ring_size(6)),
             }
         );
+    }
+
+    #[rstest]
+    fn test_dative_bond_ast_meet_both_default() {
+        let a = DativeBondAst::default();
+        let b = DativeBondAst::default();
+        assert_eq!(a.meet(&b), Some(DativeBondAst::default()));
+    }
+
+    #[rstest]
+    fn test_dative_bond_ast_meet_acceptor_slot_mismatch() {
+        let a = DativeBondAst {
+            acceptor_slot: 0,
+            order: ValueAst::Lit(1),
+            constraints: DativeBondConstraints::new(),
+        };
+        let b = DativeBondAst {
+            acceptor_slot: 1,
+            order: ValueAst::Lit(1),
+            constraints: DativeBondConstraints::new(),
+        };
+        assert_eq!(a.meet(&b), None);
+    }
+
+    #[rstest]
+    fn test_dative_bond_ast_meet_narrows_order() {
+        let a = DativeBondAst {
+            acceptor_slot: 0,
+            order: ValueAst::Undetermined,
+            constraints: DativeBondConstraints::new(),
+        };
+        let b = DativeBondAst {
+            acceptor_slot: 0,
+            order: ValueAst::Lit(1),
+            constraints: DativeBondConstraints::new(),
+        };
+        assert_eq!(
+            a.meet(&b),
+            Some(DativeBondAst {
+                acceptor_slot: 0,
+                order: ValueAst::Lit(1),
+                constraints: DativeBondConstraints::new(),
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_ast_join_acceptor_slot_mismatch_widens_to_default() {
+        let a = DativeBondAst {
+            acceptor_slot: 0,
+            order: ValueAst::Lit(1),
+            constraints: DativeBondConstraints::new(),
+        };
+        let b = DativeBondAst {
+            acceptor_slot: 1,
+            order: ValueAst::Lit(1),
+            constraints: DativeBondConstraints::new(),
+        };
+        assert_eq!(a.join(&b), DativeBondAst::default());
     }
 }

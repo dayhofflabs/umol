@@ -21,6 +21,7 @@ use super::idx::{
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::rings::{RingFamily, RingSet};
+use super::traits::Lattice;
 use super::views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, GraphView, MulticenterBondView,

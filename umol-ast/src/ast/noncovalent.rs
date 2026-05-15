@@ -1,6 +1,7 @@
 //! Noncovalent bond AST.
 
 use super::constraint::{NoncovalentBondConstraint, NoncovalentBondConstraints};
+use super::traits::Lattice;
 
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
 /// interaction kind. No bond order, no charge or spin — these do not apply
@@ -53,10 +54,6 @@ impl NoncovalentBondAst {
         self.into_ground()
     }
 
-    pub fn is_ground(&self) -> bool {
-        self.kind.is_ground()
-    }
-
     pub fn matches(&self, target: &NoncovalentBondAst) -> bool {
         self.kind.matches(&target.kind)
     }
@@ -65,6 +62,48 @@ impl NoncovalentBondAst {
     /// `ValueAst`, so it is unchanged.
     pub fn simplify_values(&mut self) {
         self.constraints.simplify_each();
+    }
+}
+
+impl Lattice for NoncovalentBondAst {
+    fn is_undetermined(&self) -> bool {
+        matches!(self.kind, NoncovalentBondKindAst::Undetermined)
+            && self.constraints.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.kind.is_ground() && self.constraints.is_ground()
+    }
+
+    /// `kind` is treated as a structural anchor (equality-only): mismatched
+    /// kinds → `None`.
+    fn meet(&self, other: &Self) -> Option<Self> {
+        let kind = match (&self.kind, &other.kind) {
+            (NoncovalentBondKindAst::Undetermined, k) | (k, NoncovalentBondKindAst::Undetermined) => {
+                k.clone()
+            }
+            (a, b) if a == b => a.clone(),
+            _ => return None,
+        };
+        Some(Self {
+            kind,
+            constraints: self.constraints.meet(&other.constraints)?,
+        })
+    }
+
+    /// `kind` is equality-only: mismatched kinds widen the entity to
+    /// `Default::default()` (entity-level undetermined).
+    fn join(&self, other: &Self) -> Self {
+        match (&self.kind, &other.kind) {
+            (NoncovalentBondKindAst::Undetermined, _) | (_, NoncovalentBondKindAst::Undetermined) => {
+                Self::default()
+            }
+            (a, b) if a == b => Self {
+                kind: a.clone(),
+                constraints: self.constraints.join(&other.constraints),
+            },
+            _ => Self::default(),
+        }
     }
 }
 
@@ -246,5 +285,36 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_meet_both_default() {
+        let a = NoncovalentBondAst::default();
+        let b = NoncovalentBondAst::default();
+        assert_eq!(a.meet(&b), Some(NoncovalentBondAst::default()));
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_meet_kind_mismatch() {
+        let a = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
+        let b = NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond);
+        assert_eq!(a.meet(&b), None);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_meet_kind_narrows_from_undetermined() {
+        let a = NoncovalentBondAst::default();
+        let b = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
+        assert_eq!(
+            a.meet(&b),
+            Some(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_ast_join_kind_mismatch_widens_to_default() {
+        let a = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
+        let b = NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond);
+        assert_eq!(a.join(&b), NoncovalentBondAst::default());
     }
 }

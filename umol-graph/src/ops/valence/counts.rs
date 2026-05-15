@@ -4,7 +4,7 @@
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst,
-    ImplicitHydrogensAst, MoleculeAst, ValueAst,
+    ImplicitHydrogensAst, Lattice, MoleculeAst, ValueAst,
 };
 use umol_shared::element::Element;
 

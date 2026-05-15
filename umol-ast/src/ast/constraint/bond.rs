@@ -202,6 +202,65 @@ impl BondConstraints {
     }
 }
 
+impl Lattice for BondConstraints {
+    fn is_undetermined(&self) -> bool {
+        self.iter().all(|c| match c {
+            BondConstraint::Aromatic => false,
+            BondConstraint::RingCount(v) | BondConstraint::RingSize(v) => v.is_undetermined(),
+        })
+    }
+
+    fn is_ground(&self) -> bool {
+        self.iter().all(|c| match c {
+            BondConstraint::Aromatic => true,
+            BondConstraint::RingCount(v) | BondConstraint::RingSize(v) => v.is_ground(),
+        })
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        let mut result = Self::new();
+        if self.aromatic() || other.aromatic() {
+            result.add(BondConstraint::Aromatic);
+        }
+        let rc = self.ring_count().meet(&other.ring_count())?;
+        if !rc.is_undetermined() {
+            result.add(BondConstraint::RingCount(rc));
+        }
+        for v in self.ring_sizes().chain(other.ring_sizes()) {
+            let entry = BondConstraint::RingSize(v.clone());
+            if !v.is_undetermined() && !result.contains_entry(&entry) {
+                result.add(entry);
+            }
+        }
+        Some(result)
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        let mut result = Self::new();
+        if self.aromatic() && other.aromatic() {
+            result.add(BondConstraint::Aromatic);
+        }
+        if self.contains(BondConstraintKind::RingCount)
+            && other.contains(BondConstraintKind::RingCount)
+        {
+            let joined = self.ring_count().join(&other.ring_count());
+            if !joined.is_undetermined() {
+                result.add(BondConstraint::RingCount(joined));
+            }
+        }
+        for v in self.ring_sizes() {
+            let entry = BondConstraint::RingSize(v.clone());
+            if other
+                .ring_sizes()
+                .any(|o| BondConstraint::RingSize(o.clone()) == entry)
+            {
+                result.add(entry);
+            }
+        }
+        result
+    }
+}
+
 impl FromIterator<BondConstraint> for BondConstraints {
     fn from_iter<I: IntoIterator<Item = BondConstraint>>(iter: I) -> Self {
         let mut out = Self::new();

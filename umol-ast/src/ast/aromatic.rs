@@ -89,12 +89,6 @@ impl AromaticSystemAst {
         self.into_ground()
     }
 
-    pub fn is_ground(&self) -> bool {
-        self.charge.is_ground()
-            && self.spin.is_ground()
-            && self.electrons.iter().all(|v| v.is_ground())
-    }
-
     /// `self` (pattern) matches `target` iff per-atom electrons match
     /// position-wise (length-equality required) and `charge` / `spin` match
     /// field-wise.
@@ -116,6 +110,57 @@ impl AromaticSystemAst {
             *e = mem::take(e).simplify();
         }
         self.constraints.simplify_each();
+    }
+}
+
+impl Lattice for AromaticSystemAst {
+    fn is_undetermined(&self) -> bool {
+        self.electrons.iter().all(|v| v.is_undetermined())
+            && self.charge.is_undetermined()
+            && self.spin.is_undetermined()
+            && self.constraints.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.electrons.iter().all(|v| v.is_ground())
+            && self.charge.is_ground()
+            && self.spin.is_ground()
+            && self.constraints.is_ground()
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        if self.electrons.len() != other.electrons.len() {
+            return None;
+        }
+        let electrons: Option<Vec<ValueAst>> = self
+            .electrons
+            .iter()
+            .zip(&other.electrons)
+            .map(|(a, b)| a.meet(b))
+            .collect();
+        Some(Self {
+            electrons: electrons?,
+            charge: self.charge.meet(&other.charge)?,
+            spin: self.spin.meet(&other.spin)?,
+            constraints: self.constraints.meet(&other.constraints)?,
+        })
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        if self.electrons.len() != other.electrons.len() {
+            return Self::default();
+        }
+        Self {
+            electrons: self
+                .electrons
+                .iter()
+                .zip(&other.electrons)
+                .map(|(a, b)| a.join(b))
+                .collect(),
+            charge: self.charge.join(&other.charge),
+            spin: self.spin.join(&other.spin),
+            constraints: self.constraints.join(&other.constraints),
+        }
     }
 }
 
@@ -265,5 +310,36 @@ mod tests {
                 ),
             },
         );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_ast_meet_both_default() {
+        let a = AromaticSystemAst::default();
+        let b = AromaticSystemAst::default();
+        assert_eq!(a.meet(&b), Some(AromaticSystemAst::default()));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_ast_meet_electrons_length_mismatch() {
+        let a = AromaticSystemAst::from_electrons(vec![1; 6]);
+        let b = AromaticSystemAst::from_electrons(vec![1; 5]);
+        assert_eq!(a.meet(&b), None);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_ast_meet_narrows_electrons() {
+        let a = AromaticSystemAst::new(vec![ValueAst::Undetermined; 3]);
+        let b = AromaticSystemAst::from_electrons(vec![1; 3]);
+        assert_eq!(
+            a.meet(&b),
+            Some(AromaticSystemAst::from_electrons(vec![1; 3]))
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_ast_join_electrons_length_mismatch_widens_to_default() {
+        let a = AromaticSystemAst::from_electrons(vec![1; 6]);
+        let b = AromaticSystemAst::from_electrons(vec![1; 5]);
+        assert_eq!(a.join(&b), AromaticSystemAst::default());
     }
 }

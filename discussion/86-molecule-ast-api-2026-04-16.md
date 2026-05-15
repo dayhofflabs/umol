@@ -1668,7 +1668,7 @@ Adds a `Lattice` trait covering the standard partial-order/lattice operations on
 
 Sequencing chosen so each step lands independently with `cargo test --workspace --tests` green and no temporary shims.
 
-##### Step 1 — `AsLit` trait + extensions
+##### Step 1 — `AsLit` trait + extensions **Done**
 
 - Add `AsLit` trait to `umol-ast/src/ast/traits.rs` with associated `type Lit`, required `fn as_lit(&self) -> Option<Self::Lit>`, and default impls for `as_lit_or` / `as_lit_or_else` / `as_lit_ok_or` / `as_lit_ok_or_else` / `as_lit_expect`
 - Convert the four existing inherent implementations (`ValueAst`, `ElementAst`, `IsotopeAst`, `ImplicitHydrogensAst`) to `AsLit` impls; remove the boilerplate inherent methods
@@ -1676,7 +1676,7 @@ Sequencing chosen so each step lands independently with `cargo test --workspace 
 - Update consumer modules with `use umol_ast::ast::AsLit;` so the trait methods are in scope at call sites
 - Per-type unit tests covering the variant cross-product (including `SpinStateAst` parity-invalid case)
 
-##### Step 2 — `Lattice` trait + manual impls (value-type ASTs)
+##### Step 2 — `Lattice` trait + manual impls (value-type ASTs) **Done**
 
 - Add the `Lattice` trait to `umol-ast/src/ast/traits.rs` (alongside `AsLit`)
 - Trait surface: `is_undetermined`, `is_ground`, `meet`, `join` required; `narrow_from`, `widen_with` default impls derived from `meet`/`join` + `PartialEq`
@@ -1686,12 +1686,15 @@ Sequencing chosen so each step lands independently with `cargo test --workspace 
 - Exhaustive `meet`/`join` tests over variant cross-products — load-bearing correctness check
 - Inline `LitSet` first-occurrence dedup helper (private to `traits.rs`)
 
-##### Step 3 — `Lattice` derive macro for struct types
+##### Step 3 — `Lattice` derive macro for struct types **Done**
 
-- Add `#[derive(Lattice)]` proc-macro (in `umol-ast-macros` if it exists, otherwise new crate)
-- Apply to `AtomAst`, `BondAst`, `DativeBondAst`, `MulticenterBondAst`, `NoncovalentBondAst`, `AromaticSystemAst`
-- Tests: field-by-field meet/join; `narrow_from` returns "changed" correctly
-- Fallback if proc-macro infrastructure is missing: hand-rolled impls on the six entity types (~150 lines total)
+- Hand-rolled `Lattice` impls on the six entity types (`AtomAst`, `BondAst`, `DativeBondAst`, `MulticenterBondAst`, `NoncovalentBondAst`, `AromaticSystemAst`) — proc-macro path deferred; no `umol-ast-macros` crate exists yet
+- Added `Lattice` impls on the six constraint containers (`AtomConstraints`, `BondConstraints`, `DativeBondConstraints`, `MulticenterBondConstraints`, `NoncovalentBondConstraints`, `AromaticSystemConstraints`) — container `meet` is per-kind merge with inner value `meet` and vacuous-entry pruning; `join` is per-kind intersection
+- Removed inherent `is_ground` / `is_undetermined` on the six entity types; trait now owns them. Added `use Lattice;` to consumer modules (resolver, atom_typing, counts, molecule.rs internal)
+- Non-Lattice field policies confirmed: `DativeBondAst::acceptor_slot` (u8) and `NoncovalentBondAst::kind` (NoncovalentBondKindAst, equality-only) → `meet` requires equality (else `None`); `join` widens to `Self::default()` on mismatch
+- `Vec<ValueAst>` length-mismatch (`AromaticSystemAst::electrons`, `MulticenterBondAst::electrons`) → `meet` `None`; `join` `Self::default()`
+- Container `is_undetermined`: every entry's value is `is_undetermined` (vacuous on empty); `meet`/`join` outputs prune undetermined-valued entries (canonical: no vacuous entries)
+- Tests: representative cross-product tests on `BondAst` (meet, join, narrow_from positive/negative cases); 8063 total tests pass
 
 ##### Step 4 — `AtomConstraints::narrow_with(&other) -> bool`
 

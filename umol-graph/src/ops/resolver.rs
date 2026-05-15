@@ -19,7 +19,7 @@ pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
 use thiserror::Error;
-use umol_ast::ast::MoleculeAst;
+use umol_ast::ast::{Lattice, MoleculeAst};
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};

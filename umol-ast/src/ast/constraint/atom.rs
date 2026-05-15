@@ -524,6 +524,133 @@ impl AtomConstraints {
     }
 }
 
+impl Lattice for AtomConstraints {
+    fn is_undetermined(&self) -> bool {
+        self.iter().all(|c| c.is_undetermined())
+    }
+
+    fn is_ground(&self) -> bool {
+        self.iter().all(|c| match c {
+            AtomConstraint::Valence(v)
+            | AtomConstraint::TotalValence(v)
+            | AtomConstraint::DonatedPairs(v)
+            | AtomConstraint::AcceptedPairs(v)
+            | AtomConstraint::Degree(v)
+            | AtomConstraint::TotalDegree(v)
+            | AtomConstraint::RingDegree(v)
+            | AtomConstraint::RingValence(v)
+            | AtomConstraint::TotalHydrogens(v)
+            | AtomConstraint::RingCount(v)
+            | AtomConstraint::RingSize(v) => v.is_ground(),
+            AtomConstraint::AromaticValence(c) => c.is_ground(),
+            AtomConstraint::MulticenterValence(c) => c.is_ground(),
+        })
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        let mut result = Self::new();
+        let v = self.valence().meet(&other.valence())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::Valence(v));
+        }
+        let v = self.total_valence().meet(&other.total_valence())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::TotalValence(v));
+        }
+        let v = self.aromatic_valence().meet(&other.aromatic_valence())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::AromaticValence(v));
+        }
+        let v = self.multicenter_valence().meet(&other.multicenter_valence())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::MulticenterValence(v));
+        }
+        let v = self.donated_pairs().meet(&other.donated_pairs())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::DonatedPairs(v));
+        }
+        let v = self.accepted_pairs().meet(&other.accepted_pairs())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::AcceptedPairs(v));
+        }
+        let v = self.degree().meet(&other.degree())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::Degree(v));
+        }
+        let v = self.total_degree().meet(&other.total_degree())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::TotalDegree(v));
+        }
+        let v = self.ring_degree().meet(&other.ring_degree())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::RingDegree(v));
+        }
+        let v = self.ring_valence().meet(&other.ring_valence())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::RingValence(v));
+        }
+        let v = self.total_hydrogens().meet(&other.total_hydrogens())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::TotalHydrogens(v));
+        }
+        let v = self.ring_count().meet(&other.ring_count())?;
+        if !v.is_undetermined() {
+            result.add(AtomConstraint::RingCount(v));
+        }
+        for v in self.ring_sizes().chain(other.ring_sizes()) {
+            if v.is_undetermined() {
+                continue;
+            }
+            let entry = AtomConstraint::RingSize(v.clone());
+            if !result.contains_entry(&entry) {
+                result.add(entry);
+            }
+        }
+        Some(result)
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        let mut result = Self::new();
+        macro_rules! join_unique_value {
+            ($kind:ident, $accessor:ident, $variant:ident) => {
+                if self.contains(AtomConstraintKind::$kind)
+                    && other.contains(AtomConstraintKind::$kind)
+                {
+                    let joined = self.$accessor().join(&other.$accessor());
+                    if !joined.is_undetermined() {
+                        result.add(AtomConstraint::$variant(joined));
+                    }
+                }
+            };
+        }
+        join_unique_value!(Valence, valence, Valence);
+        join_unique_value!(TotalValence, total_valence, TotalValence);
+        join_unique_value!(AromaticValence, aromatic_valence, AromaticValence);
+        join_unique_value!(MulticenterValence, multicenter_valence, MulticenterValence);
+        join_unique_value!(DonatedPairs, donated_pairs, DonatedPairs);
+        join_unique_value!(AcceptedPairs, accepted_pairs, AcceptedPairs);
+        join_unique_value!(Degree, degree, Degree);
+        join_unique_value!(TotalDegree, total_degree, TotalDegree);
+        join_unique_value!(RingDegree, ring_degree, RingDegree);
+        join_unique_value!(RingValence, ring_valence, RingValence);
+        join_unique_value!(TotalHydrogens, total_hydrogens, TotalHydrogens);
+        join_unique_value!(RingCount, ring_count, RingCount);
+        for v in self.ring_sizes() {
+            if v.is_undetermined() {
+                continue;
+            }
+            let entry = AtomConstraint::RingSize(v.clone());
+            if other
+                .ring_sizes()
+                .any(|o| AtomConstraint::RingSize(o.clone()) == entry)
+            {
+                result.add(entry);
+            }
+        }
+        result
+    }
+}
+
 impl FromIterator<AtomConstraint> for AtomConstraints {
     fn from_iter<I: IntoIterator<Item = AtomConstraint>>(iter: I) -> Self {
         let mut out = Self::new();

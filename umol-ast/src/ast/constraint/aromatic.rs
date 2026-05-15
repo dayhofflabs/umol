@@ -172,6 +172,42 @@ impl AromaticSystemConstraints {
     }
 }
 
+impl Lattice for AromaticSystemConstraints {
+    fn is_undetermined(&self) -> bool {
+        self.iter().all(|c| match c {
+            AromaticSystemConstraint::ElectronCount(v) => v.is_undetermined(),
+        })
+    }
+
+    fn is_ground(&self) -> bool {
+        self.iter().all(|c| match c {
+            AromaticSystemConstraint::ElectronCount(v) => v.is_ground(),
+        })
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        let mut result = Self::new();
+        let merged = self.electron_count().meet(&other.electron_count())?;
+        if !merged.is_undetermined() {
+            result.add(AromaticSystemConstraint::ElectronCount(merged));
+        }
+        Some(result)
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        let mut result = Self::new();
+        let a_has = self.contains(AromaticSystemConstraintKind::ElectronCount);
+        let b_has = other.contains(AromaticSystemConstraintKind::ElectronCount);
+        if a_has && b_has {
+            let joined = self.electron_count().join(&other.electron_count());
+            if !joined.is_undetermined() {
+                result.add(AromaticSystemConstraint::ElectronCount(joined));
+            }
+        }
+        result
+    }
+}
+
 impl FromIterator<AromaticSystemConstraint> for AromaticSystemConstraints {
     fn from_iter<I: IntoIterator<Item = AromaticSystemConstraint>>(iter: I) -> Self {
         let mut out = Self::new();

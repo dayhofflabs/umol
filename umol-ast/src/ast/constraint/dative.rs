@@ -202,6 +202,64 @@ impl DativeBondConstraints {
     }
 }
 
+impl Lattice for DativeBondConstraints {
+    fn is_undetermined(&self) -> bool {
+        self.iter().all(|c| match c {
+            DativeBondConstraint::Aromatic => false,
+            DativeBondConstraint::RingCount(v) | DativeBondConstraint::RingSize(v) => {
+                v.is_undetermined()
+            }
+        })
+    }
+
+    fn is_ground(&self) -> bool {
+        self.iter().all(|c| match c {
+            DativeBondConstraint::Aromatic => true,
+            DativeBondConstraint::RingCount(v) | DativeBondConstraint::RingSize(v) => v.is_ground(),
+        })
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        let mut result = Self::new();
+        if self.aromatic() || other.aromatic() {
+            result.add(DativeBondConstraint::Aromatic);
+        }
+        let rc = self.ring_count().meet(&other.ring_count())?;
+        if !rc.is_undetermined() {
+            result.add(DativeBondConstraint::RingCount(rc));
+        }
+        let rs = self.ring_size().meet(&other.ring_size())?;
+        if !rs.is_undetermined() {
+            result.add(DativeBondConstraint::RingSize(rs));
+        }
+        Some(result)
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        let mut result = Self::new();
+        if self.aromatic() && other.aromatic() {
+            result.add(DativeBondConstraint::Aromatic);
+        }
+        if self.contains(DativeBondConstraintKind::RingCount)
+            && other.contains(DativeBondConstraintKind::RingCount)
+        {
+            let joined = self.ring_count().join(&other.ring_count());
+            if !joined.is_undetermined() {
+                result.add(DativeBondConstraint::RingCount(joined));
+            }
+        }
+        if self.contains(DativeBondConstraintKind::RingSize)
+            && other.contains(DativeBondConstraintKind::RingSize)
+        {
+            let joined = self.ring_size().join(&other.ring_size());
+            if !joined.is_undetermined() {
+                result.add(DativeBondConstraint::RingSize(joined));
+            }
+        }
+        result
+    }
+}
+
 impl FromIterator<DativeBondConstraint> for DativeBondConstraints {
     fn from_iter<I: IntoIterator<Item = DativeBondConstraint>>(iter: I) -> Self {
         let mut out = Self::new();

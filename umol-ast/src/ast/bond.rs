@@ -87,10 +87,6 @@ impl BondAst {
         self.into_ground()
     }
 
-    pub fn is_ground(&self) -> bool {
-        self.order.is_ground() && self.charge.is_ground() && self.spin.is_ground()
-    }
-
     /// `self` (pattern) matches `target` iff every admissible assignment
     /// of `target` is also admissible by `self`, checked field-wise.
     pub fn matches(&self, target: &BondAst) -> bool {
@@ -105,6 +101,40 @@ impl BondAst {
         self.charge = mem::take(&mut self.charge).simplify();
         self.spin.simplify_values();
         self.constraints.simplify_each();
+    }
+}
+
+impl Lattice for BondAst {
+    fn is_undetermined(&self) -> bool {
+        self.order.is_undetermined()
+            && self.charge.is_undetermined()
+            && self.spin.is_undetermined()
+            && self.constraints.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.order.is_ground()
+            && self.charge.is_ground()
+            && self.spin.is_ground()
+            && self.constraints.is_ground()
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        Some(Self {
+            order: self.order.meet(&other.order)?,
+            charge: self.charge.meet(&other.charge)?,
+            spin: self.spin.meet(&other.spin)?,
+            constraints: self.constraints.meet(&other.constraints)?,
+        })
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        Self {
+            order: self.order.join(&other.order),
+            charge: self.charge.join(&other.charge),
+            spin: self.spin.join(&other.spin),
+            constraints: self.constraints.join(&other.constraints),
+        }
     }
 }
 
@@ -259,5 +289,71 @@ mod tests {
                 constraints: BondConstraints::from(BondConstraint::ring_size(6)),
             }
         );
+    }
+
+    #[rstest]
+    fn test_bond_ast_meet_both_default() {
+        let a = BondAst::default();
+        let b = BondAst::default();
+        assert_eq!(a.meet(&b), Some(BondAst::default()));
+    }
+
+    #[rstest]
+    fn test_bond_ast_meet_narrows_field() {
+        let a = BondAst::from_order(2);
+        let b = BondAst {
+            order: ValueAst::Undetermined,
+            charge: ValueAst::Lit(1),
+            spin: SpinStateAst::default(),
+            constraints: BondConstraints::new(),
+        };
+        assert_eq!(
+            a.meet(&b),
+            Some(BondAst {
+                order: ValueAst::Lit(2),
+                charge: ValueAst::Lit(1),
+                spin: SpinStateAst::default(),
+                constraints: BondConstraints::new(),
+            })
+        );
+    }
+
+    #[rstest]
+    fn test_bond_ast_meet_incompatible_order() {
+        let a = BondAst::from_order(2);
+        let b = BondAst::from_order(3);
+        assert_eq!(a.meet(&b), None);
+    }
+
+    #[rstest]
+    fn test_bond_ast_join_widens() {
+        let a = BondAst::from_order(2);
+        let b = BondAst::from_order(3);
+        assert_eq!(
+            a.join(&b),
+            BondAst {
+                order: ValueAst::LitSet(Box::new(vec![2, 3])),
+                charge: ValueAst::Undetermined,
+                spin: SpinStateAst::default(),
+                constraints: BondConstraints::new(),
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_bond_ast_narrow_from_changed() {
+        let mut a = BondAst::default();
+        let b = BondAst::from_order(2);
+        let changed = a.narrow_from(&b);
+        assert!(changed);
+        assert_eq!(a.order, ValueAst::Lit(2));
+    }
+
+    #[rstest]
+    fn test_bond_ast_narrow_from_no_change() {
+        let mut a = BondAst::from_order(2);
+        let b = BondAst::from_order(2);
+        let changed = a.narrow_from(&b);
+        assert!(!changed);
     }
 }

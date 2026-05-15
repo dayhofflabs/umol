@@ -154,15 +154,6 @@ impl AtomAst {
         self
     }
 
-    pub fn is_ground(&self) -> bool {
-        self.element.is_ground()
-            && self.isotope_mass.is_ground()
-            && self.charge.is_ground()
-            && self.implicit_hydrogens.is_ground()
-            && self.lone_pairs.is_ground()
-            && self.spin.is_ground()
-    }
-
     /// `self` (pattern) matches `target` iff every admissible assignment
     /// of `target` is also admissible by `self`, checked field-wise.
     /// See per-field `matches` for the scalar rules.
@@ -185,6 +176,52 @@ impl AtomAst {
         self.lone_pairs = mem::take(&mut self.lone_pairs).simplify();
         self.spin.simplify_values();
         self.constraints.simplify_each();
+    }
+}
+
+impl Lattice for AtomAst {
+    fn is_undetermined(&self) -> bool {
+        self.element.is_undetermined()
+            && self.isotope_mass.is_undetermined()
+            && self.charge.is_undetermined()
+            && self.implicit_hydrogens.is_undetermined()
+            && self.lone_pairs.is_undetermined()
+            && self.spin.is_undetermined()
+            && self.constraints.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.element.is_ground()
+            && self.isotope_mass.is_ground()
+            && self.charge.is_ground()
+            && self.implicit_hydrogens.is_ground()
+            && self.lone_pairs.is_ground()
+            && self.spin.is_ground()
+            && self.constraints.is_ground()
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        Some(Self {
+            element: self.element.meet(&other.element)?,
+            isotope_mass: self.isotope_mass.meet(&other.isotope_mass)?,
+            charge: self.charge.meet(&other.charge)?,
+            implicit_hydrogens: self.implicit_hydrogens.meet(&other.implicit_hydrogens)?,
+            lone_pairs: self.lone_pairs.meet(&other.lone_pairs)?,
+            spin: self.spin.meet(&other.spin)?,
+            constraints: self.constraints.meet(&other.constraints)?,
+        })
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        Self {
+            element: self.element.join(&other.element),
+            isotope_mass: self.isotope_mass.join(&other.isotope_mass),
+            charge: self.charge.join(&other.charge),
+            implicit_hydrogens: self.implicit_hydrogens.join(&other.implicit_hydrogens),
+            lone_pairs: self.lone_pairs.join(&other.lone_pairs),
+            spin: self.spin.join(&other.spin),
+            constraints: self.constraints.join(&other.constraints),
+        }
     }
 }
 
@@ -1312,5 +1349,57 @@ mod tests {
     #[should_panic]
     fn test_implicit_hydrogens_ast_div_by_zero_panics() {
         let _ = ImplicitHydrogensAst::Lit(5) / ImplicitHydrogensAst::Lit(0);
+    }
+
+    #[rstest]
+    fn test_atom_ast_meet_both_default() {
+        let a = AtomAst::default();
+        let b = AtomAst::default();
+        assert_eq!(a.meet(&b), Some(AtomAst::default()));
+    }
+
+    #[rstest]
+    fn test_atom_ast_meet_element_mismatch() {
+        let a = AtomAst::from_element(Element::C);
+        let b = AtomAst::from_element(Element::N);
+        assert_eq!(a.meet(&b), None);
+    }
+
+    #[rstest]
+    fn test_atom_ast_meet_narrows_charge() {
+        let a = AtomAst::from_element(Element::C);
+        let b = AtomAst::from_element(Element::C).with_charge(1);
+        assert_eq!(
+            a.meet(&b),
+            Some(AtomAst::from_element(Element::C).with_charge(1))
+        );
+    }
+
+    #[rstest]
+    fn test_atom_ast_join_element_mismatch_widens() {
+        let a = AtomAst::from_element(Element::C);
+        let b = AtomAst::from_element(Element::N);
+        let result = a.join(&b);
+        assert_eq!(
+            result.element,
+            ElementAst::Set(vec![Element::C, Element::N])
+        );
+    }
+
+    #[rstest]
+    fn test_atom_ast_narrow_from_charge_change() {
+        let mut a = AtomAst::from_element(Element::C);
+        let b = AtomAst::from_element(Element::C).with_charge(1);
+        let changed = a.narrow_from(&b);
+        assert!(changed);
+        assert_eq!(a.charge, ValueAst::Lit(1));
+    }
+
+    #[rstest]
+    fn test_atom_ast_narrow_from_no_change() {
+        let mut a = AtomAst::from_element(Element::C);
+        let b = AtomAst::from_element(Element::C);
+        let changed = a.narrow_from(&b);
+        assert!(!changed);
     }
 }

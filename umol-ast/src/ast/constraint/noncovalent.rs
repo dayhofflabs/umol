@@ -4,6 +4,7 @@ use std::mem;
 use std::slice::Iter;
 
 use super::super::remap::IdRemapping;
+use super::super::traits::Lattice;
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
@@ -73,6 +74,24 @@ impl NoncovalentBondConstraints {
 
     pub fn remap(self, _remap: &IdRemapping) -> Self {
         self
+    }
+}
+
+impl Lattice for NoncovalentBondConstraints {
+    fn is_undetermined(&self) -> bool {
+        true
+    }
+
+    fn is_ground(&self) -> bool {
+        true
+    }
+
+    fn meet(&self, _other: &Self) -> Option<Self> {
+        Some(Self::new())
+    }
+
+    fn join(&self, _other: &Self) -> Self {
+        Self::new()
     }
 }
 

@@ -3,8 +3,8 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst, ImplicitHydrogensAst, MoleculeAst,
-    ValueAst,
+    AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst, ImplicitHydrogensAst, Lattice,
+    MoleculeAst, ValueAst,
 };
 use umol_shared::element::Element;
 
