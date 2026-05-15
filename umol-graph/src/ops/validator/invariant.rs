@@ -35,23 +35,23 @@ impl ElectronInvariantValidator {
         let mut any_undetermined = false;
         for view in ast.atoms().iter() {
             let atom = view.ast;
-            let Some(element) = atom.element.literal() else {
+            let Some(element) = atom.element.as_lit() else {
                 any_undetermined = true;
                 continue;
             };
-            let Some(charge) = atom.charge.literal() else {
+            let Some(charge) = atom.charge.as_lit() else {
                 any_undetermined = true;
                 continue;
             };
-            let Some(implicit_h) = atom.implicit_hydrogens.literal() else {
+            let Some(implicit_h) = atom.implicit_hydrogens.as_lit() else {
                 any_undetermined = true;
                 continue;
             };
-            let Some(lone_pairs) = atom.lone_pairs.literal() else {
+            let Some(lone_pairs) = atom.lone_pairs.as_lit() else {
                 any_undetermined = true;
                 continue;
             };
-            let Some(unpaired) = atom.spin.unpaired.literal() else {
+            let Some(unpaired) = atom.spin.unpaired.as_lit() else {
                 any_undetermined = true;
                 continue;
             };
@@ -145,19 +145,19 @@ impl ElectronInvariantValidator {
         &self,
         atom: &AtomAst,
     ) -> Result<Solution<(), ElectronInvariantContradiction>, ElectronInvariantError> {
-        let Some(element) = atom.element.literal() else {
+        let Some(element) = atom.element.as_lit() else {
             return Ok(Solution::Underdetermined(()));
         };
-        let Some(charge) = atom.charge.literal() else {
+        let Some(charge) = atom.charge.as_lit() else {
             return Ok(Solution::Underdetermined(()));
         };
-        let Some(implicit_h) = atom.implicit_hydrogens.literal() else {
+        let Some(implicit_h) = atom.implicit_hydrogens.as_lit() else {
             return Ok(Solution::Underdetermined(()));
         };
-        let Some(lone_pairs) = atom.lone_pairs.literal() else {
+        let Some(lone_pairs) = atom.lone_pairs.as_lit() else {
             return Ok(Solution::Underdetermined(()));
         };
-        let Some(unpaired) = atom.spin.unpaired.literal() else {
+        let Some(unpaired) = atom.spin.unpaired.as_lit() else {
             return Ok(Solution::Underdetermined(()));
         };
         let valence_electrons = element.valence_electrons() as i64;

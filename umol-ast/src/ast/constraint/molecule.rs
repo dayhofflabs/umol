@@ -569,37 +569,37 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::atom_folds(
-        Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4)))),
+        Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4))))),
         Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
     )]
     #[case::bond_folds(
-        Constraint::Bond(BondId(0), BondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6)))),
+        Constraint::Bond(BondId(0), BondConstraint::RingSize(ValueAst::Expr(Box::new(Expr::Lit(6))))),
         Constraint::Bond(BondId(0), BondConstraint::ring_size(6)),
     )]
     #[case::dative_folds(
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Lit(2)))),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::RingCount(ValueAst::Expr(Box::new(Expr::Lit(2))))),
         Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_count(2)),
     )]
     #[case::aromatic_system_folds(
         Constraint::AromaticSystem(AromaticSystemId(0),
-            AromaticSystemConstraint::ElectronCount(ValueAst::Expr(Expr::Lit(6)))),
+            AromaticSystemConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(6))))),
         Constraint::AromaticSystem(AromaticSystemId(0),
             AromaticSystemConstraint::electron_count(6)),
     )]
     #[case::multicenter_folds(
         Constraint::MulticenterBond(MulticenterBondId(0),
-            MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Expr::Lit(2)))),
+            MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(2))))),
         Constraint::MulticenterBond(MulticenterBondId(0),
             MulticenterBondConstraint::electron_count(2)),
     )]
     #[case::molecule_folds(
-        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Expr(Expr::Lit(1)) }),
+        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Expr(Box::new(Expr::Lit(1))) }),
         Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(1) }),
     )]
     #[case::and_folds_recursively(
         Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4)))),
-            Constraint::Bond(BondId(0), BondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6)))),
+            Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4))))),
+            Constraint::Bond(BondId(0), BondConstraint::RingSize(ValueAst::Expr(Box::new(Expr::Lit(6))))),
         ]),
         Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
@@ -608,7 +608,7 @@ mod tests {
     )]
     #[case::or_folds_recursively(
         Constraint::Or(vec![
-            Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4)))),
+            Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4))))),
         ]),
         Constraint::Or(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
@@ -616,7 +616,7 @@ mod tests {
     )]
     #[case::not_folds_child(
         Constraint::Not(Box::new(Constraint::Atom(AtomId(0),
-            AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4)))))),
+            AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4))))))),
         Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)))),
     )]
     fn test_constraint_simplify(#[case] input: Constraint, #[case] expected: Constraint) {
@@ -982,11 +982,11 @@ mod tests {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(
             AtomId(0),
-            AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4))),
+            AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4)))),
         ));
         cs.push(Constraint::Bond(
             BondId(0),
-            BondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6))),
+            BondConstraint::RingSize(ValueAst::Expr(Box::new(Expr::Lit(6)))),
         ));
         cs.simplify_each();
         assert_eq!(
@@ -1018,16 +1018,16 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::charge_sum_folds(
-        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Expr(Expr::Lit(1)) },
+        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Expr(Box::new(Expr::Lit(1))) },
         MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(1) },
     )]
     #[case::bond_order_sum_folds(
-        MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Expr(Expr::Lit(4)) },
+        MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Expr(Box::new(Expr::Lit(4))) },
         MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(4) },
     )]
     #[case::spin_sum_folds(
         MoleculeConstraint::SpinSum { atoms: None,
-            spin: SpinStateAst { unpaired: ValueAst::Expr(Expr::Lit(0)), multiplicity: ValueAst::Expr(Expr::Lit(1)) } },
+            spin: SpinStateAst { unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))), multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))) } },
         MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::from((0_u8, 1_u8)) },
     )]
     fn test_molecule_constraint_simplify(

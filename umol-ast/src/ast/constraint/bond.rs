@@ -284,11 +284,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_count_folds_expr(
-        BondConstraint::RingCount(ValueAst::Expr(Expr::Lit(2))),
+        BondConstraint::RingCount(ValueAst::Expr(Box::new(Expr::Lit(2)))),
         BondConstraint::ring_count(2),
     )]
     #[case::ring_size_folds_expr(
-        BondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6))),
+        BondConstraint::RingSize(ValueAst::Expr(Box::new(Expr::Lit(6)))),
         BondConstraint::ring_size(6),
     )]
     fn test_bond_constraint_simplify(
@@ -475,8 +475,8 @@ mod tests {
     fn test_bond_constraints_simplify_each() {
         let mut cs = BondConstraints::from_iter([
             BondConstraint::Aromatic,
-            BondConstraint::RingCount(ValueAst::Expr(Expr::Lit(1))),
-            BondConstraint::RingSize(ValueAst::Expr(Expr::Lit(6))),
+            BondConstraint::RingCount(ValueAst::Expr(Box::new(Expr::Lit(1)))),
+            BondConstraint::RingSize(ValueAst::Expr(Box::new(Expr::Lit(6)))),
         ]);
         cs.simplify_each();
         assert_eq!(

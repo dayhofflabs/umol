@@ -544,19 +544,19 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::valence_folds_expr(
-        AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4))),
+        AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4)))),
         AtomConstraint::valence(4),
     )]
     #[case::degree_folds_expr(
-        AtomConstraint::Degree(ValueAst::Expr(Expr::Lit(3))),
+        AtomConstraint::Degree(ValueAst::Expr(Box::new(Expr::Lit(3)))),
         AtomConstraint::degree(3),
     )]
     #[case::aromatic_valence_folds_inner(
-        AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(Expr::Lit(2)))),
+        AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(Expr::Lit(2))))),
         AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(2)),
     )]
     #[case::multicenter_valence_folds_inner(
-        AtomConstraint::multicenter_valence(MulticenterValenceAst::Multicenter(ValueAst::Expr(Expr::Lit(3)))),
+        AtomConstraint::multicenter_valence(MulticenterValenceAst::Multicenter(ValueAst::Expr(Box::new(Expr::Lit(3))))),
         AtomConstraint::multicenter_valence(MulticenterValenceAst::multicenter(3)),
     )]
     fn test_atom_constraint_simplify(
@@ -607,7 +607,7 @@ mod tests {
 
     #[rstest]
     #[case::aromatic_folds_expr(
-        AromaticValenceAst::Aromatic(ValueAst::Expr(Expr::Lit(2))),
+        AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(Expr::Lit(2)))),
         AromaticValenceAst::aromatic(2)
     )]
     fn test_aromatic_valence_ast_simplify(
@@ -650,7 +650,7 @@ mod tests {
 
     #[rstest]
     #[case::multicenter_folds_expr(
-        MulticenterValenceAst::Multicenter(ValueAst::Expr(Expr::Lit(3))),
+        MulticenterValenceAst::Multicenter(ValueAst::Expr(Box::new(Expr::Lit(3)))),
         MulticenterValenceAst::multicenter(3)
     )]
     fn test_multicenter_valence_ast_simplify(
@@ -806,11 +806,11 @@ mod tests {
     #[rstest]
     fn test_atom_constraints_simplify_each() {
         let mut cs = AtomConstraints::from_iter([
-            AtomConstraint::Valence(ValueAst::Expr(Expr::Lit(4))),
-            AtomConstraint::Degree(ValueAst::Expr(Expr::Lit(3))),
-            AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(
+            AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4)))),
+            AtomConstraint::Degree(ValueAst::Expr(Box::new(Expr::Lit(3)))),
+            AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(
                 Expr::Lit(2),
-            ))),
+            )))),
         ]);
         cs.simplify_each();
         assert_eq!(

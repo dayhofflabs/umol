@@ -17,24 +17,28 @@ pub type Bindings = HashMap<String, i64>;
 pub enum ValueAst {
     #[default]
     Undetermined,
-    LitSet(Vec<i64>),
     Lit(i64),
-    Expr(Expr),
-}
-
-impl From<i64> for ValueAst {
-    fn from(value: i64) -> Self {
-        Self::Lit(value)
-    }
-}
-
-impl From<SpinMultiplicity> for ValueAst {
-    fn from(m: SpinMultiplicity) -> Self {
-        Self::Lit(u8::from(m) as i64)
-    }
+    LitSet(Box<Vec<i64>>),
+    Expr(Box<Expr>),
 }
 
 impl ValueAst {
+    pub fn undetermined() -> Self {
+        Self::Undetermined
+    }
+
+    pub fn lit(n: i64) -> Self {
+        Self::Lit(n)
+    }
+
+    pub fn lit_set(values: Vec<i64>) -> Self {
+        Self::LitSet(Box::new(values))
+    }
+
+    pub fn expr(e: Expr) -> Self {
+        Self::Expr(Box::new(e))
+    }
+
     /// The pattern denotes a single concrete integer. Semantic, not
     /// syntactic: `Expr` that folds to a constant is ground, and a
     /// `LitSet` of a single value (regardless of duplicates) is ground.
@@ -65,17 +69,17 @@ impl ValueAst {
     /// Aligned with [`Self::is_ground`]: `is_ground() == literal().is_some()`.
     /// Non-destructive — does not mutate or simplify in place.
     #[inline]
-    pub fn literal(&self) -> Option<i64> {
+    pub fn as_lit(&self) -> Option<i64> {
         match self {
             Self::Lit(n) => Some(*n),
             Self::Undetermined => None,
-            _ => self.literal_slow(),
+            _ => self.as_lit_slow(),
         }
     }
 
     #[inline(never)]
     #[cold]
-    fn literal_slow(&self) -> Option<i64> {
+    fn as_lit_slow(&self) -> Option<i64> {
         match self {
             Self::LitSet(s) => litset_is_ground(s).then(|| s[0]),
             Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
@@ -126,11 +130,11 @@ impl ValueAst {
                 Expr::Neg(inner) => match *inner {
                     Expr::Lit(n) => match n.checked_neg() {
                         Some(neg) => Self::Lit(neg),
-                        None => Self::Expr(Expr::Neg(Box::new(Expr::Lit(n)))),
+                        None => Self::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(n))))),
                     },
-                    other => Self::Expr(Expr::Neg(Box::new(other))),
+                    other => Self::Expr(Box::new(Expr::Neg(Box::new(other)))),
                 },
-                other => Self::Expr(other),
+                other => Self::Expr(Box::new(other)),
             },
             other => other,
         }
@@ -209,6 +213,31 @@ impl Div for ValueAst {
             (Self::Lit(a), Self::Lit(b)) => Self::Lit(a / b),
             _ => Self::Undetermined,
         }
+    }
+}
+
+
+impl From<i64> for ValueAst {
+    fn from(value: i64) -> Self {
+        Self::Lit(value)
+    }
+}
+
+impl From<SpinMultiplicity> for ValueAst {
+    fn from(m: SpinMultiplicity) -> Self {
+        Self::Lit(u8::from(m) as i64)
+    }
+}
+
+impl From<Vec<i64>> for ValueAst {
+    fn from(values: Vec<i64>) -> Self {
+        Self::LitSet(Box::new(values))
+    }
+}
+
+impl From<Expr> for ValueAst {
+    fn from(e: Expr) -> Self {
+        Self::Expr(Box::new(e))
     }
 }
 
@@ -561,26 +590,26 @@ mod tests {
     #[case::lit_zero(ValueAst::Lit(0), Some(0))]
     #[case::lit_neg(ValueAst::Lit(-5), Some(-5))]
     #[case::undetermined(ValueAst::Undetermined, None)]
-    #[case::lit_set_empty(ValueAst::LitSet(vec![]), None)]
-    #[case::lit_set_singleton(ValueAst::LitSet(vec![7]), Some(7))]
-    #[case::lit_set_all_equal(ValueAst::LitSet(vec![3, 3, 3]), Some(3))]
-    #[case::lit_set_multi(ValueAst::LitSet(vec![1, 2]), None)]
-    #[case::expr_lit(ValueAst::Expr(Expr::Lit(5)), Some(5))]
-    #[case::expr_neg_lit(ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(3)))), Some(-3))]
+    #[case::lit_set_empty(ValueAst::LitSet(Box::default()), None)]
+    #[case::lit_set_singleton(ValueAst::LitSet(Box::new(vec![7])), Some(7))]
+    #[case::lit_set_all_equal(ValueAst::LitSet(Box::new(vec![3, 3, 3])), Some(3))]
+    #[case::lit_set_multi(ValueAst::LitSet(Box::new(vec![1, 2])), None)]
+    #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Lit(5))), Some(5))]
+    #[case::expr_neg_lit(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))), Some(-3))]
     #[case::expr_const_add(
-        ValueAst::Expr(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3)))),
+        ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3))))),
         Some(5),
     )]
-    #[case::expr_var(ValueAst::Expr(Expr::Var("x".to_string())), None)]
+    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("x".to_string()))), None)]
     #[case::expr_boolean(
-        ValueAst::Expr(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(1)))),
+        ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(1))))),
         None,
     )]
     fn test_value_ast_literal_and_is_ground(
         #[case] ast: ValueAst,
         #[case] expected_literal: Option<i64>,
     ) {
-        assert_eq!(ast.literal(), expected_literal);
+        assert_eq!(ast.as_lit(), expected_literal);
         assert_eq!(ast.is_ground(), expected_literal.is_some());
     }
 
@@ -588,14 +617,14 @@ mod tests {
     #[rstest]
     #[case::undetermined(ValueAst::Undetermined, 3, true)]
     #[case::lit_match(ValueAst::Lit(3), 3,  true)]
-    #[case::lit_set_match(ValueAst::LitSet(vec![1, 2, 3]), 2, true)]
-    #[case::expr_var(ValueAst::Expr(Expr::Var("h".to_string())), 5, true)]
-    #[case::expr_lit_match(ValueAst::Expr(Expr::Lit(3)), 3, true)]
-    #[case::expr_rel_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 3, true)]
-    #[case::expr_mem_match(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![0, 1])), 1, true)]
+    #[case::lit_set_match(ValueAst::LitSet(Box::new(vec![1, 2, 3])), 2, true)]
+    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".to_string()))), 5, true)]
+    #[case::expr_lit_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 3, true)]
+    #[case::expr_rel_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 3, true)]
+    #[case::expr_mem_match(ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![0, 1]))), 1, true)]
     #[case::lit_no_match(ValueAst::Lit(3), 4, false)]
-    #[case::expr_lit_no_match(ValueAst::Expr(Expr::Lit(3)), 4, false)]
-    #[case::expr_rel_no_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 0, false)]
+    #[case::expr_lit_no_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 4, false)]
+    #[case::expr_rel_no_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 0, false)]
     fn test_matches_value(#[case] pattern: ValueAst, #[case] value: i64, #[case] expected: bool) {
         assert_eq!(pattern.matches_value(value), expected);
     }
@@ -604,11 +633,11 @@ mod tests {
     #[rstest]
     #[case::undetermined(ValueAst::Undetermined, 3, Bindings::new())]
     #[case::lit_match(ValueAst::Lit(3), 3, Bindings::new())]
-    #[case::lit_set_match(ValueAst::LitSet(vec![1, 2, 3]), 2, Bindings::new())]
-    #[case::expr_var(ValueAst::Expr(Expr::Var("h".to_string())), 5, Bindings::from([("h".to_string(), 5)]))]
-    #[case::expr_lit_match(ValueAst::Expr(Expr::Lit(3)), 3, Bindings::new())]
-    #[case::expr_rel_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 3, Bindings::from([("h".to_string(), 3)]))]
-    #[case::expr_mem_match(ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![0, 1])), 1, Bindings::from([("h".to_string(), 1)]))]
+    #[case::lit_set_match(ValueAst::LitSet(Box::new(vec![1, 2, 3])), 2, Bindings::new())]
+    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".to_string()))), 5, Bindings::from([("h".to_string(), 5)]))]
+    #[case::expr_lit_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 3, Bindings::new())]
+    #[case::expr_rel_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 3, Bindings::from([("h".to_string(), 3)]))]
+    #[case::expr_mem_match(ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![0, 1]))), 1, Bindings::from([("h".to_string(), 1)]))]
     fn test_capture(#[case] pattern: ValueAst, #[case] value: i64, #[case] expected: Bindings) {
         assert_eq!(pattern.capture(value), Some(expected));
     }
@@ -616,8 +645,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::lit_no_match(ValueAst::Lit(3), 4)]
-    #[case::expr_lit_no_match(ValueAst::Expr(Expr::Lit(3)), 4)]
-    #[case::expr_rel_no_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), 0)]
+    #[case::expr_lit_no_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 4)]
+    #[case::expr_rel_no_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 0)]
     fn test_capture_no_match(#[case] pattern: ValueAst, #[case] value: i64) {
         assert_eq!(pattern.capture(value), None);
     }
@@ -693,27 +722,27 @@ mod tests {
     #[rstest]
     #[case::lit(ValueAst::Lit(5), ValueAst::Lit(5))]
     #[case::undetermined(ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::lit_set(ValueAst::LitSet(vec![1, 2]), ValueAst::LitSet(vec![1, 2]))]
-    #[case::expr_lit_lifts(ValueAst::Expr(Expr::Lit(5)), ValueAst::Lit(5))]
+    #[case::lit_set(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![1, 2])))]
+    #[case::expr_lit_lifts(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Lit(5))]
     #[case::expr_neg_lit_lifts(
-        ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(7)))),
+        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(7))))),
         ValueAst::Lit(-7),
     )]
     #[case::expr_neg_neg_lit_lifts(
-        ValueAst::Expr(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(4)))))),
+        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(4))))))),
         ValueAst::Lit(4),
     )]
     #[case::expr_var_stays(
-        ValueAst::Expr(Expr::Var("x".into())),
-        ValueAst::Expr(Expr::Var("x".into())),
+        ValueAst::Expr(Box::new(Expr::Var("x".into()))),
+        ValueAst::Expr(Box::new(Expr::Var("x".into()))),
     )]
     #[case::expr_neg_var_stays(
-        ValueAst::Expr(Expr::Neg(Box::new(Expr::Var("x".into())))),
-        ValueAst::Expr(Expr::Neg(Box::new(Expr::Var("x".into())))),
+        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))),
+        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))),
     )]
     #[case::expr_neg_lit_min_overflow_keeps_form(
-        ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(i64::MIN)))),
-        ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(i64::MIN)))),
+        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(i64::MIN))))),
+        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(i64::MIN))))),
     )]
     fn test_value_ast_simplify(#[case] input: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(input.simplify(), expected);
@@ -744,8 +773,8 @@ mod tests {
     #[case::lit_negative(ValueAst::Lit(1), ValueAst::Lit(-4), ValueAst::Lit(-3))]
     #[case::lit_undetermined(ValueAst::Lit(2), ValueAst::Undetermined, ValueAst::Undetermined)]
     #[case::undetermined_lit(ValueAst::Undetermined, ValueAst::Lit(2), ValueAst::Undetermined)]
-    #[case::litset_lit(ValueAst::LitSet(vec![1, 2]), ValueAst::Lit(3), ValueAst::Undetermined)]
-    #[case::lit_expr(ValueAst::Lit(2), ValueAst::Expr(Expr::Var("x".into())), ValueAst::Undetermined)]
+    #[case::litset_lit(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::Lit(3), ValueAst::Undetermined)]
+    #[case::lit_expr(ValueAst::Lit(2), ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Undetermined)]
     fn test_value_ast_add(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(lhs + rhs, expected);
     }

@@ -403,12 +403,12 @@ mod tests {
     #[case::aromatic_with_ring("1#a#r6", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::Aromatic, DativeBondConstraint::RingSize(ValueAst::Lit(6))]))))]
     #[case::ring_count("1#R2", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2))]))))]
     #[case::ring_bare("1#R", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(1))]))))]
-    #[case::ring_plus("1#R+", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))]))))]
+    #[case::ring_plus("1#R+", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))))]))))]
     #[case::ring_undetermined("1#R*", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Undetermined)]))))]
     #[case::ring_size("1#r6", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(6))]))))]
     #[case::ring_size_bare("1#r", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(1))]))))]
     #[case::ring_count_and_size("1#R2#r6", DativeBondDsl(dative(ValueAst::Lit(1), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Lit(2)), DativeBondConstraint::RingSize(ValueAst::Lit(6))]))))]
-    #[case::triple_with_constraint("3#R+", DativeBondDsl(dative(ValueAst::Lit(3), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))]))))]
+    #[case::triple_with_constraint("3#R+", DativeBondDsl(dative(ValueAst::Lit(3), DativeBondConstraints::from_iter([DativeBondConstraint::RingCount(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))))]))))]
     fn test_parse_dative(#[case] input: &str, #[case] expected: DativeBondDsl) {
         let result = dative_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());

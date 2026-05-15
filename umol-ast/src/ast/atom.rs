@@ -214,7 +214,7 @@ impl ElementAst {
     /// The element this value denotes when ground; `None` otherwise. Aligned
     /// with [`Self::is_ground`].
     #[inline]
-    pub fn literal(&self) -> Option<Element> {
+    pub fn as_lit(&self) -> Option<Element> {
         match self {
             Self::Lit(e) => Some(*e),
             _ => None,
@@ -252,11 +252,31 @@ pub enum IsotopeAst {
     Undetermined,
     Natural,
     Lit(i64),
-    LitSet(Vec<i64>),
-    Expr(Expr),
+    LitSet(Box<Vec<i64>>),
+    Expr(Box<Expr>),
 }
 
 impl IsotopeAst {
+    pub fn undetermined() -> Self {
+        Self::Undetermined
+    }
+
+    pub fn natural() -> Self {
+        Self::Natural
+    }
+
+    pub fn lit(n: i64) -> Self {
+        Self::Lit(n)
+    }
+
+    pub fn lit_set(values: Vec<i64>) -> Self {
+        Self::LitSet(Box::new(values))
+    }
+
+    pub fn expr(e: Expr) -> Self {
+        Self::Expr(Box::new(e))
+    }
+
     /// Semantic ground: `Natural` and `Lit(_)` are the primary ground forms;
     /// `LitSet`/`Expr` delegate through the shared helpers so constant-valued
     /// expressions and singleton sets are also ground. Same fast-path /
@@ -285,18 +305,18 @@ impl IsotopeAst {
     /// abundance — no specific mass committed". Aligned with
     /// [`Self::is_ground`].
     #[inline]
-    pub fn literal(&self) -> Option<u32> {
+    pub fn as_lit(&self) -> Option<u32> {
         match self {
             Self::Natural => Some(0),
             Self::Lit(n) => u32::try_from(*n).ok(),
             Self::Undetermined => None,
-            _ => self.literal_slow(),
+            _ => self.as_lit_slow(),
         }
     }
 
     #[inline(never)]
     #[cold]
-    fn literal_slow(&self) -> Option<u32> {
+    fn as_lit_slow(&self) -> Option<u32> {
         match self {
             Self::LitSet(s) => super::value::litset_is_ground(s)
                 .then(|| u32::try_from(s[0]).ok())
@@ -369,11 +389,31 @@ pub enum ImplicitHydrogensAst {
     Undetermined,
     Normal,
     Lit(i64),
-    LitSet(Vec<i64>),
-    Expr(Expr),
+    LitSet(Box<Vec<i64>>),
+    Expr(Box<Expr>),
 }
 
 impl ImplicitHydrogensAst {
+    pub fn undetermined() -> Self {
+        Self::Undetermined
+    }
+
+    pub fn normal() -> Self {
+        Self::Normal
+    }
+
+    pub fn lit(n: i64) -> Self {
+        Self::Lit(n)
+    }
+
+    pub fn lit_set(values: Vec<i64>) -> Self {
+        Self::LitSet(Box::new(values))
+    }
+
+    pub fn expr(e: Expr) -> Self {
+        Self::Expr(Box::new(e))
+    }
+
     /// Semantic ground: only `Lit(_)`, ground singleton `LitSet`, and ground
     /// `Expr` count. `Normal` is **not** ground — it's a placeholder for
     /// "compute via valence model"; the resolver lowers it to `Lit(n)`.
@@ -399,17 +439,17 @@ impl ImplicitHydrogensAst {
     /// The single integer this value denotes when ground; `None` otherwise
     /// (including `Normal`). Aligned with [`Self::is_ground`].
     #[inline]
-    pub fn literal(&self) -> Option<i64> {
+    pub fn as_lit(&self) -> Option<i64> {
         match self {
             Self::Lit(n) => Some(*n),
             Self::Normal | Self::Undetermined => None,
-            _ => self.literal_slow(),
+            _ => self.as_lit_slow(),
         }
     }
 
     #[inline(never)]
     #[cold]
-    fn literal_slow(&self) -> Option<i64> {
+    fn as_lit_slow(&self) -> Option<i64> {
         match self {
             Self::LitSet(s) => super::value::litset_is_ground(s).then(|| s[0]),
             Self::Expr(e) => e.evaluate_checked(&super::value::Bindings::new()),
@@ -433,11 +473,10 @@ impl ImplicitHydrogensAst {
 
     fn as_value(&self) -> ValueAst {
         match self {
-            Self::Undetermined => ValueAst::Undetermined,
+            Self::Undetermined | Self::Normal => ValueAst::Undetermined,
             Self::Lit(n) => ValueAst::Lit(*n),
             Self::LitSet(s) => ValueAst::LitSet(s.clone()),
             Self::Expr(e) => ValueAst::Expr(e.clone()),
-            Self::Normal => unreachable!("Normal handled before as_value"),
         }
     }
 
@@ -652,17 +691,17 @@ mod tests {
     fn test_atom_ast_simplify_values() {
         let mut atom = AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Expr(Expr::Lit(12)),
-            charge: ValueAst::Expr(Expr::Lit(1)),
-            implicit_hydrogens: ImplicitHydrogensAst::Expr(Expr::Lit(3)),
-            lone_pairs: ValueAst::Expr(Expr::Neg(Box::new(Expr::Lit(2)))),
+            isotope_mass: IsotopeAst::Expr(Box::new(Expr::Lit(12))),
+            charge: ValueAst::Expr(Box::new(Expr::Lit(1))),
+            implicit_hydrogens: ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(3))),
+            lone_pairs: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(2))))),
             spin: SpinStateAst {
-                unpaired: ValueAst::Expr(Expr::Lit(0)),
-                multiplicity: ValueAst::Expr(Expr::Lit(1)),
+                unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
+                multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
             },
-            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(
+            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(Box::new(
                 Expr::Lit(4),
-            ))]),
+            )))]),
         };
         atom.simplify_values();
         assert_eq!(atom.isotope_mass, IsotopeAst::Lit(12));
@@ -695,7 +734,7 @@ mod tests {
         #[case] ast: ElementAst,
         #[case] expected: Option<Element>,
     ) {
-        assert_eq!(ast.literal(), expected);
+        assert_eq!(ast.as_lit(), expected);
         assert_eq!(ast.is_ground(), expected.is_some());
     }
 
@@ -766,8 +805,8 @@ mod tests {
     #[case::natural(IsotopeAst::Natural, false)]
     #[case::lit(IsotopeAst::Lit(12), false)]
     #[case::undetermined(IsotopeAst::Undetermined, true)]
-    #[case::lit_set(IsotopeAst::LitSet(vec![12, 13]), false)]
-    #[case::expr(IsotopeAst::Expr(Expr::Lit(12)), false)]
+    #[case::lit_set(IsotopeAst::LitSet(Box::new(vec![12, 13])), false)]
+    #[case::expr(IsotopeAst::Expr(Box::new(Expr::Lit(12))), false)]
     fn test_isotope_ast_is_undetermined(#[case] ast: IsotopeAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
     }
@@ -777,15 +816,15 @@ mod tests {
     #[case::lit(IsotopeAst::Lit(12), Some(12))]
     #[case::lit_zero(IsotopeAst::Lit(0), Some(0))]
     #[case::wildcard(IsotopeAst::Undetermined, None)]
-    #[case::set_singleton(IsotopeAst::LitSet(vec![14]), Some(14))]
-    #[case::set_multi(IsotopeAst::LitSet(vec![12, 13]), None)]
-    #[case::expr_lit(IsotopeAst::Expr(Expr::Lit(15)), Some(15))]
-    #[case::expr_var(IsotopeAst::Expr(Expr::Var("x".into())), None)]
+    #[case::set_singleton(IsotopeAst::LitSet(Box::new(vec![14])), Some(14))]
+    #[case::set_multi(IsotopeAst::LitSet(Box::new(vec![12, 13])), None)]
+    #[case::expr_lit(IsotopeAst::Expr(Box::new(Expr::Lit(15))), Some(15))]
+    #[case::expr_var(IsotopeAst::Expr(Box::new(Expr::Var("x".into()))), None)]
     fn test_isotope_ast_literal_and_is_ground(
         #[case] ast: IsotopeAst,
         #[case] expected: Option<u32>,
     ) {
-        assert_eq!(ast.literal(), expected);
+        assert_eq!(ast.as_lit(), expected);
         assert_eq!(ast.is_ground(), expected.is_some());
     }
 
@@ -802,10 +841,10 @@ mod tests {
     #[case::value_lit_match(IsotopeAst::Lit(12), IsotopeAst::Lit(12), true)]
     #[case::value_lit_mismatch(IsotopeAst::Lit(12), IsotopeAst::Lit(13), false)]
     #[case::value_wildcard_lit(IsotopeAst::Undetermined, IsotopeAst::Lit(12), true)]
-    #[case::value_set_lit_in(IsotopeAst::LitSet(vec![12, 13]), IsotopeAst::Lit(13), true)]
-    #[case::value_set_lit_out(IsotopeAst::LitSet(vec![12, 13]), IsotopeAst::Lit(14), false)]
-    #[case::value_set_set_subset(IsotopeAst::LitSet(vec![12, 13, 14]), IsotopeAst::LitSet(vec![12, 13]), true)]
-    #[case::value_set_set_superset(IsotopeAst::LitSet(vec![12]), IsotopeAst::LitSet(vec![12, 13]), false)]
+    #[case::value_set_lit_in(IsotopeAst::LitSet(Box::new(vec![12, 13])), IsotopeAst::Lit(13), true)]
+    #[case::value_set_lit_out(IsotopeAst::LitSet(Box::new(vec![12, 13])), IsotopeAst::Lit(14), false)]
+    #[case::value_set_set_subset(IsotopeAst::LitSet(Box::new(vec![12, 13, 14])), IsotopeAst::LitSet(Box::new(vec![12, 13])), true)]
+    #[case::value_set_set_superset(IsotopeAst::LitSet(Box::new(vec![12])), IsotopeAst::LitSet(Box::new(vec![12, 13])), false)]
     #[case::value_lit_wildcard(IsotopeAst::Lit(12), IsotopeAst::Undetermined, false)]
     fn test_isotope_ast_matches(
         #[case] pattern: IsotopeAst,
@@ -817,8 +856,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::expr_lit(IsotopeAst::Expr(Expr::Lit(13)), IsotopeAst::Lit(13))]
-    #[case::expr_neg_lit(IsotopeAst::Expr(Expr::Neg(Box::new(Expr::Lit(12)))), IsotopeAst::Lit(-12))]
+    #[case::expr_lit(IsotopeAst::Expr(Box::new(Expr::Lit(13))), IsotopeAst::Lit(13))]
+    #[case::expr_neg_lit(IsotopeAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(12))))), IsotopeAst::Lit(-12))]
     fn test_isotope_ast_simplify(#[case] input: IsotopeAst, #[case] expected: IsotopeAst) {
         assert_eq!(input.simplify(), expected);
     }
@@ -827,14 +866,14 @@ mod tests {
     #[case::natural(IsotopeAst::Natural)]
     #[case::lit(IsotopeAst::Lit(12))]
     #[case::undetermined(IsotopeAst::Undetermined)]
-    #[case::lit_set(IsotopeAst::LitSet(vec![12, 13]))]
-    #[case::expr_var(IsotopeAst::Expr(Expr::Var("x".into())))]
+    #[case::lit_set(IsotopeAst::LitSet(Box::new(vec![12, 13])))]
+    #[case::expr_var(IsotopeAst::Expr(Box::new(Expr::Var("x".into()))))]
     fn test_isotope_ast_simplify_identity(#[case] input: IsotopeAst) {
         assert_eq!(input.clone().simplify(), input);
     }
 
     #[rstest]
-    #[case::from_lit_set(ImplicitHydrogensAst::from(ValueAst::LitSet(vec![0, 1])), ImplicitHydrogensAst::LitSet(vec![0, 1]))]
+    #[case::from_lit_set(ImplicitHydrogensAst::from(ValueAst::LitSet(Box::new(vec![0, 1]))), ImplicitHydrogensAst::LitSet(Box::new(vec![0, 1])))]
     fn test_implicit_hydrogens_ast_from_value(
         #[case] actual: ImplicitHydrogensAst,
         #[case] expected: ImplicitHydrogensAst,
@@ -856,8 +895,8 @@ mod tests {
     #[case::normal(ImplicitHydrogensAst::Normal, false)]
     #[case::lit(ImplicitHydrogensAst::Lit(2), false)]
     #[case::undetermined(ImplicitHydrogensAst::Undetermined, true)]
-    #[case::lit_set(ImplicitHydrogensAst::LitSet(vec![1, 2]), false)]
-    #[case::expr(ImplicitHydrogensAst::Expr(Expr::Lit(2)), false)]
+    #[case::lit_set(ImplicitHydrogensAst::LitSet(Box::new(vec![1, 2])), false)]
+    #[case::expr(ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(2))), false)]
     fn test_implicit_hydrogens_ast_is_undetermined(
         #[case] ast: ImplicitHydrogensAst,
         #[case] expected: bool,
@@ -870,15 +909,15 @@ mod tests {
     #[case::lit(ImplicitHydrogensAst::Lit(2), Some(2))]
     #[case::lit_zero(ImplicitHydrogensAst::Lit(0), Some(0))]
     #[case::wildcard(ImplicitHydrogensAst::Undetermined, None)]
-    #[case::set_singleton(ImplicitHydrogensAst::LitSet(vec![3]), Some(3))]
-    #[case::set_multi(ImplicitHydrogensAst::LitSet(vec![1, 2]), None)]
-    #[case::expr_lit(ImplicitHydrogensAst::Expr(Expr::Lit(4)), Some(4))]
-    #[case::expr_var(ImplicitHydrogensAst::Expr(Expr::Var("x".into())), None)]
+    #[case::set_singleton(ImplicitHydrogensAst::LitSet(Box::new(vec![3])), Some(3))]
+    #[case::set_multi(ImplicitHydrogensAst::LitSet(Box::new(vec![1, 2])), None)]
+    #[case::expr_lit(ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(4))), Some(4))]
+    #[case::expr_var(ImplicitHydrogensAst::Expr(Box::new(Expr::Var("x".into()))), None)]
     fn test_implicit_hydrogens_ast_literal_and_is_ground(
         #[case] ast: ImplicitHydrogensAst,
         #[case] expected: Option<i64>,
     ) {
-        assert_eq!(ast.literal(), expected);
+        assert_eq!(ast.as_lit(), expected);
         assert_eq!(ast.is_ground(), expected.is_some());
     }
 
@@ -893,7 +932,7 @@ mod tests {
     #[case::value_lit_match(ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Lit(2), true)]
     #[case::value_lit_mismatch(ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Lit(3), false)]
     #[case::value_wildcard(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Lit(2), true)]
-    #[case::value_set_subset(ImplicitHydrogensAst::LitSet(vec![1, 2]), ImplicitHydrogensAst::LitSet(vec![1]), true)]
+    #[case::value_set_subset(ImplicitHydrogensAst::LitSet(Box::new(vec![1, 2])), ImplicitHydrogensAst::LitSet(Box::new(vec![1])), true)]
     fn test_implicit_hydrogens_ast_matches(
         #[case] pattern: ImplicitHydrogensAst,
         #[case] target: ImplicitHydrogensAst,
@@ -904,8 +943,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::expr_lit(ImplicitHydrogensAst::Expr(Expr::Lit(4)), ImplicitHydrogensAst::Lit(4))]
-    #[case::expr_neg_lit(ImplicitHydrogensAst::Expr(Expr::Neg(Box::new(Expr::Lit(3)))), ImplicitHydrogensAst::Lit(-3))]
+    #[case::expr_lit(ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(4))), ImplicitHydrogensAst::Lit(4))]
+    #[case::expr_neg_lit(ImplicitHydrogensAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))), ImplicitHydrogensAst::Lit(-3))]
     fn test_implicit_hydrogens_ast_simplify(
         #[case] input: ImplicitHydrogensAst,
         #[case] expected: ImplicitHydrogensAst,
@@ -917,8 +956,8 @@ mod tests {
     #[case::normal(ImplicitHydrogensAst::Normal)]
     #[case::lit(ImplicitHydrogensAst::Lit(2))]
     #[case::undetermined(ImplicitHydrogensAst::Undetermined)]
-    #[case::lit_set(ImplicitHydrogensAst::LitSet(vec![1, 2]))]
-    #[case::expr_var(ImplicitHydrogensAst::Expr(Expr::Var("h".into())))]
+    #[case::lit_set(ImplicitHydrogensAst::LitSet(Box::new(vec![1, 2])))]
+    #[case::expr_var(ImplicitHydrogensAst::Expr(Box::new(Expr::Var("h".into()))))]
     fn test_implicit_hydrogens_ast_simplify_identity(#[case] input: ImplicitHydrogensAst) {
         assert_eq!(input.clone().simplify(), input);
     }

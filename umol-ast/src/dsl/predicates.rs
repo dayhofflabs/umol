@@ -39,11 +39,11 @@ pub(crate) fn ring_count(i: &mut &str) -> PResult<ValueAst> {
         multispace0,
         alt((
             value,
-            "+".value(ValueAst::Expr(Expr::Rel(
+            "+".value(ValueAst::Expr(Box::new(Expr::Rel(
                 Box::new(Expr::Var("r".to_string())),
                 RelOp::Ge,
                 Box::new(Expr::Lit(1)),
-            ))),
+            )))),
             "!".value(ValueAst::Lit(0)),
             empty.value(ValueAst::Lit(1)),
         )),
@@ -87,10 +87,13 @@ pub(crate) fn apply_spin_pair(
 /// Convert `#z?z >= threshold` to syntactic sugar `#z+`
 pub(crate) fn is_plus_sugar(v: &ValueAst, name: &str, threshold: i64) -> bool {
     match v {
-        ValueAst::Expr(Expr::Rel(l, RelOp::Ge, r)) => {
-            matches!(l.as_ref(), Expr::Var(n) if n == name)
-                && matches!(r.as_ref(), Expr::Lit(n) if *n == threshold)
-        }
+        ValueAst::Expr(e) => match e.as_ref() {
+            Expr::Rel(l, RelOp::Ge, r) => {
+                matches!(l.as_ref(), Expr::Var(n) if n == name)
+                    && matches!(r.as_ref(), Expr::Lit(n) if *n == threshold)
+            }
+            _ => false,
+        },
         _ => false,
     }
 }
@@ -272,7 +275,7 @@ mod tests {
     #[case::pos_lit("+2", ValueAst::Lit(2))]
     #[case::neg_lit("-3", ValueAst::Lit(-3))]
     #[case::undetermined("*", ValueAst::Undetermined)]
-    #[case::lit_set("{1,2,3}", ValueAst::LitSet(vec![1, 2, 3]))]
+    #[case::lit_set("{1,2,3}", ValueAst::LitSet(Box::new(vec![1, 2, 3])))]
     fn test_charge(#[case] input: &str, #[case] expected: ValueAst) {
         let result = charge.parse(input).unwrap();
         assert_eq!(result, expected);
@@ -294,7 +297,7 @@ mod tests {
     #[case::zero("0", ValueAst::Lit(0))]
     #[case::neg("-5", ValueAst::Lit(-5))]
     #[case::undetermined("*", ValueAst::Undetermined)]
-    #[case::lit_set("{1,2}", ValueAst::LitSet(vec![1, 2]))]
+    #[case::lit_set("{1,2}", ValueAst::LitSet(Box::new(vec![1, 2])))]
     fn test_optional_value(#[case] input: &str, #[case] expected: ValueAst) {
         let result = optional_value.parse(input).unwrap();
         assert_eq!(result, expected);
@@ -305,10 +308,10 @@ mod tests {
     #[case::empty("", ValueAst::Lit(1))]
     #[case::lit("4", ValueAst::Lit(4))]
     #[case::undetermined("*", ValueAst::Undetermined)]
-    #[case::plus_sugar("+", ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))))]
+    #[case::plus_sugar("+", ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))))]
     #[case::bang_sugar("!", ValueAst::Lit(0))]
     #[case::zero_numeric("0", ValueAst::Lit(0))]
-    #[case::lit_set("{2,3}", ValueAst::LitSet(vec![2, 3]))]
+    #[case::lit_set("{2,3}", ValueAst::LitSet(Box::new(vec![2, 3])))]
     fn test_ring_count(#[case] input: &str, #[case] expected: ValueAst) {
         let result = ring_count.parse(input).unwrap();
         assert_eq!(result, expected);
@@ -319,7 +322,7 @@ mod tests {
     #[case::one_renders_bare(ValueAst::Lit(1), "#R")]
     #[case::two(ValueAst::Lit(2), "#R2")]
     #[case::plus_renders_plus(
-        ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))),
+        ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))),
         "#R+",
     )]
     fn test_fmt_ring_count(#[case] v: ValueAst, #[case] expected: &str) {
@@ -369,13 +372,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::var_ge_threshold_match(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), "r", 1, true)]
-    #[case::different_var(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("a".to_string())), RelOp::Ge, Box::new(Expr::Lit(1)))), "r", 1, false)]
-    #[case::different_threshold(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(0)))), "r", 1, false)]
-    #[case::wrong_op(ValueAst::Expr(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Eq, Box::new(Expr::Lit(1)))), "r", 1, false)]
+    #[case::var_ge_threshold_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), "r", 1, true)]
+    #[case::different_var(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("a".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), "r", 1, false)]
+    #[case::different_threshold(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(0))))), "r", 1, false)]
+    #[case::wrong_op(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Eq, Box::new(Expr::Lit(1))))), "r", 1, false)]
     #[case::lit_value(ValueAst::Lit(3), "r", 1, false)]
     #[case::undetermined(ValueAst::Undetermined, "r", 1, false)]
-    #[case::lit_set(ValueAst::LitSet(vec![1, 2]), "r", 1, false)]
+    #[case::lit_set(ValueAst::LitSet(Box::new(vec![1, 2])), "r", 1, false)]
     fn test_is_plus_sugar(
         #[case] value: ValueAst,
         #[case] name: &str,

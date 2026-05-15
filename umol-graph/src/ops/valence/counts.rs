@@ -49,7 +49,7 @@ impl CountsValenceResolver {
             let ElementAst::Lit(element) = view.ast.element else {
                 continue;
             };
-            let Some(valence) = view.valence().literal().and_then(|n| u8::try_from(n).ok()) else {
+            let Some(valence) = view.valence().as_lit().and_then(|n| u8::try_from(n).ok()) else {
                 continue;
             };
 

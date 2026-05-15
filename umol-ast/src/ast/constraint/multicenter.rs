@@ -253,7 +253,7 @@ mod tests {
 
     #[rstest]
     #[case::folds_expr(
-        MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Expr::Lit(2))),
+        MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(2)))),
         MulticenterBondConstraint::electron_count(2)
     )]
     fn test_multicenter_bond_constraint_simplify(
@@ -402,7 +402,7 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_constraints_simplify_each() {
         let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::ElectronCount(
-            ValueAst::Expr(Expr::Lit(2)),
+            ValueAst::Expr(Box::new(Expr::Lit(2))),
         ));
         cs.simplify_each();
         assert_eq!(

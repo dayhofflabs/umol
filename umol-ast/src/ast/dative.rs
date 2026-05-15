@@ -194,9 +194,9 @@ mod tests {
     fn test_dative_bond_ast_simplify_values() {
         let mut bond = DativeBondAst {
             acceptor_slot: 0,
-            order: ValueAst::Expr(Expr::Lit(2)),
+            order: ValueAst::Expr(Box::new(Expr::Lit(2))),
             constraints: DativeBondConstraints::from(DativeBondConstraint::RingSize(
-                ValueAst::Expr(Expr::Lit(6)),
+                ValueAst::Expr(Box::new(Expr::Lit(6))),
             )),
         };
         bond.simplify_values();

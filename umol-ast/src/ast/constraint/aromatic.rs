@@ -253,7 +253,7 @@ mod tests {
 
     #[rstest]
     #[case::folds_expr(
-        AromaticSystemConstraint::ElectronCount(ValueAst::Expr(Expr::Lit(6))),
+        AromaticSystemConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(6)))),
         AromaticSystemConstraint::electron_count(6)
     )]
     fn test_aromatic_system_constraint_simplify(
@@ -397,7 +397,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_simplify_each() {
         let mut cs = AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(
-            ValueAst::Expr(Expr::Lit(6)),
+            ValueAst::Expr(Box::new(Expr::Lit(6))),
         ));
         cs.simplify_each();
         assert_eq!(

@@ -296,11 +296,11 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_ast_simplify_values() {
         let mut system = AromaticSystemAst {
-            electrons: vec![ValueAst::Expr(Expr::Lit(1))],
-            charge: ValueAst::Expr(Expr::Lit(0)),
+            electrons: vec![ValueAst::Expr(Box::new(Expr::Lit(1)))],
+            charge: ValueAst::Expr(Box::new(Expr::Lit(0))),
             spin: SpinStateAst::default(),
             constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(
-                ValueAst::Expr(Expr::Lit(6)),
+                ValueAst::Expr(Box::new(Expr::Lit(6))),
             )),
         };
         system.simplify_values();

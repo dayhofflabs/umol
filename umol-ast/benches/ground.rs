@@ -40,13 +40,13 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
     // is_arithmetic()).
     let mut ast = indole_ground();
     let mut b = ast.edit();
-    b.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Expr::Rel(
+    b.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Box::new(Expr::Rel(
         Box::new(Expr::Var("c".into())),
         RelOp::Eq,
         Box::new(Expr::Lit(0)),
-    ));
+    )));
     b.atom_mut(AtomId(2)).ast.lone_pairs =
-        ValueAst::Expr(Expr::Mem(Box::new(Expr::Var("n".into())), vec![0, 1, 2]));
+        ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("n".into())), vec![0, 1, 2])));
     ast = b.build();
     ast
 }
@@ -57,7 +57,7 @@ fn arith_expr_heavy() -> MoleculeAst {
     // is_ground will walk the full tree; syntactic is_ground fails on the
     // first `Expr` encountered.
     let arith = || {
-        ValueAst::Expr(Expr::BinOp(
+        ValueAst::Expr(Box::new(Expr::BinOp(
             Box::new(Expr::BinOp(
                 Box::new(Expr::Lit(2)),
                 ArithOp::Add,
@@ -65,17 +65,17 @@ fn arith_expr_heavy() -> MoleculeAst {
             )),
             ArithOp::Mul,
             Box::new(Expr::Neg(Box::new(Expr::Lit(1)))),
-        ))
+        )))
     };
     let make_atom = |el: Element| AtomAst {
         element: ElementAst::Lit(el),
-        isotope_mass: IsotopeAst::Expr(Expr::BinOp(
+        isotope_mass: IsotopeAst::Expr(Box::new(Expr::BinOp(
             Box::new(Expr::Lit(12)),
             ArithOp::Add,
             Box::new(Expr::Lit(0)),
-        )),
+        ))),
         charge: arith(),
-        implicit_hydrogens: ImplicitHydrogensAst::Expr(Expr::Neg(Box::new(Expr::Lit(1)))),
+        implicit_hydrogens: ImplicitHydrogensAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))),
         lone_pairs: arith(),
         spin: SpinStateAst {
             unpaired: arith(),

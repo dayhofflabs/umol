@@ -51,7 +51,7 @@ impl AtomTypingValenceResolver {
             };
             if view
                 .valence()
-                .literal()
+                .as_lit()
                 .and_then(|n| u8::try_from(n).ok())
                 .is_none()
             {
@@ -81,7 +81,7 @@ impl AtomTypingValenceResolver {
 
     fn candidates_for(&self, view: &AtomView<'_>, element: Element) -> Vec<AtomCandidate> {
         let atom = view.ast;
-        let valence = match view.valence().literal().and_then(|n| u8::try_from(n).ok()) {
+        let valence = match view.valence().as_lit().and_then(|n| u8::try_from(n).ok()) {
             Some(v) => v,
             None => return Vec::new(),
         };

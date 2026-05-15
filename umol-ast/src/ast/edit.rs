@@ -537,6 +537,8 @@ impl ConstraintUpdate {
 }
 
 /// Realized rollback operation produced by the checked transaction path.
+// TODO: Review
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Undo {
     RemoveAddedTopology {

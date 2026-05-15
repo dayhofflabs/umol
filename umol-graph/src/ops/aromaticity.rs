@@ -204,25 +204,25 @@ fn equalize_charges(ast: &mut MoleculeAst, system_idx: AromaticSystemId) {
         .aromatic_system(system_idx)
         .ast
         .charge
-        .literal()
+        .as_lit()
         .unwrap_or(0);
     for (i, atom_idx) in atoms.iter().copied().enumerate() {
         let view = ast.atom(atom_idx);
         let atom = view.ast;
-        let Some(lp) = atom.lone_pairs.literal() else {
+        let Some(lp) = atom.lone_pairs.as_lit() else {
             return;
         };
-        let Some(implicit_h) = ValueAst::from(atom.implicit_hydrogens.clone()).literal() else {
+        let Some(implicit_h) = ValueAst::from(atom.implicit_hydrogens.clone()).as_lit() else {
             return;
         };
-        let Some(degree) = view.degree().literal() else {
+        let Some(degree) = view.degree().as_lit() else {
             return;
         };
         let k = v - (degree + implicit_h) - 2 * lp;
-        let Some(c) = atom.charge.literal() else {
+        let Some(c) = atom.charge.as_lit() else {
             return;
         };
-        let Some(e) = ast.aromatic_system(system_idx).ast.electrons[i].literal() else {
+        let Some(e) = ast.aromatic_system(system_idx).ast.electrons[i].as_lit() else {
             return;
         };
         if e == k {

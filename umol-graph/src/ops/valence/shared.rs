@@ -154,7 +154,7 @@ fn atom_constraint_holds(
             let actual_is_aromatic = atom_is_aromatic(view);
             let actual_pi: Option<u8> = if view.is_in_aromatic_system() {
                 view.aromatic_valence()
-                    .literal()
+                    .as_lit()
                     .and_then(|n| u8::try_from(n).ok())
             } else {
                 aromatic_pi_pinned(view.ast)
@@ -172,7 +172,7 @@ fn atom_constraint_holds(
         AtomConstraint::MulticenterValence(query) => {
             let actual = view
                 .multicenter_valence()
-                .literal()
+                .as_lit()
                 .and_then(|n| u8::try_from(n).ok());
             match query {
                 MulticenterValenceAst::NotMulticenter => actual == Some(0),
@@ -358,10 +358,10 @@ fn narrowable(existing: &AtomConstraint, new_c: &AtomConstraint) -> bool {
 pub fn atom_dative_counts(view: &AtomView<'_>) -> (Option<u8>, Option<u8>) {
     (
         view.donated_pairs()
-            .literal()
+            .as_lit()
             .and_then(|n| u8::try_from(n).ok()),
         view.accepted_pairs()
-            .literal()
+            .as_lit()
             .and_then(|n| u8::try_from(n).ok()),
     )
 }
