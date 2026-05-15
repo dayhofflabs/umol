@@ -6,9 +6,7 @@
 
 use umol_ast::ast::{AromaticValenceAst, MoleculeAst, ValueAst};
 
-use crate::ops::aromaticity::{
-    AromaticityContradiction, AromaticityError, AromaticityPerception,
-};
+use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
 use crate::ops::config::AromaticityModel;
 use crate::ops::solution::Solution;
 
@@ -28,12 +26,12 @@ impl AromaticityResolver {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityError> {
-        let outcome = self
-            .perception
-            .find_systems(ast, |v| match v.ast.constraints.aromatic_valence() {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
-                _ => None,
-            })?;
+        let outcome =
+            self.perception
+                .find_systems(ast, |v| match v.ast.constraints.aromatic_valence() {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                    _ => None,
+                })?;
         match outcome {
             Solution::Determined(systems) => {
                 self.perception.add_systems(ast, systems);

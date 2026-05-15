@@ -136,7 +136,10 @@ fn test_molecule_ast_neighbors(#[case] atom: AtomId, #[case] expected: Vec<(Atom
         vec![],
         Constraints::default(),
     );
-    let nbrs: Vec<(AtomId, BondId)> = ast.neighbors(atom).map(|n| (n.atom_id(), n.bond_id())).collect();
+    let nbrs: Vec<(AtomId, BondId)> = ast
+        .neighbors(atom)
+        .map(|n| (n.atom_id(), n.bond_id()))
+        .collect();
     assert_eq!(nbrs, expected);
 }
 
@@ -1998,14 +2001,18 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         atom.charge = ValueAst::Expr(Box::new(Expr::Lit(2)));
         atom.isotope_mass = IsotopeAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(13)))));
         atom.implicit_hydrogens = ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(3)));
-        atom.lone_pairs = ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(1)))))));
+        atom.lone_pairs = ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
+            Expr::Lit(1),
+        ))))));
         atom.spin = SpinStateAst {
             unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
             multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
         };
         // And an inline atom constraint with a non-canonical Expr.
         atom.constraints
-            .add(AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4)))));
+            .add(AtomConstraint::Valence(ValueAst::Expr(Box::new(
+                Expr::Lit(4),
+            ))));
     }
 
     // Bond 0: order/charge/spin all wrapped, plus an inline bond ring-count
@@ -2019,13 +2026,17 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
             multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
         };
         bond.constraints
-            .add(BondConstraint::RingCount(ValueAst::Expr(Box::new(Expr::Lit(1)))));
+            .add(BondConstraint::RingCount(ValueAst::Expr(Box::new(
+                Expr::Lit(1),
+            ))));
     }
 
     // Dative bond inline ring-size with non-canonical Expr.
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .add(DativeBondConstraint::RingSize(ValueAst::Expr(Box::new(Expr::Lit(5)))));
+        .add(DativeBondConstraint::RingSize(ValueAst::Expr(Box::new(
+            Expr::Lit(5),
+        ))));
 
     // Aromatic system 0: charge/electrons/spin wrapped. Three member atoms,
     // so electrons has three entries.
@@ -2080,7 +2091,9 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     ast.constraints_mut().push(Constraint::Relational(
         RelationalConstraint::AromaticSystemAllAtoms {
             system: AromaticSystemId(0),
-            predicate: Box::new(AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4))))),
+            predicate: Box::new(AtomConstraint::Valence(ValueAst::Expr(Box::new(
+                Expr::Lit(4),
+            )))),
         },
     ));
     ast.constraints_mut()

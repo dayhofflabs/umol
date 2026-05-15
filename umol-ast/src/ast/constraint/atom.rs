@@ -808,9 +808,9 @@ mod tests {
         let mut cs = AtomConstraints::from_iter([
             AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Lit(4)))),
             AtomConstraint::Degree(ValueAst::Expr(Box::new(Expr::Lit(3)))),
-            AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(
-                Expr::Lit(2),
-            )))),
+            AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(
+                Box::new(Expr::Lit(2)),
+            ))),
         ]);
         cs.simplify_each();
         assert_eq!(

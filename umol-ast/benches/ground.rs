@@ -45,8 +45,10 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
         RelOp::Eq,
         Box::new(Expr::Lit(0)),
     )));
-    b.atom_mut(AtomId(2)).ast.lone_pairs =
-        ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("n".into())), vec![0, 1, 2])));
+    b.atom_mut(AtomId(2)).ast.lone_pairs = ValueAst::Expr(Box::new(Expr::Mem(
+        Box::new(Expr::Var("n".into())),
+        vec![0, 1, 2],
+    )));
     ast = b.build();
     ast
 }

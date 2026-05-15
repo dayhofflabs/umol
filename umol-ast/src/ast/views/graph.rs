@@ -93,9 +93,7 @@ impl<'a> GraphView<'a> {
         alg: PerfectMatchingAlgorithm,
     ) -> Option<BondMatching> {
         let nodes: Vec<NodeId> = node_order.iter().copied().map(NodeId::from).collect();
-        self.graph
-            .perfect_matching(&nodes, alg)
-            .map(BondMatching)
+        self.graph.perfect_matching(&nodes, alg).map(BondMatching)
     }
 
     pub fn enumerate_perfect_matchings(

@@ -7,9 +7,7 @@
 use thiserror::Error;
 use umol_ast::ast::{AromaticValenceAst, AtomId, MoleculeAst, ValueAst};
 
-use crate::ops::aromaticity::{
-    AromaticityContradiction, AromaticityError, AromaticityPerception,
-};
+use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
 use crate::ops::config::AromaticityModel;
 use crate::ops::solution::Solution;
 
@@ -47,12 +45,12 @@ impl AromaticityValidator {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
-        let outcome = self
-            .perception
-            .find_systems(ast, |v| match v.ast.constraints.aromatic_valence() {
-                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
-                _ => None,
-            })?;
+        let outcome =
+            self.perception
+                .find_systems(ast, |v| match v.ast.constraints.aromatic_valence() {
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                    _ => None,
+                })?;
         let perception_systems = match outcome {
             Solution::Determined(systems) => systems,
             Solution::Underdetermined(_) => return Ok(Solution::Underdetermined(())),

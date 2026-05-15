@@ -169,3 +169,111 @@ pub struct NoncovalentBondBuilderViewMut<'a> {
     pub ast: &'a mut NoncovalentBondAst,
     pub atoms: [AtomId; 2],
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_shared::element::Element;
+
+    use crate::ast::aromatic::AromaticSystemAst;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::constraint::Constraints;
+    use crate::ast::dative::DativeBondAst;
+    use crate::ast::idx::{AtomId, NoncovalentBondId};
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::multicenter::MulticenterBondAst;
+    use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+
+    #[fixture]
+    fn molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(2)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+            vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemAst::default(),
+            )],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::default(),
+            )],
+            vec![(
+                AtomId(0),
+                AtomId(3),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.noncovalent_bonds().count(), 1);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.noncovalent_bonds().ids().collect::<Vec<_>>(),
+            vec![NoncovalentBondId(0)],
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_iter(molecule: MoleculeAst) {
+        let collected: Vec<(NoncovalentBondId, [AtomId; 2], NoncovalentBondAst)> = molecule
+            .noncovalent_bonds()
+            .iter()
+            .map(|v| (v.id, v.atom_ids(), v.ast.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![(
+                NoncovalentBondId(0),
+                [AtomId(0), AtomId(3)],
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_get(molecule: MoleculeAst) {
+        let view = molecule.noncovalent_bonds().get(NoncovalentBondId(0));
+        assert_eq!(view.id, NoncovalentBondId(0));
+        assert_eq!(view.atom_ids(), [AtomId(0), AtomId(3)]);
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_views_index(molecule: MoleculeAst) {
+        let _: &NoncovalentBondAst = &molecule.noncovalent_bonds()[NoncovalentBondId(0)];
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_view_atom_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.noncovalent_bond(NoncovalentBondId(0)).atom_ids(),
+            [AtomId(0), AtomId(3)],
+        );
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_view_atoms(molecule: MoleculeAst) {
+        let ids = molecule
+            .noncovalent_bond(NoncovalentBondId(0))
+            .atoms()
+            .map(|v| v.id);
+        assert_eq!(ids, [AtomId(0), AtomId(3)]);
+    }
+}

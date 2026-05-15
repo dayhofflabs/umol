@@ -380,10 +380,7 @@ impl<'a> AtomView<'a> {
     /// Count of incident bonds that participate in any canonical ring.
     /// Always `Lit`.
     pub fn ring_degree(&self) -> ValueAst {
-        let count = self
-            .neighbors()
-            .filter(|n| n.bond().is_in_ring())
-            .count();
+        let count = self.neighbors().filter(|n| n.bond().is_in_ring()).count();
         ValueAst::Lit(count as i64)
     }
 
@@ -415,4 +412,645 @@ pub struct AtomBuilderView<'a> {
 pub struct AtomBuilderViewMut<'a> {
     pub id: AtomId,
     pub ast: &'a mut AtomAst,
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_shared::element::Element;
+
+    use crate::ast::aromatic::AromaticSystemAst;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::constraint::{
+        AromaticValenceAst, AtomConstraint, Constraints, MulticenterValenceAst,
+    };
+    use crate::ast::dative::DativeBondAst;
+    use crate::ast::idx::{
+        AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    };
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::multicenter::MulticenterBondAst;
+    use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ast::rings::RingFamily;
+    use crate::ast::value::ValueAst;
+    use crate::mol;
+
+    #[fixture]
+    fn molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(2)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+            vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemAst::default(),
+            )],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::default(),
+            )],
+            vec![(
+                AtomId(0),
+                AtomId(3),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            Constraints::default(),
+        )
+    }
+
+    #[fixture]
+    fn ring_with_chain() -> MoleculeAst {
+        MoleculeAst::from_atoms_and_bonds(
+            vec![AtomAst::from_element(Element::C); 7],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(3), AtomId(4), BondAst::from_order(1)),
+                (AtomId(4), AtomId(5), BondAst::from_order(1)),
+                (AtomId(5), AtomId(0), BondAst::from_order(1)),
+                (AtomId(0), AtomId(6), BondAst::from_order(1)),
+            ],
+        )
+    }
+
+    #[rstest]
+    fn test_atom_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.atoms().count(), 4);
+    }
+
+    #[rstest]
+    fn test_atom_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.atoms().ids().collect::<Vec<_>>(),
+            vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
+        );
+    }
+
+    #[rstest]
+    fn test_atom_views_iter(molecule: MoleculeAst) {
+        let views = molecule.atoms();
+        let collected: Vec<(AtomId, AtomAst)> =
+            views.iter().map(|v| (v.id, v.ast.clone())).collect();
+        assert_eq!(
+            collected,
+            vec![
+                (AtomId(0), AtomAst::from_element(Element::C)),
+                (AtomId(1), AtomAst::from_element(Element::C)),
+                (AtomId(2), AtomAst::from_element(Element::N)),
+                (AtomId(3), AtomAst::from_element(Element::O)),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_atom_views_get(molecule: MoleculeAst) {
+        let view = molecule.atoms().get(AtomId(2));
+        assert_eq!(view.id, AtomId(2));
+        assert_eq!(*view.ast, AtomAst::from_element(Element::N));
+    }
+
+    #[rstest]
+    fn test_atom_views_index(molecule: MoleculeAst) {
+        let atom: &AtomAst = &molecule.atoms()[AtomId(2)];
+        assert_eq!(*atom, AtomAst::from_element(Element::N));
+    }
+
+    #[rstest]
+    fn test_atom_view_neighbors(molecule: MoleculeAst) {
+        let view = molecule.atom(AtomId(1));
+        let collected: Vec<(BondId, AtomId, BondAst)> = view
+            .neighbors()
+            .map(|n| (n.bond_id(), n.atom_id(), n.bond().ast.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![
+                (BondId(0), AtomId(0), BondAst::from_order(1)),
+                (BondId(1), AtomId(2), BondAst::from_order(2)),
+            ],
+        );
+    }
+
+    #[rstest]
+    #[case::no_incident(
+        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        AtomId(3),
+        ValueAst::Lit(0),
+    )]
+    #[case::single(
+        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(1),
+    )]
+    #[case::three_around_center(
+        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        AtomId(1),
+        ValueAst::Lit(3),
+    )]
+    #[case::double(
+        mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"]]}"#),
+        AtomId(2),
+        ValueAst::Lit(2),
+    )]
+    #[case::undetermined_bond(
+        mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "*"]]}"#),
+        AtomId(0),
+        ValueAst::Undetermined,
+    )]
+    fn test_atom_view_valence(
+        #[case] molecule: MoleculeAst,
+        #[case] center: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(molecule.atom(center).valence(), expected);
+    }
+
+    #[rstest]
+    #[case::with_constraint(Some(AtomConstraint::valence(4)), ValueAst::Lit(4))]
+    #[case::absent(None, ValueAst::Undetermined)]
+    fn test_atom_view_valence_constraint(
+        #[case] constraint: Option<AtomConstraint>,
+        #[case] expected: ValueAst,
+    ) {
+        let mut atom = AtomAst::from_element(Element::C);
+        if let Some(c) = constraint {
+            atom.constraints.add(c);
+        }
+        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(molecule.atom(AtomId(0)).constraints().valence(), expected);
+    }
+
+    #[rstest]
+    #[case::donor(AtomId(0), ValueAst::Lit(1))]
+    #[case::acceptor(AtomId(1), ValueAst::Lit(0))]
+    fn test_atom_view_donated_pairs(#[case] atom: AtomId, #[case] expected: ValueAst) {
+        let molecule = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![],
+            vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(molecule.atom(atom).donated_pairs(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_donated_pairs_constraint() {
+        let mut atom = AtomAst::from_element(Element::N);
+        atom.constraints.add(AtomConstraint::donated_pairs(1));
+        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().donated_pairs(),
+            ValueAst::Lit(1),
+        );
+    }
+
+    #[rstest]
+    #[case::donor(AtomId(0), ValueAst::Lit(0))]
+    #[case::acceptor(AtomId(1), ValueAst::Lit(1))]
+    fn test_atom_view_accepted_pairs(#[case] atom: AtomId, #[case] expected: ValueAst) {
+        let molecule = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![],
+            vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(molecule.atom(atom).accepted_pairs(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_accepted_pairs_constraint() {
+        let mut atom = AtomAst::from_element(Element::C);
+        atom.constraints.add(AtomConstraint::accepted_pairs(2));
+        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().accepted_pairs(),
+            ValueAst::Lit(2),
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_aromatic_valence_not_in_system() {
+        let molecule = mol!(r#"{:atoms ["C"] :bonds []}"#);
+        assert_eq!(
+            molecule.atom(AtomId(0)).aromatic_valence(),
+            ValueAst::Lit(0)
+        );
+    }
+
+    #[rstest]
+    #[case::in_system(AtomId(0), true)]
+    #[case::not_in_system(AtomId(3), false)]
+    fn test_atom_view_is_in_aromatic_system(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(molecule.atom(atom).is_in_aromatic_system(), expected);
+    }
+
+    #[rstest]
+    #[case::participant(AtomId(0), Some(AromaticSystemId(0)))]
+    #[case::not_participant(AtomId(3), None)]
+    fn test_atom_view_aromatic_system(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Option<AromaticSystemId>,
+    ) {
+        let id = molecule.atom(atom).aromatic_system().map(|v| v.id);
+        assert_eq!(id, expected);
+    }
+
+    #[rstest]
+    #[case::donor(AtomId(2), vec![DativeBondId(0)])]
+    #[case::acceptor(AtomId(3), vec![DativeBondId(0)])]
+    #[case::uninvolved(AtomId(0), vec![])]
+    fn test_atom_view_dative_bonds(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<DativeBondId>,
+    ) {
+        let ids: Vec<DativeBondId> = molecule.atom(atom).dative_bonds().map(|v| v.id).collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::participant(AtomId(0), vec![MulticenterBondId(0)])]
+    #[case::uninvolved(AtomId(3), vec![])]
+    fn test_atom_view_multicenter_bonds(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<MulticenterBondId>,
+    ) {
+        let ids: Vec<MulticenterBondId> = molecule
+            .atom(atom)
+            .multicenter_bonds()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::endpoint_0(AtomId(0), vec![NoncovalentBondId(0)])]
+    #[case::endpoint_3(AtomId(3), vec![NoncovalentBondId(0)])]
+    #[case::uninvolved(AtomId(1), vec![])]
+    fn test_atom_view_noncovalent_bonds(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<NoncovalentBondId>,
+    ) {
+        let ids: Vec<NoncovalentBondId> = molecule
+            .atom(atom)
+            .noncovalent_bonds()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom_0(AtomId(0), true)]
+    #[case::ring_atom_3(AtomId(3), true)]
+    #[case::ring_atom_5(AtomId(5), true)]
+    #[case::chain_atom_6(AtomId(6), false)]
+    fn test_atom_view_is_in_ring(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).is_in_ring(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), true)]
+    #[case::chain_atom(AtomId(6), false)]
+    fn test_atom_view_is_in_ring_from(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        let rings = ring_with_chain.rings_with(RingFamily::Relevant, 22, |_| true);
+        assert_eq!(ring_with_chain.atom(atom).is_in_ring_from(&rings), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), 1)]
+    #[case::chain_atom(AtomId(6), 0)]
+    fn test_atom_view_rings_from(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected_count: usize,
+    ) {
+        let rings = ring_with_chain.rings_with(RingFamily::Relevant, 22, |_| true);
+        let count = ring_with_chain.atom(atom).rings_from(&rings).count();
+        assert_eq!(count, expected_count);
+    }
+
+    #[rstest]
+    #[case::aromatic_and_multicenter(molecule(), AtomId(0), true)]
+    #[case::aromatic_only_in_rich(molecule(), AtomId(1), true)]
+    #[case::dative_donor(molecule(), AtomId(2), true)]
+    #[case::dative_acceptor(molecule(), AtomId(3), true)]
+    #[case::bare_atom_0(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+        AtomId(0),
+        false,
+    )]
+    #[case::bare_atom_1(
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
+        ),
+        AtomId(1),
+        false,
+    )]
+    fn test_atom_view_is_in_overlays(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(mol.atom(atom).is_in_overlays(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_aromatic_valence_constraint() {
+        let mut atom = AtomAst::from_element(Element::C);
+        atom.constraints.add(AtomConstraint::aromatic_valence(
+            AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
+        ));
+        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().aromatic_valence(),
+            AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
+        );
+    }
+
+    #[rstest]
+    #[case::single_bond(
+        vec![(vec![AtomId(0), AtomId(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)])],
+        ValueAst::Lit(2),
+    )]
+    #[case::two_bonds(
+        vec![
+            (vec![AtomId(0), AtomId(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)]),
+            (vec![AtomId(0), AtomId(2)], vec![ValueAst::Lit(1), ValueAst::Lit(1)]),
+        ],
+        ValueAst::Lit(3),
+    )]
+    #[case::undetermined_aborts(
+        vec![(vec![AtomId(0), AtomId(1)], vec![ValueAst::Undetermined, ValueAst::Lit(2)])],
+        ValueAst::Undetermined,
+    )]
+    fn test_atom_view_multicenter_valence(
+        #[case] bonds: Vec<(Vec<AtomId>, Vec<ValueAst>)>,
+        #[case] expected: ValueAst,
+    ) {
+        let multicenter: Vec<_> = bonds
+            .into_iter()
+            .map(|(parts, electrons)| (parts, MulticenterBondAst::new(electrons)))
+            .collect();
+        let molecule = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            multicenter,
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(molecule.atom(AtomId(0)).multicenter_valence(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_multicenter_valence_constraint() {
+        let mut atom = AtomAst::from_element(Element::C);
+        atom.constraints.add(AtomConstraint::multicenter_valence(
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
+        ));
+        let molecule = MoleculeAst::from_atoms_and_bonds(vec![atom], vec![]);
+        assert_eq!(
+            molecule.atom(AtomId(0)).constraints().multicenter_valence(),
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(2)),
+        );
+    }
+
+    #[rstest]
+    #[case::ethane_carbon(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#), AtomId(0), ValueAst::Lit(1))]
+    #[case::ethene_carbon(mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "2"]]}"#), AtomId(0), ValueAst::Lit(1))]
+    #[case::three_bonds(mol!(r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]]}"#), AtomId(0), ValueAst::Lit(3))]
+    fn test_atom_view_degree(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(mol.atom(atom).degree(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_total_degree() {
+        let molecule = mol!(r#"{:atoms ["C#h4"] :bonds []}"#);
+        assert_eq!(molecule.atom(AtomId(0)).total_degree(), ValueAst::Lit(4),);
+    }
+
+    #[rstest]
+    fn test_atom_view_total_degree_undetermined() {
+        let molecule = mol!(r#"{:atoms ["C#h="] :bonds []}"#);
+        assert_eq!(
+            molecule.atom(AtomId(0)).total_degree(),
+            ValueAst::Undetermined,
+        );
+    }
+
+    #[rstest]
+    #[case::all_heavy(
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(2),
+    )]
+    #[case::one_h_neighbor(
+        mol!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(1),
+    )]
+    fn test_atom_view_heavy_atom_degree(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(mol.atom(atom).heavy_atom_degree(), expected);
+    }
+
+    #[rstest]
+    #[case::all_heavy(
+        mol!(r#"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [0 2 "2"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(3),
+    )]
+    #[case::skips_h(
+        mol!(r#"{:atoms ["C" "C" "H"] :bonds [[0 1 "2"] [0 2 "1"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(2),
+    )]
+    fn test_atom_view_heavy_atom_valence(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(mol.atom(atom).heavy_atom_valence(), expected);
+    }
+
+    #[rstest]
+    #[case::implicit_only(
+        mol!(r#"{:atoms ["C#h4"] :bonds []}"#),
+        AtomId(0),
+        ValueAst::Lit(4),
+    )]
+    #[case::implicit_and_explicit(
+        mol!(r#"{:atoms ["C#h2" "H" "H"] :bonds [[0 1 "1"] [0 2 "1"]]}"#),
+        AtomId(0),
+        ValueAst::Lit(4),
+    )]
+    #[case::implicit_normal_collapses(
+        mol!(r#"{:atoms ["C#h="] :bonds []}"#),
+        AtomId(0),
+        ValueAst::Undetermined,
+    )]
+    fn test_atom_view_total_hydrogens(
+        #[case] mol: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(mol.atom(atom).total_hydrogens(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_total_valence_sum_of_terms() {
+        let molecule = mol!(r#"{:atoms ["C#h4"] :bonds []}"#);
+        assert_eq!(molecule.atom(AtomId(0)).total_valence(), ValueAst::Lit(4),);
+    }
+
+    #[rstest]
+    fn test_atom_view_total_valence_implicit_normal_collapses() {
+        let molecule = mol!(r#"{:atoms ["C#h="] :bonds []}"#);
+        assert_eq!(
+            molecule.atom(AtomId(0)).total_valence(),
+            ValueAst::Undetermined,
+        );
+    }
+
+    #[rstest]
+    fn test_atom_view_multicenter_degree() {
+        let molecule = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::new(vec![ValueAst::Lit(2), ValueAst::Lit(2), ValueAst::Lit(2)]),
+            )],
+            vec![],
+            Constraints::default(),
+        );
+        assert_eq!(
+            molecule.atom(AtomId(0)).multicenter_degree(),
+            ValueAst::Lit(2),
+        );
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(1))]
+    #[case::ring_atom_alt(AtomId(3), ValueAst::Lit(1))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_atom_view_ring_count(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).ring_count(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), vec![6])]
+    #[case::chain_atom(AtomId(6), vec![])]
+    fn test_atom_view_ring_size(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<usize>,
+    ) {
+        let sizes: Vec<_> = ring_with_chain.atom(atom).ring_size().collect();
+        assert_eq!(sizes, expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), Some(6))]
+    #[case::chain_atom(AtomId(6), None)]
+    fn test_atom_view_smallest_ring_size(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Option<usize>,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).smallest_ring_size(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(2))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_atom_view_ring_degree(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).ring_degree(), expected);
+    }
+
+    #[rstest]
+    #[case::ring_atom(AtomId(0), ValueAst::Lit(2))]
+    #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
+    fn test_atom_view_ring_valence(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).ring_valence(), expected);
+    }
 }

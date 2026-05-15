@@ -5,8 +5,8 @@
 //! The CSR is wrapped in `Arc` for zero-cost cloning; mutations rebuild
 //! it and produce a `Remapping` for reindexing external data.
 
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::relation::{FixedRelationSet, RelationId, VarRelationSet};

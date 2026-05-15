@@ -90,11 +90,7 @@ impl HmoAromaticity {
             .graph()
             .connected_components(ConnectedComponentsAlgorithm::Bfs)
             .into_iter()
-            .map(|c| {
-                c.into_iter()
-                    .map(|sub| sorted_host[sub.index()])
-                    .collect()
-            })
+            .map(|c| c.into_iter().map(|sub| sorted_host[sub.index()]).collect())
             .collect();
 
         let mut candidates = Vec::new();
@@ -190,7 +186,12 @@ impl HmoAromaticity {
             bond_positions.push((i, j));
         }
 
-        HmoCalculator::new(pi_atoms.to_vec(), electron_count, hamiltonian, bond_positions)
+        HmoCalculator::new(
+            pi_atoms.to_vec(),
+            electron_count,
+            hamiltonian,
+            bond_positions,
+        )
     }
 }
 
@@ -352,12 +353,14 @@ mod tests {
     fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
         let atoms: Vec<AtomId> = (0..ast.atoms().count() as u32).map(AtomId).collect();
         model
-            .build_calculator(ast, &atoms, &|v| {
-                match v.ast.constraints.aromatic_valence() {
+            .build_calculator(
+                ast,
+                &atoms,
+                &|v| match v.ast.constraints.aromatic_valence() {
                     AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
                     _ => None,
-                }
-            })
+                },
+            )
             .unwrap()
             .solve()
     }
@@ -489,12 +492,14 @@ mod tests {
     ) {
         let ring_info = enumerate_simple(&ast);
         let systems = hmo_model
-            .find_from_rings(&ast, &ring_info, &|v| {
-                match v.ast.constraints.aromatic_valence() {
+            .find_from_rings(
+                &ast,
+                &ring_info,
+                &|v| match v.ast.constraints.aromatic_valence() {
                     AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
                     _ => None,
-                }
-            })
+                },
+            )
             .unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);
@@ -530,12 +535,14 @@ mod tests {
     fn test_hmo_aromaticity_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
         let atoms: Vec<AtomId> = (0..pyridine.atoms().count() as u32).map(AtomId).collect();
         let calc = hmo_model
-            .build_calculator(&pyridine, &atoms, &|v| {
-                match v.ast.constraints.aromatic_valence() {
+            .build_calculator(
+                &pyridine,
+                &atoms,
+                &|v| match v.ast.constraints.aromatic_valence() {
                     AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
                     _ => None,
-                }
-            })
+                },
+            )
             .unwrap();
         let h = &calc.hamiltonian;
         assert_eq!(h.nrows(), 6);

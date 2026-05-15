@@ -92,10 +92,8 @@ impl Graph {
             let sub_graph = embedding.extract();
             let cycles = relevant_cycles_in_bcc(&sub_graph, max_cycle_size);
             for cycle in cycles {
-                let mapped: Vec<NodeId> = cycle
-                    .iter()
-                    .map(|&sub| embedding.host_node(sub))
-                    .collect();
+                let mapped: Vec<NodeId> =
+                    cycle.iter().map(|&sub| embedding.host_node(sub)).collect();
                 let normalized = normalize_cycle(&mapped);
                 if seen.insert(normalized.clone()) {
                     result.push(normalized);

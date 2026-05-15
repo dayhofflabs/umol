@@ -137,8 +137,7 @@ impl RingSet {
             (graph.clone(), host_nodes)
         };
 
-        let raw_cycles =
-            sub.enumerate_cycles(max_ring_size, CycleEnumerationAlgorithm::Vismara);
+        let raw_cycles = sub.enumerate_cycles(max_ring_size, CycleEnumerationAlgorithm::Vismara);
 
         let all_rings: Vec<Ring> = raw_cycles
             .into_iter()

@@ -7,6 +7,7 @@ pub(crate) mod bond;
 pub(crate) mod constraint;
 pub(crate) mod dative;
 pub(crate) mod edit;
+pub(crate) mod embedding;
 pub(crate) mod error;
 pub(crate) mod idx;
 pub(crate) mod matching;
@@ -17,7 +18,6 @@ pub(crate) mod reaction;
 pub(crate) mod remap;
 pub(crate) mod rings;
 pub(crate) mod spin;
-pub(crate) mod embedding;
 pub(crate) mod traits;
 pub(crate) mod value;
 pub(crate) mod views;
@@ -44,6 +44,7 @@ pub use edit::{
     RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
     RemovedOverlays, RewrittenConstraint, Undo,
 };
+pub use embedding::MoleculeEmbedding;
 pub use error::{EvaluationError, RewriteError};
 pub use idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -57,7 +58,6 @@ pub use reaction::{Assignment, ReactionRuleAst};
 pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
-pub use embedding::MoleculeEmbedding;
 pub use traits::{FromAst, IntoAst, TryFromAst, TryIntoAst};
 pub use value::{ArithOp, Bindings, Expr, RelOp, ValueAst};
 pub use views::{

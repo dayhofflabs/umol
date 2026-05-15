@@ -14,13 +14,13 @@ use super::atom::AtomAst;
 use super::bond::BondAst;
 use super::constraint::{Constraint, Constraints};
 use super::dative::DativeBondAst;
+use super::embedding::MoleculeEmbedding;
 use super::idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::rings::{RingFamily, RingSet};
-use super::embedding::MoleculeEmbedding;
 use super::views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, GraphView, MulticenterBondView,

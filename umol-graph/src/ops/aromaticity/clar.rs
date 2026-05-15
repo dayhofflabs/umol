@@ -279,12 +279,14 @@ mod tests {
         let rings = enumerate_induced(&ast);
         let model = ClarAromaticity;
         let systems = model
-            .find_from_rings(&ast, &rings, &|v| {
-                match v.ast.constraints.aromatic_valence() {
+            .find_from_rings(
+                &ast,
+                &rings,
+                &|v| match v.ast.constraints.aromatic_valence() {
                     AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
                     _ => None,
-                }
-            })
+                },
+            )
             .unwrap();
         assert_eq!(systems.len(), expected_systems);
         assert_eq!(systems.first().map(|s| s.0.len()), expected_atoms);

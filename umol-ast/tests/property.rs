@@ -1200,7 +1200,6 @@ fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
     let aromatic_flags = prop::collection::vec(id_flag(), counts.aromatic);
     let multicenter_flags = prop::collection::vec(id_flag(), counts.multicenter);
     let noncovalent_flags = prop::collection::vec(id_flag(), counts.noncovalent);
-    let alias_count = 0usize..=ALIAS_ELEMENTS.len();
     (
         atom_flags,
         bond_flags,
@@ -1208,10 +1207,9 @@ fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
         aromatic_flags,
         multicenter_flags,
         noncovalent_flags,
-        alias_count,
     )
         .prop_map(
-            |(atoms, bonds, datives, aromatics, multicenters, noncovalents, n_aliases)| {
+            |(atoms, bonds, datives, aromatics, multicenters, noncovalents)| {
                 let mut meta = Metadata::new();
                 for (i, slot) in atoms.iter().enumerate() {
                     if slot.is_some() {
@@ -1252,9 +1250,8 @@ fn metadata_for(counts: ConstraintCounts) -> BoxedStrategy<Metadata> {
                         );
                     }
                 }
-                for i in 0..n_aliases {
-                    let atom = AtomAst::from_element(ALIAS_ELEMENTS[i]);
-                    meta.add_atom_alias(format!("al{i}"), atom);
+                for (i, element) in ALIAS_ELEMENTS.iter().enumerate() {
+                    meta.add_atom_alias(format!("al{i}"), AtomAst::from_element(*element));
                 }
                 meta
             },

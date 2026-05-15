@@ -20,10 +20,7 @@ pub struct DativeBondViews<'a> {
 }
 
 impl<'a> DativeBondViews<'a> {
-    pub(crate) fn new(
-        molecule: &'a MoleculeAst,
-        set: &'a VarRelationSet<DativeBondAst>,
-    ) -> Self {
+    pub(crate) fn new(molecule: &'a MoleculeAst, set: &'a VarRelationSet<DativeBondAst>) -> Self {
         Self { molecule, set }
     }
 
@@ -234,5 +231,158 @@ pub struct DativeBondBuilderViewMut<'a> {
 impl<'a> DativeBondBuilderViewMut<'a> {
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
         self.atoms.iter().map(|&n| AtomId::from(n))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_shared::element::Element;
+
+    use crate::ast::aromatic::AromaticSystemAst;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::constraint::Constraints;
+    use crate::ast::dative::DativeBondAst;
+    use crate::ast::idx::{AtomId, DativeBondId};
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::multicenter::MulticenterBondAst;
+    use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ast::value::ValueAst;
+
+    #[fixture]
+    fn molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(2)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+            vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemAst::default(),
+            )],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::default(),
+            )],
+            vec![(
+                AtomId(0),
+                AtomId(3),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.dative_bonds().count(), 1);
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.dative_bonds().ids().collect::<Vec<_>>(),
+            vec![DativeBondId(0)],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_iter(molecule: MoleculeAst) {
+        let collected: Vec<(DativeBondId, AtomId, DativeBondAst)> = molecule
+            .dative_bonds()
+            .iter()
+            .map(|v| (v.id, v.acceptor_id, v.ast.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![(
+                DativeBondId(0),
+                AtomId(3),
+                DativeBondAst::from_order(1).with_acceptor_slot(1),
+            )],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_get(molecule: MoleculeAst) {
+        let view = molecule.dative_bonds().get(DativeBondId(0));
+        assert_eq!(view.id, DativeBondId(0));
+        assert_eq!(view.acceptor_id, AtomId(3));
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_index(molecule: MoleculeAst) {
+        let dative: &DativeBondAst = &molecule.dative_bonds()[DativeBondId(0)];
+        assert_eq!(dative.order, ValueAst::Lit(1));
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_atom_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .dative_bond(DativeBondId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(2), AtomId(3)],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_donor_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .dative_bond(DativeBondId(0))
+                .donor_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_acceptor_id(molecule: MoleculeAst) {
+        assert_eq!(molecule.dative_bond(DativeBondId(0)).acceptor_id, AtomId(3));
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_atoms(molecule: MoleculeAst) {
+        let ids: Vec<AtomId> = molecule
+            .dative_bond(DativeBondId(0))
+            .atoms()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![AtomId(2), AtomId(3)]);
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_donors(molecule: MoleculeAst) {
+        let ids: Vec<AtomId> = molecule
+            .dative_bond(DativeBondId(0))
+            .donors()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![AtomId(2)]);
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_acceptor(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.dative_bond(DativeBondId(0)).acceptor().id,
+            AtomId(3),
+        );
+    }
+
+    #[rstest]
+    fn test_dative_bond_view_atom_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.dative_bond(DativeBondId(0)).atom_count(), 2);
     }
 }

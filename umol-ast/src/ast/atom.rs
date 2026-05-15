@@ -794,9 +794,9 @@ mod tests {
                 unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
                 multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
             },
-            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(Box::new(
-                Expr::Lit(4),
-            )))]),
+            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(
+                Box::new(Expr::Lit(4)),
+            ))]),
         };
         atom.simplify_values();
         assert_eq!(atom.isotope_mass, IsotopeAst::Lit(12));

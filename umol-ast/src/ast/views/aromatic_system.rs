@@ -280,3 +280,206 @@ impl<'a> AromaticSystemBuilderViewMut<'a> {
         self.atoms.iter().map(|&n| AtomId::from(n))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_shared::element::Element;
+
+    use crate::ast::aromatic::AromaticSystemAst;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::constraint::Constraints;
+    use crate::ast::dative::DativeBondAst;
+    use crate::ast::idx::{AromaticSystemId, AtomId, BondId};
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::multicenter::MulticenterBondAst;
+    use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+    use crate::ast::value::ValueAst;
+
+    #[fixture]
+    fn molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(2)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+            vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemAst::default(),
+            )],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::default(),
+            )],
+            vec![(
+                AtomId(0),
+                AtomId(3),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.aromatic_systems().count(), 1);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.aromatic_systems().ids().collect::<Vec<_>>(),
+            vec![AromaticSystemId(0)],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_iter(molecule: MoleculeAst) {
+        let collected: Vec<(AromaticSystemId, Vec<AtomId>)> = molecule
+            .aromatic_systems()
+            .iter()
+            .map(|v| (v.id, v.atom_ids().collect()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![(AromaticSystemId(0), vec![AtomId(0), AtomId(1), AtomId(2)])],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_get(molecule: MoleculeAst) {
+        let view = molecule.aromatic_systems().get(AromaticSystemId(0));
+        assert_eq!(view.id, AromaticSystemId(0));
+        assert_eq!(
+            view.atom_ids().collect::<Vec<_>>(),
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_index(molecule: MoleculeAst) {
+        let _: &AromaticSystemAst = &molecule.aromatic_systems()[AromaticSystemId(0)];
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_atom_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .aromatic_system(AromaticSystemId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(0), AtomId(1), AtomId(2)],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_bond_ids(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .aromatic_system(AromaticSystemId(0))
+                .bond_ids()
+                .collect::<Vec<_>>(),
+            vec![BondId(0), BondId(1)],
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_atoms(molecule: MoleculeAst) {
+        let ids: Vec<AtomId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .atoms()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![AtomId(0), AtomId(1), AtomId(2)]);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_bonds(molecule: MoleculeAst) {
+        let ids: Vec<BondId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .bonds()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![BondId(0), BondId(1)]);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_electron_count(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .aromatic_system(AromaticSystemId(0))
+                .electron_count(),
+            ValueAst::Lit(0),
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_atom_count(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.aromatic_system(AromaticSystemId(0)).atom_count(),
+            3
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_bond_count(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.aromatic_system(AromaticSystemId(0)).bond_count(),
+            2
+        );
+    }
+
+    #[rstest]
+    #[case::two_in(vec![AtomId(0), AtomId(1)], vec![AtomId(0), AtomId(1)])]
+    #[case::all_in(vec![AtomId(0), AtomId(1), AtomId(2)], vec![AtomId(0), AtomId(1), AtomId(2)])]
+    #[case::disjoint(vec![AtomId(3)], vec![])]
+    fn test_aromatic_system_view_overlapping_atoms(
+        molecule: MoleculeAst,
+        #[case] subset: Vec<AtomId>,
+        #[case] expected: Vec<AtomId>,
+    ) {
+        let ids: Vec<AtomId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .overlapping_atoms(&subset)
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    #[case::one(vec![BondId(0)], vec![BondId(0)])]
+    #[case::both(vec![BondId(0), BondId(1)], vec![BondId(0), BondId(1)])]
+    #[case::other(vec![BondId(2)], vec![])]
+    fn test_aromatic_system_view_overlapping_bonds(
+        molecule: MoleculeAst,
+        #[case] subset: Vec<BondId>,
+        #[case] expected: Vec<BondId>,
+    ) {
+        let ids: Vec<BondId> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .overlapping_bonds(&subset)
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, expected);
+    }
+
+    #[rstest]
+    fn test_aromatic_system_view_overlapping_rings(molecule: MoleculeAst) {
+        let ids: Vec<usize> = molecule
+            .aromatic_system(AromaticSystemId(0))
+            .overlapping_rings()
+            .map(|r| r.len())
+            .collect();
+        assert_eq!(ids, Vec::<usize>::new());
+    }
+}

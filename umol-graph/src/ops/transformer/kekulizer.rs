@@ -151,10 +151,8 @@ impl Kekulizer {
                 .bonds()
                 .map(|sub| host_bonds[sub.index()])
                 .collect();
-            let (matched_bonds, unmatched_bonds): (Vec<BondId>, Vec<BondId>) = bonds
-                .iter()
-                .copied()
-                .partition(|b| matched.contains(b));
+            let (matched_bonds, unmatched_bonds): (Vec<BondId>, Vec<BondId>) =
+                bonds.iter().copied().partition(|b| matched.contains(b));
 
             plans.push(SystemPlan {
                 system_idx,

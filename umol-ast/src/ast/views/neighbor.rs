@@ -40,3 +40,67 @@ impl<'a> NeighborView<'a> {
         self.molecule.bond(self.bond_id)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_shared::element::Element;
+
+    use crate::ast::aromatic::AromaticSystemAst;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::constraint::Constraints;
+    use crate::ast::dative::DativeBondAst;
+    use crate::ast::idx::{AtomId, BondId};
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::multicenter::MulticenterBondAst;
+    use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
+
+    #[fixture]
+    fn molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::N),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(2)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+            vec![(vec![AtomId(2)], AtomId(3), DativeBondAst::from_order(1))],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemAst::default(),
+            )],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::default(),
+            )],
+            vec![(
+                AtomId(0),
+                AtomId(3),
+                NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
+            )],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    fn test_neighbor_view_fields(molecule: MoleculeAst) {
+        let collected: Vec<(BondId, AtomId, BondAst)> = molecule
+            .neighbors(AtomId(2))
+            .map(|n| (n.bond_id(), n.atom_id(), n.bond().ast.clone()))
+            .collect();
+        assert_eq!(
+            collected,
+            vec![
+                (BondId(1), AtomId(1), BondAst::from_order(2)),
+                (BondId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+        );
+    }
+}

@@ -258,7 +258,6 @@ impl_value_binop!(Sub, sub, -);
 impl_value_binop!(Mul, mul, *);
 impl_value_binop!(Div, div, /);
 
-
 impl From<i64> for ValueAst {
     fn from(value: i64) -> Self {
         Self::Lit(value)
@@ -693,69 +692,24 @@ mod tests {
         assert_eq!(pattern.capture(value), None);
     }
 
-    // region: simplify
-
     #[rustfmt::skip]
     #[rstest]
     #[case::lit(Expr::Lit(5), Expr::Lit(5))]
     #[case::var(Expr::Var("x".into()), Expr::Var("x".into()))]
     #[case::neg_lit(Expr::Neg(Box::new(Expr::Lit(3))), Expr::Neg(Box::new(Expr::Lit(3))))]
-    #[case::neg_neg_collapses(
-        Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))),
-        Expr::Lit(3),
-    )]
-    #[case::neg_neg_neg_collapses_to_one(
-        Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))))),
-        Expr::Neg(Box::new(Expr::Var("x".into()))),
-    )]
-    #[case::or_flattens_or_child(
-        Expr::Or(vec![
-            Expr::Var("a".into()),
-            Expr::Or(vec![Expr::Var("b".into()), Expr::Var("c".into())]),
-        ]),
-        Expr::Or(vec![
-            Expr::Var("a".into()),
-            Expr::Var("b".into()),
-            Expr::Var("c".into()),
-        ]),
-    )]
-    #[case::and_flattens_and_child(
-        Expr::And(vec![
-            Expr::And(vec![Expr::Var("a".into()), Expr::Var("b".into())]),
-            Expr::Var("c".into()),
-        ]),
-        Expr::And(vec![
-            Expr::Var("a".into()),
-            Expr::Var("b".into()),
-            Expr::Var("c".into()),
-        ]),
-    )]
-    #[case::or_does_not_flatten_and(
-        Expr::Or(vec![
-            Expr::Var("a".into()),
-            Expr::And(vec![Expr::Var("b".into()), Expr::Var("c".into())]),
-        ]),
-        Expr::Or(vec![
-            Expr::Var("a".into()),
-            Expr::And(vec![Expr::Var("b".into()), Expr::Var("c".into())]),
-        ]),
-    )]
-    #[case::recursive_into_binop(
-        Expr::BinOp(
-            Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(2)))))),
-            ArithOp::Add,
-            Box::new(Expr::Lit(3)),
-        ),
-        Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3))),
-    )]
-    #[case::recursive_into_rel(
-        Expr::Rel(
-            Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Var("h".into())))))),
-            RelOp::Ge,
-            Box::new(Expr::Lit(1)),
-        ),
-        Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))),
-    )]
+    #[case::neg_neg_collapses(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))), Expr::Lit(3))]
+    #[case::neg_neg_neg_collapses_to_one(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))))),
+        Expr::Neg(Box::new(Expr::Var("x".into()))))]
+    #[case::or_flattens_or_child(Expr::Or(vec![Expr::Var("a".into()), Expr::Or(vec![Expr::Var("b".into()), Expr::Var("c".into())])]),
+        Expr::Or(vec![Expr::Var("a".into()), Expr::Var("b".into()), Expr::Var("c".into())]))]
+    #[case::and_flattens_and_child(Expr::And(vec![Expr::And(vec![Expr::Var("a".into()), Expr::Var("b".into())]), Expr::Var("c".into())]),
+        Expr::And(vec![Expr::Var("a".into()), Expr::Var("b".into()), Expr::Var("c".into())]))]
+    #[case::or_does_not_flatten_and(Expr::Or(vec![Expr::Var("a".into()), Expr::And(vec![Expr::Var("b".into()), Expr::Var("c".into())])]),
+        Expr::Or(vec![Expr::Var("a".into()), Expr::And(vec![Expr::Var("b".into()), Expr::Var("c".into())])]))]
+    #[case::recursive_into_binop(Expr::BinOp(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(2)))))), ArithOp::Add, Box::new(Expr::Lit(3))),
+        Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3))))]
+    #[case::recursive_into_rel(Expr::Rel(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Var("h".into())))))), RelOp::Ge, Box::new(Expr::Lit(1))),
+        Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))))]
     fn test_expr_simplify(#[case] input: Expr, #[case] expected: Expr) {
         assert_eq!(input.simplify(), expected);
     }
@@ -766,38 +720,21 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined, ValueAst::Undetermined)]
     #[case::lit_set(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![1, 2])))]
     #[case::expr_lit_lifts(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Lit(5))]
-    #[case::expr_neg_lit_lifts(
-        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(7))))),
-        ValueAst::Lit(-7),
-    )]
-    #[case::expr_neg_neg_lit_lifts(
-        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(4))))))),
-        ValueAst::Lit(4),
-    )]
-    #[case::expr_var_stays(
-        ValueAst::Expr(Box::new(Expr::Var("x".into()))),
-        ValueAst::Expr(Box::new(Expr::Var("x".into()))),
-    )]
-    #[case::expr_neg_var_stays(
-        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))),
-        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))),
-    )]
-    #[case::expr_neg_lit_min_overflow_keeps_form(
-        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(i64::MIN))))),
-        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(i64::MIN))))),
-    )]
+    #[case::expr_neg_lit_lifts(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(7))))), ValueAst::Lit(-7))]
+    #[case::expr_neg_neg_lit_lifts(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(4))))))), ValueAst::Lit(4))]
+    #[case::expr_var_stays(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Expr(Box::new(Expr::Var("x".into()))))]
+    #[case::expr_neg_var_stays(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))),
+        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))))]
+    #[case::expr_neg_lit_min_overflow_keeps_form(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(i64::MIN))))),
+        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(i64::MIN))))))]
     fn test_value_ast_simplify(#[case] input: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(input.simplify(), expected);
     }
 
     #[rstest]
     #[case::neg_neg(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))))]
-    #[case::nested_or(
-        Expr::Or(vec![
-            Expr::Or(vec![Expr::Var("a".into()), Expr::Var("b".into())]),
-            Expr::Or(vec![Expr::Var("c".into()), Expr::Var("d".into())]),
-        ])
-    )]
+    #[case::nested_or(Expr::Or(vec![Expr::Or(vec![Expr::Var("a".into()), Expr::Var("b".into())]),
+        Expr::Or(vec![Expr::Var("c".into()), Expr::Var("d".into())])]))]
     #[case::deep_neg(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
         Expr::Neg(Box::new(Expr::Lit(1)))
     )))))))]
@@ -806,8 +743,6 @@ mod tests {
         let twice = once.clone().simplify();
         assert_eq!(once, twice);
     }
-
-    // endregion: simplify
 
     #[rustfmt::skip]
     #[rstest]
