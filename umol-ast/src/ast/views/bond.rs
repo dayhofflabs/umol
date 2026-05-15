@@ -23,7 +23,7 @@ pub struct BondViews<'a> {
 }
 
 impl<'a> BondViews<'a> {
-    pub(in crate::ast) fn new(molecule: &'a MoleculeAst, bonds: &'a [BondAst]) -> Self {
+    pub(crate) fn new(molecule: &'a MoleculeAst, bonds: &'a [BondAst]) -> Self {
         Self { molecule, bonds }
     }
 
@@ -207,7 +207,7 @@ pub struct BondViewMut<'a> {
 }
 
 impl<'a> BondViewMut<'a> {
-    pub(in crate::ast) fn new(id: BondId, atoms: [AtomId; 2], ast: &'a mut BondAst) -> Self {
+    pub(crate) fn new(id: BondId, atoms: [AtomId; 2], ast: &'a mut BondAst) -> Self {
         Self { id, atoms, ast }
     }
 

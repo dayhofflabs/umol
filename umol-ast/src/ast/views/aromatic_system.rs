@@ -23,7 +23,7 @@ pub struct AromaticSystemViews<'a> {
 }
 
 impl<'a> AromaticSystemViews<'a> {
-    pub(in crate::ast) fn new(
+    pub(crate) fn new(
         molecule: &'a MoleculeAst,
         set: &'a VarRelationSet<AromaticSystemAst>,
     ) -> Self {

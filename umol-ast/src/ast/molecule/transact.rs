@@ -4,6 +4,8 @@
 //! entries, and either returns a rollback-capable `Transaction` or reverse-
 //! replays the journal before surfacing a `TransactionError`.
 
+use std::collections::HashSet;
+
 use thiserror::Error;
 
 use super::super::edit::{
@@ -1169,8 +1171,8 @@ impl MoleculeBuilder {
         atoms: &[AtomId],
         bonds: &[BondId],
     ) -> (Vec<RemovedAtom>, Vec<RemovedBond>, RemovedOverlays) {
-        let atom_set: std::collections::HashSet<AtomId> = atoms.iter().copied().collect();
-        let bond_set: std::collections::HashSet<BondId> = bonds.iter().copied().collect();
+        let atom_set: HashSet<AtomId> = atoms.iter().copied().collect();
+        let bond_set: HashSet<BondId> = bonds.iter().copied().collect();
         let removed_atoms = atoms
             .iter()
             .map(|&id| RemovedAtom {

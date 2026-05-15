@@ -5,7 +5,7 @@
 
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
-use umol_graph_core::{BiconnectedComponentsAlgorithm, CycleEnumerationAlgorithm, Graph, NodeId};
+use umol_graph_core::{CycleEnumerationAlgorithm, Graph, NodeId};
 
 use super::idx::{AtomId, BondId};
 
@@ -129,52 +129,39 @@ impl RingSet {
 
         let use_subgraph = filtered_nodes.len() < graph.node_count();
 
-        let (sub, node_map) = if use_subgraph {
+        let (sub, host_nodes) = if use_subgraph {
             let embedding = graph.induced_subgraph(&filtered_nodes);
-            (embedding.extract(), embedding.node_map().to_vec())
+            (embedding.extract(), embedding.host_nodes().to_vec())
         } else {
-            let node_map: Vec<NodeId> = graph.node_ids().collect();
-            (graph.clone(), node_map)
+            let host_nodes: Vec<NodeId> = graph.node_ids().collect();
+            (graph.clone(), host_nodes)
         };
 
-        let bcc = sub.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan);
+        let raw_cycles =
+            sub.enumerate_cycles(max_ring_size, CycleEnumerationAlgorithm::Vismara);
 
-        let mut all_rings: Vec<Ring> = Vec::new();
-        for component in &bcc {
-            let comp_embedding = sub.induced_subgraph(component);
-            let comp_graph = comp_embedding.extract();
-            let raw_cycles = comp_graph
-                .enumerate_cycles(max_ring_size, CycleEnumerationAlgorithm::Vismara);
-
-            let component_rings: Vec<Ring> = raw_cycles
-                .into_iter()
-                .filter(|cycle| match family {
-                    RingFamily::Relevant => is_induced_cycle(&comp_graph, cycle),
-                    RingFamily::Simple => true,
-                })
-                .filter_map(|cycle| {
-                    let ring_atoms: Vec<AtomId> = cycle
-                        .iter()
-                        .map(|&local| {
-                            let sub_node = comp_embedding.parent_node(local);
-                            let orig_node = node_map[sub_node.index()];
-                            AtomId::from(orig_node)
-                        })
-                        .collect();
-                    let n = ring_atoms.len();
-                    let mut ring_bonds = Vec::with_capacity(n);
-                    for i in 0..n {
-                        let a_orig = NodeId::from(ring_atoms[i]);
-                        let b_orig = NodeId::from(ring_atoms[(i + 1) % n]);
-                        let edge = graph.find_edge(a_orig, b_orig)?;
-                        ring_bonds.push(BondId::from(edge));
-                    }
-                    Ring::new(ring_atoms, ring_bonds)
-                })
-                .collect();
-
-            all_rings.extend(component_rings);
-        }
+        let all_rings: Vec<Ring> = raw_cycles
+            .into_iter()
+            .filter(|cycle| match family {
+                RingFamily::Relevant => is_induced_cycle(&sub, cycle),
+                RingFamily::Simple => true,
+            })
+            .filter_map(|cycle| {
+                let ring_atoms: Vec<AtomId> = cycle
+                    .iter()
+                    .map(|&sub_node| AtomId::from(host_nodes[sub_node.index()]))
+                    .collect();
+                let n = ring_atoms.len();
+                let mut ring_bonds = Vec::with_capacity(n);
+                for i in 0..n {
+                    let a_orig = NodeId::from(ring_atoms[i]);
+                    let b_orig = NodeId::from(ring_atoms[(i + 1) % n]);
+                    let edge = graph.find_edge(a_orig, b_orig)?;
+                    ring_bonds.push(BondId::from(edge));
+                }
+                Ring::new(ring_atoms, ring_bonds)
+            })
+            .collect();
 
         Self::from_parts(family, max_ring_size, all_rings)
     }

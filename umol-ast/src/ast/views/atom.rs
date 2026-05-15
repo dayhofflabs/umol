@@ -29,7 +29,7 @@ pub struct AtomViews<'a> {
 }
 
 impl<'a> AtomViews<'a> {
-    pub(in crate::ast) fn new(molecule: &'a MoleculeAst, atoms: &'a [AtomAst]) -> Self {
+    pub(crate) fn new(molecule: &'a MoleculeAst, atoms: &'a [AtomAst]) -> Self {
         Self { molecule, atoms }
     }
 

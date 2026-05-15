@@ -88,13 +88,13 @@ impl Graph {
         let mut result = Vec::new();
 
         for component in self.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan) {
-            let sub = self.induced_subgraph(&component);
-            let local = sub.extract();
-            let cycles = relevant_cycles_in_bcc(&local, max_cycle_size);
+            let embedding = self.induced_subgraph(&component);
+            let sub_graph = embedding.extract();
+            let cycles = relevant_cycles_in_bcc(&sub_graph, max_cycle_size);
             for cycle in cycles {
                 let mapped: Vec<NodeId> = cycle
                     .iter()
-                    .map(|&local| sub.parent_node(local))
+                    .map(|&sub| embedding.host_node(sub))
                     .collect();
                 let normalized = normalize_cycle(&mapped);
                 if seen.insert(normalized.clone()) {

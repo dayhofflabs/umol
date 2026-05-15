@@ -1,5 +1,5 @@
-//! Embedding of a molecular substructure into a parent `MoleculeAst`:
-//! per-entity-type local→parent index maps borrowing the parent. Produced by
+//! Embedding of a molecular substructure into a host `MoleculeAst`:
+//! per-entity-type sub→host index maps borrowing the host. Produced by
 //! `MoleculeAst::induced_subgraph` and (in the future) by subgraph isomorphism
 //! matching.
 
@@ -13,35 +13,36 @@ use super::molecule::MoleculeAst;
 
 #[derive(Clone, Debug)]
 pub struct MoleculeEmbedding<'a> {
-    parent_atoms: Vec<AtomId>,
-    parent_bonds: Vec<BondId>,
-    parent_dative_bonds: Vec<DativeBondId>,
-    parent_aromatic_systems: Vec<AromaticSystemId>,
-    parent_multicenter_bonds: Vec<MulticenterBondId>,
-    parent_noncovalent_bonds: Vec<NoncovalentBondId>,
-    inverse_atom: HashMap<AtomId, u32>,
+    host_atoms: Vec<AtomId>,
+    host_bonds: Vec<BondId>,
+    host_dative_bonds: Vec<DativeBondId>,
+    host_aromatic_systems: Vec<AromaticSystemId>,
+    host_multicenter_bonds: Vec<MulticenterBondId>,
+    host_noncovalent_bonds: Vec<NoncovalentBondId>,
+    sub_atoms: HashMap<AtomId, AtomId>,
     ast: &'a MoleculeAst,
 }
 
 impl<'a> MoleculeEmbedding<'a> {
-    pub(in crate::ast) fn new(
-        parent_atoms: Vec<AtomId>,
-        parent_bonds: Vec<BondId>,
-        parent_dative_bonds: Vec<DativeBondId>,
-        parent_aromatic_systems: Vec<AromaticSystemId>,
-        parent_multicenter_bonds: Vec<MulticenterBondId>,
-        parent_noncovalent_bonds: Vec<NoncovalentBondId>,
-        inverse_atom: HashMap<AtomId, u32>,
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        host_atoms: Vec<AtomId>,
+        host_bonds: Vec<BondId>,
+        host_dative_bonds: Vec<DativeBondId>,
+        host_aromatic_systems: Vec<AromaticSystemId>,
+        host_multicenter_bonds: Vec<MulticenterBondId>,
+        host_noncovalent_bonds: Vec<NoncovalentBondId>,
+        sub_atoms: HashMap<AtomId, AtomId>,
         ast: &'a MoleculeAst,
     ) -> Self {
         Self {
-            parent_atoms,
-            parent_bonds,
-            parent_dative_bonds,
-            parent_aromatic_systems,
-            parent_multicenter_bonds,
-            parent_noncovalent_bonds,
-            inverse_atom,
+            host_atoms,
+            host_bonds,
+            host_dative_bonds,
+            host_aromatic_systems,
+            host_multicenter_bonds,
+            host_noncovalent_bonds,
+            sub_atoms,
             ast,
         }
     }
@@ -50,63 +51,63 @@ impl<'a> MoleculeEmbedding<'a> {
         self.ast
     }
 
-    pub fn parent_atom(&self, local: AtomId) -> AtomId {
-        self.parent_atoms[local.index()]
+    pub fn host_atom(&self, sub: AtomId) -> AtomId {
+        self.host_atoms[sub.index()]
     }
 
-    pub fn parent_atoms(&self) -> &[AtomId] {
-        &self.parent_atoms
+    pub fn host_atoms(&self) -> &[AtomId] {
+        &self.host_atoms
     }
 
-    pub fn local_atom(&self, parent: AtomId) -> Option<AtomId> {
-        self.inverse_atom.get(&parent).copied().map(AtomId)
+    pub fn sub_atom(&self, host: AtomId) -> Option<AtomId> {
+        self.sub_atoms.get(&host).copied()
     }
 
-    pub fn parent_bond(&self, local: BondId) -> BondId {
-        self.parent_bonds[local.index()]
+    pub fn host_bond(&self, sub: BondId) -> BondId {
+        self.host_bonds[sub.index()]
     }
 
-    pub fn parent_bonds(&self) -> &[BondId] {
-        &self.parent_bonds
+    pub fn host_bonds(&self) -> &[BondId] {
+        &self.host_bonds
     }
 
-    pub fn parent_dative_bond(&self, local: DativeBondId) -> DativeBondId {
-        self.parent_dative_bonds[local.index()]
+    pub fn host_dative_bond(&self, sub: DativeBondId) -> DativeBondId {
+        self.host_dative_bonds[sub.index()]
     }
 
-    pub fn parent_dative_bonds(&self) -> &[DativeBondId] {
-        &self.parent_dative_bonds
+    pub fn host_dative_bonds(&self) -> &[DativeBondId] {
+        &self.host_dative_bonds
     }
 
-    pub fn parent_aromatic_system(&self, local: AromaticSystemId) -> AromaticSystemId {
-        self.parent_aromatic_systems[local.index()]
+    pub fn host_aromatic_system(&self, sub: AromaticSystemId) -> AromaticSystemId {
+        self.host_aromatic_systems[sub.index()]
     }
 
-    pub fn parent_aromatic_systems(&self) -> &[AromaticSystemId] {
-        &self.parent_aromatic_systems
+    pub fn host_aromatic_systems(&self) -> &[AromaticSystemId] {
+        &self.host_aromatic_systems
     }
 
-    pub fn parent_multicenter_bond(&self, local: MulticenterBondId) -> MulticenterBondId {
-        self.parent_multicenter_bonds[local.index()]
+    pub fn host_multicenter_bond(&self, sub: MulticenterBondId) -> MulticenterBondId {
+        self.host_multicenter_bonds[sub.index()]
     }
 
-    pub fn parent_multicenter_bonds(&self) -> &[MulticenterBondId] {
-        &self.parent_multicenter_bonds
+    pub fn host_multicenter_bonds(&self) -> &[MulticenterBondId] {
+        &self.host_multicenter_bonds
     }
 
-    pub fn parent_noncovalent_bond(&self, local: NoncovalentBondId) -> NoncovalentBondId {
-        self.parent_noncovalent_bonds[local.index()]
+    pub fn host_noncovalent_bond(&self, sub: NoncovalentBondId) -> NoncovalentBondId {
+        self.host_noncovalent_bonds[sub.index()]
     }
 
-    pub fn parent_noncovalent_bonds(&self) -> &[NoncovalentBondId] {
-        &self.parent_noncovalent_bonds
+    pub fn host_noncovalent_bonds(&self) -> &[NoncovalentBondId] {
+        &self.host_noncovalent_bonds
     }
 
     /// Materialize the embedded substructure as a standalone `MoleculeAst`.
-    /// Atom/bond ordering follows the parent's id order, with gaps closed by
+    /// Atom/bond ordering follows the host's id order, with gaps closed by
     /// dense compaction (the order produced by `MoleculeBuilder::remove`).
     pub fn extract(&self) -> MoleculeAst {
-        let atom_set: HashSet<AtomId> = self.parent_atoms.iter().copied().collect();
+        let atom_set: HashSet<AtomId> = self.host_atoms.iter().copied().collect();
         let remove_atoms: Vec<AtomId> = (0..self.ast.atoms().count())
             .map(AtomId::from)
             .filter(|a| !atom_set.contains(a))
@@ -126,12 +127,12 @@ impl<'a> MoleculeEmbedding<'a> {
         builder.build()
     }
 
-    /// Edits that transform `parent` into the extracted substructure: a single
+    /// Edits that transform the host into the extracted substructure: a single
     /// `RemoveTopology` over atoms and bonds not present in the embedding.
     /// Overlay drops cascade automatically per phase 8i.
     pub fn edits(&self) -> Vec<Edit> {
-        let surviving_atoms: HashSet<AtomId> = self.parent_atoms.iter().copied().collect();
-        let surviving_bonds: HashSet<BondId> = self.parent_bonds.iter().copied().collect();
+        let surviving_atoms: HashSet<AtomId> = self.host_atoms.iter().copied().collect();
+        let surviving_bonds: HashSet<BondId> = self.host_bonds.iter().copied().collect();
         let removed_atoms: Vec<AtomRef> = (0..self.ast.atoms().count())
             .map(AtomId::from)
             .filter(|a| !surviving_atoms.contains(a))

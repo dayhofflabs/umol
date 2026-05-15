@@ -20,7 +20,7 @@ pub struct DativeBondViews<'a> {
 }
 
 impl<'a> DativeBondViews<'a> {
-    pub(in crate::ast) fn new(
+    pub(crate) fn new(
         molecule: &'a MoleculeAst,
         set: &'a VarRelationSet<DativeBondAst>,
     ) -> Self {

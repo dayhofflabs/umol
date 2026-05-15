@@ -94,23 +94,6 @@ impl Graph {
         }
     }
 
-    /// Perfect matching on the subgraph induced by `nodes`. Edges leaving the
-    /// subset are ignored. The returned `Matching` references parent-frame
-    /// `EdgeId`s; nodes outside `nodes` are unmatched in `Matching::mate`.
-    /// `nodes` doubles as the deterministic node order for the backtracking
-    /// algorithm.
-    pub fn perfect_matching_in(
-        &self,
-        nodes: &[NodeId],
-        alg: PerfectMatchingAlgorithm,
-    ) -> Option<Matching> {
-        match alg {
-            PerfectMatchingAlgorithm::BacktrackingDfs => {
-                self.perfect_matching_in_backtracking_dfs(nodes)
-            }
-        }
-    }
-
     pub fn enumerate_perfect_matchings(&self, alg: MatchingEnumerationAlgorithm) -> Vec<Matching> {
         match alg {
             MatchingEnumerationAlgorithm::BranchAndBound => {
@@ -172,29 +155,6 @@ impl Graph {
         }
         let mut mate = vec![-1i32; n];
         if backtrack_pair(self, node_order, 0, &mut mate) {
-            Some(Matching::from_mate_array(self, &mate))
-        } else {
-            None
-        }
-    }
-
-    fn perfect_matching_in_backtracking_dfs(&self, nodes: &[NodeId]) -> Option<Matching> {
-        let n = self.node_count();
-        if nodes.is_empty() {
-            return Some(Matching {
-                edges: Vec::new(),
-                mate: Vec::new(),
-            });
-        }
-        if !nodes.len().is_multiple_of(2) {
-            return None;
-        }
-        let mut in_subset = vec![false; n];
-        for &v in nodes {
-            in_subset[v.index()] = true;
-        }
-        let mut mate = vec![-1i32; n];
-        if backtrack_pair_in(self, nodes, 0, &mut mate, &in_subset) {
             Some(Matching::from_mate_array(self, &mate))
         } else {
             None
@@ -345,37 +305,6 @@ fn backtrack_pair(graph: &Graph, order: &[NodeId], idx: usize, mate: &mut [i32])
         mate[v.index()] = u.0 as i32;
         mate[u.index()] = v.0 as i32;
         if backtrack_pair(graph, order, i + 1, mate) {
-            return true;
-        }
-        mate[v.index()] = -1;
-        mate[u.index()] = -1;
-    }
-    false
-}
-
-fn backtrack_pair_in(
-    graph: &Graph,
-    order: &[NodeId],
-    idx: usize,
-    mate: &mut [i32],
-    in_subset: &[bool],
-) -> bool {
-    let mut i = idx;
-    while i < order.len() && mate[order[i].index()] >= 0 {
-        i += 1;
-    }
-    if i >= order.len() {
-        return true;
-    }
-    let v = order[i];
-    for nbr in graph.neighbors(v) {
-        let u = nbr.node;
-        if !in_subset[u.index()] || mate[u.index()] >= 0 {
-            continue;
-        }
-        mate[v.index()] = u.0 as i32;
-        mate[u.index()] = v.0 as i32;
-        if backtrack_pair_in(graph, order, i + 1, mate, in_subset) {
             return true;
         }
         mate[v.index()] = -1;
@@ -612,7 +541,7 @@ mod tests {
     use super::MatchingEnumerationAlgorithm::BranchAndBound;
     use super::MaxMatchingAlgorithm::{Edmonds, HopcroftKarp};
     use super::PerfectMatchingAlgorithm::BacktrackingDfs;
-    use crate::graph::{EdgeId, Graph, NodeId};
+    use crate::graph::{Graph, NodeId};
 
     #[test]
     fn test_matching_empty() {
@@ -800,50 +729,6 @@ mod tests {
         if let Some(m) = m {
             assert_eq!(m.size(), expected_size);
             assert!(m.is_perfect(node_count));
-            assert_matching_valid(&g, &m);
-        }
-    }
-
-    #[rstest]
-    #[case::benzene_subset(
-        8,
-        vec![[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0], [0, 6], [3, 7]],
-        ids(0..6),
-        true,
-        3,
-        vec![EdgeId(0), EdgeId(2), EdgeId(4)],
-    )]
-    #[case::subset_with_odd_count(
-        4,
-        vec![[0, 1], [1, 2], [2, 3]],
-        ids(0..3),
-        false,
-        0,
-        vec![],
-    )]
-    #[case::disconnected_subset(
-        4,
-        vec![[0, 1], [2, 3]],
-        vec![NodeId(0), NodeId(2)],
-        false,
-        0,
-        vec![],
-    )]
-    #[case::empty_subset(4, vec![[0, 1], [2, 3]], vec![], true, 0, vec![])]
-    fn test_graph_perfect_matching_in_backtracking_dfs(
-        #[case] node_count: usize,
-        #[case] edges: Vec<[u32; 2]>,
-        #[case] subset: Vec<NodeId>,
-        #[case] expected_some: bool,
-        #[case] expected_size: usize,
-        #[case] expected_edges: Vec<EdgeId>,
-    ) {
-        let g = Graph::new(node_count, &edges);
-        let m = g.perfect_matching_in(&subset, BacktrackingDfs);
-        assert_eq!(m.is_some(), expected_some, "Some-ness");
-        if let Some(m) = m {
-            assert_eq!(m.size(), expected_size);
-            assert_eq!(m.edges(), expected_edges.as_slice());
             assert_matching_valid(&g, &m);
         }
     }

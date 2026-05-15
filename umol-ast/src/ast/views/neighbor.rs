@@ -17,7 +17,7 @@ pub struct NeighborView<'a> {
 }
 
 impl<'a> NeighborView<'a> {
-    pub(in crate::ast) fn new(
+    pub(crate) fn new(
         bond: BondId,
         atom: AtomId,
         ast: &'a BondAst,

@@ -1,5 +1,6 @@
 //! Molecule structural AST.
 
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::iter;
 use std::ops::Index;
@@ -299,17 +300,17 @@ impl MoleculeAst {
     }
 
     pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeEmbedding<'_> {
-        let mut parent_atoms: Vec<AtomId> = Vec::with_capacity(atoms.len());
-        let mut inverse_atom: HashMap<AtomId, u32> = HashMap::with_capacity(atoms.len());
+        let mut host_atoms: Vec<AtomId> = Vec::with_capacity(atoms.len());
+        let mut sub_atoms: HashMap<AtomId, AtomId> = HashMap::with_capacity(atoms.len());
         for &a in atoms {
-            if let std::collections::hash_map::Entry::Vacant(entry) = inverse_atom.entry(a) {
-                entry.insert(parent_atoms.len() as u32);
-                parent_atoms.push(a);
+            if let Entry::Vacant(entry) = sub_atoms.entry(a) {
+                entry.insert(AtomId(host_atoms.len() as u32));
+                host_atoms.push(a);
             }
         }
-        let atom_set: HashSet<AtomId> = parent_atoms.iter().copied().collect();
+        let atom_set: HashSet<AtomId> = host_atoms.iter().copied().collect();
 
-        let parent_bonds: Vec<BondId> = self
+        let host_bonds: Vec<BondId> = self
             .bonds()
             .iter()
             .filter(|b| {
@@ -318,25 +319,25 @@ impl MoleculeAst {
             })
             .map(|b| b.id)
             .collect();
-        let parent_dative_bonds: Vec<DativeBondId> = self
+        let host_dative_bonds: Vec<DativeBondId> = self
             .dative_bonds()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
             .map(|v| v.id)
             .collect();
-        let parent_aromatic_systems: Vec<AromaticSystemId> = self
+        let host_aromatic_systems: Vec<AromaticSystemId> = self
             .aromatic_systems()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
             .map(|v| v.id)
             .collect();
-        let parent_multicenter_bonds: Vec<MulticenterBondId> = self
+        let host_multicenter_bonds: Vec<MulticenterBondId> = self
             .multicenter_bonds()
             .iter()
             .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
             .map(|v| v.id)
             .collect();
-        let parent_noncovalent_bonds: Vec<NoncovalentBondId> = self
+        let host_noncovalent_bonds: Vec<NoncovalentBondId> = self
             .noncovalent_bonds()
             .iter()
             .filter(|v| {
@@ -347,13 +348,13 @@ impl MoleculeAst {
             .collect();
 
         MoleculeEmbedding::new(
-            parent_atoms,
-            parent_bonds,
-            parent_dative_bonds,
-            parent_aromatic_systems,
-            parent_multicenter_bonds,
-            parent_noncovalent_bonds,
-            inverse_atom,
+            host_atoms,
+            host_bonds,
+            host_dative_bonds,
+            host_aromatic_systems,
+            host_multicenter_bonds,
+            host_noncovalent_bonds,
+            sub_atoms,
             self,
         )
     }

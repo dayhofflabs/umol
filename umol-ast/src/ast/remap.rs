@@ -180,6 +180,8 @@ fn normalize_removed(removed: &mut Vec<u32>) {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use rstest::*;
     use umol_graph_core::Remapping;
 
@@ -282,7 +284,7 @@ mod tests {
         assert_eq!(input.unmap(&remapping.undo_remapping()), expected);
     }
 
-    trait RelationCase: Copy + PartialEq + std::fmt::Debug {
+    trait RelationCase: Copy + PartialEq + Debug {
         fn map(self, remapping: &IdRemapping) -> Option<Self>;
         fn unmap(self, remapping: &UndoRemapping) -> Self;
     }

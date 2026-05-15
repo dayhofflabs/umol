@@ -6,6 +6,7 @@
 //! it and produce a `Remapping` for reindexing external data.
 
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
 use crate::relation::{FixedRelationSet, RelationId, VarRelationSet};
@@ -218,32 +219,32 @@ impl Graph {
     /// Returns the subgraph (with contiguous node/edge IDs starting at 0)
     /// and mappings from new IDs back to original IDs.
     /// Induced subgraph over `nodes` in caller-supplied order. Duplicates in
-    /// `nodes` are deduplicated (first occurrence wins). Local node ids
+    /// `nodes` are deduplicated (first occurrence wins). Sub node ids
     /// 0..len(deduplicated nodes) correspond positionally to the deduplicated
     /// input. The returned [`Embedding`] borrows `self`; call
-    /// [`Embedding::extract`] to materialize the local `Graph` when needed.
+    /// [`Embedding::extract`] to materialize the sub `Graph` when needed.
     pub fn induced_subgraph(&self, nodes: &[NodeId]) -> Embedding<'_> {
-        let mut node_map: Vec<NodeId> = Vec::with_capacity(nodes.len());
-        let mut inverse_node: HashMap<NodeId, u32> = HashMap::with_capacity(nodes.len());
+        let mut host_nodes: Vec<NodeId> = Vec::with_capacity(nodes.len());
+        let mut sub_nodes: HashMap<NodeId, NodeId> = HashMap::with_capacity(nodes.len());
         for &node in nodes {
-            if let std::collections::hash_map::Entry::Vacant(entry) = inverse_node.entry(node) {
-                entry.insert(node_map.len() as u32);
-                node_map.push(node);
+            if let Entry::Vacant(entry) = sub_nodes.entry(node) {
+                entry.insert(NodeId(host_nodes.len() as u32));
+                host_nodes.push(node);
             }
         }
 
-        let mut edge_map = Vec::new();
+        let mut host_edges = Vec::new();
         for eid in self.edge_ids() {
             let [a, b] = self.edge_endpoints(eid);
-            if inverse_node.contains_key(&a) && inverse_node.contains_key(&b) {
-                edge_map.push(eid);
+            if sub_nodes.contains_key(&a) && sub_nodes.contains_key(&b) {
+                host_edges.push(eid);
             }
         }
 
         Embedding {
-            node_map,
-            edge_map,
-            inverse_node,
+            host_nodes,
+            host_edges,
+            sub_nodes,
             graph: self,
         }
     }
@@ -391,14 +392,14 @@ impl Remapping {
     }
 }
 
-/// Subgraph induced by a node subset, borrowing the parent `Graph`. Holds
-/// local→parent index maps and a parent→local inverse for O(1) translation;
-/// the local `Graph` is materialized on demand via [`Embedding::extract`].
+/// Subgraph induced by a node subset, borrowing the host `Graph`. Holds
+/// sub→host index maps and a host→sub inverse for O(1) translation; the sub
+/// `Graph` is materialized on demand via [`Embedding::extract`].
 #[derive(Clone, Debug)]
 pub struct Embedding<'a> {
-    node_map: Vec<NodeId>,
-    edge_map: Vec<EdgeId>,
-    inverse_node: HashMap<NodeId, u32>,
+    host_nodes: Vec<NodeId>,
+    host_edges: Vec<EdgeId>,
+    sub_nodes: HashMap<NodeId, NodeId>,
     graph: &'a Graph,
 }
 
@@ -407,45 +408,45 @@ impl<'a> Embedding<'a> {
         self.graph
     }
 
-    pub fn node_map(&self) -> &[NodeId] {
-        &self.node_map
+    pub fn host_nodes(&self) -> &[NodeId] {
+        &self.host_nodes
     }
 
-    pub fn edge_map(&self) -> &[EdgeId] {
-        &self.edge_map
+    pub fn host_edges(&self) -> &[EdgeId] {
+        &self.host_edges
     }
 
-    pub fn parent_node(&self, local: NodeId) -> NodeId {
-        self.node_map[local.index()]
+    pub fn host_node(&self, sub: NodeId) -> NodeId {
+        self.host_nodes[sub.index()]
     }
 
-    pub fn parent_edge(&self, local: EdgeId) -> EdgeId {
-        self.edge_map[local.index()]
+    pub fn host_edge(&self, sub: EdgeId) -> EdgeId {
+        self.host_edges[sub.index()]
     }
 
-    pub fn local_node(&self, parent: NodeId) -> Option<NodeId> {
-        self.inverse_node.get(&parent).copied().map(NodeId)
+    pub fn sub_node(&self, host: NodeId) -> Option<NodeId> {
+        self.sub_nodes.get(&host).copied()
     }
 
     pub fn node_count(&self) -> usize {
-        self.node_map.len()
+        self.host_nodes.len()
     }
 
     pub fn edge_count(&self) -> usize {
-        self.edge_map.len()
+        self.host_edges.len()
     }
 
-    /// Materialize the local subgraph as an owned `Graph` with node ids
-    /// 0..node_count and edge ids 0..edge_count.
+    /// Materialize the embedded substructure as an owned `Graph` with node
+    /// ids 0..node_count and edge ids 0..edge_count.
     pub fn extract(&self) -> Graph {
-        let mut local_edges = Vec::with_capacity(self.edge_map.len());
-        for &eid in &self.edge_map {
-            let [pa, pb] = self.graph.edge_endpoints(eid);
-            let la = self.inverse_node[&pa];
-            let lb = self.inverse_node[&pb];
-            local_edges.push([la, lb]);
+        let mut sub_edges = Vec::with_capacity(self.host_edges.len());
+        for &eid in &self.host_edges {
+            let [ha, hb] = self.graph.edge_endpoints(eid);
+            let sa = self.sub_nodes[&ha];
+            let sb = self.sub_nodes[&hb];
+            sub_edges.push([sa.0, sb.0]);
         }
-        Graph::new(self.node_map.len(), &local_edges)
+        Graph::new(self.host_nodes.len(), &sub_edges)
     }
 }
 

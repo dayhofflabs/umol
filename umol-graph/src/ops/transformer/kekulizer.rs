@@ -11,7 +11,7 @@
 //! construction time and is the caller's responsibility (e.g., from a
 //! nauty/Traces canonical labeling).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 use umol_ast::ast::{
@@ -121,20 +121,35 @@ impl Kekulizer {
             let system_idx = view.id;
             let atoms: Vec<AtomId> = view.atom_ids().collect();
             let bonds: Vec<BondId> = view.bond_ids().collect();
-            let system_atoms: HashSet<AtomId> = atoms.iter().copied().collect();
 
-            let system_order: Vec<AtomId> = self
+            let embedding = ast.induced_subgraph(&atoms);
+            let extracted = embedding.extract();
+
+            // extracted has atoms in host-id order; build host→sub map.
+            let mut sorted_host = embedding.host_atoms().to_vec();
+            sorted_host.sort_unstable();
+            let host_to_sub: HashMap<AtomId, AtomId> = sorted_host
+                .iter()
+                .enumerate()
+                .map(|(i, &h)| (h, AtomId(i as u32)))
+                .collect();
+
+            let sub_order: Vec<AtomId> = self
                 .node_order
                 .iter()
                 .copied()
-                .filter(|a| system_atoms.contains(a))
+                .filter_map(|a| host_to_sub.get(&a).copied())
                 .collect();
 
-            let matched: HashSet<BondId> = ast
+            // Bonds in extracted preserve host-bond-id order, matching the
+            // order of embedding.host_bonds().
+            let host_bonds = embedding.host_bonds();
+            let matched: HashSet<BondId> = extracted
                 .graph()
-                .perfect_matching_in(&system_order, self.model.algorithm)
+                .perfect_matching(&sub_order, self.model.algorithm)
                 .ok_or(KekulizerError::NoMatching(system_idx))?
                 .bonds()
+                .map(|sub| host_bonds[sub.index()])
                 .collect();
             let (matched_bonds, unmatched_bonds): (Vec<BondId>, Vec<BondId>) = bonds
                 .iter()

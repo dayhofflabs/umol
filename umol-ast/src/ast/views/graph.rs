@@ -21,7 +21,7 @@ pub struct GraphView<'a> {
 }
 
 impl<'a> GraphView<'a> {
-    pub(in crate::ast) fn new(graph: &'a Graph) -> Self {
+    pub(crate) fn new(graph: &'a Graph) -> Self {
         Self { graph }
     }
 
@@ -32,19 +32,6 @@ impl<'a> GraphView<'a> {
     pub fn connected_components(&self, alg: ConnectedComponentsAlgorithm) -> Vec<Vec<AtomId>> {
         self.graph
             .connected_components(alg)
-            .into_iter()
-            .map(|c| c.into_iter().map(AtomId::from).collect())
-            .collect()
-    }
-
-    pub fn connected_components_in(
-        &self,
-        atoms: &[AtomId],
-        alg: ConnectedComponentsAlgorithm,
-    ) -> Vec<Vec<AtomId>> {
-        let nodes: Vec<NodeId> = atoms.iter().copied().map(NodeId::from).collect();
-        self.graph
-            .connected_components_in(&nodes, alg)
             .into_iter()
             .map(|c| c.into_iter().map(AtomId::from).collect())
             .collect()
@@ -100,14 +87,14 @@ impl<'a> GraphView<'a> {
         BondMatching(self.graph.maximum_matching(alg))
     }
 
-    pub fn perfect_matching_in(
+    pub fn perfect_matching(
         &self,
-        atoms: &[AtomId],
+        node_order: &[AtomId],
         alg: PerfectMatchingAlgorithm,
     ) -> Option<BondMatching> {
-        let nodes: Vec<NodeId> = atoms.iter().copied().map(NodeId::from).collect();
+        let nodes: Vec<NodeId> = node_order.iter().copied().map(NodeId::from).collect();
         self.graph
-            .perfect_matching_in(&nodes, alg)
+            .perfect_matching(&nodes, alg)
             .map(BondMatching)
     }
 

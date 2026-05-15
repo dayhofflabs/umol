@@ -82,9 +82,20 @@ impl HmoAromaticity {
             return Ok(Vec::new());
         }
 
-        let components = ast
+        let embedding = ast.induced_subgraph(&pi_atoms);
+        let extracted = embedding.extract();
+        let mut sorted_host = embedding.host_atoms().to_vec();
+        sorted_host.sort_unstable();
+        let components: Vec<Vec<AtomId>> = extracted
             .graph()
-            .connected_components_in(&pi_atoms, ConnectedComponentsAlgorithm::Bfs);
+            .connected_components(ConnectedComponentsAlgorithm::Bfs)
+            .into_iter()
+            .map(|c| {
+                c.into_iter()
+                    .map(|sub| sorted_host[sub.index()])
+                    .collect()
+            })
+            .collect();
 
         let mut candidates = Vec::new();
         for component in &components {
@@ -134,7 +145,7 @@ impl HmoAromaticity {
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let sub = ast.induced_subgraph(pi_atoms);
+        let embedding = ast.induced_subgraph(pi_atoms);
         let n = pi_atoms.len();
         let mut hamiltonian = DMatrix::zeros(n, n);
         let mut electron_count: u32 = 0;
@@ -163,11 +174,11 @@ impl HmoAromaticity {
             electron_count += valence as u32;
         }
 
-        let mut bond_positions = Vec::with_capacity(sub.parent_bonds().len());
-        for &bid in sub.parent_bonds() {
-            let [pa, pb] = ast.bond(bid).atom_ids();
-            let i = sub.local_atom(pa).unwrap().index();
-            let j = sub.local_atom(pb).unwrap().index();
+        let mut bond_positions = Vec::with_capacity(embedding.host_bonds().len());
+        for &bid in embedding.host_bonds() {
+            let [ha, hb] = ast.bond(bid).atom_ids();
+            let i = embedding.sub_atom(ha).unwrap().index();
+            let j = embedding.sub_atom(hb).unwrap().index();
             let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(|| {
                 HmoError::MissingParameters(format!(
                     "no Van-Catledge k_XY for {:?}-{:?}",

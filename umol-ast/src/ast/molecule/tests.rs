@@ -829,34 +829,6 @@ fn test_molecule_ast_connected_components(#[case] ast: MoleculeAst, #[case] expe
 }
 
 #[rstest]
-#[case::full_chain(
-    chain(4),
-    vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)],
-    vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]]
-)]
-#[case::split_chain_by_excluding_middle(
-    chain(4),
-    vec![AtomId(0), AtomId(1), AtomId(3)],
-    vec![vec![AtomId(0), AtomId(1)], vec![AtomId(3)]]
-)]
-#[case::one_of_two_components(
-    two_components(),
-    vec![AtomId(0), AtomId(1)],
-    vec![vec![AtomId(0), AtomId(1)]]
-)]
-#[case::empty_subset(chain(3), vec![], vec![])]
-fn test_molecule_ast_connected_components_in(
-    #[case] ast: MoleculeAst,
-    #[case] subset: Vec<AtomId>,
-    #[case] expected: Vec<Vec<AtomId>>,
-) {
-    let cc = ast
-        .graph()
-        .connected_components_in(&subset, ConnectedComponentsAlgorithm::Bfs);
-    assert_eq!(cc, expected);
-}
-
-#[rstest]
 #[case::ring_6(ring(6), 1)]
 #[case::chain(chain(5), 0)]
 fn test_molecule_ast_biconnected_components(#[case] ast: MoleculeAst, #[case] expected: usize) {
@@ -1052,19 +1024,19 @@ fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
             (AtomId(1), AtomId(2), ValueAst::Lit(2)),
         ]
     );
-    assert_eq!(sub.parent_atoms(), &[AtomId(0), AtomId(1), AtomId(2)]);
-    assert_eq!(sub.parent_bonds(), &[BondId(0), BondId(1)]);
-    assert_eq!(sub.parent_aromatic_systems(), &[AromaticSystemId(0)]);
-    assert_eq!(sub.parent_multicenter_bonds(), &[MulticenterBondId(0)]);
-    assert_eq!(sub.parent_dative_bonds(), &[] as &[DativeBondId]);
-    assert_eq!(sub.parent_noncovalent_bonds(), &[] as &[NoncovalentBondId]);
+    assert_eq!(sub.host_atoms(), &[AtomId(0), AtomId(1), AtomId(2)]);
+    assert_eq!(sub.host_bonds(), &[BondId(0), BondId(1)]);
+    assert_eq!(sub.host_aromatic_systems(), &[AromaticSystemId(0)]);
+    assert_eq!(sub.host_multicenter_bonds(), &[MulticenterBondId(0)]);
+    assert_eq!(sub.host_dative_bonds(), &[] as &[DativeBondId]);
+    assert_eq!(sub.host_noncovalent_bonds(), &[] as &[NoncovalentBondId]);
 }
 
 #[rstest]
 fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] ast: MoleculeAst) {
     let sub = ast.induced_subgraph(&[AtomId(2), AtomId(3)]);
-    assert_eq!(sub.parent_atoms(), &[AtomId(2), AtomId(3)]);
-    assert_eq!(sub.parent_dative_bonds(), &[DativeBondId(0)]);
+    assert_eq!(sub.host_atoms(), &[AtomId(2), AtomId(3)]);
+    assert_eq!(sub.host_dative_bonds(), &[DativeBondId(0)]);
     let extracted = sub.extract();
     let dv = extracted.dative_bond(DativeBondId(0));
     assert_eq!(dv.acceptor_id, AtomId(1));
