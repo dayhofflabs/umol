@@ -57,7 +57,7 @@ pub use reaction::{Assignment, ReactionRuleAst};
 pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
-pub use embedding::Embedding;
+pub use embedding::MoleculeEmbedding;
 pub use traits::{FromAst, IntoAst, TryFromAst, TryIntoAst};
 pub use value::{ArithOp, Bindings, Expr, RelOp, ValueAst};
 pub use views::{

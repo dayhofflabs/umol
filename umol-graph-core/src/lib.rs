@@ -20,6 +20,6 @@ pub use algorithms::matching::{
 };
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::subiso::SubgraphIsomorphismAlgorithm;
-pub use graph::{EdgeId, Graph, Neighbor, NodeId, Remapping, Subgraph};
+pub use graph::{EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping};
 pub use relation::{FixedRelationSet, RelationId, VarRelationSet};
 pub use union_find::UnionFind;

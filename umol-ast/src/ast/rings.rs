@@ -130,8 +130,8 @@ impl RingSet {
         let use_subgraph = filtered_nodes.len() < graph.node_count();
 
         let (sub, node_map) = if use_subgraph {
-            let sub = graph.induced_subgraph(&filtered_nodes);
-            (sub.graph, sub.node_map)
+            let embedding = graph.induced_subgraph(&filtered_nodes);
+            (embedding.extract(), embedding.node_map().to_vec())
         } else {
             let node_map: Vec<NodeId> = graph.node_ids().collect();
             (graph.clone(), node_map)
@@ -141,22 +141,22 @@ impl RingSet {
 
         let mut all_rings: Vec<Ring> = Vec::new();
         for component in &bcc {
-            let comp_sub = sub.induced_subgraph(component);
-            let raw_cycles = comp_sub
-                .graph
+            let comp_embedding = sub.induced_subgraph(component);
+            let comp_graph = comp_embedding.extract();
+            let raw_cycles = comp_graph
                 .enumerate_cycles(max_ring_size, CycleEnumerationAlgorithm::Vismara);
 
             let component_rings: Vec<Ring> = raw_cycles
                 .into_iter()
                 .filter(|cycle| match family {
-                    RingFamily::Relevant => is_induced_cycle(&comp_sub.graph, cycle),
+                    RingFamily::Relevant => is_induced_cycle(&comp_graph, cycle),
                     RingFamily::Simple => true,
                 })
                 .filter_map(|cycle| {
                     let ring_atoms: Vec<AtomId> = cycle
                         .iter()
                         .map(|&local| {
-                            let sub_node = comp_sub.node_map[local.index()];
+                            let sub_node = comp_embedding.parent_node(local);
                             let orig_node = node_map[sub_node.index()];
                             AtomId::from(orig_node)
                         })

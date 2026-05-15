@@ -4,13 +4,14 @@
 //! and compares the delocalization energy per π-electron to a configured threshold.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
 
 use nalgebra::{DMatrix, SymmetricEigen};
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, SpinStateAst, ValueAst,
 };
+use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 use umol_shared::element::Element;
 
@@ -81,29 +82,9 @@ impl HmoAromaticity {
             return Ok(Vec::new());
         }
 
-        let pi_set: HashSet<AtomId> = pi_atoms.iter().copied().collect();
-
-        let mut visited: HashSet<AtomId> = HashSet::new();
-        let mut components: Vec<Vec<AtomId>> = Vec::new();
-        for &atom in &pi_atoms {
-            if visited.contains(&atom) {
-                continue;
-            }
-            let mut component = Vec::new();
-            let mut stack = vec![atom];
-            visited.insert(atom);
-            while let Some(current) = stack.pop() {
-                component.push(current);
-                for neighbor in ast.neighbors(current) {
-                    let n = neighbor.atom;
-                    if pi_set.contains(&n) && visited.insert(n) {
-                        stack.push(n);
-                    }
-                }
-            }
-            component.sort_unstable();
-            components.push(component);
-        }
+        let components = ast
+            .graph()
+            .connected_components_in(&pi_atoms, ConnectedComponentsAlgorithm::Bfs);
 
         let mut candidates = Vec::new();
         for component in &components {
@@ -153,13 +134,12 @@ impl HmoAromaticity {
     where
         F: Fn(&AtomView<'_>) -> Option<u8>,
     {
-        let atom_to_idx: HashMap<AtomId, usize> =
-            pi_atoms.iter().enumerate().map(|(i, &a)| (a, i)).collect();
-
-        let mut h_values = Vec::with_capacity(pi_atoms.len());
+        let sub = ast.induced_subgraph(pi_atoms);
+        let n = pi_atoms.len();
+        let mut hamiltonian = DMatrix::zeros(n, n);
         let mut electron_count: u32 = 0;
-        let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(pi_atoms.len());
-        for &atom in pi_atoms {
+        let mut atom_types: Vec<(Element, u8)> = Vec::with_capacity(n);
+        for (i, &atom) in pi_atoms.iter().enumerate() {
             let view = ast.atom(atom);
             let element = match view.ast.element {
                 ElementAst::Lit(e) => e,
@@ -178,48 +158,44 @@ impl HmoAromaticity {
                     element, valence
                 ))
             })?;
-            h_values.push(hx);
+            hamiltonian[(i, i)] = hx;
             atom_types.push((element, valence));
             electron_count += valence as u32;
         }
 
-        let mut bonds = Vec::new();
-        for (i, &atom_i) in pi_atoms.iter().enumerate() {
-            for neighbor in ast.neighbors(atom_i) {
-                let n = neighbor.atom;
-                if let Some(&j) = atom_to_idx.get(&n) {
-                    if j > i {
-                        let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(
-                            || {
-                                HmoError::MissingParameters(format!(
-                                    "no Van-Catledge k_XY for {:?}-{:?}",
-                                    atom_types[i], atom_types[j]
-                                ))
-                            },
-                        )?;
-                        bonds.push((i, j, k));
-                    }
-                }
-            }
+        let mut bond_positions = Vec::with_capacity(sub.parent_bonds().len());
+        for &bid in sub.parent_bonds() {
+            let [pa, pb] = ast.bond(bid).atom_ids();
+            let i = sub.local_atom(pa).unwrap().index();
+            let j = sub.local_atom(pb).unwrap().index();
+            let k = VanCatledgeParams::k_xy(atom_types[i], atom_types[j]).ok_or_else(|| {
+                HmoError::MissingParameters(format!(
+                    "no Van-Catledge k_XY for {:?}-{:?}",
+                    atom_types[i], atom_types[j]
+                ))
+            })?;
+            hamiltonian[(i, j)] = k;
+            hamiltonian[(j, i)] = k;
+            bond_positions.push((i, j));
         }
 
-        HmoCalculator::new(pi_atoms.to_vec(), electron_count, h_values, bonds)
+        HmoCalculator::new(pi_atoms.to_vec(), electron_count, hamiltonian, bond_positions)
     }
 }
 
 pub(crate) struct HmoCalculator {
     pi_atoms: Vec<AtomId>,
     electron_count: u32,
-    h_values: Vec<f64>,
-    bonds: Vec<(usize, usize, f64)>,
+    hamiltonian: DMatrix<f64>,
+    bond_positions: Vec<(usize, usize)>,
 }
 
 impl HmoCalculator {
     fn new(
         pi_atoms: Vec<AtomId>,
         electron_count: u32,
-        h_values: Vec<f64>,
-        bonds: Vec<(usize, usize, f64)>,
+        hamiltonian: DMatrix<f64>,
+        bond_positions: Vec<(usize, usize)>,
     ) -> Result<Self, HmoError> {
         if pi_atoms.is_empty() {
             return Err(HmoError::InvalidInput(
@@ -243,28 +219,14 @@ impl HmoCalculator {
         Ok(Self {
             pi_atoms,
             electron_count,
-            h_values,
-            bonds,
+            hamiltonian,
+            bond_positions,
         })
-    }
-
-    pub(crate) fn hamiltonian(&self) -> DMatrix<f64> {
-        let n = self.pi_atoms.len();
-        let mut h = DMatrix::zeros(n, n);
-        for (i, &hx) in self.h_values.iter().enumerate() {
-            h[(i, i)] = hx;
-        }
-        for &(i, j, k) in &self.bonds {
-            h[(i, j)] = k;
-            h[(j, i)] = k;
-        }
-        h
     }
 
     pub(crate) fn solve(&self) -> HmoOutput {
         let n = self.pi_atoms.len();
-        let h = self.hamiltonian();
-        let eigen = SymmetricEigen::new(h);
+        let eigen = SymmetricEigen::new(self.hamiltonian.clone());
         let eigenvalues = eigen.eigenvalues;
         let eigenvectors = eigen.eigenvectors;
 
@@ -296,7 +258,7 @@ impl HmoCalculator {
         }
 
         let mut bond_orders: BTreeMap<(AtomId, AtomId), f64> = BTreeMap::new();
-        for &(i, j, _) in &self.bonds {
+        for &(i, j) in &self.bond_positions {
             let (a, b) = if self.pi_atoms[i] < self.pi_atoms[j] {
                 (self.pi_atoms[i], self.pi_atoms[j])
             } else {
@@ -550,7 +512,7 @@ mod tests {
         let calc = hmo_model
             .build_calculator(&pyridine, &atoms, &electrons_from_aromatic_constraint)
             .unwrap();
-        let h = calc.hamiltonian();
+        let h = &calc.hamiltonian;
         assert_eq!(h.nrows(), 6);
         assert_eq!(h.ncols(), 6);
         assert!(approx_eq!(f64, h[(0, 0)], 0.51, epsilon = 0.01));

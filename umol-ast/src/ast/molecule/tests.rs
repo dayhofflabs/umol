@@ -1026,8 +1026,8 @@ fn test_molecule_ast_subgraph_isomorphisms_at() {
 #[rstest]
 fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
     let sub = ast.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2)]);
-    let atom_elements: Vec<_> = sub
-        .ast()
+    let extracted = sub.extract();
+    let atom_elements: Vec<_> = extracted
         .atoms()
         .iter()
         .map(|v| v.ast.element.clone())
@@ -1040,8 +1040,7 @@ fn test_molecule_ast_induced_subgraph(#[from(rich_molecule)] ast: MoleculeAst) {
             ElementAst::Lit(Element::N),
         ]
     );
-    let bonds: Vec<(AtomId, AtomId, ValueAst)> = sub
-        .ast()
+    let bonds: Vec<(AtomId, AtomId, ValueAst)> = extracted
         .bonds()
         .iter()
         .map(|v| (v.atom_ids()[0], v.atom_ids()[1], v.ast.order.clone()))
@@ -1066,18 +1065,19 @@ fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] as
     let sub = ast.induced_subgraph(&[AtomId(2), AtomId(3)]);
     assert_eq!(sub.parent_atoms(), &[AtomId(2), AtomId(3)]);
     assert_eq!(sub.parent_dative_bonds(), &[DativeBondId(0)]);
-    let dv = sub.ast().dative_bond(DativeBondId(0));
+    let extracted = sub.extract();
+    let dv = extracted.dative_bond(DativeBondId(0));
     assert_eq!(dv.acceptor_id, AtomId(1));
     assert_eq!(dv.donor_ids().collect::<Vec<_>>(), vec![AtomId(0)]);
     assert_eq!(dv.ast.order, ValueAst::Lit(1));
 }
 
 #[rstest]
-fn test_embedding_edits(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_embedding_edits(#[from(rich_molecule)] ast: MoleculeAst) {
     use super::super::edit::{AtomRef, BondRef, Edit};
     let sub = ast.induced_subgraph(&[AtomId(0), AtomId(1), AtomId(2)]);
     assert_eq!(
-        sub.edits(&ast),
+        sub.edits(),
         vec![Edit::RemoveTopology {
             atoms: vec![AtomRef::Id(AtomId(3))],
             bonds: vec![BondRef::Id(BondId(2))],
@@ -1086,16 +1086,16 @@ fn test_embedding_edits(#[from(rich_molecule)] ast: MoleculeAst) {
 }
 
 #[rstest]
-fn test_embedding_edits_identity(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_embedding_edits_identity(#[from(rich_molecule)] ast: MoleculeAst) {
     let atom_ids: Vec<AtomId> = ast.atoms().iter().map(|v| v.id).collect();
     let sub = ast.induced_subgraph(&atom_ids);
-    assert_eq!(sub.edits(&ast), Vec::new());
+    assert_eq!(sub.edits(), Vec::new());
 }
 
 #[rstest]
-fn test_embedding_into_ast(#[from(rich_molecule)] ast: MoleculeAst) {
+fn test_molecule_embedding_extract(#[from(rich_molecule)] ast: MoleculeAst) {
     let sub = ast.induced_subgraph(&[AtomId(0), AtomId(1)]);
-    let extracted = sub.into_ast();
+    let extracted = sub.extract();
     assert_eq!(extracted.atoms().count(), 2);
 }
 

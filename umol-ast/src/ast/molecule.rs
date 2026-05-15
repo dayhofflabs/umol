@@ -1,6 +1,6 @@
 //! Molecule structural AST.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::iter;
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
@@ -19,7 +19,7 @@ use super::idx::{
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::rings::{RingFamily, RingSet};
-use super::embedding::Embedding;
+use super::embedding::MoleculeEmbedding;
 use super::views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, GraphView, MulticenterBondView,
@@ -298,55 +298,63 @@ impl MoleculeAst {
         self.noncovalent_bonds().get(idx)
     }
 
-    pub fn induced_subgraph(&self, atoms: &[AtomId]) -> Embedding {
-        let keep: HashSet<AtomId> = atoms.iter().copied().collect();
-        let remove_atoms: Vec<AtomId> = (0..self.atoms().count())
-            .map(AtomId::from)
-            .filter(|a| !keep.contains(a))
-            .collect();
-        let remove_bonds: Vec<BondId> = self
+    pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeEmbedding<'_> {
+        let mut parent_atoms: Vec<AtomId> = Vec::with_capacity(atoms.len());
+        let mut inverse_atom: HashMap<AtomId, u32> = HashMap::with_capacity(atoms.len());
+        for &a in atoms {
+            if let std::collections::hash_map::Entry::Vacant(entry) = inverse_atom.entry(a) {
+                entry.insert(parent_atoms.len() as u32);
+                parent_atoms.push(a);
+            }
+        }
+        let atom_set: HashSet<AtomId> = parent_atoms.iter().copied().collect();
+
+        let parent_bonds: Vec<BondId> = self
             .bonds()
             .iter()
-            .filter(|b| !keep.contains(&b.atom_ids()[0]) || !keep.contains(&b.atom_ids()[1]))
+            .filter(|b| {
+                let [a, b_end] = b.atom_ids();
+                atom_set.contains(&a) && atom_set.contains(&b_end)
+            })
             .map(|b| b.id)
             .collect();
-        let mut builder = self.edit();
-        let remap = builder.remove(&remove_atoms, &remove_bonds);
-        let ast = builder.build();
+        let parent_dative_bonds: Vec<DativeBondId> = self
+            .dative_bonds()
+            .iter()
+            .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
+            .map(|v| v.id)
+            .collect();
+        let parent_aromatic_systems: Vec<AromaticSystemId> = self
+            .aromatic_systems()
+            .iter()
+            .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
+            .map(|v| v.id)
+            .collect();
+        let parent_multicenter_bonds: Vec<MulticenterBondId> = self
+            .multicenter_bonds()
+            .iter()
+            .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
+            .map(|v| v.id)
+            .collect();
+        let parent_noncovalent_bonds: Vec<NoncovalentBondId> = self
+            .noncovalent_bonds()
+            .iter()
+            .filter(|v| {
+                let [a, b] = v.atom_ids();
+                atom_set.contains(&a) && atom_set.contains(&b)
+            })
+            .map(|v| v.id)
+            .collect();
 
-        let atom_map: Vec<AtomId> = (0..self.atoms().count())
-            .map(AtomId::from)
-            .filter(|&a| remap.atom(a).is_some())
-            .collect();
-        let bond_map: Vec<BondId> = (0..self.bonds().count())
-            .map(BondId::from)
-            .filter(|&b| remap.bond(b).is_some())
-            .collect();
-        let dative_bond_map: Vec<DativeBondId> = (0..self.dative_bonds().count())
-            .map(DativeBondId::from)
-            .filter(|&d| remap.dative_bond(d).is_some())
-            .collect();
-        let aromatic_system_map: Vec<AromaticSystemId> = (0..self.aromatic_systems().count())
-            .map(AromaticSystemId::from)
-            .filter(|&a| remap.aromatic_system(a).is_some())
-            .collect();
-        let multicenter_bond_map: Vec<MulticenterBondId> = (0..self.multicenter_bonds().count())
-            .map(MulticenterBondId::from)
-            .filter(|&m| remap.multicenter_bond(m).is_some())
-            .collect();
-        let noncovalent_bond_map: Vec<NoncovalentBondId> = (0..self.noncovalent_bonds().count())
-            .map(NoncovalentBondId::from)
-            .filter(|&n| remap.noncovalent_bond(n).is_some())
-            .collect();
-
-        Embedding::new(
-            ast,
-            atom_map,
-            bond_map,
-            dative_bond_map,
-            aromatic_system_map,
-            multicenter_bond_map,
-            noncovalent_bond_map,
+        MoleculeEmbedding::new(
+            parent_atoms,
+            parent_bonds,
+            parent_dative_bonds,
+            parent_aromatic_systems,
+            parent_multicenter_bonds,
+            parent_noncovalent_bonds,
+            inverse_atom,
+            self,
         )
     }
 

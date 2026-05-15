@@ -988,16 +988,16 @@ The convenience wrapper for this pattern (a single method that takes an overlay-
 
 | Operation | State | Notes |
 |---|---|---|
-| `induced_subgraph(&[AtomId]) -> Embedding` | **Impl** | `Embedding` carries the extracted `MoleculeAst` plus per-entity-type new→old maps. `embedding.ast()` / `into_ast()` for the standalone sub-AST; `embedding.edits(parent)` derives the `Vec<Edit>` (a single `RemoveTopology` over the complement). The same type will be produced by subgraph isomorphism matching when that lands |
+| `induced_subgraph(&[AtomId]) -> MoleculeEmbedding<'_>` | **Impl** | `MoleculeEmbedding` borrows `&MoleculeAst` and carries per-entity-type local→parent index maps plus a parent→local inverse for atoms. `embedding.extract()` materializes the standalone sub-`MoleculeAst` on demand; `embedding.edits()` derives the `Vec<Edit>` (a single `RemoveTopology` over the complement). Same type will be produced by subgraph isomorphism matching when that lands. Parallel `umol_graph_core::Embedding<'_>` does the topology-only version |
 | `bonds().induced(&[AtomId]) -> Vec<BondView<'_>>` | **Impl** | on `BondViews`; lighter alternative when only the bond list is needed; used by `AromaticSystemView` and `ops/transformer/kekulizer.rs`. `_ids` companion `bonds().induced_ids(atoms) -> Vec<BondId>` for raw-index access |
-| Dense atom-ordering projection (atom → 0..n_subset map) | **Open** | hand-rolled `HashMap<AtomId, usize>` in matrix-building code (`hmo.rs:157`); decision needed: returned from `induced_subgraph` or separate primitive |
+| Dense atom-ordering projection (atom → 0..n_subset map) | **Impl** | `MoleculeEmbedding::local_atom(parent_atom) -> Option<AtomId>` (O(1)); HMO's hand-rolled `atom_to_idx` HashMap removed in favor of this |
 
 #### Index-space conversions
 
 | Operation | State | Notes |
 |---|---|---|
 | `IdRemapping` (returned by `MoleculeBuilder::remove`) | **Impl** | old → new for all six relation kinds |
-| Subgraph remapping (returned by `induced_subgraph`) | **Impl** | `Embedding` carries new→old maps for all six entity kinds; same type intended for future subgraph isomorphism results |
+| Subgraph remapping (returned by `induced_subgraph`) | **Impl** | `MoleculeEmbedding<'a>` borrows `&MoleculeAst` and carries local→parent maps for all six entity kinds plus a parent→local inverse for atoms; same type intended for future subgraph isomorphism results |
 | Constraint remapping under structural edit | **Impl** | piggy-backs on `IdRemapping` |
 
 #### Pattern-vs-ground scope per operation
@@ -1048,7 +1048,7 @@ The Open rows above represent real recurring needs from the ops survey or doc 90
 
 1. **Cross-entity reverse navigation** (atom → containing relations) — recurring scan in valence and aromaticity ops; modest design.
 2. **Adjacency-convenience** — `bonds().connecting(a, b)` and `bonds().induced(atoms)` settled and impl on `BondViews`; `GraphView::connected_components(alg)` impl; `connected_components_in(atoms)` pending.
-3. **`induced_subgraph` shape** — settled as `Embedding`; impl on `MoleculeAst`.
+3. **`induced_subgraph` shape** — settled as `MoleculeEmbedding<'_>` (borrow + index maps); impl on `MoleculeAst`.
 4. **Internal relation mutators** — settled. Express as a `Remove*` + `Add*` Edit pair inside a transaction; no dedicated in-place API. See §"Internal relation mutators".
 5. **Cascade behavior of topology removal** — settled as R3 (cascade-and-record). `RemoveTopology` drops invalid overlays; realized `Undo` records the dropped overlay payloads, remaps, and constraint updates needed for rollback. `atom_view.is_in_overlays()` umbrella predicate to land at the same time.
 6. **`ring_count_at`** + `RingCount(ValueAst)` constraint — designed, not impl.
@@ -1571,7 +1571,7 @@ Property-style tests can come after the focused cases:
 
 ### Phase 10 — Subgraph + projection **Done**
 
-- `induced_subgraph(atoms) -> Embedding` **Done**; `Embedding` carries the extracted `MoleculeAst`, six new→old maps, `ast()`/`into_ast()` accessors, and `edits(parent) -> Vec<Edit>` for the derived `RemoveTopology`. Same type intended for future subgraph isomorphism results.
+- `induced_subgraph(atoms) -> MoleculeEmbedding<'_>` **Done**; borrows `&MoleculeAst`, carries six local→parent maps + parent→local inverse for atoms, `extract()` materializes the sub-AST on demand, `edits()` derives the `RemoveTopology`. Same type intended for future subgraph isomorphism results.
 - `bonds().induced(atoms) -> Vec<BondView>` / `bonds().induced_ids(atoms) -> Vec<BondId>` **Done** (on `BondViews`, not `MoleculeAst`)
 - `GraphView::connected_components(alg)` **Done**; `GraphView::connected_components_in(atoms, alg)` **Done**
 - `bonds().connecting(a, b) -> Option<BondView>` / `bonds().connecting_id(a, b) -> Option<BondId>` **Done** (on `BondViews`, not `MoleculeAst`)

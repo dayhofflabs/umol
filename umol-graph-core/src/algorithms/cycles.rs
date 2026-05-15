@@ -89,11 +89,12 @@ impl Graph {
 
         for component in self.biconnected_components(BiconnectedComponentsAlgorithm::Tarjan) {
             let sub = self.induced_subgraph(&component);
-            let cycles = relevant_cycles_in_bcc(&sub.graph, max_cycle_size);
+            let local = sub.extract();
+            let cycles = relevant_cycles_in_bcc(&local, max_cycle_size);
             for cycle in cycles {
                 let mapped: Vec<NodeId> = cycle
                     .iter()
-                    .map(|&local| sub.node_map[local.index()])
+                    .map(|&local| sub.parent_node(local))
                     .collect();
                 let normalized = normalize_cycle(&mapped);
                 if seen.insert(normalized.clone()) {
