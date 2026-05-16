@@ -2,11 +2,11 @@
 
 use umol_ast::ast::{
     AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraintKind, AtomId, AtomView,
-    BondAst, ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterValenceAst,
-    SpinStateAst, ValueAst,
+    BondAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterValenceAst, SpinStateAst,
+    ValueAst,
 };
 use umol_shared::element::Element;
-use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
+use umol_shared::spin::{SpinMultiplicity, SpinState};
 
 use crate::ops::valence::normal_valence::NormalValenceTable;
 
@@ -23,19 +23,6 @@ pub fn charge_or_zero(atom: &AtomAst) -> i8 {
     match atom.charge {
         ValueAst::Lit(c) => c as i8,
         _ => 0,
-    }
-}
-
-/// Extracts the per-atom aromatic π-electron count from the inline
-/// `AromaticValence` constraint, if pinned to a literal.
-pub fn aromatic_pi_pinned(atom: &AtomAst) -> Option<u8> {
-    match atom.constraints.get(AtomConstraintKind::AromaticValence)? {
-        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(n)))
-            if *n >= 0 =>
-        {
-            Some(*n as u8)
-        }
-        _ => None,
     }
 }
 
@@ -81,14 +68,6 @@ pub fn infer_normal_implicit_hydrogens(
         explicit_valence,
         is_aromatic,
     )
-}
-
-pub fn infer_normal_aromatic_implicit_hydrogens(
-    element: Element,
-    charge: i8,
-    valence: u8,
-) -> Option<u8> {
-    NormalValenceTable::default_table().implicit_hydrogens_for(element, charge, valence, true)
 }
 
 pub fn base_atom_compatible(query: &AtomAst, candidate: &AtomAst) -> bool {
@@ -157,7 +136,11 @@ fn atom_constraint_holds(
                     .as_lit()
                     .and_then(|n| u8::try_from(n).ok())
             } else {
-                aromatic_pi_pinned(view.ast)
+                view.ast
+                    .constraints
+                    .aromatic_valence()
+                    .as_lit()
+                    .and_then(|n| u8::try_from(n).ok())
             };
             match query {
                 AromaticValenceAst::NotAromatic => !actual_is_aromatic,
@@ -184,89 +167,6 @@ fn atom_constraint_holds(
             }
         }
         _ => true,
-    }
-}
-
-pub fn try_build_candidate(
-    element: Element,
-    charge: i8,
-    implicit_hydrogens: u8,
-    valence: u8,
-    aromatic_pi: u8,
-    atom_ast: &AtomAst,
-) -> Option<AtomAst> {
-    let total_valence = valence + implicit_hydrogens;
-    let num_electrons = (element.valence_electrons() as i16) - (charge as i16);
-    let unassigned = num_electrons - (total_valence as i16) - (aromatic_pi as i16);
-    if unassigned < 0 {
-        return None;
-    }
-
-    let (unpaired, lone_pairs) = resolve_unpaired_lone_pairs(atom_ast, unassigned)?;
-    if unpaired > MAX_UNPAIRED_ELECTRONS {
-        return None;
-    }
-
-    let spin = if let Some(g) = ground_spin_state(&atom_ast.spin) {
-        if g.unpaired() != unpaired {
-            return None;
-        }
-        g
-    } else if let ValueAst::Lit(m) = &atom_ast.spin.multiplicity {
-        let mult = SpinMultiplicity::from_repr(*m as u8)?;
-        SpinState::try_new(unpaired, mult).ok()?
-    } else {
-        SpinState::max_multiplicity(unpaired)?
-    };
-
-    Some(AtomAst {
-        element: ElementAst::Lit(element),
-        isotope_mass: match &atom_ast.isotope_mass {
-            IsotopeAst::Undetermined => IsotopeAst::Natural,
-            other => other.clone(),
-        },
-        charge: ValueAst::Lit(charge as i64),
-        implicit_hydrogens: ImplicitHydrogensAst::Lit(implicit_hydrogens as i64),
-        lone_pairs: ValueAst::Lit(lone_pairs as i64),
-        spin: SpinStateAst::from(spin),
-        constraints: atom_ast.constraints.clone(),
-    })
-}
-
-fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u8, u8)> {
-    let fixed_unpaired = match (ground_spin_state(&atom_ast.spin), &atom_ast.spin.unpaired) {
-        (Some(s), _) => Some(s.unpaired()),
-        (None, ValueAst::Lit(u)) => Some(*u as u8),
-        _ => None,
-    };
-
-    let fixed_lone_pairs = match &atom_ast.lone_pairs {
-        ValueAst::Lit(lp) => Some(*lp as u8),
-        _ => None,
-    };
-
-    match (fixed_unpaired, fixed_lone_pairs) {
-        (None, None) => Some(((unassigned % 2) as u8, (unassigned / 2) as u8)),
-        (Some(unpaired), None) => {
-            let remaining = unassigned - (unpaired as i16);
-            if remaining < 0 || remaining % 2 != 0 {
-                return None;
-            }
-            Some((unpaired, (remaining / 2) as u8))
-        }
-        (None, Some(lone_pairs)) => {
-            let remaining = unassigned - (2 * lone_pairs as i16);
-            if remaining < 0 {
-                return None;
-            }
-            Some((remaining as u8, lone_pairs))
-        }
-        (Some(unpaired), Some(lone_pairs)) => {
-            if (unpaired as i16) + (2 * lone_pairs as i16) != unassigned {
-                return None;
-            }
-            Some((unpaired, lone_pairs))
-        }
     }
 }
 

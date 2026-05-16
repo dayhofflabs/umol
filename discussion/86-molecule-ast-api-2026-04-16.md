@@ -1750,14 +1750,16 @@ What was actually done in this step:
 - Test sites in `umol-graph::ops::resolver` (`counts_model`, `typing_model`) and `umol-graph/tests/resolution/mod.rs` (`counts_chemistry`) updated.
 - Validation: 8137 workspace tests pass; 617 conformance resolution tests pass under `--features conformance`.
 
-##### Step 7 — Migrate `counts.rs`
+##### Step 7 — Migrate `counts.rs` **Done**
 
-- Move `try_build_candidate`, `resolve_unpaired_lone_pairs` from `shared.rs` into `counts.rs` as private fns; rewrite their internal uses of `infer_normal_aromatic_implicit_hydrogens` to call `self.normal_valence.implicit_hydrogens_for(...)` (the table is now stored on the resolver, set in Step 6).
-- The aromatic-branch decision (legacy `atom_is_aromatic`) becomes `view.is_in_aromatic_system()` alone. Inline `AromaticValence(Aromatic(_))` declarations are *constraints*, not state — they don't drive counts' branch decision. Perception runs first and resolves declarations to memberships; counts reads memberships.
-- Inline `aromatic_pi_pinned` via `AromaticValenceAst::as_lit()` (still needed for the pinned-π case where counts walks constraints to find user-supplied pin values for candidate filtering)
-- Dissolve `AtomCandidate`: `candidates_for` returns `Vec<AtomAst>` with synthetic `Valence(Lit(v))`/`AromaticValence(Aromatic(Lit(a)))` constraints pushed into each candidate's `.constraints`
-- Callsite collapses to `atom_mut.narrow_from(&candidate)`
-- `CountsError::NoValidValenceState` carries `ValueAst` for charge/valence
+- Moved `try_build_candidate` and `resolve_unpaired_lone_pairs` from `shared.rs` into `counts.rs` as private fns. `build_aromatic_candidates` became a method on `CountsValenceResolver` so it can call `self.normal_valence.implicit_hydrogens_for(...)` for the `Normal` branch (in place of the static `infer_normal_aromatic_implicit_hydrogens`).
+- **Aromatic-branch decision**: `view.is_in_aromatic_system() || AromaticValenceAst::aromatic(ValueAst::Undetermined).matches(&aromatic_constraint)`. The disjunction is load-bearing in the current `Resolver` pipeline (valence runs before aromaticity), and the declaration arm uses `Lattice::matches` against the constraint accessor instead of the legacy ad-hoc `atom_is_aromatic` helper. The doc-86-original plan of "perception runs first → counts reads memberships alone" is **not** achievable yet: `AromaticityResolver` requires `AromaticValence(Aromatic(Lit(n)))` to perceive systems (resolver/aromaticity.rs:31-34), and counts is what writes that literal. Either the pipeline keeps the current order with counts honouring declarations, or perception gains the ability to perceive from `Aromatic(Undetermined)` declarations (Hückel on ring topology) — that's a separate piece of work.
+- **Per-candidate aromatic filter**: replaced the `aromatic_pi_pinned`-extract-then-equality pattern with `aromatic_constraint.matches(&AromaticValenceAst::Aromatic(ValueAst::Lit(a as i64)))` inside the loop. `Lattice::matches` is the natural pattern/target check; the previous helper was reinventing it.
+- **Dissolved `AtomCandidate`**: `candidates_for` returns `Vec<AtomAst>`. Synthetic `Valence(Lit(v))` (and, in the aromatic case, `AromaticValence(Aromatic(Lit(a)))`) are pushed onto each candidate's own `.constraints` instead of being returned alongside.
+- **Resolve callsite**: `atom_mut.narrow_from(&cand)` — single `Lattice` op replaces the `narrow_atom + lift_constraints` pair (constraint merging falls out of the field-wise `AtomConstraints::meet` already established in Step 3).
+- `CountsError::NoValidValenceState` now carries `ValueAst` for `charge` and `valence` (the originals straight off `AtomView`, no unwrap-and-rewrap).
+- `shared.rs` lost: `try_build_candidate`, `resolve_unpaired_lone_pairs`, `infer_normal_aromatic_implicit_hydrogens`, `aromatic_pi_pinned`. `atom_is_aromatic`, `charge_or_zero`, `ground_spin_state`, `spin_state_undetermined`, `narrow_atom`, `narrow_value`, `lift_constraints`, `value_matches`, `spin_matches`, `base_atom_compatible`, `pattern_constraints_compatible`, `atom_constraint_holds`, `atom_dative_counts`, `infer_normal_implicit_hydrogens`, `AtomCandidate` stay (consumed by atom_typing.rs until Step 8).
+- Validation: 8137 workspace tests pass; 617 conformance resolution tests pass under `--features conformance`.
 
 ##### Step 8 — Migrate `atom_typing.rs`
 
