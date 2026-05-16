@@ -9,7 +9,7 @@
 use thiserror::Error;
 use umol_shared::element::Element;
 
-use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
+use crate::ops::valence::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
 
 #[derive(Debug, Clone)]
 pub struct ChemistryModel {
@@ -22,6 +22,7 @@ impl Default for ChemistryModel {
         Self {
             valence: ValenceModel::AtomTyping {
                 registry: AtomTypeRegistry::default_registry().clone(),
+                normal_valence: NormalValenceTable::default_table().clone(),
             },
             aromaticity: AromaticityModel::daylight(),
         }
@@ -32,9 +33,11 @@ impl Default for ChemistryModel {
 pub enum ValenceModel {
     AtomTyping {
         registry: AtomTypeRegistry,
+        normal_valence: NormalValenceTable,
     },
     Counts {
         table: ValenceTable,
+        normal_valence: NormalValenceTable,
         allow_implicit_hydrogens: bool,
     },
 }

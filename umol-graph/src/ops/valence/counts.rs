@@ -8,6 +8,7 @@ use umol_ast::ast::{
 };
 use umol_shared::element::Element;
 
+use crate::ops::valence::normal_valence::NormalValenceTable;
 use crate::ops::valence::shared::{
     aromatic_pi_pinned, atom_is_aromatic, charge_or_zero, infer_normal_aromatic_implicit_hydrogens,
     lift_constraints, narrow_atom, try_build_candidate, AtomCandidate,
@@ -17,6 +18,7 @@ use crate::ops::valence::table::ValenceTable;
 #[derive(Clone, Debug)]
 pub struct CountsValenceResolver {
     pub table: ValenceTable,
+    pub normal_valence: NormalValenceTable,
     pub allow_implicit_hydrogens: bool,
 }
 
@@ -32,9 +34,14 @@ pub enum CountsError {
 }
 
 impl CountsValenceResolver {
-    pub fn new(table: ValenceTable, allow_implicit_hydrogens: bool) -> Self {
+    pub fn new(
+        table: ValenceTable,
+        normal_valence: NormalValenceTable,
+        allow_implicit_hydrogens: bool,
+    ) -> Self {
         Self {
             table,
+            normal_valence,
             allow_implicit_hydrogens,
         }
     }
@@ -238,7 +245,8 @@ mod tests {
     #[rstest]
     fn test_counts_valence_resolver_resolve_ground_passthrough() {
         let table = ValenceTable::default_table().clone();
-        let resolver = CountsValenceResolver::new(table, true);
+        let resolver =
+            CountsValenceResolver::new(table, NormalValenceTable::default_table().clone(), true);
         let mut ast = mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#);
         resolver.resolve(&mut ast).unwrap();
     }
@@ -246,7 +254,8 @@ mod tests {
     #[rstest]
     fn test_counts_valence_resolver_resolve_methane_implicit_h() {
         let table = ValenceTable::default_table().clone();
-        let resolver = CountsValenceResolver::new(table, true);
+        let resolver =
+            CountsValenceResolver::new(table, NormalValenceTable::default_table().clone(), true);
         let mut ast = carbon_methane_with_undetermined();
         resolver.resolve(&mut ast).unwrap();
         let atom = ast.atom(AtomId(0)).ast;
@@ -259,7 +268,8 @@ mod tests {
     #[rstest]
     fn test_counts_valence_resolver_resolve_ethane_implicit_h() {
         let table = ValenceTable::default_table().clone();
-        let resolver = CountsValenceResolver::new(table, true);
+        let resolver =
+            CountsValenceResolver::new(table, NormalValenceTable::default_table().clone(), true);
         let mut ast = ethane();
         resolver.resolve(&mut ast).unwrap();
         for i in 0..2 {
@@ -276,7 +286,8 @@ mod tests {
         // Custom table without Si entry: a Si atom with valence 0 yields no
         // candidates → contradiction.
         let table = valence_table! { C => [4] };
-        let resolver = CountsValenceResolver::new(table, true);
+        let resolver =
+            CountsValenceResolver::new(table, NormalValenceTable::default_table().clone(), true);
         let si = AtomAst::from_element(Element::Si);
         let mut ast = MoleculeAst::from_atoms_and_bonds(vec![si], vec![]);
         let err = resolver.resolve(&mut ast).unwrap_err();

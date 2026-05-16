@@ -1,0 +1,56 @@
+# Per-element conventional σ-valences used to fill ImplicitHydrogensAst::Normal.
+# normal_valence: aliphatic atom — implicit H = normal_valence - explicit σ-valence.
+# aromatic_normal_valence: aromatic atom — implicit H = aromatic_normal_valence - actual σ-valence.
+
+[B]
+normal_valence = 3
+aromatic_normal_valence = 2
+
+[C]
+normal_valence = 4
+aromatic_normal_valence = 3
+
+[N]
+normal_valence = 3
+aromatic_normal_valence = 2
+
+[O]
+normal_valence = 2
+aromatic_normal_valence = 2
+
+[F]
+normal_valence = 1
+
+[Si]
+normal_valence = 4
+
+[P]
+normal_valence = 3
+aromatic_normal_valence = 2
+
+[S]
+normal_valence = 2
+aromatic_normal_valence = 2
+
+[Cl]
+normal_valence = 1
+
+[As]
+normal_valence = 3
+aromatic_normal_valence = 2
+
+[Se]
+normal_valence = 2
+aromatic_normal_valence = 2
+
+[Br]
+normal_valence = 1
+
+[Sb]
+normal_valence = 3
+
+[Te]
+normal_valence = 2
+
+[I]
+normal_valence = 1

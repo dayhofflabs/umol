@@ -1738,20 +1738,21 @@ What was actually done in this step:
 - New tests: `test_aromatic_valence_ast_matches`, `test_multicenter_valence_ast_matches`, `test_atom_constraints_matches`, `test_bond_constraints_matches`. Extended `test_atom_ast_matches`, `test_bond_ast_matches`, `test_dative_bond_ast_matches`, `test_multicenter_bond_ast_matches`, `test_aromatic_system_ast_matches`, `test_noncovalent_bond_ast_matches` with cases covering previously-untested dimensions: spin, `acceptor_slot`, constraints presence/absence/value-mismatch, set-pattern kind matching.
 - Validation: 2604 umol-ast lib tests pass (up from 2550 — 54 new); 8126 workspace tests pass.
 
-##### Step 6 — Config split: `NormalImplicitHydrogensTable`
+##### Step 6 — Config split: `NormalValenceTable` **Done**
 
-- Create `umol-graph/src/ops/normal_implicit_hydrogens.rs`
-- Strip `normal_valence`, `aromatic_normal_valence` from `ValenceEntry`/`ValenceTable`
-- Update `ValenceModel` variants: `AtomTyping { registry, normal_implicit_hydrogens }`, `Counts { table, normal_implicit_hydrogens, allow_implicit_hydrogens }`
-- Split TOML: write `default-normal-implicit-hydrogens.toml`; strip the two fields from `default-valence-table.toml`
-- Re-resolve the static `LazyLock` defaults
-- Touch resolver constructors to accept the new table
+(Final names: the table contains *normal valences*, so the type is `NormalValenceTable`, the module `normal_valence.rs`, the TOML `default-normal-valence-table.toml`, and the `ValenceModel` field `normal_valence`. The implicit-H inference method is `implicit_hydrogens_for(element, charge, explicit_valence, is_aromatic) -> Option<u8>`.)
 
-This temporarily breaks `shared.rs`'s `infer_normal_*` calls — those go away in Steps 7–8.
+- New `umol-graph/src/ops/valence/normal_valence.rs` with `NormalValenceTable` / `NormalValenceEntry`, `LazyLock` default, accessors `normal_valence_for` / `aromatic_normal_valence_for` / `implicit_hydrogens_for`. 16 tests using a `#[fixture]` for the default table; cases include the `unset_element` and `charged_returns_none` branches plus the aromatic/aliphatic dispatch.
+- Stripped `normal_valence` / `aromatic_normal_valence` from `ValenceEntry`, `ValenceEntryToml`, `ValenceTable::recompute_hash`, the `valence_table!` macro, and removed `normal_valence_for` / `aromatic_normal_valence_for` from `ValenceTable`. Stripped the two fields from every entry in `default-valence-table.toml`.
+- New `umol-graph/config/default-normal-valence-table.toml` containing only the elements that previously carried `normal_valence` or `aromatic_normal_valence`.
+- `ValenceModel::AtomTyping { registry, normal_valence }`, `ValenceModel::Counts { table, normal_valence, allow_implicit_hydrogens }`. `ChemistryModel::default`, resolver dispatch (`ValenceResolver::new`), and resolver constructors (`AtomTypingValenceResolver::new`, `CountsValenceResolver::new`) all extended. The new field is stored on each resolver but not yet threaded into its internals (Steps 7–8).
+- `shared.rs::infer_normal_implicit_hydrogens` and `infer_normal_aromatic_implicit_hydrogens` swapped to `NormalValenceTable::default_table().implicit_hydrogens_for(...)`. Keeps the build green; `shared.rs` dies in Step 9.
+- Test sites in `umol-graph::ops::resolver` (`counts_model`, `typing_model`) and `umol-graph/tests/resolution/mod.rs` (`counts_chemistry`) updated.
+- Validation: 8137 workspace tests pass; 617 conformance resolution tests pass under `--features conformance`.
 
 ##### Step 7 — Migrate `counts.rs`
 
-- Move `try_build_candidate`, `resolve_unpaired_lone_pairs` from `shared.rs` into `counts.rs` as private fns; rewrite their internal uses of `infer_normal_aromatic_implicit_hydrogens` to call `NormalImplicitHydrogensTable::infer`
+- Move `try_build_candidate`, `resolve_unpaired_lone_pairs` from `shared.rs` into `counts.rs` as private fns; rewrite their internal uses of `infer_normal_aromatic_implicit_hydrogens` to call `self.normal_valence.implicit_hydrogens_for(...)` (the table is now stored on the resolver, set in Step 6).
 - The aromatic-branch decision (legacy `atom_is_aromatic`) becomes `view.is_in_aromatic_system()` alone. Inline `AromaticValence(Aromatic(_))` declarations are *constraints*, not state — they don't drive counts' branch decision. Perception runs first and resolves declarations to memberships; counts reads memberships.
 - Inline `aromatic_pi_pinned` via `AromaticValenceAst::as_lit()` (still needed for the pinned-π case where counts walks constraints to find user-supplied pin values for candidate filtering)
 - Dissolve `AtomCandidate`: `candidates_for` returns `Vec<AtomAst>` with synthetic `Valence(Lit(v))`/`AromaticValence(Aromatic(Lit(a)))` constraints pushed into each candidate's `.constraints`

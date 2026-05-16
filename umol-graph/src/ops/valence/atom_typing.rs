@@ -8,6 +8,7 @@ use umol_ast::ast::{
 };
 use umol_shared::element::Element;
 
+use crate::ops::valence::normal_valence::NormalValenceTable;
 use crate::ops::valence::registry::AtomTypeRegistry;
 use crate::ops::valence::shared::{
     atom_dative_counts, atom_is_aromatic, base_atom_compatible, charge_or_zero,
@@ -18,6 +19,7 @@ use crate::ops::valence::shared::{
 #[derive(Clone, Debug)]
 pub struct AtomTypingValenceResolver {
     pub registry: AtomTypeRegistry,
+    pub normal_valence: NormalValenceTable,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -31,8 +33,11 @@ pub enum AtomTypingError {
 }
 
 impl AtomTypingValenceResolver {
-    pub fn new(registry: AtomTypeRegistry) -> Self {
-        Self { registry }
+    pub fn new(registry: AtomTypeRegistry, normal_valence: NormalValenceTable) -> Self {
+        Self {
+            registry,
+            normal_valence,
+        }
     }
 
     /// Iterates atoms, narrowing each non-ground atom against the registry.
@@ -169,7 +174,8 @@ mod tests {
     #[rstest]
     fn test_atom_typing_valence_resolver_resolve_ground_methane_passthrough() {
         let reg = AtomTypeRegistry::default_registry().clone();
-        let resolver = AtomTypingValenceResolver::new(reg);
+        let resolver =
+            AtomTypingValenceResolver::new(reg, NormalValenceTable::default_table().clone());
         let mut ast = methane();
         resolver.resolve(&mut ast).unwrap();
     }
@@ -177,7 +183,8 @@ mod tests {
     #[rstest]
     fn test_atom_typing_valence_resolver_resolve_no_match() {
         let reg = registry!["C#c0#h4#n0#u0"];
-        let resolver = AtomTypingValenceResolver::new(reg);
+        let resolver =
+            AtomTypingValenceResolver::new(reg, NormalValenceTable::default_table().clone());
         let mut ast = methyl_chloride_partial();
         let err = resolver.resolve(&mut ast).unwrap_err();
         assert!(matches!(err, AtomTypingError::NoMatchingPattern { .. }));
@@ -186,7 +193,8 @@ mod tests {
     #[rstest]
     fn test_atom_typing_valence_resolver_empty_registry_passes_through_ground_atoms() {
         let reg = AtomTypeRegistry::new();
-        let resolver = AtomTypingValenceResolver::new(reg);
+        let resolver =
+            AtomTypingValenceResolver::new(reg, NormalValenceTable::default_table().clone());
         let mut ast = methane();
         resolver.resolve(&mut ast).unwrap();
     }

@@ -8,7 +8,7 @@ use umol_ast::ast::{
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 
-use crate::ops::valence::table::ValenceTable;
+use crate::ops::valence::normal_valence::NormalValenceTable;
 
 /// One concrete narrowing target: the resolved base atom and the per-atom
 /// constraints to lift onto `AtomAst.constraints` to pin the chosen
@@ -75,11 +75,12 @@ pub fn infer_normal_implicit_hydrogens(
     explicit_valence: u8,
     is_aromatic: bool,
 ) -> Option<u8> {
-    if is_aromatic {
-        return infer_normal_aromatic_implicit_hydrogens(element, charge, explicit_valence);
-    }
-    let normal_valence = ValenceTable::default_table().normal_valence_for(element, charge)?;
-    Some(normal_valence.saturating_sub(explicit_valence))
+    NormalValenceTable::default_table().implicit_hydrogens_for(
+        element,
+        charge,
+        explicit_valence,
+        is_aromatic,
+    )
 }
 
 pub fn infer_normal_aromatic_implicit_hydrogens(
@@ -87,8 +88,7 @@ pub fn infer_normal_aromatic_implicit_hydrogens(
     charge: i8,
     valence: u8,
 ) -> Option<u8> {
-    let normal = ValenceTable::default_table().aromatic_normal_valence_for(element, charge)?;
-    Some(normal.saturating_sub(valence))
+    NormalValenceTable::default_table().implicit_hydrogens_for(element, charge, valence, true)
 }
 
 pub fn base_atom_compatible(query: &AtomAst, candidate: &AtomAst) -> bool {

@@ -30,14 +30,20 @@ pub enum ValenceError {}
 impl ValenceResolver {
     pub fn new(model: &ValenceModel) -> Self {
         match model {
-            ValenceModel::AtomTyping { registry } => {
-                Self::AtomTyping(AtomTypingValenceResolver::new(registry.clone()))
-            }
+            ValenceModel::AtomTyping {
+                registry,
+                normal_valence,
+            } => Self::AtomTyping(AtomTypingValenceResolver::new(
+                registry.clone(),
+                normal_valence.clone(),
+            )),
             ValenceModel::Counts {
                 table,
+                normal_valence,
                 allow_implicit_hydrogens,
             } => Self::Counts(CountsValenceResolver::new(
                 table.clone(),
+                normal_valence.clone(),
                 *allow_implicit_hydrogens,
             )),
         }
