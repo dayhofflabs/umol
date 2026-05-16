@@ -21,12 +21,6 @@ impl SpinStateAst {
         SpinState::closed_shell().into()
     }
 
-    /// Pattern matches target iff `unpaired` and `multiplicity` each
-    /// match field-wise under `ValueAst::matches`.
-    pub fn matches(&self, target: &Self) -> bool {
-        self.unpaired.matches(&target.unpaired) && self.multiplicity.matches(&target.multiplicity)
-    }
-
     /// Simplify both `unpaired` and `multiplicity` in place via
     /// [`ValueAst::simplify`].
     pub fn simplify_values(&mut self) {
@@ -63,6 +57,12 @@ impl Lattice for SpinStateAst {
             unpaired: self.unpaired.join(&other.unpaired),
             multiplicity: self.multiplicity.join(&other.multiplicity),
         }
+    }
+
+    /// Pattern matches target iff `unpaired` and `multiplicity` each
+    /// match field-wise under `ValueAst::matches`.
+    fn matches(&self, target: &Self) -> bool {
+        self.unpaired.matches(&target.unpaired) && self.multiplicity.matches(&target.multiplicity)
     }
 }
 

@@ -1602,6 +1602,26 @@ Property-style tests can come after the focused cases:
 
 **Completion**: `cargo test --workspace --tests` green; benchmarks unchanged or improved. **Dependencies**: all earlier phases. **Risk**: medium.
 
+#### Resolution vs. validation
+
+Every op that handles constraint-vs-state interaction splits into two distinct passes. Conflating them was the original sin behind the `satisfies` indirection (Phase 14, Step 5) and the legacy permissive `atom_is_aromatic`.
+
+- **Resolution** translates *declared constraints* into *derived state* using a model. It runs once when lowering from the declarative AST into the resolved hierarchy. Inputs: the `*Constraints` containers carrying user-supplied assertions. Outputs: concrete state on the entity (e.g. aromatic-system membership, atom-type assignment, ring set). The model is the input table or algorithm (e.g. aromaticity model, valence registry, ring-perception strategy); resolution may consult constraints as hints (pinned π count, declared aromaticity) but is not driven by them — declarations are *constraints to satisfy*, not *state to propagate*. Once resolved, the derived state is the source of truth; constraints remain on the entity but are no longer consulted to answer "what is the atom's aromaticity / valence / ring membership."
+- **Validation** compares *declared constraints* against *resolved state* for consistency. It runs after resolution. For each constraint of kind K, derive the effective state value at K from the entity and call `constraint.matches(&effective)` — pure lattice algebra (Phase 14, Step 5). Pattern `Undetermined` (vacuous) trivially matches. Mismatches surface as op-specific errors (`AromaticityValidationError`, `ValenceValidationError`, ...). Validation never mutates state.
+
+Concretely per op:
+
+- `ops/aromaticity`: `AromaticityPerception::resolve` (constraints → memberships); `AromaticityPerception::validate` (memberships ↔ constraints check). `view.is_in_aromatic_system()` is the post-resolution accessor; `view.constraints().aromatic_valence()` returns the declared constraint untouched. The two never combine via disjunction.
+- `ops/valence`: `counts.rs` and `atom_typing.rs` are resolution. `ops/validator/valence.rs` (when it lands) is validation; it checks the resolved candidate against the declared `Valence` / `TotalValence` / etc. constraints.
+- `ops/transformer` (kekulize, aromatize): mutates resolved state. After mutation, run validation to confirm declared constraints still hold.
+- `ops/validator`: pure validation; never resolves.
+
+Implementation rules:
+
+- Resolution APIs return resolved state; they do not return validation verdicts. If resolution detects an unsatisfiable declared constraint (no resolution exists), that's a resolution error (e.g., `CountsError::NoValidValenceState`), not a validation error.
+- Validation APIs return `Result<(), ValidationError>`; they never mutate. The pattern is always `for each constraint c in entity: c.matches(&derived_state_at(c.kind()))`.
+- Neither pass calls `satisfies` (it does not exist). Neither pass mixes "is the constraint asserted?" with "is the state consistent with it?" — those are answered by `entity.constraints().get(...)` and `constraint.matches(&derived)` respectively.
+
 ### Phase 14 — Lattice ops + valence resolver cleanup
 
 Adds a `Lattice` trait covering the standard partial-order/lattice operations on AST refinement types, replaces the misnamed `narrow_atom`/`lift_constraints` flow in the valence resolvers with derived `Lattice` operations, and deletes `umol-graph/src/ops/valence/shared.rs` entirely.
@@ -1627,7 +1647,9 @@ Adds a `Lattice` trait covering the standard partial-order/lattice operations on
 
 **View additions** (`umol-ast/src/ast/views/atom.rs`):
 
-- `AtomView::satisfies(&AtomConstraint) -> bool` — view-side constraint check; computes valence/donated/accepted internally per call. `is_in_aromatic_system()` and the constraint-side aromatic check remain distinct predicates; the (~2) callsites in `shared.rs` that need "system OR declared" semantics inline the disjunction explicitly rather than going through a new method.
+- ~~`AtomView::satisfies(&AtomConstraint)`~~ — **abandoned** (see Step 5). The "constraint holds against atom state" check is purely lattice algebra: `q.matches(&effective)` where `effective` is derived per-kind from the atom view. Each validator inlines its own derivation + match.
+
+- `matches` lives on the `Lattice` trait (Step 5). Required method, no default impl; each AST type provides its own direct impl.
 
 **`NormalImplicitHydrogensTable`** (new config type):
 
@@ -1642,13 +1664,13 @@ Adds a `Lattice` trait covering the standard partial-order/lattice operations on
 
 - `charge_or_zero` → inline `atom.charge.as_lit_or(0) as i8`
 - `aromatic_pi_pinned` → `AromaticValenceAst::as_lit()` or `ValueAst::matches`
-- `atom_is_aromatic` → inline `view.is_in_aromatic_system() || matches!(view.constraints().aromatic_valence(), AromaticValenceAst::Aromatic(_))` at the (~2) sites that need this disjunction (counts.rs aromatic branch + inside `AtomView::satisfies` for `AromaticValence`)
+- `atom_is_aromatic` → resolved by perception. Atoms in aromatic systems are members via the `aromatic_systems` relation; `view.is_in_aromatic_system()` is the ground-truth predicate post-perception. The legacy "system OR declared" disjunction is replaced by perception's two-pass structure (resolve reads declarations as inputs; validate cross-checks against memberships).
 - `ground_spin_state` → `SpinStateAst::as_lit()`
 - `spin_state_undetermined` → existing `SpinStateAst::is_undetermined()`
 - `value_matches`, `spin_matches` → existing `matches` on each type
 - `base_atom_compatible` → three chained `matches` inline
 - `pattern_constraints_compatible` → `.iter().all(...)` inline
-- `atom_constraint_holds` → `AtomView::satisfies(&AtomConstraint)`
+- `atom_constraint_holds` → deleted entirely. Constraint-vs-state checking is owned by validation passes (e.g., `AromaticityPerception::validate`), which inline the relevant `q.matches(&effective)` calls directly.
 - `narrow_value`, `narrow_atom` → `Lattice::narrow_from` (via derive on struct types)
 - `lift_constraints`, `narrow_atom_constraint`, `narrowable` → `AtomConstraints::narrow_with(&other: &AtomConstraints) -> bool` (bulk form)
 - `try_build_candidate`, `resolve_unpaired_lone_pairs` → private fns in `counts.rs` (counts-only consumers)
@@ -1660,7 +1682,7 @@ Adds a `Lattice` trait covering the standard partial-order/lattice operations on
 
 **Error payloads**: `CountsError`/`AtomTypingError` carry `ValueAst` (charge/valence) directly; all ASTs derive `Debug`.
 
-**Tests**: existing `atom_constraint_holds` tests (shared.rs:440-538) move to `AtomView::satisfies` tests. New tests for `Lattice` impls — exhaustive variant cross-products for `meet`/`join` on `ValueAst`, sentinel-bearing types, and tagged sum types.
+**Tests**: existing `atom_constraint_holds` tests (shared.rs:440-538) deleted with the function (no `satisfies` to port to). Aromaticity perception's `validate` will grow its own tests when implemented (separate phase, not part of Phase 14). New tests for `Lattice` impls — exhaustive variant cross-products for `meet`/`join` on `ValueAst`, sentinel-bearing types, and tagged sum types.
 
 **Completion**: `umol-graph/src/ops/valence/shared.rs` deleted; `Lattice` trait covers all value-type and entity ASTs; `cargo test --workspace --tests` green. **Dependencies**: phase 3 (`ValueAst` arithmetic), phase 13 (ops migration of `shared.rs` callers to the new API surface). **Risk**: medium-high — touches many AST types and both valence resolvers; lattice cross-product tables for `ValueAst` are the load-bearing correctness check.
 
@@ -1702,16 +1724,19 @@ Sequencing chosen so each step lands independently with `cargo test --workspace 
 - Added 14 tests per constraint kind (empty/empty, add new kind, narrows undetermined to lit, lit/lit match preserved, lit/lit mismatch → `None`, multi-kind combines, aromatic-valence narrows, aromatic-valence not vs aromatic → `None`, RingSize union, RingSize dedup, vacuous-entry pruning, `narrow_from` extends/no-change/contradiction-leaves-unchanged, `join` keeps shared kinds, `join` widens value)
 - Found and fixed a pre-existing bug in `AtomConstraints::get_all` and `remove_all`: they used `binary_search` (`find`) which can return any matching index in a multi-entry cluster (e.g., multiple `RingSize` entries). Switched to `partition_point` to find the leftmost cluster start.
 
-##### Step 5 — `AtomView::satisfies(&AtomConstraint)` **Done**
+##### Step 5 — Move `matches` into `Lattice` trait **Done**
 
-- Added `AtomView::satisfies(&AtomConstraint) -> bool` in `views/atom.rs`
-- Uses `query.matches(&accessor)` (ValueAst's existing inherent `matches`) for the simple ValueAst-wrapping kinds (`Valence`, `DonatedPairs`, `AcceptedPairs`)
-- `AromaticValence` arm inlines the `in_system || declared_aromatic` disjunction (no `is_aromatic` method); uses `AromaticValenceAst::as_lit()` (from `AsLit`) to read the inner π count
-- `MulticenterValence` arm uses `ValueAst::as_lit()` to extract the multicenter valence
-- Preserves legacy semantics from `shared.rs::atom_constraint_holds` exactly, including: outer `Undetermined` query → `false`; permissive fallback for `Aromatic(Lit)` when actual π is non-ground; non-checked constraint kinds → `true`
-- Ported the 6 multicenter + 4 aromatic test cases from `shared.rs:440-538` to a single `test_atom_view_satisfies` table at `views/atom.rs`; 10 cases, all pass
+(Supersedes the earlier `AtomView::satisfies` work, which was walked back: `satisfies` was added, recognized as conflating multiple semantics — legacy permissive fallback, system-OR-declared disjunction, vacuous-`Undetermined` handling — and deleted. The membership-vs-constraint interaction lives only inside validation passes; validators inline `q.matches(&effective)` per-kind directly. Atom typing (Step 8) uses lattice `meet`/`narrow_from` directly. No `satisfies` to call anywhere.)
 
-At this point: all new surface in place; migration unblocked.
+What was actually done in this step:
+
+- Added `fn matches(&self, target: &Self) -> bool` as a required method on the `Lattice` trait, with no default impl. Semantically the partial-order check: `pattern.matches(target) ⇔ pattern.meet(target) == Some(target)` (modulo canonicalization of set-valued representations — canonicalization will be added later if a caller needs it; existing impls keep their current loose set-matching semantics for now).
+- Moved every inherent `pub fn matches` into its `impl Lattice for ...` block (no behavioral change for the leaf/value types). Impls touched: `ValueAst`, `ElementAst`, `IsotopeAst`, `ImplicitHydrogensAst`, `SpinStateAst`, `AromaticValenceAst`, `MulticenterValenceAst`, `AtomAst`, `BondAst`, `DativeBondAst`, `MulticenterBondAst`, `NoncovalentBondAst`, `AromaticSystemAst`.
+- `NoncovalentBondKindAst::matches` stays inherent — that type doesn't implement `Lattice` (its parent treats `kind` as a structural anchor inline).
+- Entity-level `matches` now field-wise-checks `constraints` too (previously omitted because there was no `Constraints::matches`). `DativeBondAst::matches` also now enforces `acceptor_slot` equality — consistent with `meet`, fixes an asymmetry where the prior inherent `matches` ignored the anchor.
+- Added `Lattice::matches` impls on the constraint containers (which already had `Lattice`): `AtomConstraints`, `BondConstraints`, `AromaticSystemConstraints`, `MulticenterBondConstraints`, `DativeBondConstraints`, `NoncovalentBondConstraints` (trivially `true`; uninhabited inner type). Semantics: field-wise per-kind via existing accessors (absent constraint = vacuous `Undetermined`, matches anything); multi-valued kinds (`RingSize` on atom and bond) check that every pattern entry is matchable by some target entry.
+- New tests: `test_aromatic_valence_ast_matches`, `test_multicenter_valence_ast_matches`, `test_atom_constraints_matches`, `test_bond_constraints_matches`. Extended `test_atom_ast_matches`, `test_bond_ast_matches`, `test_dative_bond_ast_matches`, `test_multicenter_bond_ast_matches`, `test_aromatic_system_ast_matches`, `test_noncovalent_bond_ast_matches` with cases covering previously-untested dimensions: spin, `acceptor_slot`, constraints presence/absence/value-mismatch, set-pattern kind matching.
+- Validation: 2604 umol-ast lib tests pass (up from 2550 — 54 new); 8126 workspace tests pass.
 
 ##### Step 6 — Config split: `NormalImplicitHydrogensTable`
 
@@ -1727,21 +1752,24 @@ This temporarily breaks `shared.rs`'s `infer_normal_*` calls — those go away i
 ##### Step 7 — Migrate `counts.rs`
 
 - Move `try_build_candidate`, `resolve_unpaired_lone_pairs` from `shared.rs` into `counts.rs` as private fns; rewrite their internal uses of `infer_normal_aromatic_implicit_hydrogens` to call `NormalImplicitHydrogensTable::infer`
-- Inline `atom_is_aromatic` at the aromatic-branch decision via the explicit disjunction
-- Inline `aromatic_pi_pinned` via `AromaticValenceAst::as_lit()`
+- The aromatic-branch decision (legacy `atom_is_aromatic`) becomes `view.is_in_aromatic_system()` alone. Inline `AromaticValence(Aromatic(_))` declarations are *constraints*, not state — they don't drive counts' branch decision. Perception runs first and resolves declarations to memberships; counts reads memberships.
+- Inline `aromatic_pi_pinned` via `AromaticValenceAst::as_lit()` (still needed for the pinned-π case where counts walks constraints to find user-supplied pin values for candidate filtering)
 - Dissolve `AtomCandidate`: `candidates_for` returns `Vec<AtomAst>` with synthetic `Valence(Lit(v))`/`AromaticValence(Aromatic(Lit(a)))` constraints pushed into each candidate's `.constraints`
 - Callsite collapses to `atom_mut.narrow_from(&candidate)`
 - `CountsError::NoValidValenceState` carries `ValueAst` for charge/valence
 
 ##### Step 8 — Migrate `atom_typing.rs`
 
-- Replace `pattern_constraints_compatible(view, constraints, v, d, a)` with `constraints.iter().all(|c| view.satisfies(c))` inline
-- Replace `base_atom_compatible(atom, pattern)` with three chained `matches` calls inline
+Atom typing's job is classification + merge. The clean flow:
+
+- For each candidate pattern, **compatibility check** via the lattice: `pattern.meet(&atom_view.ast).is_some()` (or equivalent `pattern.matches(...)` form once that lifts into the trait). Constraints are part of the entity Lattice; absent constraint on atom = vacuous Undetermined, so meet succeeds when the pattern's constraints are compatible (atom doesn't have to pre-declare them).
+- **Merge**: `atom_mut.narrow_from(&pattern)` — narrows base fields and merges constraints in one lattice operation (per Q1).
+- No `satisfies` call. No `pattern_constraints_compatible`. No `base_atom_compatible`.
 - Replace `atom_dative_counts(view)` with two `as_lit_*` calls inline at the single use site
 - Replace `infer_normal_implicit_hydrogens(...)` with `normal_implicit_hydrogens.infer(...)`
-- Dissolve `AtomCandidate`; callsite collapses to `atom_mut.narrow_from(&candidate)`
+- Dissolve `AtomCandidate`
 - `AtomTypingError::NoMatchingPattern` carries `ValueAst` for charge
-- `pattern_implicit_h_compatible`, `collect_pattern_constraints` kept in place; flagged for a follow-on review pass
+- `pattern_implicit_h_compatible`, `collect_pattern_constraints` evaporate — pattern constraints flow through `narrow_from`; implicit-H pattern check folds into the lattice meet on `ImplicitHydrogensAst`
 
 ##### Step 9 — Delete `shared.rs`
 
@@ -1754,7 +1782,7 @@ This temporarily breaks `shared.rs`'s `infer_normal_*` calls — those go away i
 
 - Each step lands green: `cargo test --workspace --tests`, no new clippy warnings
 - Step 2 also: exhaustive variant cross-product tests for `meet`/`join` on `ValueAst` (foundation for everything else)
-- Step 5 also: regression tests confirm `satisfies` is behaviorally identical to `atom_constraint_holds` (ported from shared.rs)
+- Step 5 supersedes the earlier `satisfies` work (which was deleted). Regression coverage for `atom_constraint_holds` evaporates with `shared.rs`; equivalent checks are reimplemented per validator (e.g., `AromaticityPerception::validate` when that lands). New tests landed for `matches` on every Lattice impl (leaf types already had them; constraint containers and the constraint-dimension cases on entity types are new).
 - Step 9 also: `grep` confirms zero `shared::` references remain
 
 ##### Risks

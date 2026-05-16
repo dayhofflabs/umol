@@ -259,6 +259,17 @@ impl Lattice for BondConstraints {
         }
         result
     }
+
+    /// `Aromatic` is a flag; pattern requires it iff target also has it.
+    /// `RingCount` matches via `ValueAst::matches`. `RingSize` (multi-valued)
+    /// requires every `self` assertion to be matchable in `target`.
+    fn matches(&self, target: &Self) -> bool {
+        (!self.aromatic() || target.aromatic())
+            && self.ring_count().matches(&target.ring_count())
+            && self
+                .ring_sizes()
+                .all(|p| target.ring_sizes().any(|t| p.matches(t)))
+    }
 }
 
 impl FromIterator<BondConstraint> for BondConstraints {
@@ -596,6 +607,51 @@ mod tests {
             Vec::new(),
         );
         assert_eq!(cs.clone().remap(&remap), cs);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty_pattern_matches_anything(
+        BondConstraints::new(),
+        BondConstraints::from_iter([BondConstraint::Aromatic]),
+        true,
+    )]
+    #[case::aromatic_required_present(
+        BondConstraints::from_iter([BondConstraint::Aromatic]),
+        BondConstraints::from_iter([BondConstraint::Aromatic]),
+        true,
+    )]
+    #[case::aromatic_required_absent(
+        BondConstraints::from_iter([BondConstraint::Aromatic]),
+        BondConstraints::new(),
+        false,
+    )]
+    #[case::ring_count_wildcard_matches_lit(
+        BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Undetermined)]),
+        BondConstraints::from_iter([BondConstraint::ring_count(1)]),
+        true,
+    )]
+    #[case::ring_count_lit_mismatch(
+        BondConstraints::from_iter([BondConstraint::ring_count(1)]),
+        BondConstraints::from_iter([BondConstraint::ring_count(2)]),
+        false,
+    )]
+    #[case::ring_size_subset(
+        BondConstraints::from_iter([BondConstraint::ring_size(5)]),
+        BondConstraints::from_iter([BondConstraint::ring_size(5), BondConstraint::ring_size(6)]),
+        true,
+    )]
+    #[case::ring_size_not_in_target(
+        BondConstraints::from_iter([BondConstraint::ring_size(7)]),
+        BondConstraints::from_iter([BondConstraint::ring_size(5)]),
+        false,
+    )]
+    fn test_bond_constraints_matches(
+        #[case] pattern: BondConstraints,
+        #[case] target: BondConstraints,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
     }
 
     #[rustfmt::skip]

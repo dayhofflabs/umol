@@ -154,18 +154,6 @@ impl AtomAst {
         self
     }
 
-    /// `self` (pattern) matches `target` iff every admissible assignment
-    /// of `target` is also admissible by `self`, checked field-wise.
-    /// See per-field `matches` for the scalar rules.
-    pub fn matches(&self, target: &AtomAst) -> bool {
-        self.element.matches(&target.element)
-            && self.isotope_mass.matches(&target.isotope_mass)
-            && self.charge.matches(&target.charge)
-            && self.implicit_hydrogens.matches(&target.implicit_hydrogens)
-            && self.lone_pairs.matches(&target.lone_pairs)
-            && self.spin.matches(&target.spin)
-    }
-
     /// Simplify every value-bearing field in place: `isotope_mass`,
     /// `charge`, `implicit_hydrogens`, `lone_pairs`, both `spin` slots,
     /// and each constraint. `element` has no value to simplify.
@@ -223,6 +211,19 @@ impl Lattice for AtomAst {
             constraints: self.constraints.join(&other.constraints),
         }
     }
+
+    /// `self` (pattern) matches `target` iff every admissible assignment
+    /// of `target` is also admissible by `self`, checked field-wise.
+    /// See per-field `matches` for the scalar rules.
+    fn matches(&self, target: &Self) -> bool {
+        self.element.matches(&target.element)
+            && self.isotope_mass.matches(&target.isotope_mass)
+            && self.charge.matches(&target.charge)
+            && self.implicit_hydrogens.matches(&target.implicit_hydrogens)
+            && self.lone_pairs.matches(&target.lone_pairs)
+            && self.spin.matches(&target.spin)
+            && self.constraints.matches(&target.constraints)
+    }
 }
 
 /// Element expressions
@@ -245,24 +246,6 @@ impl From<Element> for ElementAst {
     }
 }
 
-impl ElementAst {
-    /// Pattern matches target iff every element the target admits is also
-    /// admitted by the pattern (superset semantics).
-    pub fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::Ref(_), _) | (_, Self::Ref(_)) => false,
-            (Self::Lit(p), Self::Lit(t)) => p == t,
-            (Self::Lit(p), Self::Set(ts) | Self::Bind { set: ts, .. }) => ts.iter().all(|t| t == p),
-            (Self::Set(ps) | Self::Bind { set: ps, .. }, Self::Lit(t)) => ps.contains(t),
-            (
-                Self::Set(ps) | Self::Bind { set: ps, .. },
-                Self::Set(ts) | Self::Bind { set: ts, .. },
-            ) => ts.iter().all(|t| ps.contains(t)),
-        }
-    }
-}
 
 impl AsLit for ElementAst {
     type Lit = Element;
@@ -370,6 +353,23 @@ impl Lattice for ElementAst {
             _ => Self::Undetermined,
         }
     }
+
+    /// Pattern matches target iff every element the target admits is also
+    /// admitted by the pattern (superset semantics).
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (Self::Ref(_), _) | (_, Self::Ref(_)) => false,
+            (Self::Lit(p), Self::Lit(t)) => p == t,
+            (Self::Lit(p), Self::Set(ts) | Self::Bind { set: ts, .. }) => ts.iter().all(|t| t == p),
+            (Self::Set(ps) | Self::Bind { set: ps, .. }, Self::Lit(t)) => ps.contains(t),
+            (
+                Self::Set(ps) | Self::Bind { set: ps, .. },
+                Self::Set(ts) | Self::Bind { set: ts, .. },
+            ) => ts.iter().all(|t| ps.contains(t)),
+        }
+    }
 }
 
 fn element_set_is_ground(s: &[Element]) -> bool {
@@ -436,16 +436,6 @@ impl IsotopeAst {
                 .evaluate_checked(&Bindings::new())
                 .and_then(|n| u32::try_from(n).ok()),
             Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
-        }
-    }
-
-    pub fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::Natural, Self::Natural) => true,
-            (Self::Natural, _) | (_, Self::Natural) => false,
-            (p, t) => p.as_value().matches(&t.as_value()),
         }
     }
 
@@ -605,6 +595,16 @@ impl Lattice for IsotopeAst {
             _ => Self::Undetermined,
         }
     }
+
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (Self::Natural, Self::Natural) => true,
+            (Self::Natural, _) | (_, Self::Natural) => false,
+            (p, t) => p.as_value().matches(&t.as_value()),
+        }
+    }
 }
 
 /// Implicit hydrogen expressions. `Normal` denotes the valence-model default
@@ -658,16 +658,6 @@ impl ImplicitHydrogensAst {
             Self::LitSet(s) => litset_is_ground(s).then(|| s[0]),
             Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
             Self::Lit(_) | Self::Normal | Self::Undetermined => unreachable!(),
-        }
-    }
-
-    pub fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::Normal, Self::Normal) => true,
-            (Self::Normal, _) | (_, Self::Normal) => false,
-            (p, t) => p.as_value().matches(&t.as_value()),
         }
     }
 
@@ -877,6 +867,16 @@ impl Lattice for ImplicitHydrogensAst {
             _ => Self::Undetermined,
         }
     }
+
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (Self::Normal, Self::Normal) => true,
+            (Self::Normal, _) | (_, Self::Normal) => false,
+            (p, t) => p.as_value().matches(&t.as_value()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -983,6 +983,18 @@ mod tests {
     #[case::hydrogens_mismatch(AtomAst::from_element(Element::C).with_implicit_hydrogens(3_i64), AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64), false)]
     #[case::lone_pairs_mismatch(AtomAst::from_element(Element::C).with_lone_pairs(1_i64), AtomAst::from_element(Element::C).with_lone_pairs(2_i64), false)]
     #[case::spin_mismatch(AtomAst::from_element(Element::C).with_spin((2_u8, 3_u8)), AtomAst::from_element(Element::C).with_spin((0_u8, 1_u8)), false)]
+    #[case::constraint_required_present(
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4)),
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4)),
+        true)]
+    #[case::constraint_required_absent(
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4)),
+        AtomAst::from_element(Element::C),
+        false)]
+    #[case::constraint_value_mismatch(
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4)),
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(3)),
+        false)]
     fn test_atom_ast_matches(
         #[case] pattern: AtomAst,
         #[case] target: AtomAst,

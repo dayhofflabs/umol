@@ -87,14 +87,6 @@ impl BondAst {
         self.into_ground()
     }
 
-    /// `self` (pattern) matches `target` iff every admissible assignment
-    /// of `target` is also admissible by `self`, checked field-wise.
-    pub fn matches(&self, target: &BondAst) -> bool {
-        self.order.matches(&target.order)
-            && self.charge.matches(&target.charge)
-            && self.spin.matches(&target.spin)
-    }
-
     /// Simplify every value-bearing field in place.
     pub fn simplify_values(&mut self) {
         self.order = mem::take(&mut self.order).simplify();
@@ -135,6 +127,15 @@ impl Lattice for BondAst {
             spin: self.spin.join(&other.spin),
             constraints: self.constraints.join(&other.constraints),
         }
+    }
+
+    /// `self` (pattern) matches `target` iff every admissible assignment
+    /// of `target` is also admissible by `self`, checked field-wise.
+    fn matches(&self, target: &Self) -> bool {
+        self.order.matches(&target.order)
+            && self.charge.matches(&target.charge)
+            && self.spin.matches(&target.spin)
+            && self.constraints.matches(&target.constraints)
     }
 }
 
@@ -260,6 +261,19 @@ mod tests {
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }, false)]
     #[case::charge_wildcard_pattern(BondAst::from_order(1),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::new() }, true)]
+    #[case::spin_mismatch(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() },
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: (2_u8, 3_u8).into(), constraints: BondConstraints::new() }, false)]
+    #[case::spin_wildcard_pattern(BondAst::from_order(1),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::closed_shell(), constraints: BondConstraints::new() }, true)]
+    #[case::constraint_required_present(
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: BondConstraints::from(BondConstraint::Aromatic) },
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: BondConstraints::from(BondConstraint::Aromatic) }, true)]
+    #[case::constraint_required_absent(
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: BondConstraints::from(BondConstraint::Aromatic) },
+        BondAst::from_order(1), false)]
     fn test_bond_ast_matches(
         #[case] pattern: BondAst,
         #[case] target: BondAst,

@@ -93,6 +93,10 @@ impl Lattice for NoncovalentBondConstraints {
     fn join(&self, _other: &Self) -> Self {
         Self::new()
     }
+
+    fn matches(&self, _target: &Self) -> bool {
+        true
+    }
 }
 
 impl FromIterator<NoncovalentBondConstraint> for NoncovalentBondConstraints {

@@ -79,14 +79,6 @@ impl DativeBondAst {
         self.into_ground()
     }
 
-    /// `self` (pattern) matches `target` iff every admissible assignment of
-    /// `target` is also admissible by `self`, checked field-wise on `order`.
-    /// `acceptor_slot` is structural — equality is enforced by the matching
-    /// driver, not here.
-    pub fn matches(&self, target: &DativeBondAst) -> bool {
-        self.order.matches(&target.order)
-    }
-
     /// Simplify every value-bearing field in place.
     pub fn simplify_values(&mut self) {
         self.order = mem::take(&mut self.order).simplify();
@@ -126,6 +118,13 @@ impl Lattice for DativeBondAst {
             order: self.order.join(&other.order),
             constraints: self.constraints.join(&other.constraints),
         }
+    }
+
+    /// `acceptor_slot` is a structural anchor: equality required.
+    fn matches(&self, target: &Self) -> bool {
+        self.acceptor_slot == target.acceptor_slot
+            && self.order.matches(&target.order)
+            && self.constraints.matches(&target.constraints)
     }
 }
 
@@ -212,6 +211,26 @@ mod tests {
     #[case::pattern_more_specific(
         DativeBondAst::from_order(2),
         DativeBondAst::new(ValueAst::Undetermined),
+        false
+    )]
+    #[case::acceptor_slot_mismatch(
+        DativeBondAst::from_order(1).with_acceptor_slot(0),
+        DativeBondAst::from_order(1).with_acceptor_slot(1),
+        false
+    )]
+    #[case::acceptor_slot_match_with_wildcard_order(
+        DativeBondAst::new(ValueAst::Undetermined).with_acceptor_slot(2),
+        DativeBondAst::from_order(1).with_acceptor_slot(2),
+        true
+    )]
+    #[case::constraint_required_present(
+        DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic),
+        DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic),
+        true
+    )]
+    #[case::constraint_required_absent(
+        DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic),
+        DativeBondAst::from_order(1),
         false
     )]
     fn test_dative_bond_ast_matches(

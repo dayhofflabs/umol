@@ -6,9 +6,7 @@ use std::ops::Index;
 use umol_shared::element::Element;
 
 use super::super::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
-use super::super::constraint::{
-    AromaticValenceAst, AtomConstraint, AtomConstraints, MulticenterValenceAst,
-};
+use super::super::constraint::AtomConstraints;
 use super::super::idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
@@ -116,44 +114,6 @@ impl<'a> AtomView<'a> {
     #[inline]
     pub fn constraints(&self) -> &'a AtomConstraints {
         &self.ast.constraints
-    }
-
-    /// True iff this atom's current ground state satisfies the constraint.
-    /// Every constraint kind is checked against the atom's computed chemistry
-    /// — `AromaticValence` against `is_in_aromatic_system()` and
-    /// `aromatic_valence()`; `MulticenterValence` against `multicenter_valence()`.
-    /// The atom's own inline constraints are *not* consulted (no self-reference).
-    pub fn satisfies(&self, constraint: &AtomConstraint) -> bool {
-        match constraint {
-            AtomConstraint::Valence(q) => q.matches(&self.valence()),
-            AtomConstraint::TotalValence(q) => q.matches(&self.total_valence()),
-            AtomConstraint::DonatedPairs(q) => q.matches(&self.donated_pairs()),
-            AtomConstraint::AcceptedPairs(q) => q.matches(&self.accepted_pairs()),
-            AtomConstraint::Degree(q) => q.matches(&self.degree()),
-            AtomConstraint::TotalDegree(q) => q.matches(&self.total_degree()),
-            AtomConstraint::RingDegree(q) => q.matches(&self.ring_degree()),
-            AtomConstraint::RingValence(q) => q.matches(&self.ring_valence()),
-            AtomConstraint::TotalHydrogens(q) => q.matches(&self.total_hydrogens()),
-            AtomConstraint::RingCount(q) => q.matches(&self.ring_count()),
-            AtomConstraint::RingSize(q) => self
-                .ring_size()
-                .any(|s| q.matches(&ValueAst::Lit(s as i64))),
-            AtomConstraint::AromaticValence(q) => {
-                let effective = if self.is_in_aromatic_system() {
-                    AromaticValenceAst::Aromatic(self.aromatic_valence())
-                } else {
-                    AromaticValenceAst::NotAromatic
-                };
-                q.matches(&effective)
-            }
-            AtomConstraint::MulticenterValence(q) => {
-                let effective = match self.multicenter_valence() {
-                    ValueAst::Lit(0) => MulticenterValenceAst::NotMulticenter,
-                    v => MulticenterValenceAst::Multicenter(v),
-                };
-                q.matches(&effective)
-            }
-        }
     }
 
     /// Iterator over incident bonds and their neighbor atoms. Equivalent to
@@ -1094,100 +1054,4 @@ mod tests {
         assert_eq!(ring_with_chain.atom(atom).ring_valence(), expected);
     }
 
-    fn bare_xenon() -> MoleculeAst {
-        mol!(r#"{:atoms ["Xe"] :bonds []}"#)
-    }
-
-    fn xenon_3c2e() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            vec![
-                AtomAst::from_element(Element::Xe),
-                AtomAst::from_element(Element::Xe),
-                AtomAst::from_element(Element::Xe),
-            ],
-            vec![],
-            vec![],
-            vec![],
-            vec![(
-                vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::new(vec![ValueAst::Lit(2), ValueAst::Lit(1), ValueAst::Lit(1)]),
-            )],
-            vec![],
-            Constraints::default(),
-        )
-    }
-
-    fn benzene_skeleton() -> MoleculeAst {
-        MoleculeAst::from_parts(
-            (0..6).map(|_| AtomAst::from_element(Element::C)).collect(),
-            vec![],
-            vec![],
-            vec![(
-                (0..6).map(AtomId).collect(),
-                AromaticSystemAst::new(vec![ValueAst::Lit(1); 6]),
-            )],
-            vec![],
-            vec![],
-            Constraints::default(),
-        )
-    }
-
-    #[rstest]
-    #[case::not_multicenter_on_bare(
-        bare_xenon(),
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
-        true,
-    )]
-    #[case::not_multicenter_on_participant(
-        xenon_3c2e(),
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
-        false,
-    )]
-    #[case::multicenter_lit_match(
-        xenon_3c2e(),
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(2))),
-        true,
-    )]
-    #[case::multicenter_lit_mismatch(
-        xenon_3c2e(),
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))),
-        false,
-    )]
-    #[case::multicenter_undetermined_on_participant(
-        xenon_3c2e(),
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Undetermined)),
-        true,
-    )]
-    #[case::multicenter_undetermined_on_bare(
-        bare_xenon(),
-        AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Undetermined)),
-        false,
-    )]
-    #[case::aromatic_lit_match_from_system(
-        benzene_skeleton(),
-        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
-        true,
-    )]
-    #[case::aromatic_lit_mismatch_from_system(
-        benzene_skeleton(),
-        AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(2))),
-        false,
-    )]
-    #[case::not_aromatic_on_bare(
-        bare_xenon(),
-        AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
-        true,
-    )]
-    #[case::not_aromatic_on_member(
-        benzene_skeleton(),
-        AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
-        false,
-    )]
-    fn test_atom_view_satisfies(
-        #[case] ast: MoleculeAst,
-        #[case] constraint: AtomConstraint,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.atom(AtomId(0)).satisfies(&constraint), expected);
-    }
 }

@@ -258,6 +258,14 @@ impl Lattice for DativeBondConstraints {
         }
         result
     }
+
+    /// `Aromatic` is a flag; pattern requires it iff target also has it.
+    /// `RingCount` / `RingSize` match field-wise via `ValueAst::matches`.
+    fn matches(&self, target: &Self) -> bool {
+        (!self.aromatic() || target.aromatic())
+            && self.ring_count().matches(&target.ring_count())
+            && self.ring_size().matches(&target.ring_size())
+    }
 }
 
 impl FromIterator<DativeBondConstraint> for DativeBondConstraints {

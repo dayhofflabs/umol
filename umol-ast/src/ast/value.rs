@@ -60,20 +60,6 @@ impl ValueAst {
         }
     }
 
-    /// Pattern matches target iff every integer target admits is also
-    /// admitted by pattern (superset semantics). `Expr` targets cannot
-    /// be certified generically and are rejected here; pattern `Expr`
-    /// is evaluated pointwise on ground / set targets.
-    pub fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (_, Self::Expr(_)) => false,
-            (pattern, Self::Lit(n)) => pattern.matches_value(*n),
-            (pattern, Self::LitSet(ns)) => ns.iter().all(|n| pattern.matches_value(*n)),
-        }
-    }
-
     /// Match a concrete integer value against this pattern.
     pub fn matches_value(&self, value: i64) -> bool {
         self.capture(value).is_some()
@@ -253,6 +239,20 @@ impl Lattice for ValueAst {
             }
             (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
             _ => Self::Undetermined,
+        }
+    }
+
+    /// Pattern matches target iff every integer target admits is also
+    /// admitted by pattern (superset semantics). `Expr` targets cannot
+    /// be certified generically and are rejected here; pattern `Expr`
+    /// is evaluated pointwise on ground / set targets.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (_, Self::Expr(_)) => false,
+            (pattern, Self::Lit(n)) => pattern.matches_value(*n),
+            (pattern, Self::LitSet(ns)) => ns.iter().all(|n| pattern.matches_value(*n)),
         }
     }
 }

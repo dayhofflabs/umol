@@ -89,20 +89,6 @@ impl MulticenterBondAst {
         self.into_ground()
     }
 
-    /// `self` (pattern) matches `target` iff per-atom electrons match
-    /// position-wise (length-equality required) and `charge` / `spin` match
-    /// field-wise.
-    pub fn matches(&self, target: &MulticenterBondAst) -> bool {
-        self.charge.matches(&target.charge)
-            && self.spin.matches(&target.spin)
-            && self.electrons.len() == target.electrons.len()
-            && self
-                .electrons
-                .iter()
-                .zip(&target.electrons)
-                .all(|(p, t)| p.matches(t))
-    }
-
     pub fn simplify_values(&mut self) {
         self.charge = mem::take(&mut self.charge).simplify();
         self.spin.simplify_values();
@@ -164,6 +150,21 @@ impl Lattice for MulticenterBondAst {
             spin: self.spin.join(&other.spin),
             constraints: self.constraints.join(&other.constraints),
         }
+    }
+
+    /// `self` (pattern) matches `target` iff per-atom electrons match
+    /// position-wise (length-equality required) and `charge` / `spin` match
+    /// field-wise.
+    fn matches(&self, target: &Self) -> bool {
+        self.electrons.len() == target.electrons.len()
+            && self
+                .electrons
+                .iter()
+                .zip(&target.electrons)
+                .all(|(p, t)| p.matches(t))
+            && self.charge.matches(&target.charge)
+            && self.spin.matches(&target.spin)
+            && self.constraints.matches(&target.constraints)
     }
 }
 
@@ -334,6 +335,24 @@ mod tests {
     #[case::charge_mismatch(
         MulticenterBondAst::new(vec![ValueAst::Undetermined; 3]).with_charge(1),
         MulticenterBondAst::new(vec![ValueAst::Undetermined; 3]).with_charge(0),
+        false,
+    )]
+    #[case::spin_mismatch(
+        MulticenterBondAst::new(vec![ValueAst::Undetermined; 3]).with_spin((2_u8, 3_u8)),
+        MulticenterBondAst::new(vec![ValueAst::Undetermined; 3]).with_spin((0_u8, 1_u8)),
+        false,
+    )]
+    #[case::constraint_required_present(
+        MulticenterBondAst::new(vec![ValueAst::Undetermined; 3])
+            .with_constraint(MulticenterBondConstraint::electron_count(3)),
+        MulticenterBondAst::new(vec![ValueAst::Undetermined; 3])
+            .with_constraint(MulticenterBondConstraint::electron_count(3)),
+        true,
+    )]
+    #[case::constraint_required_absent(
+        MulticenterBondAst::new(vec![ValueAst::Undetermined; 3])
+            .with_constraint(MulticenterBondConstraint::electron_count(3)),
+        MulticenterBondAst::new(vec![ValueAst::Undetermined; 3]),
         false,
     )]
     fn test_multicenter_bond_ast_matches(

@@ -206,6 +206,10 @@ impl Lattice for MulticenterBondConstraints {
         }
         result
     }
+
+    fn matches(&self, target: &Self) -> bool {
+        self.electron_count().matches(&target.electron_count())
+    }
 }
 
 impl FromIterator<MulticenterBondConstraint> for MulticenterBondConstraints {

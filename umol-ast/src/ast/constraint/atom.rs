@@ -151,20 +151,6 @@ impl AromaticValenceAst {
         Self::Aromatic(v.into())
     }
 
-    /// Pattern matches target. `Undetermined` is a wildcard pattern.
-    /// `NotAromatic` and `Aromatic(_)` are mutually exclusive; an `Aromatic`
-    /// pattern recurses on the inner `ValueAst::matches`.
-    pub fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::NotAromatic, Self::NotAromatic) => true,
-            (Self::NotAromatic, Self::Aromatic(_))
-            | (Self::Aromatic(_), Self::NotAromatic) => false,
-            (Self::Aromatic(p), Self::Aromatic(t)) => p.matches(t),
-        }
-    }
-
     /// Simplify the inner `ValueAst` of `Aromatic(_)`. Other variants are
     /// already canonical.
     pub fn simplify(self) -> Self {
@@ -208,6 +194,20 @@ impl Lattice for AromaticValenceAst {
             (Self::Aromatic(a), Self::Aromatic(b)) => Self::Aromatic(a.join(b)),
         }
     }
+
+    /// Pattern matches target. `Undetermined` is a wildcard pattern.
+    /// `NotAromatic` and `Aromatic(_)` are mutually exclusive; an `Aromatic`
+    /// pattern recurses on the inner `ValueAst::matches`.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (Self::NotAromatic, Self::NotAromatic) => true,
+            (Self::NotAromatic, Self::Aromatic(_))
+            | (Self::Aromatic(_), Self::NotAromatic) => false,
+            (Self::Aromatic(p), Self::Aromatic(t)) => p.matches(t),
+        }
+    }
 }
 
 impl AsLit for AromaticValenceAst {
@@ -238,20 +238,6 @@ pub enum MulticenterValenceAst {
 impl MulticenterValenceAst {
     pub fn multicenter(v: impl Into<ValueAst>) -> Self {
         Self::Multicenter(v.into())
-    }
-
-    /// Pattern matches target. `Undetermined` is a wildcard pattern.
-    /// `NotMulticenter` and `Multicenter(_)` are mutually exclusive; a
-    /// `Multicenter` pattern recurses on the inner `ValueAst::matches`.
-    pub fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::NotMulticenter, Self::NotMulticenter) => true,
-            (Self::NotMulticenter, Self::Multicenter(_))
-            | (Self::Multicenter(_), Self::NotMulticenter) => false,
-            (Self::Multicenter(p), Self::Multicenter(t)) => p.matches(t),
-        }
     }
 
     /// Simplify the inner `ValueAst` of `Multicenter(_)`. Other variants
@@ -295,6 +281,20 @@ impl Lattice for MulticenterValenceAst {
             (Self::NotMulticenter, Self::Multicenter(_))
             | (Self::Multicenter(_), Self::NotMulticenter) => Self::Undetermined,
             (Self::Multicenter(a), Self::Multicenter(b)) => Self::Multicenter(a.join(b)),
+        }
+    }
+
+    /// Pattern matches target. `Undetermined` is a wildcard pattern.
+    /// `NotMulticenter` and `Multicenter(_)` are mutually exclusive; a
+    /// `Multicenter` pattern recurses on the inner `ValueAst::matches`.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Undetermined, _) => true,
+            (_, Self::Undetermined) => false,
+            (Self::NotMulticenter, Self::NotMulticenter) => true,
+            (Self::NotMulticenter, Self::Multicenter(_))
+            | (Self::Multicenter(_), Self::NotMulticenter) => false,
+            (Self::Multicenter(p), Self::Multicenter(t)) => p.matches(t),
         }
     }
 }
@@ -678,6 +678,29 @@ impl Lattice for AtomConstraints {
         }
         result
     }
+
+    /// Field-wise per-kind: single-valued kinds match via the corresponding
+    /// `Lattice::matches`; `RingSize` (multi-valued) requires every `self`
+    /// assertion to be matchable by some `target` assertion.
+    fn matches(&self, target: &Self) -> bool {
+        self.valence().matches(&target.valence())
+            && self.total_valence().matches(&target.total_valence())
+            && self.aromatic_valence().matches(&target.aromatic_valence())
+            && self
+                .multicenter_valence()
+                .matches(&target.multicenter_valence())
+            && self.donated_pairs().matches(&target.donated_pairs())
+            && self.accepted_pairs().matches(&target.accepted_pairs())
+            && self.degree().matches(&target.degree())
+            && self.total_degree().matches(&target.total_degree())
+            && self.ring_degree().matches(&target.ring_degree())
+            && self.ring_valence().matches(&target.ring_valence())
+            && self.total_hydrogens().matches(&target.total_hydrogens())
+            && self.ring_count().matches(&target.ring_count())
+            && self
+                .ring_sizes()
+                .all(|p| target.ring_sizes().any(|t| p.matches(t)))
+    }
 }
 
 impl FromIterator<AtomConstraint> for AtomConstraints {
@@ -889,6 +912,33 @@ mod tests {
     }
 
     #[rstest]
+    #[case::wildcard_vs_not_aromatic(
+        AromaticValenceAst::Undetermined, AromaticValenceAst::NotAromatic, true)]
+    #[case::wildcard_vs_aromatic_lit(
+        AromaticValenceAst::Undetermined, AromaticValenceAst::aromatic(1), true)]
+    #[case::not_aromatic_vs_aromatic(
+        AromaticValenceAst::NotAromatic, AromaticValenceAst::aromatic(1), false)]
+    #[case::aromatic_vs_not_aromatic(
+        AromaticValenceAst::aromatic(1), AromaticValenceAst::NotAromatic, false)]
+    #[case::not_aromatic_vs_not_aromatic(
+        AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic, true)]
+    #[case::aromatic_lit_match(
+        AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1), true)]
+    #[case::aromatic_lit_mismatch(
+        AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(2), false)]
+    #[case::aromatic_wildcard_inner(
+        AromaticValenceAst::Aromatic(ValueAst::Undetermined), AromaticValenceAst::aromatic(2), true)]
+    #[case::specific_vs_undetermined(
+        AromaticValenceAst::aromatic(1), AromaticValenceAst::Undetermined, false)]
+    fn test_aromatic_valence_ast_matches(
+        #[case] pattern: AromaticValenceAst,
+        #[case] target: AromaticValenceAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rstest]
     #[case::lit(
         MulticenterValenceAst::multicenter(2),
         MulticenterValenceAst::Multicenter(ValueAst::Lit(2))
@@ -948,6 +998,31 @@ mod tests {
     #[case::multicenter_lit(MulticenterValenceAst::multicenter(1))]
     fn test_multicenter_valence_ast_simplify_identity(#[case] input: MulticenterValenceAst) {
         assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rstest]
+    #[case::wildcard_vs_not_multicenter(
+        MulticenterValenceAst::Undetermined, MulticenterValenceAst::NotMulticenter, true)]
+    #[case::wildcard_vs_multicenter_lit(
+        MulticenterValenceAst::Undetermined, MulticenterValenceAst::multicenter(2), true)]
+    #[case::not_multicenter_vs_multicenter(
+        MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::multicenter(2), false)]
+    #[case::multicenter_vs_not_multicenter(
+        MulticenterValenceAst::multicenter(2), MulticenterValenceAst::NotMulticenter, false)]
+    #[case::not_multicenter_vs_not_multicenter(
+        MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::NotMulticenter, true)]
+    #[case::multicenter_lit_match(
+        MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(2), true)]
+    #[case::multicenter_lit_mismatch(
+        MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(3), false)]
+    #[case::specific_vs_undetermined(
+        MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Undetermined, false)]
+    fn test_multicenter_valence_ast_matches(
+        #[case] pattern: MulticenterValenceAst,
+        #[case] target: MulticenterValenceAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
     }
 
     #[rstest]
@@ -1355,5 +1430,59 @@ mod tests {
         #[case] expected: AtomConstraints,
     ) {
         assert_eq!(a.join(&b), expected);
+    }
+
+    #[rstest]
+    #[case::empty_pattern_matches_anything(
+        AtomConstraints::new(),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        true,
+    )]
+    #[case::missing_in_target_when_pattern_specific(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::new(),
+        false,
+    )]
+    #[case::same_lit(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        true,
+    )]
+    #[case::lit_lit_mismatch(
+        AtomConstraints::from_iter([AtomConstraint::valence(4)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(3)]),
+        false,
+    )]
+    #[case::aromatic_wildcard_matches_aromatic(
+        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::Undetermined)]),
+        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]),
+        true,
+    )]
+    #[case::aromatic_not_vs_aromatic_mismatch(
+        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic)]),
+        AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]),
+        false,
+    )]
+    #[case::ring_size_subset(
+        AtomConstraints::from_iter([AtomConstraint::ring_size(5)]),
+        AtomConstraints::from_iter([AtomConstraint::ring_size(5), AtomConstraint::ring_size(6)]),
+        true,
+    )]
+    #[case::ring_size_not_present_in_target(
+        AtomConstraints::from_iter([AtomConstraint::ring_size(7)]),
+        AtomConstraints::from_iter([AtomConstraint::ring_size(5), AtomConstraint::ring_size(6)]),
+        false,
+    )]
+    #[case::multi_kind_all_must_match(
+        AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]),
+        AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(2)]),
+        false,
+    )]
+    fn test_atom_constraints_matches(
+        #[case] pattern: AtomConstraints,
+        #[case] target: AtomConstraints,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
     }
 }

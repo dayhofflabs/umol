@@ -95,6 +95,11 @@ pub trait AsLit {
 ///
 /// `narrow_from` and `widen_with` are the in-place counterparts of `meet`
 /// and `join`; both return `true` iff `self` actually changed.
+///
+/// `matches` is the partial-order check: `pattern.matches(target)` is true
+/// iff `target` refines `pattern`, i.e. `pattern.meet(target) == Some(target)`
+/// up to canonicalization of set-valued representations. Each impl provides
+/// its own direct implementation rather than delegating to `meet`.
 pub trait Lattice: Sized + Clone + PartialEq {
     /// Top of the lattice — `self` carries no value information.
     fn is_undetermined(&self) -> bool;
@@ -109,6 +114,11 @@ pub trait Lattice: Sized + Clone + PartialEq {
     /// Least upper bound. Total — incompatible pairs widen toward the
     /// nearest common generalization (typically `Undetermined`).
     fn join(&self, other: &Self) -> Self;
+
+    /// Partial-order check: `self` (pattern) is true on `target` iff every
+    /// value `target` admits is also admitted by `self`. Equivalent to
+    /// `self.meet(target) == Some(target)` modulo canonicalization.
+    fn matches(&self, target: &Self) -> bool;
 
     /// In-place `meet`. Returns `true` iff `self` actually changed. When
     /// `self` and `other` are incompatible, leaves `self` unchanged and

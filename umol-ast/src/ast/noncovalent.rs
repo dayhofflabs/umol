@@ -54,10 +54,6 @@ impl NoncovalentBondAst {
         self.into_ground()
     }
 
-    pub fn matches(&self, target: &NoncovalentBondAst) -> bool {
-        self.kind.matches(&target.kind)
-    }
-
     /// Simplify every constraint's inner value in place. `kind` carries no
     /// `ValueAst`, so it is unchanged.
     pub fn simplify_values(&mut self) {
@@ -104,6 +100,10 @@ impl Lattice for NoncovalentBondAst {
             },
             _ => Self::default(),
         }
+    }
+
+    fn matches(&self, target: &Self) -> bool {
+        self.kind.matches(&target.kind) && self.constraints.matches(&target.constraints)
     }
 }
 
@@ -233,6 +233,15 @@ mod tests {
     #[case::default_matches_ground(NoncovalentBondAst::default(), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), true)]
     #[case::same(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), true)]
     #[case::different(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic), false)]
+    #[case::pattern_specific_target_undetermined(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::default(), false)]
+    #[case::set_pattern_lit_in(
+        NoncovalentBondAst::new(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic])),
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic),
+        true)]
+    #[case::set_pattern_lit_out(
+        NoncovalentBondAst::new(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond])),
+        NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic),
+        false)]
     fn test_noncovalent_bond_ast_matches(
         #[case] pattern: NoncovalentBondAst,
         #[case] target: NoncovalentBondAst,
