@@ -1761,25 +1761,28 @@ What was actually done in this step:
 - `shared.rs` lost: `try_build_candidate`, `resolve_unpaired_lone_pairs`, `infer_normal_aromatic_implicit_hydrogens`, `aromatic_pi_pinned`. `atom_is_aromatic`, `charge_or_zero`, `ground_spin_state`, `spin_state_undetermined`, `narrow_atom`, `narrow_value`, `lift_constraints`, `value_matches`, `spin_matches`, `base_atom_compatible`, `pattern_constraints_compatible`, `atom_constraint_holds`, `atom_dative_counts`, `infer_normal_implicit_hydrogens`, `AtomCandidate` stay (consumed by atom_typing.rs until Step 8).
 - Validation: 8137 workspace tests pass; 617 conformance resolution tests pass under `--features conformance`.
 
-##### Step 8 — Migrate `atom_typing.rs`
+##### Step 8 — Migrate `atom_typing.rs` **Done**
 
 Atom typing's job is classification + merge. The clean flow:
 
-- For each candidate pattern, **compatibility check** via the lattice: `pattern.meet(&atom_view.ast).is_some()` (or equivalent `pattern.matches(...)` form once that lifts into the trait). Constraints are part of the entity Lattice; absent constraint on atom = vacuous Undetermined, so meet succeeds when the pattern's constraints are compatible (atom doesn't have to pre-declare them).
-- **Merge**: `atom_mut.narrow_from(&pattern)` — narrows base fields and merges constraints in one lattice operation (per Q1).
-- No `satisfies` call. No `pattern_constraints_compatible`. No `base_atom_compatible`.
-- Replace `atom_dative_counts(view)` with two `as_lit_*` calls inline at the single use site
-- Replace `infer_normal_implicit_hydrogens(...)` with `normal_implicit_hydrogens.infer(...)`
-- Dissolve `AtomCandidate`
-- `AtomTypingError::NoMatchingPattern` carries `ValueAst` for charge
-- `pattern_implicit_h_compatible`, `collect_pattern_constraints` evaporate — pattern constraints flow through `narrow_from`; implicit-H pattern check folds into the lattice meet on `ImplicitHydrogensAst`
+- `prepare_atom` projects the atom into the lattice shape registry patterns are written against: clone the AST, pre-narrow `implicit_hydrogens` (via `self.normal_valence.implicit_hydrogens_for(...)` when it isn't already `Lit`), then synthesize ground constraints for the topology-derived counts the registry's patterns key on — `Valence(Lit(v))`, `DonatedPairs(Lit(d))`, `AcceptedPairs(Lit(a))`. The membership-derived aromatic π count becomes `AromaticValence(Aromatic(Lit(pi)))` when the atom is in a system; with no membership and no `Aromatic(_)` declaration, `AromaticValence(NotAromatic)` is added. The atom's multicenter contribution becomes `MulticenterValence(Multicenter(Lit(mc)))` or `NotMulticenter` (0).
+- **Compatibility**: `pattern.meet(&prepared).is_some()`. `AtomConstraints::meet` handles the per-kind enforcement automatically — patterns with `Valence(Lit(4))` on a synthesized `Valence(Lit(0))` atom meet to `None` and are rejected.
+- **Merge**: `atom_mut.narrow_from(&pattern)` on the *original* atom (not the prepared copy) — one `Lattice` op merges base fields and constraints (the synthesized constraints are intentionally not committed back, only used to filter).
+- `atom_dative_counts(view)` inlined as two `view.donated_pairs().as_lit()` / `view.accepted_pairs().as_lit()` checks (both must be `Lit` to proceed; non-ground dative state defers atom-typing).
+- `infer_normal_implicit_hydrogens` → `self.normal_valence.implicit_hydrogens_for(...)`.
+- `AtomCandidate` dissolved: `resolve` works directly on `&AtomAst` from `registry.lookup(...)`.
+- `AtomTypingError::NoMatchingPattern` carries `ValueAst` for `charge` (straight off the view; no unwrap-rewrap).
+- `pattern_implicit_h_compatible`, `collect_pattern_constraints`, `pattern_constraints_compatible`, `base_atom_compatible` all evaporate — the synthesized-constraints + `pattern.meet(&prepared)` flow covers their work uniformly.
+- After this step `shared.rs` is entirely dead code; Step 9 deletes it.
+- Validation: 8137 workspace tests pass; 617 conformance resolution tests pass under `--features conformance`.
 
-##### Step 9 — Delete `shared.rs`
+##### Step 9 — Delete `shared.rs` **Done**
 
-- Remove `mod shared;` from `umol-graph/src/ops/valence.rs`
-- Delete `umol-graph/src/ops/valence/shared.rs`
-- `cargo test --workspace --tests`; `cargo build --workspace --all-targets`
-- Verify: `grep -rn "shared::" umol-graph/src/ops/valence/` returns empty
+- Removed `mod shared;` from `umol-graph/src/ops/valence.rs`.
+- Deleted `umol-graph/src/ops/valence/shared.rs` (it had become entirely dead code after Steps 7–8).
+- Two helpers remained needed in `counts.rs` and were replaced by stdlib-style `AsLit` infra rather than re-defined: `charge_or_zero(atom)` → `atom.charge.as_lit_or(0) as i8`; `ground_spin_state(&spin)` → `spin.as_lit()` (`SpinStateAst::as_lit` already has the same body).
+- `grep -rn "shared::" umol-graph/src/ops/valence/` returns no hits to the deleted module (remaining matches all reference `umol_shared`, the external crate).
+- Validation: 8127 workspace tests pass (down 10 from 8137: the `atom_constraint_holds` tests that lived in `shared.rs` evaporated with the function — equivalent checks land per validator when those phases happen, per Step 5's plan). 617 conformance resolution tests pass under `--features conformance`.
 
 ##### Validation gates per step
 

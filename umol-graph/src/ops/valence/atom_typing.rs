@@ -3,18 +3,13 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst, ImplicitHydrogensAst, Lattice,
-    MoleculeAst, ValueAst,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst,
+    ImplicitHydrogensAst, Lattice, MoleculeAst, MulticenterValenceAst, ValueAst,
 };
 use umol_shared::element::Element;
 
 use crate::ops::valence::normal_valence::NormalValenceTable;
 use crate::ops::valence::registry::AtomTypeRegistry;
-use crate::ops::valence::shared::{
-    atom_dative_counts, atom_is_aromatic, base_atom_compatible, charge_or_zero,
-    infer_normal_implicit_hydrogens, lift_constraints, narrow_atom, pattern_constraints_compatible,
-    AtomCandidate,
-};
 
 #[derive(Clone, Debug)]
 pub struct AtomTypingValenceResolver {
@@ -24,11 +19,11 @@ pub struct AtomTypingValenceResolver {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AtomTypingError {
-    #[error("no atom-typing match for {atom:?} (element {element}, charge {charge})")]
+    #[error("no atom-typing match for {atom:?} (element {element}, charge {charge:?})")]
     NoMatchingPattern {
         atom: AtomId,
         element: Element,
-        charge: i8,
+        charge: ValueAst,
     },
 }
 
@@ -54,29 +49,45 @@ impl AtomTypingValenceResolver {
             let ElementAst::Lit(element) = view.ast.element else {
                 continue;
             };
-            if view
-                .valence()
+            let Some(valence) = view.valence().as_lit().and_then(|n| u8::try_from(n).ok()) else {
+                continue;
+            };
+            let Some(donated) = view
+                .donated_pairs()
                 .as_lit()
                 .and_then(|n| u8::try_from(n).ok())
-                .is_none()
-            {
+            else {
                 continue;
-            }
+            };
+            let Some(accepted) = view
+                .accepted_pairs()
+                .as_lit()
+                .and_then(|n| u8::try_from(n).ok())
+            else {
+                continue;
+            };
 
-            let candidates = self.candidates_for(&view, element);
-            match candidates.len() {
+            let prepared = self.prepare_atom(&view, element, valence, donated, accepted);
+            let charge_key = prepared.charge.as_lit().and_then(|n| i8::try_from(n).ok());
+            let compatibles: Vec<&AtomAst> = self
+                .registry
+                .lookup(element, charge_key)
+                .iter()
+                .filter(|pat| pat.meet(&prepared).is_some())
+                .collect();
+
+            match compatibles.len() {
                 0 => {
                     return Err(AtomTypingError::NoMatchingPattern {
                         atom: idx,
                         element,
-                        charge: charge_or_zero(view.ast),
+                        charge: view.ast.charge.clone(),
                     });
                 }
                 1 => {
-                    let cand = candidates.into_iter().next().unwrap();
+                    let cand = compatibles[0].clone();
                     let atom_mut = ast.atom_mut(idx).ast;
-                    narrow_atom(atom_mut, &cand.ast);
-                    lift_constraints(atom_mut, &cand.lifted);
+                    atom_mut.narrow_from(&cand);
                 }
                 _ => {}
             }
@@ -84,74 +95,79 @@ impl AtomTypingValenceResolver {
         Ok(())
     }
 
-    fn candidates_for(&self, view: &AtomView<'_>, element: Element) -> Vec<AtomCandidate> {
-        let atom = view.ast;
-        let valence = match view.valence().as_lit().and_then(|n| u8::try_from(n).ok()) {
-            Some(v) => v,
-            None => return Vec::new(),
-        };
-        let charge = charge_or_zero(atom);
-        let (donated_pairs, accepted_pairs) = match atom_dative_counts(view) {
-            (Some(d), Some(a)) => (d, a),
-            _ => return Vec::new(),
-        };
-        let is_aromatic = atom_is_aromatic(view);
-
-        let implicit_h_constraint = match &atom.implicit_hydrogens {
-            ImplicitHydrogensAst::Lit(n) => Some(*n as u8),
-            ImplicitHydrogensAst::Normal => {
-                let Some(h) =
-                    infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
-                else {
-                    return Vec::new();
-                };
-                Some(h)
+    /// Project an atom into the lattice shape registry patterns are written
+    /// against: pre-narrow `implicit_hydrogens` via the normal-valence table,
+    /// and synthesize ground constraints for the topology-derived counts
+    /// (σ-valence, dative donated/accepted pairs) plus the membership-derived
+    /// aromatic π count. `pattern.meet(&prepared)` then filters by those
+    /// constraints directly via `AtomConstraints::meet`.
+    fn prepare_atom(
+        &self,
+        view: &AtomView<'_>,
+        element: Element,
+        valence: u8,
+        donated: u8,
+        accepted: u8,
+    ) -> AtomAst {
+        let mut prepared = view.ast.clone();
+        let charge = prepared
+            .charge
+            .as_lit()
+            .and_then(|n| i8::try_from(n).ok())
+            .unwrap_or(0);
+        let is_aromatic = view.is_in_aromatic_system()
+            || AromaticValenceAst::aromatic(ValueAst::Undetermined)
+                .matches(&prepared.constraints.aromatic_valence());
+        if !matches!(prepared.implicit_hydrogens, ImplicitHydrogensAst::Lit(_)) {
+            if let Some(h) =
+                self.normal_valence
+                    .implicit_hydrogens_for(element, charge, valence, is_aromatic)
+            {
+                prepared.implicit_hydrogens = ImplicitHydrogensAst::Lit(h as i64);
             }
-            ImplicitHydrogensAst::Undetermined => {
-                infer_normal_implicit_hydrogens(element, charge, valence, is_aromatic)
+        }
+        prepared
+            .constraints
+            .add(AtomConstraint::Valence(ValueAst::Lit(valence as i64)));
+        prepared
+            .constraints
+            .add(AtomConstraint::DonatedPairs(ValueAst::Lit(donated as i64)));
+        prepared
+            .constraints
+            .add(AtomConstraint::AcceptedPairs(ValueAst::Lit(accepted as i64)));
+        if view.is_in_aromatic_system() {
+            if let Some(pi) = view
+                .aromatic_valence()
+                .as_lit()
+                .and_then(|n| u8::try_from(n).ok())
+            {
+                prepared
+                    .constraints
+                    .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
+                        ValueAst::Lit(pi as i64),
+                    )));
             }
-            _ => None,
-        };
-
-        let charge_key = match &atom.charge {
-            ValueAst::Lit(n) => Some(*n as i8),
-            _ => None,
-        };
-
-        self.registry
-            .lookup(element, charge_key)
-            .iter()
-            .filter(|pattern| {
-                pattern_implicit_h_compatible(pattern, implicit_h_constraint)
-                    && pattern_constraints_compatible(
-                        view,
-                        &collect_pattern_constraints(pattern),
-                        valence,
-                        donated_pairs,
-                        accepted_pairs,
-                    )
-                    && base_atom_compatible(atom, pattern)
-            })
-            .map(|pattern| AtomCandidate {
-                ast: pattern.clone(),
-                lifted: collect_pattern_constraints(pattern),
-            })
-            .collect()
+        } else if !is_aromatic {
+            prepared
+                .constraints
+                .add(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic));
+        }
+        if let Some(mc) = view
+            .multicenter_valence()
+            .as_lit()
+            .and_then(|n| u8::try_from(n).ok())
+        {
+            let mc_constraint = if mc == 0 {
+                MulticenterValenceAst::NotMulticenter
+            } else {
+                MulticenterValenceAst::Multicenter(ValueAst::Lit(mc as i64))
+            };
+            prepared
+                .constraints
+                .add(AtomConstraint::MulticenterValence(mc_constraint));
+        }
+        prepared
     }
-}
-
-fn pattern_implicit_h_compatible(pattern: &AtomAst, implicit_h: Option<u8>) -> bool {
-    match implicit_h {
-        Some(h) => match &pattern.implicit_hydrogens {
-            ImplicitHydrogensAst::Lit(n) => *n as u8 == h,
-            _ => false,
-        },
-        None => true,
-    }
-}
-
-fn collect_pattern_constraints(pattern: &AtomAst) -> Vec<AtomConstraint> {
-    pattern.constraints.iter().cloned().collect()
 }
 
 #[cfg(test)]

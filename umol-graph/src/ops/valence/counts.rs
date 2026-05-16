@@ -10,7 +10,6 @@ use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
 
 use crate::ops::valence::normal_valence::NormalValenceTable;
-use crate::ops::valence::shared::{charge_or_zero, ground_spin_state};
 use crate::ops::valence::table::ValenceTable;
 
 #[derive(Clone, Debug)]
@@ -87,7 +86,7 @@ impl CountsValenceResolver {
         valence: u8,
     ) -> Vec<AtomAst> {
         let atom = view.ast;
-        let charge = charge_or_zero(atom);
+        let charge = atom.charge.as_lit_or(0) as i8;
         let entry = match self.table.entry(element) {
             Some(e) => e,
             None => return Vec::new(),
@@ -230,7 +229,7 @@ fn try_build_candidate(
         return None;
     }
 
-    let spin = if let Some(g) = ground_spin_state(&atom_ast.spin) {
+    let spin = if let Some(g) = atom_ast.spin.as_lit() {
         if g.unpaired() != unpaired {
             return None;
         }
@@ -257,7 +256,7 @@ fn try_build_candidate(
 }
 
 fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u8, u8)> {
-    let fixed_unpaired = match (ground_spin_state(&atom_ast.spin), &atom_ast.spin.unpaired) {
+    let fixed_unpaired = match (atom_ast.spin.as_lit(), &atom_ast.spin.unpaired) {
         (Some(s), _) => Some(s.unpaired()),
         (None, ValueAst::Lit(u)) => Some(*u as u8),
         _ => None,
