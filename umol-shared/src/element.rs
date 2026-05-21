@@ -80,21 +80,21 @@ static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, u8, (i8, i8), u8, u8)
     (54, 132, 131.29, "Xe", 5, 32, 8, 18, 8, (-2, 1), 0, 0), // Xe: allow Xe compounds
     (55, 133, 132.91, "Cs", 6, 1, 1, 8, 1, (-1, 1), 1, 0), // Cs
     (56, 138, 137.33, "Ba", 6, 2, 2, 8, 2, (0, 2), 2, 0), // Ba
-    (57, 139, 138.91, "La", 6, 3, 3, 18, 3, (0, 3), 1, 0), // La: group 3 d-block
-    (58, 140, 140.12, "Ce", 6, 4, 4, 32, 4, (0, 4), 2, 0), // Ce
-    (59, 141, 140.91, "Pr", 6, 5, 5, 32, 4, (0, 4), 3, 0), // Pr
-    (60, 142, 144.24, "Nd", 6, 6, 6, 32, 3, (0, 3), 4, 0), // Nd
-    (61, 145, 145.0, "Pm", 6, 7, 7, 32, 3, (0, 3), 5, 0), // Pm
-    (62, 152, 150.36, "Sm", 6, 8, 8, 32, 3, (0, 3), 6, 0), // Sm
-    (63, 153, 151.96, "Eu", 6, 9, 9, 32, 3, (0, 3), 7, 0), // Eu
-    (64, 158, 157.25, "Gd", 6, 10, 10, 32, 3, (0, 3), 8, 0), // Gd
-    (65, 159, 158.93, "Tb", 6, 11, 11, 32, 4, (0, 4), 7, 0), // Tb
-    (66, 164, 162.50, "Dy", 6, 12, 12, 32, 4, (0, 4), 5, 0), // Dy
-    (67, 165, 164.93, "Ho", 6, 13, 13, 32, 3, (0, 3), 4, 0), // Ho
-    (68, 166, 167.26, "Er", 6, 14, 14, 32, 3, (0, 3), 3, 0), // Er
-    (69, 169, 168.93, "Tm", 6, 15, 15, 32, 3, (0, 3), 2, 0), // Tm
-    (70, 174, 173.05, "Yb", 6, 16, 16, 32, 3, (0, 3), 1, 0), // Yb
-    (71, 175, 174.97, "Lu", 6, 17, 3, 32, 3, (0, 3), 1, 0), // Lu
+    (57, 139, 138.91, "La", 6, 3, 3, 18, 3, (0, 3), 1, 0), // La
+    (58, 140, 140.12, "Ce", 6, 4, 4, 26, 4, (0, 4), 2, 0), // Ce
+    (59, 141, 140.91, "Pr", 6, 5, 5, 26, 4, (0, 4), 3, 0), // Pr
+    (60, 142, 144.24, "Nd", 6, 6, 6, 26, 3, (0, 3), 4, 0), // Nd
+    (61, 145, 145.0, "Pm", 6, 7, 7, 26, 3, (0, 3), 5, 0), // Pm
+    (62, 152, 150.36, "Sm", 6, 8, 8, 26, 3, (0, 3), 6, 0), // Sm
+    (63, 153, 151.96, "Eu", 6, 9, 9, 26, 3, (0, 3), 7, 0), // Eu
+    (64, 158, 157.25, "Gd", 6, 10, 10, 26, 3, (0, 3), 8, 0), // Gd
+    (65, 159, 158.93, "Tb", 6, 11, 11, 26, 4, (0, 4), 7, 0), // Tb
+    (66, 164, 162.50, "Dy", 6, 12, 12, 26, 4, (0, 4), 5, 0), // Dy
+    (67, 165, 164.93, "Ho", 6, 13, 13, 26, 3, (0, 3), 4, 0), // Ho
+    (68, 166, 167.26, "Er", 6, 14, 14, 26, 3, (0, 3), 3, 0), // Er
+    (69, 169, 168.93, "Tm", 6, 15, 15, 26, 3, (0, 3), 2, 0), // Tm
+    (70, 174, 173.05, "Yb", 6, 16, 16, 26, 3, (0, 3), 1, 0), // Yb
+    (71, 175, 174.97, "Lu", 6, 17, 3, 26, 3, (0, 3), 1, 0), // Lu
     (72, 180, 178.49, "Hf", 6, 18, 4, 18, 4, (0, 4), 2, 0), // Hf
     (73, 181, 180.95, "Ta", 6, 19, 5, 18, 5, (0, 5), 5, 0), // Ta
     (74, 184, 183.84, "W", 6, 20, 6, 18, 6, (0, 6), 6, 0), // W
@@ -112,21 +112,21 @@ static ELEMENT_DATA: [(u8, u32, f64, &str, u8, u8, u8, u8, u8, (i8, i8), u8, u8)
     (86, 222, 222.0, "Rn", 6, 32, 8, 18, 8, (0, 8), 2, 0), // Rn
     (87, 223, 223.0, "Fr", 7, 1, 1, 8, 2, (0, 1), 1, 0), // Fr
     (88, 226, 226.0, "Ra", 7, 2, 2, 8, 2, (0, 2), 2, 0), // Ra
-    (89, 227, 227.0, "Ac", 7, 3, 3, 18, 3, (0, 3), 1, 0), // Ac: group 3 d-block
-    (90, 232, 232.04, "Th", 7, 4, 4, 32, 4, (0, 4), 2, 0), // Th
-    (91, 231, 231.04, "Pa", 7, 5, 5, 32, 5, (0, 5), 3, 0), // Pa
-    (92, 238, 238.03, "U", 7, 6, 6, 32, 6, (0, 6), 4, 0), // U
-    (93, 237, 237.0, "Np", 7, 7, 7, 32, 7, (0, 7), 5, 0), // Np
-    (94, 244, 244.0, "Pu", 7, 8, 8, 32, 8, (0, 8), 6, 0), // Pu
-    (95, 243, 243.0, "Am", 7, 9, 9, 32, 7, (0, 7), 7, 0), // Am
-    (96, 247, 247.0, "Cm", 7, 10, 10, 32, 4, (0, 6), 8, 0), // Cm
-    (97, 247, 247.0, "Bk", 7, 11, 11, 32, 4, (0, 5), 7, 0), // Bk
-    (98, 251, 251.0, "Cf", 7, 12, 12, 32, 4, (0, 5), 6, 0), // Cf
-    (99, 252, 252.0, "Es", 7, 13, 13, 32, 3, (0, 4), 4, 0), // Es
-    (100, 257, 257.0, "Fm", 7, 14, 14, 32, 3, (0, 3), 3, 0), // Fm
-    (101, 258, 258.0, "Md", 7, 15, 15, 32, 3, (0, 3), 2, 0), // Md
-    (102, 259, 259.0, "No", 7, 16, 16, 32, 3, (0, 3), 0, 0), // No
-    (103, 266, 226.0, "Lr", 7, 17, 3, 32, 3, (0, 3), 1, 0), // Lr
+    (89, 227, 227.0, "Ac", 7, 3, 3, 18, 3, (0, 3), 1, 0), // Ac
+    (90, 232, 232.04, "Th", 7, 4, 4, 26, 4, (0, 4), 2, 0), // Th
+    (91, 231, 231.04, "Pa", 7, 5, 5, 26, 5, (0, 5), 3, 0), // Pa
+    (92, 238, 238.03, "U", 7, 6, 6, 26, 6, (0, 6), 4, 0), // U
+    (93, 237, 237.0, "Np", 7, 7, 7, 26, 7, (0, 7), 5, 0), // Np
+    (94, 244, 244.0, "Pu", 7, 8, 8, 26, 8, (0, 8), 6, 0), // Pu
+    (95, 243, 243.0, "Am", 7, 9, 9, 26, 7, (0, 7), 7, 0), // Am
+    (96, 247, 247.0, "Cm", 7, 10, 10, 26, 4, (0, 6), 8, 0), // Cm
+    (97, 247, 247.0, "Bk", 7, 11, 11, 26, 4, (0, 5), 7, 0), // Bk
+    (98, 251, 251.0, "Cf", 7, 12, 12, 26, 4, (0, 5), 6, 0), // Cf
+    (99, 252, 252.0, "Es", 7, 13, 13, 26, 3, (0, 4), 4, 0), // Es
+    (100, 257, 257.0, "Fm", 7, 14, 14, 26, 3, (0, 3), 3, 0), // Fm
+    (101, 258, 258.0, "Md", 7, 15, 15, 26, 3, (0, 3), 2, 0), // Md
+    (102, 259, 259.0, "No", 7, 16, 16, 26, 3, (0, 3), 0, 0), // No
+    (103, 266, 226.0, "Lr", 7, 17, 3, 26, 3, (0, 3), 1, 0), // Lr
     (104, 267, 267.0, "Rf", 7, 18, 4, 18, 4, (0, 4), 2, 0), // Rf
     (105, 268, 268.0, "Db", 7, 19, 5, 18, 5, (0, 5), 3, 0), // Db
     (106, 269, 269.0, "Sg", 7, 20, 6, 18, 6, (0, 6), 4, 0), // Sg
@@ -667,14 +667,24 @@ impl Element {
         ELEMENT_DATA[index].5
     }
 
-    // TODO: Add group number (18 group layout) for element.
     pub const fn group_base18(&self) -> u8 {
-        todo!()
+        match self.group() {
+            g @ 1..=3 => g, // s-block + Sc group
+            4..=17 => 3, // f-block
+            g @ 18..=32 => g - 14, // d-block (except Sc) + p-block
+            _ => unreachable!(),
+        }
     }
 
-    // TODO: Add group number (8 group layout) for element.
     pub const fn group_base8(&self) -> u8 {
-        todo!()
+        match self.group() {
+            g @ 1..=3 => g, // s-block + Sc group
+            4..=17 => 3, // f-block
+            g @ 18..=22 => g - 14, // Ti-Fe groups
+            23 | 24 => 8, // Co, Ni groups
+            g @ 25..=32 => g - 24, // Cu, Zn groups + p-block
+            _ => unreachable!(),
+        }
     }
 
     // Get number of valence electrons for element
@@ -684,11 +694,12 @@ impl Element {
     }
 
     /// Maximum orbital occupancy in the valence shell, used as the upper bound
-    /// on `total_e` from the orbital-count invariant (doc 52 §10.1.3). H/He: 2;
-    /// row 2 + non-hypervalent row 3 main-group: 8 (strict octet); hypervalent
-    /// row 3+ main-group: 12 (Si, P, S, Ga, Ge, As, Se, In, Sn, Sb, Tl, Pb, Bi,
-    /// Nh, Fl, Mc); heavy chalcogens / halogens / d-block / heavy noble gases:
-    /// 14–18; f-block: 32.
+    /// on total number of electrons (used in electron count invariants).
+    /// H/He: 2;
+    /// row 2 + non-hypervalent row 3 main-group: 8 (strict octet);
+    /// hypervalent row 3+ main-group: (Si, P, S, Ga, Ge, As, Se, In, Sn, Sb, Tl, Pb, Bi, Nh, Fl, Mc) 12;
+    /// heavy chalcogens / halogens / d-block / heavy noble gases: 14–18;
+    /// f-block (Ce–Lu, Th–Lr): 26
     pub const fn valence_capacity(&self) -> u8 {
         let index = *self as usize;
         ELEMENT_DATA[index].7
@@ -1149,8 +1160,8 @@ mod tests {
     }
 
     #[rstest]
-    #[case::h(Element::H, "H", 1, 1, 1.008, 1, 1, 1)]
-    #[case::he(Element::He, "He", 2, 4, 4.0026, 1, 32, 0)]
+    #[case::h(Element::H, "H", 1, 1, 1.008, 1, 1, 1, 1, 1)]
+    #[case::he(Element::He, "He", 2, 4, 4.0026, 1, 32, 18, 8, 0)]
     fn test_element_properties(
         #[case] element: Element,
         #[case] symbol: &str,
@@ -1159,6 +1170,8 @@ mod tests {
         #[case] atomic_mass: f64,
         #[case] period: u8,
         #[case] group: u8,
+        #[case] group_base18: u8,
+        #[case] group_base8: u8,
         #[case] valence_electrons: u8,
     ) {
         assert_eq!(element.symbol(), symbol);
@@ -1167,6 +1180,8 @@ mod tests {
         assert!(approx_eq!(f64, element.mass(), atomic_mass, ulps = 4));
         assert_eq!(element.period(), period);
         assert_eq!(element.group(), group);
+        assert_eq!(element.group_base18(), group_base18);
+        assert_eq!(element.group_base8(), group_base8);
         assert_eq!(element.valence_electrons(), valence_electrons);
     }
 
@@ -1192,11 +1207,11 @@ mod tests {
     #[case::i(Element::I, 16, 7, -1, 1, 1, 1)]
     #[case::xe(Element::Xe, 18, 8, -2, 1, 0, 0)]
     #[case::la(Element::La, 18, 3, 0, 3, 1, 0)]
-    #[case::ce(Element::Ce, 32, 4, 0, 4, 2, 0)]
-    #[case::lu(Element::Lu, 32, 3, 0, 3, 1, 0)]
+    #[case::ce(Element::Ce, 26, 4, 0, 4, 2, 0)]
+    #[case::lu(Element::Lu, 26, 3, 0, 3, 1, 0)]
     #[case::hf(Element::Hf, 18, 4, 0, 4, 2, 0)]
     #[case::ac(Element::Ac, 18, 3, 0, 3, 1, 0)]
-    #[case::u(Element::U, 32, 6, 0, 6, 4, 0)]
+    #[case::u(Element::U, 26, 6, 0, 6, 4, 0)]
     fn test_element_bounds(
         #[case] element: Element,
         #[case] valence_capacity: u8,
