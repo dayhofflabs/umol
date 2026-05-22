@@ -270,7 +270,21 @@ fn isotope_strategy() -> impl Strategy<Value = IsotopeAst> {
             v.dedup();
             IsotopeAst::lit_set(v)
         }),
-        1 => top_expr_strategy().prop_map(IsotopeAst::expr),
+        1 => (1i64..=250).prop_map(IsotopeAst::Not),
+        1 => prop::collection::vec(1i64..=250, 1..=3).prop_map(|mut v| {
+            v.sort_unstable();
+            v.dedup();
+            IsotopeAst::not_set(v)
+        }),
+        1 => id_strategy().prop_map(IsotopeAst::reference),
+        1 => (id_strategy(), prop::collection::vec(1i64..=250, 1..=3), prop_oneof![
+            Just(Polarity::Include),
+            Just(Polarity::Exclude),
+        ]).prop_map(|(id, mut v, polarity)| {
+            v.sort_unstable();
+            v.dedup();
+            IsotopeAst::bind(id, v, polarity)
+        }),
     ]
 }
 

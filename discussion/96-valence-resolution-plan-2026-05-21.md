@@ -632,9 +632,9 @@ This keeps the universal physics in `Invariants`, the chemistry-bound setting in
    #### Order of work
 
    a. Add `Polarity` enum (single trait-adjacent file). **Done** (in `ast/atom.rs`).
-   b. ElementAst: add `Not`/`NotSet`, change `Bind` shape, update Lattice, update parser, update tests. **Partial** — AST variants, `Polarity` field on `Bind`, and full Lattice impl (meet/join/matches via the polarity-aware `element_set_view` helper) done. **Parser not started**: no DSL syntax for `!H`, `!{F, Cl}`, `?e :: !H`, `?e :: !{F, Cl}` yet; parser only emits `Polarity::Include` for the existing `(?e :: {C, N})` form. Parser-side work is folded into step 2e along with the paren-removal cleanup.
-   c. IsotopeAst: full rewrite of variants (add `Not`/`NotSet`/`Bind`/`Ref`, drop `Expr`), write dedicated parser, remove `From<ValueAst>`, update lattice + tests. **Not started.** `IsotopeAst` still has `Expr` variant and routes through `ValueAst` parser. Lattice's `Natural` semantics decision (own channel vs. unifies with Lit) remains open.
-   d. ValueAst: add simplify normalization rules. **Done** (per 2d). Parser-arm cleanup (drop forced-parens `value_bind` / `value_ref`) deferred to 2e.
+   b. ElementAst: add `Not`/`NotSet`, change `Bind` shape, update Lattice, update parser, update tests. **Done** — AST variants, `Polarity` on `Bind`, Lattice impl (polarity-aware `element_set_view` helper), parser arms for `!H`/`!{F, Cl}`/`?e :: !H`/`?e :: !{F, Cl}` (folded in via 2e), and unit tests in place.
+   c. IsotopeAst: full rewrite of variants (add `Not`/`NotSet`/`Bind`/`Ref`, drop `Expr`), write dedicated parser, remove `From<ValueAst>`, update lattice + tests. **Done.** `Natural` semantics chosen: own channel — `Natural & Lit = None`, `join(Natural, x) = Undetermined` for `x ≠ Natural`. Dedicated `isotope` parser produces variants directly with no `value`-routing. `IsotopeAst::simplify` deleted (no Expr to lift). `From<ValueAst> for IsotopeAst` deleted. `AtomAst::simplify_values` no longer touches `isotope_mass`.
+   d. ValueAst: add simplify normalization rules. **Done** (per 2d). Parser-arm cleanup (drop forced-parens `value_bind` / `value_ref`) handled by 2e.
 
    Each substep keeps tests green at its end. Substep (c) is the largest — Isotope basically gets rewritten.
 

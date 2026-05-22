@@ -71,11 +71,7 @@ fn arith_expr_heavy() -> MoleculeAst {
     };
     let make_atom = |el: Element| AtomAst {
         element: ElementAst::Lit(el),
-        isotope_mass: IsotopeAst::Expr(Box::new(Expr::BinOp(
-            Box::new(Expr::Lit(12)),
-            ArithOp::Add,
-            Box::new(Expr::Lit(0)),
-        ))),
+        isotope_mass: IsotopeAst::Lit(12),
         charge: arith(),
         implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))),
         lone_pairs: arith(),

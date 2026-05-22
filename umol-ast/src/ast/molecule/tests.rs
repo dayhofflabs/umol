@@ -1992,14 +1992,15 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     );
 
     // -- Non-canonical shapes seeded across the structure --------------
-    // Atom 0: charge as Expr::Lit (lifts to ValueAst::Lit), isotope_mass as
-    // Expr::Neg(Lit) (lifts to IsotopeAst::Lit), implicit_hydrogens as
-    // Expr::Lit, lone_pairs as Expr::Neg(Neg(_)) (folds), spin both fields
-    // wrapped in Expr.
+    // Atom 0: charge as Expr::Lit (lifts to ValueAst::Lit), implicit_hydrogens
+    // as Expr::Lit, lone_pairs as Expr::Neg(Neg(_)) (folds), spin both fields
+    // wrapped in Expr. `isotope_mass` is set to a literal directly —
+    // IsotopeAst has no Expr variant, so there's nothing for `simplify` to
+    // fold; the field passes through unchanged.
     {
         let atom = ast.atom_mut(AtomId(0)).ast;
         atom.charge = ValueAst::Expr(Box::new(Expr::Lit(2)));
-        atom.isotope_mass = IsotopeAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(13)))));
+        atom.isotope_mass = IsotopeAst::Lit(13);
         atom.implicit_hydrogens = ValueAst::Expr(Box::new(Expr::Lit(3)));
         atom.lone_pairs = ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
             Expr::Lit(1),
@@ -2116,7 +2117,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     // -- Atom 0 ---------------------------------------------------------
     let atom = ast.atom(AtomId(0)).ast;
     assert_eq!(atom.charge, ValueAst::Lit(2));
-    assert_eq!(atom.isotope_mass, IsotopeAst::Lit(-13));
+    assert_eq!(atom.isotope_mass, IsotopeAst::Lit(13));
     assert_eq!(atom.implicit_hydrogens, ValueAst::Lit(3));
     assert_eq!(atom.lone_pairs, ValueAst::Lit(1));
     assert_eq!(atom.spin, SpinStateAst::from((0_u8, 1_u8)));

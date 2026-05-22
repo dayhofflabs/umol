@@ -284,7 +284,7 @@ fn value_ref(i: &mut &str) -> PResult<String> {
 /// `dec_int`, this accepts redundant signed-zero spellings (`-0`, `+0`,
 /// `-00`) and explicit `+` sign on positive values, all of which the
 /// top-level `value` parser should treat as ground integer literals.
-fn signed_int(i: &mut &str) -> PResult<i64> {
+pub(crate) fn signed_int(i: &mut &str) -> PResult<i64> {
     let span: &str = (opt(one_of(['-', '+'])), digit1).take().parse_next(i)?;
     span.parse::<i64>()
         .map_err(|_| ErrMode::Backtrack(ParseError::Syntax))
@@ -300,7 +300,7 @@ pub(crate) fn id(i: &mut &str) -> PResult<String> {
         .parse_next(i)
 }
 
-fn terminator(i: &mut &str) -> PResult<()> {
+pub(crate) fn terminator(i: &mut &str) -> PResult<()> {
     if i.is_empty() || i.starts_with('#') {
         Ok(())
     } else {
@@ -494,6 +494,15 @@ mod tests {
     #[case::var_2char("?ha", ValueAst::Ref("ha".to_string()))]
     #[case::var_number("?h1", ValueAst::Ref("h1".to_string()))]
     #[case::var_underscore("?h_", ValueAst::Ref("h_".to_string()))]
+    #[case::ref_paren("(?h)", ValueAst::Ref("h".to_string()))]
+    #[case::ref_paren_paren("((?h))", ValueAst::Ref("h".to_string()))]
+    #[case::bind_bare("?h :: {1,2}", ValueAst::bind("h", vec![1, 2]))]
+    #[case::bind_paren("(?h :: {1,2})", ValueAst::bind("h", vec![1, 2]))]
+    #[case::bind_paren_paren("((?h :: {1,2}))", ValueAst::bind("h", vec![1, 2]))]
+    #[case::paren_expr_mem_in_and("(?a :: {0}) & 0 <= 0", ValueAst::Expr(Box::new(Expr::And(vec![
+        Expr::Mem(Box::new(Expr::Var("a".to_string())), vec![0]),
+        Expr::Rel(Box::new(Expr::Lit(0)), RelOp::Le, Box::new(Expr::Lit(0))),
+    ]))))]
     #[case::membership("?h + 0 :: {0,1}", ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::BinOp(Box::new(Expr::Var("h".to_string())), ArithOp::Add, Box::new(Expr::Lit(0)))), vec![0, 1]))))]
     #[case::double_neg("--0", ValueAst::Expr(Box::new(Expr::Lit(0))))]
     #[case::not_and_precedence("! ?h == 0 & ?v == 1", ValueAst::Expr(Box::new(Expr::And(vec![

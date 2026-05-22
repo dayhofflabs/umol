@@ -9,7 +9,7 @@ use super::constraint::{
 };
 use super::spin::SpinStateAst;
 use super::traits::{AsLit, Lattice};
-use super::value::{litset_is_ground, Bindings, Expr, ValueAst};
+use super::value::{litset_is_ground, ValueAst};
 
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
@@ -156,7 +156,6 @@ impl AtomAst {
     /// `charge`, `implicit_hydrogens`, `lone_pairs`, both `spin` slots,
     /// and each constraint. `element` has no value to simplify.
     pub fn simplify_values(&mut self) {
-        self.isotope_mass = mem::take(&mut self.isotope_mass).simplify();
         self.charge = mem::take(&mut self.charge).simplify();
         self.implicit_hydrogens = mem::take(&mut self.implicit_hydrogens).simplify();
         self.lone_pairs = mem::take(&mut self.lone_pairs).simplify();
@@ -513,8 +512,10 @@ fn element_set_view(ast: &ElementAst) -> Option<(&[Element], Polarity)> {
 }
 
 /// Isotope-mass expressions. `Natural` denotes the naturally most abundant
-/// isotope (`#i=`); numeric variants mirror `ValueAst` and are flattened here
-/// to keep `Undetermined` as a single top-level state.
+/// isotope (`#i=`) and is its own channel — does not meet with numeric
+/// literals. `Not`/`NotSet` are cofinite exclusion forms (`#i!12`,
+/// `#i!{12,13}`). `Bind`/`Ref` are named-bind / named-reference for
+/// joint-domain constraints, mirroring `ElementAst`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IsotopeAst {
     #[default]
@@ -522,7 +523,14 @@ pub enum IsotopeAst {
     Natural,
     Lit(i64),
     LitSet(Box<Vec<i64>>),
-    Expr(Box<Expr>),
+    Not(i64),
+    NotSet(Box<Vec<i64>>),
+    Bind {
+        id: String,
+        set: Box<Vec<i64>>,
+        polarity: Polarity,
+    },
+    Ref(String),
 }
 
 impl IsotopeAst {
@@ -542,76 +550,24 @@ impl IsotopeAst {
         Self::LitSet(Box::new(values))
     }
 
-    pub fn expr(e: Expr) -> Self {
-        Self::Expr(Box::new(e))
+    pub fn not(n: i64) -> Self {
+        Self::Not(n)
     }
 
-    /// Semantic ground: `Natural` and `Lit(_)` are the primary ground forms;
-    /// `LitSet`/`Expr` delegate through the shared helpers so constant-valued
-    #[inline(never)]
-    #[cold]
-    fn is_ground_slow(&self) -> bool {
-        match self {
-            Self::LitSet(s) => litset_is_ground(s),
-            Self::Expr(e) => e.is_ground(),
-            Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
+    pub fn not_set(values: Vec<i64>) -> Self {
+        Self::NotSet(Box::new(values))
+    }
+
+    pub fn bind(id: impl Into<String>, set: Vec<i64>, polarity: Polarity) -> Self {
+        Self::Bind {
+            id: id.into(),
+            set: Box::new(set),
+            polarity,
         }
     }
 
-    #[inline(never)]
-    #[cold]
-    fn as_lit_slow(&self) -> Option<u32> {
-        match self {
-            Self::LitSet(s) => litset_is_ground(s)
-                .then(|| u32::try_from(s[0]).ok())
-                .flatten(),
-            Self::Expr(e) => e
-                .evaluate_checked(&Bindings::new())
-                .and_then(|n| u32::try_from(n).ok()),
-            Self::Natural | Self::Lit(_) | Self::Undetermined => unreachable!(),
-        }
-    }
-
-    /// `Natural` (natural isotopic abundance, no committed mass) collapses to
-    /// `Undetermined`; the integer arithmetic surface has no `Natural` slot.
-    /// All other variants pass through structurally.
-    pub fn as_value(&self) -> ValueAst {
-        match self {
-            Self::Undetermined | Self::Natural => ValueAst::Undetermined,
-            Self::Lit(n) => ValueAst::Lit(*n),
-            Self::LitSet(s) => ValueAst::LitSet(s.clone()),
-            Self::Expr(e) => ValueAst::Expr(e.clone()),
-        }
-    }
-
-    /// Simplify the inner `Expr` of `Expr(_)` and lift `Expr(Lit(n))` /
-    /// `Expr(Neg(Lit(n)))` to `Lit(n)` / `Lit(-n)` (mirrors
-    /// `ValueAst::simplify`). Other variants are unchanged.
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::Expr(e) => Self::from(ValueAst::Expr(e).simplify()),
-            other => other,
-        }
-    }
-}
-
-impl From<ValueAst> for IsotopeAst {
-    /// `Bind { id, set }` and `Ref(id)` lower to the equivalent `Expr` form
-    /// (`Expr::Mem(Var(id), set)` / `Expr::Var(id)`). `IsotopeAst` has no
-    /// native joint-domain machinery; the constraint semantics survive via
-    /// the existing Expr/Var/Mem path while the bind-name is preserved for
-    /// any downstream consumer that cares.
-    fn from(v: ValueAst) -> Self {
-        match v {
-            ValueAst::Undetermined => Self::Undetermined,
-            ValueAst::Lit(n) => Self::Lit(n),
-            ValueAst::LitSet(s) => Self::LitSet(s),
-            ValueAst::Expr(e) => Self::Expr(e),
-            ValueAst::Bind { id, set } => {
-                Self::Expr(Box::new(Expr::Mem(Box::new(Expr::Var(id)), *set)))
-            }
-            ValueAst::Ref(id) => Self::Expr(Box::new(Expr::Var(id))),
-        }
+    pub fn reference(id: impl Into<String>) -> Self {
+        Self::Ref(id.into())
     }
 }
 
@@ -632,8 +588,14 @@ impl AsLit for IsotopeAst {
         match self {
             Self::Natural => Some(0),
             Self::Lit(n) => u32::try_from(*n).ok(),
-            Self::Undetermined => None,
-            _ => self.as_lit_slow(),
+            Self::LitSet(s) => litset_is_ground(s)
+                .then(|| u32::try_from(s[0]).ok())
+                .flatten(),
+            Self::Undetermined
+            | Self::Not(_)
+            | Self::NotSet(_)
+            | Self::Bind { .. }
+            | Self::Ref(_) => None,
         }
     }
 }
@@ -644,49 +606,100 @@ impl Lattice for IsotopeAst {
         matches!(self, Self::Undetermined)
     }
 
-    /// `Natural` and ground numeric variants are bottom; `Undetermined` is
-    /// top. Singleton `LitSet` and ground `Expr` count as bottom via the
-    /// shared slow path.
+    /// `Natural` and singleton `Lit`/`LitSet` are ground; cofinite forms,
+    /// `Bind`, `Ref`, and `Undetermined` are not.
     #[inline]
     fn is_ground(&self) -> bool {
         match self {
             Self::Natural | Self::Lit(_) => true,
-            Self::Undetermined => false,
-            _ => self.is_ground_slow(),
+            Self::LitSet(s) => litset_is_ground(s),
+            Self::Undetermined
+            | Self::Not(_)
+            | Self::NotSet(_)
+            | Self::Bind { .. }
+            | Self::Ref(_) => false,
         }
     }
 
-    /// `Natural` is wider than the numeric variants (`Lit`, `LitSet`, `Expr`):
-    /// `meet(Natural, x) = x` for any non-`Undetermined` `x`. `Expr` only
-    /// meets with itself (syntactic equality) or `Undetermined`.
+    /// `Natural` is its own channel — meet with any numeric form yields
+    /// `None`. `Undetermined` is the top. Other combinations follow the
+    /// finite-Boolean algebra extended with bind/ref equality.
     fn meet(&self, other: &Self) -> Option<Self> {
         match (self, other) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::Natural, Self::Natural) => Some(Self::Natural),
-            (Self::Natural, x) | (x, Self::Natural) => Some(x.clone()),
+            (Self::Natural, _) | (_, Self::Natural) => None,
             (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
             (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
                 s.contains(a).then_some(Self::Lit(*a))
             }
+            (Self::Lit(a), Self::Not(b)) | (Self::Not(b), Self::Lit(a)) => {
+                (a != b).then_some(Self::Lit(*a))
+            }
+            (Self::Lit(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Lit(a)) => {
+                (!s.contains(a)).then_some(Self::Lit(*a))
+            }
             (Self::LitSet(s), Self::LitSet(t)) => {
-                let intersection: Vec<i64> = s.iter().filter(|x| t.contains(x)).copied().collect();
-                match intersection.len() {
-                    0 => None,
-                    1 => Some(Self::Lit(intersection[0])),
-                    _ => Some(Self::LitSet(Box::new(intersection))),
+                let v: Vec<i64> = s.iter().filter(|x| t.contains(x)).copied().collect();
+                canonicalize_isotope_lit_set(v)
+            }
+            (Self::LitSet(s), Self::Not(b)) | (Self::Not(b), Self::LitSet(s)) => {
+                let v: Vec<i64> = s.iter().filter(|x| x != &b).copied().collect();
+                canonicalize_isotope_lit_set(v)
+            }
+            (Self::LitSet(s), Self::NotSet(t)) | (Self::NotSet(t), Self::LitSet(s)) => {
+                let v: Vec<i64> = s.iter().filter(|x| !t.contains(x)).copied().collect();
+                canonicalize_isotope_lit_set(v)
+            }
+            (Self::Not(a), Self::Not(b)) => {
+                if a == b {
+                    Some(Self::Not(*a))
+                } else {
+                    let mut v = vec![*a];
+                    if !v.contains(b) {
+                        v.push(*b);
+                    }
+                    Some(Self::NotSet(Box::new(v)))
                 }
             }
-            (Self::Expr(e), Self::Expr(f)) => (e == f).then(|| Self::Expr(e.clone())),
-            (Self::Expr(_), _) | (_, Self::Expr(_)) => None,
+            (Self::Not(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Not(a)) => {
+                let mut v: Vec<i64> = (**s).clone();
+                if !v.contains(a) {
+                    v.push(*a);
+                }
+                Some(Self::NotSet(Box::new(v)))
+            }
+            (Self::NotSet(s), Self::NotSet(t)) => {
+                let mut v: Vec<i64> = (**s).clone();
+                for &x in t.iter() {
+                    if !v.contains(&x) {
+                        v.push(x);
+                    }
+                }
+                Some(canonicalize_isotope_not_set(v))
+            }
+            (Self::Ref(a), Self::Ref(b)) if a == b => Some(Self::Ref(a.clone())),
+            (
+                Self::Bind {
+                    id: a,
+                    set: s,
+                    polarity: pa,
+                },
+                Self::Bind {
+                    id: b,
+                    set: t,
+                    polarity: pb,
+                },
+            ) if a == b && s == t && pa == pb => Some(self.clone()),
+            _ => None,
         }
     }
 
-    /// `Natural` is wider than the numeric variants: `join(Natural, x) =
-    /// Natural` for any non-`Undetermined` `x`.
     fn join(&self, other: &Self) -> Self {
         match (self, other) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
-            (Self::Natural, _) | (_, Self::Natural) => Self::Natural,
+            (Self::Natural, Self::Natural) => Self::Natural,
+            (Self::Natural, _) | (_, Self::Natural) => Self::Undetermined,
             (Self::Lit(a), Self::Lit(b)) => {
                 if a == b {
                     Self::Lit(*a)
@@ -694,45 +707,76 @@ impl Lattice for IsotopeAst {
                     Self::LitSet(Box::new(vec![*a, *b]))
                 }
             }
-            (Self::Lit(a), Self::LitSet(s)) => {
-                let mut v: Vec<i64> = Vec::with_capacity(s.len() + 1);
-                v.push(*a);
-                for &x in s.iter() {
-                    if x != *a {
-                        v.push(x);
-                    }
-                }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::LitSet(Box::new(v))
-                }
-            }
-            (Self::LitSet(s), Self::Lit(a)) => {
-                let mut v: Vec<i64> = s.to_vec();
+            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+                let mut v: Vec<i64> = (**s).clone();
                 if !v.contains(a) {
                     v.push(*a);
                 }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::LitSet(Box::new(v))
-                }
+                canonicalize_isotope_lit_set(v).unwrap_or(Self::Undetermined)
             }
             (Self::LitSet(s), Self::LitSet(t)) => {
-                let mut v: Vec<i64> = s.to_vec();
+                let mut v: Vec<i64> = (**s).clone();
                 for &x in t.iter() {
                     if !v.contains(&x) {
                         v.push(x);
                     }
                 }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
+                canonicalize_isotope_lit_set(v).unwrap_or(Self::Undetermined)
+            }
+            (Self::Lit(a), Self::Not(b)) | (Self::Not(b), Self::Lit(a)) => {
+                if a == b {
+                    Self::Undetermined
                 } else {
-                    Self::LitSet(Box::new(v))
+                    Self::Not(*b)
                 }
             }
-            (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
+            (Self::Lit(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Lit(a)) => {
+                let remaining: Vec<i64> = s.iter().filter(|x| x != &a).copied().collect();
+                canonicalize_isotope_not_set(remaining)
+            }
+            (Self::LitSet(s), Self::Not(b)) | (Self::Not(b), Self::LitSet(s)) => {
+                if s.contains(b) {
+                    Self::Undetermined
+                } else {
+                    Self::Not(*b)
+                }
+            }
+            (Self::LitSet(s), Self::NotSet(t)) | (Self::NotSet(t), Self::LitSet(s)) => {
+                let remaining: Vec<i64> = t.iter().filter(|x| !s.contains(x)).copied().collect();
+                canonicalize_isotope_not_set(remaining)
+            }
+            (Self::Not(a), Self::Not(b)) => {
+                if a == b {
+                    Self::Not(*a)
+                } else {
+                    Self::Undetermined
+                }
+            }
+            (Self::Not(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Not(a)) => {
+                if s.contains(a) {
+                    Self::Not(*a)
+                } else {
+                    Self::Undetermined
+                }
+            }
+            (Self::NotSet(s), Self::NotSet(t)) => {
+                let intersection: Vec<i64> =
+                    s.iter().filter(|x| t.contains(x)).copied().collect();
+                canonicalize_isotope_not_set(intersection)
+            }
+            (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
+            (
+                Self::Bind {
+                    id: a,
+                    set: s,
+                    polarity: pa,
+                },
+                Self::Bind {
+                    id: b,
+                    set: t,
+                    polarity: pb,
+                },
+            ) if a == b && s == t && pa == pb => self.clone(),
             _ => Self::Undetermined,
         }
     }
@@ -743,8 +787,54 @@ impl Lattice for IsotopeAst {
             (_, Self::Undetermined) => false,
             (Self::Natural, Self::Natural) => true,
             (Self::Natural, _) | (_, Self::Natural) => false,
-            (p, t) => p.as_value().matches(&t.as_value()),
+            (Self::Ref(_), _) | (_, Self::Ref(_)) => false,
+            _ => {
+                let (Some((ps, pp)), Some((ts, tp))) =
+                    (isotope_set_view(self), isotope_set_view(target))
+                else {
+                    return false;
+                };
+                match (pp, tp) {
+                    (Polarity::Include, Polarity::Include) => ts.iter().all(|t| ps.contains(t)),
+                    (Polarity::Include, Polarity::Exclude) => false,
+                    (Polarity::Exclude, Polarity::Include) => ts.iter().all(|t| !ps.contains(t)),
+                    (Polarity::Exclude, Polarity::Exclude) => ps.iter().all(|p| ts.contains(p)),
+                }
+            }
         }
+    }
+}
+
+/// Canonicalize an isotope-set intersection result.
+fn canonicalize_isotope_lit_set(v: Vec<i64>) -> Option<IsotopeAst> {
+    match v.len() {
+        0 => None,
+        1 => Some(IsotopeAst::Lit(v[0])),
+        _ => Some(IsotopeAst::LitSet(Box::new(v))),
+    }
+}
+
+/// Canonicalize an isotope not-set result.
+fn canonicalize_isotope_not_set(v: Vec<i64>) -> IsotopeAst {
+    match v.len() {
+        0 => IsotopeAst::Undetermined,
+        1 => IsotopeAst::Not(v[0]),
+        _ => IsotopeAst::NotSet(Box::new(v)),
+    }
+}
+
+/// View any concrete `IsotopeAst` (Lit / LitSet / Not / NotSet / Bind) as a
+/// `(set, polarity)` pair describing the admissible domain. Returns None
+/// for `Undetermined`, `Natural`, and `Ref` which don't have a finite set
+/// encoding.
+fn isotope_set_view(ast: &IsotopeAst) -> Option<(&[i64], Polarity)> {
+    match ast {
+        IsotopeAst::Lit(x) => Some((std::slice::from_ref(x), Polarity::Include)),
+        IsotopeAst::LitSet(s) => Some((s, Polarity::Include)),
+        IsotopeAst::Not(x) => Some((std::slice::from_ref(x), Polarity::Exclude)),
+        IsotopeAst::NotSet(s) => Some((s, Polarity::Exclude)),
+        IsotopeAst::Bind { set, polarity, .. } => Some((set, *polarity)),
+        IsotopeAst::Undetermined | IsotopeAst::Natural | IsotopeAst::Ref(_) => None,
     }
 }
 
@@ -755,6 +845,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{AtomConstraint, AtomConstraintKind};
+    use crate::ast::value::Expr;
     use crate::atom_zeroed;
 
     #[rstest]
@@ -876,7 +967,7 @@ mod tests {
     fn test_atom_ast_simplify_values() {
         let mut atom = AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Expr(Box::new(Expr::Lit(12))),
+            isotope_mass: IsotopeAst::Lit(12),
             charge: ValueAst::Expr(Box::new(Expr::Lit(1))),
             implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Lit(3))),
             lone_pairs: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(2))))),
@@ -973,13 +1064,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::from_lit(IsotopeAst::from(ValueAst::Lit(13)), IsotopeAst::Lit(13))]
-    #[case::from_undetermined(IsotopeAst::from(ValueAst::Undetermined), IsotopeAst::Undetermined)]
-    fn test_isotope_ast_from_value(#[case] actual: IsotopeAst, #[case] expected: IsotopeAst) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rstest]
     #[case::positive(IsotopeAst::from(13_i64), IsotopeAst::Lit(13))]
     #[case::zero(IsotopeAst::from(0_i64), IsotopeAst::Lit(0))]
     fn test_isotope_ast_from_i64(#[case] actual: IsotopeAst, #[case] expected: IsotopeAst) {
@@ -991,7 +1075,10 @@ mod tests {
     #[case::lit(IsotopeAst::Lit(12), false)]
     #[case::undetermined(IsotopeAst::Undetermined, true)]
     #[case::lit_set(IsotopeAst::LitSet(Box::new(vec![12, 13])), false)]
-    #[case::expr(IsotopeAst::Expr(Box::new(Expr::Lit(12))), false)]
+    #[case::not(IsotopeAst::Not(14), false)]
+    #[case::not_set(IsotopeAst::NotSet(Box::new(vec![12, 13])), false)]
+    #[case::bind(IsotopeAst::Bind { id: "m".into(), set: Box::new(vec![12]), polarity: Polarity::Include }, false)]
+    #[case::reference(IsotopeAst::Ref("m".into()), false)]
     fn test_isotope_ast_is_undetermined(#[case] ast: IsotopeAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
     }
@@ -1003,8 +1090,10 @@ mod tests {
     #[case::wildcard(IsotopeAst::Undetermined, None)]
     #[case::set_singleton(IsotopeAst::LitSet(Box::new(vec![14])), Some(14))]
     #[case::set_multi(IsotopeAst::LitSet(Box::new(vec![12, 13])), None)]
-    #[case::expr_lit(IsotopeAst::Expr(Box::new(Expr::Lit(15))), Some(15))]
-    #[case::expr_var(IsotopeAst::Expr(Box::new(Expr::Var("x".into()))), None)]
+    #[case::not(IsotopeAst::Not(14), None)]
+    #[case::not_set(IsotopeAst::NotSet(Box::new(vec![12, 13])), None)]
+    #[case::bind(IsotopeAst::Bind { id: "m".into(), set: Box::new(vec![12]), polarity: Polarity::Include }, None)]
+    #[case::reference(IsotopeAst::Ref("m".into()), None)]
     fn test_isotope_ast_literal_and_is_ground(
         #[case] ast: IsotopeAst,
         #[case] expected: Option<u32>,
@@ -1037,24 +1126,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::expr_lit(IsotopeAst::Expr(Box::new(Expr::Lit(13))), IsotopeAst::Lit(13))]
-    #[case::expr_neg_lit(IsotopeAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(12))))), IsotopeAst::Lit(-12))]
-    fn test_isotope_ast_simplify(#[case] input: IsotopeAst, #[case] expected: IsotopeAst) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::natural(IsotopeAst::Natural)]
-    #[case::lit(IsotopeAst::Lit(12))]
-    #[case::undetermined(IsotopeAst::Undetermined)]
-    #[case::lit_set(IsotopeAst::LitSet(Box::new(vec![12, 13])))]
-    #[case::expr_var(IsotopeAst::Expr(Box::new(Expr::Var("x".into()))))]
-    fn test_isotope_ast_simplify_identity(#[case] input: IsotopeAst) {
-        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rstest]
