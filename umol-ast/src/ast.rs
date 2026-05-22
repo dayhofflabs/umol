@@ -46,7 +46,7 @@ pub use edit::{
 };
 pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
 pub use embedding::MoleculeEmbedding;
-pub use error::{EvaluationError, JointDomainError, RewriteError};
+pub use error::{Contradiction, EvaluationError, JointDomainError, RewriteError};
 pub use idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };

@@ -51,3 +51,11 @@ pub enum JointDomainError {
     #[error("duplicate var {0:?} in vars list")]
     DuplicateVar(JointVar),
 }
+
+/// Signal raised by `Lattice::saturate` (and `saturate_atom` for `AtomAst`)
+/// when cross-field constraint propagation reveals that no admissible value
+/// assignment remains. `Lattice::meet` converts this to `None` at the
+/// boundary so it propagates through the standard `Option<Self>` contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
+#[error("constraint propagation reached a contradiction")]
+pub struct Contradiction;

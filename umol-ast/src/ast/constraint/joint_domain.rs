@@ -1,6 +1,7 @@
 //! Joint-domain (relational) constraint over a tuple of atom-level fields.
-use super::super::error::JointDomainError;
+use super::super::error::{Contradiction, JointDomainError};
 use super::super::traits::Lattice;
+use super::super::value::ValueAst;
 
 /// Atom-level variable referenceable from a joint-domain constraint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -118,6 +119,42 @@ impl JointDomainAst {
             d.tuples.dedup();
         }
         self
+    }
+
+    /// Prune `Domain` tuples to those consistent with the current value of
+    /// each var as supplied by `value_of`. `Err(Contradiction)` if pruning
+    /// empties the tuple list. `Undetermined` returns itself unchanged.
+    /// Used by per-entity `saturate` to project a JointDomain against the
+    /// surrounding field state.
+    pub fn project<F>(&self, value_of: F) -> Result<Self, Contradiction>
+    where
+        F: Fn(JointVar) -> ValueAst,
+    {
+        let Self::Domain(state) = self else {
+            return Ok(self.clone());
+        };
+        let mut kept: Vec<Vec<JointValue>> = Vec::new();
+        for tuple in &state.tuples {
+            let mut admissible = true;
+            for (var, value) in state.vars.iter().zip(tuple) {
+                let JointValue::Int(n) = value;
+                let field = value_of(*var);
+                if field.meet(&ValueAst::Lit(*n)).is_none() {
+                    admissible = false;
+                    break;
+                }
+            }
+            if admissible {
+                kept.push(tuple.clone());
+            }
+        }
+        if kept.is_empty() {
+            return Err(Contradiction);
+        }
+        Ok(Self::Domain(DomainState {
+            vars: state.vars.clone(),
+            tuples: kept,
+        }))
     }
 }
 
