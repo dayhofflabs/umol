@@ -275,7 +275,7 @@ mod tests {
     #[case::pos_lit("+2", ValueAst::Lit(2))]
     #[case::neg_lit("-3", ValueAst::Lit(-3))]
     #[case::undetermined("*", ValueAst::Undetermined)]
-    #[case::lit_set("{1,2,3}", ValueAst::LitSet(Box::new(vec![1, 2, 3])))]
+    #[case::set("{1,2,3}", ValueAst::Set(Box::new(vec![1, 2, 3])))]
     fn test_charge(#[case] input: &str, #[case] expected: ValueAst) {
         let result = charge.parse(input).unwrap();
         assert_eq!(result, expected);
@@ -297,7 +297,7 @@ mod tests {
     #[case::zero("0", ValueAst::Lit(0))]
     #[case::neg("-5", ValueAst::Lit(-5))]
     #[case::undetermined("*", ValueAst::Undetermined)]
-    #[case::lit_set("{1,2}", ValueAst::LitSet(Box::new(vec![1, 2])))]
+    #[case::set("{1,2}", ValueAst::Set(Box::new(vec![1, 2])))]
     fn test_optional_value(#[case] input: &str, #[case] expected: ValueAst) {
         let result = optional_value.parse(input).unwrap();
         assert_eq!(result, expected);
@@ -311,7 +311,7 @@ mod tests {
     #[case::plus_sugar("+", ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))))]
     #[case::bang_sugar("!", ValueAst::Lit(0))]
     #[case::zero_numeric("0", ValueAst::Lit(0))]
-    #[case::lit_set("{2,3}", ValueAst::LitSet(Box::new(vec![2, 3])))]
+    #[case::set("{2,3}", ValueAst::Set(Box::new(vec![2, 3])))]
     fn test_ring_count(#[case] input: &str, #[case] expected: ValueAst) {
         let result = ring_count.parse(input).unwrap();
         assert_eq!(result, expected);
@@ -378,7 +378,7 @@ mod tests {
     #[case::wrong_op(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Eq, Box::new(Expr::Lit(1))))), "r", 1, false)]
     #[case::lit_value(ValueAst::Lit(3), "r", 1, false)]
     #[case::undetermined(ValueAst::Undetermined, "r", 1, false)]
-    #[case::lit_set(ValueAst::LitSet(Box::new(vec![1, 2])), "r", 1, false)]
+    #[case::set(ValueAst::Set(Box::new(vec![1, 2])), "r", 1, false)]
     fn test_is_plus_sugar(
         #[case] value: ValueAst,
         #[case] name: &str,

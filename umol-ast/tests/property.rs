@@ -18,7 +18,7 @@ use umol_ast::ast::{
     DativeBondId, Edit, ElementAst, Expr, IsotopeAst, Lattice, MoleculeAst, MoleculeConstraint,
     MulticenterBondAst, MulticenterBondConstraint, MulticenterBondConstraintKind,
     MulticenterBondConstraints, MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst,
-    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, Polarity, RelOp,
+    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, MemOp, RelOp,
     RelationalConstraint, SpinStateAst, SubPatternAnchor, ValueAst,
 };
 use umol_ast::dsl::{
@@ -63,16 +63,12 @@ fn element_ast_strategy() -> impl Strategy<Value = ElementAst> {
         2 => prop::collection::vec(element_strategy(), 1..=3).prop_map(|mut v| {
             // Deduplicate to keep shape canonical for roundtrip.
             v.dedup();
-            ElementAst::LitSet(v)
+            ElementAst::Set(v)
         }),
         1 => (id_strategy(), prop::collection::vec(element_strategy(), 1..=3))
             .prop_map(|(id, mut set)| {
                 set.dedup();
-                ElementAst::Bind {
-                    id,
-                    set,
-                    polarity: Polarity::Include,
-                }
+                ElementAst::bind(id, set, MemOp::In)
             }),
         1 => id_strategy().prop_map(ElementAst::Ref),
     ]
@@ -85,7 +81,7 @@ fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
         1 => prop::collection::vec(range.clone(), 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::lit_set(v)
+            ValueAst::set(v)
         }),
         1 => id_strategy().prop_map(ValueAst::reference),
         1 => (id_strategy(), prop::collection::vec(range, 1..=3)).prop_map(|(id, mut v)| {
@@ -158,7 +154,7 @@ fn any_value_ast_strategy() -> BoxedStrategy<ValueAst> {
         prop::collection::vec(-10i64..=10, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::lit_set(v)
+            ValueAst::set(v)
         }),
         id_strategy().prop_map(ValueAst::reference),
         (id_strategy(), prop::collection::vec(-10i64..=10, 1..=3)).prop_map(|(id, mut v)| {
@@ -198,7 +194,7 @@ fn rel_op_strategy() -> impl Strategy<Value = RelOp> {
 /// `Neg(Lit(n))`, so emitting `Expr::Lit(-n)` from the generator would fail
 /// the structural roundtrip equality even though the two forms are
 /// semantically identical under `is_ground` / `evaluate`. Negative integers
-/// still appear elsewhere (top-level `ValueAst::Lit`, `LitSet`, and
+/// still appear elsewhere (top-level `ValueAst::Lit`, `Set`, and
 /// `Expr::Mem` sets all route through `dec_int` which reads signed).
 fn expr_leaf_strategy() -> impl Strategy<Value = Expr> {
     prop_oneof![
@@ -268,7 +264,7 @@ fn isotope_strategy() -> impl Strategy<Value = IsotopeAst> {
         1 => prop::collection::vec(1i64..=250, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            IsotopeAst::lit_set(v)
+            IsotopeAst::set(v)
         }),
         1 => (1i64..=250).prop_map(IsotopeAst::Not),
         1 => prop::collection::vec(1i64..=250, 1..=3).prop_map(|mut v| {
@@ -278,8 +274,8 @@ fn isotope_strategy() -> impl Strategy<Value = IsotopeAst> {
         }),
         1 => id_strategy().prop_map(IsotopeAst::reference),
         1 => (id_strategy(), prop::collection::vec(1i64..=250, 1..=3), prop_oneof![
-            Just(Polarity::Include),
-            Just(Polarity::Exclude),
+            Just(MemOp::In),
+            Just(MemOp::NotIn),
         ]).prop_map(|(id, mut v, polarity)| {
             v.sort_unstable();
             v.dedup();
@@ -311,7 +307,7 @@ fn non_vacuous_spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
 }
 
 /// Simple value strategy used inside constraint values: `Undetermined`,
-/// `Lit`, and `LitSet`. No `Expr` — the constraint formatters route to
+/// `Lit`, and `Set`. No `Expr` — the constraint formatters route to
 /// `fmt_value_field_required` / `fmt_ring_count` / the various `#r` blocks,
 /// and `Expr(Lit(n))` or `Expr(Neg(Lit(n)))` would render to a pure integer
 /// that the parser then re-reads as a plain `Lit`, breaking roundtrip. The
@@ -324,12 +320,12 @@ fn constraint_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Value 
         1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::lit_set(v)
+            ValueAst::set(v)
         }),
     ]
 }
 
-/// `Lit`/`LitSet` only — still used by the ring-size strategies where
+/// `Lit`/`Set` only — still used by the ring-size strategies where
 /// `Undetermined` on the inner value collapses into a dropped constraint
 /// in the entity-level formatter (see `BondConstraint::RingSize` /
 /// `DativeBondConstraint::RingSize` — vacuous, intentionally dropped).
@@ -339,7 +335,7 @@ fn constraint_inner_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<
         prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::lit_set(v)
+            ValueAst::set(v)
         }),
     ]
 }
@@ -535,7 +531,7 @@ fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
 
 /// Optional `ElectronCount` constraint (the asserted total). The strategy
 /// emits `None` half the time, otherwise wraps a `ValueAst::Lit` or
-/// `LitSet`. `Undetermined` is excluded because it has no canonical
+/// `Set`. `Undetermined` is excluded because it has no canonical
 /// surface form in the entity-string `#e<n>` slot — `#e*` is admitted on
 /// parse but the renderer omits the predicate entirely, breaking
 /// roundtrip.
@@ -565,7 +561,7 @@ fn electron_count_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Va
         1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ValueAst::lit_set(v)
+            ValueAst::set(v)
         }),
     ]
 }

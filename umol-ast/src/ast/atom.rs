@@ -9,7 +9,7 @@ use super::constraint::{
 };
 use super::spin::SpinStateAst;
 use super::traits::{AsLit, Lattice};
-use super::value::{litset_is_ground, ValueAst};
+use super::value::{set_is_ground, MemOp, ValueAst};
 
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
@@ -223,31 +223,23 @@ impl Lattice for AtomAst {
     }
 }
 
-/// Whether a finite set defines its domain by inclusion or by exclusion.
-/// Used by `ElementAst::Bind` and `IsotopeAst::Bind` to encode positive
-/// (`?e :: {F, Cl}` — admit these) or negative (`?e :: !{F, Cl}` — admit
-/// anything except these) bind domains in one struct shape.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Polarity {
-    Include,
-    Exclude,
-}
-
 /// Element expressions
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ElementAst {
     #[default]
     Undetermined,
     Lit(Element),
-    LitSet(Vec<Element>),
+    Set(Vec<Element>),
     Not(Element),
     NotSet(Vec<Element>),
-    Bind {
-        id: String,
-        set: Vec<Element>,
-        polarity: Polarity,
-    },
+    Bind(Box<(String, MemOp, Vec<Element>)>),
     Ref(String),
+}
+
+impl ElementAst {
+    pub fn bind(id: impl Into<String>, set: Vec<Element>, op: MemOp) -> Self {
+        Self::Bind(Box::new((id.into(), op, set)))
+    }
 }
 
 impl From<Element> for ElementAst {
@@ -265,10 +257,10 @@ impl AsLit for ElementAst {
             Self::Lit(e) => Some(*e),
             Self::Undetermined
             | Self::Ref(_)
-            | Self::Bind { .. }
+            | Self::Bind(_)
             | Self::Not(_)
             | Self::NotSet(_) => None,
-            Self::LitSet(s) => element_set_is_ground(s).then(|| s[0]),
+            Self::Set(s) => element_set_is_ground(s).then(|| s[0]),
         }
     }
 }
@@ -284,10 +276,10 @@ impl Lattice for ElementAst {
             Self::Lit(_) => true,
             Self::Undetermined
             | Self::Ref(_)
-            | Self::Bind { .. }
+            | Self::Bind(_)
             | Self::Not(_)
             | Self::NotSet(_) => false,
-            Self::LitSet(s) => element_set_is_ground(s),
+            Self::Set(s) => element_set_is_ground(s),
         }
     }
 
@@ -295,7 +287,7 @@ impl Lattice for ElementAst {
         match (self, other) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
-            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+            (Self::Lit(a), Self::Set(s)) | (Self::Set(s), Self::Lit(a)) => {
                 s.contains(a).then_some(Self::Lit(*a))
             }
             (Self::Lit(a), Self::Not(b)) | (Self::Not(b), Self::Lit(a)) => {
@@ -304,18 +296,18 @@ impl Lattice for ElementAst {
             (Self::Lit(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Lit(a)) => {
                 (!s.contains(a)).then_some(Self::Lit(*a))
             }
-            (Self::LitSet(s), Self::LitSet(t)) => {
+            (Self::Set(s), Self::Set(t)) => {
                 let intersection: Vec<Element> =
                     s.iter().filter(|x| t.contains(x)).copied().collect();
-                canonicalize_lit_set(intersection)
+                canonicalize_set(intersection)
             }
-            (Self::LitSet(s), Self::Not(b)) | (Self::Not(b), Self::LitSet(s)) => {
+            (Self::Set(s), Self::Not(b)) | (Self::Not(b), Self::Set(s)) => {
                 let filtered: Vec<Element> = s.iter().filter(|x| x != &b).copied().collect();
-                canonicalize_lit_set(filtered)
+                canonicalize_set(filtered)
             }
-            (Self::LitSet(s), Self::NotSet(t)) | (Self::NotSet(t), Self::LitSet(s)) => {
+            (Self::Set(s), Self::NotSet(t)) | (Self::NotSet(t), Self::Set(s)) => {
                 let filtered: Vec<Element> = s.iter().filter(|x| !t.contains(x)).copied().collect();
-                canonicalize_lit_set(filtered)
+                canonicalize_set(filtered)
             }
             (Self::Not(a), Self::Not(b)) => {
                 if a == b {
@@ -345,18 +337,7 @@ impl Lattice for ElementAst {
                 Some(canonicalize_not_set(v))
             }
             (Self::Ref(a), Self::Ref(b)) if a == b => Some(Self::Ref(a.clone())),
-            (
-                Self::Bind {
-                    id: a,
-                    set: s,
-                    polarity: pa,
-                },
-                Self::Bind {
-                    id: b,
-                    set: t,
-                    polarity: pb,
-                },
-            ) if a == b && s == t && pa == pb => Some(self.clone()),
+            (Self::Bind(a), Self::Bind(b)) if a == b => Some(self.clone()),
             _ => None,
         }
     }
@@ -368,24 +349,24 @@ impl Lattice for ElementAst {
                 if a == b {
                     Self::Lit(*a)
                 } else {
-                    Self::LitSet(vec![*a, *b])
+                    Self::Set(vec![*a, *b])
                 }
             }
-            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+            (Self::Lit(a), Self::Set(s)) | (Self::Set(s), Self::Lit(a)) => {
                 let mut v: Vec<Element> = s.clone();
                 if !v.contains(a) {
                     v.push(*a);
                 }
-                canonicalize_lit_set(v).unwrap_or(Self::Undetermined)
+                canonicalize_set(v).unwrap_or(Self::Undetermined)
             }
-            (Self::LitSet(s), Self::LitSet(t)) => {
+            (Self::Set(s), Self::Set(t)) => {
                 let mut v: Vec<Element> = s.clone();
                 for &x in t.iter() {
                     if !v.contains(&x) {
                         v.push(x);
                     }
                 }
-                canonicalize_lit_set(v).unwrap_or(Self::Undetermined)
+                canonicalize_set(v).unwrap_or(Self::Undetermined)
             }
             (Self::Lit(a), Self::Not(b)) | (Self::Not(b), Self::Lit(a)) => {
                 if a == b {
@@ -398,14 +379,14 @@ impl Lattice for ElementAst {
                 let remaining: Vec<Element> = s.iter().filter(|x| x != &a).copied().collect();
                 canonicalize_not_set(remaining)
             }
-            (Self::LitSet(s), Self::Not(b)) | (Self::Not(b), Self::LitSet(s)) => {
+            (Self::Set(s), Self::Not(b)) | (Self::Not(b), Self::Set(s)) => {
                 if s.contains(b) {
                     Self::Undetermined
                 } else {
                     Self::Not(*b)
                 }
             }
-            (Self::LitSet(s), Self::NotSet(t)) | (Self::NotSet(t), Self::LitSet(s)) => {
+            (Self::Set(s), Self::NotSet(t)) | (Self::NotSet(t), Self::Set(s)) => {
                 let remaining: Vec<Element> =
                     t.iter().filter(|x| !s.contains(x)).copied().collect();
                 canonicalize_not_set(remaining)
@@ -430,18 +411,7 @@ impl Lattice for ElementAst {
                 canonicalize_not_set(intersection)
             }
             (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
-            (
-                Self::Bind {
-                    id: a,
-                    set: s,
-                    polarity: pa,
-                },
-                Self::Bind {
-                    id: b,
-                    set: t,
-                    polarity: pb,
-                },
-            ) if a == b && s == t && pa == pb => self.clone(),
+            (Self::Bind(a), Self::Bind(b)) if a == b => self.clone(),
             _ => Self::Undetermined,
         }
     }
@@ -460,10 +430,10 @@ impl Lattice for ElementAst {
                     return false;
                 };
                 match (pp, tp) {
-                    (Polarity::Include, Polarity::Include) => ts.iter().all(|t| ps.contains(t)),
-                    (Polarity::Include, Polarity::Exclude) => false,
-                    (Polarity::Exclude, Polarity::Include) => ts.iter().all(|t| !ps.contains(t)),
-                    (Polarity::Exclude, Polarity::Exclude) => ps.iter().all(|p| ts.contains(p)),
+                    (MemOp::In, MemOp::In) => ts.iter().all(|t| ps.contains(t)),
+                    (MemOp::In, MemOp::NotIn) => false,
+                    (MemOp::NotIn, MemOp::In) => ts.iter().all(|t| !ps.contains(t)),
+                    (MemOp::NotIn, MemOp::NotIn) => ps.iter().all(|p| ts.contains(p)),
                 }
             }
         }
@@ -478,12 +448,12 @@ fn element_set_is_ground(s: &[Element]) -> bool {
 }
 
 /// Canonicalize a literal-set intersection result: empty → None (contradiction),
-/// singleton → Lit, otherwise → LitSet. Used by meet operations.
-fn canonicalize_lit_set(v: Vec<Element>) -> Option<ElementAst> {
+/// singleton → Lit, otherwise → Set. Used by meet operations.
+fn canonicalize_set(v: Vec<Element>) -> Option<ElementAst> {
     match v.len() {
         0 => None,
         1 => Some(ElementAst::Lit(v[0])),
-        _ => Some(ElementAst::LitSet(v)),
+        _ => Some(ElementAst::Set(v)),
     }
 }
 
@@ -497,16 +467,16 @@ fn canonicalize_not_set(v: Vec<Element>) -> ElementAst {
     }
 }
 
-/// View any concrete `ElementAst` (Lit / LitSet / Not / NotSet / Bind) as a
+/// View any concrete `ElementAst` (Lit / Set / Not / NotSet / Bind) as a
 /// `(set, polarity)` pair describing the admissible domain. Returns None for
 /// `Undetermined` and `Ref` which don't have a finite set encoding.
-fn element_set_view(ast: &ElementAst) -> Option<(&[Element], Polarity)> {
+fn element_set_view(ast: &ElementAst) -> Option<(&[Element], MemOp)> {
     match ast {
-        ElementAst::Lit(x) => Some((slice::from_ref(x), Polarity::Include)),
-        ElementAst::LitSet(s) => Some((s, Polarity::Include)),
-        ElementAst::Not(x) => Some((slice::from_ref(x), Polarity::Exclude)),
-        ElementAst::NotSet(s) => Some((s, Polarity::Exclude)),
-        ElementAst::Bind { set, polarity, .. } => Some((set, *polarity)),
+        ElementAst::Lit(x) => Some((slice::from_ref(x), MemOp::In)),
+        ElementAst::Set(s) => Some((s, MemOp::In)),
+        ElementAst::Not(x) => Some((slice::from_ref(x), MemOp::NotIn)),
+        ElementAst::NotSet(s) => Some((s, MemOp::NotIn)),
+        ElementAst::Bind(b) => Some((&b.2, b.1)),
         ElementAst::Undetermined | ElementAst::Ref(_) => None,
     }
 }
@@ -522,14 +492,10 @@ pub enum IsotopeAst {
     Undetermined,
     Natural,
     Lit(i64),
-    LitSet(Box<Vec<i64>>),
+    Set(Box<Vec<i64>>),
     Not(i64),
     NotSet(Box<Vec<i64>>),
-    Bind {
-        id: String,
-        set: Box<Vec<i64>>,
-        polarity: Polarity,
-    },
+    Bind(Box<(String, MemOp, Vec<i64>)>),
     Ref(String),
 }
 
@@ -546,8 +512,8 @@ impl IsotopeAst {
         Self::Lit(n)
     }
 
-    pub fn lit_set(values: Vec<i64>) -> Self {
-        Self::LitSet(Box::new(values))
+    pub fn set(values: Vec<i64>) -> Self {
+        Self::Set(Box::new(values))
     }
 
     pub fn not(n: i64) -> Self {
@@ -558,12 +524,8 @@ impl IsotopeAst {
         Self::NotSet(Box::new(values))
     }
 
-    pub fn bind(id: impl Into<String>, set: Vec<i64>, polarity: Polarity) -> Self {
-        Self::Bind {
-            id: id.into(),
-            set: Box::new(set),
-            polarity,
-        }
+    pub fn bind(id: impl Into<String>, set: Vec<i64>, op: MemOp) -> Self {
+        Self::Bind(Box::new((id.into(), op, set)))
     }
 
     pub fn reference(id: impl Into<String>) -> Self {
@@ -588,13 +550,13 @@ impl AsLit for IsotopeAst {
         match self {
             Self::Natural => Some(0),
             Self::Lit(n) => u32::try_from(*n).ok(),
-            Self::LitSet(s) => litset_is_ground(s)
+            Self::Set(s) => set_is_ground(s)
                 .then(|| u32::try_from(s[0]).ok())
                 .flatten(),
             Self::Undetermined
             | Self::Not(_)
             | Self::NotSet(_)
-            | Self::Bind { .. }
+            | Self::Bind(_)
             | Self::Ref(_) => None,
         }
     }
@@ -606,17 +568,17 @@ impl Lattice for IsotopeAst {
         matches!(self, Self::Undetermined)
     }
 
-    /// `Natural` and singleton `Lit`/`LitSet` are ground; cofinite forms,
+    /// `Natural` and singleton `Lit`/`Set` are ground; cofinite forms,
     /// `Bind`, `Ref`, and `Undetermined` are not.
     #[inline]
     fn is_ground(&self) -> bool {
         match self {
             Self::Natural | Self::Lit(_) => true,
-            Self::LitSet(s) => litset_is_ground(s),
+            Self::Set(s) => set_is_ground(s),
             Self::Undetermined
             | Self::Not(_)
             | Self::NotSet(_)
-            | Self::Bind { .. }
+            | Self::Bind(_)
             | Self::Ref(_) => false,
         }
     }
@@ -630,7 +592,7 @@ impl Lattice for IsotopeAst {
             (Self::Natural, Self::Natural) => Some(Self::Natural),
             (Self::Natural, _) | (_, Self::Natural) => None,
             (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
-            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+            (Self::Lit(a), Self::Set(s)) | (Self::Set(s), Self::Lit(a)) => {
                 s.contains(a).then_some(Self::Lit(*a))
             }
             (Self::Lit(a), Self::Not(b)) | (Self::Not(b), Self::Lit(a)) => {
@@ -639,17 +601,17 @@ impl Lattice for IsotopeAst {
             (Self::Lit(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Lit(a)) => {
                 (!s.contains(a)).then_some(Self::Lit(*a))
             }
-            (Self::LitSet(s), Self::LitSet(t)) => {
+            (Self::Set(s), Self::Set(t)) => {
                 let v: Vec<i64> = s.iter().filter(|x| t.contains(x)).copied().collect();
-                canonicalize_isotope_lit_set(v)
+                canonicalize_isotope_set(v)
             }
-            (Self::LitSet(s), Self::Not(b)) | (Self::Not(b), Self::LitSet(s)) => {
+            (Self::Set(s), Self::Not(b)) | (Self::Not(b), Self::Set(s)) => {
                 let v: Vec<i64> = s.iter().filter(|x| x != &b).copied().collect();
-                canonicalize_isotope_lit_set(v)
+                canonicalize_isotope_set(v)
             }
-            (Self::LitSet(s), Self::NotSet(t)) | (Self::NotSet(t), Self::LitSet(s)) => {
+            (Self::Set(s), Self::NotSet(t)) | (Self::NotSet(t), Self::Set(s)) => {
                 let v: Vec<i64> = s.iter().filter(|x| !t.contains(x)).copied().collect();
-                canonicalize_isotope_lit_set(v)
+                canonicalize_isotope_set(v)
             }
             (Self::Not(a), Self::Not(b)) => {
                 if a == b {
@@ -679,18 +641,7 @@ impl Lattice for IsotopeAst {
                 Some(canonicalize_isotope_not_set(v))
             }
             (Self::Ref(a), Self::Ref(b)) if a == b => Some(Self::Ref(a.clone())),
-            (
-                Self::Bind {
-                    id: a,
-                    set: s,
-                    polarity: pa,
-                },
-                Self::Bind {
-                    id: b,
-                    set: t,
-                    polarity: pb,
-                },
-            ) if a == b && s == t && pa == pb => Some(self.clone()),
+            (Self::Bind(a), Self::Bind(b)) if a == b => Some(self.clone()),
             _ => None,
         }
     }
@@ -704,24 +655,24 @@ impl Lattice for IsotopeAst {
                 if a == b {
                     Self::Lit(*a)
                 } else {
-                    Self::LitSet(Box::new(vec![*a, *b]))
+                    Self::Set(Box::new(vec![*a, *b]))
                 }
             }
-            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+            (Self::Lit(a), Self::Set(s)) | (Self::Set(s), Self::Lit(a)) => {
                 let mut v: Vec<i64> = (**s).clone();
                 if !v.contains(a) {
                     v.push(*a);
                 }
-                canonicalize_isotope_lit_set(v).unwrap_or(Self::Undetermined)
+                canonicalize_isotope_set(v).unwrap_or(Self::Undetermined)
             }
-            (Self::LitSet(s), Self::LitSet(t)) => {
+            (Self::Set(s), Self::Set(t)) => {
                 let mut v: Vec<i64> = (**s).clone();
                 for &x in t.iter() {
                     if !v.contains(&x) {
                         v.push(x);
                     }
                 }
-                canonicalize_isotope_lit_set(v).unwrap_or(Self::Undetermined)
+                canonicalize_isotope_set(v).unwrap_or(Self::Undetermined)
             }
             (Self::Lit(a), Self::Not(b)) | (Self::Not(b), Self::Lit(a)) => {
                 if a == b {
@@ -734,14 +685,14 @@ impl Lattice for IsotopeAst {
                 let remaining: Vec<i64> = s.iter().filter(|x| x != &a).copied().collect();
                 canonicalize_isotope_not_set(remaining)
             }
-            (Self::LitSet(s), Self::Not(b)) | (Self::Not(b), Self::LitSet(s)) => {
+            (Self::Set(s), Self::Not(b)) | (Self::Not(b), Self::Set(s)) => {
                 if s.contains(b) {
                     Self::Undetermined
                 } else {
                     Self::Not(*b)
                 }
             }
-            (Self::LitSet(s), Self::NotSet(t)) | (Self::NotSet(t), Self::LitSet(s)) => {
+            (Self::Set(s), Self::NotSet(t)) | (Self::NotSet(t), Self::Set(s)) => {
                 let remaining: Vec<i64> = t.iter().filter(|x| !s.contains(x)).copied().collect();
                 canonicalize_isotope_not_set(remaining)
             }
@@ -765,18 +716,7 @@ impl Lattice for IsotopeAst {
                 canonicalize_isotope_not_set(intersection)
             }
             (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
-            (
-                Self::Bind {
-                    id: a,
-                    set: s,
-                    polarity: pa,
-                },
-                Self::Bind {
-                    id: b,
-                    set: t,
-                    polarity: pb,
-                },
-            ) if a == b && s == t && pa == pb => self.clone(),
+            (Self::Bind(a), Self::Bind(b)) if a == b => self.clone(),
             _ => Self::Undetermined,
         }
     }
@@ -795,10 +735,10 @@ impl Lattice for IsotopeAst {
                     return false;
                 };
                 match (pp, tp) {
-                    (Polarity::Include, Polarity::Include) => ts.iter().all(|t| ps.contains(t)),
-                    (Polarity::Include, Polarity::Exclude) => false,
-                    (Polarity::Exclude, Polarity::Include) => ts.iter().all(|t| !ps.contains(t)),
-                    (Polarity::Exclude, Polarity::Exclude) => ps.iter().all(|p| ts.contains(p)),
+                    (MemOp::In, MemOp::In) => ts.iter().all(|t| ps.contains(t)),
+                    (MemOp::In, MemOp::NotIn) => false,
+                    (MemOp::NotIn, MemOp::In) => ts.iter().all(|t| !ps.contains(t)),
+                    (MemOp::NotIn, MemOp::NotIn) => ps.iter().all(|p| ts.contains(p)),
                 }
             }
         }
@@ -806,11 +746,11 @@ impl Lattice for IsotopeAst {
 }
 
 /// Canonicalize an isotope-set intersection result.
-fn canonicalize_isotope_lit_set(v: Vec<i64>) -> Option<IsotopeAst> {
+fn canonicalize_isotope_set(v: Vec<i64>) -> Option<IsotopeAst> {
     match v.len() {
         0 => None,
         1 => Some(IsotopeAst::Lit(v[0])),
-        _ => Some(IsotopeAst::LitSet(Box::new(v))),
+        _ => Some(IsotopeAst::Set(Box::new(v))),
     }
 }
 
@@ -823,17 +763,17 @@ fn canonicalize_isotope_not_set(v: Vec<i64>) -> IsotopeAst {
     }
 }
 
-/// View any concrete `IsotopeAst` (Lit / LitSet / Not / NotSet / Bind) as a
+/// View any concrete `IsotopeAst` (Lit / Set / Not / NotSet / Bind) as a
 /// `(set, polarity)` pair describing the admissible domain. Returns None
 /// for `Undetermined`, `Natural`, and `Ref` which don't have a finite set
 /// encoding.
-fn isotope_set_view(ast: &IsotopeAst) -> Option<(&[i64], Polarity)> {
+fn isotope_set_view(ast: &IsotopeAst) -> Option<(&[i64], MemOp)> {
     match ast {
-        IsotopeAst::Lit(x) => Some((std::slice::from_ref(x), Polarity::Include)),
-        IsotopeAst::LitSet(s) => Some((s, Polarity::Include)),
-        IsotopeAst::Not(x) => Some((std::slice::from_ref(x), Polarity::Exclude)),
-        IsotopeAst::NotSet(s) => Some((s, Polarity::Exclude)),
-        IsotopeAst::Bind { set, polarity, .. } => Some((set, *polarity)),
+        IsotopeAst::Lit(x) => Some((std::slice::from_ref(x), MemOp::In)),
+        IsotopeAst::Set(s) => Some((s, MemOp::In)),
+        IsotopeAst::Not(x) => Some((std::slice::from_ref(x), MemOp::NotIn)),
+        IsotopeAst::NotSet(s) => Some((s, MemOp::NotIn)),
+        IsotopeAst::Bind(b) => Some((&b.2, b.1)),
         IsotopeAst::Undetermined | IsotopeAst::Natural | IsotopeAst::Ref(_) => None,
     }
 }
@@ -1003,8 +943,8 @@ mod tests {
     #[case::lit_carbon(ElementAst::Lit(Element::C), Some(Element::C))]
     #[case::lit_nitrogen(ElementAst::Lit(Element::N), Some(Element::N))]
     #[case::wildcard(ElementAst::Undetermined, None)]
-    #[case::set(ElementAst::LitSet(vec![Element::C, Element::N]), None)]
-    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, None)]
+    #[case::set(ElementAst::Set(vec![Element::C, Element::N]), None)]
+    #[case::bind(ElementAst::bind("e", vec![Element::C], MemOp::In), None)]
     #[case::reference(ElementAst::Ref("e".into()), None)]
     fn test_element_ast_literal_and_is_ground(
         #[case] ast: ElementAst,
@@ -1017,8 +957,8 @@ mod tests {
     #[rstest]
     #[case::lit(ElementAst::Lit(Element::C), false)]
     #[case::wildcard(ElementAst::Undetermined, true)]
-    #[case::set(ElementAst::LitSet(vec![Element::C, Element::N]), false)]
-    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, false)]
+    #[case::set(ElementAst::Set(vec![Element::C, Element::N]), false)]
+    #[case::bind(ElementAst::bind("e", vec![Element::C], MemOp::In), false)]
     #[case::reference(ElementAst::Ref("e".into()), false)]
     fn test_element_ast_is_undetermined(#[case] ast: ElementAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
@@ -1028,31 +968,31 @@ mod tests {
     #[rstest]
     #[case::undetermined_lit(ElementAst::Undetermined, ElementAst::Lit(Element::C), true)]
     #[case::undetermined_undetermined(ElementAst::Undetermined, ElementAst::Undetermined, true)]
-    #[case::undetermined_set(ElementAst::Undetermined, ElementAst::LitSet(vec![Element::C, Element::N]), true)]
+    #[case::undetermined_set(ElementAst::Undetermined, ElementAst::Set(vec![Element::C, Element::N]), true)]
     #[case::lit_undetermined(ElementAst::Lit(Element::C), ElementAst::Undetermined, false)]
-    #[case::set_undetermined(ElementAst::LitSet(vec![Element::C]), ElementAst::Undetermined, false)]
+    #[case::set_undetermined(ElementAst::Set(vec![Element::C]), ElementAst::Undetermined, false)]
     #[case::lit_lit_match(ElementAst::Lit(Element::C), ElementAst::Lit(Element::C), true)]
     #[case::lit_lit_mismatch(ElementAst::Lit(Element::C), ElementAst::Lit(Element::N), false)]
-    #[case::lit_singleton_set(ElementAst::Lit(Element::C), ElementAst::LitSet(vec![Element::C]), true)]
-    #[case::lit_multi_set(ElementAst::Lit(Element::C), ElementAst::LitSet(vec![Element::C, Element::N]), false)]
-    #[case::set_lit_in(ElementAst::LitSet(vec![Element::C, Element::N]), ElementAst::Lit(Element::N), true)]
-    #[case::set_lit_out(ElementAst::LitSet(vec![Element::C, Element::N]), ElementAst::Lit(Element::O), false)]
-    #[case::set_set_subset(ElementAst::LitSet(vec![Element::C, Element::N, Element::O]), ElementAst::LitSet(vec![Element::C, Element::N]), true)]
-    #[case::set_set_equal(ElementAst::LitSet(vec![Element::C, Element::N]), ElementAst::LitSet(vec![Element::C, Element::N]), true)]
-    #[case::set_set_superset(ElementAst::LitSet(vec![Element::C]), ElementAst::LitSet(vec![Element::C, Element::N]), false)]
-    #[case::bind_lit_match(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, ElementAst::Lit(Element::C), true)]
-    #[case::bind_lit_mismatch(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, ElementAst::Lit(Element::N), false)]
-    #[case::bind_set_subset(ElementAst::Bind { id: "e".into(), set: vec![Element::C, Element::N], polarity: Polarity::Include }, ElementAst::LitSet(vec![Element::C]), true)]
-    #[case::set_bind_subset(ElementAst::LitSet(vec![Element::C, Element::N]), ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, true)]
-    #[case::bind_bind_subset(ElementAst::Bind { id: "p".into(), set: vec![Element::C, Element::N], polarity: Polarity::Include }, ElementAst::Bind { id: "t".into(), set: vec![Element::N], polarity: Polarity::Include }, true)]
-    #[case::bind_bind_superset(ElementAst::Bind { id: "p".into(), set: vec![Element::C], polarity: Polarity::Include }, ElementAst::Bind { id: "t".into(), set: vec![Element::C, Element::N], polarity: Polarity::Include }, false)]
-    #[case::undetermined_bind(ElementAst::Undetermined, ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, true)]
-    #[case::bind_undetermined(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, ElementAst::Undetermined, false)]
+    #[case::lit_singleton_set(ElementAst::Lit(Element::C), ElementAst::Set(vec![Element::C]), true)]
+    #[case::lit_multi_set(ElementAst::Lit(Element::C), ElementAst::Set(vec![Element::C, Element::N]), false)]
+    #[case::set_lit_in(ElementAst::Set(vec![Element::C, Element::N]), ElementAst::Lit(Element::N), true)]
+    #[case::set_lit_out(ElementAst::Set(vec![Element::C, Element::N]), ElementAst::Lit(Element::O), false)]
+    #[case::set_set_subset(ElementAst::Set(vec![Element::C, Element::N, Element::O]), ElementAst::Set(vec![Element::C, Element::N]), true)]
+    #[case::set_set_equal(ElementAst::Set(vec![Element::C, Element::N]), ElementAst::Set(vec![Element::C, Element::N]), true)]
+    #[case::set_set_superset(ElementAst::Set(vec![Element::C]), ElementAst::Set(vec![Element::C, Element::N]), false)]
+    #[case::bind_lit_match(ElementAst::bind("e", vec![Element::C], MemOp::In), ElementAst::Lit(Element::C), true)]
+    #[case::bind_lit_mismatch(ElementAst::bind("e", vec![Element::C], MemOp::In), ElementAst::Lit(Element::N), false)]
+    #[case::bind_set_subset(ElementAst::bind("e", vec![Element::C, Element::N], MemOp::In), ElementAst::Set(vec![Element::C]), true)]
+    #[case::set_bind_subset(ElementAst::Set(vec![Element::C, Element::N]), ElementAst::bind("e", vec![Element::C], MemOp::In), true)]
+    #[case::bind_bind_subset(ElementAst::bind("p", vec![Element::C, Element::N], MemOp::In), ElementAst::bind("t", vec![Element::N], MemOp::In), true)]
+    #[case::bind_bind_superset(ElementAst::bind("p", vec![Element::C], MemOp::In), ElementAst::bind("t", vec![Element::C, Element::N], MemOp::In), false)]
+    #[case::undetermined_bind(ElementAst::Undetermined, ElementAst::bind("e", vec![Element::C], MemOp::In), true)]
+    #[case::bind_undetermined(ElementAst::bind("e", vec![Element::C], MemOp::In), ElementAst::Undetermined, false)]
     #[case::ref_lit(ElementAst::Ref("e".into()), ElementAst::Lit(Element::C), false)]
     #[case::lit_ref(ElementAst::Lit(Element::C), ElementAst::Ref("e".into()), false)]
-    #[case::ref_set(ElementAst::Ref("e".into()), ElementAst::LitSet(vec![Element::C]), false)]
-    #[case::set_ref(ElementAst::LitSet(vec![Element::C]), ElementAst::Ref("e".into()), false)]
-    #[case::ref_bind(ElementAst::Ref("e".into()), ElementAst::Bind { id: "f".into(), set: vec![Element::C], polarity: Polarity::Include }, false)]
+    #[case::ref_set(ElementAst::Ref("e".into()), ElementAst::Set(vec![Element::C]), false)]
+    #[case::set_ref(ElementAst::Set(vec![Element::C]), ElementAst::Ref("e".into()), false)]
+    #[case::ref_bind(ElementAst::Ref("e".into()), ElementAst::bind("f", vec![Element::C], MemOp::In), false)]
     #[case::ref_ref(ElementAst::Ref("e".into()), ElementAst::Ref("f".into()), false)]
     #[case::ref_undetermined(ElementAst::Ref("e".into()), ElementAst::Undetermined, false)]
     fn test_element_ast_matches(
@@ -1074,10 +1014,10 @@ mod tests {
     #[case::natural(IsotopeAst::Natural, false)]
     #[case::lit(IsotopeAst::Lit(12), false)]
     #[case::undetermined(IsotopeAst::Undetermined, true)]
-    #[case::lit_set(IsotopeAst::LitSet(Box::new(vec![12, 13])), false)]
+    #[case::set(IsotopeAst::Set(Box::new(vec![12, 13])), false)]
     #[case::not(IsotopeAst::Not(14), false)]
     #[case::not_set(IsotopeAst::NotSet(Box::new(vec![12, 13])), false)]
-    #[case::bind(IsotopeAst::Bind { id: "m".into(), set: Box::new(vec![12]), polarity: Polarity::Include }, false)]
+    #[case::bind(IsotopeAst::bind("m", vec![12], MemOp::In), false)]
     #[case::reference(IsotopeAst::Ref("m".into()), false)]
     fn test_isotope_ast_is_undetermined(#[case] ast: IsotopeAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
@@ -1088,11 +1028,11 @@ mod tests {
     #[case::lit(IsotopeAst::Lit(12), Some(12))]
     #[case::lit_zero(IsotopeAst::Lit(0), Some(0))]
     #[case::wildcard(IsotopeAst::Undetermined, None)]
-    #[case::set_singleton(IsotopeAst::LitSet(Box::new(vec![14])), Some(14))]
-    #[case::set_multi(IsotopeAst::LitSet(Box::new(vec![12, 13])), None)]
+    #[case::set_singleton(IsotopeAst::Set(Box::new(vec![14])), Some(14))]
+    #[case::set_multi(IsotopeAst::Set(Box::new(vec![12, 13])), None)]
     #[case::not(IsotopeAst::Not(14), None)]
     #[case::not_set(IsotopeAst::NotSet(Box::new(vec![12, 13])), None)]
-    #[case::bind(IsotopeAst::Bind { id: "m".into(), set: Box::new(vec![12]), polarity: Polarity::Include }, None)]
+    #[case::bind(IsotopeAst::bind("m", vec![12], MemOp::In), None)]
     #[case::reference(IsotopeAst::Ref("m".into()), None)]
     fn test_isotope_ast_literal_and_is_ground(
         #[case] ast: IsotopeAst,
@@ -1115,10 +1055,10 @@ mod tests {
     #[case::value_lit_match(IsotopeAst::Lit(12), IsotopeAst::Lit(12), true)]
     #[case::value_lit_mismatch(IsotopeAst::Lit(12), IsotopeAst::Lit(13), false)]
     #[case::value_wildcard_lit(IsotopeAst::Undetermined, IsotopeAst::Lit(12), true)]
-    #[case::value_set_lit_in(IsotopeAst::LitSet(Box::new(vec![12, 13])), IsotopeAst::Lit(13), true)]
-    #[case::value_set_lit_out(IsotopeAst::LitSet(Box::new(vec![12, 13])), IsotopeAst::Lit(14), false)]
-    #[case::value_set_set_subset(IsotopeAst::LitSet(Box::new(vec![12, 13, 14])), IsotopeAst::LitSet(Box::new(vec![12, 13])), true)]
-    #[case::value_set_set_superset(IsotopeAst::LitSet(Box::new(vec![12])), IsotopeAst::LitSet(Box::new(vec![12, 13])), false)]
+    #[case::value_set_lit_in(IsotopeAst::Set(Box::new(vec![12, 13])), IsotopeAst::Lit(13), true)]
+    #[case::value_set_lit_out(IsotopeAst::Set(Box::new(vec![12, 13])), IsotopeAst::Lit(14), false)]
+    #[case::value_set_set_subset(IsotopeAst::Set(Box::new(vec![12, 13, 14])), IsotopeAst::Set(Box::new(vec![12, 13])), true)]
+    #[case::value_set_set_superset(IsotopeAst::Set(Box::new(vec![12])), IsotopeAst::Set(Box::new(vec![12, 13])), false)]
     #[case::value_lit_wildcard(IsotopeAst::Lit(12), IsotopeAst::Undetermined, false)]
     fn test_isotope_ast_matches(
         #[case] pattern: IsotopeAst,
@@ -1152,7 +1092,7 @@ mod tests {
     #[case::element_mismatch_widens(
         AtomAst::from_element(Element::C),
         AtomAst::from_element(Element::N),
-        ElementAst::LitSet(vec![Element::C, Element::N]),
+        ElementAst::Set(vec![Element::C, Element::N]),
     )]
     fn test_atom_ast_join_element(
         #[case] a: AtomAst,

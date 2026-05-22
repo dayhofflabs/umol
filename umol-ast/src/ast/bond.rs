@@ -322,10 +322,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::widens_to_litset(
+    #[case::widens_to_set(
         BondAst::from_order(2),
         BondAst::from_order(3),
-        BondAst { order: ValueAst::LitSet(Box::new(vec![2, 3])), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
+        BondAst { order: ValueAst::Set(Box::new(vec![2, 3])), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
     )]
     fn test_bond_ast_join(#[case] a: BondAst, #[case] b: BondAst, #[case] expected: BondAst) {
         assert_eq!(a.join(&b), expected);

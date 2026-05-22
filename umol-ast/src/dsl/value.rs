@@ -17,7 +17,7 @@ use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::{ArithOp, Expr, RelOp, ValueAst};
 
 /// Surface DSL wrapper around `ValueAst`. EDN form is hybrid: `Lit` → `Int`,
-/// `Undetermined` → `:undetermined`, `LitSet` → vector of ints, `Expr` →
+/// `Undetermined` → `:undetermined`, `Set` → vector of ints, `Expr` →
 /// string via the value subgrammar. `Expr` is string-encoded because EDN has
 /// no native representation for the boolean/arithmetic grammar and round-trip
 /// fidelity is mandatory.
@@ -63,7 +63,7 @@ impl<'de> FromEdn<'de> for ValueDsl {
                     };
                     out.push(*n);
                 }
-                ValueAst::LitSet(Box::new(out))
+                ValueAst::Set(Box::new(out))
             }
             Edn::Str(s) => parse_value(s).map_err(|e| DeError::subgrammar("value", e))?,
             other => {
@@ -83,10 +83,10 @@ impl ToEdn for ValueDsl {
         match &self.0 {
             ValueAst::Lit(n) => Edn::Int(*n),
             ValueAst::Undetermined => Edn::Keyword(EdnKeyword::owned("undetermined".to_string())),
-            ValueAst::LitSet(xs) => {
+            ValueAst::Set(xs) => {
                 Edn::Vector(xs.iter().map(|n| Edn::Int(*n)).collect::<Vec<_>>().into())
             }
-            ValueAst::Expr(_) | ValueAst::Bind { .. } | ValueAst::Ref(_) => {
+            ValueAst::Expr(_) | ValueAst::Bind(_) | ValueAst::Ref(_) => {
                 Edn::Str(Cow::Owned(self.to_string()))
             }
         }
@@ -104,7 +104,7 @@ pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result
     match v {
         ValueAst::Undetermined => f.write_char('*'),
         ValueAst::Lit(n) => write!(f, "{}", n),
-        ValueAst::LitSet(s) => {
+        ValueAst::Set(s) => {
             f.write_char('{')?;
             for (i, n) in s.iter().enumerate() {
                 if i > 0 {
@@ -115,7 +115,8 @@ pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result
             f.write_char('}')
         }
         ValueAst::Expr(e) => fmt_expr(f, e),
-        ValueAst::Bind { id, set } => {
+        ValueAst::Bind(b) => {
+            let (id, set) = &**b;
             write!(f, "?{} :: {{", id)?;
             for (i, n) in set.iter().enumerate() {
                 if i > 0 {
@@ -245,11 +246,9 @@ pub(crate) fn value(i: &mut &str) -> PResult<ValueAst> {
     alt((
         terminated(signed_int, (multispace0, terminator)).map(ValueAst::Lit),
         "*".value(ValueAst::Undetermined),
-        lit_set.map(ValueAst::lit_set),
-        terminated(value_bind, (multispace0, terminator)).map(|(id, set)| ValueAst::Bind {
-            id,
-            set: Box::new(set),
-        }),
+        set.map(ValueAst::set),
+        terminated(value_bind, (multispace0, terminator))
+            .map(|(id, set)| ValueAst::Bind(Box::new((id, set)))),
         terminated(value_ref, (multispace0, terminator)).map(ValueAst::Ref),
         bool_expr.map(ValueAst::expr),
     ))
@@ -264,7 +263,7 @@ fn value_bind(i: &mut &str) -> PResult<(String, Vec<i64>)> {
         delimited('(', delimited(multispace0, value_bind, multispace0), ')'),
         (
             preceded('?', id),
-            preceded(delimited(multispace0, "::", multispace0), lit_set),
+            preceded(delimited(multispace0, "::", multispace0), set),
         ),
     ))
     .parse_next(i)
@@ -366,7 +365,7 @@ fn mem_expr(i: &mut &str) -> PResult<Expr> {
     let expr = add_expr.parse_next(i)?;
     let set = opt(preceded(
         multispace0,
-        preceded("::", preceded(multispace0, lit_set)),
+        preceded("::", preceded(multispace0, set)),
     ))
     .parse_next(i)?;
     Ok(match set {
@@ -375,7 +374,7 @@ fn mem_expr(i: &mut &str) -> PResult<Expr> {
     })
 }
 
-pub(crate) fn lit_set(i: &mut &str) -> PResult<Vec<i64>> {
+pub(crate) fn set(i: &mut &str) -> PResult<Vec<i64>> {
     delimited(
         '{',
         delimited(
@@ -480,8 +479,8 @@ mod tests {
     #[case::num_pos_multi("+42", ValueAst::Lit(42))]
     #[case::num_neg_multi("-42", ValueAst::Lit(-42))]
     #[case::num_i64_min("-9223372036854775808", ValueAst::Lit(i64::MIN))]
-    #[case::set("{0,1,2}", ValueAst::LitSet(Box::new(vec![0, 1, 2])))]
-    #[case::set_spaced("{ 0, 1 ,2}", ValueAst::LitSet(Box::new(vec![0, 1, 2])))]
+    #[case::set("{0,1,2}", ValueAst::Set(Box::new(vec![0, 1, 2])))]
+    #[case::set_spaced("{ 0, 1 ,2}", ValueAst::Set(Box::new(vec![0, 1, 2])))]
     #[case::sum("1+2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Add, Box::new(Expr::Lit(2))))))]
     #[case::sum_spaced("1 + 2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Add, Box::new(Expr::Lit(2))))))]
     #[case::diff("1-2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Sub, Box::new(Expr::Lit(2))))))]
@@ -550,8 +549,8 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined, "*")]
     #[case::lit_zero(ValueAst::Lit(0), "0")]
     #[case::lit_neg(ValueAst::Lit(-3), "-3")]
-    #[case::set(ValueAst::LitSet(Box::new(vec![0, 1, 2])), "{0,1,2}")]
-    #[case::set_single(ValueAst::LitSet(Box::new(vec![5])), "{5}")]
+    #[case::set(ValueAst::Set(Box::new(vec![0, 1, 2])), "{0,1,2}")]
+    #[case::set_single(ValueAst::Set(Box::new(vec![5])), "{5}")]
     #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Lit(7))), "7")]
     #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".into()))), "?h")]
     #[case::expr_neg(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))), "-?x")]
@@ -624,7 +623,7 @@ mod tests {
     #[case::lit(ValueAst::Lit(4), Edn::Int(4))]
     #[case::lit_neg(ValueAst::Lit(-2), Edn::Int(-2))]
     #[case::undetermined(ValueAst::Undetermined, Edn::Keyword(EdnKeyword::owned("undetermined".into())))]
-    #[case::set(ValueAst::LitSet(Box::new(vec![1, 2, 3])), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
+    #[case::set(ValueAst::Set(Box::new(vec![1, 2, 3])), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
     #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".into()))), Edn::Str(Cow::Borrowed("?h")))]
     #[case::expr_rel(
         ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))),
@@ -641,10 +640,10 @@ mod tests {
     #[rstest]
     #[case::int(Edn::Int(5), ValueAst::Lit(5))]
     #[case::keyword(Edn::Keyword(EdnKeyword::owned("undetermined".into())), ValueAst::Undetermined)]
-    #[case::vector(Edn::Vector(vec![Edn::Int(0), Edn::Int(2)].into()), ValueAst::LitSet(Box::new(vec![0, 2])))]
+    #[case::vector(Edn::Vector(vec![Edn::Int(0), Edn::Int(2)].into()), ValueAst::Set(Box::new(vec![0, 2])))]
     #[case::str_int(Edn::Str(Cow::Borrowed("4")), ValueAst::Lit(4))]
     #[case::str_undetermined(Edn::Str(Cow::Borrowed("*")), ValueAst::Undetermined)]
-    #[case::str_set(Edn::Str(Cow::Borrowed("{1,2}")), ValueAst::LitSet(Box::new(vec![1, 2])))]
+    #[case::str_set(Edn::Str(Cow::Borrowed("{1,2}")), ValueAst::Set(Box::new(vec![1, 2])))]
     #[case::str_expr(
         Edn::Str(Cow::Borrowed("?h == 0")),
         ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))),
@@ -687,7 +686,7 @@ mod tests {
     #[rstest]
     #[case::lit(ValueAst::Lit(3))]
     #[case::undetermined(ValueAst::Undetermined)]
-    #[case::set(ValueAst::LitSet(Box::new(vec![1, 2, 3])))]
+    #[case::set(ValueAst::Set(Box::new(vec![1, 2, 3])))]
     #[case::expr(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))))))]
     #[case::bind(ValueAst::bind("n", vec![1, 2, 3]))]
     #[case::reference(ValueAst::reference("h"))]

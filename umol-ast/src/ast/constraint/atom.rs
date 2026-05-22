@@ -1476,7 +1476,7 @@ mod tests {
     #[case::widens_value(
         AtomConstraints::from_iter([AtomConstraint::valence(4)]),
         AtomConstraints::from_iter([AtomConstraint::valence(3)]),
-        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::LitSet(Box::new(vec![4, 3])))]),
+        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Set(Box::new(vec![4, 3])))]),
     )]
     fn test_atom_constraints_join(
         #[case] a: AtomConstraints,

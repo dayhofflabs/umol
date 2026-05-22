@@ -23,7 +23,7 @@ pub(crate) mod value;
 pub(crate) mod views;
 
 pub use aromatic::AromaticSystemAst;
-pub use atom::{AtomAst, ElementAst, IsotopeAst, Polarity};
+pub use atom::{AtomAst, ElementAst, IsotopeAst};
 pub use automorphism::AtomAutomorphism;
 pub use bond::BondAst;
 pub use constraint::{
@@ -59,7 +59,7 @@ pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use traits::{AsLit, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst};
-pub use value::{ArithOp, Bindings, Expr, RelOp, ValueAst};
+pub use value::{ArithOp, Bindings, Expr, MemOp, RelOp, ValueAst};
 pub use views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,

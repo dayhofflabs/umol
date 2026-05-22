@@ -20,12 +20,9 @@ pub enum ValueAst {
     #[default]
     Undetermined,
     Lit(i64),
-    LitSet(Box<Vec<i64>>),
+    Set(Box<Vec<i64>>),
     Expr(Box<Expr>),
-    Bind {
-        id: String,
-        set: Box<Vec<i64>>,
-    },
+    Bind(Box<(String, Vec<i64>)>),
     Ref(String),
 }
 
@@ -38,8 +35,8 @@ impl ValueAst {
         Self::Lit(n)
     }
 
-    pub fn lit_set(values: Vec<i64>) -> Self {
-        Self::LitSet(Box::new(values))
+    pub fn set(values: Vec<i64>) -> Self {
+        Self::Set(Box::new(values))
     }
 
     pub fn expr(e: Expr) -> Self {
@@ -47,10 +44,7 @@ impl ValueAst {
     }
 
     pub fn bind(id: impl Into<String>, set: Vec<i64>) -> Self {
-        Self::Bind {
-            id: id.into(),
-            set: Box::new(set),
-        }
+        Self::Bind(Box::new((id.into(), set)))
     }
 
     pub fn reference(id: impl Into<String>) -> Self {
@@ -61,9 +55,9 @@ impl ValueAst {
     #[cold]
     fn is_ground_slow(&self) -> bool {
         match self {
-            Self::LitSet(s) => litset_is_ground(s),
+            Self::Set(s) => set_is_ground(s),
             Self::Expr(e) => e.is_ground(),
-            Self::Bind { .. } | Self::Ref(_) => false,
+            Self::Bind(_) | Self::Ref(_) => false,
             Self::Lit(_) | Self::Undetermined => unreachable!(),
         }
     }
@@ -72,9 +66,9 @@ impl ValueAst {
     #[cold]
     fn as_lit_slow(&self) -> Option<i64> {
         match self {
-            Self::LitSet(s) => litset_is_ground(s).then(|| s[0]),
+            Self::Set(s) => set_is_ground(s).then(|| s[0]),
             Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
-            Self::Bind { .. } | Self::Ref(_) => None,
+            Self::Bind(_) | Self::Ref(_) => None,
             Self::Lit(_) | Self::Undetermined => unreachable!(),
         }
     }
@@ -96,10 +90,10 @@ impl ValueAst {
     /// - `Expr(Expr::Neg(Expr::Lit(n)))` → `Lit(-n)` when `-n` does not
     ///   overflow `i64` (otherwise the wrapped form is preserved)
     /// - `Expr(Expr::Var(id))` → `Ref(id)` (top-level bind reference)
-    /// - `Expr(Expr::Mem(Var(id), set))` → `Bind { id, set }` (named domain
+    /// - `Expr(Expr::Mem(Var(id), set))` → `Bind(id, set)` (named domain
     ///   constraint at top level)
     /// - `Expr(e)` for any other shape → `Expr(e.simplify())`
-    /// - `Lit` / `LitSet` / `Undetermined` / `Bind` / `Ref` → unchanged
+    /// - `Lit` / `Set` / `Undetermined` / `Bind` / `Ref` → unchanged
     pub fn simplify(self) -> Self {
         match self {
             Self::Expr(e) => match e.simplify() {
@@ -110,10 +104,7 @@ impl ValueAst {
                 },
                 Expr::Var(id) => Self::Ref(id),
                 Expr::Mem(inner, set) => match *inner {
-                    Expr::Var(id) => Self::Bind {
-                        id,
-                        set: Box::new(set),
-                    },
+                    Expr::Var(id) => Self::Bind(Box::new((id, set))),
                     other => Self::Expr(Box::new(Expr::Mem(Box::new(other), set))),
                 },
                 other => Self::Expr(Box::new(other)),
@@ -132,7 +123,7 @@ impl ValueAst {
                     None
                 }
             }
-            ValueAst::LitSet(s) => {
+            ValueAst::Set(s) => {
                 if s.contains(&value) {
                     Some(Bindings::new())
                 } else {
@@ -154,7 +145,8 @@ impl ValueAst {
                     }
                 }
             }
-            ValueAst::Bind { id, set } => {
+            ValueAst::Bind(b) => {
+                let (id, set) = &**b;
                 if set.contains(&value) {
                     let mut bindings = Bindings::new();
                     bindings.insert(id.clone(), value);
@@ -168,12 +160,12 @@ impl ValueAst {
     }
 }
 
-/// A `LitSet` is ground iff non-empty and all elements are equal (semantic
+/// A `Set` is ground iff non-empty and all elements are equal (semantic
 /// singleton). Shared by `ValueAst::is_ground` and the atom-field types that
-/// embed a `LitSet` directly (`IsotopeAst`, ``), so they
+/// embed a `Set` directly (`IsotopeAst`, ``), so they
 /// avoid cloning the Vec just to delegate.
 #[inline(never)]
-pub(crate) fn litset_is_ground(s: &[i64]) -> bool {
+pub(crate) fn set_is_ground(s: &[i64]) -> bool {
     match s {
         [] => false,
         [first, rest @ ..] => rest.iter().all(|x| x == first),
@@ -230,11 +222,11 @@ impl Lattice for ValueAst {
 
     /// The pattern denotes a single concrete integer. Semantic, not
     /// syntactic: `Expr` that folds to a constant is ground, and a
-    /// `LitSet` of a single value (regardless of duplicates) is ground.
+    /// `Set` of a single value (regardless of duplicates) is ground.
     ///
     /// Fast path — `Lit` and `Undetermined` dispatch with two tag compares
     /// so the common case (a fully-lowered ground molecule) doesn't pay
-    /// for the `LitSet`/`Expr` logic.
+    /// for the `Set`/`Expr` logic.
     #[inline]
     fn is_ground(&self) -> bool {
         match self {
@@ -248,24 +240,22 @@ impl Lattice for ValueAst {
         match (self, other) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
-            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
+            (Self::Lit(a), Self::Set(s)) | (Self::Set(s), Self::Lit(a)) => {
                 s.contains(a).then_some(Self::Lit(*a))
             }
-            (Self::LitSet(s), Self::LitSet(t)) => {
+            (Self::Set(s), Self::Set(t)) => {
                 let intersection: Vec<i64> = s.iter().filter(|x| t.contains(x)).copied().collect();
                 match intersection.len() {
                     0 => None,
                     1 => Some(Self::Lit(intersection[0])),
-                    _ => Some(Self::LitSet(Box::new(intersection))),
+                    _ => Some(Self::Set(Box::new(intersection))),
                 }
             }
             (Self::Expr(e), Self::Expr(f)) => (e == f).then(|| Self::Expr(e.clone())),
             (Self::Ref(a), Self::Ref(b)) if a == b => Some(Self::Ref(a.clone())),
-            (Self::Bind { id: a, set: s }, Self::Bind { id: b, set: t }) if a == b && s == t => {
-                Some(self.clone())
-            }
+            (Self::Bind(a), Self::Bind(b)) if a == b => Some(self.clone()),
             (Self::Expr(_), _) | (_, Self::Expr(_)) => None,
-            (Self::Bind { .. } | Self::Ref(_), _) | (_, Self::Bind { .. } | Self::Ref(_)) => None,
+            (Self::Bind(_) | Self::Ref(_), _) | (_, Self::Bind(_) | Self::Ref(_)) => None,
         }
     }
 
@@ -276,10 +266,10 @@ impl Lattice for ValueAst {
                 if a == b {
                     Self::Lit(*a)
                 } else {
-                    Self::LitSet(Box::new(vec![*a, *b]))
+                    Self::Set(Box::new(vec![*a, *b]))
                 }
             }
-            (Self::Lit(a), Self::LitSet(s)) => {
+            (Self::Lit(a), Self::Set(s)) => {
                 let mut v: Vec<i64> = Vec::with_capacity(s.len() + 1);
                 v.push(*a);
                 for &x in s.iter() {
@@ -290,10 +280,10 @@ impl Lattice for ValueAst {
                 if v.len() == 1 {
                     Self::Lit(v[0])
                 } else {
-                    Self::LitSet(Box::new(v))
+                    Self::Set(Box::new(v))
                 }
             }
-            (Self::LitSet(s), Self::Lit(a)) => {
+            (Self::Set(s), Self::Lit(a)) => {
                 let mut v: Vec<i64> = s.to_vec();
                 if !v.contains(a) {
                     v.push(*a);
@@ -301,10 +291,10 @@ impl Lattice for ValueAst {
                 if v.len() == 1 {
                     Self::Lit(v[0])
                 } else {
-                    Self::LitSet(Box::new(v))
+                    Self::Set(Box::new(v))
                 }
             }
-            (Self::LitSet(s), Self::LitSet(t)) => {
+            (Self::Set(s), Self::Set(t)) => {
                 let mut v: Vec<i64> = s.to_vec();
                 for &x in t.iter() {
                     if !v.contains(&x) {
@@ -314,14 +304,12 @@ impl Lattice for ValueAst {
                 if v.len() == 1 {
                     Self::Lit(v[0])
                 } else {
-                    Self::LitSet(Box::new(v))
+                    Self::Set(Box::new(v))
                 }
             }
             (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
             (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
-            (Self::Bind { id: a, set: s }, Self::Bind { id: b, set: t }) if a == b && s == t => {
-                self.clone()
-            }
+            (Self::Bind(a), Self::Bind(b)) if a == b => self.clone(),
             _ => Self::Undetermined,
         }
     }
@@ -329,7 +317,7 @@ impl Lattice for ValueAst {
     /// Pattern matches target iff every integer target admits is also
     /// admitted by pattern (superset semantics). `Expr` and `Ref` targets
     /// cannot be certified generically and are rejected. `Bind` is treated
-    /// as a `LitSet` of its admissible values on either side.
+    /// as a `Set` of its admissible values on either side.
     fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Undetermined, _) => true,
@@ -337,9 +325,8 @@ impl Lattice for ValueAst {
             (Self::Ref(_), _) | (_, Self::Ref(_)) => false,
             (_, Self::Expr(_)) => false,
             (pattern, Self::Lit(n)) => pattern.matches_value(*n),
-            (pattern, Self::LitSet(ns) | Self::Bind { set: ns, .. }) => {
-                ns.iter().all(|n| pattern.matches_value(*n))
-            }
+            (pattern, Self::Set(ns)) => ns.iter().all(|n| pattern.matches_value(*n)),
+            (pattern, Self::Bind(b)) => b.1.iter().all(|n| pattern.matches_value(*n)),
         }
     }
 }
@@ -409,7 +396,7 @@ impl From<SpinMultiplicity> for ValueAst {
 
 impl From<Vec<i64>> for ValueAst {
     fn from(values: Vec<i64>) -> Self {
-        Self::LitSet(Box::new(values))
+        Self::Set(Box::new(values))
     }
 }
 
@@ -648,6 +635,15 @@ pub enum RelOp {
     Gt,
 }
 
+/// Set-membership operator for `ElementAst::Bind` and `IsotopeAst::Bind`:
+/// `In` admits values in the set (`?e :: {F, Cl}`), `NotIn` admits values
+/// outside it (`?e :: !{F, Cl}`). Parallels the `Set`/`NotSet` split.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MemOp {
+    In,
+    NotIn,
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -726,10 +722,10 @@ mod tests {
     #[case::lit_zero(ValueAst::Lit(0), Some(0))]
     #[case::lit_neg(ValueAst::Lit(-5), Some(-5))]
     #[case::undetermined(ValueAst::Undetermined, None)]
-    #[case::lit_set_empty(ValueAst::LitSet(Box::default()), None)]
-    #[case::lit_set_singleton(ValueAst::LitSet(Box::new(vec![7])), Some(7))]
-    #[case::lit_set_all_equal(ValueAst::LitSet(Box::new(vec![3, 3, 3])), Some(3))]
-    #[case::lit_set_multi(ValueAst::LitSet(Box::new(vec![1, 2])), None)]
+    #[case::set_empty(ValueAst::Set(Box::default()), None)]
+    #[case::set_singleton(ValueAst::Set(Box::new(vec![7])), Some(7))]
+    #[case::set_all_equal(ValueAst::Set(Box::new(vec![3, 3, 3])), Some(3))]
+    #[case::set_multi(ValueAst::Set(Box::new(vec![1, 2])), None)]
     #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Lit(5))), Some(5))]
     #[case::expr_neg_lit(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))), Some(-3))]
     #[case::expr_const_add(
@@ -756,7 +752,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(ValueAst::Undetermined, 3, true)]
     #[case::lit_match(ValueAst::Lit(3), 3,  true)]
-    #[case::lit_set_match(ValueAst::LitSet(Box::new(vec![1, 2, 3])), 2, true)]
+    #[case::set_match(ValueAst::Set(Box::new(vec![1, 2, 3])), 2, true)]
     #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".to_string()))), 5, true)]
     #[case::expr_lit_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 3, true)]
     #[case::expr_rel_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 3, true)]
@@ -775,7 +771,7 @@ mod tests {
     #[rstest]
     #[case::undetermined(ValueAst::Undetermined, 3, Bindings::new())]
     #[case::lit_match(ValueAst::Lit(3), 3, Bindings::new())]
-    #[case::lit_set_match(ValueAst::LitSet(Box::new(vec![1, 2, 3])), 2, Bindings::new())]
+    #[case::set_match(ValueAst::Set(Box::new(vec![1, 2, 3])), 2, Bindings::new())]
     #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".to_string()))), 5, Bindings::from([("h".to_string(), 5)]))]
     #[case::expr_lit_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 3, Bindings::new())]
     #[case::expr_rel_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 3, Bindings::from([("h".to_string(), 3)]))]
@@ -822,7 +818,7 @@ mod tests {
     #[rstest]
     #[case::lit(ValueAst::Lit(5), ValueAst::Lit(5))]
     #[case::undetermined(ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::lit_set(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![1, 2])))]
+    #[case::set(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![1, 2])))]
     #[case::ref_stays(ValueAst::reference("h"), ValueAst::reference("h"))]
     #[case::bind_stays(ValueAst::bind("h", vec![1, 2]), ValueAst::bind("h", vec![1, 2]))]
     #[case::expr_lit_lifts(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Lit(5))]
@@ -884,7 +880,7 @@ mod tests {
     #[case::lit_negative(ValueAst::Lit(1), ValueAst::Lit(-4), ValueAst::Lit(-3))]
     #[case::lit_undetermined(ValueAst::Lit(2), ValueAst::Undetermined, ValueAst::Undetermined)]
     #[case::undetermined_lit(ValueAst::Undetermined, ValueAst::Lit(2), ValueAst::Undetermined)]
-    #[case::litset_lit(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::Lit(3), ValueAst::Undetermined)]
+    #[case::set_lit(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Lit(3), ValueAst::Undetermined)]
     #[case::lit_expr(ValueAst::Lit(2), ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Undetermined)]
     fn test_value_ast_add(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(lhs + rhs, expected);
@@ -929,13 +925,13 @@ mod tests {
     #[case::lit_und(ValueAst::Lit(3), ValueAst::Undetermined, Some(ValueAst::Lit(3)))]
     #[case::lit_lit_eq(ValueAst::Lit(3), ValueAst::Lit(3), Some(ValueAst::Lit(3)))]
     #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), None)]
-    #[case::lit_litset_in(ValueAst::Lit(2), ValueAst::LitSet(Box::new(vec![1, 2, 3])), Some(ValueAst::Lit(2)))]
-    #[case::lit_litset_out(ValueAst::Lit(5), ValueAst::LitSet(Box::new(vec![1, 2, 3])), None)]
-    #[case::litset_lit_in(ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::Lit(2), Some(ValueAst::Lit(2)))]
-    #[case::litset_litset_multi(ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::LitSet(Box::new(vec![2, 3, 4])),
-        Some(ValueAst::LitSet(Box::new(vec![2, 3]))))]
-    #[case::litset_litset_singleton(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![2, 3])), Some(ValueAst::Lit(2)))]
-    #[case::litset_litset_empty(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![3, 4])), None)]
+    #[case::lit_set_in(ValueAst::Lit(2), ValueAst::Set(Box::new(vec![1, 2, 3])), Some(ValueAst::Lit(2)))]
+    #[case::lit_set_out(ValueAst::Lit(5), ValueAst::Set(Box::new(vec![1, 2, 3])), None)]
+    #[case::set_lit_in(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Lit(2), Some(ValueAst::Lit(2)))]
+    #[case::set_set_multi(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Set(Box::new(vec![2, 3, 4])),
+        Some(ValueAst::Set(Box::new(vec![2, 3]))))]
+    #[case::set_set_singleton(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![2, 3])), Some(ValueAst::Lit(2)))]
+    #[case::set_set_empty(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![3, 4])), None)]
     #[case::expr_expr_eq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))), Some(ValueAst::Expr(Box::new(Expr::Lit(5)))))]
     #[case::expr_expr_neq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(6))), None)]
     #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Lit(5), None)]
@@ -964,13 +960,13 @@ mod tests {
     #[case::und_lit(ValueAst::Undetermined, ValueAst::Lit(3), ValueAst::Undetermined)]
     #[case::lit_und(ValueAst::Lit(3), ValueAst::Undetermined, ValueAst::Undetermined)]
     #[case::lit_lit_eq(ValueAst::Lit(3), ValueAst::Lit(3), ValueAst::Lit(3))]
-    #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), ValueAst::LitSet(Box::new(vec![3, 4])))]
-    #[case::lit_litset_in(ValueAst::Lit(2), ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::LitSet(Box::new(vec![2, 1, 3])))]
-    #[case::lit_litset_out(ValueAst::Lit(5), ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::LitSet(Box::new(vec![5, 1, 2, 3])))]
-    #[case::litset_lit_in(ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::Lit(2), ValueAst::LitSet(Box::new(vec![1, 2, 3])))]
-    #[case::litset_lit_out(ValueAst::LitSet(Box::new(vec![1, 2, 3])), ValueAst::Lit(4), ValueAst::LitSet(Box::new(vec![1, 2, 3, 4])))]
-    #[case::litset_litset_overlap(ValueAst::LitSet(Box::new(vec![1, 2])), ValueAst::LitSet(Box::new(vec![2, 3])),
-        ValueAst::LitSet(Box::new(vec![1, 2, 3])))]
+    #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), ValueAst::Set(Box::new(vec![3, 4])))]
+    #[case::lit_set_in(ValueAst::Lit(2), ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Set(Box::new(vec![2, 1, 3])))]
+    #[case::lit_set_out(ValueAst::Lit(5), ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Set(Box::new(vec![5, 1, 2, 3])))]
+    #[case::set_lit_in(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Lit(2), ValueAst::Set(Box::new(vec![1, 2, 3])))]
+    #[case::set_lit_out(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Lit(4), ValueAst::Set(Box::new(vec![1, 2, 3, 4])))]
+    #[case::set_set_overlap(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![2, 3])),
+        ValueAst::Set(Box::new(vec![1, 2, 3])))]
     #[case::expr_expr_eq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))))]
     #[case::expr_expr_neq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(6))), ValueAst::Undetermined)]
     #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Lit(5), ValueAst::Undetermined)]
@@ -1006,7 +1002,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::no_change(ValueAst::Lit(3), ValueAst::Lit(3), false, ValueAst::Lit(3))]
-    #[case::widen_to_set(ValueAst::Lit(3), ValueAst::Lit(4), true, ValueAst::LitSet(Box::new(vec![3, 4])))]
+    #[case::widen_to_set(ValueAst::Lit(3), ValueAst::Lit(4), true, ValueAst::Set(Box::new(vec![3, 4])))]
     #[case::widen_to_top(ValueAst::Lit(3), ValueAst::Undetermined, true, ValueAst::Undetermined)]
     fn test_value_ast_widen_with(
         #[case] mut target: ValueAst,

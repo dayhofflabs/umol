@@ -458,15 +458,15 @@ tag ::= [A-Za-z_]
 isotope-payload ::= '='                           (* Natural — naturally most abundant *)
                   | '*'                            (* Undetermined — wildcard           *)
                   | signed-int                     (* Lit                                *)
-                  | nat-set                        (* LitSet — finite mass disjunction  *)
+                  | nat-set                        (* Set — finite mass disjunction      *)
                   | '!' signed-int                 (* Not — cofinite singleton          *)
                   | '!' nat-set                    (* NotSet — cofinite multi           *)
                   | '?' id                         (* Ref — bind reference              *)
                   | '?' id '::' isotope-domain     (* Bind — named domain                *)
 
-isotope-domain  ::= nat-set                        (* Include polarity                  *)
-                  | '!' signed-int                 (* Exclude polarity (singleton)      *)
-                  | '!' nat-set                    (* Exclude polarity                  *)
+isotope-domain  ::= nat-set                        (* MemOp::In                          *)
+                  | '!' signed-int                 (* MemOp::NotIn (singleton)           *)
+                  | '!' nat-set                    (* MemOp::NotIn                       *)
 ```
 
 **Paren-transparency.** Outer parentheses around **`?` *id*** or **`?` *id* `::` *isotope-domain*** are **optional** and **semantically transparent** (same rule as element §7.4 and value-expr §5). Canonical render is bare.
@@ -541,7 +541,7 @@ element-literal ::= [A-Z][a-z]*
 - **`*`**: any element; **invalid** in **Ground** unless narrowed by a containing rule outside this specification.
 - **`element-set`**: finite non-empty disjunction of **one or more** **`element-literal`** entries; **§7.2**. **Query** / **Rule** when **Ground** disallows wildcards.
 - **`!` *element-literal*** / **`!` *element-set***: cofinite **negation** — admits everything in the element domain **except** the named literal / set members. **§7.2** range applies to the excluded entries. **Invalid** in **Ground**.
-- **`element-bind`**: **Query** / **Rule** only. Introduces a **nominal** variable **`id`** constrained to **membership in** (Include polarity) or **exclusion from** (Exclude polarity) an **`element-domain`** (**§6**). **`::`** here means **set membership in a set of element symbols** (**§5**). The `!` prefix flips the polarity to Exclude. **Invalid** in **Ground**.
+- **`element-bind`**: **Query** / **Rule** only. Introduces a **nominal** variable **`id`** constrained to **membership in** (**`MemOp::In`**) or **exclusion from** (**`MemOp::NotIn`**) an **`element-domain`** (**§6**). **`::`** here means **set membership in a set of element symbols** (**§5**). The `!` prefix flips the operator to **`NotIn`**. **Invalid** in **Ground**.
 - **`element-ref`**: **Query** / **Rule** only. **Nominal reference**: **`id`** must already be bound as a nominal in rule scope (**§6**). Appears only in the **element** position at the start of the atom-string. No arithmetic on nominal variables.
 
 **Paren-transparency.** Outer parentheses around an **`element-bind`** or **`element-ref`** are **optional** and **semantically transparent**: implementations **MUST** accept the bare forms (**`?e`**, **`?e :: {C,N}`**) and any nesting depth of outer parens (**`(?e)`**, **`((?e :: {C,N}))`**, …) as identical AST. The **canonical** rendered form is **bare** (no outer parens).

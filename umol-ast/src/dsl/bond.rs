@@ -619,7 +619,7 @@ mod tests {
     #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
     #[case::ring_count_undetermined(BondConstraint::RingCount(ValueAst::Undetermined), "{:ring-count :undetermined}")]
     #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
-    #[case::ring_size_set(BondConstraint::RingSize(ValueAst::LitSet(Box::new(vec![5, 6]))), "{:ring-size [5 6]}")]
+    #[case::ring_size_set(BondConstraint::RingSize(ValueAst::Set(Box::new(vec![5, 6]))), "{:ring-size [5 6]}")]
     fn test_bond_constraint_dsl_roundtrip(
         #[case] input: BondConstraint,
         #[case] edn_source: &str,
