@@ -9,7 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use umol_ast::ast::{FromAst, IntoAst, MoleculeAst};
-use umol_ast::dsl::{ImplicitHydrogensDefault, MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
+use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides, NumericDefault};
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ops::config::{AromaticityModel, ChemistryModel, ValenceModel};
 use umol_graph::ops::resolver::Resolver;
@@ -86,7 +86,7 @@ fn counts_chemistry(defaults: &MoleculeDefaults) -> ChemistryModel {
             normal_valence: NormalValenceTable::default_table().clone(),
             allow_implicit_hydrogens: !matches!(
                 defaults.atom.implicit_hydrogens,
-                ImplicitHydrogensDefault::Zero,
+                NumericDefault::Zero,
             ),
         },
         aromaticity: AromaticityModel::daylight(),

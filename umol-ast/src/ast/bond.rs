@@ -327,17 +327,23 @@ mod tests {
         BondAst::from_order(3),
         BondAst { order: ValueAst::LitSet(Box::new(vec![2, 3])), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
     )]
-    fn test_bond_ast_join(
-        #[case] a: BondAst,
-        #[case] b: BondAst,
-        #[case] expected: BondAst,
-    ) {
+    fn test_bond_ast_join(#[case] a: BondAst, #[case] b: BondAst, #[case] expected: BondAst) {
         assert_eq!(a.join(&b), expected);
     }
 
     #[rstest]
-    #[case::changed(BondAst::default(), BondAst::from_order(2), true, BondAst::from_order(2))]
-    #[case::no_change(BondAst::from_order(2), BondAst::from_order(2), false, BondAst::from_order(2))]
+    #[case::changed(
+        BondAst::default(),
+        BondAst::from_order(2),
+        true,
+        BondAst::from_order(2)
+    )]
+    #[case::no_change(
+        BondAst::from_order(2),
+        BondAst::from_order(2),
+        false,
+        BondAst::from_order(2)
+    )]
     fn test_bond_ast_narrow_from(
         #[case] mut target: BondAst,
         #[case] source: BondAst,

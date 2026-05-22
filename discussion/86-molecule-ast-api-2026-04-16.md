@@ -1586,43 +1586,142 @@ Property-style tests can come after the focused cases:
 
 **Completion**: predicates callable; NeighborView calls in ops/ migrated. **Dependencies**: phases 1, 4. **Risk**: low.
 
-### Phase 12 — Validation tier-2 stubs filled in
+### Resolution interdependence
 
-- `TotalCharge`, `TotalSpin`, `AromaticElectronCount` evaluators in `ConstraintValidator`
-- `SpinCouplingValidator` real implementation (currently stub)
-- `ConstraintValidator` cross-checks
+The per-atom electron-conservation equation (from [doc 52 §10.1.3](52-graph-ir-2026-02-11.md#1013-invariants), combining the orbital-count and electron-count invariants):
 
-**Completion**: per-test molecules pass tier-2 validation. **Dependencies**: phases 1–6. **Risk**: low–medium (chemistry-dependent).
+```
+Z(element) − charge = valence + implicit_h
+                    + aromatic_valence + multicenter_valence
+                    + 2·lone_pairs + 2·donated_pairs + unpaired
+```
 
-### Phase 13 — Ops migration + proptest update
+with side constraints: each term ≥ 0; parity `unpaired ↔ multiplicity`; `valence ∈ allowed_valences`; `aromatic_valence ∈ {0, 1, 2}`. Accepted pairs cancel between the orbital-count and electron-count invariants and do not appear here.
 
-- Migrate `ops/aromaticity/*`, `ops/valence/*`, `ops/transformer/*`, `ops/validator/*` to the new API surface
-- Update proptest generators and assertions for renamed types and new constraint variants
-- Verify all existing benchmarks still pass
+The case-by-case analysis of how the resolver should narrow `(charge, implicit_h, unpaired, lone_pairs)` under various input shapes — including the `is_aromatic` interaction, the `Normal` sentinel removal, partial-narrowing options for underdetermined inputs, and the role of fixed-point iteration for non-implicit-H cases (aromatic charge equalization, mixed-valence clusters, etc.) — lives in [doc 96](96-valence-resolution-plan-2026-05-21.md). That doc holds the chemistry-level discussion; this file holds the implementation work list.
 
-**Completion**: `cargo test --workspace --tests` green; benchmarks unchanged or improved. **Dependencies**: all earlier phases. **Risk**: medium.
+### Phase 11a — Implicit-H transformer pair
+
+`ToExplicitHydrogens` and `ToImplicitHydrogens` are mechanical, model-independent: implicit-H ↔ explicit-H is a pure topology+attribute rewrite. They live in a new `ops/implicit_hydrogens.rs` module (single file; `<module>.rs`, not `<module>/mod.rs`; splits internally only if size justifies).
+
+- `ToExplicitHydrogens`: for each atom with `implicit_hydrogens: Lit(n)` and n > 0, append n new H atoms + n new single bonds (`BondAst::from_order(1)`); set the source atom's `implicit_hydrogens` to `Lit(0)`. Idempotent (atoms with `Lit(0)` are no-ops).
+- `ToImplicitHydrogens`: inverse. For each candidate H atom — exactly one incident covalent bond, single, non-H partner — remove the H and its bond and increment the partner's `implicit_hydrogens`. Preserved as-is: isotope-labeled H (D/T, explicit `#i`), charged H, spin-bearing H, H in dative/multicenter/aromatic/noncovalent relations, H₂. Idempotent (no removable H → no-op).
+- Both implement the existing `Transformer` trait; pair round-trips when the input is in the source form.
+
+Implicit-H *perception* is not a separate phase. The implicit-H count is resolved inside valence resolution (counts / atom-typing) alongside `charge`, `unpaired`, and lone-pair `n`. See [doc 96](96-valence-resolution-plan-2026-05-21.md) for the case analysis and the design discussion for partial narrowing under underdetermined inputs.
+
+**Completion**: `ops/implicit_hydrogens.rs` carries both transformers; tests cover round-trip and per-direction correctness on representative aromatic/non-aromatic, charged/neutral, isotope-labeled, and dative inputs. **Dependencies**: Phase 14 (lattice infra). **Risk**: low — mechanical rewrite.
+
+### Current state of `ops/` (post Phase 14)
+
+**`ops/resolver`** — fills undetermined state from declarations + topology + model. One-shot per pass. Pipeline order today: valence → aromaticity → bonds → multicenter.
+
+- `valence/atom_typing.rs`, `valence/counts.rs`: rewritten in Phase 14 around `pattern.meet(&prepared).is_some()` + `atom_mut.narrow_from(&pattern)`. Skip ground atoms → idempotent. Both call `self.normal_valence.implicit_hydrogens_for(...)` for implicit-H imputation; this stays inside valence resolution (see doc 96 for the implicit-H design discussion). Both also use the `is_aromatic` disjunction `view.is_in_aromatic_system() || AromaticValenceAst::aromatic(Undetermined).matches(&aromatic_constraint)` — first arm for idempotency (membership from a prior sweep), second arm for declared `Aromatic(_)` constraints arriving from the parser. Correct by design; does not require aromaticity to run ahead of valence.
+- `resolver/aromaticity.rs`: wraps `AromaticityPerception::find_systems` with the closure `match constraints.aromatic_valence() { Aromatic(Lit(n)) ⇒ Some(n), _ ⇒ None }`. **Gap**: requires the literal π count in the constraint — cannot resolve a bare `Aromatic(Undetermined)` declaration directly from a parser; the literal is produced by counts/atom-typing's aromatic branch. Also **not idempotent** — re-running on an AST that already has aromatic systems re-perceives and re-adds them (no early-out analogous to the aromatizer's). Phase 13 Step 1 closes the bare-`Aromatic(_)` path and adds the idempotency early-out.
+- `resolver/bonds.rs`, `resolver/multicenter.rs`: trivial fillers (`charge → Lit(0)`, `spin → closed_shell` when fully undetermined). Idempotent.
+
+**`ops/aromaticity`** — shared perception model.
+
+- `aromaticity.rs`: `AromaticityPerception` enum (HueckelRule / Hmo / Clar). `find_systems(ast, electrons_at)` runs the selected algorithm against ring perception; `add_systems(ast, systems)` writes system entries, marks induced bonds aromatic, runs `equalize_charges`. Used by resolver, validator, and aromatizer — each supplying its own `electrons_at` closure.
+
+**`ops/validator`** — compare declared constraints / topology-derived state for consistency. Never mutates.
+
+- `validator/aromaticity.rs`: runs perception with the resolver's closure, compares perceived system list to AST's system list by atom-set equality. Doesn't check electron counts or per-bond aromaticity marking.
+- `validator/invariant.rs`: `ElectronInvariantValidator` — per-atom orbital count vs source-electron count.
+- `validator/entity.rs`: `EntityStructureValidator` — `electrons.len() == atoms.len()` on aromatic systems and multicenter bonds.
+- `validator/spin.rs`: `SpinCouplingValidator` — **stub** (always `Determined`).
+- `validator/constraint.rs`: `ConstraintValidator` — **stub** (always `Determined`).
+- Missing entirely: valence validator (declared `Valence`/`TotalValence`/etc. vs resolved σ-valence), implicit-H validator, bond/dative/noncovalent-bond validator, multicenter-bond validator.
+
+**`ops/transformer`** — pure transformations between resolved-AST shapes. Idempotent.
+
+- `transformer/aromatizer.rs`: Kekulé → aromatic-system. Reads bond orders, derives per-atom π via `electrons_from_kekule`. Idempotent (early-out when any aromatic system exists). **Shares only the perception model with the aromaticity resolver, not its semantics**: input is fully resolved with localized σ/π bonds; output replaces them with an aromatic-system entry.
+- `transformer/kekulizer.rs`: aromatic-system → Kekulé. Perfect-matching on the induced system subgraph. Idempotent (early-out when no aromatic systems).
+- Missing entirely: implicit-H ↔ explicit-H transformer pair.
+
+**`ops/valence`** (configuration / data, not algorithms).
+
+- `valence/table.rs`: `ValenceTable` — allowed σ-valences (and allowed aromatic valences) per element.
+- `valence/normal_valence.rs`: `NormalValenceTable` — normal σ-valence and aromatic-normal σ-valence per element. Used by both atom-typing and counts to impute implicit-H. **No element scope yet** (every element with table data is eligible), unlike `AromaticityModel`'s `ElementScope`.
+- `valence/registry.rs`: `AtomTypeRegistry` — pattern AtomAsts keyed by `(element, Option<i8> charge)`.
+
+### Phase 12 — Round out the validator suite
+
+Today only `ElectronInvariantValidator` and `EntityStructureValidator` have working implementations; `AromaticityValidator` is shallow; `SpinCouplingValidator` and `ConstraintValidator` are stubs; valence / implicit-H / bond / multicenter / noncovalent-bond validators don't exist. Phase 12 fills them in. Each validator follows the resolution-vs-validation rules in the section below: it never mutates, derives effective state from view + topology, and returns `Result<Solution<(), Contradiction>, Error>`.
+
+- `validator/spin.rs`: implement the per-entity parity rule `multiplicity = unpaired − 2k + 1` (`umol_shared::spin::SpinState::are_compatible`). Atom, aromatic-system, multicenter-bond entities each carry a `SpinStateAst`.
+- `validator/constraint.rs`: fill in the per-relation constraint evaluators currently noted as TODO — `ElectronCount` on `AromaticSystem`, the analogous rule on `MulticenterBond`, plus molecule-scope `:connected` / `:total-charge` / `:total-spin` / `AromaticElectronCount`.
+- `validator/aromaticity.rs`: extend — verify per-system electron counts match perception's, verify per-bond `Aromatic` flags match the system's induced bond set, verify atoms' `AromaticValence(Aromatic(Lit(n)))` literals agree with the system's electron contributions.
+- New `validator/valence.rs`: for each atom, derive σ-valence from topology, check it against the atom's `Valence` and `TotalValence` constraints (when present) via `constraint.matches(&effective)`. Also surfaces declared/derived disagreement when a `Valence(Lit(v))` constraint is incompatible with the bond-derived σ-valence.
+- New `validator/implicit_hydrogens.rs`: pure constraint-vs-state check. For each atom, derive `total_H = atom.implicit_hydrogens + count(neighbors == H)` and run `constraint.matches(&effective)` against any declared `ImplicitHydrogens` / `TotalHydrogens` constraints on the atom. No model-driven "expected" count — the resolver has already committed (or left underdetermined) the implicit-H value per doc 96; this validator only catches declared/resolved divergence.
+- New `validator/bonds.rs`: per-bond charge/spin consistency with its endpoints; per-dative-bond donor/acceptor consistency; uninhabited for noncovalent (no value-bearing fields).
+- New `validator/multicenter.rs`: parity of system charge vs sum of electron contributions; parity of spin coupling against participants.
+
+The composite `Validator` gains the new sub-validators, ordered such that structural shape checks run first, electron-invariant next, the relation-aware validators (aromaticity, multicenter, valence, implicit-H) after that, then constraint cross-checks.
+
+**Completion**: every conformance and proptest molecule passes the composite validator post-resolution. **Dependencies**: Phase 14 (lattice infra). **Risk**: low–medium (chemistry-dependent).
+
+### Phase 13 — Aromaticity-resolver idempotence
+
+**Pattern.** Each chemistry-level concept with a "compact declarative input ↔ fully expanded ground state" duality may carry up to four passes:
+
+1. **Perception model** (when separable) — the shared algorithm + per-element eligibility scope.
+2. **Resolver** — runs at input ingest. Reads declarative hints, runs perception (or the relevant algorithm inline), writes resolved state + per-entity literal constraints back. **Idempotent**.
+3. **Transformer pair** — both directions between the compact and expanded forms. Operates on already-resolved ground state. **Idempotent in its own direction**.
+4. **Validator** — compares declared constraints against resolved state via `Lattice::matches`.
+
+Aromaticity has all four: perception model in `ops/aromaticity`, resolver in `ops/resolver/aromaticity.rs`, transformer pair in `ops/transformer/{aromatizer,kekulizer}.rs`, validator in `ops/validator/aromaticity.rs`. Implicit-H has (3) in Phase 11a and (4) in Phase 12; (1) is not separable (folded into valence resolution per doc 96); (2) lives inside the valence resolvers.
+
+Phase 13 lands the remaining aromaticity-side gap: a working bare-`Aromatic(_)` resolution path with idempotence.
+
+##### Step 1 — Aromaticity resolver: handle `Aromatic(Undetermined)` and become idempotent
+
+Today the resolver requires `Aromatic(Lit(n))` to perceive — the literal is produced by counts/atom-typing's aromatic branch (the `is_aromatic` disjunction is the correct mechanism: idempotency arm + declared-data arm; see "Current state of `ops/`"). To accept bare-`Aromatic(_)` declarations directly, add a perception path that takes `Aromatic(_)` (any inner) as the eligibility signal and derives `n` from topology.
+
+Ordered sub-steps:
+
+1. **Hückel from topology**: extend `AromaticityPerception::find_systems` (or add a sibling entry point) so it can derive each atom's π contribution from element + localized valence + charge when the closure returns `Some(undetermined)` rather than `Some(Lit(n))`. The existing closure shape `Fn(&AtomView<'_>) -> Option<u8>` returns `None` for ineligible atoms; the new path returns `Some(derived)` for eligible-but-bare-`Aromatic(_)`.
+2. **Write-back**: after perception, write both (i) per-atom `AromaticValence(Aromatic(Lit(n)))` constraint with the resolved π; (ii) the `AromaticSystemAst` entry with per-atom electron counts and any equalized charge (the `add_systems` path already does this for systems; the new piece is also writing the literal back into the atom's constraint).
+3. **Idempotence**: early-out when every atom's `AromaticValence` is already `Aromatic(Lit(_))` *and* the AST already has the corresponding system entries. Mirrors the aromatizer's `aromatic_systems().count() > 0` short-circuit but with the constraint-side check too.
+
+Pipeline order stays valence → aromaticity → bonds → multicenter. The `is_aromatic` disjunction in counts/atom-typing stays — first arm continues to provide idempotency once aromaticity has run, second arm continues to honour declared `Aromatic(_)` on first pass.
+
+##### Step 2 — Validation gates
+
+`cargo test --workspace --tests` and the conformance suite stay green; no new clippy warnings. Every aromatic conformance case (`aromatic_*.edn`, `inorganic_*.edn`) must still produce the same snapshot it does today, and at least one new conformance case is added with `Aromatic(Undetermined)` declarations only (no pre-resolved π literals) to exercise the new path.
+
+**Completion**: aromaticity resolver handles `Aromatic(Undetermined)` end-to-end and is idempotent. **Dependencies**: Phase 14 (lattice infra), Phase 12 (validator cross-check). **Risk**: medium (aromaticity-resolver rewrite is load-bearing).
 
 #### Resolution vs. validation
 
-Every op that handles constraint-vs-state interaction splits into two distinct passes. Conflating them was the original sin behind the `satisfies` indirection (Phase 14, Step 5) and the legacy permissive `atom_is_aromatic`.
+Every op that handles constraint-vs-state interaction splits into distinct passes. Conflating them was the original sin behind the `satisfies` indirection (Phase 14, Step 5) and the legacy permissive `atom_is_aromatic`.
 
-- **Resolution** translates *declared constraints* into *derived state* using a model. It runs once when lowering from the declarative AST into the resolved hierarchy. Inputs: the `*Constraints` containers carrying user-supplied assertions. Outputs: concrete state on the entity (e.g. aromatic-system membership, atom-type assignment, ring set). The model is the input table or algorithm (e.g. aromaticity model, valence registry, ring-perception strategy); resolution may consult constraints as hints (pinned π count, declared aromaticity) but is not driven by them — declarations are *constraints to satisfy*, not *state to propagate*. Once resolved, the derived state is the source of truth; constraints remain on the entity but are no longer consulted to answer "what is the atom's aromaticity / valence / ring membership."
+- **Perception** is the shared algorithmic core (Hückel rule, ring perception, …) when it is large enough or shared enough to live in its own model object. Perception itself isn't resolution / validation / transformation — those three *consume* it. `ops/aromaticity` is the one perception module today. Implicit-H inference is not separable as its own perception module — it is resolved inside valence resolution (see doc 96).
+- **Resolution** translates *declared constraints* into *derived state* using a perception model. It runs once when lowering from the declarative AST into the resolved hierarchy. Inputs: the `*Constraints` containers carrying user-supplied assertions. Outputs: concrete state on the entity (e.g. aromatic-system membership, atom-type assignment, ring set). The model is the input table or algorithm (e.g. aromaticity model, valence registry, ring-perception strategy); resolution may consult constraints as hints (pinned π count, declared aromaticity) but is not driven by them — declarations are *constraints to satisfy*, not *state to propagate*. Resolution must be **idempotent**: ingest paths run it on every parser output, so re-running on an already-resolved AST has to be a no-op. After resolution, the derived state and the per-entity literal constraints are both the source of truth; downstream code reads whichever is convenient.
 - **Validation** compares *declared constraints* against *resolved state* for consistency. It runs after resolution. For each constraint of kind K, derive the effective state value at K from the entity and call `constraint.matches(&effective)` — pure lattice algebra (Phase 14, Step 5). Pattern `Undetermined` (vacuous) trivially matches. Mismatches surface as op-specific errors (`AromaticityValidationError`, `ValenceValidationError`, ...). Validation never mutates state.
+- **Transformation** operates on a *fully resolved* AST and rewrites it into another fully resolved AST — never imputes undetermined state, never validates. The aromatizer/kekulizer pair and the implicit-H/explicit-H pair are the canonical examples. Transformers are idempotent in their own direction; the *pair* round-trips when the input is in the source form.
 
 Concretely per op:
 
-- `ops/aromaticity`: `AromaticityPerception::resolve` (constraints → memberships); `AromaticityPerception::validate` (memberships ↔ constraints check). `view.is_in_aromatic_system()` is the post-resolution accessor; `view.constraints().aromatic_valence()` returns the declared constraint untouched. The two never combine via disjunction.
-- `ops/valence`: `counts.rs` and `atom_typing.rs` are resolution. `ops/validator/valence.rs` (when it lands) is validation; it checks the resolved candidate against the declared `Valence` / `TotalValence` / etc. constraints.
-- `ops/transformer` (kekulize, aromatize): mutates resolved state. After mutation, run validation to confirm declared constraints still hold.
-- `ops/validator`: pure validation; never resolves.
+- `ops/aromaticity`: shared perception model. Used by resolver, validator, and the aromatize transformer with different `electrons_at` closures.
+- `ops/resolver/aromaticity.rs`: resolution — `Aromatic(_)` declarations → resolved memberships + literal π counts. Idempotent.
+- `ops/transformer/aromatizer.rs`: transformation — localized σ/π Kekulé form → aromatic-system form. Idempotent. Distinct from the resolver: the aromatizer's input has no `Aromatic` declarations and has localized double bonds; the resolver's input has `Aromatic` declarations and undefined π.
+- `ops/transformer/kekulizer.rs`: inverse transformation.
+- `ops/validator/aromaticity.rs`: validation — declared `AromaticValence` vs derived membership / π count.
+- `ops/implicit_hydrogens` (Phase 11a): houses the `ToImplicitHydrogens` / `ToExplicitHydrogens` transformer pair only. Mechanical — no perception model.
+- `ops/resolver` valence path: implicit-H is resolved alongside `charge`, `unpaired`, `lone_pairs` inside counts / atom-typing. See doc 96 for the case enumeration and the design discussion on partial narrowing under underdetermined inputs.
+- `ops/validator/implicit_hydrogens.rs` (Phase 12): pure constraint-vs-state — declared `ImplicitHydrogens` / `TotalHydrogens` constraints vs resolved counts.
+- `ops/valence` (resolver path): resolution. Validation lives in the new `validator/valence.rs`.
 
 Implementation rules:
 
 - Resolution APIs return resolved state; they do not return validation verdicts. If resolution detects an unsatisfiable declared constraint (no resolution exists), that's a resolution error (e.g., `CountsError::NoValidValenceState`), not a validation error.
+- Resolution APIs must be idempotent: re-running on an already-resolved AST is a no-op (no duplicate system entries, no constraints re-written to the same value).
 - Validation APIs return `Result<(), ValidationError>`; they never mutate. The pattern is always `for each constraint c in entity: c.matches(&derived_state_at(c.kind()))`.
+- Transformer APIs operate only on fully resolved ASTs. Each direction is idempotent; the pair round-trips on inputs in the source form.
 - Neither pass calls `satisfies` (it does not exist). Neither pass mixes "is the constraint asserted?" with "is the state consistent with it?" — those are answered by `entity.constraints().get(...)` and `constraint.matches(&derived)` respectively.
 
-### Phase 14 — Lattice ops + valence resolver cleanup
+### Phase 14 — Lattice ops + valence resolver cleanup **Done**
 
 Adds a `Lattice` trait covering the standard partial-order/lattice operations on AST refinement types, replaces the misnamed `narrow_atom`/`lift_constraints` flow in the valence resolvers with derived `Lattice` operations, and deletes `umol-graph/src/ops/valence/shared.rs` entirely.
 
@@ -1753,7 +1852,7 @@ What was actually done in this step:
 ##### Step 7 — Migrate `counts.rs` **Done**
 
 - Moved `try_build_candidate` and `resolve_unpaired_lone_pairs` from `shared.rs` into `counts.rs` as private fns. `build_aromatic_candidates` became a method on `CountsValenceResolver` so it can call `self.normal_valence.implicit_hydrogens_for(...)` for the `Normal` branch (in place of the static `infer_normal_aromatic_implicit_hydrogens`).
-- **Aromatic-branch decision**: `view.is_in_aromatic_system() || AromaticValenceAst::aromatic(ValueAst::Undetermined).matches(&aromatic_constraint)`. The disjunction is load-bearing in the current `Resolver` pipeline (valence runs before aromaticity), and the declaration arm uses `Lattice::matches` against the constraint accessor instead of the legacy ad-hoc `atom_is_aromatic` helper. The doc-86-original plan of "perception runs first → counts reads memberships alone" is **not** achievable yet: `AromaticityResolver` requires `AromaticValence(Aromatic(Lit(n)))` to perceive systems (resolver/aromaticity.rs:31-34), and counts is what writes that literal. Either the pipeline keeps the current order with counts honouring declarations, or perception gains the ability to perceive from `Aromatic(Undetermined)` declarations (Hückel on ring topology) — that's a separate piece of work.
+- **Aromatic-branch decision**: `view.is_in_aromatic_system() || AromaticValenceAst::aromatic(ValueAst::Undetermined).matches(&aromatic_constraint)`. Two arms: first for idempotency (membership from a prior sweep), second for declared `Aromatic(_)` constraints from the parser. The declaration arm uses `Lattice::matches` against the constraint accessor instead of the legacy ad-hoc `atom_is_aromatic` helper. Pipeline order is valence → aromaticity; neither arm requires that order to flip.
 - **Per-candidate aromatic filter**: replaced the `aromatic_pi_pinned`-extract-then-equality pattern with `aromatic_constraint.matches(&AromaticValenceAst::Aromatic(ValueAst::Lit(a as i64)))` inside the loop. `Lattice::matches` is the natural pattern/target check; the previous helper was reinventing it.
 - **Dissolved `AtomCandidate`**: `candidates_for` returns `Vec<AtomAst>`. Synthetic `Valence(Lit(v))` (and, in the aromatic case, `AromaticValence(Aromatic(Lit(a)))`) are pushed onto each candidate's own `.constraints` instead of being returned alongside.
 - **Resolve callsite**: `atom_mut.narrow_from(&cand)` — single `Lattice` op replaces the `narrow_atom + lift_constraints` pair (constraint merging falls out of the field-wise `AtomConstraints::meet` already established in Step 3).
@@ -1915,7 +2014,7 @@ Holds for ground and partial ASTs alike. A pattern with `Undetermined` element s
 
 Universal — they follow from electron and angular-momentum conservation. Hold for every chemical system regardless of model.
 
-- **Per-atom electron count.** Z − charge = bonded_electrons + 2·lone_pairs + unpaired.
+- **Per-atom electron count** (full form in [doc 52 §10.1.3](52-graph-ir-2026-02-11.md#1013-invariants)): `Z − charge = valence + implicit_h + aromatic_valence + multicenter_valence + 2·lone_pairs + 2·donated_pairs + unpaired`.
 - **Total charge consistency.** Sum of atom charges = asserted molecular total (if asserted via `Derived { TotalCharge }`).
 - **Total spin coupling.** Per-atom unpaired electrons couple consistently to asserted total spin.
 - **Unpaired electrons/spin multiplicity consistency.** = u % 2 + 1 <= M <= u + 1

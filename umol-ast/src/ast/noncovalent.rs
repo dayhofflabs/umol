@@ -75,9 +75,8 @@ impl Lattice for NoncovalentBondAst {
     /// kinds → `None`.
     fn meet(&self, other: &Self) -> Option<Self> {
         let kind = match (&self.kind, &other.kind) {
-            (NoncovalentBondKindAst::Undetermined, k) | (k, NoncovalentBondKindAst::Undetermined) => {
-                k.clone()
-            }
+            (NoncovalentBondKindAst::Undetermined, k)
+            | (k, NoncovalentBondKindAst::Undetermined) => k.clone(),
             (a, b) if a == b => a.clone(),
             _ => return None,
         };
@@ -91,9 +90,8 @@ impl Lattice for NoncovalentBondAst {
     /// `Default::default()` (entity-level undetermined).
     fn join(&self, other: &Self) -> Self {
         match (&self.kind, &other.kind) {
-            (NoncovalentBondKindAst::Undetermined, _) | (_, NoncovalentBondKindAst::Undetermined) => {
-                Self::default()
-            }
+            (NoncovalentBondKindAst::Undetermined, _)
+            | (_, NoncovalentBondKindAst::Undetermined) => Self::default(),
             (a, b) if a == b => Self {
                 kind: a.clone(),
                 constraints: self.constraints.join(&other.constraints),
@@ -300,17 +298,17 @@ mod tests {
     #[case::both_default(
         NoncovalentBondAst::default(),
         NoncovalentBondAst::default(),
-        Some(NoncovalentBondAst::default()),
+        Some(NoncovalentBondAst::default())
     )]
     #[case::kind_mismatch(
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond),
-        None,
+        None
     )]
     #[case::kind_narrows_from_undetermined(
         NoncovalentBondAst::default(),
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
-        Some(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)),
+        Some(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))
     )]
     fn test_noncovalent_bond_ast_meet(
         #[case] a: NoncovalentBondAst,
@@ -324,7 +322,7 @@ mod tests {
     #[case::kind_mismatch_widens_to_default(
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HalogenBond),
-        NoncovalentBondAst::default(),
+        NoncovalentBondAst::default()
     )]
     fn test_noncovalent_bond_ast_join(
         #[case] a: NoncovalentBondAst,

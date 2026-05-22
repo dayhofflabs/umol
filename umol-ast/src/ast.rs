@@ -23,7 +23,7 @@ pub(crate) mod value;
 pub(crate) mod views;
 
 pub use aromatic::AromaticSystemAst;
-pub use atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
+pub use atom::{AtomAst, ElementAst, IsotopeAst, Polarity};
 pub use automorphism::AtomAutomorphism;
 pub use bond::BondAst;
 pub use constraint::{

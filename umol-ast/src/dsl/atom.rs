@@ -14,8 +14,7 @@ use winnow::token::{one_of, take};
 use winnow::Parser;
 
 use super::config::{
-    AromaticValenceDefault, AtomDefaults, ImplicitHydrogensDefault, IsotopeDefault,
-    MulticenterValenceDefault, NumericDefault,
+    AromaticValenceDefault, AtomDefaults, IsotopeDefault, MulticenterValenceDefault, NumericDefault,
 };
 use super::error::{PResult, ParseError};
 use super::predicates::{
@@ -23,7 +22,7 @@ use super::predicates::{
     raise_spin, ring_count, SpinPredicate,
 };
 use super::value::{fmt_value, id, value, ValueDsl};
-use crate::ast::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
+use crate::ast::atom::{AtomAst, ElementAst, IsotopeAst, Polarity};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
@@ -209,7 +208,7 @@ fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
 pub enum AtomPredicate {
     IsotopeMass(IsotopeAst),
     Charge(ValueAst),
-    ImplicitHydrogens(ImplicitHydrogensAst),
+    ImplicitHydrogens(ValueAst),
     LonePairs(ValueAst),
     Spin(SpinPredicate),
     Constraint(AtomConstraint),
@@ -217,11 +216,17 @@ pub enum AtomPredicate {
 
 fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
     let start = *i;
+    if i.is_empty() {
+        return Err(ErrMode::Backtrack(ParseError::Syntax));
+    }
+    if i.len() < 2 {
+        return Err(ErrMode::Cut(ParseError::TrailingInput(start.to_string())));
+    }
     let prefix: &str = take(2usize).parse_next(i)?;
     match prefix {
         "#i" => isotope.map(AtomPredicate::IsotopeMass).parse_next(i),
         "#c" => charge.map(AtomPredicate::Charge).parse_next(i),
-        "#h" => implicit_hydrogens
+        "#h" => optional_value
             .map(AtomPredicate::ImplicitHydrogens)
             .parse_next(i),
         "#n" => optional_value.map(AtomPredicate::LonePairs).parse_next(i),
@@ -280,8 +285,12 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
 fn element(i: &mut &str) -> PResult<ElementAst> {
     alt((
         '*'.value(ElementAst::Undetermined),
-        element_set.map(ElementAst::Set),
-        element_bind.map(|(id, set)| ElementAst::Bind { id, set }),
+        element_set.map(ElementAst::LitSet),
+        element_bind.map(|(id, set)| ElementAst::Bind {
+            id,
+            set,
+            polarity: Polarity::Include,
+        }),
         element_ref.map(ElementAst::Ref),
         element_literal.map(ElementAst::Lit),
     ))
@@ -349,19 +358,6 @@ fn isotope(i: &mut &str) -> PResult<IsotopeAst> {
     .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))
 }
 
-fn implicit_hydrogens(i: &mut &str) -> PResult<ImplicitHydrogensAst> {
-    preceded(
-        multispace0,
-        alt((
-            "=".value(ImplicitHydrogensAst::Normal),
-            value.map(ImplicitHydrogensAst::from),
-            empty.value(ImplicitHydrogensAst::Lit(1)),
-        )),
-    )
-    .parse_next(i)
-    .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))
-}
-
 fn aromatic_valence(i: &mut &str) -> PResult<AromaticValenceAst> {
     preceded(
         multispace0,
@@ -414,7 +410,7 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
                 ast.charge = v;
             }
             AtomPredicate::ImplicitHydrogens(v) => {
-                if !matches!(ast.implicit_hydrogens, ImplicitHydrogensAst::Undetermined) {
+                if !matches!(ast.implicit_hydrogens, ValueAst::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#h".to_string()));
                 }
                 ast.implicit_hydrogens = v;
@@ -447,38 +443,9 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
 
 fn fmt_atom_ast(f: &mut fmt::Formatter<'_>, ast: &AtomAst) -> fmt::Result {
     fmt_element(f, &ast.element)?;
-
-    match &ast.isotope_mass {
-        IsotopeAst::Undetermined => {}
-        IsotopeAst::Natural => write!(f, "#i=")?,
-        IsotopeAst::Lit(n) => write!(f, "#i{}", n)?,
-        IsotopeAst::LitSet(s) => {
-            write!(f, "#i")?;
-            fmt_value(f, &ValueAst::LitSet(s.clone()))?;
-        }
-        IsotopeAst::Expr(e) => {
-            write!(f, "#i")?;
-            fmt_value(f, &ValueAst::Expr(e.clone()))?;
-        }
-    }
-
+    fmt_isotope_mass(f, &ast.isotope_mass)?;
     fmt_charge(f, &ast.charge)?;
-
-    match &ast.implicit_hydrogens {
-        ImplicitHydrogensAst::Undetermined => {}
-        ImplicitHydrogensAst::Normal => write!(f, "#h=")?,
-        ImplicitHydrogensAst::Lit(1) => write!(f, "#h")?,
-        ImplicitHydrogensAst::Lit(n) => write!(f, "#h{}", n)?,
-        ImplicitHydrogensAst::LitSet(s) => {
-            write!(f, "#h")?;
-            fmt_value(f, &ValueAst::LitSet(s.clone()))?;
-        }
-        ImplicitHydrogensAst::Expr(e) => {
-            write!(f, "#h")?;
-            fmt_value(f, &ValueAst::Expr(e.clone()))?;
-        }
-    }
-
+    fmt_value_field(f, "#h", &ast.implicit_hydrogens)?;
     fmt_value_field(f, "#n", &ast.lone_pairs)?;
     fmt_spin_pair(f, &ast.spin)
 }
@@ -487,27 +454,48 @@ fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
     match expr {
         ElementAst::Lit(e) => write!(f, "{}", e),
         ElementAst::Undetermined => write!(f, "*"),
-        ElementAst::Set(es) => {
-            write!(f, "{{")?;
-            for (i, e) in es.iter().enumerate() {
-                if i > 0 {
-                    write!(f, ",")?;
-                }
-                write!(f, "{}", e)?;
-            }
-            write!(f, "}}")
+        ElementAst::LitSet(es) => fmt_element_set(f, es),
+        ElementAst::Not(e) => write!(f, "!{}", e),
+        ElementAst::NotSet(es) => {
+            write!(f, "!")?;
+            fmt_element_set(f, es)
         }
-        ElementAst::Bind { id, set } => {
-            write!(f, "(?{} :: {{", id)?;
-            for (i, e) in set.iter().enumerate() {
-                if i > 0 {
-                    write!(f, ",")?;
-                }
-                write!(f, "{}", e)?;
+        ElementAst::Bind { id, set, polarity } => {
+            write!(f, "(?{} :: ", id)?;
+            if matches!(polarity, Polarity::Exclude) {
+                write!(f, "!")?;
             }
-            write!(f, "}})")
+            fmt_element_set(f, set)?;
+            write!(f, ")")
         }
         ElementAst::Ref(id) => write!(f, "(?{})", id),
+    }
+}
+
+fn fmt_element_set(f: &mut fmt::Formatter<'_>, es: &[Element]) -> fmt::Result {
+    write!(f, "{{")?;
+    for (i, e) in es.iter().enumerate() {
+        if i > 0 {
+            write!(f, ",")?;
+        }
+        write!(f, "{}", e)?;
+    }
+    write!(f, "}}")
+}
+
+fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeAst) -> fmt::Result {
+    match iso {
+        IsotopeAst::Undetermined => Ok(()),
+        IsotopeAst::Natural => write!(f, "#i="),
+        IsotopeAst::Lit(n) => write!(f, "#i{}", n),
+        IsotopeAst::LitSet(s) => {
+            write!(f, "#i")?;
+            fmt_value(f, &ValueAst::LitSet(s.clone()))
+        }
+        IsotopeAst::Expr(e) => {
+            write!(f, "#i")?;
+            fmt_value(f, &ValueAst::Expr(e.clone()))
+        }
     }
 }
 
@@ -608,11 +596,10 @@ fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
             NumericDefault::Required => ValueAst::Undetermined,
         };
     }
-    if matches!(*implicit_hydrogens, ImplicitHydrogensAst::Undetermined) {
+    if matches!(*implicit_hydrogens, ValueAst::Undetermined) {
         *implicit_hydrogens = match cfg.implicit_hydrogens {
-            ImplicitHydrogensDefault::Normal => ImplicitHydrogensAst::Normal,
-            ImplicitHydrogensDefault::Zero => ImplicitHydrogensAst::Lit(0),
-            ImplicitHydrogensDefault::Required => ImplicitHydrogensAst::Undetermined,
+            NumericDefault::Zero => ValueAst::Lit(0),
+            NumericDefault::Required => ValueAst::Undetermined,
         };
     }
     if matches!(*lone_pairs, ValueAst::Undetermined) {
@@ -727,11 +714,11 @@ fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
         *charge = ValueAst::Undetermined;
     }
     match (&cfg.implicit_hydrogens, &*implicit_hydrogens) {
-        (ImplicitHydrogensDefault::Normal, ImplicitHydrogensAst::Normal) => {
-            *implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
+        (NumericDefault::Required, ValueAst::Undetermined) => {
+            *implicit_hydrogens = ValueAst::Undetermined;
         }
-        (ImplicitHydrogensDefault::Zero, ImplicitHydrogensAst::Lit(0)) => {
-            *implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
+        (NumericDefault::Zero, ValueAst::Lit(0)) => {
+            *implicit_hydrogens = ValueAst::Undetermined;
         }
         _ => {}
     }
@@ -1167,8 +1154,8 @@ mod tests {
     #[case::chlorine("Cl", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Cl))))]
     #[case::whitespace("  C  ", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
     #[case::undetermined("*", AtomDsl(AtomAst::new(ElementAst::Undetermined)))]
-    #[case::element_set("{C,N,O}", AtomDsl(AtomAst::new(ElementAst::Set(vec![Element::C, Element::N, Element::O]))))]
-    #[case::element_bind("(?e :: {C,N})", AtomDsl(AtomAst::new(ElementAst::Bind { id: "e".to_string(), set: vec![Element::C, Element::N] })))]
+    #[case::element_set("{C,N,O}", AtomDsl(AtomAst::new(ElementAst::LitSet(vec![Element::C, Element::N, Element::O]))))]
+    #[case::element_bind("(?e :: {C,N})", AtomDsl(AtomAst::new(ElementAst::Bind { id: "e".to_string(), set: vec![Element::C, Element::N], polarity: Polarity::Include })))]
     #[case::element_ref("(?e)", AtomDsl(AtomAst::new(ElementAst::Ref("e".to_string()))))]
     #[case::isotope("C#i12", AtomDsl(AtomAst { isotope_mass: IsotopeAst::Lit(12), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::isotope_natural("C#i=", AtomDsl(AtomAst { isotope_mass: IsotopeAst::Natural, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1177,13 +1164,12 @@ mod tests {
     #[case::charge_plus("C#c+", AtomDsl(AtomAst { charge: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::charge_minus("C#c-", AtomDsl(AtomAst { charge: ValueAst::Lit(-1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::charge_zero("C#c0", AtomDsl(AtomAst { charge: ValueAst::Lit(0), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_count("C#h3", AtomDsl(AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_normal("C#h=", AtomDsl(AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Normal, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_undetermined("C#h*", AtomDsl(AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Undetermined, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Expr(Box::new(Expr::Var("h".to_string()))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
-    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_count("C#h3", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_undetermined("C#h*", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Undetermined, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Ref("h".to_string()), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
+    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
     #[case::lone_pairs_omit("O#n", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
     #[case::unpaired("C#u2", AtomDsl(AtomAst { spin: SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1233,6 +1219,9 @@ mod tests {
     #[case::dup_h("C#h3#h2", ParseError::DuplicateAtomPredicate("#h".to_string()))]
     #[case::dup_charge("C#c+#c-", ParseError::DuplicateAtomPredicate("#c".to_string()))]
     #[case::dup_valence("C#v3#v4", ParseError::DuplicateAtomPredicate("#v".to_string()))]
+    #[case::invalid_special_slash("C#h/", ParseError::TrailingInput("/".to_string()))]
+    #[case::invalid_special_minus("C#h-", ParseError::TrailingInput("-".to_string()))]
+    #[case::invalid_special_equal("C#h=", ParseError::TrailingInput("=".to_string()))]
     #[case::trailing("C#h3 foo", ParseError::TrailingInput("foo".to_string()))]
     fn test_parse_atom_invalid(#[case] input: &str, #[case] expected: ParseError) {
         let result = atom.parse(input);
@@ -1308,9 +1297,9 @@ mod tests {
     #[case::iron("Fe", ElementAst::Lit(Element::Fe))]
     #[case::chlorine("Cl", ElementAst::Lit(Element::Cl))]
     #[case::undetermined("*", ElementAst::Undetermined)]
-    #[case::set("{C,N,O}", ElementAst::Set(vec![Element::C, Element::N, Element::O]))]
-    #[case::set_spaced("{ C, N}", ElementAst::Set(vec![Element::C, Element::N]))]
-    #[case::bind("(?e :: {C,N})", ElementAst::Bind { id: "e".to_string(), set: vec![Element::C, Element::N] })]
+    #[case::set("{C,N,O}", ElementAst::LitSet(vec![Element::C, Element::N, Element::O]))]
+    #[case::set_spaced("{ C, N}", ElementAst::LitSet(vec![Element::C, Element::N]))]
+    #[case::bind("(?e :: {C,N})", ElementAst::Bind { id: "e".to_string(), set: vec![Element::C, Element::N], polarity: Polarity::Include })]
     #[case::ref_("(?e)", ElementAst::Ref("e".to_string()))]
     fn test_element(#[case] input: &str, #[case] expected: ElementAst) {
         let result = element.parse(input);
@@ -1359,10 +1348,9 @@ mod tests {
     #[case::charge_minus("#c-", AtomPredicate::Charge(ValueAst::Lit(-1)))]
     #[case::charge_zero("#c0", AtomPredicate::Charge(ValueAst::Lit(0)))]
     #[case::charge_undetermined("#c*", AtomPredicate::Charge(ValueAst::Undetermined))]
-    #[case::h_count("#h3", AtomPredicate::ImplicitHydrogens(ImplicitHydrogensAst::Lit(3)))]
-    #[case::h_normal("#h=", AtomPredicate::ImplicitHydrogens(ImplicitHydrogensAst::Normal))]
-    #[case::h_undetermined("#h*", AtomPredicate::ImplicitHydrogens(ImplicitHydrogensAst::Undetermined))]
-    #[case::h_omit("#h", AtomPredicate::ImplicitHydrogens(ImplicitHydrogensAst::Lit(1)))]
+    #[case::h_count("#h3", AtomPredicate::ImplicitHydrogens(ValueAst::Lit(3)))]
+    #[case::h_undetermined("#h*", AtomPredicate::ImplicitHydrogens(ValueAst::Undetermined))]
+    #[case::h_omit("#h", AtomPredicate::ImplicitHydrogens(ValueAst::Lit(1)))]
     #[case::lone_pairs("#n2", AtomPredicate::LonePairs(ValueAst::Lit(2)))]
     #[case::lone_pairs_omit("#n", AtomPredicate::LonePairs(ValueAst::Lit(1)))]
     #[case::unpaired("#u2", AtomPredicate::Spin(SpinPredicate::Unpaired(ValueAst::Lit(2))))]
@@ -1426,7 +1414,7 @@ mod tests {
         let ast = dsl.into_ast(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(ast.lone_pairs, ValueAst::Lit(0));
-        assert_eq!(ast.implicit_hydrogens, ImplicitHydrogensAst::Lit(0));
+        assert_eq!(ast.implicit_hydrogens, ValueAst::Lit(0));
         assert_eq!(ast.isotope_mass, IsotopeAst::Natural);
         assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
         assert_eq!(
@@ -1446,7 +1434,7 @@ mod tests {
         let mut ast = AtomAst::new(ElementAst::Lit(Element::C));
         ast.charge = ValueAst::Lit(0);
         ast.lone_pairs = ValueAst::Lit(0);
-        ast.implicit_hydrogens = ImplicitHydrogensAst::Lit(0);
+        ast.implicit_hydrogens = ValueAst::Lit(0);
         ast.isotope_mass = IsotopeAst::Natural;
         ast.spin = SpinStateAst::from((0_u8, 1_u8));
         ast.constraints
@@ -1458,7 +1446,7 @@ mod tests {
         let dsl = AtomDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.lone_pairs, ValueAst::Undetermined);
-        assert_eq!(dsl.0.implicit_hydrogens, ImplicitHydrogensAst::Undetermined);
+        assert_eq!(dsl.0.implicit_hydrogens, ValueAst::Undetermined);
         assert_eq!(dsl.0.isotope_mass, IsotopeAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
         assert!(dsl.0.constraints.is_empty());
@@ -1608,7 +1596,7 @@ mod tests {
     #[rstest]
     #[case::bare("C")]
     #[case::charged("N#c+")]
-    #[case::aromatic("C#h=#a+")]
+    #[case::aromatic("C#h3#a+")]
     fn test_atom_ast_from_str_to_string_roundtrip(#[case] s: &str) {
         let ast: AtomAst = s.parse().unwrap();
         assert_eq!(ast.to_string(), s);

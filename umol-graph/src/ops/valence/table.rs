@@ -2,7 +2,7 @@
 //!
 //! `ValenceTable` carries the allowed σ-bond-order valences (and aromatic
 //! valences) per element. The conventional `Normal`-resolving valences
-//! (used to fill `ImplicitHydrogensAst::Normal`) live in
+//! (used to fill `ValueAst::Undetermined`) live in
 //! [`crate::ops::valence::NormalImplicitHydrogensTable`].
 
 use std::collections::BTreeMap;
@@ -152,7 +152,6 @@ impl ValenceTable {
         }
         None
     }
-
 }
 
 /// Defines a `ValenceTable` from element-name keys. Empty list means

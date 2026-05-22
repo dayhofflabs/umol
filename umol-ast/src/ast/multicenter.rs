@@ -391,7 +391,7 @@ mod tests {
     #[case::both_default(
         MulticenterBondAst::default(),
         MulticenterBondAst::default(),
-        Some(MulticenterBondAst::default()),
+        Some(MulticenterBondAst::default())
     )]
     #[case::electrons_length_mismatch(
         MulticenterBondAst::new(vec![ValueAst::Lit(2); 3]),

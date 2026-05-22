@@ -234,9 +234,7 @@ impl ElectronInvariantValidator {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AtomAst, AtomId, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst, SpinStateAst,
-    };
+    use umol_ast::ast::{AtomAst, AtomId, BondAst, Constraints, MoleculeAst, SpinStateAst};
     use umol_shared::element::Element;
 
     use super::*;
@@ -245,7 +243,7 @@ mod tests {
         let mut atom = AtomAst::from_element(Element::C);
         atom.charge = ValueAst::Lit(0);
         atom.lone_pairs = ValueAst::Lit(0);
-        atom.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
+        atom.implicit_hydrogens = ValueAst::Lit(4);
         atom.spin = SpinStateAst::from((0_u8, 1_u8));
         atom
     }
@@ -254,7 +252,7 @@ mod tests {
         let mut ch3_a = AtomAst::from_element(Element::C);
         ch3_a.charge = ValueAst::Lit(0);
         ch3_a.lone_pairs = ValueAst::Lit(0);
-        ch3_a.implicit_hydrogens = ImplicitHydrogensAst::Lit(3);
+        ch3_a.implicit_hydrogens = ValueAst::Lit(3);
         ch3_a.spin = SpinStateAst::from((0_u8, 1_u8));
         let ch3_b = ch3_a.clone();
         MoleculeAst::from_parts(
@@ -289,7 +287,7 @@ mod tests {
     fn test_electron_invariant_validator_validate_atom_contradictory() {
         let v = ElectronInvariantValidator;
         let mut atom = ground_methane_atom();
-        atom.implicit_hydrogens = ImplicitHydrogensAst::Lit(99);
+        atom.implicit_hydrogens = ValueAst::Lit(99);
         let result = v.validate_atom(&atom).unwrap();
         assert!(matches!(
             result,
@@ -308,7 +306,7 @@ mod tests {
     fn test_electron_invariant_validator_validate_contradictory() {
         let v = ElectronInvariantValidator;
         let mut ast = ethane();
-        ast.atoms_mut().next().unwrap().implicit_hydrogens = ImplicitHydrogensAst::Lit(99);
+        ast.atoms_mut().next().unwrap().implicit_hydrogens = ValueAst::Lit(99);
         let result = v.validate(ast).unwrap();
         assert!(matches!(
             result,

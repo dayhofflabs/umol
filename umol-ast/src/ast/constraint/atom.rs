@@ -203,8 +203,9 @@ impl Lattice for AromaticValenceAst {
             (Self::Undetermined, _) => true,
             (_, Self::Undetermined) => false,
             (Self::NotAromatic, Self::NotAromatic) => true,
-            (Self::NotAromatic, Self::Aromatic(_))
-            | (Self::Aromatic(_), Self::NotAromatic) => false,
+            (Self::NotAromatic, Self::Aromatic(_)) | (Self::Aromatic(_), Self::NotAromatic) => {
+                false
+            }
             (Self::Aromatic(p), Self::Aromatic(t)) => p.matches(t),
         }
     }
@@ -590,7 +591,9 @@ impl Lattice for AtomConstraints {
         if !v.is_undetermined() {
             result.add(AtomConstraint::AromaticValence(v));
         }
-        let v = self.multicenter_valence().meet(&other.multicenter_valence())?;
+        let v = self
+            .multicenter_valence()
+            .meet(&other.multicenter_valence())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::MulticenterValence(v));
         }
@@ -913,23 +916,50 @@ mod tests {
 
     #[rstest]
     #[case::wildcard_vs_not_aromatic(
-        AromaticValenceAst::Undetermined, AromaticValenceAst::NotAromatic, true)]
+        AromaticValenceAst::Undetermined,
+        AromaticValenceAst::NotAromatic,
+        true
+    )]
     #[case::wildcard_vs_aromatic_lit(
-        AromaticValenceAst::Undetermined, AromaticValenceAst::aromatic(1), true)]
+        AromaticValenceAst::Undetermined,
+        AromaticValenceAst::aromatic(1),
+        true
+    )]
     #[case::not_aromatic_vs_aromatic(
-        AromaticValenceAst::NotAromatic, AromaticValenceAst::aromatic(1), false)]
+        AromaticValenceAst::NotAromatic,
+        AromaticValenceAst::aromatic(1),
+        false
+    )]
     #[case::aromatic_vs_not_aromatic(
-        AromaticValenceAst::aromatic(1), AromaticValenceAst::NotAromatic, false)]
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::NotAromatic,
+        false
+    )]
     #[case::not_aromatic_vs_not_aromatic(
-        AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic, true)]
+        AromaticValenceAst::NotAromatic,
+        AromaticValenceAst::NotAromatic,
+        true
+    )]
     #[case::aromatic_lit_match(
-        AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1), true)]
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::aromatic(1),
+        true
+    )]
     #[case::aromatic_lit_mismatch(
-        AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(2), false)]
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::aromatic(2),
+        false
+    )]
     #[case::aromatic_wildcard_inner(
-        AromaticValenceAst::Aromatic(ValueAst::Undetermined), AromaticValenceAst::aromatic(2), true)]
+        AromaticValenceAst::Aromatic(ValueAst::Undetermined),
+        AromaticValenceAst::aromatic(2),
+        true
+    )]
     #[case::specific_vs_undetermined(
-        AromaticValenceAst::aromatic(1), AromaticValenceAst::Undetermined, false)]
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::Undetermined,
+        false
+    )]
     fn test_aromatic_valence_ast_matches(
         #[case] pattern: AromaticValenceAst,
         #[case] target: AromaticValenceAst,
@@ -1002,21 +1032,45 @@ mod tests {
 
     #[rstest]
     #[case::wildcard_vs_not_multicenter(
-        MulticenterValenceAst::Undetermined, MulticenterValenceAst::NotMulticenter, true)]
+        MulticenterValenceAst::Undetermined,
+        MulticenterValenceAst::NotMulticenter,
+        true
+    )]
     #[case::wildcard_vs_multicenter_lit(
-        MulticenterValenceAst::Undetermined, MulticenterValenceAst::multicenter(2), true)]
+        MulticenterValenceAst::Undetermined,
+        MulticenterValenceAst::multicenter(2),
+        true
+    )]
     #[case::not_multicenter_vs_multicenter(
-        MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::multicenter(2), false)]
+        MulticenterValenceAst::NotMulticenter,
+        MulticenterValenceAst::multicenter(2),
+        false
+    )]
     #[case::multicenter_vs_not_multicenter(
-        MulticenterValenceAst::multicenter(2), MulticenterValenceAst::NotMulticenter, false)]
+        MulticenterValenceAst::multicenter(2),
+        MulticenterValenceAst::NotMulticenter,
+        false
+    )]
     #[case::not_multicenter_vs_not_multicenter(
-        MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::NotMulticenter, true)]
+        MulticenterValenceAst::NotMulticenter,
+        MulticenterValenceAst::NotMulticenter,
+        true
+    )]
     #[case::multicenter_lit_match(
-        MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(2), true)]
+        MulticenterValenceAst::multicenter(2),
+        MulticenterValenceAst::multicenter(2),
+        true
+    )]
     #[case::multicenter_lit_mismatch(
-        MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(3), false)]
+        MulticenterValenceAst::multicenter(2),
+        MulticenterValenceAst::multicenter(3),
+        false
+    )]
     #[case::specific_vs_undetermined(
-        MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Undetermined, false)]
+        MulticenterValenceAst::multicenter(2),
+        MulticenterValenceAst::Undetermined,
+        false
+    )]
     fn test_multicenter_valence_ast_matches(
         #[case] pattern: MulticenterValenceAst,
         #[case] target: MulticenterValenceAst,
@@ -1315,7 +1369,7 @@ mod tests {
     #[case::empty_empty(
         AtomConstraints::new(),
         AtomConstraints::new(),
-        Some(AtomConstraints::new()),
+        Some(AtomConstraints::new())
     )]
     #[case::adds_kind_from_other(
         AtomConstraints::new(),

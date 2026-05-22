@@ -209,7 +209,7 @@ fn equalize_charges(
     for (i, atom_idx) in atoms.iter().copied().enumerate() {
         let atom = ast.atom(atom_idx);
         let err = || AromaticityError::NonGroundAtom(atom_idx);
-        let k = &v - atom.degree() - atom.implicit_hydrogens().as_value() - 2 * atom.lone_pairs();
+        let k = &v - atom.degree() - atom.implicit_hydrogens() - 2 * atom.lone_pairs();
         atom_updates.push((
             i,
             atom_idx,

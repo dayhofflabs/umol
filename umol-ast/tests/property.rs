@@ -15,11 +15,11 @@ use umol_ast::ast::{
     AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst, BondConstraint,
     BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, Constraint, Constraints,
     DativeBondAst, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
-    DativeBondId, Edit, ElementAst, Expr, ImplicitHydrogensAst, IsotopeAst, Lattice, MoleculeAst,
-    MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraint,
-    MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterBondId,
-    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst, SubPatternAnchor, ValueAst,
+    DativeBondId, Edit, ElementAst, Expr, IsotopeAst, Lattice, MoleculeAst, MoleculeConstraint,
+    MulticenterBondAst, MulticenterBondConstraint, MulticenterBondConstraintKind,
+    MulticenterBondConstraints, MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst,
+    NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, Polarity, RelOp,
+    RelationalConstraint, SpinStateAst, SubPatternAnchor, ValueAst,
 };
 use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
@@ -63,12 +63,16 @@ fn element_ast_strategy() -> impl Strategy<Value = ElementAst> {
         2 => prop::collection::vec(element_strategy(), 1..=3).prop_map(|mut v| {
             // Deduplicate to keep shape canonical for roundtrip.
             v.dedup();
-            ElementAst::Set(v)
+            ElementAst::LitSet(v)
         }),
         1 => (id_strategy(), prop::collection::vec(element_strategy(), 1..=3))
             .prop_map(|(id, mut set)| {
                 set.dedup();
-                ElementAst::Bind { id, set }
+                ElementAst::Bind {
+                    id,
+                    set,
+                    polarity: Polarity::Include,
+                }
             }),
         1 => id_strategy().prop_map(ElementAst::Ref),
     ]
@@ -250,17 +254,16 @@ fn isotope_strategy() -> impl Strategy<Value = IsotopeAst> {
     ]
 }
 
-fn implicit_hydrogens_strategy() -> impl Strategy<Value = ImplicitHydrogensAst> {
+fn implicit_hydrogens_strategy() -> impl Strategy<Value = ValueAst> {
     prop_oneof![
-        3 => Just(ImplicitHydrogensAst::Normal),
-        3 => Just(ImplicitHydrogensAst::Undetermined),
-        3 => (0i64..=4).prop_map(ImplicitHydrogensAst::Lit),
+        4 => Just(ValueAst::Undetermined),
+        3 => (0i64..=4).prop_map(ValueAst::Lit),
         1 => prop::collection::vec(0i64..=4, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            ImplicitHydrogensAst::lit_set(v)
+            ValueAst::lit_set(v)
         }),
-        1 => top_expr_strategy().prop_map(ImplicitHydrogensAst::expr),
+        1 => top_expr_strategy().prop_map(ValueAst::expr),
     ]
 }
 

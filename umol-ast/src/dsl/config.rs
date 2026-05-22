@@ -94,7 +94,7 @@ pub struct MoleculeOverrides {
 pub struct AtomDefaults {
     pub isotope: IsotopeDefault,
     pub charge: NumericDefault,
-    pub implicit_hydrogens: ImplicitHydrogensDefault,
+    pub implicit_hydrogens: NumericDefault,
     pub lone_pairs: NumericDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
@@ -111,7 +111,7 @@ impl AtomDefaults {
         Self {
             isotope: IsotopeDefault::Required,
             charge: NumericDefault::Required,
-            implicit_hydrogens: ImplicitHydrogensDefault::Required,
+            implicit_hydrogens: NumericDefault::Required,
             lone_pairs: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
             multiplicity: MultiplicityDefault::Derived,
@@ -128,7 +128,7 @@ impl AtomDefaults {
         Self {
             isotope: IsotopeDefault::Natural,
             charge: NumericDefault::Zero,
-            implicit_hydrogens: ImplicitHydrogensDefault::Zero,
+            implicit_hydrogens: NumericDefault::Zero,
             lone_pairs: NumericDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
@@ -145,7 +145,7 @@ impl AtomDefaults {
         Self {
             isotope: IsotopeDefault::Natural,
             charge: NumericDefault::Zero,
-            implicit_hydrogens: ImplicitHydrogensDefault::Zero,
+            implicit_hydrogens: NumericDefault::Zero,
             lone_pairs: NumericDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
@@ -208,7 +208,7 @@ impl Default for AtomDefaults {
 pub struct AtomOverrides {
     pub isotope: Option<IsotopeDefault>,
     pub charge: Option<NumericDefault>,
-    pub implicit_hydrogens: Option<ImplicitHydrogensDefault>,
+    pub implicit_hydrogens: Option<NumericDefault>,
     pub lone_pairs: Option<NumericDefault>,
     pub unpaired_electrons: Option<UnpairedElectronsDefault>,
     pub multiplicity: Option<MultiplicityDefault>,
@@ -470,14 +470,6 @@ pub enum NumericDefault {
     Required,
 }
 
-/// Implicit hydrogen default
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
-pub enum ImplicitHydrogensDefault {
-    Zero,
-    Normal,
-    Required,
-}
-
 /// Unpaired electrons default
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum UnpairedElectronsDefault {
@@ -567,7 +559,7 @@ mod tests {
          :valence :required :donated-pairs :required :accepted-pairs :required \
          :multicenter-valence :required :aromatic-valence :required}",
         NumericDefault::Required,
-        ImplicitHydrogensDefault::Required,
+        NumericDefault::Required,
         MulticenterValenceDefault::Required,
         AromaticValenceDefault::Required
     )]
@@ -577,14 +569,14 @@ mod tests {
          :valence :zero :donated-pairs :zero :accepted-pairs :zero \
          :multicenter-valence :not-multicenter :aromatic-valence :not-aromatic}",
         NumericDefault::Zero,
-        ImplicitHydrogensDefault::Zero,
+        NumericDefault::Zero,
         MulticenterValenceDefault::NotMulticenter,
         AromaticValenceDefault::NotAromatic
     )]
     fn test_atom_ast_config_from_edn(
         #[case] edn: &str,
         #[case] expected_charge: NumericDefault,
-        #[case] expected_h: ImplicitHydrogensDefault,
+        #[case] expected_h: NumericDefault,
         #[case] expected_multicenter: MulticenterValenceDefault,
         #[case] expected_aromatic: AromaticValenceDefault,
     ) {
@@ -623,7 +615,7 @@ mod tests {
         let cfg = AtomDefaults::zeroed().with_overrides(AtomOverrides {
             isotope: Some(IsotopeDefault::Required),
             charge: Some(NumericDefault::Required),
-            implicit_hydrogens: Some(ImplicitHydrogensDefault::Normal),
+            implicit_hydrogens: Some(NumericDefault::Required),
             lone_pairs: Some(NumericDefault::Required),
             unpaired_electrons: Some(UnpairedElectronsDefault::Derived),
             multiplicity: Some(MultiplicityDefault::Required),
@@ -635,7 +627,7 @@ mod tests {
         });
         assert_eq!(cfg.isotope, IsotopeDefault::Required);
         assert_eq!(cfg.charge, NumericDefault::Required);
-        assert_eq!(cfg.implicit_hydrogens, ImplicitHydrogensDefault::Normal);
+        assert_eq!(cfg.implicit_hydrogens, NumericDefault::Required);
         assert_eq!(cfg.lone_pairs, NumericDefault::Required);
         assert_eq!(cfg.unpaired_electrons, UnpairedElectronsDefault::Derived);
         assert_eq!(cfg.multiplicity, MultiplicityDefault::Required);
@@ -655,7 +647,7 @@ mod tests {
         assert_eq!(cfg.charge, NumericDefault::Required);
         // Untouched fields retain the zeroed() defaults.
         assert_eq!(cfg.isotope, IsotopeDefault::Natural);
-        assert_eq!(cfg.implicit_hydrogens, ImplicitHydrogensDefault::Zero);
+        assert_eq!(cfg.implicit_hydrogens, NumericDefault::Zero);
         assert_eq!(cfg.valence, NumericDefault::Zero);
         assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::NotAromatic);
     }

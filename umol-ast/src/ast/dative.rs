@@ -262,7 +262,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::both_default(DativeBondAst::default(), DativeBondAst::default(), Some(DativeBondAst::default()))]
+    #[case::both_default(
+        DativeBondAst::default(),
+        DativeBondAst::default(),
+        Some(DativeBondAst::default())
+    )]
     #[case::acceptor_slot_mismatch(
         DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
         DativeBondAst { acceptor_slot: 1, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },

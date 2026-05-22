@@ -284,7 +284,7 @@ When a **predicate** (**§7.3**, **§7.5**) allows a **decimal-only** payload an
 | Atom tag | Omitted numeral = 1 (decimal-only payloads) |
 |----------|-----------------------------------------------|
 | **`#c`** | **no** — charge **MUST** be explicit (**`#c0`**, **`#c+`**, **`#c-`**, **`#c+2`**, **`#c-2`**, …); empty **`#c`** is **invalid** |
-| **`#h`** | yes, when the payload is decimal-only; **`#h=`**, **`#h*`**, etc. are **special** (**§7.3**) |
+| **`#h`** | yes, when the payload is decimal-only; **`#h*`**, **`#h*`**, etc. are **special** (**§7.3**) |
 | **`#n` `#u` `#s` `#v` `#d` `#t` `#r`** | yes, when the payload is decimal-only |
 | **`#a`** | yes when decimal-only; **`#a*`**, **`#a+`**, **`#a!`** are **special** (**§7.3**) |
 | **`#m`** | yes when decimal-only; **`#m*`**, **`#m+`**, **`#m!`** are **special** (**§7.3**) |
@@ -300,7 +300,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 - The **`*`** **wildcard** is allowed in **`value-expr`**, **`element`**, and **`order`**
 - **`bool-expr`**: **infix** **`&` `|` `!`**, **relations**, **`::`**, **`+ - * / %`**, unary **`-`**, **`?id`**, **`nat`**, **`(`** **`add-expr`** **`)`**.
 
-**Ground:** no **`bool-expr`** (no **`?`**, **`::`**, relations, logic), no **`element-bind`**, no **`element-ref`**; predicate payloads are **`decimal-tail`** / **`nat`** / top-level **`nat-set`** (and tag-specific literals such as **`#h=`**) only where allowed.
+**Ground:** no **`bool-expr`** (no **`?`**, **`::`**, relations, logic), no **`element-bind`**, no **`element-ref`**; predicate payloads are **`decimal-tail`** / **`nat`** / top-level **`nat-set`** (and tag-specific literals such as **`#h*`**) only where allowed.
 
 **Query:** **`bool-expr`** where allowed; **`decimal-tail`**; **element** / **order** extensions as allowed.
 
@@ -320,7 +320,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 | Form | Inherent fields |
 |------|-----------------|
-| atom | element, isotope mass (**`#i=`**), charge (**`#c`**), implicit hydrogens (**`#h=`**), lone pairs, spin (unpaired **`#u`**, multiplicity **`#s`**) |
+| atom | element, isotope mass (**`#i=`**), charge (**`#c`**), implicit hydrogens (**`#h*`**), lone pairs, spin (unpaired **`#u`**, multiplicity **`#s`**) |
 | localized bond | order, charge (**`#c`**), spin (**`#u`**, **`#s`**) |
 | aromatic system | charge (**`#c`**), spin (**`#u`**, **`#s`**), π-electron count (**`#e`**) |
 | multicenter bond | charge (**`#c`**), spin (**`#u`**, **`#s`**), electron count (**`#e`**) |
@@ -331,7 +331,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 ### 6.2 Pattern–target match
 
-**Match as solution-set inclusion.** Each attribute slot has a **solution set** — the set of ground values the slot admits. A **literal** (e.g. **`C`**, **`3`**, **`+1`**) admits exactly itself; a **set** (**`{C,N}`**, top-level **`nat-set`**) admits its members; a **wildcard** (**`*`**) admits everything in the slot's value domain; a **`bool-expr`** admits every value for which the expression holds (**§5**); a **special-symbolic** payload (**`#h=`**, **`#i=`**, **`#a*`**, **`#a+`**, **`#a!`**, **`#m*`**, **`#m+`**, **`#m!`**, **`#R*`**, **`#R+`**) admits only its named symbolic state (**§7.3**). For a given slot, the **pattern** matches the **target** iff `solution-set(pattern)` ⊇ `solution-set(target)` — the pattern admits every value the target admits. Match is **not** symmetric.
+**Match as solution-set inclusion.** Each attribute slot has a **solution set** — the set of ground values the slot admits. A **literal** (e.g. **`C`**, **`3`**, **`+1`**) admits exactly itself; a **set** (**`{C,N}`**, top-level **`nat-set`**) admits its members; a **wildcard** (**`*`**) admits everything in the slot's value domain; a **`bool-expr`** admits every value for which the expression holds (**§5**); a **special-symbolic** payload (**`#h*`**, **`#i=`**, **`#a*`**, **`#a+`**, **`#a!`**, **`#m*`**, **`#m+`**, **`#m!`**, **`#R*`**, **`#R+`**) admits only its named symbolic state (**§7.3**). For a given slot, the **pattern** matches the **target** iff `solution-set(pattern)` ⊇ `solution-set(target)` — the pattern admits every value the target admits. Match is **not** symmetric.
 
 | pattern kind | target kind | matches iff |
 |--------------|-------------|-------------|
@@ -384,7 +384,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 **Payload extraction.** A **predicate** is **`#`**, one **tag** character **`[A-Za-z_]`**, and a **payload** consisting of all following characters up to (but not including) the **next** **`#`** or **end of string**, after **whitespace normalization** for the purpose of **tokenizing** the payload as **`value-expr`**: the payload text **MAY** contain ignored whitespace between **`value-expr`** tokens as in **§5**. The **payload** **MUST NOT** contain **`#`**.
 
-**Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`C#h=`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**, **`(?e :: {Cl,Br})#v(?q == 2)`**.
+**Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`C#h*`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**, **`(?e :: {Cl,Br})#v(?q == 2)`**.
 
 - A **`nat`** and an **`id`** contain **no** internal whitespace.
 - A **relational** token is **`<=`**, **`>=`**, **`==`**, or a **single** **`<`** or **`>`** that is **not** part of **`<=` `>=`**. **Multi-character** tokens are one lexical unit.
@@ -471,7 +471,7 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / *
 |-----|---------|
 | **`#i`** | Isotope mass; **special** **`#i=`** (natural isotope, **§7.3**) |
 | **`#c`** | Formal charge |
-| **`#h`** | Implicit H count; **special** **`#h=`**, **`#h*`** (**§7.3**) |
+| **`#h`** | Implicit H count; **special** **`#h*`**, **`#h*`** (**§7.3**) |
 | **`#n`** | Lone pairs (nonbonding pair count) |
 | **`#u`** | Unpaired electron count |
 | **`#s`** | Spin multiplicity (2S+1) |

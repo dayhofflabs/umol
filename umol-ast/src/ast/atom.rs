@@ -1,7 +1,6 @@
 //! Atom-level AST fragments shared across crates.
 
-use std::mem;
-use std::ops::{Add, Div, Mul, Sub};
+use std::{mem, slice};
 
 use umol_shared::element::Element;
 
@@ -10,8 +9,7 @@ use super::constraint::{
 };
 use super::spin::SpinStateAst;
 use super::traits::{AsLit, Lattice};
-use super::value::Bindings;
-use super::value::{litset_is_ground, Expr, ValueAst};
+use super::value::{litset_is_ground, Bindings, Expr, ValueAst};
 
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
@@ -21,7 +19,7 @@ pub struct AtomAst {
     pub element: ElementAst,
     pub isotope_mass: IsotopeAst,
     pub charge: ValueAst,
-    pub implicit_hydrogens: ImplicitHydrogensAst,
+    pub implicit_hydrogens: ValueAst,
     pub lone_pairs: ValueAst,
     pub spin: SpinStateAst,
     pub constraints: AtomConstraints,
@@ -54,7 +52,7 @@ impl AtomAst {
         self
     }
 
-    pub fn with_implicit_hydrogens(mut self, hydrogens: impl Into<ImplicitHydrogensAst>) -> Self {
+    pub fn with_implicit_hydrogens(mut self, hydrogens: impl Into<ValueAst>) -> Self {
         self.implicit_hydrogens = hydrogens.into();
         self
     }
@@ -104,7 +102,7 @@ impl AtomAst {
             self.charge = ValueAst::Lit(0);
         }
         if self.implicit_hydrogens.is_undetermined() {
-            self.implicit_hydrogens = ImplicitHydrogensAst::Lit(0);
+            self.implicit_hydrogens = ValueAst::Lit(0);
         }
         if self.lone_pairs.is_undetermined() {
             self.lone_pairs = ValueAst::Lit(0);
@@ -226,16 +224,29 @@ impl Lattice for AtomAst {
     }
 }
 
+/// Whether a finite set defines its domain by inclusion or by exclusion.
+/// Used by `ElementAst::Bind` and `IsotopeAst::Bind` to encode positive
+/// (`?e :: {F, Cl}` — admit these) or negative (`?e :: !{F, Cl}` — admit
+/// anything except these) bind domains in one struct shape.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Polarity {
+    Include,
+    Exclude,
+}
+
 /// Element expressions
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ElementAst {
-    Lit(Element),
     #[default]
     Undetermined,
-    Set(Vec<Element>),
+    Lit(Element),
+    LitSet(Vec<Element>),
+    Not(Element),
+    NotSet(Vec<Element>),
     Bind {
         id: String,
         set: Vec<Element>,
+        polarity: Polarity,
     },
     Ref(String),
 }
@@ -246,7 +257,6 @@ impl From<Element> for ElementAst {
     }
 }
 
-
 impl AsLit for ElementAst {
     type Lit = Element;
 
@@ -254,8 +264,12 @@ impl AsLit for ElementAst {
     fn as_lit(&self) -> Option<Element> {
         match self {
             Self::Lit(e) => Some(*e),
-            Self::Undetermined | Self::Ref(_) | Self::Bind { .. } => None,
-            Self::Set(s) => element_set_is_ground(s).then(|| s[0]),
+            Self::Undetermined
+            | Self::Ref(_)
+            | Self::Bind { .. }
+            | Self::Not(_)
+            | Self::NotSet(_) => None,
+            Self::LitSet(s) => element_set_is_ground(s).then(|| s[0]),
         }
     }
 }
@@ -269,8 +283,12 @@ impl Lattice for ElementAst {
     fn is_ground(&self) -> bool {
         match self {
             Self::Lit(_) => true,
-            Self::Undetermined | Self::Ref(_) | Self::Bind { .. } => false,
-            Self::Set(s) => element_set_is_ground(s),
+            Self::Undetermined
+            | Self::Ref(_)
+            | Self::Bind { .. }
+            | Self::Not(_)
+            | Self::NotSet(_) => false,
+            Self::LitSet(s) => element_set_is_ground(s),
         }
     }
 
@@ -278,22 +296,68 @@ impl Lattice for ElementAst {
         match (self, other) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
-            (Self::Lit(a), Self::Set(s)) | (Self::Set(s), Self::Lit(a)) => {
+            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
                 s.contains(a).then_some(Self::Lit(*a))
             }
-            (Self::Set(s), Self::Set(t)) => {
+            (Self::Lit(a), Self::Not(b)) | (Self::Not(b), Self::Lit(a)) => {
+                (a != b).then_some(Self::Lit(*a))
+            }
+            (Self::Lit(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Lit(a)) => {
+                (!s.contains(a)).then_some(Self::Lit(*a))
+            }
+            (Self::LitSet(s), Self::LitSet(t)) => {
                 let intersection: Vec<Element> =
                     s.iter().filter(|x| t.contains(x)).copied().collect();
-                match intersection.len() {
-                    0 => None,
-                    1 => Some(Self::Lit(intersection[0])),
-                    _ => Some(Self::Set(intersection)),
+                canonicalize_lit_set(intersection)
+            }
+            (Self::LitSet(s), Self::Not(b)) | (Self::Not(b), Self::LitSet(s)) => {
+                let filtered: Vec<Element> = s.iter().filter(|x| x != &b).copied().collect();
+                canonicalize_lit_set(filtered)
+            }
+            (Self::LitSet(s), Self::NotSet(t)) | (Self::NotSet(t), Self::LitSet(s)) => {
+                let filtered: Vec<Element> = s.iter().filter(|x| !t.contains(x)).copied().collect();
+                canonicalize_lit_set(filtered)
+            }
+            (Self::Not(a), Self::Not(b)) => {
+                if a == b {
+                    Some(Self::Not(*a))
+                } else {
+                    let mut v = vec![*a];
+                    if !v.contains(b) {
+                        v.push(*b);
+                    }
+                    Some(Self::NotSet(v))
                 }
             }
-            (Self::Ref(a), Self::Ref(b)) if a == b => Some(Self::Ref(a.clone())),
-            (Self::Bind { id: a, set: s }, Self::Bind { id: b, set: t }) if a == b && s == t => {
-                Some(self.clone())
+            (Self::Not(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Not(a)) => {
+                let mut v: Vec<Element> = s.clone();
+                if !v.contains(a) {
+                    v.push(*a);
+                }
+                Some(Self::NotSet(v))
             }
+            (Self::NotSet(s), Self::NotSet(t)) => {
+                let mut v: Vec<Element> = s.clone();
+                for &x in t.iter() {
+                    if !v.contains(&x) {
+                        v.push(x);
+                    }
+                }
+                Some(canonicalize_not_set(v))
+            }
+            (Self::Ref(a), Self::Ref(b)) if a == b => Some(Self::Ref(a.clone())),
+            (
+                Self::Bind {
+                    id: a,
+                    set: s,
+                    polarity: pa,
+                },
+                Self::Bind {
+                    id: b,
+                    set: t,
+                    polarity: pb,
+                },
+            ) if a == b && s == t && pa == pb => Some(self.clone()),
             _ => None,
         }
     }
@@ -305,51 +369,80 @@ impl Lattice for ElementAst {
                 if a == b {
                     Self::Lit(*a)
                 } else {
-                    Self::Set(vec![*a, *b])
+                    Self::LitSet(vec![*a, *b])
                 }
             }
-            (Self::Lit(a), Self::Set(s)) => {
-                let mut v: Vec<Element> = Vec::with_capacity(s.len() + 1);
-                v.push(*a);
-                for &x in s.iter() {
-                    if x != *a {
-                        v.push(x);
-                    }
-                }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::Set(v)
-                }
-            }
-            (Self::Set(s), Self::Lit(a)) => {
+            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
                 let mut v: Vec<Element> = s.clone();
                 if !v.contains(a) {
                     v.push(*a);
                 }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::Set(v)
-                }
+                canonicalize_lit_set(v).unwrap_or(Self::Undetermined)
             }
-            (Self::Set(s), Self::Set(t)) => {
+            (Self::LitSet(s), Self::LitSet(t)) => {
                 let mut v: Vec<Element> = s.clone();
                 for &x in t.iter() {
                     if !v.contains(&x) {
                         v.push(x);
                     }
                 }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
+                canonicalize_lit_set(v).unwrap_or(Self::Undetermined)
+            }
+            (Self::Lit(a), Self::Not(b)) | (Self::Not(b), Self::Lit(a)) => {
+                if a == b {
+                    Self::Undetermined
                 } else {
-                    Self::Set(v)
+                    Self::Not(*b)
                 }
             }
-            (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
-            (Self::Bind { id: a, set: s }, Self::Bind { id: b, set: t }) if a == b && s == t => {
-                self.clone()
+            (Self::Lit(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Lit(a)) => {
+                let remaining: Vec<Element> = s.iter().filter(|x| x != &a).copied().collect();
+                canonicalize_not_set(remaining)
             }
+            (Self::LitSet(s), Self::Not(b)) | (Self::Not(b), Self::LitSet(s)) => {
+                if s.contains(b) {
+                    Self::Undetermined
+                } else {
+                    Self::Not(*b)
+                }
+            }
+            (Self::LitSet(s), Self::NotSet(t)) | (Self::NotSet(t), Self::LitSet(s)) => {
+                let remaining: Vec<Element> =
+                    t.iter().filter(|x| !s.contains(x)).copied().collect();
+                canonicalize_not_set(remaining)
+            }
+            (Self::Not(a), Self::Not(b)) => {
+                if a == b {
+                    Self::Not(*a)
+                } else {
+                    Self::Undetermined
+                }
+            }
+            (Self::Not(a), Self::NotSet(s)) | (Self::NotSet(s), Self::Not(a)) => {
+                if s.contains(a) {
+                    Self::Not(*a)
+                } else {
+                    Self::Undetermined
+                }
+            }
+            (Self::NotSet(s), Self::NotSet(t)) => {
+                let intersection: Vec<Element> =
+                    s.iter().filter(|x| t.contains(x)).copied().collect();
+                canonicalize_not_set(intersection)
+            }
+            (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
+            (
+                Self::Bind {
+                    id: a,
+                    set: s,
+                    polarity: pa,
+                },
+                Self::Bind {
+                    id: b,
+                    set: t,
+                    polarity: pb,
+                },
+            ) if a == b && s == t && pa == pb => self.clone(),
             _ => Self::Undetermined,
         }
     }
@@ -361,13 +454,19 @@ impl Lattice for ElementAst {
             (Self::Undetermined, _) => true,
             (_, Self::Undetermined) => false,
             (Self::Ref(_), _) | (_, Self::Ref(_)) => false,
-            (Self::Lit(p), Self::Lit(t)) => p == t,
-            (Self::Lit(p), Self::Set(ts) | Self::Bind { set: ts, .. }) => ts.iter().all(|t| t == p),
-            (Self::Set(ps) | Self::Bind { set: ps, .. }, Self::Lit(t)) => ps.contains(t),
-            (
-                Self::Set(ps) | Self::Bind { set: ps, .. },
-                Self::Set(ts) | Self::Bind { set: ts, .. },
-            ) => ts.iter().all(|t| ps.contains(t)),
+            _ => {
+                let (Some((ps, pp)), Some((ts, tp))) =
+                    (element_set_view(self), element_set_view(target))
+                else {
+                    return false;
+                };
+                match (pp, tp) {
+                    (Polarity::Include, Polarity::Include) => ts.iter().all(|t| ps.contains(t)),
+                    (Polarity::Include, Polarity::Exclude) => false,
+                    (Polarity::Exclude, Polarity::Include) => ts.iter().all(|t| !ps.contains(t)),
+                    (Polarity::Exclude, Polarity::Exclude) => ps.iter().all(|p| ts.contains(p)),
+                }
+            }
         }
     }
 }
@@ -376,6 +475,40 @@ fn element_set_is_ground(s: &[Element]) -> bool {
     match s {
         [] => false,
         [first, rest @ ..] => rest.iter().all(|x| x == first),
+    }
+}
+
+/// Canonicalize a literal-set intersection result: empty → None (contradiction),
+/// singleton → Lit, otherwise → LitSet. Used by meet operations.
+fn canonicalize_lit_set(v: Vec<Element>) -> Option<ElementAst> {
+    match v.len() {
+        0 => None,
+        1 => Some(ElementAst::Lit(v[0])),
+        _ => Some(ElementAst::LitSet(v)),
+    }
+}
+
+/// Canonicalize a not-set result: empty → Undetermined, singleton → Not,
+/// otherwise → NotSet.
+fn canonicalize_not_set(v: Vec<Element>) -> ElementAst {
+    match v.len() {
+        0 => ElementAst::Undetermined,
+        1 => ElementAst::Not(v[0]),
+        _ => ElementAst::NotSet(v),
+    }
+}
+
+/// View any concrete `ElementAst` (Lit / LitSet / Not / NotSet / Bind) as a
+/// `(set, polarity)` pair describing the admissible domain. Returns None for
+/// `Undetermined` and `Ref` which don't have a finite set encoding.
+fn element_set_view(ast: &ElementAst) -> Option<(&[Element], Polarity)> {
+    match ast {
+        ElementAst::Lit(x) => Some((slice::from_ref(x), Polarity::Include)),
+        ElementAst::LitSet(s) => Some((s, Polarity::Include)),
+        ElementAst::Not(x) => Some((slice::from_ref(x), Polarity::Exclude)),
+        ElementAst::NotSet(s) => Some((s, Polarity::Exclude)),
+        ElementAst::Bind { set, polarity, .. } => Some((set, *polarity)),
+        ElementAst::Undetermined | ElementAst::Ref(_) => None,
     }
 }
 
@@ -463,12 +596,21 @@ impl IsotopeAst {
 }
 
 impl From<ValueAst> for IsotopeAst {
+    /// `Bind { id, set }` and `Ref(id)` lower to the equivalent `Expr` form
+    /// (`Expr::Mem(Var(id), set)` / `Expr::Var(id)`). `IsotopeAst` has no
+    /// native joint-domain machinery; the constraint semantics survive via
+    /// the existing Expr/Var/Mem path while the bind-name is preserved for
+    /// any downstream consumer that cares.
     fn from(v: ValueAst) -> Self {
         match v {
             ValueAst::Undetermined => Self::Undetermined,
             ValueAst::Lit(n) => Self::Lit(n),
             ValueAst::LitSet(s) => Self::LitSet(s),
             ValueAst::Expr(e) => Self::Expr(e),
+            ValueAst::Bind { id, set } => {
+                Self::Expr(Box::new(Expr::Mem(Box::new(Expr::Var(id)), *set)))
+            }
+            ValueAst::Ref(id) => Self::Expr(Box::new(Expr::Var(id))),
         }
     }
 }
@@ -527,8 +669,7 @@ impl Lattice for IsotopeAst {
                 s.contains(a).then_some(Self::Lit(*a))
             }
             (Self::LitSet(s), Self::LitSet(t)) => {
-                let intersection: Vec<i64> =
-                    s.iter().filter(|x| t.contains(x)).copied().collect();
+                let intersection: Vec<i64> = s.iter().filter(|x| t.contains(x)).copied().collect();
                 match intersection.len() {
                     0 => None,
                     1 => Some(Self::Lit(intersection[0])),
@@ -607,278 +748,6 @@ impl Lattice for IsotopeAst {
     }
 }
 
-/// Implicit hydrogen expressions. `Normal` denotes the valence-model default
-/// (`#h=`); numeric variants mirror `ValueAst` and are flattened here to keep
-/// `Undetermined` as a single top-level state.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ImplicitHydrogensAst {
-    #[default]
-    Undetermined,
-    Normal,
-    Lit(i64),
-    LitSet(Box<Vec<i64>>),
-    Expr(Box<Expr>),
-}
-
-impl ImplicitHydrogensAst {
-    pub fn undetermined() -> Self {
-        Self::Undetermined
-    }
-
-    pub fn normal() -> Self {
-        Self::Normal
-    }
-
-    pub fn lit(n: i64) -> Self {
-        Self::Lit(n)
-    }
-
-    pub fn lit_set(values: Vec<i64>) -> Self {
-        Self::LitSet(Box::new(values))
-    }
-
-    pub fn expr(e: Expr) -> Self {
-        Self::Expr(Box::new(e))
-    }
-
-    #[inline(never)]
-    #[cold]
-    fn is_ground_slow(&self) -> bool {
-        match self {
-            Self::LitSet(s) => litset_is_ground(s),
-            Self::Expr(e) => e.is_ground(),
-            Self::Lit(_) | Self::Normal | Self::Undetermined => unreachable!(),
-        }
-    }
-
-    #[inline(never)]
-    #[cold]
-    fn as_lit_slow(&self) -> Option<i64> {
-        match self {
-            Self::LitSet(s) => litset_is_ground(s).then(|| s[0]),
-            Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
-            Self::Lit(_) | Self::Normal | Self::Undetermined => unreachable!(),
-        }
-    }
-
-    /// `Normal` (the "compute via valence model" placeholder) collapses to
-    /// `Undetermined`; the integer arithmetic surface has no `Normal` slot.
-    /// All other variants pass through structurally.
-    pub fn as_value(&self) -> ValueAst {
-        match self {
-            Self::Undetermined | Self::Normal => ValueAst::Undetermined,
-            Self::Lit(n) => ValueAst::Lit(*n),
-            Self::LitSet(s) => ValueAst::LitSet(s.clone()),
-            Self::Expr(e) => ValueAst::Expr(e.clone()),
-        }
-    }
-
-    /// Simplify the inner `Expr` of `Expr(_)` and lift `Expr(Lit(n))` /
-    /// `Expr(Neg(Lit(n)))` to `Lit(n)` / `Lit(-n)`. Other variants are
-    /// unchanged.
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::Expr(e) => Self::from(ValueAst::Expr(e).simplify()),
-            other => other,
-        }
-    }
-}
-
-impl From<ValueAst> for ImplicitHydrogensAst {
-    fn from(v: ValueAst) -> Self {
-        match v {
-            ValueAst::Undetermined => Self::Undetermined,
-            ValueAst::Lit(n) => Self::Lit(n),
-            ValueAst::LitSet(s) => Self::LitSet(s),
-            ValueAst::Expr(e) => Self::Expr(e),
-        }
-    }
-}
-
-impl From<ImplicitHydrogensAst> for ValueAst {
-    /// `Normal` (the "compute via valence model" placeholder) collapses to
-    /// `Undetermined`; all other variants pass through structurally.
-    fn from(h: ImplicitHydrogensAst) -> Self {
-        match h {
-            ImplicitHydrogensAst::Undetermined | ImplicitHydrogensAst::Normal => {
-                ValueAst::Undetermined
-            }
-            ImplicitHydrogensAst::Lit(n) => ValueAst::Lit(n),
-            ImplicitHydrogensAst::LitSet(s) => ValueAst::LitSet(s),
-            ImplicitHydrogensAst::Expr(e) => ValueAst::Expr(e),
-        }
-    }
-}
-
-impl From<i64> for ImplicitHydrogensAst {
-    fn from(value: i64) -> Self {
-        Self::Lit(value)
-    }
-}
-
-impl Add for ImplicitHydrogensAst {
-    type Output = ImplicitHydrogensAst;
-    fn add(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a + b),
-            _ => Self::Undetermined,
-        }
-    }
-}
-
-impl Sub for ImplicitHydrogensAst {
-    type Output = ImplicitHydrogensAst;
-    fn sub(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a - b),
-            _ => Self::Undetermined,
-        }
-    }
-}
-
-impl Mul for ImplicitHydrogensAst {
-    type Output = ImplicitHydrogensAst;
-    fn mul(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a * b),
-            _ => Self::Undetermined,
-        }
-    }
-}
-
-impl Div for ImplicitHydrogensAst {
-    type Output = ImplicitHydrogensAst;
-    fn div(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            (Self::Lit(a), Self::Lit(b)) => Self::Lit(a / b),
-            _ => Self::Undetermined,
-        }
-    }
-}
-
-impl AsLit for ImplicitHydrogensAst {
-    type Lit = i64;
-
-    /// Hydrogen count when ground; `None` for `Undetermined` *and* for
-    /// `Normal` (which is a deferred lookup, not a literal).
-    #[inline]
-    fn as_lit(&self) -> Option<i64> {
-        match self {
-            Self::Lit(n) => Some(*n),
-            Self::Normal | Self::Undetermined => None,
-            _ => self.as_lit_slow(),
-        }
-    }
-}
-
-impl Lattice for ImplicitHydrogensAst {
-    #[inline]
-    fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
-    }
-
-    /// Semantic ground: only `Lit(_)`, ground singleton `LitSet`, and ground
-    /// `Expr` count. `Normal` is **not** ground — it's a placeholder for
-    /// "compute via valence model"; the resolver lowers it to `Lit(n)`.
-    #[inline]
-    fn is_ground(&self) -> bool {
-        match self {
-            Self::Lit(_) => true,
-            Self::Normal | Self::Undetermined => false,
-            _ => self.is_ground_slow(),
-        }
-    }
-
-    /// `Normal` is wider than the numeric variants (mirror of `IsotopeAst`'s
-    /// `Natural`). `meet(Normal, x) = x` for any non-`Undetermined` `x`.
-    fn meet(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
-            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
-            (Self::Normal, Self::Normal) => Some(Self::Normal),
-            (Self::Normal, x) | (x, Self::Normal) => Some(x.clone()),
-            (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
-            (Self::Lit(a), Self::LitSet(s)) | (Self::LitSet(s), Self::Lit(a)) => {
-                s.contains(a).then_some(Self::Lit(*a))
-            }
-            (Self::LitSet(s), Self::LitSet(t)) => {
-                let intersection: Vec<i64> =
-                    s.iter().filter(|x| t.contains(x)).copied().collect();
-                match intersection.len() {
-                    0 => None,
-                    1 => Some(Self::Lit(intersection[0])),
-                    _ => Some(Self::LitSet(Box::new(intersection))),
-                }
-            }
-            (Self::Expr(e), Self::Expr(f)) => (e == f).then(|| Self::Expr(e.clone())),
-            (Self::Expr(_), _) | (_, Self::Expr(_)) => None,
-        }
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        match (self, other) {
-            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
-            (Self::Normal, _) | (_, Self::Normal) => Self::Normal,
-            (Self::Lit(a), Self::Lit(b)) => {
-                if a == b {
-                    Self::Lit(*a)
-                } else {
-                    Self::LitSet(Box::new(vec![*a, *b]))
-                }
-            }
-            (Self::Lit(a), Self::LitSet(s)) => {
-                let mut v: Vec<i64> = Vec::with_capacity(s.len() + 1);
-                v.push(*a);
-                for &x in s.iter() {
-                    if x != *a {
-                        v.push(x);
-                    }
-                }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::LitSet(Box::new(v))
-                }
-            }
-            (Self::LitSet(s), Self::Lit(a)) => {
-                let mut v: Vec<i64> = s.to_vec();
-                if !v.contains(a) {
-                    v.push(*a);
-                }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::LitSet(Box::new(v))
-                }
-            }
-            (Self::LitSet(s), Self::LitSet(t)) => {
-                let mut v: Vec<i64> = s.to_vec();
-                for &x in t.iter() {
-                    if !v.contains(&x) {
-                        v.push(x);
-                    }
-                }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::LitSet(Box::new(v))
-                }
-            }
-            (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
-            _ => Self::Undetermined,
-        }
-    }
-
-    fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::Normal, Self::Normal) => true,
-            (Self::Normal, _) | (_, Self::Normal) => false,
-            (p, t) => p.as_value().matches(&t.as_value()),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -905,7 +774,7 @@ mod tests {
     #[case::with_element_primitive(AtomAst::default().with_element(Element::N), AtomAst { element: ElementAst::Lit(Element::N), ..Default::default() })]
     #[case::with_isotope_mass(AtomAst::default().with_isotope_mass(12_i64), AtomAst { isotope_mass: IsotopeAst::Lit(12), ..Default::default() })]
     #[case::with_charge(AtomAst::default().with_charge(1_i64), AtomAst { charge: ValueAst::Lit(1), ..Default::default() })]
-    #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: ImplicitHydrogensAst::Lit(3), ..Default::default() })]
+    #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..Default::default() })]
     #[case::with_lone_pairs(AtomAst::default().with_lone_pairs(2_i64), AtomAst { lone_pairs: ValueAst::Lit(2), ..Default::default() })]
     #[case::with_spin_tuple(AtomAst::default().with_spin((0_u8, 1_u8)), AtomAst { spin: SpinStateAst::from((0_u8, 1_u8)), ..Default::default() })]
     #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)),
@@ -921,13 +790,13 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::from_element(AtomAst::from_element(Element::C).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
         lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() })]
     #[case::with_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(1), implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(1), implicit_hydrogens: ValueAst::Lit(0),
         lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() })]
     #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ImplicitHydrogensAst::Lit(0),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
         lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::from(AtomConstraint::valence(4)) })]
     fn test_atom_ast_into_ground(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
@@ -947,25 +816,25 @@ mod tests {
     #[rstest]
     #[case::default_(AtomAst::default(), false)]
     #[case::all_ground(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, true)]
     #[case::element_undetermined(AtomAst { element: ElementAst::Undetermined, isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
     #[case::isotope_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Undetermined, charge: ValueAst::Lit(0),
-        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
     #[case::charge_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Undetermined,
-        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
     #[case::hydrogens_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ImplicitHydrogensAst::Undetermined, lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Undetermined, lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
     #[case::lone_pairs_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Undetermined, spin: SpinStateAst::from((0_u8, 1_u8)),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Undetermined, spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
     #[case::spin_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
-        implicit_hydrogens: ImplicitHydrogensAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::default(),
+        implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::default(),
         constraints: AtomConstraints::new() }, false)]
     fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
@@ -1009,7 +878,7 @@ mod tests {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeAst::Expr(Box::new(Expr::Lit(12))),
             charge: ValueAst::Expr(Box::new(Expr::Lit(1))),
-            implicit_hydrogens: ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(3))),
+            implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Lit(3))),
             lone_pairs: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(2))))),
             spin: SpinStateAst {
                 unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
@@ -1022,7 +891,7 @@ mod tests {
         atom.simplify_values();
         assert_eq!(atom.isotope_mass, IsotopeAst::Lit(12));
         assert_eq!(atom.charge, ValueAst::Lit(1));
-        assert_eq!(atom.implicit_hydrogens, ImplicitHydrogensAst::Lit(3));
+        assert_eq!(atom.implicit_hydrogens, ValueAst::Lit(3));
         assert_eq!(atom.lone_pairs, ValueAst::Lit(-2));
         assert_eq!(atom.spin.unpaired, ValueAst::Lit(0));
         assert_eq!(atom.spin.multiplicity, ValueAst::Lit(1));
@@ -1043,8 +912,8 @@ mod tests {
     #[case::lit_carbon(ElementAst::Lit(Element::C), Some(Element::C))]
     #[case::lit_nitrogen(ElementAst::Lit(Element::N), Some(Element::N))]
     #[case::wildcard(ElementAst::Undetermined, None)]
-    #[case::set(ElementAst::Set(vec![Element::C, Element::N]), None)]
-    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, None)]
+    #[case::set(ElementAst::LitSet(vec![Element::C, Element::N]), None)]
+    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, None)]
     #[case::reference(ElementAst::Ref("e".into()), None)]
     fn test_element_ast_literal_and_is_ground(
         #[case] ast: ElementAst,
@@ -1057,8 +926,8 @@ mod tests {
     #[rstest]
     #[case::lit(ElementAst::Lit(Element::C), false)]
     #[case::wildcard(ElementAst::Undetermined, true)]
-    #[case::set(ElementAst::Set(vec![Element::C, Element::N]), false)]
-    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, false)]
+    #[case::set(ElementAst::LitSet(vec![Element::C, Element::N]), false)]
+    #[case::bind(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, false)]
     #[case::reference(ElementAst::Ref("e".into()), false)]
     fn test_element_ast_is_undetermined(#[case] ast: ElementAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
@@ -1068,31 +937,31 @@ mod tests {
     #[rstest]
     #[case::undetermined_lit(ElementAst::Undetermined, ElementAst::Lit(Element::C), true)]
     #[case::undetermined_undetermined(ElementAst::Undetermined, ElementAst::Undetermined, true)]
-    #[case::undetermined_set(ElementAst::Undetermined, ElementAst::Set(vec![Element::C, Element::N]), true)]
+    #[case::undetermined_set(ElementAst::Undetermined, ElementAst::LitSet(vec![Element::C, Element::N]), true)]
     #[case::lit_undetermined(ElementAst::Lit(Element::C), ElementAst::Undetermined, false)]
-    #[case::set_undetermined(ElementAst::Set(vec![Element::C]), ElementAst::Undetermined, false)]
+    #[case::set_undetermined(ElementAst::LitSet(vec![Element::C]), ElementAst::Undetermined, false)]
     #[case::lit_lit_match(ElementAst::Lit(Element::C), ElementAst::Lit(Element::C), true)]
     #[case::lit_lit_mismatch(ElementAst::Lit(Element::C), ElementAst::Lit(Element::N), false)]
-    #[case::lit_singleton_set(ElementAst::Lit(Element::C), ElementAst::Set(vec![Element::C]), true)]
-    #[case::lit_multi_set(ElementAst::Lit(Element::C), ElementAst::Set(vec![Element::C, Element::N]), false)]
-    #[case::set_lit_in(ElementAst::Set(vec![Element::C, Element::N]), ElementAst::Lit(Element::N), true)]
-    #[case::set_lit_out(ElementAst::Set(vec![Element::C, Element::N]), ElementAst::Lit(Element::O), false)]
-    #[case::set_set_subset(ElementAst::Set(vec![Element::C, Element::N, Element::O]), ElementAst::Set(vec![Element::C, Element::N]), true)]
-    #[case::set_set_equal(ElementAst::Set(vec![Element::C, Element::N]), ElementAst::Set(vec![Element::C, Element::N]), true)]
-    #[case::set_set_superset(ElementAst::Set(vec![Element::C]), ElementAst::Set(vec![Element::C, Element::N]), false)]
-    #[case::bind_lit_match(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, ElementAst::Lit(Element::C), true)]
-    #[case::bind_lit_mismatch(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, ElementAst::Lit(Element::N), false)]
-    #[case::bind_set_subset(ElementAst::Bind { id: "e".into(), set: vec![Element::C, Element::N] }, ElementAst::Set(vec![Element::C]), true)]
-    #[case::set_bind_subset(ElementAst::Set(vec![Element::C, Element::N]), ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, true)]
-    #[case::bind_bind_subset(ElementAst::Bind { id: "p".into(), set: vec![Element::C, Element::N] }, ElementAst::Bind { id: "t".into(), set: vec![Element::N] }, true)]
-    #[case::bind_bind_superset(ElementAst::Bind { id: "p".into(), set: vec![Element::C] }, ElementAst::Bind { id: "t".into(), set: vec![Element::C, Element::N] }, false)]
-    #[case::undetermined_bind(ElementAst::Undetermined, ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, true)]
-    #[case::bind_undetermined(ElementAst::Bind { id: "e".into(), set: vec![Element::C] }, ElementAst::Undetermined, false)]
+    #[case::lit_singleton_set(ElementAst::Lit(Element::C), ElementAst::LitSet(vec![Element::C]), true)]
+    #[case::lit_multi_set(ElementAst::Lit(Element::C), ElementAst::LitSet(vec![Element::C, Element::N]), false)]
+    #[case::set_lit_in(ElementAst::LitSet(vec![Element::C, Element::N]), ElementAst::Lit(Element::N), true)]
+    #[case::set_lit_out(ElementAst::LitSet(vec![Element::C, Element::N]), ElementAst::Lit(Element::O), false)]
+    #[case::set_set_subset(ElementAst::LitSet(vec![Element::C, Element::N, Element::O]), ElementAst::LitSet(vec![Element::C, Element::N]), true)]
+    #[case::set_set_equal(ElementAst::LitSet(vec![Element::C, Element::N]), ElementAst::LitSet(vec![Element::C, Element::N]), true)]
+    #[case::set_set_superset(ElementAst::LitSet(vec![Element::C]), ElementAst::LitSet(vec![Element::C, Element::N]), false)]
+    #[case::bind_lit_match(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, ElementAst::Lit(Element::C), true)]
+    #[case::bind_lit_mismatch(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, ElementAst::Lit(Element::N), false)]
+    #[case::bind_set_subset(ElementAst::Bind { id: "e".into(), set: vec![Element::C, Element::N], polarity: Polarity::Include }, ElementAst::LitSet(vec![Element::C]), true)]
+    #[case::set_bind_subset(ElementAst::LitSet(vec![Element::C, Element::N]), ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, true)]
+    #[case::bind_bind_subset(ElementAst::Bind { id: "p".into(), set: vec![Element::C, Element::N], polarity: Polarity::Include }, ElementAst::Bind { id: "t".into(), set: vec![Element::N], polarity: Polarity::Include }, true)]
+    #[case::bind_bind_superset(ElementAst::Bind { id: "p".into(), set: vec![Element::C], polarity: Polarity::Include }, ElementAst::Bind { id: "t".into(), set: vec![Element::C, Element::N], polarity: Polarity::Include }, false)]
+    #[case::undetermined_bind(ElementAst::Undetermined, ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, true)]
+    #[case::bind_undetermined(ElementAst::Bind { id: "e".into(), set: vec![Element::C], polarity: Polarity::Include }, ElementAst::Undetermined, false)]
     #[case::ref_lit(ElementAst::Ref("e".into()), ElementAst::Lit(Element::C), false)]
     #[case::lit_ref(ElementAst::Lit(Element::C), ElementAst::Ref("e".into()), false)]
-    #[case::ref_set(ElementAst::Ref("e".into()), ElementAst::Set(vec![Element::C]), false)]
-    #[case::set_ref(ElementAst::Set(vec![Element::C]), ElementAst::Ref("e".into()), false)]
-    #[case::ref_bind(ElementAst::Ref("e".into()), ElementAst::Bind { id: "f".into(), set: vec![Element::C] }, false)]
+    #[case::ref_set(ElementAst::Ref("e".into()), ElementAst::LitSet(vec![Element::C]), false)]
+    #[case::set_ref(ElementAst::LitSet(vec![Element::C]), ElementAst::Ref("e".into()), false)]
+    #[case::ref_bind(ElementAst::Ref("e".into()), ElementAst::Bind { id: "f".into(), set: vec![Element::C], polarity: Polarity::Include }, false)]
     #[case::ref_ref(ElementAst::Ref("e".into()), ElementAst::Ref("f".into()), false)]
     #[case::ref_undetermined(ElementAst::Ref("e".into()), ElementAst::Undetermined, false)]
     fn test_element_ast_matches(
@@ -1189,186 +1058,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::from_lit_set(ImplicitHydrogensAst::from(ValueAst::LitSet(Box::new(vec![0, 1]))), ImplicitHydrogensAst::LitSet(Box::new(vec![0, 1])))]
-    fn test_implicit_hydrogens_ast_from_value(
-        #[case] actual: ImplicitHydrogensAst,
-        #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    #[case::positive(ImplicitHydrogensAst::from(3_i64), ImplicitHydrogensAst::Lit(3))]
-    #[case::zero(ImplicitHydrogensAst::from(0_i64), ImplicitHydrogensAst::Lit(0))]
-    fn test_implicit_hydrogens_ast_from_i64(
-        #[case] actual: ImplicitHydrogensAst,
-        #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rstest]
-    #[case::normal(ImplicitHydrogensAst::Normal, false)]
-    #[case::lit(ImplicitHydrogensAst::Lit(2), false)]
-    #[case::undetermined(ImplicitHydrogensAst::Undetermined, true)]
-    #[case::lit_set(ImplicitHydrogensAst::LitSet(Box::new(vec![1, 2])), false)]
-    #[case::expr(ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(2))), false)]
-    fn test_implicit_hydrogens_ast_is_undetermined(
-        #[case] ast: ImplicitHydrogensAst,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.is_undetermined(), expected);
-    }
-
-    #[rstest]
-    #[case::normal(ImplicitHydrogensAst::Normal, None)]
-    #[case::lit(ImplicitHydrogensAst::Lit(2), Some(2))]
-    #[case::lit_zero(ImplicitHydrogensAst::Lit(0), Some(0))]
-    #[case::wildcard(ImplicitHydrogensAst::Undetermined, None)]
-    #[case::set_singleton(ImplicitHydrogensAst::LitSet(Box::new(vec![3])), Some(3))]
-    #[case::set_multi(ImplicitHydrogensAst::LitSet(Box::new(vec![1, 2])), None)]
-    #[case::expr_lit(ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(4))), Some(4))]
-    #[case::expr_var(ImplicitHydrogensAst::Expr(Box::new(Expr::Var("x".into()))), None)]
-    fn test_implicit_hydrogens_ast_literal_and_is_ground(
-        #[case] ast: ImplicitHydrogensAst,
-        #[case] expected: Option<i64>,
-    ) {
-        assert_eq!(ast.as_lit(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined_normal(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Normal, true)]
-    #[case::undetermined_value(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Lit(3), true)]
-    #[case::normal_undetermined(ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Undetermined, false)]
-    #[case::normal_normal(ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Normal, true)]
-    #[case::normal_value(ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Lit(0), false)]
-    #[case::value_normal(ImplicitHydrogensAst::Lit(0), ImplicitHydrogensAst::Normal, false)]
-    #[case::value_lit_match(ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Lit(2), true)]
-    #[case::value_lit_mismatch(ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Lit(3), false)]
-    #[case::value_wildcard(ImplicitHydrogensAst::Undetermined, ImplicitHydrogensAst::Lit(2), true)]
-    #[case::value_set_subset(ImplicitHydrogensAst::LitSet(Box::new(vec![1, 2])), ImplicitHydrogensAst::LitSet(Box::new(vec![1])), true)]
-    fn test_implicit_hydrogens_ast_matches(
-        #[case] pattern: ImplicitHydrogensAst,
-        #[case] target: ImplicitHydrogensAst,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::expr_lit(ImplicitHydrogensAst::Expr(Box::new(Expr::Lit(4))), ImplicitHydrogensAst::Lit(4))]
-    #[case::expr_neg_lit(ImplicitHydrogensAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))), ImplicitHydrogensAst::Lit(-3))]
-    fn test_implicit_hydrogens_ast_simplify(
-        #[case] input: ImplicitHydrogensAst,
-        #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::normal(ImplicitHydrogensAst::Normal)]
-    #[case::lit(ImplicitHydrogensAst::Lit(2))]
-    #[case::undetermined(ImplicitHydrogensAst::Undetermined)]
-    #[case::lit_set(ImplicitHydrogensAst::LitSet(Box::new(vec![1, 2])))]
-    #[case::expr_var(ImplicitHydrogensAst::Expr(Box::new(Expr::Var("h".into()))))]
-    fn test_implicit_hydrogens_ast_simplify_identity(#[case] input: ImplicitHydrogensAst) {
-        assert_eq!(input.clone().simplify(), input);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit_lit(
-        ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Lit(1),
-        ImplicitHydrogensAst::Lit(3),
-    )]
-    #[case::normal_collapses(
-        ImplicitHydrogensAst::Normal, ImplicitHydrogensAst::Lit(1),
-        ImplicitHydrogensAst::Undetermined,
-    )]
-    #[case::undetermined_collapses(
-        ImplicitHydrogensAst::Lit(2), ImplicitHydrogensAst::Undetermined,
-        ImplicitHydrogensAst::Undetermined,
-    )]
-    fn test_implicit_hydrogens_ast_add(
-        #[case] lhs: ImplicitHydrogensAst,
-        #[case] rhs: ImplicitHydrogensAst,
-        #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(lhs + rhs, expected);
-    }
-
-    #[rstest]
-    #[case::lit_lit(
-        ImplicitHydrogensAst::Lit(5),
-        ImplicitHydrogensAst::Lit(2),
-        ImplicitHydrogensAst::Lit(3)
-    )]
-    #[case::normal_collapses(
-        ImplicitHydrogensAst::Normal,
-        ImplicitHydrogensAst::Lit(1),
-        ImplicitHydrogensAst::Undetermined
-    )]
-    fn test_implicit_hydrogens_ast_sub(
-        #[case] lhs: ImplicitHydrogensAst,
-        #[case] rhs: ImplicitHydrogensAst,
-        #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(lhs - rhs, expected);
-    }
-
-    #[rstest]
-    #[case::lit_lit(
-        ImplicitHydrogensAst::Lit(3),
-        ImplicitHydrogensAst::Lit(4),
-        ImplicitHydrogensAst::Lit(12)
-    )]
-    #[case::normal_collapses(
-        ImplicitHydrogensAst::Lit(3),
-        ImplicitHydrogensAst::Normal,
-        ImplicitHydrogensAst::Undetermined
-    )]
-    fn test_implicit_hydrogens_ast_mul(
-        #[case] lhs: ImplicitHydrogensAst,
-        #[case] rhs: ImplicitHydrogensAst,
-        #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(lhs * rhs, expected);
-    }
-
-    #[rstest]
-    #[case::lit_lit(
-        ImplicitHydrogensAst::Lit(10),
-        ImplicitHydrogensAst::Lit(2),
-        ImplicitHydrogensAst::Lit(5)
-    )]
-    #[case::normal_collapses(
-        ImplicitHydrogensAst::Normal,
-        ImplicitHydrogensAst::Lit(2),
-        ImplicitHydrogensAst::Undetermined
-    )]
-    fn test_implicit_hydrogens_ast_div(
-        #[case] lhs: ImplicitHydrogensAst,
-        #[case] rhs: ImplicitHydrogensAst,
-        #[case] expected: ImplicitHydrogensAst,
-    ) {
-        assert_eq!(lhs / rhs, expected);
-    }
-
-    #[rstest]
-    #[should_panic]
-    fn test_implicit_hydrogens_ast_div_by_zero_panics() {
-        let _ = ImplicitHydrogensAst::Lit(5) / ImplicitHydrogensAst::Lit(0);
-    }
-
-    #[rstest]
     #[case::both_default(AtomAst::default(), AtomAst::default(), Some(AtomAst::default()))]
     #[case::element_mismatch(
         AtomAst::from_element(Element::C),
         AtomAst::from_element(Element::N),
-        None,
+        None
     )]
     #[case::narrows_charge(
         AtomAst::from_element(Element::C),
@@ -1387,7 +1081,7 @@ mod tests {
     #[case::element_mismatch_widens(
         AtomAst::from_element(Element::C),
         AtomAst::from_element(Element::N),
-        ElementAst::Set(vec![Element::C, Element::N]),
+        ElementAst::LitSet(vec![Element::C, Element::N]),
     )]
     fn test_atom_ast_join_element(
         #[case] a: AtomAst,
@@ -1408,7 +1102,7 @@ mod tests {
         AtomAst::from_element(Element::C),
         AtomAst::from_element(Element::C),
         false,
-        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::C)
     )]
     fn test_atom_ast_narrow_from(
         #[case] mut target: AtomAst,

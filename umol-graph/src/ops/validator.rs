@@ -134,8 +134,7 @@ impl Validator {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AtomAst, AtomConstraint, AtomId, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst,
-        SpinStateAst, ValueAst,
+        AtomAst, AtomConstraint, AtomId, BondAst, Constraints, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -145,7 +144,7 @@ mod tests {
         let mut atom = AtomAst::from_element(Element::C);
         atom.charge = ValueAst::Lit(0);
         atom.lone_pairs = ValueAst::Lit(0);
-        atom.implicit_hydrogens = ImplicitHydrogensAst::Lit(4);
+        atom.implicit_hydrogens = ValueAst::Lit(4);
         atom.spin = SpinStateAst::from((0_u8, 1_u8));
         atom
     }
@@ -154,7 +153,7 @@ mod tests {
         let mut ch3_a = AtomAst::from_element(Element::C);
         ch3_a.charge = ValueAst::Lit(0);
         ch3_a.lone_pairs = ValueAst::Lit(0);
-        ch3_a.implicit_hydrogens = ImplicitHydrogensAst::Lit(3);
+        ch3_a.implicit_hydrogens = ValueAst::Lit(3);
         ch3_a.spin = SpinStateAst::from((0_u8, 1_u8));
         let ch3_b = ch3_a.clone();
         MoleculeAst::from_parts(
@@ -189,7 +188,7 @@ mod tests {
         let mut atom = AtomAst::from_element(Element::C);
         atom.charge = ValueAst::Lit(0);
         atom.lone_pairs = ValueAst::Lit(0);
-        atom.implicit_hydrogens = ImplicitHydrogensAst::Lit(3);
+        atom.implicit_hydrogens = ValueAst::Lit(3);
         atom.spin = SpinStateAst::from((0_u8, 1_u8));
         atom.constraints
             .add(AtomConstraint::Valence(ValueAst::Lit(1)));

@@ -86,7 +86,9 @@ impl ToEdn for ValueDsl {
             ValueAst::LitSet(xs) => {
                 Edn::Vector(xs.iter().map(|n| Edn::Int(*n)).collect::<Vec<_>>().into())
             }
-            ValueAst::Expr(_) => Edn::Str(Cow::Owned(self.to_string())),
+            ValueAst::Expr(_) | ValueAst::Bind { .. } | ValueAst::Ref(_) => {
+                Edn::Str(Cow::Owned(self.to_string()))
+            }
         }
     }
 }
@@ -113,6 +115,17 @@ pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result
             f.write_char('}')
         }
         ValueAst::Expr(e) => fmt_expr(f, e),
+        ValueAst::Bind { id, set } => {
+            write!(f, "(?{} :: {{", id)?;
+            for (i, n) in set.iter().enumerate() {
+                if i > 0 {
+                    f.write_char(',')?;
+                }
+                write!(f, "{}", n)?;
+            }
+            write!(f, "}})")
+        }
+        ValueAst::Ref(id) => write!(f, "(?{})", id),
     }
 }
 
@@ -233,8 +246,37 @@ pub(crate) fn value(i: &mut &str) -> PResult<ValueAst> {
         terminated(signed_int, (multispace0, terminator)).map(ValueAst::Lit),
         "*".value(ValueAst::Undetermined),
         lit_set.map(ValueAst::lit_set),
+        terminated(value_bind, (multispace0, terminator)).map(|(id, set)| ValueAst::Bind {
+            id,
+            set: Box::new(set),
+        }),
+        terminated(value_ref, (multispace0, terminator)).map(ValueAst::Ref),
         bool_expr.map(ValueAst::expr),
     ))
+    .parse_next(i)
+}
+
+/// Parse `(?id :: {n1, n2, ...})` into `(id, set)` for `ValueAst::Bind`.
+/// Mirrors `element_bind` in `dsl/atom.rs`.
+fn value_bind(i: &mut &str) -> PResult<(String, Vec<i64>)> {
+    delimited(
+        '(',
+        (
+            delimited(multispace0, preceded('?', id), multispace0),
+            preceded(("::", multispace0), terminated(lit_set, multispace0)),
+        ),
+        ')',
+    )
+    .parse_next(i)
+}
+
+/// Parse `(?id)` into `id` for `ValueAst::Ref`. Mirrors `element_ref` in `dsl/atom.rs`.
+fn value_ref(i: &mut &str) -> PResult<String> {
+    delimited(
+        '(',
+        delimited(multispace0, preceded('?', id), multispace0),
+        ')',
+    )
     .parse_next(i)
 }
 
@@ -534,6 +576,9 @@ mod tests {
         ArithOp::Mul,
         Box::new(Expr::Lit(1)),
     ))), "(0 + 1) * 1")]
+    #[case::bind(ValueAst::bind("n", vec![1, 2, 3]), "(?n :: {1,2,3})")]
+    #[case::bind_single(ValueAst::bind("u", vec![0]), "(?u :: {0})")]
+    #[case::reference(ValueAst::reference("h"), "(?h)")]
     fn test_value_display(#[case] input: ValueAst, #[case] expected: &str) {
         assert_eq!(ValueDsl::from_ast(&input, &()).to_string(), expected);
     }
@@ -555,6 +600,9 @@ mod tests {
     #[case::and_of_or("(?a | ?b) & ?c")]
     #[case::mem("?h :: {0,1,2}")]
     #[case::chained_and_or("?a & ?b | ?c & ?d")]
+    #[case::bind("(?n :: {1,2,3})")]
+    #[case::bind_single("(?u :: {0})")]
+    #[case::reference("(?h)")]
     fn test_value_display_roundtrip(#[case] input: &str) {
         let parsed = value.parse(input).unwrap();
         let rendered = ValueDsl::from_ast(&parsed, &()).to_string();
@@ -573,6 +621,8 @@ mod tests {
         ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))),
         Edn::Str(Cow::Borrowed("?h == 0")),
     )]
+    #[case::bind(ValueAst::bind("n", vec![1, 2, 3]), Edn::Str(Cow::Borrowed("(?n :: {1,2,3})")))]
+    #[case::reference(ValueAst::reference("h"), Edn::Str(Cow::Borrowed("(?h)")))]
     fn test_value_dsl_to_edn(#[case] v: ValueAst, #[case] expected: Edn<'static>) {
         use umol_edn::ToEdn;
         assert_eq!(ValueDsl::from_ast(&v, &()).to_edn(), expected);
@@ -590,6 +640,8 @@ mod tests {
         Edn::Str(Cow::Borrowed("?h == 0")),
         ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))),
     )]
+    #[case::str_bind(Edn::Str(Cow::Borrowed("(?n :: {1,2,3})")), ValueAst::bind("n", vec![1, 2, 3]))]
+    #[case::str_reference(Edn::Str(Cow::Borrowed("(?h)")), ValueAst::reference("h"))]
     fn test_value_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: ValueAst) {
         use umol_edn::FromEdn;
         assert_eq!(ValueDsl::from_edn(&input).unwrap().into_ast(&()), expected);
@@ -628,6 +680,8 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined)]
     #[case::set(ValueAst::LitSet(Box::new(vec![1, 2, 3])))]
     #[case::expr(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))))))]
+    #[case::bind(ValueAst::bind("n", vec![1, 2, 3]))]
+    #[case::reference(ValueAst::reference("h"))]
     fn test_value_dsl_edn_roundtrip(#[case] v: ValueAst) {
         use umol_edn::{FromEdn, ToEdn};
         let edn = ValueDsl::from_ast(&v, &()).to_edn();

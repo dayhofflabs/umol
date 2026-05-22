@@ -1,6 +1,6 @@
 //! Per-element conventional σ-valences (the `normal_valence` and
 //! `aromatic_normal_valence` data) used to resolve
-//! `ImplicitHydrogensAst::Normal`. Split out of `ValenceTable` so the
+//! `ValueAst::Undetermined`. Split out of `ValenceTable` so the
 //! atom-typing resolver (which has no `allowed_valences` data) and the
 //! counts resolver share the same H-inference table without forcing the
 //! atom-typing path to carry an unused valence-table.
@@ -18,7 +18,7 @@ use crate::ops::config::ConfigError;
 #[derive(Debug, Clone)]
 pub struct NormalValenceEntry {
     /// Conventional σ-valence used when an atom asserts
-    /// `ImplicitHydrogensAst::Normal`. `None` for elements without a
+    /// `ValueAst::Undetermined`. `None` for elements without a
     /// well-defined normal valence (transition metals, ionic cores).
     pub normal_valence: Option<u8>,
     /// Conventional σ-valence used on an aromatic atom: implicit H =
@@ -109,7 +109,7 @@ impl NormalValenceTable {
     }
 
     /// Conventional σ-valence used when an atom asserts
-    /// `ImplicitHydrogensAst::Normal`. For charged atoms, falls back to the
+    /// `ValueAst::Undetermined`. For charged atoms, falls back to the
     /// isoelectronic neutral element; if neither has `normal_valence` set,
     /// returns `None`.
     pub fn normal_valence_for(&self, element: Element, charge: i8) -> Option<u8> {
@@ -124,7 +124,7 @@ impl NormalValenceTable {
         self.entries.get(&element)?.normal_valence
     }
 
-    /// Conventional σ-valence used to fill `ImplicitHydrogensAst::Normal` on
+    /// Conventional σ-valence used to fill `ValueAst::Undetermined` on
     /// an aromatic atom: H = `aromatic_normal_valence - actual σ-valence`.
     /// Returns `None` for charged atoms (no charged-aromatic-normal data) or
     /// for elements without an aromatic normal valence set.

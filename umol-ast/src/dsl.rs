@@ -26,10 +26,9 @@ pub use bond::{parse_bond, BondConstraintDsl, BondDsl, BondPredicate};
 pub use config::{
     AromaticSystemDefaults, AromaticSystemOverrides, AromaticValenceDefault, AtomDefaults,
     AtomOverrides, BondDefaults, BondOverrides, DativeBondDefaults, DativeBondOverrides,
-    ImplicitHydrogensDefault, IsotopeDefault, MoleculeDefaults, MoleculeOverrides,
-    MulticenterBondDefaults, MulticenterBondOverrides, MulticenterValenceDefault,
-    MultiplicityDefault, NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault,
-    UnpairedElectronsDefault,
+    IsotopeDefault, MoleculeDefaults, MoleculeOverrides, MulticenterBondDefaults,
+    MulticenterBondOverrides, MulticenterValenceDefault, MultiplicityDefault,
+    NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, UnpairedElectronsDefault,
 };
 pub use constraint::{
     AromaticSystemRef, AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, DativeBondRef,

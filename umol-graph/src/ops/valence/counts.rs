@@ -3,8 +3,8 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst,
-    ImplicitHydrogensAst, IsotopeAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst, IsotopeAst,
+    Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState, MAX_UNPAIRED_ELECTRONS};
@@ -79,12 +79,7 @@ impl CountsValenceResolver {
         Ok(())
     }
 
-    fn candidates_for(
-        &self,
-        view: &AtomView<'_>,
-        element: Element,
-        valence: u8,
-    ) -> Vec<AtomAst> {
+    fn candidates_for(&self, view: &AtomView<'_>, element: Element, valence: u8) -> Vec<AtomAst> {
         let atom = view.ast;
         let charge = atom.charge.as_lit_or(0) as i8;
         let entry = match self.table.entry(element) {
@@ -93,6 +88,9 @@ impl CountsValenceResolver {
         };
 
         let aromatic_constraint = atom.constraints.aromatic_valence();
+        // First arm: idempotency — aromatic-system membership from a prior sweep.
+        // Second arm: declared Aromatic(_) from the parser, before aromaticity perception runs.
+        // Neither arm requires aromaticity to run ahead of valence.
         let is_aromatic = view.is_in_aromatic_system()
             || AromaticValenceAst::aromatic(ValueAst::Undetermined).matches(&aromatic_constraint);
         if is_aromatic {
@@ -116,7 +114,7 @@ impl CountsValenceResolver {
         }
 
         let implicit_hydrogens = match &atom.implicit_hydrogens {
-            ImplicitHydrogensAst::Lit(n) => *n as u8,
+            ValueAst::Lit(n) => *n as u8,
             _ if self.allow_implicit_hydrogens => {
                 match self
                     .table
@@ -165,17 +163,17 @@ impl CountsValenceResolver {
                 continue;
             }
             let implicit_hydrogens = match &atom.implicit_hydrogens {
-                ImplicitHydrogensAst::Lit(n) => *n as u8,
-                ImplicitHydrogensAst::Normal => {
-                    let Some(h) =
-                        self.normal_valence
-                            .implicit_hydrogens_for(element, charge, valence, true)
+                ValueAst::Lit(n) => *n as u8,
+                ValueAst::Undetermined => {
+                    let Some(h) = self
+                        .normal_valence
+                        .implicit_hydrogens_for(element, charge, valence, true)
                     else {
                         continue;
                     };
                     h
                 }
-                ImplicitHydrogensAst::Undetermined => {
+                ValueAst::Undetermined => {
                     if self.allow_implicit_hydrogens {
                         (sigma_budget - valence as i16) as u8
                     } else {
@@ -248,7 +246,7 @@ fn try_build_candidate(
             other => other.clone(),
         },
         charge: ValueAst::Lit(charge as i64),
-        implicit_hydrogens: ImplicitHydrogensAst::Lit(implicit_hydrogens as i64),
+        implicit_hydrogens: ValueAst::Lit(implicit_hydrogens as i64),
         lone_pairs: ValueAst::Lit(lone_pairs as i64),
         spin: SpinStateAst::from(spin),
         constraints: atom_ast.constraints.clone(),
@@ -295,7 +293,7 @@ fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u
 #[cfg(test)]
 mod tests {
     use rstest::*;
-    use umol_ast::ast::{AtomAst, AtomId, BondAst, Constraints, ImplicitHydrogensAst, MoleculeAst};
+    use umol_ast::ast::{AtomAst, AtomId, BondAst, Constraints, MoleculeAst};
     use umol_ast::{mol, mol_zeroed};
     use umol_shared::element::Element;
 
@@ -311,8 +309,8 @@ mod tests {
     fn ethane() -> MoleculeAst {
         let mut a = AtomAst::from_element(Element::C);
         let mut b = AtomAst::from_element(Element::C);
-        a.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
-        b.implicit_hydrogens = ImplicitHydrogensAst::Undetermined;
+        a.implicit_hydrogens = ValueAst::Undetermined;
+        b.implicit_hydrogens = ValueAst::Undetermined;
         MoleculeAst::from_parts(
             vec![a, b],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1))],
@@ -341,10 +339,7 @@ mod tests {
         let mut ast = carbon_methane_with_undetermined();
         resolver.resolve(&mut ast).unwrap();
         let atom = ast.atom(AtomId(0)).ast;
-        assert!(matches!(
-            atom.implicit_hydrogens,
-            ImplicitHydrogensAst::Lit(4)
-        ));
+        assert!(matches!(atom.implicit_hydrogens, ValueAst::Lit(4)));
     }
 
     #[rstest]
@@ -356,10 +351,7 @@ mod tests {
         resolver.resolve(&mut ast).unwrap();
         for i in 0..2 {
             let atom = ast.atom(AtomId(i)).ast;
-            assert!(matches!(
-                atom.implicit_hydrogens,
-                ImplicitHydrogensAst::Lit(3)
-            ));
+            assert!(matches!(atom.implicit_hydrogens, ValueAst::Lit(3)));
         }
     }
 

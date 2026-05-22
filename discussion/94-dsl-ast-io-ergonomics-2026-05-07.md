@@ -65,7 +65,7 @@ Four runtime-parsing macros, panic on bad input. Definitions live alongside the 
 ```rust
 mol!(r#"{:atoms ["C" "C"] :bonds [[0 1 "1"]]}"#)   // -> MoleculeAst (metadata dropped)
 dsl!(r#"{:atom-aliases {…} :atoms […] :bonds […]}"#)  // -> MoleculeDsl (metadata preserved)
-atom!("C#h=#a+")                                    // -> AtomAst
+atom!("C#h*#a+")                                    // -> AtomAst
 bond!("1#a")                                        // -> BondAst
 ```
 

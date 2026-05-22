@@ -1,4 +1,4 @@
 {
   :config-overrides {
     :atom {:aromatic-valence :not-aromatic :charge :zero :implicit-hydrogens :normal}}
-  :input {:atoms ["C#h=" "N #c+#h=" "N #c-#h="] :bonds [[0 1 :double] [1 2 :double]]}}
+  :input {:atoms ["C#h*" "N #c+#h*" "N #c-#h*"] :bonds [[0 1 :double] [1 2 :double]]}}

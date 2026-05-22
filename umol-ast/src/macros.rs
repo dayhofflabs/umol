@@ -33,7 +33,7 @@ macro_rules! dsl {
 /// Parse a compact atom-string into an `AtomAst`.
 ///
 /// ```ignore
-/// let a = atom!("C#h=#a+");
+/// let a = atom!("C#h*#a+");
 /// ```
 #[macro_export]
 macro_rules! atom {

@@ -329,7 +329,7 @@ mod tests {
     #[case::both_default(
         AromaticSystemAst::default(),
         AromaticSystemAst::default(),
-        Some(AromaticSystemAst::default()),
+        Some(AromaticSystemAst::default())
     )]
     #[case::electrons_length_mismatch(
         AromaticSystemAst::from_electrons(vec![1; 6]),

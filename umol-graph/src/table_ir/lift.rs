@@ -10,8 +10,8 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
-    DativeBondAst, ElementAst, ImplicitHydrogensAst, IsotopeAst, MoleculeAst, MulticenterBondAst,
-    NoncovalentBondAst, NoncovalentBondKind, SpinStateAst, TryIntoAst, ValueAst,
+    DativeBondAst, ElementAst, IsotopeAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
+    NoncovalentBondKind, SpinStateAst, TryIntoAst, ValueAst,
 };
 use umol_shared::spin::SpinState;
 
@@ -132,9 +132,9 @@ impl TryIntoAst<AtomAst> for &TableAtom {
                 None => ValueAst::Undetermined,
             },
             implicit_hydrogens: match &self.implicit_hydrogens {
-                Some(TableImplicitH::Normal) => ImplicitHydrogensAst::Normal,
-                Some(TableImplicitH::Hydrogens(n)) => ImplicitHydrogensAst::Lit(*n as i64),
-                None => ImplicitHydrogensAst::Undetermined,
+                Some(TableImplicitH::Normal) => ValueAst::Undetermined,
+                Some(TableImplicitH::Hydrogens(n)) => ValueAst::Lit(*n as i64),
+                None => ValueAst::Undetermined,
             },
             lone_pairs: match self.lone_pairs {
                 Some(n) => ValueAst::Lit(n as i64),
@@ -261,10 +261,7 @@ mod tests {
         assert_eq!(ast.atoms().count(), 1);
         let atom = ast.atom(AtomId(0)).ast;
         assert_eq!(atom.element, ElementAst::Lit(Element::C));
-        assert!(matches!(
-            atom.implicit_hydrogens,
-            ImplicitHydrogensAst::Lit(4)
-        ));
+        assert!(matches!(atom.implicit_hydrogens, ValueAst::Lit(4)));
     }
 
     #[rstest]

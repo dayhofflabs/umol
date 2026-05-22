@@ -5,7 +5,7 @@ use std::ops::Index;
 
 use umol_shared::element::Element;
 
-use super::super::atom::{AtomAst, ElementAst, ImplicitHydrogensAst, IsotopeAst};
+use super::super::atom::{AtomAst, ElementAst, IsotopeAst};
 use super::super::constraint::AtomConstraints;
 use super::super::idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -97,7 +97,7 @@ impl<'a> AtomView<'a> {
     }
 
     #[inline]
-    pub fn implicit_hydrogens(&self) -> &'a ImplicitHydrogensAst {
+    pub fn implicit_hydrogens(&self) -> &'a ValueAst {
         &self.ast.implicit_hydrogens
     }
 
@@ -298,9 +298,7 @@ impl<'a> AtomView<'a> {
     /// `degree` + `implicit_hydrogens` + `multicenter_degree`. Collapses to
     /// `Undetermined` if any term is non-`Lit`.
     pub fn total_degree(&self) -> ValueAst {
-        self.degree()
-            + ValueAst::from(self.ast.implicit_hydrogens.clone())
-            + self.multicenter_degree()
+        self.degree() + self.implicit_hydrogens() + self.multicenter_degree()
     }
 
     /// Count of incident localized bonds whose neighbor is not a literal
@@ -309,7 +307,7 @@ impl<'a> AtomView<'a> {
     pub fn heavy_atom_degree(&self) -> ValueAst {
         let count = self
             .neighbors()
-            .filter(|n| !matches!(n.atom().ast.element, ElementAst::Lit(Element::H)))
+            .filter(|n| !matches!(n.atom().element(), ElementAst::Lit(Element::H)))
             .count();
         ValueAst::Lit(count as i64)
     }
@@ -319,8 +317,8 @@ impl<'a> AtomView<'a> {
     /// is non-`Lit`.
     pub fn heavy_atom_valence(&self) -> ValueAst {
         self.neighbors()
-            .filter(|n| !matches!(n.atom().ast.element, ElementAst::Lit(Element::H)))
-            .map(|n| n.bond().ast.order.clone())
+            .filter(|n| !matches!(n.atom().element(), ElementAst::Lit(Element::H)))
+            .map(|n| n.bond().order().clone())
             .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
 
@@ -330,9 +328,9 @@ impl<'a> AtomView<'a> {
     pub fn total_hydrogens(&self) -> ValueAst {
         let explicit = self
             .neighbors()
-            .filter(|n| matches!(n.atom().ast.element, ElementAst::Lit(Element::H)))
+            .filter(|n| matches!(n.atom().element(), ElementAst::Lit(Element::H)))
             .count() as i64;
-        ValueAst::Lit(explicit) + ValueAst::from(self.ast.implicit_hydrogens.clone())
+        ValueAst::Lit(explicit) + self.implicit_hydrogens()
     }
 
     /// Full electron-sharing sum at this atom:
@@ -341,7 +339,7 @@ impl<'a> AtomView<'a> {
     /// furan O) which contribute the donated pair via `aromatic_valence`.
     pub fn total_valence(&self) -> ValueAst {
         self.valence()
-            + ValueAst::from(self.ast.implicit_hydrogens.clone())
+            + self.implicit_hydrogens()
             + self.aromatic_valence()
             + self.multicenter_valence()
     }
@@ -352,7 +350,7 @@ impl<'a> AtomView<'a> {
     pub fn multicenter_degree(&self) -> ValueAst {
         let count: usize = self
             .multicenter_bonds()
-            .map(|mc| mc.ast.electrons.len().saturating_sub(1))
+            .map(|mc| mc.electrons().len().saturating_sub(1))
             .sum();
         ValueAst::Lit(count as i64)
     }
@@ -390,7 +388,7 @@ impl<'a> AtomView<'a> {
     pub fn ring_valence(&self) -> ValueAst {
         self.neighbors()
             .filter(|n| n.bond().is_in_ring())
-            .map(|n| n.bond().ast.order.clone())
+            .map(|n| n.bond().order().clone())
             .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
 }
@@ -882,18 +880,10 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_view_total_degree() {
-        let molecule = mol!(r#"{:atoms ["C#h4"] :bonds []}"#);
-        assert_eq!(molecule.atom(AtomId(0)).total_degree(), ValueAst::Lit(4),);
-    }
-
-    #[rstest]
-    fn test_atom_view_total_degree_undetermined() {
-        let molecule = mol!(r#"{:atoms ["C#h="] :bonds []}"#);
-        assert_eq!(
-            molecule.atom(AtomId(0)).total_degree(),
-            ValueAst::Undetermined,
-        );
+    #[case::lit(mol!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
+    #[case::undetermined(mol!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
+    fn test_atom_view_total_degree(#[case] molecule: MoleculeAst, #[case] expected: ValueAst) {
+        assert_eq!(molecule.atom(AtomId(0)).total_degree(), expected);
     }
 
     #[rstest]
@@ -945,8 +935,8 @@ mod tests {
         AtomId(0),
         ValueAst::Lit(4),
     )]
-    #[case::implicit_normal_collapses(
-        mol!(r#"{:atoms ["C#h="] :bonds []}"#),
+    #[case::implicit_undetermined(
+        mol!(r#"{:atoms ["C#h*"] :bonds []}"#),
         AtomId(0),
         ValueAst::Undetermined,
     )]
@@ -959,18 +949,13 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_view_total_valence_sum_of_terms() {
-        let molecule = mol!(r#"{:atoms ["C#h4"] :bonds []}"#);
-        assert_eq!(molecule.atom(AtomId(0)).total_valence(), ValueAst::Lit(4),);
-    }
-
-    #[rstest]
-    fn test_atom_view_total_valence_implicit_normal_collapses() {
-        let molecule = mol!(r#"{:atoms ["C#h="] :bonds []}"#);
-        assert_eq!(
-            molecule.atom(AtomId(0)).total_valence(),
-            ValueAst::Undetermined,
-        );
+    #[case::lit(mol!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
+    #[case::undetemined(mol!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
+    fn test_atom_view_total_valence_sum_of_terms(
+        #[case] molecule: MoleculeAst,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(molecule.atom(AtomId(0)).total_valence(), expected);
     }
 
     #[rstest]
@@ -1053,5 +1038,4 @@ mod tests {
     ) {
         assert_eq!(ring_with_chain.atom(atom).ring_valence(), expected);
     }
-
 }

@@ -3,8 +3,8 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst,
-    ImplicitHydrogensAst, Lattice, MoleculeAst, MulticenterValenceAst, ValueAst,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst, Lattice,
+    MoleculeAst, MulticenterValenceAst, ValueAst,
 };
 use umol_shared::element::Element;
 
@@ -73,7 +73,7 @@ impl AtomTypingValenceResolver {
                 .registry
                 .lookup(element, charge_key)
                 .iter()
-                .filter(|pat| pat.meet(&prepared).is_some())
+                .filter(|pat| prepared.matches(pat))
                 .collect();
 
             match compatibles.len() {
@@ -115,15 +115,18 @@ impl AtomTypingValenceResolver {
             .as_lit()
             .and_then(|n| i8::try_from(n).ok())
             .unwrap_or(0);
+        // First arm: idempotency — aromatic-system membership from a prior sweep.
+        // Second arm: declared Aromatic(_) from the parser, before aromaticity perception runs.
+        // Neither arm requires aromaticity to run ahead of valence.
         let is_aromatic = view.is_in_aromatic_system()
             || AromaticValenceAst::aromatic(ValueAst::Undetermined)
                 .matches(&prepared.constraints.aromatic_valence());
-        if !matches!(prepared.implicit_hydrogens, ImplicitHydrogensAst::Lit(_)) {
+        if !matches!(prepared.implicit_hydrogens, ValueAst::Lit(_)) {
             if let Some(h) =
                 self.normal_valence
                     .implicit_hydrogens_for(element, charge, valence, is_aromatic)
             {
-                prepared.implicit_hydrogens = ImplicitHydrogensAst::Lit(h as i64);
+                prepared.implicit_hydrogens = ValueAst::Lit(h as i64);
             }
         }
         prepared
@@ -134,23 +137,23 @@ impl AtomTypingValenceResolver {
             .add(AtomConstraint::DonatedPairs(ValueAst::Lit(donated as i64)));
         prepared
             .constraints
-            .add(AtomConstraint::AcceptedPairs(ValueAst::Lit(accepted as i64)));
+            .add(AtomConstraint::AcceptedPairs(ValueAst::Lit(
+                accepted as i64,
+            )));
         if view.is_in_aromatic_system() {
             if let Some(pi) = view
                 .aromatic_valence()
                 .as_lit()
                 .and_then(|n| u8::try_from(n).ok())
             {
-                prepared
-                    .constraints
-                    .add(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(
-                        ValueAst::Lit(pi as i64),
-                    )));
+                prepared.constraints.add(AtomConstraint::AromaticValence(
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(pi as i64)),
+                ));
             }
         } else if !is_aromatic {
-            prepared
-                .constraints
-                .add(AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic));
+            prepared.constraints.add(AtomConstraint::AromaticValence(
+                AromaticValenceAst::NotAromatic,
+            ));
         }
         if let Some(mc) = view
             .multicenter_valence()

@@ -253,7 +253,10 @@ mod tests {
     use crate::ast::value::Expr;
 
     #[rstest]
-    #[case::electron_count(MulticenterBondConstraint::electron_count(2), MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2)))]
+    #[case::electron_count(
+        MulticenterBondConstraint::electron_count(2),
+        MulticenterBondConstraint::ElectronCount(ValueAst::Lit(2))
+    )]
     fn test_multicenter_bond_constraint_constructors(
         #[case] actual: MulticenterBondConstraint,
         #[case] expected: MulticenterBondConstraint,
@@ -262,7 +265,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::electron_count(MulticenterBondConstraint::electron_count(2), MulticenterBondConstraintKind::ElectronCount)]
+    #[case::electron_count(
+        MulticenterBondConstraint::electron_count(2),
+        MulticenterBondConstraintKind::ElectronCount
+    )]
     fn test_multicenter_bond_constraint_kind(
         #[case] c: MulticenterBondConstraint,
         #[case] expected: MulticenterBondConstraintKind,
@@ -287,7 +293,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::folds_expr(MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(2)))), MulticenterBondConstraint::electron_count(2))]
+    #[case::folds_expr(
+        MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(2)))),
+        MulticenterBondConstraint::electron_count(2)
+    )]
     fn test_multicenter_bond_constraint_simplify(
         #[case] input: MulticenterBondConstraint,
         #[case] expected: MulticenterBondConstraint,

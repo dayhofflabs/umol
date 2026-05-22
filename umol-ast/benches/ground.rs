@@ -16,8 +16,8 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
-    ArithOp, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, Expr, ImplicitHydrogensAst,
-    IntoAst, IsotopeAst, MoleculeAst, RelOp, SpinStateAst, ValueAst,
+    ArithOp, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, Expr, IntoAst, IsotopeAst,
+    MoleculeAst, RelOp, SpinStateAst, ValueAst,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_edn::FromEdn;
@@ -77,7 +77,7 @@ fn arith_expr_heavy() -> MoleculeAst {
             Box::new(Expr::Lit(0)),
         ))),
         charge: arith(),
-        implicit_hydrogens: ImplicitHydrogensAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))),
+        implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))),
         lone_pairs: arith(),
         spin: SpinStateAst {
             unpaired: arith(),

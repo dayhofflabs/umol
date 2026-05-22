@@ -120,6 +120,13 @@ pub trait Lattice: Sized + Clone + PartialEq {
     /// `self.meet(target) == Some(target)` modulo canonicalization.
     fn matches(&self, target: &Self) -> bool;
 
+    /// Symmetric compatibility: there exists a ground value that refines
+    /// both `self` and `other`. Equivalent to `self.meet(other).is_some()`;
+    /// override when a direct check is cheaper than constructing the meet.
+    fn is_compatible(&self, other: &Self) -> bool {
+        self.meet(other).is_some()
+    }
+
     /// In-place `meet`. Returns `true` iff `self` actually changed. When
     /// `self` and `other` are incompatible, leaves `self` unchanged and
     /// returns `false`.
