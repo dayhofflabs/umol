@@ -6,14 +6,13 @@ use std::str::FromStr;
 
 use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
-use winnow::combinator::{alt, delimited, preceded, separated, terminated};
+use winnow::combinator::{alt, delimited};
 use winnow::error::{ErrMode, ParserError};
 use winnow::token::one_of;
 use winnow::Parser;
 
 use super::config::NoncovalentBondDefaults;
 use super::error::{PResult, ParseError};
-use super::value::id;
 use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use crate::ast::traits::{FromAst, IntoAst};
 
@@ -136,9 +135,6 @@ pub(crate) fn noncovalent_bond(i: &mut &str) -> PResult<NoncovalentBondDsl> {
 fn kind_expr(i: &mut &str) -> PResult<NoncovalentBondKindAst> {
     alt((
         '*'.value(NoncovalentBondKindAst::Undetermined),
-        kind_set.map(NoncovalentBondKindAst::Set),
-        kind_bind.map(|(id, set)| NoncovalentBondKindAst::Bind { id, set }),
-        kind_ref.map(NoncovalentBondKindAst::Ref),
         kind_literal.map(NoncovalentBondKindAst::Lit),
     ))
     .parse_next(i)
@@ -157,40 +153,6 @@ fn kind_literal(i: &mut &str) -> PResult<NoncovalentBondKind> {
         Some(k) => Ok(k),
         None => Err(ErrMode::Backtrack(ParseError::from_input(i))),
     }
-}
-
-fn kind_set(i: &mut &str) -> PResult<Vec<NoncovalentBondKind>> {
-    delimited(
-        '{',
-        delimited(
-            multispace0,
-            separated(1.., kind_literal, delimited(multispace0, ',', multispace0)),
-            multispace0,
-        ),
-        '}',
-    )
-    .parse_next(i)
-}
-
-fn kind_bind(i: &mut &str) -> PResult<(String, Vec<NoncovalentBondKind>)> {
-    delimited(
-        '(',
-        (
-            delimited(multispace0, preceded('?', id), multispace0),
-            preceded(("::", multispace0), terminated(kind_set, multispace0)),
-        ),
-        ')',
-    )
-    .parse_next(i)
-}
-
-fn kind_ref(i: &mut &str) -> PResult<String> {
-    delimited(
-        '(',
-        delimited(multispace0, preceded('?', id), multispace0),
-        ')',
-    )
-    .parse_next(i)
 }
 
 fn kind_from_symbol(sym: &str) -> Option<NoncovalentBondKind> {
@@ -226,27 +188,6 @@ fn fmt_kind(f: &mut fmt::Formatter<'_>, kind: &NoncovalentBondKindAst) -> fmt::R
     match kind {
         NoncovalentBondKindAst::Lit(k) => write!(f, "{}", kind_symbol(*k)),
         NoncovalentBondKindAst::Undetermined => write!(f, "*"),
-        NoncovalentBondKindAst::Set(ks) => {
-            write!(f, "{{")?;
-            for (i, k) in ks.iter().enumerate() {
-                if i > 0 {
-                    write!(f, ",")?;
-                }
-                write!(f, "{}", kind_symbol(*k))?;
-            }
-            write!(f, "}}")
-        }
-        NoncovalentBondKindAst::Bind { id, set } => {
-            write!(f, "(?{} :: {{", id)?;
-            for (i, k) in set.iter().enumerate() {
-                if i > 0 {
-                    write!(f, ",")?;
-                }
-                write!(f, "{}", kind_symbol(*k))?;
-            }
-            write!(f, "}})")
-        }
-        NoncovalentBondKindAst::Ref(id) => write!(f, "(?{})", id),
     }
 }
 
@@ -293,10 +234,6 @@ mod tests {
     #[case::vdw("Vdw", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::VanDerWaals)))]
     #[case::whitespace("  Hbd  ", NoncovalentBondDsl(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)))]
     #[case::undetermined("*", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Undetermined)))]
-    #[case::set("{Hbd,Ion}", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]))))]
-    #[case::set_spaced("{ Hbd, Vdw }", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::VanDerWaals]))))]
-    #[case::bind("(?k :: {Hbd,Ion})", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Bind { id: "k".to_string(), set: vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic] })))]
-    #[case::ref_("(?k)", NoncovalentBondDsl(NoncovalentBondAst::new(NoncovalentBondKindAst::Ref("k".to_string()))))]
     fn test_parse_noncovalent(#[case] input: &str, #[case] expected: NoncovalentBondDsl) {
         let result = noncovalent_bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -318,9 +255,6 @@ mod tests {
     #[case::hbond("Hbd")]
     #[case::ion("Ion")]
     #[case::undetermined("*")]
-    #[case::set("{Hbd,Ion}")]
-    #[case::bind("(?k :: {Hbd,Ion})")]
-    #[case::ref_("(?k)")]
     fn test_noncovalent_roundtrip(#[case] input: &str) {
         let form: NoncovalentBondDsl = input.parse().unwrap();
         let rendered = form.to_string();
@@ -343,7 +277,6 @@ mod tests {
 
     #[rstest]
     #[case::single(r##""Hbd""##)]
-    #[case::set(r##""{Hbd,Ion}""##)]
     #[case::undetermined(r##""*""##)]
     fn test_noncovalent_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = NoncovalentBondDsl::from_edn_str(input).unwrap();

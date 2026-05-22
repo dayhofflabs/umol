@@ -1,12 +1,14 @@
 //! Noncovalent bond AST.
 
 use super::constraint::{NoncovalentBondConstraint, NoncovalentBondConstraints};
+use umol_ast_macros::Lattice;
+
 use super::traits::Lattice;
 
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
 /// interaction kind. No bond order, no charge or spin — these do not apply
 /// to noncovalent interactions.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Lattice)]
 pub struct NoncovalentBondAst {
     pub kind: NoncovalentBondKindAst,
     pub constraints: NoncovalentBondConstraints,
@@ -61,63 +63,15 @@ impl NoncovalentBondAst {
     }
 }
 
-impl Lattice for NoncovalentBondAst {
-    fn is_undetermined(&self) -> bool {
-        matches!(self.kind, NoncovalentBondKindAst::Undetermined)
-            && self.constraints.is_undetermined()
-    }
-
-    fn is_ground(&self) -> bool {
-        self.kind.is_ground() && self.constraints.is_ground()
-    }
-
-    /// `kind` is treated as a structural anchor (equality-only): mismatched
-    /// kinds → `None`.
-    fn meet(&self, other: &Self) -> Option<Self> {
-        let kind = match (&self.kind, &other.kind) {
-            (NoncovalentBondKindAst::Undetermined, k)
-            | (k, NoncovalentBondKindAst::Undetermined) => k.clone(),
-            (a, b) if a == b => a.clone(),
-            _ => return None,
-        };
-        Some(Self {
-            kind,
-            constraints: self.constraints.meet(&other.constraints)?,
-        })
-    }
-
-    /// `kind` is equality-only: mismatched kinds widen the entity to
-    /// `Default::default()` (entity-level undetermined).
-    fn join(&self, other: &Self) -> Self {
-        match (&self.kind, &other.kind) {
-            (NoncovalentBondKindAst::Undetermined, _)
-            | (_, NoncovalentBondKindAst::Undetermined) => Self::default(),
-            (a, b) if a == b => Self {
-                kind: a.clone(),
-                constraints: self.constraints.join(&other.constraints),
-            },
-            _ => Self::default(),
-        }
-    }
-
-    fn matches(&self, target: &Self) -> bool {
-        self.kind.matches(&target.kind) && self.constraints.matches(&target.constraints)
-    }
-}
-
-/// Noncovalent interaction kind expressions. Mirrors `ElementAst`:
-/// wildcard, literal, set, bind, ref.
+/// Noncovalent interaction kind. Two-variant lattice: `Undetermined` is
+/// the top (wildcard); `Lit(...)` pins a specific interaction kind. No
+/// set/bind/ref machinery — sets over noncovalent kinds are not a common
+/// modeling need, and the AST is kept minimal until one arises.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondKindAst {
     #[default]
     Undetermined,
     Lit(NoncovalentBondKind),
-    Set(Vec<NoncovalentBondKind>),
-    Bind {
-        id: String,
-        set: Vec<NoncovalentBondKind>,
-    },
-    Ref(String),
 }
 
 impl From<NoncovalentBondKind> for NoncovalentBondKindAst {
@@ -126,23 +80,36 @@ impl From<NoncovalentBondKind> for NoncovalentBondKindAst {
     }
 }
 
-impl NoncovalentBondKindAst {
-    pub fn is_ground(&self) -> bool {
+impl Lattice for NoncovalentBondKindAst {
+    fn is_undetermined(&self) -> bool {
+        matches!(self, Self::Undetermined)
+    }
+
+    fn is_ground(&self) -> bool {
         matches!(self, Self::Lit(_))
     }
 
-    pub fn matches(&self, target: &Self) -> bool {
+    fn meet(&self, other: &Self) -> Option<Self> {
+        match (self, other) {
+            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
+            (Self::Lit(a), Self::Lit(b)) if a == b => Some(Self::Lit(*a)),
+            _ => None,
+        }
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        match (self, other) {
+            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
+            (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),
+            _ => Self::Undetermined,
+        }
+    }
+
+    fn matches(&self, target: &Self) -> bool {
         match (self, target) {
             (Self::Undetermined, _) => true,
             (_, Self::Undetermined) => false,
-            (Self::Ref(_), _) | (_, Self::Ref(_)) => false,
             (Self::Lit(p), Self::Lit(t)) => p == t,
-            (Self::Lit(p), Self::Set(ts) | Self::Bind { set: ts, .. }) => ts.iter().all(|t| t == p),
-            (Self::Set(ps) | Self::Bind { set: ps, .. }, Self::Lit(t)) => ps.contains(t),
-            (
-                Self::Set(ps) | Self::Bind { set: ps, .. },
-                Self::Set(ts) | Self::Bind { set: ts, .. },
-            ) => ts.iter().all(|t| ps.contains(t)),
         }
     }
 }
@@ -188,8 +155,8 @@ mod tests {
         NoncovalentBondAst { kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
             constraints: NoncovalentBondConstraints::new() })]
     #[case::with_kind_ast(
-        NoncovalentBondAst::default().with_kind(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond])),
-        NoncovalentBondAst { kind: NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond]),
+        NoncovalentBondAst::default().with_kind(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond)),
+        NoncovalentBondAst { kind: NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond),
             constraints: NoncovalentBondConstraints::new() })]
     #[case::with_constraints_empty(
         NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond)
@@ -232,14 +199,6 @@ mod tests {
     #[case::same(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), true)]
     #[case::different(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic), false)]
     #[case::pattern_specific_target_undetermined(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond), NoncovalentBondAst::default(), false)]
-    #[case::set_pattern_lit_in(
-        NoncovalentBondAst::new(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic])),
-        NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic),
-        true)]
-    #[case::set_pattern_lit_out(
-        NoncovalentBondAst::new(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond])),
-        NoncovalentBondAst::from_kind(NoncovalentBondKind::Ionic),
-        false)]
     fn test_noncovalent_bond_ast_matches(
         #[case] pattern: NoncovalentBondAst,
         #[case] target: NoncovalentBondAst,
@@ -260,9 +219,6 @@ mod tests {
     #[rstest]
     #[case::lit(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), true)]
     #[case::undetermined(NoncovalentBondKindAst::Undetermined, false)]
-    #[case::set(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]), false)]
-    #[case::bind(NoncovalentBondKindAst::Bind { id: "k".into(), set: vec![NoncovalentBondKind::HydrogenBond] }, false)]
-    #[case::reference(NoncovalentBondKindAst::Ref("k".into()), false)]
     fn test_noncovalent_bond_kind_ast_is_ground(
         #[case] ast: NoncovalentBondKindAst,
         #[case] expected: bool,
@@ -277,15 +233,6 @@ mod tests {
     #[case::lit_undetermined(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Undetermined, false)]
     #[case::lit_lit_match(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), true)]
     #[case::lit_lit_mismatch(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic), false)]
-    #[case::set_lit_in(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]), NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic), true)]
-    #[case::set_lit_out(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond]), NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic), false)]
-    #[case::set_set_subset(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic, NoncovalentBondKind::VanDerWaals]),
-        NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]), true)]
-    #[case::set_set_superset(NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond]),
-        NoncovalentBondKindAst::Set(vec![NoncovalentBondKind::HydrogenBond, NoncovalentBondKind::Ionic]), false)]
-    #[case::bind_lit_match(NoncovalentBondKindAst::Bind { id: "k".into(), set: vec![NoncovalentBondKind::HydrogenBond] },
-        NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), true)]
-    #[case::ref_lit(NoncovalentBondKindAst::Ref("k".into()), NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), false)]
     fn test_noncovalent_bond_kind_ast_matches(
         #[case] pattern: NoncovalentBondKindAst,
         #[case] target: NoncovalentBondKindAst,

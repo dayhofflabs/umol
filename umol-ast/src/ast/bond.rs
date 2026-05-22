@@ -2,6 +2,8 @@
 
 use std::mem;
 
+use umol_ast_macros::Lattice;
+
 use super::constraint::{BondConstraint, BondConstraints};
 use super::spin::SpinStateAst;
 use super::traits::Lattice;
@@ -9,7 +11,7 @@ use super::value::ValueAst;
 
 /// Bond AST: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Lattice)]
 pub struct BondAst {
     pub order: ValueAst,
     pub charge: ValueAst,
@@ -96,55 +98,13 @@ impl BondAst {
     }
 }
 
-impl Lattice for BondAst {
-    fn is_undetermined(&self) -> bool {
-        self.order.is_undetermined()
-            && self.charge.is_undetermined()
-            && self.spin.is_undetermined()
-            && self.constraints.is_undetermined()
-    }
-
-    fn is_ground(&self) -> bool {
-        self.order.is_ground()
-            && self.charge.is_ground()
-            && self.spin.is_ground()
-            && self.constraints.is_ground()
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        Some(Self {
-            order: self.order.meet(&other.order)?,
-            charge: self.charge.meet(&other.charge)?,
-            spin: self.spin.meet(&other.spin)?,
-            constraints: self.constraints.meet(&other.constraints)?,
-        })
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        Self {
-            order: self.order.join(&other.order),
-            charge: self.charge.join(&other.charge),
-            spin: self.spin.join(&other.spin),
-            constraints: self.constraints.join(&other.constraints),
-        }
-    }
-
-    /// `self` (pattern) matches `target` iff every admissible assignment
-    /// of `target` is also admissible by `self`, checked field-wise.
-    fn matches(&self, target: &Self) -> bool {
-        self.order.matches(&target.order)
-            && self.charge.matches(&target.charge)
-            && self.spin.matches(&target.spin)
-            && self.constraints.matches(&target.constraints)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
+    use crate::ast::traits::Lattice;
 
     #[rustfmt::skip]
     #[rstest]

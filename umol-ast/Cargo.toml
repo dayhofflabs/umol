@@ -33,6 +33,7 @@ phf = { version = "0.13.1", features = ["macros"] }
 smallvec = "1.15.1"
 strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
+umol-ast-macros = { path = "../umol-ast-macros", version = "0.1.0" }
 umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "indexmap"] }
 umol-graph-core = { path = "../umol-graph-core", version = "0.1.0" }
 umol-shared = { path = "../umol-shared", version = "0.1.0" }

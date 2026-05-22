@@ -32,9 +32,7 @@ impl From<i64> for JointValue {
 }
 
 /// Relational constraint: `Undetermined` is the lattice top (no constraint);
-/// `Domain(...)` asserts a finite set of admissible tuples. The internal
-/// state of `Domain` is opaque to external code — query through `vars`,
-/// `tuples`, or the `Lattice` methods.
+/// `Domain(...)` asserts a finite set of admissible tuples.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum JointDomainAst {
     #[default]
@@ -42,10 +40,6 @@ pub enum JointDomainAst {
     Domain(DomainState),
 }
 
-/// Opaque payload of `JointDomainAst::Domain`. Module-private fields force
-/// all construction through `JointDomainAst::from_ints` (and the internal
-/// canonicalizing helpers), so stored invariants — sorted unique vars,
-/// sorted dedup'd non-empty tuples, arity match — hold by construction.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DomainState {
     vars: Vec<JointVar>,

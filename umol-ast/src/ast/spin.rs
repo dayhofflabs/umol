@@ -2,15 +2,16 @@
 
 use std::mem;
 
+use umol_ast_macros::Lattice;
 use umol_shared::spin::{SpinMultiplicity, SpinState};
 
-use super::traits::{AsLit, Lattice};
+use super::traits::AsLit;
 use super::value::ValueAst;
 
 /// Spin state: unpaired-electron count and multiplicity as independent
 /// `ValueAst` fields. Both may be `Undetermined`, a literal, or an
 /// expression pattern.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice)]
 pub struct SpinStateAst {
     pub unpaired: ValueAst,
     pub multiplicity: ValueAst,
@@ -26,43 +27,6 @@ impl SpinStateAst {
     pub fn simplify_values(&mut self) {
         self.unpaired = mem::take(&mut self.unpaired).simplify();
         self.multiplicity = mem::take(&mut self.multiplicity).simplify();
-    }
-}
-
-impl Lattice for SpinStateAst {
-    /// Both fields are `Undetermined` — the spin state asserts nothing.
-    fn is_undetermined(&self) -> bool {
-        self.unpaired.is_undetermined() && self.multiplicity.is_undetermined()
-    }
-
-    /// Both fields are ground. A ground spin state may still be physically
-    /// inconsistent — parity of `(unpaired, multiplicity)` is a tier-2
-    /// physics invariant enforced by a propagator in the solver, not here.
-    fn is_ground(&self) -> bool {
-        self.unpaired.is_ground() && self.multiplicity.is_ground()
-    }
-
-    /// Field-wise meet — no physics validation. A meet that combines two
-    /// individually-physics-consistent inputs may produce a parity-invalid
-    /// pair; the solver's propagator catches this separately.
-    fn meet(&self, other: &Self) -> Option<Self> {
-        Some(Self {
-            unpaired: self.unpaired.meet(&other.unpaired)?,
-            multiplicity: self.multiplicity.meet(&other.multiplicity)?,
-        })
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        Self {
-            unpaired: self.unpaired.join(&other.unpaired),
-            multiplicity: self.multiplicity.join(&other.multiplicity),
-        }
-    }
-
-    /// Pattern matches target iff `unpaired` and `multiplicity` each
-    /// match field-wise under `ValueAst::matches`.
-    fn matches(&self, target: &Self) -> bool {
-        self.unpaired.matches(&target.unpaired) && self.multiplicity.matches(&target.multiplicity)
     }
 }
 
@@ -116,6 +80,7 @@ mod tests {
     use umol_shared::spin;
 
     use super::*;
+    use crate::ast::traits::Lattice;
 
     #[rustfmt::skip]
     #[rstest]
