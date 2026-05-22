@@ -22,15 +22,10 @@ pub enum ValueAst {
     Lit(i64),
     LitSet(Box<Vec<i64>>),
     Expr(Box<Expr>),
-    /// Named bind: this field is referenced as `id` and admits values in `set`.
-    /// Mirrors `ElementAst::Bind`. Acts like a `LitSet` for matching; the `id`
-    /// links it to `Ref(id)` occurrences elsewhere via joint-domain constraints.
     Bind {
         id: String,
         set: Box<Vec<i64>>,
     },
-    /// Reference to a named bind defined elsewhere. Mirrors `ElementAst::Ref`.
-    /// Cannot be certified statically; meets only with itself by `id` equality.
     Ref(String),
 }
 

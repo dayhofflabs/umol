@@ -186,6 +186,8 @@ An empty **`nat-set`** **`{ }`** is **invalid**.
 value-expr ::= '*'
              | nat-set
              | nat
+             | '?' id                  (* top-level Ref — bind reference     *)
+             | '?' id '::' nat-set     (* top-level Bind — named domain     *)
              | bool-expr
 
 bool-expr  ::= or-expr
@@ -223,6 +225,10 @@ id  ::= [a-zA-Z][a-zA-Z0-9_]*
 **Top-level `nat`.** A **`nat`** forms a complete top-level **`value-expr`** only when it is **cut** by **end of the substring being tokenized** or by the **next predicate** (**`#`** *tag* on the atom-string / bond-string), after optional whitespace — e.g. **`#h1#v3`** yields **`1`** then **`3`**. If the next non-whitespace character is anything else (e.g. **`+`** in **`1+2`**), parsing **MUST NOT** treat the **`nat`** as this alternative; it falls through to **`bool-expr`**. Implementations **MAY** represent this form as **`Lit`** distinct from a trivial relational **`bool-expr`**. The common **Ground** case (**`#h3`**, **`#v0`**, …) is typically this shape.
 
 **Top-level `nat-set`.** A **`value-expr`** may be **only** a **`nat-set`** (after the usual ignored whitespace between **`value-expr`** tokens, **§7.1**). It denotes a **finite numeric disjunction** for the **one** quantity fixed by the enclosing predicate tag (**§7.3**, **§7.5**): that quantity **MUST** equal one of the listed **`nat`** values. This is the same constraint **shape** as a top-level **`nat-set`** in **bond-string** **`order`** (**§7.5**) and **`element-set`** for the **element** prefix, applied at the **predicate payload** level (e.g. **`#h{1,2,3}`** with payload **`{1,2,3}`**). It **MUST NOT** introduce a numeric **`?id`**; implementations **MAY** lower it to **`bool-expr`** internally. The form ***arith* `::` *nat-set*** on **`mem-expr`** is unchanged: it constrains the **arithmetic** value on the left of **`::`**, not an implicit slot quantity by bare **`{…}`** alone.
+
+**Top-level `?` *id* and `?` *id* `::` *nat-set*.** A **`value-expr`** may be **only** **`?` *id*** (a numeric **bind reference**) or **`?` *id* `::` *nat-set*** (a **named-bind** with a finite admissible domain). These shapes parse at the **value-expr** level before falling through to **`bool-expr`**, and produce the AST variants **`ValueAst::Ref`** and **`ValueAst::Bind`** respectively. Inside a compound expression (e.g. **`?h + 1`**, **`?h == 0`**), the same **`?` *id*** appears as **`Expr::Var`** inside **`bool-expr`** — the discriminator is whether the surrounding context is the whole value or an operand of a larger operator.
+
+**Paren-transparency for top-level bind/ref.** Outer parentheses around a top-level **`?` *id*** or **`?` *id* `::` *nat-set*** are **optional** and **semantically transparent**: implementations **MUST** accept the bare forms and any nesting depth of outer parens (**`(?h)`**, **`((?h))`**, **`(?h :: {1,2})`**, **`((?h :: {1,2}))`**) as identical AST. The **canonical** rendered form is **bare** (no outer parens). Disambiguation against larger expressions like **`(?h + 1)`** or **`(?a :: {0}) & 0 <= 0`** is handled by requiring a **terminator** (end-of-payload or next **`#`** predicate) after the parenthesized bind/ref before the arm fires; otherwise the parens are interpreted as **`bool-expr`** grouping (**§5.1**).
 
 **`unary-expr`** is **`sign`*** **`base-expr`**: zero or more leading **`+`** / **`-`**, then **`nat`**, **`?id`**, or parenthesized **`add-expr`**. Examples: **`#c+1`**, **`#c-2`**, **`#c--1`**. A **`sign`** with **no** following **`base-expr`** is **invalid** in the general grammar; **`#c`** additionally accepts a payload consisting **only** of **`+`** or **`-`** (after trimming whitespace) as **+1** or **−1** (**§7.3**).
 
@@ -284,8 +290,7 @@ When a **predicate** (**§7.3**, **§7.5**) allows a **decimal-only** payload an
 | Atom tag | Omitted numeral = 1 (decimal-only payloads) |
 |----------|-----------------------------------------------|
 | **`#c`** | **no** — charge **MUST** be explicit (**`#c0`**, **`#c+`**, **`#c-`**, **`#c+2`**, **`#c-2`**, …); empty **`#c`** is **invalid** |
-| **`#h`** | yes, when the payload is decimal-only; **`#h*`**, **`#h*`**, etc. are **special** (**§7.3**) |
-| **`#n` `#u` `#s` `#v` `#d` `#t` `#r`** | yes, when the payload is decimal-only |
+| **`#h` `#n` `#u` `#s` `#v` `#d` `#t` `#r`** | yes, when the payload is decimal-only |
 | **`#a`** | yes when decimal-only; **`#a*`**, **`#a+`**, **`#a!`** are **special** (**§7.3**) |
 | **`#m`** | yes when decimal-only; **`#m*`**, **`#m+`**, **`#m!`** are **special** (**§7.3**) |
 | **`#i`** | yes, when the payload is decimal-only; bare **`#i`** denotes isotope mass **1** |
@@ -300,7 +305,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 - The **`*`** **wildcard** is allowed in **`value-expr`**, **`element`**, and **`order`**
 - **`bool-expr`**: **infix** **`&` `|` `!`**, **relations**, **`::`**, **`+ - * / %`**, unary **`-`**, **`?id`**, **`nat`**, **`(`** **`add-expr`** **`)`**.
 
-**Ground:** no **`bool-expr`** (no **`?`**, **`::`**, relations, logic), no **`element-bind`**, no **`element-ref`**; predicate payloads are **`decimal-tail`** / **`nat`** / top-level **`nat-set`** (and tag-specific literals such as **`#h*`**) only where allowed.
+**Ground:** no **`bool-expr`** (no **`?`**, **`::`**, relations, logic), no **`element-bind`**, no **`element-ref`**, no top-level negation (**`!`** *literal* or **`!`** *set*); predicate payloads are **`decimal-tail`** / **`nat`** / top-level **`nat-set`** (and tag-specific literals such as **`#i=`** for natural isotope) only where allowed.
 
 **Query:** **`bool-expr`** where allowed; **`decimal-tail`**; **element** / **order** extensions as allowed.
 
@@ -320,7 +325,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 | Form | Inherent fields |
 |------|-----------------|
-| atom | element, isotope mass (**`#i=`**), charge (**`#c`**), implicit hydrogens (**`#h*`**), lone pairs, spin (unpaired **`#u`**, multiplicity **`#s`**) |
+| atom | element, isotope mass (**`#i`**), charge (**`#c`**), implicit hydrogens (**`#h`**), lone pairs (**`#n`**), spin (unpaired **`#u`**, multiplicity **`#s`**) |
 | localized bond | order, charge (**`#c`**), spin (**`#u`**, **`#s`**) |
 | aromatic system | charge (**`#c`**), spin (**`#u`**, **`#s`**), π-electron count (**`#e`**) |
 | multicenter bond | charge (**`#c`**), spin (**`#u`**, **`#s`**), electron count (**`#e`**) |
@@ -331,7 +336,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 ### 6.2 Pattern–target match
 
-**Match as solution-set inclusion.** Each attribute slot has a **solution set** — the set of ground values the slot admits. A **literal** (e.g. **`C`**, **`3`**, **`+1`**) admits exactly itself; a **set** (**`{C,N}`**, top-level **`nat-set`**) admits its members; a **wildcard** (**`*`**) admits everything in the slot's value domain; a **`bool-expr`** admits every value for which the expression holds (**§5**); a **special-symbolic** payload (**`#h*`**, **`#i=`**, **`#a*`**, **`#a+`**, **`#a!`**, **`#m*`**, **`#m+`**, **`#m!`**, **`#R*`**, **`#R+`**) admits only its named symbolic state (**§7.3**). For a given slot, the **pattern** matches the **target** iff `solution-set(pattern)` ⊇ `solution-set(target)` — the pattern admits every value the target admits. Match is **not** symmetric.
+**Match as solution-set inclusion.** Each attribute slot has a **solution set** — the set of ground values the slot admits. A **literal** (e.g. **`C`**, **`3`**, **`+1`**) admits exactly itself; a **set** (**`{C,N}`**, top-level **`nat-set`**) admits its members; a **negation** (**`!H`**, **`!12`**) admits everything in the slot's value domain *except* the named literal; a **negative set** (**`!{F,Cl}`**, **`!{12,13}`**) admits the complement of the listed entries; a **wildcard** (**`*`**) admits everything in the slot's value domain; a **`bool-expr`** admits every value for which the expression holds (**§5**); a **special-symbolic** payload (**`#i=`**, **`#a*`**, **`#a+`**, **`#a!`**, **`#m*`**, **`#m+`**, **`#m!`**, **`#R*`**, **`#R+`**) admits only its named symbolic state (**§7.3**). For a given slot, the **pattern** matches the **target** iff `solution-set(pattern)` ⊇ `solution-set(target)` — the pattern admits every value the target admits. Match is **not** symmetric.
 
 | pattern kind | target kind | matches iff |
 |--------------|-------------|-------------|
@@ -384,7 +389,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 **Payload extraction.** A **predicate** is **`#`**, one **tag** character **`[A-Za-z_]`**, and a **payload** consisting of all following characters up to (but not including) the **next** **`#`** or **end of string**, after **whitespace normalization** for the purpose of **tokenizing** the payload as **`value-expr`**: the payload text **MAY** contain ignored whitespace between **`value-expr`** tokens as in **§5**. The **payload** **MUST NOT** contain **`#`**.
 
-**Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`C#h*`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**, **`(?e :: {Cl,Br})#v(?q == 2)`**.
+**Examples (atom):** **`C`**, **`C#h3`**, **`C#h*`**, **`!H`**, **`!{F,Cl}`**, **`?e`**, **`?e :: {Cl,Br}`**, **`?e :: !{F,Cl}`**, **`C#a*`**, **`C#a !`**, **`C#c+`**, **`C#c-`**, **`C#c +`**.
 
 - A **`nat`** and an **`id`** contain **no** internal whitespace.
 - A **relational** token is **`<=`**, **`>=`**, **`==`**, or a **single** **`<`** or **`>`** that is **not** part of **`<=` `>=`**. **Multi-character** tokens are one lexical unit.
@@ -444,15 +449,34 @@ tag ::= [A-Za-z_]
 **`payload` parsing.** After trimming leading / trailing whitespace on the **payload** substring, parse as follows:
 
 1. **`#c`**, **Ground** or **Query** / **Rule**: if the trimmed payload is **exactly** **`+`** or **`-`**, the formal charge is **+1** or **−1** (same meaning as **`#c+1`** / **`#c-1`**). Otherwise parse as **`value-expr`** (**§5**) (or the **Ground** subset in **§5.4**).
-2. **Any other tag**: parse the payload as **`value-expr`** (or **Ground** subset) unless the payload matches a **special** form below.
+2. **`#i`**: parsed by a **dedicated isotope subgrammar** (see below), not as **`value-expr`**.
+3. **Any other tag**: parse the payload as **`value-expr`** (or **Ground** subset) unless the payload matches a **special** form below.
 
-**`#i`** follows the usual **§5.3** decimal-only rule: bare **`#i`** denotes mass **1**.
+**`#i` isotope subgrammar.** The isotope-mass slot uses its own subgrammar, not **`value-expr`**, because isotope mass numbers are tagged enum-like and have no arithmetic-on-numerics use. Empty payload (bare **`#i`**) denotes mass **1** (per §5.3 decimal-tail).
+
+```
+isotope-payload ::= '='                           (* Natural — naturally most abundant *)
+                  | '*'                            (* Undetermined — wildcard           *)
+                  | signed-int                     (* Lit                                *)
+                  | nat-set                        (* LitSet — finite mass disjunction  *)
+                  | '!' signed-int                 (* Not — cofinite singleton          *)
+                  | '!' nat-set                    (* NotSet — cofinite multi           *)
+                  | '?' id                         (* Ref — bind reference              *)
+                  | '?' id '::' isotope-domain     (* Bind — named domain                *)
+
+isotope-domain  ::= nat-set                        (* Include polarity                  *)
+                  | '!' signed-int                 (* Exclude polarity (singleton)      *)
+                  | '!' nat-set                    (* Exclude polarity                  *)
+```
+
+**Paren-transparency.** Outer parentheses around **`?` *id*** or **`?` *id* `::` *isotope-domain*** are **optional** and **semantically transparent** (same rule as element §7.4 and value-expr §5). Canonical render is bare.
+
+**Natural is its own channel.** **`=`** (Natural) **does not unify** with numeric variants in the lattice: **`Natural ∧ Lit(n) = ⊥`**, **`Natural ∨ Lit(n) = Undetermined`** for any **`n`**. Natural is the "no specific mass committed" state and is **disjoint** from any explicit mass number. **Ground** isotope is either **`Natural`** or a single **`Lit(n)`**.
 
 **Special predicate payloads** (trimmed; **not** parsed as boolean **`!`** — these are **opaque** lexemes for the given tag):
 
 | Form | Tag | Meaning |
 |------|-----|---------|
-| **`=`** (payload is a single equals sign) | **`#h`** | **Normal / valence-model implicit hydrogen**: implicit H count is whatever the valence model assigns for this **`element`** and the rest of the atom’s fields (**Query** / **Rule** indeterminacy **MAY** apply). |
 | **`=`** | **`#i`** | **Natural isotope**: mass number of the **naturally most abundant** isotope of **`element`**. This is the default / expected isotope for each element. |
 | **`*`** | **`#h`** | **Wildcard** implicit H count (**Query** / **Rule**). |
 | **`*`** | **`#a`** | **No constraint** on aromatic π contribution — equivalent to omitting **`#a`** entirely. |
@@ -471,7 +495,7 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / *
 |-----|---------|
 | **`#i`** | Isotope mass; **special** **`#i=`** (natural isotope, **§7.3**) |
 | **`#c`** | Formal charge |
-| **`#h`** | Implicit H count; **special** **`#h*`**, **`#h*`** (**§7.3**) |
+| **`#h`** | Implicit H count |
 | **`#n`** | Lone pairs (nonbonding pair count) |
 | **`#u`** | Unpaired electron count |
 | **`#s`** | Spin multiplicity (2S+1) |
@@ -491,23 +515,38 @@ Other **`#h`** / **`#a`** / **`#m`** payloads use the usual **`value-expr`** / *
 
 ### 7.4 Element and bond **`order`** (via **`value-expr`**)
 
-The **`element`** nonterminal (**atom-string** prefix) is **literal** | **wildcard `*`** | **brace set** | **`(?` *id* `::` *set* `)`** | **`(?` *id* `)`** (**§7.4** grammar below). The **bond-string** **`order`** prefix (**§7.5**) is a single **`value-expr`** (**§5**), which **subsumes** literal **`nat`**, **`*`**, brace **`nat-set`**, **`(?` *id* `::` *set* `)`**, **`(?` *id* `)`**, and **arithmetic** / logic (e.g. **`1+1`**, **`?o+1`**) where allowed by context.
+The **`element`** nonterminal (**atom-string** prefix) is **literal** | **wildcard `*`** | **brace set** | **negation** | **bind** | **ref** (**§7.4** grammar below). The **bond-string** **`order`** prefix (**§7.5**) is a single **`value-expr`** (**§5**), which **subsumes** literal **`nat`**, **`*`**, brace **`nat-set`**, **`?` *id***, **`?` *id* `::` *nat-set***, and **arithmetic** / logic (e.g. **`1+1`**, **`?o+1`**) where allowed by context.
 
 ```
-element ::= element-literal | '*' | element-set | element-bind | element-ref
+element ::= element-literal
+          | '*'
+          | element-set
+          | '!' element-literal
+          | '!' element-set
+          | element-bind
+          | element-ref
+
 element-set ::= '{' element-literal (',' element-literal)* '}'
-element-bind ::= '(' '?' id '::' element-set ')'
-element-ref ::= '(' '?' id ')'
+
+element-bind   ::= '?' id '::' element-domain
+element-domain ::= element-set
+                 | '!' element-literal
+                 | '!' element-set
+element-ref    ::= '?' id
+
 element-literal ::= [A-Z][a-z]*
 ```
 
 - **`element-literal`**: one chemical symbol; **§7.2** (H–Og).
 - **`*`**: any element; **invalid** in **Ground** unless narrowed by a containing rule outside this specification.
 - **`element-set`**: finite non-empty disjunction of **one or more** **`element-literal`** entries; **§7.2**. **Query** / **Rule** when **Ground** disallows wildcards.
-- **`element-bind`**: **Query** / **Rule** only. Introduces a **nominal** variable **`id`** constrained to **membership in** the **`element-set`** (**§6**). **`::`** here means **set membership in a set of element symbols** (**§5**). **Invalid** in **Ground**.
+- **`!` *element-literal*** / **`!` *element-set***: cofinite **negation** — admits everything in the element domain **except** the named literal / set members. **§7.2** range applies to the excluded entries. **Invalid** in **Ground**.
+- **`element-bind`**: **Query** / **Rule** only. Introduces a **nominal** variable **`id`** constrained to **membership in** (Include polarity) or **exclusion from** (Exclude polarity) an **`element-domain`** (**§6**). **`::`** here means **set membership in a set of element symbols** (**§5**). The `!` prefix flips the polarity to Exclude. **Invalid** in **Ground**.
 - **`element-ref`**: **Query** / **Rule** only. **Nominal reference**: **`id`** must already be bound as a nominal in rule scope (**§6**). Appears only in the **element** position at the start of the atom-string. No arithmetic on nominal variables.
 
-Optional ASCII whitespace inside **`element-bind`** after **`(`**, before **`)`**, around **`::`**, and around commas in the inner **`element-set`**, per **§7.1**.
+**Paren-transparency.** Outer parentheses around an **`element-bind`** or **`element-ref`** are **optional** and **semantically transparent**: implementations **MUST** accept the bare forms (**`?e`**, **`?e :: {C,N}`**) and any nesting depth of outer parens (**`(?e)`**, **`((?e :: {C,N}))`**, …) as identical AST. The **canonical** rendered form is **bare** (no outer parens).
+
+Optional ASCII whitespace inside **`element-bind`** around **`::`** and around commas in the inner **`element-set`**, per **§7.1**.
 
 ### 7.5 Bond subgrammar
 

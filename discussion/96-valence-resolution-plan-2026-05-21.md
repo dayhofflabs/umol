@@ -712,7 +712,8 @@ This keeps the universal physics in `Invariants`, the chemistry-bound setting in
 
    No change needed for `ElementAst` or `IsotopeAst`: neither has an `Expr` variant, so there's no Expr-form-to-canonical-Ref/Bind path. Set canonicalization (`NotSet([x])` → `Not(x)`, etc.) is already handled inside meet/join via the `canonicalize_*` helpers; doesn't need a public `simplify` method.
 
-2c. **Update `umol-ast/spec/umol-dsl-spec.md`** to reflect the surface changes from 2a and 2b. The spec is **normative** for new language constructs — when adding a new form to the DSL, the spec is the binding source of truth for what the parser must accept and emit.
+2c. **Update `umol-ast/spec/umol-dsl-spec.md`** to reflect the surface changes from 2a and 2b. **Done**
+    The spec is **normative** for new language constructs — when adding a new form to the DSL, the spec is the binding source of truth for what the parser must accept and emit.
 
    #### Read the spec first
 
