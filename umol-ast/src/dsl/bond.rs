@@ -671,10 +671,7 @@ mod tests {
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
             parsed.into_ast(&()),
-            BondConstraint::RingSize(ValueAst::Expr(Box::new(Expr::Mem(
-                Box::new(Expr::Var("n".into())),
-                vec![5, 6],
-            ))))
+            BondConstraint::RingSize(ValueAst::bind("n", vec![5, 6])),
         );
     }
     // endregion: BondConstraintDsl

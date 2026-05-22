@@ -651,7 +651,7 @@ This keeps the universal physics in `Invariants`, the chemistry-bound setting in
    - **Dependencies**: none (step 1 partially supersedes itself; this is the cleanup).
    - **Risk**: medium. Touches three AST types and their parsers, plus existing tests. Substantial but self-contained. The `Natural` semantics on IsotopeAst is the one open chemistry call; default to "Natural is its own channel, doesn't meet with Lit" unless someone surfaces a use case.
 
-2b. **Full conversion `ImplicitHydrogensAst` → `ValueAst`.**
+2b. **Full conversion `ImplicitHydrogensAst` → `ValueAst`.** **Done**
     The doc 96 takeaway "`ImplicitHydrogensAst` can be replaced by `ValueAst` in the future" — that future is now. With the AST cleanup in 2a done, `ValueAst` covers everything `ImplicitHydrogensAst` does, plus the bind/ref machinery for joint constraints, minus the obsolete `Normal` sentinel.
 
    #### Type-level change
@@ -698,7 +698,7 @@ This keeps the universal physics in `Invariants`, the chemistry-bound setting in
    - **Dependencies**: 2a (ValueAst cleanup for Bind/Ref); also requires the implicit-H resolution work to already be folded into valence resolution (per the doc 96 takeaway — already the design intent).
    - **Risk**: medium. Touches many call sites because `implicit_hydrogens` is referenced throughout the resolver / validator / DSL / table_ir / etc. But each change is mechanical (`ImplicitHydrogensAst::Lit(n)` → `ValueAst::Lit(n)`, etc.). The `#h=` → `#h*` text substitution in conformance inputs is the largest set of file changes; it's a sed-then-snapshot-update.
 
-2d. **Ensure `ValueAst::simplify` canonicalizes `Expr(Var(id))` → `Ref(id)` and `Expr(Mem(Var(id), set))` → `Bind { id, set }`.**
+2d. **Ensure `ValueAst::simplify` canonicalizes `Expr(Var(id))` → `Ref(id)` and `Expr(Mem(Var(id), set))` → `Bind { id, set }`.** **Done**
     With Bind/Ref as first-class top-level variants, the simplify path is the safety net for programmatic AST construction that produces equivalent Expr-wrapped forms. After simplify, no top-level `Expr(Var)` or `Expr(Mem(Var, set))` should remain — they collapse to their canonical Bind/Ref representations.
 
    Conservative: the rule fires only when the Expr is *exactly* `Var(id)` or `Mem(Var(id), <literal set>)`. `Expr(BinOp(Var, Add, Lit))` doesn't lift because the outer is BinOp; `Expr(Mem(BinOp(Var, ...), [..]))` doesn't lift because the Mem's first arg isn't a bare Var.

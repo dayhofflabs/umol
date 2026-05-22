@@ -116,16 +116,16 @@ pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result
         }
         ValueAst::Expr(e) => fmt_expr(f, e),
         ValueAst::Bind { id, set } => {
-            write!(f, "(?{} :: {{", id)?;
+            write!(f, "?{} :: {{", id)?;
             for (i, n) in set.iter().enumerate() {
                 if i > 0 {
                     f.write_char(',')?;
                 }
                 write!(f, "{}", n)?;
             }
-            write!(f, "}})")
+            f.write_char('}')
         }
-        ValueAst::Ref(id) => write!(f, "(?{})", id),
+        ValueAst::Ref(id) => write!(f, "?{}", id),
     }
 }
 
@@ -256,27 +256,27 @@ pub(crate) fn value(i: &mut &str) -> PResult<ValueAst> {
     .parse_next(i)
 }
 
-/// Parse `(?id :: {n1, n2, ...})` into `(id, set)` for `ValueAst::Bind`.
-/// Mirrors `element_bind` in `dsl/atom.rs`.
+/// Parse `?id :: {set}` (bare) or any-depth parenthesized form into `(id, set)`
+/// for `ValueAst::Bind`. Paren-transparent: `?id :: {n}`, `(?id :: {n})`,
+/// `((?id :: {n}))` all parse identically.
 fn value_bind(i: &mut &str) -> PResult<(String, Vec<i64>)> {
-    delimited(
-        '(',
+    alt((
+        delimited('(', delimited(multispace0, value_bind, multispace0), ')'),
         (
-            delimited(multispace0, preceded('?', id), multispace0),
-            preceded(("::", multispace0), terminated(lit_set, multispace0)),
+            preceded('?', id),
+            preceded(delimited(multispace0, "::", multispace0), lit_set),
         ),
-        ')',
-    )
+    ))
     .parse_next(i)
 }
 
-/// Parse `(?id)` into `id` for `ValueAst::Ref`. Mirrors `element_ref` in `dsl/atom.rs`.
+/// Parse `?id` (bare) or any-depth parenthesized form into `id` for
+/// `ValueAst::Ref`. Paren-transparent: `?id`, `(?id)`, `((?id))` all identical.
 fn value_ref(i: &mut &str) -> PResult<String> {
-    delimited(
-        '(',
-        delimited(multispace0, preceded('?', id), multispace0),
-        ')',
-    )
+    alt((
+        delimited('(', delimited(multispace0, value_ref, multispace0), ')'),
+        preceded('?', id),
+    ))
     .parse_next(i)
 }
 
@@ -490,10 +490,10 @@ mod tests {
     #[case::mult_spaced("1 * 2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Mul, Box::new(Expr::Lit(2))))))]
     #[case::div("2/2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Div, Box::new(Expr::Lit(2))))))]
     #[case::div_spaced("2 / 2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Div, Box::new(Expr::Lit(2))))))]
-    #[case::var("?h", ValueAst::Expr(Box::new(Expr::Var("h".to_string()))))]
-    #[case::var_2char("?ha", ValueAst::Expr(Box::new(Expr::Var("ha".to_string()))))]
-    #[case::var_number("?h1", ValueAst::Expr(Box::new(Expr::Var("h1".to_string()))))]
-    #[case::var_underscore("?h_", ValueAst::Expr(Box::new(Expr::Var("h_".to_string()))))]
+    #[case::var("?h", ValueAst::Ref("h".to_string()))]
+    #[case::var_2char("?ha", ValueAst::Ref("ha".to_string()))]
+    #[case::var_number("?h1", ValueAst::Ref("h1".to_string()))]
+    #[case::var_underscore("?h_", ValueAst::Ref("h_".to_string()))]
     #[case::membership("?h + 0 :: {0,1}", ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::BinOp(Box::new(Expr::Var("h".to_string())), ArithOp::Add, Box::new(Expr::Lit(0)))), vec![0, 1]))))]
     #[case::double_neg("--0", ValueAst::Expr(Box::new(Expr::Lit(0))))]
     #[case::not_and_precedence("! ?h == 0 & ?v == 1", ValueAst::Expr(Box::new(Expr::And(vec![
@@ -576,9 +576,9 @@ mod tests {
         ArithOp::Mul,
         Box::new(Expr::Lit(1)),
     ))), "(0 + 1) * 1")]
-    #[case::bind(ValueAst::bind("n", vec![1, 2, 3]), "(?n :: {1,2,3})")]
-    #[case::bind_single(ValueAst::bind("u", vec![0]), "(?u :: {0})")]
-    #[case::reference(ValueAst::reference("h"), "(?h)")]
+    #[case::bind(ValueAst::bind("n", vec![1, 2, 3]), "?n :: {1,2,3}")]
+    #[case::bind_single(ValueAst::bind("u", vec![0]), "?u :: {0}")]
+    #[case::reference(ValueAst::reference("h"), "?h")]
     fn test_value_display(#[case] input: ValueAst, #[case] expected: &str) {
         assert_eq!(ValueDsl::from_ast(&input, &()).to_string(), expected);
     }
@@ -621,8 +621,8 @@ mod tests {
         ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))),
         Edn::Str(Cow::Borrowed("?h == 0")),
     )]
-    #[case::bind(ValueAst::bind("n", vec![1, 2, 3]), Edn::Str(Cow::Borrowed("(?n :: {1,2,3})")))]
-    #[case::reference(ValueAst::reference("h"), Edn::Str(Cow::Borrowed("(?h)")))]
+    #[case::bind(ValueAst::bind("n", vec![1, 2, 3]), Edn::Str(Cow::Borrowed("?n :: {1,2,3}")))]
+    #[case::reference(ValueAst::reference("h"), Edn::Str(Cow::Borrowed("?h")))]
     fn test_value_dsl_to_edn(#[case] v: ValueAst, #[case] expected: Edn<'static>) {
         use umol_edn::ToEdn;
         assert_eq!(ValueDsl::from_ast(&v, &()).to_edn(), expected);

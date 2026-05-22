@@ -285,12 +285,10 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
 fn element(i: &mut &str) -> PResult<ElementAst> {
     alt((
         '*'.value(ElementAst::Undetermined),
+        preceded('!', element_set).map(ElementAst::NotSet),
+        preceded('!', element_literal).map(ElementAst::Not),
         element_set.map(ElementAst::LitSet),
-        element_bind.map(|(id, set)| ElementAst::Bind {
-            id,
-            set,
-            polarity: Polarity::Include,
-        }),
+        element_bind.map(|(id, set, polarity)| ElementAst::Bind { id, set, polarity }),
         element_ref.map(ElementAst::Ref),
         element_literal.map(ElementAst::Lit),
     ))
@@ -328,24 +326,35 @@ fn element_set(i: &mut &str) -> PResult<Vec<Element>> {
     .parse_next(i)
 }
 
-fn element_bind(i: &mut &str) -> PResult<(String, Vec<Element>)> {
-    delimited(
-        '(',
+fn element_bind(i: &mut &str) -> PResult<(String, Vec<Element>, Polarity)> {
+    alt((
+        delimited('(', delimited(multispace0, element_bind, multispace0), ')'),
         (
-            delimited(multispace0, preceded('?', id), multispace0),
-            preceded(("::", multispace0), terminated(element_set, multispace0)),
-        ),
-        ')',
-    )
+            preceded('?', id),
+            preceded(
+                delimited(multispace0, "::", multispace0),
+                element_bind_domain,
+            ),
+        )
+            .map(|(id, (set, polarity))| (id, set, polarity)),
+    ))
+    .parse_next(i)
+}
+
+fn element_bind_domain(i: &mut &str) -> PResult<(Vec<Element>, Polarity)> {
+    alt((
+        preceded('!', element_set).map(|s| (s, Polarity::Exclude)),
+        preceded('!', element_literal).map(|e| (vec![e], Polarity::Exclude)),
+        element_set.map(|s| (s, Polarity::Include)),
+    ))
     .parse_next(i)
 }
 
 fn element_ref(i: &mut &str) -> PResult<String> {
-    delimited(
-        '(',
-        delimited(multispace0, preceded('?', id), multispace0),
-        ')',
-    )
+    alt((
+        delimited('(', delimited(multispace0, element_ref, multispace0), ')'),
+        preceded('?', id),
+    ))
     .parse_next(i)
 }
 
@@ -461,14 +470,13 @@ fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
             fmt_element_set(f, es)
         }
         ElementAst::Bind { id, set, polarity } => {
-            write!(f, "(?{} :: ", id)?;
+            write!(f, "?{} :: ", id)?;
             if matches!(polarity, Polarity::Exclude) {
                 write!(f, "!")?;
             }
-            fmt_element_set(f, set)?;
-            write!(f, ")")
+            fmt_element_set(f, set)
         }
-        ElementAst::Ref(id) => write!(f, "(?{})", id),
+        ElementAst::Ref(id) => write!(f, "?{}", id),
     }
 }
 
@@ -1167,7 +1175,7 @@ mod tests {
     #[case::h_count("C#h3", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_undetermined("C#h*", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Undetermined, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Ref("h".to_string()), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
+    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::bind("h", vec![2, 3]), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
     #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]

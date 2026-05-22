@@ -1,5 +1,5 @@
 {
-  :config-overrides {:atom {:charge :zero :implicit-hydrogens :normal}}
+  :config-overrides {:atom {:charge :zero :implicit-hydrogens :required}}
   :input {
     :atoms ["C#h*" "C#h*" "C#h*" "C#h*" "C#h*" "C#h*" "C#h*" "C#h*" "C#h*"]
     :bonds [

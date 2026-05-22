@@ -82,10 +82,16 @@ fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     prop_oneof![
         4 => Just(ValueAst::Undetermined),
         4 => range.clone().prop_map(ValueAst::Lit),
-        1 => prop::collection::vec(range, 1..=3).prop_map(|mut v| {
+        1 => prop::collection::vec(range.clone(), 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
             ValueAst::lit_set(v)
+        }),
+        1 => id_strategy().prop_map(ValueAst::reference),
+        1 => (id_strategy(), prop::collection::vec(range, 1..=3)).prop_map(|(id, mut v)| {
+            v.sort_unstable();
+            v.dedup();
+            ValueAst::bind(id, v)
         }),
         1 => top_expr_strategy().prop_map(ValueAst::expr),
     ]
@@ -154,6 +160,12 @@ fn any_value_ast_strategy() -> BoxedStrategy<ValueAst> {
             v.dedup();
             ValueAst::lit_set(v)
         }),
+        id_strategy().prop_map(ValueAst::reference),
+        (id_strategy(), prop::collection::vec(-10i64..=10, 1..=3)).prop_map(|(id, mut v)| {
+            v.sort_unstable();
+            v.dedup();
+            ValueAst::bind(id, v)
+        }),
         any_expr_strategy().prop_map(ValueAst::expr),
     ]
     .boxed()
@@ -195,21 +207,29 @@ fn expr_leaf_strategy() -> impl Strategy<Value = Expr> {
     ]
 }
 
-/// Expr tree intended as the outermost `ValueAst::Expr(e)`. Must not render
-/// to a pure integer literal with optional sign, since the `value` parser's
-/// `dec_int` alt would match first (bare `Lit(n)` → `n` → `ValueAst::Lit(n)`
-/// and `Neg(Lit(n))` → `-n` → `ValueAst::Lit(-n)`). Also avoids `Neg(Neg(_))`
-/// anywhere (the parser folds consecutive signs) and `Or`/`And` children
-/// that are themselves `Or`/`And` (the parser flattens consecutive same-op
-/// tokens).
+/// Expr tree intended as the outermost `ValueAst::Expr(e)`. Constraints on
+/// the outermost shape — inner compositions (BinOp / Rel / Neg / And / Or)
+/// may freely contain `Var` leaves, so `?h + 1` and `(?h <= 1) | (?h >= 2)`
+/// generate:
+///
+/// - Must not render to a pure integer literal with optional sign — the
+///   `value` parser's `dec_int` alt would match first (bare `Lit(n)` → `n`
+///   → `ValueAst::Lit(n)`, `Neg(Lit(n))` → `-n` → `ValueAst::Lit(-n)`).
+/// - Must not be a bare `Var(_)` — renders to `?id`, which the parser now
+///   intercepts as `ValueAst::Ref` (separate generator arm covers Ref).
+/// - Must not be `Mem(Var(_), _)` — renders to `?id :: {set}`, which the
+///   parser now intercepts as `ValueAst::Bind` (separate generator arm
+///   covers Bind).
+/// - Avoids `Neg(Neg(_))` anywhere (the parser folds consecutive signs).
+/// - `Or` / `And` children are leaves so the parser can't flatten
+///   consecutive same-op tokens.
 ///
 /// Returns a boxed strategy to keep the composed type size bounded when
 /// plugged into every value field across the molecule tree.
 fn top_expr_strategy() -> BoxedStrategy<Expr> {
     let set = prop::collection::vec(-10i64..=10, 1..=3);
+    let non_var_leaf = (0i64..=10).prop_map(Expr::Lit);
     prop_oneof![
-        // Var alone renders as `?id`, distinguishable from a bare integer.
-        id_strategy().prop_map(Expr::Var),
         (
             expr_leaf_strategy(),
             arith_op_strategy(),
@@ -222,7 +242,7 @@ fn top_expr_strategy() -> BoxedStrategy<Expr> {
             expr_leaf_strategy()
         )
             .prop_map(|(a, op, b)| Expr::Rel(Box::new(a), op, Box::new(b))),
-        (expr_leaf_strategy(), set).prop_map(|(e, s)| Expr::Mem(Box::new(e), s)),
+        (non_var_leaf, set).prop_map(|(e, s)| Expr::Mem(Box::new(e), s)),
         (
             expr_leaf_strategy(),
             rel_op_strategy(),
@@ -251,19 +271,6 @@ fn isotope_strategy() -> impl Strategy<Value = IsotopeAst> {
             IsotopeAst::lit_set(v)
         }),
         1 => top_expr_strategy().prop_map(IsotopeAst::expr),
-    ]
-}
-
-fn implicit_hydrogens_strategy() -> impl Strategy<Value = ValueAst> {
-    prop_oneof![
-        4 => Just(ValueAst::Undetermined),
-        3 => (0i64..=4).prop_map(ValueAst::Lit),
-        1 => prop::collection::vec(0i64..=4, 1..=3).prop_map(|mut v| {
-            v.sort_unstable();
-            v.dedup();
-            ValueAst::lit_set(v)
-        }),
-        1 => top_expr_strategy().prop_map(ValueAst::expr),
     ]
 }
 
@@ -417,7 +424,7 @@ prop_compose! {
         element in element_ast_strategy(),
         isotope in isotope_strategy(),
         charge in value_basic(-2..=2),
-        implicit_hydrogens in implicit_hydrogens_strategy(),
+        implicit_hydrogens in value_basic(0..=4),
         lone_pairs in value_basic(0..=4),
         spin in spin_state_strategy(),
         constraints in atom_constraints_strategy(),
