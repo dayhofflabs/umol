@@ -110,10 +110,7 @@ impl ValueAst {
             Self::Expr(e) => match e.simplify() {
                 Expr::Lit(n) => Self::Lit(n),
                 Expr::Neg(inner) => match *inner {
-                    Expr::Lit(n) => match n.checked_neg() {
-                        Some(neg) => Self::Lit(neg),
-                        None => Self::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(n))))),
-                    },
+                    Expr::Lit(n) => Self::Lit(-n),
                     other => Self::Expr(Box::new(Expr::Neg(Box::new(other)))),
                 },
                 Expr::Var(id) => Self::Ref(id),
@@ -451,7 +448,6 @@ impl Expr {
     /// - `Lit(n)` for `n < 0` → `Neg(Lit(-n))`. Inside an `Expr` context
     ///   the parser always produces `Neg(Lit(n))` for `-n`; only the
     ///   ValueAst-level `Lit` slot reads signed integers directly.
-    ///   `Lit(i64::MIN)` is left as-is (cannot be negated without overflow).
     /// - `Neg(Neg(e))` → `e`
     /// - `Or(... Or(inner) ...)` flattens the inner `Or` one level
     ///   (recursively, so the result has no `Or` direct child)
@@ -463,10 +459,7 @@ impl Expr {
     /// Idempotent. Mirrors the parser's normalization.
     pub fn simplify(self) -> Self {
         match self {
-            Expr::Lit(n) if n < 0 => match n.checked_neg() {
-                Some(pos) => Expr::Neg(Box::new(Expr::Lit(pos))),
-                None => Expr::Lit(n),
-            },
+            Expr::Lit(n) if n < 0 => Expr::Neg(Box::new(Expr::Lit(-n))),
             Expr::Lit(_) | Expr::Var(_) => self,
             Expr::Neg(inner) => match inner.simplify() {
                 Expr::Neg(grand) => *grand,
@@ -512,26 +505,26 @@ impl Expr {
         self.is_arithmetic() && self.evaluate_checked(&Bindings::new()).is_some()
     }
 
-    /// Overflow-safe arithmetic evaluation. Returns `None` for free
-    /// variables, division/remainder by zero, type mismatch (boolean-domain
-    /// Expr), and any `i64` overflow in `Neg`/`BinOp`. Intended as the
-    /// foundation of [`Expr::is_ground`]; for error-reporting callers use
-    /// [`Expr::evaluate`].
+    /// Arithmetic evaluation. Returns `None` for free variables and type
+    /// mismatch (boolean-domain Expr). Uses standard Rust arithmetic — `i64`
+    /// overflow follows debug-panic / release-wrap semantics, and division
+    /// or remainder by zero panics. Intended as the foundation of
+    /// [`Expr::is_ground`]; for error-reporting callers use [`Expr::evaluate`].
     pub fn evaluate_checked(&self, vars: &Bindings) -> Option<i64> {
         match self {
             Expr::Lit(n) => Some(*n),
             Expr::Var(name) => vars.get(name).copied(),
-            Expr::Neg(e) => e.evaluate_checked(vars)?.checked_neg(),
+            Expr::Neg(e) => Some(-e.evaluate_checked(vars)?),
             Expr::BinOp(l, op, r) => {
                 let l = l.evaluate_checked(vars)?;
                 let r = r.evaluate_checked(vars)?;
-                match op {
-                    ArithOp::Add => l.checked_add(r),
-                    ArithOp::Sub => l.checked_sub(r),
-                    ArithOp::Mul => l.checked_mul(r),
-                    ArithOp::Div => l.checked_div(r),
-                    ArithOp::Rem => l.checked_rem(r),
-                }
+                Some(match op {
+                    ArithOp::Add => l + r,
+                    ArithOp::Sub => l - r,
+                    ArithOp::Mul => l * r,
+                    ArithOp::Div => l / r,
+                    ArithOp::Rem => l % r,
+                })
             }
             Expr::Rel(..) | Expr::Mem(..) | Expr::Not(..) | Expr::And(..) | Expr::Or(..) => None,
         }
@@ -861,8 +854,6 @@ mod tests {
             vec![2, 3],
         ))),
     )]
-    #[case::expr_neg_lit_min_overflow_keeps_form(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(i64::MIN))))),
-        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(i64::MIN))))))]
     fn test_value_ast_simplify(#[case] input: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(input.simplify(), expected);
     }
