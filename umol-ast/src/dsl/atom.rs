@@ -200,6 +200,7 @@ fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
         AtomConstraintKind::TotalHydrogens => "#H",
         AtomConstraintKind::RingCount => "#R",
         AtomConstraintKind::RingSize => "#r",
+        AtomConstraintKind::JointDomain => "#E",
     }
 }
 
@@ -639,6 +640,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
         AtomConstraint::TotalHydrogens(v) => fmt_value_field_required(f, "#H", v),
         AtomConstraint::RingCount(v) => fmt_ring_count(f, v),
         AtomConstraint::RingSize(v) => fmt_value_field_required(f, "#r", v),
+        AtomConstraint::JointDomain(_) => todo!("JointDomainAst DSL formatting lands in 2k"),
     }
 }
 
@@ -752,7 +754,8 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
             | AtomConstraintKind::RingValence
             | AtomConstraintKind::TotalHydrogens
             | AtomConstraintKind::RingCount
-            | AtomConstraintKind::RingSize => {
+            | AtomConstraintKind::RingSize
+            | AtomConstraintKind::JointDomain => {
                 // Pattern-only constraint: no defaulting mode in AtomDefaults.
             }
         }
@@ -895,7 +898,8 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
             | AtomConstraintKind::RingValence
             | AtomConstraintKind::TotalHydrogens
             | AtomConstraintKind::RingCount
-            | AtomConstraintKind::RingSize => {
+            | AtomConstraintKind::RingSize
+            | AtomConstraintKind::JointDomain => {
                 // Pattern-only constraint: no defaulting mode in AtomDefaults.
             }
         }
@@ -1103,6 +1107,7 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             }
             "ring-count" => AtomConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
             "ring-size" => AtomConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
+            "joint-domain" => todo!("JointDomainAst EDN parsing lands in 2l"),
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -1158,6 +1163,7 @@ impl ToEdn for AtomConstraintDsl {
             AtomConstraint::RingSize(v) => {
                 single_key_map("ring-size", ValueDsl::from_ast(v, &()).to_edn())
             }
+            AtomConstraint::JointDomain(_) => todo!("JointDomainAst EDN serialization lands in 2l"),
         }
     }
 }

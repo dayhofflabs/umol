@@ -761,18 +761,21 @@ This keeps the universal physics in `Invariants`, the chemistry-bound setting in
    - **Dependencies**: 2a and 2b complete.
    - **Risk**: low — documentation update. The risk is missing a cross-reference or example; mitigated by reading the full spec end-to-end before editing.
 
-2. **Add `AtomConstraint::JointDomain(JointDomain)`** in `umol-ast/src/ast/atom/constraint.rs`, with `JointDomain` defined in a new file `umol-ast/src/ast/joint_domain.rs`. Schema:
+2. **Add `AtomConstraint::JointDomain(JointDomain)`** in `umol-ast/src/ast/constraint/atom.rs`, with `JointDomain` defined in a new file `umol-ast/src/ast/joint_domain.rs`.
+
+   Decomposed into substeps 2f–2l (see migration plan). Schema (locked — see joint-domain design section below for the full type-shape rationale):
 
    ```rust
-   pub struct JointDomain {
-       vars: Vec<JointVar>,
-       tuples: Vec<Vec<JointValue>>,
+   pub enum JointDomain {
+       Undetermined,
+       Domain { vars: Vec<JointVar>, tuples: Vec<Vec<JointValue>> },
    }
 
    #[non_exhaustive]
    pub enum JointVar {
-       Charge, ImplicitH, LonePairs, Unpaired, Valence,
-       DonatedPairs, AcceptedPairs,
+       Charge, ImplicitHydrogens, LonePairs,
+       UnpairedElectrons, Multiplicity,             // spin AST fields (Unpaired → UnpairedElectrons rename for clarity)
+       Valence, DonatedPairs, AcceptedPairs,
        // Reserved: Element, Isotope, AromaticValence, MulticenterValence, HapticValence
    }
 
@@ -783,11 +786,29 @@ This keeps the universal physics in `Invariants`, the chemistry-bound setting in
    }
    ```
 
-   Constructor: `JointDomain::from_ints(vars, tuples: Vec<Vec<i64>>) -> Result<Self, JointDomainError>`. Validates `tuples[i].len() == vars.len()` for all `i`, and `tuples.len() > 0` (empty tuple list is bottom — see saturate). Internal: wraps each `i64` as `JointValue::Int`. Sibling constructors (`from_mixed`, etc.) added later when non-numeric variants land.
+   **Naming rule**: `JointVar` variants spell the underlying AST field in full (matches the `_count`/`_index` naming convention; no `ImplicitH` shortenings). Spin's `unpaired` field surfaces as `UnpairedElectrons` for read clarity; `Multiplicity` keeps its natural name.
 
-   Lattice impl for `JointDomain`: `meet` intersects tuple lists when var sets match (canonical ordering); `matches` is "every pinned value is consistent with at least one tuple". `is_top` returns false (JointDomain is always a real narrowing); `is_bottom` returns false (the empty-tuples state never escapes — see saturate).
+   **Field projection**:
+   - `Charge` → `atom.charge`
+   - `ImplicitHydrogens` → `atom.implicit_hydrogens`
+   - `LonePairs` → `atom.lone_pairs`
+   - `UnpairedElectrons` → `atom.spin.unpaired`
+   - `Multiplicity` → `atom.spin.multiplicity`
+   - `Valence` / `DonatedPairs` / `AcceptedPairs` → `atom.constraints` entries of the corresponding kind
 
-   **Add `Lattice::saturate(&mut self) -> Result<(), Contradiction>`** to the trait with a no-op default impl. **Extend `#[derive(Lattice)]` proc-macro** to call `result.saturate()?` at the end of the generated `meet` body. Types without relational constraints inherit the no-op default and pay nothing. Types with relational constraints opt in via an attribute on the derive:
+   **Constructor**: `JointDomain::from_ints(vars, tuples: Vec<Vec<i64>>) -> Result<Self, JointDomainError>`. Rejects degenerate inputs:
+   - `vars.len() < 1` (zero vars is degenerate)
+   - `tuples.len() < 1` (empty tuples is bottom; signaled via `Lattice::meet -> None`, not stored)
+   - `tuples[i].len() != vars.len()` for any `i`
+   - duplicate vars
+
+   Stored `Domain` values satisfy `vars.len() ≥ 1` and `tuples.len() ≥ 1`, vars sorted and unique, tuples sorted and dedup'd. Internal: wraps each `i64` as `JointValue::Int`. Sibling constructors (`from_mixed`, etc.) added when non-numeric variants land.
+
+   **Lattice impl for `JointDomain`**: standard lattice operations against the `Undetermined` top — see "Lattice behavior" in the joint-domain design section. `meet` is the relational meet (natural join: cartesian / equijoin / intersection); `join` projects to shared vars (or returns `Undetermined` if shared is empty); `matches` is "pattern vars are a subset of target vars and every projected target tuple is in pattern tuples". `is_undetermined` is `true` only for the `Undetermined` variant; `is_ground` is `true` only for single-tuple `Domain` values.
+
+   **Add `Lattice::saturate(&mut self) -> Result<(), Contradiction>`** to the trait with a no-op default impl. New `#[derive(Lattice)]` proc-macro (no derive exists today — net new) generates field-wise `meet`/`join`/`matches`/`is_undetermined`/`is_ground` for struct types, calling `result.saturate()?` at the end of `meet`. Existing hand-rolled struct impls (`AtomAst`, `SpinStateAst`, `BondAst`, `DativeBondAst`, `MulticenterBondAst`, `NoncovalentBondAst`, `AromaticSystemAst`, `NoncovalentBondConstraints`) all migrate to the derive — they're mechanical field-wise compositions today. Enum impls (`ValueAst`, `ElementAst`, `IsotopeAst`) stay hand-rolled (variant-specific rules, not mechanical).
+
+   Types without relational constraints inherit the no-op default `saturate` and pay nothing. Types with relational constraints opt in via an attribute on the derive:
 
    ```rust
    #[derive(Lattice)]
@@ -799,13 +820,21 @@ This keeps the universal physics in `Invariants`, the chemistry-bound setting in
    }
    ```
 
-   The derive's generated `meet` calls `saturate_atom(&mut result)?` at the end. `AtomAst` doesn't hand-roll `meet`; it provides `saturate_atom` as a free function. (Rationale: Rust trait specialization isn't stable, so we can't simply override a single trait method on a derived impl. The attribute-on-derive pattern matches `serde` / `derive_builder` conventions.)
+   The derive's generated `meet` calls `saturate_atom(&mut result)?` at the end. (Rationale: Rust trait specialization isn't stable, so we can't simply override a single trait method on a derived impl. The attribute-on-derive pattern matches `serde` / `derive_builder` conventions.)
 
    `saturate_atom` walks the constraint container's `JointDomain` entries, prunes tuples against the current field values, and either (i) returns `Err(Contradiction)` if any tuple list becomes empty, (ii) extracts the single remaining tuple's values into the atom's fields (and drops the resolved `JointDomain`) if a tuple list collapses to size 1, or (iii) keeps the pruned `JointDomain` if size stays ≥ 2. Loops to fixpoint — a resolved JointDomain may pin a field that another JointDomain references, cascading.
 
-   **Bottom-as-transient invariant**: `JointDomain { tuples: [] }` is never stored. The constructor rejects empty tuple lists; the pruning paths inside `saturate` convert empty-after-prune to `Err(Contradiction)`, which `AtomAst::meet` converts to `None` at the boundary. The lattice's "no concrete bottom" convention (None = contradiction) is preserved. This is the right call for now; if a future design surfaces an explicit bottom representation as useful, the convention can be revisited.
+   **Bottom convention**: empty tuple set is bottom, signaled via `Lattice::meet -> None` per the existing trait convention. Constructor rejects empty `tuples` at construction; meet returns `None` when intersection / projection yields empty. No "transient bottom" workaround needed — the type follows the same `Option`-via-`meet` pattern every other lattice type uses.
 
-   Round-trip through EDN/DSL syntax TBD (sibling of the existing constraint variants).
+   **Substep plan**:
+
+   - **2f**. `JointDomain` type (enum with `Undetermined` and `Domain` variants), `JointVar` / `JointValue` enums, `from_ints` constructor with all rejections + canonicalization. Unit tests for constructor invariants and equality.
+   - **2g**. `AtomConstraint::JointDomain(JointDomain)` variant wiring (kind, simplify routing, container ops, `is_unique = false` so multiple JointDomains can coexist).
+   - **2h**. Hand-rolled `Lattice` impl on `JointDomain` itself: relational `meet` (natural join), `join` (projection-to-shared-or-top), `matches` (projection rule). Total operations against the `Undetermined` top — no special-case fallbacks.
+   - **2i**. `#[derive(Lattice)]` proc-macro + migration of the eight struct impls listed above. No saturate hook yet (derive emits `meet` body without the saturate call). Separate design discussion before coding.
+   - **2j**. `Lattice::saturate` trait method (default no-op) + `saturate_atom` implementation (cross-field propagation; optional 1-tuple/1-var canonicalizations) + derive macro hook (`#[lattice(saturate = "…")]`).
+   - **2k**. DSL syntax + parser for `#E(?v1,…,?vn) :: {(l1,…), …}` per the "Notation" section above. Includes `JointDomain::from_ints` integration so parse errors surface constructor failures.
+   - **2l**. EDN serialization roundtrip.
 
 2e. **Remove forced-parens requirement on bind/ref in DSL parsers.** Per the audit ground rules, the parser must emit `Bind` / `Ref` directly for bare and parenthesized surface forms, never generating `Expr(Var(_))` or `Expr(Mem(Var(_), _))` shapes for these. Parens become transparent at any nesting depth: `?h`, `(?h)`, `((?h))` all produce identical AST. Compound expressions involving `?h` (e.g., `?h + 1`, `?h == 0`) continue to route through `Expr` because they genuinely need expression structure.
 
@@ -890,8 +919,8 @@ These are small follow-ups noticed during the in-progress work. Not blocking any
 2. **`solve` cost when many free vars.** A fully open atom (`Default::new()` only) has 4–5 free vars × per-element bound products — at most low hundreds, but worth a perf check on the conformance suite. If hot, add fast paths (single-unknown closed-form) inside `solve`.
 3. **`Mismatch` payload.** Carry both `orbital_count` and `electron_count` (matches today's `ElectronInvariantContradiction::AtomInvariantMismatch`) plus the aromatic-bounds case as a separate variant; or one variant with a free-form `reason: String`. Prefer typed variants.
 4. **Aromatic-valence range check.** Include in `check` (per doc 52 fn 8) or split into `check_aromatic_bounds`? Suggest include — it's part of the same per-atom invariant; splitting fragments error reporting.
-5. **`JointDomain` tuple-list ordering.** Ordered (first-match preference for ranking — e.g., closed-shell candidate first) or unordered (symmetric disjunction)? Affects propagation determinism. Doc 96 "Joint-domain constraint design" flags this; pick a default before step 2.
-6. **`JointDomain` round-trip EDN/DSL syntax.** Doc 96 sketches `Fe#c+2#n?n#u?u#E(?n,?u)=[(3,0);(1,4)]`. Concrete syntax + parser changes live in step 2; locked-in before serialization tests need to round-trip.
+5. **`JointDomain` tuple-list ordering.** **Decided: set semantics (unordered).** See "Things to nail down" above for the WCSP alternative noted but not adopted.
+6. **`JointDomain` round-trip EDN/DSL syntax.** **Decided**: `#E(?v1,…,?vn) :: {(l1,…), …}` — `{}` for the set (matches existing LitSet/element-set), `()` per tuple, comma at both levels, `::` for membership (matches bind-domain). See "Notation" in the joint-domain design section. Parser + EDN roundtrip land in substeps 2k–2l.
 
 ## Takeaways
 
@@ -912,18 +941,66 @@ Notes on the per-field domains + relational constraints (CSP-style) approach.
 
 ### Notation
 
-The proposed shape:
-
 ```
-Fe#c+2#n?n#u?u#E(?n,?u)=[(3,0);(1,4)]
+Fe#c+2#n?n#u?u#E(?n,?u) :: {(3,0), (1,4)}
 ```
 
 - `?n`, `?u` — named field-level binds. Extend the existing `ElementAst::Bind { id, set }` / `Ref(id)` machinery to `ValueAst` so any field can declare or reference a named variable.
-- `#E(vars) = [tuples]` — joint-domain constraint: the tuple of named binds must equal one of the listed tuples.
+- `#E(vars) :: {tuples}` — joint-domain constraint: the tuple of named binds must be drawn from the listed set. Set semantics (unordered); same `::` glyph as bind-domain membership (`?h :: {1,2,3}`).
+- Inner tuples: `(v1, v2)`. Outer set: `{(...), (...)}`. Comma at both levels — `()` brackets each tuple, so the outer comma is unambiguous.
+- Tuple values are always lits (no expressions, no nested sets), so neither delimiter can be confused with `value-expr`.
+
+### Type shape
+
+`JointDomain` is an enum with the standard top variant — matching the convention every other lattice type in `umol-ast` follows (`AromaticValenceAst::Undetermined`, `MulticenterValenceAst::Undetermined`, `ValueAst::Undetermined`, …):
+
+```rust
+pub enum JointDomain {
+    Undetermined,                                                  // top
+    Domain { vars: Vec<JointVar>, tuples: Vec<Vec<JointValue>> },  // proper constraint
+}
+```
+
+### Invariants
+
+The `Domain` variant satisfies:
+
+- `vars.len() ≥ 1` (zero is genuinely degenerate)
+- `tuples.len() ≥ 1` (empty is bottom — signaled via the existing `Lattice::meet -> Option<Self>` convention, not stored)
+- `tuples[i].len() == vars.len()` for all `i`
+- `vars` is sorted and unique; `tuples` is sorted and dedup'd
+
+`from_ints` rejects degenerate inputs (zero vars, zero tuples, arity mismatch, duplicate vars), canonicalizes (sort vars + permute tuples + sort + dedup), and returns `Err` on any violation — the parser surfaces these as parse errors.
+
+A `Domain { tuples: [t] }` is a ground state (every var pinned by the single tuple). It is *valid storage*, not a transient invariant violation. A `Domain { vars: [single] }` is redundant with a per-field constraint on `single` but harmless — saturate may normalize it to the per-field form (an optional canonicalization), but the type system doesn't require it.
+
+### Lattice behavior
+
+Every operation is total and clean — no special-case workarounds:
+
+- `is_undetermined`: `matches!(self, Self::Undetermined)`
+- `is_ground`: `matches!(self, Self::Domain { tuples, .. } if tuples.len() == 1)`
+- `meet(Undetermined, x) = Some(x)`; `meet(Domain, Domain)` is the relational meet (natural join: cartesian product on disjoint vars, equijoin on shared, intersection on identical) — returns `None` only when the result tuple set is empty (genuine contradiction).
+- `join(Undetermined, _) = Undetermined`; `join(Domain, Domain)` returns `Undetermined` cleanly when shared vars are empty; otherwise projects to shared vars, unions, dedups, wraps as `Domain`.
+- `matches(Undetermined, _) = true`; `Domain` pattern matches `Domain` target iff `pattern.vars ⊆ target.vars` and every target tuple projected to `pattern.vars` is in `pattern.tuples`.
+
+### Simplify vs saturate
+
+Two responsibilities, two operations:
+
+- **`simplify`** is infallible per-type canonical-form normalization — idempotent. For `JointDomain`: re-sort and dedup `tuples`; vars are already canonical from the constructor.
+- **`saturate`** (new `Lattice::saturate(&mut self) -> Result<(), Contradiction>` in step 2j) is the *cross-field propagation* step — projects per-field constraints into JointDomain tuples and vice versa, propagates pinned values across the constraint container. Returns `Err(Contradiction)` if propagation reveals incompatibility; that propagates to `None` at the `AtomAst::meet` boundary.
+
+Optional saturate canonicalization (not load-bearing for correctness):
+
+- Single-tuple `Domain` → pin each var to its tuple value, drop the JointDomain. Equivalent representation; saves storage.
+- Single-var `Domain` → fold into the corresponding per-field constraint as a `Set`. Equivalent representation.
+
+These are optimizations, not invariants. The lattice is well-defined either way.
 
 ### Things to nail down
 
-- **Order semantics of the tuple list.** `[(3,0);(1,4)]` ordered (first-match preference for ranking) or unordered (symmetric disjunction)? Different propagation rules.
+- **Order semantics of the tuple list.** **Decided: set semantics (unordered).** Meet is intersection — commutative, associative, idempotent, monotone. Tuples normalized (sort + dedup) inside the constructor and after each meet so equal sets compare equal. *Alternative considered: weighted CSP (soft constraints)* — each tuple carries a cost; meet adds costs; narrowing shrinks to min-cost tuples; solving becomes optimization. Principled but materially heavier — propagators turn cost-aware, the solver becomes an optimizer. Not adopted: out of scope for the current narrowing pipeline. Revisit if quantitative ranking ever has to compose under meet (vs. being applied at the search-driver level over candidate sets, where the lattice doesn't need to know).
 - **`#E` as one or many joint-constraint kinds.** Product-domain is one shape. Others: equality (`?n = f(?u)`), linear (`?n + ?u ≤ k`), single-variable set-membership (`?n ∈ {1,3}`). `ValueAst::Expr` already covers some of this. Decide whether `#E` is its own kind or whether broader Bind+Expr machinery covers product-domain via conjunction (`?n ∈ {1,3} & ?u ∈ {0,4} & (?n=3 ↔ ?u=0)`). Product-domain form is more compact and reads chemistry-naturally; Expr form is more uniform with existing AST.
 - **Bind-name scoping.** Atom-local (atom-id-qualified) or molecule-scope (cross-atom referenceable)? Existing `ElementAst::Ref` supports cross-atom for elements. Generalizing uniformly to values is consistent; whether the chemistry needs cross-atom for values (e.g., coupled diradical pairs) is a separate question.
 

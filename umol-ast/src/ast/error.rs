@@ -2,6 +2,7 @@
 
 use thiserror::Error;
 
+use super::constraint::joint_domain::JointVar;
 use super::idx::AtomId;
 
 /// Error raised by `MoleculeAst::rewrite` when the L / R / assignment
@@ -29,4 +30,24 @@ pub enum EvaluationError {
     DivisionByZero,
     #[error("Type mismatch")]
     TypeMismatch,
+}
+
+/// Error raised by `JointDomainAst::from_ints` (and sibling constructors) when
+/// the input does not satisfy the joint-domain invariants: vars and tuples
+/// must each have ≥ 2 entries, tuple arities must match the vars list, and
+/// vars must be unique.
+#[derive(Clone, Debug, PartialEq, Error)]
+pub enum JointDomainError {
+    #[error("vars must have at least 2 entries, got {0}")]
+    TooFewVars(usize),
+    #[error("tuples must have at least 2 distinct entries, got {0}")]
+    TooFewTuples(usize),
+    #[error("tuple {tuple_index} has {tuple_len} values but vars has {vars_len}")]
+    ArityMismatch {
+        tuple_index: usize,
+        tuple_len: usize,
+        vars_len: usize,
+    },
+    #[error("duplicate var {0:?} in vars list")]
+    DuplicateVar(JointVar),
 }

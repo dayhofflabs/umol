@@ -44,8 +44,9 @@ pub use edit::{
     RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
     RemovedOverlays, RewrittenConstraint, Undo,
 };
+pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
 pub use embedding::MoleculeEmbedding;
-pub use error::{EvaluationError, RewriteError};
+pub use error::{EvaluationError, JointDomainError, RewriteError};
 pub use idx::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };

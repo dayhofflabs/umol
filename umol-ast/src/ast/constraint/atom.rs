@@ -5,6 +5,7 @@ use std::mem::{self, replace};
 use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
+use super::joint_domain::JointDomainAst;
 use super::super::remap::IdRemapping;
 use super::super::traits::{AsLit, Lattice};
 use super::super::value::ValueAst;
@@ -29,6 +30,7 @@ pub enum AtomConstraint {
     TotalHydrogens(ValueAst),
     RingCount(ValueAst),
     RingSize(ValueAst),
+    JointDomain(JointDomainAst),
 }
 
 impl AtomConstraint {
@@ -84,16 +86,23 @@ impl AtomConstraint {
         Self::RingSize(v.into())
     }
 
+    pub fn joint_domain(jd: JointDomainAst) -> Self {
+        Self::JointDomain(jd)
+    }
+
     pub fn kind(&self) -> AtomConstraintKind {
         self.into()
     }
 
     /// `false` for variants that may legitimately appear multiple times on
-    /// the same atom (currently only `RingSize`, where an atom in fused
-    /// rings satisfies multiple ring-size assertions simultaneously). `true`
-    /// for variants that are single-valued per atom.
+    /// the same atom: `RingSize` (an atom in fused rings satisfies multiple
+    /// ring-size assertions) and `JointDomainAst` (each entry constrains a
+    /// distinct var-tuple). `true` for variants that are single-valued.
     pub fn is_unique(&self) -> bool {
-        self.kind() != AtomConstraintKind::RingSize
+        !matches!(
+            self.kind(),
+            AtomConstraintKind::RingSize | AtomConstraintKind::JointDomain
+        )
     }
 
     pub fn is_undetermined(&self) -> bool {
@@ -111,6 +120,7 @@ impl AtomConstraint {
             | Self::RingSize(v) => v.is_undetermined(),
             Self::AromaticValence(c) => c.is_undetermined(),
             Self::MulticenterValence(c) => c.is_undetermined(),
+            Self::JointDomain(jd) => jd.is_undetermined(),
         }
     }
 
@@ -131,6 +141,7 @@ impl AtomConstraint {
             Self::TotalHydrogens(v) => Self::TotalHydrogens(v.simplify()),
             Self::RingCount(v) => Self::RingCount(v.simplify()),
             Self::RingSize(v) => Self::RingSize(v.simplify()),
+            Self::JointDomain(jd) => Self::JointDomain(jd.simplify()),
         }
     }
 }
@@ -444,6 +455,16 @@ impl AtomConstraints {
             })
     }
 
+    /// Joint-domain (relational) constraints. Multiple entries may coexist —
+    /// each constrains a distinct (or overlapping) tuple of atom-level vars.
+    pub fn joint_domains(&self) -> impl Iterator<Item = &JointDomainAst> {
+        self.get_all(AtomConstraintKind::JointDomain)
+            .filter_map(|c| match c {
+                AtomConstraint::JointDomain(jd) => Some(jd),
+                _ => None,
+            })
+    }
+
     /// Insert a constraint per the per-variant cardinality policy. Single-
     /// valued kinds (`AtomConstraint::is_unique` → true) replace any
     /// existing entry of the same kind, last-wins; multi-valued kinds append
@@ -574,6 +595,7 @@ impl Lattice for AtomConstraints {
             | AtomConstraint::RingSize(v) => v.is_ground(),
             AtomConstraint::AromaticValence(c) => c.is_ground(),
             AtomConstraint::MulticenterValence(c) => c.is_ground(),
+            AtomConstraint::JointDomain(jd) => jd.is_ground(),
         })
     }
 
@@ -638,6 +660,12 @@ impl Lattice for AtomConstraints {
                 result.add(entry);
             }
         }
+        for jd in self.joint_domains().chain(other.joint_domains()) {
+            let entry = AtomConstraint::JointDomain(jd.clone());
+            if !result.contains_entry(&entry) {
+                result.add(entry);
+            }
+        }
         Some(result)
     }
 
@@ -677,6 +705,11 @@ impl Lattice for AtomConstraints {
                 .any(|o| AtomConstraint::RingSize(o.clone()) == entry)
             {
                 result.add(entry);
+            }
+        }
+        for jd in self.joint_domains() {
+            if other.joint_domains().any(|o| o == jd) {
+                result.add(AtomConstraint::JointDomain(jd.clone()));
             }
         }
         result
@@ -743,6 +776,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::constraint::joint_domain::{JointDomainAst, JointVar};
     use crate::ast::value::Expr;
 
     #[rustfmt::skip]
@@ -766,6 +800,20 @@ mod tests {
         AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
         AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter),
     )]
+    #[case::joint_domain(
+        AtomConstraint::joint_domain(
+            JointDomainAst::from_ints(
+                vec![JointVar::LonePairs, JointVar::UnpairedElectrons],
+                vec![vec![3, 0], vec![1, 4]],
+            ).unwrap(),
+        ),
+        AtomConstraint::JointDomain(
+            JointDomainAst::from_ints(
+                vec![JointVar::LonePairs, JointVar::UnpairedElectrons],
+                vec![vec![3, 0], vec![1, 4]],
+            ).unwrap(),
+        ),
+    )]
     fn test_atom_constraint_constructors(
         #[case] actual: AtomConstraint,
         #[case] expected: AtomConstraint,
@@ -788,6 +836,13 @@ mod tests {
     #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraintKind::TotalHydrogens)]
     #[case::ring_count(AtomConstraint::ring_count(1), AtomConstraintKind::RingCount)]
     #[case::ring_size(AtomConstraint::ring_size(6), AtomConstraintKind::RingSize)]
+    #[case::joint_domain(
+        AtomConstraint::joint_domain(JointDomainAst::from_ints(
+            vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+            vec![vec![0, 1], vec![1, 2]],
+        ).unwrap()),
+        AtomConstraintKind::JointDomain,
+    )]
     fn test_atom_constraint_kind(
         #[case] constraint: AtomConstraint,
         #[case] expected: AtomConstraintKind,
@@ -807,6 +862,10 @@ mod tests {
     #[case::multicenter_undetermined(AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined), true)]
     #[case::multicenter_not(AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter), false)]
     #[case::multicenter_with_value(AtomConstraint::multicenter_valence(MulticenterValenceAst::multicenter(1)), false)]
+    #[case::joint_domain(AtomConstraint::joint_domain(JointDomainAst::from_ints(
+        vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+        vec![vec![0, 1], vec![1, 2]],
+    ).unwrap()), false)]
     fn test_atom_constraint_is_undetermined(
         #[case] c: AtomConstraint,
         #[case] expected: bool,
@@ -847,8 +906,58 @@ mod tests {
     #[case::multicenter_undetermined(AtomConstraint::multicenter_valence(
         MulticenterValenceAst::Undetermined
     ))]
+    #[case::joint_domain(AtomConstraint::joint_domain(JointDomainAst::from_ints(
+        vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+        vec![vec![0, 1], vec![1, 2]],
+    ).unwrap()))]
     fn test_atom_constraint_simplify_identity(#[case] input: AtomConstraint) {
         assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rstest]
+    fn test_atom_constraint_is_unique_joint_domain() {
+        let jd = AtomConstraint::joint_domain(
+            JointDomainAst::from_ints(
+                vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+                vec![vec![0, 1], vec![1, 2]],
+            )
+            .unwrap(),
+        );
+        assert!(!jd.is_unique());
+    }
+
+    #[rstest]
+    fn test_atom_constraints_joint_domains_accessor() {
+        let jd1 = JointDomainAst::from_ints(
+            vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+            vec![vec![0, 1], vec![1, 2]],
+        )
+        .unwrap();
+        let jd2 = JointDomainAst::from_ints(
+            vec![JointVar::LonePairs, JointVar::UnpairedElectrons],
+            vec![vec![3, 0], vec![1, 4]],
+        )
+        .unwrap();
+        let mut cs = AtomConstraints::new();
+        cs.add(AtomConstraint::joint_domain(jd1.clone()));
+        cs.add(AtomConstraint::joint_domain(jd2.clone()));
+        let collected: Vec<&JointDomainAst> = cs.joint_domains().collect();
+        assert_eq!(collected, vec![&jd1, &jd2]);
+    }
+
+    #[rstest]
+    fn test_atom_constraints_is_ground_false_with_joint_domain() {
+        let mut cs = AtomConstraints::new();
+        cs.add(AtomConstraint::Valence(ValueAst::Lit(4)));
+        assert!(cs.is_ground());
+        cs.add(AtomConstraint::joint_domain(
+            JointDomainAst::from_ints(
+                vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+                vec![vec![0, 1], vec![1, 2]],
+            )
+            .unwrap(),
+        ));
+        assert!(!cs.is_ground());
     }
 
     #[rstest]
