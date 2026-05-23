@@ -376,7 +376,7 @@ fn remap_bond_subset(
 }
 
 /// Multi-correspondence anchor for a `SubPattern` constraint. Each vec carries
-/// `(target, pattern)` pairs pinning a target-molecule entity to a
+/// `(target, pattern)` pairs constraining a target-molecule entity to a
 /// pattern-molecule entity of the same kind. An empty anchor denotes an
 /// unanchored match (pattern can embed anywhere).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

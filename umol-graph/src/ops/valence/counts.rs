@@ -98,10 +98,10 @@ impl CountsValenceResolver {
                 element
                     .shift(-charge)
                     .and_then(|e| self.table.entry(e))
-                    .map(|e| e.allowed_aromatic_valences.as_slice())
-                    .unwrap_or(entry.allowed_aromatic_valences.as_slice())
+                    .map(|e| e.aromatic_valence_set.as_slice())
+                    .unwrap_or(entry.aromatic_valence_set.as_slice())
             } else {
-                entry.allowed_aromatic_valences.as_slice()
+                entry.aromatic_valence_set.as_slice()
             };
             return self.build_aromatic_candidates(
                 aromatic_valences,
@@ -139,21 +139,21 @@ impl CountsValenceResolver {
 
     fn build_aromatic_candidates(
         &self,
-        allowed_aromatic_valences: &[u8],
+        aromatic_valence_set: &[u8],
         atom: &AtomAst,
         element: Element,
         charge: i8,
         valence: u8,
         aromatic_constraint: &AromaticValenceAst,
     ) -> Vec<AtomAst> {
-        if allowed_aromatic_valences.is_empty() {
+        if aromatic_valence_set.is_empty() {
             return Vec::new();
         }
 
         let effective_electrons = (element.valence_electrons() as i16) - (charge as i16);
         let mut candidates = Vec::new();
 
-        for &a in allowed_aromatic_valences {
+        for &a in aromatic_valence_set {
             let candidate_aromatic = AromaticValenceAst::Aromatic(ValueAst::Lit(a as i64));
             if !aromatic_constraint.matches(&candidate_aromatic) {
                 continue;
@@ -294,7 +294,7 @@ fn resolve_unpaired_lone_pairs(atom_ast: &AtomAst, unassigned: i16) -> Option<(u
 mod tests {
     use rstest::*;
     use umol_ast::ast::{AtomAst, AtomId, BondAst, Constraints, MoleculeAst};
-    use umol_ast::{mol, mol_zeroed};
+    use umol_ast::{mol, mol_ground};
     use umol_shared::element::Element;
 
     use super::*;
@@ -327,7 +327,7 @@ mod tests {
         let table = ValenceTable::default_table().clone();
         let resolver =
             CountsValenceResolver::new(table, NormalValenceTable::default_table().clone(), true);
-        let mut ast = mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let mut ast = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         resolver.resolve(&mut ast).unwrap();
     }
 

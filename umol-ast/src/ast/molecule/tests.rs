@@ -27,7 +27,7 @@ use super::super::rings::{RingFamily, RingSet};
 use super::super::spin::SpinStateAst;
 use super::super::value::{Expr, ValueAst};
 use super::MoleculeAst;
-use crate::{mol, mol_zeroed};
+use crate::{mol, mol_ground};
 
 fn ground_atom() -> AtomAst {
     let mut a = AtomAst::from_element(Element::C);
@@ -89,7 +89,7 @@ fn test_molecule_ast_builder() {
 #[rstest]
 #[case::empty(MoleculeAst::default(), true)]
 #[case::ground_atom(
-    mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#),
+    mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
     true,
 )]
 #[case::wildcard_element(

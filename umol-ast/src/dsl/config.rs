@@ -39,7 +39,10 @@ impl MoleculeDefaults {
         }
     }
 
-    /// Composes `*Defaults::zeroed()` for each entity.
+    /// Composes `*Defaults::zeroed()` for each entity. Atom topology-derived
+    /// fields (`valence`, `donated_pairs`, `accepted_pairs`, `aromatic_valence`,
+    /// `multicenter_valence`) are skipped during `into_ast` when the molecule
+    /// has incident topology — see `MoleculeDsl::into_ast`.
     pub fn zeroed() -> Self {
         Self {
             atom: AtomDefaults::zeroed(),
@@ -509,9 +512,9 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::zeroed(MoleculeDefaults::zeroed())]
     #[case::verbatim(MoleculeDefaults::new())]
     #[case::ground(MoleculeDefaults::ground())]
+    #[case::zeroed(MoleculeDefaults::zeroed())]
     fn test_molecule_ast_config_roundtrip(#[case] cfg: MoleculeDefaults) {
         let edn = cfg.to_edn();
         let back = MoleculeDefaults::from_edn(&edn).unwrap();
@@ -524,7 +527,7 @@ mod tests {
 
     #[rstest]
     fn test_molecule_defaults_with_overrides_routes_to_per_entity() {
-        let cfg = MoleculeDefaults::zeroed().with_overrides(MoleculeOverrides {
+        let cfg = MoleculeDefaults::ground().with_overrides(MoleculeOverrides {
             atom: AtomOverrides {
                 charge: Some(NumericDefault::Required),
                 ..AtomOverrides::default()

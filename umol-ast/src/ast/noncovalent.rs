@@ -64,7 +64,7 @@ impl NoncovalentBondAst {
 }
 
 /// Noncovalent interaction kind. Two-variant lattice: `Undetermined` is
-/// the top (wildcard); `Lit(...)` pins a specific interaction kind. No
+/// the top (wildcard); `Lit(...)` constrains to a specific interaction kind. No
 /// set/bind/ref machinery — sets over noncovalent kinds are not a common
 /// modeling need, and the AST is kept minimal until one arises.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]

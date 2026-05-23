@@ -97,4 +97,7 @@
 | [93-aromatic-charge-and-transformer-2026-04-29.md](93-aromatic-charge-and-transformer-2026-04-29.md)                             | Completed     | 2026-05-07   |
 | [94-dsl-ast-io-ergonomics-2026-05-07.md](94-dsl-ast-io-ergonomics-2026-05-07.md)                                                 | Completed     | 2026-05-07   |
 | [95-ast-equality-and-ordering-2026-05-10.md](95-ast-equality-and-ordering-2026-05-10.md)                                         | Active        | 2026-05-10   |
-| [96-valence-resolution-plan-2026-05-21.md](96-valence-resolution-plan-2026-05-21.md)                                             | Active        | 2026-05-21   |
+| [96-valence-resolution-plan-2026-05-21.md](96-valence-resolution-plan-2026-05-21.md)                                             | Active        | 2026-05-23   |
+| [97-joint-domain-design-2026-05-23.md](97-joint-domain-design-2026-05-23.md)                                                     | Active        | 2026-05-23   |
+| [98-bind-scope-2026-05-23.md](98-bind-scope-2026-05-23.md)                                                                       | Active        | 2026-05-23   |
+| [99-counts-as-invariants-2026-05-23.md](99-counts-as-invariants-2026-05-23.md)                                                   | Active        | 2026-05-23   |

@@ -163,7 +163,7 @@ impl ElectronInvariantValidator {
         let valence_electrons = element.valence_electrons() as i64;
 
         // Atom-only mode: no topology. Each valence defaults to 0 unless a
-        // literal constraint pins it.
+        // literal constraint sets it.
         let valence: i64 = match atom.constraints.get(AtomConstraintKind::Valence) {
             Some(AtomConstraint::Valence(ValueAst::Lit(v))) if *v >= 0 => *v,
             None | Some(AtomConstraint::Valence(ValueAst::Undetermined)) => 0,

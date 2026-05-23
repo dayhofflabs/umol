@@ -122,7 +122,7 @@ fn molecule_all_ground(ast: &MoleculeAst) -> bool {
 mod tests {
     use rstest::*;
     use umol_ast::ast::MoleculeAst;
-    use umol_ast::mol_zeroed;
+    use umol_ast::mol_ground;
     use umol_shared::element::Element;
 
     use super::*;
@@ -132,11 +132,11 @@ mod tests {
     use crate::ops::valence::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
 
     fn ground_methane() -> MoleculeAst {
-        mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#)
+        mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#)
     }
 
     fn benzene_pinned() -> MoleculeAst {
-        mol_zeroed!(
+        mol_ground!(
             r#"{
             :atoms ["C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
             :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]

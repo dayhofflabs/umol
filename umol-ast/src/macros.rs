@@ -95,24 +95,6 @@ macro_rules! bond_ground {
     }};
 }
 
-/// Parse a molecule-EDN string into a `MoleculeAst` with `MoleculeDefaults::zeroed()` applied.
-///
-/// ```ignore
-/// let methane = mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#);
-/// ```
-#[macro_export]
-macro_rules! mol_zeroed {
-    ($s:expr $(,)?) => {{
-        let dsl: $crate::dsl::MoleculeDsl =
-            <$crate::dsl::MoleculeDsl as ::core::str::FromStr>::from_str($s).unwrap();
-        let (ast, _meta) = dsl.into_parts();
-        <$crate::dsl::MoleculeDsl as $crate::ast::IntoAst<$crate::ast::MoleculeAst>>::into_ast(
-            $crate::dsl::MoleculeDsl::from_parts(ast, $crate::dsl::Metadata::default()),
-            &$crate::dsl::MoleculeDefaults::zeroed(),
-        )
-    }};
-}
-
 /// Parse a compact atom-string into an `AtomAst` with `AtomDefaults::zeroed()`
 /// applied.
 #[macro_export]
@@ -402,14 +384,6 @@ mod tests {
     #[case::double("2", BondAst::from_order(2).into_ground())]
     fn test_bond_ground_macro(#[case] input: &str, #[case] expected: BondAst) {
         assert_eq!(bond_ground!(input), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::methane(r#"{:atoms ["C #h4"] :bonds []}"#,
-        MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(4_i64).into_zeroed()], vec![]))]
-    fn test_mol_zeroed_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
-        assert_eq!(mol_zeroed!(input), expected);
     }
 
     #[rustfmt::skip]

@@ -1,379 +1,379 @@
 # Per-element valence data for counts-based validation (from RDKit atomic_data.cpp).
-# allowed_valences: ordered list of allowed σ-valences. Empty = no preferred valence (transition metals, ionic cores).
+# valence_set: ordered list of allowed σ-valences. Empty = no preferred valence (transition metals, ionic cores).
 
 [H]
-allowed_valences = [1]
+valence_set = [1]
 
 [He]
-allowed_valences = [0]
+valence_set = [0]
 
 [Li]
-allowed_valences = [1]
+valence_set = [1]
 
 [Be]
-allowed_valences = [2]
+valence_set = [2]
 
 [B]
-allowed_valences = [3]
-allowed_aromatic_valences = [0]
+valence_set = [3]
+aromatic_valence_set = [0]
 
 [C]
-allowed_valences = [4]
-allowed_aromatic_valences = [1]
+valence_set = [4]
+aromatic_valence_set = [1]
 
 [N]
-allowed_valences = [3]
-allowed_aromatic_valences = [1, 2]
+valence_set = [3]
+aromatic_valence_set = [1, 2]
 
 [O]
-allowed_valences = [2]
-allowed_aromatic_valences = [2]
+valence_set = [2]
+aromatic_valence_set = [2]
 
 [F]
-allowed_valences = [1]
+valence_set = [1]
 
 [Ne]
-allowed_valences = [0]
+valence_set = [0]
 
 [Na]
-allowed_valences = [1]
+valence_set = [1]
 
 [Mg]
-allowed_valences = [2]
+valence_set = [2]
 
 [Al]
-allowed_valences = [3]
+valence_set = [3]
 
 [Si]
-allowed_valences = [4]
-allowed_aromatic_valences = [1]
+valence_set = [4]
+aromatic_valence_set = [1]
 normal_valence = 4
 
 [P]
-allowed_valences = [3, 5]
-allowed_aromatic_valences = [1, 2]
+valence_set = [3, 5]
+aromatic_valence_set = [1, 2]
 normal_valence = 3
 aromatic_normal_valence = 2
 
 [S]
-allowed_valences = [2, 4, 6]
-allowed_aromatic_valences = [2]
+valence_set = [2, 4, 6]
+aromatic_valence_set = [2]
 normal_valence = 2
 aromatic_normal_valence = 2
 
 [Cl]
-allowed_valences = [1, 3, 5, 7]
+valence_set = [1, 3, 5, 7]
 normal_valence = 1
 
 [Ar]
-allowed_valences = [0]
+valence_set = [0]
 
 [K]
-allowed_valences = [1]
+valence_set = [1]
 
 [Ca]
-allowed_valences = [2]
+valence_set = [2]
 
 [Sc]
-allowed_valences = []
+valence_set = []
 
 [Ti]
-allowed_valences = []
+valence_set = []
 
 [V]
-allowed_valences = []
+valence_set = []
 
 [Cr]
-allowed_valences = []
+valence_set = []
 
 [Mn]
-allowed_valences = []
+valence_set = []
 
 [Fe]
-allowed_valences = []
+valence_set = []
 
 [Co]
-allowed_valences = []
+valence_set = []
 
 [Ni]
-allowed_valences = []
+valence_set = []
 
 [Cu]
-allowed_valences = []
+valence_set = []
 
 [Zn]
-allowed_valences = []
+valence_set = []
 
 [Ga]
-allowed_valences = [3]
+valence_set = [3]
 
 [Ge]
-allowed_valences = [4]
+valence_set = [4]
 
 [As]
-allowed_valences = [3, 5]
-allowed_aromatic_valences = [1, 2]
+valence_set = [3, 5]
+aromatic_valence_set = [1, 2]
 normal_valence = 3
 aromatic_normal_valence = 2
 
 [Se]
-allowed_valences = [2, 4, 6]
-allowed_aromatic_valences = [2]
+valence_set = [2, 4, 6]
+aromatic_valence_set = [2]
 normal_valence = 2
 aromatic_normal_valence = 2
 
 [Br]
-allowed_valences = [1]
+valence_set = [1]
 normal_valence = 1
 
 [Kr]
-allowed_valences = [0]
+valence_set = [0]
 
 [Rb]
-allowed_valences = [1]
+valence_set = [1]
 
 [Sr]
-allowed_valences = [2]
+valence_set = [2]
 
 [Y]
-allowed_valences = []
+valence_set = []
 
 [Zr]
-allowed_valences = []
+valence_set = []
 
 [Nb]
-allowed_valences = []
+valence_set = []
 
 [Mo]
-allowed_valences = []
+valence_set = []
 
 [Tc]
-allowed_valences = []
+valence_set = []
 
 [Ru]
-allowed_valences = []
+valence_set = []
 
 [Rh]
-allowed_valences = []
+valence_set = []
 
 [Pd]
-allowed_valences = []
+valence_set = []
 
 [Ag]
-allowed_valences = []
+valence_set = []
 
 [Cd]
-allowed_valences = []
+valence_set = []
 
 [In]
-allowed_valences = [3]
+valence_set = [3]
 
 [Sn]
-allowed_valences = [2, 4]
+valence_set = [2, 4]
 
 [Sb]
-allowed_valences = [3, 5]
+valence_set = [3, 5]
 normal_valence = 3
 
 [Te]
-allowed_valences = [2, 4, 6]
+valence_set = [2, 4, 6]
 normal_valence = 2
 
 [I]
-allowed_valences = [1, 3, 5]
+valence_set = [1, 3, 5]
 normal_valence = 1
 
 [Xe]
-allowed_valences = [0, 2, 4, 6]
+valence_set = [0, 2, 4, 6]
 
 [Cs]
-allowed_valences = [1]
+valence_set = [1]
 
 [Ba]
-allowed_valences = [2]
+valence_set = [2]
 
 [La]
-allowed_valences = []
+valence_set = []
 
 [Ce]
-allowed_valences = []
+valence_set = []
 
 [Pr]
-allowed_valences = []
+valence_set = []
 
 [Nd]
-allowed_valences = []
+valence_set = []
 
 [Pm]
-allowed_valences = []
+valence_set = []
 
 [Sm]
-allowed_valences = []
+valence_set = []
 
 [Eu]
-allowed_valences = []
+valence_set = []
 
 [Gd]
-allowed_valences = []
+valence_set = []
 
 [Tb]
-allowed_valences = []
+valence_set = []
 
 [Dy]
-allowed_valences = []
+valence_set = []
 
 [Ho]
-allowed_valences = []
+valence_set = []
 
 [Er]
-allowed_valences = []
+valence_set = []
 
 [Tm]
-allowed_valences = []
+valence_set = []
 
 [Yb]
-allowed_valences = []
+valence_set = []
 
 [Lu]
-allowed_valences = []
+valence_set = []
 
 [Hf]
-allowed_valences = []
+valence_set = []
 
 [Ta]
-allowed_valences = []
+valence_set = []
 
 [W]
-allowed_valences = []
+valence_set = []
 
 [Re]
-allowed_valences = []
+valence_set = []
 
 [Os]
-allowed_valences = []
+valence_set = []
 
 [Ir]
-allowed_valences = []
+valence_set = []
 
 [Pt]
-allowed_valences = []
+valence_set = []
 
 [Au]
-allowed_valences = []
+valence_set = []
 
 [Hg]
-allowed_valences = []
+valence_set = []
 
 [Tl]
-allowed_valences = []
+valence_set = []
 
 [Pb]
-allowed_valences = [2, 4]
+valence_set = [2, 4]
 
 [Bi]
-allowed_valences = [3, 5]
+valence_set = [3, 5]
 
 [Po]
-allowed_valences = [2, 4, 6]
+valence_set = [2, 4, 6]
 
 [At]
-allowed_valences = [1, 3, 5]
+valence_set = [1, 3, 5]
 
 [Rn]
-allowed_valences = [0]
+valence_set = [0]
 
 [Fr]
-allowed_valences = [1]
+valence_set = [1]
 
 [Ra]
-allowed_valences = [2]
+valence_set = [2]
 
 [Ac]
-allowed_valences = []
+valence_set = []
 
 [Th]
-allowed_valences = []
+valence_set = []
 
 [Pa]
-allowed_valences = []
+valence_set = []
 
 [U]
-allowed_valences = []
+valence_set = []
 
 [Np]
-allowed_valences = []
+valence_set = []
 
 [Pu]
-allowed_valences = []
+valence_set = []
 
 [Am]
-allowed_valences = []
+valence_set = []
 
 [Cm]
-allowed_valences = []
+valence_set = []
 
 [Bk]
-allowed_valences = []
+valence_set = []
 
 [Cf]
-allowed_valences = []
+valence_set = []
 
 [Es]
-allowed_valences = []
+valence_set = []
 
 [Fm]
-allowed_valences = []
+valence_set = []
 
 [Md]
-allowed_valences = []
+valence_set = []
 
 [No]
-allowed_valences = []
+valence_set = []
 
 [Lr]
-allowed_valences = []
+valence_set = []
 
 [Rf]
-allowed_valences = []
+valence_set = []
 
 [Db]
-allowed_valences = []
+valence_set = []
 
 [Sg]
-allowed_valences = []
+valence_set = []
 
 [Bh]
-allowed_valences = []
+valence_set = []
 
 [Hs]
-allowed_valences = []
+valence_set = []
 
 [Mt]
-allowed_valences = []
+valence_set = []
 
 [Ds]
-allowed_valences = []
+valence_set = []
 
 [Rg]
-allowed_valences = []
+valence_set = []
 
 [Cn]
-allowed_valences = []
+valence_set = []
 
 [Nh]
-allowed_valences = []
+valence_set = []
 
 [Fl]
-allowed_valences = []
+valence_set = []
 
 [Mc]
-allowed_valences = []
+valence_set = []
 
 [Lv]
-allowed_valences = []
+valence_set = []
 
 [Ts]
-allowed_valences = []
+valence_set = []
 
 [Og]
-allowed_valences = []
+valence_set = []

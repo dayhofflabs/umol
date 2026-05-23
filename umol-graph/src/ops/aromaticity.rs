@@ -263,7 +263,7 @@ mod tests {
         AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId,
         BondAst, BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
     };
-    use umol_ast::mol_zeroed;
+    use umol_ast::mol_ground;
     use umol_shared::element::Element;
 
     use super::*;
@@ -384,54 +384,54 @@ mod tests {
 
     #[rstest]
     #[case::cyclopropenium_cation(
-        mol_zeroed!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
+        mol_ground!(r#"{:atoms ["C #h #a" "C #h #a" "C #c+ #h #a0"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]]}"#),
         1, vec![1, 1, 1], vec![0, 0, 0], vec![1, 1, 1],
     )]
     #[case::cot_dianion(
-        mol_zeroed!(r#"{:atoms ["C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"
+        mol_ground!(r#"{:atoms ["C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"
                                 "C #h #a" "C #c- #h #a2" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"]
                                [4 5 "1"] [5 6 "1"] [6 7 "1"] [7 0 "1"]]}"#),
         -2, vec![1; 8], vec![0; 8], vec![1; 8],
     )]
     #[case::s4_dication(
-        mol_zeroed!(r#"{:atoms ["S #c+ #n1 #a" "S #n1 #a2" "S #c+ #n1 #a" "S #n1 #a2"]
+        mol_ground!(r#"{:atoms ["S #c+ #n1 #a" "S #n1 #a2" "S #c+ #n1 #a" "S #n1 #a2"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 0 "1"]]}"#),
         2, vec![2; 4], vec![0; 4], vec![2; 4],
     )]
     #[case::boratabenzene_anion(
-        mol_zeroed!(r#"{:atoms ["B #c- #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_ground!(r#"{:atoms ["B #c- #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![-1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::borepin(
-        mol_zeroed!(r#"{:atoms ["B #h #a0" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_ground!(r#"{:atoms ["B #h #a0" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 6 "1"] [6 0 "1"]]}"#),
         0, vec![0, 1, 1, 1, 1, 1, 1], vec![0; 7], vec![0, 1, 1, 1, 1, 1, 1],
     )]
     #[case::pyridinium(
-        mol_zeroed!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_ground!(r#"{:atoms ["N #c+ #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::pyrylium(
-        mol_zeroed!(r#"{:atoms ["O #c+ #n1 #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_ground!(r#"{:atoms ["O #c+ #n1 #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]}"#),
         0, vec![1; 6], vec![1, 0, 0, 0, 0, 0], vec![1; 6],
     )]
     #[case::pyrrole(
-        mol_zeroed!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_ground!(r#"{:atoms ["N #h #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     #[case::furan(
-        mol_zeroed!(r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_ground!(r#"{:atoms ["O #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]
     #[case::thiophene(
-        mol_zeroed!(r#"{:atoms ["S #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
+        mol_ground!(r#"{:atoms ["S #n1 #a2" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
                        :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 0 "1"]]}"#),
         0, vec![2, 1, 1, 1, 1], vec![0; 5], vec![2, 1, 1, 1, 1],
     )]

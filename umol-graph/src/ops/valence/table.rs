@@ -22,8 +22,8 @@ pub struct ValenceEntry {
     /// accepted at any explicit valence and contributes no implicit
     /// hydrogens. For charged atoms, lookup falls back to the isoelectronic
     /// neutral entry.
-    pub allowed_valences: Vec<u8>,
-    pub allowed_aromatic_valences: Vec<u8>,
+    pub valence_set: Vec<u8>,
+    pub aromatic_valence_set: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -35,9 +35,9 @@ pub struct ValenceTable {
 #[derive(Deserialize)]
 struct ValenceEntryToml {
     #[serde(default)]
-    allowed_valences: Vec<u8>,
+    valence_set: Vec<u8>,
     #[serde(default)]
-    allowed_aromatic_valences: Vec<u8>,
+    aromatic_valence_set: Vec<u8>,
 }
 
 impl ValenceTable {
@@ -69,7 +69,7 @@ impl ValenceTable {
             let _ = writeln!(
                 buf,
                 "{}:{:?}:{:?}",
-                element, entry.allowed_valences, entry.allowed_aromatic_valences,
+                element, entry.valence_set, entry.aromatic_valence_set,
             );
         }
         self.content_hash = xxh3_64(buf.as_bytes());
@@ -90,8 +90,8 @@ impl ValenceTable {
             entries.insert(
                 element,
                 ValenceEntry {
-                    allowed_valences: entry.allowed_valences,
-                    allowed_aromatic_valences: entry.allowed_aromatic_valences,
+                    valence_set: entry.valence_set,
+                    aromatic_valence_set: entry.aromatic_valence_set,
                 },
             );
         }
@@ -107,20 +107,20 @@ impl ValenceTable {
         self.entries.get(&element)
     }
 
-    /// Compute implicit-hydrogen count from the table's `allowed_valences`.
+    /// Compute implicit-hydrogen count from the table's `valence_set`.
     ///
     /// For a charged atom, the lookup transparently switches to the
     /// isoelectronic neutral entry (`element.shift(-charge)`), so e.g. Na+
     /// reads as Ne and resolves to 0 implicit H without the parent table
     /// having to special-case the cation.
     ///
-    /// Then walks `allowed_valences` and returns `allowed -
+    /// Then walks `valence_set` and returns `allowed -
     /// explicit_valence` for the first entry that satisfies `explicit ≤
     /// allowed ≤ num_electrons`. The upper bound rejects covalent valences
     /// the atom can't actually reach (Na+ valence 1: needs 1 electron,
     /// has 0).
     ///
-    /// An empty `allowed_valences` means the table imposes no σ-valence
+    /// An empty `valence_set` means the table imposes no σ-valence
     /// preference (transition metals, ionic cores): returns `Some(0)`. A
     /// non-empty list with no entry that fits the constraints returns
     /// `None`.
@@ -137,9 +137,9 @@ impl ValenceTable {
 
         let effective_valences: &[u8] = if charge != 0 {
             let iso = element.shift(-charge)?;
-            &self.entries.get(&iso)?.allowed_valences
+            &self.entries.get(&iso)?.valence_set
         } else {
-            &self.entries.get(&element)?.allowed_valences
+            &self.entries.get(&element)?.valence_set
         };
 
         if effective_valences.is_empty() {
@@ -174,8 +174,8 @@ macro_rules! valence_table {
                 <::umol_shared::element::Element as ::std::str::FromStr>::from_str(stringify!($el))
                     .expect("invalid element symbol in valence_table!"),
                 $crate::ops::valence::ValenceEntry {
-                    allowed_valences: vec![$($v),*],
-                    allowed_aromatic_valences: vec![],
+                    valence_set: vec![$($v),*],
+                    aromatic_valence_set: vec![],
                 },
             );
         )*
@@ -200,11 +200,11 @@ mod tests {
         let table = ValenceTable::from_toml_str(
             r#"
         [H]
-        allowed_valences = [1]
+        valence_set = [1]
         "#,
         )
         .unwrap();
-        assert_eq!(table.entry(Element::H).unwrap().allowed_valences, [1]);
+        assert_eq!(table.entry(Element::H).unwrap().valence_set, [1]);
     }
 
     #[test]
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn test_valence_table_compute_implicit_hydrogens_missing() {
-        let table = ValenceTable::from_toml_str("[H]\nallowed_valences = [1]\n").unwrap();
+        let table = ValenceTable::from_toml_str("[H]\nvalence_set = [1]\n").unwrap();
         assert_eq!(table.compute_implicit_hydrogens(Element::C, 0, 0), None);
     }
 }

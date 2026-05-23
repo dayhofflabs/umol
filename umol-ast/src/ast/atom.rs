@@ -122,7 +122,7 @@ impl AtomAst {
     /// `DonatedPairs(0)`, `AcceptedPairs(0)`, `MulticenterValence(NotMulticenter)`,
     /// `AromaticValence(NotAromatic)`. Each is added only if the corresponding
     /// constraint kind is not already present; existing entries are preserved.
-    /// Matches the `atom_zeroed!` / `mol_zeroed!` macro semantics.
+    /// Matches the `atom_zeroed!` macro semantics.
     pub fn into_zeroed(mut self) -> Self {
         self = self.into_ground();
         if !self.constraints.contains(AtomConstraintKind::Valence) {
@@ -809,9 +809,9 @@ fn canonicalize_isotope_not_set(v: Vec<i64>) -> IsotopeAst {
 /// encoding.
 fn isotope_set_view(ast: &IsotopeAst) -> Option<(&[i64], MemOp)> {
     match ast {
-        IsotopeAst::Lit(x) => Some((std::slice::from_ref(x), MemOp::In)),
+        IsotopeAst::Lit(x) => Some((slice::from_ref(x), MemOp::In)),
         IsotopeAst::Set(s) => Some((s, MemOp::In)),
-        IsotopeAst::Not(x) => Some((std::slice::from_ref(x), MemOp::NotIn)),
+        IsotopeAst::Not(x) => Some((slice::from_ref(x), MemOp::NotIn)),
         IsotopeAst::NotSet(s) => Some((s, MemOp::NotIn)),
         IsotopeAst::Bind(b) => Some((&b.2, b.1)),
         IsotopeAst::Undetermined | IsotopeAst::Natural | IsotopeAst::Ref(_) => None,

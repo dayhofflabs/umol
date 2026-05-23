@@ -14,8 +14,8 @@
 //!
 //! Two sub-patterns share the enum:
 //! - **Role identity**: `Donor`, `Acceptor`, `Parallels`, `Ends`, `Atoms`,
-//!   `Contains`, `ContainsAll` — pin an atom/bond identity to a role or set
-//!   membership.
+//!   `Contains`, `ContainsAll` — constrain an atom/bond identity to a role
+//!   or set membership.
 //! - **Role predicate**: `DonorSatisfies`, `AcceptorSatisfies`, `AllAtoms`,
 //!   `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraint` to a role slot,
 //!   quantified over the matching participants.

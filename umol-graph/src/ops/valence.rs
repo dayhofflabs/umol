@@ -3,12 +3,14 @@
 
 pub mod atom_typing;
 pub mod counts;
+pub mod invariants;
 pub mod normal_valence;
 pub mod registry;
 pub mod table;
 
 pub use atom_typing::{AtomTypingError, AtomTypingValenceResolver};
 pub use counts::{CountsError, CountsValenceResolver};
+pub use invariants::{Mismatch, ValenceInvariants};
 pub use normal_valence::{NormalValenceEntry, NormalValenceTable};
 pub use registry::AtomTypeRegistry;
 pub use table::{ValenceEntry, ValenceTable};

@@ -177,13 +177,13 @@ impl AtomTypingValenceResolver {
 mod tests {
     use rstest::*;
     use umol_ast::ast::MoleculeAst;
-    use umol_ast::{mol, mol_zeroed};
+    use umol_ast::{mol, mol_ground};
 
     use super::*;
     use crate::registry;
 
     fn methane() -> MoleculeAst {
-        mol_zeroed!(r#"{:atoms ["C #h4"] :bonds []}"#)
+        mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#)
     }
 
     fn methyl_chloride_partial() -> MoleculeAst {

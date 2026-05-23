@@ -164,7 +164,7 @@ impl Lattice for JointDomainAst {
     }
 
     /// `Domain` is ground iff its tuple list has exactly one tuple — every
-    /// var is pinned to a single concrete value. `Undetermined` (top) is
+    /// var resolves to a single concrete value. `Undetermined` (top) is
     /// not ground.
     fn is_ground(&self) -> bool {
         matches!(self, Self::Domain(d) if d.tuples.len() == 1)

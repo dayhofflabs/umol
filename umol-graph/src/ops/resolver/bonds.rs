@@ -25,8 +25,8 @@ impl BondsResolver {
 
     /// Fills `charge → Lit(0)` for any covalent bond whose `charge` is
     /// `Undetermined`, and `spin → closed_shell` for any bond whose spin is
-    /// fully `Undetermined`. Existing literals / partially-pinned spin states
-    /// pass through unchanged.
+    /// fully `Undetermined`. Existing literals / partially-constrained spin
+    /// states pass through unchanged.
     pub fn resolve(
         &self,
         ast: &mut MoleculeAst,

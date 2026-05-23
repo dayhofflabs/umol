@@ -41,8 +41,8 @@ fn lower(input: &MoleculeDsl, defaults: &MoleculeDefaults) -> MoleculeAst {
 }
 
 fn raise(ast: &MoleculeAst) -> MoleculeDsl {
-    let zeroed = MoleculeDefaults::zeroed();
-    MoleculeDsl::from_ast(ast, &zeroed)
+    let cfg = MoleculeDefaults::zeroed();
+    MoleculeDsl::from_ast(ast, &cfg)
 }
 
 fn resolve_test(
