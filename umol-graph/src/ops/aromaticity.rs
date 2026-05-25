@@ -26,7 +26,7 @@ use umol_ast::ast::{
 };
 use umol_shared::element::Element;
 
-use crate::ops::config::AromaticityModel;
+use crate::ops::model::AromaticityModel;
 use crate::ops::solution::Solution;
 
 /// Chemistry-level rejection: the algorithm decided the input doesn't satisfy
@@ -170,10 +170,10 @@ impl AromaticityPerception {
 /// Equalization captures **delocalization**: when every atom in the system
 /// is the same element, the atoms are π-MO-equivalent and any single-atom
 /// localization of the system's charge is an arbitrary symmetry-breaking
-/// choice. The rule rewrites each atom to its canonical neutral π state
-/// `(q=0, π=K)` where `K = V(element) − σ_bonds − 2·σ_lone_pairs` (closed-
-/// shell electron accounting), accumulating the per-atom charge into
-/// `system.charge`.
+/// choice. The rule rewrites each atom to its canonical neutral aromatic
+/// state `(q=0, aromatic_valence=K)` where
+/// `K = V(element) − localized_valence − 2·lone_pairs` (closed-shell electron
+/// accounting), accumulating the per-atom charge into `system.charge`.
 ///
 /// In a heterogeneous system (the aromatic ring contains more than one
 /// element), the heteroatom is the natural locus of the molecule's charge
@@ -267,7 +267,7 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ops::config::{ElementScope, RingLimits};
+    use crate::ops::model::{ElementScope, RingLimits};
 
     fn any_hueckel() -> AromaticityPerception {
         AromaticityPerception::new(&AromaticityModel::HueckelRule {

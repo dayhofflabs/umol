@@ -23,7 +23,7 @@ use umol_ast::ast::{Lattice, MoleculeAst};
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
-use crate::ops::config::ChemistryModel;
+use crate::ops::model::ChemistryModel;
 use crate::ops::solution::Solution;
 
 #[derive(Clone, Debug)]
@@ -126,7 +126,7 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ops::config::{
+    use crate::ops::model::{
         AromaticityModel, ChemistryModel, ElementScope, RingLimits, ValenceModel,
     };
     use crate::ops::valence::{AtomTypeRegistry, NormalValenceTable, ValenceTable};

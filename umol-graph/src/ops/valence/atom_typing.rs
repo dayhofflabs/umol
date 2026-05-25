@@ -98,8 +98,8 @@ impl AtomTypingValenceResolver {
     /// Project an atom into the lattice shape registry patterns are written
     /// against: pre-narrow `implicit_hydrogens` via the normal-valence table,
     /// and synthesize ground constraints for the topology-derived counts
-    /// (σ-valence, dative donated/accepted pairs) plus the membership-derived
-    /// aromatic π count. `pattern.meet(&prepared)` then filters by those
+    /// (localized valence, dative donated/accepted pairs) plus the
+    /// membership-derived aromatic valence. `pattern.meet(&prepared)` then filters by those
     /// constraints directly via `AtomConstraints::meet`.
     fn prepare_atom(
         &self,

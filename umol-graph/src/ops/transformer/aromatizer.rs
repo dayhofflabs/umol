@@ -12,7 +12,7 @@ use umol_ast::ast::{AtomView, ElementAst, MoleculeAst, ValueAst};
 use umol_shared::element::Element;
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
-use crate::ops::config::AromaticityModel;
+use crate::ops::model::AromaticityModel;
 use crate::ops::transformer::Transformer;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

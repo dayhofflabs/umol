@@ -28,6 +28,10 @@ name = "resolution"
 required-features = ["conformance"]
 
 [[test]]
+name = "counts_comparison"
+required-features = ["conformance"]
+
+[[test]]
 name = "sdf_parsing"
 
 [[test]]

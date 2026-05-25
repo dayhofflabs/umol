@@ -15,7 +15,7 @@ use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
 use umol_shared::element::Element;
 
-use crate::ops::config::ElementScope;
+use crate::ops::model::ElementScope;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum HmoError {

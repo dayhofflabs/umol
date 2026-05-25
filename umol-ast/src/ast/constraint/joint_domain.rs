@@ -1,4 +1,6 @@
 //! Joint-domain (relational) constraint over a tuple of atom-level fields.
+use std::cmp::Ordering;
+
 use super::super::error::{Contradiction, JointDomainError};
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
@@ -52,10 +54,7 @@ impl JointDomainAst {
     /// arity and rejects empty vars / empty tuples / duplicate vars.
     /// Canonicalizes by sorting vars (and permuting each tuple to match),
     /// sorting tuples lexicographically, and dedup'ing the tuple list.
-    pub fn from_ints(
-        vars: Vec<JointVar>,
-        tuples: Vec<Vec<i64>>,
-    ) -> Result<Self, JointDomainError> {
+    pub fn from_ints(vars: Vec<JointVar>, tuples: Vec<Vec<i64>>) -> Result<Self, JointDomainError> {
         if vars.is_empty() {
             return Err(JointDomainError::TooFewVars(0));
         }
@@ -257,7 +256,12 @@ fn relational_meet(s: &DomainState, o: &DomainState) -> Option<JointDomainAst> {
 /// intersection of their var sets, union, dedup. If the shared set is
 /// empty, returns `Undetermined` (the proper LUB).
 fn relational_join(s: &DomainState, o: &DomainState) -> JointDomainAst {
-    let shared_vars: Vec<JointVar> = s.vars.iter().filter(|v| o.vars.contains(v)).copied().collect();
+    let shared_vars: Vec<JointVar> = s
+        .vars
+        .iter()
+        .filter(|v| o.vars.contains(v))
+        .copied()
+        .collect();
     if shared_vars.is_empty() {
         return JointDomainAst::Undetermined;
     }
@@ -267,7 +271,12 @@ fn relational_join(s: &DomainState, o: &DomainState) -> JointDomainAst {
         .collect();
     let project_o: Vec<usize> = shared_vars
         .iter()
-        .map(|sv| o.vars.iter().position(|v| v == sv).expect("shared in other"))
+        .map(|sv| {
+            o.vars
+                .iter()
+                .position(|v| v == sv)
+                .expect("shared in other")
+        })
         .collect();
     let mut tuples: Vec<Vec<JointValue>> = Vec::new();
     for t in &s.tuples {
@@ -287,6 +296,7 @@ fn relational_join(s: &DomainState, o: &DomainState) -> JointDomainAst {
 /// Merge two sorted var lists into the union (sorted). Returns the union
 /// plus, for each union position, the indices into `vs` and `vo`
 /// (`None` if absent).
+/// TODO: Replace with data structures that have the right semantics.
 fn merge_vars(
     vs: &[JointVar],
     vo: &[JointVar],
@@ -297,19 +307,19 @@ fn merge_vars(
     let (mut i, mut j) = (0, 0);
     while i < vs.len() && j < vo.len() {
         match vs[i].cmp(&vo[j]) {
-            std::cmp::Ordering::Less => {
+            Ordering::Less => {
                 union.push(vs[i]);
                 from_s.push(Some(i));
                 from_o.push(None);
                 i += 1;
             }
-            std::cmp::Ordering::Greater => {
+            Ordering::Greater => {
                 union.push(vo[j]);
                 from_s.push(None);
                 from_o.push(Some(j));
                 j += 1;
             }
-            std::cmp::Ordering::Equal => {
+            Ordering::Equal => {
                 union.push(vs[i]);
                 from_s.push(Some(i));
                 from_o.push(Some(j));
@@ -393,9 +403,8 @@ mod tests {
 
     #[rstest]
     fn test_joint_domain_ast_from_ints_single_var() {
-        let jd =
-            JointDomainAst::from_ints(vec![JointVar::Charge], vec![vec![0], vec![1], vec![2]])
-                .unwrap();
+        let jd = JointDomainAst::from_ints(vec![JointVar::Charge], vec![vec![0], vec![1], vec![2]])
+            .unwrap();
         assert_eq!(jd.vars(), Some(&[JointVar::Charge][..]));
         assert_eq!(
             jd.tuples(),
@@ -465,11 +474,9 @@ mod tests {
         #[case] tuples: Vec<Vec<i64>>,
         #[case] expected: JointDomainError,
     ) {
-        let err = JointDomainAst::from_ints(
-            vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-            tuples,
-        )
-        .unwrap_err();
+        let err =
+            JointDomainAst::from_ints(vec![JointVar::Charge, JointVar::ImplicitHydrogens], tuples)
+                .unwrap_err();
         assert_eq!(err, expected);
     }
 
@@ -530,7 +537,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::und_und(JointDomainAst::Undetermined, JointDomainAst::Undetermined, Some(JointDomainAst::Undetermined))]
+    #[case::und_und(
+        JointDomainAst::Undetermined,
+        JointDomainAst::Undetermined,
+        Some(JointDomainAst::Undetermined)
+    )]
     #[case::und_dom(
         JointDomainAst::Undetermined,
         jd(vec![JointVar::Charge, JointVar::ImplicitHydrogens], vec![vec![0, 1]]),
@@ -576,7 +587,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::und_und(JointDomainAst::Undetermined, JointDomainAst::Undetermined, JointDomainAst::Undetermined)]
+    #[case::und_und(
+        JointDomainAst::Undetermined,
+        JointDomainAst::Undetermined,
+        JointDomainAst::Undetermined
+    )]
     #[case::und_dom(
         JointDomainAst::Undetermined,
         jd(vec![JointVar::Charge, JointVar::ImplicitHydrogens], vec![vec![0, 1]]),

@@ -11,7 +11,7 @@ use rstest::*;
 use umol_ast::ast::{FromAst, IntoAst, MoleculeAst};
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides, NumericDefault};
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
-use umol_graph::ops::config::{AromaticityModel, ChemistryModel, ValenceModel};
+use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel};
 use umol_graph::ops::resolver::Resolver;
 use umol_graph::ops::solution::Solution;
 use umol_graph::ops::valence::{NormalValenceTable, ValenceTable};

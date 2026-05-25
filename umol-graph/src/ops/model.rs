@@ -14,7 +14,7 @@ use umol_ast::ast::{
 use umol_shared::element::Element;
 
 use crate::ops::valence::{
-    AtomTypeRegistry, Mismatch, NormalValenceTable, ValenceInvariants, ValenceTable,
+    AtomTypeRegistry, Mismatch, NormalValenceTable, ValenceEntry, ValenceInvariants, ValenceTable
 };
 
 #[derive(Debug, Clone)]
@@ -67,7 +67,7 @@ impl ValenceModel {
 
     /// Narrow `atom` per the model. AtomTyping matches against the registry;
     /// Counts enumerates the invariant equation, narrowing via min-unpaired
-    /// then max-lone-pairs over the `valence_set` / `aromatic_valence_set`
+    /// then max-lone-pairs over the `covalence_set` / `aromatic_valence_set`
     /// trial space.
     pub fn resolve_atom(
         &self,
@@ -175,7 +175,7 @@ fn counts_resolve_atom(
     }
 
     if let Some(e) = entry {
-        if !e.valence_set.is_empty() {
+        if !e.covalence_set.is_empty() {
             let topology_v = ast
                 .atom(atom_id)
                 .valence()
@@ -186,7 +186,7 @@ fn counts_resolve_atom(
                 c.implicit_hydrogens
                     .as_lit()
                     .and_then(|h| u8::try_from(h).ok())
-                    .is_some_and(|h| e.valence_set.contains(&(topology_v + h)))
+                    .is_some_and(|h| e.covalence_set.contains(&(topology_v + h)))
             });
         }
     }
@@ -226,7 +226,7 @@ fn counts_resolve_atom(
 
 fn counts_aromatic_trials(
     view: &AtomView<'_>,
-    entry: Option<&crate::ops::valence::ValenceEntry>,
+    entry: Option<&ValenceEntry>,
 ) -> Vec<AromaticValenceAst> {
     let aromatic_constraint = view.constraints().aromatic_valence();
     let is_aromatic = view.is_in_aromatic_system()

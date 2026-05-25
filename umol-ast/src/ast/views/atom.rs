@@ -344,6 +344,31 @@ impl<'a> AtomView<'a> {
             + self.multicenter_valence()
     }
 
+    /// Covalence — the count of ordinary covalent bonds the atom forms from
+    /// its own electrons (Langmuir covalency): `valence + implicit_hydrogens +
+    /// aromatic_increment`, where the aromatic increment is 1 for a standard
+    /// aromatic atom (`aromatic_valence == 1`) and 0 otherwise. Each is an
+    /// electron pair the atom shares one-for-one.
+    ///
+    /// Charge and dative bonds are **not** part of covalence; they perturb the
+    /// valence-shell electron count and are handled as isoelectronic shifts of
+    /// the per-element `covalence_set` lookup (shift `= 2·accepted − charge`:
+    /// a `−1` charge and an accepted pair both raise the effective Z). A pair
+    /// the atom *donates* (`donated_pairs`, or the aromatic donation
+    /// `aromatic_valence == 2` with `aromatic_increment == 0`) and multicenter
+    /// contributions count toward neither covalence nor the shift. Differs
+    /// from `valence` (adds implicit H and the aromatic bond) and from
+    /// `total_valence` (`valence + implicit_hydrogens + aromatic_valence +
+    /// multicenter_valence`).
+    pub fn covalence(&self) -> ValueAst {
+        let aromatic_increment = match self.aromatic_valence() {
+            ValueAst::Lit(1) => ValueAst::Lit(1),
+            ValueAst::Lit(_) => ValueAst::Lit(0),
+            _ => ValueAst::Undetermined,
+        };
+        self.valence() + self.implicit_hydrogens() + aromatic_increment
+    }
+
     /// Count of multicenter co-participants across all incident multicenter
     /// bonds. Per the no-overlap structural rule these are not localized-
     /// bond neighbors. Always `Lit`.
@@ -956,6 +981,80 @@ mod tests {
         #[case] expected: ValueAst,
     ) {
         assert_eq!(molecule.atom(AtomId(0)).total_valence(), expected);
+    }
+
+    #[rstest]
+    #[case::ch4(mol!(r#"{:atoms ["C#h4"] :bonds []}"#), ValueAst::Lit(4))]
+    #[case::undetermined_h(mol!(r#"{:atoms ["C#h*"] :bonds []}"#), ValueAst::Undetermined)]
+    fn test_atom_view_covalence_non_aromatic(
+        #[case] molecule: MoleculeAst,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(molecule.atom(AtomId(0)).covalence(), expected);
+    }
+
+    #[fixture]
+    fn aromatic_ring() -> MoleculeAst {
+        // 3-membered C ring, each with 0 implicit H (valence 2 from two ring
+        // bonds), aromatic system electrons [1, 2, 0].
+        let carbon = AtomAst::from_element(Element::C).with_implicit_hydrogens(0_i64);
+        MoleculeAst::from_parts(
+            vec![carbon.clone(), carbon.clone(), carbon],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(0), BondAst::from_order(1)),
+            ],
+            vec![],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemAst::new(vec![ValueAst::Lit(1), ValueAst::Lit(2), ValueAst::Lit(0)]),
+            )],
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    #[case::standard(AtomId(0), ValueAst::Lit(3))] // av=1 → +1
+    #[case::donor(AtomId(1), ValueAst::Lit(2))] // av=2 (donated pair) → +0
+    #[case::acceptor(AtomId(2), ValueAst::Lit(2))] // av=0 → +0
+    fn test_atom_view_covalence_aromatic(
+        aromatic_ring: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(aromatic_ring.atom(atom).covalence(), expected);
+    }
+
+    #[fixture]
+    fn dative_pair() -> MoleculeAst {
+        // H₃N→BH₃: N (3 H) donates a pair to B (3 H). Covalence = v+h+ai for
+        // both = 3; the dative bond (donated on N, accepted on B) is excluded.
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::N).with_implicit_hydrogens(3_i64),
+                AtomAst::from_element(Element::B).with_implicit_hydrogens(3_i64),
+            ],
+            vec![],
+            vec![(vec![AtomId(0)], AtomId(1), DativeBondAst::from_order(1))],
+            vec![],
+            vec![],
+            vec![],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    #[case::donor(AtomId(0), ValueAst::Lit(3))] // donated pair excluded → v+h = 3
+    #[case::acceptor(AtomId(1), ValueAst::Lit(3))] // accepted pair excluded → v+h = 3
+    fn test_atom_view_covalence_dative(
+        dative_pair: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(dative_pair.atom(atom).covalence(), expected);
     }
 
     #[rstest]

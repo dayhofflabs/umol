@@ -24,7 +24,7 @@ use self::utils::{
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::{ParseError, SmilesError};
-use crate::ops::config::ChemistryModel;
+use crate::ops::model::ChemistryModel;
 use crate::ops::resolver::Resolver;
 use crate::ops::solution::Solution;
 use crate::span::Span;

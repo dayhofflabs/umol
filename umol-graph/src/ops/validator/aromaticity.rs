@@ -8,7 +8,7 @@ use thiserror::Error;
 use umol_ast::ast::{AromaticValenceAst, AtomId, MoleculeAst, ValueAst};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
-use crate::ops::config::AromaticityModel;
+use crate::ops::model::AromaticityModel;
 use crate::ops::solution::Solution;
 
 #[derive(Clone, Debug)]
@@ -106,7 +106,7 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ops::config::{ElementScope, RingLimits};
+    use crate::ops::model::{ElementScope, RingLimits};
     use crate::ops::resolver::aromaticity::AromaticityResolver;
 
     fn aromatic(element: Element, pi: i64) -> AtomAst {

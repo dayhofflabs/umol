@@ -13,7 +13,7 @@ use serde::Deserialize;
 use umol_shared::element::Element;
 use xxhash_rust::const_xxh3::xxh3_64;
 
-use crate::ops::config::ConfigError;
+use crate::ops::model::ConfigError;
 
 #[derive(Debug, Clone)]
 pub struct NormalValenceEntry {

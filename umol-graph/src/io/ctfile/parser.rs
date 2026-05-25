@@ -26,7 +26,7 @@ use self::sdf_data::sdf_data_block;
 use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::{CtfileError, ParseError};
 use crate::io::utils::normalize_whitespace;
-use crate::ops::config::ChemistryModel;
+use crate::ops::model::ChemistryModel;
 use crate::ops::resolver::Resolver;
 use crate::ops::solution::Solution;
 use crate::position::Point3D;

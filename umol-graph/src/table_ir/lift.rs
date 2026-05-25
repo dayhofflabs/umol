@@ -215,11 +215,11 @@ fn lift_bond_order(order: TableBondOrder) -> ValueAst {
         TableBondOrder::Quadruple => ValueAst::Lit(4),
         TableBondOrder::Quintuple => ValueAst::Lit(5),
         TableBondOrder::Sextuple => ValueAst::Lit(6),
-        // Definite-aromatic: σ-order is 1 by Kekulé convention; the aromatic
-        // flag is added separately as `BondConstraint::Aromatic`. Renders as
-        // `1#a`.
+        // Definite-aromatic: localized bond order is 1 by Kekulé convention;
+        // the aromatic flag is added separately as `BondConstraint::Aromatic`.
+        // Renders as `1#a`.
         TableBondOrder::Aromatic => ValueAst::Lit(1),
-        // Fuzzy orders: no concrete σ-order can be assigned; lift to
+        // Fuzzy orders: no concrete bond order can be assigned; lift to
         // `Undetermined`. Aromatic-flag setting (where applicable) is left
         // off — the chemistry of these is too ambiguous for the lift.
         TableBondOrder::SingleOrDouble
@@ -284,7 +284,7 @@ mod tests {
             .push(TableBond::new(0, 1, TableBondOrder::Aromatic));
         let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
         let bond = ast.bond(BondId(0)).ast;
-        // Definite-aromatic lifts to Kekulé σ-order 1 plus the Aromatic
+        // Definite-aromatic lifts to Kekulé bond order 1 plus the Aromatic
         // constraint, rendering as `1#a`.
         assert!(matches!(bond.order, ValueAst::Lit(1)));
         assert!(bond

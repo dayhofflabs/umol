@@ -13,7 +13,7 @@ use umol_ast::ast::{
 };
 use umol_graph_core::UnionFind;
 
-use crate::ops::config::{ElementScope, RingLimits};
+use crate::ops::model::{ElementScope, RingLimits};
 
 #[derive(Clone, Debug)]
 pub struct HueckelRuleAromaticity {
