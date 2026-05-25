@@ -1,5 +1,10 @@
-# Per-element valence data for counts-based validation (from RDKit atomic_data.cpp).
-# covalence_set: ordered list of allowed σ-valences. Empty = no preferred valence (transition metals, ionic cores).
+# Per-element data for the counts valence model. An element absent from this
+# table is out of the model's scope and left to other resolvers.
+#
+# covalence_set: allowed covalences — localized valence + implicit H + aromatic
+#   increment — for the neutral atom; ions read the isoelectronic entry via an
+#   element shift.
+# aromatic_valence_set: allowed aromatic valences when the atom is aromatic.
 
 [H]
 covalence_set = [1]
@@ -47,23 +52,17 @@ covalence_set = [3]
 [Si]
 covalence_set = [4]
 aromatic_valence_set = [1]
-normal_valence = 4
 
 [P]
 covalence_set = [3, 5]
 aromatic_valence_set = [1, 2]
-normal_valence = 3
-aromatic_normal_valence = 2
 
 [S]
 covalence_set = [2, 4, 6]
 aromatic_valence_set = [2]
-normal_valence = 2
-aromatic_normal_valence = 2
 
 [Cl]
 covalence_set = [1, 3, 5, 7]
-normal_valence = 1
 
 [Ar]
 covalence_set = [0]
@@ -74,36 +73,6 @@ covalence_set = [1]
 [Ca]
 covalence_set = [2]
 
-[Sc]
-covalence_set = []
-
-[Ti]
-covalence_set = []
-
-[V]
-covalence_set = []
-
-[Cr]
-covalence_set = []
-
-[Mn]
-covalence_set = []
-
-[Fe]
-covalence_set = []
-
-[Co]
-covalence_set = []
-
-[Ni]
-covalence_set = []
-
-[Cu]
-covalence_set = []
-
-[Zn]
-covalence_set = []
-
 [Ga]
 covalence_set = [3]
 
@@ -113,18 +82,13 @@ covalence_set = [4]
 [As]
 covalence_set = [3, 5]
 aromatic_valence_set = [1, 2]
-normal_valence = 3
-aromatic_normal_valence = 2
 
 [Se]
 covalence_set = [2, 4, 6]
 aromatic_valence_set = [2]
-normal_valence = 2
-aromatic_normal_valence = 2
 
 [Br]
 covalence_set = [1]
-normal_valence = 1
 
 [Kr]
 covalence_set = [0]
@@ -135,36 +99,6 @@ covalence_set = [1]
 [Sr]
 covalence_set = [2]
 
-[Y]
-covalence_set = []
-
-[Zr]
-covalence_set = []
-
-[Nb]
-covalence_set = []
-
-[Mo]
-covalence_set = []
-
-[Tc]
-covalence_set = []
-
-[Ru]
-covalence_set = []
-
-[Rh]
-covalence_set = []
-
-[Pd]
-covalence_set = []
-
-[Ag]
-covalence_set = []
-
-[Cd]
-covalence_set = []
-
 [In]
 covalence_set = [3]
 
@@ -173,15 +107,12 @@ covalence_set = [2, 4]
 
 [Sb]
 covalence_set = [3, 5]
-normal_valence = 3
 
 [Te]
 covalence_set = [2, 4, 6]
-normal_valence = 2
 
 [I]
 covalence_set = [1, 3, 5]
-normal_valence = 1
 
 [Xe]
 covalence_set = [0, 2, 4, 6]
@@ -191,81 +122,6 @@ covalence_set = [1]
 
 [Ba]
 covalence_set = [2]
-
-[La]
-covalence_set = []
-
-[Ce]
-covalence_set = []
-
-[Pr]
-covalence_set = []
-
-[Nd]
-covalence_set = []
-
-[Pm]
-covalence_set = []
-
-[Sm]
-covalence_set = []
-
-[Eu]
-covalence_set = []
-
-[Gd]
-covalence_set = []
-
-[Tb]
-covalence_set = []
-
-[Dy]
-covalence_set = []
-
-[Ho]
-covalence_set = []
-
-[Er]
-covalence_set = []
-
-[Tm]
-covalence_set = []
-
-[Yb]
-covalence_set = []
-
-[Lu]
-covalence_set = []
-
-[Hf]
-covalence_set = []
-
-[Ta]
-covalence_set = []
-
-[W]
-covalence_set = []
-
-[Re]
-covalence_set = []
-
-[Os]
-covalence_set = []
-
-[Ir]
-covalence_set = []
-
-[Pt]
-covalence_set = []
-
-[Au]
-covalence_set = []
-
-[Hg]
-covalence_set = []
-
-[Tl]
-covalence_set = []
 
 [Pb]
 covalence_set = [2, 4]
@@ -287,93 +143,3 @@ covalence_set = [1]
 
 [Ra]
 covalence_set = [2]
-
-[Ac]
-covalence_set = []
-
-[Th]
-covalence_set = []
-
-[Pa]
-covalence_set = []
-
-[U]
-covalence_set = []
-
-[Np]
-covalence_set = []
-
-[Pu]
-covalence_set = []
-
-[Am]
-covalence_set = []
-
-[Cm]
-covalence_set = []
-
-[Bk]
-covalence_set = []
-
-[Cf]
-covalence_set = []
-
-[Es]
-covalence_set = []
-
-[Fm]
-covalence_set = []
-
-[Md]
-covalence_set = []
-
-[No]
-covalence_set = []
-
-[Lr]
-covalence_set = []
-
-[Rf]
-covalence_set = []
-
-[Db]
-covalence_set = []
-
-[Sg]
-covalence_set = []
-
-[Bh]
-covalence_set = []
-
-[Hs]
-covalence_set = []
-
-[Mt]
-covalence_set = []
-
-[Ds]
-covalence_set = []
-
-[Rg]
-covalence_set = []
-
-[Cn]
-covalence_set = []
-
-[Nh]
-covalence_set = []
-
-[Fl]
-covalence_set = []
-
-[Mc]
-covalence_set = []
-
-[Lv]
-covalence_set = []
-
-[Ts]
-covalence_set = []
-
-[Og]
-covalence_set = []

@@ -7,13 +7,13 @@ use umol_ast::ast::MoleculeAst;
 use crate::ops::model::ValenceModel;
 use crate::ops::solution::Solution;
 use crate::ops::valence::{
-    AtomTypingError, AtomTypingValenceResolver, CountsError, CountsValenceResolver,
+    AtomTypingError, AtomTypingValence, CountsError, CountsValence,
 };
 
 #[derive(Clone, Debug)]
 pub enum ValenceResolver {
-    AtomTyping(AtomTypingValenceResolver),
-    Counts(CountsValenceResolver),
+    AtomTyping(AtomTypingValence),
+    Counts(CountsValence),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -32,20 +32,12 @@ impl ValenceResolver {
         match model {
             ValenceModel::AtomTyping {
                 registry,
-                normal_valence,
-            } => Self::AtomTyping(AtomTypingValenceResolver::new(
+            } => Self::AtomTyping(AtomTypingValence::new(
                 registry.clone(),
-                normal_valence.clone(),
             )),
-            ValenceModel::Counts {
-                table,
-                normal_valence,
-                allow_implicit_hydrogens,
-            } => Self::Counts(CountsValenceResolver::new(
-                table.clone(),
-                normal_valence.clone(),
-                *allow_implicit_hydrogens,
-            )),
+            ValenceModel::Counts { table, .. } => {
+                Self::Counts(CountsValence::new(table.clone()))
+            }
         }
     }
 

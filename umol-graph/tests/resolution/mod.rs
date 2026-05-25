@@ -14,7 +14,7 @@ use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel};
 use umol_graph::ops::resolver::Resolver;
 use umol_graph::ops::solution::Solution;
-use umol_graph::ops::valence::{NormalValenceTable, ValenceTable};
+use umol_graph::ops::valence::{ValenceTable};
 
 #[derive(FromEdn)]
 struct TestInput {
@@ -83,7 +83,6 @@ fn counts_chemistry(defaults: &MoleculeDefaults) -> ChemistryModel {
     ChemistryModel {
         valence: ValenceModel::Counts {
             table: ValenceTable::default_table().clone(),
-            normal_valence: NormalValenceTable::default_table().clone(),
             allow_implicit_hydrogens: !matches!(
                 defaults.atom.implicit_hydrogens,
                 NumericDefault::Zero,

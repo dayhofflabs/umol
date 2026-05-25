@@ -1,0 +1,10 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 134
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing {:output {:atoms ["Na#u"] :bonds []} :success true}
+  :counts {
+    :error "resolution contradictory: no valid valence state for AtomId(0) (element Na, charge Lit(0), valence Lit(0))"
+    :success false}}

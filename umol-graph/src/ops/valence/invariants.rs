@@ -6,11 +6,10 @@ use std::ops::RangeInclusive;
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomId, ElementAst, IsotopeAst, MoleculeAst,
-    MulticenterValenceAst, SpinStateAst, ValueAst,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints, AtomId, ElementAst,
+    Lattice, MoleculeAst, MulticenterValenceAst, SpinStateAst, ValueAst,
 };
 use umol_shared::element::Element;
-use umol_shared::spin::{SpinMultiplicity, SpinState};
 
 pub struct ValenceInvariants;
 
@@ -28,60 +27,60 @@ impl ValenceInvariants {
     /// Returns `Ok(())` when every relevant field is ground and the
     /// orbital == electron equation holds, or when any field is non-`Lit`
     /// (the check cannot fire on a non-ground atom).
-    pub fn check_atom(ast: &MoleculeAst, atom: AtomId) -> Result<(), Mismatch> {
-        let view = ast.atom(atom);
-        let Some(element) = view.element().as_lit() else {
+    pub fn check_atom(ast: &MoleculeAst, atom_id: AtomId) -> Result<(), Mismatch> {
+        let atom = ast.atom(atom_id);
+        let Some(element) = atom.element().as_lit() else {
             return Ok(());
         };
-        let Some(charge) = view.charge().as_lit() else {
+        let Some(charge) = atom.charge().as_lit() else {
             return Ok(());
         };
-        let Some(implicit_h) = view.implicit_hydrogens().as_lit() else {
+        let Some(implicit_h) = atom.implicit_hydrogens().as_lit() else {
             return Ok(());
         };
-        let Some(lone_pairs) = view.lone_pairs().as_lit() else {
+        let Some(lone_pairs) = atom.lone_pairs().as_lit() else {
             return Ok(());
         };
-        let Some(unpaired) = view.spin().unpaired.as_lit() else {
+        let Some(unpaired) = atom.spin().unpaired.as_lit() else {
             return Ok(());
         };
-        let valence = match view.constraints().valence() {
+        let valence = match atom.constraints().valence() {
             ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match view.valence() {
+            ValueAst::Undetermined => match atom.valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Ok(()),
             },
             _ => return Ok(()),
         };
-        let donated = match view.constraints().donated_pairs() {
+        let donated = match atom.constraints().donated_pairs() {
             ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match view.donated_pairs() {
+            ValueAst::Undetermined => match atom.donated_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Ok(()),
             },
             _ => return Ok(()),
         };
-        let accepted = match view.constraints().accepted_pairs() {
+        let accepted = match atom.constraints().accepted_pairs() {
             ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match view.accepted_pairs() {
+            ValueAst::Undetermined => match atom.accepted_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Ok(()),
             },
             _ => return Ok(()),
         };
-        let aromatic_valence = match view.constraints().aromatic_valence() {
+        let aromatic_valence = match atom.constraints().aromatic_valence() {
             AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if v >= 0 => v,
             AromaticValenceAst::NotAromatic => 0,
-            AromaticValenceAst::Undetermined => match view.aromatic_valence() {
+            AromaticValenceAst::Undetermined => match atom.aromatic_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Ok(()),
             },
             _ => return Ok(()),
         };
-        let multicenter_valence = match view.constraints().multicenter_valence() {
+        let multicenter_valence = match atom.constraints().multicenter_valence() {
             MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if v >= 0 => v,
             MulticenterValenceAst::NotMulticenter => 0,
-            MulticenterValenceAst::Undetermined => match view.multicenter_valence() {
+            MulticenterValenceAst::Undetermined => match atom.multicenter_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Ok(()),
             },
@@ -101,7 +100,7 @@ impl ValenceInvariants {
         let electron = electron_count(element, charge, implicit_h, valence, aromatic_valence, accepted);
         if orbital != electron {
             return Err(Mismatch::OrbitalCount {
-                atom,
+                atom: atom_id,
                 orbital_count: orbital,
                 electron_count: electron,
             });
@@ -118,7 +117,7 @@ impl ValenceInvariants {
         Ok(())
     }
 
-    /// Enumerate all ground `AtomAst` candidates for `atom` consistent with the per-atom
+    /// Enumerate all ground `AtomAst` candidates for `atom_id` consistent with the per-atom
     /// electron conservation. Returns an empty `Vec` if no candidate exists.
     ///
     /// Per-field bounds:
@@ -127,75 +126,71 @@ impl ValenceInvariants {
     /// - `0 <= unpaired_electrons <= max_unpaired_electrons`
     /// - `0 <= lone_pairs <= valence_capacity / 2`
     ///
-    /// Topology-derived constraints from atom view (constraint or topology):
+    /// Structural inputs read from the atom (constraint, else topology):
     /// `valence`, `donated_pairs`, `accepted_pairs`, `aromatic_valence`, `multicenter_valence`.
     ///
-    pub fn solve_atom(ast: &MoleculeAst, atom: AtomId) -> Vec<AtomAst> {
-        let view = ast.atom(atom);
-        let Some(element) = view.element().as_lit() else {
+    pub fn solve_atom(ast: &MoleculeAst, atom_id: AtomId) -> Vec<AtomAst> {
+        let atom = ast.atom(atom_id);
+        let Some(element) = atom.element().as_lit() else {
             return Vec::new();
         };
 
-        let valence = match view.constraints().valence() {
+        let valence = match atom.constraints().valence() {
             ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match view.valence() {
+            ValueAst::Undetermined => match atom.valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
-        let donated = match view.constraints().donated_pairs() {
+        let donated = match atom.constraints().donated_pairs() {
             ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match view.donated_pairs() {
+            ValueAst::Undetermined => match atom.donated_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
-        let accepted = match view.constraints().accepted_pairs() {
+        let accepted = match atom.constraints().accepted_pairs() {
             ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match view.accepted_pairs() {
+            ValueAst::Undetermined => match atom.accepted_pairs() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
-        let aromatic_valence = match view.constraints().aromatic_valence() {
+        let aromatic_valence = match atom.constraints().aromatic_valence() {
             AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if v >= 0 => v,
             AromaticValenceAst::NotAromatic => 0,
-            AromaticValenceAst::Undetermined => match view.aromatic_valence() {
+            AromaticValenceAst::Undetermined => match atom.aromatic_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
-        let multicenter_valence = match view.constraints().multicenter_valence() {
+        let multicenter_valence = match atom.constraints().multicenter_valence() {
             MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if v >= 0 => v,
             MulticenterValenceAst::NotMulticenter => 0,
-            MulticenterValenceAst::Undetermined => match view.multicenter_valence() {
+            MulticenterValenceAst::Undetermined => match atom.multicenter_valence() {
                 ValueAst::Lit(t) if t >= 0 => t,
                 _ => return Vec::new(),
             },
             _ => return Vec::new(),
         };
 
-        let charge_range = enumeration_range(view.charge(), element_charge_range(element));
+        let charge_range = enumeration_range(atom.charge(), element_charge_range(element));
         let implicit_h_range = enumeration_range(
-            view.implicit_hydrogens(),
+            atom.implicit_hydrogens(),
             0..=(element.max_implicit_hydrogens() as i64),
         );
         let lone_pair_range = enumeration_range(
-            view.lone_pairs(),
+            atom.lone_pairs(),
             0..=((element.valence_capacity() / 2) as i64),
         );
         let unpaired_range = enumeration_range(
-            &view.spin().unpaired,
+            &atom.spin().unpaired,
             0..=(element.max_unpaired_electrons() as i64),
         );
-
-        let isotope = view.isotope_mass().clone();
-        let constraints = view.constraints().clone();
-        let original_spin = view.spin().clone();
 
         let mut candidates: Vec<AtomAst> = Vec::new();
         for charge in charge_range {
@@ -223,24 +218,29 @@ impl ValenceInvariants {
                         if orbital != electron {
                             continue;
                         }
-                        let Ok(unpaired) = u8::try_from(unpaired) else {
-                            continue;
-                        };
-                        let Some(spin) = build_spin(&original_spin, unpaired) else {
-                            continue;
-                        };
-                        candidates.push(AtomAst {
+                        let assignment = AtomAst {
                             element: ElementAst::Lit(element),
-                            isotope_mass: match &isotope {
-                                IsotopeAst::Undetermined => IsotopeAst::Natural,
-                                other => other.clone(),
-                            },
                             charge: ValueAst::Lit(charge),
                             implicit_hydrogens: ValueAst::Lit(implicit_h),
                             lone_pairs: ValueAst::Lit(lone_pairs),
-                            spin: SpinStateAst::from(spin),
-                            constraints: constraints.clone(),
-                        });
+                            spin: SpinStateAst {
+                                unpaired: ValueAst::Lit(unpaired),
+                                multiplicity: ValueAst::Undetermined,
+                            },
+                            constraints: AtomConstraints::from(AtomConstraint::Valence(
+                                ValueAst::Lit(valence),
+                            )),
+                            ..Default::default()
+                        };
+                        let Some(candidate) = atom.ast.meet(&assignment) else {
+                            continue;
+                        };
+                        let candidate = candidate.into_ground();
+                        // Skip a proposed spin whose unpaired/multiplicity pair is incompatible.
+                        if candidate.spin.as_lit().is_none() {
+                            continue;
+                        }
+                        candidates.push(candidate);
                     }
                 }
             }
@@ -306,28 +306,12 @@ fn enumeration_range(field: &ValueAst, bound: RangeInclusive<i64>) -> RangeInclu
     }
 }
 
-/// Build a `SpinState` consistent with `unpaired` and any multiplicity
-/// constraint on the original atom. Returns `None` if no compatible
-/// multiplicity exists.
-fn build_spin(original: &SpinStateAst, unpaired: u8) -> Option<SpinState> {
-    if let Some(g) = original.as_lit() {
-        if g.unpaired() == unpaired {
-            return Some(g);
-        }
-        return None;
-    }
-    if let ValueAst::Lit(m) = &original.multiplicity {
-        let mult = SpinMultiplicity::from_repr(*m as u8)?;
-        return SpinState::try_new(unpaired, mult).ok();
-    }
-    SpinState::max_multiplicity(unpaired)
-}
-
 #[cfg(test)]
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AtomAst, AtomId, ElementAst, IsotopeAst, MoleculeAst, SpinStateAst, ValueAst,
+        AtomAst, AtomConstraint, AtomConstraints, AtomId, ElementAst, IsotopeAst, MoleculeAst,
+        SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -356,8 +340,8 @@ mod tests {
         }], vec![]),
         AtomId(0),
     )]
-    fn test_valence_invariants_check_atom(#[case] ast: MoleculeAst, #[case] atom: AtomId) {
-        assert_eq!(ValenceInvariants::check_atom(&ast, atom), Ok(()));
+    fn test_valence_invariants_check_atom(#[case] ast: MoleculeAst, #[case] atom_id: AtomId) {
+        assert_eq!(ValenceInvariants::check_atom(&ast, atom_id), Ok(()));
     }
 
     #[rustfmt::skip]
@@ -376,10 +360,10 @@ mod tests {
     )]
     fn test_valence_invariants_check_atom_error(
         #[case] ast: MoleculeAst,
-        #[case] atom: AtomId,
+        #[case] atom_id: AtomId,
         #[case] expected: Mismatch,
     ) {
-        assert_eq!(ValenceInvariants::check_atom(&ast, atom), Err(expected));
+        assert_eq!(ValenceInvariants::check_atom(&ast, atom_id), Err(expected));
     }
 
     #[rstest]
@@ -414,7 +398,7 @@ mod tests {
             implicit_hydrogens: ValueAst::Lit(4),
             lone_pairs: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
-            ..Default::default()
+            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
         }],
     )]
     #[case::infeasible_h(
@@ -429,11 +413,156 @@ mod tests {
         AtomId(0),
         vec![],
     )]
+    // Every enumerated field already ground: the single combination is returned
+    // verbatim (oxygen atom, triplet, two lone pairs).
+    #[case::all_fields_ground(
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
+            element: ElementAst::Lit(Element::O),
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(2),
+            spin: SpinStateAst::from((2_u8, 3_u8)),
+            ..Default::default()
+        }], vec![]),
+        AtomId(0),
+        vec![AtomAst {
+            element: ElementAst::Lit(Element::O),
+            isotope_mass: IsotopeAst::Natural,
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(2),
+            spin: SpinStateAst::from((2_u8, 3_u8)),
+            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+        }],
+    )]
+    // Spin fully ground to a non-maximal but valid coupling (3 unpaired as a
+    // doublet); lone pairs open and fixed by conservation to 1.
+    #[case::ground_spin_state(
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
+            element: ElementAst::Lit(Element::N),
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(0),
+            spin: SpinStateAst::from((3_u8, 2_u8)),
+            ..Default::default()
+        }], vec![]),
+        AtomId(0),
+        vec![AtomAst {
+            element: ElementAst::Lit(Element::N),
+            isotope_mass: IsotopeAst::Natural,
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(1),
+            spin: SpinStateAst::from((3_u8, 2_u8)),
+            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+        }],
+    )]
+    // Multiplicity is ground (singlet), unpaired open: conservation fixes
+    // unpaired to 2, the meet keeps the pinned multiplicity (open-shell singlet).
+    #[case::ground_multiplicity(
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
+            element: ElementAst::Lit(Element::C),
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(2),
+            lone_pairs: ValueAst::Lit(0),
+            spin: SpinStateAst {
+                unpaired: ValueAst::Undetermined,
+                multiplicity: ValueAst::Lit(1),
+            },
+            ..Default::default()
+        }], vec![]),
+        AtomId(0),
+        vec![AtomAst {
+            element: ElementAst::Lit(Element::C),
+            isotope_mass: IsotopeAst::Natural,
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(2),
+            lone_pairs: ValueAst::Lit(0),
+            spin: SpinStateAst::from((2_u8, 1_u8)),
+            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+        }],
+    )]
+    // Spin pinned to a physically impossible pair (2 unpaired, multiplicity 2):
+    // the only conservation-valid count is incompatible, so no candidate.
+    #[case::inconsistent_spin(
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
+            element: ElementAst::Lit(Element::C),
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(2),
+            lone_pairs: ValueAst::Lit(0),
+            spin: SpinStateAst::from((2_u8, 2_u8)),
+            ..Default::default()
+        }], vec![]),
+        AtomId(0),
+        vec![],
+    )]
+    // Spin fully open: unpaired fixed by conservation to 2, multiplicity
+    // defaulted by `into_ground` to the maximum (triplet carbene).
+    #[case::open_spin(
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
+            element: ElementAst::Lit(Element::C),
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(2),
+            lone_pairs: ValueAst::Lit(0),
+            ..Default::default()
+        }], vec![]),
+        AtomId(0),
+        vec![AtomAst {
+            element: ElementAst::Lit(Element::C),
+            isotope_mass: IsotopeAst::Natural,
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(2),
+            lone_pairs: ValueAst::Lit(0),
+            spin: SpinStateAst::from((2_u8, 3_u8)),
+            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+        }],
+    )]
+    // Nonzero (given) charge: oxide anion, 7 electrons, resolves to a doublet.
+    #[case::nonzero_charge(
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
+            element: ElementAst::Lit(Element::O),
+            charge: ValueAst::Lit(-1),
+            implicit_hydrogens: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(3),
+            ..Default::default()
+        }], vec![]),
+        AtomId(0),
+        vec![AtomAst {
+            element: ElementAst::Lit(Element::O),
+            isotope_mass: IsotopeAst::Natural,
+            charge: ValueAst::Lit(-1),
+            implicit_hydrogens: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(3),
+            spin: SpinStateAst::from((1_u8, 2_u8)),
+            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+        }],
+    )]
+    // Specified isotope survives the meet (Natural can't, Lit(13) does) and is
+    // preserved through `into_ground`.
+    #[case::specified_isotope(
+        MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
+            element: ElementAst::Lit(Element::C),
+            isotope_mass: IsotopeAst::Lit(13),
+            charge: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(0),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            ..Default::default()
+        }], vec![]),
+        AtomId(0),
+        vec![AtomAst {
+            element: ElementAst::Lit(Element::C),
+            isotope_mass: IsotopeAst::Lit(13),
+            charge: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(4),
+            lone_pairs: ValueAst::Lit(0),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
+        }],
+    )]
     fn test_valence_invariants_solve_atom(
         #[case] ast: MoleculeAst,
-        #[case] atom: AtomId,
+        #[case] atom_id: AtomId,
         #[case] expected: Vec<AtomAst>,
     ) {
-        assert_eq!(ValenceInvariants::solve_atom(&ast, atom), expected);
+        assert_eq!(ValenceInvariants::solve_atom(&ast, atom_id), expected);
     }
 }

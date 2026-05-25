@@ -14,7 +14,7 @@ use umol_ast::ast::{
 use umol_shared::element::Element;
 
 use crate::ops::valence::{
-    AtomTypeRegistry, Mismatch, NormalValenceTable, ValenceEntry, ValenceInvariants, ValenceTable
+    AtomTypeRegistry, Mismatch, ValenceEntry, ValenceInvariants, ValenceTable
 };
 
 #[derive(Debug, Clone)]
@@ -28,7 +28,6 @@ impl Default for ChemistryModel {
         Self {
             valence: ValenceModel::AtomTyping {
                 registry: AtomTypeRegistry::default_registry().clone(),
-                normal_valence: NormalValenceTable::default_table().clone(),
             },
             aromaticity: AromaticityModel::daylight(),
         }
@@ -39,11 +38,9 @@ impl Default for ChemistryModel {
 pub enum ValenceModel {
     AtomTyping {
         registry: AtomTypeRegistry,
-        normal_valence: NormalValenceTable,
     },
     Counts {
         table: ValenceTable,
-        normal_valence: NormalValenceTable,
         allow_implicit_hydrogens: bool,
     },
 }
@@ -494,7 +491,6 @@ mod tests {
     #[case::counts_methane(
         ValenceModel::Counts {
             table: ValenceTable::default_table().clone(),
-            normal_valence: NormalValenceTable::default_table().clone(),
             allow_implicit_hydrogens: true,
         },
         mol!(r#"{:atoms ["C #c0 #n0"] :bonds []}"#),
@@ -504,7 +500,6 @@ mod tests {
     #[case::atom_typing_methane(
         ValenceModel::AtomTyping {
             registry: registry!["C#c0#h4#n0#u0"],
-            normal_valence: NormalValenceTable::default_table().clone(),
         },
         mol!(r#"{:atoms ["C #c0"] :bonds []}"#),
         AtomId(0),
@@ -524,7 +519,6 @@ mod tests {
     #[case::atom_typing_no_match(
         ValenceModel::AtomTyping {
             registry: registry!["C#c0#h4#n0#u0"],
-            normal_valence: NormalValenceTable::default_table().clone(),
         },
         mol!(r#"{:atoms ["Cl #c0"] :bonds []}"#),
         AtomId(0),
@@ -547,7 +541,6 @@ mod tests {
     #[case::counts_methane(
         ValenceModel::Counts {
             table: ValenceTable::default_table().clone(),
-            normal_valence: NormalValenceTable::default_table().clone(),
             allow_implicit_hydrogens: true,
         },
         mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
@@ -556,7 +549,6 @@ mod tests {
     #[case::atom_typing_methane(
         ValenceModel::AtomTyping {
             registry: registry!["C#c0#h4#n0#u0"],
-            normal_valence: NormalValenceTable::default_table().clone(),
         },
         mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#),
         AtomId(0),
@@ -573,7 +565,6 @@ mod tests {
     #[case::counts_orbital_mismatch(
         ValenceModel::Counts {
             table: ValenceTable::default_table().clone(),
-            normal_valence: NormalValenceTable::default_table().clone(),
             allow_implicit_hydrogens: true,
         },
         mol_ground!(r#"{:atoms ["C #h99"] :bonds []}"#),
@@ -587,7 +578,6 @@ mod tests {
     #[case::atom_typing_no_match(
         ValenceModel::AtomTyping {
             registry: registry!["C#c0#h4#n0#u0"],
-            normal_valence: NormalValenceTable::default_table().clone(),
         },
         mol_ground!(r#"{:atoms ["Cl #h0"] :bonds []}"#),
         AtomId(0),
@@ -610,7 +600,6 @@ mod tests {
     #[case::counts_ethane(
         ValenceModel::Counts {
             table: ValenceTable::default_table().clone(),
-            normal_valence: NormalValenceTable::default_table().clone(),
             allow_implicit_hydrogens: true,
         },
         mol!(r#"{:atoms ["C #c0 #n0" "C #c0 #n0"] :bonds [[0 1 "1"]]}"#),
@@ -631,7 +620,6 @@ mod tests {
     #[case::counts_ethane(
         ValenceModel::Counts {
             table: ValenceTable::default_table().clone(),
-            normal_valence: NormalValenceTable::default_table().clone(),
             allow_implicit_hydrogens: true,
         },
         mol_ground!(r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#),

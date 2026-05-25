@@ -237,8 +237,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::fe_neutral(Element::Fe, 0, 3, Some(0))]
-    #[case::fe_two_plus(Element::Fe, 2, 3, Some(0))]
     #[case::na_plus(Element::Na, 1, 0, Some(0))]
     #[case::mg_two_plus(Element::Mg, 2, 0, Some(0))]
     fn test_valence_table_compute_implicit_hydrogens_no_preference(

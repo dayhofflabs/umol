@@ -8,13 +8,11 @@ use umol_ast::ast::{
 };
 use umol_shared::element::Element;
 
-use crate::ops::valence::normal_valence::NormalValenceTable;
 use crate::ops::valence::registry::AtomTypeRegistry;
 
 #[derive(Clone, Debug)]
-pub struct AtomTypingValenceResolver {
+pub struct AtomTypingValence {
     pub registry: AtomTypeRegistry,
-    pub normal_valence: NormalValenceTable,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -27,12 +25,9 @@ pub enum AtomTypingError {
     },
 }
 
-impl AtomTypingValenceResolver {
-    pub fn new(registry: AtomTypeRegistry, normal_valence: NormalValenceTable) -> Self {
-        Self {
-            registry,
-            normal_valence,
-        }
+impl AtomTypingValence {
+    pub fn new(registry: AtomTypeRegistry) -> Self {
+        Self { registry }
     }
 
     /// Iterates atoms, narrowing each non-ground atom against the registry.
@@ -110,25 +105,12 @@ impl AtomTypingValenceResolver {
         accepted: u8,
     ) -> AtomAst {
         let mut prepared = view.ast.clone();
-        let charge = prepared
-            .charge
-            .as_lit()
-            .and_then(|n| i8::try_from(n).ok())
-            .unwrap_or(0);
         // First arm: idempotency — aromatic-system membership from a prior sweep.
         // Second arm: declared Aromatic(_) from the parser, before aromaticity perception runs.
         // Neither arm requires aromaticity to run ahead of valence.
         let is_aromatic = view.is_in_aromatic_system()
             || AromaticValenceAst::aromatic(ValueAst::Undetermined)
                 .matches(&prepared.constraints.aromatic_valence());
-        if !matches!(prepared.implicit_hydrogens, ValueAst::Lit(_)) {
-            if let Some(h) =
-                self.normal_valence
-                    .implicit_hydrogens_for(element, charge, valence, is_aromatic)
-            {
-                prepared.implicit_hydrogens = ValueAst::Lit(h as i64);
-            }
-        }
         prepared
             .constraints
             .add(AtomConstraint::Valence(ValueAst::Lit(valence as i64)));
@@ -194,7 +176,7 @@ mod tests {
     fn test_atom_typing_valence_resolver_resolve_ground_methane_passthrough() {
         let reg = AtomTypeRegistry::default_registry().clone();
         let resolver =
-            AtomTypingValenceResolver::new(reg, NormalValenceTable::default_table().clone());
+            AtomTypingValence::new(reg);
         let mut ast = methane();
         resolver.resolve(&mut ast).unwrap();
     }
@@ -203,7 +185,7 @@ mod tests {
     fn test_atom_typing_valence_resolver_resolve_no_match() {
         let reg = registry!["C#c0#h4#n0#u0"];
         let resolver =
-            AtomTypingValenceResolver::new(reg, NormalValenceTable::default_table().clone());
+            AtomTypingValence::new(reg);
         let mut ast = methyl_chloride_partial();
         let err = resolver.resolve(&mut ast).unwrap_err();
         assert!(matches!(err, AtomTypingError::NoMatchingPattern { .. }));
@@ -213,7 +195,7 @@ mod tests {
     fn test_atom_typing_valence_resolver_empty_registry_passes_through_ground_atoms() {
         let reg = AtomTypeRegistry::new();
         let resolver =
-            AtomTypingValenceResolver::new(reg, NormalValenceTable::default_table().clone());
+            AtomTypingValence::new(reg);
         let mut ast = methane();
         resolver.resolve(&mut ast).unwrap();
     }

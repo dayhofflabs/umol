@@ -129,7 +129,7 @@ mod tests {
     use crate::ops::model::{
         AromaticityModel, ChemistryModel, ElementScope, RingLimits, ValenceModel,
     };
-    use crate::ops::valence::{AtomTypeRegistry, NormalValenceTable, ValenceTable};
+    use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
     fn ground_methane() -> MoleculeAst {
         mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#)
@@ -148,7 +148,6 @@ mod tests {
         ChemistryModel {
             valence: ValenceModel::Counts {
                 table: ValenceTable::default_table().clone(),
-                normal_valence: NormalValenceTable::default_table().clone(),
                 allow_implicit_hydrogens: true,
             },
             aromaticity: AromaticityModel::HueckelRule {
@@ -162,7 +161,6 @@ mod tests {
         ChemistryModel {
             valence: ValenceModel::AtomTyping {
                 registry: AtomTypeRegistry::default_registry().clone(),
-                normal_valence: NormalValenceTable::default_table().clone(),
             },
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),

@@ -1,0 +1,10 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 134
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing {
+    :output {:atoms ["Hg#c+#n5#v" "Hg#c+#n5#v"] :bonds [[0 1 :single]]}
+    :success true}
+  :counts {:error "resolution underdetermined" :success false}}

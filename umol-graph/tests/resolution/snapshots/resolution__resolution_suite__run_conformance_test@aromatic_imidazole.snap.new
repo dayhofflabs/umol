@@ -1,0 +1,18 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 134
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing {
+    :output {
+      :aromatic [{:atoms [0 1 2 3 4] :electrons [1 2 1 1 1] :type ""}]
+      :atoms ["C#h#v2#a" "N#h#v2#a2" "C#h#v2#a" "C#h#v2#a" "N#n#v2#a"]
+      :bonds [
+        [0 1 :aromatic]
+        [1 2 :aromatic]
+        [2 3 :aromatic]
+        [3 4 :aromatic]
+        [0 4 :aromatic]]}
+    :success true}
+  :counts {:error "resolution underdetermined" :success false}}

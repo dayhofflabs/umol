@@ -93,8 +93,10 @@ impl AtomAst {
         self
     }
 
-    /// Fill `Undetermined` value-bearing struct fields with zero defaults
-    /// (isotope→Natural, charge / implicit hydrogens / lone pairs → 0, spin →
+    /// Fill `Undetermined` value-bearing struct fields with defaults: isotope→
+    /// Natural; charge / implicit hydrogens / lone pairs → 0; spin → 0 unpaired
+    /// and, for the (possibly already-set) unpaired count, the maximal
+    /// multiplicity `unpaired + 1` (so a fully unset spin becomes the
     /// closed-shell singlet). Existing literal or expression values and all
     /// constraints are preserved. The result is ground iff `element` is
     /// already ground.
@@ -111,8 +113,12 @@ impl AtomAst {
         if self.lone_pairs.is_undetermined() {
             self.lone_pairs = ValueAst::Lit(0);
         }
-        if self.spin.is_undetermined() {
-            self.spin = SpinStateAst::from((0_u8, 1_u8));
+        if self.spin.unpaired.is_undetermined() {
+            self.spin.unpaired = ValueAst::Lit(0);
+        }
+        if self.spin.multiplicity.is_undetermined() {
+            let unpaired = self.spin.unpaired.as_lit().unwrap_or(0);
+            self.spin.multiplicity = ValueAst::Lit(unpaired + 1);
         }
         self
     }

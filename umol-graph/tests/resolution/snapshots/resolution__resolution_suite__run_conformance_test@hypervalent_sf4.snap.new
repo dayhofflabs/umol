@@ -1,0 +1,14 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+assertion_line: 134
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing {
+    :output {
+      :atoms ["S#n#v4" "F#n3#v" "F#n3#v" "F#n3#v" "F#n3#v"]
+      :bonds [[0 1 :single] [0 2 :single] [0 3 :single] [0 4 :single]]}
+    :success true}
+  :counts {
+    :error "resolution contradictory: no valid valence state for AtomId(0) (element S, charge Lit(0), valence Lit(4))"
+    :success false}}
