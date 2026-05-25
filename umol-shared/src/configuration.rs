@@ -20,6 +20,12 @@ pub struct Configuration {
     valence_occupation: Occupation,
 }
 
+// TODO: Restructure: Add Subshell struct instead of (n, l, capacity, is_closing) tuple
+// Use subsell struct in configuration, make occupation derivable instead of stored
+// Allow addition for occupations
+// Add more structured way of determining the closing subshell for element (probably constructor on
+// Subshell).
+// Remove temporary allocations
 impl Configuration {
     /// Create new configuration
     pub fn new(
@@ -32,6 +38,59 @@ impl Configuration {
             core_element,
             valence_occupation,
         }
+    }
+
+    /// Compute configurations from Aufbau principle, Madelung rule, and Hund's rules
+    pub fn aufbau(element: Element) -> Self {
+        let mut remaining = element.atomic_number();
+        let mut subshell_occupations = Vec::new();
+        let mut closing_subshell = (0, 0, 0, false);
+
+        for subshell @ (n, l, capacity, is_closing) in MADELUNG_ORDER {
+            let occupation = cmp::min(remaining, capacity);
+            subshell_occupations.push((n, l, capacity, occupation));
+            remaining -= occupation;
+            if is_closing && remaining != 0 {
+                closing_subshell = subshell;
+            }
+            if remaining == 0 {
+                break;
+            }
+        }
+
+        // Add unpaired electrons from last partially filled subshell
+        let mut unpaired = 0;
+        if let Some(&(_, _, capacity, occupation)) = subshell_occupations.last() {
+            unpaired = hund_rule_unpaired(occupation, capacity);
+        }
+
+        debug_assert!(
+            subshell_occupations
+                .iter()
+                .map(|counts| counts.3)
+                .sum::<u8>()
+                == element.atomic_number(),
+            "Total occupation must be equal to atomic number"
+        );
+        debug_assert!(
+            unpaired <= MAX_UNPAIRED_ELECTRONS,
+            "Unpaired electrons must be less than or equal to {}",
+            MAX_UNPAIRED_ELECTRONS
+        );
+        debug_assert!(
+            closing_subshell.0 <= MAX_N_QUANTUM_NUMBER,
+            "Closing subshell n must be less than or equal to {}",
+            MAX_N_QUANTUM_NUMBER
+        );
+        debug_assert!(
+            closing_subshell.1 <= MAX_L_QUANTUM_NUMBER,
+            "Closing subshell l must be less than or equal to {}",
+            MAX_L_QUANTUM_NUMBER
+        );
+
+        let valence_occupation = get_valence_occupation(subshell_occupations, closing_subshell);
+
+        Configuration::new(element, element.core(), valence_occupation)
     }
 
     /// Return element
@@ -116,7 +175,7 @@ impl GroundState {
         if let Some(gs) = GROUND_STATE_EXCEPTIONS.get(&element) {
             *gs
         } else {
-            GroundState(get_aufbau_configuration(element))
+            Self(Configuration::aufbau(element))
         }
     }
 }
@@ -147,6 +206,7 @@ pub const MAX_L_QUANTUM_NUMBER: u8 = 3;
 
 // Order of filling of atomic orbitals according to Madelung rule
 // (n, l, orbital_count, closing subshell)
+// TODO: Implement Subshell struct instead of tuple
 #[rustfmt::skip]
 static MADELUNG_ORDER: [(u8, u8, u8, bool); 19] = [
     (1, 0, 2, true), (2, 0, 2, false), (2, 1, 6, true), (3, 0, 2, false), (3, 1, 6, true),
@@ -179,6 +239,19 @@ static GROUND_STATE_EXCEPTIONS: LazyLock<HashMap<Element, GroundState>> = LazyLo
     }
 });
 
+/// Number of unpaired electrons when `electrons` occupy `orbitals` degenerate
+/// spatial orbitals at maximum multiplicity (Hund's first rule): each orbital
+/// is filled singly before any is doubly occupied. `electrons` must not exceed
+/// `2 * orbitals`.
+pub fn hund_rule_unpaired(electrons: u8, capacity: u8) -> u8 {
+    debug_assert!(electrons <= capacity);
+    if electrons <= capacity / 2 {
+        electrons
+    } else {
+        capacity - electrons
+    }
+}
+
 /// Get total occupation
 fn get_total_occupation(element: Element) -> Occupation {
     let mut remaining = element.atomic_number();
@@ -194,83 +267,6 @@ fn get_total_occupation(element: Element) -> Occupation {
         occupations[2],
         occupations[3],
     )
-}
-/// Compute configurations from Aufbau principle, Madelung rule, and Hund's rules
-fn get_aufbau_configuration(element: Element) -> Configuration {
-    if GROUND_STATE_EXCEPTIONS.contains_key(&element) {
-        // TODO: Add warning when logging is implemented
-        eprintln!("Element {} has exceptional configuration", element);
-    }
-    let mut remaining = element.atomic_number();
-    let mut subshell_occupations = Vec::new();
-    let mut closing_subshell = (0, 0, 0, false);
-
-    for subshell @ (n, l, capacity, is_closing) in MADELUNG_ORDER {
-        let occupation = cmp::min(remaining, capacity);
-        subshell_occupations.push((n, l, capacity, occupation));
-        remaining -= occupation;
-        if is_closing && remaining != 0 {
-            closing_subshell = subshell;
-        }
-        if remaining == 0 {
-            break;
-        }
-    }
-
-    // Add unpaired electrons from last partially filled subshell
-    let mut unpaired = 0;
-    if let Some(&(_, _, capacity, occupation)) = subshell_occupations.last() {
-        if occupation < capacity {
-            if occupation <= capacity / 2 {
-                // Less than half filled shell
-                unpaired = occupation;
-            } else {
-                // More than half filled shell
-                unpaired = capacity - occupation;
-            }
-        }
-    }
-    debug_assert!(
-        subshell_occupations
-            .iter()
-            .map(|counts| counts.3)
-            .sum::<u8>()
-            == element.atomic_number(),
-        "Total occupation must be equal to atomic number"
-    );
-    debug_assert!(
-        unpaired <= MAX_UNPAIRED_ELECTRONS,
-        "Unpaired electrons must be less than or equal to {}",
-        MAX_UNPAIRED_ELECTRONS
-    );
-    debug_assert!(
-        closing_subshell.0 <= MAX_N_QUANTUM_NUMBER,
-        "Closing subshell n must be less than or equal to {}",
-        MAX_N_QUANTUM_NUMBER
-    );
-    debug_assert!(
-        closing_subshell.1 <= MAX_L_QUANTUM_NUMBER,
-        "Closing subshell l must be less than or equal to {}",
-        MAX_L_QUANTUM_NUMBER
-    );
-
-    let valence_occupation = get_valence_occupation(subshell_occupations, closing_subshell);
-    let core_element = get_core_element(element);
-    Configuration::new(element, core_element, valence_occupation)
-}
-
-/// Compute core element
-fn get_core_element(element: Element) -> Option<Element> {
-    match element.atomic_number() {
-        1..=2 => None,
-        3..=10 => Some(Element::He),
-        11..=18 => Some(Element::Ne),
-        19..=36 => Some(Element::Ar),
-        37..=54 => Some(Element::Kr),
-        55..=86 => Some(Element::Xe),
-        87..=118 => Some(Element::Rn),
-        _ => unreachable!(),
-    }
 }
 
 /// Compute valence occupation
@@ -311,54 +307,54 @@ mod tests {
     use crate::{e, occ};
 
     #[rstest]
-    #[case(e!(H), Configuration::new(e!(H), None, occ!(s1)))]
-    #[case(e!(He), Configuration::new(e!(He), None, occ!(s2)))]
-    #[case(e!(Li), Configuration::new(e!(Li), Some(e!(He)), occ!(s1)))]
-    #[case(e!(Be), Configuration::new(e!(Be), Some(e!(He)), occ!(s2)))]
-    #[case(e!(B), Configuration::new(e!(B), Some(e!(He)), occ!(s2p1)))]
-    #[case(e!(C), Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)))]
-    #[case(e!(N), Configuration::new(e!(N), Some(e!(He)), occ!(s2p3)))]
-    #[case(e!(O), Configuration::new(e!(O), Some(e!(He)), occ!(s2p4)))]
-    #[case(e!(F), Configuration::new(e!(F), Some(e!(He)), occ!(s2p5)))]
-    #[case(e!(Ne), Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)))]
-    #[case(e!(Na), Configuration::new(e!(Na), Some(e!(Ne)), occ!(s1)))]
-    #[case(e!(Mg), Configuration::new(e!(Mg), Some(e!(Ne)), occ!(s2)))]
-    #[case(e!(Al), Configuration::new(e!(Al), Some(e!(Ne)), occ!(s2p1)))]
-    #[case(e!(Si), Configuration::new(e!(Si), Some(e!(Ne)), occ!(s2p2)))]
-    #[case(e!(P), Configuration::new(e!(P), Some(e!(Ne)), occ!(s2p3)))]
-    #[case(e!(S), Configuration::new(e!(S), Some(e!(Ne)), occ!(s2p4)))]
-    #[case(e!(Cl), Configuration::new(e!(Cl), Some(e!(Ne)), occ!(s2p5)))]
-    #[case(e!(Ar), Configuration::new(e!(Ar), Some(e!(Ne)), occ!(s2p6)))]
-    #[case(e!(K), Configuration::new(e!(K), Some(e!(Ar)), occ!(s1)))]
-    #[case(e!(Ca), Configuration::new(e!(Ca), Some(e!(Ar)), occ!(s2)))]
-    #[case(e!(Sc), Configuration::new(e!(Sc), Some(e!(Ar)), occ!(s2d1)))]
-    #[case(e!(Ti), Configuration::new(e!(Ti), Some(e!(Ar)), occ!(s2d2)))]
-    #[case(e!(V), Configuration::new(e!(V), Some(e!(Ar)), occ!(s2d3)))]
-    #[case(e!(Cr), Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s2d4)))] // Exception
-    #[case(e!(Mn), Configuration::new(e!(Mn), Some(e!(Ar)), occ!(s2d5)))]
-    #[case(e!(Fe), Configuration::new(e!(Fe), Some(e!(Ar)), occ!(s2d6)))]
-    #[case(e!(Co), Configuration::new(e!(Co), Some(e!(Ar)), occ!(s2d7)))]
-    #[case(e!(Ni), Configuration::new(e!(Ni), Some(e!(Ar)), occ!(s2d8)))]
-    #[case(e!(Cu), Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s2d9)))] // Exception
-    #[case(e!(Zn), Configuration::new(e!(Zn), Some(e!(Ar)), occ!(s2d10)))]
-    #[case(e!(Ce), Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2f2)))] // Exception
-    #[case(e!(Eu), Configuration::new(e!(Eu), Some(e!(Xe)), occ!(s2f7)))]
-    #[case(e!(Gd), Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2f8)))] // Exception
-    #[case(e!(Xe), Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)))]
-    #[case(e!(Pb), Configuration::new(e!(Pb), Some(e!(Xe)), occ!(s2p2d10f14)))]
-    fn test_get_aufbau_configuration(#[case] element: Element, #[case] expected: Configuration) {
-        assert_eq!(get_aufbau_configuration(element), expected);
+    #[case::h(e!(H), Configuration::new(e!(H), None, occ!(s1)))]
+    #[case::he(e!(He), Configuration::new(e!(He), None, occ!(s2)))]
+    #[case::li(e!(Li), Configuration::new(e!(Li), Some(e!(He)), occ!(s1)))]
+    #[case::be(e!(Be), Configuration::new(e!(Be), Some(e!(He)), occ!(s2)))]
+    #[case::b(e!(B), Configuration::new(e!(B), Some(e!(He)), occ!(s2p1)))]
+    #[case::c(e!(C), Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)))]
+    #[case::n(e!(N), Configuration::new(e!(N), Some(e!(He)), occ!(s2p3)))]
+    #[case::o(e!(O), Configuration::new(e!(O), Some(e!(He)), occ!(s2p4)))]
+    #[case::f(e!(F), Configuration::new(e!(F), Some(e!(He)), occ!(s2p5)))]
+    #[case::ne(e!(Ne), Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)))]
+    #[case::na(e!(Na), Configuration::new(e!(Na), Some(e!(Ne)), occ!(s1)))]
+    #[case::mg(e!(Mg), Configuration::new(e!(Mg), Some(e!(Ne)), occ!(s2)))]
+    #[case::al(e!(Al), Configuration::new(e!(Al), Some(e!(Ne)), occ!(s2p1)))]
+    #[case::si(e!(Si), Configuration::new(e!(Si), Some(e!(Ne)), occ!(s2p2)))]
+    #[case::p(e!(P), Configuration::new(e!(P), Some(e!(Ne)), occ!(s2p3)))]
+    #[case::s(e!(S), Configuration::new(e!(S), Some(e!(Ne)), occ!(s2p4)))]
+    #[case::cl(e!(Cl), Configuration::new(e!(Cl), Some(e!(Ne)), occ!(s2p5)))]
+    #[case::ar(e!(Ar), Configuration::new(e!(Ar), Some(e!(Ne)), occ!(s2p6)))]
+    #[case::k(e!(K), Configuration::new(e!(K), Some(e!(Ar)), occ!(s1)))]
+    #[case::ca(e!(Ca), Configuration::new(e!(Ca), Some(e!(Ar)), occ!(s2)))]
+    #[case::sc(e!(Sc), Configuration::new(e!(Sc), Some(e!(Ar)), occ!(s2d1)))]
+    #[case::ti(e!(Ti), Configuration::new(e!(Ti), Some(e!(Ar)), occ!(s2d2)))]
+    #[case::v(e!(V), Configuration::new(e!(V), Some(e!(Ar)), occ!(s2d3)))]
+    #[case::cr(e!(Cr), Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s2d4)))] // Exception
+    #[case::mn(e!(Mn), Configuration::new(e!(Mn), Some(e!(Ar)), occ!(s2d5)))]
+    #[case::fe(e!(Fe), Configuration::new(e!(Fe), Some(e!(Ar)), occ!(s2d6)))]
+    #[case::co(e!(Co), Configuration::new(e!(Co), Some(e!(Ar)), occ!(s2d7)))]
+    #[case::ni(e!(Ni), Configuration::new(e!(Ni), Some(e!(Ar)), occ!(s2d8)))]
+    #[case::cu(e!(Cu), Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s2d9)))] // Exception
+    #[case::zn(e!(Zn), Configuration::new(e!(Zn), Some(e!(Ar)), occ!(s2d10)))]
+    #[case::ce(e!(Ce), Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2f2)))] // Exception
+    #[case::eu(e!(Eu), Configuration::new(e!(Eu), Some(e!(Xe)), occ!(s2f7)))]
+    #[case::gd(e!(Gd), Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2f8)))] // Exception
+    #[case::xe(e!(Xe), Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)))]
+    #[case::pb(e!(Pb), Configuration::new(e!(Pb), Some(e!(Xe)), occ!(s2p2d10f14)))]
+    fn test_aufbau_configuration(#[case] element: Element, #[case] expected: Configuration) {
+        assert_eq!(Configuration::aufbau(element), expected);
     }
 
     #[rstest]
-    #[case(Configuration::new(e!(H), None, occ!(s1)), None, occ!(s1))]
-    #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), Some(occ!(s2)), occ!(s1))]
-    #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), Some(occ!(s2)), occ!(s2))]
-    #[case(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)), Some(occ!(s2)), occ!(s2p2))]
-    #[case(Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)), Some(occ!(s2)), occ!(s2p6))]
-    #[case(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)), Some(occ!(s6p12)), occ!(s1d5))]
-    #[case(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)), Some(occ!(s8p18d10)), occ!(s2p6d10))]
-    #[case(Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)), Some(occ!(s10p24d20)), occ!(s2d1f1))]
+    #[case::h(Configuration::new(e!(H), None, occ!(s1)), None, occ!(s1))]
+    #[case::li(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), Some(occ!(s2)), occ!(s1))]
+    #[case::be(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), Some(occ!(s2)), occ!(s2))]
+    #[case::c(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2)), Some(occ!(s2)), occ!(s2p2))]
+    #[case::ne(Configuration::new(e!(Ne), Some(e!(He)), occ!(s2p6)), Some(occ!(s2)), occ!(s2p6))]
+    #[case::cr(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5)), Some(occ!(s6p12)), occ!(s1d5))]
+    #[case::xe(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10)), Some(occ!(s8p18d10)), occ!(s2p6d10))]
+    #[case::ce(Configuration::new(e!(Ce), Some(e!(Xe)), occ!(s2d1f1)), Some(occ!(s10p24d20)), occ!(s2d1f1))]
     fn test_configuration_properties(
         #[case] config: Configuration,
         #[case] expected_core_occupation: Option<Occupation>,
@@ -369,35 +365,35 @@ mod tests {
     }
 
     #[rstest]
-    #[case(Configuration::new(e!(H), None, occ!(s1)), "s1")]
-    #[case(Configuration::new(e!(He), None, occ!(s2)), "s2")]
-    #[case(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), "[He] s1")]
-    #[case(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), "[He] s2")]
-    #[case(Configuration::new(e!(B), Some(e!(He)), occ!(s2p1)), "[He] s2p1")]
+    #[case::h(Configuration::new(e!(H), None, occ!(s1)), "s1")]
+    #[case::he(Configuration::new(e!(He), None, occ!(s2)), "s2")]
+    #[case::li(Configuration::new(e!(Li), Some(e!(He)), occ!(s1)), "[He] s1")]
+    #[case::be(Configuration::new(e!(Be), Some(e!(He)), occ!(s2)), "[He] s2")]
+    #[case::b(Configuration::new(e!(B), Some(e!(He)), occ!(s2p1)), "[He] s2p1")]
     fn test_configuration_display(#[case] config: Configuration, #[case] expected: &str) {
         assert_eq!(format!("{}", config), expected);
     }
     #[rstest]
-    #[case(e!(H), GroundState(Configuration::new(e!(H), None, occ!(s1))))]
-    #[case(e!(C), GroundState(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2))))]
-    #[case(e!(Cr), GroundState(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5))))] // Exception
-    #[case(e!(Mn), GroundState(Configuration::new(e!(Mn), Some(e!(Ar)), occ!(s2d5))))]
-    #[case(e!(Cu), GroundState(Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10))))] // Exception
-    #[case(e!(La), GroundState(Configuration::new(e!(La), Some(e!(Xe)), occ!(s2d1))))] // Exception
-    #[case(e!(Eu), GroundState(Configuration::new(e!(Eu), Some(e!(Xe)), occ!(s2f7))))]
-    #[case(e!(Gd), GroundState(Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2d1f7))))] // Exception
-    #[case(e!(Xe), GroundState(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10))))]
-    #[case(e!(Pb), GroundState(Configuration::new(e!(Pb), Some(e!(Xe)), occ!(s2p2d10f14))))]
+    #[case::h(e!(H), GroundState(Configuration::new(e!(H), None, occ!(s1))))]
+    #[case::c(e!(C), GroundState(Configuration::new(e!(C), Some(e!(He)), occ!(s2p2))))]
+    #[case::cr(e!(Cr), GroundState(Configuration::new(e!(Cr), Some(e!(Ar)), occ!(s1d5))))] // Exception
+    #[case::mn(e!(Mn), GroundState(Configuration::new(e!(Mn), Some(e!(Ar)), occ!(s2d5))))]
+    #[case::cu(e!(Cu), GroundState(Configuration::new(e!(Cu), Some(e!(Ar)), occ!(s1d10))))] // Exception
+    #[case::la(e!(La), GroundState(Configuration::new(e!(La), Some(e!(Xe)), occ!(s2d1))))] // Exception
+    #[case::eu(e!(Eu), GroundState(Configuration::new(e!(Eu), Some(e!(Xe)), occ!(s2f7))))]
+    #[case::gd(e!(Gd), GroundState(Configuration::new(e!(Gd), Some(e!(Xe)), occ!(s2d1f7))))] // Exception
+    #[case::xe(e!(Xe), GroundState(Configuration::new(e!(Xe), Some(e!(Kr)), occ!(s2p6d10))))]
+    #[case::pb(e!(Pb), GroundState(Configuration::new(e!(Pb), Some(e!(Xe)), occ!(s2p2d10f14))))]
     fn test_ground_state_new(#[case] element: Element, #[case] expected: GroundState) {
         assert_eq!(GroundState::new(element), expected);
     }
 
     #[rstest]
-    #[case(GroundState::new(Element::H), "s1")]
-    #[case(GroundState::new(Element::He), "s2")]
-    #[case(GroundState::new(Element::Li), "[He] s1")]
-    #[case(GroundState::new(Element::Be), "[He] s2")]
-    #[case(GroundState::new(Element::B), "[He] s2p1")]
+    #[case::h(GroundState::new(Element::H), "s1")]
+    #[case::he(GroundState::new(Element::He), "s2")]
+    #[case::li(GroundState::new(Element::Li), "[He] s1")]
+    #[case::be(GroundState::new(Element::Be), "[He] s2")]
+    #[case::b(GroundState::new(Element::B), "[He] s2p1")]
     fn test_ground_state_display(#[case] gs: GroundState, #[case] expected: &str) {
         assert_eq!(format!("{}", gs), expected);
     }

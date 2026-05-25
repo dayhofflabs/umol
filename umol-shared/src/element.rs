@@ -729,6 +729,20 @@ impl Element {
         ELEMENT_DATA[index].11
     }
 
+    // Get core element
+    pub const fn core(&self) -> Option<Self> {
+        match self.atomic_number() {
+            1..=2 => None,
+            3..=10 => Some(Element::He),
+            11..=18 => Some(Element::Ne),
+            19..=36 => Some(Element::Ar),
+            37..=54 => Some(Element::Kr),
+            55..=86 => Some(Element::Xe),
+            87..=118 => Some(Element::Rn),
+            _ => unreachable!(),
+        }
+    }
+
     // Get next element in the periodic table
     pub const fn next(&self) -> Option<Self> {
         let atomic_number = self.atomic_number();
@@ -1144,19 +1158,34 @@ mod tests {
         assert_eq!(Element::from_symbol("invalid"), None);
     }
 
-    #[test]
-    fn test_element_from_atomic_number() {
-        assert_eq!(Element::from_atomic_number(1), Some(Element::H));
-        assert_eq!(Element::from_atomic_number(2), Some(Element::He));
-        assert_eq!(Element::from_atomic_number(6), Some(Element::C));
-        assert_eq!(Element::from_atomic_number(119), None);
+    #[rstest]
+    #[case::h(1, Some(Element::H))]
+    #[case::he(2, Some(Element::He))]
+    #[case::c(6, Some(Element::C))]
+    #[case::zero(0, None)]
+    #[case::out_of_range(119, None)]
+    fn test_element_from_atomic_number(#[case] number: u8, #[case] element: Option<Element>) {
+        assert_eq!(Element::from_atomic_number(number), element);
     }
 
-    #[test]
-    fn test_element_from_period_group() {
-        assert_eq!(Element::from_period_group(1, 1), Some(Element::H));
-        assert_eq!(Element::from_period_group(2, 28), Some(Element::C));
-        assert_eq!(Element::from_period_group(1, 3), None);
+    #[rstest]
+    #[case::h(1, 1, Some(Element::H))]
+    #[case::he(1, 32, Some(Element::He))]
+    #[case::fe(4, 22, Some(Element::Fe))]
+    #[case::pt(6, 24, Some(Element::Pt))]
+    #[case::og(7, 32, Some(Element::Og))]
+    #[case::zero_period(0, 1, None)]
+    #[case::period_out_of_range(8, 1, None)]
+    #[case::zero_group(1, 0, None)]
+    #[case::group_out_of_range(1, 33, None)]
+    #[case::group_gap_p2_g4(2, 4, None)]
+    #[case::group_gap_p3_g4(3, 4, None)]
+    fn test_element_from_period_group(
+        #[case] period: u8,
+        #[case] group: u8,
+        #[case] element: Option<Element>,
+    ) {
+        assert_eq!(Element::from_period_group(period, group), element);
     }
 
     #[rstest]
@@ -1230,12 +1259,11 @@ mod tests {
         assert_eq!(element.max_implicit_hydrogens(), max_implicit_hydrogens);
     }
 
-    #[test]
-    fn test_element_display() {
-        assert_eq!(Element::H.to_string(), "H");
-        assert_eq!(Element::He.to_string(), "He");
-        assert_eq!(Element::Li.to_string(), "Li");
-        assert_eq!(Element::Be.to_string(), "Be");
+    #[rstest]
+    #[case::h(Element::H, "H")]
+    #[case::he(Element::He, "He")]
+    fn test_element_display(#[case] element: Element, #[case] string: &str) {
+        assert_eq!(element.to_string(), string);
     }
 
     #[test]
@@ -1265,79 +1293,99 @@ mod tests {
 
     #[test]
     fn test_element_ordering() {
-        // Test basic ordering
         assert!(Element::H < Element::He);
         assert!(Element::He < Element::Li);
         assert!(Element::C < Element::N);
         assert!(Element::N < Element::O);
 
-        // Test equality
         assert!(Element::H == Element::H);
         assert!(Element::C == Element::C);
 
-        // Test partial ordering
         assert!(Element::H <= Element::H);
         assert!(Element::H <= Element::He);
         assert!(Element::He >= Element::H);
     }
 
-    #[test]
-    fn test_element_next_previous() {
-        assert_eq!(Element::H.previous(), None);
-        assert_eq!(Element::H.next(), Some(Element::He));
-        assert_eq!(Element::He.previous(), Some(Element::H));
-        assert_eq!(Element::Og.previous(), Some(Element::Ts));
-        assert_eq!(Element::Og.next(), None);
+    #[rstest]
+    #[case::h(Element::H, None)]
+    #[case::he(Element::He, None)]
+    #[case::li(Element::Li, Some(Element::He))]
+    #[case::f(Element::F, Some(Element::He))]
+    #[case::ne(Element::Ne, Some(Element::He))]
+    #[case::na(Element::Na, Some(Element::Ne))]
+    #[case::cl(Element::Cl, Some(Element::Ne))]
+    #[case::ar(Element::Ar, Some(Element::Ne))]
+    #[case::k(Element::K, Some(Element::Ar))]
+    #[case::br(Element::Br, Some(Element::Ar))]
+    #[case::kr(Element::Kr, Some(Element::Ar))]
+    #[case::rb(Element::Rb, Some(Element::Kr))]
+    #[case::i(Element::I, Some(Element::Kr))]
+    #[case::xe(Element::Xe, Some(Element::Kr))]
+    #[case::cs(Element::Cs, Some(Element::Xe))]
+    #[case::at(Element::At, Some(Element::Xe))]
+    #[case::rn(Element::Rn, Some(Element::Xe))]
+    #[case::fr(Element::Fr, Some(Element::Rn))]
+    #[case::ts(Element::Ts, Some(Element::Rn))]
+    #[case::og(Element::Og, Some(Element::Rn))]
+    fn test_element_core(#[case] element: Element, #[case] core: Option<Element>) {
+        assert_eq!(element.core(), core);
     }
 
-    #[test]
-    fn test_element_shift() {
-        assert_eq!(Element::H.shift(1), Some(Element::He));
-        assert_eq!(Element::H.shift(-1), None);
-        assert_eq!(Element::H.shift(2), Some(Element::Li));
-        assert_eq!(Element::H.shift(117), Some(Element::Og));
-        assert_eq!(Element::H.shift(118), None);
-        assert_eq!(Element::He.shift(-1), Some(Element::H));
-        assert_eq!(Element::Og.shift(1), None);
-        assert_eq!(Element::Og.shift(-1), Some(Element::Ts));
-        assert_eq!(Element::Ts.shift(1), Some(Element::Og));
-        assert_eq!(Element::Og.shift(-117), Some(Element::H));
-        assert_eq!(Element::Og.shift(-118), None);
+    #[rstest]
+    #[case::h(Element::H, None, Some(Element::He))]
+    #[case::he(Element::He, Some(Element::H), Some(Element::Li))]
+    #[case::og(Element::Og, Some(Element::Ts), None)]
+    fn test_element_next_previous(
+        #[case] element: Element,
+        #[case] previous: Option<Element>,
+        #[case] next: Option<Element>,
+    ) {
+        assert_eq!(element.previous(), previous);
+        assert_eq!(element.next(), next);
     }
 
-    #[test]
-    fn test_from_period_group() {
-        assert_eq!(Element::from_period_group(1, 1), Some(Element::H));
-        assert_eq!(Element::from_period_group(1, 32), Some(Element::He));
-        assert_eq!(Element::from_period_group(4, 22), Some(Element::Fe));
-        assert_eq!(Element::from_period_group(6, 24), Some(Element::Pt));
-        assert_eq!(Element::from_period_group(7, 32), Some(Element::Og));
-
-        assert_eq!(Element::from_period_group(0, 1), None);
-        assert_eq!(Element::from_period_group(8, 1), None);
-        assert_eq!(Element::from_period_group(1, 0), None);
-        assert_eq!(Element::from_period_group(1, 33), None);
-
-        assert_eq!(Element::from_period_group(2, 4), None);
-        assert_eq!(Element::from_period_group(3, 4), None);
+    #[rstest]
+    #[case::h_p1(Element::H, 1, Some(Element::He))]
+    #[case::h_p2(Element::H, 2, Some(Element::Li))]
+    #[case::h_p117(Element::H, 117, Some(Element::Og))]
+    #[case::h_p118(Element::H, 118, None)]
+    #[case::h_m1(Element::H, -1, None)]
+    #[case::he_m1(Element::He, -1, Some(Element::H))]
+    #[case::og_p1(Element::Og, 1, None)]
+    #[case::og_m1(Element::Og, -1, Some(Element::Ts))]
+    #[case::og_m117(Element::Og, -117, Some(Element::H))]
+    #[case::og_m118(Element::Og, -118, None)]
+    fn test_element_shift(
+        #[case] element: Element,
+        #[case] shift: i8,
+        #[case] shifted: Option<Element>,
+    ) {
+        assert_eq!(element.shift(shift), shifted);
     }
 
-    #[test]
-    fn test_element_next_previous_period() {
-        assert_eq!(Element::H.previous_period(), None);
-        assert_eq!(Element::H.next_period(), Some(Element::Li));
-        assert_eq!(Element::C.previous_period(), None);
-        assert_eq!(Element::C.next_period(), Some(Element::Si));
-        assert_eq!(Element::U.previous_period(), Some(Element::Nd));
-        assert_eq!(Element::U.next_period(), None);
+    #[rstest]
+    #[case::h(Element::H, None, Some(Element::Li))]
+    #[case::c(Element::C, None, Some(Element::Si))]
+    #[case::u(Element::U, Some(Element::Nd), None)]
+    fn test_element_previous_next_period(
+        #[case] element: Element,
+        #[case] previous: Option<Element>,
+        #[case] next: Option<Element>,
+    ) {
+        assert_eq!(element.next_period(), next);
+        assert_eq!(element.previous_period(), previous);
     }
 
-    #[test]
-    fn test_element_next_previous_group() {
-        assert_eq!(Element::Li.previous_group(), None);
-        assert_eq!(Element::Li.next_group(), Some(Element::Be));
-        assert_eq!(Element::Ne.previous_group(), Some(Element::F));
-        assert_eq!(Element::Ne.next_group(), None);
+    #[rstest]
+    #[case::li(Element::Li, None, Some(Element::Be))]
+    #[case::be(Element::Ne, Some(Element::F), None)]
+    fn test_element_previous_next_group(
+        #[case] element: Element,
+        #[case] previous: Option<Element>,
+        #[case] next: Option<Element>,
+    ) {
+        assert_eq!(element.previous_group(), previous);
+        assert_eq!(element.next_group(), next);
     }
 
     #[test]
