@@ -148,7 +148,6 @@ mod tests {
         ChemistryModel {
             valence: ValenceModel::Counts {
                 table: ValenceTable::default_table().clone(),
-                allow_implicit_hydrogens: true,
             },
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),

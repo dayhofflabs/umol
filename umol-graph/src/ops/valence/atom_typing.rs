@@ -63,7 +63,7 @@ impl AtomTypingValence {
             };
 
             let prepared = self.prepare_atom(&view, element, valence, donated, accepted);
-            let charge_key = prepared.charge.as_lit().and_then(|n| i8::try_from(n).ok());
+            let charge_key = prepared.charge.as_lit().map(|n| n as i8);
             let compatibles: Vec<&AtomAst> = self
                 .registry
                 .lookup(element, charge_key)

@@ -9,7 +9,7 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_snapshot, Settings};
 use rstest::*;
 use umol_ast::ast::{FromAst, IntoAst, MoleculeAst};
-use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides, NumericDefault};
+use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel};
 use umol_graph::ops::resolver::Resolver;
@@ -79,14 +79,10 @@ fn atom_typing_chemistry() -> ChemistryModel {
     ChemistryModel::default()
 }
 
-fn counts_chemistry(defaults: &MoleculeDefaults) -> ChemistryModel {
+fn counts_chemistry() -> ChemistryModel {
     ChemistryModel {
         valence: ValenceModel::Counts {
             table: ValenceTable::default_table().clone(),
-            allow_implicit_hydrogens: !matches!(
-                defaults.atom.implicit_hydrogens,
-                NumericDefault::Zero,
-            ),
         },
         aromaticity: AromaticityModel::daylight(),
     }
@@ -112,7 +108,7 @@ fn run_conformance_test(file_path: &Path) {
     let defaults = MoleculeDefaults::default().with_overrides(test_input.config_overrides);
 
     let atom_typing = resolve_test(&test_input.input, &atom_typing_chemistry(), &defaults);
-    let counts = resolve_test(&test_input.input, &counts_chemistry(&defaults), &defaults);
+    let counts = resolve_test(&test_input.input, &counts_chemistry(), &defaults);
 
     let results = TestResults {
         atom_typing,

@@ -35,9 +35,7 @@ impl ValenceResolver {
             } => Self::AtomTyping(AtomTypingValence::new(
                 registry.clone(),
             )),
-            ValenceModel::Counts { table, .. } => {
-                Self::Counts(CountsValence::new(table.clone()))
-            }
+            ValenceModel::Counts { table } => Self::Counts(CountsValence::new(table.clone())),
         }
     }
 

@@ -4,8 +4,6 @@
 # covalence_set: allowed covalences — localized valence + implicit H + aromatic
 #   increment — for the neutral atom; ions read the isoelectronic entry via an
 #   element shift.
-# aromatic_valence_set: allowed aromatic valences when the atom is aromatic.
-
 [H]
 covalence_set = [1]
 
@@ -20,19 +18,15 @@ covalence_set = [2]
 
 [B]
 covalence_set = [3]
-aromatic_valence_set = [0]
 
 [C]
 covalence_set = [4]
-aromatic_valence_set = [1]
 
 [N]
 covalence_set = [3]
-aromatic_valence_set = [1, 2]
 
 [O]
 covalence_set = [2]
-aromatic_valence_set = [2]
 
 [F]
 covalence_set = [1]
@@ -51,15 +45,12 @@ covalence_set = [3]
 
 [Si]
 covalence_set = [4]
-aromatic_valence_set = [1]
 
 [P]
 covalence_set = [3, 5]
-aromatic_valence_set = [1, 2]
 
 [S]
 covalence_set = [2, 4, 6]
-aromatic_valence_set = [2]
 
 [Cl]
 covalence_set = [1, 3, 5, 7]
@@ -81,11 +72,9 @@ covalence_set = [4]
 
 [As]
 covalence_set = [3, 5]
-aromatic_valence_set = [1, 2]
 
 [Se]
 covalence_set = [2, 4, 6]
-aromatic_valence_set = [2]
 
 [Br]
 covalence_set = [1]
