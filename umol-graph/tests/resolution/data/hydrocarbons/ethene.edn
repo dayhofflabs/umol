@@ -1,4 +1,2 @@
-{
-  :config-overrides {
-    :atom {:aromatic-valence :not-aromatic :charge :zero :implicit-hydrogens :required}}
-  :input {:atoms ["C#h*" "C#h*"] :bonds [[0 1 :double]]}}
+{:config-overrides {:atom {:aromatic-valence :not-aromatic :charge :zero}}
+ :input {:atoms ["C" "C"] :bonds [[0 1 :double]]}}

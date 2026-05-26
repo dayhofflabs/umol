@@ -3,7 +3,7 @@
 use thiserror::Error;
 
 use super::constraint::joint_domain::JointVar;
-use super::idx::AtomId;
+use super::ids::AtomId;
 
 /// Error raised by `MoleculeAst::rewrite` when the L / R / assignment
 /// triple is not self-consistent.

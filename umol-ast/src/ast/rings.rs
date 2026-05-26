@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use umol_graph_core::{CycleEnumerationAlgorithm, Graph, NodeId};
 
-use super::idx::{AtomId, BondId};
+use super::ids::{AtomId, BondId};
 
 /// Index of a ring within a `RingSet`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

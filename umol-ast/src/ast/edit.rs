@@ -16,7 +16,7 @@ use super::constraint::{
     DativeBondConstraint, MulticenterBondConstraint,
 };
 use super::dative::DativeBondAst;
-use super::idx::{
+use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::multicenter::MulticenterBondAst;

@@ -3,12 +3,13 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, Lattice,
-    MoleculeAst, MulticenterValenceAst, ValueAst,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, Lattice, MoleculeAst,
+    MulticenterValenceAst, ValueAst,
 };
 use umol_shared::element::Element;
 
-use crate::ops::valence::registry::AtomTypeRegistry;
+use super::compare::compare_valence_preference;
+use super::registry::AtomTypeRegistry;
 
 #[derive(Clone, Debug)]
 pub struct AtomTypingValence {
@@ -31,14 +32,13 @@ impl AtomTypingValence {
     }
 
     /// Iterates atoms, narrowing each non-ground atom against the registry.
-    /// Returns `Err` on the first atom that has zero matching patterns;
-    /// returns `Ok` if every atom either narrowed or stayed underdetermined
-    /// without contradiction.
+    /// Returns `Err` on the first atom that has zero matching patterns.
+    /// Multiple matches are resolved via [`compare_valence_preference`].
     pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), AtomTypingError> {
         for i in 0..ast.atoms().count() as u32 {
             let idx = AtomId(i);
             let atom = ast.atom(idx);
-            if atom.ast.is_ground() {
+            if atom.is_ground() {
                 continue;
             }
 
@@ -48,10 +48,14 @@ impl AtomTypingValence {
 
             // Topological derived predicates should return Lit.
             let valence = atom.valence().as_lit_expect("valence should be Lit");
-            let donated = atom.donated_pairs().as_lit_expect("donated pairs should be Lit");
-            let accepted = atom.accepted_pairs().as_lit_expect("accepted pairs should be Lit");
+            let donated = atom
+                .donated_pairs()
+                .as_lit_expect("donated pairs should be Lit");
+            let accepted = atom
+                .accepted_pairs()
+                .as_lit_expect("accepted pairs should be Lit");
 
-            let match_input = self.build_match_input(&atom, valence, donated, accepted);
+            let match_input = add_constraints(&atom, valence, donated, accepted);
             let charge_key = match_input.charge.as_lit().map(|n| n as i8);
             let candidates: Vec<&AtomAst> = self
                 .registry
@@ -73,67 +77,51 @@ impl AtomTypingValence {
                     let atom_mut = ast.atom_mut(idx).ast;
                     atom_mut.narrow_from(cand);
                 }
-                _ => {}
+                _ => {
+                    let best = candidates
+                        .into_iter()
+                        .max_by(|a, b| compare_valence_preference(a, b))
+                        .unwrap();
+                    let atom_mut = ast.atom_mut(idx).ast;
+                    atom_mut.narrow_from(best);
+                }
             }
         }
         Ok(())
     }
+}
 
-    /// Project an atom into the lattice shape registry patterns are written
-    /// against: pre-narrow `implicit_hydrogens` via the normal-valence table,
-    /// and synthesize ground constraints for the topology-derived counts
-    /// (localized valence, dative donated/accepted pairs) plus the
-    /// membership-derived aromatic valence. `pattern.meet(&match_input)` then filters by those
-    /// constraints directly via `AtomConstraints::meet`.
-    fn build_match_input(
-        &self,
-        atom: &AtomView<'_>,
-        valence: i64,
-        donated: i64,
-        accepted: i64,
-    ) -> AtomAst {
-        let mut match_input = atom.ast.clone();
-        // First arm: idempotency — aromatic-system membership from a prior sweep.
-        // Second arm: declared Aromatic(_) from the parser, before aromaticity perception runs.
-        let is_aromatic = atom.is_in_aromatic_system()
-            || AromaticValenceAst::aromatic(ValueAst::Undetermined)
-                .matches(&match_input.constraints.aromatic_valence());
+/// Add constraints to atom AST for registry pattern matching.
+fn add_constraints(atom: &AtomView<'_>, valence: i64, donated: i64, accepted: i64) -> AtomAst {
+    let mut updated = atom.ast.clone();
 
-        let aromatic_constraint = if atom.is_in_aromatic_system() {
-            atom.aromatic_valence().as_lit().map(|pi| {
-                AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(pi)))
-            })
-        } else if !is_aromatic {
-            Some(AtomConstraint::AromaticValence(
-                AromaticValenceAst::NotAromatic,
-            ))
-        } else {
-            None
-        };
+    updated.constraints.add(AtomConstraint::valence(valence));
+    updated
+        .constraints
+        .add(AtomConstraint::donated_pairs(donated));
+    updated
+        .constraints
+        .add(AtomConstraint::accepted_pairs(accepted));
 
-        let multicenter_constraint = atom.multicenter_valence().as_lit().map(|mc| {
-            let mc_constraint = if mc == 0 {
-                MulticenterValenceAst::NotMulticenter
-            } else {
-                MulticenterValenceAst::Multicenter(ValueAst::Lit(mc))
-            };
-            AtomConstraint::MulticenterValence(mc_constraint)
-        });
+    if atom.is_in_aromatic_system() {
+        let aromatic = atom.aromatic_valence().as_lit_or(0);
+        updated.constraints.add(AtomConstraint::aromatic_valence(
+            AromaticValenceAst::aromatic(aromatic),
+        ));
+    } else if atom.neighbors().any(|n| n.bond().constraints().aromatic()) {
+        updated.constraints.add(AtomConstraint::aromatic_valence(
+            AromaticValenceAst::aromatic(ValueAst::Undetermined),
+        ));
+    };
 
-        for constraint in [
-            Some(AtomConstraint::Valence(ValueAst::Lit(valence))),
-            Some(AtomConstraint::DonatedPairs(ValueAst::Lit(donated))),
-            Some(AtomConstraint::AcceptedPairs(ValueAst::Lit(accepted))),
-            aromatic_constraint,
-            multicenter_constraint,
-        ]
-        .into_iter()
-        .flatten()
-        {
-            match_input.constraints.add(constraint);
-        }
-        match_input
-    }
+    if atom.is_in_multicenter_bond() {
+        let multicenter = atom.multicenter_valence().as_lit_or(0);
+        updated.constraints.add(AtomConstraint::multicenter_valence(
+            MulticenterValenceAst::multicenter(multicenter),
+        ));
+    };
+
+    updated
 }
 
 #[cfg(test)]
@@ -156,8 +144,7 @@ mod tests {
     #[rstest]
     fn test_atom_typing_valence_resolver_resolve_ground_methane_passthrough() {
         let reg = AtomTypeRegistry::default_registry().clone();
-        let resolver =
-            AtomTypingValence::new(reg);
+        let resolver = AtomTypingValence::new(reg);
         let mut ast = methane();
         resolver.resolve(&mut ast).unwrap();
     }
@@ -165,8 +152,7 @@ mod tests {
     #[rstest]
     fn test_atom_typing_valence_resolver_resolve_no_match() {
         let reg = registry!["C#c0#h4#n0#u0"];
-        let resolver =
-            AtomTypingValence::new(reg);
+        let resolver = AtomTypingValence::new(reg);
         let mut ast = methyl_chloride_partial();
         let err = resolver.resolve(&mut ast).unwrap_err();
         assert!(matches!(err, AtomTypingError::NoMatch { .. }));
@@ -175,8 +161,7 @@ mod tests {
     #[rstest]
     fn test_atom_typing_valence_resolver_empty_registry_passes_through_ground_atoms() {
         let reg = AtomTypeRegistry::new();
-        let resolver =
-            AtomTypingValence::new(reg);
+        let resolver = AtomTypingValence::new(reg);
         let mut ast = methane();
         resolver.resolve(&mut ast).unwrap();
     }

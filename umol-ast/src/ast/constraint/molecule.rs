@@ -6,7 +6,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::super::edit::{ConstraintUpdate, DroppedConstraint, RewrittenConstraint};
-use super::super::idx::{
+use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::molecule::MoleculeAst;
@@ -502,7 +502,7 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::idx::{
+    use crate::ast::ids::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
     use crate::ast::molecule::MoleculeAst;

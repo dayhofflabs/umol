@@ -8,7 +8,7 @@ use umol_graph_core::{
 };
 
 use super::super::automorphism::AtomAutomorphism;
-use super::super::idx::{AtomId, BondId};
+use super::super::ids::{AtomId, BondId};
 use super::super::matching::BondMatching;
 
 /// AtomId/BondId-typed adapter over the underlying `Graph`. Holds the

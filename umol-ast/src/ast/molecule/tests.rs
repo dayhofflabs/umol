@@ -18,7 +18,7 @@ use super::super::constraint::{
     SubPatternAnchor,
 };
 use super::super::dative::DativeBondAst;
-use super::super::idx::{
+use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::multicenter::MulticenterBondAst;

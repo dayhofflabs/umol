@@ -2,7 +2,7 @@
 
 use umol_graph_core::{AutoGroupOrder, Automorphism, NodeId};
 
-use super::idx::AtomId;
+use super::ids::AtomId;
 
 /// Atom-level wrapper over `umol_graph_core::Automorphism`. Indexes the
 /// permutation in terms of `AtomId` rather than raw `NodeId`.
@@ -49,7 +49,7 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::idx::AtomId;
+    use crate::ast::ids::AtomId;
     use crate::ast::molecule::MoleculeAst;
 
     fn ring(n: usize) -> MoleculeAst {

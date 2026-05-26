@@ -14,7 +14,7 @@ use umol_edn::{FormatConfig, FromEdn, ToEdn};
 use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel};
 use umol_graph::ops::resolver::Resolver;
 use umol_graph::ops::solution::Solution;
-use umol_graph::ops::valence::{ValenceTable};
+use umol_graph::ops::valence::ValenceTable;
 
 #[derive(FromEdn)]
 struct TestInput {

@@ -20,7 +20,7 @@
 //!   `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraint` to a role slot,
 //!   quantified over the matching participants.
 
-use super::super::idx::{
+use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::remap::IdRemapping;

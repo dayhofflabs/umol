@@ -1,6 +1,6 @@
 //! Per-element valence data for the Counts valence resolver.
 //!
-//! `ValenceTable` carries the allowed covalences per element.
+//! `ValenceTable` carries target covalences and aromatic valences per element.
 
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -14,11 +14,13 @@ use crate::ops::model::ConfigError;
 
 #[derive(Debug, Clone)]
 pub struct ValenceEntry {
-    /// Admissible covalences for neutral atoms.
-    /// Covalence counts bonding electrons counting toward shell completions.
-    /// (Langmuir covalency), `localized_valence + implicit_H + aromatic_increment`.
-    /// Covalences for charged atoms are computed by shifting element by charge.
-    pub covalence_set: Vec<u8>,
+    /// Lewis/Langmuir saturation targets, sorted smallest to largest. Counts
+    /// uses the first entry ≥ localized valence when `#h` is free. Literal `#h`
+    /// overrides.
+    pub target_covalences: Vec<u8>,
+    /// Admissible aromatic valence counts when aromaticity is active. Empty
+    /// means the element is not aromatic-capable.
+    pub aromatic_valences: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +32,9 @@ pub struct ValenceTable {
 #[derive(Deserialize)]
 struct ValenceEntryToml {
     #[serde(default)]
-    covalence_set: Vec<u8>,
+    target_covalences: Vec<u8>,
+    #[serde(default)]
+    aromatic_valences: Vec<u8>,
 }
 
 impl ValenceTable {
@@ -45,7 +49,8 @@ impl ValenceTable {
 
     pub fn insert(&mut self, element: Element, entry: ValenceEntry) {
         let mut entry = entry;
-        entry.covalence_set.sort_unstable();
+        entry.target_covalences.sort_unstable();
+        entry.aromatic_valences.sort_unstable();
         self.entries.insert(element, entry);
         self.recompute_hash();
     }
@@ -61,7 +66,11 @@ impl ValenceTable {
     fn recompute_hash(&mut self) {
         let mut buf = String::new();
         for (element, entry) in &self.entries {
-            let _ = writeln!(buf, "{}:{:?}", element, entry.covalence_set);
+            let _ = writeln!(
+                buf,
+                "{}:{:?}:{:?}",
+                element, entry.target_covalences, entry.aromatic_valences
+            );
         }
         self.content_hash = xxh3_64(buf.as_bytes());
     }
@@ -78,9 +87,17 @@ impl ValenceTable {
             let element: Element = symbol.parse().map_err(|_| {
                 ConfigError::InvalidValenceTable(format!("unknown element: {}", symbol))
             })?;
-            let mut covalence_set = entry.covalence_set;
-            covalence_set.sort_unstable();
-            entries.insert(element, ValenceEntry { covalence_set });
+            let mut target_covalences = entry.target_covalences;
+            target_covalences.sort_unstable();
+            let mut aromatic_valences = entry.aromatic_valences;
+            aromatic_valences.sort_unstable();
+            entries.insert(
+                element,
+                ValenceEntry {
+                    target_covalences,
+                    aromatic_valences,
+                },
+            );
         }
         let mut table = ValenceTable {
             entries,
@@ -95,16 +112,7 @@ impl ValenceTable {
     }
 }
 
-/// Defines a `ValenceTable` from element-name keys. Empty list means
-/// "no preferred valence" (transition metals, ionic cores).
-///
-/// ```ignore
-/// let table = valence_table! {
-///     C => [4],
-///     N => [3],
-///     S => [2, 4, 6],
-/// };
-/// ```
+/// Defines a `ValenceTable` from element-name keys.
 #[macro_export]
 macro_rules! valence_table {
     ($($el:ident => [$($v:expr),* $(,)?]),* $(,)?) => {{
@@ -114,7 +122,8 @@ macro_rules! valence_table {
                 <::umol_shared::element::Element as ::std::str::FromStr>::from_str(stringify!($el))
                     .expect("invalid element symbol in valence_table!"),
                 $crate::ops::valence::ValenceEntry {
-                    covalence_set: vec![$($v),*],
+                    target_covalences: vec![$($v),*],
+                    aromatic_valences: vec![],
                 },
             );
         )*
@@ -139,18 +148,26 @@ mod tests {
         ValenceTable::from_toml_str(
             r#"
         [H]
-        covalence_set = [1]
+        target_covalences = [1]
         [S]
-        covalence_set = [6, 2, 4]
+        target_covalences = [6, 2, 4]
+        aromatic_valences = [2]
         "#,
         )
         .unwrap()
     }
 
     #[rstest]
-    #[case::h(Element::H, vec![1])]
-    #[case::s(Element::S, vec![2, 4, 6])]
-    fn test_valence_table_from_toml(#[case] element: Element, #[case] expected: Vec<u8>) {
-        assert_eq!(table().entry(element).unwrap().covalence_set, expected);
+    #[case::h(Element::H, vec![1], vec![])]
+    #[case::s(Element::S, vec![2, 4, 6], vec![2])]
+    fn test_valence_table_from_toml(
+        #[case] element: Element,
+        #[case] expected_targets: Vec<u8>,
+        #[case] expected_aromatic: Vec<u8>,
+    ) {
+        let t = table();
+        let entry = t.entry(element).unwrap();
+        assert_eq!(entry.target_covalences, expected_targets);
+        assert_eq!(entry.aromatic_valences, expected_aromatic);
     }
 }

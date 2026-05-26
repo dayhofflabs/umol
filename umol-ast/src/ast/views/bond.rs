@@ -7,10 +7,11 @@ use umol_graph_core::{EdgeId, NodeId};
 
 use super::super::bond::BondAst;
 use super::super::constraint::BondConstraints;
-use super::super::idx::{AtomId, BondId};
+use super::super::ids::{AtomId, BondId};
 use super::super::molecule::MoleculeAst;
 use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic_system::AromaticSystemView;
 use super::atom::AtomView;
@@ -196,6 +197,16 @@ impl<'a> BondView<'a> {
     pub fn ring_size(&self) -> impl Iterator<Item = usize> + 'a {
         self.rings().map(|r| r.len())
     }
+
+    /// Is bond ground
+    pub fn is_ground(&self) -> bool {
+        self.ast.is_ground()
+    }
+
+    /// Is bond undetermined
+    pub fn is_undetermined(&self) -> bool {
+        self.ast.is_undetermined()
+    }
 }
 
 /// Mutable borrowed view of a bond.
@@ -242,7 +253,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::idx::{AromaticSystemId, AtomId, BondId};
+    use crate::ast::ids::{AromaticSystemId, AtomId, BondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

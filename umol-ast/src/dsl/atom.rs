@@ -23,12 +23,11 @@ use super::predicates::{
 };
 use super::value::{fmt_value, id, signed_int, terminator, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, IsotopeAst};
-use crate::ast::value::MemOp;
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::ValueAst;
+use crate::ast::value::{MemOp, ValueAst};
 
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in

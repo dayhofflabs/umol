@@ -7,12 +7,13 @@ use umol_shared::element::Element;
 
 use super::super::atom::{AtomAst, ElementAst, IsotopeAst};
 use super::super::constraint::AtomConstraints;
-use super::super::idx::{
+use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::molecule::MoleculeAst;
 use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic_system::AromaticSystemView;
 use super::dative_bond::DativeBondView;
@@ -188,6 +189,15 @@ impl<'a> AtomView<'a> {
             .unwrap_or(ValueAst::Undetermined)
     }
 
+    /// Electrons gained from aromatic system this atom belongs to.
+    pub fn aromatic_increment(&self) -> ValueAst {
+        match self.aromatic_valence() {
+            ValueAst::Lit(1) => ValueAst::Lit(1),
+            ValueAst::Lit(_) => ValueAst::Lit(0),
+            _ => ValueAst::Undetermined,
+        }
+    }
+
     pub fn is_in_aromatic_system(&self) -> bool {
         self.aromatic_system().is_some()
     }
@@ -207,6 +217,10 @@ impl<'a> AtomView<'a> {
             .next()
     }
 
+    pub fn is_in_dative_bond(&self) -> bool {
+        self.dative_bonds().next().is_some()
+    }
+
     pub fn dative_bonds(&self) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
         self.molecule.dative_bonds().incident(self.id)
     }
@@ -215,12 +229,20 @@ impl<'a> AtomView<'a> {
         self.molecule.dative_bonds().incident_ids(self.id)
     }
 
+    pub fn is_in_multicenter_bond(&self) -> bool {
+        self.multicenter_bonds().next().is_some()
+    }
+
     pub fn multicenter_bonds(&self) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
         self.molecule.multicenter_bonds().incident(self.id)
     }
 
     pub fn multicenter_bond_ids(&self) -> impl Iterator<Item = MulticenterBondId> + 'a {
         self.molecule.multicenter_bonds().incident_ids(self.id)
+    }
+
+    pub fn is_in_noncovalent_bond(&self) -> bool {
+        self.noncovalent_bonds().next().is_some()
     }
 
     pub fn noncovalent_bonds(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
@@ -236,10 +258,10 @@ impl<'a> AtomView<'a> {
     /// Mirror of `MoleculeAst::has_overlays` scoped to a single atom; useful
     /// as a pre-mutation predicate before structural removal.
     pub fn is_in_overlays(&self) -> bool {
-        self.aromatic_system().is_some()
-            || self.dative_bonds().next().is_some()
-            || self.multicenter_bonds().next().is_some()
-            || self.noncovalent_bonds().next().is_some()
+        self.is_in_aromatic_system()
+            || self.is_in_dative_bond()
+            || self.is_in_multicenter_bond()
+            || self.is_in_noncovalent_bond()
     }
 
     /// True if this atom belongs to any ring in the molecule's canonical
@@ -344,29 +366,10 @@ impl<'a> AtomView<'a> {
             + self.multicenter_valence()
     }
 
-    /// Covalence — the count of ordinary covalent bonds the atom forms from
-    /// its own electrons (Langmuir covalency): `valence + implicit_hydrogens +
-    /// aromatic_increment`, where the aromatic increment is 1 for a standard
-    /// aromatic atom (`aromatic_valence == 1`) and 0 otherwise. Each is an
-    /// electron pair the atom shares one-for-one.
-    ///
-    /// Charge and dative bonds are **not** part of covalence; they perturb the
-    /// valence-shell electron count and are handled as isoelectronic shifts of
-    /// the per-element `covalence_set` lookup (shift `= 2·accepted − charge`:
-    /// a `−1` charge and an accepted pair both raise the effective Z). A pair
-    /// the atom *donates* (`donated_pairs`, or the aromatic donation
-    /// `aromatic_valence == 2` with `aromatic_increment == 0`) and multicenter
-    /// contributions count toward neither covalence nor the shift. Differs
-    /// from `valence` (adds implicit H and the aromatic bond) and from
-    /// `total_valence` (`valence + implicit_hydrogens + aromatic_valence +
-    /// multicenter_valence`).
+    /// Covalence, count of electrons gained by atom from electron sharing.
+    /// `valence + implicit_hydrogens + aromatic_increment`.
     pub fn covalence(&self) -> ValueAst {
-        let aromatic_increment = match self.aromatic_valence() {
-            ValueAst::Lit(1) => ValueAst::Lit(1),
-            ValueAst::Lit(_) => ValueAst::Lit(0),
-            _ => ValueAst::Undetermined,
-        };
-        self.valence() + self.implicit_hydrogens() + aromatic_increment
+        self.valence() + self.implicit_hydrogens() + self.aromatic_increment()
     }
 
     /// Count of multicenter co-participants across all incident multicenter
@@ -416,6 +419,16 @@ impl<'a> AtomView<'a> {
             .map(|n| n.bond().order().clone())
             .fold(ValueAst::Lit(0), |acc, order| acc + order)
     }
+
+    /// Is atom ground
+    pub fn is_ground(&self) -> bool {
+        self.ast.is_ground()
+    }
+
+    /// Is atom undetermined
+    pub fn is_undetermined(&self) -> bool {
+        self.ast.is_undetermined()
+    }
 }
 
 /// Mutable borrowed view of an atom.
@@ -450,7 +463,7 @@ mod tests {
         AromaticValenceAst, AtomConstraint, Constraints, MulticenterValenceAst,
     };
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::idx::{
+    use crate::ast::ids::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
     use crate::ast::molecule::MoleculeAst;

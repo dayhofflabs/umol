@@ -7,8 +7,9 @@ use umol_graph_core::{NodeId, RelationId, VarRelationSet};
 
 use super::super::constraint::DativeBondConstraints;
 use super::super::dative::DativeBondAst;
-use super::super::idx::{AtomId, DativeBondId};
+use super::super::ids::{AtomId, DativeBondId};
 use super::super::molecule::MoleculeAst;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::atom::AtomView;
 
@@ -204,6 +205,16 @@ impl<'a> DativeBondView<'a> {
     pub fn atom_count(&self) -> usize {
         self.atoms.len()
     }
+
+    /// Is dative bond ground
+    pub fn is_ground(&self) -> bool {
+        self.ast.is_ground()
+    }
+
+    /// Is dative bond undetermined
+    pub fn is_undetermined(&self) -> bool {
+        self.ast.is_undetermined()
+    }
 }
 
 // Builder-scope view bundles for dative bonds.
@@ -245,7 +256,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::idx::{AtomId, DativeBondId};
+    use crate::ast::ids::{AtomId, DativeBondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

@@ -5,10 +5,10 @@ use std::mem::{self, replace};
 use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
-use super::joint_domain::JointDomainAst;
 use super::super::remap::IdRemapping;
 use super::super::traits::{AsLit, Lattice};
 use super::super::value::ValueAst;
+use super::joint_domain::JointDomainAst;
 
 /// Atom-scope constraint: a predicate that pattern-matches a single atom
 /// on a topological or valence property (valence, degree, ring membership,
@@ -162,12 +162,37 @@ impl AromaticValenceAst {
         Self::Aromatic(v.into())
     }
 
+    pub fn is_aromatic(&self) -> bool {
+        matches!(self, Self::Aromatic(_))
+    }
+
+    pub fn aromatic_increment(&self) -> ValueAst {
+        match self {
+            Self::Aromatic(v) => match v.as_lit() {
+                Some(1) => ValueAst::Lit(1),
+                Some(_) => ValueAst::Lit(0),
+                None => ValueAst::Undetermined,
+            },
+            Self::NotAromatic => ValueAst::Lit(0),
+            Self::Undetermined => ValueAst::Undetermined,
+        }
+    }
+
     /// Simplify the inner `ValueAst` of `Aromatic(_)`. Other variants are
     /// already canonical.
     pub fn simplify(self) -> Self {
         match self {
             Self::Aromatic(v) => Self::Aromatic(v.simplify()),
             other => other,
+        }
+    }
+
+    /// Pattern matches value.
+    pub fn matches_value(&self, value: i64) -> bool {
+        match self {
+            Self::Aromatic(v) => v.matches_value(value),
+            Self::NotAromatic => value == 0,
+            Self::Undetermined => true,
         }
     }
 }
@@ -226,11 +251,12 @@ impl AsLit for AromaticValenceAst {
     type Lit = i64;
 
     /// Inner literal π count when `Aromatic(Lit(n))`; `None` for
-    /// `Undetermined`, `NotAromatic`, or `Aromatic` wrapping a non-literal.
+    /// `Undetermined` or `Aromatic` wrapping a non-literal.
     #[inline]
     fn as_lit(&self) -> Option<i64> {
         match self {
             Self::Aromatic(v) => v.as_lit(),
+            Self::NotAromatic => Some(0),
             _ => None,
         }
     }
@@ -252,12 +278,25 @@ impl MulticenterValenceAst {
         Self::Multicenter(v.into())
     }
 
+    pub fn is_multicenter(&self) -> bool {
+        matches!(self, Self::Multicenter(_))
+    }
+
     /// Simplify the inner `ValueAst` of `Multicenter(_)`. Other variants
     /// are already canonical.
     pub fn simplify(self) -> Self {
         match self {
             Self::Multicenter(v) => Self::Multicenter(v.simplify()),
             other => other,
+        }
+    }
+
+    /// Pattern matches value.
+    pub fn matches_value(&self, value: i64) -> bool {
+        match self {
+            Self::Multicenter(v) => v.matches_value(value),
+            Self::NotMulticenter => value == 0,
+            Self::Undetermined => true,
         }
     }
 }
@@ -315,11 +354,12 @@ impl AsLit for MulticenterValenceAst {
     type Lit = i64;
 
     /// Inner literal multicenter valence when `Multicenter(Lit(n))`; `None`
-    /// for `Undetermined`, `NotMulticenter`, or non-literal inner.
+    /// for `Undetermined` or non-literal inner.
     #[inline]
     fn as_lit(&self) -> Option<i64> {
         match self {
             Self::Multicenter(v) => v.as_lit(),
+            Self::NotMulticenter => Some(0),
             _ => None,
         }
     }
@@ -973,6 +1013,35 @@ mod tests {
     }
 
     #[rstest]
+    #[case::undetermined(AromaticValenceAst::Undetermined, false)]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, false)]
+    #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), true)]
+    #[case::aromatic_lit(AromaticValenceAst::aromatic(1), true)]
+    fn test_aromatic_valence_ast_is_aromatic(
+        #[case] v: AromaticValenceAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(v.is_aromatic(), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(AromaticValenceAst::Undetermined, ValueAst::Undetermined)]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, ValueAst::Lit(0))]
+    #[case::aromatic_undetermined(
+        AromaticValenceAst::Aromatic(ValueAst::Undetermined),
+        ValueAst::Undetermined
+    )]
+    #[case::aromatic_one(AromaticValenceAst::aromatic(1), ValueAst::Lit(1))]
+    #[case::aromatic_zero(AromaticValenceAst::aromatic(0), ValueAst::Lit(0))]
+    #[case::aromatic_two(AromaticValenceAst::aromatic(2), ValueAst::Lit(0))]
+    fn test_aromatic_valence_ast_aromatic_increment(
+        #[case] v: AromaticValenceAst,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(v.aromatic_increment(), expected);
+    }
+
+    #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, true)]
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, false)]
     #[case::aromatic_lit(AromaticValenceAst::aromatic(1), false)]
@@ -989,7 +1058,7 @@ mod tests {
 
     #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, None)]
-    #[case::not_aromatic(AromaticValenceAst::NotAromatic, None)]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, Some(0))]
     #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), None)]
     #[case::aromatic_lit(AromaticValenceAst::aromatic(3), Some(3))]
     #[case::aromatic_expr_folds(
@@ -1090,6 +1159,21 @@ mod tests {
     }
 
     #[rstest]
+    #[case::undetermined(MulticenterValenceAst::Undetermined, false)]
+    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, false)]
+    #[case::multicenter_undetermined(
+        MulticenterValenceAst::Multicenter(ValueAst::Undetermined),
+        true
+    )]
+    #[case::multicenter_lit(MulticenterValenceAst::multicenter(1), true)]
+    fn test_multicenter_valence_ast_is_multicenter(
+        #[case] v: MulticenterValenceAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(v.is_multicenter(), expected);
+    }
+
+    #[rstest]
     #[case::undetermined(MulticenterValenceAst::Undetermined, true)]
     #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, false)]
     #[case::multicenter_lit(MulticenterValenceAst::multicenter(1), false)]
@@ -1102,7 +1186,7 @@ mod tests {
 
     #[rstest]
     #[case::undetermined(MulticenterValenceAst::Undetermined, None)]
-    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, None)]
+    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, Some(0))]
     #[case::multicenter_undetermined(
         MulticenterValenceAst::Multicenter(ValueAst::Undetermined),
         None

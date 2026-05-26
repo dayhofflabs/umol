@@ -16,7 +16,7 @@ use super::super::edit::{
     RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond,
     RemovedNoncovalentBond, RemovedOverlays, Undo,
 };
-use super::super::idx::{
+use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::remap::IdRemapping;

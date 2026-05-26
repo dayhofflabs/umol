@@ -24,7 +24,7 @@ use super::super::edit::{
     AddedNoncovalentBond, ConstraintUpdate, RemovedAromaticSystem, RemovedAtom, RemovedBond,
     RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond, RemovedOverlays,
 };
-use super::super::idx::{
+use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::multicenter::MulticenterBondAst;

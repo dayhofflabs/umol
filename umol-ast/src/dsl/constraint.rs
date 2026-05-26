@@ -22,7 +22,7 @@ use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints,
     MoleculeConstraint, MulticenterValenceAst, SubPatternAnchor,
 };
-use crate::ast::idx::{
+use crate::ast::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use crate::ast::molecule::MoleculeAst;

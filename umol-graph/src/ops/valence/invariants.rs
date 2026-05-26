@@ -1,5 +1,5 @@
 //! Per-atom electron-conservation equation: `check_atom` evaluates on a
-//! fully-constrained atom; `solve_atom` returns the ground `AtomAst`
+//! fully-constrained atom; `enumerate_atom` returns the ground `AtomAst`
 //! candidates satisfying the equation when fields are `Undetermined`.
 
 use std::ops::RangeInclusive;
@@ -14,7 +14,7 @@ use umol_shared::element::Element;
 pub struct ValenceInvariants;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum Mismatch {
+pub enum ValenceMismatch {
     #[error("atom {atom:?}: orbital count {orbital_count} != electron count {electron_count}")]
     OrbitalCount {
         atom: AtomId,
@@ -27,7 +27,7 @@ impl ValenceInvariants {
     /// Returns `Ok(())` when every relevant field is ground and the
     /// orbital == electron equation holds, or when any field is non-`Lit`
     /// (the check cannot fire on a non-ground atom).
-    pub fn check_atom(ast: &MoleculeAst, atom_id: AtomId) -> Result<(), Mismatch> {
+    pub fn check_atom(ast: &MoleculeAst, atom_id: AtomId) -> Result<(), ValenceMismatch> {
         let atom = ast.atom(atom_id);
         let Some(element) = atom.element().as_lit() else {
             return Ok(());
@@ -97,9 +97,16 @@ impl ValenceInvariants {
             aromatic_valence,
             multicenter_valence,
         );
-        let electron = electron_count(element, charge, implicit_h, valence, aromatic_valence, accepted);
+        let electron = electron_count(
+            element,
+            charge,
+            implicit_h,
+            valence,
+            aromatic_valence,
+            accepted,
+        );
         if orbital != electron {
-            return Err(Mismatch::OrbitalCount {
+            return Err(ValenceMismatch::OrbitalCount {
                 atom: atom_id,
                 orbital_count: orbital,
                 electron_count: electron,
@@ -110,7 +117,7 @@ impl ValenceInvariants {
 
     /// Run `check_atom` for every atom in the molecule. Stops at the first
     /// mismatch.
-    pub fn check(ast: &MoleculeAst) -> Result<(), Mismatch> {
+    pub fn check(ast: &MoleculeAst) -> Result<(), ValenceMismatch> {
         for i in 0..ast.atoms().count() as u32 {
             Self::check_atom(ast, AtomId(i))?;
         }
@@ -129,7 +136,7 @@ impl ValenceInvariants {
     /// Structural inputs read from the atom (constraint, else topology):
     /// `valence`, `donated_pairs`, `accepted_pairs`, `aromatic_valence`, `multicenter_valence`.
     ///
-    pub fn solve_atom(ast: &MoleculeAst, atom_id: AtomId) -> Vec<AtomAst> {
+    pub fn enumerate_atom(ast: &MoleculeAst, atom_id: AtomId) -> Vec<AtomAst> {
         let atom = ast.atom(atom_id);
         let Some(element) = atom.element().as_lit() else {
             return Vec::new();
@@ -178,25 +185,25 @@ impl ValenceInvariants {
             _ => return Vec::new(),
         };
 
-        let charge_range = enumeration_range(atom.charge(), element_charge_range(element));
-        let implicit_h_range = enumeration_range(
+        let charge_range = enumeration_values(atom.charge(), element_charge_range(element));
+        let implicit_h_range = enumeration_values(
             atom.implicit_hydrogens(),
             0..=(element.max_implicit_hydrogens() as i64),
         );
-        let lone_pair_range = enumeration_range(
+        let lone_pair_range = enumeration_values(
             atom.lone_pairs(),
             0..=((element.valence_capacity() / 2) as i64),
         );
-        let unpaired_range = enumeration_range(
+        let unpaired_range = enumeration_values(
             &atom.spin().unpaired,
             0..=(element.max_unpaired_electrons() as i64),
         );
 
         let mut candidates: Vec<AtomAst> = Vec::new();
         for charge in charge_range {
-            for implicit_h in implicit_h_range.clone() {
-                for lone_pairs in lone_pair_range.clone() {
-                    for unpaired in unpaired_range.clone() {
+            for &implicit_h in &implicit_h_range {
+                for &lone_pairs in &lone_pair_range {
+                    for &unpaired in &unpaired_range {
                         let orbital = orbital_count(
                             unpaired,
                             lone_pairs,
@@ -218,6 +225,10 @@ impl ValenceInvariants {
                         if orbital != electron {
                             continue;
                         }
+                        let Some(multiplicity) = enumerate_multiplicity(atom.spin(), unpaired)
+                        else {
+                            continue;
+                        };
                         let assignment = AtomAst {
                             element: ElementAst::Lit(element),
                             charge: ValueAst::Lit(charge),
@@ -225,7 +236,7 @@ impl ValenceInvariants {
                             lone_pairs: ValueAst::Lit(lone_pairs),
                             spin: SpinStateAst {
                                 unpaired: ValueAst::Lit(unpaired),
-                                multiplicity: ValueAst::Undetermined,
+                                multiplicity: ValueAst::Lit(multiplicity),
                             },
                             constraints: AtomConstraints::from(AtomConstraint::Valence(
                                 ValueAst::Lit(valence),
@@ -235,12 +246,7 @@ impl ValenceInvariants {
                         let Some(candidate) = atom.ast.meet(&assignment) else {
                             continue;
                         };
-                        let candidate = candidate.into_ground();
-                        // Skip a proposed spin whose unpaired/multiplicity pair is incompatible.
-                        if candidate.spin.as_lit().is_none() {
-                            continue;
-                        }
-                        candidates.push(candidate);
+                        candidates.push(candidate.into_ground());
                     }
                 }
             }
@@ -248,6 +254,19 @@ impl ValenceInvariants {
 
         candidates
     }
+}
+
+fn enumerate_multiplicity(spin: &SpinStateAst, unpaired: i64) -> Option<i64> {
+    let multiplicity = match spin.multiplicity {
+        ValueAst::Lit(m) => m,
+        ValueAst::Undetermined => unpaired + 1,
+        _ => return None,
+    };
+    let spin = SpinStateAst {
+        unpaired: ValueAst::Lit(unpaired),
+        multiplicity: ValueAst::Lit(multiplicity),
+    };
+    spin.as_lit().map(|_| multiplicity)
 }
 
 /// Compute number of atomic spin orbitals involved in topology (shared and unshared)
@@ -296,13 +315,11 @@ fn element_charge_range(element: Element) -> RangeInclusive<i64> {
     (lo as i64)..=(hi as i64)
 }
 
-/// `Lit(n)` enumerates the single value `n`; `Undetermined` enumerates the
-/// element-derived `bound`; any other form enumerates nothing.
-fn enumeration_range(field: &ValueAst, bound: RangeInclusive<i64>) -> RangeInclusive<i64> {
+fn enumeration_values(field: &ValueAst, bound: RangeInclusive<i64>) -> Vec<i64> {
     match field {
-        ValueAst::Lit(n) => *n..=*n,
-        ValueAst::Undetermined => bound,
-        _ => RangeInclusive::new(1, 0),
+        ValueAst::Lit(n) => vec![*n],
+        ValueAst::Undetermined => bound.collect(),
+        _ => bound.filter(|value| field.matches_value(*value)).collect(),
     }
 }
 
@@ -356,12 +373,12 @@ mod tests {
             ..Default::default()
         }], vec![]),
         AtomId(0),
-        Mismatch::OrbitalCount { atom: AtomId(0), orbital_count: 198, electron_count: 103 },
+        ValenceMismatch::OrbitalCount { atom: AtomId(0), orbital_count: 198, electron_count: 103 },
     )]
     fn test_valence_invariants_check_atom_error(
         #[case] ast: MoleculeAst,
         #[case] atom_id: AtomId,
-        #[case] expected: Mismatch,
+        #[case] expected: ValenceMismatch,
     ) {
         assert_eq!(ValenceInvariants::check_atom(&ast, atom_id), Err(expected));
     }
@@ -558,11 +575,11 @@ mod tests {
             constraints: AtomConstraints::from(AtomConstraint::Valence(ValueAst::Lit(0))),
         }],
     )]
-    fn test_valence_invariants_solve_atom(
+    fn test_valence_invariants_enumerate_atom(
         #[case] ast: MoleculeAst,
         #[case] atom_id: AtomId,
         #[case] expected: Vec<AtomAst>,
     ) {
-        assert_eq!(ValenceInvariants::solve_atom(&ast, atom_id), expected);
+        assert_eq!(ValenceInvariants::enumerate_atom(&ast, atom_id), expected);
     }
 }

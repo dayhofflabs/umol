@@ -1,134 +1,143 @@
 # Per-element data for the counts valence model. An element absent from this
 # table is out of the model's scope and left to other resolvers.
 #
-# covalence_set: allowed covalences — localized valence + implicit H + aromatic
-#   increment — for the neutral atom; ions read the isoelectronic entry via an
-#   element shift.
+# target_covalences: Lewis/Langmuir saturation targets, sorted smallest to
+#   largest; Counts uses the first entry >= v + inc when #h is free. Literal
+#   #h overrides. Ions read the isoelectronic entry via an element shift.
 [H]
-covalence_set = [1]
+target_covalences = [1]
 
 [He]
-covalence_set = [0]
+target_covalences = [0]
 
 [Li]
-covalence_set = [1]
+target_covalences = [1]
 
 [Be]
-covalence_set = [2]
+target_covalences = [2]
 
 [B]
-covalence_set = [3]
+target_covalences = [3]
+aromatic_valences = [0]
 
 [C]
-covalence_set = [4]
+target_covalences = [4]
+aromatic_valences = [1]
 
 [N]
-covalence_set = [3]
+target_covalences = [3]
+aromatic_valences = [1, 2]
 
 [O]
-covalence_set = [2]
+target_covalences = [2]
+aromatic_valences = [2]
 
 [F]
-covalence_set = [1]
+target_covalences = [1]
 
 [Ne]
-covalence_set = [0]
+target_covalences = [0]
 
 [Na]
-covalence_set = [1]
+target_covalences = [1]
 
 [Mg]
-covalence_set = [2]
+target_covalences = [2]
 
 [Al]
-covalence_set = [3]
+target_covalences = [3]
 
 [Si]
-covalence_set = [4]
+target_covalences = [4]
+aromatic_valences = [1]
 
 [P]
-covalence_set = [3, 5]
+target_covalences = [3, 5]
+aromatic_valences = [1, 2]
 
 [S]
-covalence_set = [2, 4, 6]
+target_covalences = [2, 4, 6]
+aromatic_valences = [2]
 
 [Cl]
-covalence_set = [1, 3, 5, 7]
+target_covalences = [1, 3, 5, 7]
 
 [Ar]
-covalence_set = [0]
+target_covalences = [0]
 
 [K]
-covalence_set = [1]
+target_covalences = [1]
 
 [Ca]
-covalence_set = [2]
+target_covalences = [2]
 
 [Ga]
-covalence_set = [3]
+target_covalences = [3]
 
 [Ge]
-covalence_set = [4]
+target_covalences = [4]
 
 [As]
-covalence_set = [3, 5]
+target_covalences = [3, 5]
+aromatic_valences = [1, 2]
 
 [Se]
-covalence_set = [2, 4, 6]
+target_covalences = [2, 4, 6]
+aromatic_valences = [2]
 
 [Br]
-covalence_set = [1]
+target_covalences = [1]
 
 [Kr]
-covalence_set = [0]
+target_covalences = [0]
 
 [Rb]
-covalence_set = [1]
+target_covalences = [1]
 
 [Sr]
-covalence_set = [2]
+target_covalences = [2]
 
 [In]
-covalence_set = [3]
+target_covalences = [3]
 
 [Sn]
-covalence_set = [2, 4]
+target_covalences = [2, 4]
 
 [Sb]
-covalence_set = [3, 5]
+target_covalences = [3, 5]
 
 [Te]
-covalence_set = [2, 4, 6]
+target_covalences = [2, 4, 6]
 
 [I]
-covalence_set = [1, 3, 5]
+target_covalences = [1, 3, 5]
 
 [Xe]
-covalence_set = [0, 2, 4, 6]
+target_covalences = [0, 2, 4, 6]
 
 [Cs]
-covalence_set = [1]
+target_covalences = [1]
 
 [Ba]
-covalence_set = [2]
+target_covalences = [2]
 
 [Pb]
-covalence_set = [2, 4]
+target_covalences = [2, 4]
 
 [Bi]
-covalence_set = [3, 5]
+target_covalences = [3, 5]
 
 [Po]
-covalence_set = [2, 4, 6]
+target_covalences = [2, 4, 6]
 
 [At]
-covalence_set = [1, 3, 5]
+target_covalences = [1, 3, 5]
 
 [Rn]
-covalence_set = [0]
+target_covalences = [0]
 
 [Fr]
-covalence_set = [1]
+target_covalences = [1]
 
 [Ra]
-covalence_set = [2]
+target_covalences = [2]

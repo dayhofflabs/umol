@@ -9,7 +9,7 @@ pub(crate) mod dative;
 pub(crate) mod edit;
 pub(crate) mod embedding;
 pub(crate) mod error;
-pub(crate) mod idx;
+pub(crate) mod ids;
 pub(crate) mod matching;
 pub(crate) mod molecule;
 pub(crate) mod multicenter;
@@ -47,7 +47,7 @@ pub use edit::{
 pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
 pub use embedding::MoleculeEmbedding;
 pub use error::{Contradiction, EvaluationError, JointDomainError, RewriteError};
-pub use idx::{
+pub use ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 pub use matching::BondMatching;

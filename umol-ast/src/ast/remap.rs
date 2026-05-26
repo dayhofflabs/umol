@@ -6,7 +6,7 @@
 
 use umol_graph_core::{EdgeId, NodeId, Remapping};
 
-use super::idx::{
+use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 
@@ -83,28 +83,28 @@ impl IdRemapping {
         }
     }
 
-    pub fn atom(&self, idx: AtomId) -> Option<AtomId> {
-        self.graph.node(NodeId::from(idx)).map(AtomId::from)
+    pub fn atom(&self, id: AtomId) -> Option<AtomId> {
+        self.graph.node(NodeId::from(id)).map(AtomId::from)
     }
 
-    pub fn bond(&self, idx: BondId) -> Option<BondId> {
-        self.graph.edge(EdgeId::from(idx)).map(BondId::from)
+    pub fn bond(&self, id: BondId) -> Option<BondId> {
+        self.graph.edge(EdgeId::from(id)).map(BondId::from)
     }
 
-    pub fn dative_bond(&self, idx: DativeBondId) -> Option<DativeBondId> {
-        remap_relation(&self.removed_dative_bonds, idx.0).map(DativeBondId)
+    pub fn dative_bond(&self, id: DativeBondId) -> Option<DativeBondId> {
+        remap_relation(&self.removed_dative_bonds, id.0).map(DativeBondId)
     }
 
-    pub fn aromatic_system(&self, idx: AromaticSystemId) -> Option<AromaticSystemId> {
-        remap_relation(&self.removed_aromatic_systems, idx.0).map(AromaticSystemId)
+    pub fn aromatic_system(&self, id: AromaticSystemId) -> Option<AromaticSystemId> {
+        remap_relation(&self.removed_aromatic_systems, id.0).map(AromaticSystemId)
     }
 
-    pub fn multicenter_bond(&self, idx: MulticenterBondId) -> Option<MulticenterBondId> {
-        remap_relation(&self.removed_multicenter_bonds, idx.0).map(MulticenterBondId)
+    pub fn multicenter_bond(&self, id: MulticenterBondId) -> Option<MulticenterBondId> {
+        remap_relation(&self.removed_multicenter_bonds, id.0).map(MulticenterBondId)
     }
 
-    pub fn noncovalent_bond(&self, idx: NoncovalentBondId) -> Option<NoncovalentBondId> {
-        remap_relation(&self.removed_noncovalent_bonds, idx.0).map(NoncovalentBondId)
+    pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> Option<NoncovalentBondId> {
+        remap_relation(&self.removed_noncovalent_bonds, id.0).map(NoncovalentBondId)
     }
 
     pub fn graph(&self) -> &Remapping {
@@ -129,28 +129,28 @@ impl UndoRemapping {
         &self.forward
     }
 
-    pub fn atom(&self, idx: AtomId) -> AtomId {
-        AtomId(unmap_dense(&self.forward.graph.removed_nodes, idx.0))
+    pub fn atom(&self, id: AtomId) -> AtomId {
+        AtomId(unmap_dense(&self.forward.graph.removed_nodes, id.0))
     }
 
-    pub fn bond(&self, idx: BondId) -> BondId {
-        BondId(unmap_dense(&self.forward.graph.removed_edges, idx.0))
+    pub fn bond(&self, id: BondId) -> BondId {
+        BondId(unmap_dense(&self.forward.graph.removed_edges, id.0))
     }
 
-    pub fn dative_bond(&self, idx: DativeBondId) -> DativeBondId {
-        DativeBondId(unmap_dense(&self.forward.removed_dative_bonds, idx.0))
+    pub fn dative_bond(&self, id: DativeBondId) -> DativeBondId {
+        DativeBondId(unmap_dense(&self.forward.removed_dative_bonds, id.0))
     }
 
-    pub fn aromatic_system(&self, idx: AromaticSystemId) -> AromaticSystemId {
-        AromaticSystemId(unmap_dense(&self.forward.removed_aromatic_systems, idx.0))
+    pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemId {
+        AromaticSystemId(unmap_dense(&self.forward.removed_aromatic_systems, id.0))
     }
 
-    pub fn multicenter_bond(&self, idx: MulticenterBondId) -> MulticenterBondId {
-        MulticenterBondId(unmap_dense(&self.forward.removed_multicenter_bonds, idx.0))
+    pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondId {
+        MulticenterBondId(unmap_dense(&self.forward.removed_multicenter_bonds, id.0))
     }
 
-    pub fn noncovalent_bond(&self, idx: NoncovalentBondId) -> NoncovalentBondId {
-        NoncovalentBondId(unmap_dense(&self.forward.removed_noncovalent_bonds, idx.0))
+    pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondId {
+        NoncovalentBondId(unmap_dense(&self.forward.removed_noncovalent_bonds, id.0))
     }
 }
 

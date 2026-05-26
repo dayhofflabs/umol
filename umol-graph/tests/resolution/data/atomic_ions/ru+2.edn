@@ -1,3 +1,2 @@
-{:input {:atoms ["Ru #c+2"]
-         :bonds []}
- :config-overrides {:atom {:implicit-hydrogens :zero :charge :zero}}}
+{:input {:atoms ["Ru #c+2"] :bonds []}
+ :config-overrides {:atom {:implicit-hydrogens :zero}}}

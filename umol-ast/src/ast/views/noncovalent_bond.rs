@@ -6,9 +6,10 @@ use std::ops::Index;
 use umol_graph_core::{FixedRelationSet, NodeId, RelationId};
 
 use super::super::constraint::NoncovalentBondConstraints;
-use super::super::idx::{AtomId, NoncovalentBondId};
+use super::super::ids::{AtomId, NoncovalentBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
+use super::super::traits::Lattice;
 use super::atom::AtomView;
 
 /// Namespace accessor for noncovalent-bond views on a `MoleculeAst`.
@@ -154,6 +155,16 @@ impl<'a> NoncovalentBondView<'a> {
         let [a, b] = self.atoms;
         [self.molecule.atom(a), self.molecule.atom(b)]
     }
+
+    /// Is noncovalent bond ground
+    pub fn is_ground(&self) -> bool {
+        self.ast.is_ground()
+    }
+
+    /// Is noncovalent bond undetermined
+    pub fn is_undetermined(&self) -> bool {
+        self.ast.is_undetermined()
+    }
 }
 
 // Builder-scope view bundles for noncovalent bonds.
@@ -181,7 +192,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::idx::{AtomId, NoncovalentBondId};
+    use crate::ast::ids::{AtomId, NoncovalentBondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

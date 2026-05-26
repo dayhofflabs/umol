@@ -6,9 +6,7 @@ use umol_ast::ast::MoleculeAst;
 
 use crate::ops::model::ValenceModel;
 use crate::ops::solution::Solution;
-use crate::ops::valence::{
-    AtomTypingError, AtomTypingValence, CountsError, CountsValence,
-};
+use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
 
 #[derive(Clone, Debug)]
 pub enum ValenceResolver {
@@ -30,11 +28,9 @@ pub enum ValenceError {}
 impl ValenceResolver {
     pub fn new(model: &ValenceModel) -> Self {
         match model {
-            ValenceModel::AtomTyping {
-                registry,
-            } => Self::AtomTyping(AtomTypingValence::new(
-                registry.clone(),
-            )),
+            ValenceModel::AtomTyping { registry } => {
+                Self::AtomTyping(AtomTypingValence::new(registry.clone()))
+            }
             ValenceModel::Counts { table } => Self::Counts(CountsValence::new(table.clone())),
         }
     }

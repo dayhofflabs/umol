@@ -690,7 +690,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::AtomConstraint;
-    use crate::ast::idx::{
+    use crate::ast::ids::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
     use crate::ast::value::ValueAst;

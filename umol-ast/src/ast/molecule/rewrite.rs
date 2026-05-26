@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::super::error::RewriteError;
-use super::super::idx::{
+use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::super::reaction::{Assignment, ReactionRuleAst};

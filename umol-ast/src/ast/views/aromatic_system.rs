@@ -7,10 +7,11 @@ use umol_graph_core::{NodeId, RelationId, VarRelationSet};
 
 use super::super::aromatic::AromaticSystemAst;
 use super::super::constraint::AromaticSystemConstraints;
-use super::super::idx::{AromaticSystemId, AtomId, BondId};
+use super::super::ids::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
 use super::super::rings::RingView;
 use super::super::spin::SpinStateAst;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::atom::AtomView;
 use super::bond::BondView;
@@ -253,6 +254,16 @@ impl<'a> AromaticSystemView<'a> {
             .iter()
             .filter(move |r| r.atoms().iter().any(|a| atoms.contains(a)))
     }
+
+    /// Is aromatic system ground
+    pub fn is_ground(&self) -> bool {
+        self.ast.is_ground()
+    }
+
+    /// Is aromatic system undetermined
+    pub fn is_undetermined(&self) -> bool {
+        self.ast.is_undetermined()
+    }
 }
 
 // Builder-scope view bundles for aromatic systems.
@@ -292,7 +303,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::idx::{AromaticSystemId, AtomId, BondId};
+    use crate::ast::ids::{AromaticSystemId, AtomId, BondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

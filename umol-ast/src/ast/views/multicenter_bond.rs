@@ -6,10 +6,11 @@ use std::ops::Index;
 use umol_graph_core::{NodeId, RelationId, VarRelationSet};
 
 use super::super::constraint::MulticenterBondConstraints;
-use super::super::idx::{AtomId, MulticenterBondId};
+use super::super::ids::{AtomId, MulticenterBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::multicenter::MulticenterBondAst;
 use super::super::spin::SpinStateAst;
+use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::atom::AtomView;
 
@@ -205,6 +206,16 @@ impl<'a> MulticenterBondView<'a> {
             .filter(move |a| subset.contains(a))
             .map(move |id| molecule.atom(id))
     }
+
+    /// Is multicenter bond ground
+    pub fn is_ground(&self) -> bool {
+        self.ast.is_ground()
+    }
+
+    /// Is multicenter bond undetermined
+    pub fn is_undetermined(&self) -> bool {
+        self.ast.is_undetermined()
+    }
 }
 
 // Builder-scope view bundles for multicenter bonds.
@@ -244,7 +255,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::idx::{AtomId, MulticenterBondId};
+    use crate::ast::ids::{AtomId, MulticenterBondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
