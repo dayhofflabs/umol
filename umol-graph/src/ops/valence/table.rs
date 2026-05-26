@@ -44,6 +44,8 @@ impl ValenceTable {
     }
 
     pub fn insert(&mut self, element: Element, entry: ValenceEntry) {
+        let mut entry = entry;
+        entry.covalence_set.sort_unstable();
         self.entries.insert(element, entry);
         self.recompute_hash();
     }
@@ -76,12 +78,9 @@ impl ValenceTable {
             let element: Element = symbol.parse().map_err(|_| {
                 ConfigError::InvalidValenceTable(format!("unknown element: {}", symbol))
             })?;
-            entries.insert(
-                element,
-                ValenceEntry {
-                    covalence_set: entry.covalence_set,
-                },
-            );
+            let mut covalence_set = entry.covalence_set;
+            covalence_set.sort_unstable();
+            entries.insert(element, ValenceEntry { covalence_set });
         }
         let mut table = ValenceTable {
             entries,
@@ -130,25 +129,28 @@ static DEFAULT_VALENCE_TABLE: LazyLock<ValenceTable> = LazyLock::new(|| {
 
 #[cfg(test)]
 mod tests {
+    use rstest::*;
     use umol_shared::element::Element;
 
     use super::*;
 
-    #[test]
-    fn test_valence_table_from_toml() {
-        let table = ValenceTable::from_toml_str(
+    #[fixture]
+    fn table() -> ValenceTable {
+        ValenceTable::from_toml_str(
             r#"
         [H]
         covalence_set = [1]
+        [S]
+        covalence_set = [6, 2, 4]
         "#,
         )
-        .unwrap();
-        assert_eq!(table.entry(Element::H).unwrap().covalence_set, [1]);
+        .unwrap()
     }
 
-    #[test]
-    fn test_valence_table_default_table() {
-        let table = ValenceTable::default_table();
-        assert!(table.entry(Element::C).is_some());
+    #[rstest]
+    #[case::h(Element::H, vec![1])]
+    #[case::s(Element::S, vec![2, 4, 6])]
+    fn test_valence_table_from_toml(#[case] element: Element, #[case] expected: Vec<u8>) {
+        assert_eq!(table().entry(element).unwrap().covalence_set, expected);
     }
 }

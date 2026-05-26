@@ -3,7 +3,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, ElementAst, Lattice,
+    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, Lattice,
     MoleculeAst, MulticenterValenceAst, ValueAst,
 };
 use umol_shared::element::Element;
@@ -18,10 +18,10 @@ pub struct AtomTypingValence {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AtomTypingError {
     #[error("no atom-typing match for {atom:?} (element {element}, charge {charge:?})")]
-    NoMatchingPattern {
+    NoMatch {
         atom: AtomId,
         element: Element,
-        charge: ValueAst,
+        charge: Option<i8>,
     },
 }
 
@@ -37,52 +37,41 @@ impl AtomTypingValence {
     pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), AtomTypingError> {
         for i in 0..ast.atoms().count() as u32 {
             let idx = AtomId(i);
-            let view = ast.atom(idx);
-            if view.ast.is_ground() {
+            let atom = ast.atom(idx);
+            if atom.ast.is_ground() {
                 continue;
             }
-            let ElementAst::Lit(element) = view.ast.element else {
-                continue;
-            };
-            let Some(valence) = view.valence().as_lit().and_then(|n| u8::try_from(n).ok()) else {
-                continue;
-            };
-            let Some(donated) = view
-                .donated_pairs()
-                .as_lit()
-                .and_then(|n| u8::try_from(n).ok())
-            else {
-                continue;
-            };
-            let Some(accepted) = view
-                .accepted_pairs()
-                .as_lit()
-                .and_then(|n| u8::try_from(n).ok())
-            else {
+
+            let Some(element) = atom.element().as_lit() else {
                 continue;
             };
 
-            let prepared = self.prepare_atom(&view, element, valence, donated, accepted);
-            let charge_key = prepared.charge.as_lit().map(|n| n as i8);
-            let compatibles: Vec<&AtomAst> = self
+            // Topological derived predicates should return Lit.
+            let valence = atom.valence().as_lit_expect("valence should be Lit");
+            let donated = atom.donated_pairs().as_lit_expect("donated pairs should be Lit");
+            let accepted = atom.accepted_pairs().as_lit_expect("accepted pairs should be Lit");
+
+            let match_input = self.build_match_input(&atom, valence, donated, accepted);
+            let charge_key = match_input.charge.as_lit().map(|n| n as i8);
+            let candidates: Vec<&AtomAst> = self
                 .registry
                 .lookup(element, charge_key)
                 .iter()
-                .filter(|pat| prepared.matches(pat))
+                .filter(|pat| match_input.matches(pat))
                 .collect();
 
-            match compatibles.len() {
+            match candidates.len() {
                 0 => {
-                    return Err(AtomTypingError::NoMatchingPattern {
+                    return Err(AtomTypingError::NoMatch {
                         atom: idx,
                         element,
-                        charge: view.ast.charge.clone(),
+                        charge: charge_key,
                     });
                 }
                 1 => {
-                    let cand = compatibles[0].clone();
+                    let cand = candidates[0];
                     let atom_mut = ast.atom_mut(idx).ast;
-                    atom_mut.narrow_from(&cand);
+                    atom_mut.narrow_from(cand);
                 }
                 _ => {}
             }
@@ -94,64 +83,56 @@ impl AtomTypingValence {
     /// against: pre-narrow `implicit_hydrogens` via the normal-valence table,
     /// and synthesize ground constraints for the topology-derived counts
     /// (localized valence, dative donated/accepted pairs) plus the
-    /// membership-derived aromatic valence. `pattern.meet(&prepared)` then filters by those
+    /// membership-derived aromatic valence. `pattern.meet(&match_input)` then filters by those
     /// constraints directly via `AtomConstraints::meet`.
-    fn prepare_atom(
+    fn build_match_input(
         &self,
-        view: &AtomView<'_>,
-        element: Element,
-        valence: u8,
-        donated: u8,
-        accepted: u8,
+        atom: &AtomView<'_>,
+        valence: i64,
+        donated: i64,
+        accepted: i64,
     ) -> AtomAst {
-        let mut prepared = view.ast.clone();
+        let mut match_input = atom.ast.clone();
         // First arm: idempotency — aromatic-system membership from a prior sweep.
         // Second arm: declared Aromatic(_) from the parser, before aromaticity perception runs.
-        // Neither arm requires aromaticity to run ahead of valence.
-        let is_aromatic = view.is_in_aromatic_system()
+        let is_aromatic = atom.is_in_aromatic_system()
             || AromaticValenceAst::aromatic(ValueAst::Undetermined)
-                .matches(&prepared.constraints.aromatic_valence());
-        prepared
-            .constraints
-            .add(AtomConstraint::Valence(ValueAst::Lit(valence as i64)));
-        prepared
-            .constraints
-            .add(AtomConstraint::DonatedPairs(ValueAst::Lit(donated as i64)));
-        prepared
-            .constraints
-            .add(AtomConstraint::AcceptedPairs(ValueAst::Lit(
-                accepted as i64,
-            )));
-        if view.is_in_aromatic_system() {
-            if let Some(pi) = view
-                .aromatic_valence()
-                .as_lit()
-                .and_then(|n| u8::try_from(n).ok())
-            {
-                prepared.constraints.add(AtomConstraint::AromaticValence(
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(pi as i64)),
-                ));
-            }
+                .matches(&match_input.constraints.aromatic_valence());
+
+        let aromatic_constraint = if atom.is_in_aromatic_system() {
+            atom.aromatic_valence().as_lit().map(|pi| {
+                AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(pi)))
+            })
         } else if !is_aromatic {
-            prepared.constraints.add(AtomConstraint::AromaticValence(
+            Some(AtomConstraint::AromaticValence(
                 AromaticValenceAst::NotAromatic,
-            ));
-        }
-        if let Some(mc) = view
-            .multicenter_valence()
-            .as_lit()
-            .and_then(|n| u8::try_from(n).ok())
-        {
+            ))
+        } else {
+            None
+        };
+
+        let multicenter_constraint = atom.multicenter_valence().as_lit().map(|mc| {
             let mc_constraint = if mc == 0 {
                 MulticenterValenceAst::NotMulticenter
             } else {
-                MulticenterValenceAst::Multicenter(ValueAst::Lit(mc as i64))
+                MulticenterValenceAst::Multicenter(ValueAst::Lit(mc))
             };
-            prepared
-                .constraints
-                .add(AtomConstraint::MulticenterValence(mc_constraint));
+            AtomConstraint::MulticenterValence(mc_constraint)
+        });
+
+        for constraint in [
+            Some(AtomConstraint::Valence(ValueAst::Lit(valence))),
+            Some(AtomConstraint::DonatedPairs(ValueAst::Lit(donated))),
+            Some(AtomConstraint::AcceptedPairs(ValueAst::Lit(accepted))),
+            aromatic_constraint,
+            multicenter_constraint,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            match_input.constraints.add(constraint);
         }
-        prepared
+        match_input
     }
 }
 
@@ -188,7 +169,7 @@ mod tests {
             AtomTypingValence::new(reg);
         let mut ast = methyl_chloride_partial();
         let err = resolver.resolve(&mut ast).unwrap_err();
-        assert!(matches!(err, AtomTypingError::NoMatchingPattern { .. }));
+        assert!(matches!(err, AtomTypingError::NoMatch { .. }));
     }
 
     #[rstest]

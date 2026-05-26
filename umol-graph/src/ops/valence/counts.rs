@@ -1,4 +1,4 @@
-//! Counts valence resolver: per-atom electron conservation. `synthesize`
+//! Counts valence resolver: per-atom electron conservation. `derive_fields`
 //! builds the resolved atom type (implicit H, lone pairs, spin, aromatic
 //! valence) from the per-atom inputs; `resolve_atom` and `resolve_molecule_atom`
 //! gather those inputs — from constraints and from topology respectively — and
@@ -10,7 +10,7 @@
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints, AtomId, Lattice,
-    MoleculeAst, SpinStateAst, ValueAst,
+    MoleculeAst, ValueAst,
 };
 
 use crate::ops::valence::table::ValenceTable;
@@ -28,6 +28,8 @@ pub enum CountsError {
     InvalidElement,
     #[error("undetermined element")]
     UndeterminedElement,
+    #[error("aromatic valence requires implicit hydrogens")]
+    AromaticNoImplicitHydrogens,
 }
 
 impl CountsValence {
@@ -35,8 +37,8 @@ impl CountsValence {
         Self { table }
     }
 
+    /// Resolve all atoms in molecule. Errors if element is undetermined or not in valence table.
     pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), CountsError> {
-        // Every atom must name an element the table covers before resolving.
         for atom in ast.atoms().iter() {
             let Some(element) = atom.element().as_lit() else {
                 return Err(CountsError::UndeterminedElement);
@@ -52,11 +54,8 @@ impl CountsValence {
         Ok(())
     }
 
-    /// Resolve an atom in a molecule: localized valence and accepted dative
-    /// pairs come from topology, and the atom counts as aromatic if it is in an
-    /// aromatic system *or* carries an aromatic-valence constraint. The
-    /// synthesized type is applied with `meet` (a conflict with a pinned field
-    /// is a `NoMatch`).
+    /// Resolve atom in molecule: valence and accepted pairs are read from topology.
+    /// Atom is considered aromatic if in an aromatic system *or* has aromatic-valence constraint.
     fn resolve_molecule_atom(
         &self,
         ast: &mut MoleculeAst,
@@ -66,6 +65,13 @@ impl CountsValence {
         if atom.ast.is_ground() {
             return Ok(());
         }
+        if atom.element().is_undetermined() {
+            return Ok(());
+        };
+        if atom.charge().is_undetermined() {
+            return Ok(());
+        };
+
         // Defer if the localized valence is not determinate yet.
         let Some(valence) = atom.valence().as_lit() else {
             return Ok(());
@@ -75,57 +81,50 @@ impl CountsValence {
             || AromaticValenceAst::aromatic(ValueAst::Undetermined)
                 .matches(&atom.constraints().aromatic_valence());
 
-        let Some(synthesized) = self.synthesize(atom.ast, valence, accepted_pairs, is_aromatic)?
-        else {
-            return Ok(());
-        };
-        let resolved = atom.ast.meet(&synthesized).ok_or(CountsError::NoMatch)?;
+        let derived = self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic)?;
+        let resolved = atom.ast.meet(&derived).ok_or(CountsError::NoMatch)?;
         *ast.atom_mut(atom_id).ast = resolved;
         Ok(())
     }
 
-    /// Resolve a standalone atom: localized valence (`#v`), accepted dative
-    /// pairs (`#t`), and aromatic membership (`#a`) are read from the atom's
-    /// own constraints (absent ones default to zero / non-aromatic). The
-    /// synthesized type is applied with `meet`.
+    /// Resolve atom: valence, accepted pairs, aromatic valence are read from constraints
+    /// (absent constraints default to zero / non-aromatic).
+    /// Errors if element is undetermined or not in valence table or if charge is undetermined.
     pub fn resolve_atom(&self, ast: &mut AtomAst) -> Result<(), CountsError> {
         if ast.is_ground() {
             return Ok(());
         }
+        if ast.element.is_undetermined() {
+            return Ok(());
+        };
+        if ast.charge.is_undetermined() {
+            return Ok(());
+        };
         let valence = ast.constraints.valence().as_lit().unwrap_or(0);
         let accepted_pairs = ast.constraints.accepted_pairs().as_lit().unwrap_or(0);
         let is_aromatic = AromaticValenceAst::aromatic(ValueAst::Undetermined)
             .matches(&ast.constraints.aromatic_valence());
 
-        if let Some(synthesized) = self.synthesize(ast, valence, accepted_pairs, is_aromatic)? {
-            *ast = ast.meet(&synthesized).ok_or(CountsError::NoMatch)?;
-        }
+        let derived = self.derive_fields(ast, valence, accepted_pairs, is_aromatic)?;
+        *ast = ast.meet(&derived).ok_or(CountsError::NoMatch)?;
         Ok(())
     }
 
-    /// Build the resolved atom type — implicit hydrogens, lone pairs, spin, and
-    /// aromatic valence — from the atom's element/charge/spin and the supplied
-    /// localized valence, accepted dative pairs, and aromaticity. Returns
-    /// `None` when the atom is underdetermined (no `Lit` element or charge, or
-    /// aromatic with an unknown H count). The returned atom sets only the
-    /// computed fields; the caller `meet`s it onto the target.
-    fn synthesize(
+    /// Build atom type updates (implicit hydrogens, lone pairs, spin, and constraints).
+    /// Sets derived valence and aromatic valence constraints.
+    /// Returns `None` when the atom is underdetermined. Caller should call meet with the derived values.
+    fn derive_fields(
         &self,
         atom: &AtomAst,
         valence: i64,
         accepted_pairs: i64,
         is_aromatic: bool,
-    ) -> Result<Option<AtomAst>, CountsError> {
-        let Some(element) = atom.element.as_lit() else {
-            return Ok(None);
-        };
-        // Charge must be given; it is never defaulted to zero.
-        let Some(charge) = atom.charge.as_lit() else {
-            return Ok(None);
-        };
+    ) -> Result<AtomAst, CountsError> {
+        let element = atom.element.as_lit().unwrap();
+        let charge = atom.charge.as_lit().unwrap();
 
         // covalence_set of the charge/dative-shifted (isoelectronic) element.
-        // No shift target, no table entry, or an empty set: out of scope.
+        // Error if shift target or table data is missing.
         let covalence_set = match element
             .shift((2 * accepted_pairs - charge) as i8)
             .and_then(|shifted| self.table.entry(shifted))
@@ -134,53 +133,63 @@ impl CountsValence {
             _ => return Err(CountsError::InvalidElement),
         };
 
-        // Implicit hydrogens: given, else saturate to the lowest covalence ≥ v.
+        let mut derived = AtomAst::default();
+
         let implicit_hydrogens = match atom.implicit_hydrogens.as_lit() {
-            Some(h) => h,
-            None if is_aromatic => return Ok(None), // need a known H count to determine `a`
-            None => match covalence_set.iter().filter(|&&c| i64::from(c) >= valence).min() {
-                Some(&c) => i64::from(c) - valence,
-                None => return Err(CountsError::NoMatch),
-            },
-        };
-        let total_localized_valence = valence + implicit_hydrogens;
-        let electrons = i64::from(element.valence_electrons());
-
-        // Aromatic valence `a` from the covalence: `ai = covalence − (v+h)`.
-        // `ai = 1` ⇒ `a = 1`; `ai = 0` splits acceptor (no spare electrons)
-        // from lone-pair donor by the leftover electron count.
-        let aromatic_valence = if is_aromatic {
-            if covalence_set.contains(&(total_localized_valence as u8)) {
-                if electrons - charge - total_localized_valence == 0 {
-                    0
-                } else {
-                    2
+            Some(v) => v,
+            None => {
+                if is_aromatic {
+                    return Err(CountsError::AromaticNoImplicitHydrogens);
                 }
-            } else if covalence_set.contains(&((total_localized_valence + 1) as u8)) {
-                1
-            } else {
-                return Err(CountsError::NoMatch);
+                let v = derive_implicit_hydrogens(covalence_set, valence)?;
+                derived.implicit_hydrogens = ValueAst::lit(v);
+                v
             }
-        } else {
-            0
         };
 
-        // Per-atom conservation: e − c = v + h + a + u + 2n.
-        let nonbonding = electrons - charge - total_localized_valence - aromatic_valence;
-        if nonbonding < 0 {
-            return Err(CountsError::NoMatch);
-        }
-        let unpaired = atom.spin.unpaired.as_lit().unwrap_or(nonbonding % 2);
-        if unpaired > nonbonding || (nonbonding - unpaired) % 2 != 0 {
-            return Err(CountsError::NoMatch);
-        }
-        let lone_pairs = (nonbonding - unpaired) / 2;
-        if lone_pairs > i64::from(element.valence_capacity() / 2) {
-            return Err(CountsError::NoMatch);
-        }
-        let multiplicity = atom.spin.multiplicity.as_lit().unwrap_or(unpaired + 1);
+        let electrons = i64::from(element.valence_electrons());
+        let valence_capacity = i64::from(element.valence_capacity());
 
-        let constraints = AtomConstraints::from_iter([
+        let aromatic_valence = derive_aromatic_valence(
+            covalence_set,
+            electrons,
+            charge,
+            implicit_hydrogens,
+            valence,
+            is_aromatic,
+        )?;
+
+        let unpaired = match (atom.lone_pairs.as_lit(), atom.spin.unpaired.as_lit()) {
+            (Some(_), Some(u)) => u,
+            (input_lone_pairs, input_unpaired) => {
+                let (computed_lone_pairs, computed_unpaired) = derive_lone_pairs_unpaired(
+                    valence_capacity,
+                    electrons,
+                    charge,
+                    implicit_hydrogens,
+                    valence,
+                    aromatic_valence,
+                )?;
+
+                if input_lone_pairs.is_none() {
+                    derived.lone_pairs = ValueAst::lit(computed_lone_pairs);
+                }
+                if input_unpaired.is_none() {
+                    derived.spin.unpaired = ValueAst::lit(computed_unpaired);
+                }
+
+                input_unpaired.unwrap_or(computed_unpaired)
+            }
+        };
+
+        match atom.spin.multiplicity.as_lit() {
+            Some(_) => {}
+            None => {
+                derived.spin.multiplicity = ValueAst::lit(unpaired + 1);
+            }
+        }
+
+        derived.constraints = AtomConstraints::from_iter([
             AtomConstraint::Valence(ValueAst::Lit(valence)),
             AtomConstraint::AromaticValence(if is_aromatic {
                 AromaticValenceAst::Aromatic(ValueAst::Lit(aromatic_valence))
@@ -188,16 +197,84 @@ impl CountsValence {
                 AromaticValenceAst::NotAromatic
             }),
         ]);
-        Ok(Some(AtomAst {
-            implicit_hydrogens: ValueAst::Lit(implicit_hydrogens),
-            lone_pairs: ValueAst::Lit(lone_pairs),
-            spin: SpinStateAst {
-                unpaired: ValueAst::Lit(unpaired),
-                multiplicity: ValueAst::Lit(multiplicity),
-            },
-            constraints,
-            ..AtomAst::default()
-        }))
+        Ok(derived)
+    }
+}
+
+// Derive implicit hydrogens from lowest covalence exceeding derived valence
+#[inline]
+fn derive_implicit_hydrogens(covalence_set: &[u8], valence: i64) -> Result<i64, CountsError> {
+    covalence_set
+        .iter()
+        .find_map(|&c| {
+            let i = i64::from(c) - valence;
+            if i >= 0 {
+                Some(i)
+            } else {
+                None
+            }
+        })
+        .ok_or(CountsError::NoMatch)
+}
+
+// Derive aromatic valence from the covalence via aromatic increment.
+// `increment = covalence − (v+h)`.
+// increment = 1 -> aromatic valence = 1
+// increment = 0 -> aromatic valence = 0 or 2
+// Distinguish aromatic valence = 0 and 2 from remaining electron count in aromatic system.
+// Aromatic valence = 0 in acceptors (if total_localized_valence = covalence)
+// Aromatic valence = 2 in donors (if total localized valence < covalence)
+// Aromatic valence = 1 in other aromatic atoms
+#[inline]
+fn derive_aromatic_valence(
+    covalence_set: &[u8],
+    electrons: i64,
+    charge: i64,
+    implicit_hydrogens: i64,
+    valence: i64,
+    is_aromatic: bool,
+) -> Result<i64, CountsError> {
+    let total_localized_valence = valence + implicit_hydrogens;
+    if is_aromatic {
+        if covalence_set.contains(&(total_localized_valence as u8)) {
+            match electrons - charge - total_localized_valence {
+                0 => Ok(0),
+                _ => Ok(2),
+            }
+        } else if covalence_set.contains(&((total_localized_valence + 1) as u8)) {
+            Ok(1)
+        } else {
+            Err(CountsError::NoMatch)
+        }
+    } else {
+        Ok(0)
+    }
+}
+
+// Derive nonbonding electrons from per-atom conservation: e − c = v + h + a + u + 2n.
+// Spit nonbonding electrons by max-n principle
+#[inline]
+fn derive_lone_pairs_unpaired(
+    valence_capacity: i64,
+    electrons: i64,
+    charge: i64,
+    implicit_hydrogens: i64,
+    valence: i64,
+    aromatic_valence: i64,
+) -> Result<(i64, i64), CountsError> {
+    let nonbonding = electrons - charge - implicit_hydrogens - valence - aromatic_valence;
+    if nonbonding < 0 {
+        return Err(CountsError::NoMatch);
+    }
+    let unpaired = nonbonding % 2;
+    if unpaired > nonbonding || (nonbonding - unpaired) % 2 != 0 {
+        return Err(CountsError::NoMatch);
+    }
+    let lone_pairs = (nonbonding - unpaired) / 2;
+    if lone_pairs > valence_capacity / 2 {
+        Err(CountsError::NoMatch)
+    } else {
+        Ok((lone_pairs, unpaired))
     }
 }
 
