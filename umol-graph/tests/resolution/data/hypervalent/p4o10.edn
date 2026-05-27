@@ -1,22 +1,18 @@
-{
-  :config-overrides {
-    :atom {:aromatic-valence :not-aromatic :charge :zero :implicit-hydrogens :zero}}
-  :input {
-    :atoms ["P" "P" "P" "P" "O" "O" "O" "O" "O" "O" "O" "O" "O" "O"]
-    :bonds [
-      [0 4 :single]
-      [0 5 :single]
-      [0 6 :single]
-      [0 10 :double]
-      [1 4 :single]
-      [1 7 :single]
-      [1 8 :single]
-      [1 11 :double]
-      [2 5 :single]
-      [2 7 :single]
-      [2 9 :single]
-      [2 12 :double]
-      [3 6 :single]
-      [3 8 :single]
-      [3 9 :single]
-      [3 13 :double]]}}
+{:config-overrides {:atom {:aromatic-valence :not-aromatic :charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["P" "P" "P" "P" "O" "O" "O" "O" "O" "O" "O" "O" "O" "O"]
+         :bonds [[0 4 :single]
+                 [0 5 :single]
+                 [0 6 :single]
+                 [0 10 :double]
+                 [1 4 :single]
+                 [1 7 :single]
+                 [1 8 :single]
+                 [1 11 :double]
+                 [2 5 :single]
+                 [2 7 :single]
+                 [2 9 :single]
+                 [2 12 :double]
+                 [3 6 :single]
+                 [3 8 :single]
+                 [3 9 :single]
+                 [3 13 :double]]}}

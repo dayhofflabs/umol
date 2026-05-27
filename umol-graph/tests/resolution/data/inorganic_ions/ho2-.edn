@@ -1,3 +1,2 @@
-{
-  :config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
-  :input {:atoms ["O #c- #a!" "O #c0 #a!" "H"] :bonds [[0 1 :single] [1 2 :single]]}}
+{:config-overrides {:atom {:charge :zero :implicit-hydrogens :zero}}
+ :input {:atoms ["O #c- #a!" "O #c0 #a!" "H"] :bonds [[0 1 :single] [1 2 :single]]}}
