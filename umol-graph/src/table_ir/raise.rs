@@ -2,24 +2,16 @@
 //!
 //! Implements `TryIntoAst<MoleculeAst> for &Molecule` (and the per-atom and
 //! per-bond analogues). Table IR fields copy to `Lit` / `Undetermined`; IO
-//! ground defaults (`GROUND_ATOM_DEFAULTS`) fill neutral fields for resolution.
+//! raise applies fixed IO ground semantics for resolution.
 
 use std::collections::HashSet;
-use std::mem;
 
-use strum::IntoEnumIterator;
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomConstraints, AtomId,
-    BondAst, BondConstraint, Constraints, DativeBondAst, ElementAst, IsotopeAst, MoleculeAst,
-    MulticenterBondAst, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondKind,
-    SpinStateAst, TryIntoAst, ValueAst,
+    AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
+    DativeBondAst, ElementAst, IsotopeAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
+    NoncovalentBondKind, SpinStateAst, TryIntoAst, ValueAst,
 };
-use umol_ast::dsl::{
-    AromaticValenceDefault, AtomDefaults, IsotopeDefault, MulticenterValenceDefault,
-    MultiplicityDefault, NumericDefault, UnpairedElectronsDefault,
-};
-use umol_shared::spin::SpinState;
 
 use crate::table_ir::atom::Atom as TableAtom;
 use crate::table_ir::bond::{
@@ -37,22 +29,6 @@ use crate::table_ir::Molecule as TableMolecule;
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RaiseError {}
 
-fn ground_atom_defaults() -> AtomDefaults {
-    AtomDefaults {
-        isotope: IsotopeDefault::Natural,
-        charge: NumericDefault::Zero,
-        implicit_hydrogens: NumericDefault::Required,
-        lone_pairs: NumericDefault::Required,
-        unpaired_electrons: UnpairedElectronsDefault::Zero,
-        multiplicity: MultiplicityDefault::Required,
-        valence: NumericDefault::Required,
-        donated_pairs: NumericDefault::Required,
-        accepted_pairs: NumericDefault::Required,
-        aromatic_valence: AromaticValenceDefault::Required,
-        multicenter_valence: MulticenterValenceDefault::Required,
-    }
-}
-
 impl TryIntoAst<MoleculeAst> for &TableMolecule {
     type Ctx = ();
     type Error = RaiseError;
@@ -64,31 +40,31 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             .map(|a| a.try_into_ast(ctx))
             .collect::<Result<_, _>>()?;
 
-        let mut regular = Vec::new();
-        let mut dative: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
-        let mut noncovalent = Vec::new();
+        let mut bonds = Vec::new();
+        let mut dative_bonds: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
+        let mut noncovalent_bonds = Vec::new();
         for b in &self.bonds {
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
-                noncovalent.push((a_idx, b_idx, NoncovalentBondAst::from_kind(kind)));
+                noncovalent_bonds.push((a_idx, b_idx, NoncovalentBondAst::from_kind(kind)));
             } else if let Some(donation) = b.donation {
                 let (donor, acceptor) = match donation {
                     TableBondDonation::Donating => (a_idx, b_idx),
                     TableBondDonation::Accepting => (b_idx, a_idx),
                     _ => {
-                        regular.push((a_idx, b_idx, b.try_into_ast(ctx)?));
+                        bonds.push((a_idx, b_idx, b.try_into_ast(ctx)?));
                         continue;
                     }
                 };
                 let dative_bond = DativeBondAst::new(raise_bond_order(b.order));
-                dative.push((vec![donor], acceptor, dative_bond));
+                dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
-                regular.push((a_idx, b_idx, b.try_into_ast(ctx)?));
+                bonds.push((a_idx, b_idx, b.try_into_ast(ctx)?));
             }
         }
 
-        let multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)> = self
+        let multicenter_bond: Vec<(Vec<AtomId>, MulticenterBondAst)> = self
             .multicenter_bonds
             .iter()
             .map(|mc| {
@@ -107,7 +83,6 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             })
             .collect();
 
-        let cfg = ground_atom_defaults();
         for (table_atom, atom) in self.atoms.iter().zip(atoms.iter_mut()) {
             match table_atom.aromatic {
                 Some(true) => {
@@ -122,17 +97,27 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
                 }
                 None => {}
             }
-            raise_ground_atom(atom, &cfg);
+
+            if matches!(atom.isotope_mass, IsotopeAst::Undetermined) {
+                atom.isotope_mass = IsotopeAst::Natural;
+            }
+            if matches!(atom.charge, ValueAst::Undetermined) {
+                atom.charge = ValueAst::Lit(0);
+            }
+            if matches!(atom.spin.unpaired, ValueAst::Undetermined) {
+                atom.spin.unpaired = ValueAst::Lit(0);
+            }
+            atom.constraints.retain(|c| !c.is_undetermined());
         }
         let constraints = Constraints::new();
 
         Ok(MoleculeAst::from_parts(
             atoms,
-            regular,
-            dative,
+            bonds,
+            dative_bonds,
             vec![],
-            multicenter,
-            noncovalent,
+            multicenter_bond,
+            noncovalent_bonds,
             constraints,
         ))
     }
@@ -161,7 +146,13 @@ impl TryIntoAst<AtomAst> for &TableAtom {
                 Some(n) => ValueAst::Lit(n as i64),
                 None => ValueAst::Undetermined,
             },
-            spin: raise_atom_spin(self),
+            spin: match self.unpaired_electrons {
+                Some(u) => SpinStateAst {
+                    unpaired: ValueAst::Lit(u as i64),
+                    multiplicity: ValueAst::Undetermined,
+                },
+                None => SpinStateAst::default(),
+            },
             constraints: Default::default(),
         })
     }
@@ -177,53 +168,10 @@ impl TryIntoAst<BondAst> for &TableBond {
             Some(c) => ValueAst::Lit(c as i64),
             None => ValueAst::Undetermined,
         };
-        bond.spin = raise_bond_spin(self);
         if matches!(self.order, TableBondOrder::Aromatic) {
             bond.constraints.add(BondConstraint::Aromatic);
         }
         Ok(bond)
-    }
-}
-
-fn raise_atom_spin(atom: &TableAtom) -> SpinStateAst {
-    match (atom.unpaired_electrons, atom.multiplicity) {
-        (Some(u), Some(m)) => match SpinState::try_new(u, m) {
-            Ok(s) => s.into(),
-            Err(_) => SpinStateAst {
-                unpaired: ValueAst::Lit(u as i64),
-                multiplicity: ValueAst::Lit(u8::from(m) as i64),
-            },
-        },
-        (Some(u), None) => SpinStateAst {
-            unpaired: ValueAst::Lit(u as i64),
-            multiplicity: ValueAst::Undetermined,
-        },
-        (None, Some(m)) => SpinStateAst {
-            unpaired: ValueAst::Undetermined,
-            multiplicity: ValueAst::Lit(u8::from(m) as i64),
-        },
-        (None, None) => SpinStateAst::default(),
-    }
-}
-
-fn raise_bond_spin(bond: &TableBond) -> SpinStateAst {
-    match (bond.unpaired_electrons, bond.multiplicity) {
-        (Some(u), Some(m)) => match SpinState::try_new(u, m) {
-            Ok(s) => s.into(),
-            Err(_) => SpinStateAst {
-                unpaired: ValueAst::Lit(u as i64),
-                multiplicity: ValueAst::Lit(u8::from(m) as i64),
-            },
-        },
-        (Some(u), None) => SpinStateAst {
-            unpaired: ValueAst::Lit(u as i64),
-            multiplicity: ValueAst::Undetermined,
-        },
-        (None, Some(m)) => SpinStateAst {
-            unpaired: ValueAst::Undetermined,
-            multiplicity: ValueAst::Lit(u8::from(m) as i64),
-        },
-        (None, None) => SpinStateAst::default(),
     }
 }
 
@@ -253,148 +201,6 @@ fn raise_bond_order(order: TableBondOrder) -> ValueAst {
 fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
     match kind {
         TableNoncovalent::Hydrogen => NoncovalentBondKind::HydrogenBond,
-    }
-}
-
-fn raise_ground_spin(
-    spin: &mut SpinStateAst,
-    u_mode: UnpairedElectronsDefault,
-    m_mode: MultiplicityDefault,
-) {
-    let u = mem::replace(&mut spin.unpaired, ValueAst::Undetermined);
-    let m = mem::replace(&mut spin.multiplicity, ValueAst::Undetermined);
-    let resolved_u = if matches!(u, ValueAst::Undetermined) {
-        match u_mode {
-            UnpairedElectronsDefault::Zero => ValueAst::Lit(0),
-            UnpairedElectronsDefault::Required => ValueAst::Undetermined,
-            UnpairedElectronsDefault::Derived => match &m {
-                ValueAst::Lit(mm) => ValueAst::Lit(mm - 1),
-                _ => ValueAst::Undetermined,
-            },
-        }
-    } else {
-        u
-    };
-    let resolved_m = if matches!(m, ValueAst::Undetermined) {
-        match m_mode {
-            MultiplicityDefault::Required => ValueAst::Undetermined,
-            MultiplicityDefault::Derived => match &resolved_u {
-                ValueAst::Lit(uu) => ValueAst::Lit(uu + 1),
-                _ => ValueAst::Undetermined,
-            },
-        }
-    } else {
-        m
-    };
-    spin.unpaired = resolved_u;
-    spin.multiplicity = resolved_m;
-}
-
-fn raise_ground_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
-    let AtomAst {
-        element: _,
-        isotope_mass,
-        charge,
-        implicit_hydrogens,
-        lone_pairs,
-        spin,
-        constraints,
-    } = ast;
-
-    if matches!(*isotope_mass, IsotopeAst::Undetermined) {
-        *isotope_mass = match cfg.isotope {
-            IsotopeDefault::Natural => IsotopeAst::Natural,
-            IsotopeDefault::Required => IsotopeAst::Undetermined,
-        };
-    }
-    if matches!(*charge, ValueAst::Undetermined) {
-        *charge = match cfg.charge {
-            NumericDefault::Zero => ValueAst::Lit(0),
-            NumericDefault::Required => ValueAst::Undetermined,
-        };
-    }
-    if matches!(*implicit_hydrogens, ValueAst::Undetermined) {
-        *implicit_hydrogens = match cfg.implicit_hydrogens {
-            NumericDefault::Zero => ValueAst::Lit(0),
-            NumericDefault::Required => ValueAst::Undetermined,
-        };
-    }
-    if matches!(*lone_pairs, ValueAst::Undetermined) {
-        *lone_pairs = match cfg.lone_pairs {
-            NumericDefault::Zero => ValueAst::Lit(0),
-            NumericDefault::Required => ValueAst::Undetermined,
-        };
-    }
-    raise_ground_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
-    raise_ground_atom_constraints(constraints, cfg);
-}
-
-fn raise_ground_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults) {
-    constraints.retain(|c| !c.is_undetermined());
-
-    for kind in AtomConstraintKind::iter() {
-        match kind {
-            AtomConstraintKind::Valence => {
-                if matches!(cfg.valence, NumericDefault::Zero) && !constraints.contains(kind) {
-                    constraints.add(AtomConstraint::Valence(ValueAst::Lit(0)));
-                }
-            }
-            AtomConstraintKind::DonatedPairs => {
-                if matches!(cfg.donated_pairs, NumericDefault::Zero) && !constraints.contains(kind)
-                {
-                    constraints.add(AtomConstraint::DonatedPairs(ValueAst::Lit(0)));
-                }
-            }
-            AtomConstraintKind::AcceptedPairs => {
-                if matches!(cfg.accepted_pairs, NumericDefault::Zero) && !constraints.contains(kind)
-                {
-                    constraints.add(AtomConstraint::AcceptedPairs(ValueAst::Lit(0)));
-                }
-            }
-            AtomConstraintKind::AromaticValence => {
-                if !constraints.contains(kind) {
-                    match cfg.aromatic_valence {
-                        AromaticValenceDefault::NotAromatic => {
-                            constraints.add(AtomConstraint::AromaticValence(
-                                AromaticValenceAst::NotAromatic,
-                            ));
-                        }
-                        AromaticValenceDefault::Aromatic => {
-                            constraints.add(AtomConstraint::AromaticValence(
-                                AromaticValenceAst::Aromatic(ValueAst::Undetermined),
-                            ));
-                        }
-                        AromaticValenceDefault::Required => {}
-                    }
-                }
-            }
-            AtomConstraintKind::MulticenterValence => {
-                if !constraints.contains(kind) {
-                    match cfg.multicenter_valence {
-                        MulticenterValenceDefault::NotMulticenter => {
-                            constraints.add(AtomConstraint::MulticenterValence(
-                                MulticenterValenceAst::NotMulticenter,
-                            ));
-                        }
-                        MulticenterValenceDefault::Multicenter => {
-                            constraints.add(AtomConstraint::MulticenterValence(
-                                MulticenterValenceAst::Multicenter(ValueAst::Undetermined),
-                            ));
-                        }
-                        MulticenterValenceDefault::Required => {}
-                    }
-                }
-            }
-            AtomConstraintKind::TotalValence
-            | AtomConstraintKind::Degree
-            | AtomConstraintKind::TotalDegree
-            | AtomConstraintKind::RingDegree
-            | AtomConstraintKind::RingValence
-            | AtomConstraintKind::TotalHydrogens
-            | AtomConstraintKind::RingCount
-            | AtomConstraintKind::RingSize
-            | AtomConstraintKind::JointDomain => {}
-        }
     }
 }
 
@@ -460,7 +266,10 @@ mod tests {
         atom.aromatic = table_aromatic;
         mol.atoms.push(atom);
         let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
-        assert_eq!(ast.atom(AtomId(0)).ast.constraints.aromatic_valence(), expected);
+        assert_eq!(
+            ast.atom(AtomId(0)).ast.constraints.aromatic_valence(),
+            expected
+        );
     }
 
     #[rstest]
