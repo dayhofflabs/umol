@@ -6,8 +6,8 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints, AtomId, IsotopeAst,
-    Lattice, MoleculeAst, SpinStateAst, ValueAst,
+    aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints,
+    AtomId, IsotopeAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState};
@@ -155,11 +155,8 @@ impl CountsValence {
                 if !aromatic_constraint.matches_value(aromatic_valence) {
                     continue;
                 }
-                let aromatic_increment = AromaticValenceAst::aromatic(aromatic_valence)
-                    .aromatic_increment()
-                    .as_lit_or(0);
                 if let Some(b) = bonding_budget {
-                    if implicit_hydrogens + aromatic_increment > b {
+                    if implicit_hydrogens + aromatic_increment(aromatic_valence) > b {
                         continue;
                     }
                 }

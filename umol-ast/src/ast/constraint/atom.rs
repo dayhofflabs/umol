@@ -169,8 +169,7 @@ impl AromaticValenceAst {
     pub fn aromatic_increment(&self) -> ValueAst {
         match self {
             Self::Aromatic(v) => match v.as_lit() {
-                Some(1) => ValueAst::Lit(1),
-                Some(_) => ValueAst::Lit(0),
+                Some(a) => ValueAst::Lit(aromatic_increment(a)),
                 None => ValueAst::Undetermined,
             },
             Self::NotAromatic => ValueAst::Lit(0),
@@ -259,6 +258,14 @@ impl AsLit for AromaticValenceAst {
             Self::NotAromatic => Some(0),
             _ => None,
         }
+    }
+}
+
+/// Compute aromatic increment from aromatic valence.
+pub fn aromatic_increment(aromatic_valence: i64) -> i64 {
+    match aromatic_valence {
+        1 => 1,
+        _ => 0,
     }
 }
 

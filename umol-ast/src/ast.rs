@@ -26,13 +26,15 @@ pub use aromatic::AromaticSystemAst;
 pub use atom::{AtomAst, ElementAst, IsotopeAst};
 pub use automorphism::AtomAutomorphism;
 pub use bond::BondAst;
+pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
 pub use constraint::{
-    AromaticSystemConstraint, AromaticSystemConstraintKind, AromaticSystemConstraints,
-    AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, BondConstraint,
-    BondConstraintKind, BondConstraints, Constraint, Constraints, DativeBondConstraint,
-    DativeBondConstraintKind, DativeBondConstraints, MoleculeConstraint, MulticenterBondConstraint,
-    MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterValenceAst,
-    NoncovalentBondConstraint, NoncovalentBondConstraints, RelationalConstraint, SubPatternAnchor,
+    aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKind,
+    AromaticSystemConstraints, AromaticValenceAst, AtomConstraint, AtomConstraintKind,
+    AtomConstraints, BondConstraint, BondConstraintKind, BondConstraints, Constraint, Constraints,
+    DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, MoleculeConstraint,
+    MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
+    MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraints,
+    RelationalConstraint, SubPatternAnchor,
 };
 pub use dative::DativeBondAst;
 pub use edit::{
@@ -44,7 +46,6 @@ pub use edit::{
     RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
     RemovedOverlays, RewrittenConstraint, Undo,
 };
-pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
 pub use embedding::MoleculeEmbedding;
 pub use error::{Contradiction, EvaluationError, JointDomainError, RewriteError};
 pub use ids::{

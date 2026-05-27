@@ -47,21 +47,13 @@ impl AtomTypingValence {
             };
 
             // Topological derived predicates should return Lit.
-            let valence = atom.valence().as_lit_expect("valence should be Lit");
-            let donated = atom
-                .donated_pairs()
-                .as_lit_expect("donated pairs should be Lit");
-            let accepted = atom
-                .accepted_pairs()
-                .as_lit_expect("accepted pairs should be Lit");
-
-            let match_input = add_constraints(&atom, valence, donated, accepted);
-            let charge_key = match_input.charge.as_lit().map(|n| n as i8);
+            let pattern = add_constraints(&atom);
+            let charge = pattern.charge.as_lit().map(|n| n as i8);
             let candidates: Vec<&AtomAst> = self
                 .registry
-                .lookup(element, charge_key)
+                .lookup(element, charge)
                 .iter()
-                .filter(|pat| match_input.matches(pat))
+                .filter(|entry| pattern.matches(entry))
                 .collect();
 
             match candidates.len() {
@@ -69,7 +61,7 @@ impl AtomTypingValence {
                     return Err(AtomTypingError::NoMatch {
                         atom: idx,
                         element,
-                        charge: charge_key,
+                        charge,
                     });
                 }
                 1 => {
@@ -92,16 +84,26 @@ impl AtomTypingValence {
 }
 
 /// Add constraints to atom AST for registry pattern matching.
-fn add_constraints(atom: &AtomView<'_>, valence: i64, donated: i64, accepted: i64) -> AtomAst {
+fn add_constraints(atom: &AtomView<'_>) -> AtomAst {
     let mut updated = atom.ast.clone();
 
-    updated.constraints.add(AtomConstraint::valence(valence));
     updated
         .constraints
-        .add(AtomConstraint::donated_pairs(donated));
+        .add(AtomConstraint::valence(ValueAst::Lit(
+            atom.valence().as_lit_expect("valence should be Lit"),
+        )));
     updated
         .constraints
-        .add(AtomConstraint::accepted_pairs(accepted));
+        .add(AtomConstraint::donated_pairs(ValueAst::Lit(
+            atom.donated_pairs()
+                .as_lit_expect("donated pairs should be Lit"),
+        )));
+    updated
+        .constraints
+        .add(AtomConstraint::accepted_pairs(ValueAst::Lit(
+            atom.accepted_pairs()
+                .as_lit_expect("accepted pairs should be Lit"),
+        )));
 
     if atom.is_in_aromatic_system() {
         let aromatic = atom.aromatic_valence().as_lit_or(0);
