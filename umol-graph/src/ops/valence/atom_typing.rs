@@ -2,10 +2,7 @@
 //! `AtomAst` patterns keyed by element and (optionally) charge.
 
 use thiserror::Error;
-use umol_ast::ast::{
-    AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomId, AtomView, Lattice, MoleculeAst,
-    MulticenterValenceAst, ValueAst,
-};
+use umol_ast::ast::{AsLit, AtomAst, AtomId, Lattice, MoleculeAst};
 use umol_shared::element::Element;
 
 use super::compare::compare_valence_preference;
@@ -47,7 +44,8 @@ impl AtomTypingValence {
             };
 
             // Topological derived predicates should return Lit.
-            let pattern = add_constraints(&atom);
+            let constraints = atom.derive_constraints();
+            let pattern = atom.ast.clone().with_constraints(constraints);
             let charge = pattern.charge.as_lit().map(|n| n as i8);
             let candidates: Vec<&AtomAst> = self
                 .registry
@@ -81,49 +79,6 @@ impl AtomTypingValence {
         }
         Ok(())
     }
-}
-
-/// Add constraints to atom AST for registry pattern matching.
-fn add_constraints(atom: &AtomView<'_>) -> AtomAst {
-    let mut updated = atom.ast.clone();
-
-    updated
-        .constraints
-        .add(AtomConstraint::valence(ValueAst::Lit(
-            atom.valence().as_lit_expect("valence should be Lit"),
-        )));
-    updated
-        .constraints
-        .add(AtomConstraint::donated_pairs(ValueAst::Lit(
-            atom.donated_pairs()
-                .as_lit_expect("donated pairs should be Lit"),
-        )));
-    updated
-        .constraints
-        .add(AtomConstraint::accepted_pairs(ValueAst::Lit(
-            atom.accepted_pairs()
-                .as_lit_expect("accepted pairs should be Lit"),
-        )));
-
-    if atom.is_in_aromatic_system() {
-        let aromatic = atom.aromatic_valence().as_lit_or(0);
-        updated.constraints.add(AtomConstraint::aromatic_valence(
-            AromaticValenceAst::aromatic(aromatic),
-        ));
-    } else if atom.neighbors().any(|n| n.bond().constraints().aromatic()) {
-        updated.constraints.add(AtomConstraint::aromatic_valence(
-            AromaticValenceAst::aromatic(ValueAst::Undetermined),
-        ));
-    };
-
-    if atom.is_in_multicenter_bond() {
-        let multicenter = atom.multicenter_valence().as_lit_or(0);
-        updated.constraints.add(AtomConstraint::multicenter_valence(
-            MulticenterValenceAst::multicenter(multicenter),
-        ));
-    };
-
-    updated
 }
 
 #[cfg(test)]

@@ -539,6 +539,13 @@ impl AtomConstraints {
         }
     }
 
+    /// Add multiple constraints at once, using semantics of `add`.
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = AtomConstraint>) {
+        for constraint in constraints {
+            self.add(constraint);
+        }
+    }
+
     pub fn retain(&mut self, mut f: impl FnMut(&AtomConstraint) -> bool) {
         self.entries.retain(|c| f(c));
     }

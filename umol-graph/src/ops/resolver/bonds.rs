@@ -1,8 +1,6 @@
 //! Covalent-bond resolver: fills `BondAst` charge / spin defaults on bonds
 //! whose corresponding inherent slots are still `Undetermined` after the
-//! valence and aromaticity passes. Atom-typing and counts narrow per-atom
-//! state but do not touch bond-level fields, so this resolver closes the
-//! ground-status gap before the composite resolver reports `Determined`.
+//! valence and aromaticity passes.
 
 use thiserror::Error;
 use umol_ast::ast::{Lattice, MoleculeAst, SpinStateAst, ValueAst};

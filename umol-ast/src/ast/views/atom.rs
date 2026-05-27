@@ -20,6 +20,7 @@ use super::dative_bond::DativeBondView;
 use super::multicenter_bond::MulticenterBondView;
 use super::neighbor::NeighborView;
 use super::noncovalent_bond::NoncovalentBondView;
+use crate::ast::{AromaticValenceAst, AsLit, AtomConstraint, MulticenterValenceAst};
 
 /// Namespace accessor for atom views on a `MoleculeAst`. Provides `count`,
 /// `ids`, `iter`, `get`, and `Index` without burying them on `MoleculeAst`.
@@ -418,6 +419,39 @@ impl<'a> AtomView<'a> {
             .filter(|n| n.bond().is_in_ring())
             .map(|n| n.bond().order().clone())
             .fold(ValueAst::Lit(0), |acc, order| acc + order)
+    }
+
+    /// Derive topological constraints from atom properties.
+    pub fn derive_constraints(&self) -> AtomConstraints {
+        let valence = self.valence();
+        let donated_pairs = self.donated_pairs();
+        let accepted_pairs = self.accepted_pairs();
+        let aromatic_valence = if self.is_in_aromatic_system() {
+            AromaticValenceAst::aromatic(
+                self.aromatic_valence()
+                    .as_lit_expect("aromatic valence should be Lit"),
+            )
+        } else if self.neighbors().any(|n| n.bond().constraints().aromatic()) {
+            AromaticValenceAst::aromatic(ValueAst::Undetermined)
+        } else {
+            AromaticValenceAst::NotAromatic
+        };
+
+        let multicenter_valence = if self.is_in_multicenter_bond() {
+            MulticenterValenceAst::multicenter(
+                self.multicenter_valence()
+                    .as_lit_expect("multicenter valence should be Lit"),
+            )
+        } else {
+            MulticenterValenceAst::NotMulticenter
+        };
+        AtomConstraints::from_iter([
+            AtomConstraint::valence(valence),
+            AtomConstraint::donated_pairs(donated_pairs),
+            AtomConstraint::accepted_pairs(accepted_pairs),
+            AtomConstraint::aromatic_valence(aromatic_valence),
+            AtomConstraint::multicenter_valence(multicenter_valence),
+        ])
     }
 
     /// Is atom ground

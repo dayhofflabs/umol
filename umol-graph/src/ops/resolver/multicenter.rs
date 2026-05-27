@@ -1,8 +1,5 @@
 //! Multicenter-bond resolver: fills `MulticenterBondAst` charge / spin
-//! defaults parallel to `BondsResolver`. Per-atom `electrons` are user input
-//! (no resolver currently writes them); a slot left `Undetermined` is a real
-//! gap and gets reported via the global all-ground check, not papered over
-//! with a default.
+//! defaults parallel to `BondsResolver`.
 
 use thiserror::Error;
 use umol_ast::ast::{Lattice, MoleculeAst, SpinStateAst, ValueAst};
