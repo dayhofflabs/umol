@@ -9,17 +9,10 @@ use rstest::*;
 
 use super::*;
 use crate::io::ctfile::config::CtabParseFlags;
-use crate::table_ir::atom::{Chirality, ImplicitHydrogens};
+use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, RGroup, WildcardAtom,
 };
-
-fn hydrogens_to_count(h: Option<ImplicitHydrogens>) -> Option<u8> {
-    match h {
-        Some(ImplicitHydrogens::Hydrogens(n)) => Some(n),
-        Some(ImplicitHydrogens::Normal) | None => None,
-    }
-}
 
 #[rustfmt::skip]
 #[rstest]
@@ -79,7 +72,7 @@ fn test_atom_block(
     assert_eq!(atom.isotope_mass, isotope_mass, "{:?} isotope_mass", input_str);
     assert_eq!(atom.charge, charge, "{:?} charge", input_str);
     assert_eq!(atom.chirality, chirality, "{:?} chirality", input_str);
-    assert_eq!(hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count, "{:?} hydrogen_count", input_str);
+    assert_eq!(atom.implicit_hydrogens, hydrogen_count, "{:?} hydrogen_count", input_str);
     assert_eq!(atom.valence, valence, "{:?} valence", input_str);
 }
 
@@ -168,7 +161,7 @@ fn test_extended_atom_block(
     assert_eq!(atom.isotope_mass, isotope_mass, "{:?} isotope_mass", input_str);
     assert_eq!(atom.charge, charge, "{:?} charge", input_str);
     assert_eq!(atom.chirality, chirality, "{:?} chirality", input_str);
-    assert_eq!(hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count, "{:?} hydrogen_count", input_str);
+    assert_eq!(atom.implicit_hydrogens, hydrogen_count, "{:?} hydrogen_count", input_str);
     assert_eq!(atom.valence, valence, "{:?} valence", input_str);
 }
 
@@ -258,6 +251,8 @@ fn test_extended_atom_block_invalid(#[case] input: &[u8]) {
     1.2345, 2.3456, 3.4567, Element::C, Some(10), Some(1), None, None, Some(4))]
 #[case::zero_coordinates(b"    0.0000    0.0000    0.0000 C  -2  3  0  0  0  4",
     0.0000, 0.0000, 0.0000, Element::C, Some(10), Some(1), None, None, Some(4))]
+#[case::hydrogen_count(b"    0.0000    0.0000    0.0000 C   0  0  0  1  0  0  0  0  0  0  0  0",
+    0.0000, 0.0000, 0.0000, Element::C, None, None, None, Some(0), None)]
 #[case::named_isotope(b"    1.2345    2.3456    3.4567 D  -2  3  0  0  0  1  0  0  0  0  0  0",
     1.2345, 2.3456, 3.4567, Element::H, Some(2), Some(1), None, None, Some(1))]
 #[case::invalid_unused(b"    1.2345    2.3456    3.4567 C  -2  3  0  0  0  4  0  0XXX  0  0  0",
@@ -321,7 +316,7 @@ fn test_atom_input(
         input_str, atom.chirality, chirality
     );
     assert_eq!(
-        hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count,
+        atom.implicit_hydrogens, hydrogen_count,
         "{:?} has returned hydrogen_count {:?}, expected {:?}",
         input_str, atom.implicit_hydrogens, hydrogen_count
     );
@@ -441,7 +436,7 @@ fn test_atom_input_strict(
         input_str, atom.chirality, chirality
     );
     assert_eq!(
-        hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count,
+        atom.implicit_hydrogens, hydrogen_count,
         "{:?} has returned hydrogen_count {:?}, expected {:?}",
         input_str, atom.implicit_hydrogens, hydrogen_count
     );
@@ -531,7 +526,7 @@ fn test_atom_input_ignore_positions(
         input_str, atom.chirality, chirality
     );
     assert_eq!(
-        hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count,
+        atom.implicit_hydrogens, hydrogen_count,
         "{:?} has returned hydrogen_count {:?}, expected {:?}",
         input_str, atom.implicit_hydrogens, hydrogen_count
     );
@@ -653,7 +648,7 @@ fn test_extended_atom_input(
         input_str, atom.chirality, chirality,
     );
     assert_eq!(
-        hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count,
+        atom.implicit_hydrogens, hydrogen_count,
         "{:?} has returned hydrogen_count {:?}, expected {:?}",
         input_str, atom.implicit_hydrogens, hydrogen_count,
     );
@@ -781,7 +776,7 @@ fn test_extended_atom_input_strict(
         input_str, atom.chirality, chirality,
     );
     assert_eq!(
-        hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count,
+        atom.implicit_hydrogens, hydrogen_count,
         "{:?} has returned hydrogen_count {:?}, expected {:?}",
         input_str, atom.implicit_hydrogens, hydrogen_count,
     );
@@ -902,7 +897,7 @@ fn test_extended_atom_input_lenient(
         input_str, atom.chirality, chirality,
     );
     assert_eq!(
-        hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count,
+        atom.implicit_hydrogens, hydrogen_count,
         "{:?} has returned hydrogen_count {:?}, expected {:?}",
         input_str, atom.implicit_hydrogens, hydrogen_count,
     );
@@ -1016,7 +1011,7 @@ fn test_extended_atom_input_pseudoatoms(
         input_str, atom.chirality, chirality,
     );
     assert_eq!(
-        hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count,
+        atom.implicit_hydrogens, hydrogen_count,
         "{:?} has returned hydrogen_count {:?}, expected {:?}",
         input_str, atom.implicit_hydrogens, hydrogen_count,
     );
@@ -1098,7 +1093,7 @@ fn test_extended_atom_input_ignore_positions(
         input_str, atom.chirality, chirality,
     );
     assert_eq!(
-        hydrogens_to_count(atom.implicit_hydrogens), hydrogen_count,
+        atom.implicit_hydrogens, hydrogen_count,
         "{:?} has returned hydrogen_count {:?}, expected {:?}",
         input_str, atom.implicit_hydrogens, hydrogen_count,
     );

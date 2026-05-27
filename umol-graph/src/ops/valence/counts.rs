@@ -365,6 +365,14 @@ mod tests {
         0,
         "O#i=#c0#h0#n2#u0#s#v2#a!"
     )]
+    #[case::benzene_ring(
+        mol!(
+            r#"{:atoms ["C #c0" "C #c0" "C #c0" "C #c0" "C #c0" "C #c0"]
+               :bonds [[0 1 "1#a"] [1 2 "1#a"] [2 3 "1#a"] [3 4 "1#a"] [4 5 "1#a"] [5 0 "1#a"]]}"#
+        ),
+        0,
+        "C#i=#c0#h#n0#u0#s#v2#a"
+    )]
     fn test_counts_valence_resolve_molecule_atom(
         #[case] mut molecule: MoleculeAst,
         #[case] atom_id: u32,

@@ -937,7 +937,7 @@ Each step lands independently with tests green. Steps 1–2 are pure additions; 
 These are small follow-ups noticed during the in-progress work. Not blocking any other step; pick up alongside the nearest related substep.
 
 - **`umol-graph/src/ops/valence/counts.rs:181`** — unreachable-pattern warning. The old `ImplicitHydrogensAst::Normal` arm became unreachable when 2b merged it with `Undetermined`. One-line tidy.
-- **`umol-graph/src/table_ir/lift.rs:135`** — `Some(TableImplicitH::Normal) => ValueAst::Undetermined`. With `Normal` retired at the AST level, the table-IR variant `TableImplicitH::Normal` is now load-bearing only for the SMILES/MOL parser default. Review whether the variant should also be retired (and parsers map directly to `Undetermined` at the table layer) or if the distinction still carries useful information for the lift step.
+- **`umol-graph/src/table_ir/raise.rs`** — `Some(TableImplicitH::Normal) => ValueAst::Undetermined`. With `Normal` retired at the AST level, the table-IR variant `TableImplicitH::Normal` is now load-bearing only for the SMILES/MOL parser default. Review whether the variant should also be retired (and parsers map directly to `Undetermined` at the table layer) or if the distinction still carries useful information for the raise step.
 - **`NormalValenceTable` last consumer** — `atom_typing.rs::prepare_atom:124` still pre-narrows `implicit_hydrogens` via `normal_valence.implicit_hydrogens_for(...)`. Step 7 plans removal; flagging that this is the final consumer to retire.
 
 ### Design choices for step 3 (Invariants module)

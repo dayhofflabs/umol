@@ -121,9 +121,9 @@ EDN parser produces `MoleculeDsl` as a boundary type — surface form with metad
 
 ### SMILES / MOL IO
 
-Read: `SMILES/MOL → TableIR → MoleculeAst`. The lift step is `impl TryIntoAst<MoleculeAst> for &TableMolecule` (`umol-graph/src/table_ir/lift.rs:34`) — uses the same `IntoAst` trait family as the DSL → AST step. Per-atom and per-bond analogues exist in the same module.
+Read: `SMILES/MOL → TableIR → MoleculeAst`. The raise step is `impl TryIntoAst<MoleculeAst> for &TableMolecule` (`umol-graph/src/table_ir/raise.rs`) — uses the same `IntoAst` trait family as the DSL → AST step. Per-atom and per-bond analogues exist in the same module.
 
-After lift, `MoleculeAst` is passed to `Resolver::resolve(&MoleculeAst, &ChemistryModel) -> Solution` for narrowing. There is no `Molecule` wrapper to return into; resolved state lives on the (mutated) `MoleculeAst` itself. Validators (`ElectronInvariantValidator`, etc.) take `&MoleculeAst` directly.
+After raise, `MoleculeAst` is passed to `Resolver::resolve(&MoleculeAst, &ChemistryModel) -> Solution` for narrowing. There is no `Molecule` wrapper to return into; resolved state lives on the (mutated) `MoleculeAst` itself. Validators (`ElectronInvariantValidator`, etc.) take `&MoleculeAst` directly.
 
 Write: `MoleculeAst → TableIR → text`. No reverse `TryIntoTableIR` shortcut today; writers that need the table form go through whatever lowering exists per format.
 
@@ -2127,10 +2127,10 @@ actually live now:
   dispatcher classifies variants into `Solution::Contradictory` (chemistry),
   `Solution::Underdetermined` (e.g. HMO `UndeterminedAtom`), or `Err`
   (setup-level — currently only HMO `MissingParameters`).
-- [x] **TableIR → MoleculeAst lift.** `IntoAst<MoleculeAst> for &Molecule`
+- [x] **TableIR → MoleculeAst raise.** `TryIntoAst<MoleculeAst> for &Molecule`
   (and the per-atom and per-bond analogues) in
-  `umol-graph/src/table_ir/lift.rs`. Same conversion vocabulary as
-  umol-ast's DSL → AST lifts. `LiftError` empty for now; reserves a fail
+  `umol-graph/src/table_ir/raise.rs`. Same conversion vocabulary as
+  umol-ast's DSL → AST raise. `RaiseError` empty for now; reserves a fail
   surface for future strict checks.
 - [x] **Parser entry-points** return `MoleculeAst` (not `api::Molecule`):
   `parse_smiles`, `parse_smiles_with(... &ChemistryModel)`,

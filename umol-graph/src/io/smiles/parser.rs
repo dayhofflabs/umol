@@ -28,7 +28,6 @@ use crate::ops::model::ChemistryModel;
 use crate::ops::resolver::Resolver;
 use crate::ops::solution::Solution;
 use crate::span::Span;
-use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
     BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
     SourceFormat, WildcardAtom,
@@ -70,7 +69,7 @@ pub fn parse_smiles_bytes_with(
     let table_mol = parse_smiles_bytes_to_table_ir_with(input, io_config)?;
     let mut ast: MoleculeAst = (&table_mol)
         .try_into_ast(&())
-        .expect("table_ir → MoleculeAst lift is currently infallible");
+        .expect("table_ir → MoleculeAst raise is currently infallible");
     match Resolver::new(model).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(SmilesError::ResolveUnderdetermined),
@@ -88,7 +87,7 @@ pub fn parse_smiles_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, SmilesErro
     let table_mol = parse_smiles_bytes_to_table_ir(input)?;
     let ast: MoleculeAst = (&table_mol)
         .try_into_ast(&())
-        .expect("table_ir → MoleculeAst lift is currently infallible");
+        .expect("table_ir → MoleculeAst raise is currently infallible");
     Ok(ast)
 }
 
@@ -459,7 +458,7 @@ fn parse_smiles_inner(
                 element,
                 isotope: iso_opt,
                 charge: charge_opt.or(Some(0)),
-                hydrogens: Some(ImplicitHydrogens::Hydrogens(h_opt.unwrap_or(0))),
+                implicit_hydrogens: Some(h_opt.unwrap_or(0)),
                 class: class_opt,
                 aromatic,
                 chirality: chir_opt,
@@ -1049,7 +1048,7 @@ fn parse_extended_smiles_inner(
                 symbol,
                 isotope: iso_opt,
                 charge: charge_opt.or(Some(0)),
-                hydrogens: Some(ImplicitHydrogens::Hydrogens(h_opt.unwrap_or(0))),
+                implicit_hydrogens: Some(h_opt.unwrap_or(0)),
                 class: class_opt,
                 aromatic,
                 chirality: chir_opt,

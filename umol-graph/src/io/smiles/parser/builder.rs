@@ -5,7 +5,7 @@ use std::mem;
 use umol_shared::element::Element;
 
 use crate::span::Span;
-use crate::table_ir::atom::{Chirality, ImplicitHydrogens};
+use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
     Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedAtom,
     ExtendedBond, ExtendedMolecule, Molecule, Ring, WildcardAtom,
@@ -17,7 +17,7 @@ pub(super) struct AtomData {
     pub element: Element,
     pub isotope: Option<u32>,
     pub charge: Option<i8>,
-    pub hydrogens: Option<ImplicitHydrogens>,
+    pub implicit_hydrogens: Option<u8>,
     pub class: Option<u32>,
     pub aromatic: bool,
     pub chirality: Option<Chirality>,
@@ -58,7 +58,7 @@ impl MoleculeBuilder {
             element: a.element,
             charge: a.charge,
             isotope_mass: a.isotope,
-            implicit_hydrogens: a.hydrogens,
+            implicit_hydrogens: a.implicit_hydrogens,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -199,7 +199,7 @@ pub(super) struct ExtendedAtomData {
     pub symbol: AtomSymbol,
     pub isotope: Option<u32>,
     pub charge: Option<i8>,
-    pub hydrogens: Option<ImplicitHydrogens>,
+    pub implicit_hydrogens: Option<u8>,
     pub class: Option<u32>,
     pub aromatic: bool,
     pub chirality: Option<Chirality>,
@@ -230,7 +230,7 @@ impl ExtendedMoleculeBuilder {
             symbol: a.symbol,
             charge: a.charge,
             isotope_mass: a.isotope,
-            implicit_hydrogens: a.hydrogens,
+            implicit_hydrogens: a.implicit_hydrogens,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -286,7 +286,7 @@ impl ExtendedMoleculeBuilder {
             symbol: AtomSymbol::Element(element),
             charge: Some(0),
             isotope_mass: None,
-            implicit_hydrogens: Some(ImplicitHydrogens::Normal),
+            implicit_hydrogens: None,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,

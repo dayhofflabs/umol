@@ -11,7 +11,7 @@ use super::super::builder::{
     AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder,
 };
 use crate::span::Span;
-use crate::table_ir::atom::{Chirality, ImplicitHydrogens};
+use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
     AtomSymbol, BondDonation, BondOrder, BondWedge, ExtendedMolecule, Molecule, Ring, WildcardAtom,
 };
@@ -260,7 +260,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             aromatic: arom,
             isotope: None,
             charge: Some(0),
-            hydrogens: Some(ImplicitHydrogens::Normal),
+            implicit_hydrogens: None,
             class: None,
             chirality: None,
             span: Span::from_bytes_opt(start, end),
@@ -478,7 +478,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
                 aromatic: arom,
                 isotope: None,
                 charge: Some(0),
-                hydrogens: Some(ImplicitHydrogens::Normal),
+                implicit_hydrogens: None,
                 class: None,
                 chirality: None,
                 span: Span::from_bytes_opt(start, end),

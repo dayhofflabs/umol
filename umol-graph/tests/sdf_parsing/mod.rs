@@ -113,8 +113,8 @@ impl From<&Molecule> for MoleculeSummary {
     fn from(mol: &Molecule) -> Self {
         Self {
             sum_formula: mol.sum_formula(),
-            atom_count: mol.atoms().count(),
-            bond_count: mol.bonds().count(),
+            atom_count: mol.atom_count(),
+            bond_count: mol.bond_count(),
             property_count: mol.property_count(),
         }
     }
@@ -124,8 +124,8 @@ impl From<&ExtendedMolecule> for ExtendedMoleculeSummary {
     fn from(mol: &ExtendedMolecule) -> Self {
         Self {
             sum_formula: mol.sum_formula(),
-            atom_count: mol.atoms().count(),
-            bond_count: mol.bonds().count(),
+            atom_count: mol.atom_count(),
+            bond_count: mol.bond_count(),
             extended_atoms: mol.extended_atom_count(),
             extended_bonds: mol.extended_bond_count(),
             property_count: mol.property_count(),

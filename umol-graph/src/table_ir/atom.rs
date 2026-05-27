@@ -10,20 +10,13 @@ use super::error::ConversionError;
 use super::rgroup::RGroup;
 use crate::span::Span;
 
-/// Implicit hydrogens: either an explicit count or the "normal valence" inference rule.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImplicitHydrogens {
-    Normal,
-    Hydrogens(u8),
-}
-
 /// Basic Atom IR
 #[derive(Clone, Debug, PartialEq)]
 pub struct Atom {
     pub element: Element,
     pub isotope_mass: Option<u32>,
     pub charge: Option<i8>,
-    pub implicit_hydrogens: Option<ImplicitHydrogens>,
+    pub implicit_hydrogens: Option<u8>,
     pub valence: Option<u8>,
     pub lone_pairs: Option<u8>,
     pub unpaired_electrons: Option<u8>,
@@ -62,7 +55,7 @@ impl Atom {
             element,
             isotope_mass: None,
             charge: None,
-            implicit_hydrogens: Some(ImplicitHydrogens::Normal),
+            implicit_hydrogens: None,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -82,7 +75,7 @@ impl Atom {
             element,
             isotope_mass: None,
             charge: None,
-            implicit_hydrogens: Some(ImplicitHydrogens::Normal),
+            implicit_hydrogens: None,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -102,7 +95,7 @@ impl Atom {
             element,
             isotope_mass: None,
             charge: None,
-            implicit_hydrogens: Some(ImplicitHydrogens::Normal),
+            implicit_hydrogens: None,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -122,7 +115,7 @@ impl Atom {
             element,
             isotope_mass: None,
             charge: None,
-            implicit_hydrogens: Some(ImplicitHydrogens::Normal),
+            implicit_hydrogens: None,
             valence: None,
             lone_pairs: None,
             unpaired_electrons: None,
@@ -260,7 +253,7 @@ pub struct ExtendedAtom {
     pub symbol: AtomSymbol,
     pub isotope_mass: Option<u32>,
     pub charge: Option<i8>,
-    pub implicit_hydrogens: Option<ImplicitHydrogens>,
+    pub implicit_hydrogens: Option<u8>,
     pub valence: Option<u8>,
     pub lone_pairs: Option<u8>,
     pub unpaired_electrons: Option<u8>,
@@ -512,7 +505,7 @@ mod tests {
         let atom = Atom::aliphatic_atom(Element::C);
         assert_eq!(atom.element, Element::C);
         assert_eq!(atom.aromatic, Some(false));
-        assert_eq!(atom.implicit_hydrogens, Some(ImplicitHydrogens::Normal));
+        assert_eq!(atom.implicit_hydrogens, None);
     }
 
     #[test]
@@ -520,7 +513,7 @@ mod tests {
         let atom = Atom::aromatic_atom(Element::C);
         assert_eq!(atom.element, Element::C);
         assert_eq!(atom.aromatic, Some(true));
-        assert_eq!(atom.implicit_hydrogens, Some(ImplicitHydrogens::Normal));
+        assert_eq!(atom.implicit_hydrogens, None);
     }
 
     #[test]
@@ -539,7 +532,7 @@ mod tests {
             element: Element::C,
             isotope_mass: Some(13),
             charge: Some(1),
-            implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(3)),
+            implicit_hydrogens: Some(3),
             valence: Some(3),
             lone_pairs: None,
             unpaired_electrons: Some(1),
@@ -558,7 +551,7 @@ mod tests {
         assert_eq!(extended.charge, Some(1));
         assert_eq!(
             extended.implicit_hydrogens,
-            Some(ImplicitHydrogens::Hydrogens(3))
+            Some(3)
         );
         assert_eq!(extended.valence, Some(3));
         assert_eq!(extended.lone_pairs, None);
@@ -576,7 +569,7 @@ mod tests {
             symbol: AtomSymbol::Element(Element::O),
             isotope_mass: None,
             charge: Some(-1),
-            implicit_hydrogens: Some(ImplicitHydrogens::Normal),
+            implicit_hydrogens: None,
             valence: Some(1),
             lone_pairs: None,
             unpaired_electrons: None,
@@ -605,7 +598,7 @@ mod tests {
         assert_eq!(atom.element, Element::O);
         assert_eq!(atom.isotope_mass, None);
         assert_eq!(atom.charge, Some(-1));
-        assert_eq!(atom.implicit_hydrogens, Some(ImplicitHydrogens::Normal));
+        assert_eq!(atom.implicit_hydrogens, None);
         assert_eq!(atom.valence, Some(1));
         assert_eq!(atom.lone_pairs, None);
         assert!(atom.unpaired_electrons.is_none());
@@ -673,7 +666,7 @@ mod tests {
             symbol: AtomSymbol::Element(Element::C),
             isotope_mass: Some(13),
             charge: Some(1),
-            implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(2)),
+            implicit_hydrogens: Some(2),
             valence: None,
             lone_pairs: None,
             unpaired_electrons: Some(1),
@@ -741,7 +734,7 @@ mod tests {
             element: Element::N,
             isotope_mass: Some(15),
             charge: Some(-1),
-            implicit_hydrogens: Some(ImplicitHydrogens::Hydrogens(2)),
+            implicit_hydrogens: Some(2),
             valence: Some(3),
             lone_pairs: None,
             unpaired_electrons: None,

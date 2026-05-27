@@ -1,6 +1,6 @@
 //! Morgan fingerprint benchmark: direct MoleculeAst access vs MorganTarget view.
 //!
-//! Loads the conformance corpus (~9k SMILES), lifts each parsed table_ir
+//! Loads the conformance corpus (~9k SMILES), raises each parsed table_ir
 //! molecule into a MoleculeAst (no resolution), then benchmarks ECFP4
 //! (radius 2) fingerprint computation.
 

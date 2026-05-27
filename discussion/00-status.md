@@ -100,4 +100,5 @@
 | [96-valence-resolution-plan-2026-05-21.md](96-valence-resolution-plan-2026-05-21.md)                                             | Active        | 2026-05-23   |
 | [97-joint-domain-design-2026-05-23.md](97-joint-domain-design-2026-05-23.md)                                                     | Active        | 2026-05-23   |
 | [98-bind-scope-2026-05-23.md](98-bind-scope-2026-05-23.md)                                                                       | Active        | 2026-05-23   |
-| [99-counts-as-invariants-2026-05-23.md](99-counts-as-invariants-2026-05-23.md)                                                   | Active        | 2026-05-23   |
+| [99-counts-as-invariants-2026-05-23.md](99-counts-as-invariants-2026-05-23.md)                                                   | Completed     | 2026-05-27   |
+| [100-table-ir-raise-ast-2026-05-27.md](100-table-ir-raise-ast-2026-05-27.md)                                                   | Active        | 2026-05-27   |

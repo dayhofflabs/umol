@@ -139,6 +139,13 @@ impl BondConstraints {
         None
     }
 
+    /// Add multiple constraints at once, using semantics of `add`.
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = BondConstraint>) {
+        for constraint in constraints {
+            self.add(constraint);
+        }
+    }
+
     pub fn retain(&mut self, mut f: impl FnMut(&BondConstraint) -> bool) {
         self.0.retain(|c| f(c));
     }

@@ -283,7 +283,7 @@ pub fn parse_mol_bytes_with(
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
     let mut ast: MoleculeAst = (&table_mol)
         .try_into_ast(&())
-        .expect("table_ir → MoleculeAst lift is currently infallible");
+        .expect("table_ir → MoleculeAst raise is currently infallible");
     match Resolver::new(model).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(CtfileError::ResolveUnderdetermined),
@@ -301,7 +301,7 @@ pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, CtfileError> 
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
     let ast: MoleculeAst = (&table_mol)
         .try_into_ast(&())
-        .expect("table_ir → MoleculeAst lift is currently infallible");
+        .expect("table_ir → MoleculeAst raise is currently infallible");
     Ok(ast)
 }
 

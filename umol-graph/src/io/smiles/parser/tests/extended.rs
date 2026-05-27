@@ -9,15 +9,8 @@ use super::super::*;
 use super::utils::{
     build_extended_from_graph, find_extended_chiral_center, find_extended_stereo_bond,
 };
-use crate::table_ir::atom::{Chirality, ImplicitHydrogens};
+use crate::table_ir::atom::Chirality;
 use crate::table_ir::{AtomSymbol, BondOrder, BondWedge, ExtendedMolecule};
-
-fn hydrogens_to_count(h: Option<ImplicitHydrogens>) -> Option<u8> {
-    match h {
-        Some(ImplicitHydrogens::Hydrogens(n)) => Some(n),
-        Some(ImplicitHydrogens::Normal) | None => None,
-    }
-}
 
 #[rstest]
 #[case::organic_c(b"C", build_extended_from_graph("C@0 |"))]
@@ -605,7 +598,7 @@ fn bracket(
     assert_eq!(a.aromatic, Some(aromatic));
     assert_eq!(a.isotope_mass, isotope);
     assert_eq!(a.chirality, chirality);
-    assert_eq!(hydrogens_to_count(a.implicit_hydrogens), hcount);
+    assert_eq!(a.implicit_hydrogens, hcount);
     assert_eq!(a.charge, charge);
     assert_eq!(a.class, class_);
 }

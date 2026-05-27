@@ -111,6 +111,13 @@ impl MulticenterBondConstraints {
         None
     }
 
+    /// Add multiple constraints at once, using semantics of `add`.
+    pub fn extend(&mut self, constraints: impl IntoIterator<Item = MulticenterBondConstraint>) {
+        for constraint in constraints {
+            self.add(constraint);
+        }
+    }
+
     pub fn retain(&mut self, mut f: impl FnMut(&MulticenterBondConstraint) -> bool) {
         self.0.retain(|c| f(c));
     }

@@ -13,7 +13,6 @@ use super::convert::{
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::properties::{PropertyEntries, SGroupDataEntry};
-use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
     AtomList, AtomSymbol, AttachmentPointType, BondOrder, CtfileData, ExtendedMolecule,
     LegacyGroupAbbreviation, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount, SGroup,
@@ -724,7 +723,7 @@ impl PropertyAccumulator {
 
             // Apply hydrogen count
             if let Some(h_count) = props.hydrogen_count {
-                atom.implicit_hydrogens = Some(ImplicitHydrogens::Hydrogens(h_count));
+                atom.implicit_hydrogens = Some(h_count);
             }
         }
 
@@ -815,7 +814,7 @@ impl PropertyAccumulator {
 
             // Apply hydrogen count
             if let Some(h_count) = props.hydrogen_count {
-                atom.implicit_hydrogens = Some(ImplicitHydrogens::Hydrogens(h_count));
+                atom.implicit_hydrogens = Some(h_count);
             }
 
             // Apply SMARTS pattern

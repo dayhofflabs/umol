@@ -257,7 +257,7 @@ The bottom-up implementation plan finished in nine phases. Final state:
   `ResolverCell`, no fixpoint, no `Progress`. `ops/chemistry.rs`,
   `ops/error.rs`, `ops/propagate.rs`, `ops/resolve.rs`, `ops/validate.rs`
   deleted.
-- **Phase 7 — io re-enabled.** `umol-graph/src/table_ir/lift.rs` —
+- **Phase 7 — io re-enabled.** `umol-graph/src/table_ir/raise.rs` —
   `IntoAst<MoleculeAst> for &TableMolecule` (and per-atom and per-bond
   analogues) replaces the legacy `MoleculeAst::from_table_molecule`. SMILES
   and CTfile parser entry points return `Result<MoleculeAst, ParseError>`;

@@ -19,7 +19,6 @@ use crate::io::ctfile::parser::properties::{
     SGroupParentAtomEntry, SGroupSubscriptEntry, SGroupSubtypeEntry, SGroupTypeEntry,
     SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
-use crate::table_ir::atom::ImplicitHydrogens;
 use crate::table_ir::{
     Atom, AtomList, AtomSymbol, AttachmentPointType, Bond, BondOrder, ExtendedAtom, ExtendedBond,
     ExtendedMolecule, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount,
@@ -503,7 +502,7 @@ fn test_apply_atom_hydrogen_count(mut single_atom: Molecule) {
     let atom = &single_atom.atoms[0];
     assert_eq!(
         atom.implicit_hydrogens,
-        Some(ImplicitHydrogens::Hydrogens(1))
+        Some(1)
     );
 }
 
@@ -870,7 +869,7 @@ fn test_apply_extended_atom_hydrogen_count(mut single_extended_atom: ExtendedMol
         .unwrap();
     assert_eq!(
         single_extended_atom.atoms[0].implicit_hydrogens,
-        Some(ImplicitHydrogens::Hydrogens(1))
+        Some(1)
     );
 }
 
