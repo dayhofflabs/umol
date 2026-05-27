@@ -457,7 +457,7 @@ fn parse_smiles_inner(
             let atom = AtomData {
                 element,
                 isotope: iso_opt,
-                charge: charge_opt.or(Some(0)),
+                charge: charge_opt,
                 implicit_hydrogens: Some(h_opt.unwrap_or(0)),
                 class: class_opt,
                 aromatic,
@@ -1047,7 +1047,7 @@ fn parse_extended_smiles_inner(
             let atom = ExtendedAtomData {
                 symbol,
                 isotope: iso_opt,
-                charge: charge_opt.or(Some(0)),
+                charge: charge_opt,
                 implicit_hydrogens: Some(h_opt.unwrap_or(0)),
                 class: class_opt,
                 aromatic,

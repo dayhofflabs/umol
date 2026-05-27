@@ -114,7 +114,6 @@ impl MoleculeBuilder {
         } else {
             Atom::aliphatic_atom(element)
         };
-        atom.charge = Some(0);
         atom.span = span;
         self.atoms.push(atom);
         (self.atoms.len() - 1) as u32
@@ -284,7 +283,7 @@ impl ExtendedMoleculeBuilder {
         let span = Span::from_bytes_opt(span_start, span_end);
         let atom = ExtendedAtom {
             symbol: AtomSymbol::Element(element),
-            charge: Some(0),
+            charge: None,
             isotope_mass: None,
             implicit_hydrogens: None,
             valence: None,
