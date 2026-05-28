@@ -15,9 +15,9 @@ pub struct AtomTypingValence {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AtomTypingError {
-    #[error("no atom-typing match for {atom:?} (element {element}, charge {charge:?})")]
+    #[error("no atom-typing match for {atom_id:?} (element {element}, charge {charge:?})")]
     NoMatch {
-        atom: AtomId,
+        atom_id: AtomId,
         element: Element,
         charge: Option<i8>,
     },
@@ -32,9 +32,8 @@ impl AtomTypingValence {
     /// Returns `Err` on the first atom that has zero matching patterns.
     /// Multiple matches are resolved via [`compare_valence_preference`].
     pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), AtomTypingError> {
-        for i in 0..ast.atoms().count() as u32 {
-            let idx = AtomId(i);
-            let atom = ast.atom(idx);
+        for id in ast.atoms().ids() {
+            let atom = ast.atom(id);
             if atom.is_ground() {
                 continue;
             }
@@ -57,14 +56,14 @@ impl AtomTypingValence {
             match candidates.len() {
                 0 => {
                     return Err(AtomTypingError::NoMatch {
-                        atom: idx,
+                        atom_id: id,
                         element,
                         charge,
                     });
                 }
                 1 => {
                     let cand = candidates[0];
-                    let atom_mut = ast.atom_mut(idx).ast;
+                    let atom_mut = ast.atom_mut(id).ast;
                     atom_mut.narrow_from(cand);
                 }
                 _ => {
@@ -72,7 +71,7 @@ impl AtomTypingValence {
                         .into_iter()
                         .max_by(|a, b| compare_valence_preference(a, b))
                         .unwrap();
-                    let atom_mut = ast.atom_mut(idx).ast;
+                    let atom_mut = ast.atom_mut(id).ast;
                     atom_mut.narrow_from(best);
                 }
             }

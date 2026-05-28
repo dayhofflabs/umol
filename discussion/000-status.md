@@ -89,7 +89,7 @@
 | [085-kekulization-algorithms-2026-04-15.md](085-kekulization-algorithms-2026-04-15.md)                                             | Active        | 2026-04-15   |
 | [086-molecule-ast-api-2026-04-16.md](086-molecule-ast-api-2026-04-16.md)                                                           | Active        | 2026-04-17   |
 | [087-constraint-taxonomy-2026-04-17.md](087-constraint-taxonomy-2026-04-17.md)                                                     | Completed     | 2026-04-19   |
-| [088-fix-dsl-parsing-2026-04-19.md](088-fix-dsl-parsing-2026-04-19.md)                                                             | Complete      | 2026-04-24   |
+| [088-fix-dsl-parsing-2026-04-19.md](088-fix-dsl-parsing-2026-04-19.md)                                                             | Completed     | 2026-04-24   |
 | [089-substructure-matching-variables-2026-04-21.md](089-substructure-matching-variables-2026-04-21.md)                             | Completed     | 2026-04-24   |
 | [090-reactions-relation-mutation-2026-04-21.md](090-reactions-relation-mutation-2026-04-21.md)                                     | Active        | 2026-04-21   |
 | [091-molecule-dsl-profiling-2026-04-23.md](091-molecule-dsl-profiling-2026-04-23.md)                                               | Completed     | 2026-04-24   |
@@ -101,4 +101,4 @@
 | [097-joint-domain-design-2026-05-23.md](097-joint-domain-design-2026-05-23.md)                                                     | Active        | 2026-05-23   |
 | [098-bind-scope-2026-05-23.md](098-bind-scope-2026-05-23.md)                                                                       | Active        | 2026-05-23   |
 | [099-counts-as-invariants-2026-05-23.md](099-counts-as-invariants-2026-05-23.md)                                                   | Completed     | 2026-05-27   |
-| [100-table-ir-raise-ast-2026-05-27.md](100-table-ir-raise-ast-2026-05-27.md)                                                       | Active        | 2026-05-27   |
+| [100-table-ir-raise-ast-2026-05-27.md](100-table-ir-raise-ast-2026-05-27.md)                                                       | Completed     | 2026-05-27   |

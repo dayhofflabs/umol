@@ -5,6 +5,7 @@
 //! `Err(Error)` for setup-level failures.
 
 pub mod aromaticity;
+pub mod invariants;
 pub mod model;
 pub mod resolver;
 pub mod solution;

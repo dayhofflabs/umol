@@ -43,8 +43,8 @@ impl CountsValence {
             }
         }
 
-        for i in 0..ast.atoms().count() as u32 {
-            self.resolve_molecule_atom(ast, AtomId(i))?;
+        for id in ast.atoms().ids() {
+            self.resolve_molecule_atom(ast, id)?;
         }
         Ok(())
     }

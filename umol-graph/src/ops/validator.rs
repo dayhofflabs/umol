@@ -17,24 +17,23 @@
 pub mod aromaticity;
 pub mod constraint;
 pub mod entity;
-pub mod invariant;
+pub mod invariants;
 pub mod spin;
 
 pub use aromaticity::{AromaticityValidator, AromaticityValidatorContradiction};
 pub use constraint::{ConstraintContradiction, ConstraintError, ConstraintValidator};
 pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};
-pub use invariant::{
-    ElectronInvariantContradiction, ElectronInvariantError, ElectronInvariantValidator,
-};
+pub use invariants::{ValenceInvariantsError, ValenceInvariantsValidator};
 pub use spin::{SpinCouplingContradiction, SpinCouplingError, SpinCouplingValidator};
 use thiserror::Error;
 use umol_ast::ast::{AtomAst, MoleculeAst};
 
+use crate::ops::invariants::ValenceMismatch;
 use crate::ops::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Validator {
-    pub electron_invariant: ElectronInvariantValidator,
+    pub valence_invariants: ValenceInvariantsValidator,
     pub spin_coupling: SpinCouplingValidator,
     pub constraint: ConstraintValidator,
     pub entity_structure: EntityStructureValidator,
@@ -43,7 +42,7 @@ pub struct Validator {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValidatorContradiction {
     #[error(transparent)]
-    ElectronInvariant(#[from] ElectronInvariantContradiction),
+    ValenceInvariant(#[from] ValenceMismatch),
     #[error(transparent)]
     SpinCoupling(#[from] SpinCouplingContradiction),
     #[error(transparent)]
@@ -55,7 +54,7 @@ pub enum ValidatorContradiction {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValidatorError {
     #[error(transparent)]
-    ElectronInvariant(#[from] ElectronInvariantError),
+    ValenceInvariant(#[from] ValenceInvariantsError),
     #[error(transparent)]
     SpinCoupling(#[from] SpinCouplingError),
     #[error(transparent)]
@@ -82,7 +81,7 @@ impl Validator {
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        match self.electron_invariant.validate(ast)? {
+        match self.valence_invariants.validate(ast)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
@@ -111,7 +110,7 @@ impl Validator {
     ) -> Result<Solution<(), ValidatorContradiction>, ValidatorError> {
         let mut any_undetermined = false;
 
-        match self.electron_invariant.validate_atom(atom)? {
+        match self.valence_invariants.validate_atom(atom)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),

@@ -1,6 +1,8 @@
-//! Per-atom electron-conservation equation: `check_atom` evaluates on a
-//! fully-constrained atom; `enumerate_atom` returns the ground `AtomAst`
-//! candidates satisfying the equation when fields are `Undetermined`.
+//! Per-atom electron-conservation equation. `check` reports the molecule-wide
+//! verdict; `check_atom` evaluates a standalone `AtomAst` (topology-derived
+//! valences default to zero); `enumerate_atom` returns the ground `AtomAst`
+//! candidates satisfying the equation when fields are `Undetermined`. Shared
+//! physics, not tied to a specific valence model.
 
 use std::ops::RangeInclusive;
 
@@ -11,82 +13,74 @@ use umol_ast::ast::{
 };
 use umol_shared::element::Element;
 
+use crate::ops::solution::Solution;
+
 pub struct ValenceInvariants;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceMismatch {
-    #[error("atom {atom:?}: orbital count {orbital_count} != electron count {electron_count}")]
+    #[error("atom {atom_id:?}: orbital count {orbital_count} != electron count {electron_count}")]
     OrbitalCount {
-        atom: AtomId,
+        atom_id: AtomId,
         orbital_count: i64,
         electron_count: i64,
     },
 }
 
 impl ValenceInvariants {
-    /// Returns `Ok(())` when every relevant field is ground and the
-    /// orbital == electron equation holds, or when any field is non-`Lit`
-    /// (the check cannot fire on a non-ground atom).
-    pub fn check_atom(ast: &MoleculeAst, atom_id: AtomId) -> Result<(), ValenceMismatch> {
-        let atom = ast.atom(atom_id);
-        let Some(element) = atom.element().as_lit() else {
-            return Ok(());
-        };
-        let Some(charge) = atom.charge().as_lit() else {
-            return Ok(());
-        };
-        let Some(implicit_h) = atom.implicit_hydrogens().as_lit() else {
-            return Ok(());
-        };
-        let Some(lone_pairs) = atom.lone_pairs().as_lit() else {
-            return Ok(());
-        };
-        let Some(unpaired) = atom.spin().unpaired.as_lit() else {
-            return Ok(());
-        };
-        let valence = match atom.constraints().valence() {
-            ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match atom.valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
-                _ => return Ok(()),
-            },
-            _ => return Ok(()),
-        };
-        let donated = match atom.constraints().donated_pairs() {
-            ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match atom.donated_pairs() {
-                ValueAst::Lit(t) if t >= 0 => t,
-                _ => return Ok(()),
-            },
-            _ => return Ok(()),
-        };
-        let accepted = match atom.constraints().accepted_pairs() {
-            ValueAst::Lit(v) if v >= 0 => v,
-            ValueAst::Undetermined => match atom.accepted_pairs() {
-                ValueAst::Lit(t) if t >= 0 => t,
-                _ => return Ok(()),
-            },
-            _ => return Ok(()),
-        };
-        let aromatic_valence = match atom.constraints().aromatic_valence() {
-            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if v >= 0 => v,
-            AromaticValenceAst::NotAromatic => 0,
-            AromaticValenceAst::Undetermined => match atom.aromatic_valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
-                _ => return Ok(()),
-            },
-            _ => return Ok(()),
-        };
-        let multicenter_valence = match atom.constraints().multicenter_valence() {
-            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if v >= 0 => v,
-            MulticenterValenceAst::NotMulticenter => 0,
-            MulticenterValenceAst::Undetermined => match atom.multicenter_valence() {
-                ValueAst::Lit(t) if t >= 0 => t,
-                _ => return Ok(()),
-            },
-            _ => return Ok(()),
-        };
+    /// Molecule-wide verdict: `Underdetermined` if any atom has a non-`Lit`
+    /// field the check can't fire on, `Contradictory` on the first orbital !=
+    /// electron mismatch, else `Determined`.
+    pub fn check(ast: &MoleculeAst) -> Solution<(), ValenceMismatch> {
+        for id in ast.atoms().ids() {
+            match Self::check_molecule_atom(ast, id) {
+                Solution::Determined(()) => {}
+                Solution::Underdetermined(()) => return Solution::Underdetermined(()),
+                Solution::Contradictory(mismatch) => return Solution::Contradictory(mismatch),
+            }
+        }
+        Solution::Determined(())
+    }
 
+    /// Verdict for a standalone atom. Topology-derived valences default to zero;
+    /// only a non-negative literal constraint raises them. `Underdetermined`
+    /// when element / charge / implicit-H / lone-pairs / unpaired are not all
+    /// `Lit`.
+    pub fn check_atom(atom: &AtomAst) -> Solution<(), ValenceMismatch> {
+        let (Some(element), Some(charge), Some(implicit_h), Some(lone_pairs), Some(unpaired)) = (
+            atom.element.as_lit(),
+            atom.charge.as_lit(),
+            atom.implicit_hydrogens.as_lit(),
+            atom.lone_pairs.as_lit(),
+            atom.spin.unpaired.as_lit(),
+        ) else {
+            return Solution::Underdetermined(());
+        };
+        let valence = match atom.constraints.valence() {
+            ValueAst::Lit(v) if v >= 0 => v,
+            ValueAst::Undetermined => 0,
+            _ => return Solution::Underdetermined(()),
+        };
+        let donated = match atom.constraints.donated_pairs() {
+            ValueAst::Lit(v) if v >= 0 => v,
+            ValueAst::Undetermined => 0,
+            _ => return Solution::Underdetermined(()),
+        };
+        let accepted = match atom.constraints.accepted_pairs() {
+            ValueAst::Lit(v) if v >= 0 => v,
+            ValueAst::Undetermined => 0,
+            _ => return Solution::Underdetermined(()),
+        };
+        let aromatic_valence = match atom.constraints.aromatic_valence() {
+            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if v >= 0 => v,
+            AromaticValenceAst::NotAromatic | AromaticValenceAst::Undetermined => 0,
+            _ => return Solution::Underdetermined(()),
+        };
+        let multicenter_valence = match atom.constraints.multicenter_valence() {
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if v >= 0 => v,
+            MulticenterValenceAst::NotMulticenter | MulticenterValenceAst::Undetermined => 0,
+            _ => return Solution::Underdetermined(()),
+        };
         let orbital = orbital_count(
             unpaired,
             lone_pairs,
@@ -97,31 +91,102 @@ impl ValenceInvariants {
             aromatic_valence,
             multicenter_valence,
         );
-        let electron = electron_count(
-            element,
-            charge,
+        let electron =
+            electron_count(element, charge, implicit_h, valence, aromatic_valence, accepted);
+        if orbital == electron {
+            Solution::Determined(())
+        } else {
+            Solution::Contradictory(ValenceMismatch::OrbitalCount {
+                atom_id: AtomId(0),
+                orbital_count: orbital,
+                electron_count: electron,
+            })
+        }
+    }
+
+    /// Per-atom verdict reading the atom in its molecule context: each valence
+    /// is taken from a literal constraint, else the topology-derived value.
+    /// `Underdetermined` when any required field is non-`Lit`.
+    fn check_molecule_atom(ast: &MoleculeAst, atom_id: AtomId) -> Solution<(), ValenceMismatch> {
+        let atom = ast.atom(atom_id);
+        let Some(element) = atom.element().as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let Some(charge) = atom.charge().as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let Some(implicit_h) = atom.implicit_hydrogens().as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let Some(lone_pairs) = atom.lone_pairs().as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let Some(unpaired) = atom.spin().unpaired.as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let valence = match atom.constraints().valence() {
+            ValueAst::Lit(v) if v >= 0 => v,
+            ValueAst::Undetermined => match atom.valence() {
+                ValueAst::Lit(t) if t >= 0 => t,
+                _ => return Solution::Underdetermined(()),
+            },
+            _ => return Solution::Underdetermined(()),
+        };
+        let donated = match atom.constraints().donated_pairs() {
+            ValueAst::Lit(v) if v >= 0 => v,
+            ValueAst::Undetermined => match atom.donated_pairs() {
+                ValueAst::Lit(t) if t >= 0 => t,
+                _ => return Solution::Underdetermined(()),
+            },
+            _ => return Solution::Underdetermined(()),
+        };
+        let accepted = match atom.constraints().accepted_pairs() {
+            ValueAst::Lit(v) if v >= 0 => v,
+            ValueAst::Undetermined => match atom.accepted_pairs() {
+                ValueAst::Lit(t) if t >= 0 => t,
+                _ => return Solution::Underdetermined(()),
+            },
+            _ => return Solution::Underdetermined(()),
+        };
+        let aromatic_valence = match atom.constraints().aromatic_valence() {
+            AromaticValenceAst::Aromatic(ValueAst::Lit(v)) if v >= 0 => v,
+            AromaticValenceAst::NotAromatic => 0,
+            AromaticValenceAst::Undetermined => match atom.aromatic_valence() {
+                ValueAst::Lit(t) if t >= 0 => t,
+                _ => return Solution::Underdetermined(()),
+            },
+            _ => return Solution::Underdetermined(()),
+        };
+        let multicenter_valence = match atom.constraints().multicenter_valence() {
+            MulticenterValenceAst::Multicenter(ValueAst::Lit(v)) if v >= 0 => v,
+            MulticenterValenceAst::NotMulticenter => 0,
+            MulticenterValenceAst::Undetermined => match atom.multicenter_valence() {
+                ValueAst::Lit(t) if t >= 0 => t,
+                _ => return Solution::Underdetermined(()),
+            },
+            _ => return Solution::Underdetermined(()),
+        };
+        let orbital = orbital_count(
+            unpaired,
+            lone_pairs,
+            donated,
+            accepted,
             implicit_h,
             valence,
             aromatic_valence,
-            accepted,
+            multicenter_valence,
         );
-        if orbital != electron {
-            return Err(ValenceMismatch::OrbitalCount {
-                atom: atom_id,
+        let electron =
+            electron_count(element, charge, implicit_h, valence, aromatic_valence, accepted);
+        if orbital == electron {
+            Solution::Determined(())
+        } else {
+            Solution::Contradictory(ValenceMismatch::OrbitalCount {
+                atom_id,
                 orbital_count: orbital,
                 electron_count: electron,
-            });
+            })
         }
-        Ok(())
-    }
-
-    /// Run `check_atom` for every atom in the molecule. Stops at the first
-    /// mismatch.
-    pub fn check(ast: &MoleculeAst) -> Result<(), ValenceMismatch> {
-        for i in 0..ast.atoms().count() as u32 {
-            Self::check_atom(ast, AtomId(i))?;
-        }
-        Ok(())
     }
 
     /// Enumerate all ground `AtomAst` candidates for `atom_id` consistent with the per-atom
@@ -346,6 +411,7 @@ mod tests {
             ..Default::default()
         }], vec![]),
         AtomId(0),
+        Solution::Determined(()),
     )]
     #[case::undetermined_h(
         MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
@@ -356,13 +422,8 @@ mod tests {
             ..Default::default()
         }], vec![]),
         AtomId(0),
+        Solution::Underdetermined(()),
     )]
-    fn test_valence_invariants_check_atom(#[case] ast: MoleculeAst, #[case] atom_id: AtomId) {
-        assert_eq!(ValenceInvariants::check_atom(&ast, atom_id), Ok(()));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::orbital_count_mismatch(
         MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
             element: ElementAst::Lit(Element::C),
@@ -373,14 +434,56 @@ mod tests {
             ..Default::default()
         }], vec![]),
         AtomId(0),
-        ValenceMismatch::OrbitalCount { atom: AtomId(0), orbital_count: 198, electron_count: 103 },
+        Solution::Contradictory(ValenceMismatch::OrbitalCount { atom_id: AtomId(0), orbital_count: 198, electron_count: 103 }),
     )]
-    fn test_valence_invariants_check_atom_error(
+    fn test_valence_invariants_check_molecule_atom(
         #[case] ast: MoleculeAst,
         #[case] atom_id: AtomId,
-        #[case] expected: ValenceMismatch,
+        #[case] expected: Solution<(), ValenceMismatch>,
     ) {
-        assert_eq!(ValenceInvariants::check_atom(&ast, atom_id), Err(expected));
+        assert_eq!(ValenceInvariants::check_molecule_atom(&ast, atom_id), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::ground_methane(
+        AtomAst {
+            element: ElementAst::Lit(Element::C),
+            charge: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(4),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            ..Default::default()
+        },
+        Solution::Determined(()),
+    )]
+    #[case::undetermined_charge(
+        AtomAst {
+            element: ElementAst::Lit(Element::C),
+            charge: ValueAst::Undetermined,
+            lone_pairs: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(4),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            ..Default::default()
+        },
+        Solution::Underdetermined(()),
+    )]
+    #[case::orbital_count_mismatch(
+        AtomAst {
+            element: ElementAst::Lit(Element::C),
+            charge: ValueAst::Lit(0),
+            lone_pairs: ValueAst::Lit(0),
+            implicit_hydrogens: ValueAst::Lit(99),
+            spin: SpinStateAst::from((0_u8, 1_u8)),
+            ..Default::default()
+        },
+        Solution::Contradictory(ValenceMismatch::OrbitalCount { atom_id: AtomId(0), orbital_count: 198, electron_count: 103 }),
+    )]
+    fn test_valence_invariants_check_atom(
+        #[case] atom: AtomAst,
+        #[case] expected: Solution<(), ValenceMismatch>,
+    ) {
+        assert_eq!(ValenceInvariants::check_atom(&atom), expected);
     }
 
     #[rstest]
@@ -395,7 +498,7 @@ mod tests {
         }], vec![]),
     )]
     fn test_valence_invariants_check(#[case] ast: MoleculeAst) {
-        assert_eq!(ValenceInvariants::check(&ast), Ok(()));
+        assert_eq!(ValenceInvariants::check(&ast), Solution::Determined(()));
     }
 
     #[rstest]

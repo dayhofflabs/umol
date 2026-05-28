@@ -351,7 +351,7 @@ mod tests {
     }
 
     fn solve_hmo(model: &HmoAromaticity, ast: &MoleculeAst) -> HmoOutput {
-        let atoms: Vec<AtomId> = (0..ast.atoms().count() as u32).map(AtomId).collect();
+        let atoms: Vec<AtomId> = ast.atoms().ids().collect();
         model
             .build_calculator(
                 ast,
@@ -533,7 +533,7 @@ mod tests {
 
     #[rstest]
     fn test_hmo_aromaticity_hamiltonian(hmo_model: HmoAromaticity, pyridine: MoleculeAst) {
-        let atoms: Vec<AtomId> = (0..pyridine.atoms().count() as u32).map(AtomId).collect();
+        let atoms: Vec<AtomId> = pyridine.atoms().ids().collect();
         let calc = hmo_model
             .build_calculator(
                 &pyridine,
