@@ -6,11 +6,11 @@ use umol_ast::ast::{AsLit, AtomAst, AtomId, Lattice, MoleculeAst};
 use umol_shared::element::Element;
 
 use super::compare::compare_valence_preference;
-use super::registry::AtomTypeRegistry;
+use crate::ops::model::AtomTypingModel;
 
 #[derive(Clone, Debug)]
-pub struct AtomTypingValence {
-    pub registry: AtomTypeRegistry,
+pub struct AtomTypingValence<'a> {
+    model: &'a AtomTypingModel,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -23,9 +23,9 @@ pub enum AtomTypingError {
     },
 }
 
-impl AtomTypingValence {
-    pub fn new(registry: AtomTypeRegistry) -> Self {
-        Self { registry }
+impl<'a> AtomTypingValence<'a> {
+    pub fn new(model: &'a AtomTypingModel) -> Self {
+        Self { model }
     }
 
     /// Iterates atoms, narrowing each non-ground atom against the registry.
@@ -47,6 +47,7 @@ impl AtomTypingValence {
             let pattern = atom.ast.clone().with_constraints(constraints);
             let charge = pattern.charge.as_lit().map(|n| n as i8);
             let candidates: Vec<&AtomAst> = self
+                .model
                 .registry
                 .lookup(element, charge)
                 .iter()
@@ -82,43 +83,44 @@ impl AtomTypingValence {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use rstest::*;
-    use umol_ast::ast::MoleculeAst;
     use umol_ast::{mol, mol_ground};
 
     use super::*;
+    use crate::ops::valence::AtomTypeRegistry;
     use crate::registry;
 
-    fn methane() -> MoleculeAst {
-        mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#)
-    }
-
-    fn methyl_chloride_partial() -> MoleculeAst {
-        mol!(r#"{:atoms ["C #h3" "Cl"] :bonds [[0 1 "1"]]}"#)
+    #[rstest]
+    #[case::default_registry(Cow::Borrowed(AtomTypeRegistry::default_registry()))]
+    #[case::empty_registry(Cow::Owned(AtomTypeRegistry::new()))]
+    fn test_atom_typing_valence_resolve_identity(#[case] registry: Cow<'static, AtomTypeRegistry>) {
+        let molecule = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
+        let model = AtomTypingModel { registry };
+        let mut resolved = molecule.clone();
+        AtomTypingValence::new(&model)
+            .resolve(&mut resolved)
+            .unwrap();
+        assert_eq!(resolved, molecule);
     }
 
     #[rstest]
-    fn test_atom_typing_valence_resolver_resolve_ground_methane_passthrough() {
-        let reg = AtomTypeRegistry::default_registry().clone();
-        let resolver = AtomTypingValence::new(reg);
-        let mut ast = methane();
-        resolver.resolve(&mut ast).unwrap();
-    }
-
-    #[rstest]
-    fn test_atom_typing_valence_resolver_resolve_no_match() {
-        let reg = registry!["C#c0#h4#n0#u0"];
-        let resolver = AtomTypingValence::new(reg);
-        let mut ast = methyl_chloride_partial();
-        let err = resolver.resolve(&mut ast).unwrap_err();
-        assert!(matches!(err, AtomTypingError::NoMatch { .. }));
-    }
-
-    #[rstest]
-    fn test_atom_typing_valence_resolver_empty_registry_passes_through_ground_atoms() {
-        let reg = AtomTypeRegistry::new();
-        let resolver = AtomTypingValence::new(reg);
-        let mut ast = methane();
-        resolver.resolve(&mut ast).unwrap();
+    fn test_atom_typing_valence_resolve_error() {
+        let model = AtomTypingModel {
+            registry: Cow::Owned(registry!["C#c0#h4#n0#u0"]),
+        };
+        let mut molecule = mol!(r#"{:atoms ["C #h3" "Cl"] :bonds [[0 1 "1"]]}"#);
+        let err = AtomTypingValence::new(&model)
+            .resolve(&mut molecule)
+            .unwrap_err();
+        assert_eq!(
+            err,
+            AtomTypingError::NoMatch {
+                atom_id: AtomId(0),
+                element: Element::C,
+                charge: None,
+            }
+        );
     }
 }

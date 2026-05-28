@@ -78,6 +78,7 @@ impl AromaticityPerception {
     /// `None`. Resolver / validator callers read `#a` from the atom's
     /// `aromatic_valence()` constraint; the aromatizer derives π from bond
     /// orders.
+    #[allow(clippy::complexity)]
     pub fn find_systems<F>(
         &self,
         ast: &mut MoleculeAst,

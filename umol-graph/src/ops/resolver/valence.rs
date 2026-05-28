@@ -9,9 +9,9 @@ use crate::ops::solution::Solution;
 use crate::ops::valence::{AtomTypingError, AtomTypingValence, CountsError, CountsValence};
 
 #[derive(Clone, Debug)]
-pub enum ValenceResolver {
-    AtomTyping(AtomTypingValence),
-    Counts(CountsValence),
+pub enum ValenceResolver<'a> {
+    AtomTyping(AtomTypingValence<'a>),
+    Counts(CountsValence<'a>),
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -25,13 +25,11 @@ pub enum ValenceContradiction {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ValenceError {}
 
-impl ValenceResolver {
-    pub fn new(model: &ValenceModel) -> Self {
+impl<'a> ValenceResolver<'a> {
+    pub fn new(model: &'a ValenceModel) -> Self {
         match model {
-            ValenceModel::AtomTyping { registry } => {
-                Self::AtomTyping(AtomTypingValence::new(registry.clone()))
-            }
-            ValenceModel::Counts { table } => Self::Counts(CountsValence::new(table.clone())),
+            ValenceModel::AtomTyping(m) => Self::AtomTyping(AtomTypingValence::new(m)),
+            ValenceModel::Counts(m) => Self::Counts(CountsValence::new(m)),
         }
     }
 

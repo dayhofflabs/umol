@@ -1,12 +1,8 @@
 //! Composite resolver: chains the per-entity resolvers (valence,
 //! aromaticity, bonds, multicenter bonds) on a single `MoleculeAst`.
-//! One-shot per pass — no fixpoint loop, no `ResolverCell`. Topology stays
-//! invariant across narrowing, so intermediate views remain valid.
 //!
 //! `Determined` requires every entity (atoms, bonds, dative bonds, aromatic
-//! systems, multicenter bonds, noncovalent bonds) to be ground. Sub-resolvers
-//! report only completion or contradiction; the top-level `Resolver` decides
-//! the global ground-status verdict.
+//! systems, multicenter bonds, noncovalent bonds) to be ground.
 
 pub mod aromaticity;
 pub mod bonds;
@@ -19,7 +15,7 @@ pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
 };
 use thiserror::Error;
-use umol_ast::ast::{Lattice, MoleculeAst};
+use umol_ast::ast::MoleculeAst;
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
@@ -27,8 +23,8 @@ use crate::ops::model::ChemistryModel;
 use crate::ops::solution::Solution;
 
 #[derive(Clone, Debug)]
-pub struct Resolver {
-    pub valence: ValenceResolver,
+pub struct Resolver<'a> {
+    pub valence: ValenceResolver<'a>,
     pub aromaticity: AromaticityResolver,
     pub bonds: BondsResolver,
     pub multicenter_bonds: MulticenterBondsResolver,
@@ -58,8 +54,8 @@ pub enum ResolverError {
     MulticenterBonds(#[from] MulticenterBondsError),
 }
 
-impl Resolver {
-    pub fn new(model: &ChemistryModel) -> Self {
+impl<'a> Resolver<'a> {
+    pub fn new(model: &'a ChemistryModel) -> Self {
         Self {
             valence: ValenceResolver::new(&model.valence),
             aromaticity: AromaticityResolver::new(&model.aromaticity),
@@ -101,7 +97,7 @@ impl Resolver {
             }
         }
 
-        Ok(if molecule_all_ground(ast) {
+        Ok(if ast.is_ground() {
             Solution::Determined(())
         } else {
             Solution::Underdetermined(())
@@ -109,17 +105,10 @@ impl Resolver {
     }
 }
 
-fn molecule_all_ground(ast: &MoleculeAst) -> bool {
-    ast.atoms().iter().all(|v| v.ast.is_ground())
-        && ast.bonds().iter().all(|v| v.ast.is_ground())
-        && ast.dative_bonds().iter().all(|v| v.ast.is_ground())
-        && ast.aromatic_systems().iter().all(|v| v.ast.is_ground())
-        && ast.multicenter_bonds().iter().all(|v| v.ast.is_ground())
-        && ast.noncovalent_bonds().iter().all(|v| v.ast.is_ground())
-}
-
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use rstest::*;
     use umol_ast::ast::MoleculeAst;
     use umol_ast::mol_ground;
@@ -127,15 +116,16 @@ mod tests {
 
     use super::*;
     use crate::ops::model::{
-        AromaticityModel, ChemistryModel, ElementScope, RingLimits, ValenceModel,
+        AromaticityModel, AtomTypingModel, ChemistryModel, CountsModel, ElementScope, RingLimits,
+        ValenceModel,
     };
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
-    fn ground_methane() -> MoleculeAst {
+    fn methane() -> MoleculeAst {
         mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#)
     }
 
-    fn benzene_pinned() -> MoleculeAst {
+    fn benzene() -> MoleculeAst {
         mol_ground!(
             r#"{
             :atoms ["C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a" "C #h #a"]
@@ -146,9 +136,9 @@ mod tests {
 
     fn counts_model() -> ChemistryModel {
         ChemistryModel {
-            valence: ValenceModel::Counts {
-                table: ValenceTable::default_table().clone(),
-            },
+            valence: ValenceModel::Counts(CountsModel {
+                table: Cow::Borrowed(ValenceTable::default_table()),
+            }),
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
@@ -156,11 +146,11 @@ mod tests {
         }
     }
 
-    fn typing_model() -> ChemistryModel {
+    fn atom_typing_model() -> ChemistryModel {
         ChemistryModel {
-            valence: ValenceModel::AtomTyping {
-                registry: AtomTypeRegistry::default_registry().clone(),
-            },
+            valence: ValenceModel::AtomTyping(AtomTypingModel {
+                registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+            }),
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
@@ -170,24 +160,27 @@ mod tests {
 
     #[rstest]
     fn test_resolver_resolve_ground_methane_determined() {
-        let resolver = Resolver::new(&counts_model());
-        let mut ast = ground_methane();
+        let model = counts_model();
+        let resolver = Resolver::new(&model);
+        let mut ast = methane();
         let solution = resolver.resolve(&mut ast).unwrap();
         assert!(matches!(solution, Solution::Determined(())));
     }
 
     #[rstest]
     fn test_resolver_resolve_ground_methane_atom_typing_determined() {
-        let resolver = Resolver::new(&typing_model());
-        let mut ast = ground_methane();
+        let model = atom_typing_model();
+        let resolver = Resolver::new(&model);
+        let mut ast = methane();
         let solution = resolver.resolve(&mut ast).unwrap();
         assert!(matches!(solution, Solution::Determined(())));
     }
 
     #[rstest]
     fn test_resolver_resolve_benzene_writes_aromatic_system() {
-        let resolver = Resolver::new(&counts_model());
-        let mut ast = benzene_pinned();
+        let model = counts_model();
+        let resolver = Resolver::new(&model);
+        let mut ast = benzene();
         let solution = resolver.resolve(&mut ast).unwrap();
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 1);

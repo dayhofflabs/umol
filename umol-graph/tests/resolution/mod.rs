@@ -3,6 +3,7 @@
 //! Runs each `.edn` test input through the atom-typing and counts resolver
 //! configurations, producing insta EDN snapshots.
 
+use std::borrow::Cow;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -11,7 +12,7 @@ use rstest::*;
 use umol_ast::ast::{FromAst, IntoAst, MoleculeAst};
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl, MoleculeOverrides};
 use umol_edn::{FormatConfig, FromEdn, ToEdn};
-use umol_graph::ops::model::{AromaticityModel, ChemistryModel, ValenceModel};
+use umol_graph::ops::model::{AromaticityModel, ChemistryModel, CountsModel, ValenceModel};
 use umol_graph::ops::resolver::Resolver;
 use umol_graph::ops::solution::Solution;
 use umol_graph::ops::valence::ValenceTable;
@@ -81,9 +82,9 @@ fn atom_typing_chemistry() -> ChemistryModel {
 
 fn counts_chemistry() -> ChemistryModel {
     ChemistryModel {
-        valence: ValenceModel::Counts {
-            table: ValenceTable::default_table().clone(),
-        },
+        valence: ValenceModel::Counts(CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        }),
         aromaticity: AromaticityModel::daylight(),
     }
 }

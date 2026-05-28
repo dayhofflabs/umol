@@ -394,7 +394,7 @@ impl MoleculeAst {
 
     pub fn atom_mut(&mut self, id: AtomId) -> AtomViewMut<'_> {
         let ast = &mut Arc::make_mut(&mut self.atoms)[id.index()];
-        AtomViewMut { id: id, ast }
+        AtomViewMut { id, ast }
     }
 
     pub fn atoms_mut(&mut self) -> impl Iterator<Item = &mut AtomAst> {

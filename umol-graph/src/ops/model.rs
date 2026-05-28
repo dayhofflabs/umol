@@ -7,6 +7,8 @@
 //! share one model. The model carries no resolution behavior of its own — the
 //! resolver and validator engines do the work.
 
+use std::borrow::Cow;
+
 use thiserror::Error;
 use umol_shared::element::Element;
 
@@ -21,9 +23,9 @@ pub struct ChemistryModel {
 impl Default for ChemistryModel {
     fn default() -> Self {
         Self {
-            valence: ValenceModel::AtomTyping {
-                registry: AtomTypeRegistry::default_registry().clone(),
-            },
+            valence: ValenceModel::AtomTyping(AtomTypingModel {
+                registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+            }),
             aromaticity: AromaticityModel::daylight(),
         }
     }
@@ -31,8 +33,20 @@ impl Default for ChemistryModel {
 
 #[derive(Debug, Clone)]
 pub enum ValenceModel {
-    AtomTyping { registry: AtomTypeRegistry },
-    Counts { table: ValenceTable },
+    AtomTyping(AtomTypingModel),
+    Counts(CountsModel),
+}
+
+/// Atom-typing valence model: the registry of `AtomAst` patterns.
+#[derive(Debug, Clone)]
+pub struct AtomTypingModel {
+    pub registry: Cow<'static, AtomTypeRegistry>,
+}
+
+/// Counts valence model: the per-element covalence table.
+#[derive(Debug, Clone)]
+pub struct CountsModel {
+    pub table: Cow<'static, ValenceTable>,
 }
 
 #[derive(Debug, Clone)]
@@ -145,7 +159,7 @@ mod tests {
     #[test]
     fn test_chemistry_model_default() {
         let model = ChemistryModel::default();
-        assert!(matches!(model.valence, ValenceModel::AtomTyping { .. }));
+        assert!(matches!(model.valence, ValenceModel::AtomTyping(_)));
         assert!(matches!(
             model.aromaticity,
             AromaticityModel::HueckelRule { .. }

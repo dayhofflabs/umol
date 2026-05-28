@@ -206,6 +206,8 @@ fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use rstest::*;
     use umol_ast::ast::BondId;
     use umol_shared::element::Element;
@@ -215,7 +217,7 @@ mod tests {
     use crate::io::ctfile::{parse_mol_bytes_with, parse_mol_to_ast};
     use crate::io::smiles::parse_smiles_to_ast;
     use crate::ops::model::{
-        AromaticityModel, ChemistryModel, ElementScope, RingLimits, ValenceModel,
+        AromaticityModel, ChemistryModel, CountsModel, ElementScope, RingLimits, ValenceModel,
     };
     use crate::ops::valence::{CountsValence, ValenceTable};
     use crate::table_ir::atom::Atom as TableAtom;
@@ -236,8 +238,10 @@ mod tests {
 
     const CARBON_H0_EXPLICIT_MOL: &str = "carbon-h0\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  1  0  0  0  0  0  0  0  0\nM  END\n";
 
-    fn counts_valence() -> CountsValence {
-        CountsValence::new(ValenceTable::default_table().clone())
+    fn counts_model() -> CountsModel {
+        CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        }
     }
 
     #[rstest]
@@ -329,7 +333,9 @@ mod tests {
         #[case] expected_atom: &str,
     ) {
         let mut ast = parse_mol_to_ast(input).unwrap();
-        counts_valence().resolve(&mut ast).unwrap();
+        CountsValence::new(&counts_model())
+            .resolve(&mut ast)
+            .unwrap();
         assert_eq!(ast.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
             assert_eq!(ast.atom(AtomId(i)).ast.to_string(), expected_atom);
@@ -339,7 +345,9 @@ mod tests {
     #[rstest]
     fn test_parse_smiles_to_ast_methane_counts_resolve() {
         let mut ast = parse_smiles_to_ast("C").unwrap();
-        counts_valence().resolve(&mut ast).unwrap();
+        CountsValence::new(&counts_model())
+            .resolve(&mut ast)
+            .unwrap();
         assert_eq!(
             ast.atom(AtomId(0)).ast.to_string(),
             "C#i=#c0#h4#n0#u0#s#v0#a!"
@@ -363,9 +371,9 @@ mod tests {
     #[rstest]
     fn test_parse_mol_bytes_with_resolver_methane_determined() {
         let model = ChemistryModel {
-            valence: ValenceModel::Counts {
-                table: ValenceTable::default_table().clone(),
-            },
+            valence: ValenceModel::Counts(CountsModel {
+                table: Cow::Borrowed(ValenceTable::default_table()),
+            }),
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),

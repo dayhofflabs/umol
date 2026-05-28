@@ -12,11 +12,11 @@ use umol_ast::ast::{
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState};
 
-use super::table::ValenceTable;
+use crate::ops::model::CountsModel;
 
 #[derive(Clone, Debug)]
-pub struct CountsValence {
-    pub table: ValenceTable,
+pub struct CountsValence<'a> {
+    model: &'a CountsModel,
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -31,9 +31,9 @@ pub enum CountsError {
     UndeterminedElement,
 }
 
-impl CountsValence {
-    pub fn new(table: ValenceTable) -> Self {
-        Self { table }
+impl<'a> CountsValence<'a> {
+    pub fn new(model: &'a CountsModel) -> Self {
+        Self { model }
     }
 
     pub fn resolve(&self, ast: &mut MoleculeAst) -> Result<(), CountsError> {
@@ -113,7 +113,7 @@ impl CountsValence {
 
         let entry = element
             .shift((2 * accepted_pairs - charge) as i8)
-            .and_then(|shifted| self.table.entry(shifted));
+            .and_then(|shifted| self.model.table.entry(shifted));
 
         let aromatic_constraint = atom.constraints.aromatic_valence();
         if entry.is_none()
@@ -313,10 +313,13 @@ fn derive_multiplicity(spin: &SpinStateAst, unpaired: i64) -> Option<i64> {
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use rstest::rstest;
     use umol_ast::{atom, mol};
 
     use super::*;
+    use crate::ops::valence::ValenceTable;
 
     #[rstest]
     #[case::methane_h("C#c0#h4", "C#c0#h4#n0#u0#s#v0#a!")]
@@ -348,7 +351,10 @@ mod tests {
     #[case::tropylium_carbocation("C#c1#v2#h1#a+", "C#c+#h#n0#u0#s#v2#a0")]
     #[case::iron_out_of_table("Fe#c0#h0", "Fe#c0#h0#n4#u0#s#v0#a!")]
     fn test_counts_valence_resolve_atom(#[case] input: &str, #[case] expected: &str) {
-        let resolver = CountsValence::new(ValenceTable::default_table().clone());
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
         let mut atom = atom!(input);
         resolver.resolve_atom(&mut atom).unwrap();
         assert_eq!(atom.to_string(), expected);
@@ -378,7 +384,10 @@ mod tests {
         #[case] atom_id: u32,
         #[case] expected: &str,
     ) {
-        let resolver = CountsValence::new(ValenceTable::default_table().clone());
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
         resolver.resolve(&mut molecule).unwrap();
         assert_eq!(molecule.atom(AtomId(atom_id)).ast.to_string(), expected);
     }
@@ -392,7 +401,10 @@ mod tests {
         #[case] mut atom: AtomAst,
         #[case] expected: Result<(), CountsError>,
     ) {
-        let resolver = CountsValence::new(ValenceTable::default_table().clone());
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
         assert_eq!(resolver.resolve_atom(&mut atom), expected);
     }
 }

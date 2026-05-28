@@ -39,7 +39,7 @@ impl<'a> AtomViews<'a> {
         self.atoms.len()
     }
 
-    pub fn ids(&self) -> impl Iterator<Item = AtomId> + 'static {
+    pub fn ids(&self) -> impl Iterator<Item = AtomId> {
         (0..self.atoms.len() as u32).map(AtomId)
     }
 
