@@ -4,6 +4,16 @@ Design and case analysis for the valence resolvers (counts, atom-typing). Covers
 
 ## Status overview
 
+**Status: Completed (2026-05-27).** The valence resolver is rebuilt and green. Steps 0–7 are resolved (step 4 superseded — see below); only 2k/2l remain deferred, gated on [doc 98](98-bind-scope-2026-05-23.md). The as-built design diverges from the [Proposed architecture](#proposed-architecture-invariants-on-valencemodel) section below (which is retained as historical context) and is recorded in [doc 99](99-counts-as-invariants-2026-05-23.md) (counts) and [doc 100](100-table-ir-raise-ast-2026-05-27.md) (IO raise).
+
+### As-built vs proposed (key divergences)
+
+- **`ValenceModel` is pure data**, not a behavior surface. It is an enum of per-variant model structs — `Counts(CountsModel { table })`, `AtomTyping(AtomTypingModel { registry })` — each field `Cow<'static, _>` so the default table/registry are borrowed from their `LazyLock` statics rather than deep-cloned. It carries **no** `resolve`/`validate`/`invariants` methods (step 4 superseded).
+- **Engines borrow the model.** `CountsValence<'a>` / `AtomTypingValence<'a>` hold `&'a` the per-variant model struct; `ValenceResolver<'a>` is a thin enum dispatching by variant; `Resolver<'a>` borrows `&'a ChemistryModel` (create-use-discard, never stored). This is step 5, realized as enum dispatch rather than a single `{ model }` shell.
+- **Counts does not route through `ValenceInvariants`.** It uses a table-tuned `derive_fields` — admissible `(h, a)` enumeration against `target_covalences`/`aromatic_valences`, then `compare_valence_preference` — per [doc 99](99-counts-as-invariants-2026-05-23.md). The wide `Invariants::solve` enumeration was abandoned (unpaired electrons broke the covalence-set-as-filter assumption). `ValenceInvariants::enumerate_atom` is kept but unused, reserved for a later grounded-enumeration phase.
+- **`ValenceInvariants` is standalone per-atom physics** in `ops/invariants.rs` (moved out of `ops/valence/`). `check` / `check_atom` return `Solution<(), ValenceMismatch>`. The electron-invariant validator (`ValenceInvariantsValidator`) is a thin adapter over `check` — this is step 6, realized without the "invariants on `ValenceModel`" indirection.
+- **Spin is closed-shell** (min-unpaired / max-lone-pairs), not Hund. **Aromatic valence is deterministic** from `(charge-shifted element, v+h)`, not enumerated.
+
 The plan rebuilds the valence resolver on top of the AST/lattice layer. Work is broken into the **migration plan** (numbered steps below, plus 2a–2l for the step-2 AST cleanup and JointDomain work).
 
 ### Step status
@@ -24,11 +34,11 @@ The plan rebuilds the valence resolver on top of the AST/lattice layer. Work is 
 | 2j   | `Lattice::saturate` + `saturate_atom` (see doc 97)                            | Done        |
 | 2k   | DSL parser/formatter for `#E` predicate                                       | Deferred    |
 | 2l   | EDN serialization roundtrip for JointDomain                                   | Deferred    |
-| 3    | `ValenceInvariants` module (`umol-graph`)                                     | Done        |
-| 4    | `ValenceModel` API methods                                                    | Todo        |
-| 5    | Collapse resolvers into one shell                                             | Todo        |
-| 6    | Collapse validators similarly                                                 | Todo        |
-| 7    | Cleanup: remove `NormalValenceTable`                                          | Todo        |
+| 3    | `ValenceInvariants` module (now `ops/invariants.rs`; `check` three-valued)    | Done        |
+| 4    | `ValenceModel` API methods (`resolve`/`validate`/`invariants` on the model)   | Superseded  |
+| 5    | Collapse resolvers into one shell (enum-dispatch `ValenceResolver<'a>`)        | Done        |
+| 6    | Collapse validators (`ValenceInvariantsValidator` delegates to `check`)        | Done        |
+| 7    | Cleanup: remove `NormalValenceTable`                                          | Done        |
 
 ### Deferred sub-tracks
 
@@ -226,6 +236,8 @@ The enumeration of candidates lives inside the existing `counts.rs::candidates_f
 (Needs concrete examples per element, per (v, aromatic_valence) combination, and a worked-through fixed-point trace before turning into code. Aromatic charge equalization → counts re-pass is the canonical motivating example.)
 
 ## Proposed architecture: invariants on `ValenceModel`
+
+> **Superseded (2026-05-27).** This section is the original proposal, not the as-built design — see [As-built vs proposed](#as-built-vs-proposed-key-divergences) in the Status overview. In particular, `ValenceModel` ended up as pure data with no methods, counts does not route through `ValenceInvariants`, and the validator (not the model) calls `ValenceInvariants::check`. Retained for design rationale.
 
 The conservation equations and the enumeration solver they drive belong on `ValenceModel` (in `umol-graph/src/ops/config.rs`). Resolver and validator both call through; neither inlines the equations. Goal: a single source of truth so resolver and validator never diverge.
 

@@ -97,8 +97,11 @@
 | [093-aromatic-charge-and-transformer-2026-04-29.md](093-aromatic-charge-and-transformer-2026-04-29.md)                             | Completed     | 2026-05-07   |
 | [094-dsl-ast-io-ergonomics-2026-05-07.md](094-dsl-ast-io-ergonomics-2026-05-07.md)                                                 | Completed     | 2026-05-07   |
 | [095-ast-equality-and-ordering-2026-05-10.md](095-ast-equality-and-ordering-2026-05-10.md)                                         | Active        | 2026-05-10   |
-| [096-valence-resolution-plan-2026-05-21.md](096-valence-resolution-plan-2026-05-21.md)                                             | Active        | 2026-05-23   |
+| [096-valence-resolution-plan-2026-05-21.md](096-valence-resolution-plan-2026-05-21.md)                                             | Completed     | 2026-05-27   |
 | [097-joint-domain-design-2026-05-23.md](097-joint-domain-design-2026-05-23.md)                                                     | Active        | 2026-05-23   |
 | [098-bind-scope-2026-05-23.md](098-bind-scope-2026-05-23.md)                                                                       | Active        | 2026-05-23   |
 | [099-counts-as-invariants-2026-05-23.md](099-counts-as-invariants-2026-05-23.md)                                                   | Completed     | 2026-05-27   |
 | [100-table-ir-raise-ast-2026-05-27.md](100-table-ir-raise-ast-2026-05-27.md)                                                       | Completed     | 2026-05-27   |
+| [101-stereochemistry-framework-2026-05-28.md](101-stereochemistry-framework-2026-05-28.md)                                         | Informational | 2026-05-28   |
+| [102-stereochemistry-framework-research-2026-05-28.md](102-stereochemistry-framework-research-2026-05-28.md)                       | Informational | 2026-05-28   |
+| [103-stereochemistry-overlay-and-port-trajectory-2026-05-28.md](103-stereochemistry-overlay-and-port-trajectory-2026-05-28.md)     | Active        | 2026-05-28   |
