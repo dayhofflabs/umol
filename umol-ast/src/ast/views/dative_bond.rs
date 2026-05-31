@@ -72,6 +72,11 @@ impl<'a> DativeBondViews<'a> {
             .map(|&rid| DativeBondId::from(rid))
     }
 
+    /// Whether any dative bond is incident on `atom`.
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.set.has_incident(NodeId::from(atom))
+    }
+
     /// Views of dative bonds incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
         let molecule = self.molecule;

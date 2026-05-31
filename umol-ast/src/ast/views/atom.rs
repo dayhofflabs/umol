@@ -200,7 +200,7 @@ impl<'a> AtomView<'a> {
     }
 
     pub fn is_in_aromatic_system(&self) -> bool {
-        self.aromatic_system().is_some()
+        self.molecule.aromatic_systems().has_incident(self.id)
     }
 
     /// The aromatic system containing this atom, if any. Per-perception
@@ -219,7 +219,7 @@ impl<'a> AtomView<'a> {
     }
 
     pub fn is_in_dative_bond(&self) -> bool {
-        self.dative_bonds().next().is_some()
+        self.molecule.dative_bonds().has_incident(self.id)
     }
 
     pub fn dative_bonds(&self) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
@@ -231,7 +231,7 @@ impl<'a> AtomView<'a> {
     }
 
     pub fn is_in_multicenter_bond(&self) -> bool {
-        self.multicenter_bonds().next().is_some()
+        self.molecule.multicenter_bonds().has_incident(self.id)
     }
 
     pub fn multicenter_bonds(&self) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
@@ -243,7 +243,7 @@ impl<'a> AtomView<'a> {
     }
 
     pub fn is_in_noncovalent_bond(&self) -> bool {
-        self.noncovalent_bonds().next().is_some()
+        self.molecule.noncovalent_bonds().has_incident(self.id)
     }
 
     pub fn noncovalent_bonds(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {

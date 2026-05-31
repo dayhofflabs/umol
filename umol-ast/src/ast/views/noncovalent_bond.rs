@@ -68,6 +68,11 @@ impl<'a> NoncovalentBondViews<'a> {
             .map(|&rid| NoncovalentBondId::from(rid))
     }
 
+    /// Whether any noncovalent bond is incident on `atom`.
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.set.has_incident(NodeId::from(atom))
+    }
+
     /// Views of noncovalent bonds incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
         let molecule = self.molecule;

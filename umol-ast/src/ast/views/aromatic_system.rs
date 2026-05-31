@@ -68,6 +68,11 @@ impl<'a> AromaticSystemViews<'a> {
             .map(|&rid| AromaticSystemId::from(rid))
     }
 
+    /// Whether any aromatic system is incident on `atom`.
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.set.has_incident(NodeId::from(atom))
+    }
+
     /// Views of aromatic systems incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = AromaticSystemView<'a>> + 'a {
         let molecule = self.molecule;

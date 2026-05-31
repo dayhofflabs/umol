@@ -66,6 +66,11 @@ impl<'a> MulticenterBondViews<'a> {
             .map(|&rid| MulticenterBondId::from(rid))
     }
 
+    /// Whether any multicenter bond is incident on `atom`.
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.set.has_incident(NodeId::from(atom))
+    }
+
     /// Views of multicenter bonds incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
         let molecule = self.molecule;
