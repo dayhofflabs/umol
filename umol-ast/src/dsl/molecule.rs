@@ -2,8 +2,8 @@
 //!
 //! `MoleculeDsl` wraps a `MoleculeAst` together with the `Metadata` that records
 //! the surface-form id/alias bindings (atom ids, bond ids, etc.). The EDN
-//! form is a map keyed by `:atoms`, `:bonds`, `:dative`, `:aromatic`,
-//! `:multicenter`, `:noncovalent`, `:atom-aliases`/`:aliases`, and
+//! form is a map keyed by `:atoms`, `:bonds`, `:dative-bonds`, `:aromatic-systems`,
+//! `:multicenter-bonds`, `:noncovalent-bonds`, `:atom-aliases`/`:aliases`, and
 //! `:constraints`. Each entity delegates to its own entity DSL. Constraints
 //! parse directly into the typed `Constraint` tree.
 
@@ -318,10 +318,10 @@ pub(super) fn read_molecule_input(
         match key.as_ref() {
             "atoms" => mi.atoms = read_vec(de, read_atom_entry)?,
             "bonds" => mi.bonds = read_vec(de, read_bond_entry)?,
-            "dative" => mi.dative_bonds = read_vec(de, read_dative_bond_entry)?,
-            "aromatic" => mi.aromatic_systems = read_vec(de, read_aromatic_system_entry)?,
-            "multicenter" => mi.multicenter_bonds = read_vec(de, read_multicenter_bond_entry)?,
-            "noncovalent" => mi.noncovalent_bonds = read_vec(de, read_noncovalent_bond_entry)?,
+            "dative-bonds" => mi.dative_bonds = read_vec(de, read_dative_bond_entry)?,
+            "aromatic-systems" => mi.aromatic_systems = read_vec(de, read_aromatic_system_entry)?,
+            "multicenter-bonds" => mi.multicenter_bonds = read_vec(de, read_multicenter_bond_entry)?,
+            "noncovalent-bonds" => mi.noncovalent_bonds = read_vec(de, read_noncovalent_bond_entry)?,
             "atom-aliases" => mi.atom_aliases = read_atom_aliases(de)?,
             "constraints" => mi.constraints = read_constraints_dsl(de)?,
             "guards" => {
@@ -681,16 +681,16 @@ fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     map.insert(Edn::keyword("atoms"), render_atoms(ast, meta));
     map.insert(Edn::keyword("bonds"), render_bonds(ast, meta));
     if ast.dative_bonds().count() > 0 {
-        map.insert(Edn::keyword("dative"), render_dative(ast, meta));
+        map.insert(Edn::keyword("dative-bonds"), render_dative(ast, meta));
     }
     if ast.aromatic_systems().count() > 0 {
-        map.insert(Edn::keyword("aromatic"), render_aromatic(ast, meta));
+        map.insert(Edn::keyword("aromatic-systems"), render_aromatic(ast, meta));
     }
     if ast.multicenter_bonds().count() > 0 {
-        map.insert(Edn::keyword("multicenter"), render_multicenter(ast, meta));
+        map.insert(Edn::keyword("multicenter-bonds"), render_multicenter(ast, meta));
     }
     if ast.noncovalent_bonds().count() > 0 {
-        map.insert(Edn::keyword("noncovalent"), render_noncovalent(ast, meta));
+        map.insert(Edn::keyword("noncovalent-bonds"), render_noncovalent(ast, meta));
     }
     if meta.has_atom_aliases() {
         map.insert(Edn::keyword("atom-aliases"), render_atom_aliases(meta));
@@ -1181,17 +1181,20 @@ fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeError> {
         match key.name() {
             "atoms" => input.atoms = parse_vec(v, ":atoms", parse_atom_entry)?,
             "bonds" => input.bonds = parse_vec(v, ":bonds", parse_bond_entry)?,
-            "dative" => input.dative_bonds = parse_vec(v, ":dative", parse_dative_bond_entry)?,
-            "aromatic" => {
-                input.aromatic_systems = parse_vec(v, ":aromatic", parse_aromatic_system_entry)?
+            "dative-bonds" => {
+                input.dative_bonds = parse_vec(v, ":dative-bonds", parse_dative_bond_entry)?
             }
-            "multicenter" => {
+            "aromatic-systems" => {
+                input.aromatic_systems =
+                    parse_vec(v, ":aromatic-systems", parse_aromatic_system_entry)?
+            }
+            "multicenter-bonds" => {
                 input.multicenter_bonds =
-                    parse_vec(v, ":multicenter", parse_multicenter_bond_entry)?
+                    parse_vec(v, ":multicenter-bonds", parse_multicenter_bond_entry)?
             }
-            "noncovalent" => {
+            "noncovalent-bonds" => {
                 input.noncovalent_bonds =
-                    parse_vec(v, ":noncovalent", parse_noncovalent_bond_entry)?
+                    parse_vec(v, ":noncovalent-bonds", parse_noncovalent_bond_entry)?
             }
             "atom-aliases" => input.atom_aliases = parse_atom_aliases(v)?,
             "constraints" => {
@@ -1689,10 +1692,10 @@ mod tests {
         let Edn::Map(m) = &edn else {
             panic!("expected map");
         };
-        assert!(m.get_keyword("dative").is_none());
-        assert!(m.get_keyword("aromatic").is_none());
-        assert!(m.get_keyword("multicenter").is_none());
-        assert!(m.get_keyword("noncovalent").is_none());
+        assert!(m.get_keyword("dative-bonds").is_none());
+        assert!(m.get_keyword("aromatic-systems").is_none());
+        assert!(m.get_keyword("multicenter-bonds").is_none());
+        assert!(m.get_keyword("noncovalent-bonds").is_none());
         assert!(m.get_keyword("atom-aliases").is_none());
         assert!(m.get_keyword("constraints").is_none());
     }
@@ -1784,10 +1787,10 @@ mod tests {
     #[case::with_ids(r##"{:atoms [[:a "C"] [:b "N"]] :bonds [{:id :b1 :a :a :b :b :type "1"}]}"##)]
     #[case::inline_atom_constraints(r##"{:atoms ["C#v4" "N#R+"] :bonds []}"##)]
     #[case::inline_bond_constraint(r##"{:atoms ["C" "C"] :bonds [[0 1 "1#a"]]}"##)]
-    #[case::aromatic_section(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic [{:id :ar1 :atoms [0 1 2 3 4 5] :type "#e6"}]}"##)]
-    #[case::multicenter_section(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type "#e2"}]}"##)]
-    #[case::dative_section(r##"{:atoms ["C" "N"] :bonds [] :dative [{:id :d1 :donor 0 :acceptor 1 :type "1#R"}]}"##)]
-    #[case::noncovalent_section(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}]}"##)]
+    #[case::aromatic_section(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic-systems [{:id :ar1 :atoms [0 1 2 3 4 5] :type "#e6"}]}"##)]
+    #[case::multicenter_section(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type "#e2"}]}"##)]
+    #[case::dative_section(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:id :d1 :donor 0 :acceptor 1 :type "1#R"}]}"##)]
+    #[case::noncovalent_section(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"##)]
     #[case::atom_aliases(r##"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"##)]
     #[case::constraints_connected(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"##)]
     #[case::constraints_bond_order_sum(r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type "1"} {:id :b2 :a 1 :b 2 :type "1"}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##)]
@@ -1813,28 +1816,28 @@ mod tests {
     #[case::constraints_bond_aromatic(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 :aromatic]}]}"##)]
     #[case::constraints_bond_ring_count(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-count 1}]}]}"##)]
     #[case::constraints_bond_ring_size(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-size 6}]}]}"##)]
-    #[case::constraints_dative_ring_count(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond [0 {:ring-count 1}]}]}"##)]
-    #[case::constraints_dative_donor(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-donor [0 0]}]}"##)]
-    #[case::constraints_dative_acceptor(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-acceptor [0 1]}]}"##)]
-    #[case::constraints_dative_parallels(r##"{:atoms ["C" "N"] :bonds [[0 1 "1"]] :dative [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-parallels [0 0]}]}"##)]
-    #[case::constraints_dative_donor_satisfies(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-donor-satisfies [0 {:valence 3}]}]}"##)]
-    #[case::constraints_dative_acceptor_satisfies(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-acceptor-satisfies [0 {:valence 3}]}]}"##)]
-    #[case::constraints_aromatic_system_contains(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type "#e2"}] :constraints [{:aromatic-system-contains [0 0]}]}"##)]
-    #[case::constraints_aromatic_system_contains_all(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type "#e2"}] :constraints [{:aromatic-system-contains-all [0 [0 1]]}]}"##)]
-    #[case::constraints_aromatic_system_all_atoms(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type "#e2"}] :constraints [{:aromatic-system-all-atoms [0 {:valence 4}]}]}"##)]
-    #[case::constraints_aromatic_system_any_atom(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type "#e2"}] :constraints [{:aromatic-system-any-atom [0 {:valence 4}]}]}"##)]
-    #[case::constraints_multicenter_contains(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter [{:atoms [0 1 2] :type "#e3"}] :constraints [{:multicenter-bond-contains [0 0]}]}"##)]
-    #[case::constraints_multicenter_contains_all(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter [{:atoms [0 1 2] :type "#e3"}] :constraints [{:multicenter-bond-contains-all [0 [0 1]]}]}"##)]
-    #[case::constraints_multicenter_all_atoms(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type "#e2"}] :constraints [{:multicenter-bond-all-atoms [0 {:valence 4}]}]}"##)]
-    #[case::constraints_multicenter_any_atom(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type "#e2"}] :constraints [{:multicenter-bond-any-atom [0 {:valence 4}]}]}"##)]
-    #[case::constraints_noncovalent_contains(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-contains [0 0]}]}"##)]
-    #[case::constraints_noncovalent_ends(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends [0 [0 1]]}]}"##)]
-    #[case::constraints_noncovalent_ends_satisfy(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends-satisfy [0 [{:valence 3} {:valence 1}]]}]}"##)]
+    #[case::constraints_dative_ring_count(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond [0 {:ring-count 1}]}]}"##)]
+    #[case::constraints_dative_donor(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-donor [0 0]}]}"##)]
+    #[case::constraints_dative_acceptor(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-acceptor [0 1]}]}"##)]
+    #[case::constraints_dative_parallels(r##"{:atoms ["C" "N"] :bonds [[0 1 "1"]] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-parallels [0 0]}]}"##)]
+    #[case::constraints_dative_donor_satisfies(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-donor-satisfies [0 {:valence 3}]}]}"##)]
+    #[case::constraints_dative_acceptor_satisfies(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond-acceptor-satisfies [0 {:valence 3}]}]}"##)]
+    #[case::constraints_aromatic_system_contains(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "#e2"}] :constraints [{:aromatic-system-contains [0 0]}]}"##)]
+    #[case::constraints_aromatic_system_contains_all(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "#e2"}] :constraints [{:aromatic-system-contains-all [0 [0 1]]}]}"##)]
+    #[case::constraints_aromatic_system_all_atoms(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "#e2"}] :constraints [{:aromatic-system-all-atoms [0 {:valence 4}]}]}"##)]
+    #[case::constraints_aromatic_system_any_atom(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "#e2"}] :constraints [{:aromatic-system-any-atom [0 {:valence 4}]}]}"##)]
+    #[case::constraints_multicenter_contains(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "#e3"}] :constraints [{:multicenter-bond-contains [0 0]}]}"##)]
+    #[case::constraints_multicenter_contains_all(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type "#e3"}] :constraints [{:multicenter-bond-contains-all [0 [0 1]]}]}"##)]
+    #[case::constraints_multicenter_all_atoms(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type "#e2"}] :constraints [{:multicenter-bond-all-atoms [0 {:valence 4}]}]}"##)]
+    #[case::constraints_multicenter_any_atom(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type "#e2"}] :constraints [{:multicenter-bond-any-atom [0 {:valence 4}]}]}"##)]
+    #[case::constraints_noncovalent_contains(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-contains [0 0]}]}"##)]
+    #[case::constraints_noncovalent_ends(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends [0 [0 1]]}]}"##)]
+    #[case::constraints_noncovalent_ends_satisfy(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends-satisfy [0 [{:valence 3} {:valence 1}]]}]}"##)]
     #[case::constraints_sub_pattern_multi_entity_anchor(r##"{:atoms ["C" "N"] :bonds [[0 1 "1"]] :constraints [{:sub-pattern {:anchor {:atoms [[0 0]] :bonds [[0 0]]} :pattern {:atoms ["C" "N"] :bonds [[0 1 "1"]]}}}]}"##)]
-    #[case::constraints_sub_pattern_dative_anchor(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:sub-pattern {:anchor {:dative-bonds [[0 0]]} :pattern {:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type "1#R"}]}}}]}"##)]
-    #[case::constraints_sub_pattern_aromatic_system_anchor(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type "#e2"}] :constraints [{:sub-pattern {:anchor {:aromatic-systems [[0 0]]} :pattern {:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type "#e2"}]}}}]}"##)]
-    #[case::constraints_sub_pattern_multicenter_anchor(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type "#e2"}] :constraints [{:sub-pattern {:anchor {:multicenter-bonds [[0 0]]} :pattern {:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type "#e2"}]}}}]}"##)]
-    #[case::constraints_sub_pattern_noncovalent_anchor(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:sub-pattern {:anchor {:noncovalent-bonds [[0 0]]} :pattern {:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}]}}}]}"##)]
+    #[case::constraints_sub_pattern_dative_anchor(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:sub-pattern {:anchor {:dative-bonds [[0 0]]} :pattern {:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}]}}}]}"##)]
+    #[case::constraints_sub_pattern_aromatic_system_anchor(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "#e2"}] :constraints [{:sub-pattern {:anchor {:aromatic-systems [[0 0]]} :pattern {:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type "#e2"}]}}}]}"##)]
+    #[case::constraints_sub_pattern_multicenter_anchor(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type "#e2"}] :constraints [{:sub-pattern {:anchor {:multicenter-bonds [[0 0]]} :pattern {:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type "#e2"}]}}}]}"##)]
+    #[case::constraints_sub_pattern_noncovalent_anchor(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:sub-pattern {:anchor {:noncovalent-bonds [[0 0]]} :pattern {:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}}}]}"##)]
     fn test_molecule_dsl_from_edn_str_matches_from_edn(#[case] source: &str) {
         let via_str = MoleculeDsl::from_edn_str(source).unwrap();
         let tree = read_string(source).unwrap();
@@ -1854,11 +1857,11 @@ mod tests {
     #[case::bond_constraint_unknown_keyword(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 :bogus]}]}"##)]
     #[case::bond_constraint_unknown_inner_key(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:bogus 1}]}]}"##)]
     #[case::bond_constraint_wrong_type(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 42]}]}"##)]
-    #[case::dative_constraint_unknown_key(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond [0 {:bogus 1}]}]}"##)]
+    #[case::dative_constraint_unknown_key(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type "1#R"}] :constraints [{:dative-bond [0 {:bogus 1}]}]}"##)]
     #[case::sub_pattern_anchor_unknown_key(r##"{:atoms ["C"] :bonds [] :constraints [{:sub-pattern {:anchor {:bogus [[0 0]]} :pattern {:atoms ["C"] :bonds []}}}]}"##)]
     #[case::constraint_unknown_key(r##"{:atoms ["C"] :bonds [] :constraints [{:bogus 1}]}"##)]
-    #[case::noncovalent_ends_satisfy_wrong_pair_length(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends-satisfy [0 [{:valence 2}]]}]}"##)]
-    #[case::noncovalent_ends_wrong_pair_length(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends [0 [0]]}]}"##)]
+    #[case::noncovalent_ends_satisfy_wrong_pair_length(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends-satisfy [0 [{:valence 2}]]}]}"##)]
+    #[case::noncovalent_ends_wrong_pair_length(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends [0 [0]]}]}"##)]
     fn test_molecule_dsl_from_edn_str_rejects_invalid_constraints(#[case] source: &str) {
         let result = MoleculeDsl::from_edn_str(source);
         assert!(
@@ -1905,22 +1908,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::dative(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type :single}]}"##)]
-    #[case::dative_with_id_and_type(r##"{:atoms ["C" "N"] :bonds [] :dative [{:id :d1 :donor 0 :acceptor 1 :type "1#R"}]}"##)]
-    #[case::aromatic_minimal(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic [{:atoms [0 1 2 3 4 5] :type ""}]}"##)]
-    #[case::aromatic_with_id_and_type(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:id :a1 :atoms [0 1] :type "#e6"}]}"##)]
-    #[case::aromatic_with_electrons_lits(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type ""}]}"##)]
-    #[case::aromatic_with_electrons_undetermined(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :electrons [:undetermined :undetermined] :type ""}]}"##)]
-    #[case::aromatic_with_electrons_set(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :electrons [[1 2] 1] :type ""}]}"##)]
-    #[case::aromatic_with_electrons_expr(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :electrons ["?n + 1" 1] :type ""}]}"##)]
-    #[case::aromatic_with_electrons_and_total(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type "#e6"}]}"##)]
-    #[case::multicenter_minimal(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter [{:atoms [0 1 2] :type ""}]}"##)]
-    #[case::multicenter_with_id_and_type(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:id :m1 :atoms [0 1] :type "#e2"}]}"##)]
-    #[case::multicenter_with_electrons_lits(r##"{:atoms ["B" "H" "B"] :bonds [] :multicenter [{:atoms [0 1 2] :electrons [1 0 1] :type ""}]}"##)]
-    #[case::multicenter_with_electrons_undetermined(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :electrons [:undetermined :undetermined] :type ""}]}"##)]
-    #[case::multicenter_with_electrons_expr(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :electrons ["?n - 1" 1] :type ""}]}"##)]
-    #[case::noncovalent(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}]}"##)]
-    #[case::noncovalent_with_id(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:id :n1 :a 0 :b 1 :type "Hbd"}]}"##)]
+    #[case::dative(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type :single}]}"##)]
+    #[case::dative_with_id_and_type(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:id :d1 :donor 0 :acceptor 1 :type "1#R"}]}"##)]
+    #[case::aromatic_minimal(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type ""}]}"##)]
+    #[case::aromatic_with_id_and_type(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:id :a1 :atoms [0 1] :type "#e6"}]}"##)]
+    #[case::aromatic_with_electrons_lits(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type ""}]}"##)]
+    #[case::aromatic_with_electrons_undetermined(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons [:undetermined :undetermined] :type ""}]}"##)]
+    #[case::aromatic_with_electrons_set(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons [[1 2] 1] :type ""}]}"##)]
+    #[case::aromatic_with_electrons_expr(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons ["?n + 1" 1] :type ""}]}"##)]
+    #[case::aromatic_with_electrons_and_total(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type "#e6"}]}"##)]
+    #[case::multicenter_minimal(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type ""}]}"##)]
+    #[case::multicenter_with_id_and_type(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:id :m1 :atoms [0 1] :type "#e2"}]}"##)]
+    #[case::multicenter_with_electrons_lits(r##"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :electrons [1 0 1] :type ""}]}"##)]
+    #[case::multicenter_with_electrons_undetermined(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :electrons [:undetermined :undetermined] :type ""}]}"##)]
+    #[case::multicenter_with_electrons_expr(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :electrons ["?n - 1" 1] :type ""}]}"##)]
+    #[case::noncovalent(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"##)]
+    #[case::noncovalent_with_id(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:id :n1 :a 0 :b 1 :type "Hbd"}]}"##)]
     fn test_molecule_dsl_edn_roundtrip_non_localized_entities(#[case] source: &str) {
         let edn = read_string(source).unwrap();
         let dsl = MoleculeDsl::from_edn(&edn).unwrap();
@@ -2213,7 +2216,7 @@ mod tests {
     #[rstest]
     fn test_molecule_dsl_noncovalent_endpoint_out_of_range_errors() {
         let edn = read_string(
-            r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 99 :type "Hbd"}]}"##,
+            r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 99 :type "Hbd"}]}"##,
         )
         .unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
@@ -2223,7 +2226,7 @@ mod tests {
     #[rstest]
     fn test_molecule_dsl_aromatic_atom_out_of_range_errors() {
         let edn =
-            read_string(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 5] :type ""}]}"##)
+            read_string(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 5] :type ""}]}"##)
                 .unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
@@ -2232,7 +2235,7 @@ mod tests {
     #[rstest]
     fn test_molecule_dsl_dative_unknown_donor_id_errors() {
         let edn = read_string(
-            r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor :nope :acceptor 1 :type :single}]}"##,
+            r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor :nope :acceptor 1 :type :single}]}"##,
         )
         .unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
@@ -2249,10 +2252,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::bond_without_type(r##"{:atoms ["C" "C"] :bonds [{:a 0 :b 1}]}"##)]
-    #[case::dative_without_type(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1}]}"##)]
-    #[case::aromatic_without_type(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1]}]}"##)]
-    #[case::multicenter_without_type(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1]}]}"##)]
-    #[case::noncovalent_without_type(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1}]}"##)]
+    #[case::dative_without_type(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1}]}"##)]
+    #[case::aromatic_without_type(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1]}]}"##)]
+    #[case::multicenter_without_type(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1]}]}"##)]
+    #[case::noncovalent_without_type(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1}]}"##)]
     fn test_molecule_dsl_type_required_tree(#[case] source: &str) {
         let edn = read_string(source).unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
@@ -2266,10 +2269,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::bond_without_type(r##"{:atoms ["C" "C"] :bonds [{:a 0 :b 1}]}"##)]
-    #[case::dative_without_type(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1}]}"##)]
-    #[case::aromatic_without_type(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1]}]}"##)]
-    #[case::multicenter_without_type(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1]}]}"##)]
-    #[case::noncovalent_without_type(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1}]}"##)]
+    #[case::dative_without_type(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1}]}"##)]
+    #[case::aromatic_without_type(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1]}]}"##)]
+    #[case::multicenter_without_type(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1]}]}"##)]
+    #[case::noncovalent_without_type(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1}]}"##)]
     fn test_molecule_dsl_type_required_streaming(#[case] source: &str) {
         let err = MoleculeDsl::from_edn_str(source).unwrap_err();
         let de = match err {
@@ -2319,29 +2322,29 @@ mod tests {
     #[case::bond_ring_count(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-count 1}]}]}"##)]
     #[case::bond_ring_size(r##"{:atoms ["C" "C"] :bonds [[0 1 "1"]] :constraints [{:bond [0 {:ring-size 6}]}]}"##)]
     // DativeBondConstraint variants
-    #[case::dative_ring_count(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond [0 {:ring-count 1}]}]}"##)]
-    #[case::dative_ring_size(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond [0 {:ring-size 5}]}]}"##)]
-    #[case::dative_donor(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-donor [0 0]}]}"##)]
-    #[case::dative_acceptor(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-acceptor [0 1]}]}"##)]
-    #[case::dative_donor_satisfies(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-donor-satisfies [0 {:valence 4}]}]}"##)]
-    #[case::dative_acceptor_satisfies(r##"{:atoms ["C" "N"] :bonds [] :dative [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-acceptor-satisfies [0 {:degree 2}]}]}"##)]
-    #[case::dative_parallels(r##"{:atoms ["C" "N"] :bonds [[0 1 "1"]] :dative [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-parallels [0 0]}]}"##)]
+    #[case::dative_ring_count(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond [0 {:ring-count 1}]}]}"##)]
+    #[case::dative_ring_size(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond [0 {:ring-size 5}]}]}"##)]
+    #[case::dative_donor(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-donor [0 0]}]}"##)]
+    #[case::dative_acceptor(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-acceptor [0 1]}]}"##)]
+    #[case::dative_donor_satisfies(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-donor-satisfies [0 {:valence 4}]}]}"##)]
+    #[case::dative_acceptor_satisfies(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-acceptor-satisfies [0 {:degree 2}]}]}"##)]
+    #[case::dative_parallels(r##"{:atoms ["C" "N"] :bonds [[0 1 "1"]] :dative-bonds [{:donor 0 :acceptor 1 :type :single}] :constraints [{:dative-bond-parallels [0 0]}]}"##)]
     // RelationalConstraint variants for aromatic system
-    #[case::aromatic_atoms(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-atoms [0 [0 1]]}]}"##)]
-    #[case::aromatic_contains(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-contains [0 0]}]}"##)]
-    #[case::aromatic_contains_all(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-contains-all [0 [0 1]]}]}"##)]
-    #[case::aromatic_all_atoms(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-all-atoms [0 {:valence 4}]}]}"##)]
-    #[case::aromatic_any_atom(r##"{:atoms ["C" "C"] :bonds [] :aromatic [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-any-atom [0 {:degree 3}]}]}"##)]
+    #[case::aromatic_atoms(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-atoms [0 [0 1]]}]}"##)]
+    #[case::aromatic_contains(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-contains [0 0]}]}"##)]
+    #[case::aromatic_contains_all(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-contains-all [0 [0 1]]}]}"##)]
+    #[case::aromatic_all_atoms(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-all-atoms [0 {:valence 4}]}]}"##)]
+    #[case::aromatic_any_atom(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :type ""}] :constraints [{:aromatic-system-any-atom [0 {:degree 3}]}]}"##)]
     // RelationalConstraint variants for multicenter bond
-    #[case::multicenter_atoms(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-atoms [0 [0 1]]}]}"##)]
-    #[case::multicenter_contains(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-contains [0 0]}]}"##)]
-    #[case::multicenter_contains_all(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-contains-all [0 [0 1]]}]}"##)]
-    #[case::multicenter_all_atoms(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-all-atoms [0 {:valence 4}]}]}"##)]
-    #[case::multicenter_any_atom(r##"{:atoms ["C" "C"] :bonds [] :multicenter [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-any-atom [0 {:degree 3}]}]}"##)]
+    #[case::multicenter_atoms(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-atoms [0 [0 1]]}]}"##)]
+    #[case::multicenter_contains(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-contains [0 0]}]}"##)]
+    #[case::multicenter_contains_all(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-contains-all [0 [0 1]]}]}"##)]
+    #[case::multicenter_all_atoms(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-all-atoms [0 {:valence 4}]}]}"##)]
+    #[case::multicenter_any_atom(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type ""}] :constraints [{:multicenter-bond-any-atom [0 {:degree 3}]}]}"##)]
     // RelationalConstraint variants for noncovalent bond
-    #[case::noncovalent_ends(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends [0 [0 1]]}]}"##)]
-    #[case::noncovalent_contains(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-contains [0 0]}]}"##)]
-    #[case::noncovalent_ends_satisfy(r##"{:atoms ["N" "H"] :bonds [] :noncovalent [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends-satisfy [0 [{:valence 4} {:valence 1}]]}]}"##)]
+    #[case::noncovalent_ends(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends [0 [0 1]]}]}"##)]
+    #[case::noncovalent_contains(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-contains [0 0]}]}"##)]
+    #[case::noncovalent_ends_satisfy(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}] :constraints [{:noncovalent-bond-ends-satisfy [0 [{:valence 4} {:valence 1}]]}]}"##)]
     // MoleculeConstraint variants (via flattened keys)
     #[case::molecule_charge_sum(r##"{:atoms ["C" "N"] :bonds [] :constraints [{:charge-sum {:atoms [0 1] :sum 0}}]}"##)]
     #[case::molecule_spin_sum(r##"{:atoms ["C"] :bonds [] :constraints [{:spin-sum {:atoms [0] :spin {:unpaired 1 :multiplicity 2}}}]}"##)]
@@ -2390,9 +2393,9 @@ mod tests {
     #[rstest]
     #[case::atom_vs_bond(r##"{:atoms [[:x "C"] [:y "C"]] :bonds [{:id :x :a 0 :b 1 :type "1"}]}"##)]
     #[case::atom_vs_alias(r##"{:atoms [[:x "C"]] :bonds [] :atom-aliases [:x "N"]}"##)]
-    #[case::bond_vs_dative(r##"{:atoms ["C" "N"] :bonds [{:id :x :a 0 :b 1 :type "1"}] :dative [{:id :x :donor 0 :acceptor 1 :type :single}]}"##)]
-    #[case::atom_vs_aromatic(r##"{:atoms [[:x "C"] [:y "C"]] :bonds [] :aromatic [{:id :x :atoms [0 1] :type ""}]}"##)]
-    #[case::bond_vs_noncovalent(r##"{:atoms ["C" "C"] :bonds [{:id :x :a 0 :b 1 :type "1"}] :noncovalent [{:id :x :a 0 :b 1 :type "Hbd"}]}"##)]
+    #[case::bond_vs_dative(r##"{:atoms ["C" "N"] :bonds [{:id :x :a 0 :b 1 :type "1"}] :dative-bonds [{:id :x :donor 0 :acceptor 1 :type :single}]}"##)]
+    #[case::atom_vs_aromatic(r##"{:atoms [[:x "C"] [:y "C"]] :bonds [] :aromatic-systems [{:id :x :atoms [0 1] :type ""}]}"##)]
+    #[case::bond_vs_noncovalent(r##"{:atoms ["C" "C"] :bonds [{:id :x :a 0 :b 1 :type "1"}] :noncovalent-bonds [{:id :x :a 0 :b 1 :type "Hbd"}]}"##)]
     fn test_molecule_dsl_cross_entity_id_collision_errors(#[case] source: &str) {
         let edn = read_string(source).unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();

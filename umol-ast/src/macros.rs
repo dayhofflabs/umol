@@ -284,7 +284,7 @@ mod tests {
     #[case::carbon_oxygen(r#"{:atoms ["C #h2" "O"] :bonds [[0 1 "2"]]}"#,
         MoleculeAst::from_atoms_and_bonds(vec![AtomAst::from_element(Element::C).with_implicit_hydrogens(2_i64), AtomAst::from_element(Element::O)],
         vec![(AtomId(0), AtomId(1), BondAst::from_order(2))]))]
-    #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic [{:atoms [0 1 2] :electrons [1 1 1] :type "#e3"}]}"##,
+    #[case::aromatic_system(r##"{:atoms ["C" "C" "C"] :bonds [[0 1 "1"] [1 2 "1"] [2 0 "1"]] :aromatic-systems [{:atoms [0 1 2] :electrons [1 1 1] :type "#e3"}]}"##,
         MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
             vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],

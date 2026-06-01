@@ -926,7 +926,7 @@ The **`H`** atom here represents an **explicit** hydrogen (e.g. a hydroxyl H one
          [:C3a :C7a :single] [:C7a :N :single] [:C3a :C4 :single]
          [:C4 :C5 :double] [:C5 :C6 :single] [:C6 :C7 :double]
          [:C7 :C7a :single]]
- :aromatic [{:id :ar1 :atoms [:N :C2 :C3 :C3a :C7a] :type ""}
+ :aromatic-systems [{:id :ar1 :atoms [:N :C2 :C3 :C3a :C7a] :type ""}
             {:id :ar2 :atoms [:C3a :C4 :C5 :C6 :C7 :C7a] :type ""}]}
 ```
 

@@ -5,7 +5,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
 {
   :atom-typing {
     :output {
-      :aromatic [
+      :aromatic-systems [
         {:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type ""}
         {:atoms [6 7 8 9 10 11] :electrons [1 1 1 1 1 1] :type ""}]
       :atoms [
@@ -38,7 +38,7 @@ expression: "results.to_edn().to_string_with(&FormatConfig::default())"
     :success true}
   :counts {
     :output {
-      :aromatic [
+      :aromatic-systems [
         {:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type ""}
         {:atoms [6 7 8 9 10 11] :electrons [1 1 1 1 1 1] :type ""}]
       :atoms [
