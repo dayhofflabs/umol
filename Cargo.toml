@@ -11,6 +11,7 @@ members = [
     "umol-msym",
     "umol-msym-sys",
     "umol-params",
+    "umol-perm",
 ]
 exclude = ["umol-ast/fuzz", "umol-edn/fuzz", "umol-graph/fuzz"]
 resolver = "2"

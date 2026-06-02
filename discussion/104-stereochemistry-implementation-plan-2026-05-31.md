@@ -216,7 +216,7 @@ Phases A–E are in scope; F (3D) and G follow.
   layers (C/D/E), never this one (B–E themselves still scope to TH/CT).
   - **A′1** — `Permutation` (one permutation, n ≤ 6, `Copy`, one-line notation): `identity`/`from_image`/
     `between(from, to)` (the relabel τ) / `apply`/`compose`/`inverse`/`sign`/`act`/`rank`/`unrank` (Lehmer —
-    internal canonical ordering only); `Ord`+`Eq`+`Hash`.
+    internal canonical ordering only); `Ord`+`Eq`+`Hash`. **Done**
   - **A′2** — `PermutationGroup` (subgroup of Sₙ, full enumeration): `generate(degree, gens)` (brute-force
     closure), `symmetric`/`alternating`/`cyclic`/`dihedral`, `order`/`contains`/`elements`.
   - **A′3** — `CosetSpace` = R (a `PermutationGroup`) + the coset **partition** (one canonical rep per coset):

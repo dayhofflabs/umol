@@ -1,0 +1,27 @@
+[package]
+name = "umol-perm"
+version = "0.1.0"
+authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/rappoport/umol"
+keywords = [
+    "permutation",
+    "group-theory",
+    "cheminformatics",
+    "stereochemistry",
+]
+description = "Pure permutation and coset algebra for umol stereochemistry."
+
+[lib]
+bench = false
+
+[dependencies]
+
+[dev-dependencies]
+pretty_assertions = "1.4.1"
+rstest = "0.26.1"
+
+[lints.clippy]
+absolute_paths = "warn"
+mod_module_files = "warn"
