@@ -1,7 +1,7 @@
 //! Relation sets: N-ary relations over graph nodes with CSR incidence.
 //!
-//! `FixedRelationSet<P, O, R, N>` stores relations of compile-time-known arity
-//! (e.g. binary dative bonds); `VarRelationSet<P, O, R>` stores variable-arity
+//! `FixedRelationSet<P, O, D, N>` stores relations of compile-time-known arity
+//! (e.g. binary dative bonds); `VarRelationSet<P, O, D>` stores variable-arity
 //! relations (e.g. aromatic systems). Participants are typed `P`
 //! (`RelationParticipant`); the factor ordering `O` (`Unordered`/`Ordered`)
 //! controls canonicalization. Both use sorted parallel arrays for incidence.
@@ -124,24 +124,24 @@ fn build_incidence<'a, P: RelationParticipant + 'a>(
 /// a flat array with offset table. No heap allocations per node or
 /// per relation.
 #[derive(Clone, Debug)]
-pub struct FixedRelationSet<P, O, R, const N: usize> {
+pub struct FixedRelationSet<P, O, D, const N: usize> {
     participants: Vec<[P; N]>,
-    data: Vec<R>,
+    data: Vec<D>,
     incidence_nodes: Vec<NodeId>,
     incidence_rels: Vec<RelationId>,
     _ordering: PhantomData<O>,
 }
 
-impl<P: PartialEq, O, R: PartialEq, const N: usize> PartialEq for FixedRelationSet<P, O, R, N> {
+impl<P: PartialEq, O, D: PartialEq, const N: usize> PartialEq for FixedRelationSet<P, O, D, N> {
     fn eq(&self, other: &Self) -> bool {
         self.participants == other.participants && self.data == other.data
     }
 }
 
-impl<P: Eq, O, R: Eq, const N: usize> Eq for FixedRelationSet<P, O, R, N> {}
+impl<P: Eq, O, D: Eq, const N: usize> Eq for FixedRelationSet<P, O, D, N> {}
 
-impl<P: RelationParticipant, O: FactorOrdering, R, const N: usize> FixedRelationSet<P, O, R, N> {
-    pub fn new(entries: Vec<([P; N], R)>) -> Self {
+impl<P: RelationParticipant, O: FactorOrdering, D, const N: usize> FixedRelationSet<P, O, D, N> {
+    pub fn new(entries: Vec<([P; N], D)>) -> Self {
         let mut participants = Vec::with_capacity(entries.len());
         let mut data = Vec::with_capacity(entries.len());
         for (mut p, d) in entries {
@@ -166,15 +166,15 @@ impl<P: RelationParticipant, O: FactorOrdering, R, const N: usize> FixedRelation
         self.data.len()
     }
 
-    pub fn data(&self, id: RelationId) -> &R {
+    pub fn data(&self, id: RelationId) -> &D {
         &self.data[id.index()]
     }
 
-    pub fn data_mut(&mut self, id: RelationId) -> &mut R {
+    pub fn data_mut(&mut self, id: RelationId) -> &mut D {
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut R> {
+    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
         self.data.iter_mut()
     }
 
@@ -199,9 +199,28 @@ impl<P: RelationParticipant, O: FactorOrdering, R, const N: usize> FixedRelation
     pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
+
+    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    where
+        D: Clone,
+    {
+        let entries: Vec<([P; N], D)> = (0..self.relation_count())
+            .filter_map(|i| {
+                let rid = RelationId(i as u32);
+                let parts: Option<Vec<P>> = self
+                    .participants(rid)
+                    .iter()
+                    .map(|&p| p.remap(remapping))
+                    .collect();
+                let parts: [P; N] = parts?.try_into().ok()?;
+                Some((parts, self.data(rid).clone()))
+            })
+            .collect();
+        Self::new(entries)
+    }
 }
 
-impl<P, O, R, const N: usize> Default for FixedRelationSet<P, O, R, N> {
+impl<P, O, D, const N: usize> Default for FixedRelationSet<P, O, D, N> {
     fn default() -> Self {
         Self {
             participants: Vec::new(),
@@ -220,16 +239,16 @@ impl<P, O, R, const N: usize> Default for FixedRelationSet<P, O, R, N> {
 /// via a second offset table. No heap allocations per node or per
 /// relation.
 #[derive(Clone, Debug)]
-pub struct VarRelationSet<P, O, R> {
+pub struct VarRelationSet<P, O, D> {
     offsets: Vec<u32>,
     participants: Vec<P>,
-    data: Vec<R>,
+    data: Vec<D>,
     incidence_nodes: Vec<NodeId>,
     incidence_rels: Vec<RelationId>,
     _ordering: PhantomData<O>,
 }
 
-impl<P: PartialEq, O, R: PartialEq> PartialEq for VarRelationSet<P, O, R> {
+impl<P: PartialEq, O, D: PartialEq> PartialEq for VarRelationSet<P, O, D> {
     fn eq(&self, other: &Self) -> bool {
         self.offsets == other.offsets
             && self.participants == other.participants
@@ -237,10 +256,10 @@ impl<P: PartialEq, O, R: PartialEq> PartialEq for VarRelationSet<P, O, R> {
     }
 }
 
-impl<P: Eq, O, R: Eq> Eq for VarRelationSet<P, O, R> {}
+impl<P: Eq, O, D: Eq> Eq for VarRelationSet<P, O, D> {}
 
-impl<P: RelationParticipant, O: FactorOrdering, R> VarRelationSet<P, O, R> {
-    pub fn new(entries: Vec<(Vec<P>, R)>) -> Self {
+impl<P: RelationParticipant, O: FactorOrdering, D> VarRelationSet<P, O, D> {
+    pub fn new(entries: Vec<(Vec<P>, D)>) -> Self {
         let relation_count = entries.len();
         let mut offsets = Vec::with_capacity(relation_count + 1);
         offsets.push(0);
@@ -276,15 +295,15 @@ impl<P: RelationParticipant, O: FactorOrdering, R> VarRelationSet<P, O, R> {
         self.data.len()
     }
 
-    pub fn data(&self, id: RelationId) -> &R {
+    pub fn data(&self, id: RelationId) -> &D {
         &self.data[id.index()]
     }
 
-    pub fn data_mut(&mut self, id: RelationId) -> &mut R {
+    pub fn data_mut(&mut self, id: RelationId) -> &mut D {
         &mut self.data[id.index()]
     }
 
-    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut R> {
+    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
         self.data.iter_mut()
     }
 
@@ -311,9 +330,27 @@ impl<P: RelationParticipant, O: FactorOrdering, R> VarRelationSet<P, O, R> {
     pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
         (0..self.data.len() as u32).map(RelationId)
     }
+
+    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    where
+        D: Clone,
+    {
+        let entries: Vec<(Vec<P>, D)> = (0..self.relation_count())
+            .filter_map(|i| {
+                let rid = RelationId(i as u32);
+                let parts: Option<Vec<P>> = self
+                    .participants(rid)
+                    .iter()
+                    .map(|&p| p.remap(remapping))
+                    .collect();
+                Some((parts?, self.data(rid).clone()))
+            })
+            .collect();
+        Self::new(entries)
+    }
 }
 
-impl<P, O, R> Default for VarRelationSet<P, O, R> {
+impl<P, O, D> Default for VarRelationSet<P, O, D> {
     fn default() -> Self {
         Self {
             offsets: vec![0],
@@ -361,6 +398,20 @@ mod tests {
             FixedRelationSet::new(vec![([n(2), n(0)], "a"), ([n(3), n(1)], "b")]);
         assert_eq!(rs.participants(RelationId(0)), &[n(2), n(0)]);
         assert_eq!(rs.participants(RelationId(1)), &[n(3), n(1)]);
+    }
+
+    #[test]
+    fn test_fixed_relation_set_apply_remapping() {
+        let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
+            FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
+        let remapping = Remapping {
+            removed_nodes: vec![1],
+            removed_edges: vec![],
+        };
+        let out = rs.apply_remapping(&remapping);
+        assert_eq!(out.relation_count(), 1);
+        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(out.data(RelationId(0)), &"keep");
     }
 
     #[test]
@@ -447,6 +498,22 @@ mod tests {
         assert_eq!(rs.participants(RelationId(1)), &[n(4), n(1)]);
         assert_eq!(rs.incident(n(0)), &[RelationId(0)]);
         assert_eq!(rs.incident(n(4)), &[RelationId(1)]);
+    }
+
+    #[test]
+    fn test_var_relation_set_apply_remapping() {
+        let rs: VarRelationSet<NodeId, Unordered, &str> = VarRelationSet::new(vec![
+            (vec![n(0), n(2), n(4)], "keep"),
+            (vec![n(1), n(3)], "drop"),
+        ]);
+        let remapping = Remapping {
+            removed_nodes: vec![1],
+            removed_edges: vec![],
+        };
+        let out = rs.apply_remapping(&remapping);
+        assert_eq!(out.relation_count(), 1);
+        assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
+        assert_eq!(out.data(RelationId(0)), &"keep");
     }
 
     #[test]

@@ -11,7 +11,8 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 use umol_graph_core::{
-    EdgeId, FixedRelationSet, Graph, NodeId, RelationId, Remapping, Unordered, VarRelationSet,
+    EdgeId, FixedRelationSet, Graph, NodeId, RelationId, RelationParticipant, Remapping, Unordered,
+    VarRelationSet,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -39,13 +40,13 @@ use super::super::views::{
 use super::MoleculeAst;
 
 #[derive(Clone)]
-enum FixedSetStorage<R, const N: usize> {
-    Shared(Arc<FixedRelationSet<NodeId, Unordered, R, N>>),
-    Mutable(Vec<([NodeId; N], R)>),
+enum FixedSetStorage<D, const N: usize> {
+    Shared(Arc<FixedRelationSet<NodeId, Unordered, D, N>>),
+    Mutable(Vec<([NodeId; N], D)>),
 }
 
-impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
-    fn push(&mut self, parts: [NodeId; N], data: R) -> u32 {
+impl<D: Clone, const N: usize> FixedSetStorage<D, N> {
+    fn push(&mut self, parts: [NodeId; N], data: D) -> u32 {
         self.materialize();
         let FixedSetStorage::Mutable(vec) = self else {
             unreachable!()
@@ -57,7 +58,7 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
 
     fn materialize(&mut self) {
         if let FixedSetStorage::Shared(arc) = self {
-            let entries: Vec<([NodeId; N], R)> = (0..arc.relation_count())
+            let entries: Vec<([NodeId; N], D)> = (0..arc.relation_count())
                 .map(|i| {
                     let rid = RelationId(i as u32);
                     (*arc.participants(rid), arc.data(rid).clone())
@@ -67,7 +68,7 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
         }
     }
 
-    fn into_arc(self) -> Arc<FixedRelationSet<NodeId, Unordered, R, N>> {
+    fn into_arc(self) -> Arc<FixedRelationSet<NodeId, Unordered, D, N>> {
         match self {
             FixedSetStorage::Shared(arc) => arc,
             FixedSetStorage::Mutable(vec) => Arc::new(FixedRelationSet::new(vec)),
@@ -91,10 +92,10 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
     fn apply_remapping(self, remap: &Remapping) -> Self {
         match self {
             FixedSetStorage::Shared(arc) => {
-                FixedSetStorage::Shared(Arc::new(remap.apply_to_fixed_relation_set(&arc)))
+                FixedSetStorage::Shared(Arc::new(arc.apply_remapping(remap)))
             }
             FixedSetStorage::Mutable(vec) => {
-                let remapped: Vec<([NodeId; N], R)> = vec
+                let remapped: Vec<([NodeId; N], D)> = vec
                     .into_iter()
                     .filter_map(|(parts, d)| {
                         let mut new_parts = [NodeId(0); N];
@@ -128,7 +129,7 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
         vec.truncate(dst);
     }
 
-    fn entries(&self) -> Vec<([NodeId; N], R)> {
+    fn entries(&self) -> Vec<([NodeId; N], D)> {
         match self {
             FixedSetStorage::Shared(arc) => (0..arc.relation_count())
                 .map(|i| {
@@ -142,13 +143,13 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
 }
 
 #[derive(Clone)]
-enum VarSetStorage<R> {
-    Shared(Arc<VarRelationSet<NodeId, Unordered, R>>),
-    Mutable(Vec<(Vec<NodeId>, R)>),
+enum VarSetStorage<D> {
+    Shared(Arc<VarRelationSet<NodeId, Unordered, D>>),
+    Mutable(Vec<(Vec<NodeId>, D)>),
 }
 
-impl<R: Clone> VarSetStorage<R> {
-    fn push(&mut self, atoms: Vec<NodeId>, data: R) -> u32 {
+impl<D: Clone> VarSetStorage<D> {
+    fn push(&mut self, atoms: Vec<NodeId>, data: D) -> u32 {
         self.materialize();
         let VarSetStorage::Mutable(vec) = self else {
             unreachable!()
@@ -160,7 +161,7 @@ impl<R: Clone> VarSetStorage<R> {
 
     fn materialize(&mut self) {
         if let VarSetStorage::Shared(arc) = self {
-            let entries: Vec<(Vec<NodeId>, R)> = (0..arc.relation_count())
+            let entries: Vec<(Vec<NodeId>, D)> = (0..arc.relation_count())
                 .map(|i| {
                     let rid = RelationId(i as u32);
                     (arc.participants(rid).to_vec(), arc.data(rid).clone())
@@ -170,7 +171,7 @@ impl<R: Clone> VarSetStorage<R> {
         }
     }
 
-    fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, R>> {
+    fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, D>> {
         match self {
             VarSetStorage::Shared(arc) => arc,
             VarSetStorage::Mutable(vec) => Arc::new(VarRelationSet::new(vec)),
@@ -194,10 +195,10 @@ impl<R: Clone> VarSetStorage<R> {
     fn apply_remapping(self, remap: &Remapping) -> Self {
         match self {
             VarSetStorage::Shared(arc) => {
-                VarSetStorage::Shared(Arc::new(remap.apply_to_var_relation_set(&arc)))
+                VarSetStorage::Shared(Arc::new(arc.apply_remapping(remap)))
             }
             VarSetStorage::Mutable(vec) => {
-                let remapped: Vec<(Vec<NodeId>, R)> = vec
+                let remapped: Vec<(Vec<NodeId>, D)> = vec
                     .into_iter()
                     .filter_map(|(atoms, d)| {
                         let mapped: Option<Vec<NodeId>> =
@@ -229,7 +230,7 @@ impl<R: Clone> VarSetStorage<R> {
         vec.truncate(dst);
     }
 
-    fn entries(&self) -> Vec<(Vec<NodeId>, R)> {
+    fn entries(&self) -> Vec<(Vec<NodeId>, D)> {
         match self {
             VarSetStorage::Shared(arc) => (0..arc.relation_count())
                 .map(|i| {
@@ -242,8 +243,8 @@ impl<R: Clone> VarSetStorage<R> {
     }
 }
 
-fn fixed_relation_removed<R: Clone, const N: usize>(
-    storage: &FixedSetStorage<R, N>,
+fn fixed_relation_removed<D: Clone, const N: usize>(
+    storage: &FixedSetStorage<D, N>,
     remap: &Remapping,
 ) -> Vec<u32> {
     let mut removed = Vec::new();
@@ -256,7 +257,7 @@ fn fixed_relation_removed<R: Clone, const N: usize>(
     removed
 }
 
-fn var_relation_removed<R: Clone>(storage: &VarSetStorage<R>, remap: &Remapping) -> Vec<u32> {
+fn var_relation_removed<D: Clone>(storage: &VarSetStorage<D>, remap: &Remapping) -> Vec<u32> {
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
         let parts = storage.participants(i);
@@ -267,18 +268,17 @@ fn var_relation_removed<R: Clone>(storage: &VarSetStorage<R>, remap: &Remapping)
     removed
 }
 
-fn restore_participants(parts: Vec<NodeId>, undo_remapping: &UndoRemapping) -> Vec<NodeId> {
-    parts
-        .into_iter()
-        .map(|p| NodeId::from(undo_remapping.atom(AtomId::from(p))))
-        .collect()
+fn restore_var_participants(parts: Vec<NodeId>, undo_remapping: &UndoRemapping) -> Vec<NodeId> {
+    let remapping = undo_remapping.forward().graph();
+    parts.into_iter().map(|p| p.unmap(remapping)).collect()
 }
 
 fn restore_fixed_participants<const N: usize>(
     parts: [NodeId; N],
     undo_remapping: &UndoRemapping,
 ) -> [NodeId; N] {
-    parts.map(|p| NodeId::from(undo_remapping.atom(AtomId::from(p))))
+    let remapping = undo_remapping.forward().graph();
+    parts.map(|p| p.unmap(remapping))
 }
 
 /// Mutable builder for a `MoleculeAst`. Accumulates atoms, bonds, and
@@ -896,7 +896,7 @@ impl MoleculeBuilder {
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (parts, data)) in current.into_iter().enumerate() {
             let old_id = undo_remapping.dative_bond(DativeBondId(idx as u32));
-            next[old_id.index()] = Some((restore_participants(parts, undo_remapping), data));
+            next[old_id.index()] = Some((restore_var_participants(parts, undo_remapping), data));
         }
         for removed in removed {
             next[removed.id.index()] = Some((
@@ -916,7 +916,7 @@ impl MoleculeBuilder {
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (parts, data)) in current.into_iter().enumerate() {
             let old_id = undo_remapping.aromatic_system(AromaticSystemId(idx as u32));
-            next[old_id.index()] = Some((restore_participants(parts, undo_remapping), data));
+            next[old_id.index()] = Some((restore_var_participants(parts, undo_remapping), data));
         }
         for removed in removed {
             next[removed.id.index()] = Some((
@@ -937,7 +937,7 @@ impl MoleculeBuilder {
         let mut next = vec![None; current.len() + removed.len()];
         for (idx, (parts, data)) in current.into_iter().enumerate() {
             let old_id = undo_remapping.multicenter_bond(MulticenterBondId(idx as u32));
-            next[old_id.index()] = Some((restore_participants(parts, undo_remapping), data));
+            next[old_id.index()] = Some((restore_var_participants(parts, undo_remapping), data));
         }
         for removed in removed {
             next[removed.id.index()] = Some((
