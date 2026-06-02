@@ -9,7 +9,7 @@ use std::str::FromStr;
 use std::sync::{LazyLock, Mutex};
 use std::{fmt, ptr};
 
-use crate::coset::CosetSpace;
+use crate::coset::{CosetSpace, Decomposition};
 use crate::group::PermutationGroup;
 use crate::permutation::Permutation;
 
@@ -30,34 +30,58 @@ pub enum ClassKey {
 
 impl ClassKey {
     fn build(self) -> CosetSpace {
-        let group = match self {
-            ClassKey::Symmetric(n) => PermutationGroup::symmetric(n as usize),
-            ClassKey::Alternating(n) => PermutationGroup::alternating(n as usize),
-            ClassKey::Cyclic(n) => PermutationGroup::cyclic(n as usize),
-            ClassKey::Dihedral(n) => PermutationGroup::dihedral(n as usize),
-            ClassKey::Tetrahedral => PermutationGroup::alternating(4),
-            ClassKey::CisTrans => PermutationGroup::alternating(2),
-            ClassKey::SquarePlanar => PermutationGroup::dihedral(4),
-            // 2 apical (0,1) + 3 equatorial (2,3,4); C₃ cycles equatorial,
-            // C₂ swaps apical and two equatorial.
-            ClassKey::TrigonalBipyramidal => PermutationGroup::generate(
-                5,
-                &[
-                    Permutation::from_image(5, &[0, 1, 3, 4, 2]),
-                    Permutation::from_image(5, &[1, 0, 2, 4, 3]),
-                ],
+        let (group, decomposition) = match self {
+            ClassKey::Symmetric(n) => (
+                PermutationGroup::symmetric(n as usize),
+                Decomposition::CanonicalRank,
             ),
-            // 6 octahedron vertices (0,1=±x; 2,3=±y; 4,5=±z); C₄ about z,
-            // C₃ about the (1,1,1) body diagonal.
-            ClassKey::Octahedral => PermutationGroup::generate(
-                6,
-                &[
-                    Permutation::from_image(6, &[2, 3, 1, 0, 4, 5]),
-                    Permutation::from_image(6, &[2, 3, 4, 5, 0, 1]),
-                ],
+            ClassKey::Alternating(n) => (
+                PermutationGroup::alternating(n as usize),
+                Decomposition::CanonicalRank,
+            ),
+            ClassKey::Cyclic(n) => (
+                PermutationGroup::cyclic(n as usize),
+                Decomposition::CanonicalRank,
+            ),
+            ClassKey::Dihedral(n) => (
+                PermutationGroup::dihedral(n as usize),
+                Decomposition::CanonicalRank,
+            ),
+            ClassKey::Tetrahedral => (
+                PermutationGroup::alternating(4),
+                Decomposition::CanonicalRank,
+            ),
+            ClassKey::CisTrans => (
+                PermutationGroup::alternating(2),
+                Decomposition::CanonicalRank,
+            ),
+            ClassKey::SquarePlanar => (PermutationGroup::dihedral(4), Decomposition::SquarePlanar),
+            // 2 axial (0,4) + 3 equatorial (1,2,3); C₃ cycles equatorial,
+            // C₂ swaps the axial pair and two equatorial.
+            ClassKey::TrigonalBipyramidal => (
+                PermutationGroup::generate(
+                    5,
+                    &[
+                        Permutation::from_image(5, &[0, 2, 3, 1, 4]),
+                        Permutation::from_image(5, &[4, 3, 2, 1, 0]),
+                    ],
+                ),
+                Decomposition::TrigonalBipyramidal,
+            ),
+            // 6 octahedron vertices (0,5 = axial; 1,2,3,4 = equatorial square);
+            // C₄ about the 0–5 axis, C₃ about a body diagonal.
+            ClassKey::Octahedral => (
+                PermutationGroup::generate(
+                    6,
+                    &[
+                        Permutation::from_image(6, &[0, 2, 3, 4, 1, 5]),
+                        Permutation::from_image(6, &[1, 2, 0, 4, 5, 3]),
+                    ],
+                ),
+                Decomposition::Octahedral,
             ),
         };
-        CosetSpace::new(group)
+        CosetSpace::new(group, decomposition)
     }
 }
 
@@ -181,6 +205,41 @@ mod tests {
         let group = space(key).group();
         assert_eq!(group.degree(), degree);
         assert_eq!(group.order(), order);
+    }
+
+    #[rstest]
+    #[case::tetrahedral(ClassKey::Tetrahedral)]
+    #[case::cis_trans(ClassKey::CisTrans)]
+    #[case::square_planar(ClassKey::SquarePlanar)]
+    #[case::trigonal_bipyramidal(ClassKey::TrigonalBipyramidal)]
+    #[case::octahedral(ClassKey::Octahedral)]
+    fn test_space_index_unindex(#[case] key: ClassKey) {
+        let space = space(key);
+        for n in 0..space.count() as u32 {
+            assert_eq!(space.index(space.unindex(n)), n);
+        }
+    }
+
+    // Each case is an "all equivalent" SMILES pair from the OpenSMILES spec: the
+    // same structure written with two neighbor orders and the two `@`-numbers
+    // (0-based) they require.
+    #[rstest]
+    #[case::tb1_tb2(ClassKey::TrigonalBipyramidal, 0, vec!["S", "F", "Cl", "Br", "N"], vec!["S", "Br", "Cl", "F", "N"], 1)]
+    #[case::tb5_tb10(ClassKey::TrigonalBipyramidal, 4, vec!["S", "F", "N", "Cl", "Br"], vec!["F", "S", "Cl", "N", "Br"], 9)]
+    #[case::tb15_tb20(ClassKey::TrigonalBipyramidal, 14, vec!["F", "Cl", "S", "Br", "N"], vec!["Br", "Cl", "S", "F", "N"], 19)]
+    #[case::oh1_oh2(ClassKey::Octahedral, 0, vec!["C", "F", "Cl", "Br", "I", "S"], vec!["F", "S", "I", "C", "Cl", "Br"], 1)]
+    #[case::oh5_oh9(ClassKey::Octahedral, 4, vec!["S", "F", "I", "Cl", "C", "Br"], vec!["Br", "C", "S", "Cl", "F", "I"], 8)]
+    #[case::oh12_oh15(ClassKey::Octahedral, 11, vec!["Br", "Cl", "I", "F", "S", "C"], vec!["Cl", "C", "Br", "F", "I", "S"], 14)]
+    #[case::oh19_oh27(ClassKey::Octahedral, 18, vec!["Cl", "C", "I", "F", "S", "Br"], vec!["I", "Cl", "Br", "F", "S", "C"], 26)]
+    fn test_space_reindex(
+        #[case] key: ClassKey,
+        #[case] from_index: u32,
+        #[case] order: Vec<&str>,
+        #[case] relabeled: Vec<&str>,
+        #[case] to_index: u32,
+    ) {
+        let relabeling = Permutation::between(&order, &relabeled);
+        assert_eq!(space(key).reindex(from_index, relabeling), to_index);
     }
 
     #[rstest]

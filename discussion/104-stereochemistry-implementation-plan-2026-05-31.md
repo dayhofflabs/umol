@@ -239,7 +239,7 @@ Phases A–E are in scope; F (3D) and G follow.
     (`index ∘ unindex = id` over all `n!` permutations) per class.
   - **A′6** — `reindex(k, input_index, τ) -> u32` (= `index(τ ∘ unindex(input_index))`) + the `~`/`^k` operator
     action on indices (over Sₙ/core(R); only `~`/`^1` in scope, Phase G). raise (B3/B5) and perception (C)
-    call `space(k).reindex(…)`.
+    call `space(k).reindex(…)`. **Done**
 - **Phase B — raise → `#T`/`#C`** (mechanical; `table_ir/raise.rs`, mirrors the aromaticity→`#a` pass).
   Reads TableIR per-atom chirality / per-bond stereo, reindexes the input arrangement into umol's incidence
   frame, writes `#T`/`#C`; builds **no** element (Phase C).

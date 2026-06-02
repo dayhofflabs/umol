@@ -1,22 +1,60 @@
-//! The coset space Sₙ/R: orderings partitioned by a proper-rotation group R.
+//! The coset space R\Sₙ, with a per-class numbering of its cosets.
 //!
-//! Equivalence is by the left coset σR = `{ σ ∘ r : r ∈ R }`; the canonical
-//! representative of a coset is its min-rank element. This is the algebraic
-//! layer — which orderings are equivalent — not yet a numbering (that is the
-//! OpenSMILES index, added on top).
+//! A configuration is a ligand→position map; two configurations are the same
+//! arrangement when related by a proper rotation acting on the positions, i.e.
+//! by left multiplication `r∘σ`. The class is therefore the right coset Rσ, and
+//! the canonical representative is its min-rank element. On top of that algebra
+//! sits a `Decomposition` that numbers the cosets — `CanonicalRank` (the generic
+//! Lehmer-min ordering, which is the parity bit for a 2-coset space) or a
+//! geometry that reproduces the OpenSMILES arrangement number.
+
+use std::collections::HashMap;
 
 use crate::group::PermutationGroup;
 use crate::permutation::Permutation;
 
-/// A coset space Sₙ/R for a proper-rotation group R.
+/// How a space numbers its cosets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Decomposition {
+    CanonicalRank,
+    SquarePlanar,
+    TrigonalBipyramidal,
+    Octahedral,
+}
+
+/// A coset space Sₙ/R for a proper-rotation group R, with a fixed numbering.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CosetSpace {
     group: PermutationGroup,
+    numbering: HashMap<Permutation, u32>,
+    representatives: Vec<Permutation>,
 }
 
 impl CosetSpace {
-    pub fn new(group: PermutationGroup) -> Self {
-        Self { group }
+    pub(crate) fn new(group: PermutationGroup, decomposition: Decomposition) -> Self {
+        let ordered = decomposition.representatives(&group);
+        let mut numbering = HashMap::new();
+        let mut representatives = Vec::with_capacity(ordered.len());
+        for rep in ordered {
+            let canonical = coset_rep(&group, rep);
+            let previous = numbering.insert(canonical, representatives.len() as u32);
+            assert!(
+                previous.is_none(),
+                "decomposition assigns one coset two numbers"
+            );
+            representatives.push(rep);
+        }
+        let total: usize = (1..=group.degree()).product();
+        assert_eq!(
+            numbering.len(),
+            total / group.order(),
+            "decomposition does not cover every coset"
+        );
+        Self {
+            group,
+            numbering,
+            representatives,
+        }
     }
 
     pub fn degree(&self) -> usize {
@@ -29,31 +67,169 @@ impl CosetSpace {
 
     /// The number of cosets, `n! / |R|`.
     pub fn count(&self) -> usize {
-        let total: usize = (1..=self.group.degree()).product();
-        total / self.group.order()
+        self.representatives.len()
     }
 
-    /// The canonical representative of σ's coset: the min-rank element of σR.
+    /// The canonical representative of σ's coset: the min-rank element of Rσ.
     pub fn coset_rep(&self, perm: Permutation) -> Permutation {
-        self.group
-            .elements()
-            .iter()
-            .map(|&r| perm.compose(r))
-            .min()
-            .expect("R contains the identity")
+        coset_rep(&self.group, perm)
     }
 
-    /// The canonical representatives of all cosets, sorted (length = `count`).
-    pub fn coset_reps(&self) -> Vec<Permutation> {
-        let degree = self.degree();
-        let total: usize = (1..=degree).product();
-        let mut reps: Vec<Permutation> = (0..total)
-            .map(|i| self.coset_rep(Permutation::unrank(degree, i)))
-            .collect();
-        reps.sort();
-        reps.dedup();
-        reps
+    /// The arrangement number of σ's coset.
+    pub fn index(&self, perm: Permutation) -> u32 {
+        self.numbering[&self.coset_rep(perm)]
     }
+
+    /// A representative permutation for arrangement number `index`.
+    pub fn unindex(&self, index: u32) -> Permutation {
+        self.representatives[index as usize]
+    }
+
+    /// The arrangement number of configuration `index` after the neighbor list
+    /// is relabeled by `relabeling` — where `relabeling(i)` is the position, in
+    /// the original list, of the relabeled list's i-th neighbor. Used to carry a
+    /// parsed `@`-number into umol's incidence order.
+    pub fn reindex(&self, index: u32, relabeling: Permutation) -> u32 {
+        self.index(self.unindex(index).compose(relabeling))
+    }
+}
+
+fn coset_rep(group: &PermutationGroup, perm: Permutation) -> Permutation {
+    group
+        .elements()
+        .iter()
+        .map(|&r| r.compose(perm))
+        .min()
+        .expect("R contains the identity")
+}
+
+impl Decomposition {
+    /// One representative permutation per arrangement number, in numbering order.
+    fn representatives(self, group: &PermutationGroup) -> Vec<Permutation> {
+        match self {
+            Decomposition::CanonicalRank => {
+                let order: usize = (1..=group.degree()).product();
+                let mut reps: Vec<Permutation> = (0..order)
+                    .map(|i| coset_rep(group, Permutation::unrank(group.degree(), i)))
+                    .collect();
+                reps.sort();
+                reps.dedup();
+                reps
+            }
+            Decomposition::SquarePlanar => square_planar_reps(),
+            Decomposition::TrigonalBipyramidal => trigonal_bipyramidal_reps(),
+            Decomposition::Octahedral => octahedral_reps(),
+        }
+    }
+}
+
+/// `@SP1`/`@SP2`/`@SP3` = the U/4/Z path shapes (OpenSMILES §3.8.5); one
+/// representative per shape, taken from the spec's enumeration (U = 1234,
+/// 4 = 2413 with two diagonal steps, Z = 2314 with one).
+fn square_planar_reps() -> Vec<Permutation> {
+    vec![
+        Permutation::from_image(4, &[0, 1, 2, 3]),
+        Permutation::from_image(4, &[1, 3, 0, 2]),
+        Permutation::from_image(4, &[1, 2, 0, 3]),
+    ]
+}
+
+/// `@TB1`..`@TB20` (OpenSMILES §3.8.6): an ordered axial pair `(from, towards)`
+/// at vertices `0,4`, with the three equatorial atoms anticlockwise (`@`) or
+/// clockwise (`@@`) viewed `from → towards`.
+fn trigonal_bipyramidal_reps() -> Vec<Permutation> {
+    const AXES: [(u8, u8, bool); 20] = [
+        (0, 4, true),
+        (0, 4, false),
+        (0, 3, true),
+        (0, 3, false),
+        (0, 2, true),
+        (0, 2, false),
+        (0, 1, true),
+        (0, 1, false),
+        (1, 4, true),
+        (1, 3, true),
+        (1, 4, false),
+        (1, 3, false),
+        (1, 2, true),
+        (1, 2, false),
+        (2, 4, true),
+        (2, 3, true),
+        (3, 4, true),
+        (3, 4, false),
+        (2, 3, false),
+        (2, 4, false),
+    ];
+    AXES.iter()
+        .map(|&(from, towards, anticlockwise)| {
+            let mut image = [0u8; 5];
+            image[from as usize] = 0;
+            image[towards as usize] = 4;
+            let plane: Vec<u8> = (0..5u8).filter(|&l| l != from && l != towards).collect();
+            let vertices: [u8; 3] = if anticlockwise { [1, 2, 3] } else { [3, 2, 1] };
+            for (&label, &vertex) in plane.iter().zip(vertices.iter()) {
+                image[label as usize] = vertex;
+            }
+            Permutation::from_image(5, &image)
+        })
+        .collect()
+}
+
+/// `@OH1`..`@OH30` (OpenSMILES §3.8.7): the axis runs from ligand `a` (vertex 0)
+/// to `towards` (vertex 5); the remaining four ligands fill the equatorial
+/// square (vertices 1–4) in one of six classes — each path shape (U/4/Z by
+/// diagonal-step count) in its two C₄ windings.
+fn octahedral_reps() -> Vec<Permutation> {
+    const U_ANTI: [u8; 4] = [1, 2, 3, 4];
+    const U_CW: [u8; 4] = [4, 3, 2, 1];
+    const FOUR_ANTI: [u8; 4] = [2, 4, 1, 3];
+    const FOUR_CW: [u8; 4] = [1, 3, 2, 4];
+    const Z_ANTI: [u8; 4] = [2, 3, 1, 4];
+    const Z_CW: [u8; 4] = [2, 1, 3, 4];
+    const ARRANGEMENTS: [(u8, [u8; 4]); 30] = [
+        (5, U_ANTI),
+        (5, U_CW),
+        (4, U_ANTI),
+        (5, Z_ANTI),
+        (4, Z_ANTI),
+        (3, U_ANTI),
+        (3, Z_ANTI),
+        (5, FOUR_CW),
+        (4, FOUR_CW),
+        (5, FOUR_ANTI),
+        (4, FOUR_ANTI),
+        (3, FOUR_CW),
+        (3, FOUR_ANTI),
+        (5, Z_CW),
+        (4, Z_CW),
+        (4, U_CW),
+        (3, Z_CW),
+        (3, U_CW),
+        (2, U_ANTI),
+        (2, Z_ANTI),
+        (2, FOUR_CW),
+        (2, FOUR_ANTI),
+        (2, Z_CW),
+        (2, U_CW),
+        (1, U_ANTI),
+        (1, Z_ANTI),
+        (1, FOUR_CW),
+        (1, FOUR_ANTI),
+        (1, Z_CW),
+        (1, U_CW),
+    ];
+    ARRANGEMENTS
+        .iter()
+        .map(|&(towards, equatorial)| {
+            let mut image = [0u8; 6];
+            image[towards as usize] = 5;
+            let plane: Vec<u8> = (0..6u8).filter(|&l| l != 0 && l != towards).collect();
+            for (&label, &vertex) in plane.iter().zip(equatorial.iter()) {
+                image[label as usize] = vertex;
+            }
+            Permutation::from_image(6, &image)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -64,23 +240,53 @@ mod tests {
     use super::*;
 
     #[rstest]
-    #[case::tetrahedral(PermutationGroup::alternating(4), 2)]
-    #[case::square_planar(PermutationGroup::dihedral(4), 3)]
-    #[case::cyclic(PermutationGroup::cyclic(4), 6)]
-    #[case::whole_group(PermutationGroup::symmetric(3), 1)]
-    fn test_coset_space_count(#[case] group: PermutationGroup, #[case] count: usize) {
-        let space = CosetSpace::new(group);
-        assert_eq!(space.count(), count);
-        assert_eq!(space.coset_reps().len(), count);
+    #[case::tetrahedral(PermutationGroup::alternating(4), Decomposition::CanonicalRank, 2)]
+    #[case::square_planar(PermutationGroup::dihedral(4), Decomposition::SquarePlanar, 3)]
+    fn test_coset_space_count(
+        #[case] group: PermutationGroup,
+        #[case] decomposition: Decomposition,
+        #[case] count: usize,
+    ) {
+        assert_eq!(CosetSpace::new(group, decomposition).count(), count);
     }
 
     #[rstest]
     fn test_coset_space_coset_rep() {
-        let space = CosetSpace::new(PermutationGroup::alternating(4));
-        let identity = Permutation::identity(4);
+        let space = CosetSpace::new(
+            PermutationGroup::alternating(4),
+            Decomposition::CanonicalRank,
+        );
         let even = Permutation::from_image(4, &[1, 2, 0, 3]);
         let odd = Permutation::from_image(4, &[1, 0, 2, 3]);
-        assert_eq!(space.coset_rep(identity), space.coset_rep(even));
-        assert_ne!(space.coset_rep(identity), space.coset_rep(odd));
+        assert_eq!(
+            space.coset_rep(Permutation::identity(4)),
+            space.coset_rep(even)
+        );
+        assert_ne!(
+            space.coset_rep(Permutation::identity(4)),
+            space.coset_rep(odd)
+        );
+    }
+
+    #[rstest]
+    #[case::canonical(PermutationGroup::alternating(4), Decomposition::CanonicalRank)]
+    #[case::square_planar(PermutationGroup::dihedral(4), Decomposition::SquarePlanar)]
+    fn test_coset_space_index_unindex(
+        #[case] group: PermutationGroup,
+        #[case] decomposition: Decomposition,
+    ) {
+        let space = CosetSpace::new(group, decomposition);
+        for n in 0..space.count() as u32 {
+            assert_eq!(space.index(space.unindex(n)), n);
+        }
+    }
+
+    #[rstest]
+    #[case::u_shape([0, 1, 2, 3], 0)]
+    #[case::four_shape([1, 3, 0, 2], 1)]
+    #[case::z_shape([1, 2, 0, 3], 2)]
+    fn test_coset_space_index_square_planar(#[case] image: [u8; 4], #[case] expected: u32) {
+        let space = CosetSpace::new(PermutationGroup::dihedral(4), Decomposition::SquarePlanar);
+        assert_eq!(space.index(Permutation::from_image(4, &image)), expected);
     }
 }
