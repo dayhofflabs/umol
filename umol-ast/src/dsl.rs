@@ -13,6 +13,7 @@ pub(crate) mod noncovalent;
 mod predicates;
 pub(crate) mod refs;
 pub(crate) mod relational;
+pub(crate) mod stereo;
 pub(crate) mod value;
 
 pub use aromatic::{

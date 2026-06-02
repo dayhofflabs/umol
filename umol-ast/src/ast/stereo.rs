@@ -704,7 +704,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_kind_narrows(StereoAtomAst::new(StereoKind::Tetrahedral), StereoAtomAst::new(StereoKind::Tetrahedral).with_configuration(1u32), Some(StereoAtomAst::new(StereoKind::Tetrahedral).with_configuration(1u32)))]
+    #[case::same_kind_narrows(StereoAtomAst::new(StereoKind::Tetrahedral), StereoAtomAst::new(StereoKind::Tetrahedral).with_configuration(1u32),
+        Some(StereoAtomAst::new(StereoKind::Tetrahedral).with_configuration(1u32)))]
     #[case::different_kind(StereoAtomAst::new(StereoKind::Tetrahedral), StereoAtomAst::new(StereoKind::SquarePlanar), None)]
     #[case::config_conflict(StereoAtomAst::new(StereoKind::Tetrahedral).with_configuration(0u32), StereoAtomAst::new(StereoKind::Tetrahedral).with_configuration(1u32), None)]
     fn test_stereo_atom_ast_meet(
@@ -741,8 +742,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_kind_narrows(StereoBondAst::new(StereoKind::CisTrans), StereoBondAst::new(StereoKind::CisTrans).with_configuration(1u32), Some(StereoBondAst::new(StereoKind::CisTrans).with_configuration(1u32)))]
-    #[case::config_conflict(StereoBondAst::new(StereoKind::CisTrans).with_configuration(0u32), StereoBondAst::new(StereoKind::CisTrans).with_configuration(1u32), None)]
+    #[case::same_kind_narrows(StereoBondAst::new(StereoKind::CisTrans), StereoBondAst::new(StereoKind::CisTrans).with_configuration(1u32),
+        Some(StereoBondAst::new(StereoKind::CisTrans).with_configuration(1u32)))]
+    #[case::config_conflict(StereoBondAst::new(StereoKind::CisTrans).with_configuration(0u32),
+        StereoBondAst::new(StereoKind::CisTrans).with_configuration(1u32), None)]
     fn test_stereo_bond_ast_meet(
         #[case] a: StereoBondAst,
         #[case] b: StereoBondAst,

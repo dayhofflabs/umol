@@ -211,8 +211,8 @@ Phases A–E are in scope; F (3D) and G follow.
     `map_node`/`unmap_node`, kind carried; `refs` = that node; stored as `NodeId`, views expose `AtomId`). **Done**
   - **A6** — local-frame constraints `AtomConstraint::TetrahedralStereo(StereoConfigurationAst)` /
     `BondConstraint::CisTransStereo(StereoConfigurationAst)` in `ast/constraint/{atom,bond}.rs` (`#T`/`#C`,
-    uppercase derived-predicate namespace, `Th`→`#T`/`Ct`→`#C`; same arg as the element config, frame differs).
-  - **A7** — ids via `define_id!` in `ast/ids.rs`.
+    uppercase derived-predicate namespace, `Th`→`#T`/`Ct`→`#C`; same arg as the element config, frame differs). **Done**
+  - **A7** — ids via `define_id!` in `ast/ids.rs`. **Done**
 
 - **Phase A′ — coset algebra** (`umol-perm`, new crate; pure permutation algebra — no chemistry, no geometry,
   no AST deps; a dependency of umol-graph). The dense coset index **is the OpenSMILES arrangement number**
@@ -339,7 +339,7 @@ Phases A–E are in scope; F (3D) and G follow.
   - **D1** — config-string parser/writer: `class config` ↔ `(StereoKind, StereoConfigurationAst)`. Head
     `Th`/`Ct`; config `* | ! | + | <coset-term>`, coset-term recursive (`nat`→`Lit`, `?id`→`Expr(Var)`,
     `~e`→`Expr(SwapOp)`, `e^<image-number>`→`Expr(ApplyOp(perm))`); `Expr::LitSet`/`VarDomain` (`{…}`, `?o :: {…}`) reserved at the
-    surface (deferred with non-tetrahedral). **One function** — D3's `:type` head and D5's `#T`/`#C` call it.
+    surface (deferred with non-tetrahedral). **One function** — D3's `:type` head and D5's `#T`/`#C` call it. **Done**
   - **D2** — ligand surface: `atom-ref | [:h atom-ref] | [:lp atom-ref]` (kind-first; reserved
     `[:bond/:port/:fragment ref]`) ↔ the ordered `StereoLigand` list. Unknown tags rejected (no silent pass).
   - **D3** — `:stereo-atoms` / `:stereo-bonds` entry reader/writer: `{ :id? (keyword), :site ref,
@@ -353,6 +353,8 @@ Phases A–E are in scope; F (3D) and G follow.
     ~150-file corpus, under `--features conformance`.
   - **D7** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
      stereo_bond_zeroed! in `macros.rs`.
+  - **D8** - update specifications in umol-dsl-spec.md
+  - **D9** - add to prop test and fuzzing
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
   substructure matcher is reused, and `umol-perm` enters exactly once, at the frame alignment).

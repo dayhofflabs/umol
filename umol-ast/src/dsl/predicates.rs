@@ -11,7 +11,6 @@ use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
 use crate::ast::spin::SpinStateAst;
-use crate::ast::stereo::{StereoConfigurationAst, StereoIndexAst};
 use crate::ast::value::{RelOp, ValueAst, ValueExpr};
 
 pub(crate) fn charge(i: &mut &str) -> PResult<ValueAst> {
@@ -158,26 +157,6 @@ pub(crate) fn fmt_ring_count(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::R
         v => {
             write!(f, "#R")?;
             fmt_value(f, v)
-        }
-    }
-}
-
-/// Minimal stereo-config rendering: `{tag}!` for `NotStereo`, `{tag}*` for
-/// `Undetermined`, `{tag}{n}` for a literal index. Shared by the `#T`
-/// (tetrahedral) and `#C` (cis/trans) constraints.
-// TODO: minimal stereo DSL only — non-literal index expressions, the EDN form,
-// and the parse direction are not yet implemented.
-pub(crate) fn fmt_stereo_config(
-    f: &mut fmt::Formatter<'_>,
-    c: &StereoConfigurationAst,
-    tag: &str,
-) -> fmt::Result {
-    match c {
-        StereoConfigurationAst::NotStereo => write!(f, "{tag}!"),
-        StereoConfigurationAst::Undetermined => write!(f, "{tag}*"),
-        StereoConfigurationAst::Stereo(StereoIndexAst::Lit(n)) => write!(f, "{tag}{n}"),
-        StereoConfigurationAst::Stereo(_) => {
-            todo!("non-literal stereo index DSL formatting not yet implemented")
         }
     }
 }
@@ -338,27 +317,6 @@ mod tests {
             }
         }
         assert_eq!(W(&v).to_string(), expected);
-    }
-
-    #[rstest]
-    #[case::tetrahedral_not_stereo(StereoConfigurationAst::NotStereo, "#T", "#T!")]
-    #[case::tetrahedral_undetermined(StereoConfigurationAst::Undetermined, "#T", "#T*")]
-    #[case::tetrahedral_literal(StereoConfigurationAst::from(2_u32), "#T", "#T2")]
-    #[case::cis_trans_not_stereo(StereoConfigurationAst::NotStereo, "#C", "#C!")]
-    #[case::cis_trans_undetermined(StereoConfigurationAst::Undetermined, "#C", "#C*")]
-    #[case::cis_trans_literal(StereoConfigurationAst::from(2_u32), "#C", "#C2")]
-    fn test_fmt_stereo_config(
-        #[case] c: StereoConfigurationAst,
-        #[case] tag: &str,
-        #[case] expected: &str,
-    ) {
-        struct W<'a>(&'a StereoConfigurationAst, &'a str);
-        impl fmt::Display for W<'_> {
-            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt_stereo_config(f, self.0, self.1)
-            }
-        }
-        assert_eq!(W(&c, tag).to_string(), expected);
     }
 
     #[rustfmt::skip]

@@ -15,9 +15,10 @@ use winnow::Parser;
 use super::config::{BondDefaults, NumericDefault, StereoDefault};
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, fmt_stereo_config,
-    lower_spin, optional_value, raise_spin, ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
+    raise_spin, ring_count, SpinPredicate,
 };
+use super::stereo::fmt_stereo_config;
 use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
@@ -303,7 +304,10 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
                 fmt_value(f, v)
             }
         },
-        BondConstraint::CisTransStereo(c) => fmt_stereo_config(f, c, "#C"),
+        BondConstraint::CisTransStereo(c) => {
+            write!(f, "#C")?;
+            fmt_stereo_config(f, c)
+        }
     }
 }
 

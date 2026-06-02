@@ -43,6 +43,10 @@ define_id!(
     MulticenterBondId,
     /// Noncovalent bond index — maps to `RelationId` in the noncovalent bonds relation set.
     NoncovalentBondId,
+    /// Stereo atom index — maps to `RelationId` in the stereo atom relation set.
+    StereoAtomId,
+    /// Stereo bond index — maps to `RelationId` in the stereo bond relation set.
+    StereoBondId,
 );
 
 impl From<NodeId> for AtomId {
@@ -86,3 +90,5 @@ relation_id_from!(DativeBondId);
 relation_id_from!(AromaticSystemId);
 relation_id_from!(MulticenterBondId);
 relation_id_from!(NoncovalentBondId);
+relation_id_from!(StereoAtomId);
+relation_id_from!(StereoBondId);

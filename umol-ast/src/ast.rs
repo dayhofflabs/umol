@@ -52,6 +52,7 @@ pub use embedding::MoleculeEmbedding;
 pub use error::{Contradiction, EvaluationError, JointDomainError, RewriteError};
 pub use ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};

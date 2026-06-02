@@ -19,9 +19,10 @@ use super::config::{
 };
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, fmt_stereo_config,
-    lower_spin, optional_value, raise_spin, ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
+    raise_spin, ring_count, SpinPredicate,
 };
+use super::stereo::fmt_stereo_config;
 use super::value::{fmt_value, id, signed_int, terminator, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
@@ -636,7 +637,10 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
         AtomConstraint::TotalHydrogens(v) => fmt_value_field_required(f, "#H", v),
         AtomConstraint::RingCount(v) => fmt_ring_count(f, v),
         AtomConstraint::RingSize(v) => fmt_value_field_required(f, "#r", v),
-        AtomConstraint::TetrahedralStereo(c) => fmt_stereo_config(f, c, "#T"),
+        AtomConstraint::TetrahedralStereo(c) => {
+            write!(f, "#T")?;
+            fmt_stereo_config(f, c)
+        }
         AtomConstraint::JointDomain(_) => todo!("JointDomainAst DSL formatting lands in 2k"),
     }
 }
