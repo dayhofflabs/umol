@@ -228,7 +228,7 @@ Phases A–E are in scope; F (3D) and G follow.
     build-once + `Box::leak` (mirrors umol-msym `point_group.rs:71`); `Coset { space: &'static CosetSpace,
     index: u32 }` ties identity to the interned space (like `SymmetryOp`). Const generators per class:
     `Tetrahedral`→`alternating(4)` (A₄), `CisTrans`→double-swap (Z₂), `SquarePlanar`→`dihedral(4)` (D₄),
-    `TrigonalBipyramidal`→D₃ on 5, `Octahedral`→O on 6 — all five built now.
+    `TrigonalBipyramidal`→D₃ on 5, `Octahedral`→O on 6 — all five built now. **Done**
   - **A′5** — the **index alignment** `CosetSpace::index(perm) -> u32` = the OpenSMILES decomposition for **all
     five** classes, transcribed from the spec and validated so its fibers equal R's coset partition (A′3):
     - **TH/CT** — the parity (the `sign` bit).

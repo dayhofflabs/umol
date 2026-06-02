@@ -3,10 +3,12 @@
 //! The dense coset index this crate computes reproduces the OpenSMILES
 //! arrangement number (`@TH`/`@AL`/`@SP`/`@TB`/`@OH`).
 
+mod class;
 mod coset;
 mod group;
 mod permutation;
 
+pub use class::{space, ClassKey, Coset};
 pub use coset::CosetSpace;
 pub use group::PermutationGroup;
 pub use permutation::Permutation;

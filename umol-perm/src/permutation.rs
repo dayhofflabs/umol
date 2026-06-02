@@ -103,7 +103,7 @@ impl Permutation {
                 }
             }
         }
-        if inversions % 2 == 0 {
+        if inversions.is_multiple_of(2) {
             1
         } else {
             -1
