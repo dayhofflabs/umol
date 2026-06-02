@@ -221,6 +221,7 @@ Phases A–E are in scope; F (3D) and G follow.
     closure), `symmetric`/`alternating`/`cyclic`/`dihedral`, `order`/`contains`/`elements`. **Done**
   - **A′3** — `CosetSpace` = R (a `PermutationGroup`) + the coset **partition** (one canonical rep per coset):
     `count` (= n!/|R|), `coset_rep`. The algebraic layer — which orderings are equivalent, not yet a numbering.
+    **Done**
   - **A′4** — `ClassKey` (`FromStr`/`Display` key, à la `SchoenfliesSymbol`): families `Sym/Alt/Cyc/Dih(u8)`
     (natural action) + geometry variants `Tetrahedral`/`CisTrans`/`SquarePlanar`/`TrigonalBipyramidal`/
     `Octahedral`. `static REGISTRY: LazyLock<Mutex<HashMap<ClassKey, &'static CosetSpace>>>`, `space(k)` =
