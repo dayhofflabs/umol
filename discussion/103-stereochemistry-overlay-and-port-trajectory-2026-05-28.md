@@ -225,7 +225,7 @@ coset-term    ::= nat                                 ; StereoIndexAst::Lit(u32)
                 | '~' coset-term                      ; Expr(SwapOp(…)) — "the other handedness" = the class's canonical involution
                 | coset-term '^' image-number         ; Expr(ApplyOp(…, perm)) — GAP x^g; the 1-indexed one-line image read as a number
                 ; operators recurse over any term — ~?o, ~~0, 0^2134 all parse; Undetermined (+) is not a coset-term
-                ; sets deferred: '{' nat… '}' → Expr::Set, '?' id '::' '{' … '}' → Expr::VarDomain
+                ; sets deferred: '{' nat… '}' → Expr::LitSet, '?' id '::' '{' … '}' → Expr::VarDomain
 ```
 
 **Surface ligand contract.** The compact form is still the ordinary one: a real substituent is

@@ -187,17 +187,20 @@ do not rebuild. Stereo test corpus: ~150 files under `umol-graph/tests/{mol,smil
 Phases A–E are in scope; F (3D) and G follow.
 
 - **Phase A — types** (`umol-ast/src/ast/stereo.rs`, new):
-  - **A1** — `StereoKind { Tetrahedral, CisTrans }` (flat `Copy` enum, no algebra; further kinds added when built).
+  - **A1** — `StereoKind { Tetrahedral, CisTrans, SquarePlanar, TrigonalBipyramidal, Octahedral }` (flat `Copy`
+    enum). All five carry their `~` involution and `ClassKey` mapping — the umol-ast-side `~` table — wired to
+    `umol-perm`; perception (B–E) still scopes to TH/CT. **Done**
   - **A2** — the index types: `StereoConfigurationAst { Undetermined, NotStereo, Stereo(StereoIndexAst) }`;
     `StereoIndexAst { Undetermined, Lit(u32), Expr(Box<Expr>) }`; recursive `Expr { Lit(u32), Var(String),
-    SwapOp(Box<Expr>), ApplyOp(Box<Expr>, u32), Set(Vec<u32>), VarDomain(String, Vec<u32>) }` (stereo's own,
-    ≠ `value::Expr`; `Set`/`VarDomain` parsed-but-inert until sets land). `Lit` duplicated top-level + `Expr::Lit`
+    SwapOp(Box<Expr>), ApplyOp(Box<Expr>, Permutation), LitSet(Vec<u32>), VarDomain(String, Vec<u32>) }` (stereo's
+    own, ≠ `value::Expr`; `ApplyOp` carries the `umol-perm` `Permutation` parsed from the `^`-image, not a
+    Lehmer code; `LitSet`/`VarDomain` parsed-but-inert until sets land). `Lit` duplicated top-level + `Expr::Lit`
     by design; `Undetermined` kept out of `Expr` ⇒ `~+` unrepresentable; `Var` scope-resolved (declare/use
     collapsed); `~`/`^k` recurse. Config value = dense coset index per stereo class (`u32`), equivariant;
     equality = same index up to a common frame. `StereoConfigurationAst::simplify` (AST method,
     never in the parser): lifts `Expr(Lit)`→`Lit` (folds the by-design duplication) and reduces closed
     operator-exprs (`~1`→the enantiomer coset, `~~e`→`e`) via `umol-perm` (so depends on A′); free-`Var`
-    exprs are left as-is.
+    exprs are left as-is. **Done**
   - **A3** — payloads `StereoAtomAst` / `StereoBondAst`, each `{ kind: StereoKind, configuration:
     StereoConfigurationAst, constraints }` — predicate only, no site/ligands.
   - **A4** — per-site constraints `StereoAtomConstraint {}` / `StereoBondConstraint {}` (empty) + `…Constraints`
@@ -209,6 +212,7 @@ Phases A–E are in scope; F (3D) and G follow.
     `BondConstraint::CisTransStereo(StereoConfigurationAst)` in `ast/constraint/{atom,bond}.rs` (`#T`/`#C`,
     uppercase derived-predicate namespace, `Th`→`#T`/`Ct`→`#C`; same arg as the element config, frame differs).
   - **A7** — ids via `define_id!` in `ast/ids.rs`.
+
 - **Phase A′ — coset algebra** (`umol-perm`, new crate; pure permutation algebra — no chemistry, no geometry,
   no AST deps; a dependency of umol-graph). The dense coset index **is the OpenSMILES arrangement number**
   (`@TH/@AL/@SP/@TB/@OH`) — reproduced, never re-invented. **Built complete for all five geometries now** —
@@ -256,9 +260,9 @@ Phases A–E are in scope; F (3D) and G follow.
     5. **Position frames match OpenSMILES:** TB axial = `0,4` / equatorial `1,2,3`; OH axis `0,5` / equatorial
        square `1,2,3,4` (cyclic, diagonals `1–3`,`2–4`); SP `dihedral(4)` already matched. TH/CT use the generic
        `CanonicalRank` numbering (= parity for a 2-coset space), not a bespoke parity decomposition.
-
     Validated: 7 equivalence-SMILES `reindex` cases (3 TB §3.8.6, 4 OH §3.8.7) + `fibers == cosets` +
     `index ∘ unindex` round-trip; 61 tests, clippy clean.
+
 - **Phase B — raise → `#T`/`#C`** (mechanical; `table_ir/raise.rs`, mirrors the aromaticity→`#a` pass).
   Reads TableIR per-atom chirality / per-bond stereo, reindexes the input arrangement into umol's incidence
   frame, writes `#T`/`#C`; builds **no** element (Phase C).
@@ -332,7 +336,7 @@ Phases A–E are in scope; F (3D) and G follow.
   order; `#T`/`#C` relative to the local frame).
   - **D1** — config-string parser/writer: `class config` ↔ `(StereoKind, StereoConfigurationAst)`. Head
     `Th`/`Ct`; config `* | ! | + | <coset-term>`, coset-term recursive (`nat`→`Lit`, `?id`→`Expr(Var)`,
-    `~e`→`Expr(SwapOp)`, `e^<image-number>`→`Expr(ApplyOp(perm))`); `Expr::Set`/`VarDomain` (`{…}`, `?o :: {…}`) reserved at the
+    `~e`→`Expr(SwapOp)`, `e^<image-number>`→`Expr(ApplyOp(perm))`); `Expr::LitSet`/`VarDomain` (`{…}`, `?o :: {…}`) reserved at the
     surface (deferred with non-tetrahedral). **One function** — D3's `:type` head and D5's `#T`/`#C` call it.
   - **D2** — ligand surface: `atom-ref | [:h atom-ref] | [:lp atom-ref]` (kind-first; reserved
     `[:bond/:port/:fragment ref]`) ↔ the ordered `StereoLigand` list. Unknown tags rejected (no silent pass).
@@ -356,7 +360,7 @@ Phases A–E are in scope; F (3D) and G follow.
     Free `Var`/`Expr` configs are **top** in the pure ops (full coset domain): `meet(?o,X)=X`, `join(?o,X)=*`;
     the variable's cross-occurrence correlation is NOT here — it is `unify`'s (E5). Closed operator-exprs reduce
     first (A2 `simplify`). **In-scope assumption:** every stereo variable is free (full domain) ⇒ `meet` returns
-    the other operand; when `Set`/`VarDomain` land (non-TH), `meet` becomes a genuine domain intersection — the
+    the other operand; when `LitSet`/`VarDomain` land (non-TH), `meet` becomes a genuine domain intersection — the
     single leaf that grows. `meet`/`join` stay pure (never thread the env).
   - **E3** — frame alignment: the substructure matcher's pattern→target ligand correspondence → τ
     (`Permutation::between`) → reindex the pattern config to the target frame (`umol_perm::space(k).reindex`) →
@@ -388,7 +392,7 @@ Phases A–E are in scope; F (3D) and G follow.
 | per-site constraints | `StereoAtomConstraint {}` / `StereoBondConstraint {}` (empty; + `…Constraints` collections, empty `…ConstraintDsl`) |
 | shape | `StereoKind` (`Tetrahedral`, `CisTrans`, …) |
 | configuration | `StereoConfigurationAst { Undetermined, NotStereo, Stereo(StereoIndexAst) }` |
-| config value | `StereoIndexAst { Undetermined, Lit(u32), Expr(Box<Expr>) }` over a recursive stereo `Expr { Lit, Var, SwapOp, ApplyOp, Set, VarDomain }` (its own, ≠ `value::Expr`); `~`/`^image` recurse (`~1`, `0^2134` sayable; `ApplyOp` holds a `Permutation`); `Undetermined` out of `Expr` ⇒ `~+` unrepresentable; `Lit` duplicated by design; `Set`/`VarDomain` deferred; index = `u32` dense coset index per class (SMILES arrangement number, not Lehmer) |
+| config value | `StereoIndexAst { Undetermined, Lit(u32), Expr(Box<Expr>) }` over a recursive stereo `Expr { Lit, Var, SwapOp, ApplyOp, LitSet, VarDomain }` (its own, ≠ `value::Expr`); `~`/`^image` recurse (`~1`, `0^2134` sayable; `ApplyOp` holds a `Permutation`); `Undetermined` out of `Expr` ⇒ `~+` unrepresentable; `Lit` duplicated by design; `LitSet`/`VarDomain` deferred; index = `u32` dense coset index per class (SMILES arrangement number, not Lehmer) |
 | ligand | `StereoLigand` |
 | ligand slot | `StereoLigandKind` { `Atom`, `ImplicitHydrogen`, `LonePair` } |
 | local constraints | `AtomConstraint::TetrahedralStereo` / `BondConstraint::CisTransStereo` |
