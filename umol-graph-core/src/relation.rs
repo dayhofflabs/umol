@@ -116,7 +116,10 @@ struct Incidence {
 
 impl Incidence {
     /// `fill(i, out)` pushes every participant's `refs()` for relation `i`.
-    fn build(relation_count: usize, mut fill: impl FnMut(usize, &mut Vec<ParticipantRefs>)) -> Self {
+    fn build(
+        relation_count: usize,
+        mut fill: impl FnMut(usize, &mut Vec<ParticipantRefs>),
+    ) -> Self {
         let mut node_entries: Vec<(NodeId, RelationId)> = Vec::new();
         let mut edge_entries: Vec<(EdgeId, RelationId)> = Vec::new();
         let mut refs: Vec<ParticipantRefs> = Vec::new();
@@ -547,11 +550,17 @@ where
         let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.relation_count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
-                let f1: Option<Vec<L1>> =
-                    self.factor_1(rid).iter().map(|&p| p.remap(remapping)).collect();
+                let f1: Option<Vec<L1>> = self
+                    .factor_1(rid)
+                    .iter()
+                    .map(|&p| p.remap(remapping))
+                    .collect();
                 let f1: [L1; N1] = f1?.try_into().ok()?;
-                let f2: Option<Vec<L2>> =
-                    self.factor_2(rid).iter().map(|&p| p.remap(remapping)).collect();
+                let f2: Option<Vec<L2>> = self
+                    .factor_2(rid)
+                    .iter()
+                    .map(|&p| p.remap(remapping))
+                    .collect();
                 let f2: [L2; N2] = f2?.try_into().ok()?;
                 Some((f1, f2, self.data(rid).clone()))
             })
@@ -573,7 +582,6 @@ impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> Default
         }
     }
 }
-
 
 /// Birelation with a fixed-arity factor 1 and a variable-arity factor 2. Each factor
 /// has its own participant type and ordering; the union incidence spans both.
@@ -704,11 +712,17 @@ where
         let entries: Vec<([L1; N1], Vec<L2>, D)> = (0..self.relation_count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
-                let f1: Option<Vec<L1>> =
-                    self.factor_1(rid).iter().map(|&p| p.remap(remapping)).collect();
+                let f1: Option<Vec<L1>> = self
+                    .factor_1(rid)
+                    .iter()
+                    .map(|&p| p.remap(remapping))
+                    .collect();
                 let f1: [L1; N1] = f1?.try_into().ok()?;
-                let f2: Option<Vec<L2>> =
-                    self.factor_2(rid).iter().map(|&p| p.remap(remapping)).collect();
+                let f2: Option<Vec<L2>> = self
+                    .factor_2(rid)
+                    .iter()
+                    .map(|&p| p.remap(remapping))
+                    .collect();
                 Some((f1, f2?, self.data(rid).clone()))
             })
             .collect();
@@ -867,10 +881,16 @@ where
         let entries: Vec<(Vec<L1>, Vec<L2>, D)> = (0..self.relation_count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
-                let f1: Option<Vec<L1>> =
-                    self.factor_1(rid).iter().map(|&p| p.remap(remapping)).collect();
-                let f2: Option<Vec<L2>> =
-                    self.factor_2(rid).iter().map(|&p| p.remap(remapping)).collect();
+                let f1: Option<Vec<L1>> = self
+                    .factor_1(rid)
+                    .iter()
+                    .map(|&p| p.remap(remapping))
+                    .collect();
+                let f2: Option<Vec<L2>> = self
+                    .factor_2(rid)
+                    .iter()
+                    .map(|&p| p.remap(remapping))
+                    .collect();
                 Some((f1?, f2?, self.data(rid).clone()))
             })
             .collect();
@@ -1283,7 +1303,8 @@ mod tests {
 
     #[rstest]
     fn test_fixed_fixed_birelation_set_default() {
-        let rs = FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, ()>::default();
+        let rs =
+            FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, ()>::default();
         assert_eq!(rs.relation_count(), 0);
         assert!(!rs.has_incident(n(0)));
     }
@@ -1309,7 +1330,10 @@ mod tests {
     #[rstest]
     fn test_fixed_var_birelation_set_data_iter_mut() {
         let mut rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, i32> =
-            FixedVarBirelationSet::new(vec![([EdgeId(0)], vec![n(1)], 1), ([EdgeId(1)], vec![n(2)], 2)]);
+            FixedVarBirelationSet::new(vec![
+                ([EdgeId(0)], vec![n(1)], 1),
+                ([EdgeId(1)], vec![n(2)], 2),
+            ]);
         for d in rs.data_iter_mut() {
             *d *= 10;
         }
@@ -1341,7 +1365,10 @@ mod tests {
     #[rstest]
     fn test_fixed_var_birelation_set_relation_ids() {
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, &str> =
-            FixedVarBirelationSet::new(vec![([EdgeId(0)], vec![n(1)], "a"), ([EdgeId(1)], vec![n(2)], "b")]);
+            FixedVarBirelationSet::new(vec![
+                ([EdgeId(0)], vec![n(1)], "a"),
+                ([EdgeId(1)], vec![n(2)], "b"),
+            ]);
         let ids: Vec<RelationId> = rs.relation_ids().collect();
         assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
     }
@@ -1389,7 +1416,10 @@ mod tests {
     #[rstest]
     fn test_var_var_birelation_set_data_iter_mut() {
         let mut rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, i32> =
-            VarVarBirelationSet::new(vec![(vec![n(0)], vec![EdgeId(1)], 1), (vec![n(2)], vec![EdgeId(3)], 2)]);
+            VarVarBirelationSet::new(vec![
+                (vec![n(0)], vec![EdgeId(1)], 1),
+                (vec![n(2)], vec![EdgeId(3)], 2),
+            ]);
         for d in rs.data_iter_mut() {
             *d *= 10;
         }
@@ -1420,7 +1450,10 @@ mod tests {
     #[rstest]
     fn test_var_var_birelation_set_relation_ids() {
         let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, &str> =
-            VarVarBirelationSet::new(vec![(vec![n(0)], vec![EdgeId(1)], "a"), (vec![n(2)], vec![EdgeId(3)], "b")]);
+            VarVarBirelationSet::new(vec![
+                (vec![n(0)], vec![EdgeId(1)], "a"),
+                (vec![n(2)], vec![EdgeId(3)], "b"),
+            ]);
         let ids: Vec<RelationId> = rs.relation_ids().collect();
         assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
     }

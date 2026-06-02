@@ -374,7 +374,6 @@ impl Remapping {
             .map(|(_, v)| v.clone())
             .collect()
     }
-
 }
 
 // Inverse dense shift: re-add removed ids at or below the post index (fixpoint).

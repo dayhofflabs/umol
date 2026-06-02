@@ -148,7 +148,7 @@ their `(keys, rels)` pair.
    table → `FixedFixed`, through-space donor–acceptor → `VarVar`). Factors use `1`/`2` suffixes
    throughout (`L1`/`L2`, `N1`/`N2`, `O1`/`O2`, `factor_1()`/`factor_2()`; the chemistry layer aliases
    `site`/`ligands`). Build the node+edge union incidence (dedup `(key, rid)` per relation) and the
-   `incident_edge` query (see Incidence).
+   `incident_edge` query (see Incidence). **Done**
 
 ### Forward-looking: relations as participants
 

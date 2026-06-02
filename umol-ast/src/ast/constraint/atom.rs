@@ -828,6 +828,7 @@ impl From<Vec<AtomConstraint>> for AtomConstraints {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_graph_core::Remapping;
 
     use super::*;
     use crate::ast::constraint::joint_domain::{JointDomainAst, JointVar};
@@ -1510,7 +1511,7 @@ mod tests {
         let cs =
             AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
         let remap = IdRemapping::new(
-            umol_graph_core::Remapping::new(vec![0, 1, 2], vec![0]),
+            Remapping::new(vec![0, 1, 2], vec![0]),
             Vec::new(),
             Vec::new(),
             Vec::new(),
