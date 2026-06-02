@@ -99,7 +99,7 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
                     .filter_map(|(parts, d)| {
                         let mut new_parts = [NodeId(0); N];
                         for (i, p) in parts.iter().enumerate() {
-                            new_parts[i] = remap.node(*p)?;
+                            new_parts[i] = remap.map_node(*p)?;
                         }
                         Some((new_parts, d))
                     })
@@ -201,7 +201,7 @@ impl<R: Clone> VarSetStorage<R> {
                     .into_iter()
                     .filter_map(|(atoms, d)| {
                         let mapped: Option<Vec<NodeId>> =
-                            atoms.into_iter().map(|n| remap.node(n)).collect();
+                            atoms.into_iter().map(|n| remap.map_node(n)).collect();
                         mapped.map(|a| (a, d))
                     })
                     .collect();
@@ -249,7 +249,7 @@ fn fixed_relation_removed<R: Clone, const N: usize>(
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
         let parts = storage.participants(i);
-        if parts.iter().any(|&p| remap.node(p).is_none()) {
+        if parts.iter().any(|&p| remap.map_node(p).is_none()) {
             removed.push(i as u32);
         }
     }
@@ -260,7 +260,7 @@ fn var_relation_removed<R: Clone>(storage: &VarSetStorage<R>, remap: &Remapping)
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
         let parts = storage.participants(i);
-        if parts.iter().any(|&p| remap.node(p).is_none()) {
+        if parts.iter().any(|&p| remap.map_node(p).is_none()) {
             removed.push(i as u32);
         }
     }

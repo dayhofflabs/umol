@@ -84,11 +84,11 @@ impl IdRemapping {
     }
 
     pub fn atom(&self, id: AtomId) -> Option<AtomId> {
-        self.graph.node(NodeId::from(id)).map(AtomId::from)
+        self.graph.map_node(NodeId::from(id)).map(AtomId::from)
     }
 
     pub fn bond(&self, id: BondId) -> Option<BondId> {
-        self.graph.edge(EdgeId::from(id)).map(BondId::from)
+        self.graph.map_edge(EdgeId::from(id)).map(BondId::from)
     }
 
     pub fn dative_bond(&self, id: DativeBondId) -> Option<DativeBondId> {
@@ -130,11 +130,11 @@ impl UndoRemapping {
     }
 
     pub fn atom(&self, id: AtomId) -> AtomId {
-        AtomId(unmap_dense(&self.forward.graph.removed_nodes, id.0))
+        AtomId::from(self.forward.graph.unmap_node(NodeId::from(id)))
     }
 
     pub fn bond(&self, id: BondId) -> BondId {
-        BondId(unmap_dense(&self.forward.graph.removed_edges, id.0))
+        BondId::from(self.forward.graph.unmap_edge(EdgeId::from(id)))
     }
 
     pub fn dative_bond(&self, id: DativeBondId) -> DativeBondId {

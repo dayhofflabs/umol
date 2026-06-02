@@ -329,7 +329,7 @@ pub struct Remapping {
 }
 
 impl Remapping {
-    pub fn node(&self, old: NodeId) -> Option<NodeId> {
+    pub fn map_node(&self, old: NodeId) -> Option<NodeId> {
         if self.removed_nodes.binary_search(&old.0).is_ok() {
             return None;
         }
@@ -337,12 +337,20 @@ impl Remapping {
         Some(NodeId(old.0 - shift as u32))
     }
 
-    pub fn edge(&self, old: EdgeId) -> Option<EdgeId> {
+    pub fn map_edge(&self, old: EdgeId) -> Option<EdgeId> {
         if self.removed_edges.binary_search(&old.0).is_ok() {
             return None;
         }
         let shift = self.removed_edges.partition_point(|&r| r < old.0);
         Some(EdgeId(old.0 - shift as u32))
+    }
+
+    pub fn unmap_node(&self, post: NodeId) -> NodeId {
+        NodeId(unmap_dense(&self.removed_nodes, post.0))
+    }
+
+    pub fn unmap_edge(&self, post: EdgeId) -> EdgeId {
+        EdgeId(unmap_dense(&self.removed_edges, post.0))
     }
 
     pub fn apply_to_node_vec<T: Clone>(&self, data: &[T]) -> Vec<T> {
@@ -371,7 +379,7 @@ impl Remapping {
                 let old = rs.participants(rid);
                 let mut new_parts = [NodeId(0); N];
                 for (j, &p) in old.iter().enumerate() {
-                    new_parts[j] = self.node(p)?;
+                    new_parts[j] = self.map_node(p)?;
                 }
                 Some((new_parts, rs.data(rid).clone()))
             })
@@ -384,11 +392,23 @@ impl Remapping {
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let old = rs.participants(rid);
-                let new_parts: Option<Vec<NodeId>> = old.iter().map(|&p| self.node(p)).collect();
+                let new_parts: Option<Vec<NodeId>> = old.iter().map(|&p| self.map_node(p)).collect();
                 Some((new_parts?, rs.data(rid).clone()))
             })
             .collect();
         VarRelationSet::new(entries)
+    }
+}
+
+// Inverse dense shift: re-add removed ids at or below the post index (fixpoint).
+fn unmap_dense(removed: &[u32], post: u32) -> u32 {
+    let mut old = post;
+    loop {
+        let next = post + removed.partition_point(|&r| r <= old) as u32;
+        if next == old {
+            return old;
+        }
+        old = next;
     }
 }
 
@@ -625,9 +645,9 @@ mod tests {
         assert_eq!(remap.removed_edges, vec![0, 1]);
 
         // node 0 stays 0, node 2 becomes 1
-        assert_eq!(remap.node(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(remap.node(NodeId(1)), None);
-        assert_eq!(remap.node(NodeId(2)), Some(NodeId(1)));
+        assert_eq!(remap.map_node(NodeId(0)), Some(NodeId(0)));
+        assert_eq!(remap.map_node(NodeId(1)), None);
+        assert_eq!(remap.map_node(NodeId(2)), Some(NodeId(1)));
     }
 
     #[test]
@@ -642,9 +662,9 @@ mod tests {
         assert_eq!(remap.removed_edges, vec![0, 2]);
 
         // surviving edge (old 1) maps to new 0
-        assert_eq!(remap.edge(EdgeId(0)), None);
-        assert_eq!(remap.edge(EdgeId(1)), Some(EdgeId(0)));
-        assert_eq!(remap.edge(EdgeId(2)), None);
+        assert_eq!(remap.map_edge(EdgeId(0)), None);
+        assert_eq!(remap.map_edge(EdgeId(1)), Some(EdgeId(0)));
+        assert_eq!(remap.map_edge(EdgeId(2)), None);
 
         // nodes 1,2 become 0,1
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
@@ -661,9 +681,9 @@ mod tests {
         assert_eq!(remap.removed_nodes, Vec::<u32>::new());
         assert_eq!(remap.removed_edges, vec![1]);
 
-        assert_eq!(remap.edge(EdgeId(0)), Some(EdgeId(0)));
-        assert_eq!(remap.edge(EdgeId(1)), None);
-        assert_eq!(remap.edge(EdgeId(2)), Some(EdgeId(1)));
+        assert_eq!(remap.map_edge(EdgeId(0)), Some(EdgeId(0)));
+        assert_eq!(remap.map_edge(EdgeId(1)), None);
+        assert_eq!(remap.map_edge(EdgeId(2)), Some(EdgeId(1)));
 
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(0), NodeId(1)]);
         assert_eq!(g.edge_endpoints(EdgeId(1)), [NodeId(0), NodeId(2)]);
@@ -691,11 +711,11 @@ mod tests {
         // only none survive since every edge touches node 1 or 3
         assert_eq!(g.edge_count(), 0);
 
-        assert_eq!(remap.node(NodeId(0)), Some(NodeId(0)));
-        assert_eq!(remap.node(NodeId(1)), None);
-        assert_eq!(remap.node(NodeId(2)), Some(NodeId(1)));
-        assert_eq!(remap.node(NodeId(3)), None);
-        assert_eq!(remap.node(NodeId(4)), Some(NodeId(2)));
+        assert_eq!(remap.map_node(NodeId(0)), Some(NodeId(0)));
+        assert_eq!(remap.map_node(NodeId(1)), None);
+        assert_eq!(remap.map_node(NodeId(2)), Some(NodeId(1)));
+        assert_eq!(remap.map_node(NodeId(3)), None);
+        assert_eq!(remap.map_node(NodeId(4)), Some(NodeId(2)));
     }
 
     #[test]
@@ -712,7 +732,7 @@ mod tests {
         assert_eq!(g.edge_count(), 1);
         assert_eq!(g.edge_endpoints(EdgeId(0)), [NodeId(1), NodeId(2)]);
 
-        assert_eq!(remap.edge(EdgeId(2)), Some(EdgeId(0)));
+        assert_eq!(remap.map_edge(EdgeId(2)), Some(EdgeId(0)));
     }
 
     #[rstest]
@@ -730,6 +750,24 @@ mod tests {
             removed_nodes: removed,
             removed_edges: vec![],
         };
-        assert_eq!(remap.node(old), expected);
+        assert_eq!(remap.map_node(old), expected);
+    }
+
+    #[rstest]
+    #[case::identity(NodeId(0), vec![], NodeId(0))]
+    #[case::before_gap(NodeId(0), vec![2], NodeId(0))]
+    #[case::at_gap(NodeId(2), vec![2], NodeId(3))]
+    #[case::after_gap(NodeId(3), vec![2], NodeId(4))]
+    #[case::multi_removed(NodeId(3), vec![1, 3], NodeId(5))]
+    fn test_remapping_unmap_node(
+        #[case] post: NodeId,
+        #[case] removed: Vec<u32>,
+        #[case] expected: NodeId,
+    ) {
+        let remap = Remapping {
+            removed_nodes: removed,
+            removed_edges: vec![],
+        };
+        assert_eq!(remap.unmap_node(post), expected);
     }
 }

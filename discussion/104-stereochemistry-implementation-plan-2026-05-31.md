@@ -132,7 +132,7 @@ their `(keys, rels)` pair.
 1. `Remapping`: rename the forward `node`/`edge` → `map_node`/`map_edge` (symmetry with the inverse;
    ripples into `IdRemapping::atom`/`bond` and `apply_to_*`), and add `unmap_node`/`unmap_edge` by lifting
    the inverse `unmap_dense` (`umol-ast/remap.rs:165`) down beside them (`removed_nodes`/`removed_edges`
-   data is already on `Remapping`).
+   data is already on `Remapping`). **Done**
 2. `FactorOrdering` + `Unordered`/`Ordered`.
 3. `RelationParticipant` + `ParticipantRefs`; impls for `NodeId`/`EdgeId` (and `Ligand` in the
    chemistry layer).
