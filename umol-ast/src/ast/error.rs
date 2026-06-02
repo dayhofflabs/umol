@@ -19,7 +19,7 @@ pub enum RewriteError {
     UnmappedAssignmentAtom(AtomId),
 }
 
-/// Error raised by `Expr::evaluate` / `Expr::evaluate_bool` when the
+/// Error raised by `ValueExpr::evaluate` / `ValueExpr::evaluate_bool` when the
 /// expression cannot be reduced (unbound variable, division by zero, or
 /// arithmetic-vs-boolean domain mismatch).
 #[derive(Clone, Debug, PartialEq, Error)]

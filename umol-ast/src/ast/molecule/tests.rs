@@ -25,7 +25,7 @@ use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use super::super::rings::{RingFamily, RingSet};
 use super::super::spin::SpinStateAst;
-use super::super::value::{Expr, ValueAst};
+use super::super::value::{ValueAst, ValueExpr};
 use super::MoleculeAst;
 use crate::{mol, mol_ground};
 
@@ -1990,81 +1990,81 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     );
 
     // -- Non-canonical shapes seeded across the structure --------------
-    // Atom 0: charge as Expr::Lit (lifts to ValueAst::Lit), implicit_hydrogens
-    // as Expr::Lit, lone_pairs as Expr::Neg(Neg(_)) (folds), spin both fields
-    // wrapped in Expr. `isotope_mass` is set to a literal directly —
-    // IsotopeAst has no Expr variant, so there's nothing for `simplify` to
+    // Atom 0: charge as ValueExpr::Lit (lifts to ValueAst::Lit), implicit_hydrogens
+    // as ValueExpr::Lit, lone_pairs as ValueExpr::Neg(Neg(_)) (folds), spin both fields
+    // wrapped in ValueExpr. `isotope_mass` is set to a literal directly —
+    // IsotopeAst has no ValueExpr variant, so there's nothing for `simplify` to
     // fold; the field passes through unchanged.
     {
         let atom = ast.atom_mut(AtomId(0)).ast;
-        atom.charge = ValueAst::Expr(Box::new(Expr::Lit(2)));
+        atom.charge = ValueAst::Expr(Box::new(ValueExpr::Lit(2)));
         atom.isotope_mass = IsotopeMassAst::Lit(13);
-        atom.implicit_hydrogens = ValueAst::Expr(Box::new(Expr::Lit(3)));
-        atom.lone_pairs = ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
-            Expr::Lit(1),
-        ))))));
+        atom.implicit_hydrogens = ValueAst::Expr(Box::new(ValueExpr::Lit(3)));
+        atom.lone_pairs = ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(
+            Box::new(ValueExpr::Lit(1)),
+        )))));
         atom.spin = SpinStateAst {
-            unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
-            multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
+            unpaired: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
+            multiplicity: ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
         };
-        // And an inline atom constraint with a non-canonical Expr.
+        // And an inline atom constraint with a non-canonical ValueExpr.
         atom.constraints
             .add(AtomConstraint::Valence(ValueAst::Expr(Box::new(
-                Expr::Lit(4),
+                ValueExpr::Lit(4),
             ))));
     }
 
     // Bond 0: order/charge/spin all wrapped, plus an inline bond ring-count
-    // with a non-canonical Expr.
+    // with a non-canonical ValueExpr.
     {
         let bond = ast.bond_mut(BondId(0)).ast;
-        bond.order = ValueAst::Expr(Box::new(Expr::Lit(1)));
-        bond.charge = ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(0)))));
+        bond.order = ValueAst::Expr(Box::new(ValueExpr::Lit(1)));
+        bond.charge = ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(0)))));
         bond.spin = SpinStateAst {
-            unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
-            multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
+            unpaired: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
+            multiplicity: ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
         };
         bond.constraints
             .add(BondConstraint::RingCount(ValueAst::Expr(Box::new(
-                Expr::Lit(1),
+                ValueExpr::Lit(1),
             ))));
     }
 
-    // Dative bond inline ring-size with non-canonical Expr.
+    // Dative bond inline ring-size with non-canonical ValueExpr.
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
         .add(DativeBondConstraint::RingSize(ValueAst::Expr(Box::new(
-            Expr::Lit(5),
+            ValueExpr::Lit(5),
         ))));
 
     // Aromatic system 0: charge/electrons/spin wrapped. Three member atoms,
     // so electrons has three entries.
     {
         let ar = ast.aromatic_system_mut(AromaticSystemId(0));
-        ar.charge = ValueAst::Expr(Box::new(Expr::Lit(0)));
+        ar.charge = ValueAst::Expr(Box::new(ValueExpr::Lit(0)));
         ar.electrons = vec![
-            ValueAst::Expr(Box::new(Expr::Lit(1))),
-            ValueAst::Expr(Box::new(Expr::Lit(1))),
-            ValueAst::Expr(Box::new(Expr::Lit(1))),
+            ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
+            ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
+            ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
         ];
         ar.spin = SpinStateAst {
-            unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
-            multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
+            unpaired: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
+            multiplicity: ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
         };
     }
 
     // Multicenter bond 0: same pattern, three member atoms.
     {
         let mc = ast.multicenter_bond_mut(MulticenterBondId(0));
-        mc.charge = ValueAst::Expr(Box::new(Expr::Lit(0)));
+        mc.charge = ValueAst::Expr(Box::new(ValueExpr::Lit(0)));
         mc.electrons = vec![
-            ValueAst::Expr(Box::new(Expr::Lit(1))),
-            ValueAst::Expr(Box::new(Expr::Lit(1))),
-            ValueAst::Expr(Box::new(Expr::Lit(0))),
+            ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
+            ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
+            ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
         ];
         mc.spin = SpinStateAst {
-            unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
-            multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
+            unpaired: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
+            multiplicity: ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
         };
     }
 
@@ -2080,25 +2080,25 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         vec![],
         Constraints::default(),
     );
-    pattern.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Box::new(Expr::Lit(-3)));
+    pattern.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Box::new(ValueExpr::Lit(-3)));
 
     ast.constraints_mut()
         .push(Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: Some(vec![AtomId(0), AtomId(1)]),
-            sum: ValueAst::Expr(Box::new(Expr::Lit(0))),
+            sum: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
         }));
     ast.constraints_mut().push(Constraint::Relational(
         RelationalConstraint::AromaticSystemAllAtoms {
             system: AromaticSystemId(0),
             predicate: Box::new(AtomConstraint::Valence(ValueAst::Expr(Box::new(
-                Expr::Lit(4),
+                ValueExpr::Lit(4),
             )))),
         },
     ));
     ast.constraints_mut()
         .push(Constraint::And(vec![Constraint::Atom(
             AtomId(1),
-            AtomConstraint::Degree(ValueAst::Expr(Box::new(Expr::Lit(3)))),
+            AtomConstraint::Degree(ValueAst::Expr(Box::new(ValueExpr::Lit(3)))),
         )]));
     ast.constraints_mut()
         .push(Constraint::Molecule(MoleculeConstraint::SubPattern {
@@ -2127,8 +2127,8 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     // -- Bond 0 ---------------------------------------------------------
     let bond = ast.bond(BondId(0)).ast;
     assert_eq!(bond.order, ValueAst::Lit(1));
-    // Neg(Lit(0)) is preserved by Expr::simplify but the Expr is not at the
-    // ValueAst-Expr top, so ValueAst::simplify lifts via Lit(-0) = Lit(0).
+    // Neg(Lit(0)) is preserved by ValueExpr::simplify but the ValueExpr is not at the
+    // ValueAst-ValueExpr top, so ValueAst::simplify lifts via Lit(-0) = Lit(0).
     assert_eq!(bond.charge, ValueAst::Lit(0));
     assert_eq!(bond.spin, SpinStateAst::from((0_u8, 1_u8)));
     assert_eq!(

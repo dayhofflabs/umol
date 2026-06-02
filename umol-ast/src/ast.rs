@@ -63,10 +63,11 @@ pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use stereo::{
-    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoIndexAst, StereoKind,
+    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoExpr, StereoIndexAst, StereoKind,
+    StereoLigand, StereoLigandKind,
 };
 pub use traits::{AsLit, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst};
-pub use value::{ArithOp, Bindings, Expr, MemOp, RelOp, ValueAst};
+pub use value::{ArithOp, Bindings, MemOp, RelOp, ValueAst, ValueExpr};
 pub use views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,

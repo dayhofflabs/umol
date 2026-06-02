@@ -14,11 +14,11 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::{ArithOp, Expr, RelOp, ValueAst};
+use crate::ast::value::{ArithOp, RelOp, ValueAst, ValueExpr};
 
 /// Surface DSL wrapper around `ValueAst`. EDN form is hybrid: `Lit` → `Int`,
-/// `Undetermined` → `:undetermined`, `Set` → vector of ints, `Expr` →
-/// string via the value subgrammar. `Expr` is string-encoded because EDN has
+/// `Undetermined` → `:undetermined`, `Set` → vector of ints, `ValueExpr` →
+/// string via the value subgrammar. `ValueExpr` is string-encoded because EDN has
 /// no native representation for the boolean/arithmetic grammar and round-trip
 /// fidelity is mandatory.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -94,7 +94,7 @@ impl ToEdn for ValueDsl {
 }
 
 // `Display for ValueDsl` delegates to the helpers below, which know how to
-// render any `ValueAst` or `Expr` node in the surface subgrammar. They are
+// render any `ValueAst` or `ValueExpr` node in the surface subgrammar. They are
 // module-private: DSL callers go through `ValueDsl`; predicates/atom/bond
 // strings use `fmt_value` directly (same input type, same output form).
 
@@ -148,25 +148,25 @@ fn rel_op_str(op: RelOp) -> &'static str {
     }
 }
 
-/// Precedence level for the `Expr` grammar: lowest-binding (`Or`) to
+/// Precedence level for the `ValueExpr` grammar: lowest-binding (`Or`) to
 /// highest-binding (atom). Matches the parser's recursive-descent layering.
 /// Used to decide where `fmt_expr` wraps a child in parens to reparse to the
 /// same tree.
-fn expr_prec(e: &Expr) -> u8 {
+fn expr_prec(e: &ValueExpr) -> u8 {
     match e {
-        Expr::Or(_) => 0,
-        Expr::And(_) => 1,
-        Expr::Not(_) => 2,
-        Expr::Rel(..) => 3,
-        Expr::Mem(..) => 4,
-        Expr::BinOp(_, ArithOp::Add | ArithOp::Sub, _) => 5,
-        Expr::BinOp(_, ArithOp::Mul | ArithOp::Div | ArithOp::Rem, _) => 6,
-        Expr::Neg(_) => 7,
-        Expr::Lit(_) | Expr::Var(_) => 8,
+        ValueExpr::Or(_) => 0,
+        ValueExpr::And(_) => 1,
+        ValueExpr::Not(_) => 2,
+        ValueExpr::Rel(..) => 3,
+        ValueExpr::Mem(..) => 4,
+        ValueExpr::BinOp(_, ArithOp::Add | ArithOp::Sub, _) => 5,
+        ValueExpr::BinOp(_, ArithOp::Mul | ArithOp::Div | ArithOp::Rem, _) => 6,
+        ValueExpr::Neg(_) => 7,
+        ValueExpr::Lit(_) | ValueExpr::Var(_) => 8,
     }
 }
 
-fn fmt_paren(f: &mut fmt::Formatter<'_>, e: &Expr, paren: bool) -> fmt::Result {
+fn fmt_paren(f: &mut fmt::Formatter<'_>, e: &ValueExpr, paren: bool) -> fmt::Result {
     if paren {
         f.write_char('(')?;
         fmt_expr(f, e)?;
@@ -176,10 +176,10 @@ fn fmt_paren(f: &mut fmt::Formatter<'_>, e: &Expr, paren: bool) -> fmt::Result {
     }
 }
 
-fn fmt_expr(f: &mut fmt::Formatter<'_>, e: &Expr) -> fmt::Result {
+fn fmt_expr(f: &mut fmt::Formatter<'_>, e: &ValueExpr) -> fmt::Result {
     let parent = expr_prec(e);
     match e {
-        Expr::Or(xs) => {
+        ValueExpr::Or(xs) => {
             for (i, x) in xs.iter().enumerate() {
                 if i > 0 {
                     f.write_str(" | ")?;
@@ -188,7 +188,7 @@ fn fmt_expr(f: &mut fmt::Formatter<'_>, e: &Expr) -> fmt::Result {
             }
             Ok(())
         }
-        Expr::And(xs) => {
+        ValueExpr::And(xs) => {
             for (i, x) in xs.iter().enumerate() {
                 if i > 0 {
                     f.write_str(" & ")?;
@@ -197,16 +197,16 @@ fn fmt_expr(f: &mut fmt::Formatter<'_>, e: &Expr) -> fmt::Result {
             }
             Ok(())
         }
-        Expr::Not(x) => {
+        ValueExpr::Not(x) => {
             f.write_char('!')?;
             fmt_paren(f, x, expr_prec(x) < parent)
         }
-        Expr::Rel(l, op, r) => {
+        ValueExpr::Rel(l, op, r) => {
             fmt_paren(f, l, expr_prec(l) <= parent)?;
             write!(f, " {} ", rel_op_str(*op))?;
             fmt_paren(f, r, expr_prec(r) <= parent)
         }
-        Expr::Mem(inner, set) => {
+        ValueExpr::Mem(inner, set) => {
             fmt_paren(f, inner, expr_prec(inner) < parent)?;
             f.write_str(" :: {")?;
             for (i, n) in set.iter().enumerate() {
@@ -217,17 +217,17 @@ fn fmt_expr(f: &mut fmt::Formatter<'_>, e: &Expr) -> fmt::Result {
             }
             f.write_char('}')
         }
-        Expr::BinOp(l, op, r) => {
+        ValueExpr::BinOp(l, op, r) => {
             fmt_paren(f, l, expr_prec(l) < parent)?;
             write!(f, " {} ", arith_op_str(*op))?;
             fmt_paren(f, r, expr_prec(r) <= parent)
         }
-        Expr::Neg(x) => {
+        ValueExpr::Neg(x) => {
             f.write_char('-')?;
             fmt_paren(f, x, expr_prec(x) < parent)
         }
-        Expr::Lit(n) => write!(f, "{}", n),
-        Expr::Var(name) => write!(f, "?{}", name),
+        ValueExpr::Lit(n) => write!(f, "{}", n),
+        ValueExpr::Var(name) => write!(f, "?{}", name),
     }
 }
 
@@ -301,9 +301,9 @@ pub(crate) fn terminator(i: &mut &str) -> PResult<()> {
     }
 }
 
-fn bool_expr(i: &mut &str) -> PResult<Expr> {
+fn bool_expr(i: &mut &str) -> PResult<ValueExpr> {
     let first = and_expr.parse_next(i)?;
-    let rest: Vec<Expr> = repeat(
+    let rest: Vec<ValueExpr> = repeat(
         0..,
         preceded(delimited(multispace0, '|', multispace0), and_expr),
     )
@@ -313,13 +313,13 @@ fn bool_expr(i: &mut &str) -> PResult<Expr> {
     } else {
         let mut disjuncts = vec![first];
         disjuncts.extend(rest);
-        Expr::Or(disjuncts)
+        ValueExpr::Or(disjuncts)
     })
 }
 
-fn and_expr(i: &mut &str) -> PResult<Expr> {
+fn and_expr(i: &mut &str) -> PResult<ValueExpr> {
     let first = not_expr.parse_next(i)?;
-    let rest: Vec<Expr> = repeat(
+    let rest: Vec<ValueExpr> = repeat(
         0..,
         preceded(delimited(multispace0, '&', multispace0), not_expr),
     )
@@ -329,20 +329,20 @@ fn and_expr(i: &mut &str) -> PResult<Expr> {
     } else {
         let mut conjuncts = vec![first];
         conjuncts.extend(rest);
-        Expr::And(conjuncts)
+        ValueExpr::And(conjuncts)
     })
 }
 
-fn not_expr(i: &mut &str) -> PResult<Expr> {
+fn not_expr(i: &mut &str) -> PResult<ValueExpr> {
     alt((
-        preceded(('!', multispace0), not_expr).map(|n| Expr::Not(Box::new(n))),
+        preceded(('!', multispace0), not_expr).map(|n| ValueExpr::Not(Box::new(n))),
         rel_expr,
         delimited('(', delimited(multispace0, bool_expr, multispace0), ')'),
     ))
     .parse_next(i)
 }
 
-fn rel_expr(i: &mut &str) -> PResult<Expr> {
+fn rel_expr(i: &mut &str) -> PResult<ValueExpr> {
     let left = mem_expr.parse_next(i)?;
     let right = opt(preceded(
         multispace0,
@@ -351,11 +351,11 @@ fn rel_expr(i: &mut &str) -> PResult<Expr> {
     .parse_next(i)?;
     Ok(match right {
         None => left,
-        Some((op, r)) => Expr::Rel(Box::new(left), op, Box::new(r)),
+        Some((op, r)) => ValueExpr::Rel(Box::new(left), op, Box::new(r)),
     })
 }
 
-fn mem_expr(i: &mut &str) -> PResult<Expr> {
+fn mem_expr(i: &mut &str) -> PResult<ValueExpr> {
     let expr = add_expr.parse_next(i)?;
     let set = opt(preceded(
         multispace0,
@@ -364,7 +364,7 @@ fn mem_expr(i: &mut &str) -> PResult<Expr> {
     .parse_next(i)?;
     Ok(match set {
         None => expr,
-        Some(s) => Expr::Mem(Box::new(expr), s),
+        Some(s) => ValueExpr::Mem(Box::new(expr), s),
     })
 }
 
@@ -396,15 +396,15 @@ fn rel_op(i: &mut &str) -> PResult<RelOp> {
     .parse_next(i)
 }
 
-fn add_expr(i: &mut &str) -> PResult<Expr> {
+fn add_expr(i: &mut &str) -> PResult<ValueExpr> {
     let head = mult_expr.parse_next(i)?;
-    let tail: Vec<(ArithOp, Expr)> = repeat(
+    let tail: Vec<(ArithOp, ValueExpr)> = repeat(
         0..,
         (delimited(multispace0, add_op, multispace0), mult_expr),
     )
     .parse_next(i)?;
     Ok(tail.into_iter().fold(head, |acc, (op, rhs)| {
-        Expr::BinOp(Box::new(acc), op, Box::new(rhs))
+        ValueExpr::BinOp(Box::new(acc), op, Box::new(rhs))
     }))
 }
 
@@ -412,15 +412,15 @@ fn add_op(i: &mut &str) -> PResult<ArithOp> {
     alt(('+'.value(ArithOp::Add), '-'.value(ArithOp::Sub))).parse_next(i)
 }
 
-fn mult_expr(i: &mut &str) -> PResult<Expr> {
+fn mult_expr(i: &mut &str) -> PResult<ValueExpr> {
     let head = unary_expr.parse_next(i)?;
-    let tail: Vec<(ArithOp, Expr)> = repeat(
+    let tail: Vec<(ArithOp, ValueExpr)> = repeat(
         0..,
         (delimited(multispace0, mult_op, multispace0), unary_expr),
     )
     .parse_next(i)?;
     Ok(tail.into_iter().fold(head, |acc, (op, rhs)| {
-        Expr::BinOp(Box::new(acc), op, Box::new(rhs))
+        ValueExpr::BinOp(Box::new(acc), op, Box::new(rhs))
     }))
 }
 
@@ -433,21 +433,21 @@ fn mult_op(i: &mut &str) -> PResult<ArithOp> {
     .parse_next(i)
 }
 
-fn unary_expr(i: &mut &str) -> PResult<Expr> {
+fn unary_expr(i: &mut &str) -> PResult<ValueExpr> {
     let marks: Vec<bool> = repeat(0.., alt(('-'.value(true), '+'.value(false)))).parse_next(i)?;
     let negate = marks.into_iter().fold(false, |acc, m| acc ^ m);
     let base = base_expr.parse_next(i)?;
     Ok(if negate {
-        Expr::Neg(Box::new(base))
+        ValueExpr::Neg(Box::new(base))
     } else {
         base
     })
 }
 
-fn base_expr(i: &mut &str) -> PResult<Expr> {
+fn base_expr(i: &mut &str) -> PResult<ValueExpr> {
     alt((
-        dec_int::<_, i64, _>.map(Expr::Lit),
-        preceded('?', id).map(Expr::Var),
+        dec_int::<_, i64, _>.map(ValueExpr::Lit),
+        preceded('?', id).map(ValueExpr::Var),
         delimited('(', delimited(multispace0, add_expr, multispace0), ')'),
     ))
     .parse_next(i)
@@ -473,14 +473,14 @@ mod tests {
     #[case::num_i64_min("-9223372036854775808", ValueAst::Lit(i64::MIN))]
     #[case::set("{0,1,2}", ValueAst::Set(Box::new(vec![0, 1, 2])))]
     #[case::set_spaced("{ 0, 1 ,2}", ValueAst::Set(Box::new(vec![0, 1, 2])))]
-    #[case::sum("1+2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Add, Box::new(Expr::Lit(2))))))]
-    #[case::sum_spaced("1 + 2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Add, Box::new(Expr::Lit(2))))))]
-    #[case::diff("1-2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Sub, Box::new(Expr::Lit(2))))))]
-    #[case::diff_spaced("1 - 2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Sub, Box::new(Expr::Lit(2))))))]
-    #[case::mult("1*2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Mul, Box::new(Expr::Lit(2))))))]
-    #[case::mult_spaced("1 * 2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Mul, Box::new(Expr::Lit(2))))))]
-    #[case::div("2/2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Div, Box::new(Expr::Lit(2))))))]
-    #[case::div_spaced("2 / 2", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Div, Box::new(Expr::Lit(2))))))]
+    #[case::sum("1+2", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(1)), ArithOp::Add, Box::new(ValueExpr::Lit(2))))))]
+    #[case::sum_spaced("1 + 2", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(1)), ArithOp::Add, Box::new(ValueExpr::Lit(2))))))]
+    #[case::diff("1-2", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(1)), ArithOp::Sub, Box::new(ValueExpr::Lit(2))))))]
+    #[case::diff_spaced("1 - 2", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(1)), ArithOp::Sub, Box::new(ValueExpr::Lit(2))))))]
+    #[case::mult("1*2", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(1)), ArithOp::Mul, Box::new(ValueExpr::Lit(2))))))]
+    #[case::mult_spaced("1 * 2", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(1)), ArithOp::Mul, Box::new(ValueExpr::Lit(2))))))]
+    #[case::div("2/2", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Div, Box::new(ValueExpr::Lit(2))))))]
+    #[case::div_spaced("2 / 2", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Div, Box::new(ValueExpr::Lit(2))))))]
     #[case::var("?h", ValueAst::Ref("h".to_string()))]
     #[case::var_2char("?ha", ValueAst::Ref("ha".to_string()))]
     #[case::var_number("?h1", ValueAst::Ref("h1".to_string()))]
@@ -490,17 +490,17 @@ mod tests {
     #[case::bind_bare("?h :: {1,2}", ValueAst::bind("h", vec![1, 2]))]
     #[case::bind_paren("(?h :: {1,2})", ValueAst::bind("h", vec![1, 2]))]
     #[case::bind_paren_paren("((?h :: {1,2}))", ValueAst::bind("h", vec![1, 2]))]
-    #[case::paren_expr_mem_in_and("(?a :: {0}) & 0 <= 0", ValueAst::Expr(Box::new(Expr::And(vec![
-        Expr::Mem(Box::new(Expr::Var("a".to_string())), vec![0]),
-        Expr::Rel(Box::new(Expr::Lit(0)), RelOp::Le, Box::new(Expr::Lit(0))),
+    #[case::paren_expr_mem_in_and("(?a :: {0}) & 0 <= 0", ValueAst::Expr(Box::new(ValueExpr::And(vec![
+        ValueExpr::Mem(Box::new(ValueExpr::Var("a".to_string())), vec![0]),
+        ValueExpr::Rel(Box::new(ValueExpr::Lit(0)), RelOp::Le, Box::new(ValueExpr::Lit(0))),
     ]))))]
-    #[case::membership("?h + 0 :: {0,1}", ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::BinOp(Box::new(Expr::Var("h".to_string())), ArithOp::Add, Box::new(Expr::Lit(0)))), vec![0, 1]))))]
-    #[case::double_neg("--0", ValueAst::Expr(Box::new(Expr::Lit(0))))]
-    #[case::not_and_precedence("! ?h == 0 & ?v == 1", ValueAst::Expr(Box::new(Expr::And(vec![
-        Expr::Not(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Eq, Box::new(Expr::Lit(0))))),
-        Expr::Rel(Box::new(Expr::Var("v".to_string())), RelOp::Eq, Box::new(Expr::Lit(1))),
+    #[case::membership("?h + 0 :: {0,1}", ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".to_string())), ArithOp::Add, Box::new(ValueExpr::Lit(0)))), vec![0, 1]))))]
+    #[case::double_neg("--0", ValueAst::Expr(Box::new(ValueExpr::Lit(0))))]
+    #[case::not_and_precedence("! ?h == 0 & ?v == 1", ValueAst::Expr(Box::new(ValueExpr::And(vec![
+        ValueExpr::Not(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Eq, Box::new(ValueExpr::Lit(0))))),
+        ValueExpr::Rel(Box::new(ValueExpr::Var("v".to_string())), RelOp::Eq, Box::new(ValueExpr::Lit(1))),
     ]))))]
-    #[case::paren_arith("(0 + 1) * 1", ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::BinOp(Box::new(Expr::Lit(0)), ArithOp::Add, Box::new(Expr::Lit(1)))), ArithOp::Mul, Box::new(Expr::Lit(1))))))]
+    #[case::paren_arith("(0 + 1) * 1", ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(0)), ArithOp::Add, Box::new(ValueExpr::Lit(1)))), ArithOp::Mul, Box::new(ValueExpr::Lit(1))))))]
     fn test_value(#[case] input: &str, #[case] expected: ValueAst) {
         let result = value.parse(input);
         assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", input, result.clone().unwrap_err());
@@ -543,38 +543,38 @@ mod tests {
     #[case::lit_neg(ValueAst::Lit(-3), "-3")]
     #[case::set(ValueAst::Set(Box::new(vec![0, 1, 2])), "{0,1,2}")]
     #[case::set_single(ValueAst::Set(Box::new(vec![5])), "{5}")]
-    #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Lit(7))), "7")]
-    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".into()))), "?h")]
-    #[case::expr_neg(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))), "-?x")]
-    #[case::expr_add(ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(1)), ArithOp::Add, Box::new(Expr::Lit(2))))), "1 + 2")]
-    #[case::expr_mul(ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(3)), ArithOp::Mul, Box::new(Expr::Var("h".into()))))), "3 * ?h")]
-    #[case::expr_rel(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))), "?h == 0")]
-    #[case::expr_mem(ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".into())), vec![0, 1, 2]))), "?h :: {0,1,2}")]
-    #[case::expr_not(ValueAst::Expr(Box::new(Expr::Not(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))))), "!?h == 0")]
-    #[case::expr_and(ValueAst::Expr(Box::new(Expr::And(vec![
-        Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))),
-        Expr::Rel(Box::new(Expr::Var("v".into())), RelOp::Eq, Box::new(Expr::Lit(1))),
+    #[case::expr_lit(ValueAst::Expr(Box::new(ValueExpr::Lit(7))), "7")]
+    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("h".into()))), "?h")]
+    #[case::expr_neg(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))), "-?x")]
+    #[case::expr_add(ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(1)), ArithOp::Add, Box::new(ValueExpr::Lit(2))))), "1 + 2")]
+    #[case::expr_mul(ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(3)), ArithOp::Mul, Box::new(ValueExpr::Var("h".into()))))), "3 * ?h")]
+    #[case::expr_rel(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Eq, Box::new(ValueExpr::Lit(0))))), "?h == 0")]
+    #[case::expr_mem(ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".into())), vec![0, 1, 2]))), "?h :: {0,1,2}")]
+    #[case::expr_not(ValueAst::Expr(Box::new(ValueExpr::Not(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Eq, Box::new(ValueExpr::Lit(0))))))), "!?h == 0")]
+    #[case::expr_and(ValueAst::Expr(Box::new(ValueExpr::And(vec![
+        ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Eq, Box::new(ValueExpr::Lit(0))),
+        ValueExpr::Rel(Box::new(ValueExpr::Var("v".into())), RelOp::Eq, Box::new(ValueExpr::Lit(1))),
     ]))), "?h == 0 & ?v == 1")]
-    #[case::expr_or(ValueAst::Expr(Box::new(Expr::Or(vec![
-        Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))),
-        Expr::Rel(Box::new(Expr::Var("v".into())), RelOp::Eq, Box::new(Expr::Lit(1))),
+    #[case::expr_or(ValueAst::Expr(Box::new(ValueExpr::Or(vec![
+        ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Eq, Box::new(ValueExpr::Lit(0))),
+        ValueExpr::Rel(Box::new(ValueExpr::Var("v".into())), RelOp::Eq, Box::new(ValueExpr::Lit(1))),
     ]))), "?h == 0 | ?v == 1")]
     // And of Or: Or children need parens because And binds tighter.
-    #[case::and_of_or(ValueAst::Expr(Box::new(Expr::And(vec![
-        Expr::Or(vec![Expr::Var("a".into()), Expr::Var("b".into())]),
-        Expr::Var("c".into()),
+    #[case::and_of_or(ValueAst::Expr(Box::new(ValueExpr::And(vec![
+        ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into())]),
+        ValueExpr::Var("c".into()),
     ]))), "(?a | ?b) & ?c")]
     // Subtraction is non-right-associative at same precedence.
-    #[case::sub_right_nests(ValueAst::Expr(Box::new(Expr::BinOp(
-        Box::new(Expr::Lit(1)),
+    #[case::sub_right_nests(ValueAst::Expr(Box::new(ValueExpr::BinOp(
+        Box::new(ValueExpr::Lit(1)),
         ArithOp::Sub,
-        Box::new(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Sub, Box::new(Expr::Lit(3)))),
+        Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Sub, Box::new(ValueExpr::Lit(3)))),
     ))), "1 - (2 - 3)")]
     // (0 + 1) * 1 — left child of Mul is Add (lower prec) → parens needed.
-    #[case::mul_of_add(ValueAst::Expr(Box::new(Expr::BinOp(
-        Box::new(Expr::BinOp(Box::new(Expr::Lit(0)), ArithOp::Add, Box::new(Expr::Lit(1)))),
+    #[case::mul_of_add(ValueAst::Expr(Box::new(ValueExpr::BinOp(
+        Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(0)), ArithOp::Add, Box::new(ValueExpr::Lit(1)))),
         ArithOp::Mul,
-        Box::new(Expr::Lit(1)),
+        Box::new(ValueExpr::Lit(1)),
     ))), "(0 + 1) * 1")]
     #[case::bind(ValueAst::bind("n", vec![1, 2, 3]), "?n :: {1,2,3}")]
     #[case::bind_single(ValueAst::bind("u", vec![0]), "?u :: {0}")]
@@ -616,9 +616,9 @@ mod tests {
     #[case::lit_neg(ValueAst::Lit(-2), Edn::Int(-2))]
     #[case::undetermined(ValueAst::Undetermined, Edn::Keyword(EdnKeyword::owned("undetermined".into())))]
     #[case::set(ValueAst::Set(Box::new(vec![1, 2, 3])), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
-    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".into()))), Edn::Str(Cow::Borrowed("?h")))]
+    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("h".into()))), Edn::Str(Cow::Borrowed("?h")))]
     #[case::expr_rel(
-        ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))),
+        ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Eq, Box::new(ValueExpr::Lit(0))))),
         Edn::Str(Cow::Borrowed("?h == 0")),
     )]
     #[case::bind(ValueAst::bind("n", vec![1, 2, 3]), Edn::Str(Cow::Borrowed("?n :: {1,2,3}")))]
@@ -638,7 +638,7 @@ mod tests {
     #[case::str_set(Edn::Str(Cow::Borrowed("{1,2}")), ValueAst::Set(Box::new(vec![1, 2])))]
     #[case::str_expr(
         Edn::Str(Cow::Borrowed("?h == 0")),
-        ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Eq, Box::new(Expr::Lit(0))))),
+        ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Eq, Box::new(ValueExpr::Lit(0))))),
     )]
     #[case::str_bind(Edn::Str(Cow::Borrowed("(?n :: {1,2,3})")), ValueAst::bind("n", vec![1, 2, 3]))]
     #[case::str_reference(Edn::Str(Cow::Borrowed("(?h)")), ValueAst::reference("h"))]
@@ -679,7 +679,7 @@ mod tests {
     #[case::lit(ValueAst::Lit(3))]
     #[case::undetermined(ValueAst::Undetermined)]
     #[case::set(ValueAst::Set(Box::new(vec![1, 2, 3])))]
-    #[case::expr(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))))))]
+    #[case::expr(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))))]
     #[case::bind(ValueAst::bind("n", vec![1, 2, 3]))]
     #[case::reference(ValueAst::reference("h"))]
     fn test_value_dsl_edn_roundtrip(#[case] v: ValueAst) {

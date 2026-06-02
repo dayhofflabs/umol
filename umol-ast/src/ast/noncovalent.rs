@@ -1,8 +1,8 @@
 //! Noncovalent bond AST.
 
-use super::constraint::{NoncovalentBondConstraint, NoncovalentBondConstraints};
 use umol_ast_macros::Lattice;
 
+use super::constraint::{NoncovalentBondConstraint, NoncovalentBondConstraints};
 use super::traits::Lattice;
 
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an

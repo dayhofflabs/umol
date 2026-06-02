@@ -174,7 +174,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::value::Expr;
+    use crate::ast::value::ValueExpr;
 
     #[rustfmt::skip]
     #[rstest]
@@ -366,11 +366,13 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_ast_simplify_values() {
         let mut bond = MulticenterBondAst {
-            electrons: vec![ValueAst::Expr(Box::new(Expr::Lit(1)))],
-            charge: ValueAst::Expr(Box::new(Expr::Lit(0))),
+            electrons: vec![ValueAst::Expr(Box::new(ValueExpr::Lit(1)))],
+            charge: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
             spin: SpinStateAst::default(),
             constraints: MulticenterBondConstraints::from(
-                MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(Expr::Lit(2)))),
+                MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(ValueExpr::Lit(
+                    2,
+                )))),
             ),
         };
         bond.simplify_values();

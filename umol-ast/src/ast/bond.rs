@@ -244,13 +244,13 @@ mod tests {
 
     #[rstest]
     fn test_bond_ast_simplify_values() {
-        use super::super::value::Expr;
+        use super::super::value::ValueExpr;
         let mut bond = BondAst {
-            order: ValueAst::Expr(Box::new(Expr::Lit(2))),
-            charge: ValueAst::Expr(Box::new(Expr::Lit(0))),
+            order: ValueAst::Expr(Box::new(ValueExpr::Lit(2))),
+            charge: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
             spin: SpinStateAst::default(),
             constraints: BondConstraints::from(BondConstraint::RingSize(ValueAst::Expr(Box::new(
-                Expr::Lit(6),
+                ValueExpr::Lit(6),
             )))),
         };
         bond.simplify_values();

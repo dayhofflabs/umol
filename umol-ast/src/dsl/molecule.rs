@@ -318,8 +318,12 @@ pub(super) fn read_molecule_input(
             "bonds" => mi.bonds = read_vec(de, read_bond_entry)?,
             "dative-bonds" => mi.dative_bonds = read_vec(de, read_dative_bond_entry)?,
             "aromatic-systems" => mi.aromatic_systems = read_vec(de, read_aromatic_system_entry)?,
-            "multicenter-bonds" => mi.multicenter_bonds = read_vec(de, read_multicenter_bond_entry)?,
-            "noncovalent-bonds" => mi.noncovalent_bonds = read_vec(de, read_noncovalent_bond_entry)?,
+            "multicenter-bonds" => {
+                mi.multicenter_bonds = read_vec(de, read_multicenter_bond_entry)?
+            }
+            "noncovalent-bonds" => {
+                mi.noncovalent_bonds = read_vec(de, read_noncovalent_bond_entry)?
+            }
             "atom-aliases" => mi.atom_aliases = read_atom_aliases(de)?,
             "constraints" => mi.constraints = read_constraints_dsl(de)?,
             "guards" => {
@@ -681,10 +685,16 @@ fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
         map.insert(Edn::keyword("aromatic-systems"), render_aromatic(ast, meta));
     }
     if ast.multicenter_bonds().count() > 0 {
-        map.insert(Edn::keyword("multicenter-bonds"), render_multicenter(ast, meta));
+        map.insert(
+            Edn::keyword("multicenter-bonds"),
+            render_multicenter(ast, meta),
+        );
     }
     if ast.noncovalent_bonds().count() > 0 {
-        map.insert(Edn::keyword("noncovalent-bonds"), render_noncovalent(ast, meta));
+        map.insert(
+            Edn::keyword("noncovalent-bonds"),
+            render_noncovalent(ast, meta),
+        );
     }
     if meta.has_atom_aliases() {
         map.insert(Edn::keyword("atom-aliases"), render_atom_aliases(meta));
@@ -2203,9 +2213,10 @@ mod tests {
 
     #[rstest]
     fn test_molecule_dsl_aromatic_atom_out_of_range_errors() {
-        let edn =
-            read_string(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 5] :type ""}]}"##)
-                .unwrap();
+        let edn = read_string(
+            r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 5] :type ""}]}"##,
+        )
+        .unwrap();
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }

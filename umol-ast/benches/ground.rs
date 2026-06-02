@@ -9,15 +9,15 @@
 //!   `ValueAst::Expr` patterns (`Rel`, `Mem`). Simulates matcher workloads
 //!   where `is_arithmetic()` short-circuits.
 //! - `arith_expr_heavy`: pathological upper bound — every numeric field on
-//!   every atom carries an arithmetic `Expr` of depth 3. Exercises the
+//!   every atom carries an arithmetic `ValueExpr` of depth 3. Exercises the
 //!   evaluator walk.
 
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
-    ArithOp, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, Expr, IntoAst, IsotopeMassAst,
-    MoleculeAst, RelOp, SpinStateAst, ValueAst,
+    ArithOp, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst,
+    MoleculeAst, RelOp, SpinStateAst, ValueAst, ValueExpr,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_edn::FromEdn;
@@ -36,17 +36,17 @@ fn indole_ground() -> MoleculeAst {
 
 fn indole_with_bool_expr_fields() -> MoleculeAst {
     // Realistic pattern: take the ground indole, then splat a few atom
-    // fields with boolean-domain Expr patterns (which short-circuit via
+    // fields with boolean-domain ValueExpr patterns (which short-circuit via
     // is_arithmetic()).
     let mut ast = indole_ground();
     let mut b = ast.edit();
-    b.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Box::new(Expr::Rel(
-        Box::new(Expr::Var("c".into())),
+    b.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Box::new(ValueExpr::Rel(
+        Box::new(ValueExpr::Var("c".into())),
         RelOp::Eq,
-        Box::new(Expr::Lit(0)),
+        Box::new(ValueExpr::Lit(0)),
     )));
-    b.atom_mut(AtomId(2)).ast.lone_pairs = ValueAst::Expr(Box::new(Expr::Mem(
-        Box::new(Expr::Var("n".into())),
+    b.atom_mut(AtomId(2)).ast.lone_pairs = ValueAst::Expr(Box::new(ValueExpr::Mem(
+        Box::new(ValueExpr::Var("n".into())),
         vec![0, 1, 2],
     )));
     ast = b.build();
@@ -54,26 +54,26 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
 }
 
 fn arith_expr_heavy() -> MoleculeAst {
-    // Upper bound: every numeric field is an arithmetic Expr of depth 3.
+    // Upper bound: every numeric field is an arithmetic ValueExpr of depth 3.
     // The tree is constant-valued (evaluator can fold it), so semantic
     // is_ground will walk the full tree; syntactic is_ground fails on the
-    // first `Expr` encountered.
+    // first `ValueExpr` encountered.
     let arith = || {
-        ValueAst::Expr(Box::new(Expr::BinOp(
-            Box::new(Expr::BinOp(
-                Box::new(Expr::Lit(2)),
+        ValueAst::Expr(Box::new(ValueExpr::BinOp(
+            Box::new(ValueExpr::BinOp(
+                Box::new(ValueExpr::Lit(2)),
                 ArithOp::Add,
-                Box::new(Expr::Lit(3)),
+                Box::new(ValueExpr::Lit(3)),
             )),
             ArithOp::Mul,
-            Box::new(Expr::Neg(Box::new(Expr::Lit(1)))),
+            Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(1)))),
         )))
     };
     let make_atom = |el: Element| AtomAst {
         element: ElementAst::Lit(el),
         isotope_mass: IsotopeMassAst::Lit(12),
         charge: arith(),
-        implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))),
+        implicit_hydrogens: ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(1))))),
         lone_pairs: arith(),
         spin: SpinStateAst {
             unpaired: arith(),

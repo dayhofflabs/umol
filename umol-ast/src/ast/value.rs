@@ -8,7 +8,7 @@ use umol_shared::spin::SpinMultiplicity;
 use super::error::EvaluationError;
 use super::traits::{AsLit, Lattice};
 
-/// Variable bindings used by [`Expr::evaluate`] and [`Expr::evaluate_bool`].
+/// Variable bindings used by [`ValueExpr::evaluate`] and [`ValueExpr::evaluate_bool`].
 pub type Bindings = HashMap<String, i64>;
 
 /// Integer-valued atom/bond field: undetermined (pattern wildcard), a
@@ -21,7 +21,7 @@ pub enum ValueAst {
     Undetermined,
     Lit(i64),
     Set(Box<Vec<i64>>),
-    Expr(Box<Expr>),
+    Expr(Box<ValueExpr>),
     Bind(Box<(String, Vec<i64>)>),
     Ref(String),
 }
@@ -39,7 +39,7 @@ impl ValueAst {
         Self::Set(Box::new(values))
     }
 
-    pub fn expr(e: Expr) -> Self {
+    pub fn expr(e: ValueExpr) -> Self {
         Self::Expr(Box::new(e))
     }
 
@@ -83,29 +83,29 @@ impl ValueAst {
     /// Variables in the pattern are bound to `value`. For boolean expressions the
     /// predicate is evaluated with those bindings; for arithmetic expressions the
     /// result is compared to `value`
-    /// Reduce to canonical form by lifting trivial `Expr` wrappers and
+    /// Reduce to canonical form by lifting trivial `ValueExpr` wrappers and
     /// recursively simplifying any inner expression. Specifically:
     ///
-    /// - `Expr(Expr::Lit(n))` → `Lit(n)`
-    /// - `Expr(Expr::Neg(Expr::Lit(n)))` → `Lit(-n)` when `-n` does not
+    /// - `ValueExpr(ValueExpr::Lit(n))` → `Lit(n)`
+    /// - `ValueExpr(ValueExpr::Neg(ValueExpr::Lit(n)))` → `Lit(-n)` when `-n` does not
     ///   overflow `i64` (otherwise the wrapped form is preserved)
-    /// - `Expr(Expr::Var(id))` → `Ref(id)` (top-level bind reference)
-    /// - `Expr(Expr::Mem(Var(id), set))` → `Bind(id, set)` (named domain
+    /// - `ValueExpr(ValueExpr::Var(id))` → `Ref(id)` (top-level bind reference)
+    /// - `ValueExpr(ValueExpr::Mem(Var(id), set))` → `Bind(id, set)` (named domain
     ///   constraint at top level)
-    /// - `Expr(e)` for any other shape → `Expr(e.simplify())`
+    /// - `ValueExpr(e)` for any other shape → `ValueExpr(e.simplify())`
     /// - `Lit` / `Set` / `Undetermined` / `Bind` / `Ref` → unchanged
     pub fn simplify(self) -> Self {
         match self {
             Self::Expr(e) => match e.simplify() {
-                Expr::Lit(n) => Self::Lit(n),
-                Expr::Neg(inner) => match *inner {
-                    Expr::Lit(n) => Self::Lit(-n),
-                    other => Self::Expr(Box::new(Expr::Neg(Box::new(other)))),
+                ValueExpr::Lit(n) => Self::Lit(n),
+                ValueExpr::Neg(inner) => match *inner {
+                    ValueExpr::Lit(n) => Self::Lit(-n),
+                    other => Self::Expr(Box::new(ValueExpr::Neg(Box::new(other)))),
                 },
-                Expr::Var(id) => Self::Ref(id),
-                Expr::Mem(inner, set) => match *inner {
-                    Expr::Var(id) => Self::Bind(Box::new((id, set))),
-                    other => Self::Expr(Box::new(Expr::Mem(Box::new(other), set))),
+                ValueExpr::Var(id) => Self::Ref(id),
+                ValueExpr::Mem(inner, set) => match *inner {
+                    ValueExpr::Var(id) => Self::Bind(Box::new((id, set))),
+                    other => Self::Expr(Box::new(ValueExpr::Mem(Box::new(other), set))),
                 },
                 other => Self::Expr(Box::new(other)),
             },
@@ -173,28 +173,28 @@ pub(crate) fn set_is_ground(s: &[i64]) -> bool {
 }
 
 /// Recursively bind every variable in `expr` to `value`
-fn collect_bindings(expr: &Expr, value: i64, bindings: &mut Bindings) {
+fn collect_bindings(expr: &ValueExpr, value: i64, bindings: &mut Bindings) {
     match expr {
-        Expr::Var(name) => {
+        ValueExpr::Var(name) => {
             bindings.insert(name.clone(), value);
         }
-        Expr::Neg(e) => collect_bindings(e, value, bindings),
-        Expr::BinOp(l, _, r) => {
+        ValueExpr::Neg(e) => collect_bindings(e, value, bindings),
+        ValueExpr::BinOp(l, _, r) => {
             collect_bindings(l, value, bindings);
             collect_bindings(r, value, bindings);
         }
-        Expr::Mem(e, _) => collect_bindings(e, value, bindings),
-        Expr::Rel(l, _, r) => {
+        ValueExpr::Mem(e, _) => collect_bindings(e, value, bindings),
+        ValueExpr::Rel(l, _, r) => {
             collect_bindings(l, value, bindings);
             collect_bindings(r, value, bindings);
         }
-        Expr::Not(e) => collect_bindings(e, value, bindings),
-        Expr::And(exprs) | Expr::Or(exprs) => {
+        ValueExpr::Not(e) => collect_bindings(e, value, bindings),
+        ValueExpr::And(exprs) | ValueExpr::Or(exprs) => {
             for e in exprs {
                 collect_bindings(e, value, bindings);
             }
         }
-        Expr::Lit(_) => {}
+        ValueExpr::Lit(_) => {}
     }
 }
 
@@ -221,12 +221,12 @@ impl Lattice for ValueAst {
     }
 
     /// The pattern denotes a single concrete integer. Semantic, not
-    /// syntactic: `Expr` that folds to a constant is ground, and a
+    /// syntactic: `ValueExpr` that folds to a constant is ground, and a
     /// `Set` of a single value (regardless of duplicates) is ground.
     ///
     /// Fast path — `Lit` and `Undetermined` dispatch with two tag compares
     /// so the common case (a fully-lowered ground molecule) doesn't pay
-    /// for the `Set`/`Expr` logic.
+    /// for the `Set`/`ValueExpr` logic.
     #[inline]
     fn is_ground(&self) -> bool {
         match self {
@@ -315,7 +315,7 @@ impl Lattice for ValueAst {
     }
 
     /// Pattern matches target iff every integer target admits is also
-    /// admitted by pattern (superset semantics). `Expr` and `Ref` targets
+    /// admitted by pattern (superset semantics). `ValueExpr` and `Ref` targets
     /// cannot be certified generically and are rejected. `Bind` is treated
     /// as a `Set` of its admissible values on either side.
     fn matches(&self, target: &Self) -> bool {
@@ -400,8 +400,8 @@ impl From<Vec<i64>> for ValueAst {
     }
 }
 
-impl From<Expr> for ValueAst {
-    fn from(e: Expr) -> Self {
+impl From<ValueExpr> for ValueAst {
+    fn from(e: ValueExpr) -> Self {
         Self::Expr(Box::new(e))
     }
 }
@@ -411,23 +411,23 @@ impl From<Expr> for ValueAst {
 /// literal set, including bound variables (`Var`), membership tests
 /// (`Mem`), relational comparisons (`Rel`), and boolean combinators.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Expr {
+pub enum ValueExpr {
     Lit(i64),
     Var(String),
-    Neg(Box<Expr>),
-    BinOp(Box<Expr>, ArithOp, Box<Expr>),
-    Mem(Box<Expr>, Vec<i64>),
-    Rel(Box<Expr>, RelOp, Box<Expr>),
-    Not(Box<Expr>),
-    And(Vec<Expr>),
-    Or(Vec<Expr>),
+    Neg(Box<ValueExpr>),
+    BinOp(Box<ValueExpr>, ArithOp, Box<ValueExpr>),
+    Mem(Box<ValueExpr>, Vec<i64>),
+    Rel(Box<ValueExpr>, RelOp, Box<ValueExpr>),
+    Not(Box<ValueExpr>),
+    And(Vec<ValueExpr>),
+    Or(Vec<ValueExpr>),
 }
 
-impl Expr {
+impl ValueExpr {
     /// Reduce to canonical form. Recursively simplifies children, then
     /// applies one round of structural folding:
     ///
-    /// - `Lit(n)` for `n < 0` → `Neg(Lit(-n))`. Inside an `Expr` context
+    /// - `Lit(n)` for `n < 0` → `Neg(Lit(-n))`. Inside an `ValueExpr` context
     ///   the parser always produces `Neg(Lit(n))` for `-n`; only the
     ///   ValueAst-level `Lit` slot reads signed integers directly.
     /// - `Neg(Neg(e))` → `e`
@@ -441,32 +441,34 @@ impl Expr {
     /// Idempotent. Mirrors the parser's normalization.
     pub fn simplify(self) -> Self {
         match self {
-            Expr::Lit(n) if n < 0 => Expr::Neg(Box::new(Expr::Lit(-n))),
-            Expr::Lit(_) | Expr::Var(_) => self,
-            Expr::Neg(inner) => match inner.simplify() {
-                Expr::Neg(grand) => *grand,
-                other => Expr::Neg(Box::new(other)),
+            ValueExpr::Lit(n) if n < 0 => ValueExpr::Neg(Box::new(ValueExpr::Lit(-n))),
+            ValueExpr::Lit(_) | ValueExpr::Var(_) => self,
+            ValueExpr::Neg(inner) => match inner.simplify() {
+                ValueExpr::Neg(grand) => *grand,
+                other => ValueExpr::Neg(Box::new(other)),
             },
-            Expr::BinOp(l, op, r) => {
-                Expr::BinOp(Box::new(l.simplify()), op, Box::new(r.simplify()))
+            ValueExpr::BinOp(l, op, r) => {
+                ValueExpr::BinOp(Box::new(l.simplify()), op, Box::new(r.simplify()))
             }
-            Expr::Mem(e, set) => Expr::Mem(Box::new(e.simplify()), set),
-            Expr::Rel(l, op, r) => Expr::Rel(Box::new(l.simplify()), op, Box::new(r.simplify())),
-            Expr::Not(e) => Expr::Not(Box::new(e.simplify())),
-            Expr::And(exprs) => {
-                let mut flat = flatten_simplified(exprs, |e| matches!(e, Expr::And(_)));
+            ValueExpr::Mem(e, set) => ValueExpr::Mem(Box::new(e.simplify()), set),
+            ValueExpr::Rel(l, op, r) => {
+                ValueExpr::Rel(Box::new(l.simplify()), op, Box::new(r.simplify()))
+            }
+            ValueExpr::Not(e) => ValueExpr::Not(Box::new(e.simplify())),
+            ValueExpr::And(exprs) => {
+                let mut flat = flatten_simplified(exprs, |e| matches!(e, ValueExpr::And(_)));
                 if flat.len() == 1 {
                     flat.pop().unwrap()
                 } else {
-                    Expr::And(flat)
+                    ValueExpr::And(flat)
                 }
             }
-            Expr::Or(exprs) => {
-                let mut flat = flatten_simplified(exprs, |e| matches!(e, Expr::Or(_)));
+            ValueExpr::Or(exprs) => {
+                let mut flat = flatten_simplified(exprs, |e| matches!(e, ValueExpr::Or(_)));
                 if flat.len() == 1 {
                     flat.pop().unwrap()
                 } else {
-                    Expr::Or(flat)
+                    ValueExpr::Or(flat)
                 }
             }
         }
@@ -475,7 +477,7 @@ impl Expr {
     pub fn is_arithmetic(&self) -> bool {
         matches!(
             self,
-            Expr::Lit(..) | Expr::Var(..) | Expr::Neg(..) | Expr::BinOp(..)
+            ValueExpr::Lit(..) | ValueExpr::Var(..) | ValueExpr::Neg(..) | ValueExpr::BinOp(..)
         )
     }
 
@@ -488,16 +490,16 @@ impl Expr {
     }
 
     /// Arithmetic evaluation. Returns `None` for free variables and type
-    /// mismatch (boolean-domain Expr). Uses standard Rust arithmetic — `i64`
+    /// mismatch (boolean-domain ValueExpr). Uses standard Rust arithmetic — `i64`
     /// overflow follows debug-panic / release-wrap semantics, and division
     /// or remainder by zero panics. Intended as the foundation of
-    /// [`Expr::is_ground`]; for error-reporting callers use [`Expr::evaluate`].
+    /// [`ValueExpr::is_ground`]; for error-reporting callers use [`ValueExpr::evaluate`].
     pub fn evaluate_checked(&self, vars: &Bindings) -> Option<i64> {
         match self {
-            Expr::Lit(n) => Some(*n),
-            Expr::Var(name) => vars.get(name).copied(),
-            Expr::Neg(e) => Some(-e.evaluate_checked(vars)?),
-            Expr::BinOp(l, op, r) => {
+            ValueExpr::Lit(n) => Some(*n),
+            ValueExpr::Var(name) => vars.get(name).copied(),
+            ValueExpr::Neg(e) => Some(-e.evaluate_checked(vars)?),
+            ValueExpr::BinOp(l, op, r) => {
                 let l = l.evaluate_checked(vars)?;
                 let r = r.evaluate_checked(vars)?;
                 Some(match op {
@@ -508,7 +510,11 @@ impl Expr {
                     ArithOp::Rem => l % r,
                 })
             }
-            Expr::Rel(..) | Expr::Mem(..) | Expr::Not(..) | Expr::And(..) | Expr::Or(..) => None,
+            ValueExpr::Rel(..)
+            | ValueExpr::Mem(..)
+            | ValueExpr::Not(..)
+            | ValueExpr::And(..)
+            | ValueExpr::Or(..) => None,
         }
     }
 
@@ -518,13 +524,13 @@ impl Expr {
     /// expression (`Rel`, `Mem`, `Not`, `And`, `Or`)
     pub fn evaluate(&self, vars: &Bindings) -> Result<i64, EvaluationError> {
         match self {
-            Expr::Lit(n) => Ok(*n),
-            Expr::Var(name) => vars
+            ValueExpr::Lit(n) => Ok(*n),
+            ValueExpr::Var(name) => vars
                 .get(name)
                 .copied()
                 .ok_or_else(|| EvaluationError::UnboundVariable(name.clone())),
-            Expr::Neg(e) => Ok(-e.evaluate(vars)?),
-            Expr::BinOp(l, op, r) => {
+            ValueExpr::Neg(e) => Ok(-e.evaluate(vars)?),
+            ValueExpr::BinOp(l, op, r) => {
                 let l = l.evaluate(vars)?;
                 let r = r.evaluate(vars)?;
                 match op {
@@ -547,9 +553,11 @@ impl Expr {
                     }
                 }
             }
-            Expr::Rel(..) | Expr::Mem(..) | Expr::Not(..) | Expr::And(..) | Expr::Or(..) => {
-                Err(EvaluationError::TypeMismatch)
-            }
+            ValueExpr::Rel(..)
+            | ValueExpr::Mem(..)
+            | ValueExpr::Not(..)
+            | ValueExpr::And(..)
+            | ValueExpr::Or(..) => Err(EvaluationError::TypeMismatch),
         }
     }
 
@@ -559,7 +567,7 @@ impl Expr {
     /// expression (`Lit`, `Var`, `Neg`, `BinOp`)
     pub fn evaluate_bool(&self, vars: &Bindings) -> Result<bool, EvaluationError> {
         match self {
-            Expr::Rel(l, op, r) => {
+            ValueExpr::Rel(l, op, r) => {
                 let l = l.evaluate(vars)?;
                 let r = r.evaluate(vars)?;
                 Ok(match op {
@@ -570,9 +578,9 @@ impl Expr {
                     RelOp::Gt => l > r,
                 })
             }
-            Expr::Mem(e, set) => Ok(set.contains(&e.evaluate(vars)?)),
-            Expr::Not(e) => Ok(!e.evaluate_bool(vars)?),
-            Expr::And(exprs) => {
+            ValueExpr::Mem(e, set) => Ok(set.contains(&e.evaluate(vars)?)),
+            ValueExpr::Not(e) => Ok(!e.evaluate_bool(vars)?),
+            ValueExpr::And(exprs) => {
                 for e in exprs {
                     if !e.evaluate_bool(vars)? {
                         return Ok(false);
@@ -580,7 +588,7 @@ impl Expr {
                 }
                 Ok(true)
             }
-            Expr::Or(exprs) => {
+            ValueExpr::Or(exprs) => {
                 for e in exprs {
                     if e.evaluate_bool(vars)? {
                         return Ok(true);
@@ -588,7 +596,7 @@ impl Expr {
                 }
                 Ok(false)
             }
-            Expr::Lit(..) | Expr::Var(..) | Expr::Neg(..) | Expr::BinOp(..) => {
+            ValueExpr::Lit(..) | ValueExpr::Var(..) | ValueExpr::Neg(..) | ValueExpr::BinOp(..) => {
                 Err(EvaluationError::TypeMismatch)
             }
         }
@@ -599,13 +607,16 @@ impl Expr {
 /// `is_same_op` (i.e. an `Or` child of an `Or` parent, or `And` of `And`).
 /// One level of flattening is enough: each child has already been simplified,
 /// so its own children are themselves not same-op containers.
-fn flatten_simplified(exprs: Vec<Expr>, is_same_op: impl Fn(&Expr) -> bool) -> Vec<Expr> {
+fn flatten_simplified(
+    exprs: Vec<ValueExpr>,
+    is_same_op: impl Fn(&ValueExpr) -> bool,
+) -> Vec<ValueExpr> {
     let mut out = Vec::with_capacity(exprs.len());
     for child in exprs {
         let simplified = child.simplify();
         if is_same_op(&simplified) {
             match simplified {
-                Expr::And(inner) | Expr::Or(inner) => out.extend(inner),
+                ValueExpr::And(inner) | ValueExpr::Or(inner) => out.extend(inner),
                 _ => unreachable!("is_same_op rejects non-And/Or"),
             }
         } else {
@@ -615,7 +626,7 @@ fn flatten_simplified(exprs: Vec<Expr>, is_same_op: impl Fn(&Expr) -> bool) -> V
     out
 }
 
-/// Arithmetic operators for `Expr::BinOp`.
+/// Arithmetic operators for `ValueExpr::BinOp`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ArithOp {
     Add,
@@ -625,7 +636,7 @@ pub enum ArithOp {
     Rem,
 }
 
-/// Relational operators for `Expr::Rel`.
+/// Relational operators for `ValueExpr::Rel`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RelOp {
     Le,
@@ -653,15 +664,15 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(Expr::Lit(5), Bindings::new(), 5)]
-    #[case::var_bound(Expr::Var("x".to_string()), Bindings::from([("x".to_string(), 3)]), 3)]
-    #[case::neg(Expr::Neg(Box::new(Expr::Lit(3))), Bindings::new(), -3)]
-    #[case::add(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3))), Bindings::new(), 5)]
-    #[case::sub(Expr::BinOp(Box::new(Expr::Lit(5)), ArithOp::Sub, Box::new(Expr::Lit(3))), Bindings::new(), 2)]
-    #[case::mul(Expr::BinOp(Box::new(Expr::Lit(3)), ArithOp::Mul, Box::new(Expr::Lit(4))), Bindings::new(), 12)]
-    #[case::div(Expr::BinOp(Box::new(Expr::Lit(10)), ArithOp::Div, Box::new(Expr::Lit(3))), Bindings::new(), 3)]
-    #[case::rem(Expr::BinOp(Box::new(Expr::Lit(10)), ArithOp::Rem, Box::new(Expr::Lit(3))), Bindings::new(), 1)]
-    fn test_evaluate(#[case] expr: Expr, #[case] vars: Bindings, #[case] expected: i64) {
+    #[case::lit(ValueExpr::Lit(5), Bindings::new(), 5)]
+    #[case::var_bound(ValueExpr::Var("x".to_string()), Bindings::from([("x".to_string(), 3)]), 3)]
+    #[case::neg(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))), Bindings::new(), -3)]
+    #[case::add(ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Add, Box::new(ValueExpr::Lit(3))), Bindings::new(), 5)]
+    #[case::sub(ValueExpr::BinOp(Box::new(ValueExpr::Lit(5)), ArithOp::Sub, Box::new(ValueExpr::Lit(3))), Bindings::new(), 2)]
+    #[case::mul(ValueExpr::BinOp(Box::new(ValueExpr::Lit(3)), ArithOp::Mul, Box::new(ValueExpr::Lit(4))), Bindings::new(), 12)]
+    #[case::div(ValueExpr::BinOp(Box::new(ValueExpr::Lit(10)), ArithOp::Div, Box::new(ValueExpr::Lit(3))), Bindings::new(), 3)]
+    #[case::rem(ValueExpr::BinOp(Box::new(ValueExpr::Lit(10)), ArithOp::Rem, Box::new(ValueExpr::Lit(3))), Bindings::new(), 1)]
+    fn test_evaluate(#[case] expr: ValueExpr, #[case] vars: Bindings, #[case] expected: i64) {
         let result = expr.evaluate(&vars);
         assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", expr, result.clone().unwrap_err());
         assert_eq!(result.unwrap(), expected);
@@ -669,11 +680,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::var_unbound(Expr::Var("x".to_string()), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
-    #[case::div_zero(Expr::BinOp(Box::new(Expr::Lit(10)), ArithOp::Div, Box::new(Expr::Lit(0))), Bindings::new(), EvaluationError::DivisionByZero)]
-    #[case::rem_zero(Expr::BinOp(Box::new(Expr::Lit(10)), ArithOp::Rem, Box::new(Expr::Lit(0))), Bindings::new(), EvaluationError::DivisionByZero)]
-    #[case::type_mismatch(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(1))), Bindings::new(), EvaluationError::TypeMismatch)]
-    fn test_evaluate_invalid(#[case] expr: Expr, #[case] vars: Bindings, #[case] expected: EvaluationError) {
+    #[case::var_unbound(ValueExpr::Var("x".to_string()), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
+    #[case::div_zero(ValueExpr::BinOp(Box::new(ValueExpr::Lit(10)), ArithOp::Div, Box::new(ValueExpr::Lit(0))), Bindings::new(), EvaluationError::DivisionByZero)]
+    #[case::rem_zero(ValueExpr::BinOp(Box::new(ValueExpr::Lit(10)), ArithOp::Rem, Box::new(ValueExpr::Lit(0))), Bindings::new(), EvaluationError::DivisionByZero)]
+    #[case::type_mismatch(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(1))), Bindings::new(), EvaluationError::TypeMismatch)]
+    fn test_evaluate_invalid(#[case] expr: ValueExpr, #[case] vars: Bindings, #[case] expected: EvaluationError) {
         let result = expr.evaluate(&vars);
         assert!(result.is_err(), "{:?} should have failed, error: {:?}", expr, result.clone().unwrap_err());
         assert_eq!(result.unwrap_err(), expected);
@@ -681,26 +692,26 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::rel_eq_true(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(1))), Bindings::new(), true)]
-    #[case::rel_eq_false(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(2))), Bindings::new(), false)]
-    #[case::rel_lt_true(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Lt, Box::new(Expr::Lit(2))), Bindings::new(), true)]
-    #[case::rel_lt_false(Expr::Rel(Box::new(Expr::Lit(2)), RelOp::Lt, Box::new(Expr::Lit(1))), Bindings::new(), false)]
-    #[case::rel_le_true(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Le, Box::new(Expr::Lit(1))), Bindings::new(), true)]
-    #[case::rel_le_false(Expr::Rel(Box::new(Expr::Lit(2)), RelOp::Le, Box::new(Expr::Lit(1))), Bindings::new(), false)]
-    #[case::rel_gt_true(Expr::Rel(Box::new(Expr::Lit(2)), RelOp::Gt, Box::new(Expr::Lit(1))), Bindings::new(), true)]
-    #[case::rel_gt_false(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Gt, Box::new(Expr::Lit(2))), Bindings::new(), false)]
-    #[case::rel_ge_true(Expr::Rel(Box::new(Expr::Lit(2)), RelOp::Ge, Box::new(Expr::Lit(2))), Bindings::new(), true)]
-    #[case::rel_ge_false(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Ge, Box::new(Expr::Lit(2))), Bindings::new(), false)]
-    #[case::mem_true(Expr::Mem(Box::new(Expr::Lit(2)), vec![1, 2, 3]), Bindings::new(), true)]
-    #[case::mem_false(Expr::Mem(Box::new(Expr::Lit(4)), vec![1, 2, 3]), Bindings::new(), false)]
-    #[case::not_true(Expr::Not(Box::new(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(2))))), Bindings::new(), true)]
-    #[case::not_false(Expr::Not(Box::new(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(1))))), Bindings::new(), false)]
-    #[case::and_true(Expr::And(vec![Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Lt, Box::new(Expr::Lit(2))), Expr::Rel(Box::new(Expr::Lit(3)), RelOp::Gt, Box::new(Expr::Lit(2)))]), Bindings::new(), true)]
-    #[case::and_false(Expr::And(vec![Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Lt, Box::new(Expr::Lit(2))), Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Gt, Box::new(Expr::Lit(2)))]), Bindings::new(), false)]
-    #[case::or_true(Expr::Or(vec![Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(2))), Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Lt, Box::new(Expr::Lit(2)))]), Bindings::new(), true)]
-    #[case::or_false(Expr::Or(vec![Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(2))), Expr::Rel(Box::new(Expr::Lit(3)), RelOp::Lt, Box::new(Expr::Lit(2)))]), Bindings::new(), false)]
-    #[case::var_in_rel(Expr::Rel(Box::new(Expr::Var("x".to_string())), RelOp::Gt, Box::new(Expr::Lit(0))), Bindings::from([("x".to_string(), 5)]), true)]
-    fn test_evaluate_bool(#[case] expr: Expr, #[case] vars: Bindings, #[case] expected: bool) {
+    #[case::rel_eq_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(1))), Bindings::new(), true)]
+    #[case::rel_eq_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(2))), Bindings::new(), false)]
+    #[case::rel_lt_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Lt, Box::new(ValueExpr::Lit(2))), Bindings::new(), true)]
+    #[case::rel_lt_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(2)), RelOp::Lt, Box::new(ValueExpr::Lit(1))), Bindings::new(), false)]
+    #[case::rel_le_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Le, Box::new(ValueExpr::Lit(1))), Bindings::new(), true)]
+    #[case::rel_le_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(2)), RelOp::Le, Box::new(ValueExpr::Lit(1))), Bindings::new(), false)]
+    #[case::rel_gt_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(2)), RelOp::Gt, Box::new(ValueExpr::Lit(1))), Bindings::new(), true)]
+    #[case::rel_gt_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Gt, Box::new(ValueExpr::Lit(2))), Bindings::new(), false)]
+    #[case::rel_ge_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(2)), RelOp::Ge, Box::new(ValueExpr::Lit(2))), Bindings::new(), true)]
+    #[case::rel_ge_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Ge, Box::new(ValueExpr::Lit(2))), Bindings::new(), false)]
+    #[case::mem_true(ValueExpr::Mem(Box::new(ValueExpr::Lit(2)), vec![1, 2, 3]), Bindings::new(), true)]
+    #[case::mem_false(ValueExpr::Mem(Box::new(ValueExpr::Lit(4)), vec![1, 2, 3]), Bindings::new(), false)]
+    #[case::not_true(ValueExpr::Not(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(2))))), Bindings::new(), true)]
+    #[case::not_false(ValueExpr::Not(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(1))))), Bindings::new(), false)]
+    #[case::and_true(ValueExpr::And(vec![ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Lt, Box::new(ValueExpr::Lit(2))), ValueExpr::Rel(Box::new(ValueExpr::Lit(3)), RelOp::Gt, Box::new(ValueExpr::Lit(2)))]), Bindings::new(), true)]
+    #[case::and_false(ValueExpr::And(vec![ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Lt, Box::new(ValueExpr::Lit(2))), ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Gt, Box::new(ValueExpr::Lit(2)))]), Bindings::new(), false)]
+    #[case::or_true(ValueExpr::Or(vec![ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(2))), ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Lt, Box::new(ValueExpr::Lit(2)))]), Bindings::new(), true)]
+    #[case::or_false(ValueExpr::Or(vec![ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(2))), ValueExpr::Rel(Box::new(ValueExpr::Lit(3)), RelOp::Lt, Box::new(ValueExpr::Lit(2)))]), Bindings::new(), false)]
+    #[case::var_in_rel(ValueExpr::Rel(Box::new(ValueExpr::Var("x".to_string())), RelOp::Gt, Box::new(ValueExpr::Lit(0))), Bindings::from([("x".to_string(), 5)]), true)]
+    fn test_evaluate_bool(#[case] expr: ValueExpr, #[case] vars: Bindings, #[case] expected: bool) {
         let result = expr.evaluate_bool(&vars);
         assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", expr, result.clone().unwrap_err());
         assert_eq!(result.unwrap(), expected);
@@ -708,9 +719,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::unbound_in_rel(Expr::Rel(Box::new(Expr::Var("x".to_string())), RelOp::Gt, Box::new(Expr::Lit(0))), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
-    #[case::type_mismatch(Expr::Lit(1), Bindings::new(), EvaluationError::TypeMismatch)]
-    fn test_evaluate_bool_invalid(#[case] expr: Expr, #[case] vars: Bindings, #[case] expected: EvaluationError) {
+    #[case::unbound_in_rel(ValueExpr::Rel(Box::new(ValueExpr::Var("x".to_string())), RelOp::Gt, Box::new(ValueExpr::Lit(0))), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
+    #[case::type_mismatch(ValueExpr::Lit(1), Bindings::new(), EvaluationError::TypeMismatch)]
+    fn test_evaluate_bool_invalid(#[case] expr: ValueExpr, #[case] vars: Bindings, #[case] expected: EvaluationError) {
         let result = expr.evaluate_bool(&vars);
         assert!(result.is_err(), "{:?} should have failed, error: {:?}", expr, result.clone().unwrap_err());
         assert_eq!(result.unwrap_err(), expected);
@@ -726,15 +737,15 @@ mod tests {
     #[case::set_singleton(ValueAst::Set(Box::new(vec![7])), Some(7))]
     #[case::set_all_equal(ValueAst::Set(Box::new(vec![3, 3, 3])), Some(3))]
     #[case::set_multi(ValueAst::Set(Box::new(vec![1, 2])), None)]
-    #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Lit(5))), Some(5))]
-    #[case::expr_neg_lit(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))), Some(-3))]
+    #[case::expr_lit(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), Some(5))]
+    #[case::expr_neg_lit(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))))), Some(-3))]
     #[case::expr_const_add(
-        ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3))))),
+        ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Add, Box::new(ValueExpr::Lit(3))))),
         Some(5),
     )]
-    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("x".to_string()))), None)]
+    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("x".to_string()))), None)]
     #[case::expr_boolean(
-        ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Lit(1)), RelOp::Eq, Box::new(Expr::Lit(1))))),
+        ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(1))))),
         None,
     )]
     #[case::bind(ValueAst::bind("n", vec![1, 2]), None)]
@@ -753,14 +764,14 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined, 3, true)]
     #[case::lit_match(ValueAst::Lit(3), 3,  true)]
     #[case::set_match(ValueAst::Set(Box::new(vec![1, 2, 3])), 2, true)]
-    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".to_string()))), 5, true)]
-    #[case::expr_lit_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 3, true)]
-    #[case::expr_rel_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 3, true)]
-    #[case::expr_mem_match(ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![0, 1]))), 1, true)]
+    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("h".to_string()))), 5, true)]
+    #[case::expr_lit_match(ValueAst::Expr(Box::new(ValueExpr::Lit(3))), 3, true)]
+    #[case::expr_rel_match(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), 3, true)]
+    #[case::expr_mem_match(ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".to_string())), vec![0, 1]))), 1, true)]
     #[case::bind_in_set(ValueAst::bind("n", vec![1, 2, 3]), 2, true)]
     #[case::lit_no_match(ValueAst::Lit(3), 4, false)]
-    #[case::expr_lit_no_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 4, false)]
-    #[case::expr_rel_no_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 0, false)]
+    #[case::expr_lit_no_match(ValueAst::Expr(Box::new(ValueExpr::Lit(3))), 4, false)]
+    #[case::expr_rel_no_match(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), 0, false)]
     #[case::bind_not_in_set(ValueAst::bind("n", vec![1, 2]), 5, false)]
     #[case::reference_no_capture(ValueAst::reference("n"), 3, false)]
     fn test_matches_value(#[case] pattern: ValueAst, #[case] value: i64, #[case] expected: bool) {
@@ -772,10 +783,10 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined, 3, Bindings::new())]
     #[case::lit_match(ValueAst::Lit(3), 3, Bindings::new())]
     #[case::set_match(ValueAst::Set(Box::new(vec![1, 2, 3])), 2, Bindings::new())]
-    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".to_string()))), 5, Bindings::from([("h".to_string(), 5)]))]
-    #[case::expr_lit_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 3, Bindings::new())]
-    #[case::expr_rel_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 3, Bindings::from([("h".to_string(), 3)]))]
-    #[case::expr_mem_match(ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".to_string())), vec![0, 1]))), 1, Bindings::from([("h".to_string(), 1)]))]
+    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("h".to_string()))), 5, Bindings::from([("h".to_string(), 5)]))]
+    #[case::expr_lit_match(ValueAst::Expr(Box::new(ValueExpr::Lit(3))), 3, Bindings::new())]
+    #[case::expr_rel_match(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), 3, Bindings::from([("h".to_string(), 3)]))]
+    #[case::expr_mem_match(ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".to_string())), vec![0, 1]))), 1, Bindings::from([("h".to_string(), 1)]))]
     #[case::bind_in_set(ValueAst::bind("n", vec![1, 2, 3]), 2, Bindings::from([("n".to_string(), 2)]))]
     fn test_capture(#[case] pattern: ValueAst, #[case] value: i64, #[case] expected: Bindings) {
         assert_eq!(pattern.capture(value), Some(expected));
@@ -784,8 +795,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::lit_no_match(ValueAst::Lit(3), 4)]
-    #[case::expr_lit_no_match(ValueAst::Expr(Box::new(Expr::Lit(3))), 4)]
-    #[case::expr_rel_no_match(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), 0)]
+    #[case::expr_lit_no_match(ValueAst::Expr(Box::new(ValueExpr::Lit(3))), 4)]
+    #[case::expr_rel_no_match(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), 0)]
     #[case::bind_not_in_set(ValueAst::bind("n", vec![1, 2]), 5)]
     #[case::reference(ValueAst::reference("n"), 3)]
     fn test_capture_no_match(#[case] pattern: ValueAst, #[case] value: i64) {
@@ -794,23 +805,23 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(Expr::Lit(5), Expr::Lit(5))]
-    #[case::var(Expr::Var("x".into()), Expr::Var("x".into()))]
-    #[case::neg_lit(Expr::Neg(Box::new(Expr::Lit(3))), Expr::Neg(Box::new(Expr::Lit(3))))]
-    #[case::neg_neg_collapses(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))), Expr::Lit(3))]
-    #[case::neg_neg_neg_collapses_to_one(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))))),
-        Expr::Neg(Box::new(Expr::Var("x".into()))))]
-    #[case::or_flattens_or_child(Expr::Or(vec![Expr::Var("a".into()), Expr::Or(vec![Expr::Var("b".into()), Expr::Var("c".into())])]),
-        Expr::Or(vec![Expr::Var("a".into()), Expr::Var("b".into()), Expr::Var("c".into())]))]
-    #[case::and_flattens_and_child(Expr::And(vec![Expr::And(vec![Expr::Var("a".into()), Expr::Var("b".into())]), Expr::Var("c".into())]),
-        Expr::And(vec![Expr::Var("a".into()), Expr::Var("b".into()), Expr::Var("c".into())]))]
-    #[case::or_does_not_flatten_and(Expr::Or(vec![Expr::Var("a".into()), Expr::And(vec![Expr::Var("b".into()), Expr::Var("c".into())])]),
-        Expr::Or(vec![Expr::Var("a".into()), Expr::And(vec![Expr::Var("b".into()), Expr::Var("c".into())])]))]
-    #[case::recursive_into_binop(Expr::BinOp(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(2)))))), ArithOp::Add, Box::new(Expr::Lit(3))),
-        Expr::BinOp(Box::new(Expr::Lit(2)), ArithOp::Add, Box::new(Expr::Lit(3))))]
-    #[case::recursive_into_rel(Expr::Rel(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Var("h".into())))))), RelOp::Ge, Box::new(Expr::Lit(1))),
-        Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1))))]
-    fn test_expr_simplify(#[case] input: Expr, #[case] expected: Expr) {
+    #[case::lit(ValueExpr::Lit(5), ValueExpr::Lit(5))]
+    #[case::var(ValueExpr::Var("x".into()), ValueExpr::Var("x".into()))]
+    #[case::neg_lit(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))), ValueExpr::Neg(Box::new(ValueExpr::Lit(3))))]
+    #[case::neg_neg_collapses(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))))), ValueExpr::Lit(3))]
+    #[case::neg_neg_neg_collapses_to_one(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))))),
+        ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))]
+    #[case::or_flattens_or_child(ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::Or(vec![ValueExpr::Var("b".into()), ValueExpr::Var("c".into())])]),
+        ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into()), ValueExpr::Var("c".into())]))]
+    #[case::and_flattens_and_child(ValueExpr::And(vec![ValueExpr::And(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into())]), ValueExpr::Var("c".into())]),
+        ValueExpr::And(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into()), ValueExpr::Var("c".into())]))]
+    #[case::or_does_not_flatten_and(ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::And(vec![ValueExpr::Var("b".into()), ValueExpr::Var("c".into())])]),
+        ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::And(vec![ValueExpr::Var("b".into()), ValueExpr::Var("c".into())])]))]
+    #[case::recursive_into_binop(ValueExpr::BinOp(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(2)))))), ArithOp::Add, Box::new(ValueExpr::Lit(3))),
+        ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Add, Box::new(ValueExpr::Lit(3))))]
+    #[case::recursive_into_rel(ValueExpr::Rel(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("h".into())))))), RelOp::Ge, Box::new(ValueExpr::Lit(1))),
+        ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))]
+    fn test_expr_simplify(#[case] input: ValueExpr, #[case] expected: ValueExpr) {
         assert_eq!(input.simplify(), expected);
     }
 
@@ -821,27 +832,27 @@ mod tests {
     #[case::set(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![1, 2])))]
     #[case::ref_stays(ValueAst::reference("h"), ValueAst::reference("h"))]
     #[case::bind_stays(ValueAst::bind("h", vec![1, 2]), ValueAst::bind("h", vec![1, 2]))]
-    #[case::expr_lit_lifts(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Lit(5))]
-    #[case::expr_neg_lit_lifts(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(7))))), ValueAst::Lit(-7))]
-    #[case::expr_neg_neg_lit_lifts(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(4))))))), ValueAst::Lit(4))]
-    #[case::expr_var_lifts_to_ref(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::reference("x"))]
+    #[case::expr_lit_lifts(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Lit(5))]
+    #[case::expr_neg_lit_lifts(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(7))))), ValueAst::Lit(-7))]
+    #[case::expr_neg_neg_lit_lifts(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(4))))))), ValueAst::Lit(4))]
+    #[case::expr_var_lifts_to_ref(ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::reference("x"))]
     #[case::expr_mem_var_lifts_to_bind(
-        ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".into())), vec![1, 2, 3]))),
+        ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".into())), vec![1, 2, 3]))),
         ValueAst::bind("h", vec![1, 2, 3]),
     )]
-    #[case::expr_neg_var_stays(ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))),
-        ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Var("x".into()))))))]
+    #[case::expr_neg_var_stays(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))),
+        ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))))]
     #[case::expr_binop_var_stays(
-        ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Var("h".into())), ArithOp::Add, Box::new(Expr::Lit(1))))),
-        ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Var("h".into())), ArithOp::Add, Box::new(Expr::Lit(1))))),
+        ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1))))),
+        ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1))))),
     )]
     #[case::expr_mem_compound_first_stays(
-        ValueAst::Expr(Box::new(Expr::Mem(
-            Box::new(Expr::BinOp(Box::new(Expr::Var("h".into())), ArithOp::Add, Box::new(Expr::Lit(1)))),
+        ValueAst::Expr(Box::new(ValueExpr::Mem(
+            Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1)))),
             vec![2, 3],
         ))),
-        ValueAst::Expr(Box::new(Expr::Mem(
-            Box::new(Expr::BinOp(Box::new(Expr::Var("h".into())), ArithOp::Add, Box::new(Expr::Lit(1)))),
+        ValueAst::Expr(Box::new(ValueExpr::Mem(
+            Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1)))),
             vec![2, 3],
         ))),
     )]
@@ -850,11 +861,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case::expr_var(ValueAst::Expr(Box::new(Expr::Var("h".into()))))]
-    #[case::expr_mem_var(ValueAst::Expr(Box::new(Expr::Mem(Box::new(Expr::Var("h".into())), vec![1, 2]))))]
+    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("h".into()))))]
+    #[case::expr_mem_var(ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".into())), vec![1, 2]))))]
     #[case::ref_(ValueAst::reference("h"))]
     #[case::bind(ValueAst::bind("h", vec![1, 2, 3]))]
-    #[case::expr_binop(ValueAst::Expr(Box::new(Expr::BinOp(Box::new(Expr::Var("h".into())), ArithOp::Add, Box::new(Expr::Lit(1))))))]
+    #[case::expr_binop(ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1))))))]
     fn test_value_ast_simplify_idempotent(#[case] input: ValueAst) {
         let once = input.clone().simplify();
         let twice = once.clone().simplify();
@@ -862,13 +873,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::neg_neg(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Lit(3))))))]
-    #[case::nested_or(Expr::Or(vec![Expr::Or(vec![Expr::Var("a".into()), Expr::Var("b".into())]),
-        Expr::Or(vec![Expr::Var("c".into()), Expr::Var("d".into())])]))]
-    #[case::deep_neg(Expr::Neg(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
-        Expr::Neg(Box::new(Expr::Lit(1)))
-    )))))))]
-    fn test_expr_simplify_idempotent(#[case] input: Expr) {
+    #[case::neg_neg(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))))))]
+    #[case::nested_or(ValueExpr::Or(vec![ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into())]),
+        ValueExpr::Or(vec![ValueExpr::Var("c".into()), ValueExpr::Var("d".into())])]))]
+    #[case::deep_neg(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(
+        Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(1))))
+    ))))))]
+    fn test_expr_simplify_idempotent(#[case] input: ValueExpr) {
         let once = input.clone().simplify();
         let twice = once.clone().simplify();
         assert_eq!(once, twice);
@@ -881,7 +892,7 @@ mod tests {
     #[case::lit_undetermined(ValueAst::Lit(2), ValueAst::Undetermined, ValueAst::Undetermined)]
     #[case::undetermined_lit(ValueAst::Undetermined, ValueAst::Lit(2), ValueAst::Undetermined)]
     #[case::set_lit(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Lit(3), ValueAst::Undetermined)]
-    #[case::lit_expr(ValueAst::Lit(2), ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Undetermined)]
+    #[case::lit_expr(ValueAst::Lit(2), ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::Undetermined)]
     fn test_value_ast_add(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(lhs + rhs, expected);
     }
@@ -932,10 +943,10 @@ mod tests {
         Some(ValueAst::Set(Box::new(vec![2, 3]))))]
     #[case::set_set_singleton(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![2, 3])), Some(ValueAst::Lit(2)))]
     #[case::set_set_empty(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![3, 4])), None)]
-    #[case::expr_expr_eq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))), Some(ValueAst::Expr(Box::new(Expr::Lit(5)))))]
-    #[case::expr_expr_neq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(6))), None)]
-    #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Lit(5), None)]
-    #[case::expr_und(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Undetermined, Some(ValueAst::Expr(Box::new(Expr::Var("x".into())))))]
+    #[case::expr_expr_eq(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(5))), Some(ValueAst::Expr(Box::new(ValueExpr::Lit(5)))))]
+    #[case::expr_expr_neq(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(6))), None)]
+    #[case::expr_lit(ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::Lit(5), None)]
+    #[case::expr_und(ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::Undetermined, Some(ValueAst::Expr(Box::new(ValueExpr::Var("x".into())))))]
     #[case::bind_und(ValueAst::bind("n", vec![1, 2]), ValueAst::Undetermined, Some(ValueAst::bind("n", vec![1, 2])))]
     #[case::bind_bind_eq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("n", vec![1, 2]), Some(ValueAst::bind("n", vec![1, 2])))]
     #[case::bind_bind_id_neq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("m", vec![1, 2]), None)]
@@ -967,9 +978,9 @@ mod tests {
     #[case::set_lit_out(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Lit(4), ValueAst::Set(Box::new(vec![1, 2, 3, 4])))]
     #[case::set_set_overlap(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![2, 3])),
         ValueAst::Set(Box::new(vec![1, 2, 3])))]
-    #[case::expr_expr_eq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(5))))]
-    #[case::expr_expr_neq(ValueAst::Expr(Box::new(Expr::Lit(5))), ValueAst::Expr(Box::new(Expr::Lit(6))), ValueAst::Undetermined)]
-    #[case::expr_lit(ValueAst::Expr(Box::new(Expr::Var("x".into()))), ValueAst::Lit(5), ValueAst::Undetermined)]
+    #[case::expr_expr_eq(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(5))))]
+    #[case::expr_expr_neq(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(6))), ValueAst::Undetermined)]
+    #[case::expr_lit(ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::Lit(5), ValueAst::Undetermined)]
     #[case::bind_bind_eq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("n", vec![1, 2]), ValueAst::bind("n", vec![1, 2]))]
     #[case::bind_bind_neq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("m", vec![1, 2]), ValueAst::Undetermined)]
     #[case::bind_lit(ValueAst::bind("n", vec![1, 2]), ValueAst::Lit(1), ValueAst::Undetermined)]

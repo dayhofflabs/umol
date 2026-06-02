@@ -428,8 +428,8 @@ fn aromatic_valence(i: &mut &str) -> PResult<AromaticValenceAst> {
             "*".value(AromaticValenceAst::Undetermined),
             "!".value(AromaticValenceAst::NotAromatic),
             // `#a+` encodes "aromatic, count unspecified" — semantically the
-            // same as the (a >= 0) Expr form but structurally distinct from
-            // the outer Undetermined. Older sugar used Expr(Rel(Var("a"),
+            // same as the (a >= 0) ValueExpr form but structurally distinct from
+            // the outer Undetermined. Older sugar used ValueExpr(Rel(Var("a"),
             // Ge, Lit(0))); the canonical form is now Aromatic(Undetermined).
             "+".value(AromaticValenceAst::Aromatic(ValueAst::Undetermined)),
             value.map(AromaticValenceAst::Aromatic),
@@ -1179,7 +1179,7 @@ mod tests {
 
     use super::*;
     use crate::ast::spin::SpinStateAst;
-    use crate::ast::value::{ArithOp, Expr, RelOp};
+    use crate::ast::value::{ArithOp, RelOp, ValueExpr};
 
     #[rstest]
     #[case::single("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
@@ -1228,7 +1228,7 @@ mod tests {
     #[case::h_undetermined("C#h*", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Undetermined, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Ref("h".to_string()), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::bind("h", vec![2, 3]), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
-    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
     #[case::lone_pairs_omit("O#n", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
@@ -1260,7 +1260,7 @@ mod tests {
     #[case::total_hydrogens("C#H1", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::TotalHydrogens(ValueAst::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_bare("C#R", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_undetermined("C#R*", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_plus("C#R+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::ring_plus("C#R+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("r".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_bang("C#R!", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_zero("C#R0", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_count("C#R2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1466,7 +1466,7 @@ mod tests {
     #[case::total_hydrogens("#H1", AtomPredicate::Constraint(AtomConstraint::TotalHydrogens(ValueAst::Lit(1))))]
     #[case::ring_bare("#R", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Lit(1))))]
     #[case::ring_undetermined("#R*", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Undetermined)))]
-    #[case::ring_plus("#R+", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("r".to_string())), RelOp::Ge, Box::new(Expr::Lit(1))))))))]
+    #[case::ring_plus("#R+", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("r".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))))))]
     #[case::ring_count("#R2", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Lit(2))))]
     fn test_atom_predicate(#[case] input: &str, #[case] expected: AtomPredicate) {
         let result = atom_predicate.parse(input);
@@ -1621,7 +1621,7 @@ mod tests {
     #[case::aromatic_value(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
     #[case::multicenter_not(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
     #[case::multicenter_value(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
-    #[case::valence_expr(AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::Rel(Box::new(Expr::Var("h".into())), RelOp::Ge, Box::new(Expr::Lit(1)))))), "{:valence \"?h >= 1\"}")]
+    #[case::valence_expr(AtomConstraint::Valence(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Ge, Box::new(ValueExpr::Lit(1)))))), "{:valence \"?h >= 1\"}")]
     #[case::ring_size_set(AtomConstraint::RingSize(ValueAst::Set(Box::new(vec![5, 6]))), "{:ring-size [5 6]}")]
     fn test_atom_constraint_dsl_roundtrip(#[case] input: AtomConstraint, #[case] edn_source: &str) {
         let dsl = AtomConstraintDsl::from_ast(&input, &());
@@ -1658,10 +1658,10 @@ mod tests {
         let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
             parsed.into_ast(&()),
-            AtomConstraint::Valence(ValueAst::Expr(Box::new(Expr::BinOp(
-                Box::new(Expr::Var("h".into())),
+            AtomConstraint::Valence(ValueAst::Expr(Box::new(ValueExpr::BinOp(
+                Box::new(ValueExpr::Var("h".into())),
                 ArithOp::Add,
-                Box::new(Expr::Lit(1)),
+                Box::new(ValueExpr::Lit(1)),
             ))))
         );
     }

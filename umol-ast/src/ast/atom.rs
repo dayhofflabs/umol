@@ -207,8 +207,7 @@ pub fn saturate_atom(atom: &mut AtomAst) -> Result<(), Contradiction> {
                 if pruned != jd {
                     changed = true;
                 }
-                atom.constraints
-                    .add(AtomConstraint::JointDomain(pruned));
+                atom.constraints.add(AtomConstraint::JointDomain(pruned));
             }
         }
         if !changed {
@@ -301,11 +300,9 @@ impl AsLit for ElementAst {
     fn as_lit(&self) -> Option<Element> {
         match self {
             Self::Lit(e) => Some(*e),
-            Self::Undetermined
-            | Self::Ref(_)
-            | Self::Bind(_)
-            | Self::Not(_)
-            | Self::NotSet(_) => None,
+            Self::Undetermined | Self::Ref(_) | Self::Bind(_) | Self::Not(_) | Self::NotSet(_) => {
+                None
+            }
             Self::Set(s) => element_set_is_ground(s).then(|| s[0]),
         }
     }
@@ -320,11 +317,9 @@ impl Lattice for ElementAst {
     fn is_ground(&self) -> bool {
         match self {
             Self::Lit(_) => true,
-            Self::Undetermined
-            | Self::Ref(_)
-            | Self::Bind(_)
-            | Self::Not(_)
-            | Self::NotSet(_) => false,
+            Self::Undetermined | Self::Ref(_) | Self::Bind(_) | Self::Not(_) | Self::NotSet(_) => {
+                false
+            }
             Self::Set(s) => element_set_is_ground(s),
         }
     }
@@ -596,14 +591,10 @@ impl AsLit for IsotopeMassAst {
         match self {
             Self::Natural => Some(0),
             Self::Lit(n) => u32::try_from(*n).ok(),
-            Self::Set(s) => set_is_ground(s)
-                .then(|| u32::try_from(s[0]).ok())
-                .flatten(),
-            Self::Undetermined
-            | Self::Not(_)
-            | Self::NotSet(_)
-            | Self::Bind(_)
-            | Self::Ref(_) => None,
+            Self::Set(s) => set_is_ground(s).then(|| u32::try_from(s[0]).ok()).flatten(),
+            Self::Undetermined | Self::Not(_) | Self::NotSet(_) | Self::Bind(_) | Self::Ref(_) => {
+                None
+            }
         }
     }
 }
@@ -621,11 +612,9 @@ impl Lattice for IsotopeMassAst {
         match self {
             Self::Natural | Self::Lit(_) => true,
             Self::Set(s) => set_is_ground(s),
-            Self::Undetermined
-            | Self::Not(_)
-            | Self::NotSet(_)
-            | Self::Bind(_)
-            | Self::Ref(_) => false,
+            Self::Undetermined | Self::Not(_) | Self::NotSet(_) | Self::Bind(_) | Self::Ref(_) => {
+                false
+            }
         }
     }
 
@@ -757,8 +746,7 @@ impl Lattice for IsotopeMassAst {
                 }
             }
             (Self::NotSet(s), Self::NotSet(t)) => {
-                let intersection: Vec<i64> =
-                    s.iter().filter(|x| t.contains(x)).copied().collect();
+                let intersection: Vec<i64> = s.iter().filter(|x| t.contains(x)).copied().collect();
                 canonicalize_isotope_not_set(intersection)
             }
             (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
@@ -831,7 +819,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{AtomConstraint, AtomConstraintKind};
-    use crate::ast::value::Expr;
+    use crate::ast::value::ValueExpr;
     use crate::atom_zeroed;
 
     #[rstest]
@@ -954,15 +942,15 @@ mod tests {
         let mut atom = AtomAst {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeMassAst::Lit(12),
-            charge: ValueAst::Expr(Box::new(Expr::Lit(1))),
-            implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Lit(3))),
-            lone_pairs: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(2))))),
+            charge: ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
+            implicit_hydrogens: ValueAst::Expr(Box::new(ValueExpr::Lit(3))),
+            lone_pairs: ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(2))))),
             spin: SpinStateAst {
-                unpaired: ValueAst::Expr(Box::new(Expr::Lit(0))),
-                multiplicity: ValueAst::Expr(Box::new(Expr::Lit(1))),
+                unpaired: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
+                multiplicity: ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
             },
             constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(
-                Box::new(Expr::Lit(4)),
+                Box::new(ValueExpr::Lit(4)),
             ))]),
         };
         atom.simplify_values();
@@ -1255,8 +1243,7 @@ mod tests {
             vec![vec![0, 1], vec![1, 2]],
         )
         .unwrap();
-        let a = AtomAst::from_element(Element::C)
-            .with_constraint(AtomConstraint::JointDomain(jd));
+        let a = AtomAst::from_element(Element::C).with_constraint(AtomConstraint::JointDomain(jd));
         let b = AtomAst::from_element(Element::C).with_charge(5_i64);
         assert_eq!(a.meet(&b), None);
     }

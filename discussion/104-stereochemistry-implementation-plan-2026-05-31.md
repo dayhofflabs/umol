@@ -202,9 +202,10 @@ Phases A–E are in scope; F (3D) and G follow.
     operator-exprs (`~1`→the enantiomer coset, `~~e`→`e`) via `umol-perm` (so depends on A′); free-`Var`
     exprs are left as-is. **Done**
   - **A3** — payloads `StereoAtomAst` / `StereoBondAst`, each `{ kind: StereoKind, configuration:
-    StereoConfigurationAst, constraints }` — predicate only, no site/ligands.
+    StereoConfigurationAst, constraints }` — predicate only, no site/ligands. **Done**
   - **A4** — per-site constraints `StereoAtomConstraint {}` / `StereoBondConstraint {}` (empty) + `…Constraints`
     collections + empty `…ConstraintDsl`, mirroring `NoncovalentBond` (split — projected structure differs per site).
+    **Done**
   - **A5** — ligand participant `StereoLigand(NodeId, StereoLigandKind)` + `StereoLigandKind { Atom,
     ImplicitHydrogen, LonePair }`, with its `RelationParticipant` impl (route the inner `NodeId` via
     `map_node`/`unmap_node`, kind carried; `refs` = that node; stored as `NodeId`, views expose `AtomId`).
@@ -213,7 +214,7 @@ Phases A–E are in scope; F (3D) and G follow.
     uppercase derived-predicate namespace, `Th`→`#T`/`Ct`→`#C`; same arg as the element config, frame differs).
   - **A7** — ids via `define_id!` in `ast/ids.rs`.
   - **A8** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
-     stereo_bond_zeroed! in macros.rs.
+     stereo_bond_zeroed! in `macros.rs`.
 
 - **Phase A′ — coset algebra** (`umol-perm`, new crate; pure permutation algebra — no chemistry, no geometry,
   no AST deps; a dependency of umol-graph). The dense coset index **is the OpenSMILES arrangement number**
@@ -333,6 +334,7 @@ Phases A–E are in scope; F (3D) and G follow.
     elements; marker-free `StereoInferrer` stays in G.
   - **C7** — tests: raise→resolve round-trip over the ~150-file corpus; assert focus/ligands/config of the
     perceived birelations for known R/S and E/Z cases.
+
 - **Phase D — DSL round-trip** (`umol-ast/src/dsl/stereo.rs`, new; wired into `dsl/molecule.rs`, mirror
   `aromatic`). Faithful round-trip, no frame conversion (config stored relative to the written `:ligands`
   order; `#T`/`#C` relative to the local frame).
@@ -351,6 +353,7 @@ Phases A–E are in scope; F (3D) and G follow.
     `StereoConfigurationAst` parser) inside the atom-string (`C#h#T1`) / bond-string.
   - **D6** — round-trip tests: EDN↔AST for both surfaces (elements *and* `#T`/`#C` strings) over the
     ~150-file corpus, under `--features conformance`.
+
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
   substructure matcher is reused, and `umol-perm` enters exactly once, at the frame alignment).
   - **E1** — `AsLit` (trivial): `StereoConfigurationAst::as_lit` = the resolved config when `is_ground`

@@ -10,11 +10,13 @@
 
 use std::mem;
 
+use umol_graph_core::{NodeId, ParticipantRefs, RelationParticipant, Remapping};
 use umol_perm::{space, ClassKey, Permutation};
 
 use super::constraint::{
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
 };
+use super::ids::AtomId;
 use super::traits::{AsLit, Lattice};
 
 /// A stereo class: the atom-centered coordination geometries and the bond
@@ -43,9 +45,8 @@ impl StereoKind {
         }
     }
 
-    /// Act on coset index `index` by operation `operation`, through the class's
-    /// coset algebra.
-    fn act(self, index: u32, operation: Permutation) -> u32 {
+    /// Act on coset index `index` by `perm`, through the class's coset algebra.
+    fn act(self, index: u32, perm: Permutation) -> u32 {
         let class = match self {
             StereoKind::Tetrahedral => ClassKey::Tetrahedral,
             StereoKind::CisTrans => ClassKey::CisTrans,
@@ -53,7 +54,7 @@ impl StereoKind {
             StereoKind::TrigonalBipyramidal => ClassKey::TrigonalBipyramidal,
             StereoKind::Octahedral => ClassKey::Octahedral,
         };
-        space(class).reindex(index, operation)
+        space(class).reindex(index, perm)
     }
 }
 
@@ -68,7 +69,7 @@ pub enum StereoConfigurationAst {
 }
 
 impl StereoConfigurationAst {
-    /// Reduce to canonical form under the class context: lift trivial `Expr`
+    /// Reduce to canonical form under the class context: lift trivial `StereoExpr`
     /// wrappers and fold closed operator-expressions via the coset algebra.
     /// Free-variable expressions are left as-is.
     pub fn simplify(self, kind: StereoKind) -> Self {
@@ -143,15 +144,20 @@ pub enum StereoIndexAst {
     #[default]
     Undetermined,
     Lit(u32),
-    Expr(Box<Expr>),
+    Expr(Box<StereoExpr>),
 }
 
 impl StereoIndexAst {
-    /// Simplify the inner expression and lift a folded `Expr(Lit)` to `Lit`.
+    /// Wrap an operator-expression as an index.
+    pub fn expr(expr: StereoExpr) -> Self {
+        Self::Expr(Box::new(expr))
+    }
+
+    /// Simplify the inner expression and lift a folded `StereoExpr(Lit)` to `Lit`.
     pub fn simplify(self, kind: StereoKind) -> Self {
         match self {
             Self::Expr(e) => match e.simplify(kind) {
-                Expr::Lit(index) => Self::Lit(index),
+                StereoExpr::Lit(index) => Self::Lit(index),
                 other => Self::Expr(Box::new(other)),
             },
             other => other,
@@ -211,30 +217,43 @@ impl Lattice for StereoIndexAst {
 /// `~` involution, the generic `^` action by a permutation, or a (deferred)
 /// literal set / variable domain.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Expr {
+pub enum StereoExpr {
     Lit(u32),
     Var(String),
-    SwapOp(Box<Expr>),
-    ApplyOp(Box<Expr>, Permutation),
+    SwapOp(Box<StereoExpr>),
+    ApplyOp(Box<StereoExpr>, Permutation),
     LitSet(Vec<u32>),
     VarDomain(String, Vec<u32>),
 }
 
-impl Expr {
+impl StereoExpr {
+    /// `~inner` — the involution operator applied to `inner`.
+    pub fn swap(inner: Self) -> Self {
+        Self::SwapOp(Box::new(inner))
+    }
+
+    /// `inner ^ perm` — the generic group action of `perm` on `inner`.
+    pub fn apply(inner: Self, perm: Permutation) -> Self {
+        Self::ApplyOp(Box::new(inner), perm)
+    }
+
     /// Recursively simplify, folding closed operator nodes via the coset
     /// algebra: `~~e → e` (involution); `~(Lit k) → Lit(k · involution)`;
-    /// `(Lit k) ^ g → Lit(k · g)`. Free `Var`, `Set`, and `VarDomain` are inert.
+    /// `(Lit k) ^ g → Lit(k · g)`. Free `Var`, `LitSet`, and `VarDomain` are inert.
     pub fn simplify(self, kind: StereoKind) -> Self {
         match self {
-            Expr::Lit(_) | Expr::Var(_) | Expr::LitSet(_) | Expr::VarDomain(..) => self,
-            Expr::SwapOp(inner) => match inner.simplify(kind) {
-                Expr::SwapOp(inner2) => *inner2,
-                Expr::Lit(index) => Expr::Lit(kind.act(index, kind.involution())),
-                other => Expr::SwapOp(Box::new(other)),
+            StereoExpr::Lit(_)
+            | StereoExpr::Var(_)
+            | StereoExpr::LitSet(_)
+            | StereoExpr::VarDomain(..) => self,
+            StereoExpr::SwapOp(inner) => match inner.simplify(kind) {
+                StereoExpr::SwapOp(inner2) => *inner2,
+                StereoExpr::Lit(index) => StereoExpr::Lit(kind.act(index, kind.involution())),
+                other => StereoExpr::SwapOp(Box::new(other)),
             },
-            Expr::ApplyOp(inner, operation) => match inner.simplify(kind) {
-                Expr::Lit(index) => Expr::Lit(kind.act(index, operation)),
-                other => Expr::ApplyOp(Box::new(other), operation),
+            StereoExpr::ApplyOp(inner, perm) => match inner.simplify(kind) {
+                StereoExpr::Lit(index) => StereoExpr::Lit(kind.act(index, perm)),
+                other => StereoExpr::ApplyOp(Box::new(other), perm),
             },
         }
     }
@@ -258,190 +277,181 @@ impl From<u32> for StereoConfigurationAst {
     }
 }
 
-/// An atom-centered stereo element: its geometry class, configuration, and
-/// per-site constraints. Predicate only — the site atom and ligands live in the
-/// relation overlay, not here.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StereoAtomAst {
-    pub kind: StereoKind,
-    pub configuration: StereoConfigurationAst,
-    pub constraints: StereoAtomConstraints,
+/// Generates a stereo-element payload. The atom and bond forms are identical
+/// but for their constraint type, so the struct, builders, and `Lattice` impl
+/// are shared; they remain separate types because their per-site constraints
+/// will diverge.
+macro_rules! stereo_element {
+    (
+        $(#[doc = $doc:literal])+
+        $name:ident, $constraints:ident, $constraint:ident
+    ) => {
+        $(#[doc = $doc])+
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        pub struct $name {
+            pub kind: StereoKind,
+            pub configuration: StereoConfigurationAst,
+            pub constraints: $constraints,
+        }
+
+        impl $name {
+            pub fn new(kind: StereoKind) -> Self {
+                Self {
+                    kind,
+                    configuration: StereoConfigurationAst::Undetermined,
+                    constraints: $constraints::new(),
+                }
+            }
+
+            pub fn with_configuration(
+                mut self,
+                configuration: impl Into<StereoConfigurationAst>,
+            ) -> Self {
+                self.configuration = configuration.into();
+                self
+            }
+
+            /// Add each constraint from the iterator. Vacuous today since the
+            /// per-element constraint enum is uninhabited; the signature locks in
+            /// the extend semantic for when inhabited variants land.
+            pub fn with_constraints<I>(self, _constraints: I) -> Self
+            where
+                I: IntoIterator,
+                I::Item: Into<$constraint>,
+            {
+                self
+            }
+
+            /// No-op: an unspecified configuration has no zero default (it is
+            /// either a concrete coset or `NotStereo`). Provided for API symmetry.
+            pub fn into_ground(self) -> Self {
+                self
+            }
+
+            /// Equivalent to `into_ground()`; there are no constraint defaults.
+            pub fn into_zeroed(self) -> Self {
+                self.into_ground()
+            }
+
+            /// Fold the configuration's closed operator-expressions (under
+            /// `kind`) and simplify each constraint's value in place.
+            pub fn simplify_values(&mut self) {
+                self.configuration = mem::take(&mut self.configuration).simplify(self.kind);
+                self.constraints.simplify_each();
+            }
+        }
+
+        impl Lattice for $name {
+            fn is_undetermined(&self) -> bool {
+                self.configuration.is_undetermined() && self.constraints.is_undetermined()
+            }
+
+            fn is_ground(&self) -> bool {
+                self.configuration.is_ground() && self.constraints.is_ground()
+            }
+
+            fn meet(&self, other: &Self) -> Option<Self> {
+                if self.kind != other.kind {
+                    return None;
+                }
+                Some(Self {
+                    kind: self.kind,
+                    configuration: self.configuration.meet(&other.configuration)?,
+                    constraints: self.constraints.meet(&other.constraints)?,
+                })
+            }
+
+            /// Same-site payloads always share a kind, so the kind-mismatch arm
+            /// is a defensive identity rather than a meaningful join.
+            fn join(&self, other: &Self) -> Self {
+                if self.kind != other.kind {
+                    return self.clone();
+                }
+                Self {
+                    kind: self.kind,
+                    configuration: self.configuration.join(&other.configuration),
+                    constraints: self.constraints.join(&other.constraints),
+                }
+            }
+
+            fn matches(&self, target: &Self) -> bool {
+                self.kind == target.kind
+                    && self.configuration.matches(&target.configuration)
+                    && self.constraints.matches(&target.constraints)
+            }
+        }
+    };
 }
 
-impl StereoAtomAst {
-    pub fn new(kind: StereoKind) -> Self {
+stereo_element! {
+    /// An atom-centered stereo element: its geometry class, configuration, and
+    /// per-site constraints. Predicate only — the site atom and ligands live in
+    /// the relation overlay, not here.
+    StereoAtomAst, StereoAtomConstraints, StereoAtomConstraint
+}
+
+stereo_element! {
+    /// A bond-centered stereo element (cis/trans). Predicate only — the site
+    /// bond and ligands live in the relation overlay.
+    StereoBondAst, StereoBondConstraints, StereoBondConstraint
+}
+
+/// A stereo ligand's kind: a real atom, or one of the virtual ligands that
+/// occupy a coordination position — an implicit hydrogen or a lone pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum StereoLigandKind {
+    Atom,
+    ImplicitHydrogen,
+    LonePair,
+}
+
+/// A ligand occupying a coordination position of a stereo site. Stored as the
+/// `NodeId` it is pinned to — the ligand atom for `Atom`, the site atom for the
+/// virtual kinds (so they follow the site through a remap) — plus its kind.
+/// `atom()` exposes the chemistry `AtomId`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct StereoLigand {
+    node: NodeId,
+    kind: StereoLigandKind,
+}
+
+impl StereoLigand {
+    pub fn new(atom: AtomId, kind: StereoLigandKind) -> Self {
         Self {
+            node: atom.into(),
             kind,
-            configuration: StereoConfigurationAst::Undetermined,
-            constraints: StereoAtomConstraints::new(),
         }
     }
 
-    pub fn with_configuration(mut self, configuration: impl Into<StereoConfigurationAst>) -> Self {
-        self.configuration = configuration.into();
-        self
+    pub fn atom(self) -> AtomId {
+        self.node.into()
     }
 
-    /// Add each constraint from the iterator. Vacuous today since
-    /// `StereoAtomConstraint` is uninhabited; the signature locks in the extend
-    /// semantic for when inhabited variants land.
-    pub fn with_constraints<I>(self, _constraints: I) -> Self
-    where
-        I: IntoIterator,
-        I::Item: Into<StereoAtomConstraint>,
-    {
-        self
-    }
-
-    /// No-op: an unspecified configuration has no zero default (it is either a
-    /// concrete coset or `NotStereo`). Provided for API symmetry.
-    pub fn into_ground(self) -> Self {
-        self
-    }
-
-    /// Equivalent to `into_ground()`. `StereoAtomAst` has no constraint defaults.
-    pub fn into_zeroed(self) -> Self {
-        self.into_ground()
-    }
-
-    /// Fold the configuration's closed operator-expressions (under `kind`) and
-    /// simplify each constraint's value in place.
-    pub fn simplify_values(&mut self) {
-        self.configuration = mem::take(&mut self.configuration).simplify(self.kind);
-        self.constraints.simplify_each();
+    pub fn kind(self) -> StereoLigandKind {
+        self.kind
     }
 }
 
-impl Lattice for StereoAtomAst {
-    fn is_undetermined(&self) -> bool {
-        self.configuration.is_undetermined() && self.constraints.is_undetermined()
-    }
-
-    fn is_ground(&self) -> bool {
-        self.configuration.is_ground() && self.constraints.is_ground()
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        if self.kind != other.kind {
-            return None;
-        }
+impl RelationParticipant for StereoLigand {
+    fn remap(self, remapping: &Remapping) -> Option<Self> {
         Some(Self {
+            node: remapping.map_node(self.node)?,
             kind: self.kind,
-            configuration: self.configuration.meet(&other.configuration)?,
-            constraints: self.constraints.meet(&other.constraints)?,
         })
     }
 
-    /// Same-site payloads always share a kind, so the kind-mismatch arm is a
-    /// defensive identity rather than a meaningful join.
-    fn join(&self, other: &Self) -> Self {
-        if self.kind != other.kind {
-            return self.clone();
-        }
+    fn unmap(self, remapping: &Remapping) -> Self {
         Self {
+            node: remapping.unmap_node(self.node),
             kind: self.kind,
-            configuration: self.configuration.join(&other.configuration),
-            constraints: self.constraints.join(&other.constraints),
         }
     }
 
-    fn matches(&self, target: &Self) -> bool {
-        self.kind == target.kind
-            && self.configuration.matches(&target.configuration)
-            && self.constraints.matches(&target.constraints)
-    }
-}
-
-/// A bond-centered stereo element (cis/trans). Predicate only — the site bond
-/// and ligands live in the relation overlay.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StereoBondAst {
-    pub kind: StereoKind,
-    pub configuration: StereoConfigurationAst,
-    pub constraints: StereoBondConstraints,
-}
-
-impl StereoBondAst {
-    pub fn new(kind: StereoKind) -> Self {
-        Self {
-            kind,
-            configuration: StereoConfigurationAst::Undetermined,
-            constraints: StereoBondConstraints::new(),
+    fn refs(self) -> ParticipantRefs {
+        ParticipantRefs {
+            node: Some(self.node),
+            edge: None,
         }
-    }
-
-    pub fn with_configuration(mut self, configuration: impl Into<StereoConfigurationAst>) -> Self {
-        self.configuration = configuration.into();
-        self
-    }
-
-    /// Add each constraint from the iterator. Vacuous today since
-    /// `StereoBondConstraint` is uninhabited; the signature locks in the extend
-    /// semantic for when inhabited variants land.
-    pub fn with_constraints<I>(self, _constraints: I) -> Self
-    where
-        I: IntoIterator,
-        I::Item: Into<StereoBondConstraint>,
-    {
-        self
-    }
-
-    /// No-op: an unspecified configuration has no zero default. Provided for API
-    /// symmetry.
-    pub fn into_ground(self) -> Self {
-        self
-    }
-
-    /// Equivalent to `into_ground()`. `StereoBondAst` has no constraint defaults.
-    pub fn into_zeroed(self) -> Self {
-        self.into_ground()
-    }
-
-    /// Fold the configuration's closed operator-expressions (under `kind`) and
-    /// simplify each constraint's value in place.
-    pub fn simplify_values(&mut self) {
-        self.configuration = mem::take(&mut self.configuration).simplify(self.kind);
-        self.constraints.simplify_each();
-    }
-}
-
-impl Lattice for StereoBondAst {
-    fn is_undetermined(&self) -> bool {
-        self.configuration.is_undetermined() && self.constraints.is_undetermined()
-    }
-
-    fn is_ground(&self) -> bool {
-        self.configuration.is_ground() && self.constraints.is_ground()
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        if self.kind != other.kind {
-            return None;
-        }
-        Some(Self {
-            kind: self.kind,
-            configuration: self.configuration.meet(&other.configuration)?,
-            constraints: self.constraints.meet(&other.constraints)?,
-        })
-    }
-
-    /// Same-site payloads always share a kind, so the kind-mismatch arm is a
-    /// defensive identity rather than a meaningful join.
-    fn join(&self, other: &Self) -> Self {
-        if self.kind != other.kind {
-            return self.clone();
-        }
-        Self {
-            kind: self.kind,
-            configuration: self.configuration.join(&other.configuration),
-            constraints: self.constraints.join(&other.constraints),
-        }
-    }
-
-    fn matches(&self, target: &Self) -> bool {
-        self.kind == target.kind
-            && self.configuration.matches(&target.configuration)
-            && self.constraints.matches(&target.constraints)
     }
 }
 
@@ -452,34 +462,56 @@ mod tests {
 
     use super::*;
 
+    #[rstest]
+    fn test_stereo_expr_swap() {
+        assert_eq!(
+            StereoExpr::swap(StereoExpr::Lit(0)).simplify(StereoKind::Tetrahedral),
+            StereoExpr::Lit(1),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_expr_apply() {
+        assert_eq!(
+            StereoExpr::apply(
+                StereoExpr::Lit(0),
+                Permutation::from_image(4, &[1, 0, 2, 3])
+            )
+            .simplify(StereoKind::Tetrahedral),
+            StereoExpr::Lit(1),
+        );
+    }
+
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(StereoKind::Tetrahedral, Expr::Lit(1), Expr::Lit(1))]
-    #[case::var(StereoKind::Tetrahedral, Expr::Var("o".into()), Expr::Var("o".into()))]
-    #[case::swap_lit_even(StereoKind::Tetrahedral, Expr::SwapOp(Box::new(Expr::Lit(0))), Expr::Lit(1))]
-    #[case::swap_lit_odd(StereoKind::Tetrahedral, Expr::SwapOp(Box::new(Expr::Lit(1))), Expr::Lit(0))]
-    #[case::double_swap_lit(StereoKind::Tetrahedral, Expr::SwapOp(Box::new(Expr::SwapOp(Box::new(Expr::Lit(1))))), Expr::Lit(1))]
-    #[case::double_swap_var(StereoKind::Tetrahedral, Expr::SwapOp(Box::new(Expr::SwapOp(Box::new(Expr::Var("o".into()))))), Expr::Var("o".into()))]
-    #[case::swap_var_stays(StereoKind::Tetrahedral, Expr::SwapOp(Box::new(Expr::Var("o".into()))), Expr::SwapOp(Box::new(Expr::Var("o".into()))))]
-    #[case::apply_lit(StereoKind::Tetrahedral, Expr::ApplyOp(Box::new(Expr::Lit(0)), Permutation::from_image(4, &[1, 0, 2, 3])), Expr::Lit(1))]
-    #[case::apply_identity(StereoKind::Tetrahedral, Expr::ApplyOp(Box::new(Expr::Lit(1)), Permutation::from_image(4, &[0, 1, 2, 3])), Expr::Lit(1))]
-    #[case::apply_var_stays(StereoKind::Tetrahedral, Expr::ApplyOp(Box::new(Expr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])), Expr::ApplyOp(Box::new(Expr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])))]
-    #[case::cistrans_swap(StereoKind::CisTrans, Expr::SwapOp(Box::new(Expr::Lit(0))), Expr::Lit(1))]
-    #[case::sp_swap_u_fixed(StereoKind::SquarePlanar, Expr::SwapOp(Box::new(Expr::Lit(0))), Expr::Lit(0))]
-    #[case::sp_swap_four_z(StereoKind::SquarePlanar, Expr::SwapOp(Box::new(Expr::Lit(1))), Expr::Lit(2))]
-    #[case::tb_swap_axial(StereoKind::TrigonalBipyramidal, Expr::SwapOp(Box::new(Expr::Lit(0))), Expr::Lit(1))]
-    #[case::tb_swap_other(StereoKind::TrigonalBipyramidal, Expr::SwapOp(Box::new(Expr::Lit(2))), Expr::Lit(17))]
-    #[case::oh_swap_axial(StereoKind::Octahedral, Expr::SwapOp(Box::new(Expr::Lit(0))), Expr::Lit(1))]
-    #[case::oh_swap_other(StereoKind::Octahedral, Expr::SwapOp(Box::new(Expr::Lit(2))), Expr::Lit(21))]
-    fn test_expr_simplify(#[case] kind: StereoKind, #[case] input: Expr, #[case] expected: Expr) {
+    #[case::lit(StereoKind::Tetrahedral, StereoExpr::Lit(1), StereoExpr::Lit(1))]
+    #[case::var(StereoKind::Tetrahedral, StereoExpr::Var("o".into()), StereoExpr::Var("o".into()))]
+    #[case::swap_lit_even(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
+    #[case::swap_lit_odd(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(1))), StereoExpr::Lit(0))]
+    #[case::double_swap_lit(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(1))))), StereoExpr::Lit(1))]
+    #[case::double_swap_var(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Var("o".into()))))), StereoExpr::Var("o".into()))]
+    #[case::swap_var_stays(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Var("o".into()))), StereoExpr::SwapOp(Box::new(StereoExpr::Var("o".into()))))]
+    #[case::apply_lit(StereoKind::Tetrahedral, StereoExpr::ApplyOp(Box::new(StereoExpr::Lit(0)), Permutation::from_image(4, &[1, 0, 2, 3])), StereoExpr::Lit(1))]
+    #[case::apply_identity(StereoKind::Tetrahedral, StereoExpr::ApplyOp(Box::new(StereoExpr::Lit(1)), Permutation::from_image(4, &[0, 1, 2, 3])), StereoExpr::Lit(1))]
+    #[case::apply_var_stays(StereoKind::Tetrahedral, StereoExpr::ApplyOp(Box::new(StereoExpr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])), StereoExpr::ApplyOp(Box::new(StereoExpr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])))]
+    #[case::cistrans_swap(StereoKind::CisTrans, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
+    #[case::sp_swap_u_fixed(StereoKind::SquarePlanar, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(0))]
+    #[case::sp_swap_four_z(StereoKind::SquarePlanar, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(1))), StereoExpr::Lit(2))]
+    #[case::tb_swap_axial(StereoKind::TrigonalBipyramidal, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
+    #[case::tb_swap_other(StereoKind::TrigonalBipyramidal, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(2))), StereoExpr::Lit(17))]
+    #[case::oh_swap_axial(StereoKind::Octahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
+    #[case::oh_swap_other(StereoKind::Octahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(2))), StereoExpr::Lit(21))]
+    fn test_stereo_expr_simplify(#[case] kind: StereoKind, #[case] input: StereoExpr, #[case] expected: StereoExpr) {
         assert_eq!(input.simplify(kind), expected);
     }
 
     #[rstest]
-    #[case::swap_var(Expr::SwapOp(Box::new(Expr::Var("o".into()))))]
-    #[case::apply_var(Expr::ApplyOp(Box::new(Expr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])))]
-    #[case::double_swap_lit(Expr::SwapOp(Box::new(Expr::SwapOp(Box::new(Expr::Lit(0))))))]
-    fn test_expr_simplify_idempotent(#[case] input: Expr) {
+    #[case::swap_var(StereoExpr::SwapOp(Box::new(StereoExpr::Var("o".into()))))]
+    #[case::apply_var(StereoExpr::ApplyOp(Box::new(StereoExpr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])))]
+    #[case::double_swap_lit(StereoExpr::SwapOp(Box::new(StereoExpr::SwapOp(Box::new(
+        StereoExpr::Lit(0)
+    )))))]
+    fn test_stereo_expr_simplify_idempotent(#[case] input: StereoExpr) {
         let once = input.simplify(StereoKind::Tetrahedral);
         let twice = once.clone().simplify(StereoKind::Tetrahedral);
         assert_eq!(once, twice);
@@ -491,20 +523,31 @@ mod tests {
     #[case::square_planar(StereoKind::SquarePlanar, 1)]
     #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, 2)]
     #[case::octahedral(StereoKind::Octahedral, 2)]
-    fn test_expr_simplify_involution(#[case] kind: StereoKind, #[case] index: u32) {
-        let double = Expr::SwapOp(Box::new(Expr::SwapOp(Box::new(Expr::Lit(index)))));
-        assert_eq!(double.simplify(kind), Expr::Lit(index));
+    fn test_stereo_expr_simplify_involution(#[case] kind: StereoKind, #[case] index: u32) {
+        let double = StereoExpr::SwapOp(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(
+            index,
+        )))));
+        assert_eq!(double.simplify(kind), StereoExpr::Lit(index));
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::lit(StereoIndexAst::Lit(1), StereoIndexAst::Lit(1))]
     #[case::undetermined(StereoIndexAst::Undetermined, StereoIndexAst::Undetermined)]
-    #[case::expr_lit_lifts(StereoIndexAst::Expr(Box::new(Expr::Lit(2))), StereoIndexAst::Lit(2))]
-    #[case::expr_swap_lifts(StereoIndexAst::Expr(Box::new(Expr::SwapOp(Box::new(Expr::Lit(0))))), StereoIndexAst::Lit(1))]
-    #[case::expr_var_stays(StereoIndexAst::Expr(Box::new(Expr::Var("o".into()))), StereoIndexAst::Expr(Box::new(Expr::Var("o".into()))))]
+    #[case::expr_lit_lifts(StereoIndexAst::Expr(Box::new(StereoExpr::Lit(2))), StereoIndexAst::Lit(2))]
+    #[case::expr_swap_lifts(StereoIndexAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))))), StereoIndexAst::Lit(1))]
+    #[case::expr_var_stays(StereoIndexAst::Expr(Box::new(StereoExpr::Var("o".into()))), StereoIndexAst::Expr(Box::new(StereoExpr::Var("o".into()))))]
     fn test_stereo_index_ast_simplify(#[case] input: StereoIndexAst, #[case] expected: StereoIndexAst) {
         assert_eq!(input.simplify(StereoKind::Tetrahedral), expected);
+    }
+
+    #[rstest]
+    fn test_stereo_index_ast_expr() {
+        assert_eq!(
+            StereoIndexAst::expr(StereoExpr::swap(StereoExpr::Lit(0)))
+                .simplify(StereoKind::Tetrahedral),
+            StereoIndexAst::Lit(1),
+        );
     }
 
     #[rustfmt::skip]
@@ -513,7 +556,7 @@ mod tests {
     #[case::not_stereo(StereoConfigurationAst::NotStereo, StereoConfigurationAst::NotStereo)]
     #[case::stereo_lit(StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1)), StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1)))]
     #[case::stereo_expr_lifts(
-        StereoConfigurationAst::Stereo(StereoIndexAst::Expr(Box::new(Expr::SwapOp(Box::new(Expr::Lit(0)))))),
+        StereoConfigurationAst::Stereo(StereoIndexAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0)))))),
         StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1)),
     )]
     fn test_stereo_configuration_ast_simplify(
@@ -595,7 +638,7 @@ mod tests {
     #[rstest]
     #[case::lit(StereoIndexAst::Lit(2), Some(2))]
     #[case::undetermined(StereoIndexAst::Undetermined, None)]
-    #[case::expr(StereoIndexAst::Expr(Box::new(Expr::Var("o".into()))), None)]
+    #[case::expr(StereoIndexAst::Expr(Box::new(StereoExpr::Var("o".into()))), None)]
     fn test_stereo_index_ast_as_lit(#[case] index: StereoIndexAst, #[case] expected: Option<u32>) {
         assert_eq!(index.as_lit(), expected);
     }
@@ -605,7 +648,7 @@ mod tests {
     #[case::undetermined_narrows(StereoIndexAst::Undetermined, StereoIndexAst::Lit(1), Some(StereoIndexAst::Lit(1)))]
     #[case::lit_same(StereoIndexAst::Lit(1), StereoIndexAst::Lit(1), Some(StereoIndexAst::Lit(1)))]
     #[case::lit_conflict(StereoIndexAst::Lit(1), StereoIndexAst::Lit(2), None)]
-    #[case::expr_vs_lit(StereoIndexAst::Expr(Box::new(Expr::Var("o".into()))), StereoIndexAst::Lit(1), None)]
+    #[case::expr_vs_lit(StereoIndexAst::Expr(Box::new(StereoExpr::Var("o".into()))), StereoIndexAst::Lit(1), None)]
     fn test_stereo_index_ast_meet(
         #[case] a: StereoIndexAst,
         #[case] b: StereoIndexAst,
@@ -641,9 +684,9 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_ast_simplify_values() {
         let mut atom = StereoAtomAst::new(StereoKind::Tetrahedral).with_configuration(
-            StereoConfigurationAst::Stereo(StereoIndexAst::Expr(Box::new(Expr::SwapOp(Box::new(
-                Expr::Lit(0),
-            ))))),
+            StereoConfigurationAst::Stereo(StereoIndexAst::Expr(Box::new(StereoExpr::SwapOp(
+                Box::new(StereoExpr::Lit(0)),
+            )))),
         );
         atom.simplify_values();
         assert_eq!(
@@ -706,5 +749,55 @@ mod tests {
         #[case] expected: Option<StereoBondAst>,
     ) {
         assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rstest]
+    fn test_stereo_ligand_new() {
+        let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
+        assert_eq!(ligand.atom(), AtomId(3));
+        assert_eq!(ligand.kind(), StereoLigandKind::Atom);
+    }
+
+    #[rstest]
+    fn test_stereo_ligand_refs() {
+        let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::LonePair);
+        assert_eq!(
+            ligand.refs(),
+            ParticipantRefs {
+                node: Some(NodeId(2)),
+                edge: None,
+            }
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_ligand_remap() {
+        // node 1 removed ⇒ surviving node 3 densifies to 2; the kind is carried
+        let remapping = Remapping::new(vec![1], Vec::new());
+        let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
+        assert_eq!(
+            ligand.remap(&remapping),
+            Some(StereoLigand::new(
+                AtomId(2),
+                StereoLigandKind::ImplicitHydrogen
+            )),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_ligand_remap_removed() {
+        let remapping = Remapping::new(vec![3], Vec::new());
+        let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
+        assert_eq!(ligand.remap(&remapping), None);
+    }
+
+    #[rstest]
+    fn test_stereo_ligand_unmap() {
+        let remapping = Remapping::new(vec![1], Vec::new());
+        let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
+        assert_eq!(
+            ligand.unmap(&remapping),
+            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        );
     }
 }
