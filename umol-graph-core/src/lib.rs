@@ -22,7 +22,8 @@ pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::subiso::SubgraphIsomorphismAlgorithm;
 pub use graph::{EdgeId, Embedding, Graph, Neighbor, NodeId, Remapping};
 pub use relation::{
-    FactorOrdering, FixedRelationSet, Ordered, ParticipantRefs, RelationId, RelationParticipant,
-    Unordered, VarRelationSet,
+    FactorOrdering, FixedFixedBirelationSet, FixedRelationSet, FixedVarBirelationSet, Ordered,
+    ParticipantRefs, RelationId, RelationParticipant, Unordered, VarRelationSet,
+    VarVarBirelationSet,
 };
 pub use union_find::UnionFind;

@@ -298,8 +298,6 @@ impl ToEdn for MoleculeAst {
     }
 }
 
-// region: Streaming parser
-//
 // Single-pass parse of the molecule map directly off the source text, using
 // only the byte-level / typed primitives on `EdnStreamDeserializer`. Each
 // non-terminal in the grammar has one `read_*` function; no detour through
@@ -672,10 +670,6 @@ impl IntoAst<MoleculeAst> for MoleculeDsl {
     }
 }
 
-// endregion: Streaming parser
-
-// region: Render
-
 fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     let mut map = EdnMap::with_capacity(8);
     map.insert(Edn::keyword("atoms"), render_atoms(ast, meta));
@@ -906,10 +900,6 @@ fn render_atom_aliases(meta: &Metadata) -> Edn<'static> {
     Edn::Vector(pairs.into())
 }
 
-// endregion: Render
-
-// region: Private parse intermediate
-//
 // Unresolved, owned-by-value tree that mirrors the EDN shape. Atom entries and
 // per-bond endpoints carry `AtomRef` (index or id); constraint leaves carry
 // typed per-entity `Constraint*` variants already parsed from their EDN form.
@@ -1156,10 +1146,6 @@ impl MoleculeInput {
         Ok((ast, metadata))
     }
 }
-
-// endregion: Private parse intermediate
-
-// region: Parse
 
 fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeError> {
     let Edn::Map(m) = edn else {
@@ -1441,8 +1427,6 @@ fn check_id_disjoint(
     }
     Ok(())
 }
-
-// endregion: Parse
 
 #[cfg(test)]
 mod tests {
@@ -2088,8 +2072,6 @@ mod tests {
         assert_eq!(dsl.to_edn(), edn);
     }
 
-    // region: MoleculeAst direct EDN
-
     /// `MoleculeAst::to_edn` emits canonical EDN with positional refs only,
     /// regardless of any id keywords on the input. Parsing the canonical
     /// output back yields the same AST.
@@ -2148,8 +2130,6 @@ mod tests {
         assert_eq!(ast, reparsed);
     }
 
-    // endregion: MoleculeAst direct EDN
-
     #[rstest]
     fn test_molecule_dsl_constraint_unknown_ref_errors() {
         let source =
@@ -2197,8 +2177,6 @@ mod tests {
         assert_eq!(dsl.to_edn(), edn);
     }
 
-    // region: Entity endpoint ref errors
-
     #[rstest]
     fn test_molecule_dsl_bond_endpoint_out_of_range_errors() {
         let edn = read_string(r##"{:atoms ["C" "C"] :bonds [[0 5 "1"]]}"##).unwrap();
@@ -2242,10 +2220,6 @@ mod tests {
         assert!(matches!(err, DeError::Custom(_)));
     }
 
-    // endregion: Entity endpoint ref errors
-
-    // region: :type required
-
     /// `:type` is required on every entry kind that has a DSL surface (bond,
     /// dative, aromatic, multicenter, noncovalent). Missing `:type` is a
     /// `MissingField` error in both the streaming and tree paths.
@@ -2285,14 +2259,6 @@ mod tests {
             de,
         );
     }
-
-    // endregion: :type required
-
-    // region: :guards reserved-future key
-
-    // endregion: :guards reserved-future key
-
-    // region: Per-variant streaming parity
 
     #[rustfmt::skip]
     #[rstest]
@@ -2357,10 +2323,6 @@ mod tests {
         assert_eq!(via_str, via_tree);
     }
 
-    // endregion: Per-variant streaming parity
-
-    // region: Streaming vs tree error parity
-
     #[rstest]
     #[case::missing_key_value(r##"{:atoms}"##)]
     #[case::string_key(r##"{"atoms" []}"##)]
@@ -2385,10 +2347,6 @@ mod tests {
         assert!(via_tree_err, "{source:?}: tree path should have errored");
     }
 
-    // endregion: Streaming vs tree error parity
-
-    // region: Cross-entity id disjointness
-
     #[rustfmt::skip]
     #[rstest]
     #[case::atom_vs_bond(r##"{:atoms [[:x "C"] [:y "C"]] :bonds [{:id :x :a 0 :b 1 :type "1"}]}"##)]
@@ -2401,10 +2359,6 @@ mod tests {
         let err = MoleculeDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }
-
-    // endregion: Cross-entity id disjointness
-
-    // region: Alias bijectivity
 
     #[rstest]
     fn test_molecule_dsl_duplicate_alias_name_errors() {
@@ -2434,9 +2388,6 @@ mod tests {
         assert!(m.get_keyword("guards").is_none());
         assert_eq!(dsl.ast().atoms().count(), 1);
     }
-    // endregion: Alias bijectivity
-
-    // region: MoleculeAst symmetric I/O
 
     #[rstest]
     fn test_molecule_ast_from_str_to_string_roundtrip() {
@@ -2455,6 +2406,4 @@ mod tests {
         let back = MoleculeAst::from_edn(&edn).unwrap();
         assert_eq!(back, ast);
     }
-
-    // endregion: MoleculeAst symmetric I/O
 }

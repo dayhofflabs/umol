@@ -189,8 +189,6 @@ impl ToEdn for BondAst {
     }
 }
 
-// region: Parse
-
 /// Parse a complete bond-string into a `BondDsl`.
 pub fn parse_bond(input: &str) -> Result<BondDsl, ParseError> {
     bond.parse(input).map_err(|e| e.into_inner())
@@ -278,10 +276,6 @@ fn apply_predicates(form: &mut BondDsl, preds: Vec<BondPredicate>) -> Result<(),
     Ok(())
 }
 
-// endregion: Parse
-
-// region: Format
-
 fn fmt_bond_ast(f: &mut fmt::Formatter<'_>, ast: &BondAst) -> fmt::Result {
     match &ast.order {
         ValueAst::Lit(n) => write!(f, "{}", n)?,
@@ -309,10 +303,6 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
     }
 }
 
-// endregion: Format
-
-// region: Lower
-
 fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondAst field is a compile error
     // here, forcing the author to decide how lowering should handle it.
@@ -332,10 +322,6 @@ fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// endregion: Lower
-
-// region: Raise
-
 fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     // Exhaustive destructure: adding a new BondAst field is a compile error
     // here, forcing the author to decide how raising should handle it.
@@ -354,10 +340,6 @@ fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
     }
     raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
-
-// endregion: Raise
-
-// region: Constraint DSL
 
 /// Surface DSL wrapper around `BondConstraint`. EDN form: the keyword
 /// `:aromatic` (flag variant, no value) or a single-key map
@@ -439,8 +421,6 @@ fn bond_constraint_single_key(key: &str, v: &ValueAst) -> Edn<'static> {
     );
     Edn::Map(m)
 }
-
-// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {
@@ -611,8 +591,6 @@ mod tests {
         assert!(matches!(err, DeError::Custom(_)));
     }
 
-    // region: BondConstraintDsl
-
     #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(BondConstraint::Aromatic, ":aromatic")]
@@ -674,9 +652,6 @@ mod tests {
             BondConstraint::RingSize(ValueAst::bind("n", vec![5, 6])),
         );
     }
-    // endregion: BondConstraintDsl
-
-    // region: BondAst symmetric I/O
 
     #[rstest]
     #[case::single("1")]

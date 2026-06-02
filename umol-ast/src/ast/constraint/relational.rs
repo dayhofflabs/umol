@@ -33,7 +33,6 @@ use super::atom::AtomConstraint;
 /// `And`/`Or`/`Not`); cannot appear inline on an entity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RelationalConstraint {
-    // region: Dative bond
     /// The donor end of dative bond `bond` is `atom`.
     DativeBondDonor { bond: DativeBondId, atom: AtomId },
     /// The acceptor end of dative bond `bond` is `atom`.
@@ -55,9 +54,6 @@ pub enum RelationalConstraint {
         predicate: Box<AtomConstraint>,
     },
 
-    // endregion: Dative bond
-
-    // region: Aromatic system
     /// Aromatic system `system` consists of exactly `atoms` (as a set).
     AromaticSystemAtoms {
         system: AromaticSystemId,
@@ -85,9 +81,6 @@ pub enum RelationalConstraint {
         predicate: Box<AtomConstraint>,
     },
 
-    // endregion: Aromatic system
-
-    // region: Multicenter bond
     /// Multicenter bond `bond` consists of exactly `atoms` (as a set).
     MulticenterBondAtoms {
         bond: MulticenterBondId,
@@ -116,9 +109,6 @@ pub enum RelationalConstraint {
         predicate: Box<AtomConstraint>,
     },
 
-    // endregion: Multicenter bond
-
-    // region: Noncovalent bond
     /// Noncovalent bond `bond` connects exactly the pair `atoms` (unordered).
     NoncovalentBondEnds {
         bond: NoncovalentBondId,
@@ -137,7 +127,6 @@ pub enum RelationalConstraint {
         bond: NoncovalentBondId,
         predicates: [Box<AtomConstraint>; 2],
     },
-    // endregion: Noncovalent bond
 }
 
 impl RelationalConstraint {

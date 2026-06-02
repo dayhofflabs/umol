@@ -131,8 +131,6 @@ impl ToEdn for AromaticSystemAst {
     }
 }
 
-// region: Parse
-
 pub fn parse_aromatic_system(input: &str) -> Result<AromaticSystemDsl, ParseError> {
     aromatic_system.parse(input).map_err(|e| e.into_inner())
 }
@@ -223,10 +221,6 @@ fn electron_count_value(ast: &AromaticSystemAst) -> Option<&ValueAst> {
         .next()
 }
 
-// endregion: Parse
-
-// region: Format
-
 fn fmt_aromatic_system_ast(f: &mut fmt::Formatter<'_>, ast: &AromaticSystemAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
     fmt_spin_pair(f, &ast.spin)?;
@@ -248,10 +242,6 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     }
 }
 
-// endregion: Format
-
-// region: Raise
-
 fn raise_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
     let AromaticSystemAst {
         charge,
@@ -269,10 +259,6 @@ fn raise_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaul
     raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// endregion: Raise
-
-// region: Lower
-
 fn lower_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaults) {
     let AromaticSystemAst {
         charge,
@@ -289,10 +275,6 @@ fn lower_aromatic_system(ast: &mut AromaticSystemAst, cfg: &AromaticSystemDefaul
     }
     lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
-
-// endregion: Lower
-
-// region: Constraint DSL
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum AromaticSystemConstraintDsl {
@@ -372,7 +354,6 @@ impl ToEdn for AromaticSystemConstraintDsl {
         }
     }
 }
-// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {

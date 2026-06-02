@@ -1808,8 +1808,6 @@ proptest! {
         prop_assert_eq!(dsl, parsed);
     }
 
-    // region: ValueAst::simplify
-
     /// `simplify` is idempotent: `x.simplify().simplify() == x.simplify()`.
     #[test]
     fn test_value_ast_simplify_idempotent(v in any_value_ast_strategy()) {
@@ -1833,8 +1831,6 @@ proptest! {
         })?;
         prop_assert_eq!(parsed.simplify(), v.simplify());
     }
-
-    // endregion: ValueAst::simplify
 }
 
 /// Vacuous-payload `AtomConstraint` variants render to nothing in the

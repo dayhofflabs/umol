@@ -1962,8 +1962,6 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
     assert_eq!(ast, original);
 }
 
-// region: simplify_values
-
 /// Walks every value-bearing slot the simplifier touches: atom fields
 /// (charge, isotope, implicit-h, lone-pairs, spin), inline atom constraints,
 /// bond order/charge/spin, dative ring constraint, aromatic-system

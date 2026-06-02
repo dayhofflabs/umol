@@ -178,8 +178,6 @@ impl ToEdn for DativeBondAst {
     }
 }
 
-// region: Parse
-
 /// Parse a complete dative-bond-string into a `DativeBondDsl`.
 pub fn parse_dative_bond(input: &str) -> Result<DativeBondDsl, ParseError> {
     dative_bond.parse(input).map_err(|e| e.into_inner())
@@ -249,10 +247,6 @@ fn apply_predicates(
     Ok(())
 }
 
-// endregion: Parse
-
-// region: Format
-
 fn fmt_order(f: &mut fmt::Formatter<'_>, order: &ValueAst) -> fmt::Result {
     match order {
         ValueAst::Lit(n) => write!(f, "{}", n),
@@ -276,10 +270,6 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &DativeBondConstraint) -> fmt::
         },
     }
 }
-
-// endregion: Format
-
-// region: Constraint DSL
 
 /// Surface DSL wrapper around the narrow `DativeBondConstraint`. EDN form is
 /// either the bare keyword `:aromatic` (flag variant, no value) or a
@@ -372,8 +362,6 @@ impl DativeBondConstraintDsl {
         }
     }
 }
-
-// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {
@@ -509,8 +497,6 @@ mod tests {
         assert_eq!(via_stream, via_tree);
     }
 
-    // region: DativeBondConstraintDsl
-
     #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(DativeBondConstraint::Aromatic, ":aromatic")]
@@ -541,7 +527,6 @@ mod tests {
         let err = DativeBondConstraintDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::UnknownField { .. }));
     }
-    // endregion: DativeBondConstraintDsl
 
     #[rstest]
     #[case::single("1")]

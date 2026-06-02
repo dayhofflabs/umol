@@ -58,8 +58,6 @@ impl EntityCounts {
     }
 }
 
-// region: Streaming-parser helpers
-//
 // Shared across the constraint-tree readers here and the molecule-map reader
 // in `super::molecule`.
 
@@ -288,10 +286,6 @@ define_ref!(
     "noncovalent-bond",
     read_noncovalent_bond_ref
 );
-
-// endregion: Streaming-parser helpers
-
-// region: Streaming constraint readers
 
 pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
     match de.peek_byte()?.ok_or_else(eof_err)? {
@@ -946,10 +940,6 @@ pub(super) fn read_constraints_dsl(
     read_vec(de, read_constraint_dsl)
 }
 
-// endregion: Streaming constraint readers
-
-// region: MoleculeConstraintDsl
-
 /// Surface DSL wrapper around `MoleculeConstraint`. EDN form is a single-key
 /// map keyed by the variant: `{:charge-sum {...}}`, `{:spin-sum {...}}`,
 /// `{:bond-order-sum {...}}`, `{:connected {...}}`, `{:sub-pattern {...}}`.
@@ -1208,10 +1198,6 @@ impl ToEdn for MoleculeConstraintDsl {
     }
 }
 
-// endregion: MoleculeConstraintDsl
-
-// region: SubPatternAnchorDsl
-
 /// Surface DSL wrapper around `SubPatternAnchor`. Each vector carries
 /// `(target, pattern)` ref pairs. Target-side refs resolve against the outer
 /// molecule's `Metadata`; pattern-side refs resolve against the pattern
@@ -1427,10 +1413,6 @@ impl ToEdn for SubPatternAnchorDsl {
     }
 }
 
-// endregion: SubPatternAnchorDsl
-
-// region: Helpers
-
 fn expect_map<'e>(edn: &'e Edn<'e>, context: &'static str) -> Result<&'e EdnMap<'e>, DeError> {
     match edn {
         Edn::Map(m) => Ok(m),
@@ -1573,10 +1555,6 @@ fn render_spin(spin: &SpinStateAst) -> Edn<'static> {
     );
     Edn::Map(m)
 }
-
-// endregion: Helpers
-
-// region: ConstraintDsl
 
 /// Surface DSL wrapper around `Constraint`. Single-key-map EDN form:
 /// `{:atom [<ref> <atom-constraint>]}` for narrow entity leaves;
@@ -1776,10 +1754,6 @@ impl ConstraintDsl {
     }
 }
 
-// endregion: ConstraintDsl
-
-// region: ConstraintsDsl
-
 /// Surface DSL wrapper around `Constraints` (a flat vec of `Constraint`).
 /// EDN form: a vector of `ConstraintDsl` EDN forms.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1888,8 +1862,6 @@ fn combinator_edn(key: &str, xs: &[ConstraintDsl]) -> Edn<'static> {
     );
     Edn::Map(m)
 }
-
-// endregion: ConstraintsDsl
 
 #[cfg(test)]
 mod tests {
@@ -2002,8 +1974,6 @@ mod tests {
         );
     }
 
-    // region: MoleculeConstraintDsl
-
     #[fixture]
     fn full_counts() -> EntityCounts {
         EntityCounts {
@@ -2063,10 +2033,6 @@ mod tests {
         assert!(matches!(err, DeError::MissingField { .. }));
     }
 
-    // endregion: MoleculeConstraintDsl
-
-    // region: SubPatternAnchorDsl
-
     #[rstest]
     fn test_sub_pattern_anchor_dsl_empty_roundtrip(#[from(full_counts)] counts: EntityCounts) {
         let meta = Metadata::default();
@@ -2111,10 +2077,6 @@ mod tests {
         let err = SubPatternAnchorDsl::from_edn(&edn).unwrap_err();
         assert!(matches!(err, DeError::Custom(_)));
     }
-
-    // endregion: SubPatternAnchorDsl
-
-    // region: ConstraintDsl
 
     #[rustfmt::skip]
     #[rstest]
@@ -2268,10 +2230,6 @@ mod tests {
         assert!(matches!(err, DeError::UnknownField { .. }));
     }
 
-    // endregion: ConstraintDsl
-
-    // region: ConstraintsDsl
-
     #[rstest]
     fn test_constraints_dsl_empty_roundtrip(#[from(full_counts)] counts: EntityCounts) {
         let meta = Metadata::default();
@@ -2304,5 +2262,4 @@ mod tests {
         let back = parsed.into_ast(&counts, &meta).unwrap();
         assert_eq!(back, cs);
     }
-    // endregion: ConstraintsDsl
 }

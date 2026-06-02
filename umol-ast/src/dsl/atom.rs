@@ -140,8 +140,6 @@ impl ToEdn for AtomAst {
     }
 }
 
-// region: Parse
-
 /// Parse a complete atom-string into an `AtomDsl`.
 pub fn parse_atom(input: &str) -> Result<AtomDsl, ParseError> {
     if let Some(dsl) = parse_bare_element(input) {
@@ -502,10 +500,6 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
     Ok(())
 }
 
-// endregion: Parse
-
-// region: Format
-
 fn fmt_atom_ast(f: &mut fmt::Formatter<'_>, ast: &AtomAst) -> fmt::Result {
     fmt_element(f, &ast.element)?;
     fmt_isotope_mass(f, &ast.isotope_mass)?;
@@ -643,10 +637,6 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
     }
 }
 
-// endregion: Format
-
-// region: Raise
-
 fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     // Exhaustive destructure: adding a new AtomAst field is a compile error
     // here, forcing the author to decide how raising should handle it.
@@ -760,10 +750,6 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
         }
     }
 }
-
-// endregion: Raise
-
-// region: Lower
 
 fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
     // Exhaustive destructure: adding a new AtomAst field is a compile error
@@ -904,10 +890,6 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
         }
     }
 }
-
-// endregion: Lower
-
-// region: Constraint DSLs
 
 /// Surface DSL wrapper around `AromaticValenceAst`. EDN form: `:undetermined`,
 /// `:not-aromatic`, or `{:aromatic <value>}`.
@@ -1188,8 +1170,6 @@ fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
     m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
     Edn::Map(m)
 }
-
-// endregion: Constraint DSLs
 
 #[cfg(test)]
 mod tests {
@@ -1574,8 +1554,6 @@ mod tests {
         assert_eq!(via_stream, via_tree);
     }
 
-    // region: AromaticValenceDsl / MulticenterValenceDsl
-
     #[rustfmt::skip]
     #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, ":undetermined")]
@@ -1623,10 +1601,6 @@ mod tests {
         let err = MulticenterValenceDsl::from_edn(&Edn::Int(3)).unwrap_err();
         assert!(matches!(err, DeError::TypeMismatch { .. }));
     }
-
-    // endregion: AromaticValenceDsl / MulticenterValenceDsl
-
-    // region: AtomConstraintDsl
 
     #[rustfmt::skip]
     #[rstest]
@@ -1691,9 +1665,6 @@ mod tests {
             ))))
         );
     }
-    // endregion: AtomConstraintDsl
-
-    // region: AtomAst symmetric I/O
 
     #[rstest]
     #[case::bare("C")]
@@ -1719,6 +1690,4 @@ mod tests {
         let back = AtomAst::from_edn(&edn).unwrap();
         assert_eq!(back, ast);
     }
-
-    // endregion: AtomAst symmetric I/O
 }

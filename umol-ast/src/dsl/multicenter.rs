@@ -130,8 +130,6 @@ impl ToEdn for MulticenterBondAst {
     }
 }
 
-// region: Parse
-
 pub fn parse_multicenter_bond(input: &str) -> Result<MulticenterBondDsl, ParseError> {
     multicenter_bond.parse(input).map_err(|e| e.into_inner())
 }
@@ -222,10 +220,6 @@ fn electron_count_value(ast: &MulticenterBondAst) -> Option<&ValueAst> {
         .next()
 }
 
-// endregion: Parse
-
-// region: Format
-
 fn fmt_multicenter_bond_ast(f: &mut fmt::Formatter<'_>, ast: &MulticenterBondAst) -> fmt::Result {
     fmt_charge(f, &ast.charge)?;
     fmt_spin_pair(f, &ast.spin)?;
@@ -247,10 +241,6 @@ fn fmt_electrons(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
     }
 }
 
-// endregion: Format
-
-// region: Raise
-
 fn raise_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
     let MulticenterBondAst {
         charge,
@@ -268,10 +258,6 @@ fn raise_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDef
     raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
 
-// endregion: Raise
-
-// region: Lower
-
 fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDefaults) {
     let MulticenterBondAst {
         charge,
@@ -288,10 +274,6 @@ fn lower_multicenter_bond(ast: &mut MulticenterBondAst, cfg: &MulticenterBondDef
     }
     lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
 }
-
-// endregion: Lower
-
-// region: Constraint DSL
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MulticenterBondConstraintDsl {
@@ -371,8 +353,6 @@ impl ToEdn for MulticenterBondConstraintDsl {
         }
     }
 }
-
-// endregion: Constraint DSL
 
 #[cfg(test)]
 mod tests {

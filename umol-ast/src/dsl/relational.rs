@@ -31,7 +31,6 @@ use crate::ast::traits::{FromAst, IntoAst};
 /// See the AST enum for per-variant semantics.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RelationalConstraintDsl {
-    // region: Dative bond
     /// EDN: `{:dative-bond-donor [<dative_ref> <atom_ref>]}`.
     DativeBondDonor { bond: DativeBondRef, atom: AtomRef },
     /// EDN: `{:dative-bond-acceptor [<dative_ref> <atom_ref>]}`.
@@ -52,9 +51,6 @@ pub enum RelationalConstraintDsl {
         predicate: Box<AtomConstraintDsl>,
     },
 
-    // endregion: Dative bond
-
-    // region: Aromatic system
     /// EDN: `{:aromatic-system-atoms [<system_ref> [<atom_ref>+]]}`.
     AromaticSystemAtoms {
         system: AromaticSystemRef,
@@ -81,9 +77,6 @@ pub enum RelationalConstraintDsl {
         predicate: Box<AtomConstraintDsl>,
     },
 
-    // endregion: Aromatic system
-
-    // region: Multicenter bond
     /// EDN: `{:multicenter-bond-atoms [<bond_ref> [<atom_ref>+]]}`.
     MulticenterBondAtoms {
         bond: MulticenterBondRef,
@@ -110,9 +103,6 @@ pub enum RelationalConstraintDsl {
         predicate: Box<AtomConstraintDsl>,
     },
 
-    // endregion: Multicenter bond
-
-    // region: Noncovalent bond
     /// EDN: `{:noncovalent-bond-ends [<bond_ref> [<atom_ref> <atom_ref>]]}`.
     NoncovalentBondEnds {
         bond: NoncovalentBondRef,
@@ -129,7 +119,6 @@ pub enum RelationalConstraintDsl {
         bond: NoncovalentBondRef,
         predicates: [Box<AtomConstraintDsl>; 2],
     },
-    // endregion: Noncovalent bond
 }
 
 /// Top-level EDN keywords for every relational variant. Matches the
@@ -402,8 +391,6 @@ impl RelationalConstraintDsl {
         })
     }
 }
-
-// region: EDN payload codec
 
 /// Render the `[owner_ref <target>]` 2-element pair shared by every variant.
 fn render_pair(owner: Edn<'static>, target: Edn<'static>) -> Edn<'static> {
@@ -679,8 +666,6 @@ fn parse_payload<'de>(key: &str, edn: &Edn<'de>) -> Result<RelationalConstraintD
         }
     })
 }
-
-// endregion: EDN payload codec
 
 #[cfg(test)]
 mod tests {
