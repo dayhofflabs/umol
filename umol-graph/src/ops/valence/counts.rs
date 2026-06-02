@@ -7,7 +7,7 @@
 use thiserror::Error;
 use umol_ast::ast::{
     aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints,
-    AtomId, IsotopeAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
+    AtomId, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
 use umol_shared::element::Element;
 use umol_shared::spin::{SpinMultiplicity, SpinState};
@@ -76,7 +76,7 @@ impl<'a> CountsValence<'a> {
         let derived = self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic)?;
         let mut resolved = atom.ast.meet(&derived).ok_or(CountsError::NoMatch)?;
         if resolved.isotope_mass.is_undetermined() {
-            resolved.isotope_mass = IsotopeAst::Natural;
+            resolved.isotope_mass = IsotopeMassAst::Natural;
         }
         *ast.atom_mut(atom_id).ast = resolved;
         Ok(())

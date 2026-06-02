@@ -16,7 +16,7 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
-    ArithOp, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, Expr, IntoAst, IsotopeAst,
+    ArithOp, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, Expr, IntoAst, IsotopeMassAst,
     MoleculeAst, RelOp, SpinStateAst, ValueAst,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
@@ -71,7 +71,7 @@ fn arith_expr_heavy() -> MoleculeAst {
     };
     let make_atom = |el: Element| AtomAst {
         element: ElementAst::Lit(el),
-        isotope_mass: IsotopeAst::Lit(12),
+        isotope_mass: IsotopeMassAst::Lit(12),
         charge: arith(),
         implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(1))))),
         lone_pairs: arith(),

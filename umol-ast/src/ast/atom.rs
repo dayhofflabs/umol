@@ -21,7 +21,7 @@ use super::value::{set_is_ground, MemOp, ValueAst};
 #[lattice(saturate = "saturate_atom")]
 pub struct AtomAst {
     pub element: ElementAst,
-    pub isotope_mass: IsotopeAst,
+    pub isotope_mass: IsotopeMassAst,
     pub charge: ValueAst,
     pub implicit_hydrogens: ValueAst,
     pub lone_pairs: ValueAst,
@@ -46,7 +46,7 @@ impl AtomAst {
         self
     }
 
-    pub fn with_isotope_mass(mut self, mass: impl Into<IsotopeAst>) -> Self {
+    pub fn with_isotope_mass(mut self, mass: impl Into<IsotopeMassAst>) -> Self {
         self.isotope_mass = mass.into();
         self
     }
@@ -102,7 +102,7 @@ impl AtomAst {
     /// already ground.
     pub fn into_ground(mut self) -> Self {
         if self.isotope_mass.is_undetermined() {
-            self.isotope_mass = IsotopeAst::Natural;
+            self.isotope_mass = IsotopeMassAst::Natural;
         }
         if self.charge.is_undetermined() {
             self.charge = ValueAst::Lit(0);
@@ -533,7 +533,7 @@ fn element_set_view(ast: &ElementAst) -> Option<(&[Element], MemOp)> {
 /// `#i!{12,13}`). `Bind`/`Ref` are named-bind / named-reference for
 /// joint-domain constraints, mirroring `ElementAst`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum IsotopeAst {
+pub enum IsotopeMassAst {
     #[default]
     Undetermined,
     Natural,
@@ -545,7 +545,7 @@ pub enum IsotopeAst {
     Ref(String),
 }
 
-impl IsotopeAst {
+impl IsotopeMassAst {
     pub fn undetermined() -> Self {
         Self::Undetermined
     }
@@ -579,13 +579,13 @@ impl IsotopeAst {
     }
 }
 
-impl From<i64> for IsotopeAst {
+impl From<i64> for IsotopeMassAst {
     fn from(value: i64) -> Self {
         Self::Lit(value)
     }
 }
 
-impl AsLit for IsotopeAst {
+impl AsLit for IsotopeMassAst {
     type Lit = u32;
 
     /// Mass number when ground; `None` otherwise. `Natural` returns
@@ -608,7 +608,7 @@ impl AsLit for IsotopeAst {
     }
 }
 
-impl Lattice for IsotopeAst {
+impl Lattice for IsotopeMassAst {
     #[inline]
     fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
@@ -792,20 +792,20 @@ impl Lattice for IsotopeAst {
 }
 
 /// Canonicalize an isotope-set intersection result.
-fn canonicalize_isotope_set(v: Vec<i64>) -> Option<IsotopeAst> {
+fn canonicalize_isotope_set(v: Vec<i64>) -> Option<IsotopeMassAst> {
     match v.len() {
         0 => None,
-        1 => Some(IsotopeAst::Lit(v[0])),
-        _ => Some(IsotopeAst::Set(Box::new(v))),
+        1 => Some(IsotopeMassAst::Lit(v[0])),
+        _ => Some(IsotopeMassAst::Set(Box::new(v))),
     }
 }
 
 /// Canonicalize an isotope not-set result.
-fn canonicalize_isotope_not_set(v: Vec<i64>) -> IsotopeAst {
+fn canonicalize_isotope_not_set(v: Vec<i64>) -> IsotopeMassAst {
     match v.len() {
-        0 => IsotopeAst::Undetermined,
-        1 => IsotopeAst::Not(v[0]),
-        _ => IsotopeAst::NotSet(Box::new(v)),
+        0 => IsotopeMassAst::Undetermined,
+        1 => IsotopeMassAst::Not(v[0]),
+        _ => IsotopeMassAst::NotSet(Box::new(v)),
     }
 }
 
@@ -813,14 +813,14 @@ fn canonicalize_isotope_not_set(v: Vec<i64>) -> IsotopeAst {
 /// `(set, polarity)` pair describing the admissible domain. Returns None
 /// for `Undetermined`, `Natural`, and `Ref` which don't have a finite set
 /// encoding.
-fn isotope_set_view(ast: &IsotopeAst) -> Option<(&[i64], MemOp)> {
+fn isotope_set_view(ast: &IsotopeMassAst) -> Option<(&[i64], MemOp)> {
     match ast {
-        IsotopeAst::Lit(x) => Some((slice::from_ref(x), MemOp::In)),
-        IsotopeAst::Set(s) => Some((s, MemOp::In)),
-        IsotopeAst::Not(x) => Some((slice::from_ref(x), MemOp::NotIn)),
-        IsotopeAst::NotSet(s) => Some((s, MemOp::NotIn)),
-        IsotopeAst::Bind(b) => Some((&b.2, b.1)),
-        IsotopeAst::Undetermined | IsotopeAst::Natural | IsotopeAst::Ref(_) => None,
+        IsotopeMassAst::Lit(x) => Some((slice::from_ref(x), MemOp::In)),
+        IsotopeMassAst::Set(s) => Some((s, MemOp::In)),
+        IsotopeMassAst::Not(x) => Some((slice::from_ref(x), MemOp::NotIn)),
+        IsotopeMassAst::NotSet(s) => Some((s, MemOp::NotIn)),
+        IsotopeMassAst::Bind(b) => Some((&b.2, b.1)),
+        IsotopeMassAst::Undetermined | IsotopeMassAst::Natural | IsotopeMassAst::Ref(_) => None,
     }
 }
 
@@ -849,7 +849,7 @@ mod tests {
     #[rstest]
     #[case::with_element_ast(AtomAst::default().with_element(ElementAst::Lit(Element::C)), AtomAst { element: ElementAst::Lit(Element::C), ..Default::default() })]
     #[case::with_element_primitive(AtomAst::default().with_element(Element::N), AtomAst { element: ElementAst::Lit(Element::N), ..Default::default() })]
-    #[case::with_isotope_mass(AtomAst::default().with_isotope_mass(12_i64), AtomAst { isotope_mass: IsotopeAst::Lit(12), ..Default::default() })]
+    #[case::with_isotope_mass(AtomAst::default().with_isotope_mass(12_i64), AtomAst { isotope_mass: IsotopeMassAst::Lit(12), ..Default::default() })]
     #[case::with_charge(AtomAst::default().with_charge(1_i64), AtomAst { charge: ValueAst::Lit(1), ..Default::default() })]
     #[case::with_implicit_hydrogens(AtomAst::default().with_implicit_hydrogens(3_i64), AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..Default::default() })]
     #[case::with_lone_pairs(AtomAst::default().with_lone_pairs(2_i64), AtomAst { lone_pairs: ValueAst::Lit(2), ..Default::default() })]
@@ -867,13 +867,13 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::from_element(AtomAst::from_element(Element::C).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
         lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() })]
     #[case::with_charge(AtomAst::from_element(Element::C).with_charge(1_i64).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(1), implicit_hydrogens: ValueAst::Lit(0),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(1), implicit_hydrogens: ValueAst::Lit(0),
         lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::new() })]
     #[case::constraint(AtomAst::from_element(Element::C).with_constraint(AtomConstraint::valence(4_i64)).into_ground(),
-        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
+        AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Natural, charge: ValueAst::Lit(0), implicit_hydrogens: ValueAst::Lit(0),
         lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), constraints: AtomConstraints::from(AtomConstraint::valence(4)) })]
     fn test_atom_ast_into_ground(#[case] actual: AtomAst, #[case] expected: AtomAst) {
         assert_eq!(actual, expected);
@@ -892,25 +892,25 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::default_(AtomAst::default(), false)]
-    #[case::all_ground(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+    #[case::all_ground(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, true)]
-    #[case::element_undetermined(AtomAst { element: ElementAst::Undetermined, isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+    #[case::element_undetermined(AtomAst { element: ElementAst::Undetermined, isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
-    #[case::isotope_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Undetermined, charge: ValueAst::Lit(0),
+    #[case::isotope_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Undetermined, charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
-    #[case::charge_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Undetermined,
+    #[case::charge_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Undetermined,
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
-    #[case::hydrogens_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+    #[case::hydrogens_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Undetermined, lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
-    #[case::lone_pairs_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+    #[case::lone_pairs_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Undetermined, spin: SpinStateAst::from((0_u8, 1_u8)),
         constraints: AtomConstraints::new() }, false)]
-    #[case::spin_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeAst::Lit(12), charge: ValueAst::Lit(0),
+    #[case::spin_undetermined(AtomAst { element: ElementAst::Lit(Element::C), isotope_mass: IsotopeMassAst::Lit(12), charge: ValueAst::Lit(0),
         implicit_hydrogens: ValueAst::Lit(4), lone_pairs: ValueAst::Lit(0), spin: SpinStateAst::default(),
         constraints: AtomConstraints::new() }, false)]
     fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
@@ -953,7 +953,7 @@ mod tests {
     fn test_atom_ast_simplify_values() {
         let mut atom = AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Lit(12),
+            isotope_mass: IsotopeMassAst::Lit(12),
             charge: ValueAst::Expr(Box::new(Expr::Lit(1))),
             implicit_hydrogens: ValueAst::Expr(Box::new(Expr::Lit(3))),
             lone_pairs: ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Lit(2))))),
@@ -966,7 +966,7 @@ mod tests {
             ))]),
         };
         atom.simplify_values();
-        assert_eq!(atom.isotope_mass, IsotopeAst::Lit(12));
+        assert_eq!(atom.isotope_mass, IsotopeMassAst::Lit(12));
         assert_eq!(atom.charge, ValueAst::Lit(1));
         assert_eq!(atom.implicit_hydrogens, ValueAst::Lit(3));
         assert_eq!(atom.lone_pairs, ValueAst::Lit(-2));
@@ -1050,38 +1050,38 @@ mod tests {
     }
 
     #[rstest]
-    #[case::positive(IsotopeAst::from(13_i64), IsotopeAst::Lit(13))]
-    #[case::zero(IsotopeAst::from(0_i64), IsotopeAst::Lit(0))]
-    fn test_isotope_ast_from_i64(#[case] actual: IsotopeAst, #[case] expected: IsotopeAst) {
+    #[case::positive(IsotopeMassAst::from(13_i64), IsotopeMassAst::Lit(13))]
+    #[case::zero(IsotopeMassAst::from(0_i64), IsotopeMassAst::Lit(0))]
+    fn test_isotope_ast_from_i64(#[case] actual: IsotopeMassAst, #[case] expected: IsotopeMassAst) {
         assert_eq!(actual, expected);
     }
 
     #[rstest]
-    #[case::natural(IsotopeAst::Natural, false)]
-    #[case::lit(IsotopeAst::Lit(12), false)]
-    #[case::undetermined(IsotopeAst::Undetermined, true)]
-    #[case::set(IsotopeAst::Set(Box::new(vec![12, 13])), false)]
-    #[case::not(IsotopeAst::Not(14), false)]
-    #[case::not_set(IsotopeAst::NotSet(Box::new(vec![12, 13])), false)]
-    #[case::bind(IsotopeAst::bind("m", vec![12], MemOp::In), false)]
-    #[case::reference(IsotopeAst::Ref("m".into()), false)]
-    fn test_isotope_ast_is_undetermined(#[case] ast: IsotopeAst, #[case] expected: bool) {
+    #[case::natural(IsotopeMassAst::Natural, false)]
+    #[case::lit(IsotopeMassAst::Lit(12), false)]
+    #[case::undetermined(IsotopeMassAst::Undetermined, true)]
+    #[case::set(IsotopeMassAst::Set(Box::new(vec![12, 13])), false)]
+    #[case::not(IsotopeMassAst::Not(14), false)]
+    #[case::not_set(IsotopeMassAst::NotSet(Box::new(vec![12, 13])), false)]
+    #[case::bind(IsotopeMassAst::bind("m", vec![12], MemOp::In), false)]
+    #[case::reference(IsotopeMassAst::Ref("m".into()), false)]
+    fn test_isotope_ast_is_undetermined(#[case] ast: IsotopeMassAst, #[case] expected: bool) {
         assert_eq!(ast.is_undetermined(), expected);
     }
 
     #[rstest]
-    #[case::natural(IsotopeAst::Natural, Some(0))]
-    #[case::lit(IsotopeAst::Lit(12), Some(12))]
-    #[case::lit_zero(IsotopeAst::Lit(0), Some(0))]
-    #[case::wildcard(IsotopeAst::Undetermined, None)]
-    #[case::set_singleton(IsotopeAst::Set(Box::new(vec![14])), Some(14))]
-    #[case::set_multi(IsotopeAst::Set(Box::new(vec![12, 13])), None)]
-    #[case::not(IsotopeAst::Not(14), None)]
-    #[case::not_set(IsotopeAst::NotSet(Box::new(vec![12, 13])), None)]
-    #[case::bind(IsotopeAst::bind("m", vec![12], MemOp::In), None)]
-    #[case::reference(IsotopeAst::Ref("m".into()), None)]
+    #[case::natural(IsotopeMassAst::Natural, Some(0))]
+    #[case::lit(IsotopeMassAst::Lit(12), Some(12))]
+    #[case::lit_zero(IsotopeMassAst::Lit(0), Some(0))]
+    #[case::wildcard(IsotopeMassAst::Undetermined, None)]
+    #[case::set_singleton(IsotopeMassAst::Set(Box::new(vec![14])), Some(14))]
+    #[case::set_multi(IsotopeMassAst::Set(Box::new(vec![12, 13])), None)]
+    #[case::not(IsotopeMassAst::Not(14), None)]
+    #[case::not_set(IsotopeMassAst::NotSet(Box::new(vec![12, 13])), None)]
+    #[case::bind(IsotopeMassAst::bind("m", vec![12], MemOp::In), None)]
+    #[case::reference(IsotopeMassAst::Ref("m".into()), None)]
     fn test_isotope_ast_literal_and_is_ground(
-        #[case] ast: IsotopeAst,
+        #[case] ast: IsotopeMassAst,
         #[case] expected: Option<u32>,
     ) {
         assert_eq!(ast.as_lit(), expected);
@@ -1090,25 +1090,25 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_natural(IsotopeAst::Undetermined, IsotopeAst::Natural, true)]
-    #[case::undetermined_value(IsotopeAst::Undetermined, IsotopeAst::Lit(12), true)]
-    #[case::undetermined_undetermined(IsotopeAst::Undetermined, IsotopeAst::Undetermined, true)]
-    #[case::natural_undetermined(IsotopeAst::Natural, IsotopeAst::Undetermined, false)]
-    #[case::value_undetermined(IsotopeAst::Lit(12), IsotopeAst::Undetermined, false)]
-    #[case::natural_natural(IsotopeAst::Natural, IsotopeAst::Natural, true)]
-    #[case::natural_value(IsotopeAst::Natural, IsotopeAst::Lit(12), false)]
-    #[case::value_natural(IsotopeAst::Lit(12), IsotopeAst::Natural, false)]
-    #[case::value_lit_match(IsotopeAst::Lit(12), IsotopeAst::Lit(12), true)]
-    #[case::value_lit_mismatch(IsotopeAst::Lit(12), IsotopeAst::Lit(13), false)]
-    #[case::value_wildcard_lit(IsotopeAst::Undetermined, IsotopeAst::Lit(12), true)]
-    #[case::value_set_lit_in(IsotopeAst::Set(Box::new(vec![12, 13])), IsotopeAst::Lit(13), true)]
-    #[case::value_set_lit_out(IsotopeAst::Set(Box::new(vec![12, 13])), IsotopeAst::Lit(14), false)]
-    #[case::value_set_set_subset(IsotopeAst::Set(Box::new(vec![12, 13, 14])), IsotopeAst::Set(Box::new(vec![12, 13])), true)]
-    #[case::value_set_set_superset(IsotopeAst::Set(Box::new(vec![12])), IsotopeAst::Set(Box::new(vec![12, 13])), false)]
-    #[case::value_lit_wildcard(IsotopeAst::Lit(12), IsotopeAst::Undetermined, false)]
+    #[case::undetermined_natural(IsotopeMassAst::Undetermined, IsotopeMassAst::Natural, true)]
+    #[case::undetermined_value(IsotopeMassAst::Undetermined, IsotopeMassAst::Lit(12), true)]
+    #[case::undetermined_undetermined(IsotopeMassAst::Undetermined, IsotopeMassAst::Undetermined, true)]
+    #[case::natural_undetermined(IsotopeMassAst::Natural, IsotopeMassAst::Undetermined, false)]
+    #[case::value_undetermined(IsotopeMassAst::Lit(12), IsotopeMassAst::Undetermined, false)]
+    #[case::natural_natural(IsotopeMassAst::Natural, IsotopeMassAst::Natural, true)]
+    #[case::natural_value(IsotopeMassAst::Natural, IsotopeMassAst::Lit(12), false)]
+    #[case::value_natural(IsotopeMassAst::Lit(12), IsotopeMassAst::Natural, false)]
+    #[case::value_lit_match(IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(12), true)]
+    #[case::value_lit_mismatch(IsotopeMassAst::Lit(12), IsotopeMassAst::Lit(13), false)]
+    #[case::value_wildcard_lit(IsotopeMassAst::Undetermined, IsotopeMassAst::Lit(12), true)]
+    #[case::value_set_lit_in(IsotopeMassAst::Set(Box::new(vec![12, 13])), IsotopeMassAst::Lit(13), true)]
+    #[case::value_set_lit_out(IsotopeMassAst::Set(Box::new(vec![12, 13])), IsotopeMassAst::Lit(14), false)]
+    #[case::value_set_set_subset(IsotopeMassAst::Set(Box::new(vec![12, 13, 14])), IsotopeMassAst::Set(Box::new(vec![12, 13])), true)]
+    #[case::value_set_set_superset(IsotopeMassAst::Set(Box::new(vec![12])), IsotopeMassAst::Set(Box::new(vec![12, 13])), false)]
+    #[case::value_lit_wildcard(IsotopeMassAst::Lit(12), IsotopeMassAst::Undetermined, false)]
     fn test_isotope_ast_matches(
-        #[case] pattern: IsotopeAst,
-        #[case] target: IsotopeAst,
+        #[case] pattern: IsotopeMassAst,
+        #[case] target: IsotopeMassAst,
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);

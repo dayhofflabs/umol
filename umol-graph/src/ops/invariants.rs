@@ -392,7 +392,7 @@ fn enumeration_values(field: &ValueAst, bound: RangeInclusive<i64>) -> Vec<i64> 
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AtomAst, AtomConstraint, AtomConstraints, AtomId, ElementAst, IsotopeAst, MoleculeAst,
+        AtomAst, AtomConstraint, AtomConstraints, AtomId, ElementAst, IsotopeMassAst, MoleculeAst,
         SpinStateAst, ValueAst,
     };
     use umol_shared::element::Element;
@@ -513,7 +513,7 @@ mod tests {
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Natural,
+            isotope_mass: IsotopeMassAst::Natural,
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
             lone_pairs: ValueAst::Lit(0),
@@ -547,7 +547,7 @@ mod tests {
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::O),
-            isotope_mass: IsotopeAst::Natural,
+            isotope_mass: IsotopeMassAst::Natural,
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(2),
@@ -568,7 +568,7 @@ mod tests {
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::N),
-            isotope_mass: IsotopeAst::Natural,
+            isotope_mass: IsotopeMassAst::Natural,
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(1),
@@ -593,7 +593,7 @@ mod tests {
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Natural,
+            isotope_mass: IsotopeMassAst::Natural,
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
             lone_pairs: ValueAst::Lit(0),
@@ -628,7 +628,7 @@ mod tests {
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Natural,
+            isotope_mass: IsotopeMassAst::Natural,
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(2),
             lone_pairs: ValueAst::Lit(0),
@@ -648,7 +648,7 @@ mod tests {
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::O),
-            isotope_mass: IsotopeAst::Natural,
+            isotope_mass: IsotopeMassAst::Natural,
             charge: ValueAst::Lit(-1),
             implicit_hydrogens: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(3),
@@ -661,7 +661,7 @@ mod tests {
     #[case::specified_isotope(
         MoleculeAst::from_atoms_and_bonds(vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Lit(13),
+            isotope_mass: IsotopeMassAst::Lit(13),
             charge: ValueAst::Lit(0),
             lone_pairs: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
@@ -670,7 +670,7 @@ mod tests {
         AtomId(0),
         vec![AtomAst {
             element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeAst::Lit(13),
+            isotope_mass: IsotopeMassAst::Lit(13),
             charge: ValueAst::Lit(0),
             implicit_hydrogens: ValueAst::Lit(4),
             lone_pairs: ValueAst::Lit(0),

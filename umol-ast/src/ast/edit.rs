@@ -9,7 +9,7 @@
 //! entity created by the Nth Edit earlier in the same batch.
 
 use super::aromatic::AromaticSystemAst;
-use super::atom::{AtomAst, ElementAst, IsotopeAst};
+use super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::bond::BondAst;
 use super::constraint::{
     AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, Constraints,
@@ -49,8 +49,8 @@ pub enum AtomFieldChange {
         new: ElementAst,
     },
     IsotopeMass {
-        old: IsotopeAst,
-        new: IsotopeAst,
+        old: IsotopeMassAst,
+        new: IsotopeMassAst,
     },
     Charge {
         old: ValueAst,

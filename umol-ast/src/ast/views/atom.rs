@@ -5,7 +5,7 @@ use std::ops::Index;
 
 use umol_shared::element::Element;
 
-use super::super::atom::{AtomAst, ElementAst, IsotopeAst};
+use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::constraint::AtomConstraints;
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -89,7 +89,7 @@ impl<'a> AtomView<'a> {
     }
 
     #[inline]
-    pub fn isotope_mass(&self) -> &'a IsotopeAst {
+    pub fn isotope_mass(&self) -> &'a IsotopeMassAst {
         &self.ast.isotope_mass
     }
 

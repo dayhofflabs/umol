@@ -22,7 +22,7 @@ use super::predicates::{
     raise_spin, ring_count, SpinPredicate,
 };
 use super::value::{fmt_value, id, signed_int, terminator, value, ValueDsl};
-use crate::ast::atom::{AtomAst, ElementAst, IsotopeAst};
+use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
@@ -207,7 +207,7 @@ fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
 /// and the applier folds them into the `AtomAst`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AtomPredicate {
-    IsotopeMass(IsotopeAst),
+    IsotopeMass(IsotopeMassAst),
     Charge(ValueAst),
     ImplicitHydrogens(ValueAst),
     LonePairs(ValueAst),
@@ -359,19 +359,19 @@ fn element_ref(i: &mut &str) -> PResult<String> {
     .parse_next(i)
 }
 
-fn isotope(i: &mut &str) -> PResult<IsotopeAst> {
+fn isotope(i: &mut &str) -> PResult<IsotopeMassAst> {
     preceded(
         multispace0,
         alt((
-            '='.value(IsotopeAst::Natural),
-            '*'.value(IsotopeAst::Undetermined),
-            preceded('!', isotope_set).map(|s| IsotopeAst::NotSet(Box::new(s))),
-            preceded('!', signed_int).map(IsotopeAst::Not),
-            isotope_set.map(|s| IsotopeAst::Set(Box::new(s))),
+            '='.value(IsotopeMassAst::Natural),
+            '*'.value(IsotopeMassAst::Undetermined),
+            preceded('!', isotope_set).map(|s| IsotopeMassAst::NotSet(Box::new(s))),
+            preceded('!', signed_int).map(IsotopeMassAst::Not),
+            isotope_set.map(|s| IsotopeMassAst::Set(Box::new(s))),
             terminated(isotope_bind, (multispace0, terminator))
-                .map(|(id, set, polarity)| IsotopeAst::bind(id, set, polarity)),
-            terminated(isotope_ref, (multispace0, terminator)).map(IsotopeAst::Ref),
-            terminated(signed_int, (multispace0, terminator)).map(IsotopeAst::Lit),
+                .map(|(id, set, polarity)| IsotopeMassAst::bind(id, set, polarity)),
+            terminated(isotope_ref, (multispace0, terminator)).map(IsotopeMassAst::Ref),
+            terminated(signed_int, (multispace0, terminator)).map(IsotopeMassAst::Lit),
         )),
     )
     .parse_next(i)
@@ -463,7 +463,7 @@ fn apply_predicates(form: &mut AtomDsl, preds: Vec<AtomPredicate>) -> Result<(),
     for pred in preds {
         match pred {
             AtomPredicate::IsotopeMass(v) => {
-                if !matches!(ast.isotope_mass, IsotopeAst::Undetermined) {
+                if !matches!(ast.isotope_mass, IsotopeMassAst::Undetermined) {
                     return Err(ParseError::DuplicateAtomPredicate("#i".to_string()));
                 }
                 ast.isotope_mass = v;
@@ -548,21 +548,21 @@ fn fmt_element_set(f: &mut fmt::Formatter<'_>, es: &[Element]) -> fmt::Result {
     write!(f, "}}")
 }
 
-fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeAst) -> fmt::Result {
+fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeMassAst) -> fmt::Result {
     match iso {
-        IsotopeAst::Undetermined => Ok(()),
-        IsotopeAst::Natural => write!(f, "#i="),
-        IsotopeAst::Lit(n) => write!(f, "#i{}", n),
-        IsotopeAst::Set(s) => {
+        IsotopeMassAst::Undetermined => Ok(()),
+        IsotopeMassAst::Natural => write!(f, "#i="),
+        IsotopeMassAst::Lit(n) => write!(f, "#i{}", n),
+        IsotopeMassAst::Set(s) => {
             write!(f, "#i")?;
             fmt_value(f, &ValueAst::Set(s.clone()))
         }
-        IsotopeAst::Not(n) => write!(f, "#i!{}", n),
-        IsotopeAst::NotSet(s) => {
+        IsotopeMassAst::Not(n) => write!(f, "#i!{}", n),
+        IsotopeMassAst::NotSet(s) => {
             write!(f, "#i!")?;
             fmt_value(f, &ValueAst::Set(s.clone()))
         }
-        IsotopeAst::Bind(b) => {
+        IsotopeMassAst::Bind(b) => {
             let (id, op, set) = &**b;
             write!(f, "#i?{} :: ", id)?;
             if matches!(op, MemOp::NotIn) {
@@ -570,7 +570,7 @@ fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeAst) -> fmt::Result
             }
             fmt_value(f, &ValueAst::Set(Box::new(set.clone())))
         }
-        IsotopeAst::Ref(id) => write!(f, "#i?{}", id),
+        IsotopeMassAst::Ref(id) => write!(f, "#i?{}", id),
     }
 }
 
@@ -660,10 +660,10 @@ fn raise_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
         constraints,
     } = ast;
 
-    if matches!(*isotope_mass, IsotopeAst::Undetermined) {
+    if matches!(*isotope_mass, IsotopeMassAst::Undetermined) {
         *isotope_mass = match cfg.isotope {
-            IsotopeDefault::Natural => IsotopeAst::Natural,
-            IsotopeDefault::Required => IsotopeAst::Undetermined,
+            IsotopeDefault::Natural => IsotopeMassAst::Natural,
+            IsotopeDefault::Required => IsotopeMassAst::Undetermined,
         };
     }
     if matches!(*charge, ValueAst::Undetermined) {
@@ -780,9 +780,9 @@ fn lower_atom(ast: &mut AtomAst, cfg: &AtomDefaults) {
 
     if matches!(
         (&cfg.isotope, &*isotope_mass),
-        (IsotopeDefault::Natural, IsotopeAst::Natural)
+        (IsotopeDefault::Natural, IsotopeMassAst::Natural)
     ) {
-        *isotope_mass = IsotopeAst::Undetermined;
+        *isotope_mass = IsotopeMassAst::Undetermined;
     }
     if matches!(
         (&cfg.charge, &*charge),
@@ -1237,8 +1237,8 @@ mod tests {
     #[case::element_set("{C,N,O}", AtomDsl(AtomAst::new(ElementAst::Set(vec![Element::C, Element::N, Element::O]))))]
     #[case::element_bind("(?e :: {C,N})", AtomDsl(AtomAst::new(ElementAst::bind("e", vec![Element::C, Element::N], MemOp::In))))]
     #[case::element_ref("(?e)", AtomDsl(AtomAst::new(ElementAst::Ref("e".to_string()))))]
-    #[case::isotope("C#i12", AtomDsl(AtomAst { isotope_mass: IsotopeAst::Lit(12), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::isotope_natural("C#i=", AtomDsl(AtomAst { isotope_mass: IsotopeAst::Natural, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::isotope("C#i12", AtomDsl(AtomAst { isotope_mass: IsotopeMassAst::Lit(12), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::isotope_natural("C#i=", AtomDsl(AtomAst { isotope_mass: IsotopeMassAst::Natural, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::charge_pos("C#c+2", AtomDsl(AtomAst { charge: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::charge_neg("C#c-2", AtomDsl(AtomAst { charge: ValueAst::Lit(-2), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::charge_plus("C#c+", AtomDsl(AtomAst { charge: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1418,21 +1418,21 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::natural("=", IsotopeAst::Natural)]
-    #[case::lit("12", IsotopeAst::Lit(12))]
-    #[case::undetermined("*", IsotopeAst::Undetermined)]
-    #[case::set("{12,13,14}", IsotopeAst::Set(Box::new(vec![12, 13, 14])))]
-    #[case::bind_paren("(?m :: {12,13})", IsotopeAst::bind("m", vec![12, 13], MemOp::In))]
-    #[case::bind_bare("?m :: {12,13}", IsotopeAst::bind("m", vec![12, 13], MemOp::In))]
-    #[case::bind_paren_paren("((?m :: {12,13}))", IsotopeAst::bind("m", vec![12, 13], MemOp::In))]
-    #[case::bind_not_in_lit("?m :: !14", IsotopeAst::bind("m", vec![14], MemOp::NotIn))]
-    #[case::bind_not_in_set("?m :: !{12,13}", IsotopeAst::bind("m", vec![12, 13], MemOp::NotIn))]
-    #[case::ref_paren("(?m)", IsotopeAst::Ref("m".to_string()))]
-    #[case::ref_bare("?m", IsotopeAst::Ref("m".to_string()))]
-    #[case::ref_paren_paren("((?m))", IsotopeAst::Ref("m".to_string()))]
-    #[case::not_lit("!14", IsotopeAst::Not(14))]
-    #[case::not_set("!{12,13}", IsotopeAst::NotSet(Box::new(vec![12, 13])))]
-    fn test_isotope(#[case] input: &str, #[case] expected: IsotopeAst) {
+    #[case::natural("=", IsotopeMassAst::Natural)]
+    #[case::lit("12", IsotopeMassAst::Lit(12))]
+    #[case::undetermined("*", IsotopeMassAst::Undetermined)]
+    #[case::set("{12,13,14}", IsotopeMassAst::Set(Box::new(vec![12, 13, 14])))]
+    #[case::bind_paren("(?m :: {12,13})", IsotopeMassAst::bind("m", vec![12, 13], MemOp::In))]
+    #[case::bind_bare("?m :: {12,13}", IsotopeMassAst::bind("m", vec![12, 13], MemOp::In))]
+    #[case::bind_paren_paren("((?m :: {12,13}))", IsotopeMassAst::bind("m", vec![12, 13], MemOp::In))]
+    #[case::bind_not_in_lit("?m :: !14", IsotopeMassAst::bind("m", vec![14], MemOp::NotIn))]
+    #[case::bind_not_in_set("?m :: !{12,13}", IsotopeMassAst::bind("m", vec![12, 13], MemOp::NotIn))]
+    #[case::ref_paren("(?m)", IsotopeMassAst::Ref("m".to_string()))]
+    #[case::ref_bare("?m", IsotopeMassAst::Ref("m".to_string()))]
+    #[case::ref_paren_paren("((?m))", IsotopeMassAst::Ref("m".to_string()))]
+    #[case::not_lit("!14", IsotopeMassAst::Not(14))]
+    #[case::not_set("!{12,13}", IsotopeMassAst::NotSet(Box::new(vec![12, 13])))]
+    fn test_isotope(#[case] input: &str, #[case] expected: IsotopeMassAst) {
         let result = isotope.parse(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
         let expr = result.unwrap();
@@ -1441,9 +1441,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::isotope_lit("#i12", AtomPredicate::IsotopeMass(IsotopeAst::Lit(12)))]
-    #[case::isotope_natural("#i=", AtomPredicate::IsotopeMass(IsotopeAst::Natural))]
-    #[case::isotope_undetermined("#i*", AtomPredicate::IsotopeMass(IsotopeAst::Undetermined))]
+    #[case::isotope_lit("#i12", AtomPredicate::IsotopeMass(IsotopeMassAst::Lit(12)))]
+    #[case::isotope_natural("#i=", AtomPredicate::IsotopeMass(IsotopeMassAst::Natural))]
+    #[case::isotope_undetermined("#i*", AtomPredicate::IsotopeMass(IsotopeMassAst::Undetermined))]
     #[case::charge_pos("#c+2", AtomPredicate::Charge(ValueAst::Lit(2)))]
     #[case::charge_neg("#c-2", AtomPredicate::Charge(ValueAst::Lit(-2)))]
     #[case::charge_plus("#c+", AtomPredicate::Charge(ValueAst::Lit(1)))]
@@ -1517,7 +1517,7 @@ mod tests {
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(ast.lone_pairs, ValueAst::Lit(0));
         assert_eq!(ast.implicit_hydrogens, ValueAst::Lit(0));
-        assert_eq!(ast.isotope_mass, IsotopeAst::Natural);
+        assert_eq!(ast.isotope_mass, IsotopeMassAst::Natural);
         assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
         assert_eq!(
             ast.constraints.get(AtomConstraintKind::Valence),
@@ -1537,7 +1537,7 @@ mod tests {
         ast.charge = ValueAst::Lit(0);
         ast.lone_pairs = ValueAst::Lit(0);
         ast.implicit_hydrogens = ValueAst::Lit(0);
-        ast.isotope_mass = IsotopeAst::Natural;
+        ast.isotope_mass = IsotopeMassAst::Natural;
         ast.spin = SpinStateAst::from((0_u8, 1_u8));
         ast.constraints
             .add(AtomConstraint::Valence(ValueAst::Lit(0)));
@@ -1549,7 +1549,7 @@ mod tests {
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.lone_pairs, ValueAst::Undetermined);
         assert_eq!(dsl.0.implicit_hydrogens, ValueAst::Undetermined);
-        assert_eq!(dsl.0.isotope_mass, IsotopeAst::Undetermined);
+        assert_eq!(dsl.0.isotope_mass, IsotopeMassAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
         assert!(dsl.0.constraints.is_empty());
     }

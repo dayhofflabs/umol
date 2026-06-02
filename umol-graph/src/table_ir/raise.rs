@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
-    DativeBondAst, ElementAst, IsotopeAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
+    DativeBondAst, ElementAst, IsotopeMassAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
     NoncovalentBondKind, SpinStateAst, TryIntoAst, ValueAst,
 };
 
@@ -98,8 +98,8 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
                 None => {}
             }
 
-            if matches!(atom.isotope_mass, IsotopeAst::Undetermined) {
-                atom.isotope_mass = IsotopeAst::Natural;
+            if matches!(atom.isotope_mass, IsotopeMassAst::Undetermined) {
+                atom.isotope_mass = IsotopeMassAst::Natural;
             }
             if matches!(atom.charge, ValueAst::Undetermined) {
                 atom.charge = ValueAst::Lit(0);
@@ -131,8 +131,8 @@ impl TryIntoAst<AtomAst> for &TableAtom {
         Ok(AtomAst {
             element: ElementAst::Lit(self.element),
             isotope_mass: match self.isotope_mass {
-                Some(m) => IsotopeAst::Lit(m as i64),
-                None => IsotopeAst::Undetermined,
+                Some(m) => IsotopeMassAst::Lit(m as i64),
+                None => IsotopeMassAst::Undetermined,
             },
             charge: match self.charge {
                 Some(c) => ValueAst::Lit(c as i64),

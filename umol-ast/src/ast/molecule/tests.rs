@@ -10,7 +10,7 @@ use umol_graph_core::{
 use umol_shared::element::Element;
 
 use super::super::aromatic::AromaticSystemAst;
-use super::super::atom::{AtomAst, ElementAst, IsotopeAst};
+use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::bond::BondAst;
 use super::super::constraint::{
     AtomConstraint, AtomConstraints, BondConstraint, BondConstraints, Constraint, Constraints,
@@ -31,7 +31,7 @@ use crate::{mol, mol_ground};
 
 fn ground_atom() -> AtomAst {
     let mut a = AtomAst::from_element(Element::C);
-    a.isotope_mass = IsotopeAst::Natural;
+    a.isotope_mass = IsotopeMassAst::Natural;
     a.charge = ValueAst::Lit(0);
     a.implicit_hydrogens = ValueAst::Lit(4);
     a.lone_pairs = ValueAst::Lit(0);
@@ -2000,7 +2000,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     {
         let atom = ast.atom_mut(AtomId(0)).ast;
         atom.charge = ValueAst::Expr(Box::new(Expr::Lit(2)));
-        atom.isotope_mass = IsotopeAst::Lit(13);
+        atom.isotope_mass = IsotopeMassAst::Lit(13);
         atom.implicit_hydrogens = ValueAst::Expr(Box::new(Expr::Lit(3)));
         atom.lone_pairs = ValueAst::Expr(Box::new(Expr::Neg(Box::new(Expr::Neg(Box::new(
             Expr::Lit(1),
@@ -2117,7 +2117,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     // -- Atom 0 ---------------------------------------------------------
     let atom = ast.atom(AtomId(0)).ast;
     assert_eq!(atom.charge, ValueAst::Lit(2));
-    assert_eq!(atom.isotope_mass, IsotopeAst::Lit(13));
+    assert_eq!(atom.isotope_mass, IsotopeMassAst::Lit(13));
     assert_eq!(atom.implicit_hydrogens, ValueAst::Lit(3));
     assert_eq!(atom.lone_pairs, ValueAst::Lit(1));
     assert_eq!(atom.spin, SpinStateAst::from((0_u8, 1_u8)));

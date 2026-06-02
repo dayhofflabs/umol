@@ -15,7 +15,7 @@ use umol_ast::ast::{
     AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst, BondConstraint,
     BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, Constraint, Constraints,
     DativeBondAst, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
-    DativeBondId, Edit, ElementAst, Expr, IsotopeAst, Lattice, MoleculeAst, MoleculeConstraint,
+    DativeBondId, Edit, ElementAst, Expr, IsotopeMassAst, Lattice, MoleculeAst, MoleculeConstraint,
     MulticenterBondAst, MulticenterBondConstraint, MulticenterBondConstraintKind,
     MulticenterBondConstraints, MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst,
     NoncovalentBondId, NoncovalentBondKind, NoncovalentBondKindAst, MemOp, RelOp,
@@ -256,30 +256,30 @@ fn top_expr_strategy() -> BoxedStrategy<Expr> {
     .boxed()
 }
 
-fn isotope_strategy() -> impl Strategy<Value = IsotopeAst> {
+fn isotope_strategy() -> impl Strategy<Value = IsotopeMassAst> {
     prop_oneof![
-        3 => Just(IsotopeAst::Natural),
-        3 => Just(IsotopeAst::Undetermined),
-        3 => (1i64..=250).prop_map(IsotopeAst::Lit),
+        3 => Just(IsotopeMassAst::Natural),
+        3 => Just(IsotopeMassAst::Undetermined),
+        3 => (1i64..=250).prop_map(IsotopeMassAst::Lit),
         1 => prop::collection::vec(1i64..=250, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            IsotopeAst::set(v)
+            IsotopeMassAst::set(v)
         }),
-        1 => (1i64..=250).prop_map(IsotopeAst::Not),
+        1 => (1i64..=250).prop_map(IsotopeMassAst::Not),
         1 => prop::collection::vec(1i64..=250, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
-            IsotopeAst::not_set(v)
+            IsotopeMassAst::not_set(v)
         }),
-        1 => id_strategy().prop_map(IsotopeAst::reference),
+        1 => id_strategy().prop_map(IsotopeMassAst::reference),
         1 => (id_strategy(), prop::collection::vec(1i64..=250, 1..=3), prop_oneof![
             Just(MemOp::In),
             Just(MemOp::NotIn),
         ]).prop_map(|(id, mut v, polarity)| {
             v.sort_unstable();
             v.dedup();
-            IsotopeAst::bind(id, v, polarity)
+            IsotopeMassAst::bind(id, v, polarity)
         }),
     ]
 }

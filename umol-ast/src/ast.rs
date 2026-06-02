@@ -23,7 +23,7 @@ pub(crate) mod value;
 pub(crate) mod views;
 
 pub use aromatic::AromaticSystemAst;
-pub use atom::{AtomAst, ElementAst, IsotopeAst};
+pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
 pub use automorphism::AtomAutomorphism;
 pub use bond::BondAst;
 pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
