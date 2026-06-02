@@ -237,9 +237,28 @@ Phases A–E are in scope; F (3D) and G follow.
     - **OH** — axis + 4-equatorial shape + winding (§3.8.7, recursive on the SP shapes) → `@OH1–30`.
     No ordering of our own — each is the spec's table, fiber-checked against R. Exhaustive round-trip tests
     (`index ∘ unindex = id` over all `n!` permutations) per class.
-  - **A′6** — `reindex(k, input_index, τ) -> u32` (= `index(τ ∘ unindex(input_index))`) + the `~`/`^k` operator
-    action on indices (over Sₙ/core(R); only `~`/`^1` in scope, Phase G). raise (B3/B5) and perception (C)
-    call `space(k).reindex(…)`. **Done**
+  - **A′6** — `reindex(k, input_index, τ) -> u32` (= `index(τ ∘ unindex(input_index))`) + the `~`/`^image`
+    operator action on indices (over Sₙ/core(R); only `~` for the binary classes in scope, Phase G). raise
+    (B3/B5) and perception (C) call `space(k).reindex(…)`. **Done**
+  - **A′ as-built (verified against the spec, not assumed — load-bearing for Phase B):**
+    1. **Coset side is the right coset `Rσ`.** A config `σ` is ligand→position; two configs are the same
+       arrangement iff related by a rotation acting on positions (left mult `r∘σ`), so `coset_rep(σ) =
+       min_{r∈R} r∘σ`. (Left coset `σR` is wrong — the §3.8.5 shape groups are exactly `Rσ`.)
+    2. **`reindex` is a 2-arg method on the interned space:** `space(k).reindex(index, relabeling) =
+       index(unindex(index) ∘ relabeling)`, with `relabeling = Permutation::between(order_in, order_out)`
+       (`relabeling(i)` = position in `order_in` of `order_out`'s i-th neighbor). Supersedes the 3-arg sketch
+       in A′6. B3/B5 pass `between(tableir_order, incidence_order)`.
+    3. **Shape = diagonal-step count of the path** `σ(0)→σ(1)→σ(2)→σ(3)` on the square (diagonals `{0,2}`,
+       `{1,3}`): **U = 0, Z = 1, 4 = 2**. With `@SP1/2/3 = U/4/Z` (§3.8.5), `@SP2`(4) has two diagonal steps and
+       `@SP3`(Z) one — the opposite of the naïve reading.
+    4. **`@`/`@@` are the two C₄ orbits of a shape**, *not* an ordering and its string-reverse (a reverse can be
+       `ρ²` of the original — same orbit). OH equatorial reps: U `1234`/`4321`, Z `2314`/`2134`, 4 `2413`/`1324`.
+    5. **Position frames match OpenSMILES:** TB axial = `0,4` / equatorial `1,2,3`; OH axis `0,5` / equatorial
+       square `1,2,3,4` (cyclic, diagonals `1–3`,`2–4`); SP `dihedral(4)` already matched. TH/CT use the generic
+       `CanonicalRank` numbering (= parity for a 2-coset space), not a bespoke parity decomposition.
+
+    Validated: 7 equivalence-SMILES `reindex` cases (3 TB §3.8.6, 4 OH §3.8.7) + `fibers == cosets` +
+    `index ∘ unindex` round-trip; 61 tests, clippy clean.
 - **Phase B — raise → `#T`/`#C`** (mechanical; `table_ir/raise.rs`, mirrors the aromaticity→`#a` pass).
   Reads TableIR per-atom chirality / per-bond stereo, reindexes the input arrangement into umol's incidence
   frame, writes `#T`/`#C`; builds **no** element (Phase C).
@@ -313,7 +332,7 @@ Phases A–E are in scope; F (3D) and G follow.
   order; `#T`/`#C` relative to the local frame).
   - **D1** — config-string parser/writer: `class config` ↔ `(StereoKind, StereoConfigurationAst)`. Head
     `Th`/`Ct`; config `* | ! | + | <coset-term>`, coset-term recursive (`nat`→`Lit`, `?id`→`Expr(Var)`,
-    `~e`→`Expr(SwapOp)`, `e^k`→`Expr(ApplyOp)`); `Expr::Set`/`VarDomain` (`{…}`, `?o :: {…}`) reserved at the
+    `~e`→`Expr(SwapOp)`, `e^<image-number>`→`Expr(ApplyOp(perm))`); `Expr::Set`/`VarDomain` (`{…}`, `?o :: {…}`) reserved at the
     surface (deferred with non-tetrahedral). **One function** — D3's `:type` head and D5's `#T`/`#C` call it.
   - **D2** — ligand surface: `atom-ref | [:h atom-ref] | [:lp atom-ref]` (kind-first; reserved
     `[:bond/:port/:fragment ref]`) ↔ the ordered `StereoLigand` list. Unknown tags rejected (no silent pass).
@@ -369,7 +388,7 @@ Phases A–E are in scope; F (3D) and G follow.
 | per-site constraints | `StereoAtomConstraint {}` / `StereoBondConstraint {}` (empty; + `…Constraints` collections, empty `…ConstraintDsl`) |
 | shape | `StereoKind` (`Tetrahedral`, `CisTrans`, …) |
 | configuration | `StereoConfigurationAst { Undetermined, NotStereo, Stereo(StereoIndexAst) }` |
-| config value | `StereoIndexAst { Undetermined, Lit(u32), Expr(Box<Expr>) }` over a recursive stereo `Expr { Lit, Var, SwapOp, ApplyOp, Set, VarDomain }` (its own, ≠ `value::Expr`); `~`/`^k` recurse (`~1`, `0^1^1` sayable); `Undetermined` out of `Expr` ⇒ `~+` unrepresentable; `Lit` duplicated by design; `Set`/`VarDomain` deferred; index = `u32` dense coset index per class (SMILES arrangement number, not Lehmer) |
+| config value | `StereoIndexAst { Undetermined, Lit(u32), Expr(Box<Expr>) }` over a recursive stereo `Expr { Lit, Var, SwapOp, ApplyOp, Set, VarDomain }` (its own, ≠ `value::Expr`); `~`/`^image` recurse (`~1`, `0^2134` sayable; `ApplyOp` holds a `Permutation`); `Undetermined` out of `Expr` ⇒ `~+` unrepresentable; `Lit` duplicated by design; `Set`/`VarDomain` deferred; index = `u32` dense coset index per class (SMILES arrangement number, not Lehmer) |
 | ligand | `StereoLigand` |
 | ligand slot | `StereoLigandKind` { `Atom`, `ImplicitHydrogen`, `LonePair` } |
 | local constraints | `AtomConstraint::TetrahedralStereo` / `BondConstraint::CisTransStereo` |

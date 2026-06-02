@@ -177,8 +177,11 @@ fn trigonal_bipyramidal_reps() -> Vec<Permutation> {
 
 /// `@OH1`..`@OH30` (OpenSMILES §3.8.7): the axis runs from ligand `a` (vertex 0)
 /// to `towards` (vertex 5); the remaining four ligands fill the equatorial
-/// square (vertices 1–4) in one of six classes — each path shape (U/4/Z by
-/// diagonal-step count) in its two C₄ windings.
+/// square (vertices 1–4) in one of six classes — each path shape (U with no
+/// diagonal step, Z with one, 4 with two) in its two windings. The `@` and `@@`
+/// windings are the two C₄ orbits of the shape (not an ordering and its
+/// reverse, which can lie in the same orbit); the reps below are taken from the
+/// spec's shape enumeration.
 fn octahedral_reps() -> Vec<Permutation> {
     const U_ANTI: [u8; 4] = [1, 2, 3, 4];
     const U_CW: [u8; 4] = [4, 3, 2, 1];

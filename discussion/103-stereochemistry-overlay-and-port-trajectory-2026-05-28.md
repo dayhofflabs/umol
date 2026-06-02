@@ -222,9 +222,9 @@ config        ::= '*'                                 ; StereoConfigurationAst::
                 | coset-term                          ; ::Stereo(coset-term)
 coset-term    ::= nat                                 ; StereoIndexAst::Lit(u32) standalone (Expr::Lit as an operand) — dense coset index vs the :ligands order
                 | '?' id                              ; Expr(Var(id))
-                | '~' coset-term                      ; Expr(SwapOp(…)) — "the other" / ^1 involution, over any term
-                | coset-term '^' nat                  ; Expr(ApplyOp(…, k)) — GAP x^g; only ^1 implemented
-                ; operators recurse over any term — ~1, ~~0, 0^1^1, ~?o all parse; Undetermined (+) is not a coset-term
+                | '~' coset-term                      ; Expr(SwapOp(…)) — "the other handedness" = the class's canonical involution
+                | coset-term '^' image-number         ; Expr(ApplyOp(…, perm)) — GAP x^g; the 1-indexed one-line image read as a number
+                ; operators recurse over any term — ~?o, ~~0, 0^2134 all parse; Undetermined (+) is not a coset-term
                 ; sets deferred: '{' nat… '}' → Expr::Set, '?' id '::' '{' … '}' → Expr::VarDomain
 ```
 
@@ -337,44 +337,54 @@ between them are **group actions on the coset space, not integer arithmetic on t
 `3 - ?r` is rejected because the coset index is an arbitrary labeling and arithmetic on it is
 not invariant. There is one generic operation and one distinguished shorthand; both are
 **defined in the contract now** (so the notation is forward-stable), with the per-class
-*coding* filled for the binary classes (TH/CT) and reserved for the rest:
+*coding* now filled for all five classes (TB/OH/SP `~` defined below); implementation remains
+TH/CT-first — the larger geometries are Phase G:
 
-- **`^` (generic, infix):** `config ^ k` applies effective-group operation `k` (GAP's `x^g`
-  action convention). The operation space is the class's **effective operation group** — `Sₙ`
-  modulo the core of `R` (largest normal subgroup of `Sₙ` inside `R`); raw `Sₙ` Lehmer codes
-  over-parametrize (many permutations act identically on cosets). This is the small
-  class-specific group; only `^1` is exercised within the current scope:
+- **`^` (generic, infix):** `config ^ g` applies group operation `g` (GAP's `x^g` action). `g`
+  is written as its **one-line image read as a number** — the 1-indexed image of a permutation of
+  `1..n` (n = the class's ligand count, ≤ 6, so digits are single and unambiguous): SP `^2134`
+  swaps the first two ligands; OH `^132465` is `(2 3)(5 6)`. This is *not* a Lehmer rank — it is
+  the permutation itself, legible at sight. `Permutation::from_image` parses it, the AST node
+  stores the `Permutation`, and it prints back verbatim (round-trip fidelity). The operation
+  *space* is the **effective operation group** `Sₙ / core(R)` (core = largest normal subgroup of
+  `Sₙ` inside `R`); a raw image over-parametrizes it — two images differing by a `core(R)` factor
+  act identically — and `reindex` collapses that for free (the index is constant on each coset),
+  so the parser keeps the literal image and never canonicalizes.
 
-  | Class | R | effective operation group | size | codes implemented now |
-  |---|---|---|--:|---|
-  | TH | A₄ | S₄/A₄ ≅ Z₂ | 2 | `{0: id, 1: the other}` |
-  | CT | — | Z₂ | 2 | `{0: id, 1: E/Z swap}` |
-  | SP | D₄ (core V₄) | S₄/V₄ ≅ S₃ | 6 | reserved |
-  | TB | D₃ | Sₙ on 20 cosets | — | reserved |
-  | OH | O | Sₙ on 30 cosets | — | reserved |
+  | Class | R | core(R) | effective operation group |
+  |---|---|---|---|
+  | TH | A₄ | A₄ | S₄/A₄ ≅ Z₂ (2) |
+  | CT | {e} | {e} | Z₂ (2) |
+  | SP | D₄ | V₄ | S₄/V₄ ≅ S₃ (6) |
+  | TB | D₃ | {e} | S₅ (120) |
+  | OH | O | {e} | S₆ (720) |
 
-- **`~` (the predefined involution, unary):** `= ^1`, where code 1 is the class's **canonical
-  generating involution** — *"the other configuration."* Uniform across classes (the operation
-  is "go to the other coset," not "reflect"), visible, involutive (`~~ = id` by construction —
-  the coding assigns an involution to code 1; for binary classes it is the unique non-identity
-  element). This is the **only operator the current scope exercises**:
-  - TH: `~?r` = the other config = the enantiomer → meso (`?r` homochiral, `~?r` meso).
-  - CT: `~?r` = the other config = the E/Z swap.
+- **`~` (the predefined involution, unary):** the class's **canonical non-trivial involution**,
+  shorthand for `^` of a fixed image — *"the other handedness."* It swaps a **trans (mutually
+  opposite) ligand pair**: the axial pair for TB/OH (= the σ_h reflection = the enantiomer), a
+  diagonal for SP; TH has no trans pair, so it swaps any two ligands (also the enantiomer). On the
+  **achiral** classes (CT, SP) the mirror is the identity, so `~` is instead a deliberately
+  non-trivial coset swap — never a silent no-op. `~~ = id` everywhere.
 
-  Choosing `~` = "the other" (rather than `~` = reflection) is deliberate: a *reflection*
-  glyph would be the **identity on CT** (E/Z are achiral — their mirror is themselves), a
-  footgun where `~` silently does nothing. "The other" is non-trivial and uniform for both
-  binary classes.
+  | Class | `~` ≡ | operation | effect |
+  |---|---|---|---|
+  | TH | `^2134` | swap two ligands (odd) | enantiomer → meso (`?r` homochiral, `~?r` meso) |
+  | CT | `^21` | swap the two configs | E/Z swap (mirror is trivial) |
+  | SP | `^3214` | swap a diagonal (trans) pair (0,2) | 4↔Z, U fixed (mirror trivial; both diagonals agree) |
+  | TB | `^52341` | swap the axial pair (0,4) | enantiomer (σ_h), fixed-point-free |
+  | OH | `^623451` | swap the axial pair (0,5) | enantiomer (σ_h), fixed-point-free |
 
-`~~?r == ?r` everywhere; for binary classes `~` is the unique non-identity element, so it is
-frame-independent (Z₂ has one "other" regardless of labeling). `~?r == ?r ^ 1` by definition.
-All operators distribute over the channels (`~*`/`* ^ k` = `*`, same for `+`); composition
-`?r ^ a ^ b` applies `b ∘ a`.
+  For the binary classes `~` is the unique non-identity element, frame-independent. All operators
+  distribute over the channels (`~*` / `* ^ g` = `*`, same for `+`); composition `?r ^ a ^ b`
+  applies `b ∘ a`. Verified in `umol-perm`: TB/OH axial swaps are fixed-point-free involutions over
+  all 20 / 30 cosets; SP's two diagonal swaps `(0,2)` and `(1,3)` are the *same* operation (4↔Z),
+  whereas the edge swaps split (U↔Z vs U↔4) — so the diagonal swap is the canonical SP choice,
+  paralleling the TB/OH axial swap.
 
-A **distinct mirror / reflection operator** (the improper point-group op, `= ^ reflection_code`)
-is *not* needed now — for TH it coincides with `~`, for CT it is the identity, and it only
-diverges from `~` for multi-config classes (octahedral / TB coordination complexes). It can be
-added later as another shorthand over `^` **without any breaking change**.
+A **distinct reflection operator** is *not* needed: `~` already *is* the enantiomer for the
+chiral classes (TH/TB/OH), and on the achiral classes (CT/SP) a reflection would be the identity —
+which is exactly why `~` is defined there as a non-trivial coset swap instead. Any further
+shorthand over `^` can be added later **without a breaking change**.
 
 Precedence (unary `~` binds tighter than infix `^`) is conventional; glyph details are
 settleable without blocking, since only `~` is exercised by the current scope.
