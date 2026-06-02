@@ -5,7 +5,9 @@
 //! relations (e.g. aromatic systems). Both use sorted parallel arrays for
 //! incidence lookup, avoiding per-node offset tables.
 
-use crate::graph::NodeId;
+use std::hash::Hash;
+
+use crate::graph::{EdgeId, NodeId, Remapping};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RelationId(pub u32);
@@ -13,6 +15,82 @@ pub struct RelationId(pub u32);
 impl RelationId {
     pub fn index(self) -> usize {
         self.0 as usize
+    }
+}
+
+/// Canonicalization of a relation factor's participants, applied on
+/// construction and after a remap relabels them. `Unordered` sorts (membership
+/// is the datum); `Ordered` preserves input order (position is the datum, e.g.
+/// a stereo configuration or a bond direction).
+pub trait FactorOrdering {
+    fn canonicalize<P: Ord>(participants: &mut [P]);
+}
+
+/// Set-valued factor: participants are canonicalized by sorting.
+pub struct Unordered;
+
+/// Positional factor: canonicalization is a no-op, input order is preserved.
+pub struct Ordered;
+
+impl FactorOrdering for Unordered {
+    fn canonicalize<P: Ord>(participants: &mut [P]) {
+        participants.sort_unstable();
+    }
+}
+
+impl FactorOrdering for Ordered {
+    fn canonicalize<P: Ord>(_participants: &mut [P]) {}
+}
+
+/// The id-space contents of a participant, surfaced for the incidence index.
+/// At most one ref per space today (a node or an edge); a future port type
+/// could fill both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ParticipantRefs {
+    pub node: Option<NodeId>,
+    pub edge: Option<EdgeId>,
+}
+
+/// A value that can occupy a relation factor: routes through a `Remapping` in
+/// both directions and exposes its node/edge refs for incidence. One impl per
+/// concrete id type — dispatch is static, since a factor is homogeneous.
+pub trait RelationParticipant: Copy + Ord + Hash {
+    fn remap(self, remapping: &Remapping) -> Option<Self>;
+    fn unmap(self, remapping: &Remapping) -> Self;
+    fn refs(self) -> ParticipantRefs;
+}
+
+impl RelationParticipant for NodeId {
+    fn remap(self, remapping: &Remapping) -> Option<Self> {
+        remapping.map_node(self)
+    }
+
+    fn unmap(self, remapping: &Remapping) -> Self {
+        remapping.unmap_node(self)
+    }
+
+    fn refs(self) -> ParticipantRefs {
+        ParticipantRefs {
+            node: Some(self),
+            edge: None,
+        }
+    }
+}
+
+impl RelationParticipant for EdgeId {
+    fn remap(self, remapping: &Remapping) -> Option<Self> {
+        remapping.map_edge(self)
+    }
+
+    fn unmap(self, remapping: &Remapping) -> Self {
+        remapping.unmap_edge(self)
+    }
+
+    fn refs(self) -> ParticipantRefs {
+        ParticipantRefs {
+            node: None,
+            edge: Some(self),
+        }
     }
 }
 
@@ -239,6 +317,7 @@ impl<R> Default for VarRelationSet<R> {
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
+    use rstest::*;
 
     use super::*;
 
@@ -396,5 +475,80 @@ mod tests {
             VarRelationSet::new(vec![(vec![n(0), n(1)], ()), (vec![n(1), n(2)], ())]);
         let ids: Vec<RelationId> = rs.relation_ids().collect();
         assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
+    }
+
+    #[rstest]
+    #[case::already_sorted(vec![0, 1, 2], vec![0, 1, 2])]
+    #[case::reversed(vec![2, 1, 0], vec![0, 1, 2])]
+    #[case::shuffled(vec![2, 0, 3, 1], vec![0, 1, 2, 3])]
+    fn test_unordered_canonicalize(#[case] mut input: Vec<i32>, #[case] expected: Vec<i32>) {
+        Unordered::canonicalize(&mut input);
+        assert_eq!(input, expected);
+    }
+
+    #[rstest]
+    #[case::already_sorted(vec![0, 1, 2])]
+    #[case::reversed(vec![2, 1, 0])]
+    #[case::shuffled(vec![2, 0, 3, 1])]
+    fn test_ordered_canonicalize(#[case] input: Vec<i32>) {
+        let mut actual = input.clone();
+        Ordered::canonicalize(&mut actual);
+        assert_eq!(actual, input);
+    }
+
+    #[rstest]
+    #[case::before_removed(NodeId(0), Some(NodeId(0)))]
+    #[case::removed(NodeId(1), None)]
+    #[case::after_removed(NodeId(2), Some(NodeId(1)))]
+    fn test_node_id_remap(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
+        let remapping = Remapping {
+            removed_nodes: vec![1],
+            removed_edges: vec![],
+        };
+        assert_eq!(id.remap(&remapping), expected);
+    }
+
+    #[rstest]
+    #[case::before_gap(NodeId(0), NodeId(0))]
+    #[case::after_gap(NodeId(1), NodeId(2))]
+    fn test_node_id_unmap(#[case] id: NodeId, #[case] expected: NodeId) {
+        let remapping = Remapping {
+            removed_nodes: vec![1],
+            removed_edges: vec![],
+        };
+        assert_eq!(id.unmap(&remapping), expected);
+    }
+
+    #[test]
+    fn test_node_id_refs() {
+        assert_eq!(
+            NodeId(3).refs(),
+            ParticipantRefs {
+                node: Some(NodeId(3)),
+                edge: None,
+            }
+        );
+    }
+
+    #[rstest]
+    #[case::removed(EdgeId(0), None)]
+    #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
+    fn test_edge_id_remap(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
+        let remapping = Remapping {
+            removed_nodes: vec![],
+            removed_edges: vec![0],
+        };
+        assert_eq!(id.remap(&remapping), expected);
+    }
+
+    #[test]
+    fn test_edge_id_refs() {
+        assert_eq!(
+            EdgeId(2).refs(),
+            ParticipantRefs {
+                node: None,
+                edge: Some(EdgeId(2)),
+            }
+        );
     }
 }

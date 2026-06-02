@@ -133,9 +133,8 @@ their `(keys, rels)` pair.
    ripples into `IdRemapping::atom`/`bond` and `apply_to_*`), and add `unmap_node`/`unmap_edge` by lifting
    the inverse `unmap_dense` (`umol-ast/remap.rs:165`) down beside them (`removed_nodes`/`removed_edges`
    data is already on `Remapping`). **Done**
-2. `FactorOrdering` + `Unordered`/`Ordered`.
-3. `RelationParticipant` + `ParticipantRefs`; impls for `NodeId`/`EdgeId` (and `Ligand` in the
-   chemistry layer).
+2. `FactorOrdering` + `Unordered`/`Ordered`. **Done**
+3. `RelationParticipant` + `ParticipantRefs`; impls for `NodeId`/`EdgeId`. **Done**
 4. Generalize `FixedRelationSet`/`VarRelationSet` over `<P: RelationParticipant, O: FactorOrdering>`
    (today `NodeId` + unconditional sort): `new()` uses `O::canonicalize`. The remap-rebuild moves *off*
    `Remapping` (the `apply_to_*_relation_set` methods, `graph.rs:364`,`382`) onto the set as
