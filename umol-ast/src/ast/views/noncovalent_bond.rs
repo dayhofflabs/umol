@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::ops::Index;
 
-use umol_graph_core::{FixedRelationSet, NodeId, RelationId};
+use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
 
 use super::super::constraint::NoncovalentBondConstraints;
 use super::super::ids::{AtomId, NoncovalentBondId};
@@ -16,13 +16,13 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct NoncovalentBondViews<'a> {
     molecule: &'a MoleculeAst,
-    set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
+    set: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>,
 }
 
 impl<'a> NoncovalentBondViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        set: &'a FixedRelationSet<NoncovalentBondAst, 2>,
+        set: &'a FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>,
     ) -> Self {
         Self { molecule, set }
     }

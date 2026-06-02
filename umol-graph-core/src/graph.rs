@@ -9,7 +9,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::relation::{FixedRelationSet, RelationId, VarRelationSet};
+use crate::relation::{FactorOrdering, FixedRelationSet, RelationId, VarRelationSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NodeId(pub u32);
@@ -369,11 +369,11 @@ impl Remapping {
             .collect()
     }
 
-    pub fn apply_to_fixed_relation_set<R: Clone, const N: usize>(
+    pub fn apply_to_fixed_relation_set<O: FactorOrdering, D: Clone, const N: usize>(
         &self,
-        rs: &FixedRelationSet<R, N>,
-    ) -> FixedRelationSet<R, N> {
-        let entries: Vec<([NodeId; N], R)> = (0..rs.relation_count())
+        rs: &FixedRelationSet<NodeId, O, D, N>,
+    ) -> FixedRelationSet<NodeId, O, D, N> {
+        let entries: Vec<([NodeId; N], D)> = (0..rs.relation_count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let old = rs.participants(rid);
@@ -387,8 +387,11 @@ impl Remapping {
         FixedRelationSet::new(entries)
     }
 
-    pub fn apply_to_var_relation_set<R: Clone>(&self, rs: &VarRelationSet<R>) -> VarRelationSet<R> {
-        let entries: Vec<(Vec<NodeId>, R)> = (0..rs.relation_count())
+    pub fn apply_to_var_relation_set<O: FactorOrdering, D: Clone>(
+        &self,
+        rs: &VarRelationSet<NodeId, O, D>,
+    ) -> VarRelationSet<NodeId, O, D> {
+        let entries: Vec<(Vec<NodeId>, D)> = (0..rs.relation_count())
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let old = rs.participants(rid);

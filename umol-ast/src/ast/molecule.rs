@@ -7,7 +7,7 @@ use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
 pub use builder::MoleculeBuilder;
-use umol_graph_core::{FixedRelationSet, Graph, NodeId, RelationId, VarRelationSet};
+use umol_graph_core::{FixedRelationSet, Graph, NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
@@ -52,10 +52,10 @@ pub struct MoleculeAst {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
     bonds: Arc<Vec<BondAst>>,
-    dative_bonds: Arc<VarRelationSet<DativeBondAst>>,
-    aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
-    multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
-    noncovalent_bonds: Arc<FixedRelationSet<NoncovalentBondAst, 2>>,
+    dative_bonds: Arc<VarRelationSet<NodeId, Unordered, DativeBondAst>>,
+    aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
+    multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
+    noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
     constraints: Constraints,
     rings_cache: OnceLock<RingSet>,
 }
@@ -206,10 +206,10 @@ impl MoleculeAst {
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
         bonds: Arc<Vec<BondAst>>,
-        dative_bonds: Arc<VarRelationSet<DativeBondAst>>,
-        aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
-        multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
-        noncovalent_bonds: Arc<FixedRelationSet<NoncovalentBondAst, 2>>,
+        dative_bonds: Arc<VarRelationSet<NodeId, Unordered, DativeBondAst>>,
+        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
+        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
+        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
         constraints: Constraints,
     ) -> Self {
         Self {

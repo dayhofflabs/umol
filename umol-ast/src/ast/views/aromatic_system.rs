@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::ops::Index;
 
-use umol_graph_core::{NodeId, RelationId, VarRelationSet};
+use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::aromatic::AromaticSystemAst;
 use super::super::constraint::AromaticSystemConstraints;
@@ -20,13 +20,13 @@ use super::bond::BondView;
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
     molecule: &'a MoleculeAst,
-    set: &'a VarRelationSet<AromaticSystemAst>,
+    set: &'a VarRelationSet<NodeId, Unordered, AromaticSystemAst>,
 }
 
 impl<'a> AromaticSystemViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        set: &'a VarRelationSet<AromaticSystemAst>,
+        set: &'a VarRelationSet<NodeId, Unordered, AromaticSystemAst>,
     ) -> Self {
         Self { molecule, set }
     }

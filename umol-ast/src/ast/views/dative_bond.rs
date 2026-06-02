@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::ops::Index;
 
-use umol_graph_core::{NodeId, RelationId, VarRelationSet};
+use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::constraint::DativeBondConstraints;
 use super::super::dative::DativeBondAst;
@@ -17,11 +17,11 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
     molecule: &'a MoleculeAst,
-    set: &'a VarRelationSet<DativeBondAst>,
+    set: &'a VarRelationSet<NodeId, Unordered, DativeBondAst>,
 }
 
 impl<'a> DativeBondViews<'a> {
-    pub(crate) fn new(molecule: &'a MoleculeAst, set: &'a VarRelationSet<DativeBondAst>) -> Self {
+    pub(crate) fn new(molecule: &'a MoleculeAst, set: &'a VarRelationSet<NodeId, Unordered, DativeBondAst>) -> Self {
         Self { molecule, set }
     }
 

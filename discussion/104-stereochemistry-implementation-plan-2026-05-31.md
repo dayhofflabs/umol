@@ -142,7 +142,7 @@ their `(keys, rels)` pair.
    `filter_map` relations, `p.remap(m)` per participant (drop the relation on any `None`), then
    `Self::new` (canonicalize + incidence). The inverse needs no set method — the builder's `restore_*`
    path already assembles entries from undo payloads + survivors, switching `undo.atom` → `p.unmap(m)`.
-   This keeps `Remapping` a pure removal-data ligand and delegates id-space routing to the participant
+   This keeps `Remapping` a pure removal-data carrier and delegates id-space routing to the participant
    trait.
 5. Add all three birelation sets now (not stubbed — context-retention; foreseen consumers: a ports
    table → `FixedFixed`, through-space donor–acceptor → `VarVar`). Factors use `1`/`2` suffixes

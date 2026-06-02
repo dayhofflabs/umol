@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::ops::Index;
 
-use umol_graph_core::{NodeId, RelationId, VarRelationSet};
+use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::constraint::MulticenterBondConstraints;
 use super::super::ids::{AtomId, MulticenterBondId};
@@ -18,13 +18,13 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct MulticenterBondViews<'a> {
     molecule: &'a MoleculeAst,
-    set: &'a VarRelationSet<MulticenterBondAst>,
+    set: &'a VarRelationSet<NodeId, Unordered, MulticenterBondAst>,
 }
 
 impl<'a> MulticenterBondViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        set: &'a VarRelationSet<MulticenterBondAst>,
+        set: &'a VarRelationSet<NodeId, Unordered, MulticenterBondAst>,
     ) -> Self {
         Self { molecule, set }
     }

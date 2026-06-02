@@ -1,11 +1,13 @@
 //! Relation sets: N-ary relations over graph nodes with CSR incidence.
 //!
-//! `FixedRelationSet<R, N>` stores relations of compile-time-known arity
-//! (e.g. binary dative bonds). `VarRelationSet<R>` stores variable-arity
-//! relations (e.g. aromatic systems). Both use sorted parallel arrays for
-//! incidence lookup, avoiding per-node offset tables.
+//! `FixedRelationSet<P, O, R, N>` stores relations of compile-time-known arity
+//! (e.g. binary dative bonds); `VarRelationSet<P, O, R>` stores variable-arity
+//! relations (e.g. aromatic systems). Participants are typed `P`
+//! (`RelationParticipant`); the factor ordering `O` (`Unordered`/`Ordered`)
+//! controls canonicalization. Both use sorted parallel arrays for incidence.
 
 use std::hash::Hash;
+use std::marker::PhantomData;
 
 use crate::graph::{EdgeId, NodeId, Remapping};
 
@@ -27,9 +29,11 @@ pub trait FactorOrdering {
 }
 
 /// Set-valued factor: participants are canonicalized by sorting.
+#[derive(Clone, Copy, Debug)]
 pub struct Unordered;
 
 /// Positional factor: canonicalization is a no-op, input order is preserved.
+#[derive(Clone, Copy, Debug)]
 pub struct Ordered;
 
 impl FactorOrdering for Unordered {
@@ -94,15 +98,17 @@ impl RelationParticipant for EdgeId {
     }
 }
 
-fn build_incidence<'a>(
+fn build_incidence<'a, P: RelationParticipant + 'a>(
     relation_count: usize,
-    participants_of: impl Fn(usize) -> &'a [NodeId],
+    participants_of: impl Fn(usize) -> &'a [P],
 ) -> (Vec<NodeId>, Vec<RelationId>) {
     let mut entries: Vec<(NodeId, RelationId)> = Vec::new();
     for i in 0..relation_count {
         let rid = RelationId(i as u32);
-        for &node in participants_of(i) {
-            entries.push((node, rid));
+        for &p in participants_of(i) {
+            if let Some(node) = p.refs().node {
+                entries.push((node, rid));
+            }
         }
     }
     entries.sort_by_key(|&(node, _)| node);
@@ -118,27 +124,28 @@ fn build_incidence<'a>(
 /// a flat array with offset table. No heap allocations per node or
 /// per relation.
 #[derive(Clone, Debug)]
-pub struct FixedRelationSet<R, const N: usize> {
-    participants: Vec<[NodeId; N]>,
+pub struct FixedRelationSet<P, O, R, const N: usize> {
+    participants: Vec<[P; N]>,
     data: Vec<R>,
     incidence_nodes: Vec<NodeId>,
     incidence_rels: Vec<RelationId>,
+    _ordering: PhantomData<O>,
 }
 
-impl<R: PartialEq, const N: usize> PartialEq for FixedRelationSet<R, N> {
+impl<P: PartialEq, O, R: PartialEq, const N: usize> PartialEq for FixedRelationSet<P, O, R, N> {
     fn eq(&self, other: &Self) -> bool {
         self.participants == other.participants && self.data == other.data
     }
 }
 
-impl<R: Eq, const N: usize> Eq for FixedRelationSet<R, N> {}
+impl<P: Eq, O, R: Eq, const N: usize> Eq for FixedRelationSet<P, O, R, N> {}
 
-impl<R, const N: usize> FixedRelationSet<R, N> {
-    pub fn new(entries: Vec<([NodeId; N], R)>) -> Self {
+impl<P: RelationParticipant, O: FactorOrdering, R, const N: usize> FixedRelationSet<P, O, R, N> {
+    pub fn new(entries: Vec<([P; N], R)>) -> Self {
         let mut participants = Vec::with_capacity(entries.len());
         let mut data = Vec::with_capacity(entries.len());
         for (mut p, d) in entries {
-            p.sort_unstable();
+            O::canonicalize(&mut p);
             participants.push(p);
             data.push(d);
         }
@@ -151,6 +158,7 @@ impl<R, const N: usize> FixedRelationSet<R, N> {
             data,
             incidence_nodes,
             incidence_rels,
+            _ordering: PhantomData,
         }
     }
 
@@ -170,7 +178,7 @@ impl<R, const N: usize> FixedRelationSet<R, N> {
         self.data.iter_mut()
     }
 
-    pub fn participants(&self, id: RelationId) -> &[NodeId; N] {
+    pub fn participants(&self, id: RelationId) -> &[P; N] {
         &self.participants[id.index()]
     }
 
@@ -193,13 +201,14 @@ impl<R, const N: usize> FixedRelationSet<R, N> {
     }
 }
 
-impl<R, const N: usize> Default for FixedRelationSet<R, N> {
+impl<P, O, R, const N: usize> Default for FixedRelationSet<P, O, R, N> {
     fn default() -> Self {
         Self {
             participants: Vec::new(),
             data: Vec::new(),
             incidence_nodes: Vec::new(),
             incidence_rels: Vec::new(),
+            _ordering: PhantomData,
         }
     }
 }
@@ -211,15 +220,16 @@ impl<R, const N: usize> Default for FixedRelationSet<R, N> {
 /// via a second offset table. No heap allocations per node or per
 /// relation.
 #[derive(Clone, Debug)]
-pub struct VarRelationSet<R> {
+pub struct VarRelationSet<P, O, R> {
     offsets: Vec<u32>,
-    participants: Vec<NodeId>,
+    participants: Vec<P>,
     data: Vec<R>,
     incidence_nodes: Vec<NodeId>,
     incidence_rels: Vec<RelationId>,
+    _ordering: PhantomData<O>,
 }
 
-impl<R: PartialEq> PartialEq for VarRelationSet<R> {
+impl<P: PartialEq, O, R: PartialEq> PartialEq for VarRelationSet<P, O, R> {
     fn eq(&self, other: &Self) -> bool {
         self.offsets == other.offsets
             && self.participants == other.participants
@@ -227,10 +237,10 @@ impl<R: PartialEq> PartialEq for VarRelationSet<R> {
     }
 }
 
-impl<R: Eq> Eq for VarRelationSet<R> {}
+impl<P: Eq, O, R: Eq> Eq for VarRelationSet<P, O, R> {}
 
-impl<R> VarRelationSet<R> {
-    pub fn new(entries: Vec<(Vec<NodeId>, R)>) -> Self {
+impl<P: RelationParticipant, O: FactorOrdering, R> VarRelationSet<P, O, R> {
+    pub fn new(entries: Vec<(Vec<P>, R)>) -> Self {
         let relation_count = entries.len();
         let mut offsets = Vec::with_capacity(relation_count + 1);
         offsets.push(0);
@@ -240,7 +250,7 @@ impl<R> VarRelationSet<R> {
         let mut data = Vec::with_capacity(relation_count);
 
         for (mut p, d) in entries {
-            p.sort_unstable();
+            O::canonicalize(&mut p);
             participants.extend_from_slice(&p);
             offsets.push(participants.len() as u32);
             data.push(d);
@@ -258,6 +268,7 @@ impl<R> VarRelationSet<R> {
             data,
             incidence_nodes,
             incidence_rels,
+            _ordering: PhantomData,
         }
     }
 
@@ -277,7 +288,7 @@ impl<R> VarRelationSet<R> {
         self.data.iter_mut()
     }
 
-    pub fn participants(&self, id: RelationId) -> &[NodeId] {
+    pub fn participants(&self, id: RelationId) -> &[P] {
         let start = self.offsets[id.index()] as usize;
         let end = self.offsets[id.index() + 1] as usize;
         &self.participants[start..end]
@@ -302,7 +313,7 @@ impl<R> VarRelationSet<R> {
     }
 }
 
-impl<R> Default for VarRelationSet<R> {
+impl<P, O, R> Default for VarRelationSet<P, O, R> {
     fn default() -> Self {
         Self {
             offsets: vec![0],
@@ -310,6 +321,7 @@ impl<R> Default for VarRelationSet<R> {
             data: Vec::new(),
             incidence_nodes: Vec::new(),
             incidence_rels: Vec::new(),
+            _ordering: PhantomData,
         }
     }
 }
@@ -327,7 +339,7 @@ mod tests {
 
     #[test]
     fn test_fixed_relation_set_new() {
-        let rs: FixedRelationSet<&str, 2> =
+        let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], "dative"), ([n(1), n(2)], "noncov")]);
         assert_eq!(rs.relation_count(), 2);
         assert_eq!(rs.data(RelationId(0)), &"dative");
@@ -337,15 +349,23 @@ mod tests {
 
     #[test]
     fn test_fixed_relation_set_participants_sorted() {
-        let rs: FixedRelationSet<&str, 2> =
+        let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(2), n(0)], "a"), ([n(3), n(1)], "b")]);
         assert_eq!(rs.participants(RelationId(0)), &[n(0), n(2)]);
         assert_eq!(rs.participants(RelationId(1)), &[n(1), n(3)]);
     }
 
     #[test]
+    fn test_fixed_relation_set_participants_ordered() {
+        let rs: FixedRelationSet<NodeId, Ordered, &str, 2> =
+            FixedRelationSet::new(vec![([n(2), n(0)], "a"), ([n(3), n(1)], "b")]);
+        assert_eq!(rs.participants(RelationId(0)), &[n(2), n(0)]);
+        assert_eq!(rs.participants(RelationId(1)), &[n(3), n(1)]);
+    }
+
+    #[test]
     fn test_fixed_relation_set_incidence() {
-        let rs: FixedRelationSet<(), 2> = FixedRelationSet::new(vec![
+        let rs: FixedRelationSet<NodeId, Unordered, (), 2> = FixedRelationSet::new(vec![
             ([n(0), n(1)], ()),
             ([n(0), n(2)], ()),
             ([n(2), n(3)], ()),
@@ -360,14 +380,14 @@ mod tests {
 
     #[test]
     fn test_fixed_relation_set_data_mut() {
-        let mut rs: FixedRelationSet<i32, 2> = FixedRelationSet::new(vec![([n(0), n(1)], 1)]);
+        let mut rs: FixedRelationSet<NodeId, Unordered, i32, 2> = FixedRelationSet::new(vec![([n(0), n(1)], 1)]);
         *rs.data_mut(RelationId(0)) = 99;
         assert_eq!(rs.data(RelationId(0)), &99);
     }
 
     #[test]
     fn test_fixed_relation_set_data_iter_mut() {
-        let mut rs: FixedRelationSet<i32, 2> = FixedRelationSet::new(vec![
+        let mut rs: FixedRelationSet<NodeId, Unordered, i32, 2> = FixedRelationSet::new(vec![
             ([n(0), n(1)], 1),
             ([n(1), n(2)], 2),
             ([n(2), n(3)], 3),
@@ -382,14 +402,14 @@ mod tests {
 
     #[test]
     fn test_fixed_relation_set_default() {
-        let rs = FixedRelationSet::<(), 2>::default();
+        let rs = FixedRelationSet::<NodeId, Unordered, (), 2>::default();
         assert_eq!(rs.relation_count(), 0);
         assert!(!rs.has_incident(n(0)));
     }
 
     #[test]
     fn test_fixed_relation_set_relation_ids() {
-        let rs: FixedRelationSet<(), 2> =
+        let rs: FixedRelationSet<NodeId, Unordered, (), 2> =
             FixedRelationSet::new(vec![([n(0), n(1)], ()), ([n(1), n(2)], ())]);
         let ids: Vec<RelationId> = rs.relation_ids().collect();
         assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
@@ -397,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_var_relation_set_new() {
-        let rs: VarRelationSet<&str> =
+        let rs: VarRelationSet<NodeId, Unordered, &str> =
             VarRelationSet::new(vec![(vec![n(0), n(1), n(2), n(3), n(4), n(5)], "benzene")]);
         assert_eq!(rs.relation_count(), 1);
         assert_eq!(rs.data(RelationId(0)), &"benzene");
@@ -409,7 +429,7 @@ mod tests {
 
     #[test]
     fn test_var_relation_set_participants_sorted() {
-        let rs: VarRelationSet<()> = VarRelationSet::new(vec![
+        let rs: VarRelationSet<NodeId, Unordered, ()> = VarRelationSet::new(vec![
             (vec![n(5), n(2), n(0), n(3)], ()),
             (vec![n(4), n(1)], ()),
         ]);
@@ -418,8 +438,20 @@ mod tests {
     }
 
     #[test]
+    fn test_var_relation_set_participants_ordered() {
+        let rs: VarRelationSet<NodeId, Ordered, ()> = VarRelationSet::new(vec![
+            (vec![n(5), n(2), n(0), n(3)], ()),
+            (vec![n(4), n(1)], ()),
+        ]);
+        assert_eq!(rs.participants(RelationId(0)), &[n(5), n(2), n(0), n(3)]);
+        assert_eq!(rs.participants(RelationId(1)), &[n(4), n(1)]);
+        assert_eq!(rs.incident(n(0)), &[RelationId(0)]);
+        assert_eq!(rs.incident(n(4)), &[RelationId(1)]);
+    }
+
+    #[test]
     fn test_var_relation_set_incidence() {
-        let rs: VarRelationSet<()> = VarRelationSet::new(vec![
+        let rs: VarRelationSet<NodeId, Unordered, ()> = VarRelationSet::new(vec![
             (vec![n(0), n(1), n(2)], ()),
             (vec![n(2), n(3), n(4)], ()),
         ]);
@@ -432,7 +464,7 @@ mod tests {
 
     #[test]
     fn test_var_relation_set_variable_arity() {
-        let rs: VarRelationSet<&str> = VarRelationSet::new(vec![
+        let rs: VarRelationSet<NodeId, Unordered, &str> = VarRelationSet::new(vec![
             (vec![n(0), n(1)], "pair"),
             (vec![n(2), n(3), n(4), n(5)], "quad"),
         ]);
@@ -442,14 +474,14 @@ mod tests {
 
     #[test]
     fn test_var_relation_set_data_mut() {
-        let mut rs: VarRelationSet<i32> = VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], 1)]);
+        let mut rs: VarRelationSet<NodeId, Unordered, i32> = VarRelationSet::new(vec![(vec![n(0), n(1), n(2)], 1)]);
         *rs.data_mut(RelationId(0)) = 99;
         assert_eq!(rs.data(RelationId(0)), &99);
     }
 
     #[test]
     fn test_var_relation_set_data_iter_mut() {
-        let mut rs: VarRelationSet<i32> = VarRelationSet::new(vec![
+        let mut rs: VarRelationSet<NodeId, Unordered, i32> = VarRelationSet::new(vec![
             (vec![n(0), n(1)], 1),
             (vec![n(2), n(3), n(4)], 2),
             (vec![n(5)], 3),
@@ -464,14 +496,14 @@ mod tests {
 
     #[test]
     fn test_var_relation_set_default() {
-        let rs = VarRelationSet::<()>::default();
+        let rs = VarRelationSet::<NodeId, Unordered, ()>::default();
         assert_eq!(rs.relation_count(), 0);
         assert!(!rs.has_incident(n(0)));
     }
 
     #[test]
     fn test_var_relation_set_relation_ids() {
-        let rs: VarRelationSet<()> =
+        let rs: VarRelationSet<NodeId, Unordered, ()> =
             VarRelationSet::new(vec![(vec![n(0), n(1)], ()), (vec![n(1), n(2)], ())]);
         let ids: Vec<RelationId> = rs.relation_ids().collect();
         assert_eq!(ids, vec![RelationId(0), RelationId(1)]);

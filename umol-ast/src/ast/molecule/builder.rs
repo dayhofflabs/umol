@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 use umol_graph_core::{
-    EdgeId, FixedRelationSet, Graph, NodeId, RelationId, Remapping, VarRelationSet,
+    EdgeId, FixedRelationSet, Graph, NodeId, RelationId, Remapping, Unordered, VarRelationSet,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -40,7 +40,7 @@ use super::MoleculeAst;
 
 #[derive(Clone)]
 enum FixedSetStorage<R, const N: usize> {
-    Shared(Arc<FixedRelationSet<R, N>>),
+    Shared(Arc<FixedRelationSet<NodeId, Unordered, R, N>>),
     Mutable(Vec<([NodeId; N], R)>),
 }
 
@@ -67,7 +67,7 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
         }
     }
 
-    fn into_arc(self) -> Arc<FixedRelationSet<R, N>> {
+    fn into_arc(self) -> Arc<FixedRelationSet<NodeId, Unordered, R, N>> {
         match self {
             FixedSetStorage::Shared(arc) => arc,
             FixedSetStorage::Mutable(vec) => Arc::new(FixedRelationSet::new(vec)),
@@ -143,7 +143,7 @@ impl<R: Clone, const N: usize> FixedSetStorage<R, N> {
 
 #[derive(Clone)]
 enum VarSetStorage<R> {
-    Shared(Arc<VarRelationSet<R>>),
+    Shared(Arc<VarRelationSet<NodeId, Unordered, R>>),
     Mutable(Vec<(Vec<NodeId>, R)>),
 }
 
@@ -170,7 +170,7 @@ impl<R: Clone> VarSetStorage<R> {
         }
     }
 
-    fn into_arc(self) -> Arc<VarRelationSet<R>> {
+    fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, R>> {
         match self {
             VarSetStorage::Shared(arc) => arc,
             VarSetStorage::Mutable(vec) => Arc::new(VarRelationSet::new(vec)),
@@ -303,10 +303,10 @@ impl MoleculeBuilder {
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
         bonds: Arc<Vec<BondAst>>,
-        dative_bonds: Arc<VarRelationSet<DativeBondAst>>,
-        aromatic_systems: Arc<VarRelationSet<AromaticSystemAst>>,
-        multicenter_bonds: Arc<VarRelationSet<MulticenterBondAst>>,
-        noncovalent_bonds: Arc<FixedRelationSet<NoncovalentBondAst, 2>>,
+        dative_bonds: Arc<VarRelationSet<NodeId, Unordered, DativeBondAst>>,
+        aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
+        multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
+        noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
         constraints: Constraints,
     ) -> Self {
         Self {
