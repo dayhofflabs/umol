@@ -212,6 +212,8 @@ Phases A–E are in scope; F (3D) and G follow.
     `BondConstraint::CisTransStereo(StereoConfigurationAst)` in `ast/constraint/{atom,bond}.rs` (`#T`/`#C`,
     uppercase derived-predicate namespace, `Th`→`#T`/`Ct`→`#C`; same arg as the element config, frame differs).
   - **A7** — ids via `define_id!` in `ast/ids.rs`.
+  - **A8** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
+     stereo_bond_zeroed! in macros.rs.
 
 - **Phase A′ — coset algebra** (`umol-perm`, new crate; pure permutation algebra — no chemistry, no geometry,
   no AST deps; a dependency of umol-graph). The dense coset index **is the OpenSMILES arrangement number**

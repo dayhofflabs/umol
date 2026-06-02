@@ -35,7 +35,8 @@ pub use constraint::{
     DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, MoleculeConstraint,
     MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
     MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraints,
-    RelationalConstraint, SubPatternAnchor,
+    RelationalConstraint, StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint,
+    StereoBondConstraints, SubPatternAnchor,
 };
 pub use dative::DativeBondAst;
 pub use edit::{
@@ -61,7 +62,9 @@ pub use reaction::{Assignment, ReactionRuleAst};
 pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
-pub use stereo::{Expr as StereoExpr, StereoConfigurationAst, StereoIndexAst, StereoKind};
+pub use stereo::{
+    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoIndexAst, StereoKind,
+};
 pub use traits::{AsLit, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst};
 pub use value::{ArithOp, Bindings, Expr, MemOp, RelOp, ValueAst};
 pub use views::{
