@@ -218,7 +218,7 @@ Phases A–E are in scope; F (3D) and G follow.
     `between(from, to)` (the relabel τ) / `apply`/`compose`/`inverse`/`sign`/`act`/`rank`/`unrank` (Lehmer —
     internal canonical ordering only); `Ord`+`Eq`+`Hash`. **Done**
   - **A′2** — `PermutationGroup` (subgroup of Sₙ, full enumeration): `generate(degree, gens)` (brute-force
-    closure), `symmetric`/`alternating`/`cyclic`/`dihedral`, `order`/`contains`/`elements`.
+    closure), `symmetric`/`alternating`/`cyclic`/`dihedral`, `order`/`contains`/`elements`. **Done**
   - **A′3** — `CosetSpace` = R (a `PermutationGroup`) + the coset **partition** (one canonical rep per coset):
     `count` (= n!/|R|), `coset_rep`. The algebraic layer — which orderings are equivalent, not yet a numbering.
   - **A′4** — `ClassKey` (`FromStr`/`Display` key, à la `SchoenfliesSymbol`): families `Sym/Alt/Cyc/Dih(u8)`
