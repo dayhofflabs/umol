@@ -500,10 +500,7 @@ fn test_apply_atom_hydrogen_count(mut single_atom: Molecule) {
     acc.update_molecule(&mut single_atom, flags).unwrap();
 
     let atom = &single_atom.atoms[0];
-    assert_eq!(
-        atom.implicit_hydrogens,
-        Some(1)
-    );
+    assert_eq!(atom.implicit_hydrogens, Some(1));
 }
 
 #[rstest]
@@ -867,10 +864,7 @@ fn test_apply_extended_atom_hydrogen_count(mut single_extended_atom: ExtendedMol
     acc.add_entry(entry, CtabParseFlags::LENIENT).unwrap();
     acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::LENIENT)
         .unwrap();
-    assert_eq!(
-        single_extended_atom.atoms[0].implicit_hydrogens,
-        Some(1)
-    );
+    assert_eq!(single_extended_atom.atoms[0].implicit_hydrogens, Some(1));
 }
 
 #[rstest]

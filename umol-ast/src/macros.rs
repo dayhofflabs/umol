@@ -267,6 +267,7 @@ macro_rules! noncovalent_zeroed {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_shared::element::Element;
 

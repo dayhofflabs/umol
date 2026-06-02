@@ -11,6 +11,7 @@ use super::constraint::{
 };
 use super::error::Contradiction;
 use super::spin::SpinStateAst;
+use super::stereo::StereoConfigurationAst;
 use super::traits::{AsLit, Lattice};
 use super::value::{set_is_ground, MemOp, ValueAst};
 
@@ -126,9 +127,9 @@ impl AtomAst {
     /// `into_ground()` plus chemistry-default constraints for an isolated,
     /// non-bonded, non-aromatic, non-multicenter atom: `Valence(0)`,
     /// `DonatedPairs(0)`, `AcceptedPairs(0)`, `MulticenterValence(NotMulticenter)`,
-    /// `AromaticValence(NotAromatic)`. Each is added only if the corresponding
-    /// constraint kind is not already present; existing entries are preserved.
-    /// Matches the `atom_zeroed!` macro semantics.
+    /// `AromaticValence(NotAromatic)`, `TetrahedralStereo(NotStereo)`. Each is
+    /// added only if the corresponding constraint kind is not already present;
+    /// existing entries are preserved. Matches the `atom_zeroed!` macro semantics.
     pub fn into_zeroed(mut self) -> Self {
         self = self.into_ground();
         if !self.constraints.contains(AtomConstraintKind::Valence) {
@@ -157,6 +158,14 @@ impl AtomAst {
         {
             self.constraints.add(AtomConstraint::AromaticValence(
                 AromaticValenceAst::NotAromatic,
+            ));
+        }
+        if !self
+            .constraints
+            .contains(AtomConstraintKind::TetrahedralStereo)
+        {
+            self.constraints.add(AtomConstraint::TetrahedralStereo(
+                StereoConfigurationAst::NotStereo,
             ));
         }
         self
@@ -967,6 +976,142 @@ mod tests {
     }
 
     #[rstest]
+    #[case::both_default(AtomAst::default(), AtomAst::default(), Some(AtomAst::default()))]
+    #[case::element_mismatch(
+        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::N),
+        None
+    )]
+    #[case::narrows_charge(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C).with_charge(1),
+        Some(AtomAst::from_element(Element::C).with_charge(1)))]
+    #[case::saturate_contradiction(
+        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::JointDomain(
+            JointDomainAst::from_ints(
+                vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+                vec![vec![0, 1], vec![1, 2]],
+            )
+            .unwrap(),
+        )),
+        AtomAst::from_element(Element::C).with_charge(5_i64),
+        None)]
+    fn test_atom_ast_meet(
+        #[case] a: AtomAst,
+        #[case] b: AtomAst,
+        #[case] expected: Option<AtomAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rstest]
+    #[case::element_mismatch_widens(AtomAst::from_element(Element::C), AtomAst::from_element(Element::N),
+        ElementAst::Set(vec![Element::C, Element::N]))]
+    fn test_atom_ast_join_element(
+        #[case] a: AtomAst,
+        #[case] b: AtomAst,
+        #[case] expected: ElementAst,
+    ) {
+        assert_eq!(a.join(&b).element, expected);
+    }
+
+    #[rstest]
+    #[case::charge_change(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C).with_charge(1), true,
+        AtomAst::from_element(Element::C).with_charge(1))]
+    #[case::no_change(
+        AtomAst::from_element(Element::C),
+        AtomAst::from_element(Element::C),
+        false,
+        AtomAst::from_element(Element::C)
+    )]
+    fn test_atom_ast_narrow_from(
+        #[case] mut target: AtomAst,
+        #[case] source: AtomAst,
+        #[case] expected_changed: bool,
+        #[case] expected_after: AtomAst,
+    ) {
+        let changed = target.narrow_from(&source);
+        assert_eq!(changed, expected_changed);
+        assert_eq!(target, expected_after);
+    }
+
+    #[rstest]
+    #[case::prunes_to_pruned_jd(
+        AtomAst::from_element(Element::C)
+            .with_charge(ValueAst::Set(Box::new(vec![0, 1])))
+            .with_constraint(AtomConstraint::JointDomain(
+                JointDomainAst::from_ints(
+                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+                    vec![vec![0, 1], vec![1, 2], vec![2, 3]],
+                )
+                .unwrap(),
+            )),
+        AtomAst::from_element(Element::C)
+            .with_charge(ValueAst::Set(Box::new(vec![0, 1])))
+            .with_constraint(AtomConstraint::JointDomain(
+                JointDomainAst::from_ints(
+                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+                    vec![vec![0, 1], vec![1, 2]],
+                )
+                .unwrap(),
+            )),
+    )]
+    #[case::collapses_to_lits(
+        AtomAst::from_element(Element::C)
+            .with_charge(0_i64)
+            .with_constraint(AtomConstraint::JointDomain(
+                JointDomainAst::from_ints(
+                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+                    vec![vec![0, 1], vec![1, 2]],
+                )
+                .unwrap(),
+            )),
+        AtomAst::from_element(Element::C)
+            .with_charge(0_i64)
+            .with_implicit_hydrogens(1_i64),
+    )]
+    #[case::cascades_across_domains(
+        AtomAst::from_element(Element::C)
+            .with_charge(0_i64)
+            .with_constraint(AtomConstraint::JointDomain(
+                JointDomainAst::from_ints(
+                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+                    vec![vec![0, 1], vec![1, 2]],
+                )
+                .unwrap(),
+            ))
+            .with_constraint(AtomConstraint::JointDomain(
+                JointDomainAst::from_ints(
+                    vec![JointVar::ImplicitHydrogens, JointVar::LonePairs],
+                    vec![vec![1, 3], vec![2, 4]],
+                )
+                .unwrap(),
+            )),
+        AtomAst::from_element(Element::C)
+            .with_charge(0_i64)
+            .with_implicit_hydrogens(1_i64)
+            .with_lone_pairs(3_i64),
+    )]
+    fn test_saturate_atom(#[case] mut atom: AtomAst, #[case] expected: AtomAst) {
+        saturate_atom(&mut atom).unwrap();
+        assert_eq!(atom, expected);
+    }
+
+    #[rstest]
+    #[case::no_admissible_tuple(
+        AtomAst::from_element(Element::C)
+            .with_charge(5_i64)
+            .with_constraint(AtomConstraint::JointDomain(
+                JointDomainAst::from_ints(
+                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
+                    vec![vec![0, 1], vec![1, 2]],
+                )
+                .unwrap(),
+            )),
+    )]
+    fn test_saturate_atom_error(#[case] mut atom: AtomAst) {
+        assert_eq!(saturate_atom(&mut atom).unwrap_err(), Contradiction);
+    }
+
+    #[rstest]
     #[case::carbon(Element::C, ElementAst::Lit(Element::C))]
     #[case::nitrogen(Element::N, ElementAst::Lit(Element::N))]
     fn test_element_ast_from(#[case] element: Element, #[case] expected: ElementAst) {
@@ -1100,151 +1245,5 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    #[case::both_default(AtomAst::default(), AtomAst::default(), Some(AtomAst::default()))]
-    #[case::element_mismatch(
-        AtomAst::from_element(Element::C),
-        AtomAst::from_element(Element::N),
-        None
-    )]
-    #[case::narrows_charge(
-        AtomAst::from_element(Element::C),
-        AtomAst::from_element(Element::C).with_charge(1),
-        Some(AtomAst::from_element(Element::C).with_charge(1)),
-    )]
-    fn test_atom_ast_meet(
-        #[case] a: AtomAst,
-        #[case] b: AtomAst,
-        #[case] expected: Option<AtomAst>,
-    ) {
-        assert_eq!(a.meet(&b), expected);
-    }
-
-    #[rstest]
-    #[case::element_mismatch_widens(
-        AtomAst::from_element(Element::C),
-        AtomAst::from_element(Element::N),
-        ElementAst::Set(vec![Element::C, Element::N]),
-    )]
-    fn test_atom_ast_join_element(
-        #[case] a: AtomAst,
-        #[case] b: AtomAst,
-        #[case] expected: ElementAst,
-    ) {
-        assert_eq!(a.join(&b).element, expected);
-    }
-
-    #[rstest]
-    #[case::charge_change(
-        AtomAst::from_element(Element::C),
-        AtomAst::from_element(Element::C).with_charge(1),
-        true,
-        AtomAst::from_element(Element::C).with_charge(1),
-    )]
-    #[case::no_change(
-        AtomAst::from_element(Element::C),
-        AtomAst::from_element(Element::C),
-        false,
-        AtomAst::from_element(Element::C)
-    )]
-    fn test_atom_ast_narrow_from(
-        #[case] mut target: AtomAst,
-        #[case] source: AtomAst,
-        #[case] expected_changed: bool,
-        #[case] expected_after: AtomAst,
-    ) {
-        let changed = target.narrow_from(&source);
-        assert_eq!(changed, expected_changed);
-        assert_eq!(target, expected_after);
-    }
-
-    #[rstest]
-    fn test_saturate_atom_prunes_tuples_without_collapse() {
-        let jd = JointDomainAst::from_ints(
-            vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-            vec![vec![0, 1], vec![1, 2], vec![2, 3]],
-        )
-        .unwrap();
-        let mut atom = AtomAst::from_element(Element::C)
-            .with_charge(ValueAst::Set(Box::new(vec![0, 1])))
-            .with_constraint(AtomConstraint::JointDomain(jd));
-        saturate_atom(&mut atom).unwrap();
-        let surviving_jd = atom.constraints.joint_domains().next().unwrap();
-        assert_eq!(
-            surviving_jd.tuples(),
-            Some(
-                &[
-                    vec![JointValue::Int(0), JointValue::Int(1)],
-                    vec![JointValue::Int(1), JointValue::Int(2)],
-                ][..]
-            )
-        );
-    }
-
-    #[rstest]
-    fn test_saturate_atom_collapses_single_tuple_to_lits() {
-        let jd = JointDomainAst::from_ints(
-            vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-            vec![vec![0, 1], vec![1, 2]],
-        )
-        .unwrap();
-        let mut atom = AtomAst::from_element(Element::C)
-            .with_charge(0_i64)
-            .with_constraint(AtomConstraint::JointDomain(jd));
-        saturate_atom(&mut atom).unwrap();
-        assert_eq!(atom.charge, ValueAst::Lit(0));
-        assert_eq!(atom.implicit_hydrogens, ValueAst::Lit(1));
-        assert_eq!(atom.constraints.joint_domains().count(), 0);
-    }
-
-    #[rstest]
-    fn test_saturate_atom_contradiction_when_no_tuple_admissible() {
-        let jd = JointDomainAst::from_ints(
-            vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-            vec![vec![0, 1], vec![1, 2]],
-        )
-        .unwrap();
-        let mut atom = AtomAst::from_element(Element::C)
-            .with_charge(5_i64)
-            .with_constraint(AtomConstraint::JointDomain(jd));
-        let err = saturate_atom(&mut atom).unwrap_err();
-        assert_eq!(err, Contradiction);
-    }
-
-    #[rstest]
-    fn test_saturate_atom_cascades_across_joint_domains() {
-        let jd1 = JointDomainAst::from_ints(
-            vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-            vec![vec![0, 1], vec![1, 2]],
-        )
-        .unwrap();
-        let jd2 = JointDomainAst::from_ints(
-            vec![JointVar::ImplicitHydrogens, JointVar::LonePairs],
-            vec![vec![1, 3], vec![2, 4]],
-        )
-        .unwrap();
-        let mut atom = AtomAst::from_element(Element::C)
-            .with_charge(0_i64)
-            .with_constraint(AtomConstraint::JointDomain(jd1))
-            .with_constraint(AtomConstraint::JointDomain(jd2));
-        saturate_atom(&mut atom).unwrap();
-        assert_eq!(atom.charge, ValueAst::Lit(0));
-        assert_eq!(atom.implicit_hydrogens, ValueAst::Lit(1));
-        assert_eq!(atom.lone_pairs, ValueAst::Lit(3));
-        assert_eq!(atom.constraints.joint_domains().count(), 0);
-    }
-
-    #[rstest]
-    fn test_atom_ast_meet_surfaces_saturate_contradiction_as_none() {
-        let jd = JointDomainAst::from_ints(
-            vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-            vec![vec![0, 1], vec![1, 2]],
-        )
-        .unwrap();
-        let a = AtomAst::from_element(Element::C).with_constraint(AtomConstraint::JointDomain(jd));
-        let b = AtomAst::from_element(Element::C).with_charge(5_i64);
-        assert_eq!(a.meet(&b), None);
     }
 }

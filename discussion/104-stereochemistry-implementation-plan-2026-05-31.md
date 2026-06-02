@@ -208,13 +208,11 @@ Phases A–E are in scope; F (3D) and G follow.
     **Done**
   - **A5** — ligand participant `StereoLigand(NodeId, StereoLigandKind)` + `StereoLigandKind { Atom,
     ImplicitHydrogen, LonePair }`, with its `RelationParticipant` impl (route the inner `NodeId` via
-    `map_node`/`unmap_node`, kind carried; `refs` = that node; stored as `NodeId`, views expose `AtomId`).
+    `map_node`/`unmap_node`, kind carried; `refs` = that node; stored as `NodeId`, views expose `AtomId`). **Done**
   - **A6** — local-frame constraints `AtomConstraint::TetrahedralStereo(StereoConfigurationAst)` /
     `BondConstraint::CisTransStereo(StereoConfigurationAst)` in `ast/constraint/{atom,bond}.rs` (`#T`/`#C`,
     uppercase derived-predicate namespace, `Th`→`#T`/`Ct`→`#C`; same arg as the element config, frame differs).
   - **A7** — ids via `define_id!` in `ast/ids.rs`.
-  - **A8** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
-     stereo_bond_zeroed! in `macros.rs`.
 
 - **Phase A′ — coset algebra** (`umol-perm`, new crate; pure permutation algebra — no chemistry, no geometry,
   no AST deps; a dependency of umol-graph). The dense coset index **is the OpenSMILES arrangement number**
@@ -353,6 +351,8 @@ Phases A–E are in scope; F (3D) and G follow.
     `StereoConfigurationAst` parser) inside the atom-string (`C#h#T1`) / bond-string.
   - **D6** — round-trip tests: EDN↔AST for both surfaces (elements *and* `#T`/`#C` strings) over the
     ~150-file corpus, under `--features conformance`.
+  - **D7** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
+     stereo_bond_zeroed! in `macros.rs`.
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
   substructure matcher is reused, and `umol-perm` enters exactly once, at the frame alignment).

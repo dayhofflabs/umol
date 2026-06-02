@@ -91,8 +91,14 @@ impl ValenceInvariants {
             aromatic_valence,
             multicenter_valence,
         );
-        let electron =
-            electron_count(element, charge, implicit_h, valence, aromatic_valence, accepted);
+        let electron = electron_count(
+            element,
+            charge,
+            implicit_h,
+            valence,
+            aromatic_valence,
+            accepted,
+        );
         if orbital == electron {
             Solution::Determined(())
         } else {
@@ -176,8 +182,14 @@ impl ValenceInvariants {
             aromatic_valence,
             multicenter_valence,
         );
-        let electron =
-            electron_count(element, charge, implicit_h, valence, aromatic_valence, accepted);
+        let electron = electron_count(
+            element,
+            charge,
+            implicit_h,
+            valence,
+            aromatic_valence,
+            accepted,
+        );
         if orbital == electron {
             Solution::Determined(())
         } else {

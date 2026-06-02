@@ -549,10 +549,7 @@ mod tests {
         assert_eq!(extended.symbol, AtomSymbol::Element(Element::C));
         assert_eq!(extended.isotope_mass, Some(13));
         assert_eq!(extended.charge, Some(1));
-        assert_eq!(
-            extended.implicit_hydrogens,
-            Some(3)
-        );
+        assert_eq!(extended.implicit_hydrogens, Some(3));
         assert_eq!(extended.valence, Some(3));
         assert_eq!(extended.lone_pairs, None);
         assert_eq!(extended.unpaired_electrons, Some(1));

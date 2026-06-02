@@ -537,10 +537,7 @@ mod tests {
     #[case::two(3, Some(2))]
     #[case::three(4, Some(3))]
     #[case::four(5, Some(4))]
-    fn test_convert_atom_hydrogen_count_code(
-        #[case] code: u8,
-        #[case] expected: Option<u8>,
-    ) {
+    fn test_convert_atom_hydrogen_count_code(#[case] code: u8, #[case] expected: Option<u8>) {
         assert_eq!(convert_atom_hydrogen_count_code(code), expected);
     }
 

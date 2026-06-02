@@ -4,6 +4,7 @@ use std::borrow::Cow;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
+use strum::IntoEnumIterator;
 use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{preceded, repeat, terminated};
@@ -11,16 +12,17 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
-use super::config::{BondDefaults, NumericDefault};
+use super::config::{BondDefaults, NumericDefault, StereoDefault};
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
-    raise_spin, ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, fmt_stereo_config,
+    lower_spin, optional_value, raise_spin, ring_count, SpinPredicate,
 };
 use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
-use crate::ast::constraint::BondConstraint;
+use crate::ast::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
 use crate::ast::spin::SpinStateAst;
+use crate::ast::stereo::StereoConfigurationAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
@@ -209,6 +211,7 @@ fn constraint_tag(c: &BondConstraint) -> &'static str {
         BondConstraint::Aromatic => "#a",
         BondConstraint::RingCount(_) => "#R",
         BondConstraint::RingSize(_) => "#r",
+        BondConstraint::CisTransStereo(_) => "#C",
     }
 }
 
@@ -300,6 +303,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result
                 fmt_value(f, v)
             }
         },
+        BondConstraint::CisTransStereo(c) => fmt_stereo_config(f, c, "#C"),
     }
 }
 
@@ -310,7 +314,7 @@ fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
         order: _,
         charge,
         spin,
-        constraints: _,
+        constraints,
     } = ast;
 
     if matches!(
@@ -320,6 +324,7 @@ fn lower_bond(ast: &mut BondAst, cfg: &BondDefaults) {
         *charge = ValueAst::Undetermined;
     }
     lower_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
+    lower_bond_constraints(constraints, cfg);
 }
 
 fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
@@ -329,7 +334,7 @@ fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
         order: _,
         charge,
         spin,
-        constraints: _,
+        constraints,
     } = ast;
 
     if matches!(*charge, ValueAst::Undetermined) {
@@ -339,6 +344,56 @@ fn raise_bond(ast: &mut BondAst, cfg: &BondDefaults) {
         };
     }
     raise_spin(spin, cfg.unpaired_electrons, cfg.multiplicity);
+    raise_bond_constraints(constraints, cfg);
+}
+
+fn raise_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults) {
+    for kind in BondConstraintKind::iter() {
+        match kind {
+            BondConstraintKind::CisTransStereo => {
+                if !constraints.contains(kind) {
+                    match cfg.cis_trans_stereo {
+                        StereoDefault::NotStereo => {
+                            constraints.add(BondConstraint::CisTransStereo(
+                                StereoConfigurationAst::NotStereo,
+                            ));
+                        }
+                        StereoDefault::Required => {}
+                    }
+                }
+            }
+            BondConstraintKind::Aromatic
+            | BondConstraintKind::RingCount
+            | BondConstraintKind::RingSize => {
+                // Pattern-only constraint: no defaulting mode in BondDefaults.
+            }
+        }
+    }
+}
+
+fn lower_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults) {
+    for kind in BondConstraintKind::iter() {
+        match kind {
+            BondConstraintKind::CisTransStereo => match cfg.cis_trans_stereo {
+                StereoDefault::NotStereo => {
+                    if matches!(
+                        constraints.get(kind),
+                        Some(BondConstraint::CisTransStereo(
+                            StereoConfigurationAst::NotStereo
+                        ))
+                    ) {
+                        constraints.remove(kind);
+                    }
+                }
+                StereoDefault::Required => {}
+            },
+            BondConstraintKind::Aromatic
+            | BondConstraintKind::RingCount
+            | BondConstraintKind::RingSize => {
+                // Pattern-only constraint: no defaulting mode in BondDefaults.
+            }
+        }
+    }
 }
 
 /// Surface DSL wrapper around `BondConstraint`. EDN form: the keyword
@@ -409,6 +464,7 @@ impl ToEdn for BondConstraintDsl {
             }
             BondConstraint::RingCount(v) => bond_constraint_single_key("ring-count", v),
             BondConstraint::RingSize(v) => bond_constraint_single_key("ring-size", v),
+            BondConstraint::CisTransStereo(_) => todo!("stereo config EDN serialization"),
         }
     }
 }

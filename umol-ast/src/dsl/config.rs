@@ -106,6 +106,7 @@ pub struct AtomDefaults {
     pub accepted_pairs: NumericDefault,
     pub multicenter_valence: MulticenterValenceDefault,
     pub aromatic_valence: AromaticValenceDefault,
+    pub tetrahedral_stereo: StereoDefault,
 }
 
 impl AtomDefaults {
@@ -123,6 +124,7 @@ impl AtomDefaults {
             accepted_pairs: NumericDefault::Required,
             multicenter_valence: MulticenterValenceDefault::Required,
             aromatic_valence: AromaticValenceDefault::Required,
+            tetrahedral_stereo: StereoDefault::Required,
         }
     }
 
@@ -140,6 +142,7 @@ impl AtomDefaults {
             accepted_pairs: NumericDefault::Required,
             multicenter_valence: MulticenterValenceDefault::Required,
             aromatic_valence: AromaticValenceDefault::Required,
+            tetrahedral_stereo: StereoDefault::Required,
         }
     }
 
@@ -157,6 +160,7 @@ impl AtomDefaults {
             accepted_pairs: NumericDefault::Zero,
             multicenter_valence: MulticenterValenceDefault::NotMulticenter,
             aromatic_valence: AromaticValenceDefault::NotAromatic,
+            tetrahedral_stereo: StereoDefault::NotStereo,
         }
     }
 
@@ -195,6 +199,9 @@ impl AtomDefaults {
         if let Some(v) = ov.aromatic_valence {
             self.aromatic_valence = v;
         }
+        if let Some(v) = ov.tetrahedral_stereo {
+            self.tetrahedral_stereo = v;
+        }
         self
     }
 }
@@ -220,6 +227,7 @@ pub struct AtomOverrides {
     pub accepted_pairs: Option<NumericDefault>,
     pub multicenter_valence: Option<MulticenterValenceDefault>,
     pub aromatic_valence: Option<AromaticValenceDefault>,
+    pub tetrahedral_stereo: Option<StereoDefault>,
 }
 
 /// Lowering/raising defaults for localized bonds.
@@ -229,6 +237,7 @@ pub struct BondDefaults {
     pub charge: NumericDefault,
     pub unpaired_electrons: UnpairedElectronsDefault,
     pub multiplicity: MultiplicityDefault,
+    pub cis_trans_stereo: StereoDefault,
 }
 
 impl BondDefaults {
@@ -238,6 +247,7 @@ impl BondDefaults {
             charge: NumericDefault::Required,
             unpaired_electrons: UnpairedElectronsDefault::Derived,
             multiplicity: MultiplicityDefault::Derived,
+            cis_trans_stereo: StereoDefault::Required,
         }
     }
 
@@ -247,12 +257,19 @@ impl BondDefaults {
             charge: NumericDefault::Zero,
             unpaired_electrons: UnpairedElectronsDefault::Zero,
             multiplicity: MultiplicityDefault::Derived,
+            cis_trans_stereo: StereoDefault::Required,
         }
     }
 
-    /// Equivalent to ground()
+    /// Like `ground()` but additionally sets the constraint default
+    /// `cis_trans_stereo` to `NotStereo` (registry entries).
     pub fn zeroed() -> Self {
-        Self::ground()
+        Self {
+            charge: NumericDefault::Zero,
+            unpaired_electrons: UnpairedElectronsDefault::Zero,
+            multiplicity: MultiplicityDefault::Derived,
+            cis_trans_stereo: StereoDefault::NotStereo,
+        }
     }
 
     /// Add overrides
@@ -492,7 +509,6 @@ pub enum MultiplicityDefault {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum AromaticValenceDefault {
     NotAromatic,
-    Aromatic,
     Required,
 }
 
@@ -500,7 +516,13 @@ pub enum AromaticValenceDefault {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum MulticenterValenceDefault {
     NotMulticenter,
-    Multicenter,
+    Required,
+}
+
+/// Stereo default, shared by tetrahedral chirality and cis/trans constraints.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
+pub enum StereoDefault {
+    NotStereo,
     Required,
 }
 
@@ -560,7 +582,8 @@ mod tests {
         "{:isotope :required :charge :required :implicit-hydrogens :required \
          :lone-pairs :required :unpaired-electrons :derived :multiplicity :derived \
          :valence :required :donated-pairs :required :accepted-pairs :required \
-         :multicenter-valence :required :aromatic-valence :required}",
+         :multicenter-valence :required :aromatic-valence :required \
+         :tetrahedral-stereo :required}",
         NumericDefault::Required,
         NumericDefault::Required,
         MulticenterValenceDefault::Required,
@@ -570,7 +593,8 @@ mod tests {
         "{:isotope :natural :charge :zero :implicit-hydrogens :zero \
          :lone-pairs :zero :unpaired-electrons :zero :multiplicity :derived \
          :valence :zero :donated-pairs :zero :accepted-pairs :zero \
-         :multicenter-valence :not-multicenter :aromatic-valence :not-aromatic}",
+         :multicenter-valence :not-multicenter :aromatic-valence :not-aromatic \
+         :tetrahedral-stereo :not-stereo}",
         NumericDefault::Zero,
         NumericDefault::Zero,
         MulticenterValenceDefault::NotMulticenter,
@@ -626,7 +650,8 @@ mod tests {
             donated_pairs: Some(NumericDefault::Required),
             accepted_pairs: Some(NumericDefault::Required),
             multicenter_valence: Some(MulticenterValenceDefault::Required),
-            aromatic_valence: Some(AromaticValenceDefault::Aromatic),
+            aromatic_valence: Some(AromaticValenceDefault::Required),
+            tetrahedral_stereo: Some(StereoDefault::Required),
         });
         assert_eq!(cfg.isotope, IsotopeDefault::Required);
         assert_eq!(cfg.charge, NumericDefault::Required);
@@ -638,7 +663,8 @@ mod tests {
         assert_eq!(cfg.donated_pairs, NumericDefault::Required);
         assert_eq!(cfg.accepted_pairs, NumericDefault::Required);
         assert_eq!(cfg.multicenter_valence, MulticenterValenceDefault::Required);
-        assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::Aromatic);
+        assert_eq!(cfg.aromatic_valence, AromaticValenceDefault::Required);
+        assert_eq!(cfg.tetrahedral_stereo, StereoDefault::Required);
     }
 
     #[rstest]

@@ -15,11 +15,12 @@ use umol_ast::ast::{
     AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst, BondConstraint,
     BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, Constraint, Constraints,
     DativeBondAst, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
-    DativeBondId, Edit, ElementAst, Expr, IsotopeMassAst, Lattice, MemOp, MoleculeAst,
+    DativeBondId, Edit, ElementAst, IsotopeMassAst, Lattice, MemOp, MoleculeAst,
     MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraint,
     MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterBondId,
     MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind,
     NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst, SubPatternAnchor, ValueAst,
+    ValueExpr,
 };
 use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
@@ -93,20 +94,20 @@ fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     ]
 }
 
-/// Arithmetic-typed Expr: produces only the arithmetic subset of `Expr`
+/// Arithmetic-typed ValueExpr: produces only the arithmetic subset of `ValueExpr`
 /// (`Lit`, `Var`, `Neg(arith)`, `BinOp(arith, op, arith)`). Includes
 /// negative `Lit` and `Neg(Neg(_))` shapes that the parser canonicalizes,
 /// to be paired with `simplify()` for roundtrip testing.
-fn arith_expr_strategy() -> BoxedStrategy<Expr> {
+fn arith_expr_strategy() -> BoxedStrategy<ValueExpr> {
     let leaf = prop_oneof![
-        (-10i64..=10).prop_map(Expr::Lit),
-        id_strategy().prop_map(Expr::Var),
+        (-10i64..=10).prop_map(ValueExpr::Lit),
+        id_strategy().prop_map(ValueExpr::Var),
     ]
     .boxed();
     leaf.prop_recursive(3, 6, 3, |inner| {
         prop_oneof![
-            inner.clone().prop_map(|e| Expr::Neg(Box::new(e))),
-            (inner.clone(), arith_op_strategy(), inner).prop_map(|(l, op, r)| Expr::BinOp(
+            inner.clone().prop_map(|e| ValueExpr::Neg(Box::new(e))),
+            (inner.clone(), arith_op_strategy(), inner).prop_map(|(l, op, r)| ValueExpr::BinOp(
                 Box::new(l),
                 op,
                 Box::new(r)
@@ -117,33 +118,31 @@ fn arith_expr_strategy() -> BoxedStrategy<Expr> {
     .boxed()
 }
 
-/// Boolean-typed Expr: `Rel(arith, op, arith)`, `Mem(arith, set)`,
+/// Boolean-typed ValueExpr: `Rel(arith, op, arith)`, `Mem(arith, set)`,
 /// `Not(bool)`, `And(bool*)`, `Or(bool*)`. Each boolean recursion correctly
 /// roots in arithmetic leaves so the parser accepts the rendered form.
-fn bool_expr_strategy() -> BoxedStrategy<Expr> {
+fn bool_expr_strategy() -> BoxedStrategy<ValueExpr> {
     let arith = arith_expr_strategy();
-    let leaf = prop_oneof![
-        (arith.clone(), rel_op_strategy(), arith.clone()).prop_map(|(l, op, r)| Expr::Rel(
-            Box::new(l),
-            op,
-            Box::new(r)
-        )),
-        (arith, prop::collection::vec(-10i64..=10, 1..=3))
-            .prop_map(|(e, set)| Expr::Mem(Box::new(e), set)),
-    ]
-    .boxed();
+    let leaf =
+        prop_oneof![
+            (arith.clone(), rel_op_strategy(), arith.clone())
+                .prop_map(|(l, op, r)| ValueExpr::Rel(Box::new(l), op, Box::new(r))),
+            (arith, prop::collection::vec(-10i64..=10, 1..=3))
+                .prop_map(|(e, set)| ValueExpr::Mem(Box::new(e), set)),
+        ]
+        .boxed();
     leaf.prop_recursive(2, 6, 3, |inner| {
         prop_oneof![
-            inner.clone().prop_map(|e| Expr::Not(Box::new(e))),
-            prop::collection::vec(inner.clone(), 1..=3).prop_map(Expr::And),
-            prop::collection::vec(inner, 1..=3).prop_map(Expr::Or),
+            inner.clone().prop_map(|e| ValueExpr::Not(Box::new(e))),
+            prop::collection::vec(inner.clone(), 1..=3).prop_map(ValueExpr::And),
+            prop::collection::vec(inner, 1..=3).prop_map(ValueExpr::Or),
         ]
         .boxed()
     })
     .boxed()
 }
 
-fn any_expr_strategy() -> BoxedStrategy<Expr> {
+fn any_expr_strategy() -> BoxedStrategy<ValueExpr> {
     prop_oneof![arith_expr_strategy(), bool_expr_strategy()].boxed()
 }
 
@@ -187,23 +186,23 @@ fn rel_op_strategy() -> impl Strategy<Value = RelOp> {
     ]
 }
 
-/// Expr leaf: non-negative `Lit` or `Var`. Safe as a subexpression of any
-/// operator; **not** safe as the outermost `ValueAst::Expr` wrapper (see
-/// `top_expr_strategy`). Negative literals are excluded because the Expr
-/// grammar has no `Lit(-n)` parse — `-n` inside an Expr always parses as
-/// `Neg(Lit(n))`, so emitting `Expr::Lit(-n)` from the generator would fail
+/// ValueExpr leaf: non-negative `Lit` or `Var`. Safe as a subexpression of any
+/// operator; **not** safe as the outermost `ValueAst::ValueExpr` wrapper (see
+/// `top_expr_strategy`). Negative literals are excluded because the ValueExpr
+/// grammar has no `Lit(-n)` parse — `-n` inside an ValueExpr always parses as
+/// `Neg(Lit(n))`, so emitting `ValueExpr::Lit(-n)` from the generator would fail
 /// the structural roundtrip equality even though the two forms are
 /// semantically identical under `is_ground` / `evaluate`. Negative integers
 /// still appear elsewhere (top-level `ValueAst::Lit`, `Set`, and
-/// `Expr::Mem` sets all route through `dec_int` which reads signed).
-fn expr_leaf_strategy() -> impl Strategy<Value = Expr> {
+/// `ValueExpr::Mem` sets all route through `dec_int` which reads signed).
+fn expr_leaf_strategy() -> impl Strategy<Value = ValueExpr> {
     prop_oneof![
-        (0i64..=10).prop_map(Expr::Lit),
-        id_strategy().prop_map(Expr::Var),
+        (0i64..=10).prop_map(ValueExpr::Lit),
+        id_strategy().prop_map(ValueExpr::Var),
     ]
 }
 
-/// Expr tree intended as the outermost `ValueAst::Expr(e)`. Constraints on
+/// ValueExpr tree intended as the outermost `ValueAst::ValueExpr(e)`. Constraints on
 /// the outermost shape — inner compositions (BinOp / Rel / Neg / And / Or)
 /// may freely contain `Var` leaves, so `?h + 1` and `(?h <= 1) | (?h >= 2)`
 /// generate:
@@ -222,36 +221,36 @@ fn expr_leaf_strategy() -> impl Strategy<Value = Expr> {
 ///
 /// Returns a boxed strategy to keep the composed type size bounded when
 /// plugged into every value field across the molecule tree.
-fn top_expr_strategy() -> BoxedStrategy<Expr> {
+fn top_expr_strategy() -> BoxedStrategy<ValueExpr> {
     let set = prop::collection::vec(-10i64..=10, 1..=3);
-    let non_var_leaf = (0i64..=10).prop_map(Expr::Lit);
+    let non_var_leaf = (0i64..=10).prop_map(ValueExpr::Lit);
     prop_oneof![
         (
             expr_leaf_strategy(),
             arith_op_strategy(),
             expr_leaf_strategy()
         )
-            .prop_map(|(a, op, b)| Expr::BinOp(Box::new(a), op, Box::new(b))),
+            .prop_map(|(a, op, b)| ValueExpr::BinOp(Box::new(a), op, Box::new(b))),
         (
             expr_leaf_strategy(),
             rel_op_strategy(),
             expr_leaf_strategy()
         )
-            .prop_map(|(a, op, b)| Expr::Rel(Box::new(a), op, Box::new(b))),
-        (non_var_leaf, set).prop_map(|(e, s)| Expr::Mem(Box::new(e), s)),
+            .prop_map(|(a, op, b)| ValueExpr::Rel(Box::new(a), op, Box::new(b))),
+        (non_var_leaf, set).prop_map(|(e, s)| ValueExpr::Mem(Box::new(e), s)),
         (
             expr_leaf_strategy(),
             rel_op_strategy(),
             expr_leaf_strategy()
         )
             .prop_map(|(a, op, b)| {
-                Expr::Not(Box::new(Expr::Rel(Box::new(a), op, Box::new(b))))
+                ValueExpr::Not(Box::new(ValueExpr::Rel(Box::new(a), op, Box::new(b))))
             }),
         // `Neg` of `Var` renders `-?id`; safe (non-Lit inner, no sign folding).
-        id_strategy().prop_map(|x| Expr::Neg(Box::new(Expr::Var(x)))),
+        id_strategy().prop_map(|x| ValueExpr::Neg(Box::new(ValueExpr::Var(x)))),
         // `Or` / `And` with exactly leaf children so the parser can't flatten.
-        prop::collection::vec(expr_leaf_strategy(), 2..=3).prop_map(Expr::Or),
-        prop::collection::vec(expr_leaf_strategy(), 2..=3).prop_map(Expr::And),
+        prop::collection::vec(expr_leaf_strategy(), 2..=3).prop_map(ValueExpr::Or),
+        prop::collection::vec(expr_leaf_strategy(), 2..=3).prop_map(ValueExpr::And),
     ]
     .boxed()
 }
@@ -307,11 +306,11 @@ fn non_vacuous_spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
 }
 
 /// Simple value strategy used inside constraint values: `Undetermined`,
-/// `Lit`, and `Set`. No `Expr` — the constraint formatters route to
+/// `Lit`, and `Set`. No `ValueExpr` — the constraint formatters route to
 /// `fmt_value_field_required` / `fmt_ring_count` / the various `#r` blocks,
-/// and `Expr(Lit(n))` or `Expr(Neg(Lit(n)))` would render to a pure integer
+/// and `ValueExpr(Lit(n))` or `ValueExpr(Neg(Lit(n)))` would render to a pure integer
 /// that the parser then re-reads as a plain `Lit`, breaking roundtrip. The
-/// molecule-level EDN tests cover `Expr` on constraint values through the
+/// molecule-level EDN tests cover `ValueExpr` on constraint values through the
 /// tree-based path, so the gap is contained.
 fn constraint_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     prop_oneof![
@@ -1819,8 +1818,8 @@ proptest! {
     /// `simplify()` is the canonical form: for any generated `ValueAst`,
     /// rendering and parsing yields a value that — once simplified —
     /// equals `simplify()` on the original. The parser produces a partly
-    /// canonical form (it folds within `Expr` but doesn't always lift
-    /// `Expr(Lit(n))` to `ValueAst::Lit(n)`); simplify completes the
+    /// canonical form (it folds within `ValueExpr` but doesn't always lift
+    /// `ValueExpr(Lit(n))` to `ValueAst::Lit(n)`); simplify completes the
     /// canonicalization on both sides.
     #[test]
     fn test_value_ast_render_parse_equals_simplify(v in any_value_ast_strategy()) {

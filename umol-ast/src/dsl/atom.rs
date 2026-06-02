@@ -14,18 +14,20 @@ use winnow::token::{one_of, take};
 use winnow::Parser;
 
 use super::config::{
-    AromaticValenceDefault, AtomDefaults, IsotopeDefault, MulticenterValenceDefault, NumericDefault,
+    AromaticValenceDefault, AtomDefaults, IsotopeDefault, MulticenterValenceDefault,
+    NumericDefault, StereoDefault,
 };
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
-    raise_spin, ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, fmt_stereo_config,
+    lower_spin, optional_value, raise_spin, ring_count, SpinPredicate,
 };
 use super::value::{fmt_value, id, signed_int, terminator, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
+use crate::ast::stereo::StereoConfigurationAst;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::{MemOp, ValueAst};
 
@@ -197,6 +199,7 @@ fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
         AtomConstraintKind::TotalHydrogens => "#H",
         AtomConstraintKind::RingCount => "#R",
         AtomConstraintKind::RingSize => "#r",
+        AtomConstraintKind::TetrahedralStereo => "#T",
         AtomConstraintKind::JointDomain => "#E",
     }
 }
@@ -633,6 +636,7 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
         AtomConstraint::TotalHydrogens(v) => fmt_value_field_required(f, "#H", v),
         AtomConstraint::RingCount(v) => fmt_ring_count(f, v),
         AtomConstraint::RingSize(v) => fmt_value_field_required(f, "#r", v),
+        AtomConstraint::TetrahedralStereo(c) => fmt_stereo_config(f, c, "#T"),
         AtomConstraint::JointDomain(_) => todo!("JointDomainAst DSL formatting lands in 2k"),
     }
 }
@@ -710,11 +714,6 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                                 AromaticValenceAst::NotAromatic,
                             ));
                         }
-                        AromaticValenceDefault::Aromatic => {
-                            constraints.add(AtomConstraint::AromaticValence(
-                                AromaticValenceAst::Aromatic(ValueAst::Undetermined),
-                            ));
-                        }
                         AromaticValenceDefault::Required => {}
                     }
                 }
@@ -727,12 +726,19 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                                 MulticenterValenceAst::NotMulticenter,
                             ));
                         }
-                        MulticenterValenceDefault::Multicenter => {
-                            constraints.add(AtomConstraint::MulticenterValence(
-                                MulticenterValenceAst::Multicenter(ValueAst::Undetermined),
+                        MulticenterValenceDefault::Required => {}
+                    }
+                }
+            }
+            AtomConstraintKind::TetrahedralStereo => {
+                if !constraints.contains(kind) {
+                    match cfg.tetrahedral_stereo {
+                        StereoDefault::NotStereo => {
+                            constraints.add(AtomConstraint::TetrahedralStereo(
+                                StereoConfigurationAst::NotStereo,
                             ));
                         }
-                        MulticenterValenceDefault::Required => {}
+                        StereoDefault::Required => {}
                     }
                 }
             }
@@ -841,16 +847,6 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                         constraints.remove(kind);
                     }
                 }
-                MulticenterValenceDefault::Multicenter => {
-                    if matches!(
-                        constraints.get(kind),
-                        Some(AtomConstraint::MulticenterValence(
-                            MulticenterValenceAst::Multicenter(ValueAst::Undetermined)
-                        ))
-                    ) {
-                        constraints.remove(kind);
-                    }
-                }
                 MulticenterValenceDefault::Required => {}
             },
             AtomConstraintKind::AromaticValence => match cfg.aromatic_valence {
@@ -864,17 +860,20 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
                         constraints.remove(kind);
                     }
                 }
-                AromaticValenceDefault::Aromatic => {
+                AromaticValenceDefault::Required => {}
+            },
+            AtomConstraintKind::TetrahedralStereo => match cfg.tetrahedral_stereo {
+                StereoDefault::NotStereo => {
                     if matches!(
                         constraints.get(kind),
-                        Some(AtomConstraint::AromaticValence(
-                            AromaticValenceAst::Aromatic(ValueAst::Undetermined)
+                        Some(AtomConstraint::TetrahedralStereo(
+                            StereoConfigurationAst::NotStereo
                         ))
                     ) {
                         constraints.remove(kind);
                     }
                 }
-                AromaticValenceDefault::Required => {}
+                StereoDefault::Required => {}
             },
             AtomConstraintKind::TotalValence
             | AtomConstraintKind::Degree
@@ -1144,6 +1143,7 @@ impl ToEdn for AtomConstraintDsl {
             AtomConstraint::RingSize(v) => {
                 single_key_map("ring-size", ValueDsl::from_ast(v, &()).to_edn())
             }
+            AtomConstraint::TetrahedralStereo(_) => todo!("stereo config EDN serialization"),
             AtomConstraint::JointDomain(_) => todo!("JointDomainAst EDN serialization lands in 2l"),
         }
     }

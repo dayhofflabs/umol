@@ -134,4 +134,3 @@ fn parse_saturate_attr(attrs: &[Attribute]) -> syn::Result<Option<syn::Ident>> {
     }
     Ok(None)
 }
-

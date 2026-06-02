@@ -28,7 +28,8 @@ pub use config::{
     AtomOverrides, BondDefaults, BondOverrides, DativeBondDefaults, DativeBondOverrides,
     IsotopeDefault, MoleculeDefaults, MoleculeOverrides, MulticenterBondDefaults,
     MulticenterBondOverrides, MulticenterValenceDefault, MultiplicityDefault,
-    NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, UnpairedElectronsDefault,
+    NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, StereoDefault,
+    UnpairedElectronsDefault,
 };
 pub use constraint::{
     AromaticSystemRef, AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, DativeBondRef,

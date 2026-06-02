@@ -3,20 +3,22 @@ use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
-use strum::EnumDiscriminants;
+use strum::{EnumDiscriminants, EnumIter};
 
 use super::super::remap::IdRemapping;
+use super::super::stereo::{StereoConfigurationAst, StereoKind};
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 
 /// Localized bond constraint. Held inline on `BondAst` via
 /// `BondConstraints`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
-#[strum_discriminants(name(BondConstraintKind), derive(Hash))]
+#[strum_discriminants(name(BondConstraintKind), derive(Hash, EnumIter))]
 pub enum BondConstraint {
     Aromatic,
     RingCount(ValueAst),
     RingSize(ValueAst),
+    CisTransStereo(StereoConfigurationAst),
 }
 
 impl BondConstraint {
@@ -26,6 +28,10 @@ impl BondConstraint {
 
     pub fn ring_size(v: impl Into<ValueAst>) -> Self {
         Self::RingSize(v.into())
+    }
+
+    pub fn cis_trans_stereo(c: StereoConfigurationAst) -> Self {
+        Self::CisTransStereo(c)
     }
 
     pub fn kind(&self) -> BondConstraintKind {
@@ -40,22 +46,24 @@ impl BondConstraint {
         self.kind() != BondConstraintKind::RingSize
     }
 
-    /// `Aromatic` is a flag with no value. `RingCount` / `RingSize` are
+    /// `Aromatic` is a flag with no value; the value-carrying variants are
     /// undetermined iff their inner value is undetermined.
     pub fn is_undetermined(&self) -> bool {
         match self {
             Self::Aromatic => false,
             Self::RingCount(v) | Self::RingSize(v) => v.is_undetermined(),
+            Self::CisTransStereo(c) => c.is_undetermined(),
         }
     }
 
-    /// Simplify the inner `ValueAst` of `RingCount` / `RingSize`. `Aromatic`
-    /// is unchanged.
+    /// Recursively simplify the contained value; the constraint kind is
+    /// preserved.
     pub fn simplify(self) -> Self {
         match self {
             Self::Aromatic => Self::Aromatic,
             Self::RingCount(v) => Self::RingCount(v.simplify()),
             Self::RingSize(v) => Self::RingSize(v.simplify()),
+            Self::CisTransStereo(c) => Self::CisTransStereo(c.simplify(StereoKind::CisTrans)),
         }
     }
 }
@@ -104,6 +112,13 @@ impl BondConstraints {
         match self.get(BondConstraintKind::RingCount) {
             Some(BondConstraint::RingCount(v)) => v.clone(),
             _ => ValueAst::Undetermined,
+        }
+    }
+
+    pub fn cis_trans_stereo(&self) -> StereoConfigurationAst {
+        match self.get(BondConstraintKind::CisTransStereo) {
+            Some(BondConstraint::CisTransStereo(c)) => c.clone(),
+            _ => StereoConfigurationAst::Undetermined,
         }
     }
 
@@ -214,6 +229,7 @@ impl Lattice for BondConstraints {
         self.iter().all(|c| match c {
             BondConstraint::Aromatic => false,
             BondConstraint::RingCount(v) | BondConstraint::RingSize(v) => v.is_undetermined(),
+            BondConstraint::CisTransStereo(c) => c.is_undetermined(),
         })
     }
 
@@ -221,6 +237,7 @@ impl Lattice for BondConstraints {
         self.iter().all(|c| match c {
             BondConstraint::Aromatic => true,
             BondConstraint::RingCount(v) | BondConstraint::RingSize(v) => v.is_ground(),
+            BondConstraint::CisTransStereo(c) => c.is_ground(),
         })
     }
 
@@ -238,6 +255,10 @@ impl Lattice for BondConstraints {
             if !v.is_undetermined() && !result.contains_entry(&entry) {
                 result.add(entry);
             }
+        }
+        let cts = self.cis_trans_stereo().meet(&other.cis_trans_stereo())?;
+        if !cts.is_undetermined() {
+            result.add(BondConstraint::CisTransStereo(cts));
         }
         Some(result)
     }
@@ -264,6 +285,14 @@ impl Lattice for BondConstraints {
                 result.add(entry);
             }
         }
+        if self.contains(BondConstraintKind::CisTransStereo)
+            && other.contains(BondConstraintKind::CisTransStereo)
+        {
+            let joined = self.cis_trans_stereo().join(&other.cis_trans_stereo());
+            if !joined.is_undetermined() {
+                result.add(BondConstraint::CisTransStereo(joined));
+            }
+        }
         result
     }
 
@@ -276,6 +305,7 @@ impl Lattice for BondConstraints {
             && self
                 .ring_sizes()
                 .all(|p| target.ring_sizes().any(|t| p.matches(t)))
+            && self.cis_trans_stereo().matches(&target.cis_trans_stereo())
     }
 }
 
@@ -317,12 +347,14 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
+    use crate::ast::stereo::{StereoExpr, StereoIndexAst};
     use crate::ast::value::ValueExpr;
 
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_count(BondConstraint::ring_count(1), BondConstraint::RingCount(ValueAst::Lit(1)))]
     #[case::ring_size(BondConstraint::ring_size(6), BondConstraint::RingSize(ValueAst::Lit(6)))]
+    #[case::cis_trans_stereo(BondConstraint::cis_trans_stereo(StereoConfigurationAst::NotStereo), BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo))]
     fn test_bond_constraint_constructors(
         #[case] actual: BondConstraint,
         #[case] expected: BondConstraint,
@@ -335,6 +367,7 @@ mod tests {
     #[case::aromatic(BondConstraint::Aromatic, BondConstraintKind::Aromatic)]
     #[case::ring_count(BondConstraint::ring_count(1), BondConstraintKind::RingCount)]
     #[case::ring_size(BondConstraint::ring_size(6), BondConstraintKind::RingSize)]
+    #[case::cis_trans_stereo(BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo), BondConstraintKind::CisTransStereo)]
     fn test_bond_constraint_kind(#[case] c: BondConstraint, #[case] expected: BondConstraintKind) {
         assert_eq!(c.kind(), expected);
     }
@@ -343,6 +376,10 @@ mod tests {
     #[case::aromatic(BondConstraint::Aromatic, true)]
     #[case::ring_count(BondConstraint::ring_count(1), true)]
     #[case::ring_size(BondConstraint::ring_size(6), false)]
+    #[case::cis_trans_stereo(
+        BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo),
+        true
+    )]
     fn test_bond_constraint_is_unique(#[case] c: BondConstraint, #[case] expected: bool) {
         assert_eq!(c.is_unique(), expected);
     }
@@ -354,20 +391,20 @@ mod tests {
     #[case::ring_count_undetermined(BondConstraint::RingCount(ValueAst::Undetermined), true)]
     #[case::ring_size_lit(BondConstraint::ring_size(6), false)]
     #[case::ring_size_undetermined(BondConstraint::RingSize(ValueAst::Undetermined), true)]
+    #[case::cis_trans_not_stereo(BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo), false)]
+    #[case::cis_trans_undetermined(BondConstraint::CisTransStereo(StereoConfigurationAst::Undetermined), true)]
     fn test_bond_constraint_is_undetermined(#[case] c: BondConstraint, #[case] expected: bool) {
         assert_eq!(c.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ring_count_folds_expr(
-        BondConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))),
-        BondConstraint::ring_count(2),
-    )]
-    #[case::ring_size_folds_expr(
-        BondConstraint::RingSize(ValueAst::Expr(Box::new(ValueExpr::Lit(6)))),
-        BondConstraint::ring_size(6),
-    )]
+    #[case::ring_count_folds_expr(BondConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))),
+        BondConstraint::ring_count(2))]
+    #[case::ring_size_folds_expr(BondConstraint::RingSize(ValueAst::Expr(Box::new(ValueExpr::Lit(6)))),
+        BondConstraint::ring_size(6))]
+    #[case::cis_trans_lifts_expr(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::Lit(1)))),
+        BondConstraint::cis_trans_stereo(StereoConfigurationAst::from(1_u32)))]
     fn test_bond_constraint_simplify(
         #[case] input: BondConstraint,
         #[case] expected: BondConstraint,
@@ -379,6 +416,9 @@ mod tests {
     #[case::aromatic(BondConstraint::Aromatic)]
     #[case::ring_count_lit(BondConstraint::ring_count(1))]
     #[case::ring_size_undetermined(BondConstraint::RingSize(ValueAst::Undetermined))]
+    #[case::cis_trans_not_stereo(BondConstraint::CisTransStereo(
+        StereoConfigurationAst::NotStereo
+    ))]
     fn test_bond_constraint_simplify_identity(#[case] input: BondConstraint) {
         assert_eq!(input.clone().simplify(), input);
     }
@@ -461,37 +501,13 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::fresh(
-        vec![BondConstraint::Aromatic],
-        vec![None],
-        vec![BondConstraint::Aromatic],
-    )]
-    #[case::replace_same_kind(
-        vec![
-            BondConstraint::ring_count(1),
-            BondConstraint::ring_count(2),
-        ],
-        vec![None, Some(BondConstraint::ring_count(1))],
-        vec![BondConstraint::ring_count(2)],
-    )]
-    #[case::replace_unit_variant(
-        vec![BondConstraint::Aromatic, BondConstraint::Aromatic],
-        vec![None, Some(BondConstraint::Aromatic)],
-        vec![BondConstraint::Aromatic],
-    )]
-    #[case::distinct_kinds(
-        vec![
-            BondConstraint::Aromatic,
-            BondConstraint::ring_count(1),
-            BondConstraint::ring_size(6),
-        ],
-        vec![None, None, None],
-        vec![
-            BondConstraint::Aromatic,
-            BondConstraint::ring_count(1),
-            BondConstraint::ring_size(6),
-        ],
-    )]
+    #[case::fresh(vec![BondConstraint::Aromatic], vec![None], vec![BondConstraint::Aromatic])]
+    #[case::replace_same_kind(vec![BondConstraint::ring_count(1), BondConstraint::ring_count(2)],
+        vec![None, Some(BondConstraint::ring_count(1))], vec![BondConstraint::ring_count(2)])]
+    #[case::replace_unit_variant(vec![BondConstraint::Aromatic, BondConstraint::Aromatic],
+        vec![None, Some(BondConstraint::Aromatic)], vec![BondConstraint::Aromatic])]
+    #[case::distinct_kinds(vec![BondConstraint::Aromatic, BondConstraint::ring_count(1), BondConstraint::ring_size(6)],
+        vec![None, None, None], vec![BondConstraint::Aromatic, BondConstraint::ring_count(1), BondConstraint::ring_size(6)])]
     fn test_bond_constraints_add(
         #[case] sequence: Vec<BondConstraint>,
         #[case] expected_returns: Vec<Option<BondConstraint>>,
@@ -505,17 +521,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::partial(
-        |c: &BondConstraint| matches!(c, BondConstraint::Aromatic | BondConstraint::RingSize(_)),
-        vec![
-            BondConstraint::Aromatic,
-            BondConstraint::ring_size(6),
-        ],
-    )]
-    #[case::all_dropped(
-        |_: &BondConstraint| false,
-        vec![],
-    )]
+    #[case::partial(|c: &BondConstraint| matches!(c, BondConstraint::Aromatic | BondConstraint::RingSize(_)), vec![
+            BondConstraint::Aromatic, BondConstraint::ring_size(6)])]
+    #[case::all_dropped(|_: &BondConstraint| false, vec![])]
     fn test_bond_constraints_retain(
         #[case] predicate: impl FnMut(&BondConstraint) -> bool,
         #[case] expected: Vec<BondConstraint>,
@@ -568,24 +576,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::aromatic_present(
-        BondConstraintKind::Aromatic,
-        Some(BondConstraint::Aromatic),
-        vec![BondConstraint::ring_size(6)],
-    )]
-    #[case::ring_size_present(
-        BondConstraintKind::RingSize,
-        Some(BondConstraint::ring_size(6)),
-        vec![BondConstraint::Aromatic],
-    )]
-    #[case::ring_count_absent(
-        BondConstraintKind::RingCount,
-        None,
-        vec![
-            BondConstraint::Aromatic,
-            BondConstraint::ring_size(6),
-        ],
-    )]
+    #[case::aromatic_present(BondConstraintKind::Aromatic, Some(BondConstraint::Aromatic), vec![BondConstraint::ring_size(6)])]
+    #[case::ring_size_present(BondConstraintKind::RingSize, Some(BondConstraint::ring_size(6)), vec![BondConstraint::Aromatic])]
+    #[case::ring_count_absent(BondConstraintKind::RingCount, None, vec![BondConstraint::Aromatic, BondConstraint::ring_size(6)])]
     fn test_bond_constraints_remove(
         #[case] kind: BondConstraintKind,
         #[case] expected_returned: Option<BondConstraint>,
@@ -615,41 +608,22 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::empty_pattern_matches_anything(
-        BondConstraints::new(),
-        BondConstraints::from_iter([BondConstraint::Aromatic]),
-        true,
-    )]
-    #[case::aromatic_required_present(
-        BondConstraints::from_iter([BondConstraint::Aromatic]),
-        BondConstraints::from_iter([BondConstraint::Aromatic]),
-        true,
-    )]
-    #[case::aromatic_required_absent(
-        BondConstraints::from_iter([BondConstraint::Aromatic]),
-        BondConstraints::new(),
-        false,
-    )]
-    #[case::ring_count_wildcard_matches_lit(
-        BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Undetermined)]),
-        BondConstraints::from_iter([BondConstraint::ring_count(1)]),
-        true,
-    )]
-    #[case::ring_count_lit_mismatch(
-        BondConstraints::from_iter([BondConstraint::ring_count(1)]),
-        BondConstraints::from_iter([BondConstraint::ring_count(2)]),
-        false,
-    )]
-    #[case::ring_size_subset(
-        BondConstraints::from_iter([BondConstraint::ring_size(5)]),
-        BondConstraints::from_iter([BondConstraint::ring_size(5), BondConstraint::ring_size(6)]),
-        true,
-    )]
-    #[case::ring_size_not_in_target(
-        BondConstraints::from_iter([BondConstraint::ring_size(7)]),
-        BondConstraints::from_iter([BondConstraint::ring_size(5)]),
-        false,
-    )]
+    #[case::empty_pattern_matches_anything(BondConstraints::new(), BondConstraints::from_iter([BondConstraint::Aromatic]), true)]
+    #[case::aromatic_required_present(BondConstraints::from_iter([BondConstraint::Aromatic]),
+        BondConstraints::from_iter([BondConstraint::Aromatic]), true)]
+    #[case::aromatic_required_absent(BondConstraints::from_iter([BondConstraint::Aromatic]), BondConstraints::new(), false)]
+    #[case::ring_count_wildcard_matches_lit(BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Undetermined)]),
+        BondConstraints::from_iter([BondConstraint::ring_count(1)]), true)]
+    #[case::ring_count_lit_mismatch(BondConstraints::from_iter([BondConstraint::ring_count(1)]),
+        BondConstraints::from_iter([BondConstraint::ring_count(2)]), false)]
+    #[case::ring_size_subset(BondConstraints::from_iter([BondConstraint::ring_size(5)]),
+        BondConstraints::from_iter([BondConstraint::ring_size(5), BondConstraint::ring_size(6)]), true)]
+    #[case::ring_size_not_in_target(BondConstraints::from_iter([BondConstraint::ring_size(7)]),
+        BondConstraints::from_iter([BondConstraint::ring_size(5)]), false)]
+    #[case::cis_trans_match(BondConstraints::from_iter([BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo)]),
+        BondConstraints::from_iter([BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo)]), true)]
+    #[case::cis_trans_pattern_more_specific(BondConstraints::from_iter([BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo)]),
+        BondConstraints::new(), false)]
     fn test_bond_constraints_matches(
         #[case] pattern: BondConstraints,
         #[case] target: BondConstraints,
@@ -660,23 +634,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::distinct(
-        vec![
-            BondConstraint::Aromatic,
-            BondConstraint::ring_count(1),
-        ],
-        vec![
-            BondConstraint::Aromatic,
-            BondConstraint::ring_count(1),
-        ],
-    )]
-    #[case::same_kind_last_wins(
-        vec![
-            BondConstraint::ring_count(1),
-            BondConstraint::ring_count(2),
-        ],
-        vec![BondConstraint::ring_count(2)],
-    )]
+    #[case::distinct(vec![BondConstraint::Aromatic, BondConstraint::ring_count(1)],
+        vec![BondConstraint::Aromatic, BondConstraint::ring_count(1)])]
+    #[case::same_kind_last_wins(vec![BondConstraint::ring_count(1), BondConstraint::ring_count(2)],
+        vec![BondConstraint::ring_count(2)])]
     #[case::empty(vec![], vec![])]
     fn test_bond_constraints_from_iter(
         #[case] input: Vec<BondConstraint>,

@@ -31,9 +31,7 @@ pub fn compare_valence_preference(a: &AtomAst, b: &AtomAst) -> Ordering {
         .spin
         .unpaired
         .as_lit_expect("valence preference requires literal unpaired electrons");
-    ha.cmp(&hb)
-        .then(na.cmp(&nb))
-        .then(ub.cmp(&ua))
+    ha.cmp(&hb).then(na.cmp(&nb)).then(ub.cmp(&ua))
 }
 
 #[cfg(test)]
@@ -76,11 +74,7 @@ mod tests {
 
     #[rstest]
     fn test_compare_valence_preference_max_by_picks_higher_h() {
-        let candidates = [
-            atom(1, 1, 0),
-            atom(3, 0, 0),
-            atom(2, 0, 0),
-        ];
+        let candidates = [atom(1, 1, 0), atom(3, 0, 0), atom(2, 0, 0)];
         let best = candidates
             .iter()
             .max_by(|a, b| compare_valence_preference(a, b))

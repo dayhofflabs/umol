@@ -4,8 +4,9 @@ use std::mem;
 
 use umol_ast_macros::Lattice;
 
-use super::constraint::{BondConstraint, BondConstraints};
+use super::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
 use super::spin::SpinStateAst;
+use super::stereo::StereoConfigurationAst;
 use super::traits::Lattice;
 use super::value::ValueAst;
 
@@ -84,9 +85,20 @@ impl BondAst {
         self
     }
 
-    /// Equivalent to `into_ground()`. `BondAst` has no constraint defaults.
-    pub fn into_zeroed(self) -> Self {
-        self.into_ground()
+    /// `into_ground()` plus the sole bond constraint default,
+    /// `CisTransStereo(NotStereo)`, added only if absent. Matches the
+    /// `bond_zeroed!` macro semantics.
+    pub fn into_zeroed(mut self) -> Self {
+        self = self.into_ground();
+        if !self
+            .constraints
+            .contains(BondConstraintKind::CisTransStereo)
+        {
+            self.constraints.add(BondConstraint::CisTransStereo(
+                StereoConfigurationAst::NotStereo,
+            ));
+        }
+        self
     }
 
     /// Simplify every value-bearing field in place.
@@ -105,6 +117,7 @@ mod tests {
 
     use super::*;
     use crate::ast::traits::Lattice;
+    use crate::bond_zeroed;
 
     #[rustfmt::skip]
     #[rstest]
@@ -190,10 +203,12 @@ mod tests {
     }
 
     #[rstest]
-    #[case::from_order(BondAst::from_order(1))]
-    #[case::with_constraint(BondAst::from_order(1).with_constraint(BondConstraint::Aromatic))]
-    fn test_bond_ast_into_zeroed(#[case] bond: BondAst) {
-        assert_eq!(bond.clone().into_zeroed(), bond.into_ground());
+    #[case::from_order(BondAst::from_order(1).into_zeroed(), bond_zeroed!("1"))]
+    #[case::with_constraint(
+        BondAst::from_order(1).with_constraint(BondConstraint::Aromatic).into_zeroed(),
+        bond_zeroed!("1#a"))]
+    fn test_bond_ast_into_zeroed(#[case] actual: BondAst, #[case] expected: BondAst) {
+        assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
@@ -282,10 +297,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case::widens_to_set(
-        BondAst::from_order(2),
-        BondAst::from_order(3),
-        BondAst { order: ValueAst::Set(Box::new(vec![2, 3])), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
+    #[case::widens_to_set(BondAst::from_order(2), BondAst::from_order(3),
+        BondAst { order: ValueAst::Set(Box::new(vec![2, 3])), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+        constraints: BondConstraints::new() },
     )]
     fn test_bond_ast_join(#[case] a: BondAst, #[case] b: BondAst, #[case] expected: BondAst) {
         assert_eq!(a.join(&b), expected);
