@@ -570,10 +570,7 @@ mod tests {
             DativeBondConstraint::ring_size(6),
         ]);
         let remap = IdRemapping::new(
-            umol_graph_core::Remapping {
-                removed_nodes: vec![1],
-                removed_edges: vec![1],
-            },
+            umol_graph_core::Remapping::new(vec![1], vec![1]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

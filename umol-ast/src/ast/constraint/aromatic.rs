@@ -481,10 +481,7 @@ mod tests {
     fn test_aromatic_system_constraints_remap() {
         let cs = AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6));
         let remap = IdRemapping::new(
-            Remapping {
-                removed_nodes: vec![0, 1],
-                removed_edges: vec![0],
-            },
+            Remapping::new(vec![0, 1], vec![0]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

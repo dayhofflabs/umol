@@ -303,10 +303,7 @@ mod tests {
         removed_noncovalent: Vec<u32>,
     ) -> IdRemapping {
         IdRemapping::new(
-            Remapping {
-                removed_nodes,
-                removed_edges,
-            },
+            Remapping::new(removed_nodes, removed_edges),
             removed_dative,
             removed_aromatic,
             removed_multicenter,

@@ -644,10 +644,7 @@ impl MoleculeBuilder {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.dative_bonds.remove_indices(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
-            },
+            Remapping::new(Vec::new(), Vec::new()),
             raw,
             Vec::new(),
             Vec::new(),
@@ -664,10 +661,7 @@ impl MoleculeBuilder {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.aromatic_systems.remove_indices(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
-            },
+            Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             raw,
             Vec::new(),
@@ -684,10 +678,7 @@ impl MoleculeBuilder {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.multicenter_bonds.remove_indices(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
-            },
+            Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             raw,
@@ -704,10 +695,7 @@ impl MoleculeBuilder {
         let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
         self.noncovalent_bonds.remove_indices(&raw);
         let idx_remap = IdRemapping::new(
-            Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
-            },
+            Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),

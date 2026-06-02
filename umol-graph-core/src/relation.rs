@@ -1,10 +1,16 @@
-//! Relation sets: N-ary relations over graph nodes with CSR incidence.
+//! Relation sets: N-ary relations over typed participants (`RelationParticipant`
+//! — a `NodeId` or `EdgeId`), each carrying a shared union incidence index (a
+//! node index and an edge index) routed from every participant's `refs()`.
 //!
-//! `FixedRelationSet<P, O, D, N>` stores relations of compile-time-known arity
-//! (e.g. binary dative bonds); `VarRelationSet<P, O, D>` stores variable-arity
-//! relations (e.g. aromatic systems). Participants are typed `P`
-//! (`RelationParticipant`); the factor ordering `O` (`Unordered`/`Ordered`)
-//! controls canonicalization. Both use sorted parallel arrays for incidence.
+//! `FixedRelationSet<P, O, D, N>` stores relations of compile-time-known arity,
+//! `VarRelationSet<P, O, D>` stores variable-arity relations.
+//! Participants are typed `P` (`RelationParticipant`);
+//! the factor ordering `O` (`Unordered`/`Ordered`) controls canonicalization.
+//!
+//! `FixedFixedBirelationSet`, `FixedVarBirelationSet`, and `VarVarBirelationSet`
+//! relate two factors, each with its own participant type, ordering, and arity.
+//! The union incidence spans both factors, so a relation is reachable from any
+//! of its participants regardless of id-space.
 
 use std::hash::Hash;
 use std::marker::PhantomData;
@@ -22,8 +28,7 @@ impl RelationId {
 
 /// Canonicalization of a relation factor's participants, applied on
 /// construction and after a remap relabels them. `Unordered` sorts (membership
-/// is the datum); `Ordered` preserves input order (position is the datum, e.g.
-/// a stereo configuration or a bond direction).
+/// is the datum); `Ordered` preserves input order (position is the datum).
 pub trait FactorOrdering {
     fn canonicalize<P: Ord>(participants: &mut [P]);
 }
@@ -421,9 +426,157 @@ impl<P, O, D> Default for VarRelationSet<P, O, D> {
     }
 }
 
-/// Birelation with a fixed-arity factor 1 and a variable-arity factor 2 — the
-/// stereo-element table (factor 1 = site, factor 2 = ligands). Each factor has
-/// its own participant type and ordering; the union incidence spans both.
+/// Birelation with two fixed-arity factors.
+#[derive(Clone, Debug)]
+pub struct FixedFixedBirelationSet<L1, O1, const N1: usize, L2, O2, const N2: usize, D> {
+    factor_1: Vec<[L1; N1]>,
+    factor_2: Vec<[L2; N2]>,
+    data: Vec<D>,
+    incidence: Incidence,
+    _ordering: PhantomData<(O1, O2)>,
+}
+
+impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> PartialEq
+    for FixedFixedBirelationSet<L1, O1, N1, L2, O2, N2, D>
+where
+    L1: PartialEq,
+    L2: PartialEq,
+    D: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.factor_1 == other.factor_1
+            && self.factor_2 == other.factor_2
+            && self.data == other.data
+    }
+}
+
+impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> Eq
+    for FixedFixedBirelationSet<L1, O1, N1, L2, O2, N2, D>
+where
+    L1: Eq,
+    L2: Eq,
+    D: Eq,
+{
+}
+
+impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D>
+    FixedFixedBirelationSet<L1, O1, N1, L2, O2, N2, D>
+where
+    L1: RelationParticipant,
+    O1: FactorOrdering,
+    L2: RelationParticipant,
+    O2: FactorOrdering,
+{
+    pub fn new(entries: Vec<([L1; N1], [L2; N2], D)>) -> Self {
+        let relation_count = entries.len();
+        let mut factor_1 = Vec::with_capacity(relation_count);
+        let mut factor_2 = Vec::with_capacity(relation_count);
+        let mut data = Vec::with_capacity(relation_count);
+        for (mut l1, mut l2, d) in entries {
+            O1::canonicalize(&mut l1);
+            O2::canonicalize(&mut l2);
+            factor_1.push(l1);
+            factor_2.push(l2);
+            data.push(d);
+        }
+        let incidence = Incidence::build(relation_count, |i, out| {
+            out.extend(factor_1[i].iter().map(|p| p.refs()));
+            out.extend(factor_2[i].iter().map(|p| p.refs()));
+        });
+        Self {
+            factor_1,
+            factor_2,
+            data,
+            incidence,
+            _ordering: PhantomData,
+        }
+    }
+
+    pub fn relation_count(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn data(&self, id: RelationId) -> &D {
+        &self.data[id.index()]
+    }
+
+    pub fn data_mut(&mut self, id: RelationId) -> &mut D {
+        &mut self.data[id.index()]
+    }
+
+    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
+        self.data.iter_mut()
+    }
+
+    pub fn factor_1(&self, id: RelationId) -> &[L1; N1] {
+        &self.factor_1[id.index()]
+    }
+
+    pub fn factor_2(&self, id: RelationId) -> &[L2; N2] {
+        &self.factor_2[id.index()]
+    }
+
+    pub fn incident(&self, node: NodeId) -> &[RelationId] {
+        self.incidence.incident(node)
+    }
+
+    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
+        self.incidence.incident_edge(edge)
+    }
+
+    pub fn has_incident(&self, node: NodeId) -> bool {
+        self.incidence.has_incident(node)
+    }
+
+    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
+        self.incidence.has_incident_edge(edge)
+    }
+
+    pub fn contains(&self, id: RelationId) -> bool {
+        id.index() < self.data.len()
+    }
+
+    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
+        (0..self.data.len() as u32).map(RelationId)
+    }
+
+    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
+    where
+        D: Clone,
+    {
+        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.relation_count())
+            .filter_map(|i| {
+                let rid = RelationId(i as u32);
+                let f1: Option<Vec<L1>> =
+                    self.factor_1(rid).iter().map(|&p| p.remap(remapping)).collect();
+                let f1: [L1; N1] = f1?.try_into().ok()?;
+                let f2: Option<Vec<L2>> =
+                    self.factor_2(rid).iter().map(|&p| p.remap(remapping)).collect();
+                let f2: [L2; N2] = f2?.try_into().ok()?;
+                Some((f1, f2, self.data(rid).clone()))
+            })
+            .collect();
+        Self::new(entries)
+    }
+}
+
+impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> Default
+    for FixedFixedBirelationSet<L1, O1, N1, L2, O2, N2, D>
+{
+    fn default() -> Self {
+        Self {
+            factor_1: Vec::new(),
+            factor_2: Vec::new(),
+            data: Vec::new(),
+            incidence: Incidence::default(),
+            _ordering: PhantomData,
+        }
+    }
+}
+
+
+/// Birelation with a fixed-arity factor 1 and a variable-arity factor 2. Each factor
+/// has its own participant type and ordering; the union incidence spans both.
 #[derive(Clone, Debug)]
 pub struct FixedVarBirelationSet<L1, O1, const N1: usize, L2, O2, D> {
     factor_1: Vec<[L1; N1]>,
@@ -568,154 +721,6 @@ impl<L1, O1, const N1: usize, L2, O2, D> Default for FixedVarBirelationSet<L1, O
         Self {
             factor_1: Vec::new(),
             f2_offsets: vec![0],
-            factor_2: Vec::new(),
-            data: Vec::new(),
-            incidence: Incidence::default(),
-            _ordering: PhantomData,
-        }
-    }
-}
-
-/// Birelation with two fixed-arity factors.
-#[derive(Clone, Debug)]
-pub struct FixedFixedBirelationSet<L1, O1, const N1: usize, L2, O2, const N2: usize, D> {
-    factor_1: Vec<[L1; N1]>,
-    factor_2: Vec<[L2; N2]>,
-    data: Vec<D>,
-    incidence: Incidence,
-    _ordering: PhantomData<(O1, O2)>,
-}
-
-impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> PartialEq
-    for FixedFixedBirelationSet<L1, O1, N1, L2, O2, N2, D>
-where
-    L1: PartialEq,
-    L2: PartialEq,
-    D: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.factor_1 == other.factor_1
-            && self.factor_2 == other.factor_2
-            && self.data == other.data
-    }
-}
-
-impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> Eq
-    for FixedFixedBirelationSet<L1, O1, N1, L2, O2, N2, D>
-where
-    L1: Eq,
-    L2: Eq,
-    D: Eq,
-{
-}
-
-impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D>
-    FixedFixedBirelationSet<L1, O1, N1, L2, O2, N2, D>
-where
-    L1: RelationParticipant,
-    O1: FactorOrdering,
-    L2: RelationParticipant,
-    O2: FactorOrdering,
-{
-    pub fn new(entries: Vec<([L1; N1], [L2; N2], D)>) -> Self {
-        let relation_count = entries.len();
-        let mut factor_1 = Vec::with_capacity(relation_count);
-        let mut factor_2 = Vec::with_capacity(relation_count);
-        let mut data = Vec::with_capacity(relation_count);
-        for (mut l1, mut l2, d) in entries {
-            O1::canonicalize(&mut l1);
-            O2::canonicalize(&mut l2);
-            factor_1.push(l1);
-            factor_2.push(l2);
-            data.push(d);
-        }
-        let incidence = Incidence::build(relation_count, |i, out| {
-            out.extend(factor_1[i].iter().map(|p| p.refs()));
-            out.extend(factor_2[i].iter().map(|p| p.refs()));
-        });
-        Self {
-            factor_1,
-            factor_2,
-            data,
-            incidence,
-            _ordering: PhantomData,
-        }
-    }
-
-    pub fn relation_count(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn data(&self, id: RelationId) -> &D {
-        &self.data[id.index()]
-    }
-
-    pub fn data_mut(&mut self, id: RelationId) -> &mut D {
-        &mut self.data[id.index()]
-    }
-
-    pub fn data_iter_mut(&mut self) -> impl Iterator<Item = &mut D> {
-        self.data.iter_mut()
-    }
-
-    pub fn factor_1(&self, id: RelationId) -> &[L1; N1] {
-        &self.factor_1[id.index()]
-    }
-
-    pub fn factor_2(&self, id: RelationId) -> &[L2; N2] {
-        &self.factor_2[id.index()]
-    }
-
-    pub fn incident(&self, node: NodeId) -> &[RelationId] {
-        self.incidence.incident(node)
-    }
-
-    pub fn incident_edge(&self, edge: EdgeId) -> &[RelationId] {
-        self.incidence.incident_edge(edge)
-    }
-
-    pub fn has_incident(&self, node: NodeId) -> bool {
-        self.incidence.has_incident(node)
-    }
-
-    pub fn has_incident_edge(&self, edge: EdgeId) -> bool {
-        self.incidence.has_incident_edge(edge)
-    }
-
-    pub fn contains(&self, id: RelationId) -> bool {
-        id.index() < self.data.len()
-    }
-
-    pub fn relation_ids(&self) -> impl Iterator<Item = RelationId> {
-        (0..self.data.len() as u32).map(RelationId)
-    }
-
-    pub fn apply_remapping(&self, remapping: &Remapping) -> Self
-    where
-        D: Clone,
-    {
-        let entries: Vec<([L1; N1], [L2; N2], D)> = (0..self.relation_count())
-            .filter_map(|i| {
-                let rid = RelationId(i as u32);
-                let f1: Option<Vec<L1>> =
-                    self.factor_1(rid).iter().map(|&p| p.remap(remapping)).collect();
-                let f1: [L1; N1] = f1?.try_into().ok()?;
-                let f2: Option<Vec<L2>> =
-                    self.factor_2(rid).iter().map(|&p| p.remap(remapping)).collect();
-                let f2: [L2; N2] = f2?.try_into().ok()?;
-                Some((f1, f2, self.data(rid).clone()))
-            })
-            .collect();
-        Self::new(entries)
-    }
-}
-
-impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> Default
-    for FixedFixedBirelationSet<L1, O1, N1, L2, O2, N2, D>
-{
-    fn default() -> Self {
-        Self {
-            factor_1: Vec::new(),
             factor_2: Vec::new(),
             data: Vec::new(),
             incidence: Incidence::default(),
@@ -922,10 +927,7 @@ mod tests {
     #[case::removed(NodeId(1), None)]
     #[case::after_removed(NodeId(2), Some(NodeId(1)))]
     fn test_node_id_remap(#[case] id: NodeId, #[case] expected: Option<NodeId>) {
-        let remapping = Remapping {
-            removed_nodes: vec![1],
-            removed_edges: vec![],
-        };
+        let remapping = Remapping::new(vec![1], vec![]);
         assert_eq!(id.remap(&remapping), expected);
     }
 
@@ -933,10 +935,7 @@ mod tests {
     #[case::before_gap(NodeId(0), NodeId(0))]
     #[case::after_gap(NodeId(1), NodeId(2))]
     fn test_node_id_unmap(#[case] id: NodeId, #[case] expected: NodeId) {
-        let remapping = Remapping {
-            removed_nodes: vec![1],
-            removed_edges: vec![],
-        };
+        let remapping = Remapping::new(vec![1], vec![]);
         assert_eq!(id.unmap(&remapping), expected);
     }
 
@@ -955,10 +954,7 @@ mod tests {
     #[case::removed(EdgeId(0), None)]
     #[case::after_removed(EdgeId(2), Some(EdgeId(1)))]
     fn test_edge_id_remap(#[case] id: EdgeId, #[case] expected: Option<EdgeId>) {
-        let remapping = Remapping {
-            removed_nodes: vec![],
-            removed_edges: vec![0],
-        };
+        let remapping = Remapping::new(vec![], vec![0]);
         assert_eq!(id.remap(&remapping), expected);
     }
 
@@ -966,10 +962,7 @@ mod tests {
     #[case::before_gap(EdgeId(0), EdgeId(0))]
     #[case::after_gap(EdgeId(1), EdgeId(2))]
     fn test_edge_id_unmap(#[case] id: EdgeId, #[case] expected: EdgeId) {
-        let remapping = Remapping {
-            removed_nodes: vec![],
-            removed_edges: vec![1],
-        };
+        let remapping = Remapping::new(vec![], vec![1]);
         assert_eq!(id.unmap(&remapping), expected);
     }
 
@@ -1070,10 +1063,7 @@ mod tests {
     fn test_fixed_relation_set_apply_remapping() {
         let rs: FixedRelationSet<NodeId, Unordered, &str, 2> =
             FixedRelationSet::new(vec![([n(0), n(2)], "keep"), ([n(1), n(3)], "drop")]);
-        let remapping = Remapping {
-            removed_nodes: vec![1],
-            removed_edges: vec![],
-        };
+        let remapping = Remapping::new(vec![1], vec![]);
         let out = rs.apply_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1)]);
@@ -1204,10 +1194,7 @@ mod tests {
             (vec![n(0), n(2), n(4)], "keep"),
             (vec![n(1), n(3)], "drop"),
         ]);
-        let remapping = Remapping {
-            removed_nodes: vec![1],
-            removed_edges: vec![],
-        };
+        let remapping = Remapping::new(vec![1], vec![]);
         let out = rs.apply_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.participants(RelationId(0)), &[n(0), n(1), n(3)]);
@@ -1217,6 +1204,86 @@ mod tests {
     #[rstest]
     fn test_var_relation_set_default() {
         let rs = VarRelationSet::<NodeId, Unordered, ()>::default();
+        assert_eq!(rs.relation_count(), 0);
+        assert!(!rs.has_incident(n(0)));
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_new() {
+        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 2, &str> =
+            FixedFixedBirelationSet::new(vec![([n(0)], [n(2), n(1)], "x")]);
+        assert_eq!(rs.relation_count(), 1);
+        assert_eq!(rs.factor_1(RelationId(0)), &[n(0)]);
+        assert_eq!(rs.factor_2(RelationId(0)), &[n(1), n(2)]);
+        assert_eq!(rs.data(RelationId(0)), &"x");
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_data_mut() {
+        let mut rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, i32> =
+            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], 1)]);
+        *rs.data_mut(RelationId(0)) = 99;
+        assert_eq!(rs.data(RelationId(0)), &99);
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_data_iter_mut() {
+        let mut rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, i32> =
+            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], 1), ([n(2)], [n(3)], 2)]);
+        for d in rs.data_iter_mut() {
+            *d *= 10;
+        }
+        assert_eq!(rs.data(RelationId(0)), &10);
+        assert_eq!(rs.data(RelationId(1)), &20);
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_incidence() {
+        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, EdgeId, Unordered, 1, &str> =
+            FixedFixedBirelationSet::new(vec![([n(0)], [EdgeId(7)], "x")]);
+        assert_eq!(rs.incident(n(0)), &[RelationId(0)]);
+        assert_eq!(rs.incident_edge(EdgeId(7)), &[RelationId(0)]);
+        assert!(rs.has_incident(n(0)));
+        assert!(rs.has_incident_edge(EdgeId(7)));
+        assert!(!rs.has_incident(n(5)));
+    }
+
+    #[rstest]
+    #[case::first(RelationId(0), true)]
+    #[case::out_of_range(RelationId(1), false)]
+    fn test_fixed_fixed_birelation_set_contains(#[case] id: RelationId, #[case] expected: bool) {
+        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, &str> =
+            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], "x")]);
+        assert_eq!(rs.contains(id), expected);
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_relation_ids() {
+        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, &str> =
+            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], "a"), ([n(2)], [n(3)], "b")]);
+        let ids: Vec<RelationId> = rs.relation_ids().collect();
+        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_apply_remapping() {
+        // dropped relation loses a factor-1 participant
+        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 2, &str> =
+            FixedFixedBirelationSet::new(vec![
+                ([n(0)], [n(2), n(4)], "keep"),
+                ([n(1)], [n(5), n(6)], "drop"),
+            ]);
+        let remapping = Remapping::new(vec![1], vec![]);
+        let out = rs.apply_remapping(&remapping);
+        assert_eq!(out.relation_count(), 1);
+        assert_eq!(out.factor_1(RelationId(0)), &[n(0)]);
+        assert_eq!(out.factor_2(RelationId(0)), &[n(1), n(3)]);
+        assert_eq!(out.data(RelationId(0)), &"keep");
+    }
+
+    #[rstest]
+    fn test_fixed_fixed_birelation_set_default() {
+        let rs = FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, ()>::default();
         assert_eq!(rs.relation_count(), 0);
         assert!(!rs.has_incident(n(0)));
     }
@@ -1286,10 +1353,7 @@ mod tests {
                 ([n(0)], vec![n(2), n(4)], "keep"),
                 ([n(5)], vec![n(1), n(3)], "drop"),
             ]);
-        let remapping = Remapping {
-            removed_nodes: vec![1],
-            removed_edges: vec![],
-        };
+        let remapping = Remapping::new(vec![1], vec![]);
         let out = rs.apply_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.factor_1(RelationId(0)), &[n(0)]);
@@ -1302,89 +1366,6 @@ mod tests {
         let rs = FixedVarBirelationSet::<EdgeId, Ordered, 1, NodeId, Ordered, ()>::default();
         assert_eq!(rs.relation_count(), 0);
         assert!(!rs.has_incident_edge(EdgeId(0)));
-    }
-
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_new() {
-        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 2, &str> =
-            FixedFixedBirelationSet::new(vec![([n(0)], [n(2), n(1)], "x")]);
-        assert_eq!(rs.relation_count(), 1);
-        assert_eq!(rs.factor_1(RelationId(0)), &[n(0)]);
-        assert_eq!(rs.factor_2(RelationId(0)), &[n(1), n(2)]);
-        assert_eq!(rs.data(RelationId(0)), &"x");
-    }
-
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_data_mut() {
-        let mut rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, i32> =
-            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], 1)]);
-        *rs.data_mut(RelationId(0)) = 99;
-        assert_eq!(rs.data(RelationId(0)), &99);
-    }
-
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_data_iter_mut() {
-        let mut rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, i32> =
-            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], 1), ([n(2)], [n(3)], 2)]);
-        for d in rs.data_iter_mut() {
-            *d *= 10;
-        }
-        assert_eq!(rs.data(RelationId(0)), &10);
-        assert_eq!(rs.data(RelationId(1)), &20);
-    }
-
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_incidence() {
-        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, EdgeId, Unordered, 1, &str> =
-            FixedFixedBirelationSet::new(vec![([n(0)], [EdgeId(7)], "x")]);
-        assert_eq!(rs.incident(n(0)), &[RelationId(0)]);
-        assert_eq!(rs.incident_edge(EdgeId(7)), &[RelationId(0)]);
-        assert!(rs.has_incident(n(0)));
-        assert!(rs.has_incident_edge(EdgeId(7)));
-        assert!(!rs.has_incident(n(5)));
-    }
-
-    #[rstest]
-    #[case::first(RelationId(0), true)]
-    #[case::out_of_range(RelationId(1), false)]
-    fn test_fixed_fixed_birelation_set_contains(#[case] id: RelationId, #[case] expected: bool) {
-        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, &str> =
-            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], "x")]);
-        assert_eq!(rs.contains(id), expected);
-    }
-
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_relation_ids() {
-        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 1, &str> =
-            FixedFixedBirelationSet::new(vec![([n(0)], [n(1)], "a"), ([n(2)], [n(3)], "b")]);
-        let ids: Vec<RelationId> = rs.relation_ids().collect();
-        assert_eq!(ids, vec![RelationId(0), RelationId(1)]);
-    }
-
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_apply_remapping() {
-        // dropped relation loses a factor-1 participant
-        let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 2, &str> =
-            FixedFixedBirelationSet::new(vec![
-                ([n(0)], [n(2), n(4)], "keep"),
-                ([n(1)], [n(5), n(6)], "drop"),
-            ]);
-        let remapping = Remapping {
-            removed_nodes: vec![1],
-            removed_edges: vec![],
-        };
-        let out = rs.apply_remapping(&remapping);
-        assert_eq!(out.relation_count(), 1);
-        assert_eq!(out.factor_1(RelationId(0)), &[n(0)]);
-        assert_eq!(out.factor_2(RelationId(0)), &[n(1), n(3)]);
-        assert_eq!(out.data(RelationId(0)), &"keep");
-    }
-
-    #[rstest]
-    fn test_fixed_fixed_birelation_set_default() {
-        let rs = FixedFixedBirelationSet::<NodeId, Unordered, 1, NodeId, Unordered, 1, ()>::default();
-        assert_eq!(rs.relation_count(), 0);
-        assert!(!rs.has_incident(n(0)));
     }
 
     #[rstest]
@@ -1452,10 +1433,7 @@ mod tests {
                 (vec![n(0), n(2)], vec![n(4)], "keep"),
                 (vec![n(5)], vec![n(1)], "drop"),
             ]);
-        let remapping = Remapping {
-            removed_nodes: vec![1],
-            removed_edges: vec![],
-        };
+        let remapping = Remapping::new(vec![1], vec![]);
         let out = rs.apply_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
         assert_eq!(out.factor_1(RelationId(0)), &[n(0), n(1)]);

@@ -604,10 +604,7 @@ mod tests {
         let cs =
             BondConstraints::from_iter([BondConstraint::Aromatic, BondConstraint::ring_size(6)]);
         let remap = IdRemapping::new(
-            Remapping {
-                removed_nodes: vec![0, 1, 2],
-                removed_edges: vec![0, 1],
-            },
+            Remapping::new(vec![0, 1, 2], vec![0, 1]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

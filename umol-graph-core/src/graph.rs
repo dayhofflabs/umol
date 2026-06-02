@@ -198,10 +198,7 @@ impl Graph {
             &kept_edges,
         ));
 
-        Remapping {
-            removed_nodes,
-            removed_edges: removed_edge_set,
-        }
+        Remapping::new(removed_nodes, removed_edge_set)
     }
 
     pub fn remove_node(&mut self, id: NodeId) -> Remapping {
@@ -322,11 +319,22 @@ impl Default for Graph {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Remapping {
-    pub removed_nodes: Vec<u32>,
-    pub removed_edges: Vec<u32>,
+    removed_nodes: Vec<u32>,
+    removed_edges: Vec<u32>,
 }
 
 impl Remapping {
+    pub fn new(mut removed_nodes: Vec<u32>, mut removed_edges: Vec<u32>) -> Self {
+        removed_nodes.sort_unstable();
+        removed_nodes.dedup();
+        removed_edges.sort_unstable();
+        removed_edges.dedup();
+        Self {
+            removed_nodes,
+            removed_edges,
+        }
+    }
+
     pub fn map_node(&self, old: NodeId) -> Option<NodeId> {
         if self.removed_nodes.binary_search(&old.0).is_ok() {
             return None;
@@ -715,10 +723,7 @@ mod tests {
         #[case] removed: Vec<u32>,
         #[case] expected: Option<NodeId>,
     ) {
-        let remap = Remapping {
-            removed_nodes: removed,
-            removed_edges: vec![],
-        };
+        let remap = Remapping::new(removed, vec![]);
         assert_eq!(remap.map_node(old), expected);
     }
 
@@ -733,10 +738,7 @@ mod tests {
         #[case] removed: Vec<u32>,
         #[case] expected: NodeId,
     ) {
-        let remap = Remapping {
-            removed_nodes: removed,
-            removed_edges: vec![],
-        };
+        let remap = Remapping::new(removed, vec![]);
         assert_eq!(remap.unmap_node(post), expected);
     }
 }

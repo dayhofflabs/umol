@@ -1510,10 +1510,7 @@ mod tests {
         let cs =
             AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]);
         let remap = IdRemapping::new(
-            umol_graph_core::Remapping {
-                removed_nodes: vec![0, 1, 2],
-                removed_edges: vec![0],
-            },
+            umol_graph_core::Remapping::new(vec![0, 1, 2], vec![0]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

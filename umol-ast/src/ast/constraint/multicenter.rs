@@ -489,10 +489,7 @@ mod tests {
     fn test_multicenter_bond_constraints_remap() {
         let cs = MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2));
         let remap = IdRemapping::new(
-            Remapping {
-                removed_nodes: vec![0, 1],
-                removed_edges: vec![0],
-            },
+            Remapping::new(vec![0, 1], vec![0]),
             Vec::new(),
             Vec::new(),
             Vec::new(),

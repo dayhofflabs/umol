@@ -511,10 +511,7 @@ mod tests {
 
     fn idx_remapping(removed_nodes: Vec<u32>, removed_edges: Vec<u32>) -> IdRemapping {
         IdRemapping::new(
-            Remapping {
-                removed_nodes,
-                removed_edges,
-            },
+            Remapping::new(removed_nodes, removed_edges),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -529,10 +526,7 @@ mod tests {
         removed_noncovalent: Vec<u32>,
     ) -> IdRemapping {
         IdRemapping::new(
-            Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
-            },
+            Remapping::new(Vec::new(), Vec::new()),
             removed_dative,
             removed_aromatic,
             removed_multicenter,

@@ -34,10 +34,7 @@ pub struct UndoRemapping {
 impl IdRemapping {
     pub fn empty() -> Self {
         Self::new(
-            Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
-            },
+            Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
@@ -52,10 +49,7 @@ impl IdRemapping {
         removed_noncovalent_bonds: Vec<u32>,
     ) -> Self {
         Self::new(
-            Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
-            },
+            Remapping::new(Vec::new(), Vec::new()),
             removed_dative_bonds,
             removed_aromatic_systems,
             removed_multicenter_bonds,
@@ -190,10 +184,7 @@ mod tests {
     #[fixture]
     fn remapping() -> IdRemapping {
         IdRemapping::new(
-            Remapping {
-                removed_nodes: vec![1, 3],
-                removed_edges: vec![0, 2],
-            },
+            Remapping::new(vec![1, 3], vec![0, 2]),
             vec![2, 0, 2],
             vec![1],
             vec![3, 0],

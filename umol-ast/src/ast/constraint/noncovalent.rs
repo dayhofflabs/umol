@@ -173,10 +173,7 @@ mod tests {
     fn test_noncovalent_bond_constraints_remap() {
         let cs = NoncovalentBondConstraints::new();
         let remap = IdRemapping::new(
-            Remapping {
-                removed_nodes: Vec::new(),
-                removed_edges: Vec::new(),
-            },
+            Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
             Vec::new(),
             Vec::new(),
