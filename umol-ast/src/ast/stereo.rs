@@ -87,10 +87,11 @@ impl StereoConfigurationAst {
         }
     }
 
-    /// Pattern match value.
-    pub fn matches_value(&self, value: u32) -> bool {
+    /// Does this pattern config admit the concrete coset index `value` under
+    /// `kind`? `Undetermined` is a wildcard, `NotStereo` admits nothing.
+    pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
         match self {
-            Self::Stereo(v) => v.matches_value(value),
+            Self::Stereo(v) => v.matches_value(value, kind),
             Self::NotStereo => false,
             Self::Undetermined => true,
         }
@@ -181,13 +182,14 @@ impl StereoCosetAst {
         }
     }
 
-    /// Match a literal value against pattern.
-    /// TODO: Finish expressions
-    pub fn matches_value(&self, value: u32) -> bool {
+    /// Does this pattern coset admit the concrete coset index `value` under
+    /// `kind`? `Undetermined` is a wildcard; otherwise the index/expression must
+    /// admit `value`.
+    pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
         match self {
             Self::Undetermined => true,
             Self::Lit(v) => *v == value,
-            Self::Expr(_) => todo!("expressions not implemented"),
+            Self::Expr(e) => e.matches_value(value, kind),
         }
     }
 }
@@ -282,6 +284,25 @@ impl StereoExpr {
                 StereoExpr::Lit(index) => StereoExpr::Lit(kind.act(index, perm)),
                 other => StereoExpr::ApplyOp(Box::new(other), perm),
             },
+        }
+    }
+
+    /// Does this expression admit the coset index `value` under `kind`? `Var`
+    /// binds anything; `LitSet`/`VarDomain` are set membership; `~`/`^` pull
+    /// `value` back through the kind's involution / `perm`'s inverse — the dual
+    /// of `simplify`'s forward `kind.act` — so the recursion bottoms out on a
+    /// `Lit`, a `Var`, or a set.
+    pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
+        match self {
+            StereoExpr::Lit(n) => *n == value,
+            StereoExpr::Var(_) => true,
+            StereoExpr::LitSet(set) | StereoExpr::VarDomain(_, set) => set.contains(&value),
+            StereoExpr::SwapOp(inner) => {
+                inner.matches_value(kind.act(value, kind.involution()), kind)
+            }
+            StereoExpr::ApplyOp(inner, perm) => {
+                inner.matches_value(kind.act(value, perm.inverse()), kind)
+            }
         }
     }
 }
@@ -692,6 +713,27 @@ mod tests {
         #[case] expected: Option<StereoCosetAst>,
     ) {
         assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard(StereoCosetAst::Undetermined, 1, StereoKind::Tetrahedral, true)]
+    #[case::lit_match(StereoCosetAst::Lit(2), 2, StereoKind::Octahedral, true)]
+    #[case::lit_miss(StereoCosetAst::Lit(2), 3, StereoKind::Octahedral, false)]
+    #[case::var_wildcard(StereoCosetAst::expr(StereoExpr::Var("o".into())), 4, StereoKind::Octahedral, true)]
+    #[case::lit_set_member(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 3])), 3, StereoKind::Octahedral, true)]
+    #[case::lit_set_nonmember(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 3])), 2, StereoKind::Octahedral, false)]
+    #[case::var_domain_member(StereoCosetAst::expr(StereoExpr::VarDomain("o".into(), vec![1, 3])), 1, StereoKind::Octahedral, true)]
+    #[case::var_domain_nonmember(StereoCosetAst::expr(StereoExpr::VarDomain("o".into(), vec![1, 3])), 2, StereoKind::Octahedral, false)]
+    #[case::swap_pulls_back(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(0))), 1, StereoKind::Tetrahedral, true)]
+    #[case::swap_pulls_back_miss(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(0))), 0, StereoKind::Tetrahedral, false)]
+    fn test_stereo_coset_ast_matches_value(
+        #[case] coset: StereoCosetAst,
+        #[case] value: u32,
+        #[case] kind: StereoKind,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(coset.matches_value(value, kind), expected);
     }
 
     #[rstest]

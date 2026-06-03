@@ -348,10 +348,9 @@ Phases A–E are in scope; F (3D) and G follow.
     - **D2a** — rename + field split. `StereoIndexAst → StereoCosetAst` (incl. inside
       `StereoConfigurationAst::Stereo(_)`); on `StereoAtomAst`/`StereoBondAst`, `configuration:
       StereoConfigurationAst` → `coset: StereoCosetAst`. `into_ground`/`into_zeroed` become no-ops
-      (ground iff the coset is ground — no `NotStereo` to coerce). Element `:type` surface: write `+`,
-      read `*` as a lenient alias, reject `!`.
+      (ground iff the coset is ground — no `NotStereo` to coerce). **Done**
     - **D2b** — `StereoCosetAst` (`Undetermined | Lit(u32) | Expr`): `AsLit` ✓, `Lattice` ✓,
-      constructors ✓; **finish `matches_value()`**.
+      constructors ✓; **finish `matches_value()`**. **Done**
     - **D2c** — `StereoConfigurationAst` (`Undetermined | NotStereo | Stereo(StereoCosetAst)`): `AsLit`
       ✓, `Lattice` ✓, `From<u32>`/`From<Vec<u32>>` ✓ — rename ripple only.
     - **D2d** — `StereoAtomAst`/`StereoBondAst` (macro; fields `kind`, `coset`, `constraints`): add
