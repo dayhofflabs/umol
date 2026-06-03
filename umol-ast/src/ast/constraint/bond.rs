@@ -347,7 +347,7 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::stereo::{StereoExpr, StereoIndexAst};
+    use crate::ast::stereo::{StereoExpr, StereoCosetAst};
     use crate::ast::value::ValueExpr;
 
     #[rustfmt::skip]
@@ -403,7 +403,7 @@ mod tests {
         BondConstraint::ring_count(2))]
     #[case::ring_size_folds_expr(BondConstraint::RingSize(ValueAst::Expr(Box::new(ValueExpr::Lit(6)))),
         BondConstraint::ring_size(6))]
-    #[case::cis_trans_lifts_expr(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::Lit(1)))),
+    #[case::cis_trans_lifts_expr(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Lit(1)))),
         BondConstraint::cis_trans_stereo(StereoConfigurationAst::from(1_u32)))]
     fn test_bond_constraint_simplify(
         #[case] input: BondConstraint,

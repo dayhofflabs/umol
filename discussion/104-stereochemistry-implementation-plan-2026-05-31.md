@@ -340,8 +340,29 @@ Phases A–E are in scope; F (3D) and G follow.
     `Th`/`Ct`; config `* | ! | + | <coset-term>`, coset-term recursive (`nat`→`Lit`, `?id`→`Expr(Var)`,
     `~e`→`Expr(SwapOp)`, `e^<image-number>`→`Expr(ApplyOp(perm))`); `Expr::LitSet`/`VarDomain` (`{…}`, `?o :: {…}`) reserved at the
     surface (deferred with non-tetrahedral). **One function** — D3's `:type` head and D5's `#T`/`#C` call it. **Done**
-  - **D2** — ligand surface: `atom-ref | [:h atom-ref] | [:lp atom-ref]` (kind-first; reserved
-    `[:atom/:neighbor/:port/:fragment ref]`) ↔ the ordered `StereoLigand` list. Unknown tags rejected (no silent pass).
+  - **D2 — AST + DSL stereo types** (the predicate/element split, doc 103): the `#T`/`#C` *predicate*
+    is `StereoConfigurationAst` (`* | ! | Stereo(StereoCosetAst)` + full lattice); the stereo *element*
+    carries only `StereoCosetAst` (always stereogenic — no `NotStereo`). The ligand EDN surface
+    (`atom-ref | [:h ref] | [:lp ref]`, reserved `[:bond/:port/:fragment ref]`, unknown tags rejected),
+    the `:stereo-atoms`/`:stereo-bonds` entries, and `MoleculeDsl` raise/lower wiring are **D3**, not here.
+    - **D2a** — rename + field split. `StereoIndexAst → StereoCosetAst` (incl. inside
+      `StereoConfigurationAst::Stereo(_)`); on `StereoAtomAst`/`StereoBondAst`, `configuration:
+      StereoConfigurationAst` → `coset: StereoCosetAst`. `into_ground`/`into_zeroed` become no-ops
+      (ground iff the coset is ground — no `NotStereo` to coerce). Element `:type` surface: write `+`,
+      read `*` as a lenient alias, reject `!`.
+    - **D2b** — `StereoCosetAst` (`Undetermined | Lit(u32) | Expr`): `AsLit` ✓, `Lattice` ✓,
+      constructors ✓; **finish `matches_value()`**.
+    - **D2c** — `StereoConfigurationAst` (`Undetermined | NotStereo | Stereo(StereoCosetAst)`): `AsLit`
+      ✓, `Lattice` ✓, `From<u32>`/`From<Vec<u32>>` ✓ — rename ripple only.
+    - **D2d** — `StereoAtomAst`/`StereoBondAst` (macro; fields `kind`, `coset`, `constraints`): add
+      **`AsLit`** and **`Lattice`** — per-kind committed-(A): `meet` cross-kind = `None`, `join`
+      `debug_assert!`s equal kinds, `is_ground`/`is_undetermined`/`matches` over the three fields.
+    - **D2e** — `StereoAtomConstraint`/`StereoBondConstraint` (`ast/constraint/stereo.rs`): uninhabited
+      today; **trivial `Lattice`** (and the `StereoAtomConstraints`/`StereoBondConstraints` collections).
+    - **D2f** — DSL `FromAst`/`IntoAst`. `StereoAtomDsl`/`StereoBondDsl` ↔ `StereoAtomAst`/`StereoBondAst`
+      (`FromStr`/`Display`/`FromEdn`/`ToEdn` ✓; **add `FromAst`/`IntoAst`**, trivial now — no `NotStereo`
+      default, `into_ground` no-op). `StereoAtomConstraintDsl`/`StereoBondConstraintDsl` ↔ the uninhabited
+      AST constraints (`FromEdn`/`ToEdn` ✓; **add `FromAst`/`IntoAst`**).
   - **D3** — `:stereo-atoms` / `:stereo-bonds` entry reader/writer: `{ :id? (keyword), :site ref,
     :ligands [ ligand+ ], :type config-string }` ↔ a `StereoAtom`/`StereoBond` (focus + D2 ligands + D1 config
     + kind).

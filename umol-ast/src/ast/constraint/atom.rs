@@ -860,7 +860,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::joint_domain::{JointDomainAst, JointVar};
-    use crate::ast::stereo::{StereoExpr, StereoIndexAst};
+    use crate::ast::stereo::{StereoExpr, StereoCosetAst};
     use crate::ast::value::ValueExpr;
 
     #[rustfmt::skip]
@@ -972,7 +972,7 @@ mod tests {
         AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(2)))]
     #[case::multicenter_valence_folds_inner(AtomConstraint::multicenter_valence(MulticenterValenceAst::Multicenter(ValueAst::Expr(Box::new(ValueExpr::Lit(3))))),
         AtomConstraint::multicenter_valence(MulticenterValenceAst::multicenter(3)))]
-    #[case::tetrahedral_lifts_expr(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::Lit(1)))),
+    #[case::tetrahedral_lifts_expr(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Lit(1)))),
         AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::from(1_u32)))]
     fn test_atom_constraint_simplify(
         #[case] input: AtomConstraint,
@@ -1348,7 +1348,7 @@ mod tests {
             AtomConstraint::Degree(ValueAst::Expr(Box::new(ValueExpr::Lit(3)))),
             AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))))]),
         AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(2)), AtomConstraint::degree(3)]))]
-    #[case::lifts_stereo_expr(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::Lit(1))))]),
+    #[case::lifts_stereo_expr(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Lit(1))))]),
         AtomConstraints::from_iter([AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::from(1_u32))]))]
     #[case::empty(AtomConstraints::new(), AtomConstraints::new())]
     fn test_atom_constraints_simplify_each(

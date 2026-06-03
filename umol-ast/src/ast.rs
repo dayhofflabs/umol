@@ -64,7 +64,7 @@ pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use stereo::{
-    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoExpr, StereoIndexAst, StereoKind,
+    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoExpr, StereoCosetAst, StereoKind,
     StereoLigand, StereoLigandKind,
 };
 pub use traits::{AsLit, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst};

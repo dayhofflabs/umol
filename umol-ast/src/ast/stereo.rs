@@ -65,11 +65,11 @@ pub enum StereoConfigurationAst {
     #[default]
     Undetermined,
     NotStereo,
-    Stereo(StereoIndexAst),
+    Stereo(StereoCosetAst),
 }
 
 impl StereoConfigurationAst {
-    pub fn stereo(v: impl Into<StereoIndexAst>) -> Self {
+    pub fn stereo(v: impl Into<StereoCosetAst>) -> Self {
         Self::Stereo(v.into())
     }
 
@@ -157,14 +157,14 @@ impl Lattice for StereoConfigurationAst {
 /// The stereo index: undetermined, a literal coset index, or an
 /// operator-expression over indices.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum StereoIndexAst {
+pub enum StereoCosetAst {
     #[default]
     Undetermined,
     Lit(u32),
     Expr(Box<StereoExpr>),
 }
 
-impl StereoIndexAst {
+impl StereoCosetAst {
     /// Wrap an operator-expression as an index.
     pub fn expr(expr: StereoExpr) -> Self {
         Self::Expr(Box::new(expr))
@@ -192,7 +192,7 @@ impl StereoIndexAst {
     }
 }
 
-impl AsLit for StereoIndexAst {
+impl AsLit for StereoCosetAst {
     type Lit = u32;
 
     fn as_lit(&self) -> Option<u32> {
@@ -203,7 +203,7 @@ impl AsLit for StereoIndexAst {
     }
 }
 
-impl Lattice for StereoIndexAst {
+impl Lattice for StereoCosetAst {
     fn is_undetermined(&self) -> bool {
         matches!(self, Self::Undetermined)
     }
@@ -286,33 +286,33 @@ impl StereoExpr {
     }
 }
 
-impl From<u32> for StereoIndexAst {
-    fn from(index: u32) -> Self {
-        Self::Lit(index)
-    }
-}
-
-impl From<Vec<u32>> for StereoIndexAst {
-    fn from(values: Vec<u32>) -> Self {
-        Self::Expr(Box::new(StereoExpr::LitSet(values)))
-    }
-}
-
-impl From<StereoIndexAst> for StereoConfigurationAst {
-    fn from(index: StereoIndexAst) -> Self {
+impl From<StereoCosetAst> for StereoConfigurationAst {
+    fn from(index: StereoCosetAst) -> Self {
         Self::Stereo(index)
     }
 }
 
 impl From<u32> for StereoConfigurationAst {
     fn from(index: u32) -> Self {
-        Self::Stereo(StereoIndexAst::Lit(index))
+        Self::Stereo(StereoCosetAst::Lit(index))
     }
 }
 
 impl From<Vec<u32>> for StereoConfigurationAst {
     fn from(values: Vec<u32>) -> Self {
-        Self::Stereo(StereoIndexAst::Expr(Box::new(StereoExpr::LitSet(values))))
+        Self::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(values))))
+    }
+}
+
+impl From<u32> for StereoCosetAst {
+    fn from(index: u32) -> Self {
+        Self::Lit(index)
+    }
+}
+
+impl From<Vec<u32>> for StereoCosetAst {
+    fn from(values: Vec<u32>) -> Self {
+        Self::Expr(Box::new(StereoExpr::LitSet(values)))
     }
 }
 
@@ -329,22 +329,25 @@ macro_rules! stereo_element {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub struct $name {
             pub kind: StereoKind,
-            pub configuration: StereoConfigurationAst,
+            pub coset: StereoCosetAst,
             pub constraints: $constraints,
         }
 
         impl $name {
-            pub fn new(kind: StereoKind, configuration: impl Into<StereoConfigurationAst>) -> Self {
+            pub fn new(kind: StereoKind, coset: impl Into<StereoCosetAst>) -> Self {
                 Self {
                     kind,
-                    configuration: configuration.into(),
+                    coset: coset.into(),
                     constraints: $constraints::new(),
                 }
             }
 
-            /// Add each constraint from the iterator. Vacuous today since the
-            /// per-element constraint enum is uninhabited; the signature locks in
-            /// the extend semantic for when inhabited variants land.
+            /// Add a single constraint.
+            pub fn with_constraint(self, _constraint: impl Into<$constraint>) -> Self {
+                self
+            }
+
+            /// Add each constraint from iterator.
             pub fn with_constraints<I>(self, _constraints: I) -> Self
             where
                 I: IntoIterator,
@@ -353,13 +356,11 @@ macro_rules! stereo_element {
                 self
             }
 
-            /// Coerce Undetermined to NotStereo. Result is ground iff not stereo or stereo config
-            /// is ground.
+            /// No-op. A stereo element is always stereogenic, so its coset has no
+            /// zero default — an unspecified coset has no canonical ground term.
+            /// The element is ground iff its coset is ground.
             pub fn into_ground(self) -> Self {
-                match &self.configuration {
-                    &StereoConfigurationAst::Undetermined => Self { kind: self.kind, configuration: StereoConfigurationAst::NotStereo, constraints: self.constraints },
-                    _ => self,
-                }
+                self
             }
 
             /// Equivalent to `into_ground()`; there are no constraint defaults.
@@ -367,21 +368,21 @@ macro_rules! stereo_element {
                 self.into_ground()
             }
 
-            /// Fold the configuration's closed operator-expressions (under
-            /// `kind`) and simplify each constraint's value in place.
+            /// Fold the coset's closed operator-expressions (under `kind`) and
+            /// simplify each constraint's value in place.
             pub fn simplify_values(&mut self) {
-                self.configuration = mem::take(&mut self.configuration).simplify(self.kind);
+                self.coset = mem::take(&mut self.coset).simplify(self.kind);
                 self.constraints.simplify_each();
             }
         }
 
         impl Lattice for $name {
             fn is_undetermined(&self) -> bool {
-                self.configuration.is_undetermined() && self.constraints.is_undetermined()
+                self.coset.is_undetermined() && self.constraints.is_undetermined()
             }
 
             fn is_ground(&self) -> bool {
-                self.configuration.is_ground() && self.constraints.is_ground()
+                self.coset.is_ground() && self.constraints.is_ground()
             }
 
             fn meet(&self, other: &Self) -> Option<Self> {
@@ -390,7 +391,7 @@ macro_rules! stereo_element {
                 }
                 Some(Self {
                     kind: self.kind,
-                    configuration: self.configuration.meet(&other.configuration)?,
+                    coset: self.coset.meet(&other.coset)?,
                     constraints: self.constraints.meet(&other.constraints)?,
                 })
             }
@@ -398,21 +399,21 @@ macro_rules! stereo_element {
             /// Same-site payloads always share a kind, so the kind-mismatch arm
             /// is a defensive identity rather than a meaningful join.
             fn join(&self, other: &Self) -> Self {
-                let configuration = if self.kind != other.kind {
-                    StereoConfigurationAst::Undetermined
+                let coset = if self.kind != other.kind {
+                    StereoCosetAst::Undetermined
                 } else {
-                    self.configuration.join(&other.configuration)
+                    self.coset.join(&other.coset)
                 };
                 Self {
                     kind: self.kind,
-                    configuration,
+                    coset,
                     constraints: self.constraints.join(&other.constraints),
                 }
             }
 
             fn matches(&self, target: &Self) -> bool {
                 self.kind == target.kind
-                    && self.configuration.matches(&target.configuration)
+                    && self.coset.matches(&target.coset)
                     && self.constraints.matches(&target.constraints)
             }
         }
@@ -568,21 +569,21 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(StereoIndexAst::Lit(1), StereoIndexAst::Lit(1))]
-    #[case::undetermined(StereoIndexAst::Undetermined, StereoIndexAst::Undetermined)]
-    #[case::expr_lit_lifts(StereoIndexAst::Expr(Box::new(StereoExpr::Lit(2))), StereoIndexAst::Lit(2))]
-    #[case::expr_swap_lifts(StereoIndexAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))))), StereoIndexAst::Lit(1))]
-    #[case::expr_var_stays(StereoIndexAst::Expr(Box::new(StereoExpr::Var("o".into()))), StereoIndexAst::Expr(Box::new(StereoExpr::Var("o".into()))))]
-    fn test_stereo_index_ast_simplify(#[case] input: StereoIndexAst, #[case] expected: StereoIndexAst) {
+    #[case::lit(StereoCosetAst::Lit(1), StereoCosetAst::Lit(1))]
+    #[case::undetermined(StereoCosetAst::Undetermined, StereoCosetAst::Undetermined)]
+    #[case::expr_lit_lifts(StereoCosetAst::Expr(Box::new(StereoExpr::Lit(2))), StereoCosetAst::Lit(2))]
+    #[case::expr_swap_lifts(StereoCosetAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))))), StereoCosetAst::Lit(1))]
+    #[case::expr_var_stays(StereoCosetAst::Expr(Box::new(StereoExpr::Var("o".into()))), StereoCosetAst::Expr(Box::new(StereoExpr::Var("o".into()))))]
+    fn test_stereo_coset_ast_simplify(#[case] input: StereoCosetAst, #[case] expected: StereoCosetAst) {
         assert_eq!(input.simplify(StereoKind::Tetrahedral), expected);
     }
 
     #[rstest]
-    fn test_stereo_index_ast_expr() {
+    fn test_stereo_coset_ast_expr() {
         assert_eq!(
-            StereoIndexAst::expr(StereoExpr::swap(StereoExpr::Lit(0)))
+            StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(0)))
                 .simplify(StereoKind::Tetrahedral),
-            StereoIndexAst::Lit(1),
+            StereoCosetAst::Lit(1),
         );
     }
 
@@ -590,10 +591,10 @@ mod tests {
     #[rstest]
     #[case::undetermined(StereoConfigurationAst::Undetermined, StereoConfigurationAst::Undetermined)]
     #[case::not_stereo(StereoConfigurationAst::NotStereo, StereoConfigurationAst::NotStereo)]
-    #[case::stereo_lit(StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1)), StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1)))]
+    #[case::stereo_lit(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1)), StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1)))]
     #[case::stereo_expr_lifts(
-        StereoConfigurationAst::Stereo(StereoIndexAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0)))))),
-        StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1)),
+        StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0)))))),
+        StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1)),
     )]
     fn test_stereo_configuration_ast_simplify(
         #[case] input: StereoConfigurationAst,
@@ -604,8 +605,8 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::u32(StereoConfigurationAst::from(2u32), StereoConfigurationAst::Stereo(StereoIndexAst::Lit(2)))]
-    #[case::index(StereoConfigurationAst::from(StereoIndexAst::Lit(3)), StereoConfigurationAst::Stereo(StereoIndexAst::Lit(3)))]
+    #[case::u32(StereoConfigurationAst::from(2u32), StereoConfigurationAst::Stereo(StereoCosetAst::Lit(2)))]
+    #[case::index(StereoConfigurationAst::from(StereoCosetAst::Lit(3)), StereoConfigurationAst::Stereo(StereoCosetAst::Lit(3)))]
     fn test_stereo_configuration_ast_from(
         #[case] actual: StereoConfigurationAst,
         #[case] expected: StereoConfigurationAst,
@@ -615,10 +616,10 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::stereo_lit(StereoConfigurationAst::Stereo(StereoIndexAst::Lit(2)), Some(2))]
+    #[case::stereo_lit(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(2)), Some(2))]
     #[case::not_stereo(StereoConfigurationAst::NotStereo, None)]
     #[case::undetermined(StereoConfigurationAst::Undetermined, None)]
-    #[case::stereo_undetermined(StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined), None)]
+    #[case::stereo_undetermined(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined), None)]
     fn test_stereo_configuration_ast_as_lit(
         #[case] config: StereoConfigurationAst,
         #[case] expected: Option<u32>,
@@ -631,7 +632,7 @@ mod tests {
     #[case::undetermined(StereoConfigurationAst::Undetermined, false)]
     #[case::not_stereo(StereoConfigurationAst::NotStereo, true)]
     #[case::stereo_lit(StereoConfigurationAst::from(1u32), true)]
-    #[case::stereo_undetermined(StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined), false)]
+    #[case::stereo_undetermined(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined), false)]
     fn test_stereo_configuration_ast_is_ground(
         #[case] config: StereoConfigurationAst,
         #[case] expected: bool,
@@ -672,38 +673,33 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(StereoIndexAst::Lit(2), Some(2))]
-    #[case::undetermined(StereoIndexAst::Undetermined, None)]
-    #[case::expr(StereoIndexAst::Expr(Box::new(StereoExpr::Var("o".into()))), None)]
-    fn test_stereo_index_ast_as_lit(#[case] index: StereoIndexAst, #[case] expected: Option<u32>) {
+    #[case::lit(StereoCosetAst::Lit(2), Some(2))]
+    #[case::undetermined(StereoCosetAst::Undetermined, None)]
+    #[case::expr(StereoCosetAst::Expr(Box::new(StereoExpr::Var("o".into()))), None)]
+    fn test_stereo_coset_ast_as_lit(#[case] index: StereoCosetAst, #[case] expected: Option<u32>) {
         assert_eq!(index.as_lit(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_narrows(StereoIndexAst::Undetermined, StereoIndexAst::Lit(1), Some(StereoIndexAst::Lit(1)))]
-    #[case::lit_same(StereoIndexAst::Lit(1), StereoIndexAst::Lit(1), Some(StereoIndexAst::Lit(1)))]
-    #[case::lit_conflict(StereoIndexAst::Lit(1), StereoIndexAst::Lit(2), None)]
-    #[case::expr_vs_lit(StereoIndexAst::Expr(Box::new(StereoExpr::Var("o".into()))), StereoIndexAst::Lit(1), None)]
-    fn test_stereo_index_ast_meet(
-        #[case] a: StereoIndexAst,
-        #[case] b: StereoIndexAst,
-        #[case] expected: Option<StereoIndexAst>,
+    #[case::undetermined_narrows(StereoCosetAst::Undetermined, StereoCosetAst::Lit(1), Some(StereoCosetAst::Lit(1)))]
+    #[case::lit_same(StereoCosetAst::Lit(1), StereoCosetAst::Lit(1), Some(StereoCosetAst::Lit(1)))]
+    #[case::lit_conflict(StereoCosetAst::Lit(1), StereoCosetAst::Lit(2), None)]
+    #[case::expr_vs_lit(StereoCosetAst::Expr(Box::new(StereoExpr::Var("o".into()))), StereoCosetAst::Lit(1), None)]
+    fn test_stereo_coset_ast_meet(
+        #[case] a: StereoCosetAst,
+        #[case] b: StereoCosetAst,
+        #[case] expected: Option<StereoCosetAst>,
     ) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rstest]
     fn test_stereo_atom_ast_new() {
-        let stereo_atom = StereoAtomAst::new(
-            StereoKind::Tetrahedral,
-            StereoConfigurationAst::Undetermined,
-        );
+        let stereo_atom =
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined);
         assert_eq!(stereo_atom.kind, StereoKind::Tetrahedral);
-        assert_eq!(
-            stereo_atom.configuration,
-            StereoConfigurationAst::Undetermined
-        );
+        assert_eq!(stereo_atom.coset, StereoCosetAst::Undetermined);
         assert_eq!(stereo_atom.constraints, StereoAtomConstraints::new());
     }
 
@@ -711,20 +707,15 @@ mod tests {
     fn test_stereo_atom_ast_simplify_values() {
         let mut atom = StereoAtomAst::new(
             StereoKind::Tetrahedral,
-            StereoConfigurationAst::Stereo(StereoIndexAst::Expr(Box::new(StereoExpr::SwapOp(
-                Box::new(StereoExpr::Lit(0)),
-            )))),
+            StereoCosetAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))))),
         );
         atom.simplify_values();
-        assert_eq!(
-            atom.configuration,
-            StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1))
-        );
+        assert_eq!(atom.coset, StereoCosetAst::Lit(1));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined), false)]
+    #[case::undetermined(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), false)]
     #[case::ground(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), true)]
     fn test_stereo_atom_ast_is_ground(#[case] atom: StereoAtomAst, #[case] expected: bool) {
         assert_eq!(atom.is_ground(), expected);
@@ -732,19 +723,18 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined),
-        StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::NotStereo))]
-    #[case::ground(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
-    fn test_stereo_atom_ast_into_ground(#[case] atom: StereoAtomAst, #[case] expected: StereoAtomAst) {
-        assert_eq!(atom.into_ground(), expected);
+    #[case::open_coset(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
+    #[case::ground(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
+    fn test_stereo_atom_ast_into_ground(#[case] atom: StereoAtomAst) {
+        assert_eq!(atom.clone().into_ground(), atom);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_kind_narrows(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
+    #[case::same_kind_narrows(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32),
         Some(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32)))]
-    #[case::different_kind(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined),
-        StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::Undetermined), None)]
+    #[case::different_kind(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined),
+        StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Undetermined), None)]
     #[case::config_conflict(StereoAtomAst::new(StereoKind::Tetrahedral, 0u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), None)]
     fn test_stereo_atom_ast_meet(
         #[case] a: StereoAtomAst,
@@ -756,7 +746,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_kind_match(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), true)]
+    #[case::same_kind_match(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), true)]
     #[case::different_kind(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::SquarePlanar, 1u32), false)]
     fn test_stereo_atom_ast_matches(
         #[case] pattern: StereoAtomAst,
@@ -769,18 +759,15 @@ mod tests {
     #[rstest]
     fn test_stereo_bond_ast_new() {
         let stereo_bond =
-            StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::Undetermined);
+            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined);
         assert_eq!(stereo_bond.kind, StereoKind::CisTrans);
-        assert_eq!(
-            stereo_bond.configuration,
-            StereoConfigurationAst::Undetermined
-        );
+        assert_eq!(stereo_bond.coset, StereoCosetAst::Undetermined);
         assert_eq!(stereo_bond.constraints, StereoBondConstraints::new())
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::same_kind_narrows(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::Undetermined), StereoBondAst::new(StereoKind::CisTrans, 1u32),
+    #[case::same_kind_narrows(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined), StereoBondAst::new(StereoKind::CisTrans, 1u32),
         Some(StereoBondAst::new(StereoKind::CisTrans, 1u32)))]
     #[case::config_conflict(StereoBondAst::new(StereoKind::CisTrans, 0u32), StereoBondAst::new(StereoKind::CisTrans, 1u32), None)]
     fn test_stereo_bond_ast_meet(

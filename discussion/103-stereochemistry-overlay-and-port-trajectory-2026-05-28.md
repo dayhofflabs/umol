@@ -539,6 +539,74 @@ or (b) a stored candidate-site layer. The chosen overlay uses (a): no element is
 nonstereogenic/prochiral site, but perception/matching may materialize virtual H/lone-pair slots
 when evaluating topicity or stereo-forming patterns.
 
+### The descriptor lattice: per-kind, and what topology and prochirality say about it
+
+The `Lattice` on the stereo element is **per-kind** — `meet` across kinds is `None`, and `join`
+across kinds has no representable result, because the element carries one `StereoKind` and that enum
+has no top. The question underneath, surfaced by `Th!` being kind-relative ("not stereo *as a
+tetrahedron*"), is whether a descriptor is **geometry-committed** or a **kind-relative predicate**:
+
+- **(A) Committed** — `Th!` = "tetrahedral ∧ achiral". Kind is a *geometry*; a site has one, so
+  different-kind descriptors are mutually exclusive. Cross-kind `meet = None` (a genuine
+  incompatibility); cross-kind `join` *never occurs* (one only joins the same site, hence the same
+  geometry), so no top is needed and that arm is unreachable. Two `Undetermined` layers (config,
+  index), not three.
+- **(B) Predicate** — `Th!` = "¬ tetrahedrally-chiral, geometry open". The descriptor becomes a
+  sparse `{kind ↦ config}`; the lattice is componentwise and total (`meet(Th!, Sp1) = Sp1`). This is
+  the charge/implicit-H shape — except two *positive* kinds is `None` (one geometry per site), a
+  product modulo mutual-exclusion-of-positives that `saturate` would carry. Storage stays a single
+  entry in the common case.
+
+**Topology is outside the lattice, and that settles (A)-vs-(B) for now.** The substitution count is a
+fixed structural fact per site, not a lattice axis, and the model does not let a site be 4- *or*
+6-substituted — so `Th` and `Oh` are never live alternatives, and only `Th` vs `Sp` (both
+4-coordinate) can be, with the **element fixing which** (`C → Th`, `Pt → Sp`). Real cross-kind
+ambiguity needs a contrived element set — `{C, Pt}` makes the `{Th, Sp}` pair it induces "not entirely
+insane," but that is legal-not-sensible, not a design driver. Variable per-site topology is well
+beyond SMARTS and out of scope; a property lattice ranging *across* atoms/bonds has no use we can
+picture. **⇒ Build (A)**: per-kind, committed, cross-kind `join` asserted-unreachable; record (B) and
+the cross-atom generalization without building them.
+
+**What `NotStereo` actually means — and why it splits the types.** It is *not* handedness — a terminal
+double bond is `NotStereo`, an internal one is `Stereo`, and `CT` has no handedness at all. It means
+the fixed ligand multiset yields a **single distinguishable arrangement** (one orbit under the kind's
+group and the ligand stabilizer), so `NotStereo` is **redundant with the ligands** — derivable, never
+independent data.
+
+That redundancy *is* the `#T`/`#C`-vs-element difference, and it decides the types:
+
+- The **`#T`/`#C` constraint** is a predicate on a ligand-free atom/bond. `!` is a real assertion (one
+  orbit), `*`/`+` real uncertainty, and it needs the lattice because it is the matching object. Type:
+  **`StereoConfigurationAst`** = `* | ! | Stereo(StereoCosetAst)` + `Lattice`.
+- The **stereo element** carries explicit ligands and (lean policy) exists only for a genuinely
+  stereogenic site, so `NotStereo` never occurs on it; its content is just the **coset**, its only
+  unknown `+`. Type: **`StereoCosetAst`** (the inner of `Stereo(_)`).
+  `StereoConfigurationAst = StereoCosetAst + {NotStereo, top}`; the element takes the inner.
+
+This dissolves the earlier tangles:
+
+- **`into_ground` on the element is a no-op** (ground iff the coset is ground); the `* → NotStereo`
+  coercion is a *constraint* default, not an element one — the element has no `NotStereo`.
+- **The two `*`s separate.** The element's top is `+` (`StereoCosetAst::Undetermined`, "stereo, coset
+  open"); the constraint's top is `*` (`StereoConfigurationAst::Undetermined`, "unknown if stereo").
+- **The per-kind `join` is quarantined to the element** — the only type with a `kind` field
+  (`StereoConfigurationAst` has none; the geometry is the `TetrahedralStereo`/`CisTransStereo`
+  variant). There it takes the committed-(A) treatment: `meet` cross-kind = `None`, `join` cross-kind
+  `debug_assert!`s equal kinds (unreachable — one only joins the same site).
+- **Surface.** The element `:type` head writes `+`, reads `*` as a lenient alias, and rejects `!`;
+  `#T`/`#C` keep the full `* | ! | + | <coset-term>`.
+
+**Prochirality is derived, not stored — and a strict subset of `NotStereo`.** The one-orbit ligands
+split by topicity into homotopic (`CH₃`), enantiotopic (`AABC`, the prochiral case), and
+diastereotopic-but-non-separating (the terminal `=CH₂`); only the middle is prochiral. It is read from
+the automorphism action (`Â`/`Â*`) and materialized as virtual slots on demand (the implicit-H case),
+never emitted as an element — the lean policy stands.
+
+**Prochiral faces** remain a forward move: a trigonal (sp²) center is achiral (its plane is a mirror)
+but has Re/Si faces — a 2-coset of a new `trigonal` kind, parity-0 like CT/SP, derived not stored, and
+the first concept that couples the overlay to the **port/trajectory** model (a port approaching a
+trigonal site selects a face, and that selection *is* the formed center's config).
+
 ### I/O and 3D
 
 - **Parsing → molecule-level elements** (detail in "Ordering, the atom/bond constraint, and

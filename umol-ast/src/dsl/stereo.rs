@@ -14,7 +14,7 @@ use winnow::Parser;
 use super::error::{PResult, ParseError};
 use super::value::{id, terminator};
 use crate::ast::stereo::{
-    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoExpr, StereoIndexAst, StereoKind,
+    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
 };
 
 /// Surface DSL wrapper for `StereoAtomAst`
@@ -101,13 +101,9 @@ impl ToEdn for StereoAtomDsl {
 /// Return the stereo atom keyword for canonical stereo atom shapes, or `None`
 /// when the full definition is required. Inverse of `expand_stereo_atom_keyword`.
 fn stereo_atom_keyword_for(ast: &StereoAtomAst) -> Option<&'static str> {
-    match (ast.kind, &ast.configuration) {
-        (StereoKind::Tetrahedral, &StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1))) => {
-            Some("ccw")
-        }
-        (StereoKind::Tetrahedral, &StereoConfigurationAst::Stereo(StereoIndexAst::Lit(2))) => {
-            Some("cw")
-        }
+    match (ast.kind, &ast.coset) {
+        (StereoKind::Tetrahedral, &StereoCosetAst::Lit(1)) => Some("ccw"),
+        (StereoKind::Tetrahedral, &StereoCosetAst::Lit(2)) => Some("cw"),
         _ => None,
     }
 }
@@ -118,8 +114,8 @@ pub fn parse_stereo_atom(input: &str) -> Result<StereoAtomDsl, ParseError> {
 
 pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
     let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
-    let config = terminated(stereo_config, multispace0).parse_next(i)?;
-    Ok(StereoAtomDsl(StereoAtomAst::new(kind, config)))
+    let coset = terminated(stereo_coset, multispace0).parse_next(i)?;
+    Ok(StereoAtomDsl(StereoAtomAst::new(kind, coset)))
 }
 
 /// Surface DSL wrapper for `StereoBondAst`
@@ -206,13 +202,9 @@ impl ToEdn for StereoBondDsl {
 /// Return the stereo bond keyword for canonical stereo bond shapes, or `None`
 /// when the full definition is required. Inverse of `expand_stereo_bond_keyword`.
 fn stereo_bond_keyword_for(ast: &StereoBondAst) -> Option<&'static str> {
-    match (ast.kind, &ast.configuration) {
-        (StereoKind::CisTrans, &StereoConfigurationAst::Stereo(StereoIndexAst::Lit(1))) => {
-            Some("z")
-        }
-        (StereoKind::CisTrans, &StereoConfigurationAst::Stereo(StereoIndexAst::Lit(2))) => {
-            Some("e")
-        }
+    match (ast.kind, &ast.coset) {
+        (StereoKind::CisTrans, &StereoCosetAst::Lit(1)) => Some("z"),
+        (StereoKind::CisTrans, &StereoCosetAst::Lit(2)) => Some("e"),
         _ => None,
     }
 }
@@ -223,8 +215,8 @@ pub fn parse_stereo_bond(input: &str) -> Result<StereoBondDsl, ParseError> {
 
 pub(crate) fn stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
     let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
-    let config = terminated(stereo_config, multispace0).parse_next(i)?;
-    Ok(StereoBondDsl(StereoBondAst::new(kind, config)))
+    let coset = terminated(stereo_coset, multispace0).parse_next(i)?;
+    Ok(StereoBondDsl(StereoBondAst::new(kind, coset)))
 }
 
 /// `Th` / `Ct` / `Sp` / `Tb` / `Oh` symbol → `StereoKind`.
@@ -239,15 +231,25 @@ pub(crate) fn stereo_kind(i: &mut &str) -> PResult<StereoKind> {
     .parse_next(i)
 }
 
-/// Parse the `config` grammar into a `StereoConfigurationAst`.
+/// Parse the `config` grammar into `StereoConfigurationAst` for constraints.
 pub(crate) fn stereo_config(i: &mut &str) -> PResult<StereoConfigurationAst> {
     alt((
         '*'.value(StereoConfigurationAst::Undetermined),
         '!'.value(StereoConfigurationAst::NotStereo),
-        '+'.value(StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined)),
+        '+'.value(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined)),
         terminated(stereo_lit, (multispace0, terminator))
-            .map(|n| StereoConfigurationAst::Stereo(StereoIndexAst::Lit(n))),
-        stereo_expr.map(|e| StereoConfigurationAst::Stereo(StereoIndexAst::Expr(Box::new(e)))),
+            .map(|n| StereoConfigurationAst::Stereo(StereoCosetAst::Lit(n))),
+        stereo_expr.map(|e| StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(e)))),
+    ))
+    .parse_next(i)
+}
+
+/// Parse the `coset` grammar into `StereoCosetAst` (used in stereo elements).
+fn stereo_coset(i: &mut &str) -> PResult<StereoCosetAst> {
+    alt((
+        '*'.value(StereoCosetAst::Undetermined),
+        terminated(stereo_lit, (multispace0, terminator)).map(StereoCosetAst::Lit),
+        stereo_expr.map(|e| StereoCosetAst::Expr(Box::new(e))),
     ))
     .parse_next(i)
 }
@@ -340,15 +342,13 @@ fn perm_image(i: &mut &str) -> PResult<Permutation> {
 /// Write the stereo atom DSL
 pub(crate) fn fmt_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) -> fmt::Result {
     fmt_stereo_kind(f, atom.kind)?;
-    fmt_stereo_config(f, &atom.configuration)?;
-    Ok(())
+    fmt_stereo_coset(f, &atom.coset)
 }
 
 /// Write the stereo bond DSL
 pub(crate) fn fmt_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) -> fmt::Result {
     fmt_stereo_kind(f, bond.kind)?;
-    fmt_stereo_config(f, &bond.configuration)?;
-    Ok(())
+    fmt_stereo_coset(f, &bond.coset)
 }
 
 /// Write the stereo kind for `kind`.
@@ -371,9 +371,20 @@ pub(crate) fn fmt_stereo_config(
     match config {
         StereoConfigurationAst::Undetermined => write!(f, "*"),
         StereoConfigurationAst::NotStereo => write!(f, "!"),
-        StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined) => write!(f, "+"),
-        StereoConfigurationAst::Stereo(StereoIndexAst::Lit(n)) => write!(f, "{n}"),
-        StereoConfigurationAst::Stereo(StereoIndexAst::Expr(e)) => fmt_stereo_expr(f, e),
+        StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined) => write!(f, "+"),
+        StereoConfigurationAst::Stereo(StereoCosetAst::Lit(n)) => write!(f, "{n}"),
+        StereoConfigurationAst::Stereo(StereoCosetAst::Expr(e)) => fmt_stereo_expr(f, e),
+    }
+}
+
+/// Write a `StereoCosetAst` for the element `:type` body: `*` (open coset), a
+/// literal, or an operator expression. `fmt_stereo_config` reuses the literal
+/// and expression arms but writes its own `+` for `Stereo(Undetermined)`.
+fn fmt_stereo_coset(f: &mut fmt::Formatter<'_>, coset: &StereoCosetAst) -> fmt::Result {
+    match coset {
+        StereoCosetAst::Undetermined => write!(f, "*"),
+        StereoCosetAst::Lit(n) => write!(f, "{n}"),
+        StereoCosetAst::Expr(e) => fmt_stereo_expr(f, e),
     }
 }
 
@@ -466,35 +477,37 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::tetrahedral_ccw("Th1", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))))]
-    #[case::tetrahedral_cw("Th2", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(2_u32))))]
-    #[case::undetermined("Th*", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined)))]
-    #[case::not_stereo("Th!", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::NotStereo)))]
-    #[case::stereogenic("Th+", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined))))]
-    #[case::square_planar("Sp3", StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::from(3_u32))))]
-    #[case::octahedral("Oh6", StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoConfigurationAst::from(6_u32))))]
+    #[case::tetrahedral_ccw("Th1", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))))]
+    #[case::tetrahedral_cw("Th2", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(2))))]
+    #[case::open("Th*", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined)))]
+    #[case::square_planar("Sp3", StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(3))))]
+    #[case::octahedral("Oh6", StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoCosetAst::Lit(6))))]
     fn test_parse_stereo_atom(#[case] input: &str, #[case] expected: StereoAtomDsl) {
         assert_eq!(parse_stereo_atom(input).unwrap(), expected);
     }
 
+    #[rstest]
+    #[case::not_stereo("Th!")]
+    fn test_parse_stereo_atom_error(#[case] input: &str) {
+        assert_eq!(parse_stereo_atom(input).unwrap_err(), ParseError::Syntax);
+    }
+
     #[rustfmt::skip]
     #[rstest]
-    #[case::tetrahedral_ccw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))), "Th1")]
-    #[case::undetermined(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined)), "Th*")]
-    #[case::not_stereo(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::NotStereo)), "Th!")]
-    #[case::stereogenic(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined))), "Th+")]
-    #[case::square_planar(StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::from(3_u32))), "Sp3")]
-    #[case::octahedral(StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoConfigurationAst::from(6_u32))), "Oh6")]
+    #[case::tetrahedral_ccw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))), "Th1")]
+    #[case::open(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined)), "Th*")]
+    #[case::square_planar(StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(3))), "Sp3")]
+    #[case::octahedral(StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoCosetAst::Lit(6))), "Oh6")]
     fn test_fmt_stereo_atom(#[case] form: StereoAtomDsl, #[case] expected: &str) {
         assert_eq!(form.to_string(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::string("\"Th1\"", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))))]
-    #[case::keyword_ccw(":ccw", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))))]
-    #[case::keyword_cw(":cw", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(2_u32))))]
-    #[case::string_square_planar("\"Sp3\"", StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::from(3_u32))))]
+    #[case::string("\"Th1\"", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))))]
+    #[case::keyword_ccw(":ccw", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))))]
+    #[case::keyword_cw(":cw", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(2))))]
+    #[case::string_square_planar("\"Sp3\"", StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(3))))]
     fn test_stereo_atom_dsl_from_edn(#[case] input: &str, #[case] expected: StereoAtomDsl) {
         assert_eq!(StereoAtomDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }
@@ -509,11 +522,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::canonical_ccw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))), ":ccw")]
-    #[case::canonical_cw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(2_u32))), ":cw")]
-    #[case::undetermined_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined)), "\"Th*\"")]
-    #[case::non_tetrahedral_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::from(1_u32))), "\"Sp1\"")]
-    #[case::tetrahedral_three_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(3_u32))), "\"Th3\"")]
+    #[case::canonical_ccw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))), ":ccw")]
+    #[case::canonical_cw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(2))), ":cw")]
+    #[case::open_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined)), "\"Th*\"")]
+    #[case::non_tetrahedral_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(1))), "\"Sp1\"")]
+    #[case::tetrahedral_three_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(3))), "\"Th3\"")]
     fn test_stereo_atom_dsl_to_edn(#[case] form: StereoAtomDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }
@@ -528,28 +541,32 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::cis_trans_z("Ct1", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))))]
-    #[case::cis_trans_e("Ct2", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(2_u32))))]
-    #[case::undetermined("Ct*", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::Undetermined)))]
-    #[case::not_stereo("Ct!", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::NotStereo)))]
+    #[case::cis_trans_z("Ct1", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))))]
+    #[case::cis_trans_e("Ct2", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(2))))]
+    #[case::open("Ct*", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined)))]
     fn test_parse_stereo_bond(#[case] input: &str, #[case] expected: StereoBondDsl) {
         assert_eq!(parse_stereo_bond(input).unwrap(), expected);
     }
 
+    #[rstest]
+    #[case::not_stereo("Ct!")]
+    fn test_parse_stereo_bond_error(#[case] input: &str) {
+        assert_eq!(parse_stereo_bond(input).unwrap_err(), ParseError::Syntax);
+    }
+
     #[rustfmt::skip]
     #[rstest]
-    #[case::cis_trans_z(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))), "Ct1")]
-    #[case::undetermined(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::Undetermined)), "Ct*")]
-    #[case::not_stereo(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::NotStereo)), "Ct!")]
+    #[case::cis_trans_z(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))), "Ct1")]
+    #[case::open(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined)), "Ct*")]
     fn test_fmt_stereo_bond(#[case] form: StereoBondDsl, #[case] expected: &str) {
         assert_eq!(form.to_string(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::string("\"Ct1\"", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))))]
-    #[case::keyword_z(":z", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))))]
-    #[case::keyword_e(":e", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(2_u32))))]
+    #[case::string("\"Ct1\"", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))))]
+    #[case::keyword_z(":z", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))))]
+    #[case::keyword_e(":e", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(2))))]
     fn test_stereo_bond_dsl_from_edn(#[case] input: &str, #[case] expected: StereoBondDsl) {
         assert_eq!(StereoBondDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }
@@ -564,9 +581,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::canonical_z(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))), ":z")]
-    #[case::canonical_e(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(2_u32))), ":e")]
-    #[case::undetermined_string(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::Undetermined)), "\"Ct*\"")]
+    #[case::canonical_z(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))), ":z")]
+    #[case::canonical_e(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(2))), ":e")]
+    #[case::open_string(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined)), "\"Ct*\"")]
     fn test_stereo_bond_dsl_to_edn(#[case] form: StereoBondDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }
@@ -593,15 +610,15 @@ mod tests {
     #[rstest]
     #[case::undetermined("*", StereoConfigurationAst::Undetermined)]
     #[case::not_stereo("!", StereoConfigurationAst::NotStereo)]
-    #[case::stereogenic("+", StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined))]
+    #[case::stereogenic("+", StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined))]
     #[case::lit("1", StereoConfigurationAst::from(1_u32))]
-    #[case::var("?o", StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::Var("o".to_string()))))]
-    #[case::lit_set("{1,2}", StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::LitSet(vec![1, 2]))))]
-    #[case::var_domain("?o :: {1,2}", StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
-    #[case::swap("~1", StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))))]
-    #[case::apply("1^2134", StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_image(4, &[1, 0, 2, 3])))))]
-    #[case::swap_binds_tighter_than_apply("~1^2134", StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::apply(StereoExpr::swap(StereoExpr::Lit(1)), Permutation::from_image(4, &[1, 0, 2, 3])))))]
-    #[case::whitespace_ignored("  ?o :: { 1 , 2 }", StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
+    #[case::var("?o", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Var("o".to_string()))))]
+    #[case::lit_set("{1,2}", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 2]))))]
+    #[case::var_domain("?o :: {1,2}", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
+    #[case::swap("~1", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))))]
+    #[case::apply("1^2134", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_image(4, &[1, 0, 2, 3])))))]
+    #[case::swap_binds_tighter_than_apply("~1^2134", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::swap(StereoExpr::Lit(1)), Permutation::from_image(4, &[1, 0, 2, 3])))))]
+    #[case::whitespace_ignored("  ?o :: { 1 , 2 }", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
     fn test_stereo_config(#[case] input: &str, #[case] expected: StereoConfigurationAst) {
         assert_eq!(stereo_config.parse(input).unwrap(), expected);
     }
@@ -610,13 +627,13 @@ mod tests {
     #[rstest]
     #[case::undetermined(StereoConfigurationAst::Undetermined, "*")]
     #[case::not_stereo(StereoConfigurationAst::NotStereo, "!")]
-    #[case::stereogenic(StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined), "+")]
+    #[case::stereogenic(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined), "+")]
     #[case::lit(StereoConfigurationAst::from(1_u32), "1")]
-    #[case::var(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::Var("o".to_string()))), "?o")]
-    #[case::lit_set(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::LitSet(vec![1, 2]))), "{1,2}")]
-    #[case::var_domain(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))), "?o :: {1,2}")]
-    #[case::swap(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))), "~1")]
-    #[case::apply(StereoConfigurationAst::Stereo(StereoIndexAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_image(4, &[1, 0, 2, 3])))), "1^2134")]
+    #[case::var(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Var("o".to_string()))), "?o")]
+    #[case::lit_set(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 2]))), "{1,2}")]
+    #[case::var_domain(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))), "?o :: {1,2}")]
+    #[case::swap(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))), "~1")]
+    #[case::apply(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_image(4, &[1, 0, 2, 3])))), "1^2134")]
     fn test_fmt_stereo_config(#[case] c: StereoConfigurationAst, #[case] expected: &str) {
         struct W<'a>(&'a StereoConfigurationAst);
         impl fmt::Display for W<'_> {
