@@ -341,11 +341,12 @@ Phases A–E are in scope; F (3D) and G follow.
     `~e`→`Expr(SwapOp)`, `e^<image-number>`→`Expr(ApplyOp(perm))`); `Expr::LitSet`/`VarDomain` (`{…}`, `?o :: {…}`) reserved at the
     surface (deferred with non-tetrahedral). **One function** — D3's `:type` head and D5's `#T`/`#C` call it. **Done**
   - **D2** — ligand surface: `atom-ref | [:h atom-ref] | [:lp atom-ref]` (kind-first; reserved
-    `[:bond/:port/:fragment ref]`) ↔ the ordered `StereoLigand` list. Unknown tags rejected (no silent pass).
+    `[:atom/:neighbor/:port/:fragment ref]`) ↔ the ordered `StereoLigand` list. Unknown tags rejected (no silent pass).
   - **D3** — `:stereo-atoms` / `:stereo-bonds` entry reader/writer: `{ :id? (keyword), :site ref,
     :ligands [ ligand+ ], :type config-string }` ↔ a `StereoAtom`/`StereoBond` (focus + D2 ligands + D1 config
     + kind).
   - **D4** — sugar `:ccw`/`:cw`/`:e`/`:z` (each carries its class — `Th1`/`Th2`/`Ct1`/`Ct2`) ↔ the `:type` head.
+    **Done**
   - **D5** — `#T`/`#C` atom/bond-string surface: the derived-predicate tokens in the existing atom/bond
     constraint-string parser (`dsl/constraint.rs`) — `#T<config>`/`#C<config>` (local-frame, the **same** D1
     `StereoConfigurationAst` parser) inside the atom-string (`C#h#T1`) / bond-string.

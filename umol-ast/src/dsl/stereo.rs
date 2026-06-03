@@ -460,8 +460,134 @@ impl ToEdn for StereoBondConstraintDsl {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_edn::read_string;
 
     use super::*;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::tetrahedral_ccw("Th1", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))))]
+    #[case::tetrahedral_cw("Th2", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(2_u32))))]
+    #[case::undetermined("Th*", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined)))]
+    #[case::not_stereo("Th!", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::NotStereo)))]
+    #[case::stereogenic("Th+", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined))))]
+    #[case::square_planar("Sp3", StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::from(3_u32))))]
+    #[case::octahedral("Oh6", StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoConfigurationAst::from(6_u32))))]
+    fn test_parse_stereo_atom(#[case] input: &str, #[case] expected: StereoAtomDsl) {
+        assert_eq!(parse_stereo_atom(input).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::tetrahedral_ccw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))), "Th1")]
+    #[case::undetermined(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined)), "Th*")]
+    #[case::not_stereo(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::NotStereo)), "Th!")]
+    #[case::stereogenic(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Stereo(StereoIndexAst::Undetermined))), "Th+")]
+    #[case::square_planar(StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::from(3_u32))), "Sp3")]
+    #[case::octahedral(StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoConfigurationAst::from(6_u32))), "Oh6")]
+    fn test_fmt_stereo_atom(#[case] form: StereoAtomDsl, #[case] expected: &str) {
+        assert_eq!(form.to_string(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::string("\"Th1\"", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))))]
+    #[case::keyword_ccw(":ccw", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))))]
+    #[case::keyword_cw(":cw", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(2_u32))))]
+    #[case::string_square_planar("\"Sp3\"", StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::from(3_u32))))]
+    fn test_stereo_atom_dsl_from_edn(#[case] input: &str, #[case] expected: StereoAtomDsl) {
+        assert_eq!(StereoAtomDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unknown_keyword(":xyz", DeError::Custom("unknown stereo atom keyword :xyz".to_string()))]
+    #[case::wrong_type("5", DeError::TypeMismatch { expected: "string or stereo atom keyword", got: "int", path: Vec::new() })]
+    fn test_stereo_atom_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
+        assert_eq!(StereoAtomDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::canonical_ccw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(1_u32))), ":ccw")]
+    #[case::canonical_cw(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(2_u32))), ":cw")]
+    #[case::undetermined_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined)), "\"Th*\"")]
+    #[case::non_tetrahedral_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoConfigurationAst::from(1_u32))), "\"Sp1\"")]
+    #[case::tetrahedral_three_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::from(3_u32))), "\"Th3\"")]
+    fn test_stereo_atom_dsl_to_edn(#[case] form: StereoAtomDsl, #[case] expected: &str) {
+        assert_eq!(form.to_edn(), read_string(expected).unwrap());
+    }
+
+    #[rstest]
+    #[case::ccw("ccw", Some("Th1"))]
+    #[case::cw("cw", Some("Th2"))]
+    #[case::unknown("xyz", None)]
+    fn test_expand_stereo_atom_keyword(#[case] name: &str, #[case] expected: Option<&str>) {
+        assert_eq!(expand_stereo_atom_keyword(name), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::cis_trans_z("Ct1", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))))]
+    #[case::cis_trans_e("Ct2", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(2_u32))))]
+    #[case::undetermined("Ct*", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::Undetermined)))]
+    #[case::not_stereo("Ct!", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::NotStereo)))]
+    fn test_parse_stereo_bond(#[case] input: &str, #[case] expected: StereoBondDsl) {
+        assert_eq!(parse_stereo_bond(input).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::cis_trans_z(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))), "Ct1")]
+    #[case::undetermined(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::Undetermined)), "Ct*")]
+    #[case::not_stereo(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::NotStereo)), "Ct!")]
+    fn test_fmt_stereo_bond(#[case] form: StereoBondDsl, #[case] expected: &str) {
+        assert_eq!(form.to_string(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::string("\"Ct1\"", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))))]
+    #[case::keyword_z(":z", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))))]
+    #[case::keyword_e(":e", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(2_u32))))]
+    fn test_stereo_bond_dsl_from_edn(#[case] input: &str, #[case] expected: StereoBondDsl) {
+        assert_eq!(StereoBondDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::unknown_keyword(":xyz", DeError::Custom("unknown stereo bond keyword :xyz".to_string()))]
+    #[case::wrong_type("5", DeError::TypeMismatch { expected: "string or stereo bond keyword", got: "int", path: Vec::new() })]
+    fn test_stereo_bond_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
+        assert_eq!(StereoBondDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::canonical_z(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(1_u32))), ":z")]
+    #[case::canonical_e(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::from(2_u32))), ":e")]
+    #[case::undetermined_string(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoConfigurationAst::Undetermined)), "\"Ct*\"")]
+    fn test_stereo_bond_dsl_to_edn(#[case] form: StereoBondDsl, #[case] expected: &str) {
+        assert_eq!(form.to_edn(), read_string(expected).unwrap());
+    }
+
+    #[rstest]
+    #[case::z("z", Some("Ct1"))]
+    #[case::e("e", Some("Ct2"))]
+    #[case::unknown("xyz", None)]
+    fn test_expand_stereo_bond_keyword(#[case] name: &str, #[case] expected: Option<&str>) {
+        assert_eq!(expand_stereo_bond_keyword(name), expected);
+    }
+
+    #[rstest]
+    #[case::tetrahedral("Th", StereoKind::Tetrahedral)]
+    #[case::cis_trans("Ct", StereoKind::CisTrans)]
+    #[case::square_planar("Sp", StereoKind::SquarePlanar)]
+    #[case::trigonal_bipyramidal("Tb", StereoKind::TrigonalBipyramidal)]
+    #[case::octahedral("Oh", StereoKind::Octahedral)]
+    fn test_stereo_kind(#[case] input: &str, #[case] expected: StereoKind) {
+        assert_eq!(stereo_kind.parse(input).unwrap(), expected);
+    }
 
     #[rustfmt::skip]
     #[rstest]
@@ -499,15 +625,5 @@ mod tests {
             }
         }
         assert_eq!(W(&c).to_string(), expected);
-    }
-
-    #[rstest]
-    #[case::tetrahedral("Th", StereoKind::Tetrahedral)]
-    #[case::cis_trans("Ct", StereoKind::CisTrans)]
-    #[case::square_planar("Sp", StereoKind::SquarePlanar)]
-    #[case::trigonal_bipyramidal("Tb", StereoKind::TrigonalBipyramidal)]
-    #[case::octahedral("Oh", StereoKind::Octahedral)]
-    fn test_class(#[case] input: &str, #[case] expected: StereoKind) {
-        assert_eq!(stereo_kind.parse(input).unwrap(), expected);
     }
 }
