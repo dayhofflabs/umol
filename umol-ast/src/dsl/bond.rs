@@ -5,9 +5,9 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use strum::IntoEnumIterator;
-use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
-use winnow::combinator::{preceded, repeat, terminated};
+use winnow::combinator::{delimited, repeat, terminated};
 use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
@@ -19,7 +19,7 @@ use super::predicates::{
     raise_spin, ring_count, SpinPredicate,
 };
 use super::stereo::fmt_stereo_config;
-use super::value::{fmt_value, value};
+use super::value::{fmt_value, value, ValueDsl};
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
 use crate::ast::spin::SpinStateAst;
@@ -99,8 +99,7 @@ impl<'de> FromEdn<'de> for BondDsl {
 /// - `:aromatic` → `"1#a"` (single-order localized bond participating in
 ///   an aromatic system; `#a` is the bond-string aromatic predicate)
 ///
-/// Returns `None` for unrecognized keywords. Input sugar only — the AST
-/// renders back to bond-string form.
+/// Returns `None` for unrecognized keywords.
 pub(crate) fn expand_bond_keyword(name: &str) -> Option<&'static str> {
     match name {
         "single" => Some("1"),
@@ -115,7 +114,7 @@ pub(crate) fn expand_bond_keyword(name: &str) -> Option<&'static str> {
 impl ToEdn for BondDsl {
     fn to_edn(&self) -> Edn<'static> {
         match bond_keyword_for(&self.0) {
-            Some(kw) => Edn::Keyword(umol_edn::EdnKeyword::owned(kw.to_string())),
+            Some(kw) => Edn::Keyword(EdnKeyword::owned(kw.to_string())),
             None => Edn::Str(Cow::Owned(self.to_string())),
         }
     }
@@ -192,14 +191,14 @@ impl ToEdn for BondAst {
     }
 }
 
-/// Parse a complete bond-string into a `BondDsl`.
+/// Parse bond string into a `BondDsl`.
 pub fn parse_bond(input: &str) -> Result<BondDsl, ParseError> {
     bond.parse(input).map_err(|e| e.into_inner())
 }
 
 /// Bond-string parser (does not require consuming all input).
-pub(crate) fn bond(i: &mut &str) -> PResult<BondDsl> {
-    let order = preceded(multispace0, terminated(value, multispace0)).parse_next(i)?;
+fn bond(i: &mut &str) -> PResult<BondDsl> {
+    let order = delimited(multispace0, value, multispace0).parse_next(i)?;
     let preds: Vec<BondPredicate> =
         repeat(0.., terminated(bond_predicate, multispace0)).parse_next(i)?;
     let mut form = BondDsl(BondAst::new(order));
@@ -436,12 +435,8 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                     });
                 };
                 let c = match key.name() {
-                    "ring-count" => BondConstraint::RingCount(
-                        super::value::ValueDsl::from_edn(v)?.into_ast(&()),
-                    ),
-                    "ring-size" => {
-                        BondConstraint::RingSize(super::value::ValueDsl::from_edn(v)?.into_ast(&()))
-                    }
+                    "ring-count" => BondConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
+                    "ring-size" => BondConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
                     other => {
                         return Err(DeError::UnknownField {
                             key: other.to_string(),
@@ -463,9 +458,7 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
 impl ToEdn for BondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
-            BondConstraint::Aromatic => {
-                Edn::Keyword(umol_edn::EdnKeyword::owned("aromatic".into()))
-            }
+            BondConstraint::Aromatic => Edn::Keyword(EdnKeyword::owned("aromatic".into())),
             BondConstraint::RingCount(v) => bond_constraint_single_key("ring-count", v),
             BondConstraint::RingSize(v) => bond_constraint_single_key("ring-size", v),
             BondConstraint::CisTransStereo(_) => todo!("stereo config EDN serialization"),
@@ -474,10 +467,10 @@ impl ToEdn for BondConstraintDsl {
 }
 
 fn bond_constraint_single_key(key: &str, v: &ValueAst) -> Edn<'static> {
-    let mut m = umol_edn::EdnMap::with_capacity(1);
+    let mut m = EdnMap::with_capacity(1);
     m.insert(
-        Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())),
-        super::value::ValueDsl::from_ast(v, &()).to_edn(),
+        Edn::Keyword(EdnKeyword::owned(key.into())),
+        ValueDsl::from_ast(v, &()).to_edn(),
     );
     Edn::Map(m)
 }

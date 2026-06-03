@@ -49,4 +49,8 @@ pub use refs::{
     NoncovalentBondRefDsl,
 };
 pub use relational::RelationalConstraintDsl;
+pub use stereo::{
+    parse_stereo_atom, parse_stereo_bond, StereoAtomConstraintDsl, StereoAtomDsl,
+    StereoBondConstraintDsl, StereoBondDsl,
+};
 pub use value::{parse_value, ValueDsl};
