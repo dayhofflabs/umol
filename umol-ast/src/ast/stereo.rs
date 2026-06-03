@@ -353,10 +353,13 @@ macro_rules! stereo_element {
                 self
             }
 
-            /// No-op: an unspecified configuration has no zero default (it is
-            /// either a concrete coset or `NotStereo`). Provided for API symmetry.
+            /// Coerce Undetermined to NotStereo. Result is ground iff not stereo or stereo config
+            /// is ground.
             pub fn into_ground(self) -> Self {
-                self
+                match &self.configuration {
+                    &StereoConfigurationAst::Undetermined => Self { kind: self.kind, configuration: StereoConfigurationAst::NotStereo, constraints: self.constraints },
+                    _ => self,
+                }
             }
 
             /// Equivalent to `into_ground()`; there are no constraint defaults.
@@ -395,12 +398,14 @@ macro_rules! stereo_element {
             /// Same-site payloads always share a kind, so the kind-mismatch arm
             /// is a defensive identity rather than a meaningful join.
             fn join(&self, other: &Self) -> Self {
-                if self.kind != other.kind {
-                    return self.clone();
-                }
+                let configuration = if self.kind != other.kind {
+                    StereoConfigurationAst::Undetermined
+                } else {
+                    self.configuration.join(&other.configuration)
+                };
                 Self {
                     kind: self.kind,
-                    configuration: self.configuration.join(&other.configuration),
+                    configuration,
                     constraints: self.constraints.join(&other.constraints),
                 }
             }
@@ -723,6 +728,15 @@ mod tests {
     #[case::ground(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), true)]
     fn test_stereo_atom_ast_is_ground(#[case] atom: StereoAtomAst, #[case] expected: bool) {
         assert_eq!(atom.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::Undetermined),
+        StereoAtomAst::new(StereoKind::Tetrahedral, StereoConfigurationAst::NotStereo))]
+    #[case::ground(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
+    fn test_stereo_atom_ast_into_ground(#[case] atom: StereoAtomAst, #[case] expected: StereoAtomAst) {
+        assert_eq!(atom.into_ground(), expected);
     }
 
     #[rustfmt::skip]
