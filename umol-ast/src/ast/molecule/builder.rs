@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 use umol_graph_core::{
-    EdgeId, FixedRelationSet, Graph, NodeId, RelationId, RelationParticipant, Remapping, Unordered,
-    VarRelationSet,
+    EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId,
+    RelationParticipant, Remapping, Unordered, VarRelationSet,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -28,9 +28,11 @@ use super::super::edit::{
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
+use super::super::ligand::StereoLigand;
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::NoncovalentBondAst;
 use super::super::remap::{IdRemapping, UndoRemapping};
+use super::super::stereo::{StereoAtomAst, StereoBondAst};
 use super::super::views::{
     AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AtomBuilderView, AtomBuilderViewMut,
     BondBuilderView, BondBuilderViewMut, DativeBondBuilderView, DativeBondBuilderViewMut,
@@ -294,6 +296,13 @@ pub struct MoleculeBuilder {
     aromatic_systems: VarSetStorage<AromaticSystemAst>,
     multicenter_bonds: VarSetStorage<MulticenterBondAst>,
     noncovalent_bonds: FixedSetStorage<NoncovalentBondAst, 2>,
+    // Stereo overlays carry through the builder as plain shared Arcs: D3h has no
+    // stereo mutators (those land in D3j with the `FixedVarSetStorage` enum), so
+    // no copy-on-write `Mutable` form is needed yet — only remap on `remove`.
+    stereo_atoms:
+        Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>>,
+    stereo_bonds:
+        Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>>,
     constraints: Constraints,
 }
 
@@ -307,6 +316,12 @@ impl MoleculeBuilder {
         aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
         multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
         noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
+        stereo_atoms: Arc<
+            FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>,
+        >,
+        stereo_bonds: Arc<
+            FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>,
+        >,
         constraints: Constraints,
     ) -> Self {
         Self {
@@ -317,6 +332,8 @@ impl MoleculeBuilder {
             aromatic_systems: VarSetStorage::Shared(aromatic_systems),
             multicenter_bonds: VarSetStorage::Shared(multicenter_bonds),
             noncovalent_bonds: FixedSetStorage::Shared(noncovalent_bonds),
+            stereo_atoms,
+            stereo_bonds,
             constraints,
         }
     }
@@ -753,6 +770,12 @@ impl MoleculeBuilder {
         );
         self.noncovalent_bonds = noncovalent.apply_remapping(&remap);
 
+        // Forward-remap stereo overlays: a stereo element whose site or any
+        // ligand atom/bond was removed drops out (cascade). Capturing the
+        // dropped elements for undo is D3i.
+        self.stereo_atoms = Arc::new(self.stereo_atoms.apply_remapping(&remap));
+        self.stereo_bonds = Arc::new(self.stereo_bonds.apply_remapping(&remap));
+
         let idx_remap = IdRemapping::new(
             remap,
             removed_dative,
@@ -970,6 +993,8 @@ impl MoleculeBuilder {
             self.aromatic_systems.into_arc(),
             self.multicenter_bonds.into_arc(),
             self.noncovalent_bonds.into_arc(),
+            self.stereo_atoms,
+            self.stereo_bonds,
             self.constraints,
         )
     }
@@ -986,6 +1011,7 @@ mod tests {
     use crate::ast::constraint::AtomConstraint;
     use crate::ast::dative::DativeBondAst;
     use crate::ast::DroppedConstraint;
+    use crate::mol;
 
     #[fixture]
     fn triatomic() -> MoleculeBuilder {
@@ -1077,5 +1103,67 @@ mod tests {
         b.restore_dative_bond(removed, &undo);
 
         assert_eq!(b.build(), expected);
+    }
+
+    // `edit()` → `build()` reproduces the AST including both stereo overlays.
+    #[rstest]
+    fn test_molecule_builder_build() {
+        let ast = mol!(
+            r#"{:atoms ["C" "C" "C" "F" "Cl"]
+                :bonds [[0 1 "1"] [1 2 "2"] [0 3 "1"] [0 4 "1"]]
+                :stereo-atoms [{:site 0 :ligands [1 3 4] :type "Th1"}]
+                :stereo-bonds [{:site 1 :ligands [0 2] :type "Ct1"}]}"#
+        );
+        assert_eq!(ast.edit().build(), ast);
+    }
+
+    // `remove` forward-remaps stereo-atom node refs: removing a non-participant
+    // shifts the surviving site/ligand ids; removing the site drops the element.
+    #[rstest]
+    #[case::remaps_surviving(vec![AtomId(0)], vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]])]
+    #[case::drops_on_site_removal(vec![AtomId(1)], vec![])]
+    fn test_molecule_builder_remove_stereo_atom(
+        #[case] remove_atoms: Vec<AtomId>,
+        #[case] expected: Vec<Vec<AtomId>>,
+    ) {
+        let ast = mol!(
+            r#"{:atoms ["C" "C" "F" "Cl" "Br"]
+                :bonds [[1 2 "1"] [1 3 "1"] [1 4 "1"]]
+                :stereo-atoms [{:site 1 :ligands [2 3 4] :type "Th1"}]}"#
+        );
+        let mut builder = ast.edit();
+        builder.remove(&remove_atoms, &[]);
+        let surviving: Vec<Vec<AtomId>> = builder
+            .build()
+            .stereo_atoms()
+            .iter()
+            .map(|view| view.atom_ids().collect())
+            .collect();
+        assert_eq!(surviving, expected);
+    }
+
+    // `remove` forward-remaps the stereo-bond edge site: removing a non-site bond
+    // shifts the surviving site; removing the site bond drops the element.
+    #[rstest]
+    #[case::remaps_surviving(vec![BondId(0)], vec![BondId(0)])]
+    #[case::drops_on_site_removal(vec![BondId(1)], vec![])]
+    fn test_molecule_builder_remove_stereo_bond(
+        #[case] remove_bonds: Vec<BondId>,
+        #[case] expected: Vec<BondId>,
+    ) {
+        let ast = mol!(
+            r#"{:atoms ["C" "C" "C" "C"]
+                :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]]
+                :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#
+        );
+        let mut builder = ast.edit();
+        builder.remove(&[], &remove_bonds);
+        let surviving: Vec<BondId> = builder
+            .build()
+            .stereo_bonds()
+            .iter()
+            .map(|view| view.site())
+            .collect();
+        assert_eq!(surviving, expected);
     }
 }

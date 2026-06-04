@@ -18,6 +18,7 @@ use super::constraint::{
 use super::dative::DativeBondAst;
 use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
@@ -404,6 +405,18 @@ pub enum MulticenterBondRef {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondRef {
     Id(NoncovalentBondId),
+    New(usize),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StereoAtomRef {
+    Id(StereoAtomId),
+    New(usize),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StereoBondRef {
+    Id(StereoBondId),
     New(usize),
 }
 
