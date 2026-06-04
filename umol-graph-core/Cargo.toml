@@ -11,7 +11,7 @@ description = "Graph data structures and algorithms for umol."
 bench = false
 
 [dependencies]
-nauty-Traces-sys = "0.11"
+nauty-Traces-sys = { version = "0.11", features = ["bundled", "tls"] }
 
 [dev-dependencies]
 criterion = "0.8.1"

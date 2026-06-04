@@ -307,6 +307,8 @@ mod tests {
             removed_aromatic,
             removed_multicenter,
             removed_noncovalent,
+            Vec::new(),
+            Vec::new(),
         )
     }
 

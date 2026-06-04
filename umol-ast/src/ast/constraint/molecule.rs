@@ -526,6 +526,8 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
+            Vec::new(),
         )
     }
 
@@ -541,6 +543,8 @@ mod tests {
             removed_aromatic,
             removed_multicenter,
             removed_noncovalent,
+            Vec::new(),
+            Vec::new(),
         )
     }
 

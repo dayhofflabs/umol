@@ -398,12 +398,51 @@ Phases A–E are in scope; F (3D) and G follow.
     - **D3h** — *Builder carry + remap.* `from_arcs` + `MoleculeBuilder::from_parts` + `edit()` gain
       the two stereo Arcs; the builder stores them (shared storage) and round-trips them through
       `build`; `remove()` applies the node/edge remap so stereo refs stay valid after structural edits.
-      Add StereoAtomRef and StereoBondRef to edit.rs.
-    - **D3i** — *Builder undo.* Capture removed stereo relations in `IdRemapping` / `RemovedOverlays`
-      + `restore_stereo_*`, so structural-edit + undo is correct.
-    - **D3j** — *Builder full mirror.* `FixedVarSetStorage` enum, builder `add_/remove_stereo_*`
-      mutators, `BuilderView` / `BuilderViewMut`, `Added*` / `Removed*` edit types — full
-      noncovalent-parity surface.
+      Add StereoAtomRef and StereoBondRef to edit.rs. **Done**
+    - **D3i** — *Builder stereo editing + undo* (full noncovalent-parity edit/undo surface; widened
+      from the original "cascade-undo only" scope because undo is incomplete without the matching
+      add/remove edits, and those need mutable storage). Pulls the `FixedVarSetStorage` enum forward
+      from D3j — its first genuine consumer is exactly these mutators. Pieces:
+      - `FixedVarSetStorage` (Shared/Mutable CoW) for the two stereo birelations; D3h's plain-Arc
+        builder fields convert to it; `from_parts` / `build` route through it.
+      - Builder mutators `add_stereo_atom` / `remove_stereo_atoms` / `add_stereo_bond` /
+        `remove_stereo_bonds` (+ `remove_added_stereo_*` undo helpers).
+      - `edit.rs`: `AddedStereoAtom` / `RemovedStereoAtom` (+ bond) — each carrying **site + ligands**
+        (two factors), unlike the single-`atoms` overlays; `Edit::{AddStereoAtom, RemoveStereoAtom,
+        AddStereoBond, RemoveStereoBond}`; `Undo::{RemoveAddedStereoAtom, RestoreRemovedStereoAtom,
+        …Bond}`; `RemovedOverlays` += `stereo_atoms` / `stereo_bonds`.
+      - `remap.rs`: `IdRemapping` / `UndoRemapping` gain `removed_stereo_atoms` / `removed_stereo_bonds`
+        + accessors (ripples to `new` / `relations` / `empty` and their ~19 call sites).
+      - `builder.rs`: `restore_stereo_atoms` / `restore_stereo_bonds` (+ singular wrappers); cascade
+        capture so topology removal records dropped stereo into `RemovedOverlays` and `restore_topology`
+        restores it.
+      - `transact.rs`: dispatch the four new `Edit`s → apply + `Undo`; capture stereo in
+        `capture_removed_topology`; undo dispatch for the four new `Undo`s.
+
+      *Status: implementation landed, tree green.* Two carryovers to D3j: (1) the transactional
+      `RemoveStereo*` apply + `capture_removed_topology` read the current element through a temporary
+      `MoleculeBuilder::stereo_atom_entry` / `stereo_bond_entry` owned-snapshot stopgap (marked
+      `TODO(D3j)`), because the builder read **views** were scoped to D3j; (2) D3i adds no tests of its
+      own — they live with the view migration in D3j so they exercise the final (view-based) read path,
+      not the stopgap.
+    - **D3j** — *Builder views + field edits.* `BuilderView` / `BuilderViewMut` for stereo (read +
+      field-mutation access), `SetStereoAtomField` / `SetStereoBondField` edits and their `Undo`s, plus
+      remaining ergonomics. (The storage enum, add/remove mutators, and `Added*` / `Removed*` edit
+      types moved to D3i.) Also folds in the D3i carryovers:
+      - **Replace the D3i read stopgap.** Add `StereoAtomBuilderView` / `StereoBondBuilderView`
+        (mirror `NoncovalentBondBuilderView`); switch the transact `RemoveStereo*` apply and
+        `capture_removed_topology` to read through them (clone the `ast` off a borrow, like the sibling
+        overlays); delete `MoleculeBuilder::stereo_atom_entry` / `stereo_bond_entry` and
+        `FixedVarSetStorage::data` if then unused.
+      - **Tests deferred from D3i** (write against the view-based path, not the stopgap):
+        - Transactional `AddStereoAtom` / `AddStereoBond` + rollback restores the prior (stereo-free)
+          state; round-trip via `transact` then `Transaction::rollback`.
+        - Transactional `RemoveStereoAtom` / `RemoveStereoBond` + rollback restores the element
+          (site / ligands / coset intact); `OldStateMismatch` on a stale recorded old-state.
+        - Topology-removal cascade: a `transact` `RemoveTopology` that drops a stereo element (site or
+          ligand atom, or site bond removed) and whose rollback restores it at its original id.
+        - `IdRemapping` / `UndoRemapping` `stereo_atom` / `stereo_bond` accessor unit coverage
+          (remap shift past removed indices; inverse `unmap`).
     - **D3k** - Verify the stereo entities are correctly included in the SubpatternAnchor and remapping
       data structs / APIs.
     - **D3l** — *Review `StereoAtomView` / `StereoBondView` relational accessors.* Audit the two view

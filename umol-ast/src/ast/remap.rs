@@ -8,6 +8,7 @@ use umol_graph_core::{EdgeId, NodeId, Remapping};
 
 use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 
 /// Index remapping produced by `MoleculeBuilder::remove`. Translates
@@ -21,6 +22,8 @@ pub struct IdRemapping {
     removed_aromatic_systems: Vec<u32>,
     removed_multicenter_bonds: Vec<u32>,
     removed_noncovalent_bonds: Vec<u32>,
+    removed_stereo_atoms: Vec<u32>,
+    removed_stereo_bonds: Vec<u32>,
 }
 
 /// Inverse view of an [`IdRemapping`] for rollback. Translates surviving
@@ -39,14 +42,19 @@ impl IdRemapping {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
+            Vec::new(),
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn relations(
         removed_dative_bonds: Vec<u32>,
         removed_aromatic_systems: Vec<u32>,
         removed_multicenter_bonds: Vec<u32>,
         removed_noncovalent_bonds: Vec<u32>,
+        removed_stereo_atoms: Vec<u32>,
+        removed_stereo_bonds: Vec<u32>,
     ) -> Self {
         Self::new(
             Remapping::new(Vec::new(), Vec::new()),
@@ -54,26 +62,35 @@ impl IdRemapping {
             removed_aromatic_systems,
             removed_multicenter_bonds,
             removed_noncovalent_bonds,
+            removed_stereo_atoms,
+            removed_stereo_bonds,
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         graph: Remapping,
         mut removed_dative_bonds: Vec<u32>,
         mut removed_aromatic_systems: Vec<u32>,
         mut removed_multicenter_bonds: Vec<u32>,
         mut removed_noncovalent_bonds: Vec<u32>,
+        mut removed_stereo_atoms: Vec<u32>,
+        mut removed_stereo_bonds: Vec<u32>,
     ) -> Self {
         normalize_removed(&mut removed_dative_bonds);
         normalize_removed(&mut removed_aromatic_systems);
         normalize_removed(&mut removed_multicenter_bonds);
         normalize_removed(&mut removed_noncovalent_bonds);
+        normalize_removed(&mut removed_stereo_atoms);
+        normalize_removed(&mut removed_stereo_bonds);
         Self {
             graph,
             removed_dative_bonds,
             removed_aromatic_systems,
             removed_multicenter_bonds,
             removed_noncovalent_bonds,
+            removed_stereo_atoms,
+            removed_stereo_bonds,
         }
     }
 
@@ -99,6 +116,14 @@ impl IdRemapping {
 
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> Option<NoncovalentBondId> {
         remap_relation(&self.removed_noncovalent_bonds, id.0).map(NoncovalentBondId)
+    }
+
+    pub fn stereo_atom(&self, id: StereoAtomId) -> Option<StereoAtomId> {
+        remap_relation(&self.removed_stereo_atoms, id.0).map(StereoAtomId)
+    }
+
+    pub fn stereo_bond(&self, id: StereoBondId) -> Option<StereoBondId> {
+        remap_relation(&self.removed_stereo_bonds, id.0).map(StereoBondId)
     }
 
     pub fn graph(&self) -> &Remapping {
@@ -146,6 +171,14 @@ impl UndoRemapping {
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondId {
         NoncovalentBondId(unmap_dense(&self.forward.removed_noncovalent_bonds, id.0))
     }
+
+    pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
+        StereoAtomId(unmap_dense(&self.forward.removed_stereo_atoms, id.0))
+    }
+
+    pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondId {
+        StereoBondId(unmap_dense(&self.forward.removed_stereo_bonds, id.0))
+    }
 }
 
 fn remap_relation(removed: &[u32], old: u32) -> Option<u32> {
@@ -189,6 +222,8 @@ mod tests {
             vec![1],
             vec![3, 0],
             vec![2],
+            Vec::new(),
+            Vec::new(),
         )
     }
 

@@ -602,6 +602,8 @@ mod tests {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
+            Vec::new(),
         );
         assert_eq!(cs.clone().remap(&remap), cs);
     }

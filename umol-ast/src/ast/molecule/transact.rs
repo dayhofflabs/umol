@@ -10,15 +10,18 @@ use thiserror::Error;
 
 use super::super::edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
-    AddedNoncovalentBond, AromaticSystemFieldChange, AromaticSystemRef, AtomFieldChange, AtomRef,
-    BondFieldChange, BondRef, DativeBondFieldChange, DativeBondRef, Edit,
-    MulticenterBondFieldChange, MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef,
-    RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond,
-    RemovedNoncovalentBond, RemovedOverlays, Undo,
+    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
+    AromaticSystemRef, AtomFieldChange, AtomRef, BondFieldChange, BondRef, DativeBondFieldChange,
+    DativeBondRef, Edit, MulticenterBondFieldChange, MulticenterBondRef,
+    NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem, RemovedAtom,
+    RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
+    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, StereoAtomRef, StereoBondRef, Undo,
 };
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
+use super::super::ligand::StereoLigand;
 use super::super::remap::IdRemapping;
 use super::MoleculeBuilder;
 
@@ -101,6 +104,8 @@ enum CreatedEntity {
     AromaticSystem(AromaticSystemId),
     MulticenterBond(MulticenterBondId),
     NoncovalentBond(NoncovalentBondId),
+    StereoAtom(StereoAtomId),
+    StereoBond(StereoBondId),
 }
 
 impl CreatedEntity {
@@ -112,6 +117,8 @@ impl CreatedEntity {
             Self::AromaticSystem(_) => "AromaticSystem",
             Self::MulticenterBond(_) => "MulticenterBond",
             Self::NoncovalentBond(_) => "NoncovalentBond",
+            Self::StereoAtom(_) => "StereoAtom",
+            Self::StereoBond(_) => "StereoBond",
         }
     }
 }
@@ -213,6 +220,42 @@ impl CreatedEntities {
                 }),
             },
         }
+    }
+
+    fn stereo_atom(&self, r: StereoAtomRef) -> Result<StereoAtomId, TransactionError> {
+        match r {
+            StereoAtomRef::Id(id) => Ok(id),
+            StereoAtomRef::New(n) => match self.get(n)? {
+                CreatedEntity::StereoAtom(id) => Ok(id),
+                other => Err(TransactionError::RefTypeMismatch {
+                    expected: "StereoAtom",
+                    got: other.name(),
+                }),
+            },
+        }
+    }
+
+    fn stereo_bond(&self, r: StereoBondRef) -> Result<StereoBondId, TransactionError> {
+        match r {
+            StereoBondRef::Id(id) => Ok(id),
+            StereoBondRef::New(n) => match self.get(n)? {
+                CreatedEntity::StereoBond(id) => Ok(id),
+                other => Err(TransactionError::RefTypeMismatch {
+                    expected: "StereoBond",
+                    got: other.name(),
+                }),
+            },
+        }
+    }
+
+    fn stereo_ligands(
+        &self,
+        ligands: Vec<(AtomRef, super::super::ligand::StereoLigandKind)>,
+    ) -> Result<Vec<StereoLigand>, TransactionError> {
+        ligands
+            .into_iter()
+            .map(|(atom, kind)| Ok(StereoLigand::new(self.atom(atom)?, kind)))
+            .collect()
     }
 }
 
@@ -470,6 +513,64 @@ impl MoleculeBuilder {
                     return Err(TransactionError::IdOutOfRange("noncovalent bond"));
                 }
                 self.apply_set_noncovalent_bond_field(id, change)
+            }
+            Edit::AddStereoAtom { site, ligands, ast } => {
+                let site = created.atom(site)?;
+                if site.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                let ligands = created.stereo_ligands(ligands)?;
+                let id = self.add_stereo_atom(site, ligands, ast);
+                created.push(CreatedEntity::StereoAtom(id));
+                Ok(())
+            }
+            Edit::RemoveStereoAtom {
+                idx,
+                site,
+                ligands,
+                ast,
+            } => {
+                let id = created.stereo_atom(idx)?;
+                if id.index() >= self.stereo_atom_count() {
+                    return Err(TransactionError::IdOutOfRange("stereo atom"));
+                }
+                let site = created.atom(site)?;
+                let ligands = created.stereo_ligands(ligands)?;
+                let (cur_site, cur_ligands, cur_ast) = self.stereo_atom_entry(id);
+                if cur_ast != ast || cur_site != site || cur_ligands != ligands {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                self.remove_stereo_atoms(&[id]);
+                Ok(())
+            }
+            Edit::AddStereoBond { site, ligands, ast } => {
+                let site = created.bond(site)?;
+                if site.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
+                let ligands = created.stereo_ligands(ligands)?;
+                let id = self.add_stereo_bond(site, ligands, ast);
+                created.push(CreatedEntity::StereoBond(id));
+                Ok(())
+            }
+            Edit::RemoveStereoBond {
+                idx,
+                site,
+                ligands,
+                ast,
+            } => {
+                let id = created.stereo_bond(idx)?;
+                if id.index() >= self.stereo_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("stereo bond"));
+                }
+                let site = created.bond(site)?;
+                let ligands = created.stereo_ligands(ligands)?;
+                let (cur_site, cur_ligands, cur_ast) = self.stereo_bond_entry(id);
+                if cur_ast != ast || cur_site != site || cur_ligands != ligands {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                self.remove_stereo_bonds(&[id]);
+                Ok(())
             }
             Edit::SetAtomConstraint { idx, old, new } => {
                 let id = created.atom(idx)?;
@@ -774,6 +875,8 @@ impl MoleculeBuilder {
                         Vec::new(),
                         Vec::new(),
                         Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
                     )
                     .undo_remapping(),
                 })
@@ -834,6 +937,8 @@ impl MoleculeBuilder {
                     undo_remapping: IdRemapping::relations(
                         Vec::new(),
                         vec![id.0],
+                        Vec::new(),
+                        Vec::new(),
                         Vec::new(),
                         Vec::new(),
                     )
@@ -898,6 +1003,8 @@ impl MoleculeBuilder {
                         Vec::new(),
                         vec![id.0],
                         Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
                     )
                     .undo_remapping(),
                 })
@@ -958,6 +1065,8 @@ impl MoleculeBuilder {
                         Vec::new(),
                         Vec::new(),
                         vec![id.0],
+                        Vec::new(),
+                        Vec::new(),
                     )
                     .undo_remapping(),
                 })
@@ -973,6 +1082,108 @@ impl MoleculeBuilder {
                 };
                 self.apply_set_noncovalent_bond_field(id, change)?;
                 Ok(undo)
+            }
+            Edit::AddStereoAtom { site, ligands, ast } => {
+                let site = created.atom(site)?;
+                if site.index() >= self.atom_count() {
+                    return Err(TransactionError::IdOutOfRange("atom"));
+                }
+                let ligands = created.stereo_ligands(ligands)?;
+                let id = self.add_stereo_atom(site, ligands.clone(), ast.clone());
+                created.push(CreatedEntity::StereoAtom(id));
+                Ok(Undo::RemoveAddedStereoAtom(AddedStereoAtom {
+                    id,
+                    site,
+                    ligands,
+                    ast,
+                }))
+            }
+            Edit::RemoveStereoAtom {
+                idx,
+                site,
+                ligands,
+                ast,
+            } => {
+                let id = created.stereo_atom(idx)?;
+                if id.index() >= self.stereo_atom_count() {
+                    return Err(TransactionError::IdOutOfRange("stereo atom"));
+                }
+                let site = created.atom(site)?;
+                let ligands = created.stereo_ligands(ligands)?;
+                let (cur_site, cur_ligands, cur_ast) = self.stereo_atom_entry(id);
+                if cur_ast != ast || cur_site != site || cur_ligands != ligands {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                let removed = RemovedStereoAtom {
+                    id,
+                    site: cur_site,
+                    ligands: cur_ligands,
+                    ast: cur_ast,
+                };
+                self.remove_stereo_atoms(&[id]);
+                Ok(Undo::RestoreRemovedStereoAtom {
+                    removed,
+                    undo_remapping: IdRemapping::relations(
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        vec![id.0],
+                        Vec::new(),
+                    )
+                    .undo_remapping(),
+                })
+            }
+            Edit::AddStereoBond { site, ligands, ast } => {
+                let site = created.bond(site)?;
+                if site.index() >= self.bond_count() {
+                    return Err(TransactionError::IdOutOfRange("bond"));
+                }
+                let ligands = created.stereo_ligands(ligands)?;
+                let id = self.add_stereo_bond(site, ligands.clone(), ast.clone());
+                created.push(CreatedEntity::StereoBond(id));
+                Ok(Undo::RemoveAddedStereoBond(AddedStereoBond {
+                    id,
+                    site,
+                    ligands,
+                    ast,
+                }))
+            }
+            Edit::RemoveStereoBond {
+                idx,
+                site,
+                ligands,
+                ast,
+            } => {
+                let id = created.stereo_bond(idx)?;
+                if id.index() >= self.stereo_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("stereo bond"));
+                }
+                let site = created.bond(site)?;
+                let ligands = created.stereo_ligands(ligands)?;
+                let (cur_site, cur_ligands, cur_ast) = self.stereo_bond_entry(id);
+                if cur_ast != ast || cur_site != site || cur_ligands != ligands {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                let removed = RemovedStereoBond {
+                    id,
+                    site: cur_site,
+                    ligands: cur_ligands,
+                    ast: cur_ast,
+                };
+                self.remove_stereo_bonds(&[id]);
+                Ok(Undo::RestoreRemovedStereoBond {
+                    removed,
+                    undo_remapping: IdRemapping::relations(
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        Vec::new(),
+                        vec![id.0],
+                    )
+                    .undo_remapping(),
+                })
             }
             Edit::SetAtomConstraint { idx, old, new } => {
                 let id = created.atom(idx.clone())?;
@@ -1256,6 +1467,39 @@ impl MoleculeBuilder {
             })
             .collect();
 
+        // A stereo atom drops when its site atom or any ligand atom is removed;
+        // a stereo bond drops when its site bond (directly or via a removed
+        // endpoint) or any ligand atom is removed. Mirrors `birelation_removed`.
+        let stereo_atoms = (0..self.stereo_atom_count())
+            .map(StereoAtomId::from)
+            .filter_map(|id| {
+                let (site, ligands, ast) = self.stereo_atom_entry(id);
+                let dropped = atom_set.contains(&site)
+                    || ligands.iter().any(|l| atom_set.contains(&l.atom()));
+                dropped.then_some(RemovedStereoAtom {
+                    id,
+                    site,
+                    ligands,
+                    ast,
+                })
+            })
+            .collect();
+        let stereo_bonds = (0..self.stereo_bond_count())
+            .map(StereoBondId::from)
+            .filter_map(|id| {
+                let (site, ligands, ast) = self.stereo_bond_entry(id);
+                let site_dropped = bond_set.contains(&site)
+                    || self.bond(site).atoms.iter().any(|a| atom_set.contains(a));
+                let ligand_dropped = ligands.iter().any(|l| atom_set.contains(&l.atom()));
+                (site_dropped || ligand_dropped).then_some(RemovedStereoBond {
+                    id,
+                    site,
+                    ligands,
+                    ast,
+                })
+            })
+            .collect();
+
         (
             removed_atoms,
             removed_bonds,
@@ -1264,6 +1508,8 @@ impl MoleculeBuilder {
                 aromatic_systems,
                 multicenter_bonds,
                 noncovalent_bonds,
+                stereo_atoms,
+                stereo_bonds,
             },
         )
     }
@@ -1679,6 +1925,16 @@ impl MoleculeBuilder {
                 removed,
                 undo_remapping,
             } => self.restore_noncovalent_bond(removed, &undo_remapping),
+            Undo::RemoveAddedStereoAtom(added) => self.remove_added_stereo_atom(&added),
+            Undo::RestoreRemovedStereoAtom {
+                removed,
+                undo_remapping,
+            } => self.restore_stereo_atom(removed, &undo_remapping),
+            Undo::RemoveAddedStereoBond(added) => self.remove_added_stereo_bond(&added),
+            Undo::RestoreRemovedStereoBond {
+                removed,
+                undo_remapping,
+            } => self.restore_stereo_bond(removed, &undo_remapping),
             Undo::SetAtomField { id, change } => self.apply_set_atom_field(id, change)?,
             Undo::SetBondField { id, change } => self.apply_set_bond_field(id, change)?,
             Undo::SetDativeBondField { id, change } => {

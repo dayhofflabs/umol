@@ -20,10 +20,12 @@ use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
+use super::ligand::{StereoLigand, StereoLigandKind};
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use super::remap::{IdRemapping, UndoRemapping};
 use super::spin::SpinStateAst;
+use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::value::ValueAst;
 
 /// Symbolic reference to an atom: either an existing `AtomId` or the Nth
@@ -287,6 +289,32 @@ pub enum Edit {
         change: NoncovalentBondFieldChange,
     },
 
+    // Stereo elements. `ligands` carry their atom as an `AtomRef` (Id or
+    // same-batch New) plus the ligand kind; `site` is the atom/bond the
+    // element is sited on.
+    AddStereoAtom {
+        site: AtomRef,
+        ligands: Vec<(AtomRef, StereoLigandKind)>,
+        ast: StereoAtomAst,
+    },
+    RemoveStereoAtom {
+        idx: StereoAtomRef,
+        site: AtomRef,
+        ligands: Vec<(AtomRef, StereoLigandKind)>,
+        ast: StereoAtomAst,
+    },
+    AddStereoBond {
+        site: BondRef,
+        ligands: Vec<(AtomRef, StereoLigandKind)>,
+        ast: StereoBondAst,
+    },
+    RemoveStereoBond {
+        idx: StereoBondRef,
+        site: BondRef,
+        ligands: Vec<(AtomRef, StereoLigandKind)>,
+        ast: StereoBondAst,
+    },
+
     // Entity-inline constraints — atom
     SetAtomConstraint {
         idx: AtomRef,
@@ -502,12 +530,48 @@ pub struct RemovedNoncovalentBond {
     pub ast: NoncovalentBondAst,
 }
 
+// Stereo elements carry both factors: the `site` (atom/bond) and the ordered
+// `ligands`, unlike the single-atom-set overlays above.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedStereoAtom {
+    pub id: StereoAtomId,
+    pub site: AtomId,
+    pub ligands: Vec<StereoLigand>,
+    pub ast: StereoAtomAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedStereoAtom {
+    pub id: StereoAtomId,
+    pub site: AtomId,
+    pub ligands: Vec<StereoLigand>,
+    pub ast: StereoAtomAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AddedStereoBond {
+    pub id: StereoBondId,
+    pub site: BondId,
+    pub ligands: Vec<StereoLigand>,
+    pub ast: StereoBondAst,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RemovedStereoBond {
+    pub id: StereoBondId,
+    pub site: BondId,
+    pub ligands: Vec<StereoLigand>,
+    pub ast: StereoBondAst,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RemovedOverlays {
     pub dative_bonds: Vec<RemovedDativeBond>,
     pub aromatic_systems: Vec<RemovedAromaticSystem>,
     pub multicenter_bonds: Vec<RemovedMulticenterBond>,
     pub noncovalent_bonds: Vec<RemovedNoncovalentBond>,
+    pub stereo_atoms: Vec<RemovedStereoAtom>,
+    pub stereo_bonds: Vec<RemovedStereoBond>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -584,6 +648,16 @@ pub enum Undo {
     RemoveAddedNoncovalentBond(AddedNoncovalentBond),
     RestoreRemovedNoncovalentBond {
         removed: RemovedNoncovalentBond,
+        undo_remapping: UndoRemapping,
+    },
+    RemoveAddedStereoAtom(AddedStereoAtom),
+    RestoreRemovedStereoAtom {
+        removed: RemovedStereoAtom,
+        undo_remapping: UndoRemapping,
+    },
+    RemoveAddedStereoBond(AddedStereoBond),
+    RestoreRemovedStereoBond {
+        removed: RemovedStereoBond,
         undo_remapping: UndoRemapping,
     },
     SetAtomField {

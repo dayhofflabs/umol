@@ -42,12 +42,13 @@ pub use constraint::{
 pub use dative::DativeBondAst;
 pub use edit::{
     AddBond, AddedAromaticSystem, AddedAtom, AddedBond, AddedDativeBond, AddedMulticenterBond,
-    AddedNoncovalentBond, AromaticSystemFieldChange, AromaticSystemRef, AtomFieldChange, AtomRef,
-    BondFieldChange, BondRef, ConstraintUpdate, DativeBondFieldChange, DativeBondRef,
-    DroppedConstraint, Edit, MulticenterBondFieldChange, MulticenterBondRef,
-    NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem, RemovedAtom,
-    RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
-    RemovedOverlays, RewrittenConstraint, StereoAtomRef, StereoBondRef, Undo,
+    AddedNoncovalentBond, AddedStereoAtom, AddedStereoBond, AromaticSystemFieldChange,
+    AromaticSystemRef, AtomFieldChange, AtomRef, BondFieldChange, BondRef, ConstraintUpdate,
+    DativeBondFieldChange, DativeBondRef, DroppedConstraint, Edit, MulticenterBondFieldChange,
+    MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem,
+    RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
+    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, RewrittenConstraint, StereoAtomRef,
+    StereoBondRef, Undo,
 };
 pub use embedding::MoleculeEmbedding;
 pub use error::{Contradiction, EvaluationError, JointDomainError, RewriteError};
