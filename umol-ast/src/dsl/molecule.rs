@@ -26,14 +26,16 @@ use super::atom::AtomDsl;
 use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{
-    eof_err, missing, read_atom_ref, read_constraints_dsl, read_map, read_vec,
+    eof_err, missing, read_atom_ref, read_bond_ref, read_constraints_dsl, read_map, read_vec,
     unexpected_byte_kind, AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, EntityCounts,
 };
 use super::dative::DativeBondDsl;
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
-use super::stereo::{StereoAtomDsl, StereoBondDsl};
+use super::stereo::{
+    expand_stereo_atom_keyword, expand_stereo_bond_keyword, StereoAtomDsl, StereoBondDsl,
+};
 use super::value::ValueDsl;
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
@@ -43,10 +45,11 @@ use crate::ast::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-use crate::ast::ligand::StereoLigandKind;
+use crate::ast::ligand::{StereoLigand, StereoLigandKind};
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::noncovalent::NoncovalentBondAst;
+use crate::ast::stereo::{StereoAtomAst, StereoBondAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
@@ -355,6 +358,8 @@ pub(super) fn read_molecule_input(
             "noncovalent-bonds" => {
                 mi.noncovalent_bonds = read_vec(de, read_noncovalent_bond_entry)?
             }
+            "stereo-atoms" => mi.stereo_atoms = read_vec(de, read_stereo_atom_entry)?,
+            "stereo-bonds" => mi.stereo_bonds = read_vec(de, read_stereo_bond_entry)?,
             "atom-aliases" => mi.atom_aliases = read_atom_aliases(de)?,
             "constraints" => mi.constraints = read_constraints_dsl(de)?,
             "guards" => {
@@ -626,6 +631,111 @@ fn read_noncovalent_bond_entry(
     })
 }
 
+fn stereo_ligand_kind(tag: &str) -> Result<StereoLigandKind, DeError> {
+    match tag {
+        "h" => Ok(StereoLigandKind::ImplicitHydrogen),
+        "lp" => Ok(StereoLigandKind::LonePair),
+        other => Err(DeError::Custom(format!("unknown stereo ligand tag :{other}"))),
+    }
+}
+
+fn read_stereo_ligand(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoLigandInput, EdnError> {
+    if de.peek_byte()?.ok_or_else(eof_err)? == b'[' {
+        de.consume_byte(b'[')?;
+        let kind = stereo_ligand_kind(de.read_keyword_name()?.as_ref())?;
+        let atom = read_atom_ref(de)?;
+        de.consume_byte(b']')?;
+        Ok(StereoLigandInput { kind, atom })
+    } else {
+        Ok(StereoLigandInput {
+            kind: StereoLigandKind::Atom,
+            atom: read_atom_ref(de)?,
+        })
+    }
+}
+
+fn read_stereo_atom_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoAtomDsl, EdnError> {
+    if de.peek_byte()?.ok_or_else(eof_err)? == b':' {
+        let kw = de.read_keyword_name()?;
+        let expanded = expand_stereo_atom_keyword(kw.as_ref())
+            .ok_or_else(|| DeError::Custom(format!("unknown stereo atom keyword :{kw}")))?;
+        expanded
+            .parse::<StereoAtomDsl>()
+            .map_err(|e| DeError::subgrammar("stereo atom", e).into())
+    } else {
+        de.read_string()?
+            .as_ref()
+            .parse::<StereoAtomDsl>()
+            .map_err(|e| DeError::subgrammar("stereo atom", e).into())
+    }
+}
+
+fn read_stereo_bond_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<StereoBondDsl, EdnError> {
+    if de.peek_byte()?.ok_or_else(eof_err)? == b':' {
+        let kw = de.read_keyword_name()?;
+        let expanded = expand_stereo_bond_keyword(kw.as_ref())
+            .ok_or_else(|| DeError::Custom(format!("unknown stereo bond keyword :{kw}")))?;
+        expanded
+            .parse::<StereoBondDsl>()
+            .map_err(|e| DeError::subgrammar("stereo bond", e).into())
+    } else {
+        de.read_string()?
+            .as_ref()
+            .parse::<StereoBondDsl>()
+            .map_err(|e| DeError::subgrammar("stereo bond", e).into())
+    }
+}
+
+fn read_stereo_atom_entry(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoAtomEntryInput, EdnError> {
+    let mut id = None;
+    let mut site = None;
+    let mut ligands = None;
+    let mut stereo = None;
+    read_map(de, |de, key| {
+        match key {
+            "id" => id = Some(de.read_keyword_name()?.into_owned()),
+            "site" => site = Some(read_atom_ref(de)?),
+            "ligands" => ligands = Some(read_vec(de, read_stereo_ligand)?),
+            "type" => stereo = Some(read_stereo_atom_dsl(de)?),
+            _ => de.read_skip_value()?,
+        }
+        Ok(())
+    })?;
+    Ok(StereoAtomEntryInput {
+        id,
+        site: site.ok_or_else(|| missing("site", "stereo-atom-entry"))?,
+        ligands: ligands.ok_or_else(|| missing("ligands", "stereo-atom-entry"))?,
+        stereo: stereo.ok_or_else(|| missing("type", "stereo-atom-entry"))?,
+    })
+}
+
+fn read_stereo_bond_entry(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoBondEntryInput, EdnError> {
+    let mut id = None;
+    let mut site = None;
+    let mut ligands = None;
+    let mut stereo = None;
+    read_map(de, |de, key| {
+        match key {
+            "id" => id = Some(de.read_keyword_name()?.into_owned()),
+            "site" => site = Some(read_bond_ref(de)?),
+            "ligands" => ligands = Some(read_vec(de, read_stereo_ligand)?),
+            "type" => stereo = Some(read_stereo_bond_dsl(de)?),
+            _ => de.read_skip_value()?,
+        }
+        Ok(())
+    })?;
+    Ok(StereoBondEntryInput {
+        id,
+        site: site.ok_or_else(|| missing("site", "stereo-bond-entry"))?,
+        ligands: ligands.ok_or_else(|| missing("ligands", "stereo-bond-entry"))?,
+        stereo: stereo.ok_or_else(|| missing("type", "stereo-bond-entry"))?,
+    })
+}
+
 fn read_atom_aliases(
     de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<Vec<(String, Box<AtomDsl>)>, EdnError> {
@@ -726,6 +836,12 @@ fn render_molecule_edn(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
             Edn::keyword("noncovalent-bonds"),
             render_noncovalent(ast, meta),
         );
+    }
+    if ast.stereo_atoms().count() > 0 {
+        map.insert(Edn::keyword("stereo-atoms"), render_stereo_atoms(ast, meta));
+    }
+    if ast.stereo_bonds().count() > 0 {
+        map.insert(Edn::keyword("stereo-bonds"), render_stereo_bonds(ast, meta));
     }
     if meta.has_atom_aliases() {
         map.insert(Edn::keyword("atom-aliases"), render_atom_aliases(meta));
@@ -932,6 +1048,80 @@ fn render_noncovalent(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
+fn render_stereo_atoms(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = ast
+        .stereo_atoms()
+        .iter()
+        .map(|view| {
+            let mut m = EdnMap::with_capacity(4);
+            if let Some(id) = meta.stereo_atom_id(view.id) {
+                m.insert(
+                    Edn::keyword("id"),
+                    Edn::Keyword(EdnKeyword::owned(id.to_string())),
+                );
+            }
+            m.insert(Edn::keyword("site"), render_atom_ref(view.site(), meta));
+            let ligands: Vec<Edn<'static>> = view
+                .ligands()
+                .iter()
+                .map(|l| render_stereo_ligand(l, meta))
+                .collect();
+            m.insert(Edn::keyword("ligands"), Edn::Vector(ligands.into()));
+            m.insert(
+                Edn::keyword("type"),
+                StereoAtomDsl::from_ref(view.ast).to_edn(),
+            );
+            Edn::Map(m)
+        })
+        .collect();
+    Edn::Vector(entries.into())
+}
+
+fn render_stereo_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
+    let entries: Vec<Edn<'static>> = ast
+        .stereo_bonds()
+        .iter()
+        .map(|view| {
+            let mut m = EdnMap::with_capacity(4);
+            if let Some(id) = meta.stereo_bond_id(view.id) {
+                m.insert(
+                    Edn::keyword("id"),
+                    Edn::Keyword(EdnKeyword::owned(id.to_string())),
+                );
+            }
+            m.insert(Edn::keyword("site"), render_bond_ref(view.site(), meta));
+            let ligands: Vec<Edn<'static>> = view
+                .ligands()
+                .iter()
+                .map(|l| render_stereo_ligand(l, meta))
+                .collect();
+            m.insert(Edn::keyword("ligands"), Edn::Vector(ligands.into()));
+            m.insert(
+                Edn::keyword("type"),
+                StereoBondDsl::from_ref(view.ast).to_edn(),
+            );
+            Edn::Map(m)
+        })
+        .collect();
+    Edn::Vector(entries.into())
+}
+
+fn render_stereo_ligand(ligand: &StereoLigand, meta: &Metadata) -> Edn<'static> {
+    let atom = render_atom_ref(ligand.atom(), meta);
+    match ligand.kind() {
+        StereoLigandKind::Atom => atom,
+        StereoLigandKind::ImplicitHydrogen => Edn::Vector(vec![Edn::keyword("h"), atom].into()),
+        StereoLigandKind::LonePair => Edn::Vector(vec![Edn::keyword("lp"), atom].into()),
+    }
+}
+
+fn render_bond_ref(idx: BondId, meta: &Metadata) -> Edn<'static> {
+    match meta.bond_id(idx) {
+        Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
+        None => Edn::Int(idx.index() as i64),
+    }
+}
+
 fn render_atom_aliases(meta: &Metadata) -> Edn<'static> {
     let mut pairs: Vec<Edn<'static>> = Vec::with_capacity(meta.atom_aliases_len() * 2);
     for (name, dsl) in meta.iter_atom_aliases() {
@@ -1052,8 +1242,8 @@ impl MoleculeInput {
             aromatic_systems: aromatic_entries,
             multicenter_bonds: multicenter_entries,
             noncovalent_bonds: noncovalent_entries,
-            stereo_atoms: _,
-            stereo_bonds: _,
+            stereo_atoms: stereo_atom_entries,
+            stereo_bonds: stereo_bond_entries,
             atom_aliases: alias_entries,
             constraints: constraint_dsls,
         } = self;
@@ -1105,12 +1295,14 @@ impl MoleculeInput {
         // Bonds.
         let mut bonds: Vec<(AtomId, AtomId, BondAst)> = Vec::with_capacity(bond_entries.len());
         let mut entry_ids: IndexMap<String, ()> = IndexMap::new();
+        let mut bond_id_to_idx: IndexMap<String, BondId> = IndexMap::new();
         for (pos, entry) in bond_entries.into_iter().enumerate() {
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
                 if entry_ids.insert(id.clone(), ()).is_some() {
                     return Err(ParseError::DuplicateId(id));
                 }
+                bond_id_to_idx.insert(id.clone(), BondId(pos as u32));
                 metadata.set_bond_id(BondId(pos as u32), id);
             }
             let a = entry.a.resolve(atom_count, &atom_id_to_idx)?;
@@ -1188,6 +1380,47 @@ impl MoleculeInput {
             noncovalent_list.push((a, b, entry.bond.0));
         }
 
+        // Stereo atoms.
+        let bond_count = bonds.len();
+        let mut stereo_atom_list: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> =
+            Vec::with_capacity(stereo_atom_entries.len());
+        for (pos, entry) in stereo_atom_entries.into_iter().enumerate() {
+            if let Some(id) = entry.id {
+                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
+                if entry_ids.insert(id.clone(), ()).is_some() {
+                    return Err(ParseError::DuplicateId(id));
+                }
+                metadata.set_stereo_atom_id(StereoAtomId(pos as u32), id);
+            }
+            let site = entry.site.resolve(atom_count, &atom_id_to_idx)?;
+            let ligands: Vec<StereoLigand> = entry
+                .ligands
+                .into_iter()
+                .map(|l| Ok(StereoLigand::new(l.atom.resolve(atom_count, &atom_id_to_idx)?, l.kind)))
+                .collect::<Result<_, ParseError>>()?;
+            stereo_atom_list.push((site, ligands, entry.stereo.0));
+        }
+
+        // Stereo bonds.
+        let mut stereo_bond_list: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> =
+            Vec::with_capacity(stereo_bond_entries.len());
+        for (pos, entry) in stereo_bond_entries.into_iter().enumerate() {
+            if let Some(id) = entry.id {
+                check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
+                if entry_ids.insert(id.clone(), ()).is_some() {
+                    return Err(ParseError::DuplicateId(id));
+                }
+                metadata.set_stereo_bond_id(StereoBondId(pos as u32), id);
+            }
+            let site = entry.site.resolve(bond_count, &bond_id_to_idx)?;
+            let ligands: Vec<StereoLigand> = entry
+                .ligands
+                .into_iter()
+                .map(|l| Ok(StereoLigand::new(l.atom.resolve(atom_count, &atom_id_to_idx)?, l.kind)))
+                .collect::<Result<_, ParseError>>()?;
+            stereo_bond_list.push((site, ligands, entry.stereo.0));
+        }
+
         // Atom aliases. Names are guaranteed unique by the upstream
         // `parse_aliases` dedup; `add_atom_alias` is last-wins on
         // duplicate atom-dsl, which can't fire here.
@@ -1213,8 +1446,8 @@ impl MoleculeInput {
             aromatic_list,
             multicenter_list,
             noncovalent_list,
-            Vec::new(),
-            Vec::new(),
+            stereo_atom_list,
+            stereo_bond_list,
             constraints,
         );
         Ok((ast, metadata))
@@ -1255,6 +1488,12 @@ fn parse_molecule_input(edn: &Edn<'_>) -> Result<MoleculeInput, DeError> {
             "noncovalent-bonds" => {
                 input.noncovalent_bonds =
                     parse_vec(v, ":noncovalent-bonds", parse_noncovalent_bond_entry)?
+            }
+            "stereo-atoms" => {
+                input.stereo_atoms = parse_vec(v, ":stereo-atoms", parse_stereo_atom_entry)?
+            }
+            "stereo-bonds" => {
+                input.stereo_bonds = parse_vec(v, ":stereo-bonds", parse_stereo_bond_entry)?
             }
             "atom-aliases" => input.atom_aliases = parse_atom_aliases(v)?,
             "constraints" => {
@@ -1418,6 +1657,56 @@ fn parse_noncovalent_bond_entry(edn: &Edn<'_>) -> Result<NoncovalentBondEntryInp
         a: AtomRef::from_edn(required_key(m, "a", "noncovalent-bond-entry")?)?,
         b: AtomRef::from_edn(required_key(m, "b", "noncovalent-bond-entry")?)?,
         bond: NoncovalentBondDsl::from_edn(required_key(m, "type", "noncovalent-bond-entry")?)?,
+    })
+}
+
+fn parse_stereo_ligand(edn: &Edn<'_>) -> Result<StereoLigandInput, DeError> {
+    match edn {
+        Edn::Vector(v) if v.len() == 2 => {
+            let Edn::Keyword(tag) = &v[0] else {
+                return Err(DeError::TypeMismatch {
+                    expected: "ligand tag keyword",
+                    got: v[0].kind(),
+                    path: vec!["stereo-ligand".into()],
+                });
+            };
+            Ok(StereoLigandInput {
+                kind: stereo_ligand_kind(tag.name())?,
+                atom: AtomRef::from_edn(&v[1])?,
+            })
+        }
+        _ => Ok(StereoLigandInput {
+            kind: StereoLigandKind::Atom,
+            atom: AtomRef::from_edn(edn)?,
+        }),
+    }
+}
+
+fn parse_stereo_atom_entry(edn: &Edn<'_>) -> Result<StereoAtomEntryInput, DeError> {
+    let m = expect_map(edn, "stereo-atom-entry")?;
+    Ok(StereoAtomEntryInput {
+        id: optional_id(m)?,
+        site: AtomRef::from_edn(required_key(m, "site", "stereo-atom-entry")?)?,
+        ligands: parse_vec(
+            required_key(m, "ligands", "stereo-atom-entry")?,
+            ":ligands",
+            parse_stereo_ligand,
+        )?,
+        stereo: StereoAtomDsl::from_edn(required_key(m, "type", "stereo-atom-entry")?)?,
+    })
+}
+
+fn parse_stereo_bond_entry(edn: &Edn<'_>) -> Result<StereoBondEntryInput, DeError> {
+    let m = expect_map(edn, "stereo-bond-entry")?;
+    Ok(StereoBondEntryInput {
+        id: optional_id(m)?,
+        site: BondRef::from_edn(required_key(m, "site", "stereo-bond-entry")?)?,
+        ligands: parse_vec(
+            required_key(m, "ligands", "stereo-bond-entry")?,
+            ":ligands",
+            parse_stereo_ligand,
+        )?,
+        stereo: StereoBondDsl::from_edn(required_key(m, "type", "stereo-bond-entry")?)?,
     })
 }
 
@@ -1849,6 +2138,11 @@ mod tests {
     #[case::multicenter_section(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :type "#e2"}]}"##)]
     #[case::dative_section(r##"{:atoms ["C" "N"] :bonds [] :dative-bonds [{:id :d1 :donor 0 :acceptor 1 :type "1#R"}]}"##)]
     #[case::noncovalent_section(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"##)]
+    #[case::stereo_atom_section(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"##)]
+    #[case::stereo_atom_id_and_keyword(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 3 4] :type :ccw}]}"##)]
+    #[case::stereo_atom_virtual_ligand(r##"{:atoms ["C" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 [:lp 0] [:h 0]] :type "Th1"}]}"##)]
+    #[case::stereo_bond_section(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"##)]
+    #[case::stereo_bond_id_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :a 1 :b 2 :type "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :type :e}]}"##)]
     #[case::atom_aliases(r##"{:atoms [:x :x] :bonds [] :atom-aliases [:x "C"]}"##)]
     #[case::constraints_connected(r##"{:atoms ["C" "C"] :bonds [] :constraints [{:connected {:atoms [0 1]}}]}"##)]
     #[case::constraints_bond_order_sum(r##"{:atoms ["C" "C" "C"] :bonds [{:id :b1 :a 0 :b 1 :type "1"} {:id :b2 :a 1 :b 2 :type "1"}] :constraints [{:bond-order-sum {:bonds [:b1 :b2] :sum 2}}]}"##)]
@@ -1901,6 +2195,17 @@ mod tests {
         let tree = read_string(source).unwrap();
         let via_tree = MoleculeDsl::from_edn(&tree).unwrap();
         assert_eq!(via_str, via_tree);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stereo_atom(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"##)]
+    #[case::stereo_atom_id_virtual(r##"{:atoms ["C" "F" "Cl" "Br"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"]] :stereo-atoms [{:id :s1 :site 0 :ligands [1 2 [:lp 0] [:h 0]] :type "Th2"}]}"##)]
+    #[case::stereo_bond_id_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :a 1 :b 2 :type "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :type "Ct1"}]}"##)]
+    fn test_molecule_dsl_stereo_edn_roundtrip(#[case] source: &str) {
+        let dsl = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
+        let reparsed = MoleculeDsl::from_edn(&dsl.to_edn()).unwrap();
+        assert_eq!(reparsed, dsl);
     }
 
     #[rustfmt::skip]
