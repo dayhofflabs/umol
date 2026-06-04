@@ -352,16 +352,16 @@ Phases A–E are in scope; F (3D) and G follow.
     - **D2b** — `StereoCosetAst` (`Undetermined | Lit(u32) | Expr`): `AsLit` ✓, `Lattice` ✓,
       constructors ✓; **finish `matches_value()`**. **Done**
     - **D2c** — `StereoConfigurationAst` (`Undetermined | NotStereo | Stereo(StereoCosetAst)`): `AsLit`
-      ✓, `Lattice` ✓, `From<u32>`/`From<Vec<u32>>` ✓ — rename ripple only.
+      ✓, `Lattice` ✓, `From<u32>`/`From<Vec<u32>>` ✓ — rename ripple only. **Done**
     - **D2d** — `StereoAtomAst`/`StereoBondAst` (macro; fields `kind`, `coset`, `constraints`): add
-      **`AsLit`** and **`Lattice`** — per-kind committed-(A): `meet` cross-kind = `None`, `join`
-      `debug_assert!`s equal kinds, `is_ground`/`is_undetermined`/`matches` over the three fields.
+      **`Lattice`** — per-kind committed-(A): `meet` cross-kind = `None`, `join`
+      `debug_assert!`s equal kinds, `is_ground`/`is_undetermined`/`matches` over the three fields. **Done**
     - **D2e** — `StereoAtomConstraint`/`StereoBondConstraint` (`ast/constraint/stereo.rs`): uninhabited
-      today; **trivial `Lattice`** (and the `StereoAtomConstraints`/`StereoBondConstraints` collections).
+      today; **trivial `Lattice`** (and the `StereoAtomConstraints`/`StereoBondConstraints` collections). **Done**
     - **D2f** — DSL `FromAst`/`IntoAst`. `StereoAtomDsl`/`StereoBondDsl` ↔ `StereoAtomAst`/`StereoBondAst`
       (`FromStr`/`Display`/`FromEdn`/`ToEdn` ✓; **add `FromAst`/`IntoAst`**, trivial now — no `NotStereo`
       default, `into_ground` no-op). `StereoAtomConstraintDsl`/`StereoBondConstraintDsl` ↔ the uninhabited
-      AST constraints (`FromEdn`/`ToEdn` ✓; **add `FromAst`/`IntoAst`**).
+      AST constraints (`FromEdn`/`ToEdn` ✓; **add `FromAst`/`IntoAst`**). **Done**
   - **D3** — `:stereo-atoms` / `:stereo-bonds` entry reader/writer: `{ :id? (keyword), :site ref,
     :ligands [ ligand+ ], :type config-string }` ↔ a `StereoAtom`/`StereoBond` (focus + D2 ligands + D1 config
     + kind).

@@ -476,6 +476,58 @@ impl NoncovalentBondDefaults {
 #[derive(Clone, Debug, Default, FromEdn)]
 pub struct NoncovalentBondOverrides {}
 
+/// Lowering/raising default for stereo atoms. Currently empty (no defaultable fields).
+#[derive(Clone, Debug, Default, FromEdn, ToEdn)]
+pub struct StereoAtomDefaults {}
+
+impl StereoAtomDefaults {
+    pub fn new() -> Self {
+        Self {}
+    }
+    
+    pub fn ground() -> Self {
+        Self {}
+    }
+
+    pub fn zeroed() -> Self {
+        Self {}
+    }
+
+    pub fn with_overrides(self, _ov: StereoAtomOverrides) -> Self {
+        self
+    }
+}
+
+/// Sparse overrides on `StereoAtomDefaults`. Currently empty.
+#[derive(Clone, Debug, Default, FromEdn)]
+pub struct StereoAtomOverrides {}
+
+/// Lowering/raising default for stereo bonds. Currently empty (no defaultable fields).
+#[derive(Clone, Debug, Default, FromEdn, ToEdn)]
+pub struct StereoBondDefaults {}
+
+impl StereoBondDefaults {
+    pub fn new() -> Self {
+        Self {}
+    }
+
+    pub fn ground() -> Self {
+        Self {}
+    }
+
+    pub fn zeroed() -> Self {
+        Self {}
+    }
+
+    pub fn with_overrides(self, _ov: StereoBondOverrides) -> Self {
+        self
+    }
+}
+
+/// Sparse overrides on `StereoBondDefaults`. Currently empty.
+#[derive(Clone, Debug, Default, FromEdn)]
+pub struct StereoBondOverrides {}
+
 /// Isotope default
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromEdn, ToEdn)]
 pub enum IsotopeDefault {

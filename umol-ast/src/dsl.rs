@@ -29,7 +29,8 @@ pub use config::{
     AtomOverrides, BondDefaults, BondOverrides, DativeBondDefaults, DativeBondOverrides,
     IsotopeDefault, MoleculeDefaults, MoleculeOverrides, MulticenterBondDefaults,
     MulticenterBondOverrides, MulticenterValenceDefault, MultiplicityDefault,
-    NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, StereoDefault,
+    NoncovalentBondDefaults, NoncovalentBondOverrides, NumericDefault, StereoAtomDefaults,
+    StereoAtomOverrides, StereoBondDefaults, StereoBondOverrides, StereoDefault,
     UnpairedElectronsDefault,
 };
 pub use constraint::{

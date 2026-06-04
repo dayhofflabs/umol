@@ -23,10 +23,7 @@ use crate::ast::constraint::AromaticSystemConstraint;
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
-/// Surface DSL wrapper around `AromaticSystemAst`. Parses and renders the
-/// aromatic-system-string form. The `electrons` field (per-atom contributions)
-/// does not appear in this string; it is serialized at the molecule level.
-/// The `ElectronCount` system-scope constraint round-trips here as `#e<n>`.
+/// Surface DSL wrapper around `AromaticSystemAst`.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AromaticSystemDsl(pub AromaticSystemAst);

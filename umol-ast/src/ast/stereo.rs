@@ -1,26 +1,21 @@
 //! Stereochemistry AST: the configuration value and the operator-expression
 //! tree over it.
 //!
-//! A configuration value is a dense coset index per stereo class — the
-//! OpenSMILES arrangement number of that class's coset space (`umol-perm`).
+//! A configuration value is a dense coset index per stereo kind, corresponds to OpenSMILES
+//! numbering for SP, TB, and OH.
 //! `~` and `^` are group actions on the index; [`StereoConfigurationAst::simplify`]
-//! folds closed operator-expressions against the coset algebra. The class
-//! ([`StereoKind`]) is the interpretation context that the operators consume, so
-//! it is passed to `simplify` rather than carried in the value.
+//! folds closed operator-expressions against the coset algebra.
 
 use std::mem;
 
-use umol_graph_core::{NodeId, ParticipantRefs, RelationParticipant, Remapping};
 use umol_perm::{space, ClassKey, Permutation};
 
 use super::constraint::{
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
 };
-use super::ids::AtomId;
 use super::traits::{AsLit, Lattice};
 
-/// A stereo class: the atom-centered coordination geometries and the bond
-/// cis/trans class, all sharing the configuration machinery.
+/// Stereo kind: the atom-centered coordination geometries and the bond-centered cis/trans kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum StereoKind {
     Tetrahedral,
@@ -31,10 +26,12 @@ pub enum StereoKind {
 }
 
 impl StereoKind {
-    /// The `~` involution for this kind: swap a trans ligand pair — the axial
-    /// pair for trigonal-bipyramidal/octahedral, a diagonal for square-planar.
-    /// Tetrahedral has no trans pair, so it swaps the first two ligands;
-    /// cis/trans swaps the two configurations.
+    /// Kind-specific `~` involution:
+    /// - tetrahedral: swap the first two ligands
+    /// - cis/trans: swap the two configurations
+    /// - square-planar: swap the diagonal ligand pair
+    /// - trigonal-bipyramidal: swap the axial ligand pair
+    /// - octahedral: swap the axial ligand pair
     fn involution(self) -> Permutation {
         match self {
             StereoKind::Tetrahedral => Permutation::from_image(4, &[1, 0, 2, 3]),
@@ -58,8 +55,7 @@ impl StereoKind {
     }
 }
 
-/// A stereo configuration: undetermined (pattern wildcard), explicitly not a
-/// stereocenter, or a stereo index.
+/// Stereo configuration AST.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoConfigurationAst {
     #[default]
@@ -77,9 +73,8 @@ impl StereoConfigurationAst {
         matches!(self, Self::Stereo(_))
     }
 
-    /// Reduce to canonical form under the class context: lift trivial `StereoExpr`
+    /// Reduce to canonical form under the kind context: lift trivial `StereoExpr`
     /// wrappers and fold closed operator-expressions via the coset algebra.
-    /// Free-variable expressions are left as-is.
     pub fn simplify(self, kind: StereoKind) -> Self {
         match self {
             Self::Stereo(index) => Self::Stereo(index.simplify(kind)),
@@ -87,8 +82,7 @@ impl StereoConfigurationAst {
         }
     }
 
-    /// Does this pattern config admit the concrete coset index `value` under
-    /// `kind`? `Undetermined` is a wildcard, `NotStereo` admits nothing.
+    /// Matches literal coset index `value` under `kind`.
     pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
         match self {
             Self::Stereo(v) => v.matches_value(value, kind),
@@ -101,8 +95,6 @@ impl StereoConfigurationAst {
 impl AsLit for StereoConfigurationAst {
     type Lit = u32;
 
-    /// The coset index of a resolved stereocenter. `NotStereo` and
-    /// `Undetermined` (and unfolded expressions) carry no coset index → `None`.
     fn as_lit(&self) -> Option<u32> {
         match self {
             Self::Stereo(index) => index.as_lit(),
@@ -155,8 +147,7 @@ impl Lattice for StereoConfigurationAst {
     }
 }
 
-/// The stereo index: undetermined, a literal coset index, or an
-/// operator-expression over indices.
+/// Dense coset index AST. 1/2 for TH, CT, follows OpenSMILES numbering for SP, TB, OH.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoCosetAst {
     #[default]
@@ -166,12 +157,12 @@ pub enum StereoCosetAst {
 }
 
 impl StereoCosetAst {
-    /// Wrap an operator-expression as an index.
+    /// Wrap operator-expression as coset index.
     pub fn expr(expr: StereoExpr) -> Self {
         Self::Expr(Box::new(expr))
     }
 
-    /// Simplify the inner expression and lift a folded `StereoExpr(Lit)` to `Lit`.
+    /// Simplify the inner expression under `kind`'s coset algebra.
     pub fn simplify(self, kind: StereoKind) -> Self {
         match self {
             Self::Expr(e) => match e.simplify(kind) {
@@ -182,9 +173,7 @@ impl StereoCosetAst {
         }
     }
 
-    /// Does this pattern coset admit the concrete coset index `value` under
-    /// `kind`? `Undetermined` is a wildcard; otherwise the index/expression must
-    /// admit `value`.
+    /// Matches literal coset index `value` under `kind`.
     pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
         match self {
             Self::Undetermined => true,
@@ -242,9 +231,7 @@ impl Lattice for StereoCosetAst {
     }
 }
 
-/// An operator-expression over coset indices: a literal, a bound variable, the
-/// `~` involution, the generic `^` action by a permutation, or a (deferred)
-/// literal set / variable domain.
+/// Operator expression over coset algebra for `kind`. Includes ~ and ^ operators, and literals.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoExpr {
     Lit(u32),
@@ -268,7 +255,7 @@ impl StereoExpr {
 
     /// Recursively simplify, folding closed operator nodes via the coset
     /// algebra: `~~e → e` (involution); `~(Lit k) → Lit(k · involution)`;
-    /// `(Lit k) ^ g → Lit(k · g)`. Free `Var`, `LitSet`, and `VarDomain` are inert.
+    /// `(Lit k) ^ g → Lit(k · g)`.
     pub fn simplify(self, kind: StereoKind) -> Self {
         match self {
             StereoExpr::Lit(_)
@@ -287,11 +274,7 @@ impl StereoExpr {
         }
     }
 
-    /// Does this expression admit the coset index `value` under `kind`? `Var`
-    /// binds anything; `LitSet`/`VarDomain` are set membership; `~`/`^` pull
-    /// `value` back through the kind's involution / `perm`'s inverse — the dual
-    /// of `simplify`'s forward `kind.act` — so the recursion bottoms out on a
-    /// `Lit`, a `Var`, or a set.
+    /// Matches literal coset index `value` under `kind`'s coset algebra.
     pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
         match self {
             StereoExpr::Lit(n) => *n == value,
@@ -337,10 +320,7 @@ impl From<Vec<u32>> for StereoCosetAst {
     }
 }
 
-/// Generates a stereo-element payload. The atom and bond forms are identical
-/// but for their constraint type, so the struct, builders, and `Lattice` impl
-/// are shared; they remain separate types because their per-site constraints
-/// will diverge.
+/// StereoAtomAst and StereoBondAst generator
 macro_rules! stereo_element {
     (
         $(#[doc = $doc:literal])+
@@ -417,17 +397,15 @@ macro_rules! stereo_element {
                 })
             }
 
-            /// Same-site payloads always share a kind, so the kind-mismatch arm
-            /// is a defensive identity rather than a meaningful join.
+            /// Per-kind lattices. Cross-kind join is a precondition violation.
             fn join(&self, other: &Self) -> Self {
-                let coset = if self.kind != other.kind {
-                    StereoCosetAst::Undetermined
-                } else {
-                    self.coset.join(&other.coset)
-                };
+                debug_assert_eq!(
+                    self.kind, other.kind,
+                    "stereo elements join only within a kind"
+                );
                 Self {
                     kind: self.kind,
-                    coset,
+                    coset: self.coset.join(&other.coset),
                     constraints: self.constraints.join(&other.constraints),
                 }
             }
@@ -442,75 +420,13 @@ macro_rules! stereo_element {
 }
 
 stereo_element! {
-    /// An atom-centered stereo element: its geometry class, configuration, and
-    /// per-site constraints. Predicate only — the site atom and ligands live in
-    /// the relation overlay, not here.
+    /// StereoAtomAst with geometry class, configuration, and per-site constraints.
     StereoAtomAst, StereoAtomConstraints, StereoAtomConstraint
 }
 
 stereo_element! {
-    /// A bond-centered stereo element (cis/trans). Predicate only — the site
-    /// bond and ligands live in the relation overlay.
+    /// StereoBondAst with cis/trans configuration and per-site constraints.
     StereoBondAst, StereoBondConstraints, StereoBondConstraint
-}
-
-/// A stereo ligand's kind: a real atom, or one of the virtual ligands that
-/// occupy a coordination position — an implicit hydrogen or a lone pair.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum StereoLigandKind {
-    Atom,
-    ImplicitHydrogen,
-    LonePair,
-}
-
-/// A ligand occupying a coordination position of a stereo site. Stored as the
-/// `NodeId` it is pinned to — the ligand atom for `Atom`, the site atom for the
-/// virtual kinds (so they follow the site through a remap) — plus its kind.
-/// `atom()` exposes the chemistry `AtomId`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct StereoLigand {
-    node: NodeId,
-    kind: StereoLigandKind,
-}
-
-impl StereoLigand {
-    pub fn new(atom: AtomId, kind: StereoLigandKind) -> Self {
-        Self {
-            node: atom.into(),
-            kind,
-        }
-    }
-
-    pub fn atom(self) -> AtomId {
-        self.node.into()
-    }
-
-    pub fn kind(self) -> StereoLigandKind {
-        self.kind
-    }
-}
-
-impl RelationParticipant for StereoLigand {
-    fn remap(self, remapping: &Remapping) -> Option<Self> {
-        Some(Self {
-            node: remapping.map_node(self.node)?,
-            kind: self.kind,
-        })
-    }
-
-    fn unmap(self, remapping: &Remapping) -> Self {
-        Self {
-            node: remapping.unmap_node(self.node),
-            kind: self.kind,
-        }
-    }
-
-    fn refs(self) -> ParticipantRefs {
-        ParticipantRefs {
-            node: Some(self.node),
-            edge: None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -738,8 +654,7 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_ast_new() {
-        let stereo_atom =
-            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined);
+        let stereo_atom = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined);
         assert_eq!(stereo_atom.kind, StereoKind::Tetrahedral);
         assert_eq!(stereo_atom.coset, StereoCosetAst::Undetermined);
         assert_eq!(stereo_atom.constraints, StereoAtomConstraints::new());
@@ -788,6 +703,14 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::same_coset(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))]
+    #[case::distinct_cosets_widen(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::Tetrahedral, 2u32), StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
+    fn test_stereo_atom_ast_join(#[case] a: StereoAtomAst, #[case] b: StereoAtomAst, #[case] expected: StereoAtomAst) {
+        assert_eq!(a.join(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::same_kind_match(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), true)]
     #[case::different_kind(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32), StereoAtomAst::new(StereoKind::SquarePlanar, 1u32), false)]
     fn test_stereo_atom_ast_matches(
@@ -800,8 +723,7 @@ mod tests {
 
     #[rstest]
     fn test_stereo_bond_ast_new() {
-        let stereo_bond =
-            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined);
+        let stereo_bond = StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined);
         assert_eq!(stereo_bond.kind, StereoKind::CisTrans);
         assert_eq!(stereo_bond.coset, StereoCosetAst::Undetermined);
         assert_eq!(stereo_bond.constraints, StereoBondConstraints::new())
@@ -818,55 +740,5 @@ mod tests {
         #[case] expected: Option<StereoBondAst>,
     ) {
         assert_eq!(a.meet(&b), expected);
-    }
-
-    #[rstest]
-    fn test_stereo_ligand_new() {
-        let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
-        assert_eq!(ligand.atom(), AtomId(3));
-        assert_eq!(ligand.kind(), StereoLigandKind::Atom);
-    }
-
-    #[rstest]
-    fn test_stereo_ligand_refs() {
-        let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::LonePair);
-        assert_eq!(
-            ligand.refs(),
-            ParticipantRefs {
-                node: Some(NodeId(2)),
-                edge: None,
-            }
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_ligand_remap() {
-        // node 1 removed ⇒ surviving node 3 densifies to 2; the kind is carried
-        let remapping = Remapping::new(vec![1], Vec::new());
-        let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::ImplicitHydrogen);
-        assert_eq!(
-            ligand.remap(&remapping),
-            Some(StereoLigand::new(
-                AtomId(2),
-                StereoLigandKind::ImplicitHydrogen
-            )),
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_ligand_remap_removed() {
-        let remapping = Remapping::new(vec![3], Vec::new());
-        let ligand = StereoLigand::new(AtomId(3), StereoLigandKind::Atom);
-        assert_eq!(ligand.remap(&remapping), None);
-    }
-
-    #[rstest]
-    fn test_stereo_ligand_unmap() {
-        let remapping = Remapping::new(vec![1], Vec::new());
-        let ligand = StereoLigand::new(AtomId(2), StereoLigandKind::Atom);
-        assert_eq!(
-            ligand.unmap(&remapping),
-            StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-        );
     }
 }

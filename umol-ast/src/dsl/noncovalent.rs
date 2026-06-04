@@ -16,9 +16,7 @@ use super::error::{PResult, ParseError};
 use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use crate::ast::traits::{FromAst, IntoAst};
 
-/// Surface DSL wrapper around `NoncovalentBondAst`. String form is the
-/// noncovalent-kind expression (three-letter literal, set, bind, ref, or `*`).
-/// All `NoncovalentBondConstraint` variants are molecule-scope.
+/// Surface DSL wrapper around `NoncovalentBondAst`.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NoncovalentBondDsl(pub NoncovalentBondAst);
@@ -77,7 +75,7 @@ impl ToEdn for NoncovalentBondDsl {
 impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
 
-    fn from_ast(ast: &NoncovalentBondAst, _cfg: &Self::Ctx) -> Self {
+    fn from_ast(ast: &NoncovalentBondAst, _ctx: &Self::Ctx) -> Self {
         NoncovalentBondDsl(ast.clone())
     }
 }
@@ -85,7 +83,7 @@ impl FromAst<NoncovalentBondAst> for NoncovalentBondDsl {
 impl IntoAst<NoncovalentBondAst> for NoncovalentBondDsl {
     type Ctx = NoncovalentBondDefaults;
 
-    fn into_ast(self, _cfg: &Self::Ctx) -> NoncovalentBondAst {
+    fn into_ast(self, _ctx: &Self::Ctx) -> NoncovalentBondAst {
         self.0
     }
 }

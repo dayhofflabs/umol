@@ -10,6 +10,7 @@ pub(crate) mod edit;
 pub(crate) mod embedding;
 pub(crate) mod error;
 pub(crate) mod ids;
+pub(crate) mod ligand;
 pub(crate) mod matching;
 pub(crate) mod molecule;
 pub(crate) mod multicenter;
@@ -54,6 +55,7 @@ pub use ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
+pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{MoleculeAst, MoleculeBuilder};
@@ -64,8 +66,7 @@ pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use stereo::{
-    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoExpr, StereoCosetAst, StereoKind,
-    StereoLigand, StereoLigandKind,
+    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
 };
 pub use traits::{AsLit, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst};
 pub use value::{ArithOp, Bindings, MemOp, RelOp, ValueAst, ValueExpr};

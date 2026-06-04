@@ -1,4 +1,4 @@
-//! Stereo config-string DSL
+//! Stereo config-string DSL.
 
 use std::borrow::Cow;
 use std::fmt::{self, Display};
@@ -13,9 +13,12 @@ use winnow::Parser;
 
 use super::error::{PResult, ParseError};
 use super::value::{id, terminator};
+use crate::ast::constraint::{StereoAtomConstraint, StereoBondConstraint};
 use crate::ast::stereo::{
     StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
 };
+use crate::ast::traits::{FromAst, IntoAst};
+use crate::dsl::config::{StereoAtomDefaults, StereoBondDefaults};
 
 /// Surface DSL wrapper for `StereoAtomAst`
 #[repr(transparent)]
@@ -105,6 +108,23 @@ fn stereo_atom_keyword_for(ast: &StereoAtomAst) -> Option<&'static str> {
         (StereoKind::Tetrahedral, &StereoCosetAst::Lit(1)) => Some("ccw"),
         (StereoKind::Tetrahedral, &StereoCosetAst::Lit(2)) => Some("cw"),
         _ => None,
+    }
+}
+
+impl FromAst<StereoAtomAst> for StereoAtomDsl {
+    type Ctx = StereoAtomDefaults;
+
+    fn from_ast(ast: &StereoAtomAst, _ctx: &Self::Ctx) -> Self {
+        let ast = ast.clone();
+        StereoAtomDsl(ast.clone())
+    }
+}
+
+impl IntoAst<StereoAtomAst> for StereoAtomDsl {
+    type Ctx = StereoAtomDefaults;
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> StereoAtomAst {
+        self.0
     }
 }
 
@@ -206,6 +226,22 @@ fn stereo_bond_keyword_for(ast: &StereoBondAst) -> Option<&'static str> {
         (StereoKind::CisTrans, &StereoCosetAst::Lit(1)) => Some("z"),
         (StereoKind::CisTrans, &StereoCosetAst::Lit(2)) => Some("e"),
         _ => None,
+    }
+}
+
+impl FromAst<StereoBondAst> for StereoBondDsl {
+    type Ctx = StereoBondDefaults;
+
+    fn from_ast(ast: &StereoBondAst, _ctx: &Self::Ctx) -> Self {
+        StereoBondDsl(ast.clone())
+    }
+}
+
+impl IntoAst<StereoBondAst> for StereoBondDsl {
+    type Ctx = StereoBondDefaults;
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> StereoBondAst {
+        self.0
     }
 }
 
@@ -447,6 +483,22 @@ impl ToEdn for StereoAtomConstraintDsl {
     }
 }
 
+impl FromAst<StereoAtomConstraint> for StereoAtomConstraintDsl {
+    type Ctx = ();
+
+    fn from_ast(ast: &StereoAtomConstraint, _ctx: &Self::Ctx) -> Self {
+        match *ast {}
+    }
+}
+
+impl IntoAst<StereoAtomConstraint> for StereoAtomConstraintDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> StereoAtomConstraint {
+        match self {}
+    }
+}
+
 /// DSL for `StereoBondConstraint`
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StereoBondConstraintDsl {}
@@ -464,6 +516,22 @@ impl<'de> FromEdn<'de> for StereoBondConstraintDsl {
 impl ToEdn for StereoBondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match *self {}
+    }
+}
+
+impl FromAst<StereoBondConstraint> for StereoBondConstraintDsl {
+    type Ctx = ();
+
+    fn from_ast(ast: &StereoBondConstraint, _ctx: &Self::Ctx) -> Self {
+        match *ast {}
+    }
+}
+
+impl IntoAst<StereoBondConstraint> for StereoBondConstraintDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> StereoBondConstraint {
+        match self {}
     }
 }
 
@@ -529,6 +597,13 @@ mod tests {
     #[case::tetrahedral_three_string(StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(3))), "\"Th3\"")]
     fn test_stereo_atom_dsl_to_edn(#[case] form: StereoAtomDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
+    }
+
+    #[rstest]
+    fn test_stereo_atom_dsl_into_ast() {
+        let ast = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined);
+        assert_eq!(StereoAtomDsl(ast.clone()).into_ast(&StereoAtomDefaults::default()), ast);
+        assert_eq!(StereoAtomDsl::from_ast(&ast, &StereoAtomDefaults::default()), StereoAtomDsl(ast));
     }
 
     #[rstest]
