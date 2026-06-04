@@ -109,6 +109,8 @@ mod tests {
             aromatic,
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         let v = EntityStructureValidator;
@@ -142,6 +144,8 @@ mod tests {
             vec![],
             multicenter,
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         let v = EntityStructureValidator;
@@ -171,6 +175,8 @@ mod tests {
             aromatic,
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         let v = EntityStructureValidator;

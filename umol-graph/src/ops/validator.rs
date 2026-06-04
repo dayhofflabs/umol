@@ -162,6 +162,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         )
     }

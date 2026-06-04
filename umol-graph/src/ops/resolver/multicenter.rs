@@ -63,6 +63,8 @@ mod tests {
             vec![],
             vec![(vec![AtomId(0), AtomId(1), AtomId(2)], bond)],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         )
     }

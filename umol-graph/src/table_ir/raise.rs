@@ -118,6 +118,8 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             vec![],
             multicenter_bond,
             noncovalent_bonds,
+            Vec::new(),
+            Vec::new(),
             constraints,
         ))
     }

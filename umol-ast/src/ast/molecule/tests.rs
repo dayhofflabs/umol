@@ -104,6 +104,8 @@ fn test_molecule_ast_builder() {
     MoleculeAst::from_parts(
         vec![ground_atom()],
         vec![], vec![], vec![], vec![], vec![],
+        Vec::new(),
+        Vec::new(),
         constraints_with_molecule(Constraint::Molecule(MoleculeConstraint::ChargeSum {
             atoms: Some(vec![]),
             sum: ValueAst::Undetermined,
@@ -134,6 +136,8 @@ fn test_molecule_ast_neighbors(#[case] atom: AtomId, #[case] expected: Vec<(Atom
         vec![],
         vec![],
         vec![],
+        Vec::new(),
+        Vec::new(),
         Constraints::default(),
     );
     let nbrs: Vec<(AtomId, BondId)> = ast
@@ -155,6 +159,8 @@ fn test_molecule_builder_add_aromatic_system() {
         vec![],
         vec![],
         vec![],
+        Vec::new(),
+        Vec::new(),
         Constraints::default(),
     );
     let mut b = ast.edit();
@@ -204,6 +210,8 @@ fn rich_molecule() -> MoleculeAst {
             AtomId(3),
             NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
+        Vec::new(),
+        Vec::new(),
         Constraints::default(),
     )
 }
@@ -802,6 +810,8 @@ fn test_bond_views_induced_ids() {
         vec![],
         vec![],
         vec![],
+        Vec::new(),
+        Vec::new(),
         Constraints::default(),
     );
     let bonds = ast.bonds().induced_ids(&[AtomId(0), AtomId(1)]);
@@ -853,6 +863,8 @@ fn two_components() -> MoleculeAst {
         vec![],
         vec![],
         vec![],
+        Vec::new(),
+        Vec::new(),
         Constraints::default(),
     )
 }
@@ -1471,6 +1483,8 @@ fn test_molecule_ast_dative_acceptor_slot(
         Vec::new(),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
+        Vec::new(),
         Constraints::new(),
     );
     let view = ast.dative_bond(DativeBondId(0));
@@ -1496,11 +1510,15 @@ fn test_molecule_ast_eq_canonical_across_bond_order() {
         Vec::new(),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
+        Vec::new(),
         Constraints::new(),
     );
     let reverse = MoleculeAst::from_parts(
         atoms_b,
         vec![(AtomId(1), AtomId(0), bond)],
+        Vec::new(),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -1521,12 +1539,16 @@ fn test_molecule_ast_eq_canonical_across_dative_order() {
         Vec::new(),
         Vec::new(),
         Vec::new(),
+        Vec::new(),
+        Vec::new(),
         Constraints::new(),
     );
     let reverse = MoleculeAst::from_parts(
         atoms_b,
         Vec::new(),
         vec![(vec![AtomId(1)], AtomId(0), DativeBondAst::from_order(1))],
+        Vec::new(),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         Vec::new(),
@@ -1986,6 +2008,8 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
             AtomId(1),
             NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
         )],
+        Vec::new(),
+        Vec::new(),
         Constraints::default(),
     );
 
@@ -2078,6 +2102,8 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         vec![],
         vec![],
         vec![],
+        Vec::new(),
+        Vec::new(),
         Constraints::default(),
     );
     pattern.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Box::new(ValueExpr::Lit(-3)));

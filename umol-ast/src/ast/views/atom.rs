@@ -535,6 +535,8 @@ mod tests {
                 AtomId(3),
                 NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         )
     }
@@ -676,6 +678,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         assert_eq!(molecule.atom(atom).donated_pairs(), expected);
@@ -706,6 +710,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         assert_eq!(molecule.atom(atom).accepted_pairs(), expected);
@@ -921,6 +927,8 @@ mod tests {
             vec![],
             multicenter,
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         assert_eq!(molecule.atom(AtomId(0)).multicenter_valence(), expected);
@@ -1059,6 +1067,8 @@ mod tests {
             )],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         )
     }
@@ -1089,6 +1099,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         )
     }
@@ -1120,6 +1132,8 @@ mod tests {
                 MulticenterBondAst::new(vec![ValueAst::Lit(2), ValueAst::Lit(2), ValueAst::Lit(2)]),
             )],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         assert_eq!(

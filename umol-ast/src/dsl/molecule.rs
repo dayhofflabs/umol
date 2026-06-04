@@ -930,6 +930,7 @@ pub(crate) struct MoleculeInput {
 
 /// Atom entry in a parsed molecule map. Mirrors the DSL spec §4 grammar
 /// `atom-entry ::= atom-spec | [ keyword atom-spec ]`.
+/// TODO: Fix pub(crate) visibility markers on the struct fields.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AtomEntryInput {
     pub(crate) id: Option<String>,
@@ -984,6 +985,7 @@ impl MoleculeInput {
     /// Destructive lowering: consumes the input, resolves refs against the
     /// built id scopes, and produces the final `MoleculeAst` with its
     /// `Metadata`. Called from `FromEdn::from_edn` and the streaming path.
+    /// TODO: Fix pub(crate) visibility marker.
     pub(crate) fn into_ast(self) -> Result<(MoleculeAst, Metadata), ParseError> {
         let MoleculeInput {
             atoms: atom_entries,
@@ -1151,6 +1153,8 @@ impl MoleculeInput {
             aromatic_list,
             multicenter_list,
             noncovalent_list,
+            Vec::new(),
+            Vec::new(),
             constraints,
         );
         Ok((ast, metadata))
@@ -1948,6 +1952,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         ast.constraints_mut()
@@ -1979,6 +1985,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         ast.constraints_mut()
@@ -2003,6 +2011,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         ast.constraints_mut()
@@ -2030,6 +2040,8 @@ mod tests {
             vec![],
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
         ast.constraints_mut()

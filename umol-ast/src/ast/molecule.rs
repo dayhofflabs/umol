@@ -7,7 +7,10 @@ use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
 pub use builder::MoleculeBuilder;
-use umol_graph_core::{FixedRelationSet, Graph, NodeId, RelationId, Unordered, VarRelationSet};
+use umol_graph_core::{
+    EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId, Unordered,
+    VarRelationSet,
+};
 
 use super::aromatic::AromaticSystemAst;
 use super::atom::AtomAst;
@@ -18,9 +21,11 @@ use super::embedding::MoleculeEmbedding;
 use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
+use super::ligand::StereoLigand;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
 use super::rings::{RingFamily, RingSet};
+use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::Lattice;
 use super::views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
@@ -56,6 +61,8 @@ pub struct MoleculeAst {
     aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
     multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
     noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
+    stereo_atoms: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>>,
+    stereo_bonds: Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>>,
     constraints: Constraints,
     rings_cache: OnceLock<RingSet>,
 }
@@ -70,6 +77,8 @@ impl Clone for MoleculeAst {
             aromatic_systems: self.aromatic_systems.clone(),
             multicenter_bonds: self.multicenter_bonds.clone(),
             noncovalent_bonds: self.noncovalent_bonds.clone(),
+            stereo_atoms: self.stereo_atoms.clone(),
+            stereo_bonds: self.stereo_bonds.clone(),
             constraints: self.constraints.clone(),
             rings_cache: OnceLock::new(),
         }
@@ -85,6 +94,8 @@ impl PartialEq for MoleculeAst {
             && self.aromatic_systems == other.aromatic_systems
             && self.multicenter_bonds == other.multicenter_bonds
             && self.noncovalent_bonds == other.noncovalent_bonds
+            && self.stereo_atoms == other.stereo_atoms
+            && self.stereo_bonds == other.stereo_bonds
             && self.constraints == other.constraints
     }
 }
@@ -116,6 +127,8 @@ impl MoleculeAst {
             Vec::new(),
             Vec::new(),
             Vec::new(),
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         )
     }
@@ -139,6 +152,8 @@ impl MoleculeAst {
         aromatic: Vec<(Vec<AtomId>, AromaticSystemAst)>,
         multicenter: Vec<(Vec<AtomId>, MulticenterBondAst)>,
         noncovalent: Vec<(AtomId, AtomId, NoncovalentBondAst)>,
+        stereo_atoms: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>,
+        stereo_bonds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>,
         constraints: Constraints,
     ) -> Self {
         let node_count = atoms.len();
@@ -188,6 +203,20 @@ impl MoleculeAst {
                 .collect(),
         );
 
+        let stereo_atoms = FixedVarBirelationSet::new(
+            stereo_atoms
+                .into_iter()
+                .map(|(site, ligands, d)| ([NodeId::from(site)], ligands, d))
+                .collect(),
+        );
+
+        let stereo_bonds = FixedVarBirelationSet::new(
+            stereo_bonds
+                .into_iter()
+                .map(|(site, ligands, d)| ([EdgeId::from(site)], ligands, d))
+                .collect(),
+        );
+
         Self {
             graph,
             atoms: Arc::new(atoms),
@@ -196,6 +225,8 @@ impl MoleculeAst {
             aromatic_systems: Arc::new(aromatic_systems),
             multicenter_bonds: Arc::new(multicenter_bonds),
             noncovalent_bonds: Arc::new(noncovalent_bonds),
+            stereo_atoms: Arc::new(stereo_atoms),
+            stereo_bonds: Arc::new(stereo_bonds),
             constraints,
             rings_cache: OnceLock::new(),
         }
@@ -220,6 +251,9 @@ impl MoleculeAst {
             aromatic_systems,
             multicenter_bonds,
             noncovalent_bonds,
+            // Builder does not thread stereo overlays yet; edit() drops them.
+            stereo_atoms: Arc::new(FixedVarBirelationSet::default()),
+            stereo_bonds: Arc::new(FixedVarBirelationSet::default()),
             constraints,
             rings_cache: OnceLock::new(),
         }

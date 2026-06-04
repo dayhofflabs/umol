@@ -290,7 +290,8 @@ mod tests {
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
             vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
             AromaticSystemAst::new(vec![ValueAst::Lit(1); 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
-            vec![], vec![], Constraints::default()))]
+            vec![], vec![],
+            Vec::new(), Vec::new(), Constraints::default()))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
         assert_eq!(mol!(input), expected);
     }

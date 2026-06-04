@@ -85,6 +85,8 @@ mod tests {
                 AtomId(3),
                 NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond),
             )],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         )
     }

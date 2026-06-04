@@ -203,6 +203,8 @@ mod tests {
             aromatic_systems,
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         )
     }
@@ -285,6 +287,8 @@ mod tests {
             aromatic_systems,
             vec![],
             vec![],
+            Vec::new(),
+            Vec::new(),
             Constraints::default(),
         );
 
