@@ -383,17 +383,18 @@ Phases A–E are in scope; F (3D) and G follow.
       `<ligand>` is a plain `<atom-ref>` (→ `StereoLigandKind::Atom`) or a keyword-headed vector
       `[:h <atom-ref>]` (→ `ImplicitHydrogen`) / `[:lp <atom-ref>]` (→ `LonePair`), the ref being the
       host atom. `StereoAtomEntryInput` / `StereoBondEntryInput`; add to `MoleculeInput` and `Metadata`.
+      **Done**
     - **D3e** — *DSL parse + render.* A `read_stereo_ligand` / `parse_stereo_ligand` dispatching
       `<atom-ref>` vs `[:h <ref>]` / `[:lp <ref>]` → `StereoLigand`; `read_stereo_atom_dsl` (the
       `:type`) + `read_stereo_atom_entry` (the whole entry, streaming) and `parse_stereo_atom_entry`
       (tree), and the bond forms; wire into `parse_molecule_input`; emit both entry kinds (ligands
-      back to ref / `[:h …]` / `[:lp …]`) in `render_molecule_edn`.
+      back to ref / `[:h …]` / `[:lp …]`) in `render_molecule_edn`. **Done**
     - **D3f** — *`MoleculeDsl` raise/lower.* Thread the stereo entries through `FromAst`/`IntoAst` —1
       ref → id resolution in `into_ast`, the ligand list resolved like `:atoms`. Also add the
       **noncovalent bonds**, which are currently missing from `MoleculeDsl`'s `FromAst`/`IntoAst`.
     - **D3g** — *Tests.* EDN↔AST round-trip for both entry kinds (string and `:ccw`/`:z` payloads;
       Atom / `[:h]` / `[:lp]` ligands); ref resolution + unknown-ref errors; the new overlay accessors
-      / predicates / `is_ground` / `simplify_values`.
+      / predicates / `is_ground` / `simplify_values`. **Done**
     - **D3h** — *Builder carry + remap.* `from_arcs` + `MoleculeBuilder::from_parts` + `edit()` gain
       the two stereo Arcs; the builder stores them (shared storage) and round-trips them through
       `build`; `remove()` applies the node/edge remap so stereo refs stay valid after structural edits.

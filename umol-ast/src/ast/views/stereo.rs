@@ -11,8 +11,10 @@ use super::super::molecule::MoleculeAst;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoKind};
 use super::super::traits::Lattice;
 
-type StereoAtomSet = FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>;
-type StereoBondSet = FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>;
+type StereoAtomSet =
+    FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>;
+type StereoBondSet =
+    FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>;
 
 /// Namespace accessor for stereo-atom views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
@@ -35,7 +37,8 @@ impl<'a> StereoAtomViews<'a> {
 
     pub fn iter(&self) -> impl Iterator<Item = StereoAtomView<'a>> {
         let set = self.set;
-        set.relation_ids().map(move |rid| StereoAtomView::new(set, rid))
+        set.relation_ids()
+            .map(move |rid| StereoAtomView::new(set, rid))
     }
 
     pub fn get(&self, id: StereoAtomId) -> StereoAtomView<'a> {

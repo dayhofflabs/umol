@@ -67,6 +67,7 @@ impl NoncovalentBondAst {
 /// the top (wildcard); `Lit(...)` constrains to a specific interaction kind. No
 /// set/bind/ref machinery — sets over noncovalent kinds are not a common
 /// modeling need, and the AST is kept minimal until one arises.
+/// TODO: Compare to stereo kind and decide on harmonized approach.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondKindAst {
     #[default]

@@ -63,8 +63,10 @@ pub struct MoleculeAst {
     aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
     multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
     noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
-    stereo_atoms: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>>,
-    stereo_bonds: Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>>,
+    stereo_atoms:
+        Arc<FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>>,
+    stereo_bonds:
+        Arc<FixedVarBirelationSet<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>>,
     constraints: Constraints,
     rings_cache: OnceLock<RingSet>,
 }

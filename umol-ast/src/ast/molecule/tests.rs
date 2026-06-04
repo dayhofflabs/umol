@@ -20,11 +20,13 @@ use super::super::constraint::{
 use super::super::dative::DativeBondAst;
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId,
 };
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use super::super::rings::{RingFamily, RingSet};
 use super::super::spin::SpinStateAst;
+use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoExpr, StereoKind};
 use super::super::value::{ValueAst, ValueExpr};
 use super::MoleculeAst;
 use crate::{mol, mol_ground};
@@ -112,6 +114,26 @@ fn test_molecule_ast_builder() {
         })),
     ),
     true,
+)]
+#[case::stereo_atom_ground_coset(
+    MoleculeAst::from_parts(
+        vec![ground_atom()],
+        vec![], vec![], vec![], vec![], vec![],
+        vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, 1u32))],
+        Vec::new(),
+        Constraints::new(),
+    ),
+    true,
+)]
+#[case::stereo_atom_undetermined_coset(
+    MoleculeAst::from_parts(
+        vec![ground_atom()],
+        vec![], vec![], vec![], vec![], vec![],
+        vec![(AtomId(0), vec![], StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))],
+        Vec::new(),
+        Constraints::new(),
+    ),
+    false,
 )]
 fn test_molecule_ast_is_ground(#[case] ast: MoleculeAst, #[case] expected: bool) {
     assert_eq!(ast.is_ground(), expected);
@@ -773,6 +795,26 @@ fn test_molecule_ast_has_overlays(#[from(rich_molecule)] ast: MoleculeAst) {
 #[rstest]
 fn test_molecule_ast_has_overlays_empty() {
     assert!(!MoleculeAst::default().has_overlays());
+}
+
+#[rstest]
+fn test_molecule_ast_has_stereo_atoms() {
+    let ast = mol!(
+        r#"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#
+    );
+    assert!(ast.has_stereo_atoms());
+    assert!(!ast.has_stereo_bonds());
+    assert!(ast.has_overlays());
+}
+
+#[rstest]
+fn test_molecule_ast_has_stereo_bonds() {
+    let ast = mol!(
+        r#"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}]}"#
+    );
+    assert!(ast.has_stereo_bonds());
+    assert!(!ast.has_stereo_atoms());
+    assert!(ast.has_overlays());
 }
 
 #[rstest]
@@ -2219,6 +2261,30 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
         }
         c => panic!("expected SubPattern, got {c:?}"),
     }
+}
+
+#[rstest]
+fn test_molecule_ast_simplify_values_reduces_stereo() {
+    let mut ast = MoleculeAst::from_parts(
+        vec![ground_atom()],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![],
+        vec![(
+            AtomId(0),
+            vec![],
+            StereoAtomAst::new(
+                StereoKind::Tetrahedral,
+                StereoCosetAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))))),
+            ),
+        )],
+        Vec::new(),
+        Constraints::default(),
+    );
+    ast.simplify_values();
+    assert_eq!(ast[StereoAtomId(0)].coset, StereoCosetAst::Lit(1));
 }
 
 // endregion: simplify_values

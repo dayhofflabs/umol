@@ -602,8 +602,14 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_dsl_into_ast() {
         let ast = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined);
-        assert_eq!(StereoAtomDsl(ast.clone()).into_ast(&StereoAtomDefaults::default()), ast);
-        assert_eq!(StereoAtomDsl::from_ast(&ast, &StereoAtomDefaults::default()), StereoAtomDsl(ast));
+        assert_eq!(
+            StereoAtomDsl(ast.clone()).into_ast(&StereoAtomDefaults::default()),
+            ast
+        );
+        assert_eq!(
+            StereoAtomDsl::from_ast(&ast, &StereoAtomDefaults::default()),
+            StereoAtomDsl(ast)
+        );
     }
 
     #[rstest]

@@ -429,6 +429,30 @@ stereo_element! {
     StereoBondAst, StereoBondConstraints, StereoBondConstraint
 }
 
+/// Default implementation for StereoAtomAst.
+/// TODO: Revisit the per-kind decision and add undetermined default.
+impl Default for StereoAtomAst {
+    fn default() -> Self {
+        Self {
+            kind: StereoKind::Tetrahedral,
+            coset: StereoCosetAst::Undetermined,
+            constraints: StereoAtomConstraints::new(),
+        }
+    }
+}
+
+/// Default implementation for StereoBondAst.
+/// TODO: Revisit the per-kind decision and add undetermined default.
+impl Default for StereoBondAst {
+    fn default() -> Self {
+        Self {
+            kind: StereoKind::CisTrans,
+            coset: StereoCosetAst::Undetermined,
+            constraints: StereoBondConstraints::new(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;

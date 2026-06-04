@@ -8,10 +8,12 @@ use umol_edn::{FromEdn, ToEdn};
 pub struct MoleculeDefaults {
     pub atom: AtomDefaults,
     pub bond: BondDefaults,
+    pub dative_bond: DativeBondDefaults,
     pub aromatic_system: AromaticSystemDefaults,
     pub multicenter_bond: MulticenterBondDefaults,
-    pub dative_bond: DativeBondDefaults,
     pub noncovalent_bond: NoncovalentBondDefaults,
+    pub stereo_atom: StereoAtomDefaults,
+    pub stereo_bond: StereoBondDefaults,
 }
 
 impl MoleculeDefaults {
@@ -20,10 +22,12 @@ impl MoleculeDefaults {
         Self {
             atom: AtomDefaults::new(),
             bond: BondDefaults::new(),
+            dative_bond: DativeBondDefaults::new(),
             aromatic_system: AromaticSystemDefaults::new(),
             multicenter_bond: MulticenterBondDefaults::new(),
-            dative_bond: DativeBondDefaults::new(),
             noncovalent_bond: NoncovalentBondDefaults::new(),
+            stereo_atom: StereoAtomDefaults::new(),
+            stereo_bond: StereoBondDefaults::new(),
         }
     }
 
@@ -32,10 +36,12 @@ impl MoleculeDefaults {
         Self {
             atom: AtomDefaults::ground(),
             bond: BondDefaults::ground(),
+            dative_bond: DativeBondDefaults::ground(),
             aromatic_system: AromaticSystemDefaults::ground(),
             multicenter_bond: MulticenterBondDefaults::ground(),
-            dative_bond: DativeBondDefaults::ground(),
             noncovalent_bond: NoncovalentBondDefaults::ground(),
+            stereo_atom: StereoAtomDefaults::ground(),
+            stereo_bond: StereoBondDefaults::ground(),
         }
     }
 
@@ -47,10 +53,12 @@ impl MoleculeDefaults {
         Self {
             atom: AtomDefaults::zeroed(),
             bond: BondDefaults::zeroed(),
+            dative_bond: DativeBondDefaults::zeroed(),
             aromatic_system: AromaticSystemDefaults::zeroed(),
             multicenter_bond: MulticenterBondDefaults::zeroed(),
-            dative_bond: DativeBondDefaults::zeroed(),
             noncovalent_bond: NoncovalentBondDefaults::zeroed(),
+            stereo_atom: StereoAtomDefaults::zeroed(),
+            stereo_bond: StereoBondDefaults::zeroed(),
         }
     }
 
@@ -59,10 +67,12 @@ impl MoleculeDefaults {
         Self {
             atom: self.atom.with_overrides(ov.atom),
             bond: self.bond.with_overrides(ov.bond),
+            dative_bond: self.dative_bond.with_overrides(ov.dative_bond),
             aromatic_system: self.aromatic_system.with_overrides(ov.aromatic_system),
             multicenter_bond: self.multicenter_bond.with_overrides(ov.multicenter_bond),
-            dative_bond: self.dative_bond.with_overrides(ov.dative_bond),
             noncovalent_bond: self.noncovalent_bond.with_overrides(ov.noncovalent_bond),
+            stereo_atom: self.stereo_atom.with_overrides(ov.stereo_atom),
+            stereo_bond: self.stereo_bond.with_overrides(ov.stereo_bond),
         }
     }
 }
@@ -82,13 +92,17 @@ pub struct MoleculeOverrides {
     #[edn(default)]
     pub bond: BondOverrides,
     #[edn(default)]
+    pub dative_bond: DativeBondOverrides,
+    #[edn(default)]
     pub aromatic_system: AromaticSystemOverrides,
     #[edn(default)]
     pub multicenter_bond: MulticenterBondOverrides,
     #[edn(default)]
-    pub dative_bond: DativeBondOverrides,
-    #[edn(default)]
     pub noncovalent_bond: NoncovalentBondOverrides,
+    #[edn(default)]
+    pub stereo_atom: StereoAtomOverrides,
+    #[edn(default)]
+    pub stereo_bond: StereoBondOverrides,
 }
 
 /// Lowering/raising defaults for atoms: describe how `AtomAst`
@@ -146,7 +160,7 @@ impl AtomDefaults {
         }
     }
 
-    /// Grounds struct fields and sets all constarints to zero values (for registry entries)
+    /// Grounds struct fields and sets all constraints to zero values (for registry entries)
     pub fn zeroed() -> Self {
         Self {
             isotope: IsotopeDefault::Natural,
@@ -484,7 +498,7 @@ impl StereoAtomDefaults {
     pub fn new() -> Self {
         Self {}
     }
-    
+
     pub fn ground() -> Self {
         Self {}
     }
@@ -610,6 +624,7 @@ mod tests {
                 multiplicity: Some(MultiplicityDefault::Required),
                 ..BondOverrides::default()
             },
+            dative_bond: DativeBondOverrides::default(),
             aromatic_system: AromaticSystemOverrides {
                 charge: Some(NumericDefault::Required),
                 ..AromaticSystemOverrides::default()
@@ -618,8 +633,9 @@ mod tests {
                 charge: Some(NumericDefault::Required),
                 ..MulticenterBondOverrides::default()
             },
-            dative_bond: DativeBondOverrides::default(),
             noncovalent_bond: NoncovalentBondOverrides::default(),
+            stereo_atom: StereoAtomOverrides::default(),
+            stereo_bond: StereoBondOverrides::default(),
         });
         assert_eq!(cfg.atom.isotope, IsotopeDefault::Natural);
         assert_eq!(cfg.atom.charge, NumericDefault::Required);

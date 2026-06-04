@@ -347,7 +347,7 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::stereo::{StereoExpr, StereoCosetAst};
+    use crate::ast::stereo::{StereoCosetAst, StereoExpr};
     use crate::ast::value::ValueExpr;
 
     #[rustfmt::skip]

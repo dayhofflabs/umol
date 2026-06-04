@@ -860,7 +860,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::joint_domain::{JointDomainAst, JointVar};
-    use crate::ast::stereo::{StereoExpr, StereoCosetAst};
+    use crate::ast::stereo::{StereoCosetAst, StereoExpr};
     use crate::ast::value::ValueExpr;
 
     #[rustfmt::skip]
@@ -1129,15 +1129,51 @@ mod tests {
     }
 
     #[rstest]
-    #[case::wildcard_vs_not_aromatic(AromaticValenceAst::Undetermined, AromaticValenceAst::NotAromatic, true)]
-    #[case::wildcard_vs_aromatic_lit(AromaticValenceAst::Undetermined, AromaticValenceAst::aromatic(1), true)]
-    #[case::not_aromatic_vs_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::aromatic(1), false)]
-    #[case::aromatic_vs_not_aromatic(AromaticValenceAst::aromatic(1), AromaticValenceAst::NotAromatic, false)]
-    #[case::not_aromatic_vs_not_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic, true)]
-    #[case::aromatic_lit_match(AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1), true)]
-    #[case::aromatic_lit_mismatch(AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(2), false)]
-    #[case::aromatic_wildcard_inner(AromaticValenceAst::Aromatic(ValueAst::Undetermined), AromaticValenceAst::aromatic(2), true)]
-    #[case::specific_vs_undetermined(AromaticValenceAst::aromatic(1), AromaticValenceAst::Undetermined, false)]
+    #[case::wildcard_vs_not_aromatic(
+        AromaticValenceAst::Undetermined,
+        AromaticValenceAst::NotAromatic,
+        true
+    )]
+    #[case::wildcard_vs_aromatic_lit(
+        AromaticValenceAst::Undetermined,
+        AromaticValenceAst::aromatic(1),
+        true
+    )]
+    #[case::not_aromatic_vs_aromatic(
+        AromaticValenceAst::NotAromatic,
+        AromaticValenceAst::aromatic(1),
+        false
+    )]
+    #[case::aromatic_vs_not_aromatic(
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::NotAromatic,
+        false
+    )]
+    #[case::not_aromatic_vs_not_aromatic(
+        AromaticValenceAst::NotAromatic,
+        AromaticValenceAst::NotAromatic,
+        true
+    )]
+    #[case::aromatic_lit_match(
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::aromatic(1),
+        true
+    )]
+    #[case::aromatic_lit_mismatch(
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::aromatic(2),
+        false
+    )]
+    #[case::aromatic_wildcard_inner(
+        AromaticValenceAst::Aromatic(ValueAst::Undetermined),
+        AromaticValenceAst::aromatic(2),
+        true
+    )]
+    #[case::specific_vs_undetermined(
+        AromaticValenceAst::aromatic(1),
+        AromaticValenceAst::Undetermined,
+        false
+    )]
     fn test_aromatic_valence_ast_matches(
         #[case] pattern: AromaticValenceAst,
         #[case] target: AromaticValenceAst,
