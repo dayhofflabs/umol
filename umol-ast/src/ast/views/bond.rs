@@ -13,7 +13,7 @@ use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
-use super::aromatic_system::AromaticSystemView;
+use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
 
 /// Namespace accessor for bond views on a `MoleculeAst`.

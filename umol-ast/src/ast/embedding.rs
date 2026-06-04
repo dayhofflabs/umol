@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use super::edit::{AtomRef, BondRef, Edit};
 use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use super::molecule::MoleculeAst;
 
@@ -19,6 +20,8 @@ pub struct MoleculeEmbedding<'a> {
     host_aromatic_systems: Vec<AromaticSystemId>,
     host_multicenter_bonds: Vec<MulticenterBondId>,
     host_noncovalent_bonds: Vec<NoncovalentBondId>,
+    host_stereo_atoms: Vec<StereoAtomId>,
+    host_stereo_bonds: Vec<StereoBondId>,
     sub_atoms: HashMap<AtomId, AtomId>,
     ast: &'a MoleculeAst,
 }
@@ -32,6 +35,8 @@ impl<'a> MoleculeEmbedding<'a> {
         host_aromatic_systems: Vec<AromaticSystemId>,
         host_multicenter_bonds: Vec<MulticenterBondId>,
         host_noncovalent_bonds: Vec<NoncovalentBondId>,
+        host_stereo_atoms: Vec<StereoAtomId>,
+        host_stereo_bonds: Vec<StereoBondId>,
         sub_atoms: HashMap<AtomId, AtomId>,
         ast: &'a MoleculeAst,
     ) -> Self {
@@ -42,6 +47,8 @@ impl<'a> MoleculeEmbedding<'a> {
             host_aromatic_systems,
             host_multicenter_bonds,
             host_noncovalent_bonds,
+            host_stereo_atoms,
+            host_stereo_bonds,
             sub_atoms,
             ast,
         }
@@ -101,6 +108,22 @@ impl<'a> MoleculeEmbedding<'a> {
 
     pub fn host_noncovalent_bonds(&self) -> &[NoncovalentBondId] {
         &self.host_noncovalent_bonds
+    }
+
+    pub fn host_stereo_atom(&self, sub: StereoAtomId) -> StereoAtomId {
+        self.host_stereo_atoms[sub.index()]
+    }
+
+    pub fn host_stereo_atoms(&self) -> &[StereoAtomId] {
+        &self.host_stereo_atoms
+    }
+
+    pub fn host_stereo_bond(&self, sub: StereoBondId) -> StereoBondId {
+        self.host_stereo_bonds[sub.index()]
+    }
+
+    pub fn host_stereo_bonds(&self) -> &[StereoBondId] {
+        &self.host_stereo_bonds
     }
 
     /// Materialize the embedded substructure as a standalone `MoleculeAst`.

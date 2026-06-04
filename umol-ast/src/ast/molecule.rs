@@ -20,6 +20,7 @@ use super::dative::DativeBondAst;
 use super::embedding::MoleculeEmbedding;
 use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use super::ligand::StereoLigand;
 use super::multicenter::MulticenterBondAst;
@@ -30,7 +31,8 @@ use super::traits::Lattice;
 use super::views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, GraphView, MulticenterBondView,
-    MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews,
+    MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews, StereoAtomView,
+    StereoAtomViews, StereoBondView, StereoBondViews,
 };
 
 mod builder;
@@ -326,6 +328,22 @@ impl MoleculeAst {
         self.noncovalent_bonds().get(id)
     }
 
+    pub fn stereo_atoms(&self) -> StereoAtomViews<'_> {
+        StereoAtomViews::new(&self.stereo_atoms)
+    }
+
+    pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomView<'_> {
+        self.stereo_atoms().get(id)
+    }
+
+    pub fn stereo_bonds(&self) -> StereoBondViews<'_> {
+        StereoBondViews::new(self, &self.stereo_bonds)
+    }
+
+    pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondView<'_> {
+        self.stereo_bonds().get(id)
+    }
+
     pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeEmbedding<'_> {
         let mut host_atoms: Vec<AtomId> = Vec::with_capacity(atoms.len());
         let mut sub_atoms: HashMap<AtomId, AtomId> = HashMap::with_capacity(atoms.len());
@@ -373,6 +391,18 @@ impl MoleculeAst {
             })
             .map(|v| v.id)
             .collect();
+        let host_stereo_atoms: Vec<StereoAtomId> = self
+            .stereo_atoms()
+            .iter()
+            .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
+            .map(|v| v.id)
+            .collect();
+        let host_stereo_bonds: Vec<StereoBondId> = self
+            .stereo_bonds()
+            .iter()
+            .filter(|v| v.atom_ids().all(|a| atom_set.contains(&a)))
+            .map(|v| v.id)
+            .collect();
 
         MoleculeEmbedding::new(
             host_atoms,
@@ -381,6 +411,8 @@ impl MoleculeAst {
             host_aromatic_systems,
             host_multicenter_bonds,
             host_noncovalent_bonds,
+            host_stereo_atoms,
+            host_stereo_bonds,
             sub_atoms,
             self,
         )
@@ -405,6 +437,14 @@ impl MoleculeAst {
                 .noncovalent_bonds
                 .relation_ids()
                 .all(|id| self.noncovalent_bonds.data(id).is_ground())
+            && self
+                .stereo_atoms
+                .relation_ids()
+                .all(|id| self.stereo_atoms.data(id).is_ground())
+            && self
+                .stereo_bonds
+                .relation_ids()
+                .all(|id| self.stereo_bonds.data(id).is_ground())
     }
 
     /// Canonical ring set: Vismara relevant cycles up to max ring size 22,
@@ -477,6 +517,22 @@ impl MoleculeAst {
         Arc::make_mut(&mut self.noncovalent_bonds).data_iter_mut()
     }
 
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> &mut StereoAtomAst {
+        Arc::make_mut(&mut self.stereo_atoms).data_mut(RelationId::from(id))
+    }
+
+    pub fn stereo_atoms_mut(&mut self) -> impl Iterator<Item = &mut StereoAtomAst> {
+        Arc::make_mut(&mut self.stereo_atoms).data_iter_mut()
+    }
+
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> &mut StereoBondAst {
+        Arc::make_mut(&mut self.stereo_bonds).data_mut(RelationId::from(id))
+    }
+
+    pub fn stereo_bonds_mut(&mut self) -> impl Iterator<Item = &mut StereoBondAst> {
+        Arc::make_mut(&mut self.stereo_bonds).data_iter_mut()
+    }
+
     pub fn constraints(&self) -> &Constraints {
         &self.constraints
     }
@@ -511,18 +567,28 @@ impl MoleculeAst {
         self.noncovalent_bonds.relation_count() > 0
     }
 
+    pub fn has_stereo_atoms(&self) -> bool {
+        self.stereo_atoms.relation_count() > 0
+    }
+
+    pub fn has_stereo_bonds(&self) -> bool {
+        self.stereo_bonds.relation_count() > 0
+    }
+
     /// True if any overlay (dative bond, aromatic system, multicenter bond,
-    /// noncovalent bond) is non-empty.
+    /// noncovalent bond, stereo atom, stereo bond) is non-empty.
     pub fn has_overlays(&self) -> bool {
         self.has_dative_bonds()
             || self.has_aromatic_systems()
             || self.has_multicenter_bonds()
             || self.has_noncovalent_bonds()
+            || self.has_stereo_atoms()
+            || self.has_stereo_bonds()
     }
 
     /// Recursively reduce every contained `ValueAst` to canonical form
     /// via [`ValueAst::simplify`]. Walks every entity (atoms, bonds,
-    /// dative/aromatic/multicenter/noncovalent), each entity's inline
+    /// dative/aromatic/multicenter/noncovalent/stereo), each entity's inline
     /// constraint store, and the molecule-scope `Constraints` tree —
     /// including `SubPattern` patterns recursively. Entity counts and
     /// topology are unchanged.
@@ -545,12 +611,19 @@ impl MoleculeAst {
         for nc in self.noncovalent_bonds_mut() {
             nc.simplify_values();
         }
+        for sa in self.stereo_atoms_mut() {
+            sa.simplify_values();
+        }
+        for sb in self.stereo_bonds_mut() {
+            sb.simplify_values();
+        }
         self.constraints.simplify_each();
     }
 
     /// Drain every entity's inline `constraints` store into `self.constraints`
     /// as `Constraint::Atom` / `Bond` / `DativeBond` / `AromaticSystem` /
-    /// `MulticenterBond` / `NoncovalentBond` entries. The order of inserted
+    /// `MulticenterBond` / `NoncovalentBond` / `StereoAtom` / `StereoBond`
+    /// entries. The order of inserted
     /// entries in `self.constraints` is unspecified.
     pub fn lift_constraints(&mut self) {
         let atom_count = self.atoms().count();
@@ -559,6 +632,8 @@ impl MoleculeAst {
         let aromatic_count = self.aromatic_systems().count();
         let multicenter_count = self.multicenter_bonds().count();
         let noncovalent_count = self.noncovalent_bonds().count();
+        let stereo_atom_count = self.stereo_atoms().count();
+        let stereo_bond_count = self.stereo_bonds().count();
 
         let mut additions: Vec<Constraint> = Vec::new();
         for i in 0..atom_count {
@@ -597,6 +672,18 @@ impl MoleculeAst {
                 additions.push(Constraint::NoncovalentBond(id, c));
             }
         }
+        for i in 0..stereo_atom_count {
+            let id = StereoAtomId::from(i);
+            for c in self.stereo_atom_mut(id).constraints.take() {
+                additions.push(Constraint::StereoAtom(id, c));
+            }
+        }
+        for i in 0..stereo_bond_count {
+            let id = StereoBondId::from(i);
+            for c in self.stereo_bond_mut(id).constraints.take() {
+                additions.push(Constraint::StereoBond(id, c));
+            }
+        }
         for c in additions {
             self.constraints.push(c);
         }
@@ -610,7 +697,7 @@ impl MoleculeAst {
     ///
     /// The `Constraint` arm is exhaustively matched: adding a new variant
     /// or making any uninhabited entity-leaf inner enum (aromatic,
-    /// multicenter, noncovalent) inhabited is a compile-time forcing
+    /// multicenter, noncovalent, stereo) inhabited is a compile-time forcing
     /// function on this method.
     pub fn inline_constraints(&mut self) {
         let entries = self.constraints.take();
@@ -633,6 +720,8 @@ impl MoleculeAst {
                     self.multicenter_bond_mut(id).constraints.add(inner);
                 }
                 Constraint::NoncovalentBond(_, inner) => match inner {},
+                Constraint::StereoAtom(_, inner) => match inner {},
+                Constraint::StereoBond(_, inner) => match inner {},
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)
                 | Constraint::And(_)
@@ -698,6 +787,20 @@ impl Index<NoncovalentBondId> for MoleculeAst {
     type Output = NoncovalentBondAst;
     fn index(&self, id: NoncovalentBondId) -> &NoncovalentBondAst {
         self.noncovalent_bonds.data(RelationId::from(id))
+    }
+}
+
+impl Index<StereoAtomId> for MoleculeAst {
+    type Output = StereoAtomAst;
+    fn index(&self, id: StereoAtomId) -> &StereoAtomAst {
+        self.stereo_atoms.data(RelationId::from(id))
+    }
+}
+
+impl Index<StereoBondId> for MoleculeAst {
+    type Output = StereoBondAst;
+    fn index(&self, id: StereoBondId) -> &StereoBondAst {
+        self.stereo_bonds.data(RelationId::from(id))
     }
 }
 

@@ -5,31 +5,33 @@
 //! types group per-relation accessors (`count`, `ids`, `iter`, `get`,
 //! and `Index`) without burying them on `MoleculeAst` itself.
 
-mod aromatic_system;
+mod aromatic;
 mod atom;
 mod bond;
-mod dative_bond;
+mod dative;
 mod graph;
-mod multicenter_bond;
+mod multicenter;
 mod neighbor;
-mod noncovalent_bond;
+mod noncovalent;
+mod stereo;
 
-pub use aromatic_system::{
+pub use aromatic::{
     AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AromaticSystemView,
     AromaticSystemViews,
 };
 pub use atom::{AtomBuilderView, AtomBuilderViewMut, AtomView, AtomViewMut, AtomViews};
 pub use bond::{BondBuilderView, BondBuilderViewMut, BondView, BondViewMut, BondViews};
-pub use dative_bond::{
+pub use dative::{
     DativeBondBuilderView, DativeBondBuilderViewMut, DativeBondView, DativeBondViews,
 };
 pub use graph::GraphView;
-pub use multicenter_bond::{
+pub use multicenter::{
     MulticenterBondBuilderView, MulticenterBondBuilderViewMut, MulticenterBondView,
     MulticenterBondViews,
 };
 pub use neighbor::NeighborView;
-pub use noncovalent_bond::{
+pub use noncovalent::{
     NoncovalentBondBuilderView, NoncovalentBondBuilderViewMut, NoncovalentBondView,
     NoncovalentBondViews,
 };
+pub use stereo::{StereoAtomView, StereoAtomViews, StereoBondView, StereoBondViews};

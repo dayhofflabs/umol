@@ -370,13 +370,13 @@ Phases A–E are in scope; F (3D) and G follow.
       (fixed arity-1 site → ordered ligands; payload the D2 element). Build them in `from_parts`
       (inputs `Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>` / `Vec<(BondId, Vec<StereoLigand>,
       StereoBondAst)>`), plus `Clone` / `PartialEq` / derived `Default`. `from_arcs` defaults the two
-      overlays to empty for now; the builder / `edit()` carry is split into D3h+.
+      overlays to empty for now; the builder / `edit()` carry is split into D3h+. **Done**
     - **D3b** — *AST accessors + indexing.* Immutable and mutable accessors per relation;
       `Index<StereoAtomId>` / `Index<StereoBondId>` for `MoleculeAst`; include both relations in the
-      subgraph definition.
+      subgraph definition. **Done**
     - **D3c** — *AST predicates + transforms.* `has_stereo_atoms()` / `has_stereo_bonds()` (folded into
       `has_overlays()`); extend `is_ground`, `simplify_values()`, `lift_constraints()`, and
-      `inline_constraints()` over the two relations.
+      `inline_constraints()` over the two relations. **Done**
     - **D3d** — *DSL entry grammar + inputs.* Entry map `{ [:id <keyword>] :site <ref> :ligands
       [<ligand> …] :type <element-dsl> }` under the `:stereo-atoms` / `:stereo-bonds` keys. `:site` =
       atom-ref (atoms) or bond-ref (bonds); `:type` = the D1/D4 element string or keyword. Each
@@ -388,7 +388,7 @@ Phases A–E are in scope; F (3D) and G follow.
       `:type`) + `read_stereo_atom_entry` (the whole entry, streaming) and `parse_stereo_atom_entry`
       (tree), and the bond forms; wire into `parse_molecule_input`; emit both entry kinds (ligands
       back to ref / `[:h …]` / `[:lp …]`) in `render_molecule_edn`.
-    - **D3f** — *`MoleculeDsl` raise/lower.* Thread the stereo entries through `FromAst`/`IntoAst` —
+    - **D3f** — *`MoleculeDsl` raise/lower.* Thread the stereo entries through `FromAst`/`IntoAst` —1
       ref → id resolution in `into_ast`, the ligand list resolved like `:atoms`. Also add the
       **noncovalent bonds**, which are currently missing from `MoleculeDsl`'s `FromAst`/`IntoAst`.
     - **D3g** — *Tests.* EDN↔AST round-trip for both entry kinds (string and `:ccw`/`:z` payloads;
@@ -397,11 +397,25 @@ Phases A–E are in scope; F (3D) and G follow.
     - **D3h** — *Builder carry + remap.* `from_arcs` + `MoleculeBuilder::from_parts` + `edit()` gain
       the two stereo Arcs; the builder stores them (shared storage) and round-trips them through
       `build`; `remove()` applies the node/edge remap so stereo refs stay valid after structural edits.
+      Add StereoAtomRef and StereoBondRef to edit.rs.
     - **D3i** — *Builder undo.* Capture removed stereo relations in `IdRemapping` / `RemovedOverlays`
       + `restore_stereo_*`, so structural-edit + undo is correct.
     - **D3j** — *Builder full mirror.* `FixedVarSetStorage` enum, builder `add_/remove_stereo_*`
       mutators, `BuilderView` / `BuilderViewMut`, `Added*` / `Removed*` edit types — full
       noncovalent-parity surface.
+    - **D3k** - Verify the stereo entities are correctly included in the SubpatternAnchor and remapping
+      data structs / APIs.
+    - **D3l** — *Review `StereoAtomView` / `StereoBondView` relational accessors.* Audit the two view
+      APIs for the relational accessors consumers need — resolving the site to an `AtomView` /
+      `BondView`, ligand atoms to `AtomView`s, ligand-by-kind access, incidence queries — and add the
+      ones the render / `FromAst` path and downstream code actually use.
+    - **D3m** — *Review relational constraints for stereo.* `RelationalConstraint`
+      (`ast/constraint/relational.rs`) and its surface `RelationalConstraintDsl` (`dsl/relational.rs`)
+      are DAMN-only (dative / aromatic / multicenter / noncovalent). Decide which stereo variants to
+      add — site identity (`StereoAtomSite` → atom, `StereoBondSite` → bond), ligand-set membership /
+      equality (`StereoAtom{Contains,Ligands}`, bond analogs), and ligand role predicates
+      (`…AllLigands` / `…AnyLigand` delegating an `AtomConstraint`) — plus the `:<entity>-<role>` EDN
+      keys in `RELATIONAL_KEYS`, `from_ast` / `into_ast`, and `simplify` / `remap`.
   - **D4** — sugar `:ccw`/`:cw`/`:e`/`:z` (each carries its class — `Th1`/`Th2`/`Ct1`/`Ct2`) ↔ the `:type` head.
     **Done**
   - **D5** — `#T`/`#C` atom/bond-string surface: the derived-predicate tokens in the existing atom/bond
@@ -413,7 +427,8 @@ Phases A–E are in scope; F (3D) and G follow.
      stereo_bond_zeroed! in `macros.rs`.
   - **D8** - update specifications in umol-dsl-spec.md
   - **D9** - add to prop test and fuzzing
-  - **D10** - fix pub(crate) visibility markers on MoleculeInput::into_ast(), *EntryInput struct fields.
+  - **D10** - fix pub(crate) visibility markers on MoleculeInput::into_ast(), *EntryInput struct fields. Review
+     field naming in *EntryInput fields.
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
   substructure matcher is reused, and `umol-perm` enters exactly once, at the frame alignment).

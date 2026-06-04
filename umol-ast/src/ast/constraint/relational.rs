@@ -1,7 +1,6 @@
 //! Cross-entity relational constraints.
 //!
-//! A `RelationalConstraint` relates one DAMN entity (dative bond, aromatic
-//! system, multicenter bond, noncovalent bond) to one or more other entities
+//! A `RelationalConstraint` relates one entity kind to one or more other entity kinds
 //! by reference. Every variant carries at least two indices (the outer entity
 //! plus one or more inner atom/bond refs) or one index plus a delegated
 //! predicate over a role slot.
@@ -9,7 +8,7 @@
 //! Relational constraints live **only** at molecule scope — as entries in
 //! `MoleculeAst::constraints` (via `Constraint::Relational(...)`) or inside
 //! `And`/`Or`/`Not` combinators. They cannot be inline on the entity AST:
-//! the per-entity `XxxConstraints` containers are narrowed to value-only
+//! the per-entity constraint containers are narrowed to value-only
 //! variants so ref-bearing constraints are unrepresentable inline.
 //!
 //! Two sub-patterns share the enum:

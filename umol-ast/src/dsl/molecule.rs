@@ -27,12 +27,13 @@ use super::bond::{expand_bond_keyword, BondDsl};
 use super::config::MoleculeDefaults;
 use super::constraint::{
     eof_err, missing, read_atom_ref, read_constraints_dsl, read_map, read_vec,
-    unexpected_byte_kind, AtomRef, ConstraintDsl, ConstraintsDsl, EntityCounts,
+    unexpected_byte_kind, AtomRef, BondRef, ConstraintDsl, ConstraintsDsl, EntityCounts,
 };
 use super::dative::DativeBondDsl;
 use super::error::ParseError;
 use super::multicenter::MulticenterBondDsl;
 use super::noncovalent::NoncovalentBondDsl;
+use super::stereo::{StereoAtomDsl, StereoBondDsl};
 use super::value::ValueDsl;
 use crate::ast::aromatic::AromaticSystemAst;
 use crate::ast::atom::AtomAst;
@@ -40,7 +41,9 @@ use crate::ast::bond::BondAst;
 use crate::ast::dative::DativeBondAst;
 use crate::ast::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
+use crate::ast::ligand::StereoLigandKind;
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::multicenter::MulticenterBondAst;
 use crate::ast::noncovalent::NoncovalentBondAst;
@@ -60,6 +63,8 @@ pub struct Metadata {
     aromatic_system_ids: IndexMap<AromaticSystemId, String>,
     multicenter_bond_ids: IndexMap<MulticenterBondId, String>,
     noncovalent_bond_ids: IndexMap<NoncovalentBondId, String>,
+    stereo_atom_ids: IndexMap<StereoAtomId, String>,
+    stereo_bond_ids: IndexMap<StereoBondId, String>,
 }
 
 impl Metadata {
@@ -89,6 +94,14 @@ impl Metadata {
 
     pub fn noncovalent_bond_id(&self, idx: NoncovalentBondId) -> Option<&str> {
         self.noncovalent_bond_ids.get(&idx).map(String::as_str)
+    }
+
+    pub fn stereo_atom_id(&self, idx: StereoAtomId) -> Option<&str> {
+        self.stereo_atom_ids.get(&idx).map(String::as_str)
+    }
+
+    pub fn stereo_bond_id(&self, idx: StereoBondId) -> Option<&str> {
+        self.stereo_bond_ids.get(&idx).map(String::as_str)
     }
 
     /// Name of the alias bound to this atom DSL, if any.
@@ -138,6 +151,14 @@ impl Metadata {
         self.noncovalent_bond_ids.insert(idx, name.into());
     }
 
+    pub fn set_stereo_atom_id(&mut self, idx: StereoAtomId, name: impl Into<String>) {
+        self.stereo_atom_ids.insert(idx, name.into());
+    }
+
+    pub fn set_stereo_bond_id(&mut self, idx: StereoBondId, name: impl Into<String>) {
+        self.stereo_bond_ids.insert(idx, name.into());
+    }
+
     /// Insert an atom alias. Last-wins on either side of the bijection: a
     /// duplicate name displaces its prior atom-dsl mapping, and a duplicate
     /// atom-dsl displaces its prior name. Callers that need collision
@@ -185,6 +206,16 @@ impl Metadata {
         name: impl Into<String>,
     ) -> Self {
         self.set_noncovalent_bond_id(idx, name);
+        self
+    }
+
+    pub fn with_stereo_atom_id(mut self, idx: StereoAtomId, name: impl Into<String>) -> Self {
+        self.set_stereo_atom_id(idx, name);
+        self
+    }
+
+    pub fn with_stereo_bond_id(mut self, idx: StereoBondId, name: impl Into<String>) -> Self {
+        self.set_stereo_bond_id(idx, name);
         self
     }
 
@@ -924,6 +955,8 @@ pub(crate) struct MoleculeInput {
     pub(crate) aromatic_systems: Vec<AromaticSystemEntryInput>,
     pub(crate) multicenter_bonds: Vec<MulticenterBondEntryInput>,
     pub(crate) noncovalent_bonds: Vec<NoncovalentBondEntryInput>,
+    pub(crate) stereo_atoms: Vec<StereoAtomEntryInput>,
+    pub(crate) stereo_bonds: Vec<StereoBondEntryInput>,
     pub(crate) atom_aliases: Vec<(String, Box<AtomDsl>)>,
     pub(crate) constraints: Vec<ConstraintDsl>,
 }
@@ -981,6 +1014,31 @@ pub(crate) struct NoncovalentBondEntryInput {
     pub(crate) bond: NoncovalentBondDsl,
 }
 
+/// One ligand of a stereo element: an atom ref tagged with its kind
+/// (`Atom` for a plain `<atom-ref>`, `ImplicitHydrogen` for `[:h <ref>]`,
+/// `LonePair` for `[:lp <ref>]`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StereoLigandInput {
+    pub(crate) kind: StereoLigandKind,
+    pub(crate) atom: AtomRef,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StereoAtomEntryInput {
+    pub(crate) id: Option<String>,
+    pub(crate) site: AtomRef,
+    pub(crate) ligands: Vec<StereoLigandInput>,
+    pub(crate) stereo: StereoAtomDsl,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct StereoBondEntryInput {
+    pub(crate) id: Option<String>,
+    pub(crate) site: BondRef,
+    pub(crate) ligands: Vec<StereoLigandInput>,
+    pub(crate) stereo: StereoBondDsl,
+}
+
 impl MoleculeInput {
     /// Destructive lowering: consumes the input, resolves refs against the
     /// built id scopes, and produces the final `MoleculeAst` with its
@@ -994,6 +1052,8 @@ impl MoleculeInput {
             aromatic_systems: aromatic_entries,
             multicenter_bonds: multicenter_entries,
             noncovalent_bonds: noncovalent_entries,
+            stereo_atoms: _,
+            stereo_bonds: _,
             atom_aliases: alias_entries,
             constraints: constraint_dsls,
         } = self;

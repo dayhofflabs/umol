@@ -8,6 +8,7 @@ use std::vec::IntoIter;
 use super::super::edit::{ConstraintUpdate, DroppedConstraint, RewrittenConstraint};
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use super::super::molecule::MoleculeAst;
 use super::super::remap::IdRemapping;
@@ -21,6 +22,7 @@ use super::dative::DativeBondConstraint;
 use super::multicenter::MulticenterBondConstraint;
 use super::noncovalent::NoncovalentBondConstraint;
 use super::relational::RelationalConstraint;
+use super::stereo::{StereoAtomConstraint, StereoBondConstraint};
 
 /// Tree node type: per-entity leaf, molecule-scope leaf, relational leaf, or
 /// combinator. The bare entity-leaf forms appear only inside a combinator
@@ -38,6 +40,8 @@ pub enum Constraint {
     AromaticSystem(AromaticSystemId, AromaticSystemConstraint),
     MulticenterBond(MulticenterBondId, MulticenterBondConstraint),
     NoncovalentBond(NoncovalentBondId, NoncovalentBondConstraint),
+    StereoAtom(StereoAtomId, StereoAtomConstraint),
+    StereoBond(StereoBondId, StereoBondConstraint),
     Relational(RelationalConstraint),
     Molecule(MoleculeConstraint),
     And(Vec<Constraint>),
@@ -51,8 +55,8 @@ impl Constraint {
     /// leaves delegate to `MoleculeConstraint::is_vacuous`. Combinators
     /// (`And`/`Or`) are vacuous only when empty; `Not(c)` is treated as
     /// non-vacuous (negating a vacuous claim is a meaningful unsat claim).
-    /// `Relational` and `NoncovalentBond` are always non-vacuous (no
-    /// `Undetermined` payload to elide).
+    /// `Relational`, `NoncovalentBond`, and the stereo leaves are always
+    /// non-vacuous (no `Undetermined` payload to elide).
     pub fn is_vacuous(&self) -> bool {
         match self {
             Self::Atom(_, c) => c.is_undetermined(),
@@ -61,6 +65,8 @@ impl Constraint {
             Self::AromaticSystem(_, c) => c.is_undetermined(),
             Self::MulticenterBond(_, c) => c.is_undetermined(),
             Self::NoncovalentBond(_, _) => false,
+            Self::StereoAtom(_, _) => false,
+            Self::StereoBond(_, _) => false,
             Self::Relational(_) => false,
             Self::Molecule(c) => c.is_vacuous(),
             Self::And(xs) | Self::Or(xs) => xs.is_empty(),
@@ -79,6 +85,8 @@ impl Constraint {
             Constraint::AromaticSystem(idx, c) => Constraint::AromaticSystem(idx, c.simplify()),
             Constraint::MulticenterBond(idx, c) => Constraint::MulticenterBond(idx, c.simplify()),
             Constraint::NoncovalentBond(_, c) => match c {},
+            Constraint::StereoAtom(_, c) => match c {},
+            Constraint::StereoBond(_, c) => match c {},
             Constraint::Relational(r) => Constraint::Relational(r.simplify()),
             Constraint::Molecule(m) => Constraint::Molecule(m.simplify()),
             Constraint::And(xs) => Constraint::And(xs.into_iter().map(|c| c.simplify()).collect()),
@@ -107,6 +115,8 @@ impl Constraint {
                 let i = remap.noncovalent_bond(idx)?;
                 c.remap(remap).map(|c| Constraint::NoncovalentBond(i, c))
             }
+            Constraint::StereoAtom(_, c) => match c {},
+            Constraint::StereoBond(_, c) => match c {},
             Constraint::Relational(r) => r.remap(remap).map(Constraint::Relational),
             Constraint::Molecule(m) => m.remap(remap).map(Constraint::Molecule),
             Constraint::And(xs) => xs

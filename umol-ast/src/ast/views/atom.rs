@@ -15,11 +15,11 @@ use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
-use super::aromatic_system::AromaticSystemView;
-use super::dative_bond::DativeBondView;
-use super::multicenter_bond::MulticenterBondView;
+use super::aromatic::AromaticSystemView;
+use super::dative::DativeBondView;
+use super::multicenter::MulticenterBondView;
 use super::neighbor::NeighborView;
-use super::noncovalent_bond::NoncovalentBondView;
+use super::noncovalent::NoncovalentBondView;
 use crate::ast::{AromaticValenceAst, AsLit, AtomConstraint, MulticenterValenceAst};
 
 /// Namespace accessor for atom views on a `MoleculeAst`. Provides `count`,

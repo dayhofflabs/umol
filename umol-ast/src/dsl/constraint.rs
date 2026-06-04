@@ -1695,6 +1695,8 @@ impl ConstraintDsl {
                 MulticenterBondConstraintDsl::from_ast(c),
             ),
             Constraint::NoncovalentBond(_, c) => match *c {},
+            Constraint::StereoAtom(_, c) => match *c {},
+            Constraint::StereoBond(_, c) => match *c {},
             Constraint::Relational(rel) => {
                 Self::Relational(RelationalConstraintDsl::from_ast(rel, meta))
             }
