@@ -277,7 +277,7 @@ fn test_molecule_ast_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
 fn test_molecule_ast_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) {
     let dv = ast.dative_bond(DativeBondId(0));
     assert_eq!(dv.id, DativeBondId(0));
-    assert_eq!(dv.acceptor_id, AtomId(3));
+    assert_eq!(dv.acceptor_id(), AtomId(3));
     assert_eq!(dv.donor_ids().collect::<Vec<_>>(), vec![AtomId(2)]);
     assert_eq!(
         dv.atom_ids().collect::<Vec<_>>(),
@@ -291,7 +291,7 @@ fn test_molecule_ast_dative_bonds(#[from(rich_molecule)] ast: MoleculeAst) {
     let projected: Vec<(DativeBondId, Vec<AtomId>, AtomId)> = ast
         .dative_bonds()
         .iter()
-        .map(|v| (v.id, v.donor_ids().collect(), v.acceptor_id))
+        .map(|v| (v.id, v.donor_ids().collect(), v.acceptor_id()))
         .collect();
     assert_eq!(
         projected,
@@ -1146,7 +1146,7 @@ fn test_molecule_ast_induced_subgraph_preserves_dative(#[from(rich_molecule)] as
     assert_eq!(sub.host_dative_bonds(), &[DativeBondId(0)]);
     let extracted = sub.extract();
     let dv = extracted.dative_bond(DativeBondId(0));
-    assert_eq!(dv.acceptor_id, AtomId(1));
+    assert_eq!(dv.acceptor_id(), AtomId(1));
     assert_eq!(dv.donor_ids().collect::<Vec<_>>(), vec![AtomId(0)]);
     assert_eq!(dv.ast.order, ValueAst::Lit(1));
 }
@@ -1270,7 +1270,7 @@ fn test_molecule_builder_add_dative_bond(#[from(rich_molecule)] ast: MoleculeAst
     let result = b.build();
     assert_eq!(id, DativeBondId(1));
     let view = result.dative_bond(id);
-    assert_eq!(view.acceptor_id, AtomId(0));
+    assert_eq!(view.acceptor_id(), AtomId(0));
     assert_eq!(view.donor_ids().collect::<Vec<_>>(), vec![AtomId(1)]);
     // Participants are sorted by NodeId; acceptor=0 lands at slot 0.
     assert_eq!(view.ast.acceptor_slot, 0);
@@ -1530,7 +1530,7 @@ fn test_molecule_ast_dative_acceptor_slot(
         Constraints::new(),
     );
     let view = ast.dative_bond(DativeBondId(0));
-    assert_eq!(view.acceptor_id, acceptor);
+    assert_eq!(view.acceptor_id(), acceptor);
     assert_eq!(view.donor_ids().collect::<Vec<_>>(), vec![donor]);
     assert_eq!(view.ast.acceptor_slot, expected_slot);
 }

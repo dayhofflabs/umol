@@ -961,7 +961,7 @@ fn render_dative(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
             m.insert(Edn::keyword("donor"), donor_edn);
             m.insert(
                 Edn::keyword("acceptor"),
-                render_atom_ref(view.acceptor_id, meta),
+                render_atom_ref(view.acceptor_id(), meta),
             );
             m.insert(
                 Edn::keyword("type"),

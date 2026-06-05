@@ -29,11 +29,11 @@ impl<'a> BondViews<'a> {
     }
 
     pub fn count(&self) -> usize {
-        self.bonds.len()
+        self.molecule.raw_graph().edge_count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = BondId> {
-        (0..self.bonds.len() as u32).map(BondId)
+        self.molecule.raw_graph().edge_ids().map(BondId::from)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = BondView<'a>> {
@@ -44,21 +44,28 @@ impl<'a> BondViews<'a> {
             let [s, t] = graph.edge_endpoints(id);
             BondView {
                 id: BondId::from(id),
-                atoms: [AtomId::from(s), AtomId::from(t)],
+                atoms: [s, t],
                 ast: &bonds[id.index()],
                 molecule,
             }
         })
     }
 
-    pub fn get(&self, id: BondId) -> BondView<'a> {
+    pub fn contains(&self, id: BondId) -> bool {
+        self.molecule.raw_graph().contains_edge(EdgeId::from(id))
+    }
+
+    pub fn get(&self, id: BondId) -> Option<BondView<'a>> {
+        if !self.contains(id) {
+            return None;
+        }
         let [s, t] = self.molecule.raw_graph().edge_endpoints(EdgeId::from(id));
-        BondView {
+        Some(BondView {
             id,
-            atoms: [AtomId::from(s), AtomId::from(t)],
+            atoms: [s, t],
             ast: &self.bonds[id.index()],
             molecule: self.molecule,
-        }
+        })
     }
 
     /// ID of the bond between `a` and `b`, if any.
@@ -71,7 +78,10 @@ impl<'a> BondViews<'a> {
 
     /// View of the bond between `a` and `b`, if any.
     pub fn connecting(&self, a: AtomId, b: AtomId) -> Option<BondView<'a>> {
-        self.connecting_id(a, b).map(|id| self.get(id))
+        self.connecting_id(a, b).map(|id| {
+            self.get(id)
+                .expect("bond id from graph must refer to a bond in this molecule")
+        })
     }
 
     /// IDs of bonds whose both endpoints lie in `atoms`.
@@ -89,7 +99,10 @@ impl<'a> BondViews<'a> {
     pub fn induced(&self, atoms: &[AtomId]) -> Vec<BondView<'a>> {
         self.induced_ids(atoms)
             .into_iter()
-            .map(|id| self.get(id))
+            .map(|id| {
+                self.get(id)
+                    .expect("bond id from graph must refer to a bond in this molecule")
+            })
             .collect()
     }
 }
@@ -105,7 +118,7 @@ impl<'a> Index<BondId> for BondViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct BondView<'a> {
     pub id: BondId,
-    atoms: [AtomId; 2],
+    atoms: [NodeId; 2],
     pub ast: &'a BondAst,
     molecule: &'a MoleculeAst,
 }
@@ -133,20 +146,21 @@ impl<'a> BondView<'a> {
 
     /// The two atom indices incident to this bond.
     pub fn atom_ids(&self) -> [AtomId; 2] {
-        self.atoms
+        self.atoms.map(AtomId::from)
     }
 
     /// Views of the two atoms incident to this bond.
     pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
         let molecule = self.molecule;
-        let [a, b] = self.atoms;
-        [a, b].into_iter().map(move |id| molecule.atom(id))
+        self.atoms
+            .into_iter()
+            .map(move |id| molecule.atom(AtomId::from(id)))
     }
 
     /// The aromatic system this bond participates in, if any. A bond is in
     /// an aromatic system iff both endpoints belong to that system.
     pub fn aromatic_system(&self) -> Option<AromaticSystemView<'a>> {
-        let [a, b] = self.atoms;
+        let [a, b] = self.atom_ids();
         self.molecule
             .aromatic_systems()
             .incident(a)
@@ -341,11 +355,26 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(BondId(1), true)]
+    #[case::absent(BondId(99), false)]
+    fn test_bond_views_contains(molecule: MoleculeAst, #[case] id: BondId, #[case] expected: bool) {
+        assert_eq!(molecule.bonds().contains(id), expected);
+    }
+
+    #[rstest]
     fn test_bond_views_get(molecule: MoleculeAst) {
-        let view = molecule.bonds().get(BondId(1));
+        let res = molecule.bonds().get(BondId(1));
+        assert!(res.is_some());
+        let view = res.unwrap();
         assert_eq!(view.id, BondId(1));
         assert_eq!(view.atom_ids(), [AtomId(1), AtomId(2)]);
         assert_eq!(*view.ast, BondAst::from_order(2));
+    }
+
+    #[rstest]
+    fn test_bond_views_get_none(molecule: MoleculeAst) {
+        let res = molecule.bonds().get(BondId(99));
+        assert!(res.is_none());
     }
 
     #[rstest]

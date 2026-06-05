@@ -445,10 +445,46 @@ Phases A–E are in scope; F (3D) and G follow.
           (remap shift past removed indices; inverse `unmap`). **Done**1
     - **D3k** - Verify the stereo entities are correctly included in the SubpatternAnchor and remapping
       data structs / APIs.
-    - **D3l** — *Review `StereoAtomView` / `StereoBondView` relational accessors.* Bring the two view
-      APIs to parity with the sibling element views (dative / aromatic / multicenter / noncovalent):
-      resolving the site to an `AtomView` / `BondView`, ligand atoms to `AtomView`s, ligand-by-kind
-      access, and the `Views`-namespace incidence queries (`incident*` / `connecting*` / `induced*`).
+    - **D3l** — *`StereoAtomView` / `StereoBondView` relational + structural accessors.* Bring the stereo
+      views to parity with the sibling element views. Conventions: bare noun → view, `_id`/`_ids` →
+      id(s), `has_*` → bool — the lone exception is `ligands()`, which returns the inherent
+      `&[StereoLigand]` (ligands have their own type; their atom projections are `ligand_atoms*`). Site
+      lookups are unique (`Option`, precedent: `bonds().connecting`); all other lookups return
+      iterators. Virtual ligands (`ImplicitHydrogen` / `LonePair`) carry their **bearing atom** as
+      `.atom()` — the site for stereo atoms, the relevant end atom for stereo bonds. `#[inline]` on
+      inherent-field getters. `coset_for` / `permutation_for` take `&[StereoLigand]` and return `Option`
+      (None unless a permutation of `ligands()`); they live on the view because only it carries the
+      ligand order.
+      - **`StereoAtomViews`** (namespace; keeps `count` / `ids` / `iter` / `get` / `Index`):
+        - `with_site(atom) -> Option<StereoAtomView>`, `with_site_id`, `has_site` — atom is the stereocenter.
+        - `with_ligand(atom)`, `with_ligand_ids`, `has_ligand` — atom occurs as a ligand.
+        - `incident(atom)`, `incident_ids`, `has_incident` — site **or** ligand (union).
+      - **`StereoAtomView`** (`id: StereoAtomId`; backing `ast: &StereoAtomAst`, read by render):
+        - `kind() -> StereoKind`, `coset() -> &StereoCosetAst`, `constraints() -> &StereoAtomConstraints`, `is_ground()`, `is_undetermined()`.
+        - `site() -> AtomView`, `site_id() -> AtomId`.
+        - `ligand_count()`, `ligands() -> &[StereoLigand]`.
+        - `ligand_atoms() -> AtomView…`, `ligand_atom_ids() -> AtomId…`, `ligand_atom_count()` — `Atom`-kind ligands only.
+        - `implicit_hydrogen_count()`, `implicit_hydrogen_atoms()`, `implicit_hydrogen_atom_ids()`; `lone_pair_count()`, `lone_pair_atoms()`, `lone_pair_atom_ids()` — bearing atom per ligand of that kind (length = count; not deduped).
+        - `atoms()`, `atom_ids()`, `atom_count()` — all distinct atoms (site + `Atom`-ligands; deduped, site first).
+        - `incident_bonds() -> BondView…`, `incident_bond_ids()` — the site↔ligand bonds.
+        - `coset_for(&[StereoLigand]) -> Option<StereoCosetAst>`, `permutation_for(&[StereoLigand]) -> Option<Permutation>`.
+      - **`StereoBondViews`** (namespace; keeps `count` / `ids` / `iter` / `get` / `Index`):
+        - `with_site(bond) -> Option<StereoBondView>`, `with_site_id`, `has_site` — bond is the site.
+        - `with_site_atom(atom)`, `with_site_atom_ids`, `has_site_atom` — atom is an endpoint of the site bond.
+        - `with_ligand(atom)`, `with_ligand_ids`, `has_ligand` — atom occurs as a ligand.
+        - `incident(atom)`, `incident_ids`, `has_incident` — site endpoint **or** ligand (union).
+      - **`StereoBondView`** (`id: StereoBondId`; backing `ast: &StereoBondAst`, read by render):
+        - `kind() -> StereoKind`, `coset() -> &StereoCosetAst`, `constraints() -> &StereoBondConstraints`, `is_ground()`, `is_undetermined()`.
+        - `site() -> BondView`, `site_id() -> BondId`.
+        - `ligand_count()`, `ligands() -> &[StereoLigand]`.
+        - `ligand_atoms()`, `ligand_atom_ids()`, `ligand_atom_count()` — `Atom`-kind ligands only.
+        - `implicit_hydrogen_count()`, `implicit_hydrogen_atoms()`, `implicit_hydrogen_atom_ids()`; `lone_pair_count()`, `lone_pair_atoms()`, `lone_pair_atom_ids()` — bearing (end) atom per ligand of that kind.
+        - `atoms()`, `atom_ids()`, `atom_count()` — all distinct atoms (the two site-bond atoms + `Atom`-ligands; deduped).
+        - `incident_bonds()`, `incident_bond_ids()` — the site bond plus each endpoint↔ligand bond.
+        - `coset_for(&[StereoLigand]) -> Option<StereoCosetAst>`, `permutation_for(&[StereoLigand]) -> Option<Permutation>`.
+      - The inverse `AtomView` / `BondView` back-references (`is_in_stereo_atom` / `is_in_stereo_bond`,
+        `stereo_atoms` / `stereo_bonds` + their site / ligand splits, and adding stereo to
+        `is_in_overlays`) are deferred to **D5**.
     - **D3m** — *Review relational constraints for stereo.* `RelationalConstraint`
       (`ast/constraint/relational.rs`) and its surface `RelationalConstraintDsl` (`dsl/relational.rs`)
       are DAMN-only (dative / aromatic / multicenter / noncovalent). Decide which stereo variants to

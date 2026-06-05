@@ -17,32 +17,35 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
     molecule: &'a MoleculeAst,
-    set: &'a VarRelationSet<NodeId, Unordered, DativeBondAst>,
+    dative_bonds: &'a VarRelationSet<NodeId, Unordered, DativeBondAst>,
 }
 
 impl<'a> DativeBondViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        set: &'a VarRelationSet<NodeId, Unordered, DativeBondAst>,
+        dative_bonds: &'a VarRelationSet<NodeId, Unordered, DativeBondAst>,
     ) -> Self {
-        Self { molecule, set }
+        Self {
+            molecule,
+            dative_bonds,
+        }
     }
 
     pub fn count(&self) -> usize {
-        self.set.relation_count()
+        self.dative_bonds.relation_count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = DativeBondId> {
-        self.set.relation_ids().map(DativeBondId::from)
+        self.dative_bonds.relation_ids().map(DativeBondId::from)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = DativeBondView<'a>> {
         let molecule = self.molecule;
-        let set = self.set;
+        let set = self.dative_bonds;
         set.relation_ids().map(move |rid| {
             let atoms = set.participants(rid);
             let ast = set.data(rid);
-            let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
+            let acceptor_id = atoms[ast.acceptor_slot as usize];
             DativeBondView {
                 id: DativeBondId::from(rid),
                 ast,
@@ -53,23 +56,30 @@ impl<'a> DativeBondViews<'a> {
         })
     }
 
-    pub fn get(&self, id: DativeBondId) -> DativeBondView<'a> {
+    pub fn contains(&self, id: DativeBondId) -> bool {
+        self.dative_bonds.contains(RelationId::from(id))
+    }
+
+    pub fn get(&self, id: DativeBondId) -> Option<DativeBondView<'a>> {
+        if !self.contains(id) {
+            return None;
+        }
         let rid = RelationId::from(id);
-        let atoms = self.set.participants(rid);
-        let ast = self.set.data(rid);
-        let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
-        DativeBondView {
+        let atoms = self.dative_bonds.participants(rid);
+        let ast = self.dative_bonds.data(rid);
+        let acceptor_id = atoms[ast.acceptor_slot as usize];
+        Some(DativeBondView {
             id,
             ast,
             acceptor_id,
             atoms,
             molecule: self.molecule,
-        }
+        })
     }
 
     /// IDs of dative bonds incident on `atom`.
     pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = DativeBondId> + 'a {
-        self.set
+        self.dative_bonds
             .incident(NodeId::from(atom))
             .iter()
             .map(|&rid| DativeBondId::from(rid))
@@ -77,18 +87,18 @@ impl<'a> DativeBondViews<'a> {
 
     /// Whether any dative bond is incident on `atom`.
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.set.has_incident(NodeId::from(atom))
+        self.dative_bonds.has_incident(NodeId::from(atom))
     }
 
     /// Views of dative bonds incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
         let molecule = self.molecule;
-        let set = self.set;
+        let set = self.dative_bonds;
         self.incident_ids(atom).map(move |id| {
             let rid = RelationId::from(id);
             let atoms = set.participants(rid);
             let ast = set.data(rid);
-            let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
+            let acceptor_id = atoms[ast.acceptor_slot as usize];
             DativeBondView {
                 id,
                 ast,
@@ -105,7 +115,7 @@ impl<'a> DativeBondViews<'a> {
         let &first = target.iter().next()?;
         self.incident_ids(first).find(|&id| {
             let parts: HashSet<AtomId> = self
-                .set
+                .dative_bonds
                 .participants(RelationId::from(id))
                 .iter()
                 .map(|&n| AtomId::from(n))
@@ -119,15 +129,24 @@ impl<'a> DativeBondViews<'a> {
         &self,
         atoms: impl IntoIterator<Item = AtomId>,
     ) -> Option<DativeBondView<'a>> {
-        self.connecting_id(atoms).map(|id| self.get(id))
+        self.connecting_id(atoms).map(|id| {
+            self.get(id).expect(
+                "dative bond id from relation set must refer to a dative bond in this molecule",
+            )
+        })
     }
 
     /// IDs of dative bonds whose participants all lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<DativeBondId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.set
+        self.dative_bonds
             .relation_ids()
-            .filter(|&rid| self.set.participants(rid).iter().all(|p| set.contains(p)))
+            .filter(|&rid| {
+                self.dative_bonds
+                    .participants(rid)
+                    .iter()
+                    .all(|p| set.contains(p))
+            })
             .map(DativeBondId::from)
             .collect()
     }
@@ -136,7 +155,11 @@ impl<'a> DativeBondViews<'a> {
     pub fn induced(&self, atoms: &[AtomId]) -> Vec<DativeBondView<'a>> {
         self.induced_ids(atoms)
             .into_iter()
-            .map(|id| self.get(id))
+            .map(|id| {
+                self.get(id).expect(
+                    "dative bond id from relation set must refer to a dative bond in this molecule",
+                )
+            })
             .collect()
     }
 }
@@ -144,7 +167,7 @@ impl<'a> DativeBondViews<'a> {
 impl<'a> Index<DativeBondId> for DativeBondViews<'a> {
     type Output = DativeBondAst;
     fn index(&self, id: DativeBondId) -> &DativeBondAst {
-        self.set.data(RelationId::from(id))
+        self.dative_bonds.data(RelationId::from(id))
     }
 }
 
@@ -154,7 +177,7 @@ impl<'a> Index<DativeBondId> for DativeBondViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct DativeBondView<'a> {
     pub id: DativeBondId,
-    pub acceptor_id: AtomId,
+    acceptor_id: NodeId,
     atoms: &'a [NodeId],
     pub ast: &'a DativeBondAst,
     molecule: &'a MoleculeAst,
@@ -174,6 +197,10 @@ impl<'a> DativeBondView<'a> {
     #[inline]
     pub fn constraints(&self) -> &'a DativeBondConstraints {
         &self.ast.constraints
+    }
+
+    pub fn acceptor_id(&self) -> AtomId {
+        AtomId::from(self.acceptor_id)
     }
 
     /// All atoms in this dative bond (donors + acceptor), sorted by `AtomId`.
@@ -207,7 +234,7 @@ impl<'a> DativeBondView<'a> {
 
     /// View of the acceptor atom.
     pub fn acceptor(&self) -> AtomView<'a> {
-        self.molecule.atom(self.acceptor_id)
+        self.molecule.atom(self.acceptor_id())
     }
 
     pub fn atom_count(&self) -> usize {
@@ -322,7 +349,7 @@ mod tests {
         let collected: Vec<(DativeBondId, AtomId, DativeBondAst)> = molecule
             .dative_bonds()
             .iter()
-            .map(|v| (v.id, v.acceptor_id, v.ast.clone()))
+            .map(|v| (v.id, v.acceptor_id(), v.ast.clone()))
             .collect();
         assert_eq!(
             collected,
@@ -335,10 +362,29 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(DativeBondId(0), true)]
+    #[case::absent(DativeBondId(99), false)]
+    fn test_dative_bond_views_contains(
+        molecule: MoleculeAst,
+        #[case] id: DativeBondId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(molecule.dative_bonds().contains(id), expected);
+    }
+
+    #[rstest]
     fn test_dative_bond_views_get(molecule: MoleculeAst) {
-        let view = molecule.dative_bonds().get(DativeBondId(0));
+        let res = molecule.dative_bonds().get(DativeBondId(0));
+        assert!(res.is_some());
+        let view = res.unwrap();
         assert_eq!(view.id, DativeBondId(0));
-        assert_eq!(view.acceptor_id, AtomId(3));
+        assert_eq!(view.acceptor_id(), AtomId(3));
+    }
+
+    #[rstest]
+    fn test_dative_bond_views_get_none(molecule: MoleculeAst) {
+        let res = molecule.dative_bonds().get(DativeBondId(99));
+        assert!(res.is_none());
     }
 
     #[rstest]
@@ -371,7 +417,10 @@ mod tests {
 
     #[rstest]
     fn test_dative_bond_view_acceptor_id(molecule: MoleculeAst) {
-        assert_eq!(molecule.dative_bond(DativeBondId(0)).acceptor_id, AtomId(3));
+        assert_eq!(
+            molecule.dative_bond(DativeBondId(0)).acceptor_id(),
+            AtomId(3)
+        );
     }
 
     #[rstest]

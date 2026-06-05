@@ -3,6 +3,7 @@
 
 use std::ops::Index;
 
+use umol_graph_core::NodeId;
 use umol_shared::element::Element;
 
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
@@ -22,8 +23,7 @@ use super::neighbor::NeighborView;
 use super::noncovalent::NoncovalentBondView;
 use crate::ast::{AromaticValenceAst, AsLit, AtomConstraint, MulticenterValenceAst};
 
-/// Namespace accessor for atom views on a `MoleculeAst`. Provides `count`,
-/// `ids`, `iter`, `get`, and `Index` without burying them on `MoleculeAst`.
+/// Namespace accessor for atom views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct AtomViews<'a> {
     molecule: &'a MoleculeAst,
@@ -36,28 +36,36 @@ impl<'a> AtomViews<'a> {
     }
 
     pub fn count(&self) -> usize {
-        self.atoms.len()
+        self.molecule.raw_graph().node_count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = AtomId> {
-        (0..self.atoms.len() as u32).map(AtomId)
+        self.molecule.raw_graph().node_ids().map(AtomId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> {
+    pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> + '_ {
         let molecule = self.molecule;
-        self.atoms.iter().enumerate().map(move |(i, ast)| AtomView {
-            id: AtomId(i as u32),
-            ast,
+        let graph = molecule.raw_graph();
+        graph.node_ids().map(move |id| AtomView {
+            id: AtomId::from(id),
+            ast: &self.atoms[id.index()],
             molecule,
         })
     }
 
-    pub fn get(&self, id: AtomId) -> AtomView<'a> {
-        AtomView {
+    pub fn contains(&self, id: AtomId) -> bool {
+        self.molecule.raw_graph().contains_node(NodeId::from(id))
+    }
+
+    pub fn get(&self, id: AtomId) -> Option<AtomView<'a>> {
+        if !self.contains(id) {
+            return None;
+        }
+        Some(AtomView {
             id,
             ast: &self.atoms[id.index()],
             molecule: self.molecule,
-        }
+        })
     }
 }
 
@@ -165,7 +173,7 @@ impl<'a> AtomView<'a> {
     pub fn accepted_pairs(&self) -> ValueAst {
         let mut sum = ValueAst::Lit(0);
         for view in self.dative_bonds() {
-            if view.acceptor_id != self.id {
+            if view.acceptor_id() != self.id {
                 continue;
             }
             sum = sum + view.ast.order.clone();
@@ -254,6 +262,8 @@ impl<'a> AtomView<'a> {
         self.molecule.noncovalent_bonds().incident_ids(self.id)
     }
 
+    // TODO: Add stereo atom and stereo bond accessors.
+
     /// True if this atom participates in any of the four overlay relations
     /// (aromatic system, dative bond, multicenter bond, noncovalent bond).
     /// Mirror of `MoleculeAst::has_overlays` scoped to a single atom; useful
@@ -263,6 +273,7 @@ impl<'a> AtomView<'a> {
             || self.is_in_dative_bond()
             || self.is_in_multicenter_bond()
             || self.is_in_noncovalent_bond()
+        // TODO: Add stereo atom and stereo bond checks.
     }
 
     /// True if this atom belongs to any ring in the molecule's canonical
@@ -383,6 +394,8 @@ impl<'a> AtomView<'a> {
             .sum();
         ValueAst::Lit(count as i64)
     }
+
+    // TODO: Add tetrahedral stereo coset and ligands.
 
     /// Count of canonical rings (Vismara / max ring size 22) containing
     /// this atom. Always `Lit`.
@@ -587,10 +600,25 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(AtomId(2), true)]
+    #[case::absent(AtomId(999), false)]
+    fn test_atom_views_contains(molecule: MoleculeAst, #[case] id: AtomId, #[case] expected: bool) {
+        assert_eq!(molecule.atoms().contains(id), expected);
+    }
+
+    #[rstest]
     fn test_atom_views_get(molecule: MoleculeAst) {
-        let view = molecule.atoms().get(AtomId(2));
-        assert_eq!(view.id, AtomId(2));
-        assert_eq!(*view.ast, AtomAst::from_element(Element::N));
+        let res = molecule.atoms().get(AtomId(2));
+        assert!(res.is_some());
+        let atom = res.unwrap();
+        assert_eq!(atom.id, AtomId(2));
+        assert_eq!(atom.ast, &AtomAst::from_element(Element::N));
+    }
+
+    #[rstest]
+    fn test_atom_views_get_none(molecule: MoleculeAst) {
+        let res = molecule.atoms().get(AtomId(999));
+        assert!(res.is_none());
     }
 
     #[rstest]

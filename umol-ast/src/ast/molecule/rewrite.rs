@@ -104,7 +104,7 @@ impl MoleculeAst {
             };
             if !in_k {
                 let g_donors: Vec<AtomId> = dv.donor_ids().map(|d| r_to_g[&d]).collect();
-                let g_acceptor = r_to_g[&dv.acceptor_id];
+                let g_acceptor = r_to_g[&dv.acceptor_id()];
                 builder.add_dative_bond(g_donors, g_acceptor, dv.ast.clone());
             }
         }

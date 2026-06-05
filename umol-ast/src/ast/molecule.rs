@@ -276,6 +276,7 @@ impl MoleculeAst {
     /// Raw underlying graph with `NodeId` / `EdgeId` types. Escape hatch
     /// for code that needs the graph-core API directly; use [`Self::graph`]
     /// for AtomId/BondId-typed access.
+    #[inline]
     pub fn raw_graph(&self) -> &Graph {
         &self.graph
     }
@@ -287,28 +288,48 @@ impl MoleculeAst {
             .map(move |n| NeighborView::new(AtomId::from(n.node), BondId::from(n.edge), self))
     }
 
+    // TODO: Decide if individual node/edge ids (graph-core) or atom/bond ids (ast) should be stored in views.
+    // Slices have to store node/edge ids, otherwise need owned vectors.
     pub fn atoms(&self) -> AtomViews<'_> {
         AtomViews::new(self, &self.atoms)
     }
 
+    /// View of the atom with `id`.
+    ///
+    /// Panics if `id` is not an atom in this molecule. Use
+    /// `self.atoms().get(id)` for checked lookup.
     pub fn atom(&self, id: AtomId) -> AtomView<'_> {
-        self.atoms().get(id)
+        self.atoms()
+            .get(id)
+            .expect("atom id must refer to an atom in this molecule")
     }
 
     pub fn bonds(&self) -> BondViews<'_> {
         BondViews::new(self, &self.bonds)
     }
 
+    /// View of the bond with `id`.
+    ///
+    /// Panics if `id` is not a bond in this molecule. Use
+    /// `self.bonds().get(id)` for checked lookup.
     pub fn bond(&self, id: BondId) -> BondView<'_> {
-        self.bonds().get(id)
+        self.bonds()
+            .get(id)
+            .expect("bond id must refer to a bond in this molecule")
     }
 
     pub fn dative_bonds(&self) -> DativeBondViews<'_> {
         DativeBondViews::new(self, &self.dative_bonds)
     }
 
+    /// View of the dative bond with `id`.
+    ///
+    /// Panics if `id` is not a dative bond in this molecule. Use
+    /// `self.dative_bonds().get(id)` for checked lookup.
     pub fn dative_bond(&self, id: DativeBondId) -> DativeBondView<'_> {
-        self.dative_bonds().get(id)
+        self.dative_bonds()
+            .get(id)
+            .expect("dative bond id must refer to a dative bond in this molecule")
     }
 
     pub fn aromatic_systems(&self) -> AromaticSystemViews<'_> {

@@ -60,7 +60,7 @@ impl<'a> AromaticSystemViews<'a> {
         }
     }
 
-    /// IDs of aromatic systems incident on `atom`.
+    /// Ids of aromatic systems incident on `atom`.
     pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = AromaticSystemId> + 'a {
         self.set
             .incident(NodeId::from(atom))
@@ -88,7 +88,7 @@ impl<'a> AromaticSystemViews<'a> {
         })
     }
 
-    /// ID of the aromatic system whose atom set equals `atoms`, if any.
+    /// Id of the aromatic system whose atom set equals `atoms`, if any.
     pub fn connecting_id(
         &self,
         atoms: impl IntoIterator<Item = AtomId>,
@@ -114,7 +114,7 @@ impl<'a> AromaticSystemViews<'a> {
         self.connecting_id(atoms).map(|id| self.get(id))
     }
 
-    /// IDs of aromatic systems whose atoms all lie in `atoms`.
+    /// Ids of aromatic systems whose atoms all lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<AromaticSystemId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.set
