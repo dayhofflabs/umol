@@ -17,7 +17,7 @@ use umol_edn::{DeError, Edn, EdnKeyword, EdnMap, FromEdn, ToEdn};
 use super::atom::AtomConstraintDsl;
 use super::constraint::{
     AromaticSystemRef, AtomRef, BondRef, DativeBondRef, EntityCounts, MulticenterBondRef,
-    NoncovalentBondRef,
+    NoncovalentBondRef, StereoAtomRef, StereoBondRef,
 };
 use super::error::ParseError;
 use super::molecule::Metadata;
@@ -119,6 +119,58 @@ pub enum RelationalConstraintDsl {
         bond: NoncovalentBondRef,
         predicates: [Box<AtomConstraintDsl>; 2],
     },
+
+    /// EDN: `{:stereo-atom-site [<stereo_atom_ref> <atom_ref>]}`.
+    StereoAtomSite {
+        stereo_atom: StereoAtomRef,
+        atom: AtomRef,
+    },
+    /// EDN: `{:stereo-atom-contains [<stereo_atom_ref> <atom_ref>]}`.
+    StereoAtomContains {
+        stereo_atom: StereoAtomRef,
+        atom: AtomRef,
+    },
+    /// EDN: `{:stereo-atom-ligands [<stereo_atom_ref> [<atom_ref>+]]}`.
+    StereoAtomLigands {
+        stereo_atom: StereoAtomRef,
+        atoms: Vec<AtomRef>,
+    },
+    /// EDN: `{:stereo-atom-all-ligands [<stereo_atom_ref> <atom-constraint>]}`.
+    StereoAtomAllLigands {
+        stereo_atom: StereoAtomRef,
+        predicate: Box<AtomConstraintDsl>,
+    },
+    /// EDN: `{:stereo-atom-any-ligand [<stereo_atom_ref> <atom-constraint>]}`.
+    StereoAtomAnyLigand {
+        stereo_atom: StereoAtomRef,
+        predicate: Box<AtomConstraintDsl>,
+    },
+
+    /// EDN: `{:stereo-bond-site [<stereo_bond_ref> <bond_ref>]}`.
+    StereoBondSite {
+        stereo_bond: StereoBondRef,
+        bond: BondRef,
+    },
+    /// EDN: `{:stereo-bond-contains [<stereo_bond_ref> <atom_ref>]}`.
+    StereoBondContains {
+        stereo_bond: StereoBondRef,
+        atom: AtomRef,
+    },
+    /// EDN: `{:stereo-bond-ligands [<stereo_bond_ref> [<atom_ref>+]]}`.
+    StereoBondLigands {
+        stereo_bond: StereoBondRef,
+        atoms: Vec<AtomRef>,
+    },
+    /// EDN: `{:stereo-bond-all-ligands [<stereo_bond_ref> <atom-constraint>]}`.
+    StereoBondAllLigands {
+        stereo_bond: StereoBondRef,
+        predicate: Box<AtomConstraintDsl>,
+    },
+    /// EDN: `{:stereo-bond-any-ligand [<stereo_bond_ref> <atom-constraint>]}`.
+    StereoBondAnyLigand {
+        stereo_bond: StereoBondRef,
+        predicate: Box<AtomConstraintDsl>,
+    },
 }
 
 /// Top-level EDN keywords for every relational variant. Matches the
@@ -143,6 +195,16 @@ pub(super) const RELATIONAL_KEYS: &[&str] = &[
     "noncovalent-bond-ends",
     "noncovalent-bond-contains",
     "noncovalent-bond-ends-satisfy",
+    "stereo-atom-site",
+    "stereo-atom-contains",
+    "stereo-atom-ligands",
+    "stereo-atom-all-ligands",
+    "stereo-atom-any-ligand",
+    "stereo-bond-site",
+    "stereo-bond-contains",
+    "stereo-bond-ligands",
+    "stereo-bond-all-ligands",
+    "stereo-bond-any-ligand",
 ];
 
 impl<'de> FromEdn<'de> for RelationalConstraintDsl {
@@ -262,6 +324,58 @@ impl RelationalConstraintDsl {
                     Box::new(AtomConstraintDsl::from_ast(&predicates[0], &())),
                     Box::new(AtomConstraintDsl::from_ast(&predicates[1], &())),
                 ],
+            },
+            StereoAtomSite { stereo_atom, atom } => Self::StereoAtomSite {
+                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
+                atom: AtomRef::from_ast(*atom, meta),
+            },
+            StereoAtomContains { stereo_atom, atom } => Self::StereoAtomContains {
+                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
+                atom: AtomRef::from_ast(*atom, meta),
+            },
+            StereoAtomLigands { stereo_atom, atoms } => Self::StereoAtomLigands {
+                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+            },
+            StereoAtomAllLigands {
+                stereo_atom,
+                predicate,
+            } => Self::StereoAtomAllLigands {
+                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+            },
+            StereoAtomAnyLigand {
+                stereo_atom,
+                predicate,
+            } => Self::StereoAtomAnyLigand {
+                stereo_atom: StereoAtomRef::from_ast(*stereo_atom, meta),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+            },
+            StereoBondSite { stereo_bond, bond } => Self::StereoBondSite {
+                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
+                bond: BondRef::from_ast(*bond, meta),
+            },
+            StereoBondContains { stereo_bond, atom } => Self::StereoBondContains {
+                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
+                atom: AtomRef::from_ast(*atom, meta),
+            },
+            StereoBondLigands { stereo_bond, atoms } => Self::StereoBondLigands {
+                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
+                atoms: atoms.iter().map(|&a| AtomRef::from_ast(a, meta)).collect(),
+            },
+            StereoBondAllLigands {
+                stereo_bond,
+                predicate,
+            } => Self::StereoBondAllLigands {
+                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
+            },
+            StereoBondAnyLigand {
+                stereo_bond,
+                predicate,
+            } => Self::StereoBondAnyLigand {
+                stereo_bond: StereoBondRef::from_ast(*stereo_bond, meta),
+                predicate: Box::new(AtomConstraintDsl::from_ast(predicate, &())),
             },
         }
     }
@@ -388,6 +502,64 @@ impl RelationalConstraintDsl {
                     predicates: [Box::new(a.into_ast(&())), Box::new(b.into_ast(&()))],
                 }
             }
+            StereoAtomSite { stereo_atom, atom } => RelationalConstraint::StereoAtomSite {
+                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
+                atom: atom.into_ast(counts.atom_count, meta)?,
+            },
+            StereoAtomContains { stereo_atom, atom } => RelationalConstraint::StereoAtomContains {
+                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
+                atom: atom.into_ast(counts.atom_count, meta)?,
+            },
+            StereoAtomLigands { stereo_atom, atoms } => RelationalConstraint::StereoAtomLigands {
+                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| a.into_ast(counts.atom_count, meta))
+                    .collect::<Result<_, _>>()?,
+            },
+            StereoAtomAllLigands {
+                stereo_atom,
+                predicate,
+            } => RelationalConstraint::StereoAtomAllLigands {
+                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
+                predicate: Box::new(predicate.into_ast(&())),
+            },
+            StereoAtomAnyLigand {
+                stereo_atom,
+                predicate,
+            } => RelationalConstraint::StereoAtomAnyLigand {
+                stereo_atom: stereo_atom.into_ast(counts.stereo_atom_count, meta)?,
+                predicate: Box::new(predicate.into_ast(&())),
+            },
+            StereoBondSite { stereo_bond, bond } => RelationalConstraint::StereoBondSite {
+                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
+                bond: bond.into_ast(counts.bond_count, meta)?,
+            },
+            StereoBondContains { stereo_bond, atom } => RelationalConstraint::StereoBondContains {
+                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
+                atom: atom.into_ast(counts.atom_count, meta)?,
+            },
+            StereoBondLigands { stereo_bond, atoms } => RelationalConstraint::StereoBondLigands {
+                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
+                atoms: atoms
+                    .into_iter()
+                    .map(|a| a.into_ast(counts.atom_count, meta))
+                    .collect::<Result<_, _>>()?,
+            },
+            StereoBondAllLigands {
+                stereo_bond,
+                predicate,
+            } => RelationalConstraint::StereoBondAllLigands {
+                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
+                predicate: Box::new(predicate.into_ast(&())),
+            },
+            StereoBondAnyLigand {
+                stereo_bond,
+                predicate,
+            } => RelationalConstraint::StereoBondAnyLigand {
+                stereo_bond: stereo_bond.into_ast(counts.stereo_bond_count, meta)?,
+                predicate: Box::new(predicate.into_ast(&())),
+            },
         })
     }
 }
@@ -481,6 +653,58 @@ fn render_payload(dsl: &RelationalConstraintDsl) -> (&'static str, Edn<'static>)
                 bond.to_edn(),
                 Edn::Vector(vec![predicates[0].to_edn(), predicates[1].to_edn()].into()),
             ),
+        ),
+        StereoAtomSite { stereo_atom, atom } => (
+            "stereo-atom-site",
+            render_pair(stereo_atom.to_edn(), atom.to_edn()),
+        ),
+        StereoAtomContains { stereo_atom, atom } => (
+            "stereo-atom-contains",
+            render_pair(stereo_atom.to_edn(), atom.to_edn()),
+        ),
+        StereoAtomLigands { stereo_atom, atoms } => (
+            "stereo-atom-ligands",
+            render_pair(stereo_atom.to_edn(), render_atom_refs(atoms)),
+        ),
+        StereoAtomAllLigands {
+            stereo_atom,
+            predicate,
+        } => (
+            "stereo-atom-all-ligands",
+            render_pair(stereo_atom.to_edn(), predicate.to_edn()),
+        ),
+        StereoAtomAnyLigand {
+            stereo_atom,
+            predicate,
+        } => (
+            "stereo-atom-any-ligand",
+            render_pair(stereo_atom.to_edn(), predicate.to_edn()),
+        ),
+        StereoBondSite { stereo_bond, bond } => (
+            "stereo-bond-site",
+            render_pair(stereo_bond.to_edn(), bond.to_edn()),
+        ),
+        StereoBondContains { stereo_bond, atom } => (
+            "stereo-bond-contains",
+            render_pair(stereo_bond.to_edn(), atom.to_edn()),
+        ),
+        StereoBondLigands { stereo_bond, atoms } => (
+            "stereo-bond-ligands",
+            render_pair(stereo_bond.to_edn(), render_atom_refs(atoms)),
+        ),
+        StereoBondAllLigands {
+            stereo_bond,
+            predicate,
+        } => (
+            "stereo-bond-all-ligands",
+            render_pair(stereo_bond.to_edn(), predicate.to_edn()),
+        ),
+        StereoBondAnyLigand {
+            stereo_bond,
+            predicate,
+        } => (
+            "stereo-bond-any-ligand",
+            render_pair(stereo_bond.to_edn(), predicate.to_edn()),
         ),
     }
 }
@@ -658,6 +882,76 @@ fn parse_payload<'de>(key: &str, edn: &Edn<'de>) -> Result<RelationalConstraintD
                 predicates: parse_atom_constraint_pair(predicates, key)?,
             }
         }
+        "stereo-atom-site" => {
+            let (stereo_atom, atom) = parse_pair(edn, key)?;
+            StereoAtomSite {
+                stereo_atom: StereoAtomRef::from_edn(stereo_atom)?,
+                atom: AtomRef::from_edn(atom)?,
+            }
+        }
+        "stereo-atom-contains" => {
+            let (stereo_atom, atom) = parse_pair(edn, key)?;
+            StereoAtomContains {
+                stereo_atom: StereoAtomRef::from_edn(stereo_atom)?,
+                atom: AtomRef::from_edn(atom)?,
+            }
+        }
+        "stereo-atom-ligands" => {
+            let (stereo_atom, atoms) = parse_pair(edn, key)?;
+            StereoAtomLigands {
+                stereo_atom: StereoAtomRef::from_edn(stereo_atom)?,
+                atoms: parse_atom_refs(atoms, key)?,
+            }
+        }
+        "stereo-atom-all-ligands" => {
+            let (stereo_atom, predicate) = parse_pair(edn, key)?;
+            StereoAtomAllLigands {
+                stereo_atom: StereoAtomRef::from_edn(stereo_atom)?,
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?),
+            }
+        }
+        "stereo-atom-any-ligand" => {
+            let (stereo_atom, predicate) = parse_pair(edn, key)?;
+            StereoAtomAnyLigand {
+                stereo_atom: StereoAtomRef::from_edn(stereo_atom)?,
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?),
+            }
+        }
+        "stereo-bond-site" => {
+            let (stereo_bond, bond) = parse_pair(edn, key)?;
+            StereoBondSite {
+                stereo_bond: StereoBondRef::from_edn(stereo_bond)?,
+                bond: BondRef::from_edn(bond)?,
+            }
+        }
+        "stereo-bond-contains" => {
+            let (stereo_bond, atom) = parse_pair(edn, key)?;
+            StereoBondContains {
+                stereo_bond: StereoBondRef::from_edn(stereo_bond)?,
+                atom: AtomRef::from_edn(atom)?,
+            }
+        }
+        "stereo-bond-ligands" => {
+            let (stereo_bond, atoms) = parse_pair(edn, key)?;
+            StereoBondLigands {
+                stereo_bond: StereoBondRef::from_edn(stereo_bond)?,
+                atoms: parse_atom_refs(atoms, key)?,
+            }
+        }
+        "stereo-bond-all-ligands" => {
+            let (stereo_bond, predicate) = parse_pair(edn, key)?;
+            StereoBondAllLigands {
+                stereo_bond: StereoBondRef::from_edn(stereo_bond)?,
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?),
+            }
+        }
+        "stereo-bond-any-ligand" => {
+            let (stereo_bond, predicate) = parse_pair(edn, key)?;
+            StereoBondAnyLigand {
+                stereo_bond: StereoBondRef::from_edn(stereo_bond)?,
+                predicate: Box::new(AtomConstraintDsl::from_edn(predicate)?),
+            }
+        }
         other => {
             return Err(DeError::UnknownField {
                 key: other.to_string(),
@@ -677,6 +971,7 @@ mod tests {
     use crate::ast::constraint::AtomConstraint;
     use crate::ast::ids::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+        StereoAtomId, StereoBondId,
     };
     use crate::ast::value::ValueAst;
 
@@ -694,6 +989,8 @@ mod tests {
             aromatic_system_count: 10,
             multicenter_bond_count: 10,
             noncovalent_bond_count: 10,
+            stereo_atom_count: 10,
+            stereo_bond_count: 10,
         }
     }
 
@@ -730,6 +1027,26 @@ mod tests {
     #[case::noncovalent_ends_satisfy(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
         predicates: [Box::new(AtomConstraint::Valence(ValueAst::Lit(2))), Box::new(AtomConstraint::Valence(ValueAst::Lit(3)))] },
         "{:noncovalent-bond-ends-satisfy [0 [{:valence 2} {:valence 3}]]}")]
+    #[case::stereo_atom_site(RelationalConstraint::StereoAtomSite { stereo_atom: StereoAtomId(0), atom: AtomId(2) },
+        "{:stereo-atom-site [0 2]}")]
+    #[case::stereo_atom_contains(RelationalConstraint::StereoAtomContains { stereo_atom: StereoAtomId(0), atom: AtomId(3) },
+        "{:stereo-atom-contains [0 3]}")]
+    #[case::stereo_atom_ligands(RelationalConstraint::StereoAtomLigands { stereo_atom: StereoAtomId(0), atoms: vec![AtomId(0), AtomId(1)] },
+        "{:stereo-atom-ligands [0 [0 1]]}")]
+    #[case::stereo_atom_all_ligands(RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) },
+        "{:stereo-atom-all-ligands [0 {:valence 4}]}")]
+    #[case::stereo_atom_any_ligand(RelationalConstraint::StereoAtomAnyLigand { stereo_atom: StereoAtomId(0), predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))) },
+        "{:stereo-atom-any-ligand [0 {:degree 3}]}")]
+    #[case::stereo_bond_site(RelationalConstraint::StereoBondSite { stereo_bond: StereoBondId(0), bond: BondId(2) },
+        "{:stereo-bond-site [0 2]}")]
+    #[case::stereo_bond_contains(RelationalConstraint::StereoBondContains { stereo_bond: StereoBondId(0), atom: AtomId(3) },
+        "{:stereo-bond-contains [0 3]}")]
+    #[case::stereo_bond_ligands(RelationalConstraint::StereoBondLigands { stereo_bond: StereoBondId(0), atoms: vec![AtomId(0), AtomId(1)] },
+        "{:stereo-bond-ligands [0 [0 1]]}")]
+    #[case::stereo_bond_all_ligands(RelationalConstraint::StereoBondAllLigands { stereo_bond: StereoBondId(0), predicate: Box::new(AtomConstraint::Valence(ValueAst::Lit(4))) },
+        "{:stereo-bond-all-ligands [0 {:valence 4}]}")]
+    #[case::stereo_bond_any_ligand(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(0), predicate: Box::new(AtomConstraint::Degree(ValueAst::Lit(3))) },
+        "{:stereo-bond-any-ligand [0 {:degree 3}]}")]
     fn test_relational_constraint_dsl_roundtrip(
         meta: Metadata,
         full_counts: EntityCounts,
@@ -781,6 +1098,8 @@ mod tests {
             aromatic_system_count: 0,
             multicenter_bond_count: 0,
             noncovalent_bond_count: 0,
+            stereo_atom_count: 0,
+            stereo_bond_count: 0,
         };
         let dsl = RelationalConstraintDsl::DativeBondDonor {
             bond: DativeBondRef::Index(0),
@@ -805,6 +1124,8 @@ mod tests {
             aromatic_system_count: 0,
             multicenter_bond_count: 0,
             noncovalent_bond_count: 0,
+            stereo_atom_count: 0,
+            stereo_bond_count: 0,
         };
         let dsl = RelationalConstraintDsl::DativeBondDonor {
             bond: DativeBondRef::Index(99),

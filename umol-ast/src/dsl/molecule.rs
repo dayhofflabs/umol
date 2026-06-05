@@ -1469,6 +1469,8 @@ impl MoleculeInput {
             aromatic_system_count: aromatic_list.len(),
             multicenter_bond_count: multicenter_list.len(),
             noncovalent_bond_count: noncovalent_list.len(),
+            stereo_atom_count: stereo_atom_list.len(),
+            stereo_bond_count: stereo_bond_list.len(),
         };
         let constraints = ConstraintsDsl(constraint_dsls).into_ast(&counts, &metadata)?;
 

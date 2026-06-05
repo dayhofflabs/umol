@@ -461,7 +461,7 @@ Phases A–E are in scope; F (3D) and G follow.
       add — site identity (`StereoAtomSite` → atom, `StereoBondSite` → bond), ligand-set membership /
       equality (`StereoAtom{Contains,Ligands}`, bond analogs), and ligand role predicates
       (`…AllLigands` / `…AnyLigand` delegating an `AtomConstraint`) — plus the `:<entity>-<role>` EDN
-      keys in `RELATIONAL_KEYS`, `from_ast` / `into_ast`, and `simplify` / `remap`.
+      keys in `RELATIONAL_KEYS`, `from_ast` / `into_ast`, and `simplify` / `remap`. **Done**
     - **D3n** Fix naming in remap.rs, index -> id, indices -> ids, review all field and method names
   - **D4** — sugar `:ccw`/`:cw`/`:e`/`:z` (each carries its class — `Th1`/`Th2`/`Ct1`/`Ct2`) ↔ the `:type` head.
     **Done**

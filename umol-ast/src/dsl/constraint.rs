@@ -24,6 +24,7 @@ use crate::ast::constraint::{
 };
 use crate::ast::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::spin::SpinStateAst;
@@ -43,6 +44,8 @@ pub(crate) struct EntityCounts {
     pub(crate) aromatic_system_count: usize,
     pub(crate) multicenter_bond_count: usize,
     pub(crate) noncovalent_bond_count: usize,
+    pub(crate) stereo_atom_count: usize,
+    pub(crate) stereo_bond_count: usize,
 }
 
 impl EntityCounts {
@@ -54,6 +57,8 @@ impl EntityCounts {
             aromatic_system_count: ast.aromatic_systems().count(),
             multicenter_bond_count: ast.multicenter_bonds().count(),
             noncovalent_bond_count: ast.noncovalent_bonds().count(),
+            stereo_atom_count: ast.stereo_atoms().count(),
+            stereo_bond_count: ast.stereo_bonds().count(),
         }
     }
 }
@@ -285,6 +290,20 @@ define_ref!(
     noncovalent_bond_id,
     "noncovalent-bond",
     read_noncovalent_bond_ref
+);
+define_ref!(
+    StereoAtomRef,
+    StereoAtomId,
+    stereo_atom_id,
+    "stereo-atom",
+    read_stereo_atom_ref
+);
+define_ref!(
+    StereoBondRef,
+    StereoBondId,
+    stereo_bond_id,
+    "stereo-bond",
+    read_stereo_bond_ref
 );
 
 pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<ValueDsl, EdnError> {
@@ -690,6 +709,46 @@ pub(super) fn read_relational_constraint_dsl(
                 predicates: [Box::new(a), Box::new(b)],
             }
         }
+        "stereo-atom-site" => R::StereoAtomSite {
+            stereo_atom: read_stereo_atom_ref(de)?,
+            atom: read_atom_ref(de)?,
+        },
+        "stereo-atom-contains" => R::StereoAtomContains {
+            stereo_atom: read_stereo_atom_ref(de)?,
+            atom: read_atom_ref(de)?,
+        },
+        "stereo-atom-ligands" => R::StereoAtomLigands {
+            stereo_atom: read_stereo_atom_ref(de)?,
+            atoms: read_atom_ref_vec(de)?,
+        },
+        "stereo-atom-all-ligands" => R::StereoAtomAllLigands {
+            stereo_atom: read_stereo_atom_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "stereo-atom-any-ligand" => R::StereoAtomAnyLigand {
+            stereo_atom: read_stereo_atom_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "stereo-bond-site" => R::StereoBondSite {
+            stereo_bond: read_stereo_bond_ref(de)?,
+            bond: read_bond_ref(de)?,
+        },
+        "stereo-bond-contains" => R::StereoBondContains {
+            stereo_bond: read_stereo_bond_ref(de)?,
+            atom: read_atom_ref(de)?,
+        },
+        "stereo-bond-ligands" => R::StereoBondLigands {
+            stereo_bond: read_stereo_bond_ref(de)?,
+            atoms: read_atom_ref_vec(de)?,
+        },
+        "stereo-bond-all-ligands" => R::StereoBondAllLigands {
+            stereo_bond: read_stereo_bond_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
+        "stereo-bond-any-ligand" => R::StereoBondAnyLigand {
+            stereo_bond: read_stereo_bond_ref(de)?,
+            predicate: Box::new(read_atom_constraint_dsl(de)?),
+        },
         other => {
             unreachable!("read_relational_constraint_dsl called with non-relational key {other}")
         }
@@ -1985,6 +2044,8 @@ mod tests {
             aromatic_system_count: 10,
             multicenter_bond_count: 10,
             noncovalent_bond_count: 10,
+            stereo_atom_count: 10,
+            stereo_bond_count: 10,
         }
     }
 

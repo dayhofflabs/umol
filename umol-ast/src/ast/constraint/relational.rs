@@ -21,13 +21,15 @@
 
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId, StereoBondId,
 };
 use super::super::remap::IdRemapping;
 use super::atom::AtomConstraint;
 
-/// Cross-entity constraint relating one DAMN entity (dative bond, aromatic
-/// system, multicenter bond, noncovalent bond) to atoms, bonds, or atom
-/// predicates by reference. Lives only at molecule scope (in
+/// Cross-entity constraint relating one overlay entity (dative bond, aromatic
+/// system, multicenter bond, noncovalent bond, stereo atom, stereo bond) to
+/// atoms, bonds, or atom predicates by reference. Stereo variants constrain the
+/// site identity and the atom-kind ligands. Lives only at molecule scope (in
 /// [`Constraint::Relational`](super::Constraint::Relational) or inside
 /// `And`/`Or`/`Not`); cannot appear inline on an entity.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -126,6 +128,62 @@ pub enum RelationalConstraint {
         bond: NoncovalentBondId,
         predicates: [Box<AtomConstraint>; 2],
     },
+
+    /// The site of stereo atom `stereo_atom` is `atom`.
+    StereoAtomSite {
+        stereo_atom: StereoAtomId,
+        atom: AtomId,
+    },
+    /// `atom` is one of the atom-kind ligands of stereo atom `stereo_atom`.
+    StereoAtomContains {
+        stereo_atom: StereoAtomId,
+        atom: AtomId,
+    },
+    /// The atom-kind ligands of stereo atom `stereo_atom` are exactly `atoms`
+    /// (as a set; ligand order/configuration is the inline coset's concern).
+    StereoAtomLigands {
+        stereo_atom: StereoAtomId,
+        atoms: Vec<AtomId>,
+    },
+    /// Every atom-kind ligand of stereo atom `stereo_atom` satisfies `predicate`.
+    StereoAtomAllLigands {
+        stereo_atom: StereoAtomId,
+        predicate: Box<AtomConstraint>,
+    },
+    /// At least one atom-kind ligand of stereo atom `stereo_atom` satisfies
+    /// `predicate`.
+    StereoAtomAnyLigand {
+        stereo_atom: StereoAtomId,
+        predicate: Box<AtomConstraint>,
+    },
+
+    /// The site of stereo bond `stereo_bond` is `bond`.
+    StereoBondSite {
+        stereo_bond: StereoBondId,
+        bond: BondId,
+    },
+    /// `atom` is one of the atom-kind ligands of stereo bond `stereo_bond`.
+    StereoBondContains {
+        stereo_bond: StereoBondId,
+        atom: AtomId,
+    },
+    /// The atom-kind ligands of stereo bond `stereo_bond` are exactly `atoms`
+    /// (as a set).
+    StereoBondLigands {
+        stereo_bond: StereoBondId,
+        atoms: Vec<AtomId>,
+    },
+    /// Every atom-kind ligand of stereo bond `stereo_bond` satisfies `predicate`.
+    StereoBondAllLigands {
+        stereo_bond: StereoBondId,
+        predicate: Box<AtomConstraint>,
+    },
+    /// At least one atom-kind ligand of stereo bond `stereo_bond` satisfies
+    /// `predicate`.
+    StereoBondAnyLigand {
+        stereo_bond: StereoBondId,
+        predicate: Box<AtomConstraint>,
+    },
 }
 
 impl RelationalConstraint {
@@ -166,6 +224,34 @@ impl RelationalConstraint {
                     predicates: [Box::new((*a).simplify()), Box::new((*b).simplify())],
                 }
             }
+            Self::StereoAtomAllLigands {
+                stereo_atom,
+                predicate,
+            } => Self::StereoAtomAllLigands {
+                stereo_atom,
+                predicate: Box::new((*predicate).simplify()),
+            },
+            Self::StereoAtomAnyLigand {
+                stereo_atom,
+                predicate,
+            } => Self::StereoAtomAnyLigand {
+                stereo_atom,
+                predicate: Box::new((*predicate).simplify()),
+            },
+            Self::StereoBondAllLigands {
+                stereo_bond,
+                predicate,
+            } => Self::StereoBondAllLigands {
+                stereo_bond,
+                predicate: Box::new((*predicate).simplify()),
+            },
+            Self::StereoBondAnyLigand {
+                stereo_bond,
+                predicate,
+            } => Self::StereoBondAnyLigand {
+                stereo_bond,
+                predicate: Box::new((*predicate).simplify()),
+            },
             other @ (Self::DativeBondDonor { .. }
             | Self::DativeBondAcceptor { .. }
             | Self::DativeBondParallels { .. }
@@ -176,7 +262,13 @@ impl RelationalConstraint {
             | Self::MulticenterBondContains { .. }
             | Self::MulticenterBondContainsAll { .. }
             | Self::NoncovalentBondEnds { .. }
-            | Self::NoncovalentBondContains { .. }) => other,
+            | Self::NoncovalentBondContains { .. }
+            | Self::StereoAtomSite { .. }
+            | Self::StereoAtomContains { .. }
+            | Self::StereoAtomLigands { .. }
+            | Self::StereoBondSite { .. }
+            | Self::StereoBondContains { .. }
+            | Self::StereoBondLigands { .. }) => other,
         }
     }
 
@@ -280,6 +372,66 @@ impl RelationalConstraint {
                     predicates,
                 }
             }
+            Self::StereoAtomSite { stereo_atom, atom } => Self::StereoAtomSite {
+                stereo_atom: remap.stereo_atom(stereo_atom)?,
+                atom: remap.atom(atom)?,
+            },
+            Self::StereoAtomContains { stereo_atom, atom } => Self::StereoAtomContains {
+                stereo_atom: remap.stereo_atom(stereo_atom)?,
+                atom: remap.atom(atom)?,
+            },
+            Self::StereoAtomLigands { stereo_atom, atoms } => {
+                let stereo_atom = remap.stereo_atom(stereo_atom)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
+                Self::StereoAtomLigands {
+                    stereo_atom,
+                    atoms: atoms?,
+                }
+            }
+            Self::StereoAtomAllLigands {
+                stereo_atom,
+                predicate,
+            } => Self::StereoAtomAllLigands {
+                stereo_atom: remap.stereo_atom(stereo_atom)?,
+                predicate,
+            },
+            Self::StereoAtomAnyLigand {
+                stereo_atom,
+                predicate,
+            } => Self::StereoAtomAnyLigand {
+                stereo_atom: remap.stereo_atom(stereo_atom)?,
+                predicate,
+            },
+            Self::StereoBondSite { stereo_bond, bond } => Self::StereoBondSite {
+                stereo_bond: remap.stereo_bond(stereo_bond)?,
+                bond: remap.bond(bond)?,
+            },
+            Self::StereoBondContains { stereo_bond, atom } => Self::StereoBondContains {
+                stereo_bond: remap.stereo_bond(stereo_bond)?,
+                atom: remap.atom(atom)?,
+            },
+            Self::StereoBondLigands { stereo_bond, atoms } => {
+                let stereo_bond = remap.stereo_bond(stereo_bond)?;
+                let atoms: Option<Vec<_>> = atoms.into_iter().map(|a| remap.atom(a)).collect();
+                Self::StereoBondLigands {
+                    stereo_bond,
+                    atoms: atoms?,
+                }
+            }
+            Self::StereoBondAllLigands {
+                stereo_bond,
+                predicate,
+            } => Self::StereoBondAllLigands {
+                stereo_bond: remap.stereo_bond(stereo_bond)?,
+                predicate,
+            },
+            Self::StereoBondAnyLigand {
+                stereo_bond,
+                predicate,
+            } => Self::StereoBondAnyLigand {
+                stereo_bond: remap.stereo_bond(stereo_bond)?,
+                predicate,
+            },
         })
     }
 }
@@ -300,6 +452,8 @@ mod tests {
         removed_aromatic: Vec<u32>,
         removed_multicenter: Vec<u32>,
         removed_noncovalent: Vec<u32>,
+        removed_stereo_atom: Vec<u32>,
+        removed_stereo_bond: Vec<u32>,
     ) -> IdRemapping {
         IdRemapping::new(
             Remapping::new(removed_nodes, removed_edges),
@@ -307,8 +461,8 @@ mod tests {
             removed_aromatic,
             removed_multicenter,
             removed_noncovalent,
-            Vec::new(),
-            Vec::new(),
+            removed_stereo_atom,
+            removed_stereo_bond,
         )
     }
 
@@ -319,27 +473,27 @@ mod tests {
     /// Drop atom 1; drop dative 0; preserve other entities. Indices above
     /// the removed slot shift down by one.
     fn one_atom_one_dative() -> IdRemapping {
-        remapping(vec![1], vec![], vec![0], vec![], vec![], vec![])
+        remapping(vec![1], vec![], vec![0], vec![], vec![], vec![], vec![], vec![])
     }
 
     /// Drop bond 0; preserve other entities.
     fn drop_bond0() -> IdRemapping {
-        remapping(vec![], vec![0], vec![], vec![], vec![], vec![])
+        remapping(vec![], vec![0], vec![], vec![], vec![], vec![], vec![], vec![])
     }
 
     /// Drop aromatic system 0.
     fn drop_aromatic0() -> IdRemapping {
-        remapping(vec![], vec![], vec![], vec![0], vec![], vec![])
+        remapping(vec![], vec![], vec![], vec![0], vec![], vec![], vec![], vec![])
     }
 
     /// Drop multicenter bond 0.
     fn drop_multicenter0() -> IdRemapping {
-        remapping(vec![], vec![], vec![], vec![], vec![0], vec![])
+        remapping(vec![], vec![], vec![], vec![], vec![0], vec![], vec![], vec![])
     }
 
     /// Drop noncovalent bond 0.
     fn drop_noncovalent0() -> IdRemapping {
-        remapping(vec![], vec![], vec![], vec![], vec![], vec![0])
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![0], vec![], vec![])
     }
 
     #[rustfmt::skip]
@@ -361,57 +515,95 @@ mod tests {
     #[case::dative_acceptor_satisfies_shifts(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondId(1), predicate: val_pred() },
         one_atom_one_dative(), Some(RelationalConstraint::DativeBondAcceptorSatisfies { bond: DativeBondId(0), predicate: val_pred() }))]
     #[case::aromatic_atoms_shifts(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(1), atoms: vec![AtomId(0), AtomId(2)] },
-        remapping(vec![1], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0),
+        remapping(vec![1], vec![], vec![], vec![0], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0),
         atoms: vec![AtomId(0), AtomId(1)] }))]
     #[case::aromatic_atoms_drops_when_atom_removed(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0), atoms: vec![AtomId(1), AtomId(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), None)]
     #[case::aromatic_atoms_drops_when_system_removed(RelationalConstraint::AromaticSystemAtoms { system: AromaticSystemId(0), atoms: vec![AtomId(0)] },
         drop_aromatic0(), None)]
     #[case::aromatic_contains_shifts(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(1), atom: AtomId(2) },
-        remapping(vec![1], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(1) }))]
+        remapping(vec![1], vec![], vec![], vec![0], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::AromaticSystemContains { system: AromaticSystemId(0), atom: AtomId(1) }))]
     #[case::aromatic_contains_all_shifts(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemId(0), atoms: vec![AtomId(0), AtomId(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemId(0),
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemId(0),
         atoms: vec![AtomId(0), AtomId(1)] }))]
     #[case::aromatic_contains_all_drops_when_atom_removed(RelationalConstraint::AromaticSystemContainsAll { system: AromaticSystemId(0), atoms: vec![AtomId(1)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), None)]
     #[case::aromatic_all_atoms_shifts(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemId(1), predicate: val_pred() },
-        remapping(vec![], vec![], vec![], vec![0], vec![], vec![]),
+        remapping(vec![], vec![], vec![], vec![0], vec![], vec![], vec![], vec![]),
         Some(RelationalConstraint::AromaticSystemAllAtoms { system: AromaticSystemId(0), predicate: val_pred() }))]
     #[case::aromatic_any_atom_shifts(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemId(1), predicate: val_pred() },
-        remapping(vec![], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemId(0), predicate: val_pred() }))]
+        remapping(vec![], vec![], vec![], vec![0], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::AromaticSystemAnyAtom { system: AromaticSystemId(0), predicate: val_pred() }))]
     #[case::multicenter_atoms_shifts(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(1), atoms: vec![AtomId(0), AtomId(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![0], vec![]), Some(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0),
+        remapping(vec![1], vec![], vec![], vec![], vec![0], vec![], vec![], vec![]), Some(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0),
         atoms: vec![AtomId(0), AtomId(1)] }))]
     #[case::multicenter_atoms_drops_when_atom_removed(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0), atoms: vec![AtomId(1)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), None)]
     #[case::multicenter_atoms_drops_when_bond_removed(RelationalConstraint::MulticenterBondAtoms { bond: MulticenterBondId(0), atoms: vec![AtomId(0)] },
         drop_multicenter0(), None)]
     #[case::multicenter_contains_shifts(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondId(1), atom: AtomId(2) },
-        remapping(vec![1], vec![], vec![], vec![], vec![0], vec![]), Some(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondId(0), atom: AtomId(1) }))]
+        remapping(vec![1], vec![], vec![], vec![], vec![0], vec![], vec![], vec![]), Some(RelationalConstraint::MulticenterBondContains { bond: MulticenterBondId(0), atom: AtomId(1) }))]
     #[case::multicenter_contains_all_shifts(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0), atoms: vec![AtomId(0), AtomId(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0),
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), Some(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0),
         atoms: vec![AtomId(0), AtomId(1)] }))]
     #[case::multicenter_contains_all_drops_when_atom_removed(RelationalConstraint::MulticenterBondContainsAll { bond: MulticenterBondId(0), atoms: vec![AtomId(1)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), None)]
     #[case::multicenter_all_atoms_shifts(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondId(1), predicate: val_pred() },
-        remapping(vec![], vec![], vec![], vec![], vec![0], vec![]),
+        remapping(vec![], vec![], vec![], vec![], vec![0], vec![], vec![], vec![]),
         Some(RelationalConstraint::MulticenterBondAllAtoms { bond: MulticenterBondId(0), predicate: val_pred() }))]
     #[case::multicenter_any_atom_shifts(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondId(1), predicate: val_pred() },
-        remapping(vec![], vec![], vec![], vec![], vec![0], vec![]),
+        remapping(vec![], vec![], vec![], vec![], vec![0], vec![], vec![], vec![]),
         Some(RelationalConstraint::MulticenterBondAnyAtom { bond: MulticenterBondId(0), predicate: val_pred() }))]
     #[case::noncovalent_ends_shifts(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(1), atoms: [AtomId(0), AtomId(2)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![0]), Some(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0),
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0),
         atoms: [AtomId(0), AtomId(1)] }))]
     #[case::noncovalent_ends_drops_when_atom_removed(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)] },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![]), None)]
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), None)]
     #[case::noncovalent_ends_drops_when_bond_removed(RelationalConstraint::NoncovalentBondEnds { bond: NoncovalentBondId(0), atoms: [AtomId(0), AtomId(1)] },
         drop_noncovalent0(), None)]
     #[case::noncovalent_contains_shifts(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondId(1), atom: AtomId(2) },
-        remapping(vec![1], vec![], vec![], vec![], vec![], vec![0]),
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![0], vec![], vec![]),
         Some(RelationalConstraint::NoncovalentBondContains { bond: NoncovalentBondId(0), atom: AtomId(1) }))]
     #[case::noncovalent_ends_satisfy_shifts(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(1), predicates: [val_pred(), val_pred()] },
-        remapping(vec![], vec![], vec![], vec![], vec![], vec![0]), Some(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![0], vec![], vec![]), Some(RelationalConstraint::NoncovalentBondEndsSatisfy { bond: NoncovalentBondId(0),
         predicates: [val_pred(), val_pred()] }))]
+    #[case::stereo_atom_site_shifts(RelationalConstraint::StereoAtomSite { stereo_atom: StereoAtomId(1), atom: AtomId(2) },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![0], vec![]),
+        Some(RelationalConstraint::StereoAtomSite { stereo_atom: StereoAtomId(0), atom: AtomId(1) }))]
+    #[case::stereo_atom_site_drops_when_stereo_removed(RelationalConstraint::StereoAtomSite { stereo_atom: StereoAtomId(0), atom: AtomId(2) },
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![], vec![0], vec![]), None)]
+    #[case::stereo_atom_site_drops_when_atom_removed(RelationalConstraint::StereoAtomSite { stereo_atom: StereoAtomId(0), atom: AtomId(1) },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), None)]
+    #[case::stereo_atom_contains_shifts(RelationalConstraint::StereoAtomContains { stereo_atom: StereoAtomId(1), atom: AtomId(2) },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![0], vec![]),
+        Some(RelationalConstraint::StereoAtomContains { stereo_atom: StereoAtomId(0), atom: AtomId(1) }))]
+    #[case::stereo_atom_ligands_shifts(RelationalConstraint::StereoAtomLigands { stereo_atom: StereoAtomId(0), atoms: vec![AtomId(0), AtomId(2)] },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]),
+        Some(RelationalConstraint::StereoAtomLigands { stereo_atom: StereoAtomId(0), atoms: vec![AtomId(0), AtomId(1)] }))]
+    #[case::stereo_atom_ligands_drops_when_atom_removed(RelationalConstraint::StereoAtomLigands { stereo_atom: StereoAtomId(0), atoms: vec![AtomId(1)] },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]), None)]
+    #[case::stereo_atom_all_ligands_shifts(RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(1), predicate: val_pred() },
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![], vec![0], vec![]),
+        Some(RelationalConstraint::StereoAtomAllLigands { stereo_atom: StereoAtomId(0), predicate: val_pred() }))]
+    #[case::stereo_atom_any_ligand_shifts(RelationalConstraint::StereoAtomAnyLigand { stereo_atom: StereoAtomId(1), predicate: val_pred() },
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![], vec![0], vec![]),
+        Some(RelationalConstraint::StereoAtomAnyLigand { stereo_atom: StereoAtomId(0), predicate: val_pred() }))]
+    #[case::stereo_bond_site_shifts(RelationalConstraint::StereoBondSite { stereo_bond: StereoBondId(1), bond: BondId(2) },
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![], vec![], vec![0]),
+        Some(RelationalConstraint::StereoBondSite { stereo_bond: StereoBondId(0), bond: BondId(2) }))]
+    #[case::stereo_bond_site_drops_when_bond_removed(RelationalConstraint::StereoBondSite { stereo_bond: StereoBondId(0), bond: BondId(0) },
+        remapping(vec![], vec![0], vec![], vec![], vec![], vec![], vec![], vec![]), None)]
+    #[case::stereo_bond_contains_shifts(RelationalConstraint::StereoBondContains { stereo_bond: StereoBondId(1), atom: AtomId(2) },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![0]),
+        Some(RelationalConstraint::StereoBondContains { stereo_bond: StereoBondId(0), atom: AtomId(1) }))]
+    #[case::stereo_bond_ligands_shifts(RelationalConstraint::StereoBondLigands { stereo_bond: StereoBondId(0), atoms: vec![AtomId(0), AtomId(2)] },
+        remapping(vec![1], vec![], vec![], vec![], vec![], vec![], vec![], vec![]),
+        Some(RelationalConstraint::StereoBondLigands { stereo_bond: StereoBondId(0), atoms: vec![AtomId(0), AtomId(1)] }))]
+    #[case::stereo_bond_all_ligands_shifts(RelationalConstraint::StereoBondAllLigands { stereo_bond: StereoBondId(1), predicate: val_pred() },
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![], vec![], vec![0]),
+        Some(RelationalConstraint::StereoBondAllLigands { stereo_bond: StereoBondId(0), predicate: val_pred() }))]
+    #[case::stereo_bond_any_ligand_shifts(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(1), predicate: val_pred() },
+        remapping(vec![], vec![], vec![], vec![], vec![], vec![], vec![], vec![0]),
+        Some(RelationalConstraint::StereoBondAnyLigand { stereo_bond: StereoBondId(0), predicate: val_pred() }))]
     fn test_relational_constraint_remap(
         #[case] input: RelationalConstraint,
         #[case] remap: IdRemapping,
