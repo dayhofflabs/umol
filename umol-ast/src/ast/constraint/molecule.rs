@@ -397,6 +397,8 @@ pub struct SubPatternAnchor {
     aromatic_systems: Vec<(AromaticSystemId, AromaticSystemId)>,
     multicenter_bonds: Vec<(MulticenterBondId, MulticenterBondId)>,
     noncovalent_bonds: Vec<(NoncovalentBondId, NoncovalentBondId)>,
+    stereo_atoms: Vec<(StereoAtomId, StereoAtomId)>,
+    stereo_bonds: Vec<(StereoBondId, StereoBondId)>,
 }
 
 impl SubPatternAnchor {
@@ -411,6 +413,8 @@ impl SubPatternAnchor {
             && self.aromatic_systems.is_empty()
             && self.multicenter_bonds.is_empty()
             && self.noncovalent_bonds.is_empty()
+            && self.stereo_atoms.is_empty()
+            && self.stereo_bonds.is_empty()
     }
 
     pub fn atoms(&self) -> &[(AtomId, AtomId)] {
@@ -437,6 +441,14 @@ impl SubPatternAnchor {
         &self.noncovalent_bonds
     }
 
+    pub fn stereo_atoms(&self) -> &[(StereoAtomId, StereoAtomId)] {
+        &self.stereo_atoms
+    }
+
+    pub fn stereo_bonds(&self) -> &[(StereoBondId, StereoBondId)] {
+        &self.stereo_bonds
+    }
+
     pub fn push_atom(&mut self, target: AtomId, pattern: AtomId) {
         self.atoms.push((target, pattern));
     }
@@ -459,6 +471,14 @@ impl SubPatternAnchor {
 
     pub fn push_noncovalent_bond(&mut self, target: NoncovalentBondId, pattern: NoncovalentBondId) {
         self.noncovalent_bonds.push((target, pattern));
+    }
+
+    pub fn push_stereo_atom(&mut self, target: StereoAtomId, pattern: StereoAtomId) {
+        self.stereo_atoms.push((target, pattern));
+    }
+
+    pub fn push_stereo_bond(&mut self, target: StereoBondId, pattern: StereoBondId) {
+        self.stereo_bonds.push((target, pattern));
     }
 
     /// Remap target-side indices per `remap`. Returns `None` if any target
@@ -494,6 +514,16 @@ impl SubPatternAnchor {
             .into_iter()
             .map(|(t, p)| remap.noncovalent_bond(t).map(|t| (t, p)))
             .collect();
+        let stereo_atoms: Option<Vec<_>> = self
+            .stereo_atoms
+            .into_iter()
+            .map(|(t, p)| remap.stereo_atom(t).map(|t| (t, p)))
+            .collect();
+        let stereo_bonds: Option<Vec<_>> = self
+            .stereo_bonds
+            .into_iter()
+            .map(|(t, p)| remap.stereo_bond(t).map(|t| (t, p)))
+            .collect();
         Some(Self {
             atoms: atoms?,
             bonds: bonds?,
@@ -501,6 +531,8 @@ impl SubPatternAnchor {
             aromatic_systems: aromatic_systems?,
             multicenter_bonds: multicenter_bonds?,
             noncovalent_bonds: noncovalent_bonds?,
+            stereo_atoms: stereo_atoms?,
+            stereo_bonds: stereo_bonds?,
         })
     }
 }
@@ -536,6 +568,8 @@ mod tests {
         removed_aromatic: Vec<u32>,
         removed_multicenter: Vec<u32>,
         removed_noncovalent: Vec<u32>,
+        removed_stereo_atoms: Vec<u32>,
+        removed_stereo_bonds: Vec<u32>,
     ) -> IdRemapping {
         IdRemapping::new(
             Remapping::new(Vec::new(), Vec::new()),
@@ -543,8 +577,8 @@ mod tests {
             removed_aromatic,
             removed_multicenter,
             removed_noncovalent,
-            Vec::new(),
-            Vec::new(),
+            removed_stereo_atoms,
+            removed_stereo_bonds,
         )
     }
 
@@ -656,32 +690,32 @@ mod tests {
     )]
     #[case::dative_shifts(
         Constraint::DativeBond(DativeBondId(2), DativeBondConstraint::Aromatic),
-        relation_remapping(vec![0], vec![], vec![], vec![]),
+        relation_remapping(vec![0], vec![], vec![], vec![], vec![], vec![]),
         Some(Constraint::DativeBond(DativeBondId(1), DativeBondConstraint::Aromatic)),
     )]
     #[case::dative_dropped(
         Constraint::DativeBond(DativeBondId(1), DativeBondConstraint::Aromatic),
-        relation_remapping(vec![1], vec![], vec![], vec![]),
+        relation_remapping(vec![1], vec![], vec![], vec![], vec![], vec![]),
         None,
     )]
     #[case::aromatic_system_shifts(
         Constraint::AromaticSystem(AromaticSystemId(2), AromaticSystemConstraint::electron_count(6)),
-        relation_remapping(vec![], vec![0], vec![], vec![]),
+        relation_remapping(vec![], vec![0], vec![], vec![], vec![], vec![]),
         Some(Constraint::AromaticSystem(AromaticSystemId(1), AromaticSystemConstraint::electron_count(6))),
     )]
     #[case::aromatic_system_dropped(
         Constraint::AromaticSystem(AromaticSystemId(1), AromaticSystemConstraint::electron_count(6)),
-        relation_remapping(vec![], vec![1], vec![], vec![]),
+        relation_remapping(vec![], vec![1], vec![], vec![], vec![], vec![]),
         None,
     )]
     #[case::multicenter_shifts(
         Constraint::MulticenterBond(MulticenterBondId(2), MulticenterBondConstraint::electron_count(2)),
-        relation_remapping(vec![], vec![], vec![0], vec![]),
+        relation_remapping(vec![], vec![], vec![0], vec![], vec![], vec![]),
         Some(Constraint::MulticenterBond(MulticenterBondId(1), MulticenterBondConstraint::electron_count(2))),
     )]
     #[case::multicenter_dropped(
         Constraint::MulticenterBond(MulticenterBondId(1), MulticenterBondConstraint::electron_count(2)),
-        relation_remapping(vec![], vec![], vec![1], vec![]),
+        relation_remapping(vec![], vec![], vec![1], vec![], vec![], vec![]),
         None,
     )]
     #[case::relational_dative_donor_shifts_atom(
@@ -691,7 +725,7 @@ mod tests {
     )]
     #[case::relational_dative_donor_dropped_when_bond_removed(
         Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(1), atom: AtomId(0) }),
-        relation_remapping(vec![1], vec![], vec![], vec![]),
+        relation_remapping(vec![1], vec![], vec![], vec![], vec![], vec![]),
         None,
     )]
     #[case::relational_aromatic_system_contains_shifts_atom(
@@ -1123,6 +1157,8 @@ mod tests {
         assert!(a.aromatic_systems().is_empty());
         assert!(a.multicenter_bonds().is_empty());
         assert!(a.noncovalent_bonds().is_empty());
+        assert!(a.stereo_atoms().is_empty());
+        assert!(a.stereo_bonds().is_empty());
     }
 
     #[rstest]
@@ -1177,6 +1213,20 @@ mod tests {
         );
     }
 
+    #[rstest]
+    fn test_sub_pattern_anchor_push_stereo_atom() {
+        let mut a = SubPatternAnchor::new();
+        a.push_stereo_atom(StereoAtomId(2), StereoAtomId(0));
+        assert_eq!(a.stereo_atoms(), &[(StereoAtomId(2), StereoAtomId(0))]);
+    }
+
+    #[rstest]
+    fn test_sub_pattern_anchor_push_stereo_bond() {
+        let mut a = SubPatternAnchor::new();
+        a.push_stereo_bond(StereoBondId(4), StereoBondId(1));
+        assert_eq!(a.stereo_bonds(), &[(StereoBondId(4), StereoBondId(1))]);
+    }
+
     #[rustfmt::skip]
     #[rstest]
     #[case::shifts_target(
@@ -1191,22 +1241,32 @@ mod tests {
     )]
     #[case::dative_dropped(
         { let mut a = SubPatternAnchor::new(); a.push_dative_bond(DativeBondId(1), DativeBondId(0)); a },
-        relation_remapping(vec![1], vec![], vec![], vec![]),
+        relation_remapping(vec![1], vec![], vec![], vec![], vec![], vec![]),
         None,
     )]
     #[case::aromatic_dropped(
         { let mut a = SubPatternAnchor::new(); a.push_aromatic_system(AromaticSystemId(2), AromaticSystemId(0)); a },
-        relation_remapping(vec![], vec![2], vec![], vec![]),
+        relation_remapping(vec![], vec![2], vec![], vec![], vec![], vec![]),
         None,
     )]
     #[case::multicenter_dropped(
         { let mut a = SubPatternAnchor::new(); a.push_multicenter_bond(MulticenterBondId(3), MulticenterBondId(0)); a },
-        relation_remapping(vec![], vec![], vec![3], vec![]),
+        relation_remapping(vec![], vec![], vec![3], vec![], vec![], vec![]),
         None,
     )]
     #[case::noncovalent_dropped(
         { let mut a = SubPatternAnchor::new(); a.push_noncovalent_bond(NoncovalentBondId(4), NoncovalentBondId(0)); a },
-        relation_remapping(vec![], vec![], vec![], vec![4]),
+        relation_remapping(vec![], vec![], vec![], vec![4], vec![], vec![]),
+        None,
+    )]
+    #[case::stereo_atom_dropped(
+        { let mut a = SubPatternAnchor::new(); a.push_stereo_atom(StereoAtomId(2), StereoAtomId(0)); a },
+        relation_remapping(vec![], vec![], vec![], vec![], vec![2], vec![]),
+        None,
+    )]
+    #[case::stereo_bond_dropped(
+        { let mut a = SubPatternAnchor::new(); a.push_stereo_bond(StereoBondId(3), StereoBondId(0)); a },
+        relation_remapping(vec![], vec![], vec![], vec![], vec![], vec![3]),
         None,
     )]
     fn test_sub_pattern_anchor_remap(
@@ -1224,8 +1284,10 @@ mod tests {
         a.push_aromatic_system(AromaticSystemId(3), AromaticSystemId(1));
         a.push_multicenter_bond(MulticenterBondId(4), MulticenterBondId(2));
         a.push_noncovalent_bond(NoncovalentBondId(5), NoncovalentBondId(3));
+        a.push_stereo_atom(StereoAtomId(6), StereoAtomId(4));
+        a.push_stereo_bond(StereoBondId(7), StereoBondId(5));
 
-        let remap = relation_remapping(vec![0], vec![1], vec![0], vec![2]);
+        let remap = relation_remapping(vec![0], vec![1], vec![0], vec![2], vec![1], vec![3]);
         let mapped = a.remap(&remap).expect("all targets survive");
 
         assert_eq!(mapped.dative_bonds(), &[(DativeBondId(1), DativeBondId(0))],);
@@ -1241,6 +1303,8 @@ mod tests {
             mapped.noncovalent_bonds(),
             &[(NoncovalentBondId(4), NoncovalentBondId(3))],
         );
+        assert_eq!(mapped.stereo_atoms(), &[(StereoAtomId(5), StereoAtomId(4))],);
+        assert_eq!(mapped.stereo_bonds(), &[(StereoBondId(6), StereoBondId(5))],);
     }
 
     #[rustfmt::skip]

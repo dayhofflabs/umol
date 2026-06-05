@@ -442,13 +442,13 @@ Phases A–E are in scope; F (3D) and G follow.
         - Topology-removal cascade: a `transact` `RemoveTopology` that drops a stereo element (site or
           ligand atom, or site bond removed) and whose rollback restores it at its original id.
         - `IdRemapping` / `UndoRemapping` `stereo_atom` / `stereo_bond` accessor unit coverage
-          (remap shift past removed indices; inverse `unmap`).
+          (remap shift past removed indices; inverse `unmap`). **Done**1
     - **D3k** - Verify the stereo entities are correctly included in the SubpatternAnchor and remapping
       data structs / APIs.
-    - **D3l** — *Review `StereoAtomView` / `StereoBondView` relational accessors.* Audit the two view
-      APIs for the relational accessors consumers need — resolving the site to an `AtomView` /
-      `BondView`, ligand atoms to `AtomView`s, ligand-by-kind access, incidence queries — and add the
-      ones the render / `FromAst` path and downstream code actually use.
+    - **D3l** — *Review `StereoAtomView` / `StereoBondView` relational accessors.* Bring the two view
+      APIs to parity with the sibling element views (dative / aromatic / multicenter / noncovalent):
+      resolving the site to an `AtomView` / `BondView`, ligand atoms to `AtomView`s, ligand-by-kind
+      access, and the `Views`-namespace incidence queries (`incident*` / `connecting*` / `induced*`).
     - **D3m** — *Review relational constraints for stereo.* `RelationalConstraint`
       (`ast/constraint/relational.rs`) and its surface `RelationalConstraintDsl` (`dsl/relational.rs`)
       are DAMN-only (dative / aromatic / multicenter / noncovalent). Decide which stereo variants to
@@ -462,13 +462,21 @@ Phases A–E are in scope; F (3D) and G follow.
   - **D5** — `#T`/`#C` atom/bond-string surface: the derived-predicate tokens in the existing atom/bond
     constraint-string parser (`dsl/constraint.rs`) — `#T<config>`/`#C<config>` (local-frame, the **same** D1
     `StereoConfigurationAst` parser) inside the atom-string (`C#h#T1`) / bond-string.
-  - **D6** — round-trip tests: EDN↔AST for both surfaces (elements *and* `#T`/`#C` strings) over the
+    Add `tetrahedral_stereo` method to atom view, `cis_trans_stereo` to bond view 
+    (+ `tetrahedral_stereo_ligands` / `cis_trans_stereo_ligands` as a separate method or let `*_stereo` return
+    a tuple).
+    is_in_stereo_atom(), stereo_atoms(), stereo_atom_ids(), also separate query methods for site/ligands, names?
+    is_in_stereo_bond(), stereo_bonds(), stereo_bond_ids(), also query methods incident atoms + ligands, names?
+    add stereo atoms and stereo bonds to is_in_overlays
+    Add `#T/#C` to `derive_constraints()` method.
+  - **D6** - add stereo atoms and bonds to SubPatternAnchorDsl
+  - **D7** — round-trip tests: EDN↔AST for both surfaces (elements *and* `#T`/`#C` strings) over the
     ~150-file corpus, under `--features conformance`.
-  - **D7** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
+  - **D8** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
      stereo_bond_zeroed! in `macros.rs`.
-  - **D8** - update specifications in umol-dsl-spec.md
-  - **D9** - add to prop test and fuzzing
-  - **D10** - fix pub(crate) visibility markers on MoleculeInput::into_ast(), *EntryInput struct fields. Review
+  - **D9** - update specifications in umol-dsl-spec.md
+  - **D10** - add to prop test and fuzzing
+  - **D11** - fix pub(crate) visibility markers on MoleculeInput::into_ast(), *EntryInput struct fields. Review
      field naming in *EntryInput fields.
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
