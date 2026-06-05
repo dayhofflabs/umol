@@ -26,6 +26,35 @@ pub enum StereoKind {
 }
 
 impl StereoKind {
+    /// The `umol-perm` class key for this stereo kind.
+    pub fn class_key(self) -> ClassKey {
+        match self {
+            StereoKind::Tetrahedral => ClassKey::Tetrahedral,
+            StereoKind::CisTrans => ClassKey::CisTrans,
+            StereoKind::SquarePlanar => ClassKey::SquarePlanar,
+            StereoKind::TrigonalBipyramidal => ClassKey::TrigonalBipyramidal,
+            StereoKind::Octahedral => ClassKey::Octahedral,
+        }
+    }
+
+    /// Number of ligand positions in this stereo kind.
+    pub fn degree(self) -> usize {
+        space(self.class_key()).degree()
+    }
+
+    /// Number of cosets/configurations in this stereo kind.
+    pub fn count(self) -> usize {
+        space(self.class_key()).count()
+    }
+
+    /// Whether this stereo kind can encode local handedness.
+    pub fn is_chiral_class(self) -> bool {
+        matches!(
+            self,
+            StereoKind::Tetrahedral | StereoKind::TrigonalBipyramidal | StereoKind::Octahedral
+        )
+    }
+
     /// Kind-specific `~` involution:
     /// - tetrahedral: swap the first two ligands
     /// - cis/trans: swap the two configurations
@@ -44,14 +73,7 @@ impl StereoKind {
 
     /// Act on coset index `index` by `perm`, through the class's coset algebra.
     fn act(self, index: u32, perm: Permutation) -> u32 {
-        let class = match self {
-            StereoKind::Tetrahedral => ClassKey::Tetrahedral,
-            StereoKind::CisTrans => ClassKey::CisTrans,
-            StereoKind::SquarePlanar => ClassKey::SquarePlanar,
-            StereoKind::TrigonalBipyramidal => ClassKey::TrigonalBipyramidal,
-            StereoKind::Octahedral => ClassKey::Octahedral,
-        };
-        space(class).reindex(index, perm)
+        space(self.class_key()).reindex(index, perm)
     }
 }
 
@@ -470,6 +492,46 @@ mod tests {
     use rstest::*;
 
     use super::*;
+
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral, ClassKey::Tetrahedral)]
+    #[case::cis_trans(StereoKind::CisTrans, ClassKey::CisTrans)]
+    #[case::square_planar(StereoKind::SquarePlanar, ClassKey::SquarePlanar)]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, ClassKey::TrigonalBipyramidal)]
+    #[case::octahedral(StereoKind::Octahedral, ClassKey::Octahedral)]
+    fn test_stereo_kind_class_key(#[case] kind: StereoKind, #[case] expected: ClassKey) {
+        assert_eq!(kind.class_key(), expected);
+    }
+
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral, 4)]
+    #[case::cis_trans(StereoKind::CisTrans, 2)]
+    #[case::square_planar(StereoKind::SquarePlanar, 4)]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, 5)]
+    #[case::octahedral(StereoKind::Octahedral, 6)]
+    fn test_stereo_kind_degree(#[case] kind: StereoKind, #[case] expected: usize) {
+        assert_eq!(kind.degree(), expected);
+    }
+
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral, 2)]
+    #[case::cis_trans(StereoKind::CisTrans, 2)]
+    #[case::square_planar(StereoKind::SquarePlanar, 3)]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, 20)]
+    #[case::octahedral(StereoKind::Octahedral, 30)]
+    fn test_stereo_kind_count(#[case] kind: StereoKind, #[case] expected: usize) {
+        assert_eq!(kind.count(), expected);
+    }
+
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral, true)]
+    #[case::cis_trans(StereoKind::CisTrans, false)]
+    #[case::square_planar(StereoKind::SquarePlanar, false)]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, true)]
+    #[case::octahedral(StereoKind::Octahedral, true)]
+    fn test_stereo_kind_is_chiral_class(#[case] kind: StereoKind, #[case] expected: bool) {
+        assert_eq!(kind.is_chiral_class(), expected);
+    }
 
     #[rstest]
     fn test_stereo_expr_swap() {

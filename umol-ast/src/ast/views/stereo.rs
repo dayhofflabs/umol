@@ -10,6 +10,7 @@ use umol_perm::Permutation;
 use super::super::ids::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
+use super::super::rings::RingView;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoKind};
 use super::super::traits::Lattice;
 use super::atom::AtomView;
@@ -72,6 +73,114 @@ impl<'a> StereoAtomViews<'a> {
             ligands: self.stereo_atoms.participants_2(rid),
             ast: self.stereo_atoms.data(rid),
             molecule: self.molecule,
+        })
+    }
+
+    /// Ids of stereo atoms incident on `atom` (site or ligand).
+    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoAtomId> + 'a {
+        self.stereo_atoms
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&rid| StereoAtomId::from(rid))
+    }
+
+    /// Any stereo atom is incident on `atom` (site or ligand).
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.stereo_atoms.has_incident(NodeId::from(atom))
+    }
+
+    /// Views of stereo atoms incident on `atom` (site or ligand).
+    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = StereoAtomView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.stereo_atoms;
+        self.incident_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            StereoAtomView {
+                id,
+                site: set.participants_1(rid)[0],
+                ligands: set.participants_2(rid),
+                ast: set.data(rid),
+                molecule,
+            }
+        })
+    }
+
+    // Ids of stereo atoms incident, in which `atom` is ligand.
+    pub fn incident_at_ligand_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoAtomId> + 'a {
+        let set = self.stereo_atoms;
+        let ligand = StereoLigand {
+            atom_id: atom,
+            kind: StereoLigandKind::Atom,
+        };
+        set.incident(NodeId::from(atom))
+            .iter()
+            .filter(move |&&rid| set.participants_2(rid).contains(&ligand))
+            .map(|&rid| StereoAtomId::from(rid))
+    }
+
+    /// Any stereo atom is incident, in which `atom` is ligand.
+    pub fn has_incident_at_ligand(&self, atom: AtomId) -> bool {
+        let set = self.stereo_atoms;
+        let ligand = StereoLigand {
+            atom_id: atom,
+            kind: StereoLigandKind::Atom,
+        };
+        set.incident(NodeId::from(atom))
+            .iter()
+            .any(|&rid| set.participants_2(rid).contains(&ligand))
+    }
+
+    /// Views of stereo atoms incident, in which `atom` is ligand.
+    pub fn incident_at_ligand(
+        &self,
+        atom: AtomId,
+    ) -> impl Iterator<Item = StereoAtomView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.stereo_atoms;
+        self.incident_at_ligand_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            StereoAtomView {
+                id,
+                site: set.participants_1(rid)[0],
+                ligands: set.participants_2(rid),
+                ast: set.data(rid),
+                molecule,
+            }
+        })
+    }
+
+    /// Id of the stereo atom coincident with `atom` (its site).
+    pub fn coincident_id(&self, atom: AtomId) -> Option<StereoAtomId> {
+        let set = self.stereo_atoms;
+        let site = NodeId::from(atom);
+        set.incident(site)
+            .iter()
+            .find(move |&&rid| set.participants_1(rid).contains(&site))
+            .map(|&rid| StereoAtomId::from(rid))
+    }
+
+    /// Whether any stereo atom is coincident with `atom` (its site).
+    pub fn has_coincident(&self, atom: AtomId) -> bool {
+        let set = self.stereo_atoms;
+        let site = NodeId::from(atom);
+        set.incident(site)
+            .iter()
+            .any(move |&rid| set.participants_1(rid).contains(&site))
+    }
+
+    /// View of the stereo atom coincident with `atom` (its site).
+    pub fn coincident(&self, atom: AtomId) -> Option<StereoAtomView<'a>> {
+        let molecule = self.molecule;
+        let set = self.stereo_atoms;
+        self.coincident_id(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            StereoAtomView {
+                id,
+                site: set.participants_1(rid)[0],
+                ligands: set.participants_2(rid),
+                ast: set.data(rid),
+                molecule,
+            }
         })
     }
 }
@@ -190,11 +299,26 @@ impl<'a> StereoAtomView<'a> {
         Some(self.coset().apply_permutation(self.kind(), perm))
     }
 
-    /// Site atom followed by the ligand atoms — the relation's full atom incidence.
+    /// Site atom followed by the distinct ligand atoms — the relation's atom
+    /// incidence. Deduped: a virtual ligand's bearing atom is the site, so it is
+    /// not repeated.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         let site = self.site_id();
         let ligands = self.ligands;
-        iter::once(site).chain(ligands.iter().map(|l| l.atom_id))
+        let mut seen = HashSet::new();
+        iter::once(site)
+            .chain(ligands.iter().map(|l| l.atom_id))
+            .filter(move |id| seen.insert(*id))
+    }
+
+    /// Rings from the molecule's canonical `RingSet` sharing at least one atom
+    /// with this stereo atom (site or ligand).
+    pub fn overlapping_rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
+        let atoms: Vec<AtomId> = self.atom_ids().collect();
+        self.molecule
+            .rings()
+            .iter()
+            .filter(move |r| r.atoms().iter().any(|a| atoms.contains(a)))
     }
 
     pub fn is_ground(&self) -> bool {
@@ -252,6 +376,149 @@ impl<'a> StereoBondViews<'a> {
             ligands: self.stereo_bonds.participants_2(rid),
             ast: self.stereo_bonds.data(rid),
             molecule: self.molecule,
+        })
+    }
+
+    /// Ids of stereo bonds incident on `atom` (site endpoint or ligand). The
+    /// site is an edge, so node incidence covers only ligands; site-endpoint
+    /// membership is unioned in (and deduped) explicitly.
+    pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
+        let ligand_ids = self
+            .stereo_bonds
+            .incident(NodeId::from(atom))
+            .iter()
+            .map(|&rid| StereoBondId::from(rid));
+        let mut seen = HashSet::new();
+        self.incident_at_site_ids(atom)
+            .chain(ligand_ids)
+            .filter(move |id| seen.insert(*id))
+    }
+
+    /// Any stereo bond is incident on `atom` (site endpoint or ligand).
+    pub fn has_incident(&self, atom: AtomId) -> bool {
+        self.stereo_bonds.has_incident(NodeId::from(atom)) || self.has_incident_at_site(atom)
+    }
+
+    /// Views of stereo bonds incident on `atom`.
+    pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.stereo_bonds;
+        self.incident_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            StereoBondView {
+                id,
+                site: set.participants_1(rid)[0],
+                ligands: set.participants_2(rid),
+
+                ast: set.data(rid),
+                molecule,
+            }
+        })
+    }
+
+    /// Ids of stereo bonds incident, in which `atom` is ligand.
+    pub fn incident_at_ligand_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
+        let set = self.stereo_bonds;
+        let ligand = StereoLigand {
+            atom_id: atom,
+            kind: StereoLigandKind::Atom,
+        };
+        set.incident(NodeId::from(atom))
+            .iter()
+            .filter(move |&&rid| set.participants_2(rid).contains(&ligand))
+            .map(|&rid| StereoBondId::from(rid))
+    }
+
+    /// Any stereo bond is incident, in which `atom` is ligand.
+    pub fn has_incident_at_ligand(&self, atom: AtomId) -> bool {
+        let set = self.stereo_bonds;
+        let ligand = StereoLigand {
+            atom_id: atom,
+            kind: StereoLigandKind::Atom,
+        };
+        set.incident(NodeId::from(atom))
+            .iter()
+            .any(|&rid| set.participants_2(rid).contains(&ligand))
+    }
+
+    /// Views of stereo bonds incident, in which `atom` is ligand.
+    pub fn incident_at_ligand(
+        &self,
+        atom: AtomId,
+    ) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.stereo_bonds;
+        self.incident_at_ligand_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            StereoBondView {
+                id,
+                site: set.participants_1(rid)[0],
+                ligands: set.participants_2(rid),
+                ast: set.data(rid),
+                molecule,
+            }
+        })
+    }
+
+    /// Ids of stereo bonds, in which `atom` is a site endpoint.
+    pub fn incident_at_site_ids(&self, atom: AtomId) -> impl Iterator<Item = StereoBondId> + 'a {
+        let set = self.stereo_bonds;
+        self.molecule
+            .neighbors(atom)
+            .flat_map(move |n| set.incident_edge(EdgeId::from(n.bond_id())).iter().copied())
+            .map(StereoBondId::from)
+    }
+
+    /// Any stereo bond, in which `atom` is a site endpoint.
+    pub fn has_incident_at_site(&self, atom: AtomId) -> bool {
+        let set = self.stereo_bonds;
+        self.molecule
+            .neighbors(atom)
+            .any(move |n| set.has_incident_edge(EdgeId::from(n.bond_id())))
+    }
+
+    /// Views of stereo bonds, in which `atom` is a site endpoint.
+    pub fn incident_at_site(&self, atom: AtomId) -> impl Iterator<Item = StereoBondView<'a>> + 'a {
+        let molecule = self.molecule;
+        let set = self.stereo_bonds;
+        self.incident_at_site_ids(atom).map(move |id| {
+            let rid = RelationId::from(id);
+            StereoBondView {
+                id,
+                site: set.participants_1(rid)[0],
+                ligands: set.participants_2(rid),
+                ast: set.data(rid),
+                molecule,
+            }
+        })
+    }
+
+    /// Id of the stereo bond coincident with `bond` (its site).
+    pub fn coincident_id(&self, bond: BondId) -> Option<StereoBondId> {
+        self.stereo_bonds
+            .incident_edge(EdgeId::from(bond))
+            .first()
+            .map(|&rid| StereoBondId::from(rid))
+    }
+
+    /// Whether any stereo bond is coincident with `bond` (its site).
+    pub fn has_coincident(&self, bond: BondId) -> bool {
+        self.stereo_bonds.has_incident_edge(EdgeId::from(bond))
+    }
+
+    /// View of the stereo bond coincident with `bond` (its site).
+    pub fn coincident(&self, bond: BondId) -> Option<StereoBondView<'a>> {
+        let molecule = self.molecule;
+        let set = self.stereo_bonds;
+        self.coincident_id(bond).map(move |id| {
+            let rid = RelationId::from(id);
+            StereoBondView {
+                id,
+                site: set.participants_1(rid)[0],
+                ligands: set.participants_2(rid),
+                ast: set.data(rid),
+                molecule,
+            }
         })
     }
 }
@@ -370,12 +637,27 @@ impl<'a> StereoBondView<'a> {
         Some(self.coset().apply_permutation(self.kind(), perm))
     }
 
-    /// The site bond's two atoms followed by the ligand atoms — the relation's
-    /// full atom incidence.
+    /// The site bond's two atoms followed by the distinct ligand atoms — the
+    /// relation's atom incidence. Deduped: a virtual ligand's bearing atom is a
+    /// site endpoint, so it is not repeated.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         let [a, b] = self.site().atom_ids();
         let ligands = self.ligands;
-        [a, b].into_iter().chain(ligands.iter().map(|l| l.atom_id))
+        let mut seen = HashSet::new();
+        [a, b]
+            .into_iter()
+            .chain(ligands.iter().map(|l| l.atom_id))
+            .filter(move |id| seen.insert(*id))
+    }
+
+    /// Rings from the molecule's canonical `RingSet` sharing at least one atom
+    /// with this stereo bond (site endpoints or ligands).
+    pub fn overlapping_rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
+        let atoms: Vec<AtomId> = self.atom_ids().collect();
+        self.molecule
+            .rings()
+            .iter()
+            .filter(move |r| r.atoms().iter().any(|a| atoms.contains(a)))
     }
 
     pub fn is_ground(&self) -> bool {
@@ -521,6 +803,46 @@ mod tests {
         )
     }
 
+    // A 4-membered ring (atoms 0-1-2-3) with two pendant atoms (4 on 0, 5 on 1);
+    // a stereo atom on ring atom 0 and a stereo bond on ring bond 0-1.
+    #[fixture]
+    fn ring_molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C); 6],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(3), AtomId(0), BondAst::from_order(1)),
+                (AtomId(0), AtomId(4), BondAst::from_order(1)),
+                (AtomId(1), AtomId(5), BondAst::from_order(1)),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            )],
+            vec![(
+                BondId(0),
+                vec![
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            )],
+            Constraints::default(),
+        )
+    }
+
     #[rstest]
     fn test_stereo_atom_views_count(molecule: MoleculeAst) {
         assert_eq!(molecule.stereo_atoms().count(), 1);
@@ -574,6 +896,54 @@ mod tests {
     fn test_stereo_atom_views_get_none(molecule: MoleculeAst) {
         let res = molecule.stereo_atoms().get(StereoAtomId(99));
         assert!(res.is_none());
+    }
+
+    #[rstest]
+    #[case::site(AtomId(0), vec![StereoAtomId(0)])]
+    #[case::ligand(AtomId(2), vec![StereoAtomId(0)])]
+    #[case::unrelated(AtomId(5), vec![])]
+    fn test_stereo_atom_views_incident(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<StereoAtomId>,
+    ) {
+        assert_eq!(
+            molecule
+                .stereo_atoms()
+                .incident_ids(atom)
+                .collect::<Vec<_>>(),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::ligand(AtomId(2), vec![StereoAtomId(0)])]
+    #[case::site_not_ligand(AtomId(0), vec![])]
+    #[case::unrelated(AtomId(5), vec![])]
+    fn test_stereo_atom_views_incident_at_ligand(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<StereoAtomId>,
+    ) {
+        assert_eq!(
+            molecule
+                .stereo_atoms()
+                .incident_at_ligand_ids(atom)
+                .collect::<Vec<_>>(),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::site(AtomId(0), Some(StereoAtomId(0)))]
+    #[case::ligand_not_site(AtomId(2), None)]
+    #[case::unrelated(AtomId(5), None)]
+    fn test_stereo_atom_views_coincident(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Option<StereoAtomId>,
+    ) {
+        assert_eq!(molecule.stereo_atoms().coincident_id(atom), expected);
     }
 
     #[rstest]
@@ -809,13 +1179,41 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_atom_ids(molecule: MoleculeAst) {
+    fn test_stereo_atom_view_atom_ids(
+        molecule: MoleculeAst,
+        virtual_ligand_molecule: MoleculeAst,
+    ) {
         assert_eq!(
             molecule
                 .stereo_atom(StereoAtomId(0))
                 .atom_ids()
                 .collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
+        );
+        // Virtual ligands carry the site atom, so it is not repeated.
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(0), AtomId(1), AtomId(4)],
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_overlapping_rings(ring_molecule: MoleculeAst) {
+        let rings: Vec<Vec<AtomId>> = ring_molecule
+            .stereo_atom(StereoAtomId(0))
+            .overlapping_rings()
+            .map(|r| {
+                let mut atoms = r.atoms().to_vec();
+                atoms.sort_by_key(|a| a.0);
+                atoms
+            })
+            .collect();
+        assert_eq!(
+            rings,
+            vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]],
         );
     }
 
@@ -869,6 +1267,71 @@ mod tests {
     fn test_stereo_bond_views_get_none(molecule: MoleculeAst) {
         let res = molecule.stereo_bonds().get(StereoBondId(99));
         assert!(res.is_none());
+    }
+
+    #[rstest]
+    #[case::site_endpoint(AtomId(2), vec![StereoBondId(0)])]
+    #[case::ligand(AtomId(4), vec![StereoBondId(0)])]
+    #[case::unrelated(AtomId(0), vec![])]
+    fn test_stereo_bond_views_incident(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<StereoBondId>,
+    ) {
+        assert_eq!(
+            molecule
+                .stereo_bonds()
+                .incident_ids(atom)
+                .collect::<Vec<_>>(),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::site_endpoint(AtomId(2), vec![StereoBondId(0)])]
+    #[case::ligand_not_site(AtomId(4), vec![])]
+    #[case::unrelated(AtomId(0), vec![])]
+    fn test_stereo_bond_views_incident_at_site(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<StereoBondId>,
+    ) {
+        assert_eq!(
+            molecule
+                .stereo_bonds()
+                .incident_at_site_ids(atom)
+                .collect::<Vec<_>>(),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::ligand(AtomId(4), vec![StereoBondId(0)])]
+    #[case::site_not_ligand(AtomId(2), vec![])]
+    #[case::unrelated(AtomId(0), vec![])]
+    fn test_stereo_bond_views_incident_at_ligand(
+        molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Vec<StereoBondId>,
+    ) {
+        assert_eq!(
+            molecule
+                .stereo_bonds()
+                .incident_at_ligand_ids(atom)
+                .collect::<Vec<_>>(),
+            expected,
+        );
+    }
+
+    #[rstest]
+    #[case::site(BondId(1), Some(StereoBondId(0)))]
+    #[case::non_site(BondId(0), None)]
+    fn test_stereo_bond_views_coincident(
+        molecule: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: Option<StereoBondId>,
+    ) {
+        assert_eq!(molecule.stereo_bonds().coincident_id(bond), expected);
     }
 
     #[rstest]
@@ -1061,13 +1524,41 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bond_view_atom_ids(molecule: MoleculeAst) {
+    fn test_stereo_bond_view_atom_ids(
+        molecule: MoleculeAst,
+        virtual_ligand_molecule: MoleculeAst,
+    ) {
         assert_eq!(
             molecule
                 .stereo_bond(StereoBondId(0))
                 .atom_ids()
                 .collect::<Vec<_>>(),
             vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+        );
+        // Virtual ligands sit on the site-bond endpoints, so they are not repeated.
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(2), AtomId(3)],
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_overlapping_rings(ring_molecule: MoleculeAst) {
+        let rings: Vec<Vec<AtomId>> = ring_molecule
+            .stereo_bond(StereoBondId(0))
+            .overlapping_rings()
+            .map(|r| {
+                let mut atoms = r.atoms().to_vec();
+                atoms.sort_by_key(|a| a.0);
+                atoms
+            })
+            .collect();
+        assert_eq!(
+            rings,
+            vec![vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3)]],
         );
     }
 
