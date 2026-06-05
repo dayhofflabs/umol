@@ -1,7 +1,7 @@
 //! Stereo ligand views.
 
 use super::super::ids::AtomId;
-use super::super::ligand::StereoLigandKind;
+use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
 use super::atom::AtomView;
 
@@ -9,29 +9,24 @@ use super::atom::AtomView;
 /// molecule for resolving the atom view.
 #[derive(Clone, Copy, Debug)]
 pub struct StereoLigandView<'a> {
-    kind: StereoLigandKind,
-    atom_id: AtomId,
+    ligand: StereoLigand,
     molecule: &'a MoleculeAst,
 }
 
 impl<'a> StereoLigandView<'a> {
-    pub(crate) fn new(kind: StereoLigandKind, atom_id: AtomId, molecule: &'a MoleculeAst) -> Self {
-        Self {
-            kind,
-            atom_id,
-            molecule,
-        }
+    pub(crate) fn new(ligand: StereoLigand, molecule: &'a MoleculeAst) -> Self {
+        Self { ligand, molecule }
     }
 
     pub fn kind(&self) -> StereoLigandKind {
-        self.kind
+        self.ligand.kind
     }
 
     pub fn atom_id(&self) -> AtomId {
-        self.atom_id
+        self.ligand.atom_id
     }
 
     pub fn atom(&self) -> AtomView<'a> {
-        self.molecule.atom(self.atom_id)
+        self.molecule.atom(self.ligand.atom_id)
     }
 }

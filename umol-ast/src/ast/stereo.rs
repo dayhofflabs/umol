@@ -173,6 +173,17 @@ impl StereoCosetAst {
         }
     }
 
+    /// Apply a ligand-order permutation to this coset under `kind`.
+    pub fn apply_permutation(&self, kind: StereoKind, perm: Permutation) -> Self {
+        match self {
+            Self::Undetermined => Self::Undetermined,
+            Self::Lit(index) => Self::Lit(kind.act(*index, perm)),
+            Self::Expr(expr) => {
+                Self::Expr(Box::new(StereoExpr::ApplyOp(expr.clone(), perm))).simplify(kind)
+            }
+        }
+    }
+
     /// Matches literal coset index `value` under `kind`.
     pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
         match self {

@@ -1514,7 +1514,7 @@ impl MoleculeBuilder {
             .filter_map(|id| {
                 let view = self.stereo_atom(id);
                 let dropped = atom_set.contains(&view.site)
-                    || view.ligands.iter().any(|l| atom_set.contains(&l.atom()));
+                    || view.ligands.iter().any(|l| atom_set.contains(&l.atom_id));
                 dropped.then(|| RemovedStereoAtom {
                     id,
                     site: view.site,
@@ -1530,7 +1530,7 @@ impl MoleculeBuilder {
                 let site = view.site;
                 let site_dropped = bond_set.contains(&site)
                     || self.bond(site).atoms.iter().any(|a| atom_set.contains(a));
-                let ligand_dropped = view.ligands.iter().any(|l| atom_set.contains(&l.atom()));
+                let ligand_dropped = view.ligands.iter().any(|l| atom_set.contains(&l.atom_id));
                 (site_dropped || ligand_dropped).then(|| RemovedStereoBond {
                     id,
                     site,

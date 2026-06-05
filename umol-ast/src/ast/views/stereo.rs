@@ -1,9 +1,11 @@
 //! Stereo atom and stereo bond views.
 
+use std::collections::HashSet;
 use std::iter;
 use std::ops::Index;
 
 use umol_graph_core::{EdgeId, FixedVarBirelationSet, NodeId, Ordered, RelationId};
+use umol_perm::Permutation;
 
 use super::super::ids::{AtomId, BondId, StereoAtomId, StereoBondId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
@@ -130,7 +132,7 @@ impl<'a> StereoAtomView<'a> {
         let ligands = self.ligands;
         ligands
             .iter()
-            .map(move |ligand| StereoLigandView::new(ligand.kind(), ligand.atom(), molecule))
+            .map(move |ligand| StereoLigandView::new(*ligand, molecule))
     }
 
     pub fn atom_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
@@ -173,11 +175,26 @@ impl<'a> StereoAtomView<'a> {
         self.lone_pair_ligands().count()
     }
 
+    pub fn permutation_for(
+        &self,
+        ligands: impl IntoIterator<Item = StereoLigand>,
+    ) -> Option<Permutation> {
+        permutation_for_ligands(self.ligands, ligands)
+    }
+
+    pub fn coset_for(
+        &self,
+        ligands: impl IntoIterator<Item = StereoLigand>,
+    ) -> Option<StereoCosetAst> {
+        let perm = self.permutation_for(ligands)?;
+        Some(self.coset().apply_permutation(self.kind(), perm))
+    }
+
     /// Site atom followed by the ligand atoms — the relation's full atom incidence.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         let site = self.site_id();
         let ligands = self.ligands;
-        iter::once(site).chain(ligands.iter().map(|l| l.atom()))
+        iter::once(site).chain(ligands.iter().map(|l| l.atom_id))
     }
 
     pub fn is_ground(&self) -> bool {
@@ -295,7 +312,7 @@ impl<'a> StereoBondView<'a> {
         let ligands = self.ligands;
         ligands
             .iter()
-            .map(move |ligand| StereoLigandView::new(ligand.kind(), ligand.atom(), molecule))
+            .map(move |ligand| StereoLigandView::new(*ligand, molecule))
     }
 
     pub fn atom_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
@@ -338,17 +355,53 @@ impl<'a> StereoBondView<'a> {
         self.lone_pair_ligands().count()
     }
 
+    pub fn permutation_for(
+        &self,
+        ligands: impl IntoIterator<Item = StereoLigand>,
+    ) -> Option<Permutation> {
+        permutation_for_ligands(self.ligands, ligands)
+    }
+
+    pub fn coset_for(
+        &self,
+        ligands: impl IntoIterator<Item = StereoLigand>,
+    ) -> Option<StereoCosetAst> {
+        let perm = self.permutation_for(ligands)?;
+        Some(self.coset().apply_permutation(self.kind(), perm))
+    }
+
     /// The site bond's two atoms followed by the ligand atoms — the relation's
     /// full atom incidence.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
         let [a, b] = self.site().atom_ids();
         let ligands = self.ligands;
-        [a, b].into_iter().chain(ligands.iter().map(|l| l.atom()))
+        [a, b].into_iter().chain(ligands.iter().map(|l| l.atom_id))
     }
 
     pub fn is_ground(&self) -> bool {
         self.ast.is_ground()
     }
+}
+
+fn has_unique_ligands(ligands: &[StereoLigand]) -> bool {
+    ligands.iter().copied().collect::<HashSet<_>>().len() == ligands.len()
+}
+
+fn permutation_for_ligands(
+    current: &[StereoLigand],
+    ligands: impl IntoIterator<Item = StereoLigand>,
+) -> Option<Permutation> {
+    let current: Vec<StereoLigand> = current.to_vec();
+    let requested: Vec<StereoLigand> = ligands.into_iter().collect();
+    if current.len() != requested.len()
+        || !has_unique_ligands(&current)
+        || !has_unique_ligands(&requested)
+    {
+        return None;
+    }
+    let current_set: HashSet<StereoLigand> = current.iter().copied().collect();
+    let requested_set: HashSet<StereoLigand> = requested.iter().copied().collect();
+    (current_set == requested_set).then(|| Permutation::between(&current, &requested))
 }
 
 // Builder-scope view bundles for stereo elements. `ligands` is a borrow into
@@ -387,6 +440,7 @@ pub struct StereoBondBuilderViewMut<'a> {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
+    use umol_perm::Permutation;
     use umol_shared::element::Element;
 
     use crate::ast::atom::AtomAst;
@@ -652,6 +706,109 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_atom_view_permutation_for(molecule: MoleculeAst) {
+        let view = molecule.stereo_atom(StereoAtomId(0));
+        let ligands = vec![
+            StereoLigand {
+                atom_id: AtomId(1),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(2),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(3),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(4),
+                kind: StereoLigandKind::Atom,
+            },
+        ];
+        assert_eq!(
+            view.permutation_for(ligands.clone()),
+            Some(Permutation::identity(4)),
+        );
+
+        let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
+        assert_eq!(
+            view.permutation_for(reordered),
+            Some(Permutation::from_image(4, &[1, 0, 2, 3])),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_permutation_for_none(molecule: MoleculeAst) {
+        let view = molecule.stereo_atom(StereoAtomId(0));
+        let ligands = vec![
+            StereoLigand {
+                atom_id: AtomId(1),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(2),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(3),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(4),
+                kind: StereoLigandKind::Atom,
+            },
+        ];
+        assert_eq!(view.permutation_for(ligands[..3].iter().copied()), None);
+        assert_eq!(
+            view.permutation_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
+            None,
+        );
+        assert_eq!(
+            view.permutation_for([
+                ligands[0],
+                ligands[1],
+                ligands[2],
+                StereoLigand {
+                    atom_id: AtomId(99),
+                    kind: StereoLigandKind::Atom,
+                },
+            ]),
+            None,
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_coset_for(molecule: MoleculeAst) {
+        let view = molecule.stereo_atom(StereoAtomId(0));
+        let ligands = vec![
+            StereoLigand {
+                atom_id: AtomId(1),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(2),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(3),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(4),
+                kind: StereoLigandKind::Atom,
+            },
+        ];
+        assert_eq!(
+            view.coset_for(ligands.clone()),
+            Some(StereoCosetAst::Lit(1)),
+        );
+
+        let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
+        assert_eq!(view.coset_for(reordered), Some(StereoCosetAst::Lit(0)));
+    }
+
+    #[rstest]
     fn test_stereo_atom_view_atom_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
@@ -827,6 +984,80 @@ mod tests {
                 .lone_pair_count(),
             1,
         );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_permutation_for(molecule: MoleculeAst) {
+        let view = molecule.stereo_bond(StereoBondId(0));
+        let ligands = vec![
+            StereoLigand {
+                atom_id: AtomId(4),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(5),
+                kind: StereoLigandKind::Atom,
+            },
+        ];
+        assert_eq!(
+            view.permutation_for(ligands.clone()),
+            Some(Permutation::identity(2)),
+        );
+
+        let reordered = vec![ligands[1], ligands[0]];
+        assert_eq!(
+            view.permutation_for(reordered),
+            Some(Permutation::from_image(2, &[1, 0])),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_permutation_for_none(molecule: MoleculeAst) {
+        let view = molecule.stereo_bond(StereoBondId(0));
+        let ligands = vec![
+            StereoLigand {
+                atom_id: AtomId(4),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(5),
+                kind: StereoLigandKind::Atom,
+            },
+        ];
+        assert_eq!(view.permutation_for(ligands[..1].iter().copied()), None);
+        assert_eq!(view.permutation_for([ligands[0], ligands[0]]), None);
+        assert_eq!(
+            view.permutation_for([
+                ligands[0],
+                StereoLigand {
+                    atom_id: AtomId(99),
+                    kind: StereoLigandKind::Atom,
+                },
+            ]),
+            None,
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_coset_for(molecule: MoleculeAst) {
+        let view = molecule.stereo_bond(StereoBondId(0));
+        let ligands = vec![
+            StereoLigand {
+                atom_id: AtomId(4),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(5),
+                kind: StereoLigandKind::Atom,
+            },
+        ];
+        assert_eq!(
+            view.coset_for(ligands.clone()),
+            Some(StereoCosetAst::Lit(1)),
+        );
+
+        let reordered = vec![ligands[1], ligands[0]];
+        assert_eq!(view.coset_for(reordered), Some(StereoCosetAst::Lit(0)));
     }
 
     #[rstest]
