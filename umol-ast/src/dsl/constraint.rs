@@ -140,7 +140,7 @@ pub(super) fn consume_single_key_map_close(
 }
 
 macro_rules! define_ref {
-    ($name:ident, $idx:ident, $accessor:ident, $kind:literal, $reader:ident) => {
+    ($name:ident, $id:ident, $accessor:ident, $kind:literal, $reader:ident) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub enum $name {
             Index(usize),
@@ -150,21 +150,21 @@ macro_rules! define_ref {
         impl $name {
             /// Build a ref from an AST index, preferring an id from `metadata`
             /// if one is recorded for this index.
-            pub fn from_ast(idx: $idx, metadata: &Metadata) -> Self {
-                if let Some(name) = metadata.$accessor(idx) {
+            pub fn from_ast(id: $id, metadata: &Metadata) -> Self {
+                if let Some(name) = metadata.$accessor(id) {
                     Self::Id(name.to_string())
                 } else {
-                    Self::Index(idx.index())
+                    Self::Index(id.index())
                 }
             }
 
             /// Resolve this ref to an AST index against `metadata`. Fails on
             /// unknown id or out-of-range numeric index.
-            pub fn into_ast(self, count: usize, metadata: &Metadata) -> Result<$idx, ParseError> {
+            pub fn into_ast(self, count: usize, metadata: &Metadata) -> Result<$id, ParseError> {
                 match self {
                     Self::Index(i) => {
                         if i < count {
-                            Ok($idx::from(i))
+                            Ok($id::from(i))
                         } else {
                             Err(ParseError::InvalidRef {
                                 kind: $kind,
@@ -174,9 +174,9 @@ macro_rules! define_ref {
                     }
                     Self::Id(name) => {
                         for i in 0..count {
-                            let idx = $idx::from(i);
-                            if metadata.$accessor(idx) == Some(name.as_str()) {
-                                return Ok(idx);
+                            let id = $id::from(i);
+                            if metadata.$accessor(id) == Some(name.as_str()) {
+                                return Ok(id);
                             }
                         }
                         Err(ParseError::InvalidRef {
@@ -193,12 +193,12 @@ macro_rules! define_ref {
             pub fn resolve(
                 self,
                 count: usize,
-                id_to_idx: &IndexMap<String, $idx>,
-            ) -> Result<$idx, ParseError> {
+                id_to_idx: &IndexMap<String, $id>,
+            ) -> Result<$id, ParseError> {
                 match self {
                     Self::Index(i) => {
                         if i < count {
-                            Ok($idx::from(i))
+                            Ok($id::from(i))
                         } else {
                             Err(ParseError::InvalidRef {
                                 kind: $kind,
@@ -1733,24 +1733,24 @@ impl ToEdn for ConstraintDsl {
 impl ConstraintDsl {
     pub(crate) fn from_ast(c: &Constraint, meta: &Metadata) -> Result<Self, ParseError> {
         Ok(match c {
-            Constraint::Atom(idx, c) => Self::Atom(
-                AtomRef::from_ast(*idx, meta),
+            Constraint::Atom(id, c) => Self::Atom(
+                AtomRef::from_ast(*id, meta),
                 AtomConstraintDsl::from_ast(c, &()),
             ),
-            Constraint::Bond(idx, c) => Self::Bond(
-                BondRef::from_ast(*idx, meta),
+            Constraint::Bond(id, c) => Self::Bond(
+                BondRef::from_ast(*id, meta),
                 BondConstraintDsl::from_ast(c, &()),
             ),
-            Constraint::DativeBond(idx, c) => Self::DativeBond(
-                DativeBondRef::from_ast(*idx, meta),
+            Constraint::DativeBond(id, c) => Self::DativeBond(
+                DativeBondRef::from_ast(*id, meta),
                 DativeBondConstraintDsl::from_ast(c),
             ),
-            Constraint::AromaticSystem(idx, c) => Self::AromaticSystem(
-                AromaticSystemRef::from_ast(*idx, meta),
+            Constraint::AromaticSystem(id, c) => Self::AromaticSystem(
+                AromaticSystemRef::from_ast(*id, meta),
                 AromaticSystemConstraintDsl::from_ast(c),
             ),
-            Constraint::MulticenterBond(idx, c) => Self::MulticenterBond(
-                MulticenterBondRef::from_ast(*idx, meta),
+            Constraint::MulticenterBond(id, c) => Self::MulticenterBond(
+                MulticenterBondRef::from_ast(*id, meta),
                 MulticenterBondConstraintDsl::from_ast(c),
             ),
             Constraint::NoncovalentBond(_, c) => match *c {},
@@ -1995,16 +1995,16 @@ mod tests {
 
     #[rstest]
     fn test_atom_ref_into_ast_resolves_id(meta_with_atom_id: Metadata) {
-        let idx = AtomRef::Id("c1".into())
+        let id = AtomRef::Id("c1".into())
             .into_ast(5, &meta_with_atom_id)
             .unwrap();
-        assert_eq!(idx, AtomId(2));
+        assert_eq!(id, AtomId(2));
     }
 
     #[rstest]
     fn test_atom_ref_into_ast_resolves_index(meta_with_atom_id: Metadata) {
-        let idx = AtomRef::Index(3).into_ast(5, &meta_with_atom_id).unwrap();
-        assert_eq!(idx, AtomId(3));
+        let id = AtomRef::Index(3).into_ast(5, &meta_with_atom_id).unwrap();
+        assert_eq!(id, AtomId(3));
     }
 
     #[rstest]

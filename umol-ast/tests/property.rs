@@ -760,6 +760,8 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                     aromatic_entries,
                     multicenter_entries,
                     noncovalent_triples,
+                    Vec::new(),
+                    Vec::new(),
                     Constraints::new(),
                 )
             },
@@ -1399,7 +1401,7 @@ impl TransactionCase {
             )))],
             Self::SetAtomCharge { count, idx, charge } => {
                 vec![Edit::SetAtomField {
-                    idx: AtomRef::Id(AtomId((idx % count) as u32)),
+                    id: AtomRef::Id(AtomId((idx % count) as u32)),
                     change: AtomFieldChange::Charge {
                         old: ValueAst::default(),
                         new: ValueAst::Lit(*charge),
@@ -1409,7 +1411,7 @@ impl TransactionCase {
             Self::SetBondOrder { count, idx, order } => {
                 let bond_idx = idx % (count - 1);
                 vec![Edit::SetBondField {
-                    idx: BondRef::Id(BondId(bond_idx as u32)),
+                    id: BondRef::Id(BondId(bond_idx as u32)),
                     change: BondFieldChange::Order {
                         old: ValueAst::Lit((bond_idx % 3 + 1) as i64),
                         new: ValueAst::Lit(*order as i64),
@@ -1418,7 +1420,7 @@ impl TransactionCase {
             }
             Self::AddAtomConstraint { count, idx, size } => {
                 vec![Edit::AddAtomConstraint {
-                    idx: AtomRef::Id(AtomId((idx % count) as u32)),
+                    id: AtomRef::Id(AtomId((idx % count) as u32)),
                     constraint: AtomConstraint::ring_size(*size),
                 }]
             }
@@ -1877,6 +1879,8 @@ fn test_constraint_ref_uses_keyword_when_metadata_id_present() {
     ));
     let ast = MoleculeAst::from_parts(
         atoms,
+        Vec::new(),
+        Vec::new(),
         Vec::new(),
         Vec::new(),
         Vec::new(),

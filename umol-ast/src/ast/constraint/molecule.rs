@@ -79,11 +79,11 @@ impl Constraint {
     /// recursively simplified via [`MoleculeAst::simplify_values`].
     pub fn simplify(self) -> Self {
         match self {
-            Constraint::Atom(idx, c) => Constraint::Atom(idx, c.simplify()),
-            Constraint::Bond(idx, c) => Constraint::Bond(idx, c.simplify()),
-            Constraint::DativeBond(idx, c) => Constraint::DativeBond(idx, c.simplify()),
-            Constraint::AromaticSystem(idx, c) => Constraint::AromaticSystem(idx, c.simplify()),
-            Constraint::MulticenterBond(idx, c) => Constraint::MulticenterBond(idx, c.simplify()),
+            Constraint::Atom(id, c) => Constraint::Atom(id, c.simplify()),
+            Constraint::Bond(id, c) => Constraint::Bond(id, c.simplify()),
+            Constraint::DativeBond(id, c) => Constraint::DativeBond(id, c.simplify()),
+            Constraint::AromaticSystem(id, c) => Constraint::AromaticSystem(id, c.simplify()),
+            Constraint::MulticenterBond(id, c) => Constraint::MulticenterBond(id, c.simplify()),
             Constraint::NoncovalentBond(_, c) => match c {},
             Constraint::StereoAtom(_, c) => match c {},
             Constraint::StereoBond(_, c) => match c {},
@@ -97,22 +97,22 @@ impl Constraint {
 
     pub fn remap(self, remap: &IdRemapping) -> Option<Self> {
         match self {
-            Constraint::Atom(idx, c) => remap.atom(idx).map(|i| Constraint::Atom(i, c)),
-            Constraint::Bond(idx, c) => remap.bond(idx).map(|i| Constraint::Bond(i, c)),
-            Constraint::DativeBond(idx, c) => {
-                let i = remap.dative_bond(idx)?;
+            Constraint::Atom(id, c) => remap.atom(id).map(|i| Constraint::Atom(i, c)),
+            Constraint::Bond(id, c) => remap.bond(id).map(|i| Constraint::Bond(i, c)),
+            Constraint::DativeBond(id, c) => {
+                let i = remap.dative_bond(id)?;
                 c.remap(remap).map(|c| Constraint::DativeBond(i, c))
             }
-            Constraint::AromaticSystem(idx, c) => {
-                let i = remap.aromatic_system(idx)?;
+            Constraint::AromaticSystem(id, c) => {
+                let i = remap.aromatic_system(id)?;
                 c.remap(remap).map(|c| Constraint::AromaticSystem(i, c))
             }
-            Constraint::MulticenterBond(idx, c) => {
-                let i = remap.multicenter_bond(idx)?;
+            Constraint::MulticenterBond(id, c) => {
+                let i = remap.multicenter_bond(id)?;
                 c.remap(remap).map(|c| Constraint::MulticenterBond(i, c))
             }
-            Constraint::NoncovalentBond(idx, c) => {
-                let i = remap.noncovalent_bond(idx)?;
+            Constraint::NoncovalentBond(id, c) => {
+                let i = remap.noncovalent_bond(id)?;
                 c.remap(remap).map(|c| Constraint::NoncovalentBond(i, c))
             }
             Constraint::StereoAtom(_, c) => match c {},
@@ -541,7 +541,7 @@ impl SubPatternAnchor {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Remapping;
+    use umol_graph_core::{RelationId, Remapping};
 
     use super::*;
     use crate::ast::ids::{
@@ -571,14 +571,15 @@ mod tests {
         removed_stereo_atoms: Vec<u32>,
         removed_stereo_bonds: Vec<u32>,
     ) -> IdRemapping {
+        let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
         IdRemapping::new(
             Remapping::new(Vec::new(), Vec::new()),
-            removed_dative,
-            removed_aromatic,
-            removed_multicenter,
-            removed_noncovalent,
-            removed_stereo_atoms,
-            removed_stereo_bonds,
+            rel(removed_dative),
+            rel(removed_aromatic),
+            rel(removed_multicenter),
+            rel(removed_noncovalent),
+            rel(removed_stereo_atoms),
+            rel(removed_stereo_bonds),
         )
     }
 

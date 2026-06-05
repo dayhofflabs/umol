@@ -258,11 +258,11 @@ pub enum Edit {
         bonds: Vec<BondRef>,
     },
     SetAtomField {
-        idx: AtomRef,
+        id: AtomRef,
         change: AtomFieldChange,
     },
     SetBondField {
-        idx: BondRef,
+        id: BondRef,
         change: BondFieldChange,
     },
 
@@ -272,12 +272,12 @@ pub enum Edit {
         ast: DativeBondAst,
     },
     RemoveDativeBond {
-        idx: DativeBondRef,
+        id: DativeBondRef,
         atoms: Vec<AtomRef>,
         ast: DativeBondAst,
     },
     SetDativeBondField {
-        idx: DativeBondRef,
+        id: DativeBondRef,
         change: DativeBondFieldChange,
     },
 
@@ -287,12 +287,12 @@ pub enum Edit {
         ast: AromaticSystemAst,
     },
     RemoveAromaticSystem {
-        idx: AromaticSystemRef,
+        id: AromaticSystemRef,
         atoms: Vec<AtomRef>,
         ast: AromaticSystemAst,
     },
     SetAromaticSystemField {
-        idx: AromaticSystemRef,
+        id: AromaticSystemRef,
         change: AromaticSystemFieldChange,
     },
 
@@ -302,12 +302,12 @@ pub enum Edit {
         ast: MulticenterBondAst,
     },
     RemoveMulticenterBond {
-        idx: MulticenterBondRef,
+        id: MulticenterBondRef,
         atoms: Vec<AtomRef>,
         ast: MulticenterBondAst,
     },
     SetMulticenterBondField {
-        idx: MulticenterBondRef,
+        id: MulticenterBondRef,
         change: MulticenterBondFieldChange,
     },
 
@@ -317,12 +317,12 @@ pub enum Edit {
         ast: NoncovalentBondAst,
     },
     RemoveNoncovalentBond {
-        idx: NoncovalentBondRef,
+        id: NoncovalentBondRef,
         atoms: [AtomRef; 2],
         ast: NoncovalentBondAst,
     },
     SetNoncovalentBondField {
-        idx: NoncovalentBondRef,
+        id: NoncovalentBondRef,
         change: NoncovalentBondFieldChange,
     },
 
@@ -335,13 +335,13 @@ pub enum Edit {
         ast: StereoAtomAst,
     },
     RemoveStereoAtom {
-        idx: StereoAtomRef,
+        id: StereoAtomRef,
         site: AtomRef,
         ligands: Vec<(AtomRef, StereoLigandKind)>,
         ast: StereoAtomAst,
     },
     SetStereoAtomField {
-        idx: StereoAtomRef,
+        id: StereoAtomRef,
         change: StereoAtomFieldChange,
     },
     AddStereoBond {
@@ -350,71 +350,71 @@ pub enum Edit {
         ast: StereoBondAst,
     },
     RemoveStereoBond {
-        idx: StereoBondRef,
+        id: StereoBondRef,
         site: BondRef,
         ligands: Vec<(AtomRef, StereoLigandKind)>,
         ast: StereoBondAst,
     },
     SetStereoBondField {
-        idx: StereoBondRef,
+        id: StereoBondRef,
         change: StereoBondFieldChange,
     },
 
     // Entity-inline constraints — atom
     SetAtomConstraint {
-        idx: AtomRef,
+        id: AtomRef,
         old: Option<AtomConstraint>,
         new: Option<AtomConstraint>,
     },
     AddAtomConstraint {
-        idx: AtomRef,
+        id: AtomRef,
         constraint: AtomConstraint,
     },
     RemoveAtomConstraint {
-        idx: AtomRef,
+        id: AtomRef,
         constraint: AtomConstraint,
     },
 
     // Entity-inline constraints — bond
     SetBondConstraint {
-        idx: BondRef,
+        id: BondRef,
         old: Option<BondConstraint>,
         new: Option<BondConstraint>,
     },
     AddBondConstraint {
-        idx: BondRef,
+        id: BondRef,
         constraint: BondConstraint,
     },
     RemoveBondConstraint {
-        idx: BondRef,
+        id: BondRef,
         constraint: BondConstraint,
     },
 
     // Entity-inline constraints — dative bond
     SetDativeBondConstraint {
-        idx: DativeBondRef,
+        id: DativeBondRef,
         old: Option<DativeBondConstraint>,
         new: Option<DativeBondConstraint>,
     },
     AddDativeBondConstraint {
-        idx: DativeBondRef,
+        id: DativeBondRef,
         constraint: DativeBondConstraint,
     },
     RemoveDativeBondConstraint {
-        idx: DativeBondRef,
+        id: DativeBondRef,
         constraint: DativeBondConstraint,
     },
 
     // Entity-inline constraints — aromatic system (no non-unique kinds)
     SetAromaticSystemConstraint {
-        idx: AromaticSystemRef,
+        id: AromaticSystemRef,
         old: Option<AromaticSystemConstraint>,
         new: Option<AromaticSystemConstraint>,
     },
 
     // Entity-inline constraints — multicenter bond (no non-unique kinds)
     SetMulticenterBondConstraint {
-        idx: MulticenterBondRef,
+        id: MulticenterBondRef,
         old: Option<MulticenterBondConstraint>,
         new: Option<MulticenterBondConstraint>,
     },
@@ -441,17 +441,17 @@ impl Edit {
         }
     }
 
-    pub fn remove_atom(idx: AtomRef) -> Self {
+    pub fn remove_atom(id: AtomRef) -> Self {
         Self::RemoveTopology {
-            atoms: vec![idx],
+            atoms: vec![id],
             bonds: Vec::new(),
         }
     }
 
-    pub fn remove_bond(idx: BondRef) -> Self {
+    pub fn remove_bond(id: BondRef) -> Self {
         Self::RemoveTopology {
             atoms: Vec::new(),
-            bonds: vec![idx],
+            bonds: vec![id],
         }
     }
 }

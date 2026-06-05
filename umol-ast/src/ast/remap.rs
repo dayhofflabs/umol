@@ -1,29 +1,29 @@
-//! AST-level index remapping produced by `MoleculeBuilder::remove`.
+//! AST-level id remapping produced by `MoleculeBuilder::remove`.
 //!
 //! Wraps `umol_graph_core::Remapping` for node/edge (atom/bond) and carries
-//! sorted removed-id lists for the four relation kinds. Storage is O(removed)
+//! sorted removed-id lists for the six relation kinds. Storage is O(removed)
 //! per kind; lookups are binary search + partition-point shift.
 
-use umol_graph_core::{EdgeId, NodeId, Remapping};
+use umol_graph_core::{EdgeId, NodeId, RelationId, Remapping};
 
 use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
 
-/// Index remapping produced by `MoleculeBuilder::remove`. Translates
-/// pre-removal `AtomId` / `BondId` / relation indices to post-removal
-/// indices, or signals that an entity was removed. Used to rewrite stale
-/// index references against the new `MoleculeAst` layout.
+/// Id remapping produced by `MoleculeBuilder::remove`. Translates
+/// pre-removal `AtomId` / `BondId` / relation ids to post-removal
+/// ids, or signals that an entity was removed. Used to rewrite stale
+/// id references against the new `MoleculeAst` layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IdRemapping {
     graph: Remapping,
-    removed_dative_bonds: Vec<u32>,
-    removed_aromatic_systems: Vec<u32>,
-    removed_multicenter_bonds: Vec<u32>,
-    removed_noncovalent_bonds: Vec<u32>,
-    removed_stereo_atoms: Vec<u32>,
-    removed_stereo_bonds: Vec<u32>,
+    removed_dative_bonds: Vec<RelationId>,
+    removed_aromatic_systems: Vec<RelationId>,
+    removed_multicenter_bonds: Vec<RelationId>,
+    removed_noncovalent_bonds: Vec<RelationId>,
+    removed_stereo_atoms: Vec<RelationId>,
+    removed_stereo_bonds: Vec<RelationId>,
 }
 
 /// Inverse view of an [`IdRemapping`] for rollback. Translates surviving
@@ -49,12 +49,12 @@ impl IdRemapping {
 
     #[allow(clippy::too_many_arguments)]
     pub fn relations(
-        removed_dative_bonds: Vec<u32>,
-        removed_aromatic_systems: Vec<u32>,
-        removed_multicenter_bonds: Vec<u32>,
-        removed_noncovalent_bonds: Vec<u32>,
-        removed_stereo_atoms: Vec<u32>,
-        removed_stereo_bonds: Vec<u32>,
+        removed_dative_bonds: Vec<RelationId>,
+        removed_aromatic_systems: Vec<RelationId>,
+        removed_multicenter_bonds: Vec<RelationId>,
+        removed_noncovalent_bonds: Vec<RelationId>,
+        removed_stereo_atoms: Vec<RelationId>,
+        removed_stereo_bonds: Vec<RelationId>,
     ) -> Self {
         Self::new(
             Remapping::new(Vec::new(), Vec::new()),
@@ -70,12 +70,12 @@ impl IdRemapping {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         graph: Remapping,
-        mut removed_dative_bonds: Vec<u32>,
-        mut removed_aromatic_systems: Vec<u32>,
-        mut removed_multicenter_bonds: Vec<u32>,
-        mut removed_noncovalent_bonds: Vec<u32>,
-        mut removed_stereo_atoms: Vec<u32>,
-        mut removed_stereo_bonds: Vec<u32>,
+        mut removed_dative_bonds: Vec<RelationId>,
+        mut removed_aromatic_systems: Vec<RelationId>,
+        mut removed_multicenter_bonds: Vec<RelationId>,
+        mut removed_noncovalent_bonds: Vec<RelationId>,
+        mut removed_stereo_atoms: Vec<RelationId>,
+        mut removed_stereo_bonds: Vec<RelationId>,
     ) -> Self {
         normalize_removed(&mut removed_dative_bonds);
         normalize_removed(&mut removed_aromatic_systems);
@@ -103,27 +103,27 @@ impl IdRemapping {
     }
 
     pub fn dative_bond(&self, id: DativeBondId) -> Option<DativeBondId> {
-        remap_relation(&self.removed_dative_bonds, id.0).map(DativeBondId)
+        remap_relation(&self.removed_dative_bonds, id.into()).map(DativeBondId::from)
     }
 
     pub fn aromatic_system(&self, id: AromaticSystemId) -> Option<AromaticSystemId> {
-        remap_relation(&self.removed_aromatic_systems, id.0).map(AromaticSystemId)
+        remap_relation(&self.removed_aromatic_systems, id.into()).map(AromaticSystemId::from)
     }
 
     pub fn multicenter_bond(&self, id: MulticenterBondId) -> Option<MulticenterBondId> {
-        remap_relation(&self.removed_multicenter_bonds, id.0).map(MulticenterBondId)
+        remap_relation(&self.removed_multicenter_bonds, id.into()).map(MulticenterBondId::from)
     }
 
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> Option<NoncovalentBondId> {
-        remap_relation(&self.removed_noncovalent_bonds, id.0).map(NoncovalentBondId)
+        remap_relation(&self.removed_noncovalent_bonds, id.into()).map(NoncovalentBondId::from)
     }
 
     pub fn stereo_atom(&self, id: StereoAtomId) -> Option<StereoAtomId> {
-        remap_relation(&self.removed_stereo_atoms, id.0).map(StereoAtomId)
+        remap_relation(&self.removed_stereo_atoms, id.into()).map(StereoAtomId::from)
     }
 
     pub fn stereo_bond(&self, id: StereoBondId) -> Option<StereoBondId> {
-        remap_relation(&self.removed_stereo_bonds, id.0).map(StereoBondId)
+        remap_relation(&self.removed_stereo_bonds, id.into()).map(StereoBondId::from)
     }
 
     pub fn graph(&self) -> &Remapping {
@@ -157,42 +157,42 @@ impl UndoRemapping {
     }
 
     pub fn dative_bond(&self, id: DativeBondId) -> DativeBondId {
-        DativeBondId(unmap_dense(&self.forward.removed_dative_bonds, id.0))
+        DativeBondId::from(unmap_dense(&self.forward.removed_dative_bonds, id.into()))
     }
 
     pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemId {
-        AromaticSystemId(unmap_dense(&self.forward.removed_aromatic_systems, id.0))
+        AromaticSystemId::from(unmap_dense(&self.forward.removed_aromatic_systems, id.into()))
     }
 
     pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondId {
-        MulticenterBondId(unmap_dense(&self.forward.removed_multicenter_bonds, id.0))
+        MulticenterBondId::from(unmap_dense(&self.forward.removed_multicenter_bonds, id.into()))
     }
 
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondId {
-        NoncovalentBondId(unmap_dense(&self.forward.removed_noncovalent_bonds, id.0))
+        NoncovalentBondId::from(unmap_dense(&self.forward.removed_noncovalent_bonds, id.into()))
     }
 
     pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {
-        StereoAtomId(unmap_dense(&self.forward.removed_stereo_atoms, id.0))
+        StereoAtomId::from(unmap_dense(&self.forward.removed_stereo_atoms, id.into()))
     }
 
     pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondId {
-        StereoBondId(unmap_dense(&self.forward.removed_stereo_bonds, id.0))
+        StereoBondId::from(unmap_dense(&self.forward.removed_stereo_bonds, id.into()))
     }
 }
 
-fn remap_relation(removed: &[u32], old: u32) -> Option<u32> {
+fn remap_relation(removed: &[RelationId], old: RelationId) -> Option<RelationId> {
     if removed.binary_search(&old).is_ok() {
         return None;
     }
     let shift = removed.partition_point(|&r| r < old);
-    Some(old - shift as u32)
+    Some(RelationId(old.0 - shift as u32))
 }
 
-fn unmap_dense(removed: &[u32], post: u32) -> u32 {
+fn unmap_dense(removed: &[RelationId], post: RelationId) -> RelationId {
     let mut old = post;
     loop {
-        let next = post + removed.partition_point(|&r| r <= old) as u32;
+        let next = RelationId(post.0 + removed.partition_point(|&r| r <= old) as u32);
         if next == old {
             return old;
         }
@@ -200,7 +200,7 @@ fn unmap_dense(removed: &[u32], post: u32) -> u32 {
     }
 }
 
-fn normalize_removed(removed: &mut Vec<u32>) {
+fn normalize_removed(removed: &mut Vec<RelationId>) {
     removed.sort_unstable();
     removed.dedup();
 }
@@ -218,12 +218,12 @@ mod tests {
     fn remapping() -> IdRemapping {
         IdRemapping::new(
             Remapping::new(vec![1, 3], vec![0, 2]),
-            vec![2, 0, 2],
-            vec![1],
-            vec![3, 0],
-            vec![2],
-            vec![1],
-            vec![2],
+            vec![RelationId(2), RelationId(0), RelationId(2)],
+            vec![RelationId(1)],
+            vec![RelationId(3), RelationId(0)],
+            vec![RelationId(2)],
+            vec![RelationId(1)],
+            vec![RelationId(2)],
         )
     }
 

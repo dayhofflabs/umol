@@ -244,13 +244,13 @@ fn rich_molecule() -> MoleculeAst {
 #[case::n_o(BondId(2), AtomId(2), AtomId(3), ValueAst::Lit(1))]
 fn test_molecule_ast_bond(
     #[from(rich_molecule)] ast: MoleculeAst,
-    #[case] idx: BondId,
+    #[case] id: BondId,
     #[case] src: AtomId,
     #[case] tgt: AtomId,
     #[case] order: ValueAst,
 ) {
-    let bv = ast.bond(idx);
-    assert_eq!(bv.id, idx);
+    let bv = ast.bond(id);
+    assert_eq!(bv.id, id);
     assert_eq!(bv.atom_ids()[0], src);
     assert_eq!(bv.atom_ids()[1], tgt);
     assert_eq!(bv.ast.order, order);
@@ -739,11 +739,11 @@ fn test_noncovalent_bond_views_induced(
 #[case::atom_3(AtomId(3), Element::O)]
 fn test_molecule_ast_atom(
     #[from(rich_molecule)] ast: MoleculeAst,
-    #[case] idx: AtomId,
+    #[case] id: AtomId,
     #[case] element: Element,
 ) {
-    let av = ast.atom(idx);
-    assert_eq!(av.id, idx);
+    let av = ast.atom(id);
+    assert_eq!(av.id, id);
     assert_eq!(av.ast.element, ElementAst::Lit(element));
 }
 
@@ -2246,8 +2246,8 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     }
     match cs[2] {
         Constraint::And(xs) => match &xs[0] {
-            Constraint::Atom(idx, AtomConstraint::Degree(v)) => {
-                assert_eq!(*idx, AtomId(1));
+            Constraint::Atom(id, AtomConstraint::Degree(v)) => {
+                assert_eq!(*id, AtomId(1));
                 assert_eq!(v, &ValueAst::Lit(3));
             }
             c => panic!("expected Atom Degree leaf, got {c:?}"),

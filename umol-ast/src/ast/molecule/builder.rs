@@ -61,9 +61,9 @@ where
         let FixedSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
-        let idx = vec.len() as u32;
+        let id = vec.len() as u32;
         vec.push((participants, data));
-        idx
+        id
     }
 
     fn materialize(&mut self) {
@@ -119,18 +119,18 @@ where
         }
     }
 
-    fn remove_indices(&mut self, indices: &[u32]) {
-        if indices.is_empty() {
+    fn remove_relations(&mut self, ids: &[RelationId]) {
+        if ids.is_empty() {
             return;
         }
         self.materialize();
         let FixedSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
-        let remove: HashSet<u32> = indices.iter().copied().collect();
+        let remove: HashSet<RelationId> = ids.iter().copied().collect();
         let mut dst = 0usize;
         for src in 0..vec.len() {
-            if !remove.contains(&(src as u32)) {
+            if !remove.contains(&RelationId(src as u32)) {
                 vec.swap(dst, src);
                 dst += 1;
             }
@@ -168,9 +168,9 @@ where
         let VarSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
-        let idx = vec.len() as u32;
+        let id = vec.len() as u32;
         vec.push((participants, data));
-        idx
+        id
     }
 
     fn materialize(&mut self) {
@@ -225,18 +225,18 @@ where
         }
     }
 
-    fn remove_indices(&mut self, indices: &[u32]) {
-        if indices.is_empty() {
+    fn remove_relations(&mut self, ids: &[RelationId]) {
+        if ids.is_empty() {
             return;
         }
         self.materialize();
         let VarSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
-        let remove: HashSet<u32> = indices.iter().copied().collect();
+        let remove: HashSet<RelationId> = ids.iter().copied().collect();
         let mut dst = 0usize;
         for src in 0..vec.len() {
-            if !remove.contains(&(src as u32)) {
+            if !remove.contains(&RelationId(src as u32)) {
                 vec.swap(dst, src);
                 dst += 1;
             }
@@ -258,10 +258,7 @@ where
 }
 
 /// Builder storage for a fixed-arity-first-factor / var-second-factor birelation:
-/// shared until first mutation, then a `Vec` of entries — mirroring
-/// `VarSetStorage` / `FixedSetStorage`. Generic over exactly what
-/// `FixedVarBirelationSet` is; chemistry-specific naming (site/ligands) lives in
-/// the views, not here.
+/// shared until first mutation, then a `Vec` of entries.
 #[derive(Clone)]
 enum FixedVarSetStorage<L1, O1, const N1: usize, L2, O2, D> {
     Shared(Arc<FixedVarBirelationSet<L1, O1, N1, L2, O2, D>>),
@@ -281,9 +278,9 @@ where
         let FixedVarSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
-        let idx = vec.len() as u32;
+        let id = vec.len() as u32;
         vec.push((participants_1, participants_2, data));
-        idx
+        id
     }
 
     fn materialize(&mut self) {
@@ -342,18 +339,18 @@ where
         }
     }
 
-    fn remove_indices(&mut self, indices: &[u32]) {
-        if indices.is_empty() {
+    fn remove_relations(&mut self, ids: &[RelationId]) {
+        if ids.is_empty() {
             return;
         }
         self.materialize();
         let FixedVarSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
-        let remove: HashSet<u32> = indices.iter().copied().collect();
+        let remove: HashSet<RelationId> = ids.iter().copied().collect();
         let mut dst = 0usize;
         for src in 0..vec.len() {
-            if !remove.contains(&(src as u32)) {
+            if !remove.contains(&RelationId(src as u32)) {
                 vec.swap(dst, src);
                 dst += 1;
             }
@@ -396,7 +393,7 @@ where
 fn birelation_removed<L1, O1, const N1: usize, L2, O2, D>(
     storage: &FixedVarSetStorage<L1, O1, N1, L2, O2, D>,
     remap: &Remapping,
-) -> Vec<u32>
+) -> Vec<RelationId>
 where
     L1: RelationParticipant,
     O1: FactorOrdering,
@@ -415,7 +412,7 @@ where
             .iter()
             .any(|&p| p.remap(remap).is_none());
         if f1_gone || f2_gone {
-            removed.push(i as u32);
+            removed.push(RelationId(i as u32));
         }
     }
     removed
@@ -442,7 +439,7 @@ where
 fn fixed_relation_removed<P, O, D, const N: usize>(
     storage: &FixedSetStorage<P, O, D, N>,
     remap: &Remapping,
-) -> Vec<u32>
+) -> Vec<RelationId>
 where
     P: RelationParticipant,
     O: FactorOrdering,
@@ -455,13 +452,13 @@ where
             .iter()
             .any(|&p| p.remap(remap).is_none())
         {
-            removed.push(i as u32);
+            removed.push(RelationId(i as u32));
         }
     }
     removed
 }
 
-fn var_relation_removed<P, O, D>(storage: &VarSetStorage<P, O, D>, remap: &Remapping) -> Vec<u32>
+fn var_relation_removed<P, O, D>(storage: &VarSetStorage<P, O, D>, remap: &Remapping) -> Vec<RelationId>
 where
     P: RelationParticipant,
     O: FactorOrdering,
@@ -474,7 +471,7 @@ where
             .iter()
             .any(|&p| p.remap(remap).is_none())
         {
-            removed.push(i as u32);
+            removed.push(RelationId(i as u32));
         }
     }
     removed
@@ -649,7 +646,7 @@ impl MoleculeBuilder {
 
     /// Add a molecule-level constraint (molecule-scope predicate or
     /// combinator). Unconditional per-entity constraints belong inline on the
-    /// entity — use `atom_mut(idx).constraints.set(c)` etc.
+    /// entity — use `atom_mut(id).constraints.set(c)` etc.
     pub fn push_constraint(&mut self, c: Constraint) {
         self.constraints.push(c);
     }
@@ -659,58 +656,58 @@ impl MoleculeBuilder {
     // Mutable views edit entity data in place. Structural add/remove stays on
     // the builder itself because dense removal can remap many unrelated ids.
 
-    pub fn atom(&self, idx: AtomId) -> AtomBuilderView<'_> {
+    pub fn atom(&self, id: AtomId) -> AtomBuilderView<'_> {
         AtomBuilderView {
-            id: idx,
-            ast: &self.atoms[idx.index()],
+            id,
+            ast: &self.atoms[id.index()],
         }
     }
 
-    pub fn atom_mut(&mut self, idx: AtomId) -> AtomBuilderViewMut<'_> {
-        let ast = &mut Arc::make_mut(&mut self.atoms)[idx.index()];
-        AtomBuilderViewMut { id: idx, ast }
+    pub fn atom_mut(&mut self, id: AtomId) -> AtomBuilderViewMut<'_> {
+        let ast = &mut Arc::make_mut(&mut self.atoms)[id.index()];
+        AtomBuilderViewMut { id, ast }
     }
 
-    pub fn bond(&self, idx: BondId) -> BondBuilderView<'_> {
-        let endpoints = self.graph.edge_endpoints(EdgeId::from(idx));
+    pub fn bond(&self, id: BondId) -> BondBuilderView<'_> {
+        let endpoints = self.graph.edge_endpoints(EdgeId::from(id));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
         BondBuilderView {
-            id: idx,
-            ast: &self.bonds[idx.index()],
+            id,
+            ast: &self.bonds[id.index()],
             atoms,
         }
     }
 
-    pub fn bond_mut(&mut self, idx: BondId) -> BondBuilderViewMut<'_> {
-        let endpoints = self.graph.edge_endpoints(EdgeId::from(idx));
+    pub fn bond_mut(&mut self, id: BondId) -> BondBuilderViewMut<'_> {
+        let endpoints = self.graph.edge_endpoints(EdgeId::from(id));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
-        let ast = &mut Arc::make_mut(&mut self.bonds)[idx.index()];
+        let ast = &mut Arc::make_mut(&mut self.bonds)[id.index()];
         BondBuilderViewMut {
-            id: idx,
+            id,
             ast,
             atoms,
         }
     }
 
-    pub fn dative_bond(&self, idx: DativeBondId) -> DativeBondBuilderView<'_> {
+    pub fn dative_bond(&self, id: DativeBondId) -> DativeBondBuilderView<'_> {
         match &self.dative_bonds {
             VarSetStorage::Shared(arc) => {
-                let rid = RelationId(idx.0);
+                let rid = RelationId(id.0);
                 let atoms = arc.participants(rid);
                 let ast = arc.data(rid);
                 let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
                 DativeBondBuilderView {
-                    id: idx,
+                    id,
                     ast,
                     atoms,
                     acceptor_id,
                 }
             }
             VarSetStorage::Mutable(vec) => {
-                let entry = &vec[idx.index()];
+                let entry = &vec[id.index()];
                 let acceptor_id = AtomId::from(entry.0[entry.1.acceptor_slot as usize]);
                 DativeBondBuilderView {
-                    id: idx,
+                    id,
                     ast: &entry.1,
                     atoms: &entry.0,
                     acceptor_id,
@@ -719,35 +716,35 @@ impl MoleculeBuilder {
         }
     }
 
-    pub fn dative_bond_mut(&mut self, idx: DativeBondId) -> DativeBondBuilderViewMut<'_> {
+    pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondBuilderViewMut<'_> {
         self.dative_bonds.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.dative_bonds else {
             unreachable!()
         };
-        let entry = &mut vec[idx.index()];
+        let entry = &mut vec[id.index()];
         let acceptor_id = AtomId::from(entry.0[entry.1.acceptor_slot as usize]);
         DativeBondBuilderViewMut {
-            id: idx,
+            id,
             atoms: &entry.0,
             ast: &mut entry.1,
             acceptor_id,
         }
     }
 
-    pub fn aromatic_system(&self, idx: AromaticSystemId) -> AromaticSystemBuilderView<'_> {
+    pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemBuilderView<'_> {
         match &self.aromatic_systems {
             VarSetStorage::Shared(arc) => {
-                let rid = RelationId(idx.0);
+                let rid = RelationId(id.0);
                 AromaticSystemBuilderView {
-                    id: idx,
+                    id,
                     ast: arc.data(rid),
                     atoms: arc.participants(rid),
                 }
             }
             VarSetStorage::Mutable(vec) => {
-                let entry = &vec[idx.index()];
+                let entry = &vec[id.index()];
                 AromaticSystemBuilderView {
-                    id: idx,
+                    id,
                     ast: &entry.1,
                     atoms: &entry.0,
                 }
@@ -757,34 +754,34 @@ impl MoleculeBuilder {
 
     pub fn aromatic_system_mut(
         &mut self,
-        idx: AromaticSystemId,
+        id: AromaticSystemId,
     ) -> AromaticSystemBuilderViewMut<'_> {
         self.aromatic_systems.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.aromatic_systems else {
             unreachable!()
         };
-        let entry = &mut vec[idx.index()];
+        let entry = &mut vec[id.index()];
         AromaticSystemBuilderViewMut {
-            id: idx,
+            id,
             atoms: &entry.0,
             ast: &mut entry.1,
         }
     }
 
-    pub fn multicenter_bond(&self, idx: MulticenterBondId) -> MulticenterBondBuilderView<'_> {
+    pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondBuilderView<'_> {
         match &self.multicenter_bonds {
             VarSetStorage::Shared(arc) => {
-                let rid = RelationId(idx.0);
+                let rid = RelationId(id.0);
                 MulticenterBondBuilderView {
-                    id: idx,
+                    id,
                     ast: arc.data(rid),
                     atoms: arc.participants(rid),
                 }
             }
             VarSetStorage::Mutable(vec) => {
-                let entry = &vec[idx.index()];
+                let entry = &vec[id.index()];
                 MulticenterBondBuilderView {
-                    id: idx,
+                    id,
                     ast: &entry.1,
                     atoms: &entry.0,
                 }
@@ -794,35 +791,35 @@ impl MoleculeBuilder {
 
     pub fn multicenter_bond_mut(
         &mut self,
-        idx: MulticenterBondId,
+        id: MulticenterBondId,
     ) -> MulticenterBondBuilderViewMut<'_> {
         self.multicenter_bonds.materialize();
         let VarSetStorage::Mutable(vec) = &mut self.multicenter_bonds else {
             unreachable!()
         };
-        let entry = &mut vec[idx.index()];
+        let entry = &mut vec[id.index()];
         MulticenterBondBuilderViewMut {
-            id: idx,
+            id,
             atoms: &entry.0,
             ast: &mut entry.1,
         }
     }
 
-    pub fn noncovalent_bond(&self, idx: NoncovalentBondId) -> NoncovalentBondBuilderView<'_> {
+    pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondBuilderView<'_> {
         match &self.noncovalent_bonds {
             FixedSetStorage::Shared(arc) => {
-                let rid = RelationId(idx.0);
+                let rid = RelationId(id.0);
                 let parts = arc.participants(rid);
                 NoncovalentBondBuilderView {
-                    id: idx,
+                    id,
                     ast: arc.data(rid),
                     atoms: [AtomId::from(parts[0]), AtomId::from(parts[1])],
                 }
             }
             FixedSetStorage::Mutable(vec) => {
-                let entry = &vec[idx.index()];
+                let entry = &vec[id.index()];
                 NoncovalentBondBuilderView {
-                    id: idx,
+                    id,
                     ast: &entry.1,
                     atoms: [AtomId::from(entry.0[0]), AtomId::from(entry.0[1])],
                 }
@@ -832,16 +829,16 @@ impl MoleculeBuilder {
 
     pub fn noncovalent_bond_mut(
         &mut self,
-        idx: NoncovalentBondId,
+        id: NoncovalentBondId,
     ) -> NoncovalentBondBuilderViewMut<'_> {
         self.noncovalent_bonds.materialize();
         let FixedSetStorage::Mutable(vec) = &mut self.noncovalent_bonds else {
             unreachable!()
         };
-        let entry = &mut vec[idx.index()];
+        let entry = &mut vec[id.index()];
         let atoms = [AtomId::from(entry.0[0]), AtomId::from(entry.0[1])];
         NoncovalentBondBuilderViewMut {
-            id: idx,
+            id,
             ast: &mut entry.1,
             atoms,
         }
@@ -969,9 +966,9 @@ impl MoleculeBuilder {
     ///
     /// This is a low-level dense removal primitive. It remaps molecule-level
     /// constraints but does not build rollback data.
-    pub fn remove_dative_bonds(&mut self, indices: &[DativeBondId]) {
-        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
-        self.dative_bonds.remove_indices(&raw);
+    pub fn remove_dative_bonds(&mut self, ids: &[DativeBondId]) {
+        let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
+        self.dative_bonds.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
             Remapping::new(Vec::new(), Vec::new()),
             raw,
@@ -988,9 +985,9 @@ impl MoleculeBuilder {
     ///
     /// This is a low-level dense removal primitive. It remaps molecule-level
     /// constraints but does not build rollback data.
-    pub fn remove_aromatic_systems(&mut self, indices: &[AromaticSystemId]) {
-        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
-        self.aromatic_systems.remove_indices(&raw);
+    pub fn remove_aromatic_systems(&mut self, ids: &[AromaticSystemId]) {
+        let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
+        self.aromatic_systems.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
             Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
@@ -1007,9 +1004,9 @@ impl MoleculeBuilder {
     ///
     /// This is a low-level dense removal primitive. It remaps molecule-level
     /// constraints but does not build rollback data.
-    pub fn remove_multicenter_bonds(&mut self, indices: &[MulticenterBondId]) {
-        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
-        self.multicenter_bonds.remove_indices(&raw);
+    pub fn remove_multicenter_bonds(&mut self, ids: &[MulticenterBondId]) {
+        let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
+        self.multicenter_bonds.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
             Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
@@ -1026,9 +1023,9 @@ impl MoleculeBuilder {
     ///
     /// This is a low-level dense removal primitive. It remaps molecule-level
     /// constraints but does not build rollback data.
-    pub fn remove_noncovalent_bonds(&mut self, indices: &[NoncovalentBondId]) {
-        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
-        self.noncovalent_bonds.remove_indices(&raw);
+    pub fn remove_noncovalent_bonds(&mut self, ids: &[NoncovalentBondId]) {
+        let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
+        self.noncovalent_bonds.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
             Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
@@ -1045,9 +1042,9 @@ impl MoleculeBuilder {
     ///
     /// Low-level dense removal primitive; remaps molecule-level constraints but
     /// does not build rollback data.
-    pub fn remove_stereo_atoms(&mut self, indices: &[StereoAtomId]) {
-        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
-        self.stereo_atoms.remove_indices(&raw);
+    pub fn remove_stereo_atoms(&mut self, ids: &[StereoAtomId]) {
+        let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
+        self.stereo_atoms.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
             Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
@@ -1064,9 +1061,9 @@ impl MoleculeBuilder {
     ///
     /// Low-level dense removal primitive; remaps molecule-level constraints but
     /// does not build rollback data.
-    pub fn remove_stereo_bonds(&mut self, indices: &[StereoBondId]) {
-        let raw: Vec<u32> = indices.iter().map(|i| i.0).collect();
-        self.stereo_bonds.remove_indices(&raw);
+    pub fn remove_stereo_bonds(&mut self, ids: &[StereoBondId]) {
+        let raw: Vec<RelationId> = ids.iter().map(|&i| i.into()).collect();
+        self.stereo_bonds.remove_relations(&raw);
         let idx_remap = IdRemapping::new(
             Remapping::new(Vec::new(), Vec::new()),
             Vec::new(),
@@ -1131,7 +1128,7 @@ impl MoleculeBuilder {
         self.noncovalent_bonds = noncovalent.apply_remapping(&remap);
 
         // Forward-remap stereo overlays: a stereo element whose site or any
-        // ligand atom/bond was removed drops out (cascade). The dropped indices
+        // ligand atom/bond was removed drops out (cascade). The dropped ids
         // (computed above) feed `IdRemapping` so rollback (`restore_topology`)
         // can reinsert them.
         let stereo_atoms = mem::replace(
@@ -1542,7 +1539,7 @@ mod tests {
 
         b.remove_dative_bonds(&[DativeBondId(0)]);
         let undo = IdRemapping::relations(
-            vec![removed.id.0],
+            vec![removed.id.into()],
             Vec::new(),
             Vec::new(),
             Vec::new(),

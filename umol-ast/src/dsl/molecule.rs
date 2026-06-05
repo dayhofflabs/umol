@@ -76,36 +76,36 @@ impl Metadata {
         Self::default()
     }
 
-    pub fn atom_id(&self, idx: AtomId) -> Option<&str> {
-        self.atom_ids.get(&idx).map(String::as_str)
+    pub fn atom_id(&self, id: AtomId) -> Option<&str> {
+        self.atom_ids.get(&id).map(String::as_str)
     }
 
-    pub fn bond_id(&self, idx: BondId) -> Option<&str> {
-        self.bond_ids.get(&idx).map(String::as_str)
+    pub fn bond_id(&self, id: BondId) -> Option<&str> {
+        self.bond_ids.get(&id).map(String::as_str)
     }
 
-    pub fn dative_bond_id(&self, idx: DativeBondId) -> Option<&str> {
-        self.dative_bond_ids.get(&idx).map(String::as_str)
+    pub fn dative_bond_id(&self, id: DativeBondId) -> Option<&str> {
+        self.dative_bond_ids.get(&id).map(String::as_str)
     }
 
-    pub fn aromatic_system_id(&self, idx: AromaticSystemId) -> Option<&str> {
-        self.aromatic_system_ids.get(&idx).map(String::as_str)
+    pub fn aromatic_system_id(&self, id: AromaticSystemId) -> Option<&str> {
+        self.aromatic_system_ids.get(&id).map(String::as_str)
     }
 
-    pub fn multicenter_bond_id(&self, idx: MulticenterBondId) -> Option<&str> {
-        self.multicenter_bond_ids.get(&idx).map(String::as_str)
+    pub fn multicenter_bond_id(&self, id: MulticenterBondId) -> Option<&str> {
+        self.multicenter_bond_ids.get(&id).map(String::as_str)
     }
 
-    pub fn noncovalent_bond_id(&self, idx: NoncovalentBondId) -> Option<&str> {
-        self.noncovalent_bond_ids.get(&idx).map(String::as_str)
+    pub fn noncovalent_bond_id(&self, id: NoncovalentBondId) -> Option<&str> {
+        self.noncovalent_bond_ids.get(&id).map(String::as_str)
     }
 
-    pub fn stereo_atom_id(&self, idx: StereoAtomId) -> Option<&str> {
-        self.stereo_atom_ids.get(&idx).map(String::as_str)
+    pub fn stereo_atom_id(&self, id: StereoAtomId) -> Option<&str> {
+        self.stereo_atom_ids.get(&id).map(String::as_str)
     }
 
-    pub fn stereo_bond_id(&self, idx: StereoBondId) -> Option<&str> {
-        self.stereo_bond_ids.get(&idx).map(String::as_str)
+    pub fn stereo_bond_id(&self, id: StereoBondId) -> Option<&str> {
+        self.stereo_bond_ids.get(&id).map(String::as_str)
     }
 
     /// Name of the alias bound to this atom DSL, if any.
@@ -131,36 +131,36 @@ impl Metadata {
             .map(|(k, v)| (k.as_str(), v.as_ref()))
     }
 
-    pub fn set_atom_id(&mut self, idx: AtomId, name: impl Into<String>) {
-        self.atom_ids.insert(idx, name.into());
+    pub fn set_atom_id(&mut self, id: AtomId, name: impl Into<String>) {
+        self.atom_ids.insert(id, name.into());
     }
 
-    pub fn set_bond_id(&mut self, idx: BondId, name: impl Into<String>) {
-        self.bond_ids.insert(idx, name.into());
+    pub fn set_bond_id(&mut self, id: BondId, name: impl Into<String>) {
+        self.bond_ids.insert(id, name.into());
     }
 
-    pub fn set_dative_bond_id(&mut self, idx: DativeBondId, name: impl Into<String>) {
-        self.dative_bond_ids.insert(idx, name.into());
+    pub fn set_dative_bond_id(&mut self, id: DativeBondId, name: impl Into<String>) {
+        self.dative_bond_ids.insert(id, name.into());
     }
 
-    pub fn set_aromatic_system_id(&mut self, idx: AromaticSystemId, name: impl Into<String>) {
-        self.aromatic_system_ids.insert(idx, name.into());
+    pub fn set_aromatic_system_id(&mut self, id: AromaticSystemId, name: impl Into<String>) {
+        self.aromatic_system_ids.insert(id, name.into());
     }
 
-    pub fn set_multicenter_bond_id(&mut self, idx: MulticenterBondId, name: impl Into<String>) {
-        self.multicenter_bond_ids.insert(idx, name.into());
+    pub fn set_multicenter_bond_id(&mut self, id: MulticenterBondId, name: impl Into<String>) {
+        self.multicenter_bond_ids.insert(id, name.into());
     }
 
-    pub fn set_noncovalent_bond_id(&mut self, idx: NoncovalentBondId, name: impl Into<String>) {
-        self.noncovalent_bond_ids.insert(idx, name.into());
+    pub fn set_noncovalent_bond_id(&mut self, id: NoncovalentBondId, name: impl Into<String>) {
+        self.noncovalent_bond_ids.insert(id, name.into());
     }
 
-    pub fn set_stereo_atom_id(&mut self, idx: StereoAtomId, name: impl Into<String>) {
-        self.stereo_atom_ids.insert(idx, name.into());
+    pub fn set_stereo_atom_id(&mut self, id: StereoAtomId, name: impl Into<String>) {
+        self.stereo_atom_ids.insert(id, name.into());
     }
 
-    pub fn set_stereo_bond_id(&mut self, idx: StereoBondId, name: impl Into<String>) {
-        self.stereo_bond_ids.insert(idx, name.into());
+    pub fn set_stereo_bond_id(&mut self, id: StereoBondId, name: impl Into<String>) {
+        self.stereo_bond_ids.insert(id, name.into());
     }
 
     /// Insert an atom alias. Last-wins on either side of the bijection: a
@@ -171,55 +171,55 @@ impl Metadata {
         self.atom_aliases.insert(name.into(), Box::new(atom.into()));
     }
 
-    pub fn with_atom_id(mut self, idx: AtomId, name: impl Into<String>) -> Self {
-        self.set_atom_id(idx, name);
+    pub fn with_atom_id(mut self, id: AtomId, name: impl Into<String>) -> Self {
+        self.set_atom_id(id, name);
         self
     }
 
-    pub fn with_bond_id(mut self, idx: BondId, name: impl Into<String>) -> Self {
-        self.set_bond_id(idx, name);
+    pub fn with_bond_id(mut self, id: BondId, name: impl Into<String>) -> Self {
+        self.set_bond_id(id, name);
         self
     }
 
-    pub fn with_dative_bond_id(mut self, idx: DativeBondId, name: impl Into<String>) -> Self {
-        self.set_dative_bond_id(idx, name);
+    pub fn with_dative_bond_id(mut self, id: DativeBondId, name: impl Into<String>) -> Self {
+        self.set_dative_bond_id(id, name);
         self
     }
 
     pub fn with_aromatic_system_id(
         mut self,
-        idx: AromaticSystemId,
+        id: AromaticSystemId,
         name: impl Into<String>,
     ) -> Self {
-        self.set_aromatic_system_id(idx, name);
+        self.set_aromatic_system_id(id, name);
         self
     }
 
     pub fn with_multicenter_bond_id(
         mut self,
-        idx: MulticenterBondId,
+        id: MulticenterBondId,
         name: impl Into<String>,
     ) -> Self {
-        self.set_multicenter_bond_id(idx, name);
+        self.set_multicenter_bond_id(id, name);
         self
     }
 
     pub fn with_noncovalent_bond_id(
         mut self,
-        idx: NoncovalentBondId,
+        id: NoncovalentBondId,
         name: impl Into<String>,
     ) -> Self {
-        self.set_noncovalent_bond_id(idx, name);
+        self.set_noncovalent_bond_id(id, name);
         self
     }
 
-    pub fn with_stereo_atom_id(mut self, idx: StereoAtomId, name: impl Into<String>) -> Self {
-        self.set_stereo_atom_id(idx, name);
+    pub fn with_stereo_atom_id(mut self, id: StereoAtomId, name: impl Into<String>) -> Self {
+        self.set_stereo_atom_id(id, name);
         self
     }
 
-    pub fn with_stereo_bond_id(mut self, idx: StereoBondId, name: impl Into<String>) -> Self {
-        self.set_stereo_bond_id(idx, name);
+    pub fn with_stereo_bond_id(mut self, id: StereoBondId, name: impl Into<String>) -> Self {
+        self.set_stereo_bond_id(id, name);
         self
     }
 
@@ -888,23 +888,23 @@ fn render_atoms(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_atom_entry(idx: AtomId, atom: &AtomAst, meta: &Metadata) -> Edn<'static> {
+fn render_atom_entry(id: AtomId, atom: &AtomAst, meta: &Metadata) -> Edn<'static> {
     let dsl = AtomDsl::from_ref(atom);
     let spec = if let Some(alias) = meta.atom_alias_for(dsl) {
         Edn::Keyword(EdnKeyword::owned(alias.to_string()))
     } else {
         dsl.to_edn()
     };
-    match meta.atom_id(idx) {
+    match meta.atom_id(id) {
         Some(id) => Edn::Vector(vec![Edn::Keyword(EdnKeyword::owned(id.to_string())), spec].into()),
         None => spec,
     }
 }
 
-fn render_atom_ref(idx: AtomId, meta: &Metadata) -> Edn<'static> {
-    match meta.atom_id(idx) {
+fn render_atom_ref(id: AtomId, meta: &Metadata) -> Edn<'static> {
+    match meta.atom_id(id) {
         Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
-        None => Edn::Int(idx.index() as i64),
+        None => Edn::Int(id.index() as i64),
     }
 }
 
@@ -1138,10 +1138,10 @@ fn render_stereo_ligand(ligand: StereoLigandView<'_>, meta: &Metadata) -> Edn<'s
     }
 }
 
-fn render_bond_ref(idx: BondId, meta: &Metadata) -> Edn<'static> {
-    match meta.bond_id(idx) {
+fn render_bond_ref(id: BondId, meta: &Metadata) -> Edn<'static> {
+    match meta.bond_id(id) {
         Some(id) => Edn::Keyword(EdnKeyword::owned(id.to_string())),
-        None => Edn::Int(idx.index() as i64),
+        None => Edn::Int(id.index() as i64),
     }
 }
 
@@ -1292,11 +1292,10 @@ impl MoleculeInput {
         let mut metadata = Metadata::new();
         let mut atom_id_to_idx: IndexMap<String, AtomId> = IndexMap::new();
         for (pos, entry) in atom_entries.into_iter().enumerate() {
-            let idx = AtomId(pos as u32);
             if let Some(id) = entry.id {
                 check_id_disjoint(&id, &atom_id_to_idx, &alias_table)?;
-                atom_id_to_idx.insert(id.clone(), idx);
-                metadata.set_atom_id(idx, id);
+                atom_id_to_idx.insert(id.clone(), AtomId(pos as u32));
+                metadata.set_atom_id(AtomId(pos as u32), id);
             }
             let ast = match entry.spec {
                 AtomSpecInput::Bare(dsl) => dsl.0,

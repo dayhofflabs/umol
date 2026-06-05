@@ -440,7 +440,7 @@ impl RelationalConstraint {
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
-    use umol_graph_core::Remapping;
+    use umol_graph_core::{RelationId, Remapping};
 
     use super::*;
     use crate::ast::value::ValueAst;
@@ -455,14 +455,15 @@ mod tests {
         removed_stereo_atom: Vec<u32>,
         removed_stereo_bond: Vec<u32>,
     ) -> IdRemapping {
+        let rel = |v: Vec<u32>| v.into_iter().map(RelationId).collect::<Vec<_>>();
         IdRemapping::new(
             Remapping::new(removed_nodes, removed_edges),
-            removed_dative,
-            removed_aromatic,
-            removed_multicenter,
-            removed_noncovalent,
-            removed_stereo_atom,
-            removed_stereo_bond,
+            rel(removed_dative),
+            rel(removed_aromatic),
+            rel(removed_multicenter),
+            rel(removed_noncovalent),
+            rel(removed_stereo_atom),
+            rel(removed_stereo_bond),
         )
     }
 
@@ -473,27 +474,72 @@ mod tests {
     /// Drop atom 1; drop dative 0; preserve other entities. Indices above
     /// the removed slot shift down by one.
     fn one_atom_one_dative() -> IdRemapping {
-        remapping(vec![1], vec![], vec![0], vec![], vec![], vec![], vec![], vec![])
+        remapping(
+            vec![1],
+            vec![],
+            vec![0],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )
     }
 
     /// Drop bond 0; preserve other entities.
     fn drop_bond0() -> IdRemapping {
-        remapping(vec![], vec![0], vec![], vec![], vec![], vec![], vec![], vec![])
+        remapping(
+            vec![],
+            vec![0],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )
     }
 
     /// Drop aromatic system 0.
     fn drop_aromatic0() -> IdRemapping {
-        remapping(vec![], vec![], vec![], vec![0], vec![], vec![], vec![], vec![])
+        remapping(
+            vec![],
+            vec![],
+            vec![],
+            vec![0],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+        )
     }
 
     /// Drop multicenter bond 0.
     fn drop_multicenter0() -> IdRemapping {
-        remapping(vec![], vec![], vec![], vec![], vec![0], vec![], vec![], vec![])
+        remapping(
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![0],
+            vec![],
+            vec![],
+            vec![],
+        )
     }
 
     /// Drop noncovalent bond 0.
     fn drop_noncovalent0() -> IdRemapping {
-        remapping(vec![], vec![], vec![], vec![], vec![], vec![0], vec![], vec![])
+        remapping(
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![0],
+            vec![],
+            vec![],
+        )
     }
 
     #[rustfmt::skip]

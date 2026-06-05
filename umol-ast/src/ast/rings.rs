@@ -376,9 +376,9 @@ impl RingGraph {
     fn new(rings: &[Ring]) -> Self {
         let mut edges = Vec::new();
         let mut neighbors = vec![Vec::new(); rings.len()];
-        let indices: Vec<RingId> = (0..rings.len()).map(|i| RingId(i as u32)).collect();
-        for (i, &a) in indices.iter().enumerate() {
-            for &b in &indices[i + 1..] {
+        let ids: Vec<RingId> = (0..rings.len()).map(|i| RingId(i as u32)).collect();
+        for (i, &a) in ids.iter().enumerate() {
+            for &b in &ids[i + 1..] {
                 let relation = classify_ring_relation(&rings[a.index()], &rings[b.index()]);
                 if relation == RingRelation::Disjoint || relation == RingRelation::Identical {
                     continue;
