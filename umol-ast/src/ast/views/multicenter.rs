@@ -18,28 +18,33 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct MulticenterBondViews<'a> {
     molecule: &'a MoleculeAst,
-    set: &'a VarRelationSet<NodeId, Unordered, MulticenterBondAst>,
+    multicenter_bonds: &'a VarRelationSet<NodeId, Unordered, MulticenterBondAst>,
 }
 
 impl<'a> MulticenterBondViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        set: &'a VarRelationSet<NodeId, Unordered, MulticenterBondAst>,
+        multicenter_bonds: &'a VarRelationSet<NodeId, Unordered, MulticenterBondAst>,
     ) -> Self {
-        Self { molecule, set }
+        Self {
+            molecule,
+            multicenter_bonds,
+        }
     }
 
     pub fn count(&self) -> usize {
-        self.set.relation_count()
+        self.multicenter_bonds.relation_count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = MulticenterBondId> {
-        self.set.relation_ids().map(MulticenterBondId::from)
+        self.multicenter_bonds
+            .relation_ids()
+            .map(MulticenterBondId::from)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = MulticenterBondView<'a>> {
         let molecule = self.molecule;
-        let set = self.set;
+        let set = self.multicenter_bonds;
         set.relation_ids().map(move |rid| MulticenterBondView {
             id: MulticenterBondId::from(rid),
             ast: set.data(rid),
@@ -48,19 +53,26 @@ impl<'a> MulticenterBondViews<'a> {
         })
     }
 
-    pub fn get(&self, id: MulticenterBondId) -> MulticenterBondView<'a> {
-        let rid = RelationId::from(id);
-        MulticenterBondView {
-            id,
-            ast: self.set.data(rid),
-            atoms: self.set.participants(rid),
-            molecule: self.molecule,
-        }
+    pub fn contains(&self, id: MulticenterBondId) -> bool {
+        self.multicenter_bonds.contains(RelationId::from(id))
     }
 
-    /// IDs of multicenter bonds incident on `atom`.
+    pub fn get(&self, id: MulticenterBondId) -> Option<MulticenterBondView<'a>> {
+        if !self.contains(id) {
+            return None;
+        }
+        let rid = RelationId::from(id);
+        Some(MulticenterBondView {
+            id,
+            ast: self.multicenter_bonds.data(rid),
+            atoms: self.multicenter_bonds.participants(rid),
+            molecule: self.molecule,
+        })
+    }
+
+    /// Ids of multicenter bonds incident on `atom`.
     pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = MulticenterBondId> + 'a {
-        self.set
+        self.multicenter_bonds
             .incident(NodeId::from(atom))
             .iter()
             .map(|&rid| MulticenterBondId::from(rid))
@@ -68,13 +80,13 @@ impl<'a> MulticenterBondViews<'a> {
 
     /// Whether any multicenter bond is incident on `atom`.
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.set.has_incident(NodeId::from(atom))
+        self.multicenter_bonds.has_incident(NodeId::from(atom))
     }
 
     /// Views of multicenter bonds incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
         let molecule = self.molecule;
-        let set = self.set;
+        let set = self.multicenter_bonds;
         self.incident_ids(atom).map(move |id| {
             let rid = RelationId::from(id);
             MulticenterBondView {
@@ -95,7 +107,7 @@ impl<'a> MulticenterBondViews<'a> {
         let &first = target.iter().next()?;
         self.incident_ids(first).find(|&id| {
             let parts: HashSet<AtomId> = self
-                .set
+                .multicenter_bonds
                 .participants(RelationId::from(id))
                 .iter()
                 .map(|&n| AtomId::from(n))
@@ -109,15 +121,24 @@ impl<'a> MulticenterBondViews<'a> {
         &self,
         atoms: impl IntoIterator<Item = AtomId>,
     ) -> Option<MulticenterBondView<'a>> {
-        self.connecting_id(atoms).map(|id| self.get(id))
+        self.connecting_id(atoms).map(|id| {
+            self.get(id).expect(
+                "multicenter bond id from relation set must refer to a multicenter bond in this molecule",
+            )
+        })
     }
 
-    /// IDs of multicenter bonds whose participants all lie in `atoms`.
+    /// Ids of multicenter bonds whose participants all lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<MulticenterBondId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.set
+        self.multicenter_bonds
             .relation_ids()
-            .filter(|&rid| self.set.participants(rid).iter().all(|p| set.contains(p)))
+            .filter(|&rid| {
+                self.multicenter_bonds
+                    .participants(rid)
+                    .iter()
+                    .all(|p| set.contains(p))
+            })
             .map(MulticenterBondId::from)
             .collect()
     }
@@ -126,7 +147,11 @@ impl<'a> MulticenterBondViews<'a> {
     pub fn induced(&self, atoms: &[AtomId]) -> Vec<MulticenterBondView<'a>> {
         self.induced_ids(atoms)
             .into_iter()
-            .map(|id| self.get(id))
+            .map(|id| {
+                self.get(id).expect(
+                    "multicenter bond id from relation set must refer to a multicenter bond in this molecule",
+                )
+            })
             .collect()
     }
 }
@@ -134,7 +159,7 @@ impl<'a> MulticenterBondViews<'a> {
 impl<'a> Index<MulticenterBondId> for MulticenterBondViews<'a> {
     type Output = MulticenterBondAst;
     fn index(&self, id: MulticenterBondId) -> &MulticenterBondAst {
-        self.set.data(RelationId::from(id))
+        self.multicenter_bonds.data(RelationId::from(id))
     }
 }
 
@@ -145,7 +170,6 @@ pub struct MulticenterBondView<'a> {
     pub id: MulticenterBondId,
     atoms: &'a [NodeId],
     pub ast: &'a MulticenterBondAst,
-    #[allow(dead_code)]
     molecule: &'a MoleculeAst,
 }
 
@@ -327,13 +351,32 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(MulticenterBondId(0), true)]
+    #[case::absent(MulticenterBondId(99), false)]
+    fn test_multicenter_bond_views_contains(
+        molecule: MoleculeAst,
+        #[case] id: MulticenterBondId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(molecule.multicenter_bonds().contains(id), expected);
+    }
+
+    #[rstest]
     fn test_multicenter_bond_views_get(molecule: MoleculeAst) {
-        let view = molecule.multicenter_bonds().get(MulticenterBondId(0));
+        let res = molecule.multicenter_bonds().get(MulticenterBondId(0));
+        assert!(res.is_some());
+        let view = res.unwrap();
         assert_eq!(view.id, MulticenterBondId(0));
         assert_eq!(
             view.atom_ids().collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
         );
+    }
+
+    #[rstest]
+    fn test_multicenter_bond_views_get_none(molecule: MoleculeAst) {
+        let res = molecule.multicenter_bonds().get(MulticenterBondId(99));
+        assert!(res.is_none());
     }
 
     #[rstest]

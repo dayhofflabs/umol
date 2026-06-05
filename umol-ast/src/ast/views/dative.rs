@@ -77,7 +77,7 @@ impl<'a> DativeBondViews<'a> {
         })
     }
 
-    /// IDs of dative bonds incident on `atom`.
+    /// Ids of dative bonds incident on `atom`.
     pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = DativeBondId> + 'a {
         self.dative_bonds
             .incident(NodeId::from(atom))
@@ -109,7 +109,7 @@ impl<'a> DativeBondViews<'a> {
         })
     }
 
-    /// ID of the dative bond whose participant set equals `atoms`, if any.
+    /// Id of the dative bond whose participant set equals `atoms`, if any.
     pub fn connecting_id(&self, atoms: impl IntoIterator<Item = AtomId>) -> Option<DativeBondId> {
         let target: HashSet<AtomId> = atoms.into_iter().collect();
         let &first = target.iter().next()?;
@@ -136,7 +136,7 @@ impl<'a> DativeBondViews<'a> {
         })
     }
 
-    /// IDs of dative bonds whose participants all lie in `atoms`.
+    /// Ids of dative bonds whose participants all lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<DativeBondId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         self.dative_bonds

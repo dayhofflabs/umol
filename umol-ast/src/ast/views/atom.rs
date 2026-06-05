@@ -43,12 +43,13 @@ impl<'a> AtomViews<'a> {
         self.molecule.raw_graph().node_ids().map(AtomId::from)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = AtomView<'a>> {
         let molecule = self.molecule;
+        let atoms = self.atoms;
         let graph = molecule.raw_graph();
         graph.node_ids().map(move |id| AtomView {
             id: AtomId::from(id),
-            ast: &self.atoms[id.index()],
+            ast: &atoms[id.index()],
             molecule,
         })
     }
@@ -134,7 +135,7 @@ impl<'a> AtomView<'a> {
         self.molecule.neighbors(self.id)
     }
 
-    /// IDs of incident localized bonds, in iteration order of `neighbors`.
+    /// Ids of incident bonds, in iteration order of `neighbors`.
     pub fn bond_ids(&self) -> impl Iterator<Item = BondId> + 'a {
         self.molecule.neighbors(self.id).map(|n| n.bond_id())
     }

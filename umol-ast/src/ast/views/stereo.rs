@@ -19,37 +19,61 @@ type StereoBondSet =
 /// Namespace accessor for stereo-atom views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
 pub struct StereoAtomViews<'a> {
-    set: &'a StereoAtomSet,
+    molecule: &'a MoleculeAst,
+    stereo_atoms: &'a StereoAtomSet,
 }
 
 impl<'a> StereoAtomViews<'a> {
-    pub(crate) fn new(set: &'a StereoAtomSet) -> Self {
-        Self { set }
+    pub(crate) fn new(molecule: &'a MoleculeAst, stereo_atoms: &'a StereoAtomSet) -> Self {
+        Self {
+            molecule,
+            stereo_atoms,
+        }
     }
 
     pub fn count(&self) -> usize {
-        self.set.relation_count()
+        self.stereo_atoms.relation_count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = StereoAtomId> {
-        self.set.relation_ids().map(StereoAtomId::from)
+        self.stereo_atoms.relation_ids().map(StereoAtomId::from)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = StereoAtomView<'a>> {
-        let set = self.set;
-        set.relation_ids()
-            .map(move |rid| StereoAtomView::new(set, rid))
+        let molecule = self.molecule;
+        let set = self.stereo_atoms;
+        set.relation_ids().map(move |rid| StereoAtomView {
+            id: StereoAtomId::from(rid),
+            site: set.participants_1(rid)[0],
+            ligands: set.participants_2(rid),
+            ast: set.data(rid),
+            molecule,
+        })
     }
 
-    pub fn get(&self, id: StereoAtomId) -> StereoAtomView<'a> {
-        StereoAtomView::new(self.set, RelationId::from(id))
+    pub fn contains(&self, id: StereoAtomId) -> bool {
+        self.stereo_atoms.contains(RelationId::from(id))
+    }
+
+    pub fn get(&self, id: StereoAtomId) -> Option<StereoAtomView<'a>> {
+        if !self.contains(id) {
+            return None;
+        }
+        let rid = RelationId::from(id);
+        Some(StereoAtomView {
+            id,
+            site: self.stereo_atoms.participants_1(rid)[0],
+            ligands: self.stereo_atoms.participants_2(rid),
+            ast: self.stereo_atoms.data(rid),
+            molecule: self.molecule,
+        })
     }
 }
 
 impl<'a> Index<StereoAtomId> for StereoAtomViews<'a> {
     type Output = StereoAtomAst;
     fn index(&self, id: StereoAtomId) -> &StereoAtomAst {
-        self.set.data(RelationId::from(id))
+        self.stereo_atoms.data(RelationId::from(id))
     }
 }
 
@@ -57,24 +81,21 @@ impl<'a> Index<StereoAtomId> for StereoAtomViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct StereoAtomView<'a> {
     pub id: StereoAtomId,
-    site: AtomId,
+    site: NodeId,
     ligands: &'a [StereoLigand],
     pub ast: &'a StereoAtomAst,
+    molecule: &'a MoleculeAst,
 }
 
 impl<'a> StereoAtomView<'a> {
-    fn new(set: &'a StereoAtomSet, rid: RelationId) -> Self {
-        Self {
-            id: StereoAtomId::from(rid),
-            site: AtomId::from(set.participants_1(rid)[0]),
-            ligands: set.participants_2(rid),
-            ast: set.data(rid),
-        }
-    }
-
     /// The stereo site atom.
     pub fn site(&self) -> AtomId {
-        self.site
+        AtomId::from(self.site)
+    }
+
+    /// View of the stereo site atom.
+    pub fn site_atom(&self) -> super::atom::AtomView<'a> {
+        self.molecule.atom(self.site())
     }
 
     /// The ordered ligands occupying the site's coordination positions.
@@ -89,7 +110,7 @@ impl<'a> StereoAtomView<'a> {
 
     /// Site atom followed by the ligand atoms — the relation's full atom incidence.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        let site = self.site;
+        let site = self.site();
         let ligands = self.ligands;
         iter::once(site).chain(ligands.iter().map(|l| l.atom()))
     }
@@ -103,38 +124,60 @@ impl<'a> StereoAtomView<'a> {
 #[derive(Clone, Copy)]
 pub struct StereoBondViews<'a> {
     molecule: &'a MoleculeAst,
-    set: &'a StereoBondSet,
+    stereo_bonds: &'a StereoBondSet,
 }
 
 impl<'a> StereoBondViews<'a> {
-    pub(crate) fn new(molecule: &'a MoleculeAst, set: &'a StereoBondSet) -> Self {
-        Self { molecule, set }
+    pub(crate) fn new(molecule: &'a MoleculeAst, stereo_bonds: &'a StereoBondSet) -> Self {
+        Self {
+            molecule,
+            stereo_bonds,
+        }
     }
 
     pub fn count(&self) -> usize {
-        self.set.relation_count()
+        self.stereo_bonds.relation_count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = StereoBondId> {
-        self.set.relation_ids().map(StereoBondId::from)
+        self.stereo_bonds.relation_ids().map(StereoBondId::from)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = StereoBondView<'a>> {
         let molecule = self.molecule;
-        let set = self.set;
-        set.relation_ids()
-            .map(move |rid| StereoBondView::new(molecule, set, rid))
+        let set = self.stereo_bonds;
+        set.relation_ids().map(move |rid| StereoBondView {
+            id: StereoBondId::from(rid),
+            site: set.participants_1(rid)[0],
+            ligands: set.participants_2(rid),
+            ast: set.data(rid),
+            molecule,
+        })
     }
 
-    pub fn get(&self, id: StereoBondId) -> StereoBondView<'a> {
-        StereoBondView::new(self.molecule, self.set, RelationId::from(id))
+    pub fn contains(&self, id: StereoBondId) -> bool {
+        self.stereo_bonds.contains(RelationId::from(id))
+    }
+
+    pub fn get(&self, id: StereoBondId) -> Option<StereoBondView<'a>> {
+        if !self.contains(id) {
+            return None;
+        }
+        let rid = RelationId::from(id);
+        Some(StereoBondView {
+            id,
+            site: self.stereo_bonds.participants_1(rid)[0],
+            ligands: self.stereo_bonds.participants_2(rid),
+            ast: self.stereo_bonds.data(rid),
+            molecule: self.molecule,
+        })
     }
 }
 
 impl<'a> Index<StereoBondId> for StereoBondViews<'a> {
     type Output = StereoBondAst;
     fn index(&self, id: StereoBondId) -> &StereoBondAst {
-        self.set.data(RelationId::from(id))
+        self.stereo_bonds.data(RelationId::from(id))
     }
 }
 
@@ -142,26 +185,16 @@ impl<'a> Index<StereoBondId> for StereoBondViews<'a> {
 #[derive(Clone, Copy, Debug)]
 pub struct StereoBondView<'a> {
     pub id: StereoBondId,
-    site: BondId,
+    site: EdgeId,
     ligands: &'a [StereoLigand],
     pub ast: &'a StereoBondAst,
     molecule: &'a MoleculeAst,
 }
 
 impl<'a> StereoBondView<'a> {
-    fn new(molecule: &'a MoleculeAst, set: &'a StereoBondSet, rid: RelationId) -> Self {
-        Self {
-            id: StereoBondId::from(rid),
-            site: BondId::from(set.participants_1(rid)[0]),
-            ligands: set.participants_2(rid),
-            ast: set.data(rid),
-            molecule,
-        }
-    }
-
     /// The stereo site bond.
     pub fn site(&self) -> BondId {
-        self.site
+        BondId::from(self.site)
     }
 
     /// The ordered ligands defining the bond's configuration.
@@ -177,7 +210,7 @@ impl<'a> StereoBondView<'a> {
     /// The site bond's two atoms followed by the ligand atoms — the relation's
     /// full atom incidence.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        let [a, b] = self.molecule.bond(self.site).atom_ids();
+        let [a, b] = self.molecule.bond(self.site()).atom_ids();
         let ligands = self.ligands;
         [a, b].into_iter().chain(ligands.iter().map(|l| l.atom()))
     }
@@ -282,8 +315,21 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(StereoAtomId(0), true)]
+    #[case::absent(StereoAtomId(99), false)]
+    fn test_stereo_atom_views_contains(
+        molecule: MoleculeAst,
+        #[case] id: StereoAtomId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(molecule.stereo_atoms().contains(id), expected);
+    }
+
+    #[rstest]
     fn test_stereo_atom_views_get(molecule: MoleculeAst) {
-        let view = molecule.stereo_atoms().get(StereoAtomId(0));
+        let res = molecule.stereo_atoms().get(StereoAtomId(0));
+        assert!(res.is_some());
+        let view = res.unwrap();
         assert_eq!(view.id, StereoAtomId(0));
         assert_eq!(view.site(), AtomId(0));
         assert_eq!(view.kind(), StereoKind::Tetrahedral);
@@ -303,6 +349,12 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_atom_views_get_none(molecule: MoleculeAst) {
+        let res = molecule.stereo_atoms().get(StereoAtomId(99));
+        assert!(res.is_none());
+    }
+
+    #[rstest]
     fn test_stereo_atom_view_atom_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
@@ -311,6 +363,13 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
         );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_site_atom(molecule: MoleculeAst) {
+        let view = molecule.stereo_atom(StereoAtomId(0)).site_atom();
+        assert_eq!(view.id, AtomId(0));
+        assert_eq!(view.ast, &AtomAst::from_element(Element::C));
     }
 
     #[rstest]
@@ -335,8 +394,21 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(StereoBondId(0), true)]
+    #[case::absent(StereoBondId(99), false)]
+    fn test_stereo_bond_views_contains(
+        molecule: MoleculeAst,
+        #[case] id: StereoBondId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(molecule.stereo_bonds().contains(id), expected);
+    }
+
+    #[rstest]
     fn test_stereo_bond_views_get(molecule: MoleculeAst) {
-        let view = molecule.stereo_bonds().get(StereoBondId(0));
+        let res = molecule.stereo_bonds().get(StereoBondId(0));
+        assert!(res.is_some());
+        let view = res.unwrap();
         assert_eq!(view.id, StereoBondId(0));
         assert_eq!(view.site(), BondId(1));
         assert_eq!(view.kind(), StereoKind::CisTrans);
@@ -344,6 +416,12 @@ mod tests {
             view.ast,
             &StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
         );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_views_get_none(molecule: MoleculeAst) {
+        let res = molecule.stereo_bonds().get(StereoBondId(99));
+        assert!(res.is_none());
     }
 
     #[rstest]

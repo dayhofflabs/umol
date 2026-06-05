@@ -20,28 +20,33 @@ use super::bond::BondView;
 #[derive(Clone, Copy)]
 pub struct AromaticSystemViews<'a> {
     molecule: &'a MoleculeAst,
-    set: &'a VarRelationSet<NodeId, Unordered, AromaticSystemAst>,
+    aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemAst>,
 }
 
 impl<'a> AromaticSystemViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        set: &'a VarRelationSet<NodeId, Unordered, AromaticSystemAst>,
+        aromatic_systems: &'a VarRelationSet<NodeId, Unordered, AromaticSystemAst>,
     ) -> Self {
-        Self { molecule, set }
+        Self {
+            molecule,
+            aromatic_systems,
+        }
     }
 
     pub fn count(&self) -> usize {
-        self.set.relation_count()
+        self.aromatic_systems.relation_count()
     }
 
     pub fn ids(&self) -> impl Iterator<Item = AromaticSystemId> {
-        self.set.relation_ids().map(AromaticSystemId::from)
+        self.aromatic_systems
+            .relation_ids()
+            .map(AromaticSystemId::from)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = AromaticSystemView<'a>> {
         let molecule = self.molecule;
-        let set = self.set;
+        let set = self.aromatic_systems;
         set.relation_ids().map(move |rid| AromaticSystemView {
             id: AromaticSystemId::from(rid),
             ast: set.data(rid),
@@ -50,19 +55,26 @@ impl<'a> AromaticSystemViews<'a> {
         })
     }
 
-    pub fn get(&self, id: AromaticSystemId) -> AromaticSystemView<'a> {
-        let rid = RelationId::from(id);
-        AromaticSystemView {
-            id,
-            ast: self.set.data(rid),
-            atoms: self.set.participants(rid),
-            molecule: self.molecule,
+    pub fn contains(&self, id: AromaticSystemId) -> bool {
+        self.aromatic_systems.contains(RelationId::from(id))
+    }
+
+    pub fn get(&self, id: AromaticSystemId) -> Option<AromaticSystemView<'a>> {
+        if !self.contains(id) {
+            return None;
         }
+        let rid = RelationId::from(id);
+        Some(AromaticSystemView {
+            id,
+            ast: self.aromatic_systems.data(rid),
+            atoms: self.aromatic_systems.participants(rid),
+            molecule: self.molecule,
+        })
     }
 
     /// Ids of aromatic systems incident on `atom`.
     pub fn incident_ids(&self, atom: AtomId) -> impl Iterator<Item = AromaticSystemId> + 'a {
-        self.set
+        self.aromatic_systems
             .incident(NodeId::from(atom))
             .iter()
             .map(|&rid| AromaticSystemId::from(rid))
@@ -70,13 +82,13 @@ impl<'a> AromaticSystemViews<'a> {
 
     /// Whether any aromatic system is incident on `atom`.
     pub fn has_incident(&self, atom: AtomId) -> bool {
-        self.set.has_incident(NodeId::from(atom))
+        self.aromatic_systems.has_incident(NodeId::from(atom))
     }
 
     /// Views of aromatic systems incident on `atom`.
     pub fn incident(&self, atom: AtomId) -> impl Iterator<Item = AromaticSystemView<'a>> + 'a {
         let molecule = self.molecule;
-        let set = self.set;
+        let set = self.aromatic_systems;
         self.incident_ids(atom).map(move |id| {
             let rid = RelationId::from(id);
             AromaticSystemView {
@@ -97,7 +109,7 @@ impl<'a> AromaticSystemViews<'a> {
         let &first = target.iter().next()?;
         self.incident_ids(first).find(|&id| {
             let parts: HashSet<AtomId> = self
-                .set
+                .aromatic_systems
                 .participants(RelationId::from(id))
                 .iter()
                 .map(|&n| AtomId::from(n))
@@ -111,15 +123,24 @@ impl<'a> AromaticSystemViews<'a> {
         &self,
         atoms: impl IntoIterator<Item = AtomId>,
     ) -> Option<AromaticSystemView<'a>> {
-        self.connecting_id(atoms).map(|id| self.get(id))
+        self.connecting_id(atoms).map(|id| {
+            self.get(id).expect(
+                "aromatic system id from relation set must refer to an aromatic system in this molecule",
+            )
+        })
     }
 
     /// Ids of aromatic systems whose atoms all lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<AromaticSystemId> {
         let set: HashSet<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
-        self.set
+        self.aromatic_systems
             .relation_ids()
-            .filter(|&rid| self.set.participants(rid).iter().all(|p| set.contains(p)))
+            .filter(|&rid| {
+                self.aromatic_systems
+                    .participants(rid)
+                    .iter()
+                    .all(|p| set.contains(p))
+            })
             .map(AromaticSystemId::from)
             .collect()
     }
@@ -128,7 +149,11 @@ impl<'a> AromaticSystemViews<'a> {
     pub fn induced(&self, atoms: &[AtomId]) -> Vec<AromaticSystemView<'a>> {
         self.induced_ids(atoms)
             .into_iter()
-            .map(|id| self.get(id))
+            .map(|id| {
+                self.get(id).expect(
+                    "aromatic system id from relation set must refer to an aromatic system in this molecule",
+                )
+            })
             .collect()
     }
 }
@@ -136,7 +161,7 @@ impl<'a> AromaticSystemViews<'a> {
 impl<'a> Index<AromaticSystemId> for AromaticSystemViews<'a> {
     type Output = AromaticSystemAst;
     fn index(&self, id: AromaticSystemId) -> &AromaticSystemAst {
-        self.set.data(RelationId::from(id))
+        self.aromatic_systems.data(RelationId::from(id))
     }
 }
 
@@ -375,13 +400,32 @@ mod tests {
     }
 
     #[rstest]
+    #[case::present(AromaticSystemId(0), true)]
+    #[case::absent(AromaticSystemId(99), false)]
+    fn test_aromatic_system_views_contains(
+        molecule: MoleculeAst,
+        #[case] id: AromaticSystemId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(molecule.aromatic_systems().contains(id), expected);
+    }
+
+    #[rstest]
     fn test_aromatic_system_views_get(molecule: MoleculeAst) {
-        let view = molecule.aromatic_systems().get(AromaticSystemId(0));
+        let res = molecule.aromatic_systems().get(AromaticSystemId(0));
+        assert!(res.is_some());
+        let view = res.unwrap();
         assert_eq!(view.id, AromaticSystemId(0));
         assert_eq!(
             view.atom_ids().collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2)],
         );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_views_get_none(molecule: MoleculeAst) {
+        let res = molecule.aromatic_systems().get(AromaticSystemId(99));
+        assert!(res.is_none());
     }
 
     #[rstest]

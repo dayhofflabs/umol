@@ -336,40 +336,70 @@ impl MoleculeAst {
         AromaticSystemViews::new(self, &self.aromatic_systems)
     }
 
+    /// View of the aromatic system with `id`.
+    ///
+    /// Panics if `id` is not an aromatic system in this molecule. Use
+    /// `self.aromatic_systems().get(id)` for checked lookup.
     pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemView<'_> {
-        self.aromatic_systems().get(id)
+        self.aromatic_systems()
+            .get(id)
+            .expect("aromatic system id must refer to an aromatic system in this molecule")
     }
 
     pub fn multicenter_bonds(&self) -> MulticenterBondViews<'_> {
         MulticenterBondViews::new(self, &self.multicenter_bonds)
     }
 
+    /// View of the multicenter bond with `id`.
+    ///
+    /// Panics if `id` is not a multicenter bond in this molecule. Use
+    /// `self.multicenter_bonds().get(id)` for checked lookup.
     pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondView<'_> {
-        self.multicenter_bonds().get(id)
+        self.multicenter_bonds()
+            .get(id)
+            .expect("multicenter bond id must refer to a multicenter bond in this molecule")
     }
 
     pub fn noncovalent_bonds(&self) -> NoncovalentBondViews<'_> {
         NoncovalentBondViews::new(self, &self.noncovalent_bonds)
     }
 
+    /// View of the noncovalent bond with `id`.
+    ///
+    /// Panics if `id` is not a noncovalent bond in this molecule. Use
+    /// `self.noncovalent_bonds().get(id)` for checked lookup.
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondView<'_> {
-        self.noncovalent_bonds().get(id)
+        self.noncovalent_bonds()
+            .get(id)
+            .expect("noncovalent bond id must refer to a noncovalent bond in this molecule")
     }
 
     pub fn stereo_atoms(&self) -> StereoAtomViews<'_> {
-        StereoAtomViews::new(&self.stereo_atoms)
+        StereoAtomViews::new(self, &self.stereo_atoms)
     }
 
+    /// View of the stereo atom with `id`.
+    ///
+    /// Panics if `id` is not a stereo atom in this molecule. Use
+    /// `self.stereo_atoms().get(id)` for checked lookup.
     pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomView<'_> {
-        self.stereo_atoms().get(id)
+        self.stereo_atoms()
+            .get(id)
+            .expect("stereo atom id must refer to a stereo atom in this molecule")
     }
 
     pub fn stereo_bonds(&self) -> StereoBondViews<'_> {
         StereoBondViews::new(self, &self.stereo_bonds)
     }
 
+    /// View of the stereo bond with `id`.
+    ///
+    /// Panics if `id` is not a stereo bond in this molecule. Use
+    /// `self.stereo_bonds().get(id)` for checked lookup.
     pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondView<'_> {
-        self.stereo_bonds().get(id)
+        self.stereo_bonds()
+            .get(id)
+            .expect("stereo bond id must refer to a stereo bond in this molecule")
     }
 
     pub fn induced_subgraph(&self, atoms: &[AtomId]) -> MoleculeEmbedding<'_> {

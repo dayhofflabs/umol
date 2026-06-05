@@ -68,7 +68,7 @@ impl<'a> BondViews<'a> {
         })
     }
 
-    /// ID of the bond between `a` and `b`, if any.
+    /// Id of the bond between `a` and `b`, if any.
     pub fn connecting_id(&self, a: AtomId, b: AtomId) -> Option<BondId> {
         self.molecule
             .raw_graph()
@@ -84,7 +84,7 @@ impl<'a> BondViews<'a> {
         })
     }
 
-    /// IDs of bonds whose both endpoints lie in `atoms`.
+    /// Ids of bonds whose both endpoints lie in `atoms`.
     pub fn induced_ids(&self, atoms: &[AtomId]) -> Vec<BondId> {
         let mut nodes: Vec<NodeId> = atoms.iter().map(|&a| NodeId::from(a)).collect();
         nodes.sort_unstable();
