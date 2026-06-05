@@ -15,7 +15,8 @@ use super::super::edit::{
     DativeBondRef, Edit, MulticenterBondFieldChange, MulticenterBondRef,
     NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem, RemovedAtom,
     RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
-    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, StereoAtomRef, StereoBondRef, Undo,
+    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, StereoAtomFieldChange, StereoAtomRef,
+    StereoBondFieldChange, StereoBondRef, Undo,
 };
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -536,12 +537,19 @@ impl MoleculeBuilder {
                 }
                 let site = created.atom(site)?;
                 let ligands = created.stereo_ligands(ligands)?;
-                let (cur_site, cur_ligands, cur_ast) = self.stereo_atom_entry(id);
-                if cur_ast != ast || cur_site != site || cur_ligands != ligands {
+                let view = self.stereo_atom(id);
+                if view.ast != &ast || view.site != site || view.ligands != ligands.as_slice() {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 self.remove_stereo_atoms(&[id]);
                 Ok(())
+            }
+            Edit::SetStereoAtomField { idx, change } => {
+                let id = created.stereo_atom(idx)?;
+                if id.index() >= self.stereo_atom_count() {
+                    return Err(TransactionError::IdOutOfRange("stereo atom"));
+                }
+                self.apply_set_stereo_atom_field(id, change)
             }
             Edit::AddStereoBond { site, ligands, ast } => {
                 let site = created.bond(site)?;
@@ -565,12 +573,19 @@ impl MoleculeBuilder {
                 }
                 let site = created.bond(site)?;
                 let ligands = created.stereo_ligands(ligands)?;
-                let (cur_site, cur_ligands, cur_ast) = self.stereo_bond_entry(id);
-                if cur_ast != ast || cur_site != site || cur_ligands != ligands {
+                let view = self.stereo_bond(id);
+                if view.ast != &ast || view.site != site || view.ligands != ligands.as_slice() {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 self.remove_stereo_bonds(&[id]);
                 Ok(())
+            }
+            Edit::SetStereoBondField { idx, change } => {
+                let id = created.stereo_bond(idx)?;
+                if id.index() >= self.stereo_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("stereo bond"));
+                }
+                self.apply_set_stereo_bond_field(id, change)
             }
             Edit::SetAtomConstraint { idx, old, new } => {
                 let id = created.atom(idx)?;
@@ -1110,15 +1125,15 @@ impl MoleculeBuilder {
                 }
                 let site = created.atom(site)?;
                 let ligands = created.stereo_ligands(ligands)?;
-                let (cur_site, cur_ligands, cur_ast) = self.stereo_atom_entry(id);
-                if cur_ast != ast || cur_site != site || cur_ligands != ligands {
+                let view = self.stereo_atom(id);
+                if view.ast != &ast || view.site != site || view.ligands != ligands.as_slice() {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 let removed = RemovedStereoAtom {
                     id,
-                    site: cur_site,
-                    ligands: cur_ligands,
-                    ast: cur_ast,
+                    site: view.site,
+                    ligands: view.ligands.to_vec(),
+                    ast: view.ast.clone(),
                 };
                 self.remove_stereo_atoms(&[id]);
                 Ok(Undo::RestoreRemovedStereoAtom {
@@ -1133,6 +1148,18 @@ impl MoleculeBuilder {
                     )
                     .undo_remapping(),
                 })
+            }
+            Edit::SetStereoAtomField { idx, change } => {
+                let id = created.stereo_atom(idx)?;
+                if id.index() >= self.stereo_atom_count() {
+                    return Err(TransactionError::IdOutOfRange("stereo atom"));
+                }
+                let undo = Undo::SetStereoAtomField {
+                    id,
+                    change: change.clone().inverse(),
+                };
+                self.apply_set_stereo_atom_field(id, change)?;
+                Ok(undo)
             }
             Edit::AddStereoBond { site, ligands, ast } => {
                 let site = created.bond(site)?;
@@ -1161,15 +1188,15 @@ impl MoleculeBuilder {
                 }
                 let site = created.bond(site)?;
                 let ligands = created.stereo_ligands(ligands)?;
-                let (cur_site, cur_ligands, cur_ast) = self.stereo_bond_entry(id);
-                if cur_ast != ast || cur_site != site || cur_ligands != ligands {
+                let view = self.stereo_bond(id);
+                if view.ast != &ast || view.site != site || view.ligands != ligands.as_slice() {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 let removed = RemovedStereoBond {
                     id,
-                    site: cur_site,
-                    ligands: cur_ligands,
-                    ast: cur_ast,
+                    site: view.site,
+                    ligands: view.ligands.to_vec(),
+                    ast: view.ast.clone(),
                 };
                 self.remove_stereo_bonds(&[id]);
                 Ok(Undo::RestoreRemovedStereoBond {
@@ -1184,6 +1211,18 @@ impl MoleculeBuilder {
                     )
                     .undo_remapping(),
                 })
+            }
+            Edit::SetStereoBondField { idx, change } => {
+                let id = created.stereo_bond(idx)?;
+                if id.index() >= self.stereo_bond_count() {
+                    return Err(TransactionError::IdOutOfRange("stereo bond"));
+                }
+                let undo = Undo::SetStereoBondField {
+                    id,
+                    change: change.clone().inverse(),
+                };
+                self.apply_set_stereo_bond_field(id, change)?;
+                Ok(undo)
             }
             Edit::SetAtomConstraint { idx, old, new } => {
                 let id = created.atom(idx.clone())?;
@@ -1473,29 +1512,30 @@ impl MoleculeBuilder {
         let stereo_atoms = (0..self.stereo_atom_count())
             .map(StereoAtomId::from)
             .filter_map(|id| {
-                let (site, ligands, ast) = self.stereo_atom_entry(id);
-                let dropped = atom_set.contains(&site)
-                    || ligands.iter().any(|l| atom_set.contains(&l.atom()));
-                dropped.then_some(RemovedStereoAtom {
+                let view = self.stereo_atom(id);
+                let dropped = atom_set.contains(&view.site)
+                    || view.ligands.iter().any(|l| atom_set.contains(&l.atom()));
+                dropped.then(|| RemovedStereoAtom {
                     id,
-                    site,
-                    ligands,
-                    ast,
+                    site: view.site,
+                    ligands: view.ligands.to_vec(),
+                    ast: view.ast.clone(),
                 })
             })
             .collect();
         let stereo_bonds = (0..self.stereo_bond_count())
             .map(StereoBondId::from)
             .filter_map(|id| {
-                let (site, ligands, ast) = self.stereo_bond_entry(id);
+                let view = self.stereo_bond(id);
+                let site = view.site;
                 let site_dropped = bond_set.contains(&site)
                     || self.bond(site).atoms.iter().any(|a| atom_set.contains(a));
-                let ligand_dropped = ligands.iter().any(|l| atom_set.contains(&l.atom()));
-                (site_dropped || ligand_dropped).then_some(RemovedStereoBond {
+                let ligand_dropped = view.ligands.iter().any(|l| atom_set.contains(&l.atom()));
+                (site_dropped || ligand_dropped).then(|| RemovedStereoBond {
                     id,
                     site,
-                    ligands,
-                    ast,
+                    ligands: view.ligands.to_vec(),
+                    ast: view.ast.clone(),
                 })
             })
             .collect();
@@ -1683,6 +1723,40 @@ impl MoleculeBuilder {
                     return Err(TransactionError::OldStateMismatch);
                 }
                 nc.ast.kind = new;
+            }
+        }
+        Ok(())
+    }
+
+    fn apply_set_stereo_atom_field(
+        &mut self,
+        id: StereoAtomId,
+        change: StereoAtomFieldChange,
+    ) -> Result<(), TransactionError> {
+        let sa = self.stereo_atom_mut(id);
+        match change {
+            StereoAtomFieldChange::Coset { old, new } => {
+                if sa.ast.coset != old {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                sa.ast.coset = new;
+            }
+        }
+        Ok(())
+    }
+
+    fn apply_set_stereo_bond_field(
+        &mut self,
+        id: StereoBondId,
+        change: StereoBondFieldChange,
+    ) -> Result<(), TransactionError> {
+        let sb = self.stereo_bond_mut(id);
+        match change {
+            StereoBondFieldChange::Coset { old, new } => {
+                if sb.ast.coset != old {
+                    return Err(TransactionError::OldStateMismatch);
+                }
+                sb.ast.coset = new;
             }
         }
         Ok(())
@@ -1949,6 +2023,12 @@ impl MoleculeBuilder {
             Undo::SetNoncovalentBondField { id, change } => {
                 self.apply_set_noncovalent_bond_field(id, change)?
             }
+            Undo::SetStereoAtomField { id, change } => {
+                self.apply_set_stereo_atom_field(id, change)?
+            }
+            Undo::SetStereoBondField { id, change } => {
+                self.apply_set_stereo_bond_field(id, change)?
+            }
             Undo::ApplyConstraintUpdate(update) => update.rollback_into(self.constraints_mut()),
             Undo::ApplyEdit(edit) => {
                 let mut created = CreatedEntities::default();
@@ -1972,10 +2052,12 @@ mod tests {
         MoleculeConstraint, MulticenterBondConstraint,
     };
     use super::super::super::dative::DativeBondAst;
+    use super::super::super::ligand::StereoLigandKind;
     use super::super::super::multicenter::MulticenterBondAst;
     use super::super::super::noncovalent::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
+    use super::super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
     use super::super::super::value::ValueAst;
     use super::super::MoleculeAst;
     use super::*;
@@ -2384,6 +2466,277 @@ mod tests {
                 change: BondFieldChange::Order {
                     old: ValueAst::Lit(99),
                     new: ValueAst::Lit(2),
+                },
+            }])
+            .unwrap_err();
+        assert_eq!(err, TransactionError::OldStateMismatch);
+    }
+
+    // Stereo elements — transactional add/remove + undo, and topology-cascade
+    // restore. (D3i behavior, tested against D3j's view-based read path.)
+
+    #[fixture]
+    fn stereo_atom_skeleton() -> MoleculeBuilder {
+        let mut b = MoleculeAst::default().edit();
+        for el in [Element::C, Element::F, Element::Cl, Element::Br, Element::I] {
+            b.add_atom(AtomAst::from_element(el));
+        }
+        for t in 1u32..=4 {
+            b.add_bond(AtomId(0), AtomId(t), BondAst::from_order(1));
+        }
+        b
+    }
+
+    fn tetrahedral_ligands() -> Vec<StereoLigand> {
+        (1u32..=4)
+            .map(|t| StereoLigand::new(AtomId(t), StereoLigandKind::Atom))
+            .collect()
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_add_stereo_atom(mut stereo_atom_skeleton: MoleculeBuilder) {
+        let before = stereo_atom_skeleton.clone().build();
+        let tx = stereo_atom_skeleton
+            .transact(vec![Edit::AddStereoAtom {
+                site: AtomRef::Id(AtomId(0)),
+                ligands: (1u32..=4)
+                    .map(|t| (AtomRef::Id(AtomId(t)), StereoLigandKind::Atom))
+                    .collect(),
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            }])
+            .unwrap();
+        assert_eq!(stereo_atom_skeleton.stereo_atom_count(), 1);
+        tx.rollback(&mut stereo_atom_skeleton).unwrap();
+        assert_eq!(stereo_atom_skeleton.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_remove_stereo_atom(
+        mut stereo_atom_skeleton: MoleculeBuilder,
+    ) {
+        stereo_atom_skeleton.add_stereo_atom(
+            AtomId(0),
+            tetrahedral_ligands(),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        );
+        let before = stereo_atom_skeleton.clone().build();
+        let tx = stereo_atom_skeleton
+            .transact(vec![Edit::RemoveStereoAtom {
+                idx: StereoAtomRef::Id(StereoAtomId(0)),
+                site: AtomRef::Id(AtomId(0)),
+                ligands: (1u32..=4)
+                    .map(|t| (AtomRef::Id(AtomId(t)), StereoLigandKind::Atom))
+                    .collect(),
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            }])
+            .unwrap();
+        assert_eq!(stereo_atom_skeleton.stereo_atom_count(), 0);
+        tx.rollback(&mut stereo_atom_skeleton).unwrap();
+        assert_eq!(stereo_atom_skeleton.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_remove_stereo_atom_error(
+        mut stereo_atom_skeleton: MoleculeBuilder,
+    ) {
+        stereo_atom_skeleton.add_stereo_atom(
+            AtomId(0),
+            tetrahedral_ligands(),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        );
+        let err = stereo_atom_skeleton
+            .transact(vec![Edit::RemoveStereoAtom {
+                idx: StereoAtomRef::Id(StereoAtomId(0)),
+                site: AtomRef::Id(AtomId(0)),
+                ligands: (1u32..=4)
+                    .map(|t| (AtomRef::Id(AtomId(t)), StereoLigandKind::Atom))
+                    .collect(),
+                // Wrong recorded coset (Th2 vs the stored Th1).
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(2)),
+            }])
+            .unwrap_err();
+        assert_eq!(err, TransactionError::OldStateMismatch);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_topology_removal_restores_stereo_atom(
+        mut stereo_atom_skeleton: MoleculeBuilder,
+    ) {
+        stereo_atom_skeleton.add_stereo_atom(
+            AtomId(0),
+            tetrahedral_ligands(),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        );
+        let before = stereo_atom_skeleton.clone().build();
+        // Removing a ligand atom cascades the stereo element away.
+        let tx = stereo_atom_skeleton
+            .transact(vec![Edit::RemoveTopology {
+                atoms: vec![AtomRef::Id(AtomId(1))],
+                bonds: Vec::new(),
+            }])
+            .unwrap();
+        assert_eq!(stereo_atom_skeleton.stereo_atom_count(), 0);
+        tx.rollback(&mut stereo_atom_skeleton).unwrap();
+        assert_eq!(stereo_atom_skeleton.build(), before);
+    }
+
+    #[fixture]
+    fn stereo_bond_skeleton() -> MoleculeBuilder {
+        let mut b = MoleculeAst::default().edit();
+        for _ in 0..4 {
+            b.add_atom(AtomAst::from_element(Element::C));
+        }
+        b.add_bond(AtomId(0), AtomId(1), BondAst::from_order(1));
+        b.add_bond(AtomId(1), AtomId(2), BondAst::from_order(2));
+        b.add_bond(AtomId(2), AtomId(3), BondAst::from_order(1));
+        b
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_add_stereo_bond(mut stereo_bond_skeleton: MoleculeBuilder) {
+        let before = stereo_bond_skeleton.clone().build();
+        let tx = stereo_bond_skeleton
+            .transact(vec![Edit::AddStereoBond {
+                site: BondRef::Id(BondId(1)),
+                ligands: vec![
+                    (AtomRef::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (AtomRef::Id(AtomId(3)), StereoLigandKind::Atom),
+                ],
+                ast: StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            }])
+            .unwrap();
+        assert_eq!(stereo_bond_skeleton.stereo_bond_count(), 1);
+        tx.rollback(&mut stereo_bond_skeleton).unwrap();
+        assert_eq!(stereo_bond_skeleton.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_remove_stereo_bond(
+        mut stereo_bond_skeleton: MoleculeBuilder,
+    ) {
+        stereo_bond_skeleton.add_stereo_bond(
+            BondId(1),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+        );
+        let before = stereo_bond_skeleton.clone().build();
+        let tx = stereo_bond_skeleton
+            .transact(vec![Edit::RemoveStereoBond {
+                idx: StereoBondRef::Id(StereoBondId(0)),
+                site: BondRef::Id(BondId(1)),
+                ligands: vec![
+                    (AtomRef::Id(AtomId(0)), StereoLigandKind::Atom),
+                    (AtomRef::Id(AtomId(3)), StereoLigandKind::Atom),
+                ],
+                ast: StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            }])
+            .unwrap();
+        assert_eq!(stereo_bond_skeleton.stereo_bond_count(), 0);
+        tx.rollback(&mut stereo_bond_skeleton).unwrap();
+        assert_eq!(stereo_bond_skeleton.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_set_stereo_atom_field(
+        mut stereo_atom_skeleton: MoleculeBuilder,
+    ) {
+        stereo_atom_skeleton.add_stereo_atom(
+            AtomId(0),
+            tetrahedral_ligands(),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        );
+        let before = stereo_atom_skeleton.clone().build();
+        let tx = stereo_atom_skeleton
+            .transact(vec![Edit::SetStereoAtomField {
+                idx: StereoAtomRef::Id(StereoAtomId(0)),
+                change: StereoAtomFieldChange::Coset {
+                    old: StereoCosetAst::Lit(1),
+                    new: StereoCosetAst::Lit(2),
+                },
+            }])
+            .unwrap();
+        assert_eq!(
+            stereo_atom_skeleton.stereo_atom(StereoAtomId(0)).ast.coset,
+            StereoCosetAst::Lit(2),
+        );
+        tx.rollback(&mut stereo_atom_skeleton).unwrap();
+        assert_eq!(stereo_atom_skeleton.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_set_stereo_atom_field_error(
+        mut stereo_atom_skeleton: MoleculeBuilder,
+    ) {
+        stereo_atom_skeleton.add_stereo_atom(
+            AtomId(0),
+            tetrahedral_ligands(),
+            StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+        );
+        let err = stereo_atom_skeleton
+            .transact(vec![Edit::SetStereoAtomField {
+                idx: StereoAtomRef::Id(StereoAtomId(0)),
+                change: StereoAtomFieldChange::Coset {
+                    // Wrong recorded coset (Th2 vs the stored Th1).
+                    old: StereoCosetAst::Lit(2),
+                    new: StereoCosetAst::Lit(1),
+                },
+            }])
+            .unwrap_err();
+        assert_eq!(err, TransactionError::OldStateMismatch);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_set_stereo_bond_field(
+        mut stereo_bond_skeleton: MoleculeBuilder,
+    ) {
+        stereo_bond_skeleton.add_stereo_bond(
+            BondId(1),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+        );
+        let before = stereo_bond_skeleton.clone().build();
+        let tx = stereo_bond_skeleton
+            .transact(vec![Edit::SetStereoBondField {
+                idx: StereoBondRef::Id(StereoBondId(0)),
+                change: StereoBondFieldChange::Coset {
+                    old: StereoCosetAst::Lit(1),
+                    new: StereoCosetAst::Lit(2),
+                },
+            }])
+            .unwrap();
+        assert_eq!(
+            stereo_bond_skeleton.stereo_bond(StereoBondId(0)).ast.coset,
+            StereoCosetAst::Lit(2),
+        );
+        tx.rollback(&mut stereo_bond_skeleton).unwrap();
+        assert_eq!(stereo_bond_skeleton.build(), before);
+    }
+
+    #[rstest]
+    fn test_molecule_builder_transact_set_stereo_bond_field_error(
+        mut stereo_bond_skeleton: MoleculeBuilder,
+    ) {
+        stereo_bond_skeleton.add_stereo_bond(
+            BondId(1),
+            vec![
+                StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+            ],
+            StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+        );
+        let err = stereo_bond_skeleton
+            .transact(vec![Edit::SetStereoBondField {
+                idx: StereoBondRef::Id(StereoBondId(0)),
+                change: StereoBondFieldChange::Coset {
+                    // Wrong recorded coset (vs the stored 1).
+                    old: StereoCosetAst::Lit(2),
+                    new: StereoCosetAst::Lit(1),
                 },
             }])
             .unwrap_err();

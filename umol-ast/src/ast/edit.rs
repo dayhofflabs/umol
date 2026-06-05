@@ -25,7 +25,7 @@ use super::multicenter::MulticenterBondAst;
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use super::remap::{IdRemapping, UndoRemapping};
 use super::spin::SpinStateAst;
-use super::stereo::{StereoAtomAst, StereoBondAst};
+use super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst};
 use super::value::ValueAst;
 
 /// Symbolic reference to an atom: either an existing `AtomId` or the Nth
@@ -196,6 +196,43 @@ impl NoncovalentBondFieldChange {
     }
 }
 
+/// Per-field old/new payload for a stereo-atom mutation. Only `coset` is
+/// settable: `kind` fixes the coset's group, so changing it would desync the
+/// configuration — kind changes go through remove + add.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StereoAtomFieldChange {
+    Coset {
+        old: StereoCosetAst,
+        new: StereoCosetAst,
+    },
+}
+
+impl StereoAtomFieldChange {
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Coset { old, new } => Self::Coset { old: new, new: old },
+        }
+    }
+}
+
+/// Per-field old/new payload for a stereo-bond mutation. Coset-only, for the
+/// same reason as `StereoAtomFieldChange`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StereoBondFieldChange {
+    Coset {
+        old: StereoCosetAst,
+        new: StereoCosetAst,
+    },
+}
+
+impl StereoBondFieldChange {
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::Coset { old, new } => Self::Coset { old: new, new: old },
+        }
+    }
+}
+
 /// Single bond addition inside an `Edit::AddBonds` batch.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AddBond {
@@ -303,6 +340,10 @@ pub enum Edit {
         ligands: Vec<(AtomRef, StereoLigandKind)>,
         ast: StereoAtomAst,
     },
+    SetStereoAtomField {
+        idx: StereoAtomRef,
+        change: StereoAtomFieldChange,
+    },
     AddStereoBond {
         site: BondRef,
         ligands: Vec<(AtomRef, StereoLigandKind)>,
@@ -313,6 +354,10 @@ pub enum Edit {
         site: BondRef,
         ligands: Vec<(AtomRef, StereoLigandKind)>,
         ast: StereoBondAst,
+    },
+    SetStereoBondField {
+        idx: StereoBondRef,
+        change: StereoBondFieldChange,
     },
 
     // Entity-inline constraints — atom
@@ -684,6 +729,14 @@ pub enum Undo {
         id: NoncovalentBondId,
         change: NoncovalentBondFieldChange,
     },
+    SetStereoAtomField {
+        id: StereoAtomId,
+        change: StereoAtomFieldChange,
+    },
+    SetStereoBondField {
+        id: StereoBondId,
+        change: StereoBondFieldChange,
+    },
     ApplyConstraintUpdate(ConstraintUpdate),
     ApplyEdit(Box<Edit>),
 }
@@ -755,6 +808,44 @@ mod tests {
     fn test_atom_field_change_inverse(
         #[case] input: AtomFieldChange,
         #[case] expected: AtomFieldChange,
+    ) {
+        assert_eq!(input.clone().inverse(), expected);
+        assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    #[case::coset(
+        StereoAtomFieldChange::Coset {
+            old: StereoCosetAst::Lit(1),
+            new: StereoCosetAst::Lit(2),
+        },
+        StereoAtomFieldChange::Coset {
+            old: StereoCosetAst::Lit(2),
+            new: StereoCosetAst::Lit(1),
+        },
+    )]
+    fn test_stereo_atom_field_change_inverse(
+        #[case] input: StereoAtomFieldChange,
+        #[case] expected: StereoAtomFieldChange,
+    ) {
+        assert_eq!(input.clone().inverse(), expected);
+        assert_eq!(input.clone().inverse().inverse(), input);
+    }
+
+    #[rstest]
+    #[case::coset(
+        StereoBondFieldChange::Coset {
+            old: StereoCosetAst::Lit(1),
+            new: StereoCosetAst::Lit(2),
+        },
+        StereoBondFieldChange::Coset {
+            old: StereoCosetAst::Lit(2),
+            new: StereoCosetAst::Lit(1),
+        },
+    )]
+    fn test_stereo_bond_field_change_inverse(
+        #[case] input: StereoBondFieldChange,
+        #[case] expected: StereoBondFieldChange,
     ) {
         assert_eq!(input.clone().inverse(), expected);
         assert_eq!(input.clone().inverse().inverse(), input);

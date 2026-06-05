@@ -432,8 +432,8 @@ impl<P, O, D> Default for VarRelationSet<P, O, D> {
 /// Birelation with two fixed-arity factors.
 #[derive(Clone, Debug)]
 pub struct FixedFixedBirelationSet<L1, O1, const N1: usize, L2, O2, const N2: usize, D> {
-    factor_1: Vec<[L1; N1]>,
-    factor_2: Vec<[L2; N2]>,
+    participants_1: Vec<[L1; N1]>,
+    participants_2: Vec<[L2; N2]>,
     data: Vec<D>,
     incidence: Incidence,
     _ordering: PhantomData<(O1, O2)>,
@@ -447,8 +447,8 @@ where
     D: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.factor_1 == other.factor_1
-            && self.factor_2 == other.factor_2
+        self.participants_1 == other.participants_1
+            && self.participants_2 == other.participants_2
             && self.data == other.data
     }
 }
@@ -472,23 +472,23 @@ where
 {
     pub fn new(entries: Vec<([L1; N1], [L2; N2], D)>) -> Self {
         let relation_count = entries.len();
-        let mut factor_1 = Vec::with_capacity(relation_count);
-        let mut factor_2 = Vec::with_capacity(relation_count);
+        let mut participants_1 = Vec::with_capacity(relation_count);
+        let mut participants_2 = Vec::with_capacity(relation_count);
         let mut data = Vec::with_capacity(relation_count);
         for (mut l1, mut l2, d) in entries {
             O1::canonicalize(&mut l1);
             O2::canonicalize(&mut l2);
-            factor_1.push(l1);
-            factor_2.push(l2);
+            participants_1.push(l1);
+            participants_2.push(l2);
             data.push(d);
         }
         let incidence = Incidence::build(relation_count, |i, out| {
-            out.extend(factor_1[i].iter().map(|p| p.refs()));
-            out.extend(factor_2[i].iter().map(|p| p.refs()));
+            out.extend(participants_1[i].iter().map(|p| p.refs()));
+            out.extend(participants_2[i].iter().map(|p| p.refs()));
         });
         Self {
-            factor_1,
-            factor_2,
+            participants_1,
+            participants_2,
             data,
             incidence,
             _ordering: PhantomData,
@@ -511,12 +511,12 @@ where
         self.data.iter_mut()
     }
 
-    pub fn factor_1(&self, id: RelationId) -> &[L1; N1] {
-        &self.factor_1[id.index()]
+    pub fn participants_1(&self, id: RelationId) -> &[L1; N1] {
+        &self.participants_1[id.index()]
     }
 
-    pub fn factor_2(&self, id: RelationId) -> &[L2; N2] {
-        &self.factor_2[id.index()]
+    pub fn participants_2(&self, id: RelationId) -> &[L2; N2] {
+        &self.participants_2[id.index()]
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -551,13 +551,13 @@ where
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let f1: Option<Vec<L1>> = self
-                    .factor_1(rid)
+                    .participants_1(rid)
                     .iter()
                     .map(|&p| p.remap(remapping))
                     .collect();
                 let f1: [L1; N1] = f1?.try_into().ok()?;
                 let f2: Option<Vec<L2>> = self
-                    .factor_2(rid)
+                    .participants_2(rid)
                     .iter()
                     .map(|&p| p.remap(remapping))
                     .collect();
@@ -574,8 +574,8 @@ impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> Default
 {
     fn default() -> Self {
         Self {
-            factor_1: Vec::new(),
-            factor_2: Vec::new(),
+            participants_1: Vec::new(),
+            participants_2: Vec::new(),
             data: Vec::new(),
             incidence: Incidence::default(),
             _ordering: PhantomData,
@@ -587,9 +587,9 @@ impl<L1, O1, const N1: usize, L2, O2, const N2: usize, D> Default
 /// has its own participant type and ordering; the union incidence spans both.
 #[derive(Clone, Debug)]
 pub struct FixedVarBirelationSet<L1, O1, const N1: usize, L2, O2, D> {
-    factor_1: Vec<[L1; N1]>,
+    participants_1: Vec<[L1; N1]>,
     f2_offsets: Vec<u32>,
-    factor_2: Vec<L2>,
+    participants_2: Vec<L2>,
     data: Vec<D>,
     incidence: Incidence,
     _ordering: PhantomData<(O1, O2)>,
@@ -602,9 +602,9 @@ where
     D: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.factor_1 == other.factor_1
+        self.participants_1 == other.participants_1
             && self.f2_offsets == other.f2_offsets
-            && self.factor_2 == other.factor_2
+            && self.participants_2 == other.participants_2
             && self.data == other.data
     }
 }
@@ -626,29 +626,29 @@ where
 {
     pub fn new(entries: Vec<([L1; N1], Vec<L2>, D)>) -> Self {
         let relation_count = entries.len();
-        let mut factor_1 = Vec::with_capacity(relation_count);
+        let mut participants_1 = Vec::with_capacity(relation_count);
         let mut f2_offsets = Vec::with_capacity(relation_count + 1);
         f2_offsets.push(0);
-        let mut factor_2 = Vec::new();
+        let mut participants_2 = Vec::new();
         let mut data = Vec::with_capacity(relation_count);
         for (mut l1, mut l2, d) in entries {
             O1::canonicalize(&mut l1);
-            factor_1.push(l1);
+            participants_1.push(l1);
             O2::canonicalize(&mut l2);
-            factor_2.extend_from_slice(&l2);
-            f2_offsets.push(factor_2.len() as u32);
+            participants_2.extend_from_slice(&l2);
+            f2_offsets.push(participants_2.len() as u32);
             data.push(d);
         }
         let incidence = Incidence::build(relation_count, |i, out| {
-            out.extend(factor_1[i].iter().map(|p| p.refs()));
+            out.extend(participants_1[i].iter().map(|p| p.refs()));
             let start = f2_offsets[i] as usize;
             let end = f2_offsets[i + 1] as usize;
-            out.extend(factor_2[start..end].iter().map(|p| p.refs()));
+            out.extend(participants_2[start..end].iter().map(|p| p.refs()));
         });
         Self {
-            factor_1,
+            participants_1,
             f2_offsets,
-            factor_2,
+            participants_2,
             data,
             incidence,
             _ordering: PhantomData,
@@ -671,14 +671,14 @@ where
         self.data.iter_mut()
     }
 
-    pub fn factor_1(&self, id: RelationId) -> &[L1; N1] {
-        &self.factor_1[id.index()]
+    pub fn participants_1(&self, id: RelationId) -> &[L1; N1] {
+        &self.participants_1[id.index()]
     }
 
-    pub fn factor_2(&self, id: RelationId) -> &[L2] {
+    pub fn participants_2(&self, id: RelationId) -> &[L2] {
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
-        &self.factor_2[start..end]
+        &self.participants_2[start..end]
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -713,13 +713,13 @@ where
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let f1: Option<Vec<L1>> = self
-                    .factor_1(rid)
+                    .participants_1(rid)
                     .iter()
                     .map(|&p| p.remap(remapping))
                     .collect();
                 let f1: [L1; N1] = f1?.try_into().ok()?;
                 let f2: Option<Vec<L2>> = self
-                    .factor_2(rid)
+                    .participants_2(rid)
                     .iter()
                     .map(|&p| p.remap(remapping))
                     .collect();
@@ -733,9 +733,9 @@ where
 impl<L1, O1, const N1: usize, L2, O2, D> Default for FixedVarBirelationSet<L1, O1, N1, L2, O2, D> {
     fn default() -> Self {
         Self {
-            factor_1: Vec::new(),
+            participants_1: Vec::new(),
             f2_offsets: vec![0],
-            factor_2: Vec::new(),
+            participants_2: Vec::new(),
             data: Vec::new(),
             incidence: Incidence::default(),
             _ordering: PhantomData,
@@ -747,9 +747,9 @@ impl<L1, O1, const N1: usize, L2, O2, D> Default for FixedVarBirelationSet<L1, O
 #[derive(Clone, Debug)]
 pub struct VarVarBirelationSet<L1, O1, L2, O2, D> {
     f1_offsets: Vec<u32>,
-    factor_1: Vec<L1>,
+    participants_1: Vec<L1>,
     f2_offsets: Vec<u32>,
-    factor_2: Vec<L2>,
+    participants_2: Vec<L2>,
     data: Vec<D>,
     incidence: Incidence,
     _ordering: PhantomData<(O1, O2)>,
@@ -763,9 +763,9 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.f1_offsets == other.f1_offsets
-            && self.factor_1 == other.factor_1
+            && self.participants_1 == other.participants_1
             && self.f2_offsets == other.f2_offsets
-            && self.factor_2 == other.factor_2
+            && self.participants_2 == other.participants_2
             && self.data == other.data
     }
 }
@@ -789,33 +789,33 @@ where
         let relation_count = entries.len();
         let mut f1_offsets = Vec::with_capacity(relation_count + 1);
         f1_offsets.push(0);
-        let mut factor_1 = Vec::new();
+        let mut participants_1 = Vec::new();
         let mut f2_offsets = Vec::with_capacity(relation_count + 1);
         f2_offsets.push(0);
-        let mut factor_2 = Vec::new();
+        let mut participants_2 = Vec::new();
         let mut data = Vec::with_capacity(relation_count);
         for (mut l1, mut l2, d) in entries {
             O1::canonicalize(&mut l1);
-            factor_1.extend_from_slice(&l1);
-            f1_offsets.push(factor_1.len() as u32);
+            participants_1.extend_from_slice(&l1);
+            f1_offsets.push(participants_1.len() as u32);
             O2::canonicalize(&mut l2);
-            factor_2.extend_from_slice(&l2);
-            f2_offsets.push(factor_2.len() as u32);
+            participants_2.extend_from_slice(&l2);
+            f2_offsets.push(participants_2.len() as u32);
             data.push(d);
         }
         let incidence = Incidence::build(relation_count, |i, out| {
             let s1 = f1_offsets[i] as usize;
             let e1 = f1_offsets[i + 1] as usize;
-            out.extend(factor_1[s1..e1].iter().map(|p| p.refs()));
+            out.extend(participants_1[s1..e1].iter().map(|p| p.refs()));
             let s2 = f2_offsets[i] as usize;
             let e2 = f2_offsets[i + 1] as usize;
-            out.extend(factor_2[s2..e2].iter().map(|p| p.refs()));
+            out.extend(participants_2[s2..e2].iter().map(|p| p.refs()));
         });
         Self {
             f1_offsets,
-            factor_1,
+            participants_1,
             f2_offsets,
-            factor_2,
+            participants_2,
             data,
             incidence,
             _ordering: PhantomData,
@@ -838,16 +838,16 @@ where
         self.data.iter_mut()
     }
 
-    pub fn factor_1(&self, id: RelationId) -> &[L1] {
+    pub fn participants_1(&self, id: RelationId) -> &[L1] {
         let start = self.f1_offsets[id.index()] as usize;
         let end = self.f1_offsets[id.index() + 1] as usize;
-        &self.factor_1[start..end]
+        &self.participants_1[start..end]
     }
 
-    pub fn factor_2(&self, id: RelationId) -> &[L2] {
+    pub fn participants_2(&self, id: RelationId) -> &[L2] {
         let start = self.f2_offsets[id.index()] as usize;
         let end = self.f2_offsets[id.index() + 1] as usize;
-        &self.factor_2[start..end]
+        &self.participants_2[start..end]
     }
 
     pub fn incident(&self, node: NodeId) -> &[RelationId] {
@@ -882,12 +882,12 @@ where
             .filter_map(|i| {
                 let rid = RelationId(i as u32);
                 let f1: Option<Vec<L1>> = self
-                    .factor_1(rid)
+                    .participants_1(rid)
                     .iter()
                     .map(|&p| p.remap(remapping))
                     .collect();
                 let f2: Option<Vec<L2>> = self
-                    .factor_2(rid)
+                    .participants_2(rid)
                     .iter()
                     .map(|&p| p.remap(remapping))
                     .collect();
@@ -902,9 +902,9 @@ impl<L1, O1, L2, O2, D> Default for VarVarBirelationSet<L1, O1, L2, O2, D> {
     fn default() -> Self {
         Self {
             f1_offsets: vec![0],
-            factor_1: Vec::new(),
+            participants_1: Vec::new(),
             f2_offsets: vec![0],
-            factor_2: Vec::new(),
+            participants_2: Vec::new(),
             data: Vec::new(),
             incidence: Incidence::default(),
             _ordering: PhantomData,
@@ -1233,8 +1233,8 @@ mod tests {
         let rs: FixedFixedBirelationSet<NodeId, Unordered, 1, NodeId, Unordered, 2, &str> =
             FixedFixedBirelationSet::new(vec![([n(0)], [n(2), n(1)], "x")]);
         assert_eq!(rs.relation_count(), 1);
-        assert_eq!(rs.factor_1(RelationId(0)), &[n(0)]);
-        assert_eq!(rs.factor_2(RelationId(0)), &[n(1), n(2)]);
+        assert_eq!(rs.participants_1(RelationId(0)), &[n(0)]);
+        assert_eq!(rs.participants_2(RelationId(0)), &[n(1), n(2)]);
         assert_eq!(rs.data(RelationId(0)), &"x");
     }
 
@@ -1296,8 +1296,8 @@ mod tests {
         let remapping = Remapping::new(vec![1], vec![]);
         let out = rs.apply_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
-        assert_eq!(out.factor_1(RelationId(0)), &[n(0)]);
-        assert_eq!(out.factor_2(RelationId(0)), &[n(1), n(3)]);
+        assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
+        assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
     }
 
@@ -1314,8 +1314,8 @@ mod tests {
         let rs: FixedVarBirelationSet<EdgeId, Ordered, 1, NodeId, Ordered, &str> =
             FixedVarBirelationSet::new(vec![([EdgeId(0)], vec![n(1), n(2), n(3)], "ct")]);
         assert_eq!(rs.relation_count(), 1);
-        assert_eq!(rs.factor_1(RelationId(0)), &[EdgeId(0)]);
-        assert_eq!(rs.factor_2(RelationId(0)), &[n(1), n(2), n(3)]);
+        assert_eq!(rs.participants_1(RelationId(0)), &[EdgeId(0)]);
+        assert_eq!(rs.participants_2(RelationId(0)), &[n(1), n(2), n(3)]);
         assert_eq!(rs.data(RelationId(0)), &"ct");
     }
 
@@ -1383,8 +1383,8 @@ mod tests {
         let remapping = Remapping::new(vec![1], vec![]);
         let out = rs.apply_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
-        assert_eq!(out.factor_1(RelationId(0)), &[n(0)]);
-        assert_eq!(out.factor_2(RelationId(0)), &[n(1), n(3)]);
+        assert_eq!(out.participants_1(RelationId(0)), &[n(0)]);
+        assert_eq!(out.participants_2(RelationId(0)), &[n(1), n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
     }
 
@@ -1400,8 +1400,8 @@ mod tests {
         let rs: VarVarBirelationSet<NodeId, Unordered, EdgeId, Unordered, &str> =
             VarVarBirelationSet::new(vec![(vec![n(0), n(1)], vec![EdgeId(5)], "y")]);
         assert_eq!(rs.relation_count(), 1);
-        assert_eq!(rs.factor_1(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(rs.factor_2(RelationId(0)), &[EdgeId(5)]);
+        assert_eq!(rs.participants_1(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(rs.participants_2(RelationId(0)), &[EdgeId(5)]);
         assert_eq!(rs.data(RelationId(0)), &"y");
     }
 
@@ -1469,8 +1469,8 @@ mod tests {
         let remapping = Remapping::new(vec![1], vec![]);
         let out = rs.apply_remapping(&remapping);
         assert_eq!(out.relation_count(), 1);
-        assert_eq!(out.factor_1(RelationId(0)), &[n(0), n(1)]);
-        assert_eq!(out.factor_2(RelationId(0)), &[n(3)]);
+        assert_eq!(out.participants_1(RelationId(0)), &[n(0), n(1)]);
+        assert_eq!(out.participants_2(RelationId(0)), &[n(3)]);
         assert_eq!(out.data(RelationId(0)), &"keep");
     }
 

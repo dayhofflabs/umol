@@ -47,8 +47,8 @@ pub use edit::{
     DativeBondFieldChange, DativeBondRef, DroppedConstraint, Edit, MulticenterBondFieldChange,
     MulticenterBondRef, NoncovalentBondFieldChange, NoncovalentBondRef, RemovedAromaticSystem,
     RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond, RemovedNoncovalentBond,
-    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, RewrittenConstraint, StereoAtomRef,
-    StereoBondRef, Undo,
+    RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, RewrittenConstraint,
+    StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
 };
 pub use embedding::MoleculeEmbedding;
 pub use error::{Contradiction, EvaluationError, JointDomainError, RewriteError};

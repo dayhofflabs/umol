@@ -66,8 +66,8 @@ impl<'a> StereoAtomView<'a> {
     fn new(set: &'a StereoAtomSet, rid: RelationId) -> Self {
         Self {
             id: StereoAtomId::from(rid),
-            site: AtomId::from(set.factor_1(rid)[0]),
-            ligands: set.factor_2(rid),
+            site: AtomId::from(set.participants_1(rid)[0]),
+            ligands: set.participants_2(rid),
             ast: set.data(rid),
         }
     }
@@ -152,8 +152,8 @@ impl<'a> StereoBondView<'a> {
     fn new(molecule: &'a MoleculeAst, set: &'a StereoBondSet, rid: RelationId) -> Self {
         Self {
             id: StereoBondId::from(rid),
-            site: BondId::from(set.factor_1(rid)[0]),
-            ligands: set.factor_2(rid),
+            site: BondId::from(set.participants_1(rid)[0]),
+            ligands: set.participants_2(rid),
             ast: set.data(rid),
             molecule,
         }
@@ -185,6 +185,38 @@ impl<'a> StereoBondView<'a> {
     pub fn is_ground(&self) -> bool {
         self.ast.is_ground()
     }
+}
+
+// Builder-scope view bundles for stereo elements. `ligands` is a borrow into
+// builder storage so old-state checks compare without cloning; callers clone
+// only what they keep (the `ast`).
+
+pub struct StereoAtomBuilderView<'a> {
+    pub id: StereoAtomId,
+    pub ast: &'a StereoAtomAst,
+    pub site: AtomId,
+    pub ligands: &'a [StereoLigand],
+}
+
+pub struct StereoBondBuilderView<'a> {
+    pub id: StereoBondId,
+    pub ast: &'a StereoBondAst,
+    pub site: BondId,
+    pub ligands: &'a [StereoLigand],
+}
+
+pub struct StereoAtomBuilderViewMut<'a> {
+    pub id: StereoAtomId,
+    pub ast: &'a mut StereoAtomAst,
+    pub site: AtomId,
+    pub ligands: &'a [StereoLigand],
+}
+
+pub struct StereoBondBuilderViewMut<'a> {
+    pub id: StereoBondId,
+    pub ast: &'a mut StereoBondAst,
+    pub site: BondId,
+    pub ligands: &'a [StereoLigand],
 }
 
 #[cfg(test)]

@@ -34,4 +34,7 @@ pub use noncovalent::{
     NoncovalentBondBuilderView, NoncovalentBondBuilderViewMut, NoncovalentBondView,
     NoncovalentBondViews,
 };
-pub use stereo::{StereoAtomView, StereoAtomViews, StereoBondView, StereoBondViews};
+pub use stereo::{
+    StereoAtomBuilderView, StereoAtomBuilderViewMut, StereoAtomView, StereoAtomViews,
+    StereoBondBuilderView, StereoBondBuilderViewMut, StereoBondView, StereoBondViews,
+};

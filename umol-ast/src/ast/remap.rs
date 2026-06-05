@@ -222,8 +222,8 @@ mod tests {
             vec![1],
             vec![3, 0],
             vec![2],
-            Vec::new(),
-            Vec::new(),
+            vec![1],
+            vec![2],
         )
     }
 
@@ -261,6 +261,10 @@ mod tests {
     #[case::aromatic_removed(AromaticSystemId(1), None)]
     #[case::multicenter_shifted(MulticenterBondId(2), Some(MulticenterBondId(1)))]
     #[case::noncovalent_shifted(NoncovalentBondId(3), Some(NoncovalentBondId(2)))]
+    #[case::stereo_atom_removed(StereoAtomId(1), None)]
+    #[case::stereo_atom_shifted(StereoAtomId(2), Some(StereoAtomId(1)))]
+    #[case::stereo_bond_removed(StereoBondId(2), None)]
+    #[case::stereo_bond_shifted(StereoBondId(3), Some(StereoBondId(2)))]
     fn test_id_remapping_relations<T>(
         remapping: IdRemapping,
         #[case] input: T,
@@ -300,6 +304,8 @@ mod tests {
     #[case::aromatic_shifted(AromaticSystemId(1), AromaticSystemId(2))]
     #[case::multicenter_after_two_gaps(MulticenterBondId(1), MulticenterBondId(2))]
     #[case::noncovalent_after_gap(NoncovalentBondId(2), NoncovalentBondId(3))]
+    #[case::stereo_atom_after_gap(StereoAtomId(1), StereoAtomId(2))]
+    #[case::stereo_bond_after_gap(StereoBondId(2), StereoBondId(3))]
     fn test_undo_remapping_relations<T>(
         remapping: IdRemapping,
         #[case] input: T,
@@ -352,6 +358,26 @@ mod tests {
 
         fn unmap(self, remapping: &UndoRemapping) -> Self {
             remapping.noncovalent_bond(self)
+        }
+    }
+
+    impl RelationCase for StereoAtomId {
+        fn map(self, remapping: &IdRemapping) -> Option<Self> {
+            remapping.stereo_atom(self)
+        }
+
+        fn unmap(self, remapping: &UndoRemapping) -> Self {
+            remapping.stereo_atom(self)
+        }
+    }
+
+    impl RelationCase for StereoBondId {
+        fn map(self, remapping: &IdRemapping) -> Option<Self> {
+            remapping.stereo_bond(self)
+        }
+
+        fn unmap(self, remapping: &UndoRemapping) -> Self {
+            remapping.stereo_bond(self)
         }
     }
 }

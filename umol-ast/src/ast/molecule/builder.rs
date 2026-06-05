@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::{iter, mem};
 
 use umol_graph_core::{
-    EdgeId, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered, RelationId,
-    RelationParticipant, Remapping, Unordered, VarRelationSet,
+    EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
+    RelationId, RelationParticipant, Remapping, Unordered, VarRelationSet,
 };
 
 use super::super::aromatic::AromaticSystemAst;
@@ -39,30 +39,36 @@ use super::super::views::{
     AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AtomBuilderView, AtomBuilderViewMut,
     BondBuilderView, BondBuilderViewMut, DativeBondBuilderView, DativeBondBuilderViewMut,
     MulticenterBondBuilderView, MulticenterBondBuilderViewMut, NoncovalentBondBuilderView,
-    NoncovalentBondBuilderViewMut,
+    NoncovalentBondBuilderViewMut, StereoAtomBuilderView, StereoAtomBuilderViewMut,
+    StereoBondBuilderView, StereoBondBuilderViewMut,
 };
 use super::MoleculeAst;
 
 #[derive(Clone)]
-enum FixedSetStorage<D, const N: usize> {
-    Shared(Arc<FixedRelationSet<NodeId, Unordered, D, N>>),
-    Mutable(Vec<([NodeId; N], D)>),
+enum FixedSetStorage<P, O, D, const N: usize> {
+    Shared(Arc<FixedRelationSet<P, O, D, N>>),
+    Mutable(Vec<([P; N], D)>),
 }
 
-impl<D: Clone, const N: usize> FixedSetStorage<D, N> {
-    fn push(&mut self, parts: [NodeId; N], data: D) -> u32 {
+impl<P, O, D, const N: usize> FixedSetStorage<P, O, D, N>
+where
+    P: RelationParticipant,
+    O: FactorOrdering,
+    D: Clone,
+{
+    fn push(&mut self, participants: [P; N], data: D) -> u32 {
         self.materialize();
         let FixedSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
         let idx = vec.len() as u32;
-        vec.push((parts, data));
+        vec.push((participants, data));
         idx
     }
 
     fn materialize(&mut self) {
         if let FixedSetStorage::Shared(arc) = self {
-            let entries: Vec<([NodeId; N], D)> = (0..arc.relation_count())
+            let entries: Vec<([P; N], D)> = (0..arc.relation_count())
                 .map(|i| {
                     let rid = RelationId(i as u32);
                     (*arc.participants(rid), arc.data(rid).clone())
@@ -72,7 +78,7 @@ impl<D: Clone, const N: usize> FixedSetStorage<D, N> {
         }
     }
 
-    fn into_arc(self) -> Arc<FixedRelationSet<NodeId, Unordered, D, N>> {
+    fn into_arc(self) -> Arc<FixedRelationSet<P, O, D, N>> {
         match self {
             FixedSetStorage::Shared(arc) => arc,
             FixedSetStorage::Mutable(vec) => Arc::new(FixedRelationSet::new(vec)),
@@ -86,7 +92,7 @@ impl<D: Clone, const N: usize> FixedSetStorage<D, N> {
         }
     }
 
-    fn participants(&self, i: usize) -> [NodeId; N] {
+    fn participants(&self, i: usize) -> [P; N] {
         match self {
             FixedSetStorage::Shared(arc) => *arc.participants(RelationId(i as u32)),
             FixedSetStorage::Mutable(vec) => vec[i].0,
@@ -99,14 +105,13 @@ impl<D: Clone, const N: usize> FixedSetStorage<D, N> {
                 FixedSetStorage::Shared(Arc::new(arc.apply_remapping(remap)))
             }
             FixedSetStorage::Mutable(vec) => {
-                let remapped: Vec<([NodeId; N], D)> = vec
+                let remapped: Vec<([P; N], D)> = vec
                     .into_iter()
-                    .filter_map(|(parts, d)| {
-                        let mut new_parts = [NodeId(0); N];
-                        for (i, p) in parts.iter().enumerate() {
-                            new_parts[i] = remap.map_node(*p)?;
+                    .filter_map(|(mut participants, d)| {
+                        for slot in &mut participants {
+                            *slot = (*slot).remap(remap)?;
                         }
-                        Some((new_parts, d))
+                        Some((participants, d))
                     })
                     .collect();
                 FixedSetStorage::Mutable(remapped)
@@ -133,7 +138,7 @@ impl<D: Clone, const N: usize> FixedSetStorage<D, N> {
         vec.truncate(dst);
     }
 
-    fn entries(&self) -> Vec<([NodeId; N], D)> {
+    fn entries(&self) -> Vec<([P; N], D)> {
         match self {
             FixedSetStorage::Shared(arc) => (0..arc.relation_count())
                 .map(|i| {
@@ -147,25 +152,30 @@ impl<D: Clone, const N: usize> FixedSetStorage<D, N> {
 }
 
 #[derive(Clone)]
-enum VarSetStorage<D> {
-    Shared(Arc<VarRelationSet<NodeId, Unordered, D>>),
-    Mutable(Vec<(Vec<NodeId>, D)>),
+enum VarSetStorage<P, O, D> {
+    Shared(Arc<VarRelationSet<P, O, D>>),
+    Mutable(Vec<(Vec<P>, D)>),
 }
 
-impl<D: Clone> VarSetStorage<D> {
-    fn push(&mut self, atoms: Vec<NodeId>, data: D) -> u32 {
+impl<P, O, D> VarSetStorage<P, O, D>
+where
+    P: RelationParticipant,
+    O: FactorOrdering,
+    D: Clone,
+{
+    fn push(&mut self, participants: Vec<P>, data: D) -> u32 {
         self.materialize();
         let VarSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
         let idx = vec.len() as u32;
-        vec.push((atoms, data));
+        vec.push((participants, data));
         idx
     }
 
     fn materialize(&mut self) {
         if let VarSetStorage::Shared(arc) = self {
-            let entries: Vec<(Vec<NodeId>, D)> = (0..arc.relation_count())
+            let entries: Vec<(Vec<P>, D)> = (0..arc.relation_count())
                 .map(|i| {
                     let rid = RelationId(i as u32);
                     (arc.participants(rid).to_vec(), arc.data(rid).clone())
@@ -175,7 +185,7 @@ impl<D: Clone> VarSetStorage<D> {
         }
     }
 
-    fn into_arc(self) -> Arc<VarRelationSet<NodeId, Unordered, D>> {
+    fn into_arc(self) -> Arc<VarRelationSet<P, O, D>> {
         match self {
             VarSetStorage::Shared(arc) => arc,
             VarSetStorage::Mutable(vec) => Arc::new(VarRelationSet::new(vec)),
@@ -189,7 +199,7 @@ impl<D: Clone> VarSetStorage<D> {
         }
     }
 
-    fn participants(&self, i: usize) -> Vec<NodeId> {
+    fn participants(&self, i: usize) -> Vec<P> {
         match self {
             VarSetStorage::Shared(arc) => arc.participants(RelationId(i as u32)).to_vec(),
             VarSetStorage::Mutable(vec) => vec[i].0.clone(),
@@ -202,12 +212,12 @@ impl<D: Clone> VarSetStorage<D> {
                 VarSetStorage::Shared(Arc::new(arc.apply_remapping(remap)))
             }
             VarSetStorage::Mutable(vec) => {
-                let remapped: Vec<(Vec<NodeId>, D)> = vec
+                let remapped: Vec<(Vec<P>, D)> = vec
                     .into_iter()
-                    .filter_map(|(atoms, d)| {
-                        let mapped: Option<Vec<NodeId>> =
-                            atoms.into_iter().map(|n| remap.map_node(n)).collect();
-                        mapped.map(|a| (a, d))
+                    .filter_map(|(participants, d)| {
+                        let mapped: Option<Vec<P>> =
+                            participants.into_iter().map(|p| p.remap(remap)).collect();
+                        mapped.map(|p| (p, d))
                     })
                     .collect();
                 VarSetStorage::Mutable(remapped)
@@ -234,7 +244,7 @@ impl<D: Clone> VarSetStorage<D> {
         vec.truncate(dst);
     }
 
-    fn entries(&self) -> Vec<(Vec<NodeId>, D)> {
+    fn entries(&self) -> Vec<(Vec<P>, D)> {
         match self {
             VarSetStorage::Shared(arc) => (0..arc.relation_count())
                 .map(|i| {
@@ -247,44 +257,42 @@ impl<D: Clone> VarSetStorage<D> {
     }
 }
 
-/// Builder storage for a stereo birelation: an arity-1 `site` participant `S`
-/// (`NodeId` for stereo atoms, `EdgeId` for stereo bonds) plus ordered
-/// `StereoLigand` factors. Shared until first mutation, mirroring
-/// `VarSetStorage` / `FixedSetStorage`.
+/// Builder storage for a fixed-arity-first-factor / var-second-factor birelation:
+/// shared until first mutation, then a `Vec` of entries — mirroring
+/// `VarSetStorage` / `FixedSetStorage`. Generic over exactly what
+/// `FixedVarBirelationSet` is; chemistry-specific naming (site/ligands) lives in
+/// the views, not here.
 #[derive(Clone)]
-enum FixedVarSetStorage<S, D> {
-    Shared(Arc<FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>>),
-    Mutable(Vec<([S; 1], Vec<StereoLigand>, D)>),
+enum FixedVarSetStorage<L1, O1, const N1: usize, L2, O2, D> {
+    Shared(Arc<FixedVarBirelationSet<L1, O1, N1, L2, O2, D>>),
+    Mutable(Vec<([L1; N1], Vec<L2>, D)>),
 }
 
-impl<S: RelationParticipant, D: Clone> FixedVarSetStorage<S, D> {
-    fn push(&mut self, site: [S; 1], ligands: Vec<StereoLigand>, data: D) -> u32 {
+impl<L1, O1, const N1: usize, L2, O2, D> FixedVarSetStorage<L1, O1, N1, L2, O2, D>
+where
+    L1: RelationParticipant,
+    O1: FactorOrdering,
+    L2: RelationParticipant,
+    O2: FactorOrdering,
+    D: Clone,
+{
+    fn push(&mut self, participants_1: [L1; N1], participants_2: Vec<L2>, data: D) -> u32 {
         self.materialize();
         let FixedVarSetStorage::Mutable(vec) = self else {
             unreachable!()
         };
         let idx = vec.len() as u32;
-        vec.push((site, ligands, data));
+        vec.push((participants_1, participants_2, data));
         idx
     }
 
     fn materialize(&mut self) {
         if let FixedVarSetStorage::Shared(arc) = self {
-            let entries: Vec<([S; 1], Vec<StereoLigand>, D)> = (0..arc.relation_count())
-                .map(|i| {
-                    let rid = RelationId(i as u32);
-                    (
-                        *arc.factor_1(rid),
-                        arc.factor_2(rid).to_vec(),
-                        arc.data(rid).clone(),
-                    )
-                })
-                .collect();
-            *self = FixedVarSetStorage::Mutable(entries);
+            *self = FixedVarSetStorage::Mutable(arc_entries(arc));
         }
     }
 
-    fn into_arc(self) -> Arc<FixedVarBirelationSet<S, Ordered, 1, StereoLigand, Ordered, D>> {
+    fn into_arc(self) -> Arc<FixedVarBirelationSet<L1, O1, N1, L2, O2, D>> {
         match self {
             FixedVarSetStorage::Shared(arc) => arc,
             FixedVarSetStorage::Mutable(vec) => Arc::new(FixedVarBirelationSet::new(vec)),
@@ -298,24 +306,17 @@ impl<S: RelationParticipant, D: Clone> FixedVarSetStorage<S, D> {
         }
     }
 
-    fn site(&self, i: usize) -> [S; 1] {
+    fn participants_1(&self, i: usize) -> [L1; N1] {
         match self {
-            FixedVarSetStorage::Shared(arc) => *arc.factor_1(RelationId(i as u32)),
+            FixedVarSetStorage::Shared(arc) => *arc.participants_1(RelationId(i as u32)),
             FixedVarSetStorage::Mutable(vec) => vec[i].0,
         }
     }
 
-    fn ligands(&self, i: usize) -> Vec<StereoLigand> {
+    fn participants_2(&self, i: usize) -> Vec<L2> {
         match self {
-            FixedVarSetStorage::Shared(arc) => arc.factor_2(RelationId(i as u32)).to_vec(),
+            FixedVarSetStorage::Shared(arc) => arc.participants_2(RelationId(i as u32)).to_vec(),
             FixedVarSetStorage::Mutable(vec) => vec[i].1.clone(),
-        }
-    }
-
-    fn data(&self, i: usize) -> D {
-        match self {
-            FixedVarSetStorage::Shared(arc) => arc.data(RelationId(i as u32)).clone(),
-            FixedVarSetStorage::Mutable(vec) => vec[i].2.clone(),
         }
     }
 
@@ -325,13 +326,15 @@ impl<S: RelationParticipant, D: Clone> FixedVarSetStorage<S, D> {
                 FixedVarSetStorage::Shared(Arc::new(arc.apply_remapping(remap)))
             }
             FixedVarSetStorage::Mutable(vec) => {
-                let remapped: Vec<([S; 1], Vec<StereoLigand>, D)> = vec
+                let remapped: Vec<([L1; N1], Vec<L2>, D)> = vec
                     .into_iter()
-                    .filter_map(|(site, ligands, d)| {
-                        let site = site[0].remap(remap).map(|s| [s])?;
-                        let ligands: Option<Vec<StereoLigand>> =
-                            ligands.into_iter().map(|l| l.remap(remap)).collect();
-                        Some((site, ligands?, d))
+                    .filter_map(|(mut participants_1, participants_2, d)| {
+                        for slot in &mut participants_1 {
+                            *slot = (*slot).remap(remap)?;
+                        }
+                        let participants_2: Option<Vec<L2>> =
+                            participants_2.into_iter().map(|p| p.remap(remap)).collect();
+                        Some((participants_1, participants_2?, d))
                     })
                     .collect();
                 FixedVarSetStorage::Mutable(remapped)
@@ -358,88 +361,137 @@ impl<S: RelationParticipant, D: Clone> FixedVarSetStorage<S, D> {
         vec.truncate(dst);
     }
 
-    fn entries(&self) -> Vec<([S; 1], Vec<StereoLigand>, D)> {
+    fn entries(&self) -> Vec<([L1; N1], Vec<L2>, D)> {
         match self {
-            FixedVarSetStorage::Shared(arc) => (0..arc.relation_count())
-                .map(|i| {
-                    let rid = RelationId(i as u32);
-                    (
-                        *arc.factor_1(rid),
-                        arc.factor_2(rid).to_vec(),
-                        arc.data(rid).clone(),
-                    )
-                })
-                .collect(),
+            FixedVarSetStorage::Shared(arc) => arc_entries(arc),
             FixedVarSetStorage::Mutable(vec) => vec.clone(),
         }
     }
 }
 
-/// Indices of stereo relations whose site or any ligand maps to `None` under
+fn arc_entries<L1, O1, const N1: usize, L2, O2, D>(
+    arc: &FixedVarBirelationSet<L1, O1, N1, L2, O2, D>,
+) -> Vec<([L1; N1], Vec<L2>, D)>
+where
+    L1: RelationParticipant,
+    O1: FactorOrdering,
+    L2: RelationParticipant,
+    O2: FactorOrdering,
+    D: Clone,
+{
+    (0..arc.relation_count())
+        .map(|i| {
+            let rid = RelationId(i as u32);
+            (
+                *arc.participants_1(rid),
+                arc.participants_2(rid).to_vec(),
+                arc.data(rid).clone(),
+            )
+        })
+        .collect()
+}
+
+/// Indices of birelations whose first or second factor maps to `None` under
 /// `remap` (i.e. dropped by the structural removal).
-fn birelation_removed<S: RelationParticipant, D: Clone>(
-    storage: &FixedVarSetStorage<S, D>,
+fn birelation_removed<L1, O1, const N1: usize, L2, O2, D>(
+    storage: &FixedVarSetStorage<L1, O1, N1, L2, O2, D>,
     remap: &Remapping,
-) -> Vec<u32> {
+) -> Vec<u32>
+where
+    L1: RelationParticipant,
+    O1: FactorOrdering,
+    L2: RelationParticipant,
+    O2: FactorOrdering,
+    D: Clone,
+{
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
-        let site_gone = storage.site(i).iter().any(|&s| s.remap(remap).is_none());
-        let ligand_gone = storage.ligands(i).iter().any(|&l| l.remap(remap).is_none());
-        if site_gone || ligand_gone {
+        let f1_gone = storage
+            .participants_1(i)
+            .iter()
+            .any(|&p| p.remap(remap).is_none());
+        let f2_gone = storage
+            .participants_2(i)
+            .iter()
+            .any(|&p| p.remap(remap).is_none());
+        if f1_gone || f2_gone {
             removed.push(i as u32);
         }
     }
     removed
 }
 
-/// Un-map a surviving stereo relation's site + ligands back to the pre-removal
-/// coordinate system during rollback.
-fn restore_stereo_participants<S: RelationParticipant>(
-    site: [S; 1],
-    ligands: Vec<StereoLigand>,
+/// Un-map a surviving birelation's factors back to the pre-removal coordinate
+/// system during rollback.
+fn restore_birelation_participants<L1, const N1: usize, L2>(
+    participants_1: [L1; N1],
+    participants_2: Vec<L2>,
     undo_remapping: &UndoRemapping,
-) -> ([S; 1], Vec<StereoLigand>) {
+) -> ([L1; N1], Vec<L2>)
+where
+    L1: RelationParticipant,
+    L2: RelationParticipant,
+{
     let graph = undo_remapping.forward().graph();
     (
-        site.map(|p| p.unmap(graph)),
-        ligands.into_iter().map(|l| l.unmap(graph)).collect(),
+        participants_1.map(|p| p.unmap(graph)),
+        participants_2.into_iter().map(|p| p.unmap(graph)).collect(),
     )
 }
 
-fn fixed_relation_removed<D: Clone, const N: usize>(
-    storage: &FixedSetStorage<D, N>,
+fn fixed_relation_removed<P, O, D, const N: usize>(
+    storage: &FixedSetStorage<P, O, D, N>,
     remap: &Remapping,
-) -> Vec<u32> {
+) -> Vec<u32>
+where
+    P: RelationParticipant,
+    O: FactorOrdering,
+    D: Clone,
+{
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
-        let parts = storage.participants(i);
-        if parts.iter().any(|&p| remap.map_node(p).is_none()) {
+        if storage
+            .participants(i)
+            .iter()
+            .any(|&p| p.remap(remap).is_none())
+        {
             removed.push(i as u32);
         }
     }
     removed
 }
 
-fn var_relation_removed<D: Clone>(storage: &VarSetStorage<D>, remap: &Remapping) -> Vec<u32> {
+fn var_relation_removed<P, O, D>(storage: &VarSetStorage<P, O, D>, remap: &Remapping) -> Vec<u32>
+where
+    P: RelationParticipant,
+    O: FactorOrdering,
+    D: Clone,
+{
     let mut removed = Vec::new();
     for i in 0..storage.relation_count() {
-        let parts = storage.participants(i);
-        if parts.iter().any(|&p| remap.map_node(p).is_none()) {
+        if storage
+            .participants(i)
+            .iter()
+            .any(|&p| p.remap(remap).is_none())
+        {
             removed.push(i as u32);
         }
     }
     removed
 }
 
-fn restore_var_participants(parts: Vec<NodeId>, undo_remapping: &UndoRemapping) -> Vec<NodeId> {
+fn restore_var_participants<P: RelationParticipant>(
+    parts: Vec<P>,
+    undo_remapping: &UndoRemapping,
+) -> Vec<P> {
     let remapping = undo_remapping.forward().graph();
     parts.into_iter().map(|p| p.unmap(remapping)).collect()
 }
 
-fn restore_fixed_participants<const N: usize>(
-    parts: [NodeId; N],
+fn restore_fixed_participants<P: RelationParticipant, const N: usize>(
+    parts: [P; N],
     undo_remapping: &UndoRemapping,
-) -> [NodeId; N] {
+) -> [P; N] {
     let remapping = undo_remapping.forward().graph();
     parts.map(|p| p.unmap(remapping))
 }
@@ -453,12 +505,12 @@ pub struct MoleculeBuilder {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
     bonds: Arc<Vec<BondAst>>,
-    dative_bonds: VarSetStorage<DativeBondAst>,
-    aromatic_systems: VarSetStorage<AromaticSystemAst>,
-    multicenter_bonds: VarSetStorage<MulticenterBondAst>,
-    noncovalent_bonds: FixedSetStorage<NoncovalentBondAst, 2>,
-    stereo_atoms: FixedVarSetStorage<NodeId, StereoAtomAst>,
-    stereo_bonds: FixedVarSetStorage<EdgeId, StereoBondAst>,
+    dative_bonds: VarSetStorage<NodeId, Unordered, DativeBondAst>,
+    aromatic_systems: VarSetStorage<NodeId, Unordered, AromaticSystemAst>,
+    multicenter_bonds: VarSetStorage<NodeId, Unordered, MulticenterBondAst>,
+    noncovalent_bonds: FixedSetStorage<NodeId, Unordered, NoncovalentBondAst, 2>,
+    stereo_atoms: FixedVarSetStorage<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>,
+    stereo_bonds: FixedVarSetStorage<EdgeId, Ordered, 1, StereoLigand, Ordered, StereoBondAst>,
     constraints: Constraints,
 }
 
@@ -573,6 +625,26 @@ impl MoleculeBuilder {
             .noncovalent_bonds
             .push([NodeId::from(ends[0]), NodeId::from(ends[1])], bond);
         NoncovalentBondId(i)
+    }
+
+    /// Append a stereo-atom overlay directly to the builder.
+    pub fn add_stereo_atom(
+        &mut self,
+        site: AtomId,
+        ligands: Vec<StereoLigand>,
+        ast: StereoAtomAst,
+    ) -> StereoAtomId {
+        StereoAtomId(self.stereo_atoms.push([NodeId::from(site)], ligands, ast))
+    }
+
+    /// Append a stereo-bond overlay directly to the builder.
+    pub fn add_stereo_bond(
+        &mut self,
+        site: BondId,
+        ligands: Vec<StereoLigand>,
+        ast: StereoBondAst,
+    ) -> StereoBondId {
+        StereoBondId(self.stereo_bonds.push([EdgeId::from(site)], ligands, ast))
     }
 
     /// Add a molecule-level constraint (molecule-scope predicate or
@@ -775,6 +847,82 @@ impl MoleculeBuilder {
         }
     }
 
+    pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomBuilderView<'_> {
+        match &self.stereo_atoms {
+            FixedVarSetStorage::Shared(arc) => {
+                let rid = RelationId(id.0);
+                StereoAtomBuilderView {
+                    id,
+                    ast: arc.data(rid),
+                    site: AtomId::from(arc.participants_1(rid)[0]),
+                    ligands: arc.participants_2(rid),
+                }
+            }
+            FixedVarSetStorage::Mutable(vec) => {
+                let entry = &vec[id.index()];
+                StereoAtomBuilderView {
+                    id,
+                    ast: &entry.2,
+                    site: AtomId::from(entry.0[0]),
+                    ligands: &entry.1,
+                }
+            }
+        }
+    }
+
+    pub fn stereo_bond(&self, id: StereoBondId) -> StereoBondBuilderView<'_> {
+        match &self.stereo_bonds {
+            FixedVarSetStorage::Shared(arc) => {
+                let rid = RelationId(id.0);
+                StereoBondBuilderView {
+                    id,
+                    ast: arc.data(rid),
+                    site: BondId::from(arc.participants_1(rid)[0]),
+                    ligands: arc.participants_2(rid),
+                }
+            }
+            FixedVarSetStorage::Mutable(vec) => {
+                let entry = &vec[id.index()];
+                StereoBondBuilderView {
+                    id,
+                    ast: &entry.2,
+                    site: BondId::from(entry.0[0]),
+                    ligands: &entry.1,
+                }
+            }
+        }
+    }
+
+    pub fn stereo_atom_mut(&mut self, id: StereoAtomId) -> StereoAtomBuilderViewMut<'_> {
+        self.stereo_atoms.materialize();
+        let FixedVarSetStorage::Mutable(vec) = &mut self.stereo_atoms else {
+            unreachable!()
+        };
+        let entry = &mut vec[id.index()];
+        let site = AtomId::from(entry.0[0]);
+        StereoAtomBuilderViewMut {
+            id,
+            ast: &mut entry.2,
+            site,
+            ligands: &entry.1,
+        }
+    }
+
+    pub fn stereo_bond_mut(&mut self, id: StereoBondId) -> StereoBondBuilderViewMut<'_> {
+        self.stereo_bonds.materialize();
+        let FixedVarSetStorage::Mutable(vec) = &mut self.stereo_bonds else {
+            unreachable!()
+        };
+        let entry = &mut vec[id.index()];
+        let site = BondId::from(entry.0[0]);
+        StereoBondBuilderViewMut {
+            id,
+            ast: &mut entry.2,
+            site,
+            ligands: &entry.1,
+        }
+    }
+
     pub fn constraints(&self) -> &Constraints {
         &self.constraints
     }
@@ -813,39 +961,6 @@ impl MoleculeBuilder {
 
     pub fn stereo_bond_count(&self) -> usize {
         self.stereo_bonds.relation_count()
-    }
-
-    // TODO(D3j): remove these. They are a stopgap, NOT a permanent API. The
-    // transactional `RemoveStereo*` apply reads a stereo element's current
-    // (site, ligands, ast) for the old-state check and removed-element capture;
-    // every sibling overlay does this through a builder view (e.g.
-    // `noncovalent_bond(id) -> NoncovalentBondBuilderView`), cloning off a
-    // borrow before mutating. The owned snapshot only exists to avoid pulling
-    // `StereoAtomBuilderView` / `StereoBondBuilderView` forward; once D3j adds
-    // those, the apply path uses them and these accessors are deleted.
-    pub(super) fn stereo_atom_entry(
-        &self,
-        id: StereoAtomId,
-    ) -> (AtomId, Vec<StereoLigand>, StereoAtomAst) {
-        let i = id.index();
-        (
-            AtomId::from(self.stereo_atoms.site(i)[0]),
-            self.stereo_atoms.ligands(i),
-            self.stereo_atoms.data(i),
-        )
-    }
-
-    // TODO(D3j): remove — see `stereo_atom_entry`.
-    pub(super) fn stereo_bond_entry(
-        &self,
-        id: StereoBondId,
-    ) -> (BondId, Vec<StereoLigand>, StereoBondAst) {
-        let i = id.index();
-        (
-            BondId::from(self.stereo_bonds.site(i)[0]),
-            self.stereo_bonds.ligands(i),
-            self.stereo_bonds.data(i),
-        )
     }
 
     // -- Relation removal -----------------------------------------------------
@@ -924,26 +1039,6 @@ impl MoleculeBuilder {
             Vec::new(),
         );
         self.constraints.remap(&idx_remap);
-    }
-
-    /// Append a stereo-atom overlay directly to the builder.
-    pub fn add_stereo_atom(
-        &mut self,
-        site: AtomId,
-        ligands: Vec<StereoLigand>,
-        ast: StereoAtomAst,
-    ) -> StereoAtomId {
-        StereoAtomId(self.stereo_atoms.push([NodeId::from(site)], ligands, ast))
-    }
-
-    /// Append a stereo-bond overlay directly to the builder.
-    pub fn add_stereo_bond(
-        &mut self,
-        site: BondId,
-        ligands: Vec<StereoLigand>,
-        ast: StereoBondAst,
-    ) -> StereoBondId {
-        StereoBondId(self.stereo_bonds.push([EdgeId::from(site)], ligands, ast))
     }
 
     /// Remove stereo-atom overlays directly from the builder.
@@ -1063,11 +1158,39 @@ impl MoleculeBuilder {
         idx_remap
     }
 
+    // -- Undo of additions ----------------------------------------------------
+
     pub(super) fn remove_added_topology(&mut self, atoms: &[AddedAtom], bonds: &[AddedBond]) {
         let atom_ids: Vec<AtomId> = atoms.iter().map(|a| a.id).collect();
         let bond_ids: Vec<BondId> = bonds.iter().map(|b| b.id).collect();
         self.remove(&atom_ids, &bond_ids);
     }
+
+    pub(super) fn remove_added_dative_bond(&mut self, added: &AddedDativeBond) {
+        self.remove_dative_bonds(&[added.id]);
+    }
+
+    pub(super) fn remove_added_aromatic_system(&mut self, added: &AddedAromaticSystem) {
+        self.remove_aromatic_systems(&[added.id]);
+    }
+
+    pub(super) fn remove_added_multicenter_bond(&mut self, added: &AddedMulticenterBond) {
+        self.remove_multicenter_bonds(&[added.id]);
+    }
+
+    pub(super) fn remove_added_noncovalent_bond(&mut self, added: &AddedNoncovalentBond) {
+        self.remove_noncovalent_bonds(&[added.id]);
+    }
+
+    pub(super) fn remove_added_stereo_atom(&mut self, added: &AddedStereoAtom) {
+        self.remove_stereo_atoms(&[added.id]);
+    }
+
+    pub(super) fn remove_added_stereo_bond(&mut self, added: &AddedStereoBond) {
+        self.remove_stereo_bonds(&[added.id]);
+    }
+
+    // -- Undo of removals -----------------------------------------------------
 
     pub(super) fn restore_topology(
         &mut self,
@@ -1088,20 +1211,12 @@ impl MoleculeBuilder {
         constraint_update.rollback_into(&mut self.constraints);
     }
 
-    pub(super) fn remove_added_dative_bond(&mut self, added: &AddedDativeBond) {
-        self.remove_dative_bonds(&[added.id]);
-    }
-
     pub(super) fn restore_dative_bond(
         &mut self,
         removed: RemovedDativeBond,
         undo_remapping: &UndoRemapping,
     ) {
         self.restore_dative_bonds(vec![removed], undo_remapping);
-    }
-
-    pub(super) fn remove_added_aromatic_system(&mut self, added: &AddedAromaticSystem) {
-        self.remove_aromatic_systems(&[added.id]);
     }
 
     pub(super) fn restore_aromatic_system(
@@ -1112,20 +1227,12 @@ impl MoleculeBuilder {
         self.restore_aromatic_systems(vec![removed], undo_remapping);
     }
 
-    pub(super) fn remove_added_multicenter_bond(&mut self, added: &AddedMulticenterBond) {
-        self.remove_multicenter_bonds(&[added.id]);
-    }
-
     pub(super) fn restore_multicenter_bond(
         &mut self,
         removed: RemovedMulticenterBond,
         undo_remapping: &UndoRemapping,
     ) {
         self.restore_multicenter_bonds(vec![removed], undo_remapping);
-    }
-
-    pub(super) fn remove_added_noncovalent_bond(&mut self, added: &AddedNoncovalentBond) {
-        self.remove_noncovalent_bonds(&[added.id]);
     }
 
     pub(super) fn restore_noncovalent_bond(
@@ -1136,20 +1243,12 @@ impl MoleculeBuilder {
         self.restore_noncovalent_bonds(vec![removed], undo_remapping);
     }
 
-    pub(super) fn remove_added_stereo_atom(&mut self, added: &AddedStereoAtom) {
-        self.remove_stereo_atoms(&[added.id]);
-    }
-
     pub(super) fn restore_stereo_atom(
         &mut self,
         removed: RemovedStereoAtom,
         undo_remapping: &UndoRemapping,
     ) {
         self.restore_stereo_atoms(vec![removed], undo_remapping);
-    }
-
-    pub(super) fn remove_added_stereo_bond(&mut self, added: &AddedStereoBond) {
-        self.remove_stereo_bonds(&[added.id]);
     }
 
     pub(super) fn restore_stereo_bond(
@@ -1160,45 +1259,7 @@ impl MoleculeBuilder {
         self.restore_stereo_bonds(vec![removed], undo_remapping);
     }
 
-    fn restore_stereo_atoms(
-        &mut self,
-        removed: Vec<RemovedStereoAtom>,
-        undo_remapping: &UndoRemapping,
-    ) {
-        let current = self.stereo_atoms.entries();
-        let mut next = vec![None; current.len() + removed.len()];
-        for (idx, (site, ligands, data)) in current.into_iter().enumerate() {
-            let old_id = undo_remapping.stereo_atom(StereoAtomId(idx as u32));
-            let (site, ligands) = restore_stereo_participants(site, ligands, undo_remapping);
-            next[old_id.index()] = Some((site, ligands, data));
-        }
-        for removed in removed {
-            next[removed.id.index()] =
-                Some(([NodeId::from(removed.site)], removed.ligands, removed.ast));
-        }
-        self.stereo_atoms =
-            FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
-    }
-
-    fn restore_stereo_bonds(
-        &mut self,
-        removed: Vec<RemovedStereoBond>,
-        undo_remapping: &UndoRemapping,
-    ) {
-        let current = self.stereo_bonds.entries();
-        let mut next = vec![None; current.len() + removed.len()];
-        for (idx, (site, ligands, data)) in current.into_iter().enumerate() {
-            let old_id = undo_remapping.stereo_bond(StereoBondId(idx as u32));
-            let (site, ligands) = restore_stereo_participants(site, ligands, undo_remapping);
-            next[old_id.index()] = Some((site, ligands, data));
-        }
-        for removed in removed {
-            next[removed.id.index()] =
-                Some(([EdgeId::from(removed.site)], removed.ligands, removed.ast));
-        }
-        self.stereo_bonds =
-            FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
-    }
+    // -- Restore primitives ---------------------------------------------------
 
     fn restore_atoms(&mut self, removed: Vec<RemovedAtom>, undo_remapping: &UndoRemapping) {
         let mut next = vec![None; self.atoms.len() + removed.len()];
@@ -1324,6 +1385,46 @@ impl MoleculeBuilder {
         }
         self.noncovalent_bonds =
             FixedSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
+    }
+
+    fn restore_stereo_atoms(
+        &mut self,
+        removed: Vec<RemovedStereoAtom>,
+        undo_remapping: &UndoRemapping,
+    ) {
+        let current = self.stereo_atoms.entries();
+        let mut next = vec![None; current.len() + removed.len()];
+        for (idx, (site, ligands, data)) in current.into_iter().enumerate() {
+            let old_id = undo_remapping.stereo_atom(StereoAtomId(idx as u32));
+            let (site, ligands) = restore_birelation_participants(site, ligands, undo_remapping);
+            next[old_id.index()] = Some((site, ligands, data));
+        }
+        for removed in removed {
+            next[removed.id.index()] =
+                Some(([NodeId::from(removed.site)], removed.ligands, removed.ast));
+        }
+        self.stereo_atoms =
+            FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
+    }
+
+    fn restore_stereo_bonds(
+        &mut self,
+        removed: Vec<RemovedStereoBond>,
+        undo_remapping: &UndoRemapping,
+    ) {
+        let current = self.stereo_bonds.entries();
+        let mut next = vec![None; current.len() + removed.len()];
+        for (idx, (site, ligands, data)) in current.into_iter().enumerate() {
+            let old_id = undo_remapping.stereo_bond(StereoBondId(idx as u32));
+            let (site, ligands) = restore_birelation_participants(site, ligands, undo_remapping);
+            next[old_id.index()] = Some((site, ligands, data));
+        }
+        for removed in removed {
+            next[removed.id.index()] =
+                Some(([EdgeId::from(removed.site)], removed.ligands, removed.ast));
+        }
+        self.stereo_bonds =
+            FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
     pub fn build(self) -> MoleculeAst {

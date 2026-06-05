@@ -456,6 +456,7 @@ Phases A–E are in scope; F (3D) and G follow.
       equality (`StereoAtom{Contains,Ligands}`, bond analogs), and ligand role predicates
       (`…AllLigands` / `…AnyLigand` delegating an `AtomConstraint`) — plus the `:<entity>-<role>` EDN
       keys in `RELATIONAL_KEYS`, `from_ast` / `into_ast`, and `simplify` / `remap`.
+    - **D3n** Fix naming in remap.rs, index -> id, indices -> ids, review all field and method names
   - **D4** — sugar `:ccw`/`:cw`/`:e`/`:z` (each carries its class — `Th1`/`Th2`/`Ct1`/`Ct2`) ↔ the `:type` head.
     **Done**
   - **D5** — `#T`/`#C` atom/bond-string surface: the derived-predicate tokens in the existing atom/bond
