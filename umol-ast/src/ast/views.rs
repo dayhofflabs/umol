@@ -10,6 +10,7 @@ mod atom;
 mod bond;
 mod dative;
 mod graph;
+mod ligand;
 mod multicenter;
 mod neighbor;
 mod noncovalent;
@@ -25,6 +26,7 @@ pub use dative::{
     DativeBondBuilderView, DativeBondBuilderViewMut, DativeBondView, DativeBondViews,
 };
 pub use graph::GraphView;
+pub use ligand::StereoLigandView;
 pub use multicenter::{
     MulticenterBondBuilderView, MulticenterBondBuilderViewMut, MulticenterBondView,
     MulticenterBondViews,

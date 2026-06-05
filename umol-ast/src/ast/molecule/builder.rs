@@ -1612,7 +1612,7 @@ mod tests {
             .build()
             .stereo_bonds()
             .iter()
-            .map(|view| view.site())
+            .map(|view| view.site_id())
             .collect();
         assert_eq!(surviving, expected);
     }

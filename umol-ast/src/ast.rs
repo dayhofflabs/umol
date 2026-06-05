@@ -74,5 +74,6 @@ pub use value::{ArithOp, Bindings, MemOp, RelOp, ValueAst, ValueExpr};
 pub use views::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,
-    MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews,
+    MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews, StereoAtomView,
+    StereoAtomViews, StereoBondView, StereoBondViews, StereoLigandView,
 };

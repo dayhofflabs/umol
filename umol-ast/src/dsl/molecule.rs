@@ -52,6 +52,7 @@ use crate::ast::noncovalent::NoncovalentBondAst;
 use crate::ast::stereo::{StereoAtomAst, StereoBondAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
+use crate::ast::StereoLigandView;
 
 /// Surface-form metadata paired with a `MoleculeAst`. Records atom ids,
 /// per-entity ids, and the atom-alias table. Never drifts onto a different
@@ -1084,10 +1085,9 @@ fn render_stereo_atoms(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            m.insert(Edn::keyword("site"), render_atom_ref(view.site(), meta));
+            m.insert(Edn::keyword("site"), render_atom_ref(view.site_id(), meta));
             let ligands: Vec<Edn<'static>> = view
                 .ligands()
-                .iter()
                 .map(|l| render_stereo_ligand(l, meta))
                 .collect();
             m.insert(Edn::keyword("ligands"), Edn::Vector(ligands.into()));
@@ -1113,10 +1113,9 @@ fn render_stereo_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                     Edn::Keyword(EdnKeyword::owned(id.to_string())),
                 );
             }
-            m.insert(Edn::keyword("site"), render_bond_ref(view.site(), meta));
+            m.insert(Edn::keyword("site"), render_bond_ref(view.site_id(), meta));
             let ligands: Vec<Edn<'static>> = view
                 .ligands()
-                .iter()
                 .map(|l| render_stereo_ligand(l, meta))
                 .collect();
             m.insert(Edn::keyword("ligands"), Edn::Vector(ligands.into()));
@@ -1130,8 +1129,8 @@ fn render_stereo_bonds(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
     Edn::Vector(entries.into())
 }
 
-fn render_stereo_ligand(ligand: &StereoLigand, meta: &Metadata) -> Edn<'static> {
-    let atom = render_atom_ref(ligand.atom(), meta);
+fn render_stereo_ligand(ligand: StereoLigandView<'_>, meta: &Metadata) -> Edn<'static> {
+    let atom = render_atom_ref(ligand.atom_id(), meta);
     match ligand.kind() {
         StereoLigandKind::Atom => atom,
         StereoLigandKind::ImplicitHydrogen => Edn::Vector(vec![Edn::keyword("h"), atom].into()),

@@ -6,10 +6,14 @@ use std::ops::Index;
 use umol_graph_core::{EdgeId, FixedVarBirelationSet, NodeId, Ordered, RelationId};
 
 use super::super::ids::{AtomId, BondId, StereoAtomId, StereoBondId};
-use super::super::ligand::StereoLigand;
+use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
 use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoKind};
 use super::super::traits::Lattice;
+use super::atom::AtomView;
+use super::bond::BondView;
+use super::ligand::StereoLigandView;
+use crate::ast::{StereoAtomConstraints, StereoBondConstraints, StereoCosetAst};
 
 type StereoAtomSet =
     FixedVarBirelationSet<NodeId, Ordered, 1, StereoLigand, Ordered, StereoAtomAst>;
@@ -88,29 +92,90 @@ pub struct StereoAtomView<'a> {
 }
 
 impl<'a> StereoAtomView<'a> {
-    /// The stereo site atom.
-    pub fn site(&self) -> AtomId {
-        AtomId::from(self.site)
-    }
-
-    /// View of the stereo site atom.
-    pub fn site_atom(&self) -> super::atom::AtomView<'a> {
-        self.molecule.atom(self.site())
-    }
-
-    /// The ordered ligands occupying the site's coordination positions.
-    pub fn ligands(&self) -> &'a [StereoLigand] {
-        self.ligands
-    }
-
+    #[inline]
     /// The coordination-geometry kind.
     pub fn kind(&self) -> StereoKind {
         self.ast.kind
     }
 
+    #[inline]
+    /// The stereo coset.
+    pub fn coset(&self) -> &'a StereoCosetAst {
+        &self.ast.coset
+    }
+
+    #[inline]
+    /// The stereo atom constraints.
+    pub fn constraints(&self) -> &'a StereoAtomConstraints {
+        &self.ast.constraints
+    }
+
+    /// ID of the stereo site atom.
+    pub fn site_id(&self) -> AtomId {
+        AtomId::from(self.site)
+    }
+
+    /// View of the stereo site atom.
+    pub fn site(&self) -> AtomView<'a> {
+        self.molecule.atom(self.site_id())
+    }
+
+    pub fn ligand_count(&self) -> usize {
+        self.ligands.len()
+    }
+
+    /// The ordered ligands occupying the site's coordination positions.
+    pub fn ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+        let molecule = self.molecule;
+        let ligands = self.ligands;
+        ligands
+            .iter()
+            .map(move |ligand| StereoLigandView::new(ligand.kind(), ligand.atom(), molecule))
+    }
+
+    pub fn atom_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+        self.ligands()
+            .filter(|ligand| ligand.kind() == StereoLigandKind::Atom)
+    }
+
+    pub fn atom_ligand_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+        self.atom_ligands().map(|ligand| ligand.atom_id())
+    }
+
+    pub fn atom_ligand_count(&self) -> usize {
+        self.atom_ligands().count()
+    }
+
+    pub fn implicit_hydrogen_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+        self.ligands()
+            .filter(|ligand| ligand.kind() == StereoLigandKind::ImplicitHydrogen)
+    }
+
+    pub fn implicit_hydrogen_atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+        self.implicit_hydrogen_ligands()
+            .map(|ligand| ligand.atom_id())
+    }
+
+    pub fn implicit_hydrogen_count(&self) -> usize {
+        self.implicit_hydrogen_ligands().count()
+    }
+
+    pub fn lone_pair_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+        self.ligands()
+            .filter(|ligand| ligand.kind() == StereoLigandKind::LonePair)
+    }
+
+    pub fn lone_pair_atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+        self.lone_pair_ligands().map(|ligand| ligand.atom_id())
+    }
+
+    pub fn lone_pair_count(&self) -> usize {
+        self.lone_pair_ligands().count()
+    }
+
     /// Site atom followed by the ligand atoms — the relation's full atom incidence.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        let site = self.site();
+        let site = self.site_id();
         let ligands = self.ligands;
         iter::once(site).chain(ligands.iter().map(|l| l.atom()))
     }
@@ -192,25 +257,91 @@ pub struct StereoBondView<'a> {
 }
 
 impl<'a> StereoBondView<'a> {
-    /// The stereo site bond.
-    pub fn site(&self) -> BondId {
+    #[inline]
+    /// The coordination-geometry kind.
+    pub fn kind(&self) -> StereoKind {
+        self.ast.kind
+    }
+
+    #[inline]
+    /// The stereo coset.
+    pub fn coset(&self) -> &'a StereoCosetAst {
+        &self.ast.coset
+    }
+
+    #[inline]
+    /// The stereo bond constraints.
+    pub fn constraints(&self) -> &'a StereoBondConstraints {
+        &self.ast.constraints
+    }
+
+    /// ID of the stereo site bond.
+    pub fn site_id(&self) -> BondId {
         BondId::from(self.site)
     }
 
-    /// The ordered ligands defining the bond's configuration.
-    pub fn ligands(&self) -> &'a [StereoLigand] {
-        self.ligands
+    /// View of the stereo site bond.
+    pub fn site(&self) -> BondView<'a> {
+        self.molecule.bond(self.site_id())
     }
 
-    /// The cis/trans kind.
-    pub fn kind(&self) -> StereoKind {
-        self.ast.kind
+    pub fn ligand_count(&self) -> usize {
+        self.ligands.len()
+    }
+
+    /// The ordered ligands defining the bond's configuration.
+    pub fn ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+        let molecule = self.molecule;
+        let ligands = self.ligands;
+        ligands
+            .iter()
+            .map(move |ligand| StereoLigandView::new(ligand.kind(), ligand.atom(), molecule))
+    }
+
+    pub fn atom_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+        self.ligands()
+            .filter(|ligand| ligand.kind() == StereoLigandKind::Atom)
+    }
+
+    pub fn atom_ligand_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+        self.atom_ligands().map(|ligand| ligand.atom_id())
+    }
+
+    pub fn atom_ligand_count(&self) -> usize {
+        self.atom_ligands().count()
+    }
+
+    pub fn implicit_hydrogen_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+        self.ligands()
+            .filter(|ligand| ligand.kind() == StereoLigandKind::ImplicitHydrogen)
+    }
+
+    pub fn implicit_hydrogen_atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+        self.implicit_hydrogen_ligands()
+            .map(|ligand| ligand.atom_id())
+    }
+
+    pub fn implicit_hydrogen_count(&self) -> usize {
+        self.implicit_hydrogen_ligands().count()
+    }
+
+    pub fn lone_pair_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
+        self.ligands()
+            .filter(|ligand| ligand.kind() == StereoLigandKind::LonePair)
+    }
+
+    pub fn lone_pair_atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+        self.lone_pair_ligands().map(|ligand| ligand.atom_id())
+    }
+
+    pub fn lone_pair_count(&self) -> usize {
+        self.lone_pair_ligands().count()
     }
 
     /// The site bond's two atoms followed by the ligand atoms — the relation's
     /// full atom incidence.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        let [a, b] = self.molecule.bond(self.site()).atom_ids();
+        let [a, b] = self.site().atom_ids();
         let ligands = self.ligands;
         [a, b].into_iter().chain(ligands.iter().map(|l| l.atom()))
     }
@@ -301,6 +432,41 @@ mod tests {
         )
     }
 
+    #[fixture]
+    fn virtual_ligand_molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C); 6],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(2)),
+                (AtomId(4), AtomId(5), BondAst::from_order(1)),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::LonePair),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            )],
+            vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            )],
+            Constraints::default(),
+        )
+    }
+
     #[rstest]
     fn test_stereo_atom_views_count(molecule: MoleculeAst) {
         assert_eq!(molecule.stereo_atoms().count(), 1);
@@ -331,15 +497,17 @@ mod tests {
         assert!(res.is_some());
         let view = res.unwrap();
         assert_eq!(view.id, StereoAtomId(0));
-        assert_eq!(view.site(), AtomId(0));
+        assert_eq!(view.site_id(), AtomId(0));
         assert_eq!(view.kind(), StereoKind::Tetrahedral);
         assert_eq!(
-            view.ligands(),
-            &[
-                StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
-                StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+            view.ligands()
+                .map(|ligand| (ligand.kind(), ligand.atom_id()))
+                .collect::<Vec<_>>(),
+            vec![
+                (StereoLigandKind::Atom, AtomId(1)),
+                (StereoLigandKind::Atom, AtomId(2)),
+                (StereoLigandKind::Atom, AtomId(3)),
+                (StereoLigandKind::Atom, AtomId(4)),
             ],
         );
         assert_eq!(
@@ -355,6 +523,135 @@ mod tests {
     }
 
     #[rstest]
+    fn test_stereo_atom_view_site_id(molecule: MoleculeAst) {
+        assert_eq!(molecule.stereo_atom(StereoAtomId(0)).site_id(), AtomId(0));
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_site(molecule: MoleculeAst) {
+        let view = molecule.stereo_atom(StereoAtomId(0)).site();
+        assert_eq!(view.id, AtomId(0));
+        assert_eq!(view.ast, &AtomAst::from_element(Element::C));
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_coset(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.stereo_atom(StereoAtomId(0)).coset(),
+            &StereoCosetAst::Lit(1),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_ligand_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.stereo_atom(StereoAtomId(0)).ligand_count(), 4);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_ligands(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .stereo_atom(StereoAtomId(0))
+                .ligands()
+                .map(|ligand| (ligand.kind(), ligand.atom_id()))
+                .collect::<Vec<_>>(),
+            vec![
+                (StereoLigandKind::Atom, AtomId(1)),
+                (StereoLigandKind::Atom, AtomId(2)),
+                (StereoLigandKind::Atom, AtomId(3)),
+                (StereoLigandKind::Atom, AtomId(4)),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_ligand_view_atom(molecule: MoleculeAst) {
+        let ligand = molecule
+            .stereo_atom(StereoAtomId(0))
+            .ligands()
+            .next()
+            .unwrap();
+        let atom = ligand.atom();
+        assert_eq!(atom.id, AtomId(1));
+        assert_eq!(atom.ast, &AtomAst::from_element(Element::C));
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_atom_ligands(virtual_ligand_molecule: MoleculeAst) {
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .atom_ligands()
+                .map(|ligand| ligand.atom_id())
+                .collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .atom_ligand_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(1), AtomId(4)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .atom_ligand_count(),
+            2,
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_implicit_hydrogen_ligands(virtual_ligand_molecule: MoleculeAst) {
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .implicit_hydrogen_ligands()
+                .map(|ligand| ligand.atom_id())
+                .collect::<Vec<_>>(),
+            vec![AtomId(0)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .implicit_hydrogen_atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(0)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .implicit_hydrogen_count(),
+            1,
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_view_lone_pair_ligands(virtual_ligand_molecule: MoleculeAst) {
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .lone_pair_ligands()
+                .map(|ligand| ligand.atom_id())
+                .collect::<Vec<_>>(),
+            vec![AtomId(0)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .lone_pair_atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(0)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_atom(StereoAtomId(0))
+                .lone_pair_count(),
+            1,
+        );
+    }
+
+    #[rstest]
     fn test_stereo_atom_view_atom_ids(molecule: MoleculeAst) {
         assert_eq!(
             molecule
@@ -363,13 +660,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![AtomId(0), AtomId(1), AtomId(2), AtomId(3), AtomId(4)],
         );
-    }
-
-    #[rstest]
-    fn test_stereo_atom_view_site_atom(molecule: MoleculeAst) {
-        let view = molecule.stereo_atom(StereoAtomId(0)).site_atom();
-        assert_eq!(view.id, AtomId(0));
-        assert_eq!(view.ast, &AtomAst::from_element(Element::C));
     }
 
     #[rstest]
@@ -410,7 +700,7 @@ mod tests {
         assert!(res.is_some());
         let view = res.unwrap();
         assert_eq!(view.id, StereoBondId(0));
-        assert_eq!(view.site(), BondId(1));
+        assert_eq!(view.site_id(), BondId(1));
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert_eq!(
             view.ast,
@@ -422,6 +712,121 @@ mod tests {
     fn test_stereo_bond_views_get_none(molecule: MoleculeAst) {
         let res = molecule.stereo_bonds().get(StereoBondId(99));
         assert!(res.is_none());
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_site_id(molecule: MoleculeAst) {
+        assert_eq!(molecule.stereo_bond(StereoBondId(0)).site_id(), BondId(1));
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_site(molecule: MoleculeAst) {
+        let view = molecule.stereo_bond(StereoBondId(0)).site();
+        assert_eq!(view.id, BondId(1));
+        assert_eq!(view.atom_ids(), [AtomId(2), AtomId(3)]);
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_coset(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule.stereo_bond(StereoBondId(0)).coset(),
+            &StereoCosetAst::Lit(1),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_ligand_count(molecule: MoleculeAst) {
+        assert_eq!(molecule.stereo_bond(StereoBondId(0)).ligand_count(), 2);
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_ligands(molecule: MoleculeAst) {
+        assert_eq!(
+            molecule
+                .stereo_bond(StereoBondId(0))
+                .ligands()
+                .map(|ligand| (ligand.kind(), ligand.atom_id()))
+                .collect::<Vec<_>>(),
+            vec![
+                (StereoLigandKind::Atom, AtomId(4)),
+                (StereoLigandKind::Atom, AtomId(5)),
+            ],
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_atom_ligands(virtual_ligand_molecule: MoleculeAst) {
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .atom_ligands()
+                .map(|ligand| ligand.atom_id())
+                .collect::<Vec<_>>(),
+            Vec::<AtomId>::new(),
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .atom_ligand_ids()
+                .collect::<Vec<_>>(),
+            Vec::<AtomId>::new(),
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .atom_ligand_count(),
+            0,
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_implicit_hydrogen_ligands(virtual_ligand_molecule: MoleculeAst) {
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .implicit_hydrogen_ligands()
+                .map(|ligand| ligand.atom_id())
+                .collect::<Vec<_>>(),
+            vec![AtomId(2)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .implicit_hydrogen_atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(2)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .implicit_hydrogen_count(),
+            1,
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_bond_view_lone_pair_ligands(virtual_ligand_molecule: MoleculeAst) {
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .lone_pair_ligands()
+                .map(|ligand| ligand.atom_id())
+                .collect::<Vec<_>>(),
+            vec![AtomId(3)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .lone_pair_atom_ids()
+                .collect::<Vec<_>>(),
+            vec![AtomId(3)],
+        );
+        assert_eq!(
+            virtual_ligand_molecule
+                .stereo_bond(StereoBondId(0))
+                .lone_pair_count(),
+            1,
+        );
     }
 
     #[rstest]
