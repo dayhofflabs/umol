@@ -1151,7 +1151,7 @@ mod tests {
     #[rstest]
     fn test_stereo_atom_view_permutation_for_none(molecule: MoleculeAst) {
         let view = molecule.stereo_atom(StereoAtomId(0));
-        let ligands = vec![
+        let ligands = [
             StereoLigand {
                 atom_id: AtomId(1),
                 kind: StereoLigandKind::Atom,
@@ -1537,7 +1537,7 @@ mod tests {
     #[rstest]
     fn test_stereo_bond_view_permutation_for_none(molecule: MoleculeAst) {
         let view = molecule.stereo_bond(StereoBondId(0));
-        let ligands = vec![
+        let ligands = [
             StereoLigand {
                 atom_id: AtomId(4),
                 kind: StereoLigandKind::Atom,

@@ -10,10 +10,12 @@ use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::constraint::AtomConstraints;
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+    StereoAtomId,
 };
 use super::super::molecule::MoleculeAst;
 use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
+use super::super::stereo::StereoKind;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic::AromaticSystemView;
@@ -21,6 +23,7 @@ use super::dative::DativeBondView;
 use super::multicenter::MulticenterBondView;
 use super::neighbor::NeighborView;
 use super::noncovalent::NoncovalentBondView;
+use super::stereo::StereoAtomView;
 use crate::ast::{AromaticValenceAst, AsLit, AtomConstraint, MulticenterValenceAst};
 
 /// Namespace accessor for atom views on a `MoleculeAst`.
@@ -263,7 +266,23 @@ impl<'a> AtomView<'a> {
         self.molecule.noncovalent_bonds().incident_ids(self.id)
     }
 
-    // TODO: Add stereo atom and stereo bond accessors.
+    pub fn is_in_tetrahedral_stereo(&self) -> bool {
+        self.tetrahedral_stereo().is_some()
+    }
+
+    pub fn tetrahedral_stereo_id(&self) -> Option<StereoAtomId> {
+        self.tetrahedral_stereo().map(|s| s.id)
+    }
+
+    /// The tetrahedral stereo atom sited on this atom, if any. An atom is the
+    /// site of at most one stereo atom; the kind filter selects the tetrahedral
+    /// case from the other coordination geometries that share the relation.
+    pub fn tetrahedral_stereo(&self) -> Option<StereoAtomView<'a>> {
+        self.molecule
+            .stereo_atoms()
+            .coincident(self.id)
+            .filter(|s| s.kind() == StereoKind::Tetrahedral)
+    }
 
     /// True if this atom participates in any of the four overlay relations
     /// (aromatic system, dative bond, multicenter bond, noncovalent bond).
@@ -513,11 +532,14 @@ mod tests {
     use crate::ast::dative::DativeBondAst;
     use crate::ast::ids::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+        StereoAtomId,
     };
+    use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::rings::RingFamily;
+    use crate::ast::stereo::{StereoAtomAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
     use crate::mol;
 
@@ -833,6 +855,89 @@ mod tests {
             .map(|v| v.id)
             .collect();
         assert_eq!(ids, expected);
+    }
+
+    #[fixture]
+    fn stereo_molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C); 10],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(0), AtomId(2), BondAst::from_order(1)),
+                (AtomId(0), AtomId(3), BondAst::from_order(1)),
+                (AtomId(0), AtomId(4), BondAst::from_order(1)),
+                (AtomId(5), AtomId(6), BondAst::from_order(1)),
+                (AtomId(5), AtomId(7), BondAst::from_order(1)),
+                (AtomId(5), AtomId(8), BondAst::from_order(1)),
+                (AtomId(5), AtomId(9), BondAst::from_order(1)),
+            ],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![
+                (
+                    AtomId(0),
+                    vec![
+                        StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                ),
+                (
+                    AtomId(5),
+                    vec![
+                        StereoLigand::new(AtomId(6), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(7), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(8), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(9), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(1)),
+                ),
+            ],
+            Vec::new(),
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    #[case::tetrahedral_site(AtomId(0), true)]
+    #[case::square_planar_site(AtomId(5), false)]
+    #[case::ligand(AtomId(1), false)]
+    fn test_atom_view_is_in_tetrahedral_stereo(
+        stereo_molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            stereo_molecule.atom(atom).is_in_tetrahedral_stereo(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::tetrahedral_site(AtomId(0), Some(StereoAtomId(0)))]
+    #[case::square_planar_site(AtomId(5), None)]
+    #[case::ligand(AtomId(1), None)]
+    fn test_atom_view_tetrahedral_stereo_id(
+        stereo_molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: Option<StereoAtomId>,
+    ) {
+        assert_eq!(stereo_molecule.atom(atom).tetrahedral_stereo_id(), expected);
+    }
+
+    #[rstest]
+    fn test_atom_view_tetrahedral_stereo(stereo_molecule: MoleculeAst) {
+        let view = stereo_molecule.atom(AtomId(0)).tetrahedral_stereo().unwrap();
+        assert_eq!(view.id, StereoAtomId(0));
+        assert_eq!(view.kind(), StereoKind::Tetrahedral);
+        assert!(stereo_molecule
+            .atom(AtomId(5))
+            .tetrahedral_stereo()
+            .is_none());
     }
 
     #[rstest]

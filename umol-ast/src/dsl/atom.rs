@@ -22,7 +22,7 @@ use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
     raise_spin, ring_count, SpinPredicate,
 };
-use super::stereo::fmt_stereo_config;
+use super::stereo::{fmt_stereo_config, stereo_config, StereoConfigurationDsl};
 use super::value::{fmt_value, id, signed_int, terminator, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
@@ -277,6 +277,9 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
             .parse_next(i),
         "#r" => optional_value
             .map(|v| AtomPredicate::Constraint(AtomConstraint::RingSize(v)))
+            .parse_next(i),
+        "#T" => stereo_config
+            .map(|c| AtomPredicate::Constraint(AtomConstraint::TetrahedralStereo(c)))
             .parse_next(i),
         p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownAtomPredicate(
             p.to_string(),
@@ -1091,6 +1094,9 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             }
             "ring-count" => AtomConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
             "ring-size" => AtomConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
+            "tetrahedral-stereo" => {
+                AtomConstraint::TetrahedralStereo(StereoConfigurationDsl::from_edn(v)?.into_ast(&()))
+            }
             "joint-domain" => todo!("JointDomainAst EDN parsing lands in 2l"),
             other => {
                 return Err(DeError::UnknownField {
@@ -1147,7 +1153,10 @@ impl ToEdn for AtomConstraintDsl {
             AtomConstraint::RingSize(v) => {
                 single_key_map("ring-size", ValueDsl::from_ast(v, &()).to_edn())
             }
-            AtomConstraint::TetrahedralStereo(_) => todo!("stereo config EDN serialization"),
+            AtomConstraint::TetrahedralStereo(c) => single_key_map(
+                "tetrahedral-stereo",
+                StereoConfigurationDsl::from_ast(c, &()).to_edn(),
+            ),
             AtomConstraint::JointDomain(_) => todo!("JointDomainAst EDN serialization lands in 2l"),
         }
     }
@@ -1169,7 +1178,7 @@ impl IntoAst<AtomConstraint> for AtomConstraintDsl {
     }
 }
 
-fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
+pub(crate) fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
     let mut m = umol_edn::EdnMap::with_capacity(1);
     m.insert(Edn::Keyword(umol_edn::EdnKeyword::owned(key.into())), value);
     Edn::Map(m)
@@ -1183,13 +1192,14 @@ mod tests {
 
     use super::*;
     use crate::ast::spin::SpinStateAst;
+    use crate::ast::stereo::{StereoCosetAst, StereoExpr};
     use crate::ast::value::{ArithOp, RelOp, ValueExpr};
 
     #[rstest]
     #[case::single("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
     #[case::double("Cl", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Cl))))]
     #[case::transuranic("Og", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Og))))]
-    fn test_parse_bare_element_accepts(#[case] input: &str, #[case] expected: AtomDsl) {
+    fn test_parse_bare_element(#[case] input: &str, #[case] expected: AtomDsl) {
         assert_eq!(parse_bare_element(input), Some(expected));
     }
 
@@ -1207,7 +1217,7 @@ mod tests {
     #[case::h_count("C#h3")]
     #[case::charge_plus("N#c+")]
     #[case::full("C#c+1#R+#v4")]
-    fn test_parse_bare_element_rejects(#[case] input: &str) {
+    fn test_parse_bare_element_error(#[case] input: &str) {
         assert_eq!(parse_bare_element(input), None);
     }
 
@@ -1287,7 +1297,7 @@ mod tests {
     #[case::invalid_special_minus("C#h-", ParseError::TrailingInput("-".to_string()))]
     #[case::invalid_special_equal("C#h=", ParseError::TrailingInput("=".to_string()))]
     #[case::trailing("C#h3 foo", ParseError::TrailingInput("foo".to_string()))]
-    fn test_parse_atom_invalid(#[case] input: &str, #[case] expected: ParseError) {
+    fn test_parse_atom_error(#[case] input: &str, #[case] expected: ParseError) {
         let result = atom.parse(input);
         assert!(
             result.is_err(),
@@ -1391,7 +1401,7 @@ mod tests {
     #[case::lowercase("c")]
     #[case::invalid("123")]
     #[case::unknown_element("Xx")]
-    fn test_element_invalid(#[case] input: &str) {
+    fn test_element_error(#[case] input: &str) {
         let result = element.parse(input);
         assert!(
             result.is_err(),
@@ -1494,29 +1504,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_atom_dsl_to_ast_fills_zero_defaults() {
-        let dsl = AtomDsl(AtomAst::new(ElementAst::Lit(Element::C)));
-        let cfg = AtomDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg);
-        assert_eq!(ast.charge, ValueAst::Lit(0));
-        assert_eq!(ast.lone_pairs, ValueAst::Lit(0));
-        assert_eq!(ast.implicit_hydrogens, ValueAst::Lit(0));
-        assert_eq!(ast.isotope_mass, IsotopeMassAst::Natural);
-        assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
-        assert_eq!(
-            ast.constraints.get(AtomConstraintKind::Valence),
-            Some(&AtomConstraint::Valence(ValueAst::Lit(0)))
-        );
-        assert_eq!(
-            ast.constraints.get(AtomConstraintKind::AromaticValence),
-            Some(&AtomConstraint::AromaticValence(
-                AromaticValenceAst::NotAromatic
-            ))
-        );
-    }
-
-    #[rstest]
-    fn test_atom_dsl_from_ast_strips_zero_defaults() {
+    fn test_atom_dsl_from_ast() {
         let mut ast = AtomAst::new(ElementAst::Lit(Element::C));
         ast.charge = ValueAst::Lit(0);
         ast.lone_pairs = ValueAst::Lit(0);
@@ -1539,6 +1527,28 @@ mod tests {
     }
 
     #[rstest]
+    fn test_atom_dsl_into_ast() {
+        let dsl = AtomDsl(AtomAst::new(ElementAst::Lit(Element::C)));
+        let cfg = AtomDefaults::zeroed();
+        let ast = dsl.into_ast(&cfg);
+        assert_eq!(ast.charge, ValueAst::Lit(0));
+        assert_eq!(ast.lone_pairs, ValueAst::Lit(0));
+        assert_eq!(ast.implicit_hydrogens, ValueAst::Lit(0));
+        assert_eq!(ast.isotope_mass, IsotopeMassAst::Natural);
+        assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
+        assert_eq!(
+            ast.constraints.get(AtomConstraintKind::Valence),
+            Some(&AtomConstraint::Valence(ValueAst::Lit(0)))
+        );
+        assert_eq!(
+            ast.constraints.get(AtomConstraintKind::AromaticValence),
+            Some(&AtomConstraint::AromaticValence(
+                AromaticValenceAst::NotAromatic
+            ))
+        );
+    }
+
+    #[rstest]
     fn test_atom_dsl_roundtrip_zeroed() {
         let input = AtomDsl(AtomAst::new(ElementAst::Lit(Element::C)));
         let cfg = AtomDefaults::zeroed();
@@ -1551,6 +1561,7 @@ mod tests {
     #[case::simple(r##""C""##)]
     #[case::with_charge(r##""C#c+""##)]
     #[case::with_constraint(r##""N#v3#a""##)]
+    #[case::with_tetrahedral_stereo(r##""C#T1""##)]
     fn test_atom_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = AtomDsl::from_edn_str(input).unwrap();
         let tree = umol_edn::read_string(input).unwrap();
@@ -1627,6 +1638,12 @@ mod tests {
     #[case::multicenter_value(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
     #[case::valence_expr(AtomConstraint::Valence(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Ge, Box::new(ValueExpr::Lit(1)))))), "{:valence \"?h >= 1\"}")]
     #[case::ring_size_set(AtomConstraint::RingSize(ValueAst::Set(Box::new(vec![5, 6]))), "{:ring-size [5 6]}")]
+    #[case::tetrahedral_stereo_undetermined(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Undetermined), "{:tetrahedral-stereo :undetermined}")]
+    #[case::tetrahedral_stereo_not_stereo(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
+    #[case::tetrahedral_stereo_lit(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
+    #[case::tetrahedral_stereo_coset_undetermined(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined)), "{:tetrahedral-stereo {:stereo :undetermined}}")]
+    #[case::tetrahedral_stereo_set(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(vec![1, 2]))))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
+    #[case::tetrahedral_stereo_expr(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::swap(StereoExpr::Lit(1)))))), "{:tetrahedral-stereo {:stereo \"~1\"}}")]
     fn test_atom_constraint_dsl_roundtrip(#[case] input: AtomConstraint, #[case] edn_source: &str) {
         let dsl = AtomConstraintDsl::from_ast(&input, &());
         let edn = dsl.to_edn();

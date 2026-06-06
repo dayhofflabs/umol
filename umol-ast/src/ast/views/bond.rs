@@ -7,14 +7,16 @@ use umol_graph_core::{EdgeId, NodeId};
 
 use super::super::bond::BondAst;
 use super::super::constraint::BondConstraints;
-use super::super::ids::{AtomId, BondId};
+use super::super::ids::{AtomId, BondId, StereoBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
+use super::super::stereo::StereoKind;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic::AromaticSystemView;
 use super::atom::AtomView;
+use super::stereo::StereoBondView;
 
 /// Namespace accessor for bond views on a `MoleculeAst`.
 #[derive(Clone, Copy)]
@@ -171,6 +173,24 @@ impl<'a> BondView<'a> {
         self.aromatic_system().is_some()
     }
 
+    pub fn is_in_cis_trans_stereo(&self) -> bool {
+        self.cis_trans_stereo().is_some()
+    }
+
+    pub fn cis_trans_stereo_id(&self) -> Option<StereoBondId> {
+        self.cis_trans_stereo().map(|s| s.id)
+    }
+
+    /// The cis/trans stereo bond sited on this bond, if any. A bond is the
+    /// site of at most one stereo bond; the kind filter selects the cis/trans
+    /// case from any other bond-centered geometries that share the relation.
+    pub fn cis_trans_stereo(&self) -> Option<StereoBondView<'a>> {
+        self.molecule
+            .stereo_bonds()
+            .coincident(self.id)
+            .filter(|s| s.kind() == StereoKind::CisTrans)
+    }
+
     /// True if this bond belongs to any ring in the molecule's canonical
     /// ring set (Vismara relevant cycles, max ring size 22). Uses the
     /// molecule's cached canonical `RingSet`.
@@ -267,11 +287,13 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::ids::{AromaticSystemId, AtomId, BondId};
+    use crate::ast::ids::{AromaticSystemId, AtomId, BondId, StereoBondId};
+    use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::rings::RingFamily;
+    use crate::ast::stereo::{StereoBondAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[fixture]
@@ -417,6 +439,65 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(molecule.bond(bond).is_in_aromatic_system(), expected);
+    }
+
+    #[fixture]
+    fn stereo_molecule() -> MoleculeAst {
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C); 4],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(2)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+            ],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            )],
+            Constraints::default(),
+        )
+    }
+
+    #[rstest]
+    #[case::site(BondId(1), true)]
+    #[case::non_site(BondId(0), false)]
+    fn test_bond_view_is_in_cis_trans_stereo(
+        stereo_molecule: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            stereo_molecule.bond(bond).is_in_cis_trans_stereo(),
+            expected
+        );
+    }
+
+    #[rstest]
+    #[case::site(BondId(1), Some(StereoBondId(0)))]
+    #[case::non_site(BondId(0), None)]
+    fn test_bond_view_cis_trans_stereo_id(
+        stereo_molecule: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: Option<StereoBondId>,
+    ) {
+        assert_eq!(stereo_molecule.bond(bond).cis_trans_stereo_id(), expected);
+    }
+
+    #[rstest]
+    fn test_bond_view_cis_trans_stereo(stereo_molecule: MoleculeAst) {
+        let view = stereo_molecule.bond(BondId(1)).cis_trans_stereo().unwrap();
+        assert_eq!(view.id, StereoBondId(0));
+        assert_eq!(view.kind(), StereoKind::CisTrans);
+        assert!(stereo_molecule.bond(BondId(0)).cis_trans_stereo().is_none());
     }
 
     #[rstest]

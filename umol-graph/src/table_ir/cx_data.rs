@@ -128,13 +128,7 @@ impl CxAnnotationData {
                     })
                     .collect::<Vec<LocalParityCenter>>()
             })
-            .and_then(|entries| {
-                if entries.is_empty() {
-                    None
-                } else {
-                    Some(entries)
-                }
-            });
+            .filter(|entries| !entries.is_empty());
 
         let bicyclo_stereo = self
             .bicyclo_stereo
@@ -145,13 +139,7 @@ impl CxAnnotationData {
                     .filter_map(|entry| update_bicyclo_atoms(entry, atom_index_map))
                     .collect::<Vec<BicycloStereo>>()
             })
-            .and_then(|entries| {
-                if entries.is_empty() {
-                    None
-                } else {
-                    Some(entries)
-                }
-            });
+            .filter(|entries| !entries.is_empty());
 
         let data = Self {
             stereo_groups,

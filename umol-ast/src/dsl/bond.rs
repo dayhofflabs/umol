@@ -12,13 +12,14 @@ use winnow::error::ErrMode;
 use winnow::token::take;
 use winnow::Parser;
 
+use super::atom::single_key_map;
 use super::config::{BondDefaults, NumericDefault, StereoDefault};
 use super::error::{PResult, ParseError};
 use super::predicates::{
     apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
     raise_spin, ring_count, SpinPredicate,
 };
-use super::stereo::fmt_stereo_config;
+use super::stereo::{fmt_stereo_config, stereo_config, StereoConfigurationDsl};
 use super::value::{fmt_value, value, ValueDsl};
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
@@ -242,6 +243,9 @@ fn bond_predicate(i: &mut &str) -> PResult<BondPredicate> {
         "#r" => optional_value
             .map(|v| BondPredicate::Constraint(BondConstraint::RingSize(v)))
             .parse_next(i),
+        "#C" => stereo_config
+            .map(|c| BondPredicate::Constraint(BondConstraint::CisTransStereo(c)))
+            .parse_next(i),
         p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownBondPredicate(
             p.to_string(),
         ))),
@@ -437,6 +441,9 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                 let c = match key.name() {
                     "ring-count" => BondConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
                     "ring-size" => BondConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
+                    "cis-trans-stereo" => BondConstraint::CisTransStereo(
+                        StereoConfigurationDsl::from_edn(v)?.into_ast(&()),
+                    ),
                     other => {
                         return Err(DeError::UnknownField {
                             key: other.to_string(),
@@ -461,7 +468,10 @@ impl ToEdn for BondConstraintDsl {
             BondConstraint::Aromatic => Edn::Keyword(EdnKeyword::owned("aromatic".into())),
             BondConstraint::RingCount(v) => bond_constraint_single_key("ring-count", v),
             BondConstraint::RingSize(v) => bond_constraint_single_key("ring-size", v),
-            BondConstraint::CisTransStereo(_) => todo!("stereo config EDN serialization"),
+            BondConstraint::CisTransStereo(c) => single_key_map(
+                "cis-trans-stereo",
+                StereoConfigurationDsl::from_ast(c, &()).to_edn(),
+            ),
         }
     }
 }
@@ -483,6 +493,7 @@ mod tests {
     use super::*;
     use crate::ast::constraint::BondConstraints;
     use crate::ast::spin::SpinStateAst;
+    use crate::ast::stereo::{StereoCosetAst, StereoExpr};
     use crate::ast::value::{RelOp, ValueExpr};
 
     #[rustfmt::skip]
@@ -582,16 +593,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_bond_dsl_to_ast_fills_zero_defaults() {
-        let dsl = BondDsl(BondAst::new(ValueAst::Lit(1)));
-        let cfg = BondDefaults::zeroed();
-        let ast = dsl.into_ast(&cfg);
-        assert_eq!(ast.charge, ValueAst::Lit(0));
-        assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
-    }
-
-    #[rstest]
-    fn test_bond_dsl_from_ast_strips_zero_defaults() {
+    fn test_bond_dsl_from_ast() {
         let mut ast = BondAst::new(ValueAst::Lit(1));
         ast.charge = ValueAst::Lit(0);
         ast.spin = SpinStateAst::from((0_u8, 1_u8));
@@ -599,6 +601,15 @@ mod tests {
         let dsl = BondDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
+    }
+
+    #[rstest]
+    fn test_bond_dsl_into_ast() {
+        let dsl = BondDsl(BondAst::new(ValueAst::Lit(1)));
+        let cfg = BondDefaults::zeroed();
+        let ast = dsl.into_ast(&cfg);
+        assert_eq!(ast.charge, ValueAst::Lit(0));
+        assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
     }
 
     #[rstest]
@@ -614,6 +625,7 @@ mod tests {
     #[case::single(r##""1""##)]
     #[case::aromatic(r##""1#a""##)]
     #[case::ring_count(r##""2#R+""##)]
+    #[case::with_cis_trans_stereo(r##""2#C1""##)]
     fn test_bond_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = BondDsl::from_edn_str(input).unwrap();
         let tree = umol_edn::read_string(input).unwrap();
@@ -651,6 +663,11 @@ mod tests {
     #[case::ring_count_undetermined(BondConstraint::RingCount(ValueAst::Undetermined), "{:ring-count :undetermined}")]
     #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
     #[case::ring_size_set(BondConstraint::RingSize(ValueAst::Set(Box::new(vec![5, 6]))), "{:ring-size [5 6]}")]
+    #[case::cis_trans_stereo_undetermined(BondConstraint::CisTransStereo(StereoConfigurationAst::Undetermined), "{:cis-trans-stereo :undetermined}")]
+    #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo), "{:cis-trans-stereo :not-stereo}")]
+    #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1))), "{:cis-trans-stereo {:stereo 1}}")]
+    #[case::cis_trans_stereo_coset_undetermined(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined)), "{:cis-trans-stereo {:stereo :undetermined}}")]
+    #[case::cis_trans_stereo_set(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(vec![1, 2]))))), "{:cis-trans-stereo {:stereo [1 2]}}")]
     fn test_bond_constraint_dsl_roundtrip(
         #[case] input: BondConstraint,
         #[case] edn_source: &str,
@@ -723,6 +740,4 @@ mod tests {
         let back = BondAst::from_edn(&edn).unwrap();
         assert_eq!(back, ast);
     }
-
-    // endregion: BondAst symmetric I/O
 }

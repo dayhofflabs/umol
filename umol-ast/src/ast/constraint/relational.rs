@@ -445,6 +445,7 @@ mod tests {
     use super::*;
     use crate::ast::value::ValueAst;
 
+    #[allow(clippy::too_many_arguments)]
     fn remapping(
         removed_nodes: Vec<u32>,
         removed_edges: Vec<u32>,
