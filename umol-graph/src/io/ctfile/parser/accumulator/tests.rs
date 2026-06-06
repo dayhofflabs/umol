@@ -24,7 +24,7 @@ use crate::table_ir::{
     ExtendedMolecule, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount,
     SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierTerm, SGroupType,
-    StereoInterpretation, SubstitutionCount, UnsaturatedAtom,
+    ConfigurationScope, SubstitutionCount, UnsaturatedAtom,
 };
 
 #[fixture]
@@ -194,8 +194,8 @@ fn test_apply_molecule_chiral_flag(mut single_atom: Molecule) {
         .unwrap();
 
     assert_eq!(
-        single_atom.stereo_interpretation,
-        Some(StereoInterpretation::Absolute)
+        single_atom.configuration_scope,
+        Some(ConfigurationScope::Absolute)
     );
 }
 
@@ -205,7 +205,7 @@ fn test_apply_molecule_no_chiral_flag(mut single_atom: Molecule) {
     acc.update_molecule(&mut single_atom, CtabParseFlags::BASIC)
         .unwrap();
 
-    assert!(single_atom.stereo_interpretation.is_none());
+    assert!(single_atom.configuration_scope.is_none());
 }
 
 #[rstest]
@@ -526,8 +526,8 @@ fn test_apply_extended_molecule_chiral_flag(mut single_extended_atom: ExtendedMo
         .unwrap();
 
     assert_eq!(
-        single_extended_atom.stereo_interpretation,
-        Some(StereoInterpretation::Absolute)
+        single_extended_atom.configuration_scope,
+        Some(ConfigurationScope::Absolute)
     );
 }
 
@@ -537,7 +537,7 @@ fn test_apply_extended_molecule_no_chiral_flag(mut single_extended_atom: Extende
     acc.update_extended_molecule(&mut single_extended_atom, CtabParseFlags::EXTENDED)
         .unwrap();
 
-    assert!(single_extended_atom.stereo_interpretation.is_none());
+    assert!(single_extended_atom.configuration_scope.is_none());
 }
 
 #[rstest]

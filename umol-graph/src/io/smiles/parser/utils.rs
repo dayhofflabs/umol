@@ -360,7 +360,7 @@ pub(super) fn parse_chirality(
     let n = input.len();
     let k = i;
     if k + 1 < n && input[k + 1] == b'@' {
-        return Ok((Some(Chirality::CounterClockwise), k + 2));
+        return Ok((Some(Chirality::Clockwise), k + 2));
     }
     if k + 2 < n && input[k + 1] == b'T' && input[k + 2] == b'H' {
         if k + 3 >= n || !input[k + 3].is_ascii_digit() {
@@ -432,7 +432,7 @@ pub(super) fn parse_chirality(
             pos: pos_in_bracket(pos_base, k),
         });
     }
-    Ok((Some(Chirality::Clockwise), k + 1))
+    Ok((Some(Chirality::CounterClockwise), k + 1))
 }
 
 #[inline]

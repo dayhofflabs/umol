@@ -20,7 +20,7 @@ use super::multicenter::MulticenterBond;
 use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
-use super::stereo::StereoInterpretation;
+use super::stereo::{ChiralityFrame, ConfigurationScope};
 use super::topology::Ring;
 use super::utils::{element_symbol_key, format_sum_formula};
 use crate::position::Point3D;
@@ -33,7 +33,8 @@ pub struct Molecule {
     pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
     pub multicenter_bonds: Vec<MulticenterBond>,
-    pub stereo_interpretation: Option<StereoInterpretation>,
+    pub configuration_scope: Option<ConfigurationScope>,
+    pub chirality_frame: Option<ChiralityFrame>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
     pub source_format: SourceFormat,
@@ -47,7 +48,8 @@ impl Molecule {
             rings: Vec::new(),
             positions: None,
             multicenter_bonds: Vec::new(),
-            stereo_interpretation: None,
+            configuration_scope: None,
+            chirality_frame: None,
             comments: Vec::new(),
             properties: IndexMap::new(),
             source_format: SourceFormat::UNKNOWN,
@@ -106,7 +108,8 @@ pub struct ExtendedMolecule {
     pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
     pub multicenter_bonds: Vec<MulticenterBond>,
-    pub stereo_interpretation: Option<StereoInterpretation>,
+    pub configuration_scope: Option<ConfigurationScope>,
+    pub chirality_frame: Option<ChiralityFrame>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
     pub ctfile_data: Option<CtfileData>,
@@ -122,7 +125,8 @@ impl ExtendedMolecule {
             rings: Vec::new(),
             positions: None,
             multicenter_bonds: Vec::new(),
-            stereo_interpretation: None,
+            configuration_scope: None,
+            chirality_frame: None,
             comments: Vec::new(),
             properties: IndexMap::new(),
             ctfile_data: None,
@@ -287,7 +291,8 @@ impl From<Molecule> for ExtendedMolecule {
             rings: mol.rings,
             positions: mol.positions,
             multicenter_bonds: mol.multicenter_bonds,
-            stereo_interpretation: mol.stereo_interpretation,
+            configuration_scope: mol.configuration_scope,
+            chirality_frame: mol.chirality_frame,
             comments: mol.comments,
             properties: mol.properties,
             ctfile_data: None,
@@ -316,7 +321,8 @@ impl TryFrom<ExtendedMolecule> for Molecule {
             positions: extended.positions.clone(),
             multicenter_bonds: extended.multicenter_bonds.clone(),
             comments: extended.comments.clone(),
-            stereo_interpretation: extended.stereo_interpretation,
+            configuration_scope: extended.configuration_scope,
+            chirality_frame: extended.chirality_frame,
             properties: extended.properties.clone(),
             source_format: extended.source_format,
         })

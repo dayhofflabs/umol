@@ -9,7 +9,7 @@ use crate::table_ir::bond::BondNoncovalent;
 use crate::table_ir::{
     BondDonation, BondOrder, BondStereo, BondWedge, LinkAtom, RingBondCount, SGroupBracketCoords,
     SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity, SGroupDataType, SGroupType,
-    StereoInterpretation, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
+    ConfigurationScope, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
 };
 
 fn parse_basic_cxsmiles(input: &[u8]) -> Result<Molecule, ParseError> {
@@ -589,12 +589,12 @@ fn cx_fragment_groups_invalid(#[case] input: &[u8], #[case] expected: ParseError
 
 #[rustfmt::skip]
 #[rstest]
-#[case::absolute(b"CC |a:0,1|", Some(StereoInterpretation::Absolute), None)]
+#[case::absolute(b"CC |a:0,1|", Some(ConfigurationScope::Absolute), None)]
 #[case::or_group(b"CC |o1:0,1|", None, Some(( 1u32, StereoSet { atoms: vec![0u32, 1u32], relation: StereoSetRelation::Correlated})))]
 #[case::and_group(b"CC |&2:1|", None, Some(( 2u32, StereoSet { atoms: vec![1u32], relation: StereoSetRelation::Independent})))]
 fn cx_stereo_groups(
     #[case] input: &[u8],
-    #[case] expected_interpretation: Option<StereoInterpretation>,
+    #[case] expected_interpretation: Option<ConfigurationScope>,
     #[case] expected_group: Option<(u32, StereoSet)>,
 ) {
     let input_str = input.to_str_lossy();
@@ -616,7 +616,7 @@ fn cx_stereo_groups(
         res
     );
     let mol = res.unwrap();
-    assert_eq!(mol.stereo_interpretation, expected_interpretation);
+    assert_eq!(mol.configuration_scope, expected_interpretation);
 
     if let Some((idx, set)) = expected_group {
         let cx_data = mol.cx_data.as_ref().expect("cx_data should be present");
@@ -684,8 +684,8 @@ fn cx_relative_stereo(#[case] input: &[u8]) {
     );
     let mol = res.unwrap();
     assert_eq!(
-        mol.stereo_interpretation,
-        Some(StereoInterpretation::Relative)
+        mol.configuration_scope,
+        Some(ConfigurationScope::Relative)
     );
     assert_eq!(mol.cx_data, None);
 }

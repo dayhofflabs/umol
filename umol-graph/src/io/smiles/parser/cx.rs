@@ -29,7 +29,7 @@ use crate::table_ir::{
     CxAnnotationData, ExtendedMolecule, ExtendedReaction, LinkAtom, Molecule, MulticenterBond,
     MulticenterSet, Reaction, RingBondCount, SGroup, SGroupBracketCoords, SGroupBracketOrientation,
     SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType, SGroupSubtype, SGroupType,
-    StereoInterpretation, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
+    ConfigurationScope, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -281,7 +281,7 @@ pub fn update_extended_molecule(
     mol: &mut ExtendedMolecule,
     entries: Vec<CxEntry>,
 ) -> Result<(), ParseError> {
-    let mut stereo_interpretation: Option<StereoInterpretation> = None;
+    let mut configuration_scope: Option<ConfigurationScope> = None;
     let mut stereo_groups: BTreeMap<u32, StereoSet> = BTreeMap::new();
     let mut components: Option<Vec<Vec<u32>>> = None;
     let mut sgroups: BTreeMap<u32, SGroup> = BTreeMap::new();
@@ -450,8 +450,8 @@ pub fn update_extended_molecule(
 
                 match sg.group_type {
                     StereoGroupType::Absolute => {
-                        // Absolute atoms don't need group storage; stereo_interpretation captures this
-                        stereo_interpretation = Some(StereoInterpretation::Absolute);
+                        // Absolute atoms don't need group storage; configuration_scope captures this
+                        configuration_scope = Some(ConfigurationScope::Absolute);
                     }
                     StereoGroupType::Or(n) => {
                         stereo_groups
@@ -474,7 +474,7 @@ pub fn update_extended_molecule(
                 }
             }
             CxEntry::RelativeStereo => {
-                stereo_interpretation = Some(StereoInterpretation::Relative);
+                configuration_scope = Some(ConfigurationScope::Relative);
             }
             CxEntry::AtomProperties(props) => {
                 for (idx, key, value) in props {
@@ -583,7 +583,7 @@ pub fn update_extended_molecule(
         }
     }
 
-    mol.stereo_interpretation = stereo_interpretation;
+    mol.configuration_scope = configuration_scope;
 
     // Store CX-specific data if any
     if !stereo_groups.is_empty()
@@ -2607,13 +2607,13 @@ mod tests {
           mol.multicenter_bonds[0] == MulticenterBond::new(vec![MulticenterSet::new(vec![0]), MulticenterSet::new(vec![1, 2])]) &&
           mol.multicenter_bonds[1] == MulticenterBond::new(vec![MulticenterSet::new(vec![2]), MulticenterSet::new(vec![0, 1])]))]
     #[case::stereo_group_absolute(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Absolute, atoms: vec![0, 1] })],
-        |mol: &ExtendedMolecule| mol.stereo_interpretation == Some(StereoInterpretation::Absolute) && mol.cx_data.is_none())]
+        |mol: &ExtendedMolecule| mol.configuration_scope == Some(ConfigurationScope::Absolute) && mol.cx_data.is_none())]
     #[case::stereo_group_or(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::Or(1), atoms: vec![0] })],
         |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&1)) == Some(&StereoSet { atoms: vec![0], relation: StereoSetRelation::Correlated }))]
     #[case::stereo_group_and(vec![CxEntry::StereoGroup(StereoGroup { group_type: StereoGroupType::And(2), atoms: vec![1] })],
         |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.stereo_groups.get(&2)) == Some(&StereoSet { atoms: vec![1], relation: StereoSetRelation::Independent }))]
     #[case::relative_stereo(vec![CxEntry::RelativeStereo],
-        |mol: &ExtendedMolecule| mol.stereo_interpretation == Some(StereoInterpretation::Relative) && mol.cx_data.is_none())]
+        |mol: &ExtendedMolecule| mol.configuration_scope == Some(ConfigurationScope::Relative) && mol.cx_data.is_none())]
     #[case::atom_properties(vec![CxEntry::AtomProperties(vec![(0, "key".to_string(), "value".to_string())])], |mol: &ExtendedMolecule| mol.atoms[0].properties.get("key") == Some(&"value".to_string()))]
     #[case::bicyclo_stereo(vec![CxEntry::BicycloStereo(vec![BicycloStereo::TowardsHigherBridge(BicycloStereoData{ligand_atom: 12, connection_atom: 11,
         lower_bridge_atoms: vec![2, 4, 3], higher_bridge_atoms: vec![7, 10, 8], }), ])], |mol: &ExtendedMolecule| mol.cx_data.as_ref().and_then(|d| d.bicyclo_stereo.as_ref()).map(|v| v.len()) == Some(1))]

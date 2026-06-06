@@ -32,6 +32,7 @@ use crate::ops::solution::Solution;
 use crate::position::Point3D;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
+use crate::table_ir::stereo::ChiralityFrame;
 use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
 
 mod accumulator;
@@ -171,7 +172,8 @@ fn build_molecule(
         multicenter_bonds: Vec::new(),
         comments: Vec::new(),
         properties: IndexMap::new(),
-        stereo_interpretation: None,
+        configuration_scope: None,
+        chirality_frame: Some(ChiralityFrame::LastNeighborAway),
         source_format: SourceFormat::MOL,
     };
 
@@ -198,11 +200,12 @@ fn build_extended_molecule(
         rings: Vec::new(),
         positions,
         multicenter_bonds: Vec::new(),
-        stereo_interpretation: None,
+        configuration_scope: None,
         comments: Vec::new(),
         properties: IndexMap::new(),
         ctfile_data: None,
         cx_data: None,
+        chirality_frame: Some(ChiralityFrame::LastNeighborAway),
         source_format: SourceFormat::MOL,
     };
 

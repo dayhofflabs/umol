@@ -13,7 +13,8 @@ use super::super::builder::{
 use crate::span::Span;
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    AtomSymbol, BondDonation, BondOrder, BondWedge, ExtendedMolecule, Molecule, Ring, WildcardAtom,
+    AtomSymbol, BondDonation, BondOrder, BondWedge, ChiralityFrame, ExtendedMolecule, Molecule, Ring,
+    SourceFormat, WildcardAtom,
 };
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.
@@ -431,6 +432,8 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         }
     }
 
+    mol.source_format = SourceFormat::SMILES;
+    mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
     mol
 }
 
@@ -644,5 +647,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
         }
     }
 
+    mol.source_format = SourceFormat::SMILES;
+    mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
     mol
 }

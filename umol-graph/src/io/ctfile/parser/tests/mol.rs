@@ -7,7 +7,7 @@ use crate::io::ctfile::parser::{
     parse_mol_bytes_to_table_ir, parse_mol_bytes_to_table_ir_with, parse_mol_to_table_ir,
     parse_mol_to_table_ir_with,
 };
-use crate::table_ir::StereoInterpretation;
+use crate::table_ir::ConfigurationScope;
 
 #[fixture]
 fn methane_mol() -> &'static str {
@@ -69,9 +69,9 @@ fn test_parse_mol_chiral_flag(chiral_mol: &str) {
     assert!(result.is_ok(), "Should parse: {:?}", result.err());
     let molecule = result.unwrap();
     assert_eq!(
-        molecule.stereo_interpretation,
-        Some(StereoInterpretation::Absolute),
-        "Chiral flag should set StereoInterpretation::Absolute"
+        molecule.configuration_scope,
+        Some(ConfigurationScope::Absolute),
+        "Chiral flag should set ConfigurationScope::Absolute"
     );
 }
 
@@ -235,8 +235,8 @@ fn test_parse_extended_mol_chiral_flag(chiral_mol: &str) {
     assert!(result.is_ok(), "Should parse: {:?}", result.err());
     let molecule = result.unwrap();
     assert_eq!(
-        molecule.stereo_interpretation,
-        Some(StereoInterpretation::Absolute),
-        "Chiral flag should set StereoInterpretation::Absolute"
+        molecule.configuration_scope,
+        Some(ConfigurationScope::Absolute),
+        "Chiral flag should set ConfigurationScope::Absolute"
     );
 }

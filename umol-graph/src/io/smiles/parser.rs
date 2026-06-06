@@ -29,8 +29,8 @@ use crate::ops::resolver::Resolver;
 use crate::ops::solution::Solution;
 use crate::span::Span;
 use crate::table_ir::{
-    BondDonation, BondOrder, BondWedge, ExtendedMolecule, ExtendedReaction, Molecule, Reaction,
-    SourceFormat, WildcardAtom,
+    BondDonation, BondOrder, BondWedge, ChiralityFrame, ExtendedMolecule, ExtendedReaction,
+    Molecule, Reaction, SourceFormat, WildcardAtom,
 };
 
 /// Parse SMILES to a resolved [`MoleculeAst`] using default IO config and
@@ -688,7 +688,14 @@ fn parse_smiles_inner(
         });
     }
     let mut mols = builder.finish();
-    let mol = mols.pop().unwrap_or_else(Molecule::empty);
+    let mol = mols
+        .pop()
+        .map(|mut mol| {
+            mol.source_format = SourceFormat::SMILES;
+            mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
+            mol
+        })
+        .unwrap_or_else(Molecule::empty);
     let new_offset = offset + i;
     Ok((&input[i..], (mol, new_offset)))
 }
@@ -1298,7 +1305,14 @@ fn parse_extended_smiles_inner(
         });
     }
     let mut mols = builder.finish();
-    let mol = mols.pop().unwrap_or_else(ExtendedMolecule::empty);
+    let mol = mols
+        .pop()
+        .map(|mut mol| {
+            mol.source_format = SourceFormat::SMILES;
+            mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
+            mol
+        })
+        .unwrap_or_else(ExtendedMolecule::empty);
     let new_offset = offset + i;
     Ok((&input[i..], (mol, new_offset)))
 }
