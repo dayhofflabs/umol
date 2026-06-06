@@ -15,7 +15,7 @@ use super::super::ids::{
 use super::super::molecule::MoleculeAst;
 use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
-use super::super::stereo::StereoKind;
+use super::super::stereo::{StereoConfigurationAst, StereoKind};
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic::AromaticSystemView;
@@ -211,117 +211,15 @@ impl<'a> AtomView<'a> {
         }
     }
 
-    pub fn is_in_aromatic_system(&self) -> bool {
-        self.molecule.aromatic_systems().has_incident(self.id)
-    }
-
-    /// The aromatic system containing this atom, if any. Per-perception
-    /// design an atom belongs to at most one aromatic system; this
-    /// returns the first incident system.
-    pub fn aromatic_system(&self) -> Option<AromaticSystemView<'a>> {
-        self.aromatic_system_id()
-            .map(|id| self.molecule.aromatic_system(id))
-    }
-
-    pub fn aromatic_system_id(&self) -> Option<AromaticSystemId> {
-        self.molecule
-            .aromatic_systems()
-            .incident_ids(self.id)
-            .next()
-    }
-
-    pub fn is_in_dative_bond(&self) -> bool {
-        self.molecule.dative_bonds().has_incident(self.id)
-    }
-
-    pub fn dative_bonds(&self) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
-        self.molecule.dative_bonds().incident(self.id)
-    }
-
-    pub fn dative_bond_ids(&self) -> impl Iterator<Item = DativeBondId> + 'a {
-        self.molecule.dative_bonds().incident_ids(self.id)
-    }
-
-    pub fn is_in_multicenter_bond(&self) -> bool {
-        self.molecule.multicenter_bonds().has_incident(self.id)
-    }
-
-    pub fn multicenter_bonds(&self) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
-        self.molecule.multicenter_bonds().incident(self.id)
-    }
-
-    pub fn multicenter_bond_ids(&self) -> impl Iterator<Item = MulticenterBondId> + 'a {
-        self.molecule.multicenter_bonds().incident_ids(self.id)
-    }
-
-    pub fn is_in_noncovalent_bond(&self) -> bool {
-        self.molecule.noncovalent_bonds().has_incident(self.id)
-    }
-
-    pub fn noncovalent_bonds(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
-        self.molecule.noncovalent_bonds().incident(self.id)
-    }
-
-    pub fn noncovalent_bond_ids(&self) -> impl Iterator<Item = NoncovalentBondId> + 'a {
-        self.molecule.noncovalent_bonds().incident_ids(self.id)
-    }
-
-    pub fn is_in_tetrahedral_stereo(&self) -> bool {
-        self.tetrahedral_stereo().is_some()
-    }
-
-    pub fn tetrahedral_stereo_id(&self) -> Option<StereoAtomId> {
-        self.tetrahedral_stereo().map(|s| s.id)
-    }
-
-    /// The tetrahedral stereo atom sited on this atom, if any. An atom is the
-    /// site of at most one stereo atom; the kind filter selects the tetrahedral
-    /// case from the other coordination geometries that share the relation.
-    pub fn tetrahedral_stereo(&self) -> Option<StereoAtomView<'a>> {
-        self.molecule
-            .stereo_atoms()
-            .coincident(self.id)
-            .filter(|s| s.kind() == StereoKind::Tetrahedral)
-    }
-
-    /// True if this atom participates in any of the four overlay relations
-    /// (aromatic system, dative bond, multicenter bond, noncovalent bond).
-    /// Mirror of `MoleculeAst::has_overlays` scoped to a single atom; useful
-    /// as a pre-mutation predicate before structural removal.
-    pub fn is_in_overlays(&self) -> bool {
-        self.is_in_aromatic_system()
-            || self.is_in_dative_bond()
-            || self.is_in_multicenter_bond()
-            || self.is_in_noncovalent_bond()
-        // TODO: Add stereo atom and stereo bond checks.
-    }
-
-    /// True if this atom belongs to any ring in the molecule's canonical
-    /// ring set (Vismara relevant cycles, max ring size 22). Uses the
-    /// molecule's cached canonical `RingSet`.
-    pub fn is_in_ring(&self) -> bool {
-        self.molecule.rings().contains_atom(self.id)
-    }
-
-    /// True if this atom appears in any ring of the supplied set.
-    pub fn is_in_ring_from(&self, rings: &RingSet) -> bool {
-        rings.contains_atom(self.id)
-    }
-
-    /// Rings containing this atom drawn from the molecule's canonical
-    /// `RingSet` (Vismara relevant cycles, max ring size 22).
-    pub fn rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
-        let id = self.id;
-        self.molecule
-            .rings()
-            .iter()
-            .filter(move |v| v.atoms().contains(&id))
-    }
-
-    /// Rings from the supplied set that contain this atom.
-    pub fn rings_from<'r>(&self, rings: &'r RingSet) -> impl Iterator<Item = RingView<'r>> + 'r {
-        let id = self.id;
-        rings.iter().filter(move |v| v.atoms().contains(&id))
+    /// Count of multicenter co-participants across all incident multicenter
+    /// bonds. Per the no-overlap structural rule these are not localized-
+    /// bond neighbors. Always `Lit`.
+    pub fn multicenter_degree(&self) -> ValueAst {
+        let count: usize = self
+            .multicenter_bonds()
+            .map(|mc| mc.electrons().len().saturating_sub(1))
+            .sum();
+        ValueAst::Lit(count as i64)
     }
 
     /// Sum of per-atom contributions across incident multicenter bonds.
@@ -404,18 +302,118 @@ impl<'a> AtomView<'a> {
         self.valence() + self.implicit_hydrogens() + self.aromatic_increment()
     }
 
-    /// Count of multicenter co-participants across all incident multicenter
-    /// bonds. Per the no-overlap structural rule these are not localized-
-    /// bond neighbors. Always `Lit`.
-    pub fn multicenter_degree(&self) -> ValueAst {
-        let count: usize = self
-            .multicenter_bonds()
-            .map(|mc| mc.electrons().len().saturating_sub(1))
-            .sum();
-        ValueAst::Lit(count as i64)
+    pub fn is_in_dative_bond(&self) -> bool {
+        self.molecule.dative_bonds().has_incident(self.id)
     }
 
-    // TODO: Add tetrahedral stereo coset and ligands.
+    pub fn dative_bonds(&self) -> impl Iterator<Item = DativeBondView<'a>> + 'a {
+        self.molecule.dative_bonds().incident(self.id)
+    }
+
+    pub fn dative_bond_ids(&self) -> impl Iterator<Item = DativeBondId> + 'a {
+        self.molecule.dative_bonds().incident_ids(self.id)
+    }
+
+    pub fn is_in_aromatic_system(&self) -> bool {
+        self.molecule.aromatic_systems().has_incident(self.id)
+    }
+
+    /// The aromatic system containing this atom, if any. Per-perception
+    /// design an atom belongs to at most one aromatic system; this
+    /// returns the first incident system.
+    pub fn aromatic_system(&self) -> Option<AromaticSystemView<'a>> {
+        self.aromatic_system_id()
+            .map(|id| self.molecule.aromatic_system(id))
+    }
+
+    pub fn aromatic_system_id(&self) -> Option<AromaticSystemId> {
+        self.molecule
+            .aromatic_systems()
+            .incident_ids(self.id)
+            .next()
+    }
+
+    pub fn is_in_multicenter_bond(&self) -> bool {
+        self.molecule.multicenter_bonds().has_incident(self.id)
+    }
+
+    pub fn multicenter_bonds(&self) -> impl Iterator<Item = MulticenterBondView<'a>> + 'a {
+        self.molecule.multicenter_bonds().incident(self.id)
+    }
+
+    pub fn multicenter_bond_ids(&self) -> impl Iterator<Item = MulticenterBondId> + 'a {
+        self.molecule.multicenter_bonds().incident_ids(self.id)
+    }
+
+    pub fn is_in_noncovalent_bond(&self) -> bool {
+        self.molecule.noncovalent_bonds().has_incident(self.id)
+    }
+
+    pub fn noncovalent_bonds(&self) -> impl Iterator<Item = NoncovalentBondView<'a>> + 'a {
+        self.molecule.noncovalent_bonds().incident(self.id)
+    }
+
+    pub fn noncovalent_bond_ids(&self) -> impl Iterator<Item = NoncovalentBondId> + 'a {
+        self.molecule.noncovalent_bonds().incident_ids(self.id)
+    }
+
+    pub fn is_in_tetrahedral_stereo(&self) -> bool {
+        self.tetrahedral_stereo().is_some()
+    }
+
+    pub fn tetrahedral_stereo_id(&self) -> Option<StereoAtomId> {
+        self.tetrahedral_stereo().map(|s| s.id)
+    }
+
+    /// The tetrahedral stereo atom sited on this atom, if any. An atom is the
+    /// site of at most one stereo atom; the kind filter selects the tetrahedral
+    /// case from the other coordination geometries that share the relation.
+    pub fn tetrahedral_stereo(&self) -> Option<StereoAtomView<'a>> {
+        self.molecule
+            .stereo_atoms()
+            .coincident(self.id)
+            .filter(|s| s.kind() == StereoKind::Tetrahedral)
+    }
+
+    /// True if this atom participates in any overlay relation (aromatic
+    /// system, dative bond, multicenter bond, noncovalent bond, tetrahedral
+    /// stereo). Mirror of `MoleculeAst::has_overlays` scoped to a single atom;
+    /// useful as a pre-mutation predicate before structural removal.
+    pub fn is_in_overlays(&self) -> bool {
+        self.is_in_aromatic_system()
+            || self.is_in_dative_bond()
+            || self.is_in_multicenter_bond()
+            || self.is_in_noncovalent_bond()
+            || self.is_in_tetrahedral_stereo()
+    }
+
+    /// True if this atom belongs to any ring in the molecule's canonical
+    /// ring set (Vismara relevant cycles, max ring size 22). Uses the
+    /// molecule's cached canonical `RingSet`.
+    pub fn is_in_ring(&self) -> bool {
+        self.molecule.rings().contains_atom(self.id)
+    }
+
+    /// True if this atom appears in any ring of the supplied set.
+    pub fn is_in_ring_from(&self, rings: &RingSet) -> bool {
+        rings.contains_atom(self.id)
+    }
+
+    /// Rings containing this atom drawn from the molecule's canonical
+    /// `RingSet` (Vismara relevant cycles, max ring size 22).
+    pub fn rings(&self) -> impl Iterator<Item = RingView<'a>> + 'a {
+        let id = self.id;
+        self.molecule
+            .rings()
+            .iter()
+            .filter(move |v| v.atoms().contains(&id))
+    }
+
+    /// Rings from the supplied set that contain this atom.
+    pub fn rings_from<'r>(&self, rings: &'r RingSet) -> impl Iterator<Item = RingView<'r>> + 'r {
+        let id = self.id;
+        rings.iter().filter(move |v| v.atoms().contains(&id))
+    }
 
     /// Count of canonical rings (Vismara / max ring size 22) containing
     /// this atom. Always `Lit`.
@@ -478,12 +476,19 @@ impl<'a> AtomView<'a> {
         } else {
             MulticenterValenceAst::NotMulticenter
         };
+
+        let tetrahedral_stereo = match self.tetrahedral_stereo() {
+            Some(stereo) => StereoConfigurationAst::stereo(stereo.coset().clone()),
+            None => StereoConfigurationAst::NotStereo,
+        };
+
         AtomConstraints::from_iter([
             AtomConstraint::valence(valence),
             AtomConstraint::donated_pairs(donated_pairs),
             AtomConstraint::accepted_pairs(accepted_pairs),
             AtomConstraint::aromatic_valence(aromatic_valence),
             AtomConstraint::multicenter_valence(multicenter_valence),
+            AtomConstraint::tetrahedral_stereo(tetrahedral_stereo),
         ])
     }
 
@@ -527,7 +532,7 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::{
-        AromaticValenceAst, AtomConstraint, Constraints, MulticenterValenceAst,
+        AromaticValenceAst, AtomConstraint, AtomConstraints, Constraints, MulticenterValenceAst,
     };
     use crate::ast::dative::DativeBondAst;
     use crate::ast::ids::{
@@ -539,7 +544,7 @@ mod tests {
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::rings::RingFamily;
-    use crate::ast::stereo::{StereoAtomAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
     use crate::mol;
 
@@ -931,7 +936,10 @@ mod tests {
 
     #[rstest]
     fn test_atom_view_tetrahedral_stereo(stereo_molecule: MoleculeAst) {
-        let view = stereo_molecule.atom(AtomId(0)).tetrahedral_stereo().unwrap();
+        let view = stereo_molecule
+            .atom(AtomId(0))
+            .tetrahedral_stereo()
+            .unwrap();
         assert_eq!(view.id, StereoAtomId(0));
         assert_eq!(view.kind(), StereoKind::Tetrahedral);
         assert!(stereo_molecule
@@ -1005,12 +1013,47 @@ mod tests {
         AtomId(1),
         false,
     )]
+    #[case::tetrahedral_stereo_site(stereo_molecule(), AtomId(0), true)]
     fn test_atom_view_is_in_overlays(
         #[case] mol: MoleculeAst,
         #[case] atom: AtomId,
         #[case] expected: bool,
     ) {
         assert_eq!(mol.atom(atom).is_in_overlays(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::tetrahedral_site(AtomId(0), AtomConstraints::from_iter([
+        AtomConstraint::valence(ValueAst::Lit(4)),
+        AtomConstraint::donated_pairs(ValueAst::Lit(0)),
+        AtomConstraint::accepted_pairs(ValueAst::Lit(0)),
+        AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
+        AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
+        AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::stereo(StereoCosetAst::Lit(1))),
+    ]))]
+    #[case::non_stereo_ligand(AtomId(1), AtomConstraints::from_iter([
+        AtomConstraint::valence(ValueAst::Lit(1)),
+        AtomConstraint::donated_pairs(ValueAst::Lit(0)),
+        AtomConstraint::accepted_pairs(ValueAst::Lit(0)),
+        AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
+        AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
+        AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::NotStereo),
+    ]))]
+    #[case::square_planar_site(AtomId(5), AtomConstraints::from_iter([
+        AtomConstraint::valence(ValueAst::Lit(4)),
+        AtomConstraint::donated_pairs(ValueAst::Lit(0)),
+        AtomConstraint::accepted_pairs(ValueAst::Lit(0)),
+        AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
+        AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
+        AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::NotStereo),
+    ]))]
+    fn test_atom_view_derive_constraints(
+        stereo_molecule: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] expected: AtomConstraints,
+    ) {
+        assert_eq!(stereo_molecule.atom(atom).derive_constraints(), expected);
     }
 
     #[rstest]

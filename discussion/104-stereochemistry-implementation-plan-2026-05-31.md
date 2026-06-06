@@ -474,7 +474,7 @@ Phases A–E are in scope; F (3D) and G follow.
     a tuple).
     is_in_stereo_atom(), stereo_atoms(), stereo_atom_ids(), also separate query methods for site/ligands, names?
     is_in_stereo_bond(), stereo_bonds(), stereo_bond_ids(), also query methods incident atoms + ligands, names?
-    add stereo atoms and stereo bonds to is_in_overlays
+    add stereo atoms and stereo bonds to is_in_overlays **Done**
     Add `#T/#C` to `derive_constraints()` method.
   - **D6** - add stereo atoms and bonds to SubPatternAnchorDsl
   - **D7** — round-trip tests: EDN↔AST for both surfaces (elements *and* `#T`/`#C` strings) over the

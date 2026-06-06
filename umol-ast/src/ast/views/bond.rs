@@ -6,12 +6,12 @@ use std::ops::Index;
 use umol_graph_core::{EdgeId, NodeId};
 
 use super::super::bond::BondAst;
-use super::super::constraint::BondConstraints;
+use super::super::constraint::{BondConstraint, BondConstraints};
 use super::super::ids::{AtomId, BondId, StereoBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
-use super::super::stereo::StereoKind;
+use super::super::stereo::{StereoConfigurationAst, StereoKind};
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic::AromaticSystemView;
@@ -191,6 +191,13 @@ impl<'a> BondView<'a> {
             .filter(|s| s.kind() == StereoKind::CisTrans)
     }
 
+    /// True if this bond participates in any overlay relation (aromatic
+    /// system, cis/trans stereo). Bond counterpart of `AtomView::is_in_overlays`;
+    /// useful as a pre-mutation predicate before structural removal.
+    pub fn is_in_overlays(&self) -> bool {
+        self.is_in_aromatic_system() || self.is_in_cis_trans_stereo()
+    }
+
     /// True if this bond belongs to any ring in the molecule's canonical
     /// ring set (Vismara relevant cycles, max ring size 22). Uses the
     /// molecule's cached canonical `RingSet`.
@@ -230,6 +237,15 @@ impl<'a> BondView<'a> {
     /// ring.
     pub fn ring_size(&self) -> impl Iterator<Item = usize> + 'a {
         self.rings().map(|r| r.len())
+    }
+
+    /// Derive topological constraints from bond properties.
+    pub fn derive_constraints(&self) -> BondConstraints {
+        let cis_trans_stereo = match self.cis_trans_stereo() {
+            Some(stereo) => StereoConfigurationAst::stereo(stereo.coset().clone()),
+            None => StereoConfigurationAst::NotStereo,
+        };
+        BondConstraints::from_iter([BondConstraint::cis_trans_stereo(cis_trans_stereo)])
     }
 
     /// Is bond ground
@@ -285,7 +301,7 @@ mod tests {
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::Constraints;
+    use crate::ast::constraint::{BondConstraint, BondConstraints, Constraints};
     use crate::ast::dative::DativeBondAst;
     use crate::ast::ids::{AromaticSystemId, AtomId, BondId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
@@ -293,7 +309,7 @@ mod tests {
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::rings::RingFamily;
-    use crate::ast::stereo::{StereoBondAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[fixture]
@@ -498,6 +514,34 @@ mod tests {
         assert_eq!(view.id, StereoBondId(0));
         assert_eq!(view.kind(), StereoKind::CisTrans);
         assert!(stereo_molecule.bond(BondId(0)).cis_trans_stereo().is_none());
+    }
+
+    #[rstest]
+    #[case::aromatic(molecule(), BondId(0), true)]
+    #[case::cis_trans_stereo(stereo_molecule(), BondId(1), true)]
+    #[case::plain(stereo_molecule(), BondId(0), false)]
+    fn test_bond_view_is_in_overlays(
+        #[case] mol: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(mol.bond(bond).is_in_overlays(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::cis_trans_site(BondId(1), BondConstraints::from_iter([
+        BondConstraint::cis_trans_stereo(StereoConfigurationAst::stereo(StereoCosetAst::Lit(1))),
+    ]))]
+    #[case::non_stereo(BondId(0), BondConstraints::from_iter([
+        BondConstraint::cis_trans_stereo(StereoConfigurationAst::NotStereo),
+    ]))]
+    fn test_bond_view_derive_constraints(
+        stereo_molecule: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] expected: BondConstraints,
+    ) {
+        assert_eq!(stereo_molecule.bond(bond).derive_constraints(), expected);
     }
 
     #[rstest]
