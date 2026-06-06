@@ -48,6 +48,14 @@ impl FromStr for StereoAtomDsl {
     }
 }
 
+impl FromStr for StereoAtomAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(StereoAtomDsl::from_str(s)?.into_ast(&StereoAtomDefaults::default()))
+    }
+}
+
 impl Display for StereoAtomDsl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt_stereo_atom(f, &self.0)?;
@@ -163,6 +171,14 @@ impl FromStr for StereoBondDsl {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         parse_stereo_bond(s)
+    }
+}
+
+impl FromStr for StereoBondAst {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(StereoBondDsl::from_str(s)?.into_ast(&StereoBondDefaults::default()))
     }
 }
 

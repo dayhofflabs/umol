@@ -480,7 +480,7 @@ Phases A–E are in scope; F (3D) and G follow.
   - **D7** — round-trip tests: EDN↔AST for both surfaces (stereo elements *and* `#T`/`#C` strings) over the
     ~150-file corpus, under `--features conformance`. **Replaced by full conformance tests**
   - **D8** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
-     stereo_bond_zeroed! in `macros.rs`.
+     stereo_bond_zeroed! in `macros.rs`. **Done**
   - **D9** - update specifications in umol-dsl-spec.md
   - **D10** - add to prop test and fuzzing
 
