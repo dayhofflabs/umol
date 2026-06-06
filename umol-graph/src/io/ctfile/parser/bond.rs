@@ -163,16 +163,10 @@ pub fn bond_input<'inp>(
         }
 
         let mut bond = Bond::new(first_atom as u32, second_atom as u32, order);
-        if let (Some(stereo), Some(wedge)) = (stereo, wedge) {
-            match order {
-                BondOrder::Single => {
-                    bond.wedge = Some(wedge);
-                }
-                BondOrder::Double => {
-                    bond.stereo = Some(stereo);
-                }
-                _ => (),
-            }
+        // The stereo/direction field applies only to single and double bonds.
+        if matches!(order, BondOrder::Single | BondOrder::Double) {
+            bond.stereo = stereo;
+            bond.wedge = wedge;
         }
 
         Ok((&input[offset..], bond))
@@ -268,16 +262,10 @@ pub fn extended_bond_input<'inp>(
         }
 
         let mut bond = ExtendedBond::new(first_atom as u32, second_atom as u32, order);
-        if let (Some(stereo), Some(wedge)) = (stereo, wedge) {
-            match order {
-                BondOrder::Single => {
-                    bond.wedge = Some(wedge);
-                }
-                BondOrder::Double => {
-                    bond.stereo = Some(stereo);
-                }
-                _ => (),
-            }
+        // The stereo/direction field applies only to single and double bonds.
+        if matches!(order, BondOrder::Single | BondOrder::Double) {
+            bond.stereo = stereo;
+            bond.wedge = wedge;
         }
         bond.topology = topology;
         bond.reacting_center = reacting_center;

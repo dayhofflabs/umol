@@ -221,21 +221,20 @@ pub(super) fn convert_extended_bond_type_code(
     }
 }
 
-/// Convert bond stereo/direction code
-/// 'sss' field - can mean stereo for double bonds or direction for single bonds
-/// Stereo (double bond): (0=Unknown, 1=Cis, 3|4=Either, 6=Trans)
-/// Direction (single bond): (0=Not stereo, 1=Up, 3|4=Either, 6=Down)
-/// NOTE: CTFile docs do not define cis/trans, 3=Double Either, 4=Single Either
+/// Convert bond stereo/direction code.
+/// 'sss' field - single-bond wedge direction or double-bond stereo; the codes are disjoint by bond order.
+/// Single bond: 0 = none, 1 = Up wedge, 6 = Down wedge, 4 = Either (wavy).
+/// Double bond: 0 = from coordinates, 3 = Either (cis-or-trans unknown, crossed double bond).
+/// Definite cis/trans is never encoded in this field; it derives from coordinates.
 pub(super) fn convert_bond_stereo_direction_code(
     code: u8,
 ) -> (Option<BondStereo>, Option<BondWedge>) {
     match code {
         0 => (None, None),
-        1 => (Some(BondStereo::Cis), Some(BondWedge::Up)),
-        // TODO: In RDKit: 3 is "either" double bond, implement configuration option
-        // 4 is "either" single bond
-        3 | 4 => (Some(BondStereo::Either), Some(BondWedge::Either)),
-        6 => (Some(BondStereo::Trans), Some(BondWedge::Down)),
+        1 => (None, Some(BondWedge::Up)),
+        3 => (Some(BondStereo::Either), None),
+        4 => (None, Some(BondWedge::Either)),
+        6 => (None, Some(BondWedge::Down)),
         _ => unreachable!("invalid stereo/direction code: {}", code),
     }
 }
@@ -663,10 +662,10 @@ mod tests {
 
     #[rstest]
     #[case::not_stereo(0, (None, None))]
-    #[case::cis(1, (Some(BondStereo::Cis), Some(BondWedge::Up)))]
-    #[case::either(3, (Some(BondStereo::Either), Some(BondWedge::Either)))]
-    #[case::unknown(4, (Some(BondStereo::Either), Some(BondWedge::Either)))]
-    #[case::trans(6, (Some(BondStereo::Trans), Some(BondWedge::Down)))]
+    #[case::up_wedge(1, (None, Some(BondWedge::Up)))]
+    #[case::either_double(3, (Some(BondStereo::Either), None))]
+    #[case::either_single(4, (None, Some(BondWedge::Either)))]
+    #[case::down_wedge(6, (None, Some(BondWedge::Down)))]
     fn test_convert_bond_stereo_direction_code(
         #[case] code: u8,
         #[case] expected: (Option<BondStereo>, Option<BondWedge>),

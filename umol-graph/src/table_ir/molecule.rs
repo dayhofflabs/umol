@@ -106,14 +106,11 @@ pub struct ExtendedMolecule {
     pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
     pub multicenter_bonds: Vec<MulticenterBond>,
-
     pub stereo_interpretation: Option<StereoInterpretation>,
     pub comments: Vec<String>,
     pub properties: IndexMap<String, String>,
-
     pub ctfile_data: Option<CtfileData>,
     pub cx_data: Option<CxAnnotationData>,
-
     pub source_format: SourceFormat,
 }
 
