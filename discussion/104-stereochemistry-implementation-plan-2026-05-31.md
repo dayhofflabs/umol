@@ -481,7 +481,7 @@ Phases A–E are in scope; F (3D) and G follow.
     ~150-file corpus, under `--features conformance`. **Replaced by full conformance tests**
   - **D8** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
      stereo_bond_zeroed! in `macros.rs`. **Done**
-  - **D9** - update specifications in umol-dsl-spec.md
+  - **D9** - update specifications in umol-dsl-spec.md **Done** (top-level keys fixed; grammar non-terminals aligned to key names; stereo elements + `#T`/`#C` constraints + relational + anchor + §7.14 subgrammar added)
   - **D10** - add to prop test and fuzzing
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
