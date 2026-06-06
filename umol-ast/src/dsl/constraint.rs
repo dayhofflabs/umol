@@ -872,6 +872,16 @@ pub(super) fn read_sub_pattern_anchor_dsl(
                     read_ref_pair(d, read_noncovalent_bond_ref, read_noncovalent_bond_ref)
                 })?
             }
+            "stereo-atoms" => {
+                out.stereo_atoms = read_vec(d, |d| {
+                    read_ref_pair(d, read_stereo_atom_ref, read_stereo_atom_ref)
+                })?
+            }
+            "stereo-bonds" => {
+                out.stereo_bonds = read_vec(d, |d| {
+                    read_ref_pair(d, read_stereo_bond_ref, read_stereo_bond_ref)
+                })?
+            }
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -1354,6 +1364,8 @@ pub struct SubPatternAnchorDsl {
     pub aromatic_systems: Vec<(AromaticSystemRef, AromaticSystemRef)>,
     pub multicenter_bonds: Vec<(MulticenterBondRef, MulticenterBondRef)>,
     pub noncovalent_bonds: Vec<(NoncovalentBondRef, NoncovalentBondRef)>,
+    pub stereo_atoms: Vec<(StereoAtomRef, StereoAtomRef)>,
+    pub stereo_bonds: Vec<(StereoBondRef, StereoBondRef)>,
 }
 
 impl SubPatternAnchorDsl {
@@ -1425,6 +1437,26 @@ impl SubPatternAnchorDsl {
                     )
                 })
                 .collect(),
+            stereo_atoms: anchor
+                .stereo_atoms()
+                .iter()
+                .map(|&(t, p)| {
+                    (
+                        StereoAtomRef::from_ast(t, target_meta),
+                        StereoAtomRef::from_ast(p, pattern_meta),
+                    )
+                })
+                .collect(),
+            stereo_bonds: anchor
+                .stereo_bonds()
+                .iter()
+                .map(|&(t, p)| {
+                    (
+                        StereoBondRef::from_ast(t, target_meta),
+                        StereoBondRef::from_ast(p, pattern_meta),
+                    )
+                })
+                .collect(),
         }
     }
 
@@ -1474,6 +1506,18 @@ impl SubPatternAnchorDsl {
                 p.into_ast(pattern_counts.noncovalent_bond_count, pattern_meta)?,
             );
         }
+        for (t, p) in self.stereo_atoms {
+            anchor.push_stereo_atom(
+                t.into_ast(target_counts.stereo_atom_count, target_meta)?,
+                p.into_ast(pattern_counts.stereo_atom_count, pattern_meta)?,
+            );
+        }
+        for (t, p) in self.stereo_bonds {
+            anchor.push_stereo_bond(
+                t.into_ast(target_counts.stereo_bond_count, target_meta)?,
+                p.into_ast(pattern_counts.stereo_bond_count, pattern_meta)?,
+            );
+        }
         Ok(anchor)
     }
 }
@@ -1508,6 +1552,12 @@ impl<'de> FromEdn<'de> for SubPatternAnchorDsl {
                     out.noncovalent_bonds =
                         parse_ref_pairs::<NoncovalentBondRef, NoncovalentBondRef>(v)?
                 }
+                "stereo-atoms" => {
+                    out.stereo_atoms = parse_ref_pairs::<StereoAtomRef, StereoAtomRef>(v)?
+                }
+                "stereo-bonds" => {
+                    out.stereo_bonds = parse_ref_pairs::<StereoBondRef, StereoBondRef>(v)?
+                }
                 other => {
                     return Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -1522,7 +1572,7 @@ impl<'de> FromEdn<'de> for SubPatternAnchorDsl {
 
 impl ToEdn for SubPatternAnchorDsl {
     fn to_edn(&self) -> Edn<'static> {
-        let mut m = EdnMap::with_capacity(6);
+        let mut m = EdnMap::with_capacity(8);
         if !self.atoms.is_empty() {
             m.insert(Edn::keyword("atoms"), render_ref_pairs(&self.atoms));
         }
@@ -1551,6 +1601,18 @@ impl ToEdn for SubPatternAnchorDsl {
             m.insert(
                 Edn::keyword("noncovalent-bonds"),
                 render_ref_pairs(&self.noncovalent_bonds),
+            );
+        }
+        if !self.stereo_atoms.is_empty() {
+            m.insert(
+                Edn::keyword("stereo-atoms"),
+                render_ref_pairs(&self.stereo_atoms),
+            );
+        }
+        if !self.stereo_bonds.is_empty() {
+            m.insert(
+                Edn::keyword("stereo-bonds"),
+                render_ref_pairs(&self.stereo_bonds),
             );
         }
         Edn::Map(m)
@@ -2205,6 +2267,25 @@ mod tests {
         let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
         let edn = dsl.to_edn();
         assert_eq!(edn, read_string("{:atoms [[3 0] [5 1]]}").unwrap());
+        let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
+        let back = parsed
+            .into_ast_pair(&counts, &meta, &counts, &meta)
+            .unwrap();
+        assert_eq!(back, anchor);
+    }
+
+    #[rstest]
+    fn test_sub_pattern_anchor_dsl_stereo_roundtrip(#[from(full_counts)] counts: EntityCounts) {
+        let meta = Metadata::default();
+        let mut anchor = SubPatternAnchor::new();
+        anchor.push_stereo_atom(StereoAtomId(2), StereoAtomId(0));
+        anchor.push_stereo_bond(StereoBondId(4), StereoBondId(1));
+        let dsl = SubPatternAnchorDsl::from_ast_pair(&anchor, &meta, &meta);
+        let edn = dsl.to_edn();
+        assert_eq!(
+            edn,
+            read_string("{:stereo-atoms [[2 0]] :stereo-bonds [[4 1]]}").unwrap()
+        );
         let parsed = SubPatternAnchorDsl::from_edn(&edn).unwrap();
         let back = parsed
             .into_ast_pair(&counts, &meta, &counts, &meta)

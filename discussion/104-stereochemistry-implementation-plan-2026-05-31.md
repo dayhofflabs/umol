@@ -474,17 +474,15 @@ Phases A–E are in scope; F (3D) and G follow.
     a tuple).
     is_in_stereo_atom(), stereo_atoms(), stereo_atom_ids(), also separate query methods for site/ligands, names?
     is_in_stereo_bond(), stereo_bonds(), stereo_bond_ids(), also query methods incident atoms + ligands, names?
-    add stereo atoms and stereo bonds to is_in_overlays **Done**
-    Add `#T/#C` to `derive_constraints()` method.
-  - **D6** - add stereo atoms and bonds to SubPatternAnchorDsl
-  - **D7** — round-trip tests: EDN↔AST for both surfaces (elements *and* `#T`/`#C` strings) over the
-    ~150-file corpus, under `--features conformance`.
+    add stereo atoms and stereo bonds to is_in_overlays.
+    Add `#T/#C` to `derive_constraints()` method. **Done**
+  - **D6** - add stereo atoms and bonds to SubPatternAnchorDsl **Done**
+  - **D7** — round-trip tests: EDN↔AST for both surfaces (stereo elements *and* `#T`/`#C` strings) over the
+    ~150-file corpus, under `--features conformance`. **Replaced by full conformance tests**
   - **D8** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
      stereo_bond_zeroed! in `macros.rs`.
   - **D9** - update specifications in umol-dsl-spec.md
   - **D10** - add to prop test and fuzzing
-  - **D11** - fix pub(crate) visibility markers on MoleculeInput::into_ast(), *EntryInput struct fields. Review
-     field naming in *EntryInput fields.
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
   substructure matcher is reused, and `umol-perm` enters exactly once, at the frame alignment).
