@@ -1,0 +1,1 @@
+{:sub-pattern {:anchor {:atoms [[0 0]]} :pattern {:atoms ["C"] :bonds []}}}

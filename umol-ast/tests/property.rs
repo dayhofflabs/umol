@@ -19,12 +19,13 @@ use umol_ast::ast::{
     MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraint,
     MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterBondId,
     MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst, SubPatternAnchor, ValueAst,
-    ValueExpr,
+    NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst, StereoAtomAst, StereoAtomId,
+    StereoBondAst, StereoBondId, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
+    StereoLigand, StereoLigandKind, SubPatternAnchor, ValueAst, ValueExpr,
 };
 use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
-    MulticenterBondDsl, NoncovalentBondDsl, ValueDsl,
+    MulticenterBondDsl, NoncovalentBondDsl, StereoAtomDsl, StereoBondDsl, ValueDsl,
 };
 use umol_edn::{read_string, Edn, FromEdn, ToEdn};
 use umol_shared::element::Element;
@@ -375,6 +376,7 @@ fn atom_constraint_strategy() -> BoxedStrategy<AtomConstraint> {
         constraint_inner_value_strategy(3..=10).prop_map(AtomConstraint::RingSize),
         aromatic_valence_ast_strategy().prop_map(AtomConstraint::AromaticValence),
         multicenter_valence_ast_strategy().prop_map(AtomConstraint::MulticenterValence),
+        stereo_config_strategy().prop_map(AtomConstraint::TetrahedralStereo),
     ]
     .boxed()
 }
@@ -394,6 +396,7 @@ fn bond_constraint_strategy() -> BoxedStrategy<BondConstraint> {
         Just(BondConstraint::Aromatic),
         constraint_inner_value_strategy(0..=6).prop_map(BondConstraint::RingCount),
         constraint_inner_value_strategy(3..=10).prop_map(BondConstraint::RingSize),
+        stereo_config_strategy().prop_map(BondConstraint::CisTransStereo),
     ]
     .boxed()
 }
@@ -629,6 +632,125 @@ fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> 
     })
 }
 
+/// Coset forms that round-trip through both the entity `:type` string and the
+/// EDN coset-form: `Undetermined` (`*`), `Lit`, and a literal set
+/// (`{a,b,…}` ↔ EDN vector). The `~`/`^`/`?var` operator-exprs are reserved
+/// (§7.14) and excluded.
+fn stereo_coset_strategy() -> impl Strategy<Value = StereoCosetAst> {
+    prop_oneof![
+        Just(StereoCosetAst::Undetermined),
+        (1u32..=6).prop_map(StereoCosetAst::Lit),
+        prop::collection::vec(1u32..=6, 1..=3).prop_map(|mut v| {
+            v.sort_unstable();
+            v.dedup();
+            StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(v)))
+        }),
+    ]
+}
+
+fn stereo_ligand_kind_strategy() -> impl Strategy<Value = StereoLigandKind> {
+    prop_oneof![
+        Just(StereoLigandKind::Atom),
+        Just(StereoLigandKind::ImplicitHydrogen),
+        Just(StereoLigandKind::LonePair),
+    ]
+}
+
+/// `StereoConfigurationAst` for `#T` / `#C` constraints, excluding the vacuous
+/// `Undetermined` config (it renders empty per the canonical-rendering rule,
+/// breaking render → reparse — mirrors `aromatic_valence_ast_strategy`).
+/// `Stereo(Undetermined)` (the `+` form) is non-vacuous and kept.
+fn stereo_config_strategy() -> impl Strategy<Value = StereoConfigurationAst> {
+    prop_oneof![
+        Just(StereoConfigurationAst::NotStereo),
+        stereo_coset_strategy().prop_map(StereoConfigurationAst::Stereo),
+    ]
+}
+
+fn stereo_atom_ast_strategy() -> impl Strategy<Value = StereoAtomAst> {
+    let kind = prop_oneof![
+        Just(StereoKind::Tetrahedral),
+        Just(StereoKind::SquarePlanar),
+        Just(StereoKind::TrigonalBipyramidal),
+        Just(StereoKind::Octahedral),
+    ];
+    (kind, stereo_coset_strategy()).prop_map(|(kind, coset)| StereoAtomAst::new(kind, coset))
+}
+
+fn stereo_bond_ast_strategy() -> impl Strategy<Value = StereoBondAst> {
+    stereo_coset_strategy().prop_map(|coset| StereoBondAst::new(StereoKind::CisTrans, coset))
+}
+
+/// Stereo-atom entries for a molecule of `atom_count` atoms. Sites are the
+/// distinct indices `0..n` (one stereo element per site, §4.1). Plain-atom
+/// ligands reference any atom; virtual ligands (implicit-H / lone-pair) carry
+/// the site atom (their bearing atom).
+fn stereo_atom_entries_strategy(
+    atom_count: usize,
+    max: usize,
+) -> BoxedStrategy<Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)>> {
+    if atom_count == 0 || max == 0 {
+        return Just(Vec::new()).boxed();
+    }
+    let entry = (
+        prop::collection::vec((stereo_ligand_kind_strategy(), 0..atom_count as u32), 1..=4),
+        stereo_atom_ast_strategy(),
+    );
+    prop::collection::vec(entry, 0..=max)
+        .prop_map(|entries| {
+            entries
+                .into_iter()
+                .enumerate()
+                .map(|(i, (ligand_specs, ast))| {
+                    let site = AtomId(i as u32);
+                    let ligands = ligand_specs
+                        .into_iter()
+                        .map(|(kind, a)| match kind {
+                            StereoLigandKind::Atom => StereoLigand::new(AtomId(a), kind),
+                            _ => StereoLigand::new(site, kind),
+                        })
+                        .collect();
+                    (site, ligands, ast)
+                })
+                .collect()
+        })
+        .boxed()
+}
+
+/// Stereo-bond entries. Sites are the distinct bond indices `0..n`; ligands
+/// reference any atom (a virtual ligand's bearing atom is a double-bond
+/// terminus, modeled here as any in-range atom — roundtrip is independent of
+/// the choice).
+fn stereo_bond_entries_strategy(
+    atom_count: usize,
+    bond_count: usize,
+    max: usize,
+) -> BoxedStrategy<Vec<(BondId, Vec<StereoLigand>, StereoBondAst)>> {
+    if atom_count == 0 || bond_count == 0 || max == 0 {
+        return Just(Vec::new()).boxed();
+    }
+    let entry = (
+        prop::collection::vec((stereo_ligand_kind_strategy(), 0..atom_count as u32), 1..=4),
+        stereo_bond_ast_strategy(),
+    );
+    prop::collection::vec(entry, 0..=max)
+        .prop_map(|entries| {
+            entries
+                .into_iter()
+                .enumerate()
+                .map(|(i, (ligand_specs, ast))| {
+                    let site = BondId(i as u32);
+                    let ligands = ligand_specs
+                        .into_iter()
+                        .map(|(kind, a)| StereoLigand::new(AtomId(a), kind))
+                        .collect();
+                    (site, ligands, ast)
+                })
+                .collect()
+        })
+        .boxed()
+}
+
 /// Generate k distinct atom indices in [0, atom_count).
 fn distinct_atoms_strategy(
     atom_count: usize,
@@ -719,6 +841,9 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                 0..=noncovalent_count_max,
             );
 
+            let stereo_atoms = stereo_atom_entries_strategy(atom_count, atom_count.min(2));
+            let stereo_bonds = stereo_bond_entries_strategy(atom_count, bond_count, bond_count.min(2));
+
             (
                 Just(atoms),
                 Just(bonds_full),
@@ -726,11 +851,12 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                 aromatics,
                 multicenters,
                 noncovalents,
-                Just(atom_count),
+                stereo_atoms,
+                stereo_bonds,
             )
         })
         .prop_map(
-            |(atoms, bonds, datives, aromatics, multicenters, noncovalents, _n)| {
+            |(atoms, bonds, datives, aromatics, multicenters, noncovalents, stereo_atoms, stereo_bonds)| {
                 let dative_triples: Vec<_> = datives
                     .into_iter()
                     .filter_map(|(atoms, data)| match atoms.as_slice() {
@@ -760,8 +886,8 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
                     aromatic_entries,
                     multicenter_entries,
                     noncovalent_triples,
-                    Vec::new(),
-                    Vec::new(),
+                    stereo_atoms,
+                    stereo_bonds,
                     Constraints::new(),
                 )
             },
@@ -779,6 +905,8 @@ struct ConstraintCounts {
     aromatic: usize,
     multicenter: usize,
     noncovalent: usize,
+    stereo_atom: usize,
+    stereo_bond: usize,
 }
 
 impl ConstraintCounts {
@@ -790,6 +918,8 @@ impl ConstraintCounts {
             aromatic: ast.aromatic_systems().count(),
             multicenter: ast.multicenter_bonds().count(),
             noncovalent: ast.noncovalent_bonds().count(),
+            stereo_atom: ast.stereo_atoms().count(),
+            stereo_bond: ast.stereo_bonds().count(),
         }
     }
 }
@@ -816,6 +946,14 @@ fn multicenter_bond_idx_strategy(count: usize) -> BoxedStrategy<MulticenterBondI
 
 fn noncovalent_bond_idx_strategy(count: usize) -> BoxedStrategy<NoncovalentBondId> {
     (0u32..count as u32).prop_map(NoncovalentBondId).boxed()
+}
+
+fn stereo_atom_idx_strategy(count: usize) -> BoxedStrategy<StereoAtomId> {
+    (0u32..count as u32).prop_map(StereoAtomId).boxed()
+}
+
+fn stereo_bond_idx_strategy(count: usize) -> BoxedStrategy<StereoBondId> {
+    (0u32..count as u32).prop_map(StereoBondId).boxed()
 }
 
 /// Non-recursive constraint leaves: every value-only and relational
@@ -1091,6 +1229,105 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
         choices.push(ends_satisfy);
     }
 
+    if counts.stereo_atom > 0 && counts.atom > 0 {
+        let sa_idx = stereo_atom_idx_strategy(counts.stereo_atom);
+        let atom_idx = atom_idx_strategy(counts.atom);
+        let max_atoms = counts.atom.min(3);
+
+        let site = (sa_idx.clone(), atom_idx.clone())
+            .prop_map(|(stereo_atom, atom)| {
+                Constraint::Relational(RelationalConstraint::StereoAtomSite { stereo_atom, atom })
+            })
+            .boxed();
+        let contains = (sa_idx.clone(), atom_idx.clone())
+            .prop_map(|(stereo_atom, atom)| {
+                Constraint::Relational(RelationalConstraint::StereoAtomContains { stereo_atom, atom })
+            })
+            .boxed();
+        let ligands = (sa_idx.clone(), prop::collection::vec(atom_idx, 1..=max_atoms))
+            .prop_map(|(stereo_atom, atoms)| {
+                Constraint::Relational(RelationalConstraint::StereoAtomLigands { stereo_atom, atoms })
+            })
+            .boxed();
+        let all_ligands = (sa_idx.clone(), atom_constraint_strategy())
+            .prop_map(|(stereo_atom, c)| {
+                Constraint::Relational(RelationalConstraint::StereoAtomAllLigands {
+                    stereo_atom,
+                    predicate: Box::new(c),
+                })
+            })
+            .boxed();
+        let any_ligand = (sa_idx, atom_constraint_strategy())
+            .prop_map(|(stereo_atom, c)| {
+                Constraint::Relational(RelationalConstraint::StereoAtomAnyLigand {
+                    stereo_atom,
+                    predicate: Box::new(c),
+                })
+            })
+            .boxed();
+        choices.push(site);
+        choices.push(contains);
+        choices.push(ligands);
+        choices.push(all_ligands);
+        choices.push(any_ligand);
+    }
+
+    if counts.stereo_bond > 0 {
+        let sb_idx = stereo_bond_idx_strategy(counts.stereo_bond);
+
+        if counts.bond > 0 {
+            let bond_idx = bond_idx_strategy(counts.bond);
+            let site = (sb_idx.clone(), bond_idx)
+                .prop_map(|(stereo_bond, bond)| {
+                    Constraint::Relational(RelationalConstraint::StereoBondSite { stereo_bond, bond })
+                })
+                .boxed();
+            choices.push(site);
+        }
+
+        if counts.atom > 0 {
+            let atom_idx = atom_idx_strategy(counts.atom);
+            let max_atoms = counts.atom.min(3);
+
+            let contains = (sb_idx.clone(), atom_idx.clone())
+                .prop_map(|(stereo_bond, atom)| {
+                    Constraint::Relational(RelationalConstraint::StereoBondContains {
+                        stereo_bond,
+                        atom,
+                    })
+                })
+                .boxed();
+            let ligands = (sb_idx.clone(), prop::collection::vec(atom_idx, 1..=max_atoms))
+                .prop_map(|(stereo_bond, atoms)| {
+                    Constraint::Relational(RelationalConstraint::StereoBondLigands {
+                        stereo_bond,
+                        atoms,
+                    })
+                })
+                .boxed();
+            let all_ligands = (sb_idx.clone(), atom_constraint_strategy())
+                .prop_map(|(stereo_bond, c)| {
+                    Constraint::Relational(RelationalConstraint::StereoBondAllLigands {
+                        stereo_bond,
+                        predicate: Box::new(c),
+                    })
+                })
+                .boxed();
+            let any_ligand = (sb_idx, atom_constraint_strategy())
+                .prop_map(|(stereo_bond, c)| {
+                    Constraint::Relational(RelationalConstraint::StereoBondAnyLigand {
+                        stereo_bond,
+                        predicate: Box::new(c),
+                    })
+                })
+                .boxed();
+            choices.push(contains);
+            choices.push(ligands);
+            choices.push(all_ligands);
+            choices.push(any_ligand);
+        }
+    }
+
     // SubPattern: pattern molecule and a small anchor pinning the first few
     // entities to themselves on both sides (capped to keep refs valid).
     let target_counts = counts;
@@ -1133,6 +1370,8 @@ fn sub_pattern_anchor_strategy(
     let aromatic_pairs = target.aromatic.min(pattern.aromatic).min(1);
     let multicenter_pairs = target.multicenter.min(pattern.multicenter).min(1);
     let noncovalent_pairs = target.noncovalent.min(pattern.noncovalent).min(1);
+    let stereo_atom_pairs = target.stereo_atom.min(pattern.stereo_atom).min(1);
+    let stereo_bond_pairs = target.stereo_bond.min(pattern.stereo_bond).min(1);
     (
         0..=atom_pairs,
         0..=bond_pairs,
@@ -1140,8 +1379,10 @@ fn sub_pattern_anchor_strategy(
         0..=aromatic_pairs,
         0..=multicenter_pairs,
         0..=noncovalent_pairs,
+        0..=stereo_atom_pairs,
+        0..=stereo_bond_pairs,
     )
-        .prop_map(|(a, b, d, ar, mc, nc)| {
+        .prop_map(|(a, b, d, ar, mc, nc, sa, sb)| {
             let mut anchor = SubPatternAnchor::new();
             for i in 0..a {
                 anchor.push_atom(AtomId(i as u32), AtomId(i as u32));
@@ -1166,6 +1407,12 @@ fn sub_pattern_anchor_strategy(
                     NoncovalentBondId(i as u32),
                     NoncovalentBondId(i as u32),
                 );
+            }
+            for i in 0..sa {
+                anchor.push_stereo_atom(StereoAtomId(i as u32), StereoAtomId(i as u32));
+            }
+            for i in 0..sb {
+                anchor.push_stereo_bond(StereoBondId(i as u32), StereoBondId(i as u32));
             }
             anchor
         })
@@ -1805,6 +2052,71 @@ proptest! {
         let rendered = dsl.to_string();
         let parsed: NoncovalentBondDsl = rendered.parse().map_err(|e| {
             TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_stereo_atom_dsl_display_from_str_roundtrip(
+        stereo in stereo_atom_ast_strategy(),
+    ) {
+        let dsl = StereoAtomDsl(stereo);
+        let rendered = dsl.to_string();
+        let parsed: StereoAtomDsl = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_stereo_bond_dsl_display_from_str_roundtrip(
+        stereo in stereo_bond_ast_strategy(),
+    ) {
+        let dsl = StereoBondDsl(stereo);
+        let rendered = dsl.to_string();
+        let parsed: StereoBondDsl = rendered.parse().map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}\nrendered: {rendered}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    /// Canonical `Th1`/`Th2` render to the `:ccw`/`:cw` EDN keyword shorthand
+    /// and parse back to the same AST.
+    #[test]
+    fn test_stereo_atom_dsl_keyword_to_edn_from_edn_roundtrip(
+        coset in prop_oneof![Just(1u32), Just(2u32)],
+    ) {
+        let dsl = StereoAtomDsl(StereoAtomAst::new(
+            StereoKind::Tetrahedral,
+            StereoCosetAst::Lit(coset),
+        ));
+        let edn = dsl.to_edn();
+        prop_assert!(
+            matches!(&edn, Edn::Keyword(_)),
+            "expected keyword render for canonical stereo atom, got {edn:?}",
+        );
+        let parsed = StereoAtomDsl::from_edn(&edn).map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    /// Canonical `Ct1`/`Ct2` render to the `:z`/`:e` EDN keyword shorthand.
+    #[test]
+    fn test_stereo_bond_dsl_keyword_to_edn_from_edn_roundtrip(
+        coset in prop_oneof![Just(1u32), Just(2u32)],
+    ) {
+        let dsl = StereoBondDsl(StereoBondAst::new(
+            StereoKind::CisTrans,
+            StereoCosetAst::Lit(coset),
+        ));
+        let edn = dsl.to_edn();
+        prop_assert!(
+            matches!(&edn, Edn::Keyword(_)),
+            "expected keyword render for canonical stereo bond, got {edn:?}",
+        );
+        let parsed = StereoBondDsl::from_edn(&edn).map_err(|e| {
+            TestCaseError::fail(format!("parse failed: {e}"))
         })?;
         prop_assert_eq!(dsl, parsed);
     }

@@ -1,0 +1,1 @@
+{:atoms ["C" "C"] :bonds [[0 1 "2"]] :constraints [{:atom [0 {:tetrahedral-stereo {:stereo [1 2]}}]} {:bond [0 {:cis-trans-stereo :not-stereo}]}]}

@@ -1,0 +1,1 @@
+{:sub-pattern {:anchor {:stereo-atoms [[0 0]]} :pattern {:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}}}

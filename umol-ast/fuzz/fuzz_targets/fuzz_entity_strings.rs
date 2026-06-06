@@ -2,7 +2,7 @@
 use libfuzzer_sys::fuzz_target;
 use umol_ast::dsl::{
     parse_aromatic_system, parse_atom, parse_bond, parse_dative_bond, parse_multicenter_bond,
-    parse_noncovalent_bond, parse_value,
+    parse_noncovalent_bond, parse_stereo_atom, parse_stereo_bond, parse_value,
 };
 
 fuzz_target!(|data: &str| {
@@ -14,5 +14,7 @@ fuzz_target!(|data: &str| {
     let _ = parse_dative_bond(data);
     let _ = parse_multicenter_bond(data);
     let _ = parse_noncovalent_bond(data);
+    let _ = parse_stereo_atom(data);
+    let _ = parse_stereo_bond(data);
     let _ = parse_value(data);
 });

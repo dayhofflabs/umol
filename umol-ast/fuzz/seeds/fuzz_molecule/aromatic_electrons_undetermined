@@ -1,1 +1,1 @@
-{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons [:undetermined :undetermined]}]}
+{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons [:undetermined :undetermined] :type ""}]}

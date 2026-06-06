@@ -332,6 +332,7 @@ Phases A–E are in scope; F (3D) and G follow.
     elements; marker-free `StereoInferrer` stays in G.
   - **C7** — tests: raise→resolve round-trip over the ~150-file corpus; assert focus/ligands/config of the
     perceived birelations for known R/S and E/Z cases.
+  - **C8** - validators "Th3", "Ct3", ... are disallowed (tier-2 checks, doc 86)
 
 - **Phase D — DSL round-trip** (`umol-ast/src/dsl/stereo.rs`, new; wired into `dsl/molecule.rs`, mirror
   `aromatic`). Faithful round-trip, no frame conversion (config stored relative to the written `:ligands`
@@ -481,8 +482,9 @@ Phases A–E are in scope; F (3D) and G follow.
     ~150-file corpus, under `--features conformance`. **Replaced by full conformance tests**
   - **D8** - macros stereo_atom!, stereo_atom_ground!, stereo_atom_zeroed!, stereo_bond!, stereo_bond_ground!,
      stereo_bond_zeroed! in `macros.rs`. **Done**
-  - **D9** - update specifications in umol-dsl-spec.md **Done** (top-level keys fixed; grammar non-terminals aligned to key names; stereo elements + `#T`/`#C` constraints + relational + anchor + §7.14 subgrammar added)
-  - **D10** - add to prop test and fuzzing
+  - **D9** - update specifications in umol-dsl-spec.md **Done** (top-level keys fixed; grammar non-terminals
+      aligned to key names; stereo elements + `#T`/`#C` constraints + relational + anchor + §7.14 subgrammar added)
+  - **D10** - add to prop test and fuzzing **Done** (stereo elements + `#T`/`#C` + relational + anchor in `molecule_ast_strategy`/`constraint_leaf_strategy`/`sub_pattern_anchor_strategy`; stereo entity-string + keyword roundtrip tests; `parse_stereo_atom`/`parse_stereo_bond` in `fuzz_entity_strings`)
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
   substructure matcher is reused, and `umol-perm` enters exactly once, at the frame alignment).

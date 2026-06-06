@@ -1,0 +1,1 @@
+{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :a 1 :b 2 :type "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :type "Ct2"}]}

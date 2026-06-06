@@ -1,0 +1,6 @@
+[[rule]]
+include = ["**/Cargo.toml"]
+keys = ["lints.clippy", "workspace.lints.clippy"]
+
+[rule.schema]
+enabled = false
