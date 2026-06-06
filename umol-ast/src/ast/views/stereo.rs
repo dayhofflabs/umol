@@ -244,6 +244,16 @@ impl<'a> StereoAtomView<'a> {
             .map(move |ligand| StereoLigandView::new(*ligand, molecule))
     }
 
+    /// View of the ligand at coordination position `idx`. Panics if `idx` is
+    /// not a coordination position of this stereo atom.
+    pub fn ligand(&self, idx: usize) -> StereoLigandView<'a> {
+        let ligand = *self
+            .ligands
+            .get(idx)
+            .expect("ligand index must refer to a ligand of this stereo atom");
+        StereoLigandView::new(ligand, self.molecule)
+    }
+
     pub fn atom_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
         self.ligands()
             .filter(|ligand| ligand.kind() == StereoLigandKind::Atom)
@@ -580,6 +590,16 @@ impl<'a> StereoBondView<'a> {
         ligands
             .iter()
             .map(move |ligand| StereoLigandView::new(*ligand, molecule))
+    }
+
+    /// View of the ligand at coordination position `idx`. Panics if `idx` is
+    /// not a coordination position of this stereo bond.
+    pub fn ligand(&self, idx: usize) -> StereoLigandView<'a> {
+        let ligand = *self
+            .ligands
+            .get(idx)
+            .expect("ligand index must refer to a ligand of this stereo bond");
+        StereoLigandView::new(ligand, self.molecule)
     }
 
     pub fn atom_ligands(&self) -> impl Iterator<Item = StereoLigandView<'a>> + 'a {
@@ -989,6 +1009,26 @@ mod tests {
     }
 
     #[rstest]
+    #[case::first(0, StereoLigandKind::Atom, AtomId(1))]
+    #[case::last(3, StereoLigandKind::Atom, AtomId(4))]
+    fn test_stereo_atom_view_ligand(
+        molecule: MoleculeAst,
+        #[case] idx: usize,
+        #[case] kind: StereoLigandKind,
+        #[case] atom: AtomId,
+    ) {
+        let ligand = molecule.stereo_atom(StereoAtomId(0)).ligand(idx);
+        assert_eq!(ligand.kind(), kind);
+        assert_eq!(ligand.atom_id(), atom);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_stereo_atom_view_ligand_error(molecule: MoleculeAst) {
+        molecule.stereo_atom(StereoAtomId(0)).ligand(4);
+    }
+
+    #[rstest]
     fn test_stereo_ligand_view_atom(molecule: MoleculeAst) {
         let ligand = molecule
             .stereo_atom(StereoAtomId(0))
@@ -1372,6 +1412,26 @@ mod tests {
                 (StereoLigandKind::Atom, AtomId(5)),
             ],
         );
+    }
+
+    #[rstest]
+    #[case::first(0, StereoLigandKind::Atom, AtomId(4))]
+    #[case::last(1, StereoLigandKind::Atom, AtomId(5))]
+    fn test_stereo_bond_view_ligand(
+        molecule: MoleculeAst,
+        #[case] idx: usize,
+        #[case] kind: StereoLigandKind,
+        #[case] atom: AtomId,
+    ) {
+        let ligand = molecule.stereo_bond(StereoBondId(0)).ligand(idx);
+        assert_eq!(ligand.kind(), kind);
+        assert_eq!(ligand.atom_id(), atom);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_stereo_bond_view_ligand_error(molecule: MoleculeAst) {
+        molecule.stereo_bond(StereoBondId(0)).ligand(2);
     }
 
     #[rstest]
