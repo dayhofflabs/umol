@@ -123,6 +123,98 @@ pub fn parse_extended_cx_annotations(
     parse_cx_block(input, |i| parse_extended_entry(i, skip_unknown_cx_tags))
 }
 
+/// Maps CXSMILES bond indices (close-order: ring-closure bonds counted at their
+/// closing digit) onto our bond list (open-order: ring bonds at their opening
+/// position). Built from the parser's per-ring `(close_rank, open_index)` record,
+/// so it is O(ring count); empty (identity) for ring-free molecules.
+pub struct BondIndexMap {
+    /// `(close_rank, open_index)` per ring-closure bond, in closing order.
+    ring_bonds: Vec<(usize, usize)>,
+    /// Ring-closure bonds' open indices, ascending.
+    ring_open_sorted: Vec<usize>,
+    bond_count: usize,
+}
+
+impl BondIndexMap {
+    pub fn new(ring_bonds: Vec<(usize, usize)>, bond_count: usize) -> Self {
+        let mut ring_open_sorted: Vec<usize> = ring_bonds.iter().map(|&(_, open)| open).collect();
+        ring_open_sorted.sort_unstable();
+        Self {
+            ring_bonds,
+            ring_open_sorted,
+            bond_count,
+        }
+    }
+
+    /// No ring closures, so close-order equals open-order — translation is identity.
+    pub fn is_identity(&self) -> bool {
+        self.ring_bonds.is_empty()
+    }
+
+    /// Translate a CXSMILES (close-order) bond index to our (open-order) index,
+    /// or `None` if out of range.
+    pub fn translate(&self, cx_idx: u32) -> Option<u32> {
+        let k = cx_idx as usize;
+        if k >= self.bond_count {
+            return None;
+        }
+        // A ring bond closing at rank k maps to its opening position.
+        if let Some(&(_, open)) = self.ring_bonds.iter().find(|&&(rank, _)| rank == k) {
+            return Some(open as u32);
+        }
+        // Otherwise it is a sequential bond: the s-th one in close order, whose
+        // open index is the s-th slot once the ring opening positions are skipped.
+        let s = k - self.ring_bonds.iter().filter(|&&(rank, _)| rank < k).count();
+        let mut open = s;
+        for &r in &self.ring_open_sorted {
+            if r <= open {
+                open += 1;
+            }
+        }
+        Some(open as u32)
+    }
+}
+
+/// Rewrite the close-order bond indices in `entries` to our open-order indices.
+/// A no-op for ring-free molecules.
+pub fn remap_cx_bond_indices(
+    entries: &mut [CxEntry],
+    map: &BondIndexMap,
+) -> Result<(), ParseError> {
+    if map.is_identity() {
+        return Ok(());
+    }
+    let translate = |bond_idx: &mut u32| -> Result<(), ParseError> {
+        *bond_idx = map
+            .translate(*bond_idx)
+            .ok_or(ParseError::BondIndexOutOfBounds { bond_idx: *bond_idx })?;
+        Ok(())
+    };
+    for entry in entries {
+        match entry {
+            CxEntry::WigglyBonds(items) => {
+                for (_, bond_idx, _) in items {
+                    translate(bond_idx)?;
+                }
+            }
+            CxEntry::CisBonds(indices)
+            | CxEntry::TransBonds(indices)
+            | CxEntry::UnspecBonds(indices) => {
+                for bond_idx in indices {
+                    translate(bond_idx)?;
+                }
+            }
+            CxEntry::CoordinateBonds(pairs) | CxEntry::HydrogenBonds(pairs) => {
+                for (_, bond_idx) in pairs {
+                    translate(bond_idx)?;
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 /// Update Molecule with parsed CX entries
 /// TODO: Add FragmentGroups, StereoGroups, RelativeStereo, LigandOrder to Molecule?
 pub fn update_molecule(mol: &mut Molecule, entries: Vec<CxEntry>) -> Result<(), ParseError> {

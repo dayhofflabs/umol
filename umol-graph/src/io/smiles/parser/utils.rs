@@ -17,7 +17,7 @@ use crate::table_ir::{
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Frame {
     Branch {
-        base: u32,
+        base: usize,
         had_atom: bool,
         open_pos: usize,
     },
@@ -311,8 +311,8 @@ pub(super) fn pos_in_bracket(base: usize, local: usize) -> usize {
 }
 
 #[inline]
-pub(super) fn make_bond(start: u32, end: u32, b: BondData) -> Bond {
-    let mut bond = Bond::new(start, end, b.order);
+pub(super) fn make_bond(start: usize, end: usize, b: BondData) -> Bond {
+    let mut bond = Bond::new(start as u32, end as u32, b.order);
     bond.wedge = b.wedge;
     bond.donation = if start > end {
         b.donation.map(|d| d.flip())
@@ -324,8 +324,8 @@ pub(super) fn make_bond(start: u32, end: u32, b: BondData) -> Bond {
 }
 
 #[inline]
-pub(super) fn make_extended_bond(start: u32, end: u32, b: BondData) -> ExtendedBond {
-    let mut bond = ExtendedBond::new(start, end, b.order);
+pub(super) fn make_extended_bond(start: usize, end: usize, b: BondData) -> ExtendedBond {
+    let mut bond = ExtendedBond::new(start as u32, end as u32, b.order);
     bond.wedge = b.wedge;
     // Adjust donation for AtomPair normalization (swap flips donation)
     bond.donation = if start > end {
@@ -341,8 +341,8 @@ pub(super) fn make_extended_bond(start: u32, end: u32, b: BondData) -> ExtendedB
 #[allow(clippy::too_many_arguments)]
 pub(super) fn attach_atom(
     builder: &mut MoleculeBuilder,
-    last_atom_idx: Option<u32>,
-    curr_atom_idx: u32,
+    last_atom_idx: Option<usize>,
+    curr_atom_idx: usize,
     pending_bond: &mut Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)>,
     curr_aromatic: bool,
     curr_atom_start: u32,
@@ -563,8 +563,8 @@ pub(super) fn parse_bracket(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn attach_extended_atom(
     builder: &mut ExtendedMoleculeBuilder,
-    last_atom_idx: Option<u32>,
-    curr_atom_idx: u32,
+    last_atom_idx: Option<usize>,
+    curr_atom_idx: usize,
     pending_bond: &mut Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)>,
     curr_aromatic: bool,
     curr_atom_start: u32,

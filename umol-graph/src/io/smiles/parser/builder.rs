@@ -17,8 +17,8 @@ use crate::table_ir::{
 /// reserved entry in `bond_table`, filled in when the ring closes.
 #[derive(Debug, Clone, Copy)]
 struct OpenRing {
-    atom_idx: u32,
-    bond_idx: u32,
+    atom_idx: usize,
+    bond_idx: usize,
     order: Option<BondOrder>,
     wedge: Option<BondWedge>,
     donation: Option<BondDonation>,
@@ -52,6 +52,10 @@ pub(super) struct MoleculeBuilder {
     atoms: Vec<Atom>,
     bond_table: Vec<Option<Bond>>,
     ring_table: Vec<Option<OpenRing>>,
+    /// (close_rank, open_index) per ring-closure bond, for CX bond-index remapping.
+    ring_bonds: Vec<(usize, usize)>,
+    /// Count of completed bonds; a bond's completion order is its CX close index.
+    closed_bonds: usize,
     molecules: Vec<Molecule>,
 }
 
@@ -61,12 +65,14 @@ impl MoleculeBuilder {
             atoms: Vec::with_capacity(approx_atoms),
             bond_table: Vec::with_capacity(approx_bonds),
             ring_table: Vec::new(),
+            ring_bonds: Vec::new(),
+            closed_bonds: 0,
             molecules: Vec::new(),
         }
     }
 
     #[inline]
-    pub(crate) fn on_atom(&mut self, a: AtomData) -> u32 {
+    pub(crate) fn on_atom(&mut self, a: AtomData) -> usize {
         let span = a.span;
         let atom = Atom {
             element: a.element,
@@ -86,31 +92,34 @@ impl MoleculeBuilder {
         };
 
         self.atoms.push(atom);
-        (self.atoms.len() - 1) as u32
+        self.atoms.len() - 1
     }
 
     #[inline]
-    pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
+    pub(crate) fn on_bond(&mut self, start: usize, end: usize, b: BondData) {
         self.bond_table.push(Some(make_bond(start, end, b)));
+        self.closed_bonds += 1;
     }
 
     /// Reserve an empty bond entry at the current write position, returning its
     /// index. Completed later by [`on_ring_bond_close`] so that ring-closure
     /// bonds are recorded at their opening position, not their closing position.
     #[inline]
-    fn on_ring_bond_open(&mut self) -> u32 {
+    fn on_ring_bond_open(&mut self) -> usize {
         self.bond_table.push(None);
-        (self.bond_table.len() - 1) as u32
+        self.bond_table.len() - 1
     }
 
     #[inline]
-    fn on_ring_bond_close(&mut self, bond_idx: u32, start: u32, end: u32, b: BondData) {
-        self.bond_table[bond_idx as usize] = Some(make_bond(start, end, b));
+    fn on_ring_bond_close(&mut self, bond_idx: usize, start: usize, end: usize, b: BondData) {
+        self.bond_table[bond_idx] = Some(make_bond(start, end, b));
+        self.ring_bonds.push((self.closed_bonds, bond_idx));
+        self.closed_bonds += 1;
     }
 
     /// Whether the atom at `atom_idx` is aromatic (false for wildcards / unset).
-    pub(crate) fn is_aromatic(&self, atom_idx: u32) -> bool {
-        self.atoms[atom_idx as usize].aromatic == Some(true)
+    pub(crate) fn is_aromatic(&self, atom_idx: usize) -> bool {
+        self.atoms[atom_idx].aromatic == Some(true)
     }
 
     /// Process a ring-bond digit `ring_idx`: open it (reserve a bond entry) on first
@@ -118,7 +127,7 @@ impl MoleculeBuilder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_ring_bond(
         &mut self,
-        last_atom_idx: u32,
+        last_atom_idx: usize,
         ring_idx: usize,
         order_opt: Option<BondOrder>,
         wedge_opt: Option<BondWedge>,
@@ -237,7 +246,7 @@ impl MoleculeBuilder {
         aromatic: bool,
         span_start: Option<u32>,
         span_end: Option<u32>,
-    ) -> u32 {
+    ) -> usize {
         let span = Span::from_bytes_opt(span_start, span_end);
         let mut atom = if aromatic {
             Atom::aromatic_atom(element)
@@ -246,21 +255,22 @@ impl MoleculeBuilder {
         };
         atom.span = span;
         self.atoms.push(atom);
-        (self.atoms.len() - 1) as u32
+        self.atoms.len() - 1
     }
 
     #[inline]
     pub(crate) fn on_bond_single_fast(
         &mut self,
-        start_atom: u32,
-        end_atom: u32,
+        start_atom: usize,
+        end_atom: usize,
         span_start: Option<u32>,
         span_end: Option<u32>,
     ) {
         let span = Span::from_bytes_opt(span_start, span_end);
-        let mut bond = Bond::new(start_atom, end_atom, BondOrder::Single);
+        let mut bond = Bond::new(start_atom as u32, end_atom as u32, BondOrder::Single);
         bond.span = span;
         self.bond_table.push(Some(bond));
+        self.closed_bonds += 1;
     }
 
     pub(crate) fn on_component_end(&mut self) {
@@ -279,6 +289,11 @@ impl MoleculeBuilder {
         }
         mem::take(&mut self.molecules)
     }
+
+    /// Take the recorded ring-closure bond records for CX bond-index remapping.
+    pub(crate) fn take_ring_bonds(&mut self) -> Vec<(usize, usize)> {
+        mem::take(&mut self.ring_bonds)
+    }
 }
 
 pub(super) struct ExtendedAtomData {
@@ -296,6 +311,10 @@ pub(super) struct ExtendedMoleculeBuilder {
     atoms: Vec<ExtendedAtom>,
     bond_table: Vec<Option<ExtendedBond>>,
     ring_table: Vec<Option<OpenRing>>,
+    /// (close_rank, open_index) per ring-closure bond, for CX bond-index remapping.
+    ring_bonds: Vec<(usize, usize)>,
+    /// Count of completed bonds; a bond's completion order is its CX close index.
+    closed_bonds: usize,
     molecules: Vec<ExtendedMolecule>,
 }
 
@@ -305,12 +324,14 @@ impl ExtendedMoleculeBuilder {
             atoms: Vec::with_capacity(approx_atoms),
             bond_table: Vec::with_capacity(approx_bonds),
             ring_table: Vec::new(),
+            ring_bonds: Vec::new(),
+            closed_bonds: 0,
             molecules: Vec::new(),
         }
     }
 
     #[inline]
-    pub(crate) fn on_atom(&mut self, a: ExtendedAtomData) -> u32 {
+    pub(crate) fn on_atom(&mut self, a: ExtendedAtomData) -> usize {
         let atom = ExtendedAtom {
             symbol: a.symbol,
             charge: a.charge,
@@ -341,31 +362,34 @@ impl ExtendedMoleculeBuilder {
         };
 
         self.atoms.push(atom);
-        (self.atoms.len() - 1) as u32
+        self.atoms.len() - 1
     }
 
     #[inline]
-    pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
+    pub(crate) fn on_bond(&mut self, start: usize, end: usize, b: BondData) {
         self.bond_table.push(Some(make_extended_bond(start, end, b)));
+        self.closed_bonds += 1;
     }
 
     /// Reserve an empty bond entry at the current write position, returning its
     /// index. Completed later by [`on_ring_bond_close`] so that ring-closure
     /// bonds are recorded at their opening position, not their closing position.
     #[inline]
-    fn on_ring_bond_open(&mut self) -> u32 {
+    fn on_ring_bond_open(&mut self) -> usize {
         self.bond_table.push(None);
-        (self.bond_table.len() - 1) as u32
+        self.bond_table.len() - 1
     }
 
     #[inline]
-    fn on_ring_bond_close(&mut self, bond_idx: u32, start: u32, end: u32, b: BondData) {
-        self.bond_table[bond_idx as usize] = Some(make_extended_bond(start, end, b));
+    fn on_ring_bond_close(&mut self, bond_idx: usize, start: usize, end: usize, b: BondData) {
+        self.bond_table[bond_idx] = Some(make_extended_bond(start, end, b));
+        self.ring_bonds.push((self.closed_bonds, bond_idx));
+        self.closed_bonds += 1;
     }
 
     /// Whether the atom at `atom_idx` is aromatic (false for wildcards / unset).
-    pub(crate) fn is_aromatic(&self, atom_idx: u32) -> bool {
-        self.atoms[atom_idx as usize].aromatic == Some(true)
+    pub(crate) fn is_aromatic(&self, atom_idx: usize) -> bool {
+        self.atoms[atom_idx].aromatic == Some(true)
     }
 
     /// Process a ring-bond digit `ring_idx`: open it (reserve a bond entry) on first
@@ -373,7 +397,7 @@ impl ExtendedMoleculeBuilder {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_ring_bond(
         &mut self,
-        last_atom_idx: u32,
+        last_atom_idx: usize,
         ring_idx: usize,
         order_opt: Option<BondOrder>,
         wedge_opt: Option<BondWedge>,
@@ -492,7 +516,7 @@ impl ExtendedMoleculeBuilder {
         aromatic: bool,
         span_start: Option<u32>,
         span_end: Option<u32>,
-    ) -> u32 {
+    ) -> usize {
         let span = Span::from_bytes_opt(span_start, span_end);
         let atom = ExtendedAtom {
             symbol: AtomSymbol::Element(element),
@@ -523,7 +547,7 @@ impl ExtendedMoleculeBuilder {
             span,
         };
         self.atoms.push(atom);
-        (self.atoms.len() - 1) as u32
+        self.atoms.len() - 1
     }
 
     #[inline]
@@ -533,7 +557,7 @@ impl ExtendedMoleculeBuilder {
         class: Option<u32>,
         span_start: Option<u32>,
         span_end: Option<u32>,
-    ) -> u32 {
+    ) -> usize {
         let span = Span::from_bytes_opt(span_start, span_end);
         let atom = ExtendedAtom {
             symbol: AtomSymbol::WildcardAtom(wildcard),
@@ -564,21 +588,22 @@ impl ExtendedMoleculeBuilder {
             span,
         };
         self.atoms.push(atom);
-        (self.atoms.len() - 1) as u32
+        self.atoms.len() - 1
     }
 
     #[inline]
     pub(crate) fn on_bond_single_fast(
         &mut self,
-        start_atom: u32,
-        end_atom: u32,
+        start_atom: usize,
+        end_atom: usize,
         span_start: Option<u32>,
         span_end: Option<u32>,
     ) {
         let span = Span::from_bytes_opt(span_start, span_end);
-        let mut bond = ExtendedBond::new(start_atom, end_atom, BondOrder::Single);
+        let mut bond = ExtendedBond::new(start_atom as u32, end_atom as u32, BondOrder::Single);
         bond.span = span;
         self.bond_table.push(Some(bond));
+        self.closed_bonds += 1;
     }
 
     pub(crate) fn on_component_end(&mut self) {
@@ -596,5 +621,10 @@ impl ExtendedMoleculeBuilder {
             self.on_component_end();
         }
         mem::take(&mut self.molecules)
+    }
+
+    /// Take the recorded ring-closure bond records for CX bond-index remapping.
+    pub(crate) fn take_ring_bonds(&mut self) -> Vec<(usize, usize)> {
+        mem::take(&mut self.ring_bonds)
     }
 }
