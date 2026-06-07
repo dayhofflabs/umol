@@ -16,8 +16,8 @@ libfuzzer-sys = "0.4"
 path = ".."
 
 [[bin]]
-name = "opensmiles_fuzzing"
-path = "fuzz_targets/opensmiles_fuzzing.rs"
+name = "fuzz_parse_opensmiles"
+path = "fuzz_targets/fuzz_parse_opensmiles.rs"
 test = false
 doc = false
 bench = false
