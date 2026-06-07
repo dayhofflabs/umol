@@ -318,9 +318,7 @@ impl<'a> AtomView<'a> {
         self.molecule.aromatic_systems().has_incident(self.id)
     }
 
-    /// The aromatic system containing this atom, if any. Per-perception
-    /// design an atom belongs to at most one aromatic system; this
-    /// returns the first incident system.
+    /// The aromatic system containing this atom, if any.
     pub fn aromatic_system(&self) -> Option<AromaticSystemView<'a>> {
         self.aromatic_system_id()
             .map(|id| self.molecule.aromatic_system(id))

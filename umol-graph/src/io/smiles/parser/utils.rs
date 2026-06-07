@@ -10,18 +10,9 @@ use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::span::Span;
 use crate::table_ir::atom::Chirality;
-use crate::table_ir::{AtomSymbol, BondDonation, BondOrder, BondWedge, WildcardAtom};
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct OpenRing {
-    pub(super) atom_id: u32,
-    pub(super) order: Option<BondOrder>,
-    pub(super) wedge: Option<BondWedge>,
-    pub(super) donation: Option<BondDonation>,
-    pub(super) open_pos: usize,
-    pub(super) open_end: usize,
-    pub(super) open_aromatic: bool,
-}
+use crate::table_ir::{
+    AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedBond, WildcardAtom,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Frame {
@@ -59,115 +50,6 @@ pub(super) fn parse_ring_index(
         return Ok(Some((idx, i + 3, true)));
     }
     Ok(None)
-}
-
-#[inline]
-#[allow(clippy::too_many_arguments)]
-pub(super) fn process_ring_closure(
-    ring_table: &mut Vec<Option<OpenRing>>,
-    builder: &mut MoleculeBuilder,
-    last_aromatic: bool,
-    last_atom_idx: u32,
-    idx: usize,
-    order_opt: Option<BondOrder>,
-    wedge_opt: Option<BondWedge>,
-    donation_opt: Option<BondDonation>,
-    pos: usize,
-    token_end: usize,
-    offset: usize,
-) -> Result<(), ParseError> {
-    if ring_table.len() <= idx {
-        ring_table.resize_with(idx + 1, || None);
-    }
-    let entry = &mut ring_table[idx];
-    match entry.take() {
-        None => {
-            *entry = Some(OpenRing {
-                atom_id: last_atom_idx,
-                order: order_opt,
-                wedge: wedge_opt,
-                donation: donation_opt,
-                open_pos: pos,
-                open_end: token_end,
-                open_aromatic: last_aromatic,
-            });
-        }
-        Some(open) => {
-            if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
-                if d1 != d2 {
-                    return Err(ParseError::MismatchedRingBondDirs {
-                        pos: offset + pos,
-                        open_pos: offset + open.open_pos,
-                    });
-                }
-            }
-            // Check for dative bond donation conflict
-            // Same donation on both ends = conflict (both donating or both receiving)
-            if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
-                if don1 == don2 {
-                    return Err(ParseError::MismatchedRingBondDonations {
-                        pos: offset + pos,
-                        open_pos: offset + open.open_pos,
-                    });
-                }
-            }
-            if let (Some(o1), Some(o2)) = (open.order, order_opt) {
-                if o1 != o2 {
-                    return Err(ParseError::MismatchedRingBondOrders {
-                        pos: offset + pos,
-                        open_pos: offset + open.open_pos,
-                    });
-                }
-            }
-            if open.wedge.is_some() || wedge_opt.is_some() {
-                let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
-                if ord != BondOrder::Single {
-                    return Err(ParseError::MismatchedRingBondOrders {
-                        pos: offset + pos,
-                        open_pos: offset + open.open_pos,
-                    });
-                }
-            }
-            let mut final_order = match (open.order, order_opt) {
-                (Some(o1), Some(o2)) => {
-                    if o1 == o2 {
-                        o1
-                    } else {
-                        o2
-                    }
-                }
-                (Some(o), None) | (None, Some(o)) => o,
-                (None, None) => BondOrder::Single,
-            };
-            let final_wedge = open.wedge.or(wedge_opt);
-            // For donation: use open's donation (from opening atom's perspective)
-            // If only close specifies, flip it (since it's from closing atom's perspective)
-            let final_donation = match (open.donation, donation_opt) {
-                (Some(d), _) => Some(d),
-                (None, Some(d)) => Some(d.flip()),
-                (None, None) => None,
-            };
-            let a = open.atom_id;
-            let b = last_atom_idx;
-            if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
-                final_order = BondOrder::Aromatic;
-            }
-            builder.on_bond(
-                a,
-                b,
-                BondData {
-                    order: final_order,
-                    wedge: final_wedge,
-                    donation: final_donation,
-                    span: Span::from_bytes_opt(
-                        Some(open.open_pos as u32),
-                        Some(open.open_end as u32),
-                    ),
-                },
-            );
-        }
-    }
-    Ok(())
 }
 
 #[inline]
@@ -429,13 +311,39 @@ pub(super) fn pos_in_bracket(base: usize, local: usize) -> usize {
 }
 
 #[inline]
+pub(super) fn make_bond(start: u32, end: u32, b: BondData) -> Bond {
+    let mut bond = Bond::new(start, end, b.order);
+    bond.wedge = b.wedge;
+    bond.donation = if start > end {
+        b.donation.map(|d| d.flip())
+    } else {
+        b.donation
+    };
+    bond.span = b.span;
+    bond
+}
+
+#[inline]
+pub(super) fn make_extended_bond(start: u32, end: u32, b: BondData) -> ExtendedBond {
+    let mut bond = ExtendedBond::new(start, end, b.order);
+    bond.wedge = b.wedge;
+    // Adjust donation for AtomPair normalization (swap flips donation)
+    bond.donation = if start > end {
+        b.donation.map(|d| d.flip())
+    } else {
+        b.donation
+    };
+    bond.span = b.span;
+    bond
+}
+
+#[inline]
 #[allow(clippy::too_many_arguments)]
 pub(super) fn attach_atom(
     builder: &mut MoleculeBuilder,
     last_atom_idx: Option<u32>,
     curr_atom_idx: u32,
     pending_bond: &mut Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)>,
-    last_aromatic: bool,
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
@@ -452,7 +360,7 @@ pub(super) fn attach_atom(
                     span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
                 },
             );
-        } else if last_aromatic && curr_aromatic {
+        } else if builder.is_aromatic(last) && curr_aromatic {
             builder.on_bond(
                 last,
                 curr_atom_idx,
@@ -653,121 +561,11 @@ pub(super) fn parse_bracket(
 
 #[inline]
 #[allow(clippy::too_many_arguments)]
-pub(super) fn process_extended_ring_closure(
-    ring_table: &mut Vec<Option<OpenRing>>,
-    builder: &mut ExtendedMoleculeBuilder,
-    last_aromatic: bool,
-    last_atom_idx: u32,
-    idx: usize,
-    order_opt: Option<BondOrder>,
-    wedge_opt: Option<BondWedge>,
-    donation_opt: Option<BondDonation>,
-    pos: usize,
-    token_end: usize,
-    offset: usize,
-) -> Result<(), ParseError> {
-    if ring_table.len() <= idx {
-        ring_table.resize_with(idx + 1, || None);
-    }
-    let entry = &mut ring_table[idx];
-    match entry.take() {
-        None => {
-            *entry = Some(OpenRing {
-                atom_id: last_atom_idx,
-                order: order_opt,
-                wedge: wedge_opt,
-                donation: donation_opt,
-                open_pos: pos,
-                open_end: token_end,
-                open_aromatic: last_aromatic,
-            });
-        }
-        Some(open) => {
-            if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
-                if d1 != d2 {
-                    return Err(ParseError::MismatchedRingBondDirs {
-                        pos: offset + pos,
-                        open_pos: offset + open.open_pos,
-                    });
-                }
-            }
-            // Check for dative bond donation conflict
-            // Same donation on both ends = conflict (both donating or both receiving)
-            if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
-                if don1 == don2 {
-                    return Err(ParseError::MismatchedRingBondDonations {
-                        pos: offset + pos,
-                        open_pos: offset + open.open_pos,
-                    });
-                }
-            }
-            if let (Some(o1), Some(o2)) = (open.order, order_opt) {
-                if o1 != o2 {
-                    return Err(ParseError::MismatchedRingBondOrders {
-                        pos: offset + pos,
-                        open_pos: offset + open.open_pos,
-                    });
-                }
-            }
-            if open.wedge.is_some() || wedge_opt.is_some() {
-                let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
-                if ord != BondOrder::Single {
-                    return Err(ParseError::MismatchedRingBondOrders {
-                        pos: offset + pos,
-                        open_pos: offset + open.open_pos,
-                    });
-                }
-            }
-            let mut final_order = match (open.order, order_opt) {
-                (Some(o1), Some(o2)) => {
-                    if o1 == o2 {
-                        o1
-                    } else {
-                        o2
-                    }
-                }
-                (Some(o), None) | (None, Some(o)) => o,
-                (None, None) => BondOrder::Single,
-            };
-            let final_wedge = open.wedge.or(wedge_opt);
-            // For donation: use open's donation (from opening atom's perspective)
-            // If only close specifies, flip it (since it's from closing atom's perspective)
-            let final_donation = match (open.donation, donation_opt) {
-                (Some(d), _) => Some(d),
-                (None, Some(d)) => Some(d.flip()),
-                (None, None) => None,
-            };
-            let a = open.atom_id;
-            let b = last_atom_idx;
-            if final_order == BondOrder::Single && open.open_aromatic && last_aromatic {
-                final_order = BondOrder::Aromatic;
-            }
-            builder.on_bond(
-                a,
-                b,
-                BondData {
-                    order: final_order,
-                    wedge: final_wedge,
-                    donation: final_donation,
-                    span: Span::from_bytes_opt(
-                        Some(open.open_pos as u32),
-                        Some(open.open_end as u32),
-                    ),
-                },
-            );
-        }
-    }
-    Ok(())
-}
-
-#[inline]
-#[allow(clippy::too_many_arguments)]
 pub(super) fn attach_extended_atom(
     builder: &mut ExtendedMoleculeBuilder,
     last_atom_idx: Option<u32>,
     curr_atom_idx: u32,
     pending_bond: &mut Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)>,
-    last_aromatic: bool,
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
@@ -784,7 +582,7 @@ pub(super) fn attach_extended_atom(
                     span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
                 },
             );
-        } else if last_aromatic && curr_aromatic {
+        } else if builder.is_aromatic(last) && curr_aromatic {
             builder.on_bond(
                 last,
                 curr_atom_idx,

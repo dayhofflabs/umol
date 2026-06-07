@@ -10,22 +10,21 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
     DativeBondAst, ElementAst, IsotopeMassAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
-    NoncovalentBondKind, SpinStateAst, TryIntoAst, ValueAst,
+    NoncovalentBondKind, SpinStateAst, StereoConfigurationAst, StereoCosetAst, StereoLigand,
+    StereoLigandKind, TryIntoAst, ValueAst,
 };
+use umol_perm::{space, ClassKey, Permutation};
 
+use crate::position::Point3D;
 use crate::table_ir::atom::Atom as TableAtom;
 use crate::table_ir::bond::{
     Bond as TableBond, BondDonation as TableBondDonation, BondNoncovalent as TableNoncovalent,
     BondOrder as TableBondOrder,
 };
+use crate::table_ir::{BondStereo, BondWedge, Chirality, ChiralityFrame};
 use crate::table_ir::Molecule as TableMolecule;
 
-/// Failure modes for the TableIR → MoleculeAst raise.
-///
-/// Empty for now: every TableIR field maps mechanically to a MoleculeAst
-/// equivalent. The variant slot exists so that future strictly-checked raise
-/// paths (e.g., asserting bond endpoint validity, rejecting unsupported
-/// `BondOrder::Any`) can land without changing the public signature.
+/// Error variants for TableIR -> MoleculeAst raise.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RaiseError {}
 
@@ -43,7 +42,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
         let mut bonds = Vec::new();
         let mut dative_bonds: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
         let mut noncovalent_bonds = Vec::new();
-        for b in &self.bonds {
+        for (bond_idx, b) in self.bonds.iter().enumerate() {
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
@@ -60,7 +59,11 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
                 let dative_bond = DativeBondAst::new(raise_bond_order(b.order));
                 dative_bonds.push((vec![donor], acceptor, dative_bond));
             } else {
-                bonds.push((a_idx, b_idx, b.try_into_ast(ctx)?));
+                let mut bond_ast = b.try_into_ast(ctx)?;
+                if let Some(constraint) = raise_cis_trans_stereo(self, bond_idx) {
+                    bond_ast.constraints.add(constraint);
+                }
+                bonds.push((a_idx, b_idx, bond_ast));
             }
         }
 
@@ -83,7 +86,9 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             })
             .collect();
 
-        for (table_atom, atom) in self.atoms.iter().zip(atoms.iter_mut()) {
+        for (atom_idx, (table_atom, atom)) in
+            self.atoms.iter().zip(atoms.iter_mut()).enumerate()
+        {
             match table_atom.aromatic {
                 Some(true) => {
                     atom.constraints.add(AtomConstraint::AromaticValence(
@@ -96,6 +101,10 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
                     ));
                 }
                 None => {}
+            }
+
+            if let Some(constraint) = raise_tetrahedral_stereo(self, atom_idx) {
+                atom.constraints.add(constraint);
             }
 
             if matches!(atom.isotope_mass, IsotopeMassAst::Undetermined) {
@@ -193,6 +202,7 @@ fn raise_bond_order(order: TableBondOrder) -> ValueAst {
         // Fuzzy orders: no concrete bond order can be assigned; raise to
         // `Undetermined`. Aromatic-flag setting (where applicable) is left
         // off — the chemistry of these is too ambiguous for the raise.
+        // TODO: Convert to LitSet.
         TableBondOrder::SingleOrDouble
         | TableBondOrder::SingleOrAromatic
         | TableBondOrder::DoubleOrAromatic
@@ -204,6 +214,272 @@ fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
     match kind {
         TableNoncovalent::Hydrogen => NoncovalentBondKind::HydrogenBond,
     }
+}
+
+/// Neighbors of `atom_idx`, ascending index (= atom-list / MDL atom-number order).
+fn neighbors(mol: &TableMolecule, atom_idx: usize) -> Vec<usize> {
+    let mut indices: Vec<usize> = mol
+        .bonds
+        .iter()
+        .filter_map(|bond| bond.atoms.other(atom_idx as u32))
+        .map(|other| other as usize)
+        .collect();
+    indices.sort_unstable();
+    indices
+}
+
+/// `atom_idx`'s virtual ligands: implicit H then lone pairs, each hosted by `atom_idx`. Shared by the
+/// target and source orderings so they hold the identical set (`Permutation::between` requires it).
+fn virtual_ligands(mol: &TableMolecule, atom_idx: usize) -> Vec<StereoLigand> {
+    let atom = &mol.atoms[atom_idx];
+    let host = AtomId(atom_idx as u32);
+    let hydrogens = atom.implicit_hydrogens.unwrap_or(0);
+    let lone_pairs = atom.lone_pairs.unwrap_or(0);
+    (0..hydrogens)
+        .map(|_| StereoLigand::new(host, StereoLigandKind::ImplicitHydrogen))
+        .chain((0..lone_pairs).map(|_| StereoLigand::new(host, StereoLigandKind::LonePair)))
+        .collect()
+}
+
+/// Neighbors of `atom_idx` in input (parse) order — the OpenSMILES write order, read off the
+/// incident bonds in `mol.bonds` order. (Ring-closure slotting is pinned by the raise tests.)
+fn input_neighbor_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<usize> {
+    mol.bonds
+        .iter()
+        .filter_map(|bond| bond.atoms.other(atom_idx as u32))
+        .map(|other| other as usize)
+        .collect()
+}
+
+/// #T umol target ordering: real neighbors ascending, then the virtual ligands.
+fn tetrahedral_target_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<StereoLigand> {
+    let mut ordering: Vec<StereoLigand> = neighbors(mol, atom_idx)
+        .iter()
+        .map(|&n| StereoLigand::new(AtomId(n as u32), StereoLigandKind::Atom))
+        .collect();
+    ordering.extend(virtual_ligands(mol, atom_idx));
+    ordering
+}
+
+/// #T source ordering, FirstNeighborToward (SMILES/SMARTS): neighbors in input order, the implicit H
+/// at slot 0 if `atom_idx` opened the SMILES (`atom_idx == 0`) else slot 1; remaining virtuals after.
+fn first_neighbor_toward_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<StereoLigand> {
+    let mut ordering: Vec<StereoLigand> = input_neighbor_ordering(mol, atom_idx)
+        .iter()
+        .map(|&n| StereoLigand::new(AtomId(n as u32), StereoLigandKind::Atom))
+        .collect();
+    let mut virtuals = virtual_ligands(mol, atom_idx).into_iter();
+    if mol.atoms[atom_idx].implicit_hydrogens.unwrap_or(0) > 0 {
+        let slot = if atom_idx > 0 { 1 } else { 0 };
+        ordering.insert(slot, virtuals.next().expect("implicit hydrogen present"));
+    }
+    ordering.extend(virtuals);
+    ordering
+}
+
+/// #T source ordering, LastNeighborAway (MDL / MOL parity). Atom-number order = atom-index order with
+/// the H/lone pair last — identical to the target frame, so it passes through unchanged; only the
+/// parity winding (read with that last ligand behind) converts.
+fn last_neighbor_away_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<StereoLigand> {
+    tetrahedral_target_ordering(mol, atom_idx)
+}
+
+/// The empty in-plane direction at `atom_idx`: opposite the sum of unit vectors to its real
+/// neighbors — where a virtual ligand sits when a wedge is read against the 2D depiction.
+fn leftover_inplane(positions: &[Point3D], atom_idx: usize, neighbor_indices: &[usize]) -> [f64; 3] {
+    let center = positions[atom_idx];
+    let (mut sum_x, mut sum_y) = (0.0, 0.0);
+    for &neighbor in neighbor_indices {
+        let (dx, dy) = (positions[neighbor].x - center.x, positions[neighbor].y - center.y);
+        let length = (dx * dx + dy * dy).sqrt();
+        if length > 0.0 {
+            sum_x += dx / length;
+            sum_y += dy / length;
+        }
+    }
+    [center.x - sum_x, center.y - sum_y, 0.0]
+}
+
+/// The configuration index a wedge realizes in `ordering`: lift the wedged neighbor out of plane
+/// (Up: +, Down: −), keep the rest in the 2D depiction (a virtual ligand at the leftover direction),
+/// and take the sign of the signed winding (3×3 determinant). The 0/1 mapping is pinned by the tests.
+fn wedge_winding(
+    positions: &[Point3D],
+    atom_idx: usize,
+    ordering: &[StereoLigand],
+    wedged: usize,
+    up: bool,
+) -> usize {
+    let lift = if up { 1.0 } else { -1.0 };
+    let real: Vec<usize> = ordering
+        .iter()
+        .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
+        .map(|ligand| ligand.atom_id.0 as usize)
+        .collect();
+    let leftover = leftover_inplane(positions, atom_idx, &real);
+    let points: Vec<[f64; 3]> = ordering
+        .iter()
+        .map(|ligand| {
+            let index = ligand.atom_id.0 as usize;
+            match ligand.kind {
+                StereoLigandKind::Atom if index == wedged => {
+                    [positions[wedged].x, positions[wedged].y, lift]
+                }
+                StereoLigandKind::Atom => [positions[index].x, positions[index].y, 0.0],
+                _ => leftover,
+            }
+        })
+        .collect();
+    let edge = |i: usize| {
+        [
+            points[i][0] - points[0][0],
+            points[i][1] - points[0][1],
+            points[i][2] - points[0][2],
+        ]
+    };
+    let (u, v, w) = (edge(1), edge(2), edge(3));
+    let determinant = u[0] * (v[1] * w[2] - v[2] * w[1]) - u[1] * (v[0] * w[2] - v[2] * w[0])
+        + u[2] * (v[0] * w[1] - v[1] * w[0]);
+    if determinant > 0.0 {
+        0
+    } else {
+        1
+    }
+}
+
+/// #T source ordering from the wedge + 2D depiction (the wedge is consumed). Frame-free, so the
+/// ordering returned is the target frame and the index carries the configuration. `None` if no wedge.
+fn tetrahedral_wedge_ordering(
+    mol: &TableMolecule,
+    atom_idx: usize,
+) -> Option<(Vec<StereoLigand>, usize)> {
+    let positions = mol.positions.as_ref()?;
+    let (wedged, up) =
+        mol.bonds
+            .iter()
+            .find_map(|bond| match (bond.atoms.other(atom_idx as u32), bond.wedge) {
+                (Some(other), Some(BondWedge::Up)) => Some((other as usize, true)),
+                (Some(other), Some(BondWedge::Down)) => Some((other as usize, false)),
+                _ => None,
+            })?;
+    let ordering = tetrahedral_target_ordering(mol, atom_idx);
+    let source_idx = wedge_winding(positions, atom_idx, &ordering, wedged, up);
+    Some((ordering, source_idx))
+}
+
+/// One sp² carbon's substituents (ascending index, then its virtual ligands).
+fn cis_trans_side_ligands(mol: &TableMolecule, carbon: usize, partner: usize) -> Vec<StereoLigand> {
+    let mut ordering: Vec<StereoLigand> = neighbors(mol, carbon)
+        .into_iter()
+        .filter(|&n| n != partner)
+        .map(|n| StereoLigand::new(AtomId(n as u32), StereoLigandKind::Atom))
+        .collect();
+    ordering.extend(virtual_ligands(mol, carbon));
+    ordering
+}
+
+/// #C umol target ordering: atom_1's side then atom_2's side.
+fn cis_trans_target_ordering(
+    mol: &TableMolecule,
+    atom_1: usize,
+    atom_2: usize,
+) -> Vec<StereoLigand> {
+    let mut ordering = cis_trans_side_ligands(mol, atom_1, atom_2);
+    ordering.extend(cis_trans_side_ligands(mol, atom_2, atom_1));
+    ordering
+}
+
+/// #C source ordering from the directional `/`,`\` flanking bonds. Frame-free, so the ordering
+/// returned is the target frame and the index carries cis/trans (syn ⇒ 0, anti ⇒ 1). `None` when a
+/// side has no directional bond (⇒ MOL field 0 ⇒ coordinates ⇒ external).
+fn cis_trans_wedge_ordering(
+    mol: &TableMolecule,
+    atom_1: usize,
+    atom_2: usize,
+) -> Option<(Vec<StereoLigand>, usize)> {
+    let side = |carbon: usize, partner: usize| -> Option<i8> {
+        mol.bonds.iter().find_map(|single| {
+            if single.order != TableBondOrder::Single {
+                return None;
+            }
+            let other = single.atoms.other(carbon as u32)? as usize;
+            if other == partner {
+                return None;
+            }
+            let direction = match single.wedge? {
+                BondWedge::Up => 1,
+                BondWedge::Down => -1,
+                _ => return None,
+            };
+            Some(if single.start_atom() as usize == carbon {
+                direction
+            } else {
+                -direction
+            })
+        })
+    };
+    let direction_1 = side(atom_1, atom_2)?;
+    let direction_2 = side(atom_2, atom_1)?;
+    let source_idx = usize::from(direction_1 != direction_2);
+    Some((cis_trans_target_ordering(mol, atom_1, atom_2), source_idx))
+}
+
+/// B4 — tetrahedral atom → `#T`.
+fn raise_tetrahedral_stereo(mol: &TableMolecule, atom_idx: usize) -> Option<AtomConstraint> {
+    let (source, source_idx): (Vec<StereoLigand>, usize) =
+        match (mol.atoms[atom_idx].chirality, mol.chirality_frame) {
+            (Some(Chirality::Unspecified), _) => {
+                return Some(AtomConstraint::TetrahedralStereo(
+                    StereoConfigurationAst::stereo(StereoCosetAst::Undetermined),
+                ));
+            }
+            (Some(token), Some(ChiralityFrame::FirstNeighborToward)) => {
+                let source_idx = match token {
+                    Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 } => 0,
+                    Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 } => 1,
+                    _ => return None,
+                };
+                (first_neighbor_toward_ordering(mol, atom_idx), source_idx)
+            }
+            (Some(token), Some(ChiralityFrame::LastNeighborAway)) => {
+                let source_idx = match token {
+                    Chirality::Clockwise => 0,
+                    Chirality::CounterClockwise => 1,
+                    _ => return None,
+                };
+                (last_neighbor_away_ordering(mol, atom_idx), source_idx)
+            }
+            (None, _) => tetrahedral_wedge_ordering(mol, atom_idx)?,
+            (Some(_), None) => return None,
+        };
+    let target = tetrahedral_target_ordering(mol, atom_idx);
+    let coset = space(ClassKey::Tetrahedral)
+        .reindex(source_idx as u32, Permutation::between(&source, &target));
+    Some(AtomConstraint::TetrahedralStereo(
+        StereoConfigurationAst::stereo(StereoCosetAst::Lit(coset)),
+    ))
+}
+
+/// B5 — double bond → `#C`.
+fn raise_cis_trans_stereo(mol: &TableMolecule, bond_idx: usize) -> Option<BondConstraint> {
+    let bond = &mol.bonds[bond_idx];
+    if bond.order != TableBondOrder::Double {
+        return None;
+    }
+    if bond.stereo == Some(BondStereo::Either) {
+        return Some(BondConstraint::CisTransStereo(
+            StereoConfigurationAst::stereo(StereoCosetAst::Undetermined),
+        ));
+    }
+    let atom_1 = bond.start_atom() as usize;
+    let atom_2 = bond.end_atom() as usize;
+    let (source, source_idx) = cis_trans_wedge_ordering(mol, atom_1, atom_2)?;
+    let target = cis_trans_target_ordering(mol, atom_1, atom_2);
+    let coset = space(ClassKey::CisTrans)
+        .reindex(source_idx as u32, Permutation::between(&source, &target));
+    Some(BondConstraint::CisTransStereo(
+        StereoConfigurationAst::stereo(StereoCosetAst::Lit(coset)),
+    ))
 }
 
 #[cfg(test)]
@@ -218,6 +494,7 @@ mod tests {
     use crate::io::ctfile::config::CtfileIoConfig;
     use crate::io::ctfile::{parse_mol_bytes_with, parse_mol_to_ast};
     use crate::io::smiles::parse_smiles_to_ast;
+    use crate::io::smiles::parser::parse_smiles_bytes_to_table_ir;
     use crate::ops::model::{
         AromaticityModel, ChemistryModel, CountsModel, ElementScope, RingLimits, ValenceModel,
     };
@@ -386,6 +663,84 @@ mod tests {
         assert_eq!(
             ast.atom(AtomId(0)).ast.to_string(),
             "C#i=#c0#h4#n0#u0#s#v0#a!"
+        );
+    }
+
+    #[rstest]
+    #[case::cfclbri("Br[C@@](F)(Cl)I", 1, vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+    ])]
+    #[case::alanine("N[C@@H](C)C(O)=O", 1, vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+    ])]
+    fn test_first_neighbor_toward_ordering(
+        #[case] smiles: &str,
+        #[case] atom_idx: usize,
+        #[case] expected: Vec<StereoLigand>,
+    ) {
+        let mol = parse_smiles_bytes_to_table_ir(smiles.as_bytes()).unwrap();
+        assert_eq!(first_neighbor_toward_ordering(&mol, atom_idx), expected);
+    }
+
+    #[rstest]
+    #[case::cfclbri("Br[C@@](F)(Cl)I", 1, vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+    ])]
+    #[case::alanine("N[C@@H](C)C(O)=O", 1, vec![
+        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+        StereoLigand::new(AtomId(1), StereoLigandKind::ImplicitHydrogen),
+    ])]
+    fn test_tetrahedral_target_ordering(
+        #[case] smiles: &str,
+        #[case] atom_idx: usize,
+        #[case] expected: Vec<StereoLigand>,
+    ) {
+        let mol = parse_smiles_bytes_to_table_ir(smiles.as_bytes()).unwrap();
+        assert_eq!(tetrahedral_target_ordering(&mol, atom_idx), expected);
+    }
+
+    #[rstest]
+    #[case::cfclbri_clockwise("Br[C@@](F)(Cl)I", 1, 1)]
+    #[case::cfclbri_counterclockwise("Br[C@](F)(Cl)I", 1, 0)]
+    fn test_raise_tetrahedral_stereo(
+        #[case] smiles: &str,
+        #[case] atom_idx: usize,
+        #[case] expected: u32,
+    ) {
+        let mol = parse_smiles_bytes_to_table_ir(smiles.as_bytes()).unwrap();
+        assert_eq!(
+            raise_tetrahedral_stereo(&mol, atom_idx),
+            Some(AtomConstraint::TetrahedralStereo(
+                StereoConfigurationAst::stereo(StereoCosetAst::Lit(expected))
+            ))
+        );
+    }
+
+    #[rstest]
+    #[case::trans("F/C=C/F", 1, 1)]
+    #[case::cis("F/C=C\\F", 1, 0)]
+    fn test_raise_cis_trans_stereo(
+        #[case] smiles: &str,
+        #[case] bond_idx: usize,
+        #[case] expected: u32,
+    ) {
+        let mol = parse_smiles_bytes_to_table_ir(smiles.as_bytes()).unwrap();
+        assert_eq!(
+            raise_cis_trans_stereo(&mol, bond_idx),
+            Some(BondConstraint::CisTransStereo(
+                StereoConfigurationAst::stereo(StereoCosetAst::Lit(expected))
+            ))
         );
     }
 }

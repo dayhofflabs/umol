@@ -213,23 +213,18 @@ fn parse_bond_token(
 }
 
 pub fn build_from_graph(spec: &str) -> Molecule {
-    // Format: "atoms... | edges... [| rings...]"
+    // Format: "atoms... | bonds..."
     // atoms: tokens like "C", "Cl", optional aromatic '_' and optional span "@<pos>": e.g. "C_@5"
-    // edges: tokens like "i-j" or with type/wedge: "i-j:=" "/" "\\" etc., optional span "@<pos>"
-    // rings (optional third section): tokens encoding ring events with optional positions/atoms.
-    // Grammar (examples):
-    //   full:      idx@open-close:a-b   e.g. "1@2-7:0-5"
-    //   open-only: idx@open:a           e.g. "3@10:2"
-    //   close-only:idx-close:-b         e.g. "9-21:-4"
-    let parts: Vec<_> = spec.split('|').map(|s| s.trim()).collect();
-    assert!(parts.len() >= 2, "spec must have at least atoms | edges");
-    let atoms_s = parts[0];
-    let edges_s = parts[1];
+    // bonds: tokens like "i-j" or with type/wedge: "i-j:=" "/" "\\" etc., optional span "@<pos>"
+    let (atoms_s, bonds_s) = spec
+        .split_once('|')
+        .map(|(a, b)| (a.trim(), b.trim()))
+        .expect("spec must be: atoms | bonds");
 
     let atoms: Vec<_> = atoms_s.split_whitespace().collect();
-    let edges: Vec<_> = edges_s.split_whitespace().collect();
+    let bonds: Vec<_> = bonds_s.split_whitespace().collect();
 
-    let mut b = MoleculeBuilder::with_capacity(atoms.len(), edges.len());
+    let mut b = MoleculeBuilder::with_capacity(atoms.len(), bonds.len());
     // map of insertion index to atom id is identity by construction; still collect ids
     let mut ids: Vec<u32> = Vec::with_capacity(atoms.len());
     // Keep a map from atom span_start -> span_end for bond defaulting
@@ -266,8 +261,8 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         }
         ids.push(id);
     }
-    for etok in edges {
-        let (i, j, order, wedge, donation, span_start, mut span_end) = parse_bond_token(etok);
+    for btok in bonds {
+        let (i, j, order, wedge, donation, span_start, mut span_end) = parse_bond_token(btok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
@@ -293,19 +288,18 @@ pub fn build_from_graph(spec: &str) -> Molecule {
 }
 
 pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
-    // Format: "atoms... | edges... [| rings...]"
+    // Format: "atoms... | bonds..."
     // atoms: tokens like "C", "Cl", "*" (wildcard), optional aromatic '_' and span "@<pos>"
-    // edges: tokens like "i-j" or with type/wedge: "i-j:=" "/" "\\" etc., optional span "@<pos>"
-    // rings (optional third section): tokens encoding ring events with optional positions/atoms.
-    let parts: Vec<_> = spec.split('|').map(|s| s.trim()).collect();
-    assert!(parts.len() >= 2, "spec must have at least atoms | edges");
-    let atoms_s = parts[0];
-    let edges_s = parts[1];
+    // bonds: tokens like "i-j" or with type/wedge: "i-j:=" "/" "\\" etc., optional span "@<pos>"
+    let (atoms_s, bonds_s) = spec
+        .split_once('|')
+        .map(|(a, b)| (a.trim(), b.trim()))
+        .expect("spec must be: atoms | bonds");
 
     let atoms: Vec<_> = atoms_s.split_whitespace().collect();
-    let edges: Vec<_> = edges_s.split_whitespace().collect();
+    let bonds: Vec<_> = bonds_s.split_whitespace().collect();
 
-    let mut b = ExtendedMoleculeBuilder::with_capacity(atoms.len(), edges.len());
+    let mut b = ExtendedMoleculeBuilder::with_capacity(atoms.len(), bonds.len());
     let mut ids: Vec<u32> = Vec::with_capacity(atoms.len());
     let mut atom_span_map: HashMap<u32, u32> = HashMap::new();
 
@@ -342,8 +336,8 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
         }
         ids.push(id);
     }
-    for etok in edges {
-        let (i, j, order, wedge, donation, span_start, mut span_end) = parse_bond_token(etok);
+    for btok in bonds {
+        let (i, j, order, wedge, donation, span_start, mut span_end) = parse_bond_token(btok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));

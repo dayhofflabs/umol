@@ -4,12 +4,27 @@ use std::mem;
 
 use umol_shared::element::Element;
 
+use super::super::error::ParseError;
+use super::utils::{make_bond, make_extended_bond};
 use crate::span::Span;
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedAtom,
-    ExtendedBond, ExtendedMolecule, Molecule, WildcardAtom,
+    Atom, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedAtom, ExtendedBond,
+    ExtendedMolecule, Molecule, WildcardAtom,
 };
+
+/// Open ring-closure bond awaiting its matching digit. `bond_idx` is the
+/// reserved entry in `bond_table`, filled in when the ring closes.
+#[derive(Debug, Clone, Copy)]
+struct OpenRing {
+    atom_idx: u32,
+    bond_idx: u32,
+    order: Option<BondOrder>,
+    wedge: Option<BondWedge>,
+    donation: Option<BondDonation>,
+    open_pos: usize,
+    open_end: usize,
+}
 
 /// Atom event data
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,10 +48,10 @@ pub(super) struct BondData {
 }
 
 /// Molecule builder
-/// TODO: Consider removing Vec allocation and always return a single Molecule object
 pub(super) struct MoleculeBuilder {
     atoms: Vec<Atom>,
-    bonds: Vec<Bond>,
+    bond_table: Vec<Option<Bond>>,
+    ring_table: Vec<Option<OpenRing>>,
     molecules: Vec<Molecule>,
 }
 
@@ -44,7 +59,8 @@ impl MoleculeBuilder {
     pub(crate) fn with_capacity(approx_atoms: usize, approx_bonds: usize) -> Self {
         Self {
             atoms: Vec::with_capacity(approx_atoms),
-            bonds: Vec::with_capacity(approx_bonds),
+            bond_table: Vec::with_capacity(approx_bonds),
+            ring_table: Vec::new(),
             molecules: Vec::new(),
         }
     }
@@ -75,27 +91,143 @@ impl MoleculeBuilder {
 
     #[inline]
     pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
-        let span = b.span;
-        // Adjust donation for AtomPair normalization (flip donation)
-        let donation = if start > end {
-            b.donation.map(|d| d.flip())
-        } else {
-            b.donation
-        };
-        let bond = Bond {
-            atoms: AtomPair::new(start, end),
-            order: b.order,
-            charge: None,
-            unpaired_electrons: None,
-            multiplicity: None,
-            wedge: b.wedge,
-            donation,
-            noncovalent: None,
-            ring: None,
-            stereo: None,
-            span,
-        };
-        self.bonds.push(bond);
+        self.bond_table.push(Some(make_bond(start, end, b)));
+    }
+
+    /// Reserve an empty bond entry at the current write position, returning its
+    /// index. Completed later by [`on_ring_bond_close`] so that ring-closure
+    /// bonds are recorded at their opening position, not their closing position.
+    #[inline]
+    fn on_ring_bond_open(&mut self) -> u32 {
+        self.bond_table.push(None);
+        (self.bond_table.len() - 1) as u32
+    }
+
+    #[inline]
+    fn on_ring_bond_close(&mut self, bond_idx: u32, start: u32, end: u32, b: BondData) {
+        self.bond_table[bond_idx as usize] = Some(make_bond(start, end, b));
+    }
+
+    /// Whether the atom at `atom_idx` is aromatic (false for wildcards / unset).
+    pub(crate) fn is_aromatic(&self, atom_idx: u32) -> bool {
+        self.atoms[atom_idx as usize].aromatic == Some(true)
+    }
+
+    /// Process a ring-bond digit `ring_idx`: open it (reserve a bond entry) on first
+    /// sight, close it (fill the reserved entry) on the matching second sight.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn on_ring_bond(
+        &mut self,
+        last_atom_idx: u32,
+        ring_idx: usize,
+        order_opt: Option<BondOrder>,
+        wedge_opt: Option<BondWedge>,
+        donation_opt: Option<BondDonation>,
+        pos: usize,
+        token_end: usize,
+        offset: usize,
+    ) -> Result<(), ParseError> {
+        if self.ring_table.len() <= ring_idx {
+            self.ring_table.resize_with(ring_idx + 1, || None);
+        }
+        match self.ring_table[ring_idx].take() {
+            None => {
+                let bond_idx = self.on_ring_bond_open();
+                self.ring_table[ring_idx] = Some(OpenRing {
+                    atom_idx: last_atom_idx,
+                    bond_idx,
+                    order: order_opt,
+                    wedge: wedge_opt,
+                    donation: donation_opt,
+                    open_pos: pos,
+                    open_end: token_end,
+                });
+            }
+            Some(open) => {
+                if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
+                    if d1 != d2 {
+                        return Err(ParseError::MismatchedRingBondDirs {
+                            pos: offset + pos,
+                            open_pos: offset + open.open_pos,
+                        });
+                    }
+                }
+                // Same donation on both ends = conflict (both donating or both receiving)
+                if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
+                    if don1 == don2 {
+                        return Err(ParseError::MismatchedRingBondDonations {
+                            pos: offset + pos,
+                            open_pos: offset + open.open_pos,
+                        });
+                    }
+                }
+                if let (Some(o1), Some(o2)) = (open.order, order_opt) {
+                    if o1 != o2 {
+                        return Err(ParseError::MismatchedRingBondOrders {
+                            pos: offset + pos,
+                            open_pos: offset + open.open_pos,
+                        });
+                    }
+                }
+                if open.wedge.is_some() || wedge_opt.is_some() {
+                    let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
+                    if ord != BondOrder::Single {
+                        return Err(ParseError::MismatchedRingBondOrders {
+                            pos: offset + pos,
+                            open_pos: offset + open.open_pos,
+                        });
+                    }
+                }
+                let mut final_order = match (open.order, order_opt) {
+                    (Some(o1), Some(o2)) => {
+                        if o1 == o2 {
+                            o1
+                        } else {
+                            o2
+                        }
+                    }
+                    (Some(o), None) | (None, Some(o)) => o,
+                    (None, None) => BondOrder::Single,
+                };
+                let final_wedge = open.wedge.or(wedge_opt);
+                // Donation: use the opening atom's perspective; if only the close
+                // specifies it, flip it (it is from the closing atom's perspective).
+                let final_donation = match (open.donation, donation_opt) {
+                    (Some(d), _) => Some(d),
+                    (None, Some(d)) => Some(d.flip()),
+                    (None, None) => None,
+                };
+                let a = open.atom_idx;
+                let b = last_atom_idx;
+                if final_order == BondOrder::Single
+                    && self.is_aromatic(open.atom_idx)
+                    && self.is_aromatic(b)
+                {
+                    final_order = BondOrder::Aromatic;
+                }
+                self.on_ring_bond_close(
+                    open.bond_idx,
+                    a,
+                    b,
+                    BondData {
+                        order: final_order,
+                        wedge: final_wedge,
+                        donation: final_donation,
+                        span: Span::from_bytes_opt(
+                            Some(open.open_pos as u32),
+                            Some(open.open_end as u32),
+                        ),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Byte position of the latest still-open ring, if any (for reporting an
+    /// unbalanced ring index once parsing is complete).
+    pub(crate) fn unclosed_ring_pos(&self) -> Option<usize> {
+        self.ring_table.iter().flatten().map(|o| o.open_pos).max()
     }
 
     #[inline]
@@ -128,7 +260,7 @@ impl MoleculeBuilder {
         let span = Span::from_bytes_opt(span_start, span_end);
         let mut bond = Bond::new(start_atom, end_atom, BondOrder::Single);
         bond.span = span;
-        self.bonds.push(bond);
+        self.bond_table.push(Some(bond));
     }
 
     pub(crate) fn on_component_end(&mut self) {
@@ -137,12 +269,12 @@ impl MoleculeBuilder {
         }
         let mut mol = Molecule::empty();
         mol.atoms = mem::take(&mut self.atoms);
-        mol.bonds = mem::take(&mut self.bonds);
+        mol.bonds = self.bond_table.drain(..).flatten().collect();
         self.molecules.push(mol);
     }
 
     pub(crate) fn finish(&mut self) -> Vec<Molecule> {
-        if !self.atoms.is_empty() || !self.bonds.is_empty() {
+        if !self.atoms.is_empty() || !self.bond_table.is_empty() {
             self.on_component_end();
         }
         mem::take(&mut self.molecules)
@@ -160,10 +292,10 @@ pub(super) struct ExtendedAtomData {
     pub span: Option<Span>,
 }
 
-/// TODO: Consider removing Vec allocation and always return a single Molecule object
 pub(super) struct ExtendedMoleculeBuilder {
     atoms: Vec<ExtendedAtom>,
-    bonds: Vec<ExtendedBond>,
+    bond_table: Vec<Option<ExtendedBond>>,
+    ring_table: Vec<Option<OpenRing>>,
     molecules: Vec<ExtendedMolecule>,
 }
 
@@ -171,7 +303,8 @@ impl ExtendedMoleculeBuilder {
     pub(crate) fn with_capacity(approx_atoms: usize, approx_bonds: usize) -> Self {
         Self {
             atoms: Vec::with_capacity(approx_atoms),
-            bonds: Vec::with_capacity(approx_bonds),
+            bond_table: Vec::with_capacity(approx_bonds),
+            ring_table: Vec::new(),
             molecules: Vec::new(),
         }
     }
@@ -213,16 +346,143 @@ impl ExtendedMoleculeBuilder {
 
     #[inline]
     pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
-        let mut bond = ExtendedBond::new(start, end, b.order);
-        bond.wedge = b.wedge;
-        // Adjust donation for AtomPair normalization (swap flips donation)
-        bond.donation = if start > end {
-            b.donation.map(|d| d.flip())
-        } else {
-            b.donation
-        };
-        bond.span = b.span;
-        self.bonds.push(bond);
+        self.bond_table.push(Some(make_extended_bond(start, end, b)));
+    }
+
+    /// Reserve an empty bond entry at the current write position, returning its
+    /// index. Completed later by [`on_ring_bond_close`] so that ring-closure
+    /// bonds are recorded at their opening position, not their closing position.
+    #[inline]
+    fn on_ring_bond_open(&mut self) -> u32 {
+        self.bond_table.push(None);
+        (self.bond_table.len() - 1) as u32
+    }
+
+    #[inline]
+    fn on_ring_bond_close(&mut self, bond_idx: u32, start: u32, end: u32, b: BondData) {
+        self.bond_table[bond_idx as usize] = Some(make_extended_bond(start, end, b));
+    }
+
+    /// Whether the atom at `atom_idx` is aromatic (false for wildcards / unset).
+    pub(crate) fn is_aromatic(&self, atom_idx: u32) -> bool {
+        self.atoms[atom_idx as usize].aromatic == Some(true)
+    }
+
+    /// Process a ring-bond digit `ring_idx`: open it (reserve a bond entry) on first
+    /// sight, close it (fill the reserved entry) on the matching second sight.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn on_ring_bond(
+        &mut self,
+        last_atom_idx: u32,
+        ring_idx: usize,
+        order_opt: Option<BondOrder>,
+        wedge_opt: Option<BondWedge>,
+        donation_opt: Option<BondDonation>,
+        pos: usize,
+        token_end: usize,
+        offset: usize,
+    ) -> Result<(), ParseError> {
+        if self.ring_table.len() <= ring_idx {
+            self.ring_table.resize_with(ring_idx + 1, || None);
+        }
+        match self.ring_table[ring_idx].take() {
+            None => {
+                let bond_idx = self.on_ring_bond_open();
+                self.ring_table[ring_idx] = Some(OpenRing {
+                    atom_idx: last_atom_idx,
+                    bond_idx,
+                    order: order_opt,
+                    wedge: wedge_opt,
+                    donation: donation_opt,
+                    open_pos: pos,
+                    open_end: token_end,
+                });
+            }
+            Some(open) => {
+                if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
+                    if d1 != d2 {
+                        return Err(ParseError::MismatchedRingBondDirs {
+                            pos: offset + pos,
+                            open_pos: offset + open.open_pos,
+                        });
+                    }
+                }
+                // Same donation on both ends = conflict (both donating or both receiving)
+                if let (Some(don1), Some(don2)) = (open.donation, donation_opt) {
+                    if don1 == don2 {
+                        return Err(ParseError::MismatchedRingBondDonations {
+                            pos: offset + pos,
+                            open_pos: offset + open.open_pos,
+                        });
+                    }
+                }
+                if let (Some(o1), Some(o2)) = (open.order, order_opt) {
+                    if o1 != o2 {
+                        return Err(ParseError::MismatchedRingBondOrders {
+                            pos: offset + pos,
+                            open_pos: offset + open.open_pos,
+                        });
+                    }
+                }
+                if open.wedge.is_some() || wedge_opt.is_some() {
+                    let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
+                    if ord != BondOrder::Single {
+                        return Err(ParseError::MismatchedRingBondOrders {
+                            pos: offset + pos,
+                            open_pos: offset + open.open_pos,
+                        });
+                    }
+                }
+                let mut final_order = match (open.order, order_opt) {
+                    (Some(o1), Some(o2)) => {
+                        if o1 == o2 {
+                            o1
+                        } else {
+                            o2
+                        }
+                    }
+                    (Some(o), None) | (None, Some(o)) => o,
+                    (None, None) => BondOrder::Single,
+                };
+                let final_wedge = open.wedge.or(wedge_opt);
+                // Donation: use the opening atom's perspective; if only the close
+                // specifies it, flip it (it is from the closing atom's perspective).
+                let final_donation = match (open.donation, donation_opt) {
+                    (Some(d), _) => Some(d),
+                    (None, Some(d)) => Some(d.flip()),
+                    (None, None) => None,
+                };
+                let a = open.atom_idx;
+                let b = last_atom_idx;
+                if final_order == BondOrder::Single
+                    && self.is_aromatic(open.atom_idx)
+                    && self.is_aromatic(b)
+                {
+                    final_order = BondOrder::Aromatic;
+                }
+                self.on_ring_bond_close(
+                    open.bond_idx,
+                    a,
+                    b,
+                    BondData {
+                        order: final_order,
+                        wedge: final_wedge,
+                        donation: final_donation,
+                        span: Span::from_bytes_opt(
+                            Some(open.open_pos as u32),
+                            Some(open.open_end as u32),
+                        ),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Byte position of the latest still-open ring, if any (for reporting an
+    /// unbalanced ring index once parsing is complete).
+    pub(crate) fn unclosed_ring_pos(&self) -> Option<usize> {
+        self.ring_table.iter().flatten().map(|o| o.open_pos).max()
     }
 
     #[inline]
@@ -318,7 +578,7 @@ impl ExtendedMoleculeBuilder {
         let span = Span::from_bytes_opt(span_start, span_end);
         let mut bond = ExtendedBond::new(start_atom, end_atom, BondOrder::Single);
         bond.span = span;
-        self.bonds.push(bond);
+        self.bond_table.push(Some(bond));
     }
 
     pub(crate) fn on_component_end(&mut self) {
@@ -327,12 +587,12 @@ impl ExtendedMoleculeBuilder {
         }
         let mut mol = ExtendedMolecule::empty();
         mol.atoms = mem::take(&mut self.atoms);
-        mol.bonds = mem::take(&mut self.bonds);
+        mol.bonds = self.bond_table.drain(..).flatten().collect();
         self.molecules.push(mol);
     }
 
     pub(crate) fn finish(&mut self) -> Vec<ExtendedMolecule> {
-        if !self.atoms.is_empty() || !self.bonds.is_empty() {
+        if !self.atoms.is_empty() || !self.bond_table.is_empty() {
             self.on_component_end();
         }
         mem::take(&mut self.molecules)

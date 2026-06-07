@@ -19,8 +19,7 @@ use self::cx::{
 use self::utils::{
     attach_atom, attach_extended_atom, invalid_ring_context, parse_bond, parse_bracket,
     parse_extended_bond, parse_extended_bracket, parse_organic_aliphatic_element,
-    parse_organic_aromatic_element, parse_ring_index, process_extended_ring_closure,
-    process_ring_closure, Frame, OpenRing,
+    parse_organic_aromatic_element, parse_ring_index, Frame,
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::{ParseError, SmilesError};
@@ -259,11 +258,9 @@ fn parse_smiles_inner(
     let n = input.len();
     let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
     let mut branch_stack: Vec<Frame> = Vec::new();
-    let mut ring_table: Vec<Option<OpenRing>> = Vec::new();
     let mut last_atom_idx: Option<u32> = None;
     let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =
         None;
-    let mut last_aromatic: bool = false;
     let mut after_closed_group: bool = false;
 
     while i < n {
@@ -375,7 +372,6 @@ fn parse_smiles_inner(
                 return Err(ParseError::DotBeforeRing { pos: offset + i });
             }
             last_atom_idx = None;
-            last_aromatic = false;
             i += 1;
             continue;
         }
@@ -390,10 +386,7 @@ fn parse_smiles_inner(
                 let bond = pending_bond.take();
                 let (order_opt, wedge_opt, donation_opt) =
                     bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
-                process_ring_closure(
-                    &mut ring_table,
-                    &mut builder,
-                    last_aromatic,
+                builder.on_ring_bond(
                     last_atom_idx.unwrap(),
                     idx,
                     order_opt,
@@ -471,13 +464,11 @@ fn parse_smiles_inner(
                 last_atom_idx,
                 curr,
                 &mut pending_bond,
-                last_aromatic,
                 aromatic,
                 i as u32,
                 (j + 1) as u32,
             );
             last_atom_idx = Some(curr);
-            last_aromatic = aromatic;
             if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -498,13 +489,11 @@ fn parse_smiles_inner(
                     last_atom_idx,
                     curr,
                     &mut pending_bond,
-                    last_aromatic,
                     false,
                     i as u32,
                     (i + 2) as u32,
                 );
                 last_atom_idx = Some(curr);
-                last_aromatic = false;
                 if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -523,13 +512,11 @@ fn parse_smiles_inner(
                 last_atom_idx,
                 curr,
                 &mut pending_bond,
-                last_aromatic,
                 false,
                 i as u32,
                 (i + 1) as u32,
             );
             last_atom_idx = Some(curr);
-            last_aromatic = false;
             if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -550,13 +537,11 @@ fn parse_smiles_inner(
                     last_atom_idx,
                     curr,
                     &mut pending_bond,
-                    last_aromatic,
                     false,
                     i as u32,
                     (i + 2) as u32,
                 );
                 last_atom_idx = Some(curr);
-                last_aromatic = false;
                 if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -575,13 +560,11 @@ fn parse_smiles_inner(
                 last_atom_idx,
                 curr,
                 &mut pending_bond,
-                last_aromatic,
                 false,
                 i as u32,
                 (i + 1) as u32,
             );
             last_atom_idx = Some(curr);
-            last_aromatic = false;
             if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -603,13 +586,11 @@ fn parse_smiles_inner(
                     last_atom_idx,
                     curr,
                     &mut pending_bond,
-                    last_aromatic,
                     false,
                     i as u32,
                     (i + consumed) as u32,
                 );
                 last_atom_idx = Some(curr);
-                last_aromatic = false;
                 if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -629,13 +610,11 @@ fn parse_smiles_inner(
                     last_atom_idx,
                     curr,
                     &mut pending_bond,
-                    last_aromatic,
                     true,
                     i as u32,
                     (i + consumed) as u32,
                 );
                 last_atom_idx = Some(curr);
-                last_aromatic = true;
                 if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -671,18 +650,7 @@ fn parse_smiles_inner(
         };
         return Err(ParseError::UnbalancedOpenParen { pos: offset + pos });
     }
-    let mut last_open: Option<usize> = None;
-    for entry in ring_table.iter().flatten() {
-        match last_open {
-            None => last_open = Some(entry.open_pos),
-            Some(p) => {
-                if entry.open_pos > p {
-                    last_open = Some(entry.open_pos)
-                }
-            }
-        }
-    }
-    if let Some(pos_open) = last_open {
+    if let Some(pos_open) = builder.unclosed_ring_pos() {
         return Err(ParseError::UnbalancedRingIndex {
             open_pos: offset + pos_open,
         });
@@ -859,11 +827,9 @@ fn parse_extended_smiles_inner(
     let n = input.len();
     let mut builder = ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
     let mut branch_stack: Vec<Frame> = Vec::new();
-    let mut ring_table: Vec<Option<OpenRing>> = Vec::new();
     let mut last_atom_idx: Option<u32> = None;
     let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =
         None;
-    let mut last_aromatic: bool = false;
     let mut just_closed_group: bool = false;
 
     while i < n {
@@ -973,7 +939,6 @@ fn parse_extended_smiles_inner(
                 return Err(ParseError::DotBeforeRing { pos: offset + i });
             }
             last_atom_idx = None;
-            last_aromatic = false;
             i += 1;
             continue;
         }
@@ -988,10 +953,7 @@ fn parse_extended_smiles_inner(
                 let bond = pending_bond.take();
                 let (order_opt, wedge_opt, donation_opt) =
                     bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
-                process_extended_ring_closure(
-                    &mut ring_table,
-                    &mut builder,
-                    last_aromatic,
+                builder.on_ring_bond(
                     last_atom_idx.unwrap(),
                     idx,
                     order_opt,
@@ -1068,13 +1030,11 @@ fn parse_extended_smiles_inner(
                 last_atom_idx,
                 curr,
                 &mut pending_bond,
-                last_aromatic,
                 aromatic,
                 i as u32,
                 (j + 1) as u32,
             );
             last_atom_idx = Some(curr);
-            last_aromatic = aromatic;
             if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -1095,13 +1055,11 @@ fn parse_extended_smiles_inner(
                     last_atom_idx,
                     curr,
                     &mut pending_bond,
-                    last_aromatic,
                     false,
                     i as u32,
                     (i + 2) as u32,
                 );
                 last_atom_idx = Some(curr);
-                last_aromatic = false;
                 if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -1120,13 +1078,11 @@ fn parse_extended_smiles_inner(
                 last_atom_idx,
                 curr,
                 &mut pending_bond,
-                last_aromatic,
                 false,
                 i as u32,
                 (i + 1) as u32,
             );
             last_atom_idx = Some(curr);
-            last_aromatic = false;
             if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -1147,13 +1103,11 @@ fn parse_extended_smiles_inner(
                     last_atom_idx,
                     curr,
                     &mut pending_bond,
-                    last_aromatic,
                     false,
                     i as u32,
                     (i + 2) as u32,
                 );
                 last_atom_idx = Some(curr);
-                last_aromatic = false;
                 if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -1172,13 +1126,11 @@ fn parse_extended_smiles_inner(
                 last_atom_idx,
                 curr,
                 &mut pending_bond,
-                last_aromatic,
                 false,
                 i as u32,
                 (i + 1) as u32,
             );
             last_atom_idx = Some(curr);
-            last_aromatic = false;
             if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -1199,13 +1151,11 @@ fn parse_extended_smiles_inner(
                     last_atom_idx,
                     curr,
                     &mut pending_bond,
-                    last_aromatic,
                     false,
                     i as u32,
                     (i + consumed) as u32,
                 );
                 last_atom_idx = Some(curr);
-                last_aromatic = false;
                 if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -1225,13 +1175,11 @@ fn parse_extended_smiles_inner(
                     last_atom_idx,
                     curr,
                     &mut pending_bond,
-                    last_aromatic,
                     true,
                     i as u32,
                     (i + consumed) as u32,
                 );
                 last_atom_idx = Some(curr);
-                last_aromatic = true;
                 if let Some(top) = branch_stack.last_mut() {
                     match top {
                         Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -1253,13 +1201,11 @@ fn parse_extended_smiles_inner(
                 last_atom_idx,
                 curr,
                 &mut pending_bond,
-                last_aromatic,
                 false,
                 i as u32,
                 (i + 1) as u32,
             );
             last_atom_idx = Some(curr);
-            last_aromatic = false;
             if let Some(top) = branch_stack.last_mut() {
                 match top {
                     Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {
@@ -1288,18 +1234,7 @@ fn parse_extended_smiles_inner(
         };
         return Err(ParseError::UnbalancedOpenParen { pos: offset + pos });
     }
-    let mut last_open: Option<usize> = None;
-    for entry in ring_table.iter().flatten() {
-        match last_open {
-            None => last_open = Some(entry.open_pos),
-            Some(p) => {
-                if entry.open_pos > p {
-                    last_open = Some(entry.open_pos)
-                }
-            }
-        }
-    }
-    if let Some(pos_open) = last_open {
+    if let Some(pos_open) = builder.unclosed_ring_pos() {
         return Err(ParseError::UnbalancedRingIndex {
             open_pos: offset + pos_open,
         });
