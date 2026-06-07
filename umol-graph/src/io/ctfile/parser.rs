@@ -25,11 +25,8 @@ use self::properties::{extended_properties_block, properties_block, PropertyEntr
 pub use self::properties::{extended_property_input, property_input}; // NOTE: Re-exported for benchmarks
 use self::sdf_data::sdf_data_block;
 use super::config::{CtabParseFlags, CtfileIoConfig};
-use super::error::{CtfileError, ParseError};
+use super::error::ParseError;
 use crate::io::utils::normalize_whitespace;
-use crate::ops::model::ChemistryModel;
-use crate::ops::resolver::Resolver;
-use crate::ops::solution::Solution;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
 use crate::table_ir::stereo::ChiralityFrame;
@@ -252,53 +249,13 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
     false
 }
 
-/// Parse MOL to a resolved [`MoleculeAst`] using default IO config and
-/// [`ChemistryModel::default`].
-pub fn parse_mol(input: &str) -> Result<MoleculeAst, CtfileError> {
-    parse_mol_bytes(input.as_bytes())
-}
-
-/// Parse MOL bytes to a resolved [`MoleculeAst`] using default IO config and
-/// [`ChemistryModel::default`].
-pub fn parse_mol_bytes(input: &[u8]) -> Result<MoleculeAst, CtfileError> {
-    parse_mol_bytes_with(input, &CtfileIoConfig::basic(), &ChemistryModel::default())
-}
-
-/// Parse MOL to a resolved [`MoleculeAst`] with explicit IO config and
-/// chemistry model.
-pub fn parse_mol_with(
-    input: &str,
-    io_config: &CtfileIoConfig,
-    model: &ChemistryModel,
-) -> Result<MoleculeAst, CtfileError> {
-    parse_mol_bytes_with(input.as_bytes(), io_config, model)
-}
-
-/// Parse MOL bytes to a resolved [`MoleculeAst`] with explicit IO config and
-/// chemistry model.
-pub fn parse_mol_bytes_with(
-    input: &[u8],
-    io_config: &CtfileIoConfig,
-    model: &ChemistryModel,
-) -> Result<MoleculeAst, CtfileError> {
-    let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
-    let mut ast: MoleculeAst = (&table_mol)
-        .try_into_ast(&())
-        .expect("table_ir → MoleculeAst raise is currently infallible");
-    match Resolver::new(model).resolve(&mut ast)? {
-        Solution::Determined(()) => Ok(ast),
-        Solution::Underdetermined(()) => Err(CtfileError::ResolveUnderdetermined),
-        Solution::Contradictory(c) => Err(CtfileError::ResolveContradictory(c)),
-    }
-}
-
 /// Parse MOL to [`MoleculeAst`] without running the solver.
-pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, CtfileError> {
+pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, ParseError> {
     parse_mol_bytes_to_ast(input.as_bytes())
 }
 
 /// Parse MOL bytes to [`MoleculeAst`] without running the solver.
-pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, CtfileError> {
+pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, ParseError> {
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
     let ast: MoleculeAst = (&table_mol)
         .try_into_ast(&())

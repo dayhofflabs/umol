@@ -1,26 +1,16 @@
 //! Error types for CTFile parsing
 
+use std::any::Any;
+
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind, ParseError as NomParseError};
 use nom::Err;
 use thiserror::Error;
 use umol_shared::element::Element;
+use umol_shared::error::UmolError;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use crate::ops::resolver::{ResolverContradiction, ResolverError};
 use crate::span::Span;
 use crate::table_ir::SGroupType;
-
-#[derive(Debug, Clone, PartialEq, Error)]
-pub enum CtfileError {
-    #[error(transparent)]
-    Parse(#[from] ParseError),
-    #[error(transparent)]
-    Resolve(#[from] ResolverError),
-    #[error("resolution contradictory: {0}")]
-    ResolveContradictory(ResolverContradiction),
-    #[error("resolution underdetermined")]
-    ResolveUnderdetermined,
-}
 
 // TODO: Fix error hierarchy:
 // - Remove Incomplete variant -> we never used streaming parsing
@@ -226,6 +216,12 @@ impl ParseError {
             Err::Incomplete(_) => ParseError::Incomplete { line },
             _ => ParseError::MissingMEndTag { line },
         }
+    }
+}
+
+impl UmolError for ParseError {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 

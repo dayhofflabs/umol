@@ -15,7 +15,7 @@ use umol_graph::ast::atom::AtomAst;
 use umol_graph::ast::bond::BondAst;
 use umol_graph::ast::molecule::MoleculeAst;
 use umol_graph::ast::AtomId;
-use umol_graph::io::smiles::parse_smiles;
+use umol_graph::parse::parse_smiles;
 use umol_graph::ops::matcher::Matcher;
 use umol_shared::element::Element;
 

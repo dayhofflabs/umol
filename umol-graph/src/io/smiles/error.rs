@@ -1,20 +1,10 @@
+use std::any::Any;
+
 use thiserror::Error;
+use umol_shared::error::UmolError;
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use crate::ops::resolver::{ResolverContradiction, ResolverError};
 use crate::span::Span;
-
-#[derive(Debug, Clone, PartialEq, Error)]
-pub enum SmilesError {
-    #[error(transparent)]
-    Parse(#[from] ParseError),
-    #[error(transparent)]
-    Resolve(#[from] ResolverError),
-    #[error("resolution contradictory: {0}")]
-    ResolveContradictory(ResolverContradiction),
-    #[error("resolution underdetermined")]
-    ResolveUnderdetermined,
-}
 
 #[derive(Debug, Clone, PartialEq, Error)]
 pub enum ParseError {
@@ -92,6 +82,12 @@ pub enum ParseError {
     MismatchedAtomBondIndices { atom_idx: u32, bond_idx: u32 },
     #[error("S-group index out of bounds: {sgroup_idx}")]
     SgroupIndexOutOfBounds { sgroup_idx: u32 },
+}
+
+impl UmolError for ParseError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl From<ParseError> for Diagnostic {

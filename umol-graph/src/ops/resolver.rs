@@ -9,6 +9,8 @@ pub mod bonds;
 pub mod multicenter;
 pub mod valence;
 
+use std::any::Any;
+
 pub use aromaticity::AromaticityResolver;
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
@@ -16,6 +18,7 @@ pub use multicenter::{
 };
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
+use umol_shared::error::UmolError;
 pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
@@ -52,6 +55,30 @@ pub enum ResolverError {
     Bonds(#[from] BondsError),
     #[error(transparent)]
     MulticenterBonds(#[from] MulticenterBondsError),
+}
+
+impl UmolError for ResolverError {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl UmolError for ResolverContradiction {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Resolution left the molecule underdetermined (no contradiction, but not ground).
+/// Surfaced as an error only at boundaries that require a determined result.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[error("resolution underdetermined")]
+pub struct ResolveUnderdetermined;
+
+impl UmolError for ResolveUnderdetermined {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl<'a> Resolver<'a> {

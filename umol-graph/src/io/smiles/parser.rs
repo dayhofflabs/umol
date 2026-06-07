@@ -23,67 +23,20 @@ use self::utils::{
     parse_organic_aromatic_element, parse_ring_index, Frame,
 };
 use super::config::{SmilesIoConfig, SmilesParseFlags};
-use super::error::{ParseError, SmilesError};
-use crate::ops::model::ChemistryModel;
-use crate::ops::resolver::Resolver;
-use crate::ops::solution::Solution;
+use super::error::ParseError;
 use crate::span::Span;
 use crate::table_ir::{
     BondDonation, BondOrder, BondWedge, ChiralityFrame, ExtendedMolecule, ExtendedReaction,
     Molecule, Reaction, SourceFormat, WildcardAtom,
 };
 
-/// Parse SMILES to a resolved [`MoleculeAst`] using default IO config and
-/// [`ChemistryModel::default`].
-pub fn parse_smiles(input: &str) -> Result<MoleculeAst, SmilesError> {
-    parse_smiles_bytes(input.as_bytes())
-}
-
-/// Parse SMILES bytes to a resolved [`MoleculeAst`] using default IO config
-/// and [`ChemistryModel::default`].
-pub fn parse_smiles_bytes(input: &[u8]) -> Result<MoleculeAst, SmilesError> {
-    parse_smiles_bytes_with(
-        input,
-        &SmilesIoConfig::basic_opensmiles(),
-        &ChemistryModel::default(),
-    )
-}
-
-/// Parse SMILES to a resolved [`MoleculeAst`] with explicit IO config and
-/// chemistry model.
-pub fn parse_smiles_with(
-    input: &str,
-    io_config: &SmilesIoConfig,
-    model: &ChemistryModel,
-) -> Result<MoleculeAst, SmilesError> {
-    parse_smiles_bytes_with(input.as_bytes(), io_config, model)
-}
-
-/// Parse SMILES bytes to a resolved [`MoleculeAst`] with explicit IO config
-/// and chemistry model.
-pub fn parse_smiles_bytes_with(
-    input: &[u8],
-    io_config: &SmilesIoConfig,
-    model: &ChemistryModel,
-) -> Result<MoleculeAst, SmilesError> {
-    let table_mol = parse_smiles_bytes_to_table_ir_with(input, io_config)?;
-    let mut ast: MoleculeAst = (&table_mol)
-        .try_into_ast(&())
-        .expect("table_ir → MoleculeAst raise is currently infallible");
-    match Resolver::new(model).resolve(&mut ast)? {
-        Solution::Determined(()) => Ok(ast),
-        Solution::Underdetermined(()) => Err(SmilesError::ResolveUnderdetermined),
-        Solution::Contradictory(c) => Err(SmilesError::ResolveContradictory(c)),
-    }
-}
-
 /// Parse SMILES to [`MoleculeAst`] without running the solver.
-pub fn parse_smiles_to_ast(input: &str) -> Result<MoleculeAst, SmilesError> {
+pub fn parse_smiles_to_ast(input: &str) -> Result<MoleculeAst, ParseError> {
     parse_smiles_bytes_to_ast(input.as_bytes())
 }
 
 /// Parse SMILES bytes to [`MoleculeAst`] without running the solver.
-pub fn parse_smiles_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, SmilesError> {
+pub fn parse_smiles_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, ParseError> {
     let table_mol = parse_smiles_bytes_to_table_ir(input)?;
     let ast: MoleculeAst = (&table_mol)
         .try_into_ast(&())
