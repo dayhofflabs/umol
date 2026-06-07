@@ -383,7 +383,8 @@ impl ExtendedMoleculeBuilder {
 
     #[inline]
     pub(crate) fn on_bond(&mut self, start: usize, end: usize, b: BondData) {
-        self.bond_table.push(Some(make_extended_bond(start, end, b)));
+        self.bond_table
+            .push(Some(make_extended_bond(start, end, b)));
         self.closed_bonds += 1;
     }
 

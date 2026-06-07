@@ -9,6 +9,7 @@
 use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
+use umol_geometric_core::Point3D;
 use umol_shared::element::Element;
 
 use super::atom::{Atom, AtomSymbol, ExtendedAtom};
@@ -22,7 +23,6 @@ use super::sgroup::SGroup;
 use super::source::SourceFormat;
 use super::stereo::{ChiralityFrame, ConfigurationScope};
 use super::utils::{element_symbol_key, format_sum_formula};
-use crate::position::Point3D;
 
 /// Basic molecule IR
 #[derive(Clone, Debug, PartialEq)]

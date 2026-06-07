@@ -8,6 +8,7 @@ use nom::combinator::all_consuming;
 use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::terminated;
 use nom::{Err, Parser};
+use umol_geometric_core::{all_zero, Point3D};
 use umol_shared::element::Element;
 use umol_shared::isotope::NamedIsotope;
 
@@ -24,7 +25,6 @@ use super::utils::{
 use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::rgroup::rgroup_symbol;
-use crate::position::{all_zero, Point3D};
 use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, WildcardAtom};
 
 /// Parse atom block (basic atoms only)

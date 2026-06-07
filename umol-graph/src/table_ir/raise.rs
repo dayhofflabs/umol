@@ -13,9 +13,11 @@ use umol_ast::ast::{
     NoncovalentBondKind, SpinStateAst, StereoConfigurationAst, StereoCosetAst, StereoLigand,
     StereoLigandKind, TryIntoAst, ValueAst,
 };
+use umol_geometric_core::orientation::signed_volume;
+use umol_geometric_core::plane::complementary_direction;
+use umol_geometric_core::Point3D;
 use umol_perm::{space, ClassKey, Permutation};
 
-use crate::position::Point3D;
 use crate::table_ir::atom::Atom as TableAtom;
 use crate::table_ir::bond::{
     Bond as TableBond, BondDonation as TableBondDonation, BondNoncovalent as TableNoncovalent,
@@ -283,32 +285,10 @@ fn last_neighbor_away_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<Ster
     tetrahedral_target_ordering(mol, atom_idx)
 }
 
-/// The empty in-plane direction at `atom_idx`: opposite the sum of unit vectors to its real
-/// neighbors — where a virtual ligand sits when a wedge is read against the 2D depiction.
-fn leftover_inplane(
-    positions: &[Point3D],
-    atom_idx: usize,
-    neighbor_indices: &[usize],
-) -> [f64; 3] {
-    let center = positions[atom_idx];
-    let (mut sum_x, mut sum_y) = (0.0, 0.0);
-    for &neighbor in neighbor_indices {
-        let (dx, dy) = (
-            positions[neighbor].x - center.x,
-            positions[neighbor].y - center.y,
-        );
-        let length = (dx * dx + dy * dy).sqrt();
-        if length > 0.0 {
-            sum_x += dx / length;
-            sum_y += dy / length;
-        }
-    }
-    [center.x - sum_x, center.y - sum_y, 0.0]
-}
-
-/// The configuration index a wedge realizes in `ordering`: lift the wedged neighbor out of plane
-/// (Up: +, Down: −), keep the rest in the 2D depiction (a virtual ligand at the leftover direction),
-/// and take the sign of the signed winding (3×3 determinant). The 0/1 mapping is pinned by the tests.
+/// The configuration index a wedge realizes in `ordering`: lift the wedged neighbor out of
+/// plane (Up: +, Down: −), keep the rest in the 2D depiction (a virtual ligand at the
+/// complementary in-plane direction), and take the sign of the signed volume of the four
+/// points. The 0/1 mapping is pinned by the tests.
 fn wedge_winding(
     positions: &[Point3D],
     atom_idx: usize,
@@ -317,36 +297,27 @@ fn wedge_winding(
     up: bool,
 ) -> usize {
     let lift = if up { 1.0 } else { -1.0 };
-    let real: Vec<usize> = ordering
+    let center = positions[atom_idx];
+    let neighbor_points: Vec<Point3D> = ordering
         .iter()
         .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
-        .map(|ligand| ligand.atom_id.0 as usize)
+        .map(|ligand| positions[ligand.atom_id.0 as usize])
         .collect();
-    let leftover = leftover_inplane(positions, atom_idx, &real);
-    let points: Vec<[f64; 3]> = ordering
+    let virtual_point = complementary_direction(center, &neighbor_points);
+    let points: Vec<Point3D> = ordering
         .iter()
         .map(|ligand| {
             let index = ligand.atom_id.0 as usize;
             match ligand.kind {
                 StereoLigandKind::Atom if index == wedged => {
-                    [positions[wedged].x, positions[wedged].y, lift]
+                    Point3D::new(positions[wedged].x, positions[wedged].y, lift)
                 }
-                StereoLigandKind::Atom => [positions[index].x, positions[index].y, 0.0],
-                _ => leftover,
+                StereoLigandKind::Atom => Point3D::new(positions[index].x, positions[index].y, 0.0),
+                _ => virtual_point,
             }
         })
         .collect();
-    let edge = |i: usize| {
-        [
-            points[i][0] - points[0][0],
-            points[i][1] - points[0][1],
-            points[i][2] - points[0][2],
-        ]
-    };
-    let (u, v, w) = (edge(1), edge(2), edge(3));
-    let determinant = u[0] * (v[1] * w[2] - v[2] * w[1]) - u[1] * (v[0] * w[2] - v[2] * w[0])
-        + u[2] * (v[0] * w[1] - v[1] * w[0]);
-    if determinant > 0.0 {
+    if signed_volume(points[0], points[1], points[2], points[3]) > 0.0 {
         0
     } else {
         1
@@ -760,5 +731,4 @@ mod tests {
             ))
         );
     }
-
 }

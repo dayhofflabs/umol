@@ -14,10 +14,10 @@ use crate::io::ctfile::config::CtabParseFlags;
 use crate::io::ctfile::error::ParseError;
 use crate::io::ctfile::parser::properties::{PropertyEntries, SGroupDataEntry};
 use crate::table_ir::{
-    AtomList, AtomSymbol, AttachmentPointType, BondOrder, CtfileData, ExtendedMolecule,
-    LegacyGroupAbbreviation, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount, SGroup,
-    SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity, SGroupData, SGroupDataDisplay,
-    SGroupMultiplier, SGroupSubtype, SGroupType, ConfigurationScope, SubstitutionCount,
+    AtomList, AtomSymbol, AttachmentPointType, BondOrder, ConfigurationScope, CtfileData,
+    ExtendedMolecule, LegacyGroupAbbreviation, LinkAtom, Molecule, RGroup, RGroupOccurrence,
+    RingBondCount, SGroup, SGroupBracketCoords, SGroupConnectingBond, SGroupConnectivity,
+    SGroupData, SGroupDataDisplay, SGroupMultiplier, SGroupSubtype, SGroupType, SubstitutionCount,
     UnsaturatedAtom,
 };
 

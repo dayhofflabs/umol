@@ -67,6 +67,7 @@ bstr = "1.12.0"
 clap = { version = "4", features = ["derive"] }
 umol-ast = { path = "../umol-ast", version = "0.1.0" }
 umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "indexmap"] }
+umol-geometric-core = { path = "../umol-geometric-core", version = "0.1.0" }
 umol-graph-core = { path = "../umol-graph-core", version = "0.1.0" }
 umol-perm = { path = "../umol-perm", version = "0.1.0" }
 fast-float2 = "0.2.3"

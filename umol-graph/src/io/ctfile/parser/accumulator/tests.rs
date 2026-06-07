@@ -20,11 +20,11 @@ use crate::io::ctfile::parser::properties::{
     SubstitutionCountEntry, UnsaturatedAtomEntry,
 };
 use crate::table_ir::{
-    Atom, AtomList, AtomSymbol, AttachmentPointType, Bond, BondOrder, ExtendedAtom, ExtendedBond,
-    ExtendedMolecule, LinkAtom, Molecule, RGroup, RGroupOccurrence, RingBondCount,
-    SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
+    Atom, AtomList, AtomSymbol, AttachmentPointType, Bond, BondOrder, ConfigurationScope,
+    ExtendedAtom, ExtendedBond, ExtendedMolecule, LinkAtom, Molecule, RGroup, RGroupOccurrence,
+    RingBondCount, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierTerm, SGroupType,
-    ConfigurationScope, SubstitutionCount, UnsaturatedAtom,
+    SubstitutionCount, UnsaturatedAtom,
 };
 
 #[fixture]

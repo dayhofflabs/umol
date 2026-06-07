@@ -9,6 +9,7 @@ use nom::character::complete::multispace0;
 use nom::sequence::terminated;
 use nom::{Err, Parser};
 use umol_ast::ast::{MoleculeAst, TryIntoAst};
+use umol_geometric_core::Point3D;
 
 use self::accumulator::PropertyAccumulator;
 use self::atom::{atom_block, extended_atom_block};
@@ -29,7 +30,6 @@ use crate::io::utils::normalize_whitespace;
 use crate::ops::model::ChemistryModel;
 use crate::ops::resolver::Resolver;
 use crate::ops::solution::Solution;
-use crate::position::Point3D;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
 use crate::table_ir::stereo::ChiralityFrame;

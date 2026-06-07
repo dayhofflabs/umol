@@ -1,4 +1,8 @@
-//! 3D coordinate type.
+//! Geometric primitives for umol I/O: the 3D coordinate type plus the
+//! depiction-derived `orientation` and `plane` helpers used to read MOL wedges.
+
+pub mod orientation;
+pub mod plane;
 
 /// 3D coordinate type (Cartesian coordinates)
 #[derive(Clone, Copy, Debug, PartialEq)]

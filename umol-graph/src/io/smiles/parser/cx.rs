@@ -17,19 +17,19 @@ use nom::multi::{count, many1, separated_list0};
 use nom::number::complete::double;
 use nom::sequence::{delimited, preceded, separated_pair, terminated};
 use nom::{Err, IResult, Parser};
+use umol_geometric_core::Point3D;
 use umol_shared::spin::SpinMultiplicity;
 
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::utils::{split_escaped_semicolons, unescape_html_entities};
-use crate::position::Point3D;
 use crate::table_ir::bond::BondNoncovalent;
 use crate::table_ir::{
     BicycloStereo, BicycloStereoData, BondDonation, BondOrder, BondStereo, BondWedge,
-    CxAnnotationData, ExtendedMolecule, ExtendedReaction, LinkAtom, Molecule, MulticenterBond,
-    MulticenterSet, Reaction, RingBondCount, SGroup, SGroupBracketCoords, SGroupBracketOrientation,
-    SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType, SGroupSubtype, SGroupType,
-    ConfigurationScope, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
+    ConfigurationScope, CxAnnotationData, ExtendedMolecule, ExtendedReaction, LinkAtom, Molecule,
+    MulticenterBond, MulticenterSet, Reaction, RingBondCount, SGroup, SGroupBracketCoords,
+    SGroupBracketOrientation, SGroupBracketStyle, SGroupConnectivity, SGroupData, SGroupDataType,
+    SGroupSubtype, SGroupType, StereoSet, StereoSetRelation, SubstitutionCount, UnsaturatedAtom,
 };
 
 /// Stereo group type for enhanced stereochemistry
@@ -164,7 +164,11 @@ impl BondIndexMap {
         }
         // Otherwise it is a sequential bond: the s-th one in close order, whose
         // open index is the s-th slot once the ring opening positions are skipped.
-        let s = k - self.ring_bonds.iter().filter(|&&(rank, _)| rank < k).count();
+        let s = k - self
+            .ring_bonds
+            .iter()
+            .filter(|&&(rank, _)| rank < k)
+            .count();
         let mut open = s;
         for &r in &self.ring_open_sorted {
             if r <= open {
@@ -187,7 +191,9 @@ pub fn remap_cx_bond_indices(
     let translate = |bond_idx: &mut u32| -> Result<(), ParseError> {
         *bond_idx = map
             .translate(*bond_idx)
-            .ok_or(ParseError::BondIndexOutOfBounds { bond_idx: *bond_idx })?;
+            .ok_or(ParseError::BondIndexOutOfBounds {
+                bond_idx: *bond_idx,
+            })?;
         Ok(())
     };
     for entry in entries {
