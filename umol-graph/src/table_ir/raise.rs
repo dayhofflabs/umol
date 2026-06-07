@@ -21,8 +21,9 @@ use crate::table_ir::bond::{
     Bond as TableBond, BondDonation as TableBondDonation, BondNoncovalent as TableNoncovalent,
     BondOrder as TableBondOrder,
 };
-use crate::table_ir::{BondStereo, BondWedge, Chirality, ChiralityFrame};
-use crate::table_ir::Molecule as TableMolecule;
+use crate::table_ir::{
+    BondStereo, BondWedge, Chirality, ChiralityFrame, Molecule as TableMolecule,
+};
 
 /// Error variants for TableIR -> MoleculeAst raise.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -86,9 +87,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
             })
             .collect();
 
-        for (atom_idx, (table_atom, atom)) in
-            self.atoms.iter().zip(atoms.iter_mut()).enumerate()
-        {
+        for (atom_idx, (table_atom, atom)) in self.atoms.iter().zip(atoms.iter_mut()).enumerate() {
             match table_atom.aromatic {
                 Some(true) => {
                     atom.constraints.add(AtomConstraint::AromaticValence(
@@ -286,11 +285,18 @@ fn last_neighbor_away_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<Ster
 
 /// The empty in-plane direction at `atom_idx`: opposite the sum of unit vectors to its real
 /// neighbors — where a virtual ligand sits when a wedge is read against the 2D depiction.
-fn leftover_inplane(positions: &[Point3D], atom_idx: usize, neighbor_indices: &[usize]) -> [f64; 3] {
+fn leftover_inplane(
+    positions: &[Point3D],
+    atom_idx: usize,
+    neighbor_indices: &[usize],
+) -> [f64; 3] {
     let center = positions[atom_idx];
     let (mut sum_x, mut sum_y) = (0.0, 0.0);
     for &neighbor in neighbor_indices {
-        let (dx, dy) = (positions[neighbor].x - center.x, positions[neighbor].y - center.y);
+        let (dx, dy) = (
+            positions[neighbor].x - center.x,
+            positions[neighbor].y - center.y,
+        );
         let length = (dx * dx + dy * dy).sqrt();
         if length > 0.0 {
             sum_x += dx / length;
@@ -354,14 +360,13 @@ fn tetrahedral_wedge_ordering(
     atom_idx: usize,
 ) -> Option<(Vec<StereoLigand>, usize)> {
     let positions = mol.positions.as_ref()?;
-    let (wedged, up) =
-        mol.bonds
-            .iter()
-            .find_map(|bond| match (bond.atoms.other(atom_idx as u32), bond.wedge) {
-                (Some(other), Some(BondWedge::Up)) => Some((other as usize, true)),
-                (Some(other), Some(BondWedge::Down)) => Some((other as usize, false)),
-                _ => None,
-            })?;
+    let (wedged, up) = mol.bonds.iter().find_map(|bond| {
+        match (bond.atoms.other(atom_idx as u32), bond.wedge) {
+            (Some(other), Some(BondWedge::Up)) => Some((other as usize, true)),
+            (Some(other), Some(BondWedge::Down)) => Some((other as usize, false)),
+            _ => None,
+        }
+    })?;
     let ordering = tetrahedral_target_ordering(mol, atom_idx);
     let source_idx = wedge_winding(positions, atom_idx, &ordering, wedged, up);
     Some((ordering, source_idx))
@@ -492,6 +497,7 @@ mod tests {
 
     use super::*;
     use crate::io::ctfile::config::CtfileIoConfig;
+    use crate::io::ctfile::parser::parse_mol_bytes_to_table_ir;
     use crate::io::ctfile::{parse_mol_bytes_with, parse_mol_to_ast};
     use crate::io::smiles::parse_smiles_to_ast;
     use crate::io::smiles::parser::parse_smiles_bytes_to_table_ir;
@@ -503,11 +509,28 @@ mod tests {
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
     use crate::table_ir::Molecule as TableMolecule;
 
-    fn methane_table() -> TableMolecule {
+    #[fixture]
+    fn methane() -> TableMolecule {
         let mut atom = TableAtom::from_element(Element::C);
         atom.implicit_hydrogens = Some(4);
         let mut mol = TableMolecule::empty();
         mol.atoms.push(atom);
+        mol
+    }
+
+    #[fixture]
+    fn carbon() -> TableMolecule {
+        let mut mol = TableMolecule::empty();
+        mol.atoms.push(TableAtom::from_element(Element::C));
+        mol
+    }
+
+    #[fixture]
+    fn diatomic(#[default(TableBondOrder::Single)] order: TableBondOrder) -> TableMolecule {
+        let mut mol = TableMolecule::empty();
+        mol.atoms.push(TableAtom::from_element(Element::C));
+        mol.atoms.push(TableAtom::from_element(Element::C));
+        mol.bonds.push(TableBond::new(0, 1, order));
         mol
     }
 
@@ -517,6 +540,11 @@ mod tests {
 
     const CARBON_H0_EXPLICIT_MOL: &str = "carbon-h0\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  1  0  0  0  0  0  0  0  0\nM  END\n";
 
+    const CHIRAL_PARITY_MOL: &str = "chiral\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    1.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1  3  1  0  0  0  0\n  1  4  1  0  0  0  0\n  1  5  1  0  0  0  0\nM  END\n";
+
+    const CIS_TRANS_EITHER_MOL: &str = "butene\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  2  3  2  3  0  0  0\n  3  4  1  0  0  0  0\nM  END\n";
+
+    #[fixture]
     fn counts_model() -> CountsModel {
         CountsModel {
             table: Cow::Borrowed(ValenceTable::default_table()),
@@ -524,9 +552,8 @@ mod tests {
     }
 
     #[rstest]
-    fn test_table_molecule_try_into_ast_methane_table() {
-        let mol = methane_table();
-        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
+    fn test_table_molecule_try_into_ast(methane: TableMolecule) {
+        let ast: MoleculeAst = (&methane).try_into_ast(&()).unwrap();
         assert_eq!(ast.atoms().count(), 1);
         let atom = ast.atom(AtomId(0)).ast;
         assert_eq!(atom.element, ElementAst::Lit(Element::C));
@@ -540,15 +567,13 @@ mod tests {
     #[case::table_aromatic_none(None, AromaticValenceAst::Undetermined)]
     #[case::table_aromatic_false(Some(false), AromaticValenceAst::NotAromatic)]
     #[case::table_aromatic_true(Some(true), AromaticValenceAst::Aromatic(ValueAst::Undetermined))]
-    fn test_table_molecule_try_into_ast(
-        #[case] table_aromatic: Option<bool>,
+    fn test_table_molecule_try_into_ast_aromatic(
+        mut carbon: TableMolecule,
+        #[case] aromatic: Option<bool>,
         #[case] expected: AromaticValenceAst,
     ) {
-        let mut mol = TableMolecule::empty();
-        let mut atom = TableAtom::from_element(Element::C);
-        atom.aromatic = table_aromatic;
-        mol.atoms.push(atom);
-        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
+        carbon.atoms[0].aromatic = aromatic;
+        let ast: MoleculeAst = (&carbon).try_into_ast(&()).unwrap();
         assert_eq!(
             ast.atom(AtomId(0)).ast.constraints.aromatic_valence(),
             expected
@@ -556,24 +581,19 @@ mod tests {
     }
 
     #[rstest]
-    fn test_table_molecule_try_into_ast_bond_order() {
-        let mut mol = TableMolecule::empty();
-        mol.atoms.push(TableAtom::from_element(Element::C));
-        mol.atoms.push(TableAtom::from_element(Element::C));
-        mol.bonds.push(TableBond::new(0, 1, TableBondOrder::Double));
-        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
+    fn test_table_molecule_try_into_ast_bond_order(
+        #[with(TableBondOrder::Double)] diatomic: TableMolecule,
+    ) {
+        let ast: MoleculeAst = (&diatomic).try_into_ast(&()).unwrap();
         let bond = ast.bond(BondId(0)).ast;
         assert!(matches!(bond.order, ValueAst::Lit(2)));
     }
 
     #[rstest]
-    fn test_table_molecule_try_into_ast_aromatic_bond() {
-        let mut mol = TableMolecule::empty();
-        mol.atoms.push(TableAtom::from_element(Element::C));
-        mol.atoms.push(TableAtom::from_element(Element::C));
-        mol.bonds
-            .push(TableBond::new(0, 1, TableBondOrder::Aromatic));
-        let ast: MoleculeAst = (&mol).try_into_ast(&()).unwrap();
+    fn test_table_molecule_try_into_ast_aromatic_bond(
+        #[with(TableBondOrder::Aromatic)] diatomic: TableMolecule,
+    ) {
+        let ast: MoleculeAst = (&diatomic).try_into_ast(&()).unwrap();
         let bond = ast.bond(BondId(0)).ast;
         assert!(matches!(bond.order, ValueAst::Lit(1)));
         assert!(bond
@@ -607,14 +627,13 @@ mod tests {
     #[case::methane(METHANE_MOL, 1, "C#i=#c0#h4#n0#u0#s#v0#a!")]
     #[case::benzene(BENZENE_AROMATIC_MOL, 6, "C#i=#c0#h#n0#u0#s#v2#a")]
     fn test_parse_mol_to_ast_counts_resolve(
+        counts_model: CountsModel,
         #[case] input: &str,
         #[case] atom_count: u32,
         #[case] expected_atom: &str,
     ) {
         let mut ast = parse_mol_to_ast(input).unwrap();
-        CountsValence::new(&counts_model())
-            .resolve(&mut ast)
-            .unwrap();
+        CountsValence::new(&counts_model).resolve(&mut ast).unwrap();
         assert_eq!(ast.atoms().count(), atom_count as usize);
         for i in 0..atom_count {
             assert_eq!(ast.atom(AtomId(i)).ast.to_string(), expected_atom);
@@ -622,11 +641,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_parse_smiles_to_ast_methane_counts_resolve() {
+    fn test_parse_smiles_to_ast_methane_counts_resolve(counts_model: CountsModel) {
         let mut ast = parse_smiles_to_ast("C").unwrap();
-        CountsValence::new(&counts_model())
-            .resolve(&mut ast)
-            .unwrap();
+        CountsValence::new(&counts_model).resolve(&mut ast).unwrap();
         assert_eq!(
             ast.atom(AtomId(0)).ast.to_string(),
             "C#i=#c0#h4#n0#u0#s#v0#a!"
@@ -648,11 +665,9 @@ mod tests {
     }
 
     #[rstest]
-    fn test_parse_mol_bytes_with_resolver_methane_determined() {
+    fn test_parse_mol_bytes_with_resolver_methane_determined(counts_model: CountsModel) {
         let model = ChemistryModel {
-            valence: ValenceModel::Counts(CountsModel {
-                table: Cow::Borrowed(ValenceTable::default_table()),
-            }),
+            valence: ValenceModel::Counts(counts_model),
             aromaticity: AromaticityModel::HueckelRule {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
@@ -711,14 +726,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::cfclbri_clockwise("Br[C@@](F)(Cl)I", 1, 1)]
-    #[case::cfclbri_counterclockwise("Br[C@](F)(Cl)I", 1, 0)]
+    #[case::cfclbri_clockwise(parse_smiles_bytes_to_table_ir(b"Br[C@@](F)(Cl)I").unwrap(), 1, 1)]
+    #[case::cfclbri_counterclockwise(parse_smiles_bytes_to_table_ir(b"Br[C@](F)(Cl)I").unwrap(), 1, 0)]
+    #[case::ring_then_branch(parse_smiles_bytes_to_table_ir(b"C[C@]1(Cl)CC(C)CC1").unwrap(), 1, 0)]
+    #[case::branch_then_ring(parse_smiles_bytes_to_table_ir(b"C[C@](Cl)1CC(C)CC1").unwrap(), 1, 1)]
+    #[case::mol_parity_clockwise(parse_mol_bytes_to_table_ir(CHIRAL_PARITY_MOL.as_bytes()).unwrap(), 0, 0)]
     fn test_raise_tetrahedral_stereo(
-        #[case] smiles: &str,
+        #[case] mol: TableMolecule,
         #[case] atom_idx: usize,
         #[case] expected: u32,
     ) {
-        let mol = parse_smiles_bytes_to_table_ir(smiles.as_bytes()).unwrap();
         assert_eq!(
             raise_tetrahedral_stereo(&mol, atom_idx),
             Some(AtomConstraint::TetrahedralStereo(
@@ -728,18 +745,18 @@ mod tests {
     }
 
     #[rstest]
-    #[case::trans("F/C=C/F", 1, 1)]
-    #[case::cis("F/C=C\\F", 1, 0)]
+    #[case::trans(parse_smiles_bytes_to_table_ir(b"F/C=C/F").unwrap(), 1, StereoCosetAst::Lit(1))]
+    #[case::cis(parse_smiles_bytes_to_table_ir(b"F/C=C\\F").unwrap(), 1, StereoCosetAst::Lit(0))]
+    #[case::mol_either(parse_mol_bytes_to_table_ir(CIS_TRANS_EITHER_MOL.as_bytes()).unwrap(), 1, StereoCosetAst::Undetermined)]
     fn test_raise_cis_trans_stereo(
-        #[case] smiles: &str,
+        #[case] mol: TableMolecule,
         #[case] bond_idx: usize,
-        #[case] expected: u32,
+        #[case] expected: StereoCosetAst,
     ) {
-        let mol = parse_smiles_bytes_to_table_ir(smiles.as_bytes()).unwrap();
         assert_eq!(
             raise_cis_trans_stereo(&mol, bond_idx),
             Some(BondConstraint::CisTransStereo(
-                StereoConfigurationAst::stereo(StereoCosetAst::Lit(expected))
+                StereoConfigurationAst::stereo(expected)
             ))
         );
     }
