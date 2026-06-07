@@ -130,7 +130,11 @@ pub fn parse_smiles_bytes_to_table_ir_with(
         return Err(ParseError::LeadingWhitespace);
     }
 
-    let (remaining, (mut mol, ring_bonds, _)) = parse_smiles_inner(input, 0, false, flags)?;
+    // Check if the input contains a CX block, record ring bonds if it is present.
+    let has_cx_annotations =
+        flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
+    let (remaining, (mut mol, ring_bonds, _)) =
+        parse_smiles_inner(input, 0, false, has_cx_annotations, flags)?;
 
     // Inner parser stops at whitespace.
     let trimmed = remaining.trim_ascii_start();
@@ -139,7 +143,7 @@ pub fn parse_smiles_bytes_to_table_ir_with(
     }
 
     // Chemaxon extensions
-    if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
+    if has_cx_annotations {
         let mut entries = parse_cx_annotations(trimmed, flags)?;
         let bond_map = BondIndexMap::new(ring_bonds, mol.bonds.len());
         remap_cx_bond_indices(&mut entries, &bond_map)?;
@@ -178,6 +182,9 @@ pub fn parse_reaction_smiles_bytes_with(
         "flags must be a subset of BASIC_MAX"
     );
 
+    // Check if the input contains a CX block, record ring bonds if it is present.
+    let has_cx_annotations =
+        flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let mut remaining = input;
     let mut offset = 0usize;
 
@@ -192,7 +199,7 @@ pub fn parse_reaction_smiles_bytes_with(
 
     // Reactants: parse one side-supermolecule until '>'.
     let (rest, (reactants, reactant_ring_bonds, new_offset)) =
-        parse_smiles_inner(remaining, offset, true, flags)?;
+        parse_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
     offset = new_offset;
     remaining = rest;
 
@@ -209,7 +216,7 @@ pub fn parse_reaction_smiles_bytes_with(
 
         // Agents: parse one side-supermolecule until '>'.
         let (rest, (agents_parsed, agents_ring_bonds, new_offset)) =
-            parse_smiles_inner(remaining, offset, true, flags)?;
+            parse_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
         offset = new_offset;
         remaining = rest;
         agents = agents_parsed;
@@ -226,7 +233,7 @@ pub fn parse_reaction_smiles_bytes_with(
 
     // Products: parse one side-supermolecule until EOF/whitespace.
     let (rest, (products, product_ring_bonds, _new_offset)) =
-        parse_smiles_inner(remaining, offset, true, flags)?;
+        parse_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
 
     let mut reaction = Reaction {
         reactants,
@@ -237,9 +244,8 @@ pub fn parse_reaction_smiles_bytes_with(
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
-    let trimmed = rest.trim_ascii_start();
-    if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
-        let entries = parse_cx_annotations(trimmed, flags)?;
+    if has_cx_annotations {
+        let entries = parse_cx_annotations(rest.trim_ascii_start(), flags)?;
         let mut split = split_reaction_cx_entries(
             entries,
             reaction.reactants.atom_count(),
@@ -271,12 +277,14 @@ fn parse_smiles_inner(
     input: &[u8],
     offset: usize,
     as_reaction: bool,
+    store_rings: bool,
     flags: SmilesParseFlags,
 ) -> Result<(&[u8], (Molecule, Vec<(usize, usize)>, usize)), ParseError> {
     let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
-    let mut builder = MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
+    let mut builder =
+        MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut last_atom_idx: Option<usize> = None;
     let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =
@@ -718,8 +726,11 @@ pub fn parse_extended_smiles_bytes_with(
         return Ok(ExtendedMolecule::empty());
     }
 
+    // Check if the input contains a CX block, record ring bonds if it is present.
+    let has_cx_annotations =
+        flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let (remaining, (mut mol, ring_bonds, _)) =
-        parse_extended_smiles_inner(input, 0, false, flags)?;
+        parse_extended_smiles_inner(input, 0, false, has_cx_annotations, flags)?;
 
     // Inner parser stops at whitespace. Leading whitespace is not allowed
     // (exception: whitespace-only input is allowed)
@@ -732,9 +743,8 @@ pub fn parse_extended_smiles_bytes_with(
     }
 
     // Chemaxon annotations
-    let trimmed = remaining.trim_ascii_start();
-    if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
-        let mut entries = parse_extended_cx_annotations(trimmed, flags)?;
+    if has_cx_annotations {
+        let mut entries = parse_extended_cx_annotations(remaining.trim_ascii_start(), flags)?;
         let bond_map = BondIndexMap::new(ring_bonds, mol.bonds.len());
         remap_cx_bond_indices(&mut entries, &bond_map)?;
         update_extended_molecule(&mut mol, entries)?;
@@ -768,6 +778,9 @@ pub fn parse_extended_reaction_smiles_bytes_with(
 ) -> Result<ExtendedReaction, ParseError> {
     let flags = config.parse_flags;
 
+    // Check if the input contains a CX block, record ring bonds if it is present.
+    let has_cx_annotations =
+        flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) && input.contains(&b'|');
     let mut remaining = input;
     let mut offset = 0usize;
 
@@ -781,7 +794,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
 
     // Reactants: parse one side-supermolecule until '>'.
     let (rest, (reactants, reactant_ring_bonds, new_offset)) =
-        parse_extended_smiles_inner(remaining, offset, true, flags)?;
+        parse_extended_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
     offset = new_offset;
     remaining = rest;
 
@@ -797,7 +810,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
         offset += 1;
 
         let (rest, (agents_parsed, agents_ring_bonds, new_offset)) =
-            parse_extended_smiles_inner(remaining, offset, true, flags)?;
+            parse_extended_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
         offset = new_offset;
         remaining = rest;
         agents = agents_parsed;
@@ -814,7 +827,7 @@ pub fn parse_extended_reaction_smiles_bytes_with(
 
     // Products: parse one side-supermolecule until EOF/whitespace.
     let (rest, (products, product_ring_bonds, _new_offset)) =
-        parse_extended_smiles_inner(remaining, offset, true, flags)?;
+        parse_extended_smiles_inner(remaining, offset, true, has_cx_annotations, flags)?;
 
     let mut reaction = ExtendedReaction {
         reactants,
@@ -825,9 +838,8 @@ pub fn parse_extended_reaction_smiles_bytes_with(
         properties: IndexMap::new(),
         source_format: SourceFormat::SMILES,
     };
-    let trimmed = rest.trim_ascii_start();
-    if trimmed.starts_with(b"|") && flags.contains(SmilesParseFlags::CHEMAXON_EXTENSIONS) {
-        let entries = parse_extended_cx_annotations(trimmed, flags)?;
+    if has_cx_annotations {
+        let entries = parse_extended_cx_annotations(rest.trim_ascii_start(), flags)?;
         let mut split = split_reaction_cx_entries(
             entries,
             reaction.reactants.atom_count(),
@@ -859,12 +871,14 @@ fn parse_extended_smiles_inner(
     input: &[u8],
     offset: usize,
     as_reaction: bool,
+    store_rings: bool,
     flags: SmilesParseFlags,
 ) -> Result<(&[u8], (ExtendedMolecule, Vec<(usize, usize)>, usize)), ParseError> {
     let extended_bonds = flags.contains(SmilesParseFlags::EXTENDED_BONDS);
     let mut i = 0usize;
     let n = input.len();
-    let mut builder = ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1));
+    let mut builder =
+        ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut last_atom_idx: Option<usize> = None;
     let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =

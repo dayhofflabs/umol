@@ -224,7 +224,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
     let atoms: Vec<_> = atoms_s.split_whitespace().collect();
     let bonds: Vec<_> = bonds_s.split_whitespace().collect();
 
-    let mut b = MoleculeBuilder::with_capacity(atoms.len(), bonds.len());
+    let mut b = MoleculeBuilder::with_capacity(atoms.len(), bonds.len(), false);
     // map of insertion index to atom id is identity by construction; still collect ids
     let mut ids: Vec<usize> = Vec::with_capacity(atoms.len());
     // Keep a map from atom span_start -> span_end for bond defaulting
@@ -299,7 +299,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     let atoms: Vec<_> = atoms_s.split_whitespace().collect();
     let bonds: Vec<_> = bonds_s.split_whitespace().collect();
 
-    let mut b = ExtendedMoleculeBuilder::with_capacity(atoms.len(), bonds.len());
+    let mut b = ExtendedMoleculeBuilder::with_capacity(atoms.len(), bonds.len(), false);
     let mut ids: Vec<usize> = Vec::with_capacity(atoms.len());
     let mut atom_span_map: HashMap<u32, u32> = HashMap::new();
 

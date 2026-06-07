@@ -56,17 +56,24 @@ pub(super) struct MoleculeBuilder {
     ring_bonds: Vec<(usize, usize)>,
     /// Count of completed bonds; a bond's completion order is its CX close index.
     closed_bonds: usize,
+    /// Whether to record ring closures (set only when a CX block is present).
+    store_rings: bool,
     molecules: Vec<Molecule>,
 }
 
 impl MoleculeBuilder {
-    pub(crate) fn with_capacity(approx_atoms: usize, approx_bonds: usize) -> Self {
+    pub(crate) fn with_capacity(
+        approx_atoms: usize,
+        approx_bonds: usize,
+        store_rings: bool,
+    ) -> Self {
         Self {
             atoms: Vec::with_capacity(approx_atoms),
             bond_table: Vec::with_capacity(approx_bonds),
             ring_table: Vec::new(),
             ring_bonds: Vec::new(),
             closed_bonds: 0,
+            store_rings,
             molecules: Vec::new(),
         }
     }
@@ -113,7 +120,9 @@ impl MoleculeBuilder {
     #[inline]
     fn on_ring_bond_close(&mut self, bond_idx: usize, start: usize, end: usize, b: BondData) {
         self.bond_table[bond_idx] = Some(make_bond(start, end, b));
-        self.ring_bonds.push((self.closed_bonds, bond_idx));
+        if self.store_rings {
+            self.ring_bonds.push((self.closed_bonds, bond_idx));
+        }
         self.closed_bonds += 1;
     }
 
@@ -315,17 +324,24 @@ pub(super) struct ExtendedMoleculeBuilder {
     ring_bonds: Vec<(usize, usize)>,
     /// Count of completed bonds; a bond's completion order is its CX close index.
     closed_bonds: usize,
+    /// Whether to record ring closures (set only when a CX block is present).
+    store_rings: bool,
     molecules: Vec<ExtendedMolecule>,
 }
 
 impl ExtendedMoleculeBuilder {
-    pub(crate) fn with_capacity(approx_atoms: usize, approx_bonds: usize) -> Self {
+    pub(crate) fn with_capacity(
+        approx_atoms: usize,
+        approx_bonds: usize,
+        store_rings: bool,
+    ) -> Self {
         Self {
             atoms: Vec::with_capacity(approx_atoms),
             bond_table: Vec::with_capacity(approx_bonds),
             ring_table: Vec::new(),
             ring_bonds: Vec::new(),
             closed_bonds: 0,
+            store_rings,
             molecules: Vec::new(),
         }
     }
@@ -383,7 +399,9 @@ impl ExtendedMoleculeBuilder {
     #[inline]
     fn on_ring_bond_close(&mut self, bond_idx: usize, start: usize, end: usize, b: BondData) {
         self.bond_table[bond_idx] = Some(make_extended_bond(start, end, b));
-        self.ring_bonds.push((self.closed_bonds, bond_idx));
+        if self.store_rings {
+            self.ring_bonds.push((self.closed_bonds, bond_idx));
+        }
         self.closed_bonds += 1;
     }
 
