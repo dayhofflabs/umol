@@ -264,7 +264,7 @@ fn parse_smiles_inner(
     let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =
         None;
     let mut last_aromatic: bool = false;
-    let mut just_closed_group: bool = false;
+    let mut after_closed_group: bool = false;
 
     while i < n {
         let b0 = input[i];
@@ -278,19 +278,19 @@ fn parse_smiles_inner(
         }
 
         if b0 != b'(' {
-            just_closed_group = false;
+            after_closed_group = false;
         }
         if b0 == b'(' {
             if let Some((_, _, _, pos)) = pending_bond {
                 return Err(ParseError::TrailingBond { pos: offset + pos });
             }
-            if just_closed_group {
+            if after_closed_group {
                 last_atom_idx = None;
                 branch_stack.push(Frame::Group {
                     had_atom: false,
                     open_pos: i,
                 });
-                just_closed_group = false;
+                after_closed_group = false;
             } else {
                 match last_atom_idx {
                     Some(idx) => branch_stack.push(Frame::Branch {
@@ -325,7 +325,7 @@ fn parse_smiles_inner(
                     if !had_atom {
                         return Err(ParseError::EmptyGroup { pos: offset + i });
                     }
-                    just_closed_group = true;
+                    after_closed_group = true;
                     if let Some(parent) = branch_stack.last_mut() {
                         match parent {
                             Frame::Branch { had_atom, .. } | Frame::Group { had_atom, .. } => {

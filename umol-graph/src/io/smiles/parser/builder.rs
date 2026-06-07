@@ -8,7 +8,7 @@ use crate::span::Span;
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
     Atom, AtomPair, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedAtom,
-    ExtendedBond, ExtendedMolecule, Molecule, Ring, WildcardAtom,
+    ExtendedBond, ExtendedMolecule, Molecule, WildcardAtom,
 };
 
 /// Atom event data
@@ -37,7 +37,6 @@ pub(super) struct BondData {
 pub(super) struct MoleculeBuilder {
     atoms: Vec<Atom>,
     bonds: Vec<Bond>,
-    rings: Vec<Ring>,
     molecules: Vec<Molecule>,
 }
 
@@ -46,7 +45,6 @@ impl MoleculeBuilder {
         Self {
             atoms: Vec::with_capacity(approx_atoms),
             bonds: Vec::with_capacity(approx_bonds),
-            rings: Vec::new(),
             molecules: Vec::new(),
         }
     }
@@ -78,7 +76,7 @@ impl MoleculeBuilder {
     #[inline]
     pub(crate) fn on_bond(&mut self, start: u32, end: u32, b: BondData) {
         let span = b.span;
-        // Adjust donation for AtomPair normalization (swap flips donation)
+        // Adjust donation for AtomPair normalization (flip donation)
         let donation = if start > end {
             b.donation.map(|d| d.flip())
         } else {
@@ -140,7 +138,6 @@ impl MoleculeBuilder {
         let mut mol = Molecule::empty();
         mol.atoms = mem::take(&mut self.atoms);
         mol.bonds = mem::take(&mut self.bonds);
-        mol.rings = mem::take(&mut self.rings);
         self.molecules.push(mol);
     }
 
@@ -149,48 +146,6 @@ impl MoleculeBuilder {
             self.on_component_end();
         }
         mem::take(&mut self.molecules)
-    }
-
-    #[inline]
-    pub(crate) fn on_ring_open(
-        &mut self,
-        ring_idx: u32,
-        start: Option<u32>,
-        end: Option<u32>,
-        atom_idx: Option<u32>,
-    ) {
-        self.rings.push(Ring {
-            ring_idx,
-            open_span: Span::from_bytes_opt(start, end),
-            close_span: None,
-            start_atom: atom_idx,
-            end_atom: None,
-        });
-    }
-
-    #[inline]
-    pub(crate) fn on_ring_close(
-        &mut self,
-        ring_idx: u32,
-        start: Option<u32>,
-        end: Option<u32>,
-        atom_idx: Option<u32>,
-    ) {
-        for ev in self.rings.iter_mut().rev() {
-            if ev.ring_idx == ring_idx && ev.close_span.is_none() {
-                ev.close_span = Span::from_bytes_opt(start, end);
-                ev.end_atom = atom_idx;
-                return;
-            }
-        }
-
-        self.rings.push(Ring {
-            ring_idx,
-            open_span: None,
-            close_span: Span::from_bytes_opt(start, end),
-            start_atom: None,
-            end_atom: atom_idx,
-        });
     }
 }
 
@@ -209,7 +164,6 @@ pub(super) struct ExtendedAtomData {
 pub(super) struct ExtendedMoleculeBuilder {
     atoms: Vec<ExtendedAtom>,
     bonds: Vec<ExtendedBond>,
-    rings: Vec<Ring>,
     molecules: Vec<ExtendedMolecule>,
 }
 
@@ -218,7 +172,6 @@ impl ExtendedMoleculeBuilder {
         Self {
             atoms: Vec::with_capacity(approx_atoms),
             bonds: Vec::with_capacity(approx_bonds),
-            rings: Vec::new(),
             molecules: Vec::new(),
         }
     }
@@ -375,7 +328,6 @@ impl ExtendedMoleculeBuilder {
         let mut mol = ExtendedMolecule::empty();
         mol.atoms = mem::take(&mut self.atoms);
         mol.bonds = mem::take(&mut self.bonds);
-        mol.rings = mem::take(&mut self.rings);
         self.molecules.push(mol);
     }
 
@@ -384,47 +336,5 @@ impl ExtendedMoleculeBuilder {
             self.on_component_end();
         }
         mem::take(&mut self.molecules)
-    }
-
-    #[inline]
-    pub(crate) fn on_ring_open(
-        &mut self,
-        ring_idx: u32,
-        start: Option<u32>,
-        end: Option<u32>,
-        atom_idx: Option<u32>,
-    ) {
-        self.rings.push(Ring {
-            ring_idx,
-            open_span: Span::from_bytes_opt(start, end),
-            close_span: None,
-            start_atom: atom_idx,
-            end_atom: None,
-        });
-    }
-
-    #[inline]
-    pub(crate) fn on_ring_close(
-        &mut self,
-        ring_idx: u32,
-        start: Option<u32>,
-        end: Option<u32>,
-        atom_idx: Option<u32>,
-    ) {
-        for ev in self.rings.iter_mut().rev() {
-            if ev.ring_idx == ring_idx && ev.close_span.is_none() {
-                ev.close_span = Span::from_bytes_opt(start, end);
-                ev.end_atom = atom_idx;
-                return;
-            }
-        }
-
-        self.rings.push(Ring {
-            ring_idx,
-            open_span: None,
-            close_span: Span::from_bytes_opt(start, end),
-            start_atom: None,
-            end_atom: atom_idx,
-        });
     }
 }

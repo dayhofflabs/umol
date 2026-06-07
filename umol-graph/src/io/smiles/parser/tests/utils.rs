@@ -13,7 +13,7 @@ use super::super::builder::{
 use crate::span::Span;
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    AtomSymbol, BondDonation, BondOrder, BondWedge, ChiralityFrame, ExtendedMolecule, Molecule, Ring,
+    AtomSymbol, BondDonation, BondOrder, BondWedge, ChiralityFrame, ExtendedMolecule, Molecule,
     SourceFormat, WildcardAtom,
 };
 
@@ -225,11 +225,6 @@ pub fn build_from_graph(spec: &str) -> Molecule {
     assert!(parts.len() >= 2, "spec must have at least atoms | edges");
     let atoms_s = parts[0];
     let edges_s = parts[1];
-    let rings_s = if parts.len() >= 3 {
-        Some(parts[2])
-    } else {
-        None
-    };
 
     let atoms: Vec<_> = atoms_s.split_whitespace().collect();
     let edges: Vec<_> = edges_s.split_whitespace().collect();
@@ -292,146 +287,6 @@ pub fn build_from_graph(spec: &str) -> Molecule {
     let mut mols = b.finish();
     let mut mol = mols.pop().unwrap_or_else(Molecule::empty);
 
-    if let Some(rings_src) = rings_s {
-        let ring_tokens: Vec<_> = rings_src.split_whitespace().collect();
-        if !ring_tokens.is_empty() {
-            let mut rings: Vec<Ring> = Vec::with_capacity(ring_tokens.len());
-            for rtok in ring_tokens {
-                if rtok.is_empty() {
-                    continue;
-                }
-                // Parse left/right around ':'
-                let (left, right) = rtok.split_once(':').map_or((rtok, ""), |(l, r)| (l, r));
-                // Parse left: idx[@open][-close]
-                let mut chars = left.chars().peekable();
-                let mut idx_str = String::new();
-                while let Some(c) = chars.peek() {
-                    if c.is_ascii_digit() {
-                        idx_str.push(*c);
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                let ring_idx: u32 = idx_str.parse().expect("ring idx");
-                let mut open_start: Option<u32> = None;
-                let mut close_start: Option<u32> = None;
-                let mut open_end: Option<u32> = None;
-                let mut close_end: Option<u32> = None;
-                if chars.peek() == Some(&'@') {
-                    chars.next();
-                    // parse start
-                    let mut num = String::new();
-                    while let Some(c) = chars.peek() {
-                        if c.is_ascii_digit() {
-                            num.push(*c);
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    if !num.is_empty() {
-                        open_start = Some(num.parse::<u32>().expect("open start"));
-                    }
-                    // optional ..end
-                    if chars.peek() == Some(&'.') {
-                        chars.next();
-                        if chars.peek() == Some(&'.') {
-                            chars.next();
-                            let mut num2 = String::new();
-                            while let Some(c) = chars.peek() {
-                                if c.is_ascii_digit() {
-                                    num2.push(*c);
-                                    chars.next();
-                                } else {
-                                    break;
-                                }
-                            }
-                            if !num2.is_empty() {
-                                open_end = Some(num2.parse::<u32>().expect("open end"));
-                            }
-                        }
-                    }
-                }
-                if chars.peek() == Some(&'-') {
-                    chars.next();
-                    let mut num = String::new();
-                    while let Some(c) = chars.peek() {
-                        if c.is_ascii_digit() {
-                            num.push(*c);
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    if !num.is_empty() {
-                        close_start = Some(num.parse::<u32>().expect("close start"));
-                    }
-                    if chars.peek() == Some(&'.') {
-                        chars.next();
-                        if chars.peek() == Some(&'.') {
-                            chars.next();
-                            let mut num2 = String::new();
-                            while let Some(c) = chars.peek() {
-                                if c.is_ascii_digit() {
-                                    num2.push(*c);
-                                    chars.next();
-                                } else {
-                                    break;
-                                }
-                            }
-                            if !num2.is_empty() {
-                                close_end = Some(num2.parse::<u32>().expect("close end"));
-                            }
-                        }
-                    }
-                }
-                // Parse right: a-b (either side may be empty)
-                let (a_opt, b_opt) = if right.is_empty() {
-                    (None, None)
-                } else {
-                    let mut split = right.splitn(2, '-');
-                    let a_str = split.next().unwrap_or("");
-                    let b_str = split.next().unwrap_or("");
-                    let a = if a_str.is_empty() {
-                        None
-                    } else {
-                        Some(a_str.parse::<usize>().expect("a"))
-                    };
-                    let b = if b_str.is_empty() {
-                        None
-                    } else {
-                        Some(b_str.parse::<usize>().expect("b"))
-                    };
-                    (a, b)
-                };
-                let atom_a = a_opt.map(|ai| ids[ai]);
-                let atom_b = b_opt.map(|bi| ids[bi]);
-                // Default ends if positions are provided without ends
-                if open_end.is_none() {
-                    if let Some(s) = open_start {
-                        open_end = Some(s + 1);
-                    }
-                }
-                if close_end.is_none() {
-                    if let Some(s) = close_start {
-                        close_end = Some(s + 1);
-                    }
-                }
-                let open_span = Span::from_bytes_opt(open_start, open_end);
-                let close_span = Span::from_bytes_opt(close_start, close_end);
-                rings.push(Ring {
-                    ring_idx,
-                    start_atom: atom_a,
-                    end_atom: atom_b,
-                    open_span,
-                    close_span,
-                });
-            }
-            mol.rings = rings;
-        }
-    }
-
     mol.source_format = SourceFormat::SMILES;
     mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);
     mol
@@ -446,11 +301,6 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     assert!(parts.len() >= 2, "spec must have at least atoms | edges");
     let atoms_s = parts[0];
     let edges_s = parts[1];
-    let rings_s = if parts.len() >= 3 {
-        Some(parts[2])
-    } else {
-        None
-    };
 
     let atoms: Vec<_> = atoms_s.split_whitespace().collect();
     let edges: Vec<_> = edges_s.split_whitespace().collect();
@@ -512,140 +362,6 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     }
     let mut mols = b.finish();
     let mut mol = mols.pop().unwrap_or_else(ExtendedMolecule::empty);
-
-    if let Some(rings_src) = rings_s {
-        let ring_tokens: Vec<_> = rings_src.split_whitespace().collect();
-        if !ring_tokens.is_empty() {
-            let mut rings: Vec<Ring> = Vec::with_capacity(ring_tokens.len());
-            for rtok in ring_tokens {
-                if rtok.is_empty() {
-                    continue;
-                }
-                let (left, right) = rtok.split_once(':').map_or((rtok, ""), |(l, r)| (l, r));
-                let mut chars = left.chars().peekable();
-                let mut idx_str = String::new();
-                while let Some(c) = chars.peek() {
-                    if c.is_ascii_digit() {
-                        idx_str.push(*c);
-                        chars.next();
-                    } else {
-                        break;
-                    }
-                }
-                let ring_idx: u32 = idx_str.parse().expect("ring idx");
-                let mut open_start: Option<u32> = None;
-                let mut close_start: Option<u32> = None;
-                let mut open_end: Option<u32> = None;
-                let mut close_end: Option<u32> = None;
-                if chars.peek() == Some(&'@') {
-                    chars.next();
-                    let mut num = String::new();
-                    while let Some(c) = chars.peek() {
-                        if c.is_ascii_digit() {
-                            num.push(*c);
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    if !num.is_empty() {
-                        open_start = Some(num.parse::<u32>().expect("open start"));
-                    }
-                    if chars.peek() == Some(&'.') {
-                        chars.next();
-                        if chars.peek() == Some(&'.') {
-                            chars.next();
-                            let mut num2 = String::new();
-                            while let Some(c) = chars.peek() {
-                                if c.is_ascii_digit() {
-                                    num2.push(*c);
-                                    chars.next();
-                                } else {
-                                    break;
-                                }
-                            }
-                            if !num2.is_empty() {
-                                open_end = Some(num2.parse::<u32>().expect("open end"));
-                            }
-                        }
-                    }
-                }
-                if chars.peek() == Some(&'-') {
-                    chars.next();
-                    let mut num = String::new();
-                    while let Some(c) = chars.peek() {
-                        if c.is_ascii_digit() {
-                            num.push(*c);
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    if !num.is_empty() {
-                        close_start = Some(num.parse::<u32>().expect("close start"));
-                    }
-                    if chars.peek() == Some(&'.') {
-                        chars.next();
-                        if chars.peek() == Some(&'.') {
-                            chars.next();
-                            let mut num2 = String::new();
-                            while let Some(c) = chars.peek() {
-                                if c.is_ascii_digit() {
-                                    num2.push(*c);
-                                    chars.next();
-                                } else {
-                                    break;
-                                }
-                            }
-                            if !num2.is_empty() {
-                                close_end = Some(num2.parse::<u32>().expect("close end"));
-                            }
-                        }
-                    }
-                }
-                let (a_opt, b_opt) = if right.is_empty() {
-                    (None, None)
-                } else {
-                    let mut split = right.splitn(2, '-');
-                    let a_str = split.next().unwrap_or("");
-                    let b_str = split.next().unwrap_or("");
-                    let a = if a_str.is_empty() {
-                        None
-                    } else {
-                        Some(a_str.parse::<usize>().expect("a"))
-                    };
-                    let b = if b_str.is_empty() {
-                        None
-                    } else {
-                        Some(b_str.parse::<usize>().expect("b"))
-                    };
-                    (a, b)
-                };
-                let atom_a = a_opt.map(|ai| ids[ai]);
-                let atom_b = b_opt.map(|bi| ids[bi]);
-                if open_end.is_none() {
-                    if let Some(s) = open_start {
-                        open_end = Some(s + 1);
-                    }
-                }
-                if close_end.is_none() {
-                    if let Some(s) = close_start {
-                        close_end = Some(s + 1);
-                    }
-                }
-                let open_span = Span::from_bytes_opt(open_start, open_end);
-                let close_span = Span::from_bytes_opt(close_start, close_end);
-                rings.push(Ring {
-                    ring_idx,
-                    start_atom: atom_a,
-                    end_atom: atom_b,
-                    open_span,
-                    close_span,
-                });
-            }
-            mol.rings = rings;
-        }
-    }
 
     mol.source_format = SourceFormat::SMILES;
     mol.chirality_frame = Some(ChiralityFrame::FirstNeighborToward);

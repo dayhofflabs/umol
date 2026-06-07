@@ -13,7 +13,6 @@ fn test_molecule_empty() {
     let mol = Molecule::empty();
     assert!(mol.atoms.is_empty());
     assert!(mol.bonds.is_empty());
-    assert!(mol.rings.is_empty());
     assert_eq!(mol.source_format, SourceFormat::UNKNOWN);
 }
 
@@ -25,7 +24,6 @@ fn test_molecule_with_atoms_and_bonds() {
             Atom::aliphatic_atom(Element::O),
         ],
         bonds: vec![Bond::new(0, 1, BondOrder::Single)],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,
@@ -49,7 +47,6 @@ fn test_molecule_atom_count() {
             Atom::aliphatic_atom(Element::O),
         ],
         bonds: vec![],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,
@@ -73,7 +70,6 @@ fn test_molecule_bond_count() {
             Bond::new(0, 1, BondOrder::Single),
             Bond::new(1, 2, BondOrder::Double),
         ],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,
@@ -94,7 +90,6 @@ fn test_molecule_multicenter_bond_count() {
             Atom::aliphatic_atom(Element::C),
         ],
         bonds: vec![],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![MulticenterBond::new(vec![MulticenterSet::new(vec![
             0, 1, 2,
@@ -113,7 +108,6 @@ fn test_molecule_sum_formula() {
     let mol = Molecule {
         atoms: vec![Atom::aliphatic_atom(Element::C)],
         bonds: vec![],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,
@@ -136,7 +130,6 @@ fn test_molecule_sum_formula_hydrogen() {
             Atom::aliphatic_atom(Element::H),
         ],
         bonds: vec![],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,
@@ -155,7 +148,6 @@ fn test_molecule_sum_formula_charge() {
     let mol = Molecule {
         atoms: vec![atom],
         bonds: vec![],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,
@@ -178,7 +170,6 @@ fn test_molecule_sum_formula_multiple_elements() {
             Atom::aliphatic_atom(Element::N),
         ],
         bonds: vec![],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,
@@ -196,7 +187,6 @@ fn test_extended_molecule_empty() {
     let ext = ExtendedMolecule::empty();
     assert!(ext.atoms.is_empty());
     assert!(ext.bonds.is_empty());
-    assert!(ext.rings.is_empty());
     assert!(ext.positions.is_none());
     assert!(ext.multicenter_bonds.is_empty());
     assert!(ext.configuration_scope.is_none());
@@ -211,7 +201,6 @@ fn test_extended_molecule() {
     let ext = ExtendedMolecule {
         atoms: vec![ExtendedAtom::from_element(Element::C)],
         bonds: vec![ExtendedBond::new(0, 0, BondOrder::Single)],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,
@@ -236,7 +225,6 @@ fn test_extended_molecule_from_molecule() {
             Atom::aromatic_atom(Element::N),
         ],
         bonds: vec![Bond::new(0, 1, BondOrder::Double)],
-        rings: vec![],
         positions: None,
         multicenter_bonds: vec![],
         configuration_scope: None,

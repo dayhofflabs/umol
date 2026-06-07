@@ -167,7 +167,6 @@ fn build_molecule(
     let mut molecule = Molecule {
         atoms,
         bonds,
-        rings: Vec::new(),
         positions,
         multicenter_bonds: Vec::new(),
         comments: Vec::new(),
@@ -197,7 +196,6 @@ fn build_extended_molecule(
     let mut molecule = ExtendedMolecule {
         atoms,
         bonds,
-        rings: Vec::new(),
         positions,
         multicenter_bonds: Vec::new(),
         configuration_scope: None,

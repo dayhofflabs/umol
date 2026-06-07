@@ -14,7 +14,6 @@ pub mod rgroup;
 pub mod sgroup;
 pub mod source;
 pub mod stereo;
-pub mod topology;
 mod utils;
 
 pub use atom::*;
@@ -30,4 +29,3 @@ pub use rgroup::*;
 pub use sgroup::*;
 pub use source::*;
 pub use stereo::*;
-pub use topology::*;

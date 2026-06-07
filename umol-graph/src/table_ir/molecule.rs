@@ -21,7 +21,6 @@ use super::rgroup::RGroup;
 use super::sgroup::SGroup;
 use super::source::SourceFormat;
 use super::stereo::{ChiralityFrame, ConfigurationScope};
-use super::topology::Ring;
 use super::utils::{element_symbol_key, format_sum_formula};
 use crate::position::Point3D;
 
@@ -30,7 +29,6 @@ use crate::position::Point3D;
 pub struct Molecule {
     pub atoms: Vec<Atom>,
     pub bonds: Vec<Bond>,
-    pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub configuration_scope: Option<ConfigurationScope>,
@@ -45,7 +43,6 @@ impl Molecule {
         Self {
             atoms: Vec::new(),
             bonds: Vec::new(),
-            rings: Vec::new(),
             positions: None,
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
@@ -105,7 +102,6 @@ impl Molecule {
 pub struct ExtendedMolecule {
     pub atoms: Vec<ExtendedAtom>,
     pub bonds: Vec<ExtendedBond>,
-    pub rings: Vec<Ring>,
     pub positions: Option<Vec<Point3D>>,
     pub multicenter_bonds: Vec<MulticenterBond>,
     pub configuration_scope: Option<ConfigurationScope>,
@@ -122,7 +118,6 @@ impl ExtendedMolecule {
         Self {
             atoms: Vec::new(),
             bonds: Vec::new(),
-            rings: Vec::new(),
             positions: None,
             multicenter_bonds: Vec::new(),
             configuration_scope: None,
@@ -288,7 +283,6 @@ impl From<Molecule> for ExtendedMolecule {
         Self {
             atoms: mol.atoms.into_iter().map(ExtendedAtom::from).collect(),
             bonds: mol.bonds.into_iter().map(ExtendedBond::from).collect(),
-            rings: mol.rings,
             positions: mol.positions,
             multicenter_bonds: mol.multicenter_bonds,
             configuration_scope: mol.configuration_scope,
@@ -317,7 +311,6 @@ impl TryFrom<ExtendedMolecule> for Molecule {
                 .iter()
                 .map(|b| Bond::try_from(b.clone()))
                 .collect::<Result<Vec<_>, _>>()?,
-            rings: extended.rings.clone(),
             positions: extended.positions.clone(),
             multicenter_bonds: extended.multicenter_bonds.clone(),
             comments: extended.comments.clone(),

@@ -91,12 +91,6 @@ pub(super) fn process_ring_closure(
                 open_end: token_end,
                 open_aromatic: last_aromatic,
             });
-            builder.on_ring_open(
-                idx as u32,
-                Some(pos as u32),
-                Some(token_end as u32),
-                Some(last_atom_idx),
-            );
         }
         Some(open) => {
             if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
@@ -170,12 +164,6 @@ pub(super) fn process_ring_closure(
                         Some(open.open_end as u32),
                     ),
                 },
-            );
-            builder.on_ring_close(
-                idx as u32,
-                Some(pos as u32),
-                Some(token_end as u32),
-                Some(b),
             );
         }
     }
@@ -693,12 +681,6 @@ pub(super) fn process_extended_ring_closure(
                 open_end: token_end,
                 open_aromatic: last_aromatic,
             });
-            builder.on_ring_open(
-                idx as u32,
-                Some(pos as u32),
-                Some(token_end as u32),
-                Some(last_atom_idx),
-            );
         }
         Some(open) => {
             if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
@@ -772,12 +754,6 @@ pub(super) fn process_extended_ring_closure(
                         Some(open.open_end as u32),
                     ),
                 },
-            );
-            builder.on_ring_close(
-                idx as u32,
-                Some(pos as u32),
-                Some(token_end as u32),
-                Some(b),
             );
         }
     }
