@@ -13,9 +13,7 @@ use umol_ast::ast::{
     NoncovalentBondKind, SpinStateAst, StereoConfigurationAst, StereoCosetAst, StereoLigand,
     StereoLigandKind, TryIntoAst, ValueAst,
 };
-use umol_geometric_core::orientation::signed_volume;
-use umol_geometric_core::plane::complementary_direction;
-use umol_geometric_core::Point3D;
+use umol_geometric_core::{complementary_direction, signed_volume, Point3D};
 use umol_perm::{space, ClassKey, Permutation};
 
 use crate::table_ir::atom::Atom as TableAtom;
@@ -243,7 +241,7 @@ fn virtual_ligands(mol: &TableMolecule, atom_idx: usize) -> Vec<StereoLigand> {
 }
 
 /// Neighbors of `atom_idx` in input (parse) order — the OpenSMILES write order, read off the
-/// incident bonds in `mol.bonds` order. (Ring-closure slotting is pinned by the raise tests.)
+/// incident bonds in `mol.bonds` order.
 fn input_neighbor_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<usize> {
     mol.bonds
         .iter()
@@ -263,7 +261,7 @@ fn tetrahedral_target_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<Ster
 }
 
 /// #T source ordering, FirstNeighborToward (SMILES/SMARTS): neighbors in input order, the implicit H
-/// at slot 0 if `atom_idx` opened the SMILES (`atom_idx == 0`) else slot 1; remaining virtuals after.
+/// is first if `atom_idx` is first atom (`atom_idx == 0`) else second; remaining virtuals after.
 fn first_neighbor_toward_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<StereoLigand> {
     let mut ordering: Vec<StereoLigand> = input_neighbor_ordering(mol, atom_idx)
         .iter()
@@ -271,8 +269,8 @@ fn first_neighbor_toward_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<S
         .collect();
     let mut virtuals = virtual_ligands(mol, atom_idx).into_iter();
     if mol.atoms[atom_idx].implicit_hydrogens.unwrap_or(0) > 0 {
-        let slot = if atom_idx > 0 { 1 } else { 0 };
-        ordering.insert(slot, virtuals.next().expect("implicit hydrogen present"));
+        let ligand_idx = if atom_idx > 0 { 1 } else { 0 };
+        ordering.insert(ligand_idx, virtuals.next().expect("implicit hydrogen present"));
     }
     ordering.extend(virtuals);
     ordering
@@ -296,28 +294,28 @@ fn wedge_winding(
     wedged: usize,
     up: bool,
 ) -> usize {
-    let lift = if up { 1.0 } else { -1.0 };
-    let center = positions[atom_idx];
-    let neighbor_points: Vec<Point3D> = ordering
+    let z = if up { 1.0 } else { -1.0 };
+    let center_position = positions[atom_idx];
+    let neighbor_positions: Vec<Point3D> = ordering
         .iter()
         .filter(|ligand| ligand.kind == StereoLigandKind::Atom)
         .map(|ligand| positions[ligand.atom_id.0 as usize])
         .collect();
-    let virtual_point = complementary_direction(center, &neighbor_points);
-    let points: Vec<Point3D> = ordering
+    let virtual_position = complementary_direction(center_position, &neighbor_positions);
+    let positions: Vec<Point3D> = ordering
         .iter()
         .map(|ligand| {
             let index = ligand.atom_id.0 as usize;
             match ligand.kind {
                 StereoLigandKind::Atom if index == wedged => {
-                    Point3D::new(positions[wedged].x, positions[wedged].y, lift)
+                    Point3D::new(positions[wedged].x, positions[wedged].y, z)
                 }
                 StereoLigandKind::Atom => Point3D::new(positions[index].x, positions[index].y, 0.0),
-                _ => virtual_point,
+                _ => virtual_position,
             }
         })
         .collect();
-    if signed_volume(points[0], points[1], points[2], points[3]) > 0.0 {
+    if signed_volume(positions[0], positions[1], positions[2], positions[3]) > 0.0 {
         0
     } else {
         1

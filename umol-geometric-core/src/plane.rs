@@ -1,6 +1,6 @@
 //! In-plane direction helpers for reading 2D depictions.
 
-use crate::Point3D;
+use crate::point::Point3D;
 
 /// The open in-plane (z = 0) direction at `center`: opposite the mean of the unit
 /// vectors to `neighbors`. This is where a virtual ligand sits when a wedge is read

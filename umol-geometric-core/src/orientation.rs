@@ -1,6 +1,6 @@
 //! Orientation (handedness) of ordered point tuples.
 
-use crate::Point3D;
+use crate::point::Point3D;
 
 /// Signed volume of the tetrahedron `(a, b, c, d)` — the 3×3 determinant of the
 /// edge vectors from `a`, i.e. six times the geometric volume. Its **sign** is the
