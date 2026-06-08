@@ -13,29 +13,14 @@ keywords = [
     "molecular representation",
 ]
 description = "Graph-based molecular models for umol."
-# Integration tests listed explicitly so the `legacy` gate applies to the
-# resolution conformance suite which still uses pre-restructure types.
 autotests = false
 
 [lib]
 bench = false
 
 [[test]]
-name = "mol_parsing"
-
-[[test]]
 name = "resolution"
 required-features = ["conformance"]
-
-[[test]]
-name = "sdf_parsing"
-
-[[test]]
-name = "smiles_parsing"
-
-[[test]]
-name = "smiles_property"
-required-features = ["proptest"]
 
 [[bin]]
 name = "test_mol_file"
@@ -59,38 +44,25 @@ bench = false
 
 [features]
 conformance = []
-proptest = []
 
 [dependencies]
-bitflags = "2.9.4"
-bstr = "1.12.0"
 clap = { version = "4", features = ["derive"] }
 umol-ast = { path = "../umol-ast", version = "0.1.0" }
 umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "indexmap"] }
-umol-geometric-core = { path = "../umol-geometric-core", version = "0.1.0" }
 umol-graph-core = { path = "../umol-graph-core", version = "0.1.0" }
-umol-perm = { path = "../umol-perm", version = "0.1.0" }
-fast-float2 = "0.2.3"
-indexmap = "2.11.1"
-itertools = "0.14.0"
-map-macro = "0.3.0"
+umol-io = { path = "../umol-io", version = "0.1.0" }
 murmur3 = "0.5"
-nalgebra = "0.34.0"
+nalgebra = "0.35.0"
 nom = { version = "8.0.0" }
-num = "0.4.3"
 rand = "0.10"
 rand_chacha = "0.10"
 regex = "1.11.2"
 serde = { version = "1.0.221", features = ["derive"] }
-smallvec = "1.15.1"
-strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0"
 toml = "1.1.0"
 umol-shared = { path = "../umol-shared", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3", "xxh3"] }
-bimap = "0.6.3"
-index_vec = "0.1.4"
 
 [build-dependencies]
 walkdir = "2.5.0"
@@ -101,7 +73,6 @@ fastrand = "2.3.0"
 float-cmp = "0.10.0"
 insta = { version = "1.43.2", features = ["yaml", "glob"] }
 pretty_assertions = "1.4.1"
-proptest = "1.7.0"
 rand = "0.10"
 rand_chacha = "0.10"
 rstest = "0.26.1"

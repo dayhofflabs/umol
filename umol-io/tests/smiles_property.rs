@@ -6,11 +6,11 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, FileFailurePersistence};
-use umol_graph::io::smiles::config::SmilesIoConfig;
-use umol_graph::io::smiles::parser::{
+use umol_io::io::smiles::config::SmilesIoConfig;
+use umol_io::io::smiles::parser::{
     parse_smiles_bytes_to_table_ir, parse_smiles_bytes_to_table_ir_with,
 };
-use umol_graph::io::smiles::ParseError;
+use umol_io::io::smiles::ParseError;
 
 // Generate ASCII strings from a token-friendly alphabet to bias towards SMILES-like inputs.
 // This is intentionally permissive; the property is "no panics".

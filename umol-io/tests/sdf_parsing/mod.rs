@@ -1,6 +1,6 @@
-//! MOL file parsing conformance tests.
+//! SDF file parsing conformance tests.
 //!
-//! This module runs parsing tests against a collection of MOL files from various sources.
+//! This module runs parsing tests against a collection of SDF files from various sources.
 //! Files are organized by parse result category:
 //! - molecule: passes all 4 parsers
 //! - molecule_lenient: needs lenient flags for basic parser
@@ -14,12 +14,10 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_graph::io::ctfile::config::CtfileIoConfig;
-use umol_graph::io::ctfile::error::ParseError;
-use umol_graph::io::ctfile::parser::{
-    parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir_with,
-};
-use umol_graph::table_ir::{ExtendedMolecule, Molecule};
+use umol_io::io::ctfile::config::CtfileIoConfig;
+use umol_io::io::ctfile::error::ParseError;
+use umol_io::io::ctfile::parser::{parse_extended_sdf_bytes_with, parse_sdf_bytes_with};
+use umol_io::table_ir::{ExtendedMolecule, Molecule};
 
 /// Category based on which parsers succeed
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -87,27 +85,28 @@ struct ParseErrorSummary {
     message: String,
 }
 
-/// Result of a single parser invocation
+/// Result of a single parser invocation for an SDF file (may contain multiple compounds)
 #[derive(Serialize)]
-struct ParseResult {
+struct SdfParseResult {
     success: bool,
+    compound_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
-    summary: Option<MoleculeSummary>,
+    summaries: Option<Vec<MoleculeSummary>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    extended_summary: Option<ExtendedMoleculeSummary>,
+    extended_summaries: Option<Vec<ExtendedMoleculeSummary>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<ParseErrorSummary>,
 }
 
-/// Combined results from all 4 parsers for a single file
+/// Combined results from all 4 parsers for a single SDF file
 #[derive(Serialize)]
 struct FileParseResults {
     expected_category: Category,
     category: Category,
-    molecule: ParseResult,
-    molecule_lenient: ParseResult,
-    extended_molecule: ParseResult,
-    extended_molecule_lenient: ParseResult,
+    molecule: SdfParseResult,
+    molecule_lenient: SdfParseResult,
+    extended_molecule: SdfParseResult,
+    extended_molecule_lenient: SdfParseResult,
 }
 
 impl From<&Molecule> for MoleculeSummary {
@@ -148,19 +147,21 @@ fn error_type_name(e: &ParseError) -> String {
         .to_string()
 }
 
-fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
+fn parse_with_basic_flags(bytes: &[u8]) -> SdfParseResult {
     let config = CtfileIoConfig::basic();
-    match parse_mol_bytes_to_table_ir_with(bytes, &config) {
-        Ok(mol) => ParseResult {
+    match parse_sdf_bytes_with(bytes, &config) {
+        Ok(mols) => SdfParseResult {
             success: true,
-            summary: Some(MoleculeSummary::from(&mol)),
-            extended_summary: None,
+            compound_count: mols.len(),
+            summaries: Some(mols.iter().map(MoleculeSummary::from).collect()),
+            extended_summaries: None,
             error: None,
         },
-        Err(e) => ParseResult {
+        Err(e) => SdfParseResult {
             success: false,
-            summary: None,
-            extended_summary: None,
+            compound_count: 0,
+            summaries: None,
+            extended_summaries: None,
             error: Some(ParseErrorSummary {
                 error_type: error_type_name(&e),
                 message: e.to_string(),
@@ -169,19 +170,21 @@ fn parse_with_basic_flags(bytes: &[u8]) -> ParseResult {
     }
 }
 
-fn parse_with_lenient_flags(bytes: &[u8]) -> ParseResult {
+fn parse_with_lenient_flags(bytes: &[u8]) -> SdfParseResult {
     let config = CtfileIoConfig::basic_lenient();
-    match parse_mol_bytes_to_table_ir_with(bytes, &config) {
-        Ok(mol) => ParseResult {
+    match parse_sdf_bytes_with(bytes, &config) {
+        Ok(mols) => SdfParseResult {
             success: true,
-            summary: Some(MoleculeSummary::from(&mol)),
-            extended_summary: None,
+            compound_count: mols.len(),
+            summaries: Some(mols.iter().map(MoleculeSummary::from).collect()),
+            extended_summaries: None,
             error: None,
         },
-        Err(e) => ParseResult {
+        Err(e) => SdfParseResult {
             success: false,
-            summary: None,
-            extended_summary: None,
+            compound_count: 0,
+            summaries: None,
+            extended_summaries: None,
             error: Some(ParseErrorSummary {
                 error_type: error_type_name(&e),
                 message: e.to_string(),
@@ -190,19 +193,21 @@ fn parse_with_lenient_flags(bytes: &[u8]) -> ParseResult {
     }
 }
 
-fn parse_extended_with_extended_flags(bytes: &[u8]) -> ParseResult {
+fn parse_extended_with_extended_flags(bytes: &[u8]) -> SdfParseResult {
     let config = CtfileIoConfig::extended();
-    match parse_extended_mol_bytes_with(bytes, &config) {
-        Ok(mol) => ParseResult {
+    match parse_extended_sdf_bytes_with(bytes, &config) {
+        Ok(mols) => SdfParseResult {
             success: true,
-            summary: None,
-            extended_summary: Some(ExtendedMoleculeSummary::from(&mol)),
+            compound_count: mols.len(),
+            summaries: None,
+            extended_summaries: Some(mols.iter().map(ExtendedMoleculeSummary::from).collect()),
             error: None,
         },
-        Err(e) => ParseResult {
+        Err(e) => SdfParseResult {
             success: false,
-            summary: None,
-            extended_summary: None,
+            compound_count: 0,
+            summaries: None,
+            extended_summaries: None,
             error: Some(ParseErrorSummary {
                 error_type: error_type_name(&e),
                 message: e.to_string(),
@@ -211,19 +216,21 @@ fn parse_extended_with_extended_flags(bytes: &[u8]) -> ParseResult {
     }
 }
 
-fn parse_extended_with_lenient_flags(bytes: &[u8]) -> ParseResult {
+fn parse_extended_with_lenient_flags(bytes: &[u8]) -> SdfParseResult {
     let config = CtfileIoConfig::extended_lenient();
-    match parse_extended_mol_bytes_with(bytes, &config) {
-        Ok(mol) => ParseResult {
+    match parse_extended_sdf_bytes_with(bytes, &config) {
+        Ok(mols) => SdfParseResult {
             success: true,
-            summary: None,
-            extended_summary: Some(ExtendedMoleculeSummary::from(&mol)),
+            compound_count: mols.len(),
+            summaries: None,
+            extended_summaries: Some(mols.iter().map(ExtendedMoleculeSummary::from).collect()),
             error: None,
         },
-        Err(e) => ParseResult {
+        Err(e) => SdfParseResult {
             success: false,
-            summary: None,
-            extended_summary: None,
+            compound_count: 0,
+            summaries: None,
+            extended_summaries: None,
             error: Some(ParseErrorSummary {
                 error_type: error_type_name(&e),
                 message: e.to_string(),
@@ -233,7 +240,7 @@ fn parse_extended_with_lenient_flags(bytes: &[u8]) -> ParseResult {
 }
 
 fn extract_expected_category(path: &Path) -> Category {
-    // Path structure: .../data/<category>/<source>/<file>.mol
+    // Path structure: .../data/<category>/<source>/<file>.sdf
     // We need to find the category directory (child of "data")
     let components: Vec<_> = path.components().collect();
     for (i, comp) in components.iter().enumerate() {
@@ -301,7 +308,7 @@ fn run_conformance_test(file_path: &PathBuf) {
 
     let base = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
-        .join("mol_parsing");
+        .join("sdf_parsing");
 
     let mut settings = Settings::clone_current();
     settings.set_snapshot_path(base.join("snapshots"));
@@ -312,6 +319,6 @@ fn run_conformance_test(file_path: &PathBuf) {
 }
 
 #[rstest]
-fn test_conformance(#[files("tests/mol_parsing/data/**/*.mol")] file_path: PathBuf) {
+fn test_conformance(#[files("tests/sdf_parsing/data/**/*.sdf")] file_path: PathBuf) {
     run_conformance_test(&file_path);
 }

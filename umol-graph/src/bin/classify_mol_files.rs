@@ -18,8 +18,8 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{env, fs, process};
 
-use umol_graph::io::ctfile::config::CtfileIoConfig;
-use umol_graph::io::ctfile::parser::{
+use umol_io::io::ctfile::config::CtfileIoConfig;
+use umol_io::io::ctfile::parser::{
     parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir_with,
 };
 

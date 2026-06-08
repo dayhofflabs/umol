@@ -4,8 +4,8 @@ use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use nom::Parser;
-use umol_graph::io::ctfile::config::CtabParseFlags;
-use umol_graph::io::ctfile::parser::{
+use umol_io::io::ctfile::config::CtabParseFlags;
+use umol_io::io::ctfile::parser::{
     atom_input, bond_input, counts_input, extended_atom_input, extended_bond_input,
     extended_property_input, legacy_atom_list_input, property_input,
 };

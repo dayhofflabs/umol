@@ -460,23 +460,15 @@ fn raise_cis_trans_stereo(mol: &TableMolecule, bond_idx: usize) -> Option<BondCo
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Cow;
-
     use rstest::*;
     use umol_ast::ast::BondId;
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::io::ctfile::config::CtfileIoConfig;
     use crate::io::ctfile::parse_mol_to_ast;
     use crate::io::ctfile::parser::parse_mol_bytes_to_table_ir;
     use crate::io::smiles::parse_smiles_to_ast;
     use crate::io::smiles::parser::parse_smiles_bytes_to_table_ir;
-    use crate::ops::model::{
-        AromaticityModel, ChemistryModel, CountsModel, ElementScope, RingLimits, ValenceModel,
-    };
-    use crate::ops::valence::{CountsValence, ValenceTable};
-    use crate::parse::parse_mol_bytes_with;
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
     use crate::table_ir::Molecule as TableMolecule;
@@ -515,13 +507,6 @@ mod tests {
     const CHIRAL_PARITY_MOL: &str = "chiral\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    1.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1  3  1  0  0  0  0\n  1  4  1  0  0  0  0\n  1  5  1  0  0  0  0\nM  END\n";
 
     const CIS_TRANS_EITHER_MOL: &str = "butene\n\n\n  4  3  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    2.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    3.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  2  3  2  3  0  0  0\n  3  4  1  0  0  0  0\nM  END\n";
-
-    #[fixture]
-    fn counts_model() -> CountsModel {
-        CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        }
-    }
 
     #[rstest]
     fn test_table_molecule_try_into_ast(methane: TableMolecule) {
@@ -596,33 +581,6 @@ mod tests {
     }
 
     #[rstest]
-    #[case::methane(METHANE_MOL, 1, "C#i=#c0#h4#n0#u0#s#v0#a!")]
-    #[case::benzene(BENZENE_AROMATIC_MOL, 6, "C#i=#c0#h#n0#u0#s#v2#a")]
-    fn test_parse_mol_to_ast_counts_resolve(
-        counts_model: CountsModel,
-        #[case] input: &str,
-        #[case] atom_count: u32,
-        #[case] expected_atom: &str,
-    ) {
-        let mut ast = parse_mol_to_ast(input).unwrap();
-        CountsValence::new(&counts_model).resolve(&mut ast).unwrap();
-        assert_eq!(ast.atoms().count(), atom_count as usize);
-        for i in 0..atom_count {
-            assert_eq!(ast.atom(AtomId(i)).ast.to_string(), expected_atom);
-        }
-    }
-
-    #[rstest]
-    fn test_parse_smiles_to_ast_methane_counts_resolve(counts_model: CountsModel) {
-        let mut ast = parse_smiles_to_ast("C").unwrap();
-        CountsValence::new(&counts_model).resolve(&mut ast).unwrap();
-        assert_eq!(
-            ast.atom(AtomId(0)).ast.to_string(),
-            "C#i=#c0#h4#n0#u0#s#v0#a!"
-        );
-    }
-
-    #[rstest]
     #[case::organic("C", "C#i=#c0#u0#a!")]
     fn test_parse_smiles_to_ast(#[case] input: &str, #[case] expected_atom: &str) {
         let ast = parse_smiles_to_ast(input).unwrap();
@@ -634,23 +592,6 @@ mod tests {
             AromaticValenceAst::NotAromatic
         ));
         assert_eq!(atom.to_string(), expected_atom);
-    }
-
-    #[rstest]
-    fn test_parse_mol_bytes_with_resolver_methane_determined(counts_model: CountsModel) {
-        let model = ChemistryModel {
-            valence: ValenceModel::Counts(counts_model),
-            aromaticity: AromaticityModel::HueckelRule {
-                scope: ElementScope::AllowList(vec![Element::C]),
-                ring_limits: RingLimits::default(),
-            },
-        };
-        let ast =
-            parse_mol_bytes_with(METHANE_MOL.as_bytes(), &CtfileIoConfig::basic(), &model).unwrap();
-        assert_eq!(
-            ast.atom(AtomId(0)).ast.to_string(),
-            "C#i=#c0#h4#n0#u0#s#v0#a!"
-        );
     }
 
     #[rstest]

@@ -107,3 +107,4 @@
 | [103-stereochemistry-overlay-and-port-trajectory-2026-05-28.md](103-stereochemistry-overlay-and-port-trajectory-2026-05-28.md)     | Active        | 2026-05-28   |
 | [104-stereochemistry-implementation-plan-2026-05-31.md](104-stereochemistry-implementation-plan-2026-05-31.md)                     | Active        | 2026-05-31   |
 | [105-dsl-fixes-2026-06-06.md](105-dsl-fixes-2026-06-06.md)                                                                         | Active        | 2026-06-06   |
+| [106-io-geometry-crate-split-2026-06-07.md](106-io-geometry-crate-split-2026-06-07.md)                                             | Done          | 2026-06-07   |

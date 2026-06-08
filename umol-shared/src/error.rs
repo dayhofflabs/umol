@@ -14,6 +14,14 @@ pub trait UmolError: StdError + Send + Sync + 'static {
     fn as_any(&self) -> &dyn Any;
 }
 
+/// Box any `UmolError` at a cross-module boundary, so `?` promotes into
+/// `Box<dyn UmolError>`
+impl<E: UmolError> From<E> for Box<dyn UmolError> {
+    fn from(error: E) -> Self {
+        Box::new(error)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum DataError {
     #[error(transparent)]

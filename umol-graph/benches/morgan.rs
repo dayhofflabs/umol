@@ -11,7 +11,7 @@ use umol_graph::ast::molecule::MoleculeAst;
 use umol_graph::ast::morgan::{
     morgan_direct, morgan_view, morgan_view_opt, MorganTarget, MorganTargetOpt,
 };
-use umol_graph::io::smiles::parse_smiles_to_ast;
+use umol_io::io::smiles::parse_smiles_to_ast;
 
 fn load_smiles() -> Vec<String> {
     let data_dir = concat!(
