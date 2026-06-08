@@ -1,8 +1,8 @@
 //! Tests for MOL file parsing
 use rstest::*;
 
-use crate::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
-use crate::io::ctfile::parser::{
+use crate::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use crate::ctfile::parser::{
     has_extended_features, parse_extended_mol, parse_extended_mol_bytes, parse_extended_mol_with,
     parse_mol_bytes_to_table_ir, parse_mol_bytes_to_table_ir_with, parse_mol_to_table_ir,
     parse_mol_to_table_ir_with,

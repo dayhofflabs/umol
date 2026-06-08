@@ -4,7 +4,7 @@ use bstr::ByteSlice;
 use nom::{Err, Parser};
 
 use super::utils::LinesWithOffsetExt;
-use crate::io::ctfile::error::ParseError;
+use crate::ctfile::error::ParseError;
 
 /// Parse the 3-line MOL file header block (name, program info, comment)
 ///

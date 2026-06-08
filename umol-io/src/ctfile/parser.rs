@@ -26,11 +26,11 @@ pub use self::properties::{extended_property_input, property_input}; // NOTE: Re
 use self::sdf_data::sdf_data_block;
 use super::config::{CtabParseFlags, CtfileIoConfig};
 use super::error::ParseError;
-use crate::io::utils::normalize_whitespace;
 use crate::table_ir::bond::Bond;
 use crate::table_ir::source::SourceFormat;
 use crate::table_ir::stereo::ChiralityFrame;
 use crate::table_ir::{Atom, AtomSymbol, ExtendedAtom, ExtendedBond, ExtendedMolecule, Molecule};
+use crate::utils::normalize_whitespace;
 
 mod accumulator;
 mod atom;

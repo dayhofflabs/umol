@@ -8,8 +8,6 @@ use thiserror::Error;
 use umol_shared::element::Element;
 use umol_shared::error::UmolError;
 
-use crate::diagnostics::{Diagnostic, DiagnosticKind, Severity};
-use crate::span::Span;
 use crate::table_ir::SGroupType;
 
 // TODO: Fix error hierarchy:
@@ -18,7 +16,6 @@ use crate::table_ir::SGroupType;
 // - Probably need to keep the nom-based composition at the level of blocks
 // - But need to use some generic ParseError vaariant in nom::ParseError trait impl for ParseError,
 //   weird boilerplate right now
-// - Verify that all ParseError::<Variant> variants map to DiagnosticKind::Ctfile<Variant>
 //   not the case atm
 
 #[derive(Debug, Clone, PartialEq, Error)]
@@ -222,168 +219,5 @@ impl ParseError {
 impl UmolError for ParseError {
     fn as_any(&self) -> &dyn Any {
         self
-    }
-}
-
-impl From<ParseError> for Diagnostic {
-    fn from(error: ParseError) -> Self {
-        let (kind, span, details) = match error {
-            ParseError::InvalidHeader { line } => {
-                (DiagnosticKind::CtfileInvalidHeader, Span::line(line), None)
-            }
-            ParseError::InvalidCountsLine { line } => (
-                DiagnosticKind::CtfileInvalidCountsLine,
-                Span::line(line),
-                None,
-            ),
-            ParseError::InvalidAtomLine { line, .. } => (
-                DiagnosticKind::CtfileInvalidAtomLine,
-                Span::line(line),
-                None,
-            ),
-            ParseError::InvalidBondLine { line, .. } => (
-                DiagnosticKind::CtfileInvalidBondLine,
-                Span::line(line),
-                None,
-            ),
-            ParseError::InvalidLegacyAtomListLine { line, .. } => (
-                DiagnosticKind::CtfileInvalidLegacyAtomListLine,
-                Span::line(line),
-                None,
-            ),
-            ParseError::UnsupportedLegacyAtomList { line } => (
-                DiagnosticKind::CtfileInvalidLegacyAtomListLine,
-                Span::line(line),
-                None,
-            ),
-            ParseError::InvalidPropertyLine { line, .. } => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::line(line),
-                None,
-            ),
-            ParseError::InvalidSgroupLine { line, .. } => (
-                DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::line(line),
-                None,
-            ),
-            ParseError::InvalidSdfDataHeader { line } => (
-                DiagnosticKind::CtfileInvalidSdfDataHeader,
-                Span::line(line),
-                None,
-            ),
-            ParseError::InvalidSdfDataValue { line } => (
-                DiagnosticKind::CtfileInvalidSdfDataValue,
-                Span::line(line),
-                None,
-            ),
-            ParseError::MissingDelimiter { line } => (
-                DiagnosticKind::CtfileMissingDelimiter,
-                Span::line(line),
-                None,
-            ),
-            ParseError::MissingMEndTag { line } => {
-                (DiagnosticKind::CtfileMissingMEndTag, Span::line(line), None)
-            }
-            ParseError::UnexpectedEof { line, block } => (
-                DiagnosticKind::CtfileUnexpectedEof,
-                Span::line(line),
-                Some(format!("in {} block", block)),
-            ),
-            ParseError::Incomplete { line } => {
-                (DiagnosticKind::CtfileIncomplete, Span::line(line), None)
-            }
-            ParseError::NomError(kind) => (
-                DiagnosticKind::CtfileParserError,
-                Span::None,
-                Some(format!("nom error: {:?}", kind)),
-            ),
-            ParseError::Generic { line, message, .. } => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::line(line),
-                Some(message),
-            ),
-            ParseError::InvalidChargeCode(_) => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::InvalidValenceCode(_) => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::PropertyMismatch(s) => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::None,
-                Some(s.clone()),
-            ),
-            ParseError::InconsistentSgroups(s) => (
-                DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::None,
-                Some(s.clone()),
-            ),
-            ParseError::IndexOutOfBounds(_) => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::IncompleteStructure(s) => (
-                DiagnosticKind::CtfileInvalidCountsLine,
-                Span::None,
-                Some(s.clone()),
-            ),
-            ParseError::DuplicateProperty(s) => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::None,
-                Some(s.clone()),
-            ),
-            ParseError::InvalidCode { .. } => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::InvalidIsotopeMass { .. } => (
-                DiagnosticKind::CtfileInvalidPropertyLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::UndefinedSGroup { .. } => (
-                DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::SGroupMissingType(_) => (
-                DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::SGroupTypeConstraint { .. } => (
-                DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::MissingSGroupDataContext { .. } => (
-                DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::MissingSgroupDataEnd { .. } => (
-                DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-            ParseError::SGroupIndexMismatch { .. } => (
-                DiagnosticKind::CtfileInvalidSgroupLine,
-                Span::None,
-                Some(error.to_string()),
-            ),
-        };
-        Diagnostic {
-            kind,
-            category: kind.category(),
-            severity: Severity::Error,
-            span: Some(span),
-            details,
-        }
     }
 }

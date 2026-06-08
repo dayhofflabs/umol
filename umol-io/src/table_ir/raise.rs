@@ -465,10 +465,10 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::io::ctfile::parse_mol_to_ast;
-    use crate::io::ctfile::parser::parse_mol_bytes_to_table_ir;
-    use crate::io::smiles::parse_smiles_to_ast;
-    use crate::io::smiles::parser::parse_smiles_bytes_to_table_ir;
+    use crate::ctfile::parse_mol_to_ast;
+    use crate::ctfile::parser::parse_mol_bytes_to_table_ir;
+    use crate::smiles::parse_smiles_to_ast;
+    use crate::smiles::parser::parse_smiles_bytes_to_table_ir;
     use crate::table_ir::atom::Atom as TableAtom;
     use crate::table_ir::bond::{Bond as TableBond, BondOrder as TableBondOrder};
     use crate::table_ir::Molecule as TableMolecule;

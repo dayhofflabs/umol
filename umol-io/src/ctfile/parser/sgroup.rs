@@ -9,7 +9,7 @@ use nom::error::{Error as NomError, ErrorKind as NomErrorKind};
 use nom::sequence::separated_pair;
 use nom::{AsChar, Err, Parser};
 
-use crate::io::ctfile::parser::utils::fixed_width_partial;
+use crate::ctfile::parser::utils::fixed_width_partial;
 use crate::table_ir::{
     SGroupConnectivity, SGroupDataDisplayChars, SGroupDataDisplayPlacement, SGroupDataDisplayType,
     SGroupDataDisplayUnits, SGroupDataType, SGroupMultiplier, SGroupMultiplierOp,

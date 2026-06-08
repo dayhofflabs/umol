@@ -6,9 +6,9 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 use umol_shared::element::Element;
 
-use crate::io::ctfile::config::CtabParseFlags;
-use crate::io::ctfile::error::ParseError;
-use crate::io::ctfile::parser::{ctab_block, extended_ctab_block};
+use crate::ctfile::config::CtabParseFlags;
+use crate::ctfile::error::ParseError;
+use crate::ctfile::parser::{ctab_block, extended_ctab_block};
 use crate::table_ir::{AtomList, AtomSymbol, BondOrder};
 
 #[rustfmt::skip]

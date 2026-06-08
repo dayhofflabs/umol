@@ -1,7 +1,7 @@
 use std::{env, fs, process};
 
-use umol_io::io::ctfile::config::CtfileIoConfig;
-use umol_io::io::ctfile::parser::{
+use umol_io::ctfile::config::CtfileIoConfig;
+use umol_io::ctfile::parser::{
     parse_extended_mol_bytes, parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir,
     parse_mol_bytes_to_table_ir_with,
 };

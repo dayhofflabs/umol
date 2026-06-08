@@ -7,7 +7,7 @@ use rstest::*;
 use umol_shared::element::Element;
 
 use super::*;
-use crate::io::ctfile::config::CtabParseFlags;
+use crate::ctfile::config::CtabParseFlags;
 use crate::table_ir::{SGroupMultiplierOp, SGroupMultiplierTerm};
 
 #[rstest]

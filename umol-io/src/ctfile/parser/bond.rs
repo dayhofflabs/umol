@@ -11,8 +11,8 @@ use super::convert::{
     convert_bond_topology_code, convert_bond_type_code, convert_extended_bond_type_code,
 };
 use super::utils::{parse_int_opt, validate_unused_n, LinesWithOffsetExt};
-use crate::io::ctfile::config::CtabParseFlags;
-use crate::io::ctfile::error::ParseError;
+use crate::ctfile::config::CtabParseFlags;
+use crate::ctfile::error::ParseError;
 use crate::table_ir::bond::{Bond, BondOrder, ExtendedBond};
 
 /// Parse bond block (basic bonds only)

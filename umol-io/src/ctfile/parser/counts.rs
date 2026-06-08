@@ -8,8 +8,8 @@ use nom::{Err, Parser};
 
 use super::properties::{MoleculeChiralFlagEntry, PropertyEntries};
 use super::utils::{parse_int_opt, validate_unused_n, LinesWithOffsetExt};
-use crate::io::ctfile::config::CtabParseFlags;
-use crate::io::ctfile::error::ParseError;
+use crate::ctfile::config::CtabParseFlags;
+use crate::ctfile::error::ParseError;
 
 /// Parse counts block
 pub(super) fn counts_block<'inp>(

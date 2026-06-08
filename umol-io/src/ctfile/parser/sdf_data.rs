@@ -9,7 +9,7 @@ use nom::sequence::{delimited, preceded};
 use nom::{Err, Parser};
 
 use super::utils::LinesWithOffsetExt;
-use crate::io::ctfile::error::ParseError;
+use crate::ctfile::error::ParseError;
 
 /// Parse data field header: `> <Field Name>`
 pub(super) fn sdf_data_header<'inp>(

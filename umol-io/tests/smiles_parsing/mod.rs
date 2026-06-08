@@ -19,10 +19,10 @@ use insta::{assert_yaml_snapshot, Settings};
 use regex::Regex;
 use rstest::*;
 use serde::Serialize;
-use umol_io::io::smiles::config::SmilesIoConfig;
-use umol_io::io::smiles::error::ParseError;
-use umol_io::io::smiles::parse_extended_smiles_bytes_with;
-use umol_io::io::smiles::parser::{parse_smiles_bytes_to_table_ir_with, parse_smiles_to_table_ir};
+use umol_io::smiles::config::SmilesIoConfig;
+use umol_io::smiles::error::ParseError;
+use umol_io::smiles::parse_extended_smiles_bytes_with;
+use umol_io::smiles::parser::{parse_smiles_bytes_to_table_ir_with, parse_smiles_to_table_ir};
 use umol_io::table_ir::{ExtendedMolecule, Molecule};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

@@ -28,9 +28,9 @@ use rand::seq::SliceRandom;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use regex::Regex;
-use umol_io::io::smiles::config::SmilesIoConfig;
-use umol_io::io::smiles::parse_extended_smiles_bytes_with;
-use umol_io::io::smiles::parser::parse_smiles_bytes_to_table_ir_with;
+use umol_io::smiles::config::SmilesIoConfig;
+use umol_io::smiles::parse_extended_smiles_bytes_with;
+use umol_io::smiles::parser::parse_smiles_bytes_to_table_ir_with;
 
 #[derive(Parser)]
 #[command(name = "classify_smiles_strings")]

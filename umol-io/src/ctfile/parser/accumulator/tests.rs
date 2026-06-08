@@ -6,8 +6,8 @@ use umol_shared::e;
 use umol_shared::isotope::NamedIsotope;
 
 use super::*;
-use crate::io::ctfile::config::CtabParseFlags;
-use crate::io::ctfile::parser::properties::{
+use crate::ctfile::config::CtabParseFlags;
+use crate::ctfile::parser::properties::{
     AtomAliasEntry, AtomAttachmentOrderEntry, AtomChargeOverrideEntry, AtomHydrogenCountEntry,
     AtomListEntry, AtomValueEntry, AttachmentPointEntry, BondOrderOverrideEntry, ChargeEntry,
     ChemSketchLabelEntry, IsotopeEntry, LegacyGroupAbbreviationEntry, LinkAtomEntry,

@@ -64,19 +64,13 @@ umol-shared = { path = "../umol-shared", version = "0.1.0" }
 umol-params = { path = "../umol-params", version = "0.1.0" }
 xxhash-rust = { version = "0.8.15", features = ["const_xxh3", "xxh3"] }
 
-[build-dependencies]
-walkdir = "2.5.0"
-
 [dev-dependencies]
 criterion = "0.8.1"
 fastrand = "2.3.0"
 float-cmp = "0.10.0"
 insta = { version = "1.43.2", features = ["yaml", "glob"] }
 pretty_assertions = "1.4.1"
-rand = "0.10"
-rand_chacha = "0.10"
 rstest = "0.26.1"
-umol-shared = { path = "../umol-shared", version = "0.1.0" }
 walkdir = "2.5.0"
 
 [[bench]]

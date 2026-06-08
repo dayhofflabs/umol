@@ -7,7 +7,7 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::*;
-use crate::io::ctfile::config::CtabParseFlags;
+use crate::ctfile::config::CtabParseFlags;
 use crate::table_ir::{BondOrder, BondReactingCenter, BondStereo, BondTopology, BondWedge};
 
 #[rustfmt::skip]
@@ -49,7 +49,7 @@ fn test_bond_block(
 #[case::len12_trailing_data(b"  1  2  1 1\n")]
 #[case::len8_too_short(b"  1  2  \n")]
 fn test_bond_block_invalid(#[case] input: &[u8]) {
-    use crate::io::ctfile::error::ParseError;
+    use crate::ctfile::error::ParseError;
     let flags = CtabParseFlags::BASIC;
     let result = bond_block(1, 0, flags).parse(input);
     let input_str = input.to_str_lossy();
@@ -98,7 +98,7 @@ fn test_extended_bond_block(
 #[case::len_21_trailing_data(b"  1  2  1  0  0  0  0X\n")]
 #[case::len_8_too_short(b"  1  2  \n")]
 fn test_extended_bond_block_invalid(#[case] input: &[u8]) {
-    use crate::io::ctfile::error::ParseError;
+    use crate::ctfile::error::ParseError;
     let flags = CtabParseFlags::EXTENDED;
     let result = extended_bond_block(1, 0, flags).parse(input);
     let input_str = input.to_str_lossy();

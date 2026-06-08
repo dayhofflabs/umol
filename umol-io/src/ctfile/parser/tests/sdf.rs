@@ -4,8 +4,8 @@ use std::str::from_utf8;
 
 use rstest::*;
 
-use crate::io::ctfile::config::{CtabParseFlags, CtfileIoConfig};
-use crate::io::ctfile::parser::{
+use crate::ctfile::config::{CtabParseFlags, CtfileIoConfig};
+use crate::ctfile::parser::{
     parse_extended_sdf, parse_extended_sdf_with, parse_sdf, parse_sdf_bytes, parse_sdf_bytes_with,
     parse_sdf_with,
 };

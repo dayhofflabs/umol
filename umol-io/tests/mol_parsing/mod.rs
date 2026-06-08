@@ -14,9 +14,9 @@ use std::path::{Component, Path, PathBuf};
 use insta::{assert_yaml_snapshot, Settings};
 use rstest::*;
 use serde::Serialize;
-use umol_io::io::ctfile::config::CtfileIoConfig;
-use umol_io::io::ctfile::error::ParseError;
-use umol_io::io::ctfile::parser::{
+use umol_io::ctfile::config::CtfileIoConfig;
+use umol_io::ctfile::error::ParseError;
+use umol_io::ctfile::parser::{
     parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir_with,
 };
 use umol_io::table_ir::{ExtendedMolecule, Molecule};

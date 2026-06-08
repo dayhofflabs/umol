@@ -5,10 +5,10 @@
 //! `ResolverContradiction`, or `ResolveUnderdetermined`, each boxed at this boundary.
 
 use umol_ast::ast::{MoleculeAst, TryIntoAst};
-use umol_io::io::ctfile::config::CtfileIoConfig;
-use umol_io::io::ctfile::parser::parse_mol_bytes_to_table_ir_with;
-use umol_io::io::smiles::config::SmilesIoConfig;
-use umol_io::io::smiles::parser::parse_smiles_bytes_to_table_ir_with;
+use umol_io::ctfile::config::CtfileIoConfig;
+use umol_io::ctfile::parser::parse_mol_bytes_to_table_ir_with;
+use umol_io::smiles::config::SmilesIoConfig;
+use umol_io::smiles::parser::parse_smiles_bytes_to_table_ir_with;
 use umol_shared::error::UmolError;
 
 use crate::ops::model::ChemistryModel;
@@ -97,9 +97,9 @@ mod tests {
 
     use rstest::*;
     use umol_ast::ast::AtomId;
-    use umol_io::io::ctfile::config::CtfileIoConfig;
-    use umol_io::io::ctfile::parse_mol_to_ast;
-    use umol_io::io::smiles::parse_smiles_to_ast;
+    use umol_io::ctfile::config::CtfileIoConfig;
+    use umol_io::ctfile::parse_mol_to_ast;
+    use umol_io::smiles::parse_smiles_to_ast;
     use umol_shared::element::Element;
 
     use super::parse_mol_bytes_with;

@@ -1,7 +1,8 @@
-//! I/O for umol: molecular file-format parsers (SMILES, CTFile), the TableIR
-//! boundary type and its raise to `MoleculeAst`, byte spans, and diagnostics.
+//! I/O for umol: molecular file-format parsers (SMILES, CTFile)
+//! and the TableIR boundary type.
 
-pub mod diagnostics;
-pub mod io;
+pub mod ctfile;
+pub mod smiles;
 pub mod span;
 pub mod table_ir;
+mod utils;

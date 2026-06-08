@@ -8,7 +8,7 @@ use pretty_assertions::assert_eq;
 use rstest::*;
 
 use super::*;
-use crate::io::ctfile::config::CtabParseFlags;
+use crate::ctfile::config::CtabParseFlags;
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, RGroup, WildcardAtom,

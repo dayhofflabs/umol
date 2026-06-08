@@ -12,9 +12,9 @@ use umol_shared::element::Element;
 use super::utils::{
     fixed_width_int_in_range, fixed_width_int_minus1, fixed_width_int_partial, LinesWithOffsetExt,
 };
-use crate::io::ctfile::config::CtabParseFlags;
-use crate::io::ctfile::error::ParseError;
-use crate::io::ctfile::parser::properties::{AtomListEntry, PropertyEntries};
+use crate::ctfile::config::CtabParseFlags;
+use crate::ctfile::error::ParseError;
+use crate::ctfile::parser::properties::{AtomListEntry, PropertyEntries};
 
 // Parse legacy atom list block
 pub(super) fn legacy_atom_list_block<'inp>(

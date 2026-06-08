@@ -17,9 +17,9 @@ use super::utils::{
     fixed_width_int_in_range, fixed_width_int_minus1, fixed_width_str_partial, fixed_width_unused,
     rgroup_occurrences, LinesWithOffsetExt,
 };
-use crate::io::ctfile::config::CtabParseFlags;
-use crate::io::ctfile::error::ParseError;
-use crate::io::ctfile::parser::sgroup::{
+use crate::ctfile::config::CtabParseFlags;
+use crate::ctfile::error::ParseError;
+use crate::ctfile::parser::sgroup::{
     sgroup_data_display_chars, sgroup_data_display_placement, sgroup_data_display_type,
     sgroup_data_display_units, sgroup_data_type, sgroup_multiplier, sgroup_subscript,
 };

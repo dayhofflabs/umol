@@ -22,9 +22,9 @@ use super::utils::{
     is_reserved_atom_symbol, parse_float_f10_4, parse_int_opt, validate_unused_n,
     LinesWithOffsetExt,
 };
-use crate::io::ctfile::config::CtabParseFlags;
-use crate::io::ctfile::error::ParseError;
-use crate::io::ctfile::parser::rgroup::rgroup_symbol;
+use crate::ctfile::config::CtabParseFlags;
+use crate::ctfile::error::ParseError;
+use crate::ctfile::parser::rgroup::rgroup_symbol;
 use crate::table_ir::{Atom, AtomList, AtomSymbol, ExtendedAtom, WildcardAtom};
 
 /// Parse atom block (basic atoms only)

@@ -5,7 +5,7 @@
 use umol_shared::element::Element;
 use umol_shared::isotope::Isotope;
 
-use crate::io::ctfile::error::ParseError;
+use crate::ctfile::error::ParseError;
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
     AtomExactChange, AtomInversionRetention, AtomStereoCare, AtomSymbol, AttachmentPointType,
