@@ -30,35 +30,65 @@ pub enum ClassKey {
 
 impl ClassKey {
     fn build(self) -> CosetSpace {
-        let (group, decomposition) = match self {
+        // Each arm gives (parent P, symmetry R, decomposition). P is the group of realizable
+        // arrangements: Sₙ for the geometry classes, the partition group D₄ for cis/trans.
+        let (parent, group, decomposition) = match self {
             ClassKey::Symmetric(n) => (
+                PermutationGroup::symmetric(n as usize),
                 PermutationGroup::symmetric(n as usize),
                 Decomposition::CanonicalRank,
             ),
             ClassKey::Alternating(n) => (
+                PermutationGroup::symmetric(n as usize),
                 PermutationGroup::alternating(n as usize),
                 Decomposition::CanonicalRank,
             ),
             ClassKey::Cyclic(n) => (
+                PermutationGroup::symmetric(n as usize),
                 PermutationGroup::cyclic(n as usize),
                 Decomposition::CanonicalRank,
             ),
             ClassKey::Dihedral(n) => (
+                PermutationGroup::symmetric(n as usize),
                 PermutationGroup::dihedral(n as usize),
                 Decomposition::CanonicalRank,
             ),
             ClassKey::Tetrahedral => (
+                PermutationGroup::symmetric(4),
                 PermutationGroup::alternating(4),
                 Decomposition::CanonicalRank,
             ),
+            // Substituents are bonded to fixed sp² carbons and the bond may be written with
+            // either carbon first, so the parent is S₂ ≀ S₂ = D₄ — within-side swaps (0 1), (2 3)
+            // and the carbon swap (0 2)(1 3). R is the Klein four V (face flip (0 1)(2 3) and
+            // carbon swap), giving 8/4 = 2 cosets (cis, trans).
             ClassKey::CisTrans => (
-                PermutationGroup::alternating(2),
+                PermutationGroup::generate(
+                    4,
+                    &[
+                        Permutation::from_image(4, &[1, 0, 2, 3]),
+                        Permutation::from_image(4, &[0, 1, 3, 2]),
+                        Permutation::from_image(4, &[2, 3, 0, 1]),
+                    ],
+                ),
+                PermutationGroup::generate(
+                    4,
+                    &[
+                        Permutation::from_image(4, &[1, 0, 3, 2]),
+                        Permutation::from_image(4, &[2, 3, 0, 1]),
+                    ],
+                ),
                 Decomposition::CanonicalRank,
             ),
-            ClassKey::SquarePlanar => (PermutationGroup::dihedral(4), Decomposition::SquarePlanar),
+            ClassKey::SquarePlanar => (
+                PermutationGroup::symmetric(4),
+                PermutationGroup::dihedral(4),
+                Decomposition::SquarePlanar,
+            ),
             // 2 axial (0,4) + 3 equatorial (1,2,3); C₃ cycles equatorial,
             // C₂ swaps the axial pair and two equatorial.
             ClassKey::TrigonalBipyramidal => (
+                PermutationGroup::symmetric(5),
                 PermutationGroup::generate(
                     5,
                     &[
@@ -71,6 +101,7 @@ impl ClassKey {
             // 6 octahedron vertices (0,5 = axial; 1,2,3,4 = equatorial square);
             // C₄ about the 0–5 axis, C₃ about a body diagonal.
             ClassKey::Octahedral => (
+                PermutationGroup::symmetric(6),
                 PermutationGroup::generate(
                     6,
                     &[
@@ -81,7 +112,7 @@ impl ClassKey {
                 Decomposition::Octahedral,
             ),
         };
-        CosetSpace::new(group, decomposition)
+        CosetSpace::new(parent, group, decomposition)
     }
 }
 

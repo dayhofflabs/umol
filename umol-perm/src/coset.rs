@@ -1,4 +1,4 @@
-//! The coset space R\Sₙ, with a per-class numbering of its cosets.
+//! The coset space R\P for a parent group P (Sₙ unless restricted), with a per-class numbering.
 //!
 //! A configuration is a ligand→position map; two configurations are the same
 //! arrangement when related by a proper rotation acting on the positions, i.e.
@@ -22,17 +22,29 @@ pub(crate) enum Decomposition {
     Octahedral,
 }
 
-/// A coset space Sₙ/R for a proper-rotation group R, with a fixed numbering.
+/// A coset space P/R for a proper-rotation group R inside a parent group P, with a fixed
+/// numbering. P is the group of realizable arrangements: Sₙ for the geometry classes (any
+/// ligand may take any position), or a partition subgroup for cis/trans (substituents are
+/// bonded to fixed sp² carbons).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CosetSpace {
+    parent: PermutationGroup,
     group: PermutationGroup,
     numbering: HashMap<Permutation, u32>,
     representatives: Vec<Permutation>,
 }
 
 impl CosetSpace {
-    pub(crate) fn new(group: PermutationGroup, decomposition: Decomposition) -> Self {
-        let ordered = decomposition.representatives(&group);
+    pub(crate) fn new(
+        parent: PermutationGroup,
+        group: PermutationGroup,
+        decomposition: Decomposition,
+    ) -> Self {
+        assert!(
+            group.elements().iter().all(|g| parent.contains(g)),
+            "coset group R is not a subgroup of the parent P"
+        );
+        let ordered = decomposition.representatives(&parent, &group);
         let mut numbering = HashMap::new();
         let mut representatives = Vec::with_capacity(ordered.len());
         for rep in ordered {
@@ -44,13 +56,13 @@ impl CosetSpace {
             );
             representatives.push(rep);
         }
-        let total: usize = (1..=group.degree()).product();
         assert_eq!(
             numbering.len(),
-            total / group.order(),
+            parent.order() / group.order(),
             "decomposition does not cover every coset"
         );
         Self {
+            parent,
             group,
             numbering,
             representatives,
@@ -90,6 +102,10 @@ impl CosetSpace {
     /// the original list, of the relabeled list's i-th neighbor. Used to carry a
     /// parsed `@`-number into umol's incidence order.
     pub fn reindex(&self, index: u32, relabeling: Permutation) -> u32 {
+        assert!(
+            self.parent.contains(&relabeling),
+            "reindex relabeling is not in the parent group"
+        );
         self.index(self.unindex(index).compose(relabeling))
     }
 }
@@ -105,12 +121,17 @@ fn coset_rep(group: &PermutationGroup, perm: Permutation) -> Permutation {
 
 impl Decomposition {
     /// One representative permutation per arrangement number, in numbering order.
-    fn representatives(self, group: &PermutationGroup) -> Vec<Permutation> {
+    fn representatives(
+        self,
+        parent: &PermutationGroup,
+        group: &PermutationGroup,
+    ) -> Vec<Permutation> {
         match self {
             Decomposition::CanonicalRank => {
-                let order: usize = (1..=group.degree()).product();
-                let mut reps: Vec<Permutation> = (0..order)
-                    .map(|i| coset_rep(group, Permutation::unrank(group.degree(), i)))
+                let mut reps: Vec<Permutation> = parent
+                    .elements()
+                    .iter()
+                    .map(|&perm| coset_rep(group, perm))
                     .collect();
                 reps.sort();
                 reps.dedup();
@@ -250,12 +271,14 @@ mod tests {
         #[case] decomposition: Decomposition,
         #[case] count: usize,
     ) {
-        assert_eq!(CosetSpace::new(group, decomposition).count(), count);
+        let parent = PermutationGroup::symmetric(group.degree());
+        assert_eq!(CosetSpace::new(parent, group, decomposition).count(), count);
     }
 
     #[rstest]
     fn test_coset_space_coset_rep() {
         let space = CosetSpace::new(
+            PermutationGroup::symmetric(4),
             PermutationGroup::alternating(4),
             Decomposition::CanonicalRank,
         );
@@ -278,7 +301,8 @@ mod tests {
         #[case] group: PermutationGroup,
         #[case] decomposition: Decomposition,
     ) {
-        let space = CosetSpace::new(group, decomposition);
+        let parent = PermutationGroup::symmetric(group.degree());
+        let space = CosetSpace::new(parent, group, decomposition);
         for n in 0..space.count() as u32 {
             assert_eq!(space.index(space.unindex(n)), n);
         }
@@ -289,7 +313,45 @@ mod tests {
     #[case::four_shape([1, 3, 0, 2], 1)]
     #[case::z_shape([1, 2, 0, 3], 2)]
     fn test_coset_space_index_square_planar(#[case] image: [u8; 4], #[case] expected: u32) {
-        let space = CosetSpace::new(PermutationGroup::dihedral(4), Decomposition::SquarePlanar);
+        let space = CosetSpace::new(
+            PermutationGroup::symmetric(4),
+            PermutationGroup::dihedral(4),
+            Decomposition::SquarePlanar,
+        );
         assert_eq!(space.index(Permutation::from_image(4, &image)), expected);
+    }
+
+    #[rstest]
+    fn test_coset_space_cis_trans() {
+        // parent D₄ = S₂ ≀ S₂ (within-side swaps + carbon swap); R = Klein four V; 8/4 = 2 cosets.
+        let parent = PermutationGroup::generate(
+            4,
+            &[
+                Permutation::from_image(4, &[1, 0, 2, 3]),
+                Permutation::from_image(4, &[0, 1, 3, 2]),
+                Permutation::from_image(4, &[2, 3, 0, 1]),
+            ],
+        );
+        let group = PermutationGroup::generate(
+            4,
+            &[
+                Permutation::from_image(4, &[1, 0, 3, 2]),
+                Permutation::from_image(4, &[2, 3, 0, 1]),
+            ],
+        );
+        let space = CosetSpace::new(parent, group, Decomposition::CanonicalRank);
+        assert_eq!(space.count(), 2);
+        // The within-side swap (0 1) is the cis↔trans flip: a different coset from identity.
+        let within_side_swap = Permutation::from_image(4, &[1, 0, 2, 3]);
+        assert_ne!(
+            space.coset_rep(Permutation::identity(4)),
+            space.coset_rep(within_side_swap)
+        );
+        // The carbon swap (0 2)(1 3) ∈ R: same coset (writing the bond with either carbon first).
+        let carbon_swap = Permutation::from_image(4, &[2, 3, 0, 1]);
+        assert_eq!(
+            space.coset_rep(Permutation::identity(4)),
+            space.coset_rep(carbon_swap)
+        );
     }
 }
