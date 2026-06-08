@@ -13,6 +13,7 @@ pub mod reaction;
 pub mod rgroup;
 pub mod sgroup;
 pub mod source;
+pub mod span;
 pub mod stereo;
 mod utils;
 
@@ -28,4 +29,5 @@ pub use reaction::*;
 pub use rgroup::*;
 pub use sgroup::*;
 pub use source::*;
+pub use span::*;
 pub use stereo::*;

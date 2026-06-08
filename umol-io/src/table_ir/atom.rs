@@ -8,7 +8,7 @@ use umol_shared::spin::SpinMultiplicity;
 
 use super::error::ConversionError;
 use super::rgroup::RGroup;
-use crate::span::Span;
+use super::span::Span;
 
 /// Basic Atom IR
 #[derive(Clone, Debug, PartialEq)]

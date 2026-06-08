@@ -10,11 +10,9 @@ use umol_shared::element::Element;
 use super::super::builder::{
     AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder,
 };
-use crate::span::Span;
-use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    AtomSymbol, BondDonation, BondOrder, BondWedge, ChiralityFrame, ExtendedMolecule, Molecule,
-    SourceFormat, WildcardAtom,
+    AtomSymbol, BondDonation, BondOrder, BondWedge, Chirality, ChiralityFrame, ExtendedMolecule,
+    Molecule, SourceFormat, Span, WildcardAtom,
 };
 
 /// Returns the sorted list of neighbor atom indices for a given atom in a Molecule.

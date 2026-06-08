@@ -6,7 +6,7 @@ use strum::{Display, EnumString};
 use umol_shared::spin::SpinMultiplicity;
 
 use super::error::ConversionError;
-use crate::span::Span;
+use super::span::Span;
 
 /// Ordered pair of atom indices, `first <= second`
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -6,11 +6,9 @@ use umol_shared::element::Element;
 
 use super::super::error::ParseError;
 use super::utils::{make_bond, make_extended_bond};
-use crate::span::Span;
-use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    Atom, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedAtom, ExtendedBond,
-    ExtendedMolecule, Molecule, WildcardAtom,
+    Atom, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, Chirality, ExtendedAtom,
+    ExtendedBond, ExtendedMolecule, Molecule, Span, WildcardAtom,
 };
 
 /// Open ring-closure bond awaiting its matching digit. `bond_idx` is the

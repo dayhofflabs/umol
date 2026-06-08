@@ -3,6 +3,5 @@
 
 pub mod ctfile;
 pub mod smiles;
-pub mod span;
 pub mod table_ir;
 mod utils;
