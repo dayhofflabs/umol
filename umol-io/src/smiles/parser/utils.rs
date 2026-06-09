@@ -10,7 +10,7 @@ use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
 use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedBond, Span, WildcardAtom,
+    AtomSymbol, Bond, BondDonation, BondOrder, BondDirection, ExtendedBond, Span, WildcardAtom,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -313,11 +313,11 @@ pub(super) fn pos_in_bracket(base: usize, local: usize) -> usize {
 pub(super) fn make_bond(start: usize, end: usize, b: BondData) -> Bond {
     let mut bond = Bond::new(start as u32, end as u32, b.order);
     // AtomPair normalization sorts the atoms; a swap reverses the start-atom
-    // viewpoint, so flip both the wedge and the donation.
-    bond.wedge = if start > end {
-        b.wedge.map(|w| w.flip())
+    // viewpoint, so flip both the direction and the donation.
+    bond.direction = if start > end {
+        b.direction.map(|w| w.flip())
     } else {
-        b.wedge
+        b.direction
     };
     bond.donation = if start > end {
         b.donation.map(|d| d.flip())
@@ -332,11 +332,11 @@ pub(super) fn make_bond(start: usize, end: usize, b: BondData) -> Bond {
 pub(super) fn make_extended_bond(start: usize, end: usize, b: BondData) -> ExtendedBond {
     let mut bond = ExtendedBond::new(start as u32, end as u32, b.order);
     // AtomPair normalization sorts the atoms; a swap reverses the start-atom
-    // viewpoint, so flip both the wedge and the donation.
-    bond.wedge = if start > end {
-        b.wedge.map(|w| w.flip())
+    // viewpoint, so flip both the direction and the donation.
+    bond.direction = if start > end {
+        b.direction.map(|w| w.flip())
     } else {
-        b.wedge
+        b.direction
     };
     bond.donation = if start > end {
         b.donation.map(|d| d.flip())
@@ -353,19 +353,19 @@ pub(super) fn attach_atom(
     builder: &mut MoleculeBuilder,
     last_atom_idx: Option<usize>,
     curr_atom_idx: usize,
-    pending_bond: &mut Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)>,
+    pending_bond: &mut Option<(BondOrder, Option<BondDirection>, Option<BondDonation>, usize)>,
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
 ) {
     if let Some(last) = last_atom_idx {
-        if let Some((order, wedge, donation, pos)) = pending_bond.take() {
+        if let Some((order, direction, donation, pos)) = pending_bond.take() {
             builder.on_bond(
                 last,
                 curr_atom_idx,
                 BondData {
                     order,
-                    wedge,
+                    direction,
                     donation,
                     span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
                 },
@@ -376,7 +376,7 @@ pub(super) fn attach_atom(
                 curr_atom_idx,
                 BondData {
                     order: BondOrder::Aromatic,
-                    wedge: None,
+                    direction: None,
                     donation: None,
                     span: Span::from_bytes_opt(Some(curr_atom_start), Some(curr_atom_end)),
                 },
@@ -393,27 +393,27 @@ pub(super) fn attach_atom(
 }
 
 #[inline]
-pub(super) fn parse_bond(b: u8) -> (BondOrder, Option<BondWedge>) {
+pub(super) fn parse_bond(b: u8) -> (BondOrder, Option<BondDirection>) {
     match b {
         b'-' => (BondOrder::Single, None),
         b'=' => (BondOrder::Double, None),
         b'#' => (BondOrder::Triple, None),
         b'$' => (BondOrder::Quadruple, None),
         b':' => (BondOrder::Aromatic, None),
-        b'/' => (BondOrder::Single, Some(BondWedge::Up)),
-        b'\\' => (BondOrder::Single, Some(BondWedge::Down)),
+        b'/' => (BondOrder::Single, Some(BondDirection::Rising)),
+        b'\\' => (BondOrder::Single, Some(BondDirection::Falling)),
         b'~' => (BondOrder::Any, None),
         _ => (BondOrder::Single, None),
     }
 }
 
 /// Parse extended bond tokens including dative bonds (-> and <-).
-/// Returns (order, wedge, donation, bytes_consumed).
+/// Returns (order, direction, donation, bytes_consumed).
 #[inline]
 pub(super) fn parse_extended_bond(
     input: &[u8],
     pos: usize,
-) -> (BondOrder, Option<BondWedge>, Option<BondDonation>, usize) {
+) -> (BondOrder, Option<BondDirection>, Option<BondDonation>, usize) {
     let b0 = input[pos];
     let next = if pos + 1 < input.len() {
         Some(input[pos + 1])
@@ -426,8 +426,8 @@ pub(super) fn parse_extended_bond(
         (b'<', Some(b'-')) => (BondOrder::Single, None, Some(BondDonation::Accepting), 2),
         (b'~', _) => (BondOrder::Any, None, None, 1),
         _ => {
-            let (order, wedge) = parse_bond(b0);
-            (order, wedge, None, 1)
+            let (order, direction) = parse_bond(b0);
+            (order, direction, None, 1)
         }
     }
 }
@@ -575,19 +575,19 @@ pub(super) fn attach_extended_atom(
     builder: &mut ExtendedMoleculeBuilder,
     last_atom_idx: Option<usize>,
     curr_atom_idx: usize,
-    pending_bond: &mut Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)>,
+    pending_bond: &mut Option<(BondOrder, Option<BondDirection>, Option<BondDonation>, usize)>,
     curr_aromatic: bool,
     curr_atom_start: u32,
     curr_atom_end: u32,
 ) {
     if let Some(last) = last_atom_idx {
-        if let Some((order, wedge, donation, pos)) = pending_bond.take() {
+        if let Some((order, direction, donation, pos)) = pending_bond.take() {
             builder.on_bond(
                 last,
                 curr_atom_idx,
                 BondData {
                     order,
-                    wedge,
+                    direction,
                     donation,
                     span: Span::from_bytes_opt(Some(pos as u32), Some(pos as u32 + 1)),
                 },
@@ -598,7 +598,7 @@ pub(super) fn attach_extended_atom(
                 curr_atom_idx,
                 BondData {
                     order: BondOrder::Aromatic,
-                    wedge: None,
+                    direction: None,
                     donation: None,
                     span: Span::from_bytes_opt(Some(curr_atom_start), Some(curr_atom_end)),
                 },

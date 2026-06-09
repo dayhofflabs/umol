@@ -101,6 +101,7 @@ pub struct Bond {
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
     pub wedge: Option<BondWedge>,
+    pub direction: Option<BondDirection>,
     pub donation: Option<BondDonation>,
     pub noncovalent: Option<BondNoncovalent>,
     pub span: Option<Span>,
@@ -117,6 +118,7 @@ impl Bond {
             ring: None,
             stereo: None,
             wedge: None,
+            direction: None,
             donation: None,
             noncovalent: None,
             span: None,
@@ -136,6 +138,7 @@ impl Bond {
             ring: None,
             stereo: None,
             wedge: None,
+            direction: None,
             donation: Some(if swapped { donation.flip() } else { donation }),
             noncovalent: None,
             span: None,
@@ -153,6 +156,7 @@ impl Bond {
             ring: None,
             stereo: None,
             wedge: None,
+            direction: None,
             donation: None,
             noncovalent: Some(noncovalent),
             span: None,
@@ -249,29 +253,33 @@ impl BondOrder {
     }
 }
 
-/// Stereo wedge indication for single bonds
-/// In MOL files: Wedge (up, code 1), Dash (down, code 6)
-/// The wedge (pointed) end of the stereo bond is at the first atom
-/// In SMILES: / (up), \ (down)
+/// Tetrahedral depiction wedge for single bonds.
+/// In MOL files: Wedge (up, code 1), Dash (down, code 6), Either (code 4).
+/// The wedge (pointed) end of the stereo bond is at the first atom.
 /// In CXSMILES: w: (undefined), wU: (undefined, display up), wD: (undefined, display down)
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BondWedge {
-    Up,         // MOL: Wedge (code 1), SMILES: /
-    Down,       // MOL: Dash (code 6), SMILES: \
+    Up,         // MOL: Wedge (code 1)
+    Down,       // MOL: Dash (code 6)
     Either,     // MOL code 4, CXSMILES: w: (stereo undefined)
     EitherUp,   // CXSMILES: wU: (stereo undefined, display up)
     EitherDown, // CXSMILES: wD: (stereo undefined, display down)
 }
 
-impl BondWedge {
-    /// Reverse the up/down sense, as when the same bond is read from its other end.
+/// Cis/trans directional bond, for a single bond adjacent to a double bond.
+/// In SMILES/CXSMILES: `/` (Rising), `\` (Falling).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum BondDirection {
+    Rising,
+    Falling,
+}
+
+impl BondDirection {
+    /// Reverse the direction, as when the same bond is read from its other end.
     pub fn flip(self) -> Self {
         match self {
-            Self::Up => Self::Down,
-            Self::Down => Self::Up,
-            Self::Either => Self::Either,
-            Self::EitherUp => Self::EitherDown,
-            Self::EitherDown => Self::EitherUp,
+            Self::Rising => Self::Falling,
+            Self::Falling => Self::Rising,
         }
     }
 }
@@ -298,6 +306,7 @@ pub struct ExtendedBond {
     pub ring: Option<u32>,
     pub stereo: Option<BondStereo>,
     pub wedge: Option<BondWedge>,
+    pub direction: Option<BondDirection>,
     pub donation: Option<BondDonation>,
     pub noncovalent: Option<BondNoncovalent>,
     pub topology: Option<BondTopology>,
@@ -318,6 +327,7 @@ impl ExtendedBond {
             ring: None,
             stereo: None,
             wedge: None,
+            direction: None,
             donation: None,
             noncovalent: None,
             topology: None,
@@ -340,6 +350,7 @@ impl ExtendedBond {
             ring: None,
             stereo: None,
             wedge: None,
+            direction: None,
             donation: Some(if swapped { donation.flip() } else { donation }),
             noncovalent: None,
             topology: None,
@@ -360,6 +371,7 @@ impl ExtendedBond {
             ring: None,
             stereo: None,
             wedge: None,
+            direction: None,
             donation: None,
             noncovalent: Some(noncovalent),
             topology: None,
@@ -410,6 +422,7 @@ impl From<Bond> for ExtendedBond {
             ring: bond.ring,
             stereo: bond.stereo,
             wedge: bond.wedge,
+            direction: bond.direction,
             donation: bond.donation,
             noncovalent: bond.noncovalent,
             topology: None,
@@ -437,6 +450,7 @@ impl TryFrom<ExtendedBond> for Bond {
             ring: extended.ring,
             stereo: extended.stereo,
             wedge: extended.wedge,
+            direction: extended.direction,
             donation: extended.donation,
             noncovalent: extended.noncovalent,
             span: extended.span,
@@ -678,7 +692,7 @@ mod tests {
     #[rstest]
     #[case::query(ExtendedBond::new(0, 1, BondOrder::Any))]
     #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, charge: None, unpaired_electrons: None,
-                                    multiplicity: None, ring: None, stereo: None, wedge: None, donation: None, noncovalent: None,
+                                    multiplicity: None, ring: None, stereo: None, wedge: None, direction: None, donation: None, noncovalent: None,
                                     topology: Some(BondTopology::Ring), reacting_center: None, properties: HashMap::new(), span: None })]
     fn test_extended_bond_try_into_bond_error(#[case] extended: ExtendedBond) {
         let result: Result<Bond, _> = extended.try_into();
@@ -694,7 +708,7 @@ mod tests {
     #[case::query(ExtendedBond::new(0, 1, BondOrder::Any), true)]
     #[case::order_zero(ExtendedBond::new(0, 1, BondOrder::Zero), true)]
     #[case::topology(ExtendedBond { atoms: AtomPair::new(0, 1), order: BondOrder::Single, charge: None, unpaired_electrons: None,
-                                    multiplicity: None, ring: None, stereo: None, wedge: None, donation: None, noncovalent: None,
+                                    multiplicity: None, ring: None, stereo: None, wedge: None, direction: None, donation: None, noncovalent: None,
                                     topology: Some(BondTopology::Ring), reacting_center: None, properties: HashMap::new(), span: None }, true)]
     fn test_extended_bond_has_extended_features(
         #[case] extended: ExtendedBond,

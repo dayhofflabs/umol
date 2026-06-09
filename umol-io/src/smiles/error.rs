@@ -36,7 +36,7 @@ pub enum ParseError {
     #[error("Mismatched ring bond orders at position {pos}")]
     MismatchedRingBondOrders { pos: usize, open_pos: usize },
     #[error("Mismatched ring bond directions at position {pos}")]
-    MismatchedRingBondDirs { pos: usize, open_pos: usize },
+    MismatchedRingBondDirections { pos: usize, open_pos: usize },
     #[error("Mismatched ring bond donations at position {pos}")]
     MismatchedRingBondDonations { pos: usize, open_pos: usize },
     #[error("Leading dot at position {pos}")]

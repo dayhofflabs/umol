@@ -10,7 +10,7 @@ use super::utils::{
     build_extended_from_graph, find_extended_chiral_center, find_extended_stereo_bond,
 };
 use crate::table_ir::atom::Chirality;
-use crate::table_ir::{AtomSymbol, BondOrder, BondWedge, ExtendedMolecule};
+use crate::table_ir::{AtomSymbol, BondOrder, BondDirection, ExtendedMolecule};
 
 #[rstest]
 #[case::organic_c(b"C", build_extended_from_graph("C@0 |"))]
@@ -209,15 +209,15 @@ fn test_ring_invalid_topology(#[case] input: &[u8], #[case] expected: ExtendedMo
 #[case::triple_bond(b"C#C", build_extended_from_graph("C@0 C@2 | 0-1:#@1"))]
 #[case::quadruple_bond(b"C$C", build_extended_from_graph("C@0 C@2 | 0-1:$@1"))]
 #[case::aromatic_bond(b"C:C", build_extended_from_graph("C@0 C@2 | 0-1::@1"))]
-#[case::up_bond(b"C/C", build_extended_from_graph("C@0 C@2 | 0-1:/@1"))]
-#[case::down_bond(b"C\\C", build_extended_from_graph("C@0 C@2 | 0-1:\\@1"))]
+#[case::rising_bond(b"C/C", build_extended_from_graph("C@0 C@2 | 0-1:/@1"))]
+#[case::falling_bond(b"C\\C", build_extended_from_graph("C@0 C@2 | 0-1:\\@1"))]
 #[case::single_bond_aromatic(b"c-c", build_extended_from_graph("C_@0 C_@2 | 0-1:-@1"))]
 #[case::double_bond_aromatic(b"c=c", build_extended_from_graph("C_@0 C_@2 | 0-1:=@1"))]
 #[case::triple_bond_aromatic(b"c#c", build_extended_from_graph("C_@0 C_@2 | 0-1:#@1"))]
 #[case::quadruple_bond_aromatic(b"c$c", build_extended_from_graph("C_@0 C_@2 | 0-1:$@1"))]
 #[case::aromatic_bond_aromatic(b"c:c", build_extended_from_graph("C_@0 C_@2 | 0-1::@1"))]
-#[case::up_bond_aromatic(b"c/c", build_extended_from_graph("C_@0 C_@2 | 0-1:/@1"))]
-#[case::down_bond_aromatic(b"c\\c", build_extended_from_graph("C_@0 C_@2 | 0-1:\\@1"))]
+#[case::rising_bond_aromatic(b"c/c", build_extended_from_graph("C_@0 C_@2 | 0-1:/@1"))]
+#[case::falling_bond_aromatic(b"c\\c", build_extended_from_graph("C_@0 C_@2 | 0-1:\\@1"))]
 #[case::allene_bonds(b"C=C=C", build_extended_from_graph("C@0 C@2 C@4 | 0-1:=@1 1-2:=@3"))]
 #[case::conjugated_bonds(b"C=CC=C", build_extended_from_graph("C@0 C@2 C@3 C@5 | 0-1:=@1 1-2:-@3 2-3:=@4"))]
 #[case::cumulene_bonds(b"C=C=C=C", build_extended_from_graph("C@0 C@2 C@4 C@6 | 0-1:=@1 1-2:=@3 2-3:=@5"))]
@@ -259,15 +259,15 @@ fn test_ring_invalid_topology(#[case] input: &[u8], #[case] expected: ExtendedMo
 #[case::ring_quadruple_bond(b"C1-C-C$1", build_extended_from_graph("C@0 C@3 C@5 | 0-2:$@1 0-1@2 1-2@4"))]
 #[case::ring_aromatic_bond(b"c1:c:c:1", build_extended_from_graph("C_@0 C_@3 C_@5 | 0-2:@1 0-1:@2 1-2:@4"))]
 #[case::ring_aromatic_single_bond(b"c1ccccc1-c2ccccc2", build_extended_from_graph("C_@0 C_@2 C_@3 C_@4 C_@5 C_@6 C_@9 C_@11 C_@12 C_@13 C_@14 C_@15 | 0-5:@1 0-1:@2 1-2:@3 2-3:@4 3-4:@5 4-5:@6 5-6@8 6-11:@10 6-7:@11 7-8:@12 8-9:@13 9-10:@14 10-11:@15"))]
-#[case::ring_up_bond_1(b"C1CC/1", build_extended_from_graph("C@0 C@2 C@3 | 0-2:\\@1 0-1@2 1-2@3"))]
-#[case::ring_up_bond_2(b"C/1CC1", build_extended_from_graph("C@0 C@3 C@4 | 0-2:/@2 0-1@3 1-2@4"))]
-#[case::ring_down_bond(b"C1CC\\1", build_extended_from_graph("C@0 C@2 C@3 | 0-2:/@1 0-1@2 1-2@3"))]
-#[case::ring_up_bond_percent_open(b"C/%12CC%12", build_extended_from_graph("C@0 C@5 C@6 | 0-2:/@2 0-1@5 1-2@6"))]
-#[case::ring_up_bond_percent_close(b"C%12CC/%12", build_extended_from_graph("C@0 C@4 C@5 | 0-2:\\@1 0-1@4 1-2@5"))]
-#[case::ring_up_down(b"C/1CC\\1", build_extended_from_graph("C@0 C@3 C@4 | 0-2:/@2 0-1@3 1-2@4"))]
-#[case::ring_down_up(b"C\\1CC/1", build_extended_from_graph("C@0 C@3 C@4 | 0-2:\\@2 0-1@3 1-2@4"))]
-#[case::ring_up_down_percent(b"C/%12CC\\%12", build_extended_from_graph("C@0 C@5 C@6 | 0-2:/@2 0-1@5 1-2@6"))]
-#[case::ring_down_up_percent(b"C\\%12CC/%12", build_extended_from_graph("C@0 C@5 C@6 | 0-2:\\@2 0-1@5 1-2@6"))]
+#[case::ring_rising_bond_1(b"C1CC/1", build_extended_from_graph("C@0 C@2 C@3 | 0-2:\\@1 0-1@2 1-2@3"))]
+#[case::ring_rising_bond_2(b"C/1CC1", build_extended_from_graph("C@0 C@3 C@4 | 0-2:/@2 0-1@3 1-2@4"))]
+#[case::ring_falling_bond(b"C1CC\\1", build_extended_from_graph("C@0 C@2 C@3 | 0-2:/@1 0-1@2 1-2@3"))]
+#[case::ring_rising_bond_percent_open(b"C/%12CC%12", build_extended_from_graph("C@0 C@5 C@6 | 0-2:/@2 0-1@5 1-2@6"))]
+#[case::ring_rising_bond_percent_close(b"C%12CC/%12", build_extended_from_graph("C@0 C@4 C@5 | 0-2:\\@1 0-1@4 1-2@5"))]
+#[case::ring_rising_falling(b"C/1CC\\1", build_extended_from_graph("C@0 C@3 C@4 | 0-2:/@2 0-1@3 1-2@4"))]
+#[case::ring_falling_rising(b"C\\1CC/1", build_extended_from_graph("C@0 C@3 C@4 | 0-2:\\@2 0-1@3 1-2@4"))]
+#[case::ring_rising_falling_percent(b"C/%12CC\\%12", build_extended_from_graph("C@0 C@5 C@6 | 0-2:/@2 0-1@5 1-2@6"))]
+#[case::ring_falling_rising_percent(b"C\\%12CC/%12", build_extended_from_graph("C@0 C@5 C@6 | 0-2:\\@2 0-1@5 1-2@6"))]
 #[case::ring_between_bonds(b"C1CC-1-C", build_extended_from_graph("C@0 C@2 C@3 C@7 | 0-2@1 0-1@2 1-2@3 2-3@6"))]
 #[case::aromatic_aliphatic_branch(b"cc(C)c", build_extended_from_graph("C_@0 C_@1 C@3 C_@5 | 0-1:@1 1-2@3 1-3:@5"))]
 #[case::aromatic_ring_aliphatic_branch(b"c1ccc(C)cc1", build_extended_from_graph("C_@0 C_@2 C_@3 C_@4 C@6 C_@8 C_@9 | 0-6:@1 0-1:@2 1-2:@3 2-3:@4 3-4@6 3-5:@8 5-6:@9"))]
@@ -297,8 +297,8 @@ fn test_bonds(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
 #[case::trailing_bond_before_dot_1(b"C-.C", ParseError::TrailingBond { pos: 1 })]
 #[case::trailing_bond_before_dot_2(b"C=.C", ParseError::TrailingBond { pos: 1 })]
 #[case::trailing_bond_before_dot_aromatic(b"C:.C", ParseError::TrailingBond { pos: 1 })]
-#[case::trailing_stereo_bond_before_dot_up(b"C/.C", ParseError::TrailingBond { pos: 1 })]
-#[case::trailing_stereo_bond_before_dot_down(b"C.\\C", ParseError::LeadingBond { pos: 2 })]
+#[case::trailing_stereo_bond_before_dot_rising(b"C/.C", ParseError::TrailingBond { pos: 1 })]
+#[case::trailing_stereo_bond_before_dot_falling(b"C.\\C", ParseError::LeadingBond { pos: 2 })]
 #[case::bond_after_group_1(b"(C)-", ParseError::NonfinalGroup { pos: 2 })]
 #[case::bond_after_group_2(b"(C)=", ParseError::NonfinalGroup { pos: 2 })]
 #[case::group_after_group_1(b"(C)(C)", ParseError::NonfinalGroup { pos: 2 })]
@@ -335,9 +335,9 @@ fn test_bonds(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
 #[case::ring_bond_order_conflict_6(b"C=1CC/1", ParseError::MismatchedRingBondOrders { pos: 6, open_pos: 2 })]
 #[case::ring_bond_order_conflict_7(b"C=1CC\\1", ParseError::MismatchedRingBondOrders { pos: 6, open_pos: 2 })]
 #[case::ring_bond_order_conflict_8(b"C=%10CC#%10", ParseError::MismatchedRingBondOrders { pos: 8, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_1(b"C/1CC/1", ParseError::MismatchedRingBondDirs { pos: 6, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_2(b"C\\1CC\\1", ParseError::MismatchedRingBondDirs { pos: 6, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_3(b"C\\%12CC\\%12", ParseError::MismatchedRingBondDirs { pos: 8, open_pos: 2 })]
+#[case::ring_bond_direction_conflict_1(b"C/1CC/1", ParseError::MismatchedRingBondDirections { pos: 6, open_pos: 2 })]
+#[case::ring_bond_direction_conflict_2(b"C\\1CC\\1", ParseError::MismatchedRingBondDirections { pos: 6, open_pos: 2 })]
+#[case::ring_bond_direction_conflict_3(b"C\\%12CC\\%12", ParseError::MismatchedRingBondDirections { pos: 8, open_pos: 2 })]
 #[case::extended_bonds_1(b"C~C", ParseError::InvalidToken { pos: 1 })]
 #[case::extended_bonds_2(b"C->N", ParseError::InvalidToken { pos: 2 })]
 #[case::extended_bonds_3(b"C<-N", ParseError::InvalidToken { pos: 1 })]
@@ -429,9 +429,9 @@ fn test_bonds_lenient_invalid(#[case] input: &[u8], #[case] expected: ParseError
 #[case::rings_across_multiple_dots_percent(b"C%12.C.CC%12", build_extended_from_graph("C@0 C@5 C@7 C@8 | 0-3@1 2-3@8"))]
 #[case::ring_double_unilateral_open(b"C=1.CC1", build_extended_from_graph("C@0 C@4 C@5 | 0-2:=@2 1-2@5"))]
 #[case::ring_double_unilateral_close(b"C1.CC=1", build_extended_from_graph("C@0 C@3 C@4 | 0-2:=@1 1-2@4"))]
-#[case::ring_up_down_dot(b"C/1.CC\\1", build_extended_from_graph("C@0 C@4 C@5 | 0-2:/@2 1-2@5"))]
-#[case::ring_up_down_dot_percent(b"C/%12.CC\\%12", build_extended_from_graph("C@0 C@6 C@7 | 0-2:/@2 1-2@7"))]
-#[case::ring_up_down_dot_aromatic(b"c/1.cc\\1", build_extended_from_graph("C_@0 C_@4 C_@5 | 0-2:/@2 1-2:@5"))]
+#[case::ring_rising_falling_dot(b"C/1.CC\\1", build_extended_from_graph("C@0 C@4 C@5 | 0-2:/@2 1-2@5"))]
+#[case::ring_rising_falling_dot_percent(b"C/%12.CC\\%12", build_extended_from_graph("C@0 C@6 C@7 | 0-2:/@2 1-2@7"))]
+#[case::ring_rising_falling_dot_aromatic(b"c/1.cc\\1", build_extended_from_graph("C_@0 C_@4 C_@5 | 0-2:/@2 1-2:@5"))]
 #[case::branch_multiple_components(b"C(.C.C)", build_extended_from_graph("C@0 C@3 C@5 |"))]
 fn test_components(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
     let res = parse_extended_smiles_bytes(input);
@@ -476,9 +476,9 @@ fn test_components(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
 #[case::dot_unclosed_ring_before_group(b"C1.(C)(C)C1", ParseError::NonfinalGroup { pos: 5 })]
 #[case::ring_bond_order_conflict_1(b"C=1.CC#1", ParseError::MismatchedRingBondOrders { pos: 7, open_pos: 2 })]
 #[case::ring_bond_order_conflict_2(b"C=%12.CC#%12", ParseError::MismatchedRingBondOrders { pos: 9, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_1(b"C/1.CC/1", ParseError::MismatchedRingBondDirs { pos: 7, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_2(b"C\\1.CC\\1", ParseError::MismatchedRingBondDirs { pos: 7, open_pos: 2 })]
-#[case::ring_bond_dir_conflict_3(b"C/%12.CC/%12", ParseError::MismatchedRingBondDirs { pos: 9, open_pos: 2 })]
+#[case::ring_bond_direction_conflict_1(b"C/1.CC/1", ParseError::MismatchedRingBondDirections { pos: 7, open_pos: 2 })]
+#[case::ring_bond_direction_conflict_2(b"C\\1.CC\\1", ParseError::MismatchedRingBondDirections { pos: 7, open_pos: 2 })]
+#[case::ring_bond_direction_conflict_3(b"C/%12.CC/%12", ParseError::MismatchedRingBondDirections { pos: 9, open_pos: 2 })]
 #[case::group_dot_before_ring_digit(b"(.1)", ParseError::LeadingDot { pos: 1 })]
 #[case::group_dot_before_ring_percent(b"(.%12)", ParseError::LeadingDot { pos: 1 })]
 #[case::branch_dot_before_ring_digit(b"C(.1)", ParseError::DotBeforeRing { pos: 2 })]
@@ -487,8 +487,8 @@ fn test_components(#[case] input: &[u8], #[case] expected: ExtendedMolecule) {
 #[case::branch_dot_before_bond(b"C(.-C)", ParseError::LeadingBond { pos: 3 })]
 #[case::leading_bond_after_dot_1(b"C.-C", ParseError::LeadingBond { pos: 2 })]
 #[case::leading_bond_after_dot_2(b"C.=-C", ParseError::LeadingBond { pos: 2 })]
-#[case::leading_stereobond_after_dot_up(b"C./C", ParseError::LeadingBond { pos: 2 })]
-#[case::leading_stereobond_after_dot_down(b"C.\\C", ParseError::LeadingBond { pos: 2 })]
+#[case::leading_stereobond_after_dot_rising(b"C./C", ParseError::LeadingBond { pos: 2 })]
+#[case::leading_stereobond_after_dot_falling(b"C.\\C", ParseError::LeadingBond { pos: 2 })]
 #[case::trailing_bond_dot_aromatic(b"C:.", ParseError::TrailingBond { pos: 1 })]
 #[case::group_trailing_bond_dot(b"(C-.)", ParseError::TrailingBond { pos: 2 })]
 #[case::branch_trailing_bond_dot(b"C(C-.)", ParseError::TrailingBond { pos: 3 })]
@@ -739,16 +739,16 @@ fn test_bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aro
 #[case::aliphatic_before_triple(b"C#[C]", Some(BondOrder::Triple), None)]
 #[case::aliphatic_before_quadruple(b"C$[C]", Some(BondOrder::Quadruple), None)]
 #[case::aliphatic_before_aromatic(b"C:[C]", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondWedge::Up))]
-#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondWedge::Down))]
+#[case::aliphatic_before_up(b"C/[C]", Some(BondOrder::Single), Some(BondDirection::Rising))]
+#[case::aliphatic_before_down(b"C\\[C]", Some(BondOrder::Single), Some(BondDirection::Falling))]
 #[case::aliphatic_after(b"[C]C", Some(BondOrder::Single), None)]
 #[case::aliphatic_after_single(b"[C]-C", Some(BondOrder::Single), None)]
 #[case::aliphatic_after_double(b"[C]=C", Some(BondOrder::Double), None)]
 #[case::aliphatic_after_triple(b"[C]#C", Some(BondOrder::Triple), None)]
 #[case::aliphatic_after_quadruple(b"[C]$C", Some(BondOrder::Quadruple), None)]
 #[case::aliphatic_after_aromatic(b"[C]:C", Some(BondOrder::Aromatic), None)]
-#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondWedge::Up))]
-#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondWedge::Down))]
+#[case::aliphatic_after_up(b"[C]/C", Some(BondOrder::Single), Some(BondDirection::Rising))]
+#[case::aliphatic_after_down(b"[C]\\C", Some(BondOrder::Single), Some(BondDirection::Falling))]
 #[case::aromatic_before(b"c[c]", Some(BondOrder::Aromatic), None)]
 #[case::aromatic_before_single(b"c-[c]", Some(BondOrder::Single), None)]
 #[case::aromatic_before_aromatic(b"c:[c]", Some(BondOrder::Aromatic), None)]
@@ -762,8 +762,8 @@ fn test_bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aro
 #[case::aromatic_after_aliphatic(b"[C]c", Some(BondOrder::Single), None)]
 #[case::aromatic_after_aliphatic_single(b"[C]-c", Some(BondOrder::Single), None)]
 #[case::aromatic_after_aliphatic_aromatic(b"[c]:c", Some(BondOrder::Aromatic), None)]
-#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondWedge::Up))]
-#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondWedge::Down))]
+#[case::aromatic_after_aliphatic_up(b"[C]/c", Some(BondOrder::Single), Some(BondDirection::Rising))]
+#[case::aromatic_after_aliphatic_down(b"[C]\\c", Some(BondOrder::Single), Some(BondDirection::Falling))]
 #[case::bracket_branch_1(b"[C](C)", Some(BondOrder::Single), None)]
 #[case::bracket_branch_2(b"C([C])", Some(BondOrder::Single), None)]
 #[case::bracket_branch_single(b"C(-[C])", Some(BondOrder::Single), None)]
@@ -771,8 +771,8 @@ fn test_bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aro
 #[case::bracket_branch_triple(b"C(#[C])", Some(BondOrder::Triple), None)]
 #[case::bracket_branch_quadruple(b"C($[C])", Some(BondOrder::Quadruple), None)]
 #[case::bracket_branch_aromatic(b"C(:[C])", Some(BondOrder::Aromatic), None)]
-#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondWedge::Up))]
-#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondWedge::Down))]
+#[case::bracket_branch_up(b"C(/[C])", Some(BondOrder::Single), Some(BondDirection::Rising))]
+#[case::bracket_branch_down(b"C(\\[C])", Some(BondOrder::Single), Some(BondDirection::Falling))]
 #[case::bracket_group_1(b"([C]C)", Some(BondOrder::Single), None)]
 #[case::bracket_group_2(b"(C[C])", Some(BondOrder::Single), None)]
 #[case::bracket_ring_1(b"[C]1CC1", Some(BondOrder::Single), None)]
@@ -787,13 +787,13 @@ fn test_bracket_lenient(#[case] input: &[u8], #[case] elem: Element, #[case] aro
 #[case::two_brackets_triple_bond(b"[C-]#[O+]", Some(BondOrder::Triple), None)]
 #[case::two_brackets_quadruple_bond(b"[C]$[C]", Some(BondOrder::Quadruple), None)]
 #[case::two_brackets_aromatic_bond(b"[CH]:[CH]", Some(BondOrder::Aromatic), None)]
-#[case::two_brackets_up_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondWedge::Up))]
-#[case::two_brackets_down_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondWedge::Down))]
+#[case::two_brackets_rising_bond(b"[CH]/[OH]", Some(BondOrder::Single), Some(BondDirection::Rising))]
+#[case::two_brackets_falling_bond(b"[CH]\\[OH]", Some(BondOrder::Single), Some(BondDirection::Falling))]
 #[case::bracket_before_dot(b"[Na+].[Cl-]", None, None)]
 fn test_bracket_bonds(
     #[case] input: &[u8],
     #[case] expected_order: Option<BondOrder>,
-    #[case] expected_wedge: Option<BondWedge>,
+    #[case] expected_direction: Option<BondDirection>,
 ) {
     let res = parse_extended_smiles_bytes(input);
     let input_str = input.to_str_lossy();
@@ -803,7 +803,7 @@ fn test_bracket_bonds(
         if let Some(expected_order) = expected_order {
             assert_eq!(bond1.order, expected_order);
         }
-        assert_eq!(bond1.wedge, expected_wedge);
+        assert_eq!(bond1.direction, expected_direction);
     }
 }
 
@@ -883,34 +883,34 @@ fn test_stereo_chiral(
 
 #[rstest]
 // Double bond stereo - trans
-#[case::trans_1_eq_1(b"F/C=C/F", 0, 1, BondWedge::Up)]
-#[case::trans_1_eq_2(b"F\\C=C\\F", 0, 1, BondWedge::Down)]
-#[case::trans_1_eq_3(b"C(\\F)=C/F", 0, 1, BondWedge::Down)]
+#[case::trans_1_eq_1(b"F/C=C/F", 0, 1, BondDirection::Rising)]
+#[case::trans_1_eq_2(b"F\\C=C\\F", 0, 1, BondDirection::Falling)]
+#[case::trans_1_eq_3(b"C(\\F)=C/F", 0, 1, BondDirection::Falling)]
 // Double bond stereo - cis
-#[case::cis_1_eq_1(b"F\\C=C/F", 0, 1, BondWedge::Down)]
-#[case::cis_1_eq_2(b"F/C=C\\F", 0, 1, BondWedge::Up)]
-#[case::cis_1_eq_3(b"C(/F)=C/F", 0, 1, BondWedge::Up)]
+#[case::cis_1_eq_1(b"F\\C=C/F", 0, 1, BondDirection::Falling)]
+#[case::cis_1_eq_2(b"F/C=C\\F", 0, 1, BondDirection::Rising)]
+#[case::cis_1_eq_3(b"C(/F)=C/F", 0, 1, BondDirection::Rising)]
 // Cis with substituents
-#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 0, 1, BondWedge::Up)]
-#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 0, 1, BondWedge::Up)]
-#[case::cis_2_eq_3(b"C/C(F)=C(/C)F", 0, 1, BondWedge::Up)]
-#[case::cis_2_eq_4(b"CC(/F)=C(/C)F", 1, 2, BondWedge::Up)]
-#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F", 0, 1, BondWedge::Up)]
-#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F", 1, 2, BondWedge::Up)]
+#[case::cis_2_eq_1(b"C/C(/F)=C(\\F)/C", 0, 1, BondDirection::Rising)]
+#[case::cis_2_eq_2(b"C/C(/F)=C(/C)\\F", 0, 1, BondDirection::Rising)]
+#[case::cis_2_eq_3(b"C/C(F)=C(/C)F", 0, 1, BondDirection::Rising)]
+#[case::cis_2_eq_4(b"CC(/F)=C(/C)F", 1, 2, BondDirection::Rising)]
+#[case::cis_2_eq_5(b"C/C(F)=C(C)\\F", 0, 1, BondDirection::Rising)]
+#[case::cis_2_eq_6(b"CC(/F)=C(C)\\F", 1, 2, BondDirection::Rising)]
 // Partial stereo specification
-#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondWedge::Up)]
-#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondWedge::Up)]
+#[case::partial_cis_trans_1(b"F/C=C/C/C=C\\C", 0, 1, BondDirection::Rising)]
+#[case::partial_cis_trans_2(b"F/C=C/CC=CC", 0, 1, BondDirection::Rising)]
 // Extended cis/trans for cumulenes (3 double bonds - odd)
-#[case::cumulene_3_trans(b"F/C=C=C=C/F", 0, 1, BondWedge::Up)]
-#[case::cumulene_3_cis(b"F/C=C=C=C\\F", 0, 1, BondWedge::Up)]
+#[case::cumulene_3_trans(b"F/C=C=C=C/F", 0, 1, BondDirection::Rising)]
+#[case::cumulene_3_cis(b"F/C=C=C=C\\F", 0, 1, BondDirection::Rising)]
 // Extended cis/trans for cumulenes (5 double bonds - odd)
-#[case::cumulene_5_trans(b"F/C=C=C=C=C=C/F", 0, 1, BondWedge::Up)]
-#[case::cumulene_5_cis(b"F/C=C=C=C=C=C\\F", 0, 1, BondWedge::Up)]
+#[case::cumulene_5_trans(b"F/C=C=C=C=C=C/F", 0, 1, BondDirection::Rising)]
+#[case::cumulene_5_cis(b"F/C=C=C=C=C=C\\F", 0, 1, BondDirection::Rising)]
 fn test_stereo_bonds(
     #[case] input: &[u8],
     #[case] exp_a: u32,
     #[case] exp_b: u32,
-    #[case] exp_wedge: BondWedge,
+    #[case] exp_direction: BondDirection,
 ) {
     let res = parse_extended_smiles_bytes(input);
     let input_str = input.to_str_lossy();
@@ -921,10 +921,10 @@ fn test_stereo_bonds(
         res
     );
     let mol = res.unwrap();
-    let (a, b, wedge) = find_extended_stereo_bond(&mol).expect("expected a stereo bond");
+    let (a, b, direction) = find_extended_stereo_bond(&mol).expect("expected a stereo bond");
     assert_eq!(a, exp_a, "atom1 mismatch for {:?}", input_str);
     assert_eq!(b, exp_b, "atom2 mismatch for {:?}", input_str);
-    assert_eq!(wedge, exp_wedge, "wedge mismatch for {:?}", input_str);
+    assert_eq!(direction, exp_direction, "direction mismatch for {:?}", input_str);
 }
 
 #[rstest]

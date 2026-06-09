@@ -11,7 +11,7 @@ use super::super::builder::{
     AtomData, BondData, ExtendedAtomData, ExtendedMoleculeBuilder, MoleculeBuilder,
 };
 use crate::table_ir::{
-    AtomSymbol, BondDonation, BondOrder, BondWedge, Chirality, ChiralityFrame, ExtendedMolecule,
+    AtomSymbol, BondDonation, BondOrder, BondDirection, Chirality, ChiralityFrame, ExtendedMolecule,
     Molecule, SourceFormat, Span, WildcardAtom,
 };
 
@@ -74,24 +74,24 @@ pub fn find_extended_chiral_center(
 }
 
 /// Finds the first bond with stereo direction in a Molecule.
-/// Returns (atom1, atom2, wedge) or None if no stereo bond found.
-pub fn find_stereo_bond(mol: &Molecule) -> Option<(u32, u32, BondWedge)> {
+/// Returns (atom1, atom2, direction) or None if no stereo bond found.
+pub fn find_stereo_bond(mol: &Molecule) -> Option<(u32, u32, BondDirection)> {
     for bond in &mol.bonds {
-        if let Some(wedge) = bond.wedge {
+        if let Some(direction) = bond.direction {
             let (a, b) = bond.atoms.as_tuple();
-            return Some((a, b, wedge));
+            return Some((a, b, direction));
         }
     }
     None
 }
 
-/// Finds the first bond with stereo wedge in an ExtendedMolecule.
-/// Returns (atom1, atom2, wedge) or None if no stereo bond found.
-pub fn find_extended_stereo_bond(mol: &ExtendedMolecule) -> Option<(u32, u32, BondWedge)> {
+/// Finds the first bond with stereo direction in an ExtendedMolecule.
+/// Returns (atom1, atom2, direction) or None if no stereo bond found.
+pub fn find_extended_stereo_bond(mol: &ExtendedMolecule) -> Option<(u32, u32, BondDirection)> {
     for bond in &mol.bonds {
-        if let Some(wedge) = bond.wedge {
+        if let Some(direction) = bond.direction {
             let (a, b) = bond.atoms.as_tuple();
-            return Some((a, b, wedge));
+            return Some((a, b, direction));
         }
     }
     None
@@ -145,7 +145,7 @@ fn parse_bond_token(
     usize,
     usize,
     BondOrder,
-    Option<BondWedge>,
+    Option<BondDirection>,
     Option<BondDonation>,
     Option<u32>,
     Option<u32>,
@@ -194,26 +194,26 @@ fn parse_bond_token(
         spec_part // no colon prefix
     };
 
-    let (order, wedge, donation) = match spec_norm {
+    let (order, direction, donation) = match spec_norm {
         "-" => (BondOrder::Single, None, None),
         "=" => (BondOrder::Double, None, None),
         "#" => (BondOrder::Triple, None, None),
         "$" => (BondOrder::Quadruple, None, None),
         ":" => (BondOrder::Aromatic, None, None),
-        "/" => (BondOrder::Single, Some(BondWedge::Up), None),
-        "\\" => (BondOrder::Single, Some(BondWedge::Down), None),
+        "/" => (BondOrder::Single, Some(BondDirection::Rising), None),
+        "\\" => (BondOrder::Single, Some(BondDirection::Falling), None),
         "~" => (BondOrder::Any, None, None),
         "->" => (BondOrder::Single, None, Some(BondDonation::Donating)),
         "<-" => (BondOrder::Single, None, Some(BondDonation::Accepting)),
         other => panic!("unknown bond spec: {}", other),
     };
-    (i, j, order, wedge, donation, span_start, span_end)
+    (i, j, order, direction, donation, span_start, span_end)
 }
 
 pub fn build_from_graph(spec: &str) -> Molecule {
     // Format: "atoms... | bonds..."
     // atoms: tokens like "C", "Cl", optional aromatic '_' and optional span "@<pos>": e.g. "C_@5"
-    // bonds: tokens like "i-j" or with type/wedge: "i-j:=" "/" "\\" etc., optional span "@<pos>"
+    // bonds: tokens like "i-j" or with type/direction: "i-j:=" "/" "\\" etc., optional span "@<pos>"
     let (atoms_s, bonds_s) = spec
         .split_once('|')
         .map(|(a, b)| (a.trim(), b.trim()))
@@ -260,7 +260,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
         ids.push(id);
     }
     for btok in bonds {
-        let (i, j, order, wedge, donation, span_start, mut span_end) = parse_bond_token(btok);
+        let (i, j, order, direction, donation, span_start, mut span_end) = parse_bond_token(btok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
@@ -271,7 +271,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
             ids[j],
             BondData {
                 order,
-                wedge,
+                direction,
                 donation,
                 span: Span::from_bytes_opt(span_start, span_end),
             },
@@ -288,7 +288,7 @@ pub fn build_from_graph(spec: &str) -> Molecule {
 pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
     // Format: "atoms... | bonds..."
     // atoms: tokens like "C", "Cl", "*" (wildcard), optional aromatic '_' and span "@<pos>"
-    // bonds: tokens like "i-j" or with type/wedge: "i-j:=" "/" "\\" etc., optional span "@<pos>"
+    // bonds: tokens like "i-j" or with type/direction: "i-j:=" "/" "\\" etc., optional span "@<pos>"
     let (atoms_s, bonds_s) = spec
         .split_once('|')
         .map(|(a, b)| (a.trim(), b.trim()))
@@ -335,7 +335,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
         ids.push(id);
     }
     for btok in bonds {
-        let (i, j, order, wedge, donation, span_start, mut span_end) = parse_bond_token(btok);
+        let (i, j, order, direction, donation, span_start, mut span_end) = parse_bond_token(btok);
         if span_end.is_none() {
             if let Some(s) = span_start {
                 span_end = atom_span_map.get(&s).copied().or(Some(s + 1));
@@ -346,7 +346,7 @@ pub fn build_extended_from_graph(spec: &str) -> ExtendedMolecule {
             ids[j],
             BondData {
                 order,
-                wedge,
+                direction,
                 donation,
                 span: Span::from_bytes_opt(span_start, span_end),
             },

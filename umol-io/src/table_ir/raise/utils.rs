@@ -6,7 +6,7 @@ use umol_geometric_core::{complementary_direction, signed_volume, Point3D};
 
 use super::RaiseError;
 use crate::table_ir::bond::{BondNoncovalent as TableNoncovalent, BondOrder as TableBondOrder};
-use crate::table_ir::{BondWedge, Molecule as TableMolecule};
+use crate::table_ir::{BondDirection, BondWedge, Molecule as TableMolecule};
 
 pub(super) fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
     match kind {
@@ -64,6 +64,14 @@ fn atom_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<usize> {
         .collect();
     indices.sort_unstable();
     indices
+}
+
+/// Number of bonds incident on `atom_idx`. Counts directly, without building the ordering.
+pub(super) fn neighbor_count(mol: &TableMolecule, atom_idx: usize) -> usize {
+    mol.bonds
+        .iter()
+        .filter(|bond| bond.atoms.contains(atom_idx as u32))
+        .count()
 }
 
 /// Neighbor atom ordering of `atom_idx` by bond ordering (used by SMILES, which refers to it as parse ordering).
@@ -151,7 +159,9 @@ pub(super) fn coset_from_wedge_winding(
             StereoLigand::Virtual(_) => virtual_position,
         })
         .collect();
-    if signed_volume(points[0], points[1], points[2], points[3]) > 0.0 {
+    // umol convention (matching the SMILES `@` = anticlockwise = coset 0 path): the ascending-index
+    // ligands of coset 0 have a negative signed volume.
+    if signed_volume(points[0], points[1], points[2], points[3]) < 0.0 {
         0
     } else {
         1
@@ -184,7 +194,7 @@ pub(super) fn validate_tetrahedral_geometry(
     mol: &TableMolecule,
     atom_idx: usize,
 ) -> Result<(), RaiseError> {
-    let count = atom_ordering(mol, atom_idx).len();
+    let count = neighbor_count(mol, atom_idx);
     if count == 3 || count == 4 {
         Ok(())
     } else {
@@ -195,36 +205,39 @@ pub(super) fn validate_tetrahedral_geometry(
     }
 }
 
-/// The face the directional `/`,`\` of the single bond `atom_idx`–`other_atom_idx` puts
-/// `other_atom_idx` on, seen from `atom_idx` (flipped when `atom_idx` is the bond's stored end).
-/// `None` when the bond has no `/`,`\`.
-fn direction(
+/// Validate that a directional bond (`/`,`\`) is adjacent to a cis/trans-capable double bond.
+/// Returns `Ok(())` for any non-directional bond.
+pub(super) fn validate_bond_direction(
     mol: &TableMolecule,
-    atom_idx: usize,
-    other_atom_idx: usize,
-) -> Option<StereoHalfplane> {
-    mol.bonds.iter().find_map(|bond| {
-        if bond.order != TableBondOrder::Single {
-            return None;
-        }
-        if bond.atoms.other(atom_idx as u32)? as usize != other_atom_idx {
-            return None;
-        }
-        let face = match bond.wedge? {
-            BondWedge::Up => StereoHalfplane::Top,
-            BondWedge::Down => StereoHalfplane::Bottom,
-            _ => return None,
-        };
-        Some(if bond.start_atom() as usize == atom_idx {
-            face
-        } else {
-            face.flip()
-        })
-    })
+    bond_idx: usize,
+) -> Result<(), RaiseError> {
+    let bond = &mol.bonds[bond_idx];
+    if bond.order != TableBondOrder::Single || bond.direction.is_none() {
+        return Ok(());
+    }
+    let flanks_capable = [bond.start_atom() as usize, bond.end_atom() as usize]
+        .into_iter()
+        .any(|atom| {
+            mol.bonds.iter().any(|d| {
+                d.order == TableBondOrder::Double
+                    && d.atoms
+                        .other(atom as u32)
+                        .is_some_and(|partner| cis_trans_capable(mol, atom, partner as usize))
+            })
+        });
+    if flanks_capable {
+        Ok(())
+    } else {
+        Err(RaiseError::DanglingBondDirection { bond: bond_idx })
+    }
 }
 
-/// One double-bond atom's #C side. `None` when it has no substituent besides `other_atom_idx` (caller
-/// gates this with `cis_trans_capable`) or carries no `/`,`\`. Errors when its markers disagree.
+/// Double bond is cis-trans capable iff its both ends are substituted.
+pub(super) fn cis_trans_capable(mol: &TableMolecule, atom_1: usize, atom_2: usize) -> bool {
+    neighbor_count(mol, atom_1) > 1 && neighbor_count(mol, atom_2) > 1
+}
+
+/// Arrangement of the bond atom `atom_idx` of stereogenic double bond. Errors when its markers disagree.
 pub(super) fn cis_trans_side(
     mol: &TableMolecule,
     atom_idx: usize,
@@ -263,36 +276,27 @@ pub(super) fn cis_trans_side(
     }))
 }
 
-/// A double bond `atom_1`=`atom_2` is cis/trans-capable when both ends carry a substituent besides
-/// each other.
-pub(super) fn cis_trans_capable(mol: &TableMolecule, atom_1: usize, atom_2: usize) -> bool {
-    atom_ordering(mol, atom_1).into_iter().any(|n| n != atom_2)
-        && atom_ordering(mol, atom_2).into_iter().any(|n| n != atom_1)
-}
-
-/// A directional `/`,`\` single bond must flank a cis/trans-capable double bond — one of its atoms is
-/// in a double bond whose both ends are substituted. A marker flanking none is dangling, the cis/trans
-/// analog of a chirality token on an under-coordinated atom. `Ok(())` for any non-directional bond.
-pub(super) fn validate_bond_wedge(mol: &TableMolecule, bond_idx: usize) -> Result<(), RaiseError> {
-    let bond = &mol.bonds[bond_idx];
-    if bond.order != TableBondOrder::Single
-        || !matches!(bond.wedge, Some(BondWedge::Up | BondWedge::Down))
-    {
-        return Ok(());
-    }
-    let flanks_capable = [bond.start_atom() as usize, bond.end_atom() as usize]
-        .into_iter()
-        .any(|atom| {
-            mol.bonds.iter().any(|d| {
-                d.order == TableBondOrder::Double
-                    && d.atoms
-                        .other(atom as u32)
-                        .is_some_and(|partner| cis_trans_capable(mol, atom, partner as usize))
-            })
-        });
-    if flanks_capable {
-        Ok(())
-    } else {
-        Err(RaiseError::DanglingBondWedge { bond: bond_idx })
-    }
+/// Halfplane (top/bottom) of `other_atom_idx` viewed from `atom_idx`.
+fn direction(
+    mol: &TableMolecule,
+    atom_idx: usize,
+    other_atom_idx: usize,
+) -> Option<StereoHalfplane> {
+    mol.bonds.iter().find_map(|bond| {
+        if bond.order != TableBondOrder::Single {
+            return None;
+        }
+        if bond.atoms.other(atom_idx as u32)? as usize != other_atom_idx {
+            return None;
+        }
+        let face = match bond.direction? {
+            BondDirection::Rising => StereoHalfplane::Top,
+            BondDirection::Falling => StereoHalfplane::Bottom,
+        };
+        Some(if bond.start_atom() as usize == atom_idx {
+            face
+        } else {
+            face.flip()
+        })
+    })
 }

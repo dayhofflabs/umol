@@ -26,7 +26,7 @@ use self::utils::{
 use super::config::{SmilesIoConfig, SmilesParseFlags};
 use super::error::ParseError;
 use crate::table_ir::{
-    BondDonation, BondOrder, BondWedge, ChiralityFrame, ExtendedMolecule, ExtendedReaction,
+    BondDonation, BondOrder, BondDirection, ChiralityFrame, ExtendedMolecule, ExtendedReaction,
     Molecule, Reaction, SourceFormat, Span, WildcardAtom,
 };
 
@@ -242,7 +242,7 @@ fn parse_smiles_inner(
         MoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut last_atom_idx: Option<usize> = None;
-    let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =
+    let mut pending_bond: Option<(BondOrder, Option<BondDirection>, Option<BondDonation>, usize)> =
         None;
     let mut after_closed_group: bool = false;
 
@@ -367,13 +367,13 @@ fn parse_smiles_inner(
                     return Err(ParseError::LeadingRing { pos: offset });
                 }
                 let bond = pending_bond.take();
-                let (order_opt, wedge_opt, donation_opt) =
+                let (order_opt, direction_opt, donation_opt) =
                     bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
                 builder.on_ring_bond(
                     last_atom_idx.unwrap(),
                     idx,
                     order_opt,
-                    wedge_opt,
+                    direction_opt,
                     donation_opt,
                     i,
                     i + 1,
@@ -403,12 +403,12 @@ fn parse_smiles_inner(
             }
             // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
             if extended_bonds {
-                let (order, wedge, donation, consumed) = parse_extended_bond(input, i);
-                pending_bond = Some((order, wedge, donation, i));
+                let (order, direction, donation, consumed) = parse_extended_bond(input, i);
+                pending_bond = Some((order, direction, donation, i));
                 i += consumed;
             } else {
-                let (order, bond_wedge) = parse_bond(b0);
-                pending_bond = Some((order, bond_wedge, None, i));
+                let (order, bond_direction) = parse_bond(b0);
+                pending_bond = Some((order, bond_direction, None, i));
                 i += 1;
             }
             continue;
@@ -837,7 +837,7 @@ fn parse_extended_smiles_inner(
         ExtendedMoleculeBuilder::with_capacity(n.max(1), n.max(1).saturating_sub(1), store_rings);
     let mut branch_stack: Vec<Frame> = Vec::new();
     let mut last_atom_idx: Option<usize> = None;
-    let mut pending_bond: Option<(BondOrder, Option<BondWedge>, Option<BondDonation>, usize)> =
+    let mut pending_bond: Option<(BondOrder, Option<BondDirection>, Option<BondDonation>, usize)> =
         None;
     let mut just_closed_group: bool = false;
 
@@ -960,13 +960,13 @@ fn parse_extended_smiles_inner(
                     return Err(ParseError::LeadingRing { pos: offset });
                 }
                 let bond = pending_bond.take();
-                let (order_opt, wedge_opt, donation_opt) =
+                let (order_opt, direction_opt, donation_opt) =
                     bond.map_or((None, None, None), |(o, d, don, _)| (Some(o), d, don));
                 builder.on_ring_bond(
                     last_atom_idx.unwrap(),
                     idx,
                     order_opt,
-                    wedge_opt,
+                    direction_opt,
                     donation_opt,
                     i,
                     i + 1,
@@ -996,12 +996,12 @@ fn parse_extended_smiles_inner(
             }
             // Use extended bond parsing for ->, <-, ~ when EXTENDED_BONDS is set
             if extended_bonds {
-                let (order, wedge, donation, consumed) = parse_extended_bond(input, i);
-                pending_bond = Some((order, wedge, donation, i));
+                let (order, direction, donation, consumed) = parse_extended_bond(input, i);
+                pending_bond = Some((order, direction, donation, i));
                 i += consumed;
             } else {
-                let (order, bond_wedge) = parse_bond(b0);
-                pending_bond = Some((order, bond_wedge, None, i));
+                let (order, bond_direction) = parse_bond(b0);
+                pending_bond = Some((order, bond_direction, None, i));
                 i += 1;
             }
             continue;

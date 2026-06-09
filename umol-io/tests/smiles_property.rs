@@ -74,7 +74,7 @@ proptest! {
                 | ParseError::UnbalancedRingIndex { open_pos } => open_pos < len,
                 | ParseError::InvalidRingIndex { pos } => pos < len,
                 | ParseError::MismatchedRingBondOrders { pos, open_pos } => pos < len && open_pos < len,
-                | ParseError::MismatchedRingBondDirs { pos, open_pos } => pos < len && open_pos < len,
+                | ParseError::MismatchedRingBondDirections { pos, open_pos } => pos < len && open_pos < len,
                 | ParseError::MismatchedRingBondDonations { pos, open_pos } => pos < len && open_pos < len,
                 | ParseError::LeadingDot { pos } => pos < len,
                 | ParseError::TrailingDot { pos } => pos < len,

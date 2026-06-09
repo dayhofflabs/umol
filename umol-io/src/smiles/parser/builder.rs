@@ -7,7 +7,7 @@ use umol_shared::element::Element;
 use super::super::error::ParseError;
 use super::utils::{make_bond, make_extended_bond};
 use crate::table_ir::{
-    Atom, AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, Chirality, ExtendedAtom,
+    Atom, AtomSymbol, Bond, BondDonation, BondOrder, BondDirection, Chirality, ExtendedAtom,
     ExtendedBond, ExtendedMolecule, Molecule, Span, WildcardAtom,
 };
 
@@ -18,7 +18,7 @@ struct OpenRing {
     atom_idx: usize,
     bond_idx: usize,
     order: Option<BondOrder>,
-    wedge: Option<BondWedge>,
+    direction: Option<BondDirection>,
     donation: Option<BondDonation>,
     open_pos: usize,
     open_end: usize,
@@ -40,7 +40,7 @@ pub(super) struct AtomData {
 /// Bond event data
 pub(super) struct BondData {
     pub order: BondOrder,
-    pub wedge: Option<BondWedge>,
+    pub direction: Option<BondDirection>,
     pub donation: Option<BondDonation>,
     pub span: Option<Span>,
 }
@@ -137,7 +137,7 @@ impl MoleculeBuilder {
         last_atom_idx: usize,
         ring_idx: usize,
         order_opt: Option<BondOrder>,
-        wedge_opt: Option<BondWedge>,
+        direction_opt: Option<BondDirection>,
         donation_opt: Option<BondDonation>,
         pos: usize,
         token_end: usize,
@@ -153,7 +153,7 @@ impl MoleculeBuilder {
                     atom_idx: last_atom_idx,
                     bond_idx,
                     order: order_opt,
-                    wedge: wedge_opt,
+                    direction: direction_opt,
                     donation: donation_opt,
                     open_pos: pos,
                     open_end: token_end,
@@ -162,9 +162,9 @@ impl MoleculeBuilder {
             Some(open) => {
                 // Once the close end's view is flipped (below), a consistent both-ends spec has
                 // opposite raw symbols; equal raw symbols conflict.
-                if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
+                if let (Some(d1), Some(d2)) = (open.direction, direction_opt) {
                     if d1 == d2 {
-                        return Err(ParseError::MismatchedRingBondDirs {
+                        return Err(ParseError::MismatchedRingBondDirections {
                             pos: offset + pos,
                             open_pos: offset + open.open_pos,
                         });
@@ -198,9 +198,9 @@ impl MoleculeBuilder {
                     (Some(o), None) | (None, Some(o)) => o,
                     (None, None) => BondOrder::Single,
                 };
-                // Wedge and donation: use the opening atom's perspective; if only the close
+                // Direction and donation: use the opening atom's perspective; if only the close
                 // specifies it, flip it (it is from the closing atom's perspective).
-                let final_wedge = match (open.wedge, wedge_opt) {
+                let final_direction = match (open.direction, direction_opt) {
                     (Some(d), _) => Some(d),
                     (None, Some(d)) => Some(d.flip()),
                     (None, None) => None,
@@ -216,8 +216,8 @@ impl MoleculeBuilder {
                 // an explicit order or a directional /,\ keeps the bond as written.
                 if open.order.is_none()
                     && order_opt.is_none()
-                    && open.wedge.is_none()
-                    && wedge_opt.is_none()
+                    && open.direction.is_none()
+                    && direction_opt.is_none()
                     && self.is_aromatic(open.atom_idx)
                     && self.is_aromatic(b)
                 {
@@ -229,7 +229,7 @@ impl MoleculeBuilder {
                     b,
                     BondData {
                         order: final_order,
-                        wedge: final_wedge,
+                        direction: final_direction,
                         donation: final_donation,
                         span: Span::from_bytes_opt(
                             Some(open.open_pos as u32),
@@ -419,7 +419,7 @@ impl ExtendedMoleculeBuilder {
         last_atom_idx: usize,
         ring_idx: usize,
         order_opt: Option<BondOrder>,
-        wedge_opt: Option<BondWedge>,
+        direction_opt: Option<BondDirection>,
         donation_opt: Option<BondDonation>,
         pos: usize,
         token_end: usize,
@@ -435,7 +435,7 @@ impl ExtendedMoleculeBuilder {
                     atom_idx: last_atom_idx,
                     bond_idx,
                     order: order_opt,
-                    wedge: wedge_opt,
+                    direction: direction_opt,
                     donation: donation_opt,
                     open_pos: pos,
                     open_end: token_end,
@@ -444,9 +444,9 @@ impl ExtendedMoleculeBuilder {
             Some(open) => {
                 // Once the close end's view is flipped (below), a consistent both-ends spec has
                 // opposite raw symbols; equal raw symbols conflict.
-                if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
+                if let (Some(d1), Some(d2)) = (open.direction, direction_opt) {
                     if d1 == d2 {
-                        return Err(ParseError::MismatchedRingBondDirs {
+                        return Err(ParseError::MismatchedRingBondDirections {
                             pos: offset + pos,
                             open_pos: offset + open.open_pos,
                         });
@@ -480,9 +480,9 @@ impl ExtendedMoleculeBuilder {
                     (Some(o), None) | (None, Some(o)) => o,
                     (None, None) => BondOrder::Single,
                 };
-                // Wedge and donation: use the opening atom's perspective; if only the close
+                // Direction and donation: use the opening atom's perspective; if only the close
                 // specifies it, flip it (it is from the closing atom's perspective).
-                let final_wedge = match (open.wedge, wedge_opt) {
+                let final_direction = match (open.direction, direction_opt) {
                     (Some(d), _) => Some(d),
                     (None, Some(d)) => Some(d.flip()),
                     (None, None) => None,
@@ -498,8 +498,8 @@ impl ExtendedMoleculeBuilder {
                 // an explicit order or a directional /,\ keeps the bond as written.
                 if open.order.is_none()
                     && order_opt.is_none()
-                    && open.wedge.is_none()
-                    && wedge_opt.is_none()
+                    && open.direction.is_none()
+                    && direction_opt.is_none()
                     && self.is_aromatic(open.atom_idx)
                     && self.is_aromatic(b)
                 {
@@ -511,7 +511,7 @@ impl ExtendedMoleculeBuilder {
                     b,
                     BondData {
                         order: final_order,
-                        wedge: final_wedge,
+                        direction: final_direction,
                         donation: final_donation,
                         span: Span::from_bytes_opt(
                             Some(open.open_pos as u32),

@@ -27,7 +27,7 @@ mod utils;
 
 use utils::{
     cis_trans_capable, cis_trans_side, first_neighbor_toward_ordering, last_neighbor_away_ordering,
-    noncovalent_kind, tetrahedral_ligand_ordering, validate_bond_wedge,
+    neighbor_count, noncovalent_kind, tetrahedral_ligand_ordering, validate_bond_direction,
     validate_tetrahedral_geometry, wedge_bond_neighbors, StereoBondAtom, StereoHalfplane,
 };
 
@@ -37,7 +37,7 @@ pub enum RaiseError {
     #[error("tetrahedral stereo at atom {atom} with {count} ligands, expected 3 or 4 ligands")]
     TetrahedralLigandCount { atom: usize, count: usize },
     #[error("directional bond {bond} not adjacent to a stereogenic double bond")]
-    DanglingBondWedge { bond: usize },
+    DanglingBondDirection { bond: usize },
     #[error("contradictory cis/trans markers at atom {atom}")]
     CisTransConflict { atom: usize },
     #[error("inconsistent wedge bonds at atom {atom}")]
@@ -72,7 +72,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
         let mut dative_bonds: Vec<(Vec<AtomId>, AtomId, DativeBondAst)> = Vec::new();
         let mut noncovalent_bonds = Vec::new();
         for (bond_idx, b) in self.bonds.iter().enumerate() {
-            validate_bond_wedge(self, bond_idx)?;
+            validate_bond_direction(self, bond_idx)?;
             let a_idx = AtomId(b.atoms.first());
             let b_idx = AtomId(b.atoms.second());
             if let Some(kind) = b.noncovalent.map(noncovalent_kind) {
@@ -286,6 +286,11 @@ fn raise_tetrahedral_stereo(
             let Some(positions) = mol.positions.as_ref() else {
                 return Ok(None);
             };
+            // Exclude atoms adjacent to tetrahedral stereo centers that share a wedge bond.
+            let count = neighbor_count(mol, atom_idx);
+            if count != 3 && count != 4 {
+                return Ok(None);
+            }
             let neighbors = wedge_bond_neighbors(mol, atom_idx);
             let Some(&(neighbor_idx, outofplane)) = neighbors.first() else {
                 return Ok(None);
@@ -335,8 +340,6 @@ fn raise_cis_trans_stereo(
     }
     let atom_1_idx = bond.start_atom() as usize;
     let atom_2_idx = bond.end_atom() as usize;
-    // A terminal side (e.g. =O, =CH2) cannot host cis/trans; any flanking marker belongs to a
-    // neighboring double bond and is checked by `validate_bond_wedge`.
     if !cis_trans_capable(mol, atom_1_idx, atom_2_idx) {
         return Ok(None);
     }
@@ -410,6 +413,30 @@ mod tests {
     const BENZENE_AROMATIC_MOL: &str = "benzene\n\n\n  6  6  0  0  0  0  0  0  0  0999 V2000\n    0.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.8660    0.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.8660   -0.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.8660   -0.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.8660    0.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  4  0  0  0  0\n  2  3  4  0  0  0  0\n  3  4  4  0  0  0  0\n  4  5  4  0  0  0  0\n  5  6  4  0  0  0  0\n  6  1  4  0  0  0  0\nM  END\n";
 
     const CARBON_H0_EXPLICIT_MOL: &str = "carbon-h0\n\n\n  1  0  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  1  0  0  0  0  0  0  0  0\nM  END\n";
+
+    const WEDGE_CONFLICT_MOL: &str = "wedge-conflict\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  1  0  0  0\n  1  3  1  1  0  0  0\n  1  4  1  0  0  0  0\n  1  5  1  0  0  0  0\nM  END\n";
+
+    const CFCLBRI_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  6        0\n  2  4  1  0        0\n  2  5  1  6        0\nM  END\n";
+
+    const CFCLBRI_R_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  1        0\n  2  4  1  0        0\n  2  5  1  1        0\nM  END\n";
+
+    const CFCLBRI_INCONSISTENT_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  6        0\n  2  4  1  0        0\n  2  5  1  1        0\nM  END\n";
+
+    const CFCLBRI_SINGLE_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.6906   -0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    0.6906    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6906   -0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -0.6906    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  0        0\n  2  5  1  1        0\nM  END\n";
+
+    // Gives opposite coset from SMILES `C[C@@H](O)CC` example because of atom ordering swap.
+    const BUTANOL_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n   -1.0643   -0.6145    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.3548   -0.2048    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.3548   -0.6145    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.3548    0.6145    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0643   -0.2048    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  1        0\n  3  5  1  0        0\nM  END\n";
+
+    // Same coset as `C[C@H](N)C(O)=O` because atom ordering differs by even (3-cycle) permutation.
+    const ALANINE_WEDGE_MOL: &str = "\n\n\n  6  5  0  0  1  0  0  0  0  0999 V2000\n   -0.3560   -1.0277    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0680    0.2055    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    0.3560    1.0277    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.3560   -0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.3560    0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    1.0680   -0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  4  1  2  0        0\n  4  2  1  0        0\n  5  3  1  1        0\n  5  4  1  0        0\n  6  5  1  0        0\nM  END\n";
+
+    // Opposite coset from `C[S@@+]([O-])CC` because of atom ordering swap.
+    const SULFOXIDE_WEDGE_MOL: &str = "\n\n\n  5  4  0  0  0  0  0  0  0  0999 V2000\n   -1.0680   -0.6166    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.3560   -0.2055    0.0000 S   0  3  0  0  0  0  0  0  0  0  0  0\n    0.3560   -0.6166    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.3560    0.6166    0.0000 O   0  5  0  0  0  0  0  0  0  0  0  0\n    1.0680   -0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  1  1        0\n  3  5  1  0        0\nM  CHG  2   2   1   4  -1\nM  END\n";
+
+    // 2-methyloxirane, explicit H, two consistent wedges. Opposite coset from `C[C@@]1([H])OC1`.
+    const METHYLOXIRANE_WEDGE_MOL: &str = "\n\n\n  5  5  0  0  1  0  0  0  0  0999 V2000\n   -0.1738    0.0355    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.4076    0.6168    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.9889    0.1428    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.9889    0.0355    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.6743   -0.6168    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  1  3  1  1        0\n  2  4  1  0        0\n  4  1  1  0        0\n  1  5  1  6        0\nM  END\n";
+
+    const PROCHIRAL_METHYLENE_WEDGE_MOL: &str = "\n\n\n  7  6  0  0  0  0  0  0  0  0999 V2000\n   -0.3009   -0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.4111    0.2055    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n    0.4111    1.0277    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n    1.1231   -0.2055    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.3009   -1.0277    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0\n   -0.7120    0.5065    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.1231   -0.2055    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0        0\n  2  3  1  0        0\n  2  4  2  0        0\n  1  5  1  0        0\n  1  6  1  1        0\n  1  7  1  6        0\nM  END\n";
 
     const CHIRAL_PARITY_MOL: &str = "chiral\n\n\n  5  4  0  0  1  0  0  0  0  0999 V2000\n    0.0000    0.0000    0.0000 C   0  0  1  0  0  0  0  0  0  0  0  0\n    1.0000    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0\n   -1.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000    1.0000    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0\n    0.0000   -1.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0\n  1  2  1  0  0  0  0\n  1  3  1  0  0  0  0\n  1  4  1  0  0  0  0\n  1  5  1  0  0  0  0\nM  END\n";
 
@@ -511,6 +538,14 @@ mod tests {
     #[case::ring_then_branch(parse_smiles_bytes_to_table_ir(b"C[C@]1(Cl)CC(C)CC1").unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
     #[case::branch_then_ring(parse_smiles_bytes_to_table_ir(b"C[C@](Cl)1CC(C)CC1").unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
     #[case::mol_parity_clockwise(parse_mol_bytes_to_table_ir(CHIRAL_PARITY_MOL.as_bytes()).unwrap(), 0, Some(StereoCosetAst::Lit(0)))]
+    #[case::mol_wedge_cfclbri(parse_mol_bytes_to_table_ir(CFCLBRI_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
+    #[case::mol_wedge_cfclbri_r(parse_mol_bytes_to_table_ir(CFCLBRI_R_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
+    #[case::mol_wedge_cfclbri_single(parse_mol_bytes_to_table_ir(CFCLBRI_SINGLE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
+    #[case::mol_wedge_butanol(parse_mol_bytes_to_table_ir(BUTANOL_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
+    #[case::mol_wedge_alanine(parse_mol_bytes_to_table_ir(ALANINE_WEDGE_MOL.as_bytes()).unwrap(), 4, Some(StereoCosetAst::Lit(0)))]
+    #[case::mol_wedge_sulfoxide(parse_mol_bytes_to_table_ir(SULFOXIDE_WEDGE_MOL.as_bytes()).unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
+    #[case::mol_wedge_methyloxirane(parse_mol_bytes_to_table_ir(METHYLOXIRANE_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCosetAst::Lit(0)))]
+    #[case::mol_wedge_prochiral_methylene(parse_mol_bytes_to_table_ir(PROCHIRAL_METHYLENE_WEDGE_MOL.as_bytes()).unwrap(), 0, Some(StereoCosetAst::Lit(1)))]
     #[case::sulfoxide_counterclockwise(parse_smiles_bytes_to_table_ir(b"C[S@](=O)CC").unwrap(), 1, Some(StereoCosetAst::Lit(0)))]
     #[case::sulfoxide_clockwise(parse_smiles_bytes_to_table_ir(b"C[S@@](=O)CC").unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
     #[case::sulfoxide_charge_separated(parse_smiles_bytes_to_table_ir(b"C[S@@+]([O-])CC").unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
@@ -526,19 +561,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::dimethyl_sulfide(parse_smiles_bytes_to_table_ir(b"C[S@]C").unwrap(), 1, 2)]
+    #[case::dimethyl_sulfide(parse_smiles_bytes_to_table_ir(b"C[S@]C").unwrap(), 1, RaiseError::TetrahedralLigandCount { atom: 1, count: 2 })]
+    #[case::wedge_conflict(parse_mol_bytes_to_table_ir(WEDGE_CONFLICT_MOL.as_bytes()).unwrap(), 0, RaiseError::WedgeConflict { atom: 0 })]
+    #[case::cfclbri_inconsistent_wedges(parse_mol_bytes_to_table_ir(CFCLBRI_INCONSISTENT_WEDGE_MOL.as_bytes()).unwrap(), 1, RaiseError::WedgeConflict { atom: 1 })]
     fn test_raise_tetrahedral_stereo_error(
         #[case] mol: TableMolecule,
         #[case] atom_idx: usize,
-        #[case] count: usize,
+        #[case] expected: RaiseError,
     ) {
-        assert_eq!(
-            raise_tetrahedral_stereo(&mol, atom_idx),
-            Err(RaiseError::TetrahedralLigandCount {
-                atom: atom_idx,
-                count,
-            })
-        );
+        assert_eq!(raise_tetrahedral_stereo(&mol, atom_idx), Err(expected));
     }
 
     #[rstest]
@@ -571,6 +602,10 @@ mod tests {
     #[case::terminal_no_substituent(parse_smiles_bytes_to_table_ir(b"F/C=C").unwrap(), 1, None)]
     #[case::cyclohexenone_carbonyl(parse_smiles_bytes_to_table_ir(b"O=C1/C=C\\CCC1").unwrap(), 0, None)]
     #[case::cyclohexenone(parse_smiles_bytes_to_table_ir(b"O=C1/C=C\\CCC1").unwrap(), 3, Some(StereoCosetAst::Lit(0)))]
+    #[case::hexadiene_first(parse_smiles_bytes_to_table_ir(b"C/C=C/C=C/C").unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
+    #[case::hexadiene_second(parse_smiles_bytes_to_table_ir(b"C/C=C/C=C/C").unwrap(), 3, Some(StereoCosetAst::Lit(1)))]
+    #[case::hexadiene_ez_first(parse_smiles_bytes_to_table_ir(b"C/C=C/C=C\\C").unwrap(), 1, Some(StereoCosetAst::Lit(1)))]
+    #[case::hexadiene_ez_second(parse_smiles_bytes_to_table_ir(b"C/C=C/C=C\\C").unwrap(), 3, Some(StereoCosetAst::Lit(0)))]
     fn test_raise_cis_trans_stereo(
         #[case] mol: TableMolecule,
         #[case] bond_idx: usize,
@@ -592,13 +627,13 @@ mod tests {
     }
 
     #[rstest]
-    #[case::dangling(parse_smiles_bytes_to_table_ir(b"F/C=C").unwrap(), 0, Err(RaiseError::DanglingBondWedge { bond: 0 }))]
+    #[case::dangling(parse_smiles_bytes_to_table_ir(b"F/C=C").unwrap(), 0, Err(RaiseError::DanglingBondDirection { bond: 0 }))]
     #[case::flanks_capable(parse_smiles_bytes_to_table_ir(b"O=C1/C=C\\CCC1").unwrap(), 2, Ok(()))]
-    fn test_validate_bond_wedge(
+    fn test_validate_bond_direction(
         #[case] mol: TableMolecule,
         #[case] bond_idx: usize,
         #[case] expected: Result<(), RaiseError>,
     ) {
-        assert_eq!(validate_bond_wedge(&mol, bond_idx), expected);
+        assert_eq!(validate_bond_direction(&mol, bond_idx), expected);
     }
 }
