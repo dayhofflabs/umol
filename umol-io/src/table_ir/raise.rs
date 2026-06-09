@@ -20,29 +20,26 @@ use crate::table_ir::atom::Atom as TableAtom;
 use crate::table_ir::bond::{
     Bond as TableBond, BondDonation as TableBondDonation, BondOrder as TableBondOrder,
 };
+use crate::table_ir::raise::utils::coset_from_wedge_winding;
 use crate::table_ir::{BondStereo, Chirality, ChiralityFrame, Molecule as TableMolecule};
 
 mod utils;
 
 use utils::{
     cis_trans_capable, cis_trans_side, first_neighbor_toward_ordering, last_neighbor_away_ordering,
-    noncovalent_kind, tetrahedral_ligand_gate, tetrahedral_target_ordering, validate_bond_wedge,
-    wedge_winding, wedged_neighbors, StereoBondAtom, StereoFace, StereoLigand,
+    noncovalent_kind, tetrahedral_ligand_ordering, validate_bond_wedge,
+    validate_tetrahedral_geometry, wedge_bond_neighbors, StereoBondAtom, StereoHalfplane,
 };
 
 /// Error variants for TableIR -> MoleculeAst raise.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum RaiseError {
-    /// A tetrahedral stereo assertion on an atom that cannot host a tetrahedral center.
     #[error("tetrahedral stereo at atom {atom} with {count} ligands, expected 3 or 4 ligands")]
     TetrahedralLigandCount { atom: usize, count: usize },
-    /// A directional `/`,`\` bond not adjacent to any cis/trans-capable double bond.
-    #[error("directional bond {bond} is not adjacent to a stereogenic double bond")]
+    #[error("directional bond {bond} not adjacent to a stereogenic double bond")]
     DanglingBondWedge { bond: usize },
-    /// Directional `/`,`\` bonds on one double-bond atom that imply both faces for its substituent.
     #[error("contradictory cis/trans markers at atom {atom}")]
     CisTransConflict { atom: usize },
-    /// Multiple wedge bonds at a tetrahedral center that disagree on the configuration.
     #[error("inconsistent wedge bonds at atom {atom}")]
     WedgeConflict { atom: usize },
 }
@@ -242,64 +239,81 @@ fn raise_tetrahedral_stereo(
     atom_idx: usize,
 ) -> Result<Option<AtomConstraint>, RaiseError> {
     let chirality = mol.atoms[atom_idx].chirality;
-    let (source, target, source_idx): (Vec<StereoLigand>, Vec<StereoLigand>, usize) =
-        match (chirality, mol.chirality_frame) {
-            (Some(Chirality::Unspecified), _) => {
-                tetrahedral_ligand_gate(mol, atom_idx)?;
-                return Ok(Some(AtomConstraint::TetrahedralStereo(
-                    StereoConfigurationAst::stereo(StereoCosetAst::Undetermined),
-                )));
-            }
-            (Some(token), Some(ChiralityFrame::FirstNeighborToward)) => {
-                let source_idx = match token {
-                    Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 } => 0,
-                    Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 } => 1,
-                    _ => return Ok(None),
-                };
-                tetrahedral_ligand_gate(mol, atom_idx)?;
+    let (relabeling, source_coset): (Permutation, usize) = match chirality {
+        Some(Chirality::Unspecified) => {
+            validate_tetrahedral_geometry(mol, atom_idx)?;
+            return Ok(Some(AtomConstraint::TetrahedralStereo(
+                StereoConfigurationAst::stereo(StereoCosetAst::Undetermined),
+            )));
+        }
+        Some(symbol) => {
+            let source_coset = match (symbol, mol.chirality_frame) {
                 (
-                    first_neighbor_toward_ordering(mol, atom_idx),
-                    tetrahedral_target_ordering(mol, atom_idx),
-                    source_idx,
-                )
-            }
-            (Some(token), Some(ChiralityFrame::LastNeighborAway)) => {
-                let source_idx = match token {
-                    Chirality::Clockwise => 0,
-                    Chirality::CounterClockwise => 1,
-                    _ => return Ok(None),
-                };
-                tetrahedral_ligand_gate(mol, atom_idx)?;
+                    Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 },
+                    Some(ChiralityFrame::FirstNeighborToward),
+                ) => 0,
                 (
-                    last_neighbor_away_ordering(mol, atom_idx),
-                    tetrahedral_target_ordering(mol, atom_idx),
-                    source_idx,
-                )
-            }
-            (None, _) => {
-                let Some(positions) = mol.positions.as_ref() else {
-                    return Ok(None);
-                };
-                let wedges = wedged_neighbors(mol, atom_idx);
-                let Some(&(wedged, up)) = wedges.first() else {
-                    return Ok(None);
-                };
-                tetrahedral_ligand_gate(mol, atom_idx)?;
-                let ordering = tetrahedral_target_ordering(mol, atom_idx);
-                let source_idx = wedge_winding(positions, atom_idx, &ordering, wedged, up);
-                for &(other_wedged, other_up) in &wedges[1..] {
-                    if wedge_winding(positions, atom_idx, &ordering, other_wedged, other_up)
-                        != source_idx
-                    {
-                        return Err(RaiseError::WedgeConflict { atom: atom_idx });
-                    }
+                    Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 },
+                    Some(ChiralityFrame::FirstNeighborToward),
+                ) => 1,
+                (
+                    Chirality::CounterClockwise | Chirality::Tetrahedral { arr: 1 },
+                    Some(ChiralityFrame::LastNeighborAway),
+                ) => 1,
+                (
+                    Chirality::Clockwise | Chirality::Tetrahedral { arr: 2 },
+                    Some(ChiralityFrame::LastNeighborAway),
+                ) => 0,
+                _ => return Ok(None),
+            };
+            validate_tetrahedral_geometry(mol, atom_idx)?;
+            let source_ordering = match mol.chirality_frame {
+                Some(ChiralityFrame::FirstNeighborToward) => {
+                    first_neighbor_toward_ordering(mol, atom_idx)
                 }
-                (ordering.clone(), ordering, source_idx)
+                Some(ChiralityFrame::LastNeighborAway) => {
+                    last_neighbor_away_ordering(mol, atom_idx)
+                }
+                None => return Ok(None),
+            };
+            let permutation = Permutation::between(
+                &source_ordering,
+                &tetrahedral_ligand_ordering(mol, atom_idx),
+            );
+            (permutation, source_coset)
+        }
+        None => {
+            let Some(positions) = mol.positions.as_ref() else {
+                return Ok(None);
+            };
+            let neighbors = wedge_bond_neighbors(mol, atom_idx);
+            let Some(&(neighbor_idx, outofplane)) = neighbors.first() else {
+                return Ok(None);
+            };
+            let target_ordering = tetrahedral_ligand_ordering(mol, atom_idx);
+            let source_coset = coset_from_wedge_winding(
+                atom_idx,
+                &target_ordering,
+                neighbor_idx,
+                &positions,
+                outofplane,
+            );
+            for &(neighbor_idx, outofplane) in &neighbors[1..] {
+                if coset_from_wedge_winding(
+                    atom_idx,
+                    &target_ordering,
+                    neighbor_idx,
+                    positions,
+                    outofplane,
+                ) != source_coset
+                {
+                    return Err(RaiseError::WedgeConflict { atom: atom_idx });
+                }
             }
-            (Some(_), None) => return Ok(None),
-        };
-    let coset = space(ClassKey::Tetrahedral)
-        .reindex(source_idx as u32, Permutation::between(&source, &target));
+            (Permutation::identity(4), source_coset)
+        }
+    };
+    let coset = space(ClassKey::Tetrahedral).reindex(source_coset as u32, relabeling);
     Ok(Some(AtomConstraint::TetrahedralStereo(
         StereoConfigurationAst::stereo(StereoCosetAst::Lit(coset)),
     )))
@@ -319,25 +333,25 @@ fn raise_cis_trans_stereo(
             StereoConfigurationAst::stereo(StereoCosetAst::Undetermined),
         )));
     }
-    let atom_1 = bond.start_atom() as usize;
-    let atom_2 = bond.end_atom() as usize;
+    let atom_1_idx = bond.start_atom() as usize;
+    let atom_2_idx = bond.end_atom() as usize;
     // A terminal side (e.g. =O, =CH2) cannot host cis/trans; any flanking marker belongs to a
     // neighboring double bond and is checked by `validate_bond_wedge`.
-    if !cis_trans_capable(mol, atom_1, atom_2) {
+    if !cis_trans_capable(mol, atom_1_idx, atom_2_idx) {
         return Ok(None);
     }
     let (Some(side_1), Some(side_2)) = (
-        cis_trans_side(mol, atom_1, atom_2)?,
-        cis_trans_side(mol, atom_2, atom_1)?,
+        cis_trans_side(mol, atom_1_idx, atom_2_idx)?,
+        cis_trans_side(mol, atom_2_idx, atom_1_idx)?,
     ) else {
         return Ok(None);
     };
-    // Materialize the by-face order from each side's first-ligand face (the second is the opposite).
-    let faces = |side: &StereoBondAtom| match side.first_face {
-        StereoFace::Above => (side.first_ligand, side.second_ligand),
-        StereoFace::Below => (side.second_ligand, side.first_ligand),
+    // Generate the halfplane assignments for each side of the double bond.
+    let halfplanes = |side: &StereoBondAtom| match side.first_halfplane {
+        StereoHalfplane::Top => (side.first_ligand, side.second_ligand),
+        StereoHalfplane::Bottom => (side.second_ligand, side.first_ligand),
     };
-    let ((s1_above, s1_below), (s2_above, s2_below)) = (faces(&side_1), faces(&side_2));
+    let ((s1_above, s1_below), (s2_above, s2_below)) = (halfplanes(&side_1), halfplanes(&side_2));
     let source = [s1_above, s1_below, s2_above, s2_below];
     let target = [
         side_1.first_ligand,

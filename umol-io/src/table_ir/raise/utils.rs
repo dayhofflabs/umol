@@ -4,27 +4,54 @@
 use umol_ast::ast::NoncovalentBondKind;
 use umol_geometric_core::{complementary_direction, signed_volume, Point3D};
 
+use super::RaiseError;
 use crate::table_ir::bond::{BondNoncovalent as TableNoncovalent, BondOrder as TableBondOrder};
 use crate::table_ir::{BondWedge, Molecule as TableMolecule};
-
-use super::RaiseError;
-
-/// A ligand position in a raise-time stereo ordering: a neighbor atom, or an opaque virtual ligand
-/// (an under-determined implicit H or lone pair — raise asserts the coset without deciding which).
-/// Raise-local and distinct from `umol_ast::ast::StereoLigand`; `Permutation::between` is generic over
-/// `Eq`, so the orderings carry no AST type.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum StereoLigand {
-    Atom(usize),
-    /// An under-determined virtual ligand, tagged by its host atom so the two double-bond atoms'
-    /// virtuals in a `#C` ordering stay distinct (`Permutation::between` matches ligands by equality).
-    Virtual(usize),
-}
 
 pub(super) fn noncovalent_kind(kind: TableNoncovalent) -> NoncovalentBondKind {
     match kind {
         TableNoncovalent::Hydrogen => NoncovalentBondKind::HydrogenBond,
     }
+}
+
+/// Ligand stereo ordering for raise operation (atom or virtual ligand). Virtual
+/// ligand does not distinguish between implicit H or lone pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum StereoLigand {
+    Atom(usize),
+    Virtual(usize),
+}
+
+/// Halfplane of the plane of the double bond, split by the bond axis.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum StereoHalfplane {
+    Top,
+    Bottom,
+}
+
+impl StereoHalfplane {
+    fn flip(self) -> Self {
+        match self {
+            Self::Top => Self::Bottom,
+            Self::Bottom => Self::Top,
+        }
+    }
+}
+
+/// Out-of-plane direction.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum StereoOutofPlane {
+    Front,
+    Back,
+}
+
+/// Atom adjacent to stereogenic double bond. Second virtual ligand is
+/// added if atom has one substituent. Halfplane of the second ligand is
+/// flipped from the first.
+pub(super) struct StereoBondAtom {
+    pub(super) first_ligand: StereoLigand,
+    pub(super) second_ligand: StereoLigand,
+    pub(super) first_halfplane: StereoHalfplane,
 }
 
 /// Neighbor atom ordering of `atom_idx`, by ascending atom index.
@@ -50,9 +77,12 @@ fn bond_neighbor_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<usize> {
         .collect()
 }
 
-/// #T umol target ordering: neighbors ascending as `Atom`, then one `Virtual` (the under-determined
-/// fourth ligand, placed last) when the center has three neighbors.
-pub(super) fn tetrahedral_target_ordering(mol: &TableMolecule, atom_idx: usize) -> Vec<StereoLigand> {
+/// Ligand ordering used in tetrahedral stereo constraints (#T): neighbors ascending as `Atom`,
+/// then at most one `Virtual`. More than one virtual ligand is disallowed by `validate_tetrahedral_geometry`.
+pub(super) fn tetrahedral_ligand_ordering(
+    mol: &TableMolecule,
+    atom_idx: usize,
+) -> Vec<StereoLigand> {
     let mut ordering: Vec<StereoLigand> = atom_ordering(mol, atom_idx)
         .into_iter()
         .map(StereoLigand::Atom)
@@ -63,9 +93,8 @@ pub(super) fn tetrahedral_target_ordering(mol: &TableMolecule, atom_idx: usize) 
     ordering
 }
 
-/// #T source ordering, FirstNeighborToward (SMILES/SMARTS): neighbors in parse order, with the
-/// under-determined `Virtual` at the implicit slot (first if `atom_idx` opens the SMILES, else second)
-/// when the center has three neighbors.
+/// SMILES/SMARTS tetrahedral ligand ordering, FirstNeighborToward: neighbors in parse order, virtual
+/// ligand is first if `atom_idx` opens the SMILES, else second.
 pub(super) fn first_neighbor_toward_ordering(
     mol: &TableMolecule,
     atom_idx: usize,
@@ -81,28 +110,28 @@ pub(super) fn first_neighbor_toward_ordering(
     ordering
 }
 
-/// #T source ordering, LastNeighborAway (MDL / MOL parity). Atom-number order = atom-index order with
-/// the under-determined ligand last — identical to the target frame, so it passes through unchanged;
-/// only the parity winding (read with that last ligand behind) converts.
+/// MDL/CTFile tetradehral ligand ordering, LastNeighborAway: atom index ordering,
+/// virtual ligand is last.
 pub(super) fn last_neighbor_away_ordering(
     mol: &TableMolecule,
     atom_idx: usize,
 ) -> Vec<StereoLigand> {
-    tetrahedral_target_ordering(mol, atom_idx)
+    tetrahedral_ligand_ordering(mol, atom_idx)
 }
 
-/// The configuration index a wedge realizes in `ordering`: lift the wedged neighbor out of
-/// plane (Up: +, Down: −), keep the rest in the 2D depiction (a virtual ligand at the
-/// complementary in-plane direction), and take the sign of the signed volume of the four
-/// points. The 0/1 mapping is pinned by the tests.
-pub(super) fn wedge_winding(
-    positions: &[Point3D],
+/// Tetrahedral stereo coset index from wedge bonds at `atom_idx`.
+pub(super) fn coset_from_wedge_winding(
     atom_idx: usize,
     ordering: &[StereoLigand],
     wedged: usize,
-    up: bool,
+    positions: &[Point3D],
+    outofplane: StereoOutofPlane,
 ) -> usize {
-    let z = if up { 1.0 } else { -1.0 };
+    let z = if outofplane == StereoOutofPlane::Front {
+        1.0
+    } else {
+        -1.0
+    };
     let center_position = positions[atom_idx];
     let neighbor_positions: Vec<Point3D> = ordering
         .iter()
@@ -129,23 +158,32 @@ pub(super) fn wedge_winding(
     }
 }
 
-/// The neighbors reached by wedge bonds at `atom_idx`, each with its up/down sense (`true` = up).
-pub(super) fn wedged_neighbors(mol: &TableMolecule, atom_idx: usize) -> Vec<(usize, bool)> {
+/// Neighbors reached by wedge bonds at `atom_idx`, each with its out-of-plane direction.
+pub(super) fn wedge_bond_neighbors(
+    mol: &TableMolecule,
+    atom_idx: usize,
+) -> Vec<(usize, StereoOutofPlane)> {
     mol.bonds
         .iter()
         .filter_map(
             |bond| match (bond.atoms.other(atom_idx as u32), bond.wedge) {
-                (Some(other), Some(BondWedge::Up)) => Some((other as usize, true)),
-                (Some(other), Some(BondWedge::Down)) => Some((other as usize, false)),
+                (Some(other), Some(BondWedge::Up)) => {
+                    Some((other as usize, StereoOutofPlane::Front))
+                }
+                (Some(other), Some(BondWedge::Down)) => {
+                    Some((other as usize, StereoOutofPlane::Back))
+                }
                 _ => None,
             },
         )
         .collect()
 }
 
-/// A tetrahedral center has four ligands, so it needs three neighbors (one under-determined virtual
-/// completes it) or four. Fewer (or more) cannot host a tetrahedral assertion.
-pub(super) fn tetrahedral_ligand_gate(mol: &TableMolecule, atom_idx: usize) -> Result<(), RaiseError> {
+/// Validate that tetrahedral stereo has 3 or 4 neighbors.
+pub(super) fn validate_tetrahedral_geometry(
+    mol: &TableMolecule,
+    atom_idx: usize,
+) -> Result<(), RaiseError> {
     let count = atom_ordering(mol, atom_idx).len();
     if count == 3 || count == 4 {
         Ok(())
@@ -157,36 +195,14 @@ pub(super) fn tetrahedral_ligand_gate(mol: &TableMolecule, atom_idx: usize) -> R
     }
 }
 
-/// Which face of the double-bond axis a directional `/`,`\` puts a substituent on, as seen from a
-/// given double-bond atom.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum StereoFace {
-    Above,
-    Below,
-}
-
-impl StereoFace {
-    fn flip(self) -> Self {
-        match self {
-            Self::Above => Self::Below,
-            Self::Below => Self::Above,
-        }
-    }
-}
-
-/// One double-bond atom's two #C ligands by atom index (`first_ligand`, `second_ligand`; the second is
-/// the under-determined `Virtual` when the atom has one substituent), with the face of the first. The
-/// second ligand sits on `first_face.flip()`.
-pub(super) struct StereoBondAtom {
-    pub(super) first_ligand: StereoLigand,
-    pub(super) second_ligand: StereoLigand,
-    pub(super) first_face: StereoFace,
-}
-
 /// The face the directional `/`,`\` of the single bond `atom_idx`–`other_atom_idx` puts
 /// `other_atom_idx` on, seen from `atom_idx` (flipped when `atom_idx` is the bond's stored end).
 /// `None` when the bond has no `/`,`\`.
-fn direction(mol: &TableMolecule, atom_idx: usize, other_atom_idx: usize) -> Option<StereoFace> {
+fn direction(
+    mol: &TableMolecule,
+    atom_idx: usize,
+    other_atom_idx: usize,
+) -> Option<StereoHalfplane> {
     mol.bonds.iter().find_map(|bond| {
         if bond.order != TableBondOrder::Single {
             return None;
@@ -195,8 +211,8 @@ fn direction(mol: &TableMolecule, atom_idx: usize, other_atom_idx: usize) -> Opt
             return None;
         }
         let face = match bond.wedge? {
-            BondWedge::Up => StereoFace::Above,
-            BondWedge::Down => StereoFace::Below,
+            BondWedge::Up => StereoHalfplane::Top,
+            BondWedge::Down => StereoHalfplane::Bottom,
             _ => return None,
         };
         Some(if bond.start_atom() as usize == atom_idx {
@@ -232,18 +248,18 @@ pub(super) fn cis_trans_side(
     let toward_second = substituents
         .get(1)
         .and_then(|&second| direction(mol, atom_idx, second))
-        .map(StereoFace::flip);
-    let first_face = match (toward_first, toward_second) {
+        .map(StereoHalfplane::flip);
+    let first_halfplane = match (toward_first, toward_second) {
         (Some(a), Some(b)) if a != b => {
             return Err(RaiseError::CisTransConflict { atom: atom_idx })
         }
-        (Some(face), _) | (_, Some(face)) => face,
+        (Some(halfplane), _) | (_, Some(halfplane)) => halfplane,
         (None, None) => return Ok(None),
     };
     Ok(Some(StereoBondAtom {
         first_ligand,
         second_ligand,
-        first_face,
+        first_halfplane,
     }))
 }
 
