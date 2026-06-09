@@ -756,7 +756,8 @@ mod tests {
     #[fixture]
     fn molecule() -> MoleculeAst {
         MoleculeAst::from_parts(
-            vec![AtomAst::from_element(Element::C); 6],
+            // Atom 6 is an unbonded spare: a node that is neither stereo-bond site nor ligand.
+            vec![AtomAst::from_element(Element::C); 7],
             vec![
                 (AtomId(0), AtomId(1), BondAst::from_order(1)),
                 (AtomId(2), AtomId(3), BondAst::from_order(2)),
@@ -781,6 +782,8 @@ mod tests {
                 vec![
                     StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             )],
@@ -814,7 +817,9 @@ mod tests {
             vec![(
                 BondId(1),
                 vec![
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::ImplicitHydrogen),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(3), StereoLigandKind::LonePair),
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
@@ -855,7 +860,9 @@ mod tests {
                 BondId(0),
                 vec![
                     StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
                     StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(5), StereoLigandKind::Atom),
                 ],
                 StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
             )],
@@ -1312,7 +1319,7 @@ mod tests {
     #[rstest]
     #[case::site_endpoint(AtomId(2), vec![StereoBondId(0)])]
     #[case::ligand(AtomId(4), vec![StereoBondId(0)])]
-    #[case::unrelated(AtomId(0), vec![])]
+    #[case::unrelated(AtomId(6), vec![])]
     fn test_stereo_bond_views_incident(
         molecule: MoleculeAst,
         #[case] atom: AtomId,
@@ -1330,7 +1337,7 @@ mod tests {
     #[rstest]
     #[case::site_endpoint(AtomId(2), vec![StereoBondId(0)])]
     #[case::ligand_not_site(AtomId(4), vec![])]
-    #[case::unrelated(AtomId(0), vec![])]
+    #[case::unrelated(AtomId(6), vec![])]
     fn test_stereo_bond_views_incident_at_site(
         molecule: MoleculeAst,
         #[case] atom: AtomId,
@@ -1348,7 +1355,7 @@ mod tests {
     #[rstest]
     #[case::ligand(AtomId(4), vec![StereoBondId(0)])]
     #[case::site_not_ligand(AtomId(2), vec![])]
-    #[case::unrelated(AtomId(0), vec![])]
+    #[case::unrelated(AtomId(6), vec![])]
     fn test_stereo_bond_views_incident_at_ligand(
         molecule: MoleculeAst,
         #[case] atom: AtomId,
@@ -1396,7 +1403,7 @@ mod tests {
 
     #[rstest]
     fn test_stereo_bond_view_ligand_count(molecule: MoleculeAst) {
-        assert_eq!(molecule.stereo_bond(StereoBondId(0)).ligand_count(), 2);
+        assert_eq!(molecule.stereo_bond(StereoBondId(0)).ligand_count(), 4);
     }
 
     #[rstest]
@@ -1410,13 +1417,17 @@ mod tests {
             vec![
                 (StereoLigandKind::Atom, AtomId(4)),
                 (StereoLigandKind::Atom, AtomId(5)),
+                (StereoLigandKind::Atom, AtomId(0)),
+                (StereoLigandKind::Atom, AtomId(1)),
             ],
         );
     }
 
     #[rstest]
     #[case::first(0, StereoLigandKind::Atom, AtomId(4))]
-    #[case::last(1, StereoLigandKind::Atom, AtomId(5))]
+    #[case::second(1, StereoLigandKind::Atom, AtomId(5))]
+    #[case::third(2, StereoLigandKind::Atom, AtomId(0))]
+    #[case::fourth(3, StereoLigandKind::Atom, AtomId(1))]
     fn test_stereo_bond_view_ligand(
         molecule: MoleculeAst,
         #[case] idx: usize,
@@ -1431,7 +1442,7 @@ mod tests {
     #[rstest]
     #[should_panic]
     fn test_stereo_bond_view_ligand_error(molecule: MoleculeAst) {
-        molecule.stereo_bond(StereoBondId(0)).ligand(2);
+        molecule.stereo_bond(StereoBondId(0)).ligand(4);
     }
 
     #[rstest]
@@ -1442,20 +1453,20 @@ mod tests {
                 .atom_ligands()
                 .map(|ligand| ligand.atom_id())
                 .collect::<Vec<_>>(),
-            Vec::<AtomId>::new(),
+            vec![AtomId(4), AtomId(5)],
         );
         assert_eq!(
             virtual_ligand_molecule
                 .stereo_bond(StereoBondId(0))
                 .atom_ligand_ids()
                 .collect::<Vec<_>>(),
-            Vec::<AtomId>::new(),
+            vec![AtomId(4), AtomId(5)],
         );
         assert_eq!(
             virtual_ligand_molecule
                 .stereo_bond(StereoBondId(0))
                 .atom_ligand_count(),
-            0,
+            2,
         );
     }
 
@@ -1521,16 +1532,24 @@ mod tests {
                 atom_id: AtomId(5),
                 kind: StereoLigandKind::Atom,
             },
+            StereoLigand {
+                atom_id: AtomId(0),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(1),
+                kind: StereoLigandKind::Atom,
+            },
         ];
         assert_eq!(
             view.permutation_for(ligands.clone()),
-            Some(Permutation::identity(2)),
+            Some(Permutation::identity(4)),
         );
 
-        let reordered = vec![ligands[1], ligands[0]];
+        let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
         assert_eq!(
             view.permutation_for(reordered),
-            Some(Permutation::from_image(2, &[1, 0])),
+            Some(Permutation::from_image(4, &[1, 0, 2, 3])),
         );
     }
 
@@ -1546,12 +1565,25 @@ mod tests {
                 atom_id: AtomId(5),
                 kind: StereoLigandKind::Atom,
             },
+            StereoLigand {
+                atom_id: AtomId(0),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(1),
+                kind: StereoLigandKind::Atom,
+            },
         ];
         assert_eq!(view.permutation_for(ligands[..1].iter().copied()), None);
-        assert_eq!(view.permutation_for([ligands[0], ligands[0]]), None);
+        assert_eq!(
+            view.permutation_for([ligands[0], ligands[0], ligands[2], ligands[3]]),
+            None,
+        );
         assert_eq!(
             view.permutation_for([
                 ligands[0],
+                ligands[1],
+                ligands[2],
                 StereoLigand {
                     atom_id: AtomId(99),
                     kind: StereoLigandKind::Atom,
@@ -1573,13 +1605,21 @@ mod tests {
                 atom_id: AtomId(5),
                 kind: StereoLigandKind::Atom,
             },
+            StereoLigand {
+                atom_id: AtomId(0),
+                kind: StereoLigandKind::Atom,
+            },
+            StereoLigand {
+                atom_id: AtomId(1),
+                kind: StereoLigandKind::Atom,
+            },
         ];
         assert_eq!(
             view.coset_for(ligands.clone()),
             Some(StereoCosetAst::Lit(1)),
         );
 
-        let reordered = vec![ligands[1], ligands[0]];
+        let reordered = vec![ligands[1], ligands[0], ligands[2], ligands[3]];
         assert_eq!(view.coset_for(reordered), Some(StereoCosetAst::Lit(0)));
     }
 
@@ -1593,7 +1633,7 @@ mod tests {
                 .stereo_bond(StereoBondId(0))
                 .atom_ids()
                 .collect::<Vec<_>>(),
-            vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
+            vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(0), AtomId(1)],
         );
         // Virtual ligands sit on the site-bond endpoints, so they are not repeated.
         assert_eq!(
@@ -1601,7 +1641,7 @@ mod tests {
                 .stereo_bond(StereoBondId(0))
                 .atom_ids()
                 .collect::<Vec<_>>(),
-            vec![AtomId(2), AtomId(3)],
+            vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5)],
         );
     }
 

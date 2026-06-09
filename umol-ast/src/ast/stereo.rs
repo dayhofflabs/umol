@@ -64,7 +64,7 @@ impl StereoKind {
     fn involution(self) -> Permutation {
         match self {
             StereoKind::Tetrahedral => Permutation::from_image(4, &[1, 0, 2, 3]),
-            StereoKind::CisTrans => Permutation::from_image(2, &[1, 0]),
+            StereoKind::CisTrans => Permutation::from_image(4, &[1, 0, 2, 3]),
             StereoKind::SquarePlanar => Permutation::from_image(4, &[2, 1, 0, 3]),
             StereoKind::TrigonalBipyramidal => Permutation::from_image(5, &[4, 1, 2, 3, 0]),
             StereoKind::Octahedral => Permutation::from_image(6, &[5, 1, 2, 3, 4, 0]),
@@ -505,7 +505,7 @@ mod tests {
 
     #[rstest]
     #[case::tetrahedral(StereoKind::Tetrahedral, 4)]
-    #[case::cis_trans(StereoKind::CisTrans, 2)]
+    #[case::cis_trans(StereoKind::CisTrans, 4)]
     #[case::square_planar(StereoKind::SquarePlanar, 4)]
     #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, 5)]
     #[case::octahedral(StereoKind::Octahedral, 6)]
