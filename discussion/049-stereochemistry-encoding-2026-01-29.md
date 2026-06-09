@@ -1,5 +1,7 @@
 # Stereochemistry encoding (ordering-independent) — 2026-01-29
 
+Superseded by docs 103 and 104.
+
 This note records a design direction for stereochemistry in umol with two goals:
 
 1. **Ordering-independent semantics** suitable for GraphIR and graph algorithms.

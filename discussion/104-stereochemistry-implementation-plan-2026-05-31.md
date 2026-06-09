@@ -264,7 +264,9 @@ Phases A–E are in scope; F (3D) and G follow.
     Validated: 7 equivalence-SMILES `reindex` cases (3 TB §3.8.6, 4 OH §3.8.7) + `fibers == cosets` +
     `index ∘ unindex` round-trip; 61 tests, clippy clean.
 
-- **Phase B — raise → `#T`/`#C` assertions** (mechanical; `table_ir/raise.rs`). raise transcribes the source
+- **Phase B — raise → `#T`/`#C` assertions** (mechanical; `table_ir/raise.rs`). **DONE (2026-06-09)** — implemented
+  and validated (SMILES `@`/`/`,`\`; MOL parity + wedges; SMILES/MOL cross-checks; `WedgeConflict`/`DanglingBondDirection`/
+  `CisTransConflict`). MOL coordinate-derived cis/trans is out of B by design (perception). raise transcribes the source
   model's **atom/bond-based** stereo into the umol AST's per-atom / per-bond `#T`/`#C` constraints, reindexed
   into the atom's / bond's own umol neighbor frame. SMILES `@`/`@@` and MOL wedges are **per-atom** assertions
   (→ `#T` on the atom); `/`,`\` are **per-bond** assertions (→ `#C` on the bond) — the same atom/bond-based
@@ -346,16 +348,20 @@ Phases A–E are in scope; F (3D) and G follow.
   - atom → `#T`: `Atom.chirality` (MOL parity / SMILES `@`/`@@`) **and** wedges (MOL up/down when no parity, read
     against the 2D depiction). umol treats a wedge + its 2D depiction as a symbolic descriptor it consumes here —
     unlike CDK/RDKit, which resolve wedges through a coordinate pass.
-  - bond → `#C`: the directional `/`,`\` (`Bond.wedge`).
+  - bond → `#C`: the directional `/`,`\` (`Bond.direction`).
 
   **Out of scope — bare 3D coordinates.** A 3D conformer with no symbolic marker is **not** interpreted; raise
   leaves `positions` intact and passes it through, and E/Z (or chirality) is derived from it by conversion
   functions **outside umol-graph**. The MOL double-bond field `0` ("from coordinates") falls here. Perception
   (Phase C) consumes `#T`/`#C` only — it never reads wedges or coordinates.
 
-  All of B lives in `umol-graph/src/table_ir/raise.rs` (private fns; may move to a `raise` util module later) and
-  uses `umol-perm` — added as a **direct `umol-graph` dependency** (approved). The wedge helpers are local up/down +
-  2D-winding code, **not** `umol-geometric` (the depiction only fixes which side is up; no real geometry).
+  All of B lives in `umol-io/src/table_ir/raise.rs` (private fns; may move to a `raise` util module later) and uses
+  `umol-perm` — a **direct `umol-io` dependency**. The wedge helpers resolve the up/down wedge + 2D depiction into a
+  handedness via the `umol-geometric-core` leaf crate (doc 106): `wedge_winding` lifts the wedged neighbor off the
+  depiction plane (z = ±1, sign from up/down), places the missing substituent at `complementary_direction`, and
+  takes the sign of `signed_volume` of the four points. This is synthetic geometry over the depiction (the lift
+  magnitude is arbitrary — only its sign matters), distinct from `umol-geometric`, the heavy 3D crate reserved for
+  Phase F.
 
   RESOLVED (2026-06-07): the SMILES input-ordering problem (`C[C@]1(Cl)CC(C)CC1` vs `C[C@](Cl)1CC(C)CC1` — same atoms,
   ring vs branch bond written in a different order, opposite stereo) is fixed in the parser, not raise. The SMILES
@@ -392,7 +398,7 @@ Phases A–E are in scope; F (3D) and G follow.
     or the **wedge** when `Atom.chirality` is absent (ChemDraw, parity 0). `Unspecified` (`@?` / wavy) → `#T+`.
     Non-tetrahedral `Chirality` (Allenal / SquarePlanar / TrigonalBipyramidal / Octahedral) is out of scope → no
     constraint.
-  - **B5 — `raise_cis_trans_stereo` → `#C`** (`BondConstraint::CisTransStereo`). The flanking `/`,`\` (`Bond.wedge`)
+  - **B5 — `raise_cis_trans_stereo` → `#C`** (`BondConstraint::CisTransStereo`). The flanking `/`,`\` (`Bond.direction`)
     → cis/trans → `Stereo(Lit(target_idx))`. MOL double bond: field `3` → `#C+`; field `0` ("from coordinates") →
     **not raised** (external).
   - **B6 — undetermined / absent.** The `#T+` / `#C+` cases above (`@?`, `Bond.stereo == Either`); absent ⇒ no
@@ -405,6 +411,73 @@ Phases A–E are in scope; F (3D) and G follow.
     known configurations (CFClBrI, L-alanine, (±)-menthol, an E/Z, a ring stereocenter). Then a molecule-level test
     that **SMILES and MOL of the same molecule raise to the same physical `#T`/`#C`**; the conformance suites
     (MOL + SMILES; no element output — those are C7); and a cross-check of a few cosets against RDKit/CDK.
+  - **B7a — umol-perm: coset spaces over an explicit parent group (prerequisite for `#C`).** `#C`'s realizable
+    arrangements are not `Sₙ`: the two substituents on each sp² carbon are bonded to that carbon, and the bond may
+    be written with either carbon first, so the parent is `S₂ ≀ S₂ = D₄` — within-side swaps `(0 1)`, `(2 3)` **and**
+    the carbon swap `(0 2)(1 3)` (order 8) — not `S₄`. The cis/trans descriptor is `D₄ / V`, quotient by the Klein
+    four `V = D₂ = {e, (0 1)(2 3), (0 2)(1 3), (0 3)(1 2)}` (face flip, carbon swap, both) → `8/4 = 2` cosets:
+    `{e, (0 1)(2 3)}`-class = cis, `{(0 1),(2 3)}`-class = trans. The carbon swap living in `R = V` is what makes
+    `#C` invariant to which carbon is written first (the source→target relabeling can itself be a carbon swap, so it
+    must be inside the parent). `D₄` here is a *different* embedding than the existing `dihedral(4)` (the cyclic-square
+    Sylow-2 used for `SquarePlanar`); it's the partition-respecting Sylow-2, built by `generate`. `CosetSpace`
+    currently hardwires the parent to `Sₙ` (`coset.rs`: `count = n!/|R|`; `CanonicalRank` enumerates all `n!` via
+    `Permutation::unrank`), so it cannot express a sub-`Sₙ` parent. Generalize `Sₙ/R → P/R`:
+    - `CosetSpace` gains a `parent: PermutationGroup` field; `new(parent, group, decomposition)` asserts
+      `group ⊆ parent` (`parent.contains`); `count = parent.order() / group.order()`.
+    - `Decomposition::CanonicalRank` enumerates `parent.elements()` (was: `unrank` over `0..n!`), maps each to its
+      `coset_rep` (min over `R∘σ`), sorts + dedups. The bespoke `SquarePlanar` / `TrigonalBipyramidal` / `Octahedral`
+      decompositions are unchanged (explicit reps, all in `Sₙ`).
+    - `coset_rep` / `index` / `unindex` / `reindex` logic unchanged; `reindex` requires the relabeling `∈ parent`
+      (assert — `#C`'s within-side and carbon-swap relabelings are all in `D₄`).
+    - `ClassKey::build()` arms return `(parent, R, decomposition)`. Existing arms set `parent =
+      PermutationGroup::symmetric(degree)` (Tetrahedral → `symmetric(4)`/`alternating(4)`, SquarePlanar →
+      `symmetric(4)`/`dihedral(4)` = `S₄/D₄` = 3, TB → `symmetric(5)`/…, OH → `symmetric(6)`/…) — behavior identical.
+      `CisTrans` → `parent = generate(4, &[(0 1),(2 3),(0 2)(1 3)])` (`D₄`), `R = generate(4, &[(0 1)(2 3),(0 2)(1 3)])`
+      (`V`), `CanonicalRank` → 2 cosets, **degree 4** (no longer `alternating(2)`/degree 2). The `space()` registry is
+      unchanged.
+    - Tests: `CisTrans` count = 2 and the eight `D₄` elements map to the two cosets (cis/trans, including the
+      carbon-swap images); `reindex` over within-side **and** carbon-swap relabelings gives the same coset; the
+      `group ⊆ parent` assertion fires on a bad pairing; existing counts unchanged (Tetrahedral 2, SquarePlanar 3,
+      TB 20, OH 30). This is what lets B8's `#C` go through `space(ClassKey::CisTrans).reindex` on the 4-tuple
+      `[atom_1's two ligands, atom_2's two ligands]` — consistent with `#T` — instead of a hand-rolled binary; B8's
+      `#C` (below) uses it.
+  - **B8 — under-determined ligands: no inference at raise (2026-06-07; supersedes the implicit-H / lone-pair
+    inference in B1/B4/B5 and the degree-2 `#C` ordering).** A missing tetrahedral position or one-substituent
+    `#C` side may be an implicit H or a lone pair; raise does **not** decide which and does **not** write
+    `atom.lone_pairs` / `implicit_hydrogens` — that is resolution's job. `#T`/`#C` assert only the coset, never what
+    the ligands are, which is the point: an opaque virtual ligand stands in, placed last in the target frame.
+    - **`#T`** (keeps `space(ClassKey::Tetrahedral).reindex`). Count neighbors via `neighbor_count`: 4 → use them;
+      3 → one `StereoLigand::Virtual` (last in `tetrahedral_ligand_ordering`; at `ligand_idx` 0/1 in
+      `first_neighbor_toward_ordering`; the `complementary_direction` point in `coset_from_wedge_winding`); `< 3` or `> 4` →
+      `RaiseError::TetrahedralLigandCount`. The virtual count is `4 − neighbors`, **not** an H/LP inference, so
+      sulfoxides/sulfonium etc. raise to the same coset as before — only the (wrongly set) `#n` annotation is gone.
+    - **`#C`** — via `space(ClassKey::CisTrans)` over parent `D₄` / quotient `V` (B7a), on the 4-tuple
+      `[atom_1's two ligands, atom_2's two ligands]` (each side padded to two with a `StereoLigand::Virtual` when it
+      has one substituent). Per side, resolve each substituent's **halfplane** (`StereoHalfplane {Top, Bottom}`) from
+      its `/`,`\` (`Bond.direction`) — toward the substituent, with the geminal substituent's mark inverted
+      (disagreement → `RaiseError::CisTransConflict`). Build `source` from the halfplanes and
+      `target = [atom_1's ligands by index, atom_2's by index]`; then
+      `coset = space(ClassKey::CisTrans).index(Permutation::between(&source, &target))` → `0` = cis, `1` = trans
+      (`F/C=C\F → 0`, `F/C=C/F → 1`; the `BondDirection`→halfplane orientation is pinned by tests). The `V` quotient
+      (face flip + carbon swap) makes the result invariant to which carbon is written first and to within-side order.
+    - **Capability gate (`#C`), 2026-06-09 — supersedes `CisTransLigandCount` / `has_cis_trans_marker`.** A double bond
+      is raised only when **cis/trans-capable** (`cis_trans_capable`: each end has a substituent besides the other);
+      otherwise `raise_cis_trans_stereo` returns `Ok(None)` (terminal `=O`/`=CH2`, plain ethylene — no error, no
+      marker needed). A directional `/`,`\` flanking **no** capable double bond is orphaned →
+      `RaiseError::DanglingBondDirection`, checked per-bond by `validate_bond_direction` in the bond loop (the cis/trans
+      analog of a chirality token on an under-coordinated atom). A capable side with no `/`,`\` → not raised
+      (coordinates / external).
+    - **Errors** (all raise-time): `#T` `< 3` or `> 4` neighbors (`TetrahedralLigandCount`); inconsistent MOL wedges at
+      a `#T` center (`WedgeConflict`); contradictory geminal `/`,`\` on one carbon (`CisTransConflict`); orphaned
+      `/`,`\` (`DanglingBondDirection`).
+    - **`StereoLigand`** is raise-local (`raise/utils.rs`) `{ Atom(usize), Virtual(usize) }` (the `Virtual` carries its
+      host atom so the two carbons' virtuals in a `#C` 4-tuple stay distinct — `Permutation::between<T: Eq>` matches by
+      equality); distinct from `umol_ast::ast::StereoLigand`.
+    - **As-built names / sign (2026-06-09).** `/`,`\` live on `Bond.direction: BondDirection {Rising, Falling}`, split
+      from `Bond.wedge: BondWedge` (MOL tetrahedral wedges only) so the dangling-marker check sees only cis/trans
+      markers (doc 106). Other renames: `coset_from_wedge_winding`, `tetrahedral_ligand_ordering`,
+      `validate_bond_direction`, `MismatchedRingBondDirections`. Wedge sign (B7, “pinned by tests”):
+      `signed_volume < 0 ⇒ coset 0` (matching SMILES `@` = CCW = 0; an inverted sign was found and fixed).
 
   **Coset index.** The config value is the **dense coset index per stereo class** — the OpenSMILES arrangement
   number (`@TH1-2` … `@OH1-30` = n!/|R| cosets, `u32`; not a Lehmer rank). Input conventions are in *Current
@@ -419,7 +492,8 @@ Phases A–E are in scope; F (3D) and G follow.
   digit slot; basic `Atom` records no explicit order (only `ExtendedAtom.ligand_order`, CXSMILES), so raise derives
   it from incident-bond parse order — **confirmed (2026-06-07): the builder preserves it** by storing ring-closure
   bonds at their opening position (see RESOLVED note above). `b.other` / `b.start_atom` are
-  `Bond` methods; `neighbors` / `virtual_ligands` / `wedge_winding` / `leftover_inplane` are local primitives.
+  `Bond` methods; `neighbors` / `virtual_ligands` are local primitives, and `wedge_winding` calls
+  `umol-geometric-core` (`signed_volume`, `complementary_direction`).
   `atom_idx` is the atom's `usize` index (0..n_atoms−1); `AtomId` appears only on the AST `StereoLigand`.
 
   ```rust
@@ -477,8 +551,8 @@ Phases A–E are in scope; F (3D) and G follow.
 
   // #T source ordering from the wedge: one up/down wedge at `atom_idx` + the 2D depiction. The result is
   // frame-free, so the ordering returned is the target frame and `source_idx` carries the config, from
-  // `wedge_winding` — the 2D winding sense of `order` around `atom_idx` (a virtual ligand sits in the
-  // leftover in-plane direction) flipped by the wedge's up/down. → source_idx (0/1, pinned by B7). None if no wedge.
+  // `wedge_winding` — lift the wedged neighbor off the depiction plane (z = ±1 by up/down), place the missing
+  // substituent at `complementary_direction`, sign of `signed_volume` of the four points. → source_idx (0/1, pinned by B7). None if no wedge.
   fn tetrahedral_wedge_ordering(mol: &TableMolecule, atom_idx: usize) -> Option<(Vec<StereoLigand>, usize)> {
       let pos = mol.positions.as_ref()?;
       let (w, up) = mol.bonds.iter().find_map(|b| match (b.other(atom_idx as u32), b.wedge) {
@@ -504,6 +578,12 @@ Phases A–E are in scope; F (3D) and G follow.
       o
   }
 
+  // SUPERSEDED by B8's `cis_trans_side` (see "#C cis/trans — verified design" below). This sketch reads
+  // the *wedged* substituent's face, which is wrong when a side has two real substituents: for
+  // F/C(C)=C(Cl)/C it compares F and the `/`-marked methyl (anti ⇒ 1), but the stored atom-index coset is
+  // 0 (compare the first atom-index ligands F and Cl, both down ⇒ syn). The correct rule reads the FIRST
+  // atom-index ligand's face (inferring from the geminal marker when that ligand is unmarked).
+  //
   // #C source ordering from the directional `/`,`\` flanking bonds. For each sp² carbon read its
   // directional substituent's side ±1: `/`=Up, `\`=Down on the x–c bond, flipped if `c` is the bond's
   // start so the slope reads toward `c`. Geometry is frame-free, so the ordering returned is the target
@@ -567,6 +647,139 @@ Phases A–E are in scope; F (3D) and G follow.
       Some(BondConstraint::CisTransStereo(Stereo(StereoCosetAst::Lit(target_idx))))
   }
   ```
+
+  **B8 pseudocode** (revises the orderings + raise above; no H/LP inference, no `atom.lone_pairs` write).
+
+  ```rust
+  // Raise-local opaque ligand; Permutation::between is generic over Eq, so no StereoLigandKind change.
+  enum TableLigand { Atom(usize), Virtual }
+
+  // #T target ordering: neighbors ascending, then ONE Virtual when the center has 3 neighbors (last).
+  fn tetrahedral_target_ordering(mol, atom_idx) -> Vec<TableLigand> {
+      let mut order: Vec<_> =
+          atom_ordering(mol, atom_idx).iter().map(|&n| TableLigand::Atom(n)).collect();
+      if order.len() == 3 { order.push(TableLigand::Virtual(atom_idx)); }
+      order
+  }
+
+  // #T source ordering (FirstNeighborToward): Virtual at ligand_idx (0 if atom_idx == 0 else 1).
+  fn first_neighbor_toward_ordering(mol, atom_idx) -> Vec<TableLigand> {
+      let mut order: Vec<_> =
+          bond_neighbor_ordering(mol, atom_idx).iter().map(|&n| TableLigand::Atom(n)).collect();
+      if order.len() == 3 {
+          order.insert(if atom_idx > 0 { 1 } else { 0 }, TableLigand::Virtual);
+      }
+      order
+  }
+  // last_neighbor_away_ordering = tetrahedral_target_ordering (Virtual last);
+  // wedge path uses tetrahedral_target_ordering, and wedge_winding maps TableLigand::Virtual to the
+  // complementary_direction point.
+
+  fn raise_tetrahedral_stereo(mol, atom_idx) -> Result<Option<AtomConstraint>, RaiseError> {
+      // no chirality token and no wedge bond at atom_idx -> Ok(None)
+      let neighbor_count = atom_ordering(mol, atom_idx).len();
+      if neighbor_count < 3 || neighbor_count > 4 {
+          return Err(RaiseError::TetrahedralLigandCount { atom: atom_idx, count: neighbor_count });
+      }
+      // Unspecified -> #T+; else build (source, source_idx) per chirality_frame / wedge as before:
+      let target = tetrahedral_target_ordering(mol, atom_idx);
+      let coset = space(ClassKey::Tetrahedral)
+          .reindex(source_idx, Permutation::between(&source, &target));
+      Ok(Some(/* TetrahedralStereo Stereo(Lit(coset)) */))
+      // no (constraint, lone_pairs) return; no atom.lone_pairs / implicit_hydrogens write.
+  }
+
+  // #C via the coset machinery (B7a: space(CisTrans) over parent D₄, quotient V). Build each side as
+  // [up-face, down-face] from the /,\, plus its atom-index pair, then take the coset of the relabeling.
+  fn raise_cis_trans_stereo(mol, bond_idx) -> Result<Option<BondConstraint>, RaiseError> {
+      let bond = &mol.bonds[bond_idx];
+      if bond.order != BondOrder::Double { return Ok(None); }
+      if bond.stereo == Some(BondStereo::Either) { return Ok(Some(/* #C Stereo(Undetermined) */)); }
+      if !has_cis_trans_marker(mol, bond.start_atom(), bond.end_atom()) { return Ok(None); } // plain double bond
+      let (Some(side_1), Some(side_2)) = (
+          cis_trans_side(mol, bond.start_atom(), bond.end_atom())?,
+          cis_trans_side(mol, bond.end_atom(), bond.start_atom())?,
+      ) else {
+          return Ok(None); // a side carries no /,\ -> coordinates / external
+      };
+      let source = [side_1.up_ligand, side_1.down_ligand, side_2.up_ligand, side_2.down_ligand];
+      let target = [side_1.first_ligand, side_1.second_ligand, side_2.first_ligand, side_2.second_ligand]; // atom index
+      let coset = space(ClassKey::CisTrans).index(Permutation::between(&source, &target));
+      Ok(Some(/* CisTransStereo Stereo(Lit(coset)) */))
+  }
+
+  // One sp² atom's two #C ligands: by atom index (first_ligand, second_ligand|Virtual) and by face
+  // (up_ligand, down_ligand). first = lowest-index substituent != other_atom_idx (atoms precede virtuals).
+  // None if the side carries no /,\ (-> external).
+  struct StereoBondAtom { first_ligand: StereoLigand, second_ligand: StereoLigand,
+                          up_ligand: StereoLigand, down_ligand: StereoLigand }
+  fn cis_trans_side(mol, atom_idx, other_atom_idx) -> Result<Option<StereoBondAtom>, RaiseError> {
+      let subs: Vec<usize> =
+          atom_ordering(mol, atom_idx).into_iter().filter(|&n| n != other_atom_idx).collect(); // ascending
+      let first = *subs.first().ok_or(RaiseError::CisTransLigandCount { atom: atom_idx })?;
+      let first_ligand = StereoLigand::Atom(first);
+      let second_ligand = subs.get(1).map(|&o| StereoLigand::Atom(o)).unwrap_or(StereoLigand::Virtual(atom_idx));
+      // face of `first`: from the bond toward it and the inverted bond toward the second; conflict -> Err
+      let toward_first  = direction(mol, atom_idx, first);
+      let toward_second = subs.get(1).and_then(|&o| direction(mol, atom_idx, o)).map(|up| !up);
+      let up = match (toward_first, toward_second) {
+          (Some(a), Some(b)) if a != b => return Err(RaiseError::CisTransConflict { atom: atom_idx }),
+          (Some(face), _) | (_, Some(face)) => face,
+          (None, None) => return Ok(None),
+      };
+      Ok(Some(if up { StereoBondAtom { first_ligand, second_ligand, up_ligand: first_ligand, down_ligand: second_ligand } }
+              else   { StereoBondAtom { first_ligand, second_ligand, up_ligand: second_ligand, down_ligand: first_ligand } }))
+  }
+  // direction(mol, atom_idx, other): the /,\ (BondWedge) on the single bond atom_idx-other as a face
+  // (true = up), oriented toward `atom_idx` (negate when `atom_idx` is the bond's stored end). Relies on the
+  // builder's ring-closure flip (below) so a `\1`/`/1` written at the closing atom is already in the bond's
+  // stored orientation. (#T MOL wedges: multiple wedge bonds at atom_idx must agree else WedgeConflict.)
+  ```
+
+  **#C cis/trans — verified design (2026-06-08).** Implemented in `umol-io/src/table_ir/raise.rs`;
+  validation done by feeding reference SMILES and comparing `cargo run -p umol-graph --bin stereo`. The two
+  templates (`X`,`Y` the sp² atoms; `0`,`1` on `X`, `2`,`3` on `Y`):
+
+  ```
+   0   2          0   3
+    \ /            \ /
+     X=Y   Z=0      X=Y   E=1
+    / \            / \
+   1   3          1   2
+  ```
+  "same side / opposite sides" is the `D₂`-invariant mnemonic for the two cosets (like CW/CCW for `#T`).
+  The only freedom is how `0,1,2,3` map to substituents — CIP uses atomic-number rank, SMILES uses parse
+  (bond) order, **umol uses atom-index order**. umol stores the coset in the **atom-index (target) frame**.
+
+  - **Target ordering = atom index** (unchanged; `cis_trans_side` uses `atom_ordering`). Each side is its
+    substituents ascending by index, then virtuals; an atom always gets a lower index than a virtual.
+  - **Reduces to one bit.** `between([up,down,up,down], [first,second,first,second])`'s `D₄/V` coset is
+    exactly: the **first** (atom-index) ligand on each side has the **same face → 0, opposite → 1**. The
+    second ligand is the geminal opposite and never matters. The 4-field `StereoBondAtom` + `between` is
+    kept only for symmetry with `#T`; `#C` could be a direct `(face_1 != face_2) as u32`.
+  - **Face of `first`** = `direction(atom_idx, first)`, or `!direction(atom_idx, second)` when only the
+    second is marked; the two disagreeing ⇒ `CisTransConflict`.
+  - **Ring-closure wedge flip (parser `on_ring_bond`, both impls).** A ring bond is stored opening-atom
+    first, but a `/`,`\` written at the *closing* atom is from that atom's perspective, so the builder
+    **flips** it — `final_wedge = open.wedge` if the opening end set it, else `wedge_opt.flip()` —
+    exactly as it already does for donation. Both ends set it ⇒ consistent only when the raw symbols are
+    **opposite**; equal raw symbols ⇒ `MismatchedRingBondDirs` (mirrors the donation conflict rule).
+    Without the flip `direction()` reads a ring substituent's face inverted. `BondWedge::flip` swaps
+    Up↔Down, EitherUp↔EitherDown.
+
+  **Worked example — `C/C=C1CO\1` ((E)-2-ethylideneoxirane); exercises both fixes.** Atoms
+  `C0`(Me) `C1` `C2`(opens ring 1) `C3`(CH₂) `O4`(closes ring 1); double bond `C1=C2`, ring bond stored `[2 4]`.
+  - In **SMILES (source) order**: left first = Me, right first = O (the ring digit precedes `C3`). Me down,
+    O up (the `\1` flip) → opposite → **source coset 1**.
+  - SMILES→umol reindex: indices follow string order, so O4 (idx 4) is *after* C3 (idx 3) though the bond to
+    O is written first. Source `[O,CH₂]` vs target `[CH₂,O]` = one swap (odd) ⇒ coset flips ⇒ **stored
+    atom-index `#C` = 0**. umol emits `2#C0`; test `ethylideneoxirane → Lit(0)`.
+  - This is the only case where bond order ≠ atom index; for ring-free molecules they coincide, which is why
+    the simpler cases didn't separate the two frames.
+
+  **Validation methodology.** Reference cosets are given in SMILES/bond *source* order; the stored coset is
+  that value reindexed by the parity of the source→target permutation (even = unchanged, odd = flipped).
+
 - **Phase C — perception → birelations** (chemistry; `umol-graph/src/ops/stereo.rs`). Lifts `#T`/`#C` +
   topology → the stereo birelation overlay. **Same-frame lift** — the element's `:ligands` order is
   `stereo_ligands()` is `#T`'s incidence frame (D2: equivariant, not canonical), so config copies through with
@@ -744,7 +957,9 @@ Phases A–E are in scope; F (3D) and G follow.
      stereo_bond_zeroed! in `macros.rs`. **Done**
   - **D9** - update specifications in umol-dsl-spec.md **Done** (top-level keys fixed; grammar non-terminals
       aligned to key names; stereo elements + `#T`/`#C` constraints + relational + anchor + §7.14 subgrammar added)
-  - **D10** - add to prop test and fuzzing **Done** (stereo elements + `#T`/`#C` + relational + anchor in `molecule_ast_strategy`/`constraint_leaf_strategy`/`sub_pattern_anchor_strategy`; stereo entity-string + keyword roundtrip tests; `parse_stereo_atom`/`parse_stereo_bond` in `fuzz_entity_strings`)
+  - **D10** - add to prop test and fuzzing **Done** (stereo elements + `#T`/`#C` + relational + anchor in
+     `molecule_ast_strategy`/`constraint_leaf_strategy`/`sub_pattern_anchor_strategy`; stereo entity-string +
+     keyword roundtrip tests; `parse_stereo_atom`/`parse_stereo_bond` in `fuzz_entity_strings`)
 
 - **Phase E — matching** (the stereo ASTs' `AsLit` + `Lattice` impls — not a bespoke matcher; the existing
   substructure matcher is reused, and `umol-perm` enters exactly once, at the frame alignment).
@@ -813,8 +1028,8 @@ config head (`Th1`/`Ct2`).
 New: `umol-ast/src/ast/stereo.rs`, `umol-ast/src/dsl/stereo.rs`, `umol-graph/src/ops/stereo.rs`.
 Modified — graph-core: `relation.rs`, `graph.rs`; umol-ast: `ast/{ids,molecule,remap}.rs`,
 `ast/molecule/builder.rs`, `ast/views/{atom,bond}.rs`, `ast/constraint/{atom,bond}.rs`,
-`dsl/molecule.rs`; umol-graph: `table_ir/raise.rs`; umol-geometric: `src/{coordinates,molecule}.rs`
-(Phase F).
+`dsl/molecule.rs`; umol-io: `table_ir/raise.rs` (Phase B, with `umol-geometric-core` for the wedge geometry);
+umol-graph: `ops/stereo.rs` (Phase C); umol-geometric: `src/{coordinates,molecule}.rs` (Phase F).
 
 ## Verification
 

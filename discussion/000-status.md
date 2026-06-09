@@ -50,7 +50,7 @@
 | [046-mol-parser-performance-analysis-2026-01-14.md](046-mol-parser-performance-analysis-2026-01-14.md)                             | Informational | 2026-02-17   |
 | [047-smiles-conformance-suite-2026-01-21.md](047-smiles-conformance-suite-2026-01-21.md)                                           | Completed     | 2026-02-17   |
 | [048-smiles-parser-configuration-2026-01-23.md](048-smiles-parser-configuration-2026-01-23.md)                                     | Completed     | 2026-02-17   |
-| [049-stereochemistry-encoding-2026-01-29.md](049-stereochemistry-encoding-2026-01-29.md)                                           | Active        | 2026-02-17   |
+| [049-stereochemistry-encoding-2026-01-29.md](049-stereochemistry-encoding-2026-01-29.md)                                           | Outdated      | 2026-02-17   |
 | [050-reaction-design-research-2026-02-08.md](050-reaction-design-research-2026-02-08.md)                                           | Informational | 2026-02-17   |
 | [051-reaction-design-research-claude-2026-02-08.md](051-reaction-design-research-claude-2026-02-08.md)                             | Informational | 2026-02-17   |
 | [052-graph-ir-2026-02-11.md](052-graph-ir-2026-02-11.md)                                                                           | Active        | 2026-04-17   |
