@@ -1,0 +1,12 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: basic_opensmiles
+category: basic_opensmiles
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C21N4O2S
+    atom_count: 28
+    bond_count: 31

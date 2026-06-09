@@ -1,0 +1,12 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: basic_opensmiles
+category: basic_opensmiles
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C7N+
+    atom_count: 8
+    bond_count: 9

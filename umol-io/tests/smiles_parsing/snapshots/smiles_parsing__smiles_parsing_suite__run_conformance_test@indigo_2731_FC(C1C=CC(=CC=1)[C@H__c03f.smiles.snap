@@ -1,0 +1,12 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: basic_opensmiles
+category: basic_opensmiles
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C25F3N4O
+    atom_count: 33
+    bond_count: 36

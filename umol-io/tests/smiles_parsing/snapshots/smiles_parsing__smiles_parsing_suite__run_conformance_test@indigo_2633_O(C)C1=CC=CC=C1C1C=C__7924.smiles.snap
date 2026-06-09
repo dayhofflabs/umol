@@ -1,0 +1,12 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: basic_opensmiles
+category: basic_opensmiles
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C19N5O
+    atom_count: 25
+    bond_count: 28

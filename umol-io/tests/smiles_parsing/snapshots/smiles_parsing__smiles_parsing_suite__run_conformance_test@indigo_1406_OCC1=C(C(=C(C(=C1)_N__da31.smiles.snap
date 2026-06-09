@@ -1,0 +1,12 @@
+---
+source: umol-io/tests/smiles_parsing/mod.rs
+expression: results
+---
+expected_category: basic_opensmiles
+category: basic_opensmiles
+basic_opensmiles:
+  success: true
+  summary:
+    sum_formula: C27N4Na2O9S2
+    atom_count: 44
+    bond_count: 46

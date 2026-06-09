@@ -265,7 +265,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let should_sort = args.iter().any(|a| a == "--sort");
 
     // Paths relative to workspace root, prefixed with package dir
-    let base_path = "umol-models-graph";
+    let base_path = "umol-io";
     let data_raw_path = format!("{}/tests/mol_parsing/data_raw", base_path);
     let data_path = format!("{}/tests/mol_parsing/data", base_path);
 
