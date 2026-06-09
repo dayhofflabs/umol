@@ -312,7 +312,13 @@ pub(super) fn pos_in_bracket(base: usize, local: usize) -> usize {
 #[inline]
 pub(super) fn make_bond(start: usize, end: usize, b: BondData) -> Bond {
     let mut bond = Bond::new(start as u32, end as u32, b.order);
-    bond.wedge = b.wedge;
+    // AtomPair normalization sorts the atoms; a swap reverses the start-atom
+    // viewpoint, so flip both the wedge and the donation.
+    bond.wedge = if start > end {
+        b.wedge.map(|w| w.flip())
+    } else {
+        b.wedge
+    };
     bond.donation = if start > end {
         b.donation.map(|d| d.flip())
     } else {
@@ -325,8 +331,13 @@ pub(super) fn make_bond(start: usize, end: usize, b: BondData) -> Bond {
 #[inline]
 pub(super) fn make_extended_bond(start: usize, end: usize, b: BondData) -> ExtendedBond {
     let mut bond = ExtendedBond::new(start as u32, end as u32, b.order);
-    bond.wedge = b.wedge;
-    // Adjust donation for AtomPair normalization (swap flips donation)
+    // AtomPair normalization sorts the atoms; a swap reverses the start-atom
+    // viewpoint, so flip both the wedge and the donation.
+    bond.wedge = if start > end {
+        b.wedge.map(|w| w.flip())
+    } else {
+        b.wedge
+    };
     bond.donation = if start > end {
         b.donation.map(|d| d.flip())
     } else {
