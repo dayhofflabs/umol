@@ -16,9 +16,7 @@ use rstest::*;
 use serde::Serialize;
 use umol_io::ctfile::config::CtfileIoConfig;
 use umol_io::ctfile::error::ParseError;
-use umol_io::ctfile::parser::{
-    parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir_with,
-};
+use umol_io::ctfile::parser::{parse_extended_mol_bytes_with, parse_mol_bytes_to_table_ir_with};
 use umol_io::table_ir::{ExtendedMolecule, Molecule};
 
 /// Category based on which parsers succeed

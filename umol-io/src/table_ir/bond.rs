@@ -263,6 +263,19 @@ pub enum BondWedge {
     EitherDown, // CXSMILES: wD: (stereo undefined, display down)
 }
 
+impl BondWedge {
+    /// Reverse the up/down sense, as when the same bond is read from its other end.
+    pub fn flip(self) -> Self {
+        match self {
+            Self::Up => Self::Down,
+            Self::Down => Self::Up,
+            Self::Either => Self::Either,
+            Self::EitherUp => Self::EitherDown,
+            Self::EitherDown => Self::EitherUp,
+        }
+    }
+}
+
 /// Double-bond stereochemistry (E/Z) annotation in IR
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BondStereo {

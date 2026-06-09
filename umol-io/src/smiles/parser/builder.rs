@@ -160,8 +160,10 @@ impl MoleculeBuilder {
                 });
             }
             Some(open) => {
+                // Once the close end's view is flipped (below), a consistent both-ends spec has
+                // opposite raw symbols; equal raw symbols conflict.
                 if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
-                    if d1 != d2 {
+                    if d1 == d2 {
                         return Err(ParseError::MismatchedRingBondDirs {
                             pos: offset + pos,
                             open_pos: offset + open.open_pos,
@@ -185,15 +187,6 @@ impl MoleculeBuilder {
                         });
                     }
                 }
-                if open.wedge.is_some() || wedge_opt.is_some() {
-                    let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
-                    if ord != BondOrder::Single {
-                        return Err(ParseError::MismatchedRingBondOrders {
-                            pos: offset + pos,
-                            open_pos: offset + open.open_pos,
-                        });
-                    }
-                }
                 let mut final_order = match (open.order, order_opt) {
                     (Some(o1), Some(o2)) => {
                         if o1 == o2 {
@@ -205,9 +198,13 @@ impl MoleculeBuilder {
                     (Some(o), None) | (None, Some(o)) => o,
                     (None, None) => BondOrder::Single,
                 };
-                let final_wedge = open.wedge.or(wedge_opt);
-                // Donation: use the opening atom's perspective; if only the close
+                // Wedge and donation: use the opening atom's perspective; if only the close
                 // specifies it, flip it (it is from the closing atom's perspective).
+                let final_wedge = match (open.wedge, wedge_opt) {
+                    (Some(d), _) => Some(d),
+                    (None, Some(d)) => Some(d.flip()),
+                    (None, None) => None,
+                };
                 let final_donation = match (open.donation, donation_opt) {
                     (Some(d), _) => Some(d),
                     (None, Some(d)) => Some(d.flip()),
@@ -215,7 +212,12 @@ impl MoleculeBuilder {
                 };
                 let a = open.atom_idx;
                 let b = last_atom_idx;
-                if final_order == BondOrder::Single
+                // Promote to aromatic only when the ring bond is implicit (no explicit bond token);
+                // an explicit order or a directional /,\ keeps the bond as written.
+                if open.order.is_none()
+                    && order_opt.is_none()
+                    && open.wedge.is_none()
+                    && wedge_opt.is_none()
                     && self.is_aromatic(open.atom_idx)
                     && self.is_aromatic(b)
                 {
@@ -440,8 +442,10 @@ impl ExtendedMoleculeBuilder {
                 });
             }
             Some(open) => {
+                // Once the close end's view is flipped (below), a consistent both-ends spec has
+                // opposite raw symbols; equal raw symbols conflict.
                 if let (Some(d1), Some(d2)) = (open.wedge, wedge_opt) {
-                    if d1 != d2 {
+                    if d1 == d2 {
                         return Err(ParseError::MismatchedRingBondDirs {
                             pos: offset + pos,
                             open_pos: offset + open.open_pos,
@@ -465,15 +469,6 @@ impl ExtendedMoleculeBuilder {
                         });
                     }
                 }
-                if open.wedge.is_some() || wedge_opt.is_some() {
-                    let ord = open.order.or(order_opt).unwrap_or(BondOrder::Single);
-                    if ord != BondOrder::Single {
-                        return Err(ParseError::MismatchedRingBondOrders {
-                            pos: offset + pos,
-                            open_pos: offset + open.open_pos,
-                        });
-                    }
-                }
                 let mut final_order = match (open.order, order_opt) {
                     (Some(o1), Some(o2)) => {
                         if o1 == o2 {
@@ -485,9 +480,13 @@ impl ExtendedMoleculeBuilder {
                     (Some(o), None) | (None, Some(o)) => o,
                     (None, None) => BondOrder::Single,
                 };
-                let final_wedge = open.wedge.or(wedge_opt);
-                // Donation: use the opening atom's perspective; if only the close
+                // Wedge and donation: use the opening atom's perspective; if only the close
                 // specifies it, flip it (it is from the closing atom's perspective).
+                let final_wedge = match (open.wedge, wedge_opt) {
+                    (Some(d), _) => Some(d),
+                    (None, Some(d)) => Some(d.flip()),
+                    (None, None) => None,
+                };
                 let final_donation = match (open.donation, donation_opt) {
                     (Some(d), _) => Some(d),
                     (None, Some(d)) => Some(d.flip()),
@@ -495,7 +494,12 @@ impl ExtendedMoleculeBuilder {
                 };
                 let a = open.atom_idx;
                 let b = last_atom_idx;
-                if final_order == BondOrder::Single
+                // Promote to aromatic only when the ring bond is implicit (no explicit bond token);
+                // an explicit order or a directional /,\ keeps the bond as written.
+                if open.order.is_none()
+                    && order_opt.is_none()
+                    && open.wedge.is_none()
+                    && wedge_opt.is_none()
                     && self.is_aromatic(open.atom_idx)
                     && self.is_aromatic(b)
                 {

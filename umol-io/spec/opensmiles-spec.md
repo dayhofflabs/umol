@@ -137,13 +137,12 @@ A ring index is either a single digit in the range 0–9 or a percent form in th
 
 Ring indices MAY be reused after closure. Each occurrence of a ring index opens or closes a ring bond: the first occurrence opens the ring, the second closes it, the third reopens it, and so on. Consequently, every ring index MUST occur an even number of times in the input; an odd count for any ring index MUST be rejected as an unclosed ring. When the same ring index appears on two adjacent atoms (e.g., 'C1C1'), each pair forms a separate ring bond. Implementations MAY emit a style warning when a ring index is reused.
 
-When both sides of a ring closure specify a bond direction and they differ, the input MUST be rejected (SYN_MISMATCHED_RING_BOND_DIRS). When directions do not conflict, the closing-side specification takes precedence; otherwise the opening-side specification applies. Consecutive bond tokens without an intervening atom or ring index MUST be rejected (SYN_CONSECUTIVE_BONDS), and a trailing bond token at end-of-input MUST be rejected (SYN_TRAILING_BOND).
+When both sides of a ring closure specify a bond direction and they disagree, the input MUST be rejected (SYN_MISMATCHED_RING_BOND_DIRS). Direction is read from each atom's own viewpoint, so a marker written at the closing atom is the reverse of one written at the opening atom: the two specifications agree when their glyphs are opposite (e.g. `C/1CC\1`) and disagree when their glyphs are the same (e.g. `C/1CCC/1`, both `/`). When the directions agree (or only one side specifies one), that direction applies, normalized to the opening atom's viewpoint. Consecutive bond tokens without an intervening atom or ring index MUST be rejected (SYN_CONSECUTIVE_BONDS), and a trailing bond token at end-of-input MUST be rejected (SYN_TRAILING_BOND).
 
 Ring bond order semantics:
 
 - If both endpoints of a ring closure specify a bond order and they differ, the input MUST be rejected (SYN_MISMATCHED_RING_BOND_ORDERS).
 - If exactly one endpoint specifies a non-single order, the input is valid; the specified order applies to the ring bond. If both endpoints specify orders, they MUST be the same or the input MUST be rejected (SYN_MISMATCHED_RING_BOND_ORDERS).
-- A ring bond with a non-single order MUST NOT carry a direction marker; such combinations MUST be rejected (SYN_MISMATCHED_RING_BOND_ORDERS).
 - Error position convention: implementations SHOULD report errors at the closing ring index token (for single-digit rings, the digit; for percent rings, the '%').
 
 ### Aromaticity
@@ -258,6 +257,8 @@ _To be specified. Validation of implicit hydrogen counts, valence limits, and ch
 
 _To be specified. Validation of chiral center neighbor counts, allene geometry, and cis/trans bond consistency._
 
+Note: cis/trans bond consistency — two substituents on the same double-bond atom marked on the same face (e.g. `C/C(\F)=C/F`) — is currently enforced at raise time as `RaiseError::CisTransConflict`, not in a dedicated validation pass. It SHOULD be incorporated into this semantic step with its own diagnostic code once this section is specified.
+
 ### Aromaticity Validation
 
 _To be specified. Validation of aromatic ring membership and Kekulization._
@@ -288,7 +289,7 @@ This implementation accepts '0' as a single-digit ring index. Percent ring indic
 
 - `%0` — SYN_INVALID_RING_INDEX (requires exactly two digits)
 - `C1CC` — SYN_UNBALANCED_RING_INDEX
-- `C/1CC\1` — SYN_MISMATCHED_RING_BOND_DIRS
+- `C/1CCC/1` — SYN_MISMATCHED_RING_BOND_DIRS (both ends `/`: same glyph, so the two viewpoints disagree)
 - `C-` — SYN_TRAILING_BOND
 - `C==C` — SYN_CONSECUTIVE_BONDS
 - `.C` — SYN_LEADING_DOT

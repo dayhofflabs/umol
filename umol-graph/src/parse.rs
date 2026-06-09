@@ -45,9 +45,7 @@ pub fn parse_smiles_bytes_with(
     model: &ChemistryModel,
 ) -> Result<MoleculeAst, Box<dyn UmolError>> {
     let table_mol = parse_smiles_bytes_to_table_ir_with(input, io_config)?;
-    let mut ast: MoleculeAst = (&table_mol)
-        .try_into_ast(&())
-        .expect("table_ir → MoleculeAst raise is currently infallible");
+    let mut ast: MoleculeAst = (&table_mol).try_into_ast(&())?;
     match Resolver::new(model).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),
@@ -81,9 +79,7 @@ pub fn parse_mol_bytes_with(
     model: &ChemistryModel,
 ) -> Result<MoleculeAst, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir_with(input, io_config)?;
-    let mut ast: MoleculeAst = (&table_mol)
-        .try_into_ast(&())
-        .expect("table_ir → MoleculeAst raise is currently infallible");
+    let mut ast: MoleculeAst = (&table_mol).try_into_ast(&())?;
     match Resolver::new(model).resolve(&mut ast)? {
         Solution::Determined(()) => Ok(ast),
         Solution::Underdetermined(()) => Err(Box::new(ResolveUnderdetermined)),

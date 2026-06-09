@@ -8,9 +8,9 @@ use umol_shared::element::Element;
 use super::super::config::SmilesParseFlags;
 use super::super::error::ParseError;
 use super::builder::{BondData, ExtendedMoleculeBuilder, MoleculeBuilder};
-use crate::table_ir::{atom::Chirality, Span};
+use crate::table_ir::atom::Chirality;
 use crate::table_ir::{
-    AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedBond, WildcardAtom,
+    AtomSymbol, Bond, BondDonation, BondOrder, BondWedge, ExtendedBond, Span, WildcardAtom,
 };
 
 #[derive(Debug, Clone, Copy)]

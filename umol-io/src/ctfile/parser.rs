@@ -10,6 +10,7 @@ use nom::sequence::terminated;
 use nom::{Err, Parser};
 use umol_ast::ast::{MoleculeAst, TryIntoAst};
 use umol_geometric_core::Point3D;
+use umol_shared::error::UmolError;
 
 use self::accumulator::PropertyAccumulator;
 use self::atom::{atom_block, extended_atom_block};
@@ -250,16 +251,15 @@ pub fn has_extended_features(molecule: &ExtendedMolecule) -> bool {
 }
 
 /// Parse MOL to [`MoleculeAst`] without running the solver.
-pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, ParseError> {
+pub fn parse_mol_to_ast(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> {
     parse_mol_bytes_to_ast(input.as_bytes())
 }
 
-/// Parse MOL bytes to [`MoleculeAst`] without running the solver.
-pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, ParseError> {
+/// Parse MOL bytes to [`MoleculeAst`] without running the solver. Spans the parse (`ParseError`)
+/// and raise (`RaiseError`) concerns, so per doc 065 it returns the boxed boundary error.
+pub fn parse_mol_bytes_to_ast(input: &[u8]) -> Result<MoleculeAst, Box<dyn UmolError>> {
     let table_mol = parse_mol_bytes_to_table_ir(input)?;
-    let ast: MoleculeAst = (&table_mol)
-        .try_into_ast(&())
-        .expect("table_ir → MoleculeAst raise is currently infallible");
+    let ast: MoleculeAst = (&table_mol).try_into_ast(&())?;
     Ok(ast)
 }
 

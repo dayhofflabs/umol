@@ -42,6 +42,10 @@ bench = false
 name = "classify_smiles_strings"
 bench = false
 
+[[bin]]
+name = "stereo"
+bench = false
+
 [features]
 conformance = []
 
