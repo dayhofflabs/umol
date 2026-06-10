@@ -18,9 +18,12 @@ pub use algorithms::cycles::{CycleEnumerationAlgorithm, ShortestCycleAlgorithm};
 pub use algorithms::matching::{
     Matching, MatchingEnumerationAlgorithm, MaxMatchingAlgorithm, PerfectMatchingAlgorithm,
 };
+pub use algorithms::mcs::{
+    CommonSubgraph, McesAlgorithm, McisAlgorithm, McsConnectivity,
+};
 pub use algorithms::mis::MaxIndependentSetAlgorithm;
 pub use algorithms::refine::{
-    ColorRefinementAlgorithm, Refinement, RefinementAggregation, RefinementHash, RefinementRounds,
+    Refinement, RefinementAggregation, RefinementAlgorithm, RefinementHash, RefinementRounds,
     RefinementWidth, RefinementWidth64, RefinementWidth128, RefinementXxh3Scheme,
 };
 pub use algorithms::subiso::SubgraphIsomorphismAlgorithm;

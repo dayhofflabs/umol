@@ -108,3 +108,5 @@
 | [104-stereochemistry-implementation-plan-2026-05-31.md](104-stereochemistry-implementation-plan-2026-05-31.md)                     | Active        | 2026-05-31   |
 | [105-dsl-fixes-2026-06-06.md](105-dsl-fixes-2026-06-06.md)                                                                         | Active        | 2026-06-06   |
 | [106-io-geometry-crate-split-2026-06-07.md](106-io-geometry-crate-split-2026-06-07.md)                                             | Done          | 2026-06-07   |
+| [107-mcs-algorithms-2026-06-09.md](107-mcs-algorithms-2026-06-09.md)                                                               | Active        | 2026-06-09   |
+| [108-permutation-infrastructure-2026-06-09.md](108-permutation-infrastructure-2026-06-09.md)                                       | Informational | 2026-06-09   |

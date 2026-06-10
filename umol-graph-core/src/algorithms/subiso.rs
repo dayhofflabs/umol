@@ -8,6 +8,9 @@ pub enum SubgraphIsomorphismAlgorithm {
 }
 
 impl Graph {
+    // TODO: add singular `subgraph_isomorphism(...) -> Option<Vec<usize>>` that stops at
+    // the first match (existence via `.is_some()`). Saves the embedding-multiplicity
+    // factor on positive matches; same Vf2, `search` gains an early-exit cap.
     pub fn subgraph_isomorphisms(
         &self,
         query: &Graph,

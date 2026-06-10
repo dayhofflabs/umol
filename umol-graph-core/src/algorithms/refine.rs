@@ -22,10 +22,12 @@ use xxhash_rust::xxh3::{xxh3_128_with_seed, xxh3_64_with_seed};
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ColorRefinementAlgorithm {
-    /// 1-dimensional Weisfeiler–Leman (Weisfeiler & Leman 1968); classic color refinement.
-    WeisfeilerLehman,
+/// A refinement algorithm and its configuration. Parameterized variants carry
+/// their own parameters (unlike parameter-free unit-variant algorithm enums).
+#[derive(Clone, Copy, Debug)]
+pub enum RefinementAlgorithm<H> {
+    /// 1-dimensional Weisfeiler–Leman (Weisfeiler & Leman 1968).
+    WeisfeilerLehman { rounds: RefinementRounds, scheme: H },
 }
 
 /// Refinement rounds to run: `ToFixpoint` until stabilization; `Fixed(n)` for exactly `n` rounds.
@@ -41,8 +43,8 @@ pub trait RefinementHash {
     /// Identifier width — the scheme's native type (`u32`/`u64`/`u128`).
     type Color: Copy + Ord + Eq + Hash + Debug;
 
-    /// Initial color from a caller-supplied node invariant.
-    fn seed(&self, invariant: u64) -> Self::Color;
+    /// Initial color from a caller-supplied node label.
+    fn seed(&self, label: u64) -> Self::Color;
 
     /// New color from the current color and the node's incident
     /// `(edge label, neighbor color)` pairs. The impl owns the aggregation
@@ -62,32 +64,30 @@ pub struct Refinement<C> {
 }
 
 impl Graph {
-    /// Color-refine under `scheme`, seeding node/edge colors from caller closures.
-    pub fn color_refine<H: RefinementHash>(
+    /// Color-refine under `algorithm`, seeding node/edge colors from caller closures.
+    pub fn refine<H: RefinementHash>(
         &self,
-        node_invariant: impl Fn(NodeId) -> u64,
+        node_label: impl Fn(NodeId) -> u64,
         edge_label: impl Fn(EdgeId) -> u64,
-        rounds: RefinementRounds,
-        scheme: &H,
-        algorithm: ColorRefinementAlgorithm,
+        algorithm: RefinementAlgorithm<H>,
     ) -> Refinement<H::Color> {
         match algorithm {
-            ColorRefinementAlgorithm::WeisfeilerLehman => {
-                self.color_refine_wl(node_invariant, edge_label, rounds, scheme)
+            RefinementAlgorithm::WeisfeilerLehman { rounds, scheme } => {
+                self.refine_wl(node_label, edge_label, rounds, &scheme)
             }
         }
     }
 
-    fn color_refine_wl<H: RefinementHash>(
+    fn refine_wl<H: RefinementHash>(
         &self,
-        node_invariant: impl Fn(NodeId) -> u64,
+        node_label: impl Fn(NodeId) -> u64,
         edge_label: impl Fn(EdgeId) -> u64,
         rounds: RefinementRounds,
         scheme: &H,
     ) -> Refinement<H::Color> {
         let n = self.node_count();
         let seed: Vec<H::Color> = (0..n)
-            .map(|i| scheme.seed(node_invariant(NodeId(i as u32))))
+            .map(|i| scheme.seed(node_label(NodeId(i as u32))))
             .collect();
         let mut colorings = vec![seed];
 
@@ -175,6 +175,7 @@ pub trait RefinementWidth {
 }
 
 /// 64-bit digests (`xxh3_64`).
+#[derive(Clone, Copy, Debug)]
 pub enum RefinementWidth64 {}
 impl RefinementWidth for RefinementWidth64 {
     type Color = u64;
@@ -193,6 +194,7 @@ impl RefinementWidth for RefinementWidth64 {
 }
 
 /// 128-bit digests (`xxh3_128`) — the collision budget for large-scale dedup.
+#[derive(Clone, Copy, Debug)]
 pub enum RefinementWidth128 {}
 impl RefinementWidth for RefinementWidth128 {
     type Color = u128;
@@ -259,8 +261,8 @@ impl<W: RefinementWidth> RefinementXxh3Scheme<W> {
 impl<W: RefinementWidth> RefinementHash for RefinementXxh3Scheme<W> {
     type Color = W::Color;
 
-    fn seed(&self, invariant: u64) -> W::Color {
-        W::hash(self.seed, &invariant.to_le_bytes())
+    fn seed(&self, label: u64) -> W::Color {
+        W::hash(self.seed, &label.to_le_bytes())
     }
 
     fn refine(&self, current: W::Color, neighbors: &[(u64, W::Color)]) -> W::Color {
@@ -270,7 +272,7 @@ impl<W: RefinementWidth> RefinementHash for RefinementXxh3Scheme<W> {
             W::push_le(&mut buf, color);
             W::hash(self.seed, &buf)
         };
-        let combined = match self.aggregation {
+        match self.aggregation {
             RefinementAggregation::Sorted => {
                 let mut elements: Vec<W::Color> =
                     neighbors.iter().map(|&(edge, c)| element(edge, c)).collect();
@@ -292,8 +294,7 @@ impl<W: RefinementWidth> RefinementHash for RefinementXxh3Scheme<W> {
                 W::push_le(&mut buf, acc);
                 W::hash(self.seed, &buf)
             }
-        };
-        combined
+        }
     }
 
     fn graph_hash(&self, colors: &[W::Color]) -> W::Color {
@@ -320,7 +321,6 @@ mod tests {
     use pretty_assertions::{assert_eq, assert_ne};
     use rstest::*;
 
-    use super::ColorRefinementAlgorithm::WeisfeilerLehman;
     use super::*;
 
     fn uniform(_: NodeId) -> u64 {
@@ -330,12 +330,17 @@ mod tests {
         0
     }
 
-    fn scheme() -> RefinementXxh3Scheme<RefinementWidth128> {
-        RefinementXxh3Scheme::default_scheme()
+    fn wl_128(
+        rounds: RefinementRounds,
+    ) -> RefinementAlgorithm<RefinementXxh3Scheme<RefinementWidth128>> {
+        RefinementAlgorithm::WeisfeilerLehman {
+            rounds,
+            scheme: RefinementXxh3Scheme::default_scheme(),
+        }
     }
 
     fn hash_of(g: &Graph) -> u128 {
-        g.color_refine(uniform, no_edge_color, RefinementRounds::ToFixpoint, &scheme(), WeisfeilerLehman)
+        g.refine(uniform, no_edge_color, wl_128(RefinementRounds::ToFixpoint))
             .graph_hash()
     }
 
@@ -345,9 +350,8 @@ mod tests {
     #[case::path4(Graph::new(4, &[[0, 1], [1, 2], [2, 3]]), 2)]
     #[case::star4(Graph::new(5, &[[0, 1], [0, 2], [0, 3], [0, 4]]), 2)]
     #[case::six_cycle(Graph::new(6, &[[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]), 1)]
-    fn test_graph_color_refine(#[case] g: Graph, #[case] expected_cells: usize) {
-        let refinement =
-            g.color_refine(uniform, no_edge_color, RefinementRounds::ToFixpoint, &scheme(), WeisfeilerLehman);
+    fn test_graph_refine(#[case] g: Graph, #[case] expected_cells: usize) {
+        let refinement = g.refine(uniform, no_edge_color, wl_128(RefinementRounds::ToFixpoint));
         assert_eq!(refinement.cell_count(), expected_cells);
     }
 
@@ -378,10 +382,10 @@ mod tests {
         let g = Graph::new(2, &[[0, 1]]);
         let plain = hash_of(&g);
         let node_colored = g
-            .color_refine(|nd| nd.index() as u64, no_edge_color, RefinementRounds::ToFixpoint, &scheme(), WeisfeilerLehman)
+            .refine(|nd| nd.index() as u64, no_edge_color, wl_128(RefinementRounds::ToFixpoint))
             .graph_hash();
         let edge_colored = g
-            .color_refine(uniform, |_| 7, RefinementRounds::ToFixpoint, &scheme(), WeisfeilerLehman)
+            .refine(uniform, |_| 7, wl_128(RefinementRounds::ToFixpoint))
             .graph_hash();
         assert_ne!(plain, node_colored);
         assert_ne!(plain, edge_colored);
@@ -391,8 +395,7 @@ mod tests {
     fn test_refinement_counts() {
         // path 0-1-2, radius 1: round 0 all-same (3); round 1 splits ends (2) from middle (1).
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let refinement =
-            g.color_refine(uniform, no_edge_color, RefinementRounds::Fixed(1), &scheme(), WeisfeilerLehman);
+        let refinement = g.refine(uniform, no_edge_color, wl_128(RefinementRounds::Fixed(1)));
         let mut values: Vec<u32> = refinement.counts().into_values().collect();
         values.sort_unstable();
         assert_eq!(values, vec![1, 2, 3]);
@@ -402,26 +405,27 @@ mod tests {
     fn test_refinement_sum_sketch_matches_partition() {
         // SumSketch must still split path ends from the middle.
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let sketch = RefinementXxh3Scheme::<RefinementWidth128>::new(
-            ALBATROSS_SEED,
-            RefinementAggregation::SumSketch,
-        );
-        let refinement =
-            g.color_refine(uniform, no_edge_color, RefinementRounds::ToFixpoint, &sketch, WeisfeilerLehman);
+        let algorithm = RefinementAlgorithm::WeisfeilerLehman {
+            rounds: RefinementRounds::ToFixpoint,
+            scheme: RefinementXxh3Scheme::<RefinementWidth128>::new(
+                ALBATROSS_SEED,
+                RefinementAggregation::SumSketch,
+            ),
+        };
+        let refinement = g.refine(uniform, no_edge_color, algorithm);
         assert_eq!(refinement.cell_count(), 2);
     }
 
     // The 64- and 128-bit widths both distinguish path from triangle.
     fn distinguishes<W: RefinementWidth>() {
-        let s = RefinementXxh3Scheme::<W>::default_scheme();
+        let algorithm = || RefinementAlgorithm::WeisfeilerLehman {
+            rounds: RefinementRounds::ToFixpoint,
+            scheme: RefinementXxh3Scheme::<W>::default_scheme(),
+        };
         let path = Graph::new(3, &[[0, 1], [1, 2]]);
         let triangle = Graph::new(3, &[[0, 1], [1, 2], [0, 2]]);
-        let hp = path
-            .color_refine(uniform, no_edge_color, RefinementRounds::ToFixpoint, &s, WeisfeilerLehman)
-            .graph_hash();
-        let ht = triangle
-            .color_refine(uniform, no_edge_color, RefinementRounds::ToFixpoint, &s, WeisfeilerLehman)
-            .graph_hash();
+        let hp = path.refine(uniform, no_edge_color, algorithm()).graph_hash();
+        let ht = triangle.refine(uniform, no_edge_color, algorithm()).graph_hash();
         assert_ne!(hp, ht);
     }
 
@@ -436,11 +440,12 @@ mod tests {
     }
 
     // A custom RefinementHash impl exercises the trait seam (and proves pluggability).
+    #[derive(Clone, Copy, Debug)]
     struct CountingScheme;
     impl RefinementHash for CountingScheme {
         type Color = u64;
-        fn seed(&self, invariant: u64) -> u64 {
-            invariant
+        fn seed(&self, label: u64) -> u64 {
+            label
         }
         fn refine(&self, current: u64, neighbors: &[(u64, u64)]) -> u64 {
             current.wrapping_add(neighbors.len() as u64)
@@ -453,8 +458,11 @@ mod tests {
     #[rstest]
     fn test_refinement_custom_scheme() {
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let refinement =
-            g.color_refine(uniform, no_edge_color, RefinementRounds::Fixed(1), &CountingScheme, WeisfeilerLehman);
+        let algorithm = RefinementAlgorithm::WeisfeilerLehman {
+            rounds: RefinementRounds::Fixed(1),
+            scheme: CountingScheme,
+        };
+        let refinement = g.refine(uniform, no_edge_color, algorithm);
         // round 1 colors = degree: ends 1, middle 2 → sum = 4.
         assert_eq!(refinement.coloring_at(1), &[1, 2, 1]);
         assert_eq!(refinement.graph_hash(), 4);
@@ -464,15 +472,11 @@ mod tests {
     #[rstest]
     fn test_refinement_frozen_albatross_128() {
         let g = Graph::new(3, &[[0, 1], [1, 2]]);
-        let h = g
-            .color_refine(
-                uniform,
-                no_edge_color,
-                RefinementRounds::ToFixpoint,
-                &RefinementXxh3Scheme::<RefinementWidth128>::albatross(),
-                WeisfeilerLehman,
-            )
-            .graph_hash();
+        let algorithm = RefinementAlgorithm::WeisfeilerLehman {
+            rounds: RefinementRounds::ToFixpoint,
+            scheme: RefinementXxh3Scheme::<RefinementWidth128>::albatross(),
+        };
+        let h = g.refine(uniform, no_edge_color, algorithm).graph_hash();
         assert_eq!(h, 313131582038434349855774725390837831516);
     }
 }
