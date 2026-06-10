@@ -780,33 +780,60 @@ Phases A–E are in scope; F (3D) and G follow.
   **Validation methodology.** Reference cosets are given in SMILES/bond *source* order; the stored coset is
   that value reindexed by the parity of the source→target permutation (even = unchanged, odd = flipped).
 
-- **Phase C — perception → birelations** (chemistry; `umol-graph/src/ops/stereo.rs`). Lifts `#T`/`#C` +
-  topology → the stereo birelation overlay. **Same-frame lift** — the element's `:ligands` order is
-  `stereo_ligands()` is `#T`'s incidence frame (D2: equivariant, not canonical), so config copies through with
-  no reindex; marker-free inference / meso / canonicalization stay in G.
-  - **C1** — storage: `MoleculeAst` fields `stereo_atoms: StereoAtom` (= `FixedVarBirelationSet<NodeId,
-    Ordered, 1, StereoLigand, Ordered, StereoAtomAst>`) + `stereo_bonds: StereoBond` (`EdgeId`-site analogue);
-    ids `StereoAtomId`/`StereoBondId` (`define_id!`); extend `from_parts`/`Clone`/`PartialEq`. **Done**
-  - **C2** — builder `add_stereo_atom` / `add_stereo_bond`, mirroring the four existing overlay builders.
-    **Done**
-  - **C3** — remap/restore: apply Step-1's `RelationParticipant` generalization to both tables —
-    `apply_remapping` (`remap.node`→`p.remap`, `builder.rs:102`/`204`), `restore_participants`
-    (`undo.atom`→`p.unmap`, `:270`/`277`), and `removed_stereo_*` in `IdRemapping`/`UndoRemapping` (hand-written
-    per kind, no abstraction). **Done**
-  - **C4** — `stereo_ligands()` on atom/bond views: real neighbors in adjacency order, then implicit-H
-    (× H-count), then lone-pairs, each a `StereoLigand` (materializes the virtual ligands). Shared with B1;
-    LP minimal/deferred for the organic deliverable.
-  - **C5** — perception core (one element): from an atom/bond + its `#T`/`#C` + `stereo_ligands()`, build the
-    `StereoAtomAst`/`StereoBondAst` element (focus, ligand set, kind, config copied through — same frame); plus
-    the inverse projection element→`#T` (re-derivable, for write-back).
-  - **C6** — `StereoResolver` (≈ `AromaticResolver`, `ops/resolver/aromaticity` template): scan a molecule's
-    `#T`/`#C`, drive C5, populate both tables. Marker-driven and partial — only marked atoms/bonds become
-    elements; marker-free `StereoInferrer` stays in G.
-  - **C7** — tests: raise→resolve round-trip over the ~150-file corpus; assert focus/ligands/config of the
-    perceived birelations for known R/S and E/Z cases.
-  - **C8** - validators "Th3", "Ct3", ... are disallowed (tier-2 checks, doc 86)
-  - **C9** - queries for the ligand number, ligand ordering around atom if available, separately from topology
-    and from constraints. Need design.
+- **Phase C — perception → stereo elements** (chemistry; `umol-graph/src/ops/stereo*`). Lifts `#T`/`#C` +
+  topology into the molecule-level stereo overlay and provides the stereo query/operation surface — modeled on the
+  aromaticity ops (`AromaticityModel` + `AromaticityPerception` + resolver/validator/transformer). The storage
+  overlay is built: `stereo_atoms`/`stereo_bonds` (`FixedVarBirelationSet`), `StereoAtomId`/`StereoBondId`,
+  builders, remap/restore, and `stereo_ligands()` (real neighbors in adjacency order, then implicit-H ×h, then
+  lone pairs — materializes the virtual ligands). Same-frame lift: the element's ligand order is `#T`'s incidence
+  frame (equivariant, not canonical), so config copies through with no reindex.
+
+  - **Common core (the `AromaticityModel`/`AromaticityPerception` analog).**
+    - `StereoModel` — policy (sibling of `AromaticityModel`, `ops/model.rs`): kinds in scope (TH/CT now),
+      stereogenicity strictness (lean — emit nothing for a nonstereogenic site), para-stereocenter refinement.
+    - `StereoPerception` — the shared engine that resolution and the queries consume, built on a stereo-aware
+      color-refinement / automorphism pass: extend `umol-graph-core/algorithms/auto.rs` to fold the config
+      descriptor into the color and re-refine to a fixpoint (the para-stereo case).
+  - **Algorithms.**
+    - **WL** (Weisfeiler–Lehman color refinement) — the refinement core: fast approximate hash + automorphism
+      classes; the substrate for stereogenicity, canonical labeling, and isomorphism seeding.
+    - **VF2 / VF2++** (long planned) — exact graph isomorphism **carrying the per-site stereo descriptor** in the
+      match, seeded by the WL hash; VF2++ is the target node-ordering refinement.
+  - **Resolution** (`StereoResolver`, ≈ `AromaticResolver`). Marker-driven: scan `#T`/`#C`, build the
+    `StereoAtomAst`/`StereoBondAst` element (focus, ligand set, kind, config — same incidence frame, no reindex);
+    plus the inverse projection element→`#T` for write-back. Lean: drops nonstereogenic sites (via the topicity
+    test below). Tests: raise→resolve round-trip over the corpus, asserting focus/ligands/config for known R/S, E/Z.
+  - **Validation** (≈ `validator/aromaticity`; pass/fail, never mutates). Three checks: (1) **coset range** — config
+    index within the kind's coset count (TH/CT 0–1; `Th3`/`Ct3` over-range fails here); (2) **ligand count vs kind
+    degree** — element ligand count matches the kind (TH/CT = 4, incl. virtuals); (3) **derived ↔ asserted
+    projection** — the `#T`/`#C` on the atom/bond equals the projection re-derived from the resolved element. A
+    stereo element on a **non-stereogenic** site is **not** a contradiction (the element is agnostic about ligand
+    distinctness — it covers prochirality), so validation stays silent on it.
+  - **Topicity / stereogenicity** — ligand distinctness is the **automorphism-orbit partition** (homotopic /
+    enantiotopic / diastereotopic), computed by the WL/automorphism core (`StereoPerception`), **not** CIP. CIP is a
+    separate derived module (priority total-order → R/S/E/Z) that may consume this partition — the dependency runs
+    CIP → core, never core → CIP. Resolution's lean drop and the non-stereogenic handling below key off it.
+  - **Handling non-stereogenic elements** (open). Validation is pass/fail and never alters structure, so a redundant
+    stereo element on a non-stereogenic site is surfaced by one of: a **strip transformer** (mutates — removes them,
+    a cleanup op) and/or a **linter** — a new op category that emits advisory lints, no fail, no mutate
+    (clippy-style). Not mutually exclusive (lint to flag, transform to fix); split to decide. Prochirality ×
+    reactions interactions are **out of scope** for now.
+  - **Perception** (geometry → stereo). 3D conformer or 2D+wedges → `#T`/`#C`/elements — the coordinate path raise
+    refuses (perception, not translation; MOL cis/trans and marker-free tetrahedral fall here). Needs the
+    `MoleculeAst`+positions container; the inverse — config → wedges/2D/3D (depiction/embedding) — is the
+    aromatizer/kekulizer shape. (Container + perceiver/depicter detailed in doc 103, Future plan.)
+  - **Operations** (over `StereoPerception` + the `umol-perm` coset algebra).
+    - **remove stereo** — strip elements / `#T`/`#C`.
+    - **invert / manipulate** — `~` (enantiomer / other config) and `^` (group action), already in `umol-perm`.
+    - **enumerate stereoisomers** — expand undetermined (`+`) configs over each site's coset space.
+    - **canonical labeling** — stereo-aware canonical order (WL fixpoint; the storage frame stays equivariant).
+    - **isomorphism incl. stereochemistry** — VF2(++) equality up-to-isomorphism with the descriptors.
+
+  Minimum: `StereoModel` + the refinement engine + resolver + validator (graph-only). Perception (geometry) waits
+  on the positions container; the heavier derived layers (CIP, symmetry numbers, meso) and reaction stereo are in
+  doc 103, Future plan.
+  - **C1/C2/C3 (done)** — storage, builders, remap/restore.
+  - **C9** — ligand-count / ligand-order queries, separate from topology and from constraints. Needs design.
 
 - **Phase D — DSL round-trip** (`umol-ast/src/dsl/stereo.rs`, new; wired into `dsl/molecule.rs`, mirror
   `aromatic`). Faithful round-trip, no frame conversion (config stored relative to the written `:ligands`

@@ -820,3 +820,32 @@ The design converged through several drafts; these are kept so the reasoning is 
 - [Andersen, Flamm, Merkle, Stadler — *Chemical Graph Transformation with Stereo-Information* (2017)](https://link.springer.com/chapter/10.1007/978-3-319-61470-0_4) (the "ordered list method" + permutation groups; partial stereo)
 - [Rotation system — Wolfram MathWorld](https://mathworld.wolfram.com/RotationSystem.html) · [Rotation system / combinatorial map — Wikipedia](https://en.wikipedia.org/wiki/Rotation_system)
 - [Planar diagram (PD) notation — Knot Atlas](https://katlas.org/wiki/Planar_Diagrams) · [Knot notation — KnotInfo](https://knotinfo.math.indiana.edu/descriptions/notation.html)
+
+## Future plan (stereo ops beyond the doc-104 Section C minimum)
+
+From the Section C ops review (2026-06-09). Doc-104 Section C builds the minimum on a shared core — `StereoModel` +
+a WL/automorphism refinement engine (`StereoPerception`) + resolver + validator — plus the operation surface
+(remove, invert/`^`, enumerate stereoisomers, canonical labeling, stereo-aware isomorphism). The rest layers on the
+same core later:
+
+- **Geometry container + perceiver/depicter.** A distinct `MoleculeAst` + positions object — positions are a
+  different semantic object, not RDKit-style conformers stored on the graph. On it: the coordinate **perceiver**
+  (3D / 2D+wedges → `#T`/`#C`/elements — the MOL cis/trans and marker-free tetrahedral cases raise leaves alone)
+  and the inverse **depicter / embedder** (config → wedges / 2D / 3D). The aromatizer/kekulizer pair for stereo.
+- **CIP labeling** (R/S, E/Z) — a heavy *derived* layer, its own module (cf. RDKit `CIPLabeler/`: digraph, Mancude
+  rings, rule sort). Optional, gated by `StereoModel`; the storage frame stays the relative/equivariant coset
+  (StereoMolGraph omits CIP entirely — relative-only).
+- **Derived symmetry queries** on the refinement core: automorphism classes; **symmetry numbers** (topological /
+  rotational / external — feed thermochemistry and the spectroscopy / Raman-ROA side); topicity / prochirality
+  (homotopic / enantiotopic / diastereotopic via the `Â`/`Â*` action); meso.
+- **Reaction stereo** (long-horizon tie to the reaction-network goal). StereoMolGraph's layering —
+  `MolGraph → StereoMolGraph → CondensedReactionGraph → StereoCondensedReactionGraph`, stereo and bond-change as
+  orthogonal mixins, with **stereo changes** carried on the reaction — is the precedent: stereo descriptors and
+  their changes attach to rule / condensed-graph edges.
+- **More stereo kinds.** Beyond TH/CT (/SP/TB/OH + allene `#A`): atropisomerism / axial (StereoMolGraph
+  `AtropBond`) and hindered-rotation stereo (`HinderedBond{12,13,23,33}`). Keep in view, do not build.
+- **Reference implementations.** StereoMolGraph (`/Users/dr/Source/external/StereoMolGraph`): permutation-descriptor
+  model with `invert` (= our coset + `~`), WL color refinement (`algorithms/circular`), VF2++-with-stereo
+  isomorphism (`algorithms/isomorphism`), symmetry numbers (`algorithms/symmetry`), 3D→stereo inference, RDKit
+  interop; relative-only, no CIP. RDKit `GraphMol/{Chirality,FindStereo,new_canon,NontetrahedralStereo,StereoGroup,
+  CIPLabeler,FileParsers/MolFileStereochem}` for the full functional surface.

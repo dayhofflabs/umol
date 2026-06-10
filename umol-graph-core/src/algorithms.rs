@@ -7,4 +7,5 @@ pub mod connected;
 pub mod cycles;
 pub mod matching;
 pub mod mis;
+pub mod refine;
 pub mod subiso;
