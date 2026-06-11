@@ -506,6 +506,15 @@ equivariant stored form.
 
 ### Achiral, nonstereogenic, and prochiral sites
 
+**Clarification (2026-06-10) — see [104, "Section C design summary" → "Prochirality / stereogenicity
+model"](104-stereochemistry-implementation-plan-2026-05-31.md).** The "lean" framing below is refined
+there: the element is an **arrangement record** (ordered ligands + coset; distinctness neither
+required nor asserted), a stored coset is a faithful labeled-arrangement fact (never vacuous), and
+**stereogenicity / prochirality / topicity is a derived predicate plus an assertable constraint**
+(`StereoAtomConstraint::Topicity`), in analogy to valence / `#v` — not a storage policy. So the
+lean-vs-eager distinction dissolves; the cases below stand as the *derived* classification, not as a
+rule about which sites store an element.
+
 Three distinct cases, handled at different layers (meso is a fourth, molecule-level case,
 covered under decisions above):
 
