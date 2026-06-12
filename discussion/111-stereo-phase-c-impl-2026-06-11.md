@@ -11,9 +11,9 @@ Each subphase is one module.
 
 ---
 
-## C1 · umol-perm
+## C1 · umol-perm **Done**
 
-### C1a · `oriented.rs` (new)
+### C1a · `oriented.rs` (new) **Done**
 
 Orientation-graded permutation and its group (proper subgroup + one improper coset rep) — the
 permutation-inversion element `π·E^k` of Sₙ×Z₂.
@@ -66,7 +66,7 @@ impl OrientedPermutationGroup {
 }
 ```
 
-### C1b · `permutation.rs` (extend `Permutation`)
+### C1b · `permutation.rs` (extend `Permutation`) **Done**
 
 Cycle construct/decompose + GAP-notation `Display` (0-indexed). Pure additions to the existing
 degree-≤6 `Copy` type.
@@ -83,7 +83,7 @@ impl Permutation {
 impl Display for Permutation;   // "(0,1,2)(3,4)"; identity → "()"
 ```
 
-### C1c · `class.rs` (extend `ClassKey`)
+### C1c · `class.rs` (extend `ClassKey`) **Done**
 
 Add `Axial`; `build()` also yields the **improper (orientation-reversing) generator** per class (the
 source of chirality). `Axial` shares `CisTrans`'s parent/group/decomposition but with a coset-swapping
@@ -109,7 +109,7 @@ impl ClassKey {
 The TB/OH improper generators are class-geometry data (same source as today's hardcoded
 `is_chiral_class`), not invented in this plan.
 
-### C1d · `coset.rs` (extend `CosetSpace`)
+### C1d · `coset.rs` (extend `CosetSpace`) **Done**
 
 Carry the improper generator; add chirality, enantiomer, and the merge primitive shared by
 stereogenicity and fluxionality.

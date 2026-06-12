@@ -1,11 +1,36 @@
 //! Graph automorphism and canonical labeling.
 
+use std::cell::RefCell;
 use std::collections::HashSet;
+use std::mem;
 use std::os::raw::c_int;
 
 use nauty_Traces_sys::*;
 
 use crate::graph::{Graph, NodeId};
+
+thread_local! {
+    /// Accumulates the generators nauty emits via `userautomproc` during one
+    /// `sparsenauty` call; cleared before the call and drained right after. The
+    /// crate enables nauty's `tls` feature, so each thread runs independently.
+    static GENERATORS: RefCell<Vec<Vec<NodeId>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// nauty `userautomproc`: invoked once per generator with its permutation image
+/// `perm` over the `n` vertices (`perm[i]` is the image of vertex `i`).
+unsafe extern "C" fn capture_generator(
+    _count: c_int,
+    perm: *mut c_int,
+    _orbits: *mut c_int,
+    _numorbits: c_int,
+    _stabvertex: c_int,
+    n: c_int,
+) {
+    let image: Vec<NodeId> = (0..n as usize)
+        .map(|i| NodeId(unsafe { *perm.add(i) } as u32))
+        .collect();
+    GENERATORS.with(|g| g.borrow_mut().push(image));
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AutomorphismAlgorithm {
@@ -25,6 +50,7 @@ pub struct Automorphism {
     node_count: usize,
     orbit_count: usize,
     group_order: AutoGroupOrder,
+    generators: Vec<Vec<NodeId>>,
 }
 
 impl Graph {
@@ -49,6 +75,7 @@ impl Graph {
                 node_count: 0,
                 orbit_count: 0,
                 group_order: AutoGroupOrder::Exact(1),
+                generators: vec![],
             };
         }
 
@@ -104,9 +131,11 @@ impl Graph {
         let mut options = optionblk::default_sparse();
         options.getcanon = TRUE;
         options.defaultptn = FALSE;
+        options.userautomproc = Some(capture_generator);
         let mut stats = statsblk::default();
         let mut cg = sparsegraph::default();
 
+        GENERATORS.with(|g| g.borrow_mut().clear());
         let m = SETWORDSNEEDED(n);
         unsafe {
             nauty_check(
@@ -127,6 +156,7 @@ impl Graph {
             SG_FREE(&mut cg);
         }
 
+        let generators = GENERATORS.with(|g| mem::take(&mut *g.borrow_mut()));
         let orbits: Vec<NodeId> = orbits.iter().map(|&o| NodeId(o as u32)).collect();
         let canonical_lab: Vec<NodeId> = lab.iter().map(|&v| NodeId(v as u32)).collect();
 
@@ -156,6 +186,7 @@ impl Graph {
             node_count: n,
             orbit_count,
             group_order,
+            generators,
         }
     }
 }
@@ -184,10 +215,19 @@ impl Automorphism {
     pub fn auto_group_order(&self) -> AutoGroupOrder {
         self.group_order
     }
+
+    /// A generating set of the automorphism group, each generator a permutation
+    /// image over `0..node_count` (`generators()[k][i]` is the image of node `i`).
+    /// Empty iff the group is trivial.
+    pub fn generators(&self) -> &[Vec<NodeId>] {
+        &self.generators
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use rstest::*;
+
     use super::AutomorphismAlgorithm::Nauty;
     use super::*;
 
@@ -243,5 +283,18 @@ mod tests {
         assert!(aut.same_orbit(NodeId(0), NodeId(2)));
         assert!(!aut.same_orbit(NodeId(0), NodeId(1)));
         assert_eq!(aut.auto_group_order(), AutoGroupOrder::Exact(2));
+    }
+
+    #[rstest]
+    #[case::swap(Graph::new(2, &[[0, 1]]), vec![0u8, 0], vec![vec![NodeId(1), NodeId(0)]])]
+    #[case::colored_path(Graph::new(3, &[[0, 1], [1, 2]]), vec![0u8, 1, 0], vec![vec![NodeId(2), NodeId(1), NodeId(0)]])]
+    #[case::trivial(Graph::new(2, &[[0, 1]]), vec![0u8, 1], vec![])]
+    fn test_automorphism_generators(
+        #[case] g: Graph,
+        #[case] colors: Vec<u8>,
+        #[case] expected: Vec<Vec<NodeId>>,
+    ) {
+        let aut = g.automorphisms(|n| colors[n.index()], Nauty);
+        assert_eq!(aut.generators(), expected);
     }
 }
