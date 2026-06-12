@@ -1,0 +1,271 @@
+//! Round-0 graph coloring: one `u64` per graph node — an atom or a relation
+//! pseudonode — saying what counts as distinguishable. Used in automorphism
+//! symmetry computation; the impl is the policy of "same".
+
+use std::hash::{DefaultHasher, Hash, Hasher};
+
+use bitflags::bitflags;
+
+use super::entity::Entity;
+use super::molecule::MoleculeAst;
+
+/// Round-0 color of any graph-participating molecule entity.
+pub trait MoleculeColoring {
+    fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64;
+}
+
+bitflags! {
+    /// The inherent fields a `ConstitutionColoring` folds into a color, across
+    /// every graph-participating entity kind. Derived constitution predicates
+    /// (ring, degree, valence) are excluded here, they are folded in by the
+    /// automorphism.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct ConstitutionFeatures: u32 {
+        // atom
+        const ELEMENT = 1 << 0;
+        const ISOTOPE = 1 << 1;
+        const CHARGE = 1 << 2;
+        const IMPLICIT_HYDROGENS = 1 << 3;
+        const LONE_PAIRS = 1 << 4;
+        const SPIN = 1 << 5;
+        // bond
+        const BOND_ORDER = 1 << 6;
+        const BOND_CHARGE = 1 << 7;
+        const BOND_SPIN = 1 << 8;
+        // dative bond
+        const DATIVE_ORDER = 1 << 9;
+        // aromatic system
+        const AROMATIC_ELECTRONS = 1 << 10;
+        const AROMATIC_CHARGE = 1 << 11;
+        const AROMATIC_SPIN = 1 << 12;
+        // multicenter bond
+        const MULTICENTER_ELECTRONS = 1 << 13;
+        const MULTICENTER_CHARGE = 1 << 14;
+        const MULTICENTER_SPIN = 1 << 15;
+        // noncovalent bond
+        const NONCOVALENT_KIND = 1 << 16;
+    }
+}
+
+/// Constitution coloring includes only inherent fields on all entities.
+#[derive(Clone, Copy, Debug)]
+pub struct ConstitutionColoring {
+    features: ConstitutionFeatures,
+}
+
+impl ConstitutionColoring {
+    pub fn new(features: ConstitutionFeatures) -> Self {
+        Self { features }
+    }
+
+    pub fn entity_only() -> Self {
+        Self::new(ConstitutionFeatures::empty())
+    }
+
+    /// Every inherent field selected.
+    pub fn full() -> Self {
+        Self::new(ConstitutionFeatures::all())
+    }
+}
+
+impl MoleculeColoring for ConstitutionColoring {
+    fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64 {
+        // A leading kind tag keeps kinds in disjoint color ranges; then the
+        // entity's inherent fields, each gated by `features`.
+        let mut hasher = DefaultHasher::new();
+        match entity {
+            Entity::Atom(id) => {
+                0u8.hash(&mut hasher);
+                let atom = mol.atom(id);
+                if self.features.contains(ConstitutionFeatures::ELEMENT) {
+                    atom.element().hash(&mut hasher);
+                }
+                if self.features.contains(ConstitutionFeatures::ISOTOPE) {
+                    atom.isotope_mass().hash(&mut hasher);
+                }
+                if self.features.contains(ConstitutionFeatures::CHARGE) {
+                    atom.charge().hash(&mut hasher);
+                }
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::IMPLICIT_HYDROGENS)
+                {
+                    atom.implicit_hydrogens().hash(&mut hasher);
+                }
+                if self.features.contains(ConstitutionFeatures::LONE_PAIRS) {
+                    atom.lone_pairs().hash(&mut hasher);
+                }
+                if self.features.contains(ConstitutionFeatures::SPIN) {
+                    atom.spin().hash(&mut hasher);
+                }
+            }
+            Entity::Bond(id) => {
+                1u8.hash(&mut hasher);
+                let bond = mol.bond(id);
+                if self.features.contains(ConstitutionFeatures::BOND_ORDER) {
+                    bond.order().hash(&mut hasher);
+                }
+                if self.features.contains(ConstitutionFeatures::BOND_CHARGE) {
+                    bond.charge().hash(&mut hasher);
+                }
+                if self.features.contains(ConstitutionFeatures::BOND_SPIN) {
+                    bond.spin().hash(&mut hasher);
+                }
+            }
+            Entity::AromaticSystem(id) => {
+                2u8.hash(&mut hasher);
+                let system = mol
+                    .aromatic_systems()
+                    .get(id)
+                    .expect("aromatic id in range");
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::AROMATIC_ELECTRONS)
+                {
+                    system.electron_count().hash(&mut hasher);
+                }
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::AROMATIC_CHARGE)
+                {
+                    system.charge().hash(&mut hasher);
+                }
+                if self.features.contains(ConstitutionFeatures::AROMATIC_SPIN) {
+                    system.spin().hash(&mut hasher);
+                }
+            }
+            Entity::MulticenterBond(id) => {
+                3u8.hash(&mut hasher);
+                let bond = mol
+                    .multicenter_bonds()
+                    .get(id)
+                    .expect("multicenter id in range");
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::MULTICENTER_ELECTRONS)
+                {
+                    bond.electron_count().hash(&mut hasher);
+                }
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::MULTICENTER_CHARGE)
+                {
+                    bond.charge().hash(&mut hasher);
+                }
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::MULTICENTER_SPIN)
+                {
+                    bond.spin().hash(&mut hasher);
+                }
+            }
+            Entity::DativeBond(id) => {
+                4u8.hash(&mut hasher);
+                let bond = mol.dative_bonds().get(id).expect("dative id in range");
+                if self.features.contains(ConstitutionFeatures::DATIVE_ORDER) {
+                    bond.order().hash(&mut hasher);
+                }
+            }
+            Entity::NoncovalentBond(id) => {
+                5u8.hash(&mut hasher);
+                let bond = mol
+                    .noncovalent_bonds()
+                    .get(id)
+                    .expect("noncovalent id in range");
+                if self
+                    .features
+                    .contains(ConstitutionFeatures::NONCOVALENT_KIND)
+                {
+                    bond.kind().hash(&mut hasher);
+                }
+            }
+            // Stereo atoms and bonds are not part of constitution coloring.
+            Entity::StereoAtom(_) | Entity::StereoBond(_) => {}
+        }
+        hasher.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+    use rstest::*;
+    use umol_shared::element::Element;
+
+    use super::*;
+    use crate::ast::atom::AtomAst;
+    use crate::ast::bond::BondAst;
+    use crate::ast::ids::{AtomId, BondId};
+    use crate::ast::molecule::MoleculeAst;
+    use crate::ast::spin::SpinStateAst;
+    use crate::ast::value::ValueAst;
+
+    #[fixture]
+    fn ethanol_fragment() -> MoleculeAst {
+        // C-C-O: the two carbons share an element; oxygen differs.
+        MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::O),
+            ],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+            ],
+        )
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::distinct_element( ConstitutionFeatures::all(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), false)]
+    #[case::same_element( ConstitutionFeatures::all(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(1)), true)]
+    #[case::kind_tag_disjoint( ConstitutionFeatures::empty(), Entity::Atom(AtomId(0)), Entity::Bond(BondId(0)), false)]
+    #[case::element_not_selected( ConstitutionFeatures::empty(), Entity::Atom(AtomId(0)), Entity::Atom(AtomId(2)), true)]
+    fn test_constitution_coloring_color(
+        ethanol_fragment: MoleculeAst,
+        #[case] features: ConstitutionFeatures,
+        #[case] left: Entity,
+        #[case] right: Entity,
+        #[case] expected_equal: bool,
+    ) {
+        let coloring = ConstitutionColoring::new(features);
+        let equal =
+            coloring.color(&ethanol_fragment, left) == coloring.color(&ethanol_fragment, right);
+        assert_eq!(equal, expected_equal);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::both_undetermined( SpinStateAst::default(), SpinStateAst::default(), ConstitutionFeatures::SPIN, true)]
+    #[case::equal_triplet((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), ConstitutionFeatures::SPIN, true)]
+    #[case::unpaired_differs((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::SPIN, false)]
+    #[case::multiplicity_differs((2_u8, 3_u8).into(), (2_u8, 1_u8).into(), ConstitutionFeatures::SPIN, false)]
+    #[case::partial_vs_undetermined(
+        SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
+        SpinStateAst::default(),
+        ConstitutionFeatures::SPIN,
+        false,
+    )]
+    #[case::spin_not_selected((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), ConstitutionFeatures::empty(), true)]
+    fn test_constitution_coloring_color_spin(
+        #[case] spin_a: SpinStateAst,
+        #[case] spin_b: SpinStateAst,
+        #[case] features: ConstitutionFeatures,
+        #[case] expected_equal: bool,
+    ) {
+        // Two same-element atoms differing only in spin; the color matches iff
+        // the spins are indistinguishable under `features`.
+        let mol = MoleculeAst::from_atoms_and_bonds(
+            vec![
+                AtomAst::from_element(Element::C).with_spin(spin_a),
+                AtomAst::from_element(Element::C).with_spin(spin_b),
+            ],
+            vec![],
+        );
+        let coloring = ConstitutionColoring::new(features);
+        let equal = coloring.color(&mol, Entity::Atom(AtomId(0)))
+            == coloring.color(&mol, Entity::Atom(AtomId(1)));
+        assert_eq!(equal, expected_equal);
+    }
+}

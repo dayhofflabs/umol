@@ -145,9 +145,9 @@ chiral kinds.
 
 ---
 
-## C2 · umol-graph-core
+## C2 · umol-graph-core **Done**
 
-### C2a · `algorithms/auto.rs` (extend `Automorphism`)
+### C2a · `algorithms/auto.rs` (extend `Automorphism`) **Done**
 
 Capture and expose nauty/Traces generators (currently discarded); no other graph-core change. Bond /
 relation labels stay **caller-side** — C3c folds them into node colors via a colored incidence gadget —
@@ -171,7 +171,7 @@ impl Automorphism {
 
 ## C3 · umol-ast
 
-### C3a · `ast/coloring.rs` (new) + `Entity` in `ast/molecule.rs` (extend)
+### C3a · `ast/coloring.rs` (new) + `Entity` in `ast/entity.rs` (new)
 
 The pluggable **round-0 color policy**: one `u64` per **graph node** — atom or pseudonode (a relation:
 localized bond or an overlay) — that says what counts as distinguishable. One rule, applied to every node:
@@ -183,33 +183,41 @@ automorphism for free — once each overlay is an **entity pseudonode** (C3c), e
 with graph-core's proper-coloring `algorithms/coloring.rs`.
 
 Because the rule is uniform across node kinds, the trait is a **single method over a public `Entity`** (a
-typed ref to any molecule entity — lives in `ast/molecule.rs`, generally useful beyond coloring):
+typed ref to any molecule entity — lives in `ast/entity.rs`, generally useful beyond coloring; variant names
+mirror the entity types exactly):
 
 ```rust
-// ast/molecule.rs  (public, general-purpose)
+// ast/entity.rs  (public, general-purpose)
 enum Entity {
-    Atom(AtomId), Bond(BondId), Dative(DativeBondId), Aromatic(AromaticSystemId),
-    Multicenter(MulticenterBondId), Noncovalent(NoncovalentBondId),
+    Atom(AtomId), Bond(BondId), DativeBond(DativeBondId), AromaticSystem(AromaticSystemId),
+    MulticenterBond(MulticenterBondId), NoncovalentBond(NoncovalentBondId),
     StereoAtom(StereoAtomId), StereoBond(StereoBondId),
 }
 
 // ast/coloring.rs
 trait MoleculeColoring {
-    fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64;   // invoked only for graph-participating kinds
+    fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64;   // stereo kinds → kind tag only (no fields)
 }
 
-bitflags! struct ColorFeatures: u16 {              // inherent fields only (§6.1) — derived excluded (free)
-    ELEMENT, ISOTOPE, CHARGE, IMPLICIT_H, LONE_PAIRS, SPIN,   // atom
+bitflags! struct ColorFeatures: u32 {              // inherent fields only (§6.1) — derived excluded (free)
+    ELEMENT, ISOTOPE, CHARGE, IMPLICIT_HYDROGENS, LONE_PAIRS, SPIN,   // atom
     BOND_ORDER, BOND_CHARGE, BOND_SPIN,                       // localized bond
+    DATIVE_ORDER,                                             // dative bond
+    AROMATIC_ELECTRONS, AROMATIC_CHARGE, AROMATIC_SPIN,       // aromatic system (electrons = order-indep π-count)
+    MULTICENTER_ELECTRONS, MULTICENTER_CHARGE, MULTICENTER_SPIN, // multicenter bond
+    NONCOVALENT_KIND,                                         // noncovalent bond
+    // bit values are arbitrary (runtime config, never serialized); append freely.
 }
 
 struct ConstitutionColoring { features: ColorFeatures }   // the one impl now (pre-stereo inherent fields)
 impl ConstitutionColoring { fn new(features: ColorFeatures) -> Self; fn full() -> Self; }
 impl MoleculeColoring for ConstitutionColoring;
-// color(): match entity kind → hash (kind tag, that kind's inherent fields):
-//   Atom → ColorFeatures-selected atom fields;  Bond → order/charge/spin;
-//   Aromatic → charge/spin/π-count;  Multicenter → charge/spin/e-count;
+// color(): match entity kind → hash (kind tag, that kind's inherent fields, each gated by ColorFeatures):
+//   Atom → element/isotope/charge/#h/lone-pairs/spin;  Bond → order/charge/spin;
+//   Aromatic → π-count/charge/spin;  Multicenter → e-count/charge/spin;
 //   Dative → order (direction is gadget-encoded, C3c);  Noncovalent → kind.
+//   StereoAtom/StereoBond → kind tag only (not constitution fields; stereo isn't a graph node).
+//   per-atom electron vectors are NOT node fields (order-dependent) → incidence-edge colors, C3c.
 // the kind tag keeps kinds in disjoint color ranges (no pseudonode maps onto an atom or another kind).
 ```
 
@@ -218,7 +226,8 @@ are **separate** impls owning their own fields (ring, aromaticity, functional cl
 props because their consumer is per-atom hashing, not an automorphism, so "relational ⇒ free" doesn't apply
 to them. Stereo is **not** a coloring impl: its descriptor is partition-dependent, so the symmetry-refinement loop
 folds it on top (C3d); the trait stays stereo-free (and fingerprint-reusable). `Entity`'s `StereoAtom`/
-`StereoBond` variants exist for the general enum but are never passed to `color` (stereo isn't a graph node).
+`StereoBond` variants exist for the general enum; `ConstitutionColoring` colors them by kind tag only
+(no constitution fields), since stereo isn't a graph node.
 
 ### C3b · `ast/automorphism.rs` (extend)
 

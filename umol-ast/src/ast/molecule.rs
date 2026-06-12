@@ -288,7 +288,6 @@ impl MoleculeAst {
             .map(move |n| NeighborView::new(AtomId::from(n.node), BondId::from(n.edge), self))
     }
 
-    // TODO: Decide if individual node/edge ids (graph-core) or atom/bond ids (ast) should be stored in views.
     // Slices have to store node/edge ids, otherwise need owned vectors.
     pub fn atoms(&self) -> AtomViews<'_> {
         AtomViews::new(self, &self.atoms)

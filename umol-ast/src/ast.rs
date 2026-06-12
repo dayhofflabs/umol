@@ -4,6 +4,7 @@ pub(crate) mod aromatic;
 pub(crate) mod atom;
 pub(crate) mod automorphism;
 pub(crate) mod bond;
+pub(crate) mod coloring;
 pub(crate) mod constraint;
 pub(crate) mod dative;
 pub(crate) mod edit;
@@ -23,11 +24,13 @@ pub(crate) mod stereo;
 pub(crate) mod traits;
 pub(crate) mod value;
 pub(crate) mod views;
+pub(crate) mod entity;
 
 pub use aromatic::AromaticSystemAst;
 pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
 pub use automorphism::AtomAutomorphism;
 pub use bond::BondAst;
+pub use coloring::{ConstitutionFeatures, ConstitutionColoring, MoleculeColoring};
 pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
 pub use constraint::{
     aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKind,
@@ -56,6 +59,7 @@ pub use ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
+pub use entity::Entity;
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};
