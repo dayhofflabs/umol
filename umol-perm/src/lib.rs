@@ -6,9 +6,11 @@
 mod class;
 mod coset;
 mod group;
+mod oriented;
 mod permutation;
 
 pub use class::{space, ClassKey, Coset};
 pub use coset::CosetSpace;
 pub use group::PermutationGroup;
+pub use oriented::{OrientedPermutation, OrientedPermutationGroup, Orientation};
 pub use permutation::Permutation;
