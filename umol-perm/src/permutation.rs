@@ -8,6 +8,8 @@
 //! - `rank`/`unrank` are the Lehmer order — an internal canonical numbering for
 //!   coset representatives, NOT the OpenSMILES arrangement index.
 
+use std::fmt;
+
 const MAX_DEGREE: usize = 6;
 
 /// A permutation of `0..degree` (`degree ≤ 6`) in one-line notation.
@@ -157,6 +159,66 @@ impl Permutation {
         }
         Self::from_image(degree, &image)
     }
+
+    /// Build from disjoint cycles: each `[c0,…,ck]` sets `σ(c0)=c1, …, σ(ck)=c0`;
+    /// unlisted points are fixed; `[]` is the identity. Panics unless the cycles
+    /// form a bijection of `0..degree`.
+    pub fn from_cycles(degree: usize, cycles: &[Vec<usize>]) -> Self {
+        assert!(degree <= MAX_DEGREE);
+        let mut image: Vec<u8> = (0..degree as u8).collect();
+        for cycle in cycles {
+            let len = cycle.len();
+            for (w, &point) in cycle.iter().enumerate() {
+                assert!(point < degree, "cycle point out of range");
+                image[point] = cycle[(w + 1) % len] as u8;
+            }
+        }
+        Self::from_image(degree, &image)
+    }
+
+    /// Disjoint-cycle decomposition, fixed points dropped. Canonical: each cycle
+    /// starts at its least element, cycles ordered by least element; identity → `[]`.
+    pub fn cycles(self) -> Vec<Vec<usize>> {
+        let degree = self.degree();
+        let mut visited = [false; MAX_DEGREE];
+        let mut cycles = Vec::new();
+        for start in 0..degree {
+            if visited[start] || self.apply(start) == start {
+                visited[start] = true;
+                continue;
+            }
+            let mut cycle = Vec::new();
+            let mut point = start;
+            while !visited[point] {
+                visited[point] = true;
+                cycle.push(point);
+                point = self.apply(point);
+            }
+            cycles.push(cycle);
+        }
+        cycles
+    }
+}
+
+impl fmt::Display for Permutation {
+    /// GAP product-of-cycles, 0-indexed and comma-separated; identity → `()`.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let cycles = self.cycles();
+        if cycles.is_empty() {
+            return write!(f, "()");
+        }
+        for cycle in cycles {
+            write!(f, "(")?;
+            for (i, point) in cycle.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ",")?;
+                }
+                write!(f, "{point}")?;
+            }
+            write!(f, ")")?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -235,5 +297,43 @@ mod tests {
         for i in 0..count {
             assert_eq!(Permutation::unrank(degree, i).rank(), i);
         }
+    }
+
+    #[rstest]
+    #[case::single_cycle(3, vec![vec![0, 1, 2]], Permutation::from_image(3, &[1, 2, 0]))]
+    #[case::double_transposition(4, vec![vec![0, 1], vec![2, 3]], Permutation::from_image(4, &[1, 0, 3, 2]))]
+    #[case::partial(4, vec![vec![0, 1, 2]], Permutation::from_image(4, &[1, 2, 0, 3]))]
+    #[case::empty(4, vec![], Permutation::identity(4))]
+    fn test_permutation_from_cycles(
+        #[case] degree: usize,
+        #[case] cycles: Vec<Vec<usize>>,
+        #[case] expected: Permutation,
+    ) {
+        assert_eq!(Permutation::from_cycles(degree, &cycles), expected);
+    }
+
+    #[rstest]
+    #[case::overlap(3, vec![vec![0, 1], vec![1, 2]])]
+    #[case::out_of_range(3, vec![vec![0, 3]])]
+    #[should_panic]
+    fn test_permutation_from_cycles_error(#[case] degree: usize, #[case] cycles: Vec<Vec<usize>>) {
+        Permutation::from_cycles(degree, &cycles);
+    }
+
+    #[rstest]
+    #[case::identity(Permutation::identity(4), vec![])]
+    #[case::single_cycle(Permutation::from_image(4, &[1, 2, 0, 3]), vec![vec![0, 1, 2]])]
+    #[case::double_transposition(Permutation::from_image(4, &[1, 0, 3, 2]), vec![vec![0, 1], vec![2, 3]])]
+    #[case::interleaved(Permutation::from_image(4, &[2, 3, 0, 1]), vec![vec![0, 2], vec![1, 3]])]
+    fn test_permutation_cycles(#[case] p: Permutation, #[case] expected: Vec<Vec<usize>>) {
+        assert_eq!(p.cycles(), expected);
+    }
+
+    #[rstest]
+    #[case::identity(Permutation::identity(3), "()")]
+    #[case::three_cycle(Permutation::from_image(3, &[1, 2, 0]), "(0,1,2)")]
+    #[case::double_transposition(Permutation::from_image(4, &[1, 0, 3, 2]), "(0,1)(2,3)")]
+    fn test_permutation_display(#[case] p: Permutation, #[case] expected: &str) {
+        assert_eq!(p.to_string(), expected);
     }
 }

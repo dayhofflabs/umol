@@ -23,6 +23,7 @@ pub enum ClassKey {
     Dihedral(u8),
     Tetrahedral,
     CisTrans,
+    Axial,
     SquarePlanar,
     TrigonalBipyramidal,
     Octahedral,
@@ -62,7 +63,9 @@ impl ClassKey {
             // either carbon first, so the parent is S₂ ≀ S₂ = D₄ — within-side swaps (0 1), (2 3)
             // and the carbon swap (0 2)(1 3). R is the Klein four V (face flip (0 1)(2 3) and
             // carbon swap), giving 8/4 = 2 cosets (cis, trans).
-            ClassKey::CisTrans => (
+            // Axial (allene / biaryl …) shares this coset space but is chiral: its
+            // improper generator swaps the two cosets (see the `improper` match below).
+            ClassKey::CisTrans | ClassKey::Axial => (
                 PermutationGroup::generate(
                     4,
                     &[
@@ -112,7 +115,23 @@ impl ClassKey {
                 Decomposition::Octahedral,
             ),
         };
-        CosetSpace::new(parent, group, decomposition)
+        // The orientation-reversing generator.
+        // TH σ_d (0 1); Axial the cis↔trans flip (0 1); TB/OH σ_h swapping the axial pair.
+        // Achiral classes (CisTrans, SP, and the abstract families) take the identity,
+        // so `is_chiral` is false for them.
+        // NOTE: σ_h gives the correct `is_chiral` for TB/OH; the exact enantiomer *pairing* is
+        // class-geometry data still to be verified against the OpenSMILES @↔@@ numbering.
+        let improper = match self {
+            ClassKey::Tetrahedral | ClassKey::Axial => Permutation::from_image(4, &[1, 0, 2, 3]),
+            ClassKey::TrigonalBipyramidal => Permutation::from_image(5, &[4, 1, 2, 3, 0]),
+            ClassKey::Octahedral => Permutation::from_image(6, &[5, 1, 2, 3, 4, 0]),
+            ClassKey::CisTrans | ClassKey::SquarePlanar => Permutation::identity(4),
+            ClassKey::Symmetric(n)
+            | ClassKey::Alternating(n)
+            | ClassKey::Cyclic(n)
+            | ClassKey::Dihedral(n) => Permutation::identity(n as usize),
+        };
+        CosetSpace::new(parent, group, decomposition, improper)
     }
 }
 
@@ -125,6 +144,7 @@ impl fmt::Display for ClassKey {
             ClassKey::Dihedral(n) => write!(f, "Dih{n}"),
             ClassKey::Tetrahedral => write!(f, "TH"),
             ClassKey::CisTrans => write!(f, "CT"),
+            ClassKey::Axial => write!(f, "AX"),
             ClassKey::SquarePlanar => write!(f, "SP"),
             ClassKey::TrigonalBipyramidal => write!(f, "TB"),
             ClassKey::Octahedral => write!(f, "OH"),
@@ -139,6 +159,7 @@ impl FromStr for ClassKey {
         match s {
             "TH" => return Ok(ClassKey::Tetrahedral),
             "CT" => return Ok(ClassKey::CisTrans),
+            "AX" => return Ok(ClassKey::Axial),
             "SP" => return Ok(ClassKey::SquarePlanar),
             "TB" => return Ok(ClassKey::TrigonalBipyramidal),
             "OH" => return Ok(ClassKey::Octahedral),
@@ -218,11 +239,23 @@ mod tests {
     #[rstest]
     #[case::tetrahedral(ClassKey::Tetrahedral, 2)]
     #[case::cis_trans(ClassKey::CisTrans, 2)]
+    #[case::axial(ClassKey::Axial, 2)]
     #[case::square_planar(ClassKey::SquarePlanar, 3)]
     #[case::trigonal_bipyramidal(ClassKey::TrigonalBipyramidal, 20)]
     #[case::octahedral(ClassKey::Octahedral, 30)]
     fn test_space_count(#[case] key: ClassKey, #[case] count: usize) {
         assert_eq!(space(key).count(), count);
+    }
+
+    #[rstest]
+    #[case::tetrahedral(ClassKey::Tetrahedral, true)]
+    #[case::cis_trans(ClassKey::CisTrans, false)]
+    #[case::axial(ClassKey::Axial, true)]
+    #[case::square_planar(ClassKey::SquarePlanar, false)]
+    #[case::trigonal_bipyramidal(ClassKey::TrigonalBipyramidal, true)]
+    #[case::octahedral(ClassKey::Octahedral, true)]
+    fn test_space_is_chiral(#[case] key: ClassKey, #[case] expected: bool) {
+        assert_eq!(space(key).is_chiral(), expected);
     }
 
     #[rstest]
@@ -285,6 +318,7 @@ mod tests {
     #[case::symmetric(ClassKey::Symmetric(4), "Sym4")]
     #[case::dihedral(ClassKey::Dihedral(5), "Dih5")]
     #[case::tetrahedral(ClassKey::Tetrahedral, "TH")]
+    #[case::axial(ClassKey::Axial, "AX")]
     #[case::octahedral(ClassKey::Octahedral, "OH")]
     fn test_class_key_display(#[case] key: ClassKey, #[case] text: &str) {
         assert_eq!(key.to_string(), text);

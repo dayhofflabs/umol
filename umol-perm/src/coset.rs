@@ -32,6 +32,7 @@ pub struct CosetSpace {
     group: PermutationGroup,
     numbering: HashMap<Permutation, u32>,
     representatives: Vec<Permutation>,
+    improper: Permutation,
 }
 
 impl CosetSpace {
@@ -39,6 +40,7 @@ impl CosetSpace {
         parent: PermutationGroup,
         group: PermutationGroup,
         decomposition: Decomposition,
+        improper: Permutation,
     ) -> Self {
         assert!(
             group.elements().iter().all(|g| parent.contains(g)),
@@ -66,6 +68,7 @@ impl CosetSpace {
             group,
             numbering,
             representatives,
+            improper,
         }
     }
 
@@ -107,6 +110,48 @@ impl CosetSpace {
             "reindex relabeling is not in the parent group"
         );
         self.index(self.unindex(index).compose(relabeling))
+    }
+
+    /// The enantiomeric coset: apply the orientation-reversing generator.
+    pub fn enantiomer(&self, index: u32) -> u32 {
+        self.index(self.unindex(index).compose(self.improper))
+    }
+
+    /// Chiral iff the improper generator moves some coset.
+    pub fn is_chiral(&self) -> bool {
+        (0..self.count() as u32).any(|i| self.enantiomer(i) != i)
+    }
+
+    /// Quotient the coset space by extra proper generators (right action on
+    /// positions): cosets merge iff related by `⟨generators⟩`. Returns, per
+    /// coset, its class's canonical (minimum) index. Shared by stereogenicity
+    /// (Π_proper) and fluxionality (R′ moves).
+    pub fn merge_under(&self, generators: &[Permutation]) -> Vec<u32> {
+        fn root(parent: &mut [u32], mut x: u32) -> u32 {
+            while parent[x as usize] != x {
+                parent[x as usize] = parent[parent[x as usize] as usize];
+                x = parent[x as usize];
+            }
+            x
+        }
+        let count = self.count() as u32;
+        let mut parent: Vec<u32> = (0..count).collect();
+        for i in 0..count {
+            let rep = self.unindex(i);
+            for &generator in generators {
+                let j = self.index(rep.compose(generator));
+                let (ri, rj) = (root(&mut parent, i), root(&mut parent, j));
+                if ri != rj {
+                    parent[ri.max(rj) as usize] = ri.min(rj);
+                }
+            }
+        }
+        (0..count).map(|i| root(&mut parent, i)).collect()
+    }
+
+    /// The observable coset under a fluxional supergroup: the merged class id.
+    pub fn observable_coset(&self, index: u32, fluxional: &[Permutation]) -> u32 {
+        self.merge_under(fluxional)[index as usize]
     }
 }
 
@@ -271,8 +316,12 @@ mod tests {
         #[case] decomposition: Decomposition,
         #[case] count: usize,
     ) {
-        let parent = PermutationGroup::symmetric(group.degree());
-        assert_eq!(CosetSpace::new(parent, group, decomposition).count(), count);
+        let degree = group.degree();
+        let parent = PermutationGroup::symmetric(degree);
+        assert_eq!(
+            CosetSpace::new(parent, group, decomposition, Permutation::identity(degree)).count(),
+            count
+        );
     }
 
     #[rstest]
@@ -281,6 +330,7 @@ mod tests {
             PermutationGroup::symmetric(4),
             PermutationGroup::alternating(4),
             Decomposition::CanonicalRank,
+            Permutation::identity(4),
         );
         let even = Permutation::from_image(4, &[1, 2, 0, 3]);
         let odd = Permutation::from_image(4, &[1, 0, 2, 3]);
@@ -301,8 +351,9 @@ mod tests {
         #[case] group: PermutationGroup,
         #[case] decomposition: Decomposition,
     ) {
-        let parent = PermutationGroup::symmetric(group.degree());
-        let space = CosetSpace::new(parent, group, decomposition);
+        let degree = group.degree();
+        let parent = PermutationGroup::symmetric(degree);
+        let space = CosetSpace::new(parent, group, decomposition, Permutation::identity(degree));
         for n in 0..space.count() as u32 {
             assert_eq!(space.index(space.unindex(n)), n);
         }
@@ -317,6 +368,7 @@ mod tests {
             PermutationGroup::symmetric(4),
             PermutationGroup::dihedral(4),
             Decomposition::SquarePlanar,
+            Permutation::identity(4),
         );
         assert_eq!(space.index(Permutation::from_image(4, &image)), expected);
     }
@@ -339,7 +391,7 @@ mod tests {
                 Permutation::from_image(4, &[2, 3, 0, 1]),
             ],
         );
-        let space = CosetSpace::new(parent, group, Decomposition::CanonicalRank);
+        let space = CosetSpace::new(parent, group, Decomposition::CanonicalRank, Permutation::identity(4));
         assert_eq!(space.count(), 2);
         // The within-side swap (0 1) is the cis↔trans flip: a different coset from identity.
         let within_side_swap = Permutation::from_image(4, &[1, 0, 2, 3]);
@@ -353,5 +405,65 @@ mod tests {
             space.coset_rep(Permutation::identity(4)),
             space.coset_rep(carbon_swap)
         );
+    }
+
+    #[rstest]
+    #[case::coset_0(0, 1)]
+    #[case::coset_1(1, 0)]
+    fn test_coset_space_enantiomer(#[case] index: u32, #[case] expected: u32) {
+        let space = CosetSpace::new(
+            PermutationGroup::symmetric(4),
+            PermutationGroup::alternating(4),
+            Decomposition::CanonicalRank,
+            Permutation::from_image(4, &[1, 0, 2, 3]),
+        );
+        assert_eq!(space.enantiomer(index), expected);
+    }
+
+    #[rstest]
+    #[case::improper_swap(Permutation::from_image(4, &[1, 0, 2, 3]), true)]
+    #[case::identity(Permutation::identity(4), false)]
+    fn test_coset_space_is_chiral(#[case] improper: Permutation, #[case] expected: bool) {
+        let space = CosetSpace::new(
+            PermutationGroup::symmetric(4),
+            PermutationGroup::alternating(4),
+            Decomposition::CanonicalRank,
+            improper,
+        );
+        assert_eq!(space.is_chiral(), expected);
+    }
+
+    #[rstest]
+    #[case::no_generators(vec![], vec![0, 1])]
+    #[case::odd_swap(vec![Permutation::from_image(4, &[1, 0, 2, 3])], vec![0, 0])]
+    #[case::even_keeps(vec![Permutation::from_image(4, &[1, 2, 0, 3])], vec![0, 1])]
+    fn test_coset_space_merge_under(
+        #[case] generators: Vec<Permutation>,
+        #[case] expected: Vec<u32>,
+    ) {
+        let space = CosetSpace::new(
+            PermutationGroup::symmetric(4),
+            PermutationGroup::alternating(4),
+            Decomposition::CanonicalRank,
+            Permutation::identity(4),
+        );
+        assert_eq!(space.merge_under(&generators), expected);
+    }
+
+    #[rstest]
+    #[case::no_fluxion(1, vec![], 1)]
+    #[case::fluxion_merges(1, vec![Permutation::from_image(4, &[1, 0, 2, 3])], 0)]
+    fn test_coset_space_observable_coset(
+        #[case] index: u32,
+        #[case] fluxional: Vec<Permutation>,
+        #[case] expected: u32,
+    ) {
+        let space = CosetSpace::new(
+            PermutationGroup::symmetric(4),
+            PermutationGroup::alternating(4),
+            Decomposition::CanonicalRank,
+            Permutation::identity(4),
+        );
+        assert_eq!(space.observable_coset(index, &fluxional), expected);
     }
 }
