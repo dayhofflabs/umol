@@ -463,7 +463,6 @@ stereo_element! {
 }
 
 /// Default implementation for StereoAtomAst.
-/// TODO: Revisit the per-kind decision and add undetermined default.
 impl Default for StereoAtomAst {
     fn default() -> Self {
         Self {
@@ -475,7 +474,6 @@ impl Default for StereoAtomAst {
 }
 
 /// Default implementation for StereoBondAst.
-/// TODO: Revisit the per-kind decision and add undetermined default.
 impl Default for StereoBondAst {
     fn default() -> Self {
         Self {

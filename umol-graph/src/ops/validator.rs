@@ -5,8 +5,7 @@
 //! Each validator borrows a `MoleculeAst` (or `AtomAst`) and returns
 //! `Result<Solution<(), C>, E>`. Determined and Underdetermined are both
 //! successful outcomes; only `Contradictory(C)` is a failure on the `Solution`
-//! side. Setup-level failures (parameter-table gaps, etc.) live in `Err(E)`;
-//! tier-2 validators that have no setup use uninhabited error types.
+//! side. Setup-level failures (parameter-table gaps, etc.) live in `Err(E)`.
 //!
 //! The composite [`Validator`] runs the four sub-validators in order and lifts
 //! their per-engine `Contradiction` and `Error` types into unions via `From`

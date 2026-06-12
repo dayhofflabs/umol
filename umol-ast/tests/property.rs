@@ -285,9 +285,8 @@ fn isotope_strategy() -> impl Strategy<Value = IsotopeMassAst> {
 }
 
 fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {
-    // DSL preserves spin fields field-wise. Physical (u, m) parity is a
-    // tier-2 solver invariant, not a parse-time check, so any independent
-    // pair must roundtrip.
+    // DSL preserves spin fields field-wise. Physical (u, m) parity is
+    // not a parse-time check, so any independent pair must roundtrip.
     (value_basic(0..=6), value_basic(1..=7)).prop_map(|(u, m)| SpinStateAst {
         unpaired: u,
         multiplicity: m,

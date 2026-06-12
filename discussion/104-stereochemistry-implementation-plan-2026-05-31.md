@@ -176,7 +176,8 @@ Built on Step 1. raise is mechanical (no chemistry); perception is the chemistry
 - **raise** (mechanical): TableIR `chirality`/`wedge` → `#T`/`#C` constraint projections in the
   neighbor-order frame (a reindexing); no element. The aromaticity template — `raise` → `#a`
   (`AromaticValence`) constraint (`raise.rs:87–99`).
-- **perception** (chemistry): a perception core + drivers, mirroring the aromaticity ops
+- **stereo symmetry + drivers** (chemistry): the symmetry computation is umol-ast (`StereoSymmetry`, a
+  graph-symmetry algorithm — **not** a umol-graph `…Perception` engine); the umol-graph drivers mirror the aromaticity ops
   (`ops/transformer/aromatizer.rs`, `ops/resolver/aromaticity`): `StereoResolver` (≈ `AromaticResolver`;
   partial `#T`/`#C` → elements — the deliverable's driver), `StereoInferrer` (≈ `Aromatizer`;
   marker-free → elements — later), stereo transformation ops (≈ `Kekulizer` — later).
@@ -791,7 +792,7 @@ Phases A–E are in scope; F (3D) and G follow.
   - **Common core (the `AromaticityModel`/`AromaticityPerception` analog).**
     - `StereoModel` — policy (sibling of `AromaticityModel`, `ops/model.rs`): kinds in scope (TH/CT now),
       stereogenicity strictness (lean — emit nothing for a nonstereogenic site), para-stereocenter refinement.
-    - `StereoPerception` — the shared engine that resolution and the queries consume, built on a stereo-aware
+    - `StereoSymmetry` — the shared engine that resolution and the queries consume, built on a stereo-aware
       color-refinement / automorphism pass: extend `umol-graph-core/algorithms/auto.rs` to fold the config
       descriptor into the color and re-refine to a fixpoint (the para-stereo case).
   - **Algorithms.**
@@ -810,7 +811,7 @@ Phases A–E are in scope; F (3D) and G follow.
     stereo element on a **non-stereogenic** site is **not** a contradiction (the element is agnostic about ligand
     distinctness — it covers prochirality), so validation stays silent on it.
   - **Topicity / stereogenicity** — ligand distinctness is the **automorphism-orbit partition** (homotopic /
-    enantiotopic / diastereotopic), computed by the WL/automorphism core (`StereoPerception`), **not** CIP. CIP is a
+    enantiotopic / diastereotopic), computed by the WL/automorphism core (`StereoSymmetry`), **not** CIP. CIP is a
     separate derived module (priority total-order → R/S/E/Z) that may consume this partition — the dependency runs
     CIP → core, never core → CIP. Resolution's lean drop and the non-stereogenic handling below key off it.
   - **Handling non-stereogenic elements** (open). Validation is pass/fail and never alters structure, so a redundant
@@ -822,7 +823,7 @@ Phases A–E are in scope; F (3D) and G follow.
     refuses (perception, not translation; MOL cis/trans and marker-free tetrahedral fall here). Needs the
     `MoleculeAst`+positions container; the inverse — config → wedges/2D/3D (depiction/embedding) — is the
     aromatizer/kekulizer shape. (Container + perceiver/depicter detailed in doc 103, Future plan.)
-  - **Operations** (over `StereoPerception` + the `umol-perm` coset algebra).
+  - **Operations** (over `StereoSymmetry` + the `umol-perm` coset algebra).
     - **remove stereo** — strip elements / `#T`/`#C`.
     - **invert / manipulate** — `~` (enantiomer / other config) and `^` (group action), already in `umol-perm`.
     - **enumerate stereoisomers** — expand undetermined (`+`) configs over each site's coset space.
@@ -941,8 +942,8 @@ Phases A–E are in scope; F (3D) and G follow.
       over-approximating the concrete set-union — fine, disjunctive requirements don't arise);
       `matches(ground Π)` = every positive `∈ Π` and every negative `∉ Π`. CIP labels (pro-R/pro-S,
       Re/Si faces) deferred with CIP; Re/Si is a separate `trigonal` kind (doc 103), not this constraint.
-    - **Constraint notation (settled 2026-06-10).** `#p` (LigandSymmetry) and `#f` (Fluxionality) are
-      **non-unique** constraints — multiple per element, implicit conjunction (the `#R` convention);
+    - **Constraint notation (settled 2026-06-10; `#o`/`#g` added 2026-06-11).** `#p` (LigandSymmetry)
+      and `#f` (Fluxionality) are **non-unique** constraints — multiple per element, implicit conjunction (the `#R` convention);
       `{…}` stays reserved for disjunction and is **not** used here. Each entry is one signed literal,
       written as a cycle-notation permutation with two optional prefixes, `[!][']perm` (the cycle
       parens self-delimit — no wrapper):
@@ -963,6 +964,79 @@ Phases A–E are in scope; F (3D) and G follow.
         `from_cycles(degree, cycles)`, `cycles() -> Vec<Vec<usize>>` (disjoint-cycle decomposition),
         `Display` (GAP cycle notation, 0-indexed) — the **string parse stays in the DSL** (it supplies
         the degree); and docs/tests using image notation.
+    - **Topicity / stereogenicity as assertable lossy constraints (settled 2026-06-11).** Besides the
+      precise `#p` group literals, the **lossy** topicity/stereogenicity facts are *also* assertable —
+      the ring-count / ring-membership analog (lossy yet matchable; `#p` is the precise
+      substructure-analog). The earlier "query-only" framing is withdrawn. Both ride a **unified
+      same/different glyph language**, read at pair-level (`#o`) or site-level (`#g`):
+
+      | glyph | `#o` topicity (pair) | `#g` stereogenicity (site) | meaning |
+      | --- | --- | --- | --- |
+      | `=` same      | homotopic      | symmetric   | equivalent under proper |
+      | `'` mirror    | enantiotopic   | prochiral   | equivalent only under improper |
+      | `/` different | diastereotopic | stereogenic | inequivalent under both |
+
+      The mapping is **aligned, not inverted** — homotopic ligands ⟹ symmetric site, enantiotopic ⟹
+      prochiral, diastereotopic ⟹ stereogenic — the same glyph at two granularities.
+      - **`#o` topicity** — a relation between two ligands, reusing cycle notation **restricted to a
+        transposition**: `#o=(i,j)`, `#o'(i,j)`, `#o/(i,j)` (explicit glyph, no bare form). A **distinct
+        tag** from `#p` because `#p(i,j)` asserts the *transposition ∈ Π* (element-level) whereas topicity
+        asserts the *orbit relation*, and the two differ for non-binary kinds (C₃: `0,1` homotopic yet
+        `(0 1)∉Π`).
+      - **`#g` stereogenicity** — a site-level flag: `#g=` / `#g'` / `#g/`. Derived: `#g/` ⟺ stored
+        coset is a singleton class of `merge_under(Π_proper)`; `#g'` ⟺ not that but ∃ an enantiotopic
+        ligand pair; `#g=` otherwise.
+      - **`!` is a true negation** (not a value selector): because `/` carries "different" positively,
+        `!` is freed for real negation, restoring the full **subset lattice** over `{=, ', /}` for both
+        tags — `*` = any, singletons, `!X` = complement (`#g!/` = non-stereogenic = `{=, '}`; `#o!=` =
+        not-homotopic = `{', /}`), sets = disjunction, `∅` = `None`. Value lattice: `meet`=∩, `join`=∪,
+        `matches` = derived ground ∈ asserted set.
+      - **Collection lattice.** `#g` is **unique per site** (one flag; `meet` = value-meet, `None` on
+        conflict). `#o` is **keyed-unique per (unordered) pair** — a `{i,j} → value` map (the
+        `JointDomain` keying), distinct pairs conjoined; collection `meet` = per-pair value-`meet`
+        (`None` if a pair is double-asserted with disjoint sets, e.g. `#o=(0,1)` ∧ `#o/(0,1)`), union
+        over pairs; `join` = per-pair value-`join`, keep pairs in both; `matches` = every asserted pair's
+        value contains the target's derived topicity. CH₂Cl₂ = `{#o=(0,1), #o=(2,3), #o/(0,2)}` — three
+        keys, conjoined.
+      - **Stereo-bond carriers** use the **2-per-terminus, 4-position** ligand model (`[0,1]` terminus 1,
+        `[2,3]` terminus 2); same-terminus pairs are the stereo-determining ones, and `#p`/`#o`/`#g`/`#f`
+        apply unchanged over those positions (`#p(0,1)(2,3)` = the axial C₂; `#f(0,1)` = single-terminus
+        swap merging cis/trans).
+      - **cis/trans (achiral kinds).** `'` (enantiotopic / prochiral) is **meaningless** — no
+        enantiomers — so `#o'`/`#g'` on a CT (or any achiral) kind is a **validator error**. The
+        meaningful CT values are `=` and `/` taken w.r.t. the `~` involution (the 1,2-swap);
+        1-chloroethene's "substitute at the CH₂ → diastereomers" is `#o/` on that terminus. The
+        three-member nomenclature is kept; the validator gates `'` out for achiral kinds. EDN-reserved
+        `'`/`/` are not a problem — the short-hand DSL is quoted.
+      - **`~` sugar** — `~` = the class's canonical involution permutation (doc-103 `~`; binary classes
+        → `(0,1)`, class-parameterized for TB/OH). Usable as the cycle operand everywhere: `#p~` ≡
+        `#p(0,1)`, `#p'~` ≡ `#p'(0,1)`; `#o=~` ≡ `#o=(0,1)` (homotopic), `#o/~` ≡ `#o/(0,1)`
+        (diastereotopic). The *same* involution the coset operator `~` uses — one applies it to a config
+        value, the other names it as a literal. `~` resolves **eagerly** to a concrete `Permutation`: a
+        stereo element's kind is always known and literal (a non-literal kind is an invalid element), so
+        the class involution is well-defined at parse/lift — no deferred permutation expression is needed.
+      - **EDN representation (structured; 2026-06-11).** The DSL uses **keywords, not EDN reader tags**
+        (spec §2 / §7.1: `#` appears only *inside* atom/bond/stereo strings, never as a reader-dispatch
+        tag). A **permutation** is a **vector of cycles**, each cycle a 0-indexed `[int…]` vector; identity
+        `[]`: `[[0 1 2] [3 4]]` = `(0 1 2)(3 4)`. One vector-of-cycles is **one element** (vs two
+        generators = two values); canonicalized least-element-first per cycle, cycles sorted, fixed points
+        dropped, for deterministic roundtrip. `PermutationAst` hosts its `FromEdn`/`ToEdn`. This is the
+        shared primitive reused by the molecule-level symmetry assertions ([[110-molecular-symmetry-structure]]).
+        The constraint envelope inhabits the **already-provisioned** `StereoAtomConstraint` /
+        `StereoBondConstraint` (empty today by state, not by prohibition — the type, `Lattice`, collection,
+        and DSL plumbing are in place): a new `:stereo-atom` / `:stereo-bond` entity-constraint key carrying
+        `{:ligand-symmetry [{:perm [[0 1]] :orientation :improper :member :not-in} …]}`,
+        `{:fluxionality [[[0 1]] …]}`, `{:topicity {[0 1] :homotopic, [0 2] :diastereotopic}}`,
+        `{:stereogenicity :stereogenic}` — `:orientation` (`:proper` default) / `:member` (`:in` default)
+        omittable; relation values are the AST-enum keywords (`:homotopic`/`:enantiotopic`/`:diastereotopic`,
+        `:symmetric`/`:prochiral`/`:stereogenic`), a **set** `#{…}` for `!`-complements, `:undetermined` for
+        any. **Two serializations, mirroring atoms** (`dsl/atom.rs` + `dsl/constraint.rs`): the per-element
+        constraints serialize **inline** in the §7.14 stereo-string (`#p`/`#f`/`#o`/`#g`), with
+        `StereoAtomDsl` round-tripping via `Edn::Str(to_string())` — `dsl/stereo.rs`, the atom.rs pattern;
+        the structured `:stereo-atom` / `:stereo-bond` entity-constraint key (above) is the molecule-scope
+        peer in `dsl/constraint.rs` (parallel to `:atom` / `atom-constraint-form`), with
+        `lift_constraints`/`inline_constraints` moving between them. This adds the `:stereo-atom`
+        entity-constraint key + §7.14 stereo-string predicates to the spec (the planned evolution).
     - **No coherence machinery needed.** A concrete coset on a non-distinct site is legitimate
       labeled data, not an error to validate against. Molecular equality / stereoisomer enumeration
       uses the standard equivariant-storage → canonicalize-both-sides quotient umol already commits
@@ -1019,43 +1093,70 @@ Phases A–E are in scope; F (3D) and G follow.
        `Orientation`, *not* `Sign`, which is the existing parity `Permutation::sign()`). `compose`
        multiplies orientations. `OrientedPermutationGroup` is Π; its *storage* (full group vs
        `proper: PermutationGroup` + `improper_rep`) is deferred.
-    2. **`AtomColoring` seam (umol-ast)** — the minimal interface, sized to admit Morgan/ECFP/FCFP
-       later without rework: `trait AtomColoring { fn atom_seed(&self, AtomView) -> u64;
-       fn bond_label(&self, BondView) -> u64; }`, **one impl now** (chemistry-feature scheme). The
-       `u64` seed closure is the stable seam consumed **chemistry-agnostically** by `auto.rs` (nauty)
-       and `refine.rs` (WL). Downstream Morgan/ECFP/FCFP = new impls; per-round identifiers = a
-       `refine.rs` output method; bit-folding = a separate consumer — all additive, none touch the
-       trait. The trait yields the **pure chemistry** seed; stereo folding is added by the perception
-       loop (next), keeping the trait stereo-free and fingerprint-reusable. (Full invariant/fingerprint
-       module is its own future effort; only this interface is built now.)
-    3. **`stereo_perception` loop (umol-ast)** — `MoleculeAst::stereo_perception(&self,
-       coloring: &impl AtomColoring, para: bool) -> StereoPerception`. Loop: `color = atom_seed ⊕
-       canonical_stereo_descriptor(rel. to current partition)`; `auto = automorphisms(color)` (graded
+    2. **`MoleculeColoring` seam (umol-ast)** — one method over the public `Entity` ref (`ast/molecule.rs`,
+       generally useful), **not** views: `trait MoleculeColoring { fn color(&self, &MoleculeAst, Entity)
+       -> u64; }`. **One impl now**, `ConstitutionColoring` (inherent-field scheme): the color is a hash of
+       the entity's **inherent fields only**. This is *complete* for our consumer (a graph automorphism):
+       every **derived** predicate is relational, hence a function of the structure and preserved for free;
+       once each overlay is an **entity pseudonode** (loop, next), even overlay-derived predicates
+       (aromaticity, dative/multicenter participation) are graph functions. Named `MoleculeColoring` (not
+       `Invariants`/`Coloring`) to avoid conflation with graph-core's proper-coloring. nauty's refinement
+       subsumes Morgan for perception; ECFP/FCFP/scaffold are **separate impls** owning their own (often
+       derived) fields — their consumer is per-atom hashing, where "relational ⇒ free" does not hold —
+       reusing this seam. Stereo folding is added by the perception loop (next), keeping the trait
+       stereo-free and fingerprint-reusable. (Full fingerprint module is its own future effort; only this
+       interface is built now.)
+    3. **`stereo_symmetry` loop (umol-ast)** — `MoleculeAst::stereo_symmetry(&self,
+       coloring: &impl MoleculeColoring, para_stereo: bool) -> StereoSymmetry`. Builds the graph (atoms + a
+       pseudonode per relation/overlay, colored by `coloring.color(self, entity)`; dative direction
+       gadget-encoded). Loop: `node color ⊕ canonical_stereo_descriptor(rel. to current partition)`;
+       `auto = automorphisms(color)` (graded
        Â/Â*, extending `AtomAutomorphism`); return when the partition is stable **or** `!para`.
        `para=false` ⇒ one pass; `para=true` ⇒ InChI-style fixpoint — full structure, para a pure
-       on/off. `StereoPerception` holds the converged molecule-wide graded automorphism. Config
-       carrier: a small umol-ast `StereoPerceptionConfig { coloring, para }` (room for a max-iters
+       on/off. `StereoSymmetry` holds the converged molecule-wide graded automorphism. Config
+       carrier: a small umol-ast `StereoSymmetryConfig { coloring, para_stereo }` (room for a max-iterations
        guard); `StereoModel` (umol-graph) composes it + the kind-scope and passes it down — umol-ast
        keeps **no** dependency on umol-graph.
-    4. **Queries — read-only `StereoAtomView`/`StereoBondView`, taking `&StereoPerception`** (computed
-       once at molecule level, passed by reference; no interior mutability): `ligand_symmetry(&p) -> Π`
+    4. **Queries — read-only `StereoAtomView`/`StereoBondView`, taking `&StereoSymmetry`** (the consumer
+       computes it and passes it to its own view queries; no interior mutability). The **validator** is the
+       only pipeline consumer (computes it once, molecule-wide, on the resolved AST); the **resolver is
+       structural** and computes none; query-time reuse caches on the immutable `Molecule` (doc 086). Nothing
+       is shared op-to-op — and couldn't be, since the resolver mutates the molecule. `ligand_symmetry(&p) -> Π`
        (site-stabilizer, lift atom-perm → ligand-position perm with virtual-ligand blocks, grade
        proper/improper); `is_stereogenic(&p)` = stored coset is a singleton class of
        `merge_under(Π_proper)`; `is_chiral()` (kind-level, umol-perm, no perception); `topicity(a,b,&p)
        -> Topicity`; `is_homotopic`/`is_enantiotopic`/`is_diastereotopic(a,b,&p)`; `is_prochiral(&p)`.
-    5. **Constraints — fill the empty `StereoAtomConstraint`/`StereoBondConstraint`.**
-       `LigandSymmetry { perm: OrientedPermutationAst, mem: MemOp }` (one `±` literal over Π — `mem`
-       `In`/`NotIn` = `g∈Π` / `g∉Π`, the `'` = `Orientation::Improper` inside `OrientedPermutationAst`);
-       `Fluxionality(PermutationAst)` (positive proper move). New umol-ast types: `PermutationAst`
-       (cycle-parsed permutation), `OrientedPermutationAst { perm: PermutationAst, orientation:
-       Orientation }`, and a **local** `MemOp { In, NotIn }` (a duplicate — the `value.rs` `MemOp` is
-       scoped to element/isotope sets; keep the stereo module decoupled).
-       Lattice: `meet` = literal-union (`None` on a required-vs-forbidden clash or unrealizable),
-       `join` = literal-intersection (over-approximating LUB), `matches(&p)` = derive the target Π and
-       test each literal (frame-aligned via `permutation_for`). `remap` = no-op (position-indexed;
-       `Ordered` preserves order). Storage shape (flat literal `Vec` vs `(B, N)`) deferred.
+    5. **Constraints — fill the empty `StereoAtomConstraint`/`StereoBondConstraint`.** Four variants, each
+       wrapping a dedicated AST struct: `LigandSymmetry(LigandSymmetryAst)`, `Fluxionality(FluxionalityAst)`,
+       `Topicity(TopicityAst)`, `Stereogenicity(StereogenicityAst)`, where
+       `LigandSymmetryAst { perm: OrientedPermutationAst, mem: MemOp }` (one `±` literal over Π — `mem`
+       `In`/`NotIn` = `g∈Π` / `g∉Π`, the `'` = `Orientation::Improper`); `FluxionalityAst { perm:
+       PermutationAst }` (positive proper move); `TopicityAst { pair: LigandPairAst, rel:
+       TopicityRelationAst }` (the `#o` pair relation; `LigandPairAst { first: StereoLigandId, second:
+       StereoLigandId }` = an unordered pair of ligand positions, normalizing `first ≤ second` like `AtomPair`);
+       `StereogenicityAst(StereogenicityRelationAst)` (the `#g` site flag — just the relation, no
+       pair). The relation value (the **subset lattice over `{=, ', /}`**: `{ Undetermined, Lit, LitSet,
+       NotSet }` — any / singleton / positive set / `!`-complement; `#o!=` lowers to `NotSet({Homotopic})`,
+       **no** separate `Not`) is generated by a **declarative macro** over each ground enum
+       (`Topicity { Homotopic, Enantiotopic, Diastereotopic }`, `Stereogenicity { Symmetric, Prochiral,
+       Stereogenic }`) — **no** `StereoRelationKind` trait (not worth it for two; the macro bakes the domain
+       for the full-set→`Undetermined` collapse). `meet`=∩, `join`=∪, `matches`=∈; the glyph↔variant map
+       (`=`/`'`//') lives in the **DSL only**. `PermutationAst(Permutation)` and `OrientedPermutationAst { perm:
+       PermutationAst, orientation: Orientation }` are **thin wrappers** over the umol-perm types — no added
+       structure (a permutation literal is always concrete: no `Undetermined`, no per-permutation lattice),
+       kept so the AST layer stays uniform and can host the EDN/DSL traits (orphan rule); plus the
+       **local** `MemOp { In, NotIn }` (a duplicate — the `value.rs` `MemOp` is scoped to element/isotope
+       sets; keep the stereo module decoupled).
+       Lattice: `LigandSymmetry`/`Fluxionality` — `meet` = literal-union (`None` on a required-vs-forbidden
+       clash or unrealizable), `join` = literal-intersection (over-approximating LUB), `matches(&p)` =
+       derive Π and test each literal (frame-aligned via `permutation_for`). `Topicity` — keyed-unique per
+       (unordered) pair: collection `meet` = per-pair value-`meet` (set ∩, `None` on disjoint) + union
+       over pairs, `join` = per-pair value-`join` (set ∪) keeping shared pairs, `matches` = derived
+       topicity ∈ asserted set per pair. `Stereogenicity` — unique per site, value-`meet`/`join` = set
+       ∩/∪, `matches` = derived ∈ set. `remap` = no-op (position-indexed; `Ordered` preserves order). The
+       validator gates `'` out for achiral kinds. Storage shape (flat literal `Vec` vs `(B, N)`) deferred.
     6. **Threading + wiring.** Representation-independent now: `from_parts` / view carry of the
-       per-element constraints, umol-graph `StereoModel` (`StereoPerceptionConfig` + kind-scope) and
+       per-element constraints, umol-graph `StereoModel` (`StereoSymmetryConfig` + kind-scope) and
        `StereoValidator` last in the composite chain. Inhabiting the constraint enums (`match` arms,
        `Lattice`, DSL) follows the **step-5 representation/storage (TBD; notation settled)**.
   - **Artifacts (concrete surface — steps 1–4 and 6; step 5's representation/storage TBD, notation settled — see "Constraint notation").**
@@ -1068,34 +1169,84 @@ Phases A–E are in scope; F (3D) and G follow.
       cycles)`, `cycles() -> Vec<Vec<usize>>` (disjoint-cycle decomposition), `Display` (GAP cycle
       notation, 0-indexed) — the construct/decompose algebra for `^` / `#p` / `#f`; the cycle-string
       parse lives in the umol-ast DSL (it supplies the degree).
-    - **2 · umol-ast `ast/coloring.rs` (new):** `trait AtomColoring { atom_seed(AtomView) -> u64;
-      bond_label(BondView) -> u64 }`; `struct ChemistryColoring { features }` (the one impl); `struct
-      AtomColorFeatures` (bitflags — element / isotope / charge / implicit-h / lone-pairs / spin /
-      aromatic / ring / valence; bond order / aromatic / dative).
-    - **3 · umol-ast `ast/stereo_perception.rs` (new):** `struct StereoPerceptionConfig<C: AtomColoring>
-      { coloring, para, max_iters }`; `struct StereoPerception` (`proper_orbit_of`, `star_orbit_of`,
-      `same_proper_orbit`, `same_star_orbit`, `generators`); `MoleculeAst::stereo_perception<C>(&self,
-      &cfg) -> StereoPerception`. Ext `ast/automorphism.rs` (graded Â/Â* + expose generators); ext
-      `umol-graph-core/algorithms/auto.rs` (`Automorphism::generators()`).
+    - **2 · umol-ast `ast/coloring.rs` (new) + `Entity` in `ast/molecule.rs`:** public `enum Entity` (a typed
+      ref to any molecule entity: Atom/Bond/Dative/Aromatic/Multicenter/Noncovalent/StereoAtom/StereoBond);
+      `trait MoleculeColoring { color(&MoleculeAst, Entity) -> u64 }` (one method, not views); `struct
+      ConstitutionColoring { features }` (the one impl — hashes each entity kind's **inherent fields** + a
+      kind tag; derived predicates excluded as automorphism-free); `struct ColorFeatures` (bitflags, inherent
+      only — element / isotope / charge / implicit-h / lone-pairs / spin; bond order / charge / spin).
+    - **3 · umol-ast `ast/incidence.rs` (new, generic) + `ast/stereo_symmetry.rs` (new):** generic
+      `struct IncidenceGraph { graph: Graph, node_entity: Vec<Entity> }` (the molecule's incidence/Levi
+      graph — relations lifted to CSR pseudonodes; dative direction in the gadget edges) + `MoleculeAst::
+      incidence_graph()`. Then `struct StereoSymmetryConfig<C: MoleculeColoring> { coloring, para_stereo,
+      max_iterations }`; `struct StereoSymmetry` (the *result*: `proper_orbit_of`, `star_orbit_of`,
+      `same_proper_orbit`, `same_star_orbit`, `graded`, `ligand_symmetry(site, &[StereoLigand])`);
+      `MoleculeAst::stereo_symmetry<C>(&self, &cfg) -> StereoSymmetry` (runs the automorphism over
+      `incidence_graph` with stereo-folded colors). Ext `ast/automorphism.rs` (graded Â/Â* + expose
+      generators); ext `umol-graph-core/algorithms/auto.rs` (`Automorphism::generators()`).
     - **4 · umol-ast `ast/stereo.rs` + `ast/views/stereo.rs` (ext):** `enum Topicity { Homotopic,
-      Enantiotopic, Diastereotopic }`; on `StereoAtomView` / `StereoBondView` —
-      `ligand_symmetry(&p) -> OrientedPermutationGroup`, `is_stereogenic(&p)`, `is_chiral()`,
-      `topicity(a, b, &p) -> Topicity`, `is_homotopic` / `is_enantiotopic` / `is_diastereotopic(a, b, &p)`,
-      `is_prochiral(&p)`; helpers `ligand_position(AtomId) -> Option<usize>`,
-      `virtual_ligand_positions(host, kind)`, `induced_ligand_permutation(atom_perm) -> OrientedPermutation`.
-    - **5 · umol-ast `ast/constraint/stereo.rs` + `dsl/stereo.rs`:** `PermutationAst` (cycle-parsed
-      permutation), `OrientedPermutationAst { perm: PermutationAst, orientation: Orientation }`, local
-      `enum MemOp { In, NotIn }`; `StereoAtomConstraint::{ LigandSymmetry { perm: OrientedPermutationAst,
-      mem: MemOp }, Fluxionality(PermutationAst) }` (bond mirror), non-unique (`is_unique() = false`);
-      collection `Lattice` = the `RingSize` pattern (meet = union+dedup, join = intersection) with
-      `LigandSymmetry` overriding `matches` group-aware (`matches_group(&Π)`) and adding a clash-`None`;
-      DSL parse/render of `[!][']perm`. `^` migrates to `PermutationAst` cycle notation. *(Storage of Π
-      and of the literal set — flat vs `(B,N)` — still deferred.)*
-    - **6 · wiring:** umol-graph `StereoModel` (`StereoPerceptionConfig` + kind-scope), `StereoValidator`
-      last in `ops/validator.rs`; representation-independent `from_parts` / view carry of constraints.
+      Enantiotopic, Diastereotopic }` and `enum Stereogenicity { Symmetric, Prochiral, Stereogenic }`
+      (the derived ground triples; the `=` / `'` / `/` glyph map is DSL-only). On `StereoAtomView` /
+      `StereoBondView` —
+      `ligand_symmetry(&p) -> OrientedPermutationGroup`, `stereogenicity(&p) -> Stereogenicity`,
+      `is_stereogenic(&p)`, `is_chiral()`, `topicity(a: StereoLigandId, b: StereoLigandId, &p) -> Topicity`,
+      `is_homotopic` / `is_enantiotopic` / `is_diastereotopic(a, b, &p)`, `is_prochiral(&p)`; helpers
+      `ligand_position(AtomId) -> Option<StereoLigandId>`, `ligand_frame(&p) -> Vec<StereoLigand>`,
+      `induced_ligand_permutation(atom_perm) -> OrientedPermutation`. New id `StereoLigandId(u8)` in
+      `ast/ids.rs` — a frame-relative ligand position (Permutation-width, not `usize`); existing
+      position-taking view methods migrate to it.
+    - **5 · umol-ast `ast/constraint/stereo.rs` + `dsl/stereo.rs`:** `PermutationAst(Permutation)` (thin
+      wrapper, cycle-parsed), `OrientedPermutationAst { perm: PermutationAst, orientation: Orientation }`,
+      local `enum MemOp { In, NotIn }`, `struct LigandPairAst { first: StereoLigandId, second: StereoLigandId }`
+      (normalizing `first ≤ second`, like `AtomPair`); a **declarative macro** `relation_ast! { TopicityRelationAst,
+      Topicity }` / `relation_ast! { StereogenicityRelationAst, Stereogenicity }` generating the 4-variant
+      subset lattice (`Undetermined`/`Lit`/`LitSet`/`NotSet`, `meet`/`join`/`matches`) — no trait; the
+      constraint structs `LigandSymmetryAst { perm: OrientedPermutationAst, mem: MemOp }`,
+      `FluxionalityAst { perm: PermutationAst }`, `TopicityAst { pair: LigandPairAst, rel:
+      TopicityRelationAst }`, `StereogenicityAst(StereogenicityRelationAst)`; the glyph↔variant table lives
+      in `dsl/stereo.rs`. **Trait coverage** (codebase convention): the macro gives `*RelationAst`
+      `Lattice` + `AsLit` (`Lit` = the ground enum); `StereogenicityAst` delegates both; `TopicityAst`
+      impls `Lattice` keyed per pair (à la `JointDomainAst`); the **concrete literals** (`PermutationAst`,
+      `OrientedPermutationAst`, `LigandPairAst`, `LigandSymmetryAst`, `FluxionalityAst`) can't be lattices
+      (no top), so they carry `Eq`/`Hash` **plus a standalone inherent `matches(&self, &Self)`** (the
+      `StereoExpr::matches_value` precedent — matchable without `Lattice`; the collection's matching
+      dispatches per kind). No `Matches` trait is extracted — `matches` is already a directly-written
+      (non-`meet`-delegating) method by the `Lattice` doc-contract, so it stays co-located with `meet` for
+      the lattice types. The `StereoAtomConstraint` enum impls neither `Lattice` nor `AsLit` (the collection
+      dispatches), matching `AtomConstraint`. `StereoAtomConstraint::{ LigandSymmetry(LigandSymmetryAst),
+      Fluxionality(FluxionalityAst), Topicity(TopicityAst), Stereogenicity(StereogenicityAst) }`
+      (bond parallels). `#p`/`#f` non-unique (`is_unique() = false`); `#o` keyed-unique per pair; `#g`
+      unique per site. `StereoAtomConstraints` mirrors the **full `AtomConstraints` surface** — the stored
+      side of the derived↔stored pair: per-kind stored accessors (`ligand_symmetry()`/`fluxionality()` iter,
+      `topicity(pair)`, `stereogenicity()`), `get`/`add`(insert policy)/`contains`/`get_all`/`remove`/`iter`/
+      `simplify_each`/`remap` (no-op — positions are frame-relative), and `Lattice { is_ground, meet, join,
+      matches }` (`matches` is plain AST↔AST, like `AtomConstraints`; `#p`/`#f` union+dedup, `#o` per-pair
+      value-meet/join with clash-`None`, `#g` value-meet/join). **No `matches_derived`/`matches_group`** —
+      the derived↔stored cross-check is the **C4 validator's** job (parallels the atom validator's
+      topology-derived-vs-stored valence cross-check), comparing `view.{ligand_symmetry,topicity,
+      stereogenicity}(&StereoSymmetry)` against the stored constraints. DSL tags `#p` `#f` `#o` `#g`,
+      parse/render of `[!][']perm` (`#p`/`#f`) and `[!](=|'|/)[pair]` (`#o`/`#g`); `^` migrates to cycle
+      notation; validator rejects `'` on achiral kinds. *(Storage shape — flat vs `(B,N)` — still deferred.)*
+    - **6 · wiring (umol-graph, mirrors the aromaticity model/resolver/validator split):** `ops/model.rs`
+      `StereoModel` (`KindScope` + fluxionality + para + `InconsistencyPolicy`, producing
+      `StereoSymmetryConfig`); `ops/resolver/stereo.rs` `StereoResolver` (adds+resolves stereo elements
+      from `#T`/`#C` — kind-by-scope, ligand frame, coset resolved — with **idempotency = site-membership**
+      (`has_coincident`/`coincident`, **not** `is_ground` — this adds entities, it doesn't narrow atoms) and
+      a **configurable coverage/inconsistency policy `{ Keep | Strip | Error }`**, never a silent drop);
+      `ops/validator/stereo.rs`
+      `StereoValidator` **last** after `AromaticityValidator`, checking coset-in-range, ligand-arity =
+      kind degree, the achiral `'` gate, and the asserted↔derived cross-check (computing `StereoSymmetry`
+      **once**, molecule-wide, on the resolved AST). The validator is the **sole** pipeline consumer; the
+      resolver is **structural** (computes none) — so there's nothing to share op-to-op, and a shared
+      result would be stale anyway (the resolver mutates the molecule). Representation-independent
+      `from_parts` / view carry of constraints. *(Non-stereo follow-up — **C4d**: `AromaticityResolver` needs the same membership-based
+      idempotency + shared `InconsistencyPolicy` — today it re-perceives on re-run (duplicating systems) and
+      silently discards proposals.)*
   - **Deliverable unchanged:** TH/CT first — both rigid (`R′=R`) under any fluxionality choice.
-  - **Open (impl-level, decide at build):** perception passed-by-ref vs cached (lean passed) and the
-    `StereoPerceptionConfig` struct vs bare params (lean struct) — the only remaining choices. Π
+  - **Open (impl-level, decide at build):** the `StereoSymmetryConfig` struct vs bare params (lean struct).
+    (Resolved: only the **validator** computes `StereoSymmetry` (once, on the resolved AST); the resolver is
+    **structural** and computes none — nothing is shared op-to-op, and couldn't be since the resolver mutates
+    the molecule; query-time reuse caches on the immutable `Molecule`, doc 086.) Π
     storage = `OrientedPermutationGroup`; constraint-AST names settled. Literal storage is the **flat
     non-unique collection** (the `RingSize` pattern); `(B,N)` is the lattice *model*, not a stored form
     — `B` is computed on demand from the positive literals via Π's group-closure (transient in
