@@ -171,7 +171,7 @@ impl Automorphism {
 
 ## C3 · umol-ast
 
-### C3a · `ast/coloring.rs` (new) + `Entity` in `ast/entity.rs` (new)
+### C3a · `ast/coloring.rs` (new) + `Entity` in `ast/entity.rs` (new) **Done**
 
 The pluggable **round-0 color policy**: one `u64` per **graph node** — atom or pseudonode (a relation:
 localized bond or an overlay) — that says what counts as distinguishable. One rule, applied to every node:
@@ -229,7 +229,7 @@ folds it on top (C3d); the trait stays stereo-free (and fingerprint-reusable). `
 `StereoBond` variants exist for the general enum; `ConstitutionColoring` colors them by kind tag only
 (no constitution fields), since stereo isn't a graph node.
 
-### C3b · `ast/automorphism.rs` (extend)
+### C3b · `ast/automorphism.rs` (extend) **Done**
 
 Expose generators on `AtomAutomorphism`; add the orientation-graded holder (Â proper + Â* mirror).
 
@@ -248,22 +248,40 @@ impl GradedAutomorphism {
 }
 ```
 
-### C3c · `ast/incidence.rs` (new) — generic
+### C3c · `ast/incidence.rs` (new) — generic **Done**
 
-The molecule's **incidence graph** (Levi graph): every relation — localized bond and each overlay
-(aromatic / multicenter / dative / noncovalent) — lifted to a node alongside the atoms, with incidence edges
-to its participants. A **generic** `MoleculeAst` property (canonicalization, fingerprints, symmetry numbers
-all reuse it), not stereo-specific; structure only — colors are applied at automorphism time. Hyperedge
-overlays (>2 atoms) are why it's the incidence/Levi graph rather than an ordinary-edge subdivision; it is
-**not** a port graph — attachment stays unordered (ligand order enters only in the per-site projection, C3d).
+The molecule's **incidence graph** (Levi graph): each selected relation — localized bond and each overlay
+(aromatic / multicenter / dative / noncovalent) — lifted to a pseudonode alongside the atoms, with incidence
+edges to its participants. A **generic** `MoleculeAst` property (canonicalization, fingerprints, symmetry
+numbers all reuse it), not stereo-specific; structure only — colors are applied at automorphism time.
+Hyperedge overlays (>2 atoms) are why it's the incidence/Levi graph rather than an ordinary-edge subdivision;
+it is **not** a port graph — attachment stays unordered (ligand order enters only in the per-site projection,
+C3d). Localized bonds are lifted (not kept as edges) so their `BOND_*` labels can ride as node colors under
+graph-core's node-color-only automorphism (C2a).
+
+The node set is **configurable** over a forced atoms+bonds base: `IncidenceNodeSelection` toggles `OVERLAYS`
+and `STEREO` (presets `topological` / `constitution` / `full`). Stereo atoms/bonds **are** graph nodes (just
+not part of the constitution coloring); each attaches to **its site only** (the site atom, or the site bond's
+pseudonode) — the ligand–site bonds already live in the topology, so re-linking ligands through the stereo
+node would duplicate them; the new information a stereo node carries is its site plus (at color time) its
+stereo label.
+
+**No dative-direction gadget.** A directed bond between automorphism-equivalent atoms is a contradiction in
+terms (dative-ness *is* the donor/acceptor asymmetry), so the coloring already separates the endpoints; the
+direction itself is retained in the AST (`acceptor_slot`). Noncovalent relations are stored unordered and
+need nothing. So `node_entity` stays `Vec<Entity>` — no marker nodes.
 
 ```rust
+bitflags! struct IncidenceNodeSelection: u8 { OVERLAYS, STEREO }   // atoms + localized bonds always in
+impl IncidenceNodeSelection { fn topological()/*empty*/; fn constitution()/*OVERLAYS*/; fn full()/*both*/; }
+
 struct IncidenceGraph {
-    graph: Graph,             // CSR (graph-core); nodes = atoms ++ relation-pseudonodes
-    node_entity: Vec<Entity>, // node → the molecule Entity it represents
+    graph: Graph,             // CSR (graph-core); nodes = atoms ++ selected relation-pseudonodes
+    node_entity: Vec<Entity>, // node → the molecule Entity it represents (atoms at 0..n; BondId(k) at n+k)
 }
+impl IncidenceGraph { fn graph(&self) -> &Graph; fn entity(&self, NodeId) -> Entity; fn entities(&self) -> &[Entity]; }
 impl MoleculeAst {
-    fn incidence_graph(&self) -> IncidenceGraph;   // dative donor→acceptor direction = distinguished gadget edges
+    fn incidence_graph(&self, selection: IncidenceNodeSelection) -> IncidenceGraph;
 }
 ```
 

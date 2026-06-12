@@ -11,6 +11,7 @@ pub(crate) mod edit;
 pub(crate) mod embedding;
 pub(crate) mod error;
 pub(crate) mod ids;
+pub(crate) mod incidence;
 pub(crate) mod ligand;
 pub(crate) mod matching;
 pub(crate) mod molecule;
@@ -60,6 +61,7 @@ pub use ids::{
     StereoAtomId, StereoBondId,
 };
 pub use entity::Entity;
+pub use incidence::{IncidenceGraph, IncidenceNodeSelection};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
 pub use molecule::transact::{Transaction, TransactionError};
