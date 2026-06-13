@@ -777,8 +777,12 @@ impl MoleculeAst {
                     self.multicenter_bond_mut(id).constraints.add(inner);
                 }
                 Constraint::NoncovalentBond(_, inner) => match inner {},
-                Constraint::StereoAtom(_, inner) => match inner {},
-                Constraint::StereoBond(_, inner) => match inner {},
+                Constraint::StereoAtom(id, inner) => {
+                    self.stereo_atom_mut(id).constraints.add(inner);
+                }
+                Constraint::StereoBond(id, inner) => {
+                    self.stereo_bond_mut(id).constraints.add(inner);
+                }
                 c @ (Constraint::Relational(_)
                 | Constraint::Molecule(_)
                 | Constraint::And(_)

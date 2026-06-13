@@ -502,7 +502,15 @@ constraint enum + collection now (split later if they diverge).
   `TopicityAst` (keyed Lattice — `meet`/`join` debug-assert same pair, operate on the relation),
   `StereogenicityAst` (Lattice + AsLit, delegates to the inner relation). **Done**
 - **C3g.4 — inhabit the unions**: `StereoAtomConstraint`/`StereoBondConstraint` (4 variants) +
-  `…Kind` + `kind()`/`is_unique()`, replacing today's uninhabited `enum {}` (macro-generated atom/bond).
+  `…Kind` + `kind()`/`is_unique()`, replacing today's uninhabited `enum {}` (macro-generated atom/bond). **Done.**
+  Inhabiting forced the `Constraint`-level exhaustive matches: `molecule.rs::inline_constraints` (now
+  `stereo_{atom,bond}_mut(id).constraints.add(inner)`), `constraint/molecule.rs::simplify` (pass-through — no
+  `ValueAst`) and `::remap` (`remap.stereo_{atom,bond}(id)?` + no-op constraint remap, positions are
+  frame-relative). The collection `add` is a minimal push (cardinality is C3g.5). The `…Kind` re-exports are
+  withheld until C3g.5 consumes them (would warn unused otherwise). The four DSL sites — `dsl/constraint.rs`
+  (molecule-level) and `dsl/stereo.rs` (inline) `match c {}` over the now-inhabited enums — are **left red**:
+  rendering/parsing stereo constraints is C3h's `ConstraintDsl::StereoAtom` + inline stereo-string work, done
+  once there rather than as a throwaway `Err`. Tree is red on exactly those four sites until C3h.
 - **C3g.5 — collections** `StereoAtomConstraints`/`StereoBondConstraints`: full surface mirroring
   `AtomConstraints` + `Lattice` (per-kind meet/join: `#p`/`#f` union+dedup, `#o` per-pair value-meet, `#g`
   value-meet).

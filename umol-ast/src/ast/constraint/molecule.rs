@@ -85,8 +85,8 @@ impl Constraint {
             Constraint::AromaticSystem(id, c) => Constraint::AromaticSystem(id, c.simplify()),
             Constraint::MulticenterBond(id, c) => Constraint::MulticenterBond(id, c.simplify()),
             Constraint::NoncovalentBond(_, c) => match c {},
-            Constraint::StereoAtom(_, c) => match c {},
-            Constraint::StereoBond(_, c) => match c {},
+            Constraint::StereoAtom(id, c) => Constraint::StereoAtom(id, c),
+            Constraint::StereoBond(id, c) => Constraint::StereoBond(id, c),
             Constraint::Relational(r) => Constraint::Relational(r.simplify()),
             Constraint::Molecule(m) => Constraint::Molecule(m.simplify()),
             Constraint::And(xs) => Constraint::And(xs.into_iter().map(|c| c.simplify()).collect()),
@@ -115,8 +115,14 @@ impl Constraint {
                 let i = remap.noncovalent_bond(id)?;
                 c.remap(remap).map(|c| Constraint::NoncovalentBond(i, c))
             }
-            Constraint::StereoAtom(_, c) => match c {},
-            Constraint::StereoBond(_, c) => match c {},
+            Constraint::StereoAtom(id, c) => {
+                let i = remap.stereo_atom(id)?;
+                c.remap(remap).map(|c| Constraint::StereoAtom(i, c))
+            }
+            Constraint::StereoBond(id, c) => {
+                let i = remap.stereo_bond(id)?;
+                c.remap(remap).map(|c| Constraint::StereoBond(i, c))
+            }
             Constraint::Relational(r) => r.remap(remap).map(Constraint::Relational),
             Constraint::Molecule(m) => m.remap(remap).map(Constraint::Molecule),
             Constraint::And(xs) => xs

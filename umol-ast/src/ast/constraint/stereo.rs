@@ -296,19 +296,62 @@ impl AsLit for StereogenicityAst {
     }
 }
 
-/// Atom-centered stereo constraint.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StereoAtomConstraint {}
+/// Generates a per-element stereo constraint as a 4-variant tagged union plus its
+/// kind tag. Atom- and bond-centered share the same variants for now (split if
+/// they diverge). The collection (`StereoAtomConstraints`/…) dispatches; the enum
+/// impls neither `Lattice` nor `AsLit`, like `AtomConstraint`.
+macro_rules! stereo_constraint {
+    ($constraint:ident, $kind:ident) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+        pub enum $kind {
+            LigandSymmetry,
+            Fluxionality,
+            Topicity,
+            Stereogenicity,
+        }
 
-impl StereoAtomConstraint {
-    pub fn is_undetermined(&self) -> bool {
-        match *self {}
-    }
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        pub enum $constraint {
+            LigandSymmetry(LigandSymmetryAst),
+            Fluxionality(FluxionalityAst),
+            Topicity(TopicityAst),
+            Stereogenicity(StereogenicityAst),
+        }
 
-    pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
-        match self {}
-    }
+        impl $constraint {
+            pub fn kind(&self) -> $kind {
+                match self {
+                    Self::LigandSymmetry(_) => $kind::LigandSymmetry,
+                    Self::Fluxionality(_) => $kind::Fluxionality,
+                    Self::Topicity(_) => $kind::Topicity,
+                    Self::Stereogenicity(_) => $kind::Stereogenicity,
+                }
+            }
+
+            /// Whether at most one constraint of this kind may be stored. Only
+            /// stereogenicity (`#g`) is unique; `#p`/`#f` are non-unique literals
+            /// and `#o` is keyed per ligand pair.
+            pub fn is_unique(&self) -> bool {
+                matches!(self, Self::Stereogenicity(_))
+            }
+
+            pub fn is_undetermined(&self) -> bool {
+                match self {
+                    Self::LigandSymmetry(_) | Self::Fluxionality(_) => false,
+                    Self::Topicity(t) => t.is_undetermined(),
+                    Self::Stereogenicity(g) => g.is_undetermined(),
+                }
+            }
+
+            /// Frame-relative ligand positions carry no atom ids, so remap is a no-op.
+            pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
+                Some(self)
+            }
+        }
+    };
 }
+
+stereo_constraint! { StereoAtomConstraint, StereoAtomConstraintKind }
 
 /// Per-stereo-atom constraint container.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -336,7 +379,8 @@ impl StereoAtomConstraints {
     }
 
     pub fn add(&mut self, c: StereoAtomConstraint) -> Option<StereoAtomConstraint> {
-        match c {}
+        self.0.push(c);
+        None
     }
 
     /// Add multiple constraints at once, using the semantics of `add`.
@@ -359,7 +403,7 @@ impl StereoAtomConstraints {
         mem::take(&mut self.0).into_iter()
     }
 
-    /// No-op: the inner enum is uninhabited, so there are no values to simplify.
+    /// No-op: stereo constraints hold no `ValueAst`; relations are already canonical.
     pub fn simplify_each(&mut self) {}
 
     pub fn remap(self, _remap: &IdRemapping) -> Self {
@@ -399,19 +443,7 @@ impl FromIterator<StereoAtomConstraint> for StereoAtomConstraints {
     }
 }
 
-/// Bond-centered stereo constraint.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StereoBondConstraint {}
-
-impl StereoBondConstraint {
-    pub fn is_undetermined(&self) -> bool {
-        match *self {}
-    }
-
-    pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
-        match self {}
-    }
-}
+stereo_constraint! { StereoBondConstraint, StereoBondConstraintKind }
 
 /// Per-stereo-bond constraint container.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -439,7 +471,8 @@ impl StereoBondConstraints {
     }
 
     pub fn add(&mut self, c: StereoBondConstraint) -> Option<StereoBondConstraint> {
-        match c {}
+        self.0.push(c);
+        None
     }
 
     /// Add multiple constraints at once, using the semantics of `add`.
@@ -462,7 +495,7 @@ impl StereoBondConstraints {
         mem::take(&mut self.0).into_iter()
     }
 
-    /// No-op: the inner enum is uninhabited, so there are no values to simplify.
+    /// No-op: stereo constraints hold no `ValueAst`; relations are already canonical.
     pub fn simplify_each(&mut self) {}
 
     pub fn remap(self, _remap: &IdRemapping) -> Self {
