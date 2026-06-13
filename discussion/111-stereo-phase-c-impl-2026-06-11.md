@@ -483,6 +483,26 @@ impl StereoAtomView<'_> {                    // StereoBondView parallel
 
 ### C3g · `ast/constraint/stereo.rs` (extend — inhabit the empty enums)
 
+**Staged plan (2026-06-13). Decisions locked:** (1) `relation_ast!` generates a **4-variant** subset lattice
+`{ Undetermined /*full domain*/, Lit(T), LitSet(Vec<T>), NotSet(Vec<T>) }` (no special `Not`); meet=∩, join=∪,
+matches=∈; domain baked so full-set ⇒ `Undetermined`. (2) Collections have the **same shape as
+`AtomConstraints`** — flat storage, pos/neg encoded *in the constraint* (`LigandSymmetryAst.mem`), **no `(B,N)`
+storage** (that's a matching-side concern, not storage). (3) **Macro-generate** the atom/bond parallel
+constraint enum + collection now (split later if they diverge).
+
+- **C3g.1 — leaf value types** (`PermutationAst`, `OrientedPermutationAst`, `MemOp`, `LigandPairAst`): concrete
+  `Eq`/`Hash` + inherent `matches`; `LigandPairAst::new` normalizes (private fields + `first()`/`second()`).
+  PermutationAst EDN host deferred to C3h (constraints round-trip via the inline stereo-string, not per-type EDN). **Done**
+- **C3g.2 — `relation_ast!` macro** + `TopicityRelationAst`, `StereogenicityRelationAst` (Lattice + AsLit), the
+  4-variant subset lattice above.
+- **C3g.3 — constraint variant types**: `LigandSymmetryAst`, `FluxionalityAst` (concrete + `matches`),
+  `TopicityAst` (keyed Lattice, JointDomainAst-style), `StereogenicityAst` (Lattice + AsLit, delegate).
+- **C3g.4 — inhabit the unions**: `StereoAtomConstraint`/`StereoBondConstraint` (4 variants) +
+  `…Kind` + `kind()`/`is_unique()`, replacing today's uninhabited `enum {}` (macro-generated atom/bond).
+- **C3g.5 — collections** `StereoAtomConstraints`/`StereoBondConstraints`: full surface mirroring
+  `AtomConstraints` + `Lattice` (per-kind meet/join: `#p`/`#f` union+dedup, `#o` per-pair value-meet, `#g`
+  value-meet).
+
 The constraint AST. Trait coverage follows the codebase convention: **value-bearing AST types impl
 `Lattice` (`is_undetermined`/`is_ground`/`meet`/`join`/`matches`) + `AsLit`; keyed values impl `Lattice`
 (à la `JointDomainAst`); collections impl `Lattice`; the constraint enum impls neither** (the collection
