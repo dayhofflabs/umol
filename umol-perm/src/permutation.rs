@@ -201,7 +201,7 @@ impl Permutation {
 }
 
 impl fmt::Display for Permutation {
-    /// GAP product-of-cycles, 0-indexed and comma-separated; identity → `()`.
+    /// Product of disjoint cycles, 0-indexed and comma-separated; identity → `()`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let cycles = self.cycles();
         if cycles.is_empty() {

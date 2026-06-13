@@ -59,7 +59,7 @@ impl StereoKind {
     /// generator to borrow — theirs is the identity):
     /// - cis/trans: swap the two configurations
     /// - square-planar: swap the diagonal ligand pair
-    fn involution(self) -> Permutation {
+    pub(crate) fn involution(self) -> Permutation {
         let coset_space = space(self.class_key());
         if coset_space.is_chiral() {
             coset_space.improper()

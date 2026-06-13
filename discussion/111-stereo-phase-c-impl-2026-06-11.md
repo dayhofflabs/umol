@@ -645,9 +645,45 @@ Substeps:
   (`:orientation` defaults `:proper`, `:member` defaults `:in` — omitted when default.) Verified by
   `test_constraint_dsl_stereo_atom_roundtrip` (5 cases: render-equals-expected-EDN **and** parse-back-equals-AST,
   across all four constraint kinds + the defaults). Full `umol-ast` suite green (3216 tests); workspace builds.
-- **C3h.3 — inline stereo-string predicates** (`dsl/stereo.rs`): `StereoPredicate`, extend
-  `parse_stereo_atom`/`fmt_stereo_atom` past `class coset` with `#p`/`#f`/`#o`/`#g` (GAP cycles + glyphs +
-  `[!]`/`[']` prefixes + `~` class-involution sugar). Bond parallel.
+- **C3h.3 — inline stereo-string predicates** (`dsl/stereo.rs`). **Done.** Extends
+  `parse_stereo_atom`/`fmt_stereo_atom` (and bond) so the `:type` payload is `class coset predicate*`. Note
+  `~`/`'`/`^` are already coset-expression operators (swap/mirror/apply-1-indexed-image); the predicates get
+  their own payload grammar that coexists, and the coset stays unchanged (predicates use 0-indexed
+  disjoint-cycle notation — that is the doc's "`^` migrates to cycle notation").
+
+  Grammar (degree = `kind.degree()` from the class):
+  ```
+  #p  ligand-symmetry   [!][']<cycles> | [!]~     ! → member NotIn (else In);  ' → Improper (else Proper)
+  #f  fluxionality        <cycles> | ~            (no !/' — FluxionalityAst is a bare proper perm)
+  #o  topicity           (* | [!]<glyph>)(i,j)    * → Undetermined; ! → NotSet([v]); else Lit(v); (i,j) = pair
+  #g  stereogenicity     (* | [!]<glyph>)         * → Undetermined; ! → NotSet([v]); else Lit(v)
+  <cycles>  product of disjoint cycles, 0-indexed, identity ()  e.g. (0,1,2)(3,4)  [Permutation::Display/from_cycles]
+  <glyph>   =  '  /     #o: = homotopic ' enantiotopic / diastereotopic
+                        #g: = symmetric ' prochiral    / stereogenic
+  ```
+  `(* | [!]<glyph>)` is exactly complete over the 3-element relation domain: `*` = `Undetermined`, glyph =
+  `Lit`, `!`glyph = `NotSet([v])` (the 2-element complement) — all 7 non-empty subsets. Render is the inverse
+  via `to_set().len()` (3 → `*`, 1 → glyph, 2 → `!`+complement-glyph). `*` (a stored `Undetermined` relation)
+  is distinct from *omitting* the predicate (no constraint at all); the collection stores vacuous entries (per
+  C3g.5), so both round-trip.
+
+  **`~` sugar = `kind.involution()`, eager, bidirectional.** It is the key binary-kind assertion: its
+  Π-membership *is* the stereogenic-vs-symmetric bit. `#p~`/`#p!~` → `LigandSymmetryAst { perm: involution,
+  orientation: Improper if chiral else Proper, mem }` (the orientation is fixed by the kind, so `~` subsumes
+  `'`); `#f~` → `FluxionalityAst { perm: involution }` (no `!`; for chiral kinds the involution is improper →
+  degenerate, C4 flags). Render emits `~` when a `#p`/`#f` perm equals the involution, else explicit cycles.
+
+  Worked cases — **Th** (chiral, 4 ligands, 2 enantiomeric cosets): `#p~`/`!~` = prochiral vs stereocenter
+  (higher symmetry → explicit proper cycles); `#f` rare (`~` degenerate); `#o`/`#g` all three glyphs. **Ct**
+  (achiral, 2 diastereomeric configs): `#p~`/`!~` = symmetric vs stereogenic; `#f~` = fluxional E/Z
+  interconversion (involution is proper here); `#o`/`#g` binary (`=`/`/`; `'` is chiral-only → C4).
+
+  `'` on achiral kinds (and any glyph/kind/degree consistency) is accepted at parse and rejected by the C4
+  validator, consistent with C3h.2. Implemented via a `stereo_predicate_parser!`/`stereo_constraint_fmt!`
+  macro pair (atom+bond) over shared helpers (`cycle`/`perm_cycles`, `ligand_pair`, the glyph/relation
+  codecs); `Permutation::involution` is now `pub(crate)`. Verified by `test_stereo_atom_inline_roundtrip`
+  (10 cases incl. `~`/`!~`/`*`/`!glyph`/multiple), `test_stereo_atom_predicate` (+`_involution`) for parse
+  semantics, and `test_stereo_bond_inline_roundtrip`.
 - **C3h.4 — roundtrip tests** for both surfaces (structured EDN and inline string).
 
 The per-element constraints serialize **inline in the stereo-string**, exactly as `dsl/atom.rs` does for the
@@ -711,6 +747,8 @@ Sections to edit:
   symmetry surface, doc 110).
 
 (Spec edits are part of the implementation — recorded here, not made now.)
+
+### C3j · add to property testing and fuzz corpora
 
 ---
 

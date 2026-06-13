@@ -11,8 +11,11 @@ use umol_edn::{
 };
 use umol_perm::{Orientation, Permutation};
 use winnow::ascii::{digit1, multispace0};
-use winnow::combinator::{alt, delimited, opt, preceded, separated, terminated};
+use winnow::combinator::{
+    alt, delimited, opt, preceded, repeat, separated, separated_pair, terminated,
+};
 use winnow::error::ErrMode;
+use winnow::token::one_of;
 use winnow::Parser;
 
 use super::atom::single_key_map;
@@ -154,7 +157,11 @@ pub fn parse_stereo_atom(input: &str) -> Result<StereoAtomDsl, ParseError> {
 pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
     let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
     let coset = terminated(stereo_coset, multispace0).parse_next(i)?;
-    Ok(StereoAtomDsl(StereoAtomAst::new(kind, coset)))
+    let constraints: Vec<StereoAtomConstraint> =
+        repeat(0.., move |i: &mut &str| stereo_atom_predicate(i, kind)).parse_next(i)?;
+    Ok(StereoAtomDsl(
+        StereoAtomAst::new(kind, coset).with_constraints(constraints),
+    ))
 }
 
 /// Surface DSL wrapper for `StereoBondAst`
@@ -279,7 +286,11 @@ pub fn parse_stereo_bond(input: &str) -> Result<StereoBondDsl, ParseError> {
 pub(crate) fn stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
     let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
     let coset = terminated(stereo_coset, multispace0).parse_next(i)?;
-    Ok(StereoBondDsl(StereoBondAst::new(kind, coset)))
+    let constraints: Vec<StereoBondConstraint> =
+        repeat(0.., move |i: &mut &str| stereo_bond_predicate(i, kind)).parse_next(i)?;
+    Ok(StereoBondDsl(
+        StereoBondAst::new(kind, coset).with_constraints(constraints),
+    ))
 }
 
 /// `Th` / `Ct` / `Sp` / `Tb` / `Oh` symbol → `StereoKind`.
@@ -410,16 +421,285 @@ fn perm_image(i: &mut &str) -> PResult<Permutation> {
     Ok(Permutation::from_image(degree, &img))
 }
 
+fn cycle_point(i: &mut &str) -> PResult<usize> {
+    let s: &str = digit1.parse_next(i)?;
+    s.parse::<usize>()
+        .map_err(|_| ErrMode::Backtrack(ParseError::Syntax))
+}
+
+/// One cycle `(p0,p1,…)` mapping `p0→p1→…→p0`; the empty `()` is the identity.
+fn cycle(i: &mut &str) -> PResult<Vec<usize>> {
+    delimited('(', separated(0.., cycle_point, ','), ')').parse_next(i)
+}
+
+/// A permutation in disjoint-cycle notation → `Permutation` of `degree`
+/// (0-indexed); validated as in-range and disjoint, since `from_cycles` panics
+/// on a non-bijection.
+fn perm_cycles(i: &mut &str, degree: usize) -> PResult<Permutation> {
+    let cycles: Vec<Vec<usize>> = repeat(1.., cycle).parse_next(i)?;
+    let mut seen = vec![false; degree];
+    for cycle in &cycles {
+        for &p in cycle {
+            if p >= degree || seen[p] {
+                return Err(ErrMode::Cut(ParseError::Syntax));
+            }
+            seen[p] = true;
+        }
+    }
+    Ok(Permutation::from_cycles(degree, &cycles))
+}
+
+/// `~` (the kind involution, eager) or an explicit permutation in cycle notation.
+fn stereo_perm(i: &mut &str, kind: StereoKind) -> PResult<Permutation> {
+    if opt('~').parse_next(i)?.is_some() {
+        Ok(kind.involution())
+    } else {
+        perm_cycles(i, kind.degree())
+    }
+}
+
+fn ligand_pair(i: &mut &str) -> PResult<LigandPairAst> {
+    let (a, b) =
+        delimited('(', separated_pair(cycle_point, ',', cycle_point), ')').parse_next(i)?;
+    Ok(LigandPairAst::new(
+        StereoLigandId(a as u8),
+        StereoLigandId(b as u8),
+    ))
+}
+
+fn topicity_glyph(i: &mut &str) -> PResult<Topicity> {
+    alt((
+        '='.value(Topicity::Homotopic),
+        '\''.value(Topicity::Enantiotopic),
+        '/'.value(Topicity::Diastereotopic),
+    ))
+    .parse_next(i)
+}
+
+fn stereogenicity_glyph(i: &mut &str) -> PResult<Stereogenicity> {
+    alt((
+        '='.value(Stereogenicity::Symmetric),
+        '\''.value(Stereogenicity::Prochiral),
+        '/'.value(Stereogenicity::Stereogenic),
+    ))
+    .parse_next(i)
+}
+
+fn topicity_relation_inline(i: &mut &str) -> PResult<TopicityRelationAst> {
+    if opt('*').parse_next(i)?.is_some() {
+        return Ok(TopicityRelationAst::Undetermined);
+    }
+    let neg = opt('!').parse_next(i)?.is_some();
+    let v = topicity_glyph(i)?;
+    Ok(if neg {
+        TopicityRelationAst::NotSet(vec![v])
+    } else {
+        TopicityRelationAst::Lit(v)
+    })
+}
+
+fn stereogenicity_relation_inline(i: &mut &str) -> PResult<StereogenicityRelationAst> {
+    if opt('*').parse_next(i)?.is_some() {
+        return Ok(StereogenicityRelationAst::Undetermined);
+    }
+    let neg = opt('!').parse_next(i)?.is_some();
+    let v = stereogenicity_glyph(i)?;
+    Ok(if neg {
+        StereogenicityRelationAst::NotSet(vec![v])
+    } else {
+        StereogenicityRelationAst::Lit(v)
+    })
+}
+
+/// Parse one `#p`/`#f`/`#o`/`#g` predicate for `kind`. Atom and bond share the
+/// grammar; the macro emits a parser per constraint type.
+macro_rules! stereo_predicate_parser {
+    ($name:ident, $constraint:ident) => {
+        fn $name(i: &mut &str, kind: StereoKind) -> PResult<$constraint> {
+            '#'.parse_next(i)?;
+            let tag = one_of(['p', 'f', 'o', 'g']).parse_next(i)?;
+            match tag {
+                'p' => {
+                    let mem = if opt('!').parse_next(i)?.is_some() {
+                        MemOp::NotIn
+                    } else {
+                        MemOp::In
+                    };
+                    let (perm, orientation) = if opt('~').parse_next(i)?.is_some() {
+                        let orientation = if kind.is_chiral_class() {
+                            Orientation::Improper
+                        } else {
+                            Orientation::Proper
+                        };
+                        (kind.involution(), orientation)
+                    } else {
+                        let orientation = if opt('\'').parse_next(i)?.is_some() {
+                            Orientation::Improper
+                        } else {
+                            Orientation::Proper
+                        };
+                        (perm_cycles(i, kind.degree())?, orientation)
+                    };
+                    Ok($constraint::LigandSymmetry(LigandSymmetryAst {
+                        perm: OrientedPermutationAst {
+                            perm: PermutationAst(perm),
+                            orientation,
+                        },
+                        mem,
+                    }))
+                }
+                'f' => Ok($constraint::Fluxionality(FluxionalityAst {
+                    perm: PermutationAst(stereo_perm(i, kind)?),
+                })),
+                'o' => {
+                    let rel = topicity_relation_inline(i)?;
+                    let pair = ligand_pair(i)?;
+                    Ok($constraint::Topicity(TopicityAst { pair, rel }))
+                }
+                'g' => Ok($constraint::Stereogenicity(StereogenicityAst(
+                    stereogenicity_relation_inline(i)?,
+                ))),
+                _ => unreachable!("one_of restricts the tag"),
+            }
+        }
+    };
+}
+
+stereo_predicate_parser! { stereo_atom_predicate, StereoAtomConstraint }
+stereo_predicate_parser! { stereo_bond_predicate, StereoBondConstraint }
+
+/// `~` (when the perm is the kind involution) or an explicit permutation in
+/// cycle notation (`Permutation`'s `Display`).
+fn fmt_stereo_perm(f: &mut fmt::Formatter<'_>, perm: Permutation, kind: StereoKind) -> fmt::Result {
+    if perm == kind.involution() {
+        f.write_str("~")
+    } else {
+        write!(f, "{perm}")
+    }
+}
+
+fn topicity_char(t: Topicity) -> char {
+    match t {
+        Topicity::Homotopic => '=',
+        Topicity::Enantiotopic => '\'',
+        Topicity::Diastereotopic => '/',
+    }
+}
+
+fn stereogenicity_char(s: Stereogenicity) -> char {
+    match s {
+        Stereogenicity::Symmetric => '=',
+        Stereogenicity::Prochiral => '\'',
+        Stereogenicity::Stereogenic => '/',
+    }
+}
+
+fn fmt_topicity_relation(f: &mut fmt::Formatter<'_>, rel: &TopicityRelationAst) -> fmt::Result {
+    let members = rel.to_set();
+    match members.len() {
+        1 => write!(f, "{}", topicity_char(members.into_iter().next().unwrap())),
+        2 => {
+            let complement = Topicity::VARIANTS
+                .iter()
+                .copied()
+                .find(|v| !members.contains(v))
+                .unwrap();
+            write!(f, "!{}", topicity_char(complement))
+        }
+        _ => f.write_str("*"),
+    }
+}
+
+fn fmt_stereogenicity_relation(
+    f: &mut fmt::Formatter<'_>,
+    rel: &StereogenicityRelationAst,
+) -> fmt::Result {
+    let members = rel.to_set();
+    match members.len() {
+        1 => write!(f, "{}", stereogenicity_char(members.into_iter().next().unwrap())),
+        2 => {
+            let complement = Stereogenicity::VARIANTS
+                .iter()
+                .copied()
+                .find(|v| !members.contains(v))
+                .unwrap();
+            write!(f, "!{}", stereogenicity_char(complement))
+        }
+        _ => f.write_str("*"),
+    }
+}
+
+/// Render one stereo constraint as its inline predicate. `~` is emitted for a
+/// `#p`/`#f` perm equal to the kind involution (matching the involution's
+/// orientation for `#p`); otherwise explicit cycles.
+macro_rules! stereo_constraint_fmt {
+    ($name:ident, $constraint:ident) => {
+        fn $name(
+            f: &mut fmt::Formatter<'_>,
+            c: &$constraint,
+            kind: StereoKind,
+        ) -> fmt::Result {
+            match c {
+                $constraint::LigandSymmetry(ls) => {
+                    f.write_str("#p")?;
+                    if ls.mem == MemOp::NotIn {
+                        f.write_str("!")?;
+                    }
+                    let involution_orientation = if kind.is_chiral_class() {
+                        Orientation::Improper
+                    } else {
+                        Orientation::Proper
+                    };
+                    if ls.perm.perm.0 == kind.involution()
+                        && ls.perm.orientation == involution_orientation
+                    {
+                        f.write_str("~")
+                    } else {
+                        if ls.perm.orientation == Orientation::Improper {
+                            f.write_str("'")?;
+                        }
+                        write!(f, "{}", ls.perm.perm.0)
+                    }
+                }
+                $constraint::Fluxionality(fx) => {
+                    f.write_str("#f")?;
+                    fmt_stereo_perm(f, fx.perm.0, kind)
+                }
+                $constraint::Topicity(t) => {
+                    f.write_str("#o")?;
+                    fmt_topicity_relation(f, &t.rel)?;
+                    write!(f, "({},{})", t.pair.first().0, t.pair.second().0)
+                }
+                $constraint::Stereogenicity(g) => {
+                    f.write_str("#g")?;
+                    fmt_stereogenicity_relation(f, &g.0)
+                }
+            }
+        }
+    };
+}
+
+stereo_constraint_fmt! { fmt_stereo_atom_constraint, StereoAtomConstraint }
+stereo_constraint_fmt! { fmt_stereo_bond_constraint, StereoBondConstraint }
+
 /// Write the stereo atom DSL
 pub(crate) fn fmt_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) -> fmt::Result {
     fmt_stereo_kind(f, atom.kind)?;
-    fmt_stereo_coset(f, &atom.coset)
+    fmt_stereo_coset(f, &atom.coset)?;
+    for c in atom.constraints.iter() {
+        fmt_stereo_atom_constraint(f, c, atom.kind)?;
+    }
+    Ok(())
 }
 
 /// Write the stereo bond DSL
 pub(crate) fn fmt_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) -> fmt::Result {
     fmt_stereo_kind(f, bond.kind)?;
-    fmt_stereo_coset(f, &bond.coset)
+    fmt_stereo_coset(f, &bond.coset)?;
+    for c in bond.constraints.iter() {
+        fmt_stereo_bond_constraint(f, c, bond.kind)?;
+    }
+    Ok(())
 }
 
 /// Write the stereo kind for `kind`.
@@ -1128,6 +1408,57 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::fluxionality("Th2#f(0,1,2)")]
+    #[case::ligand_symmetry_involution("Th2#p~")]
+    #[case::ligand_symmetry_not_in("Th2#p!~")]
+    #[case::ligand_symmetry_explicit("Th2#p(0,1,2)")]
+    #[case::topicity("Th2#o=(0,1)")]
+    #[case::topicity_negated("Th2#o!'(0,1)")]
+    #[case::topicity_open("Th2#o*(0,1)")]
+    #[case::stereogenicity("Th2#g/")]
+    #[case::stereogenicity_open("Th2#g*")]
+    #[case::multiple("Th2#f(0,1,2)#o=(0,1)#g/")]
+    fn test_stereo_atom_inline_roundtrip(#[case] s: &str) {
+        assert_eq!(parse_stereo_atom(s).unwrap().to_string(), s);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fluxionality("Th2#f(0,1,2)",
+        StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: PermutationAst(Permutation::from_cycles(4, &[vec![0, 1, 2]])) }))]
+    #[case::ligand_symmetry("Th2#p(0,1,2)",
+        StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+            perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_cycles(4, &[vec![0, 1, 2]])), orientation: Orientation::Proper },
+            mem: MemOp::In }))]
+    #[case::topicity_negated("Th2#o!'(0,1)",
+        StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::NotSet(vec![Topicity::Enantiotopic]) }))]
+    #[case::topicity_open("Th2#o*(0,1)",
+        StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Undetermined }))]
+    #[case::stereogenicity("Th2#g/",
+        StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic))))]
+    fn test_stereo_atom_predicate(#[case] input: &str, #[case] expected: StereoAtomConstraint) {
+        let dsl = parse_stereo_atom(input).unwrap();
+        assert_eq!(dsl.0.constraints.iter().cloned().collect::<Vec<_>>(), vec![expected]);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_predicate_involution() {
+        let dsl = parse_stereo_atom("Th2#p~").unwrap();
+        let expected = StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(StereoKind::Tetrahedral.involution()),
+                orientation: Orientation::Improper,
+            },
+            mem: MemOp::In,
+        });
+        assert_eq!(
+            dsl.0.constraints.iter().cloned().collect::<Vec<_>>(),
+            vec![expected],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::string("\"Th1\"", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))))]
     #[case::keyword_ccw(":ccw", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))))]
     #[case::keyword_cw(":cw", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(2))))]
@@ -1197,6 +1528,15 @@ mod tests {
     #[case::open(StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined)), "Ct*")]
     fn test_fmt_stereo_bond(#[case] form: StereoBondDsl, #[case] expected: &str) {
         assert_eq!(form.to_string(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fluxionality_involution("Ct1#f~")]
+    #[case::topicity("Ct1#o=(0,1)")]
+    #[case::stereogenicity("Ct1#g/")]
+    fn test_stereo_bond_inline_roundtrip(#[case] s: &str) {
+        assert_eq!(parse_stereo_bond(s).unwrap().to_string(), s);
     }
 
     #[rustfmt::skip]
