@@ -36,12 +36,13 @@ pub use constraint::{
     aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKind,
     AromaticSystemConstraints, AromaticValenceAst, AtomConstraint, AtomConstraintKind,
     AtomConstraints, BondConstraint, BondConstraintKind, BondConstraints, Constraint, Constraints,
-    DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, LigandPairAst,
-    MoleculeConstraint, MulticenterBondConstraint, MulticenterBondConstraintKind,
-    MulticenterBondConstraints, MulticenterValenceAst, NoncovalentBondConstraint,
-    NoncovalentBondConstraints, OrientedPermutationAst, PermutationAst, RelationalConstraint,
-    StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
-    StereogenicityRelationAst, SubPatternAnchor, TopicityRelationAst,
+    DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, FluxionalityAst,
+    LigandPairAst, LigandSymmetryAst, MoleculeConstraint, MulticenterBondConstraint,
+    MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterValenceAst,
+    NoncovalentBondConstraint, NoncovalentBondConstraints, OrientedPermutationAst, PermutationAst,
+    RelationalConstraint, StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint,
+    StereoBondConstraints, StereogenicityAst, StereogenicityRelationAst, SubPatternAnchor,
+    TopicityAst, TopicityRelationAst,
 };
 pub use dative::DativeBondAst;
 pub use edit::{

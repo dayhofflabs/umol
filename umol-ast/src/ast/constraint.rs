@@ -42,7 +42,7 @@ pub use multicenter::{
 pub use noncovalent::{NoncovalentBondConstraint, NoncovalentBondConstraints};
 pub use relational::RelationalConstraint;
 pub use stereo::{
-    LigandPairAst, OrientedPermutationAst, PermutationAst, StereoAtomConstraint,
-    StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints, StereogenicityRelationAst,
-    TopicityRelationAst,
+    FluxionalityAst, LigandPairAst, LigandSymmetryAst, OrientedPermutationAst, PermutationAst,
+    StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
+    StereogenicityAst, StereogenicityRelationAst, TopicityAst, TopicityRelationAst,
 };

@@ -47,8 +47,7 @@ impl OrientedPermutationAst {
 
 /// Membership operator for a `±` ligand-symmetry literal: the permutation is
 /// asserted present in (`In`) or absent from (`NotIn`) the ligand symmetry group.
-/// Module-local (distinct from `value::MemOp`); consumed by `LigandSymmetryAst` (C3g.3).
-#[allow(dead_code)]
+/// Module-local (distinct from `value::MemOp`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MemOp {
     In,
@@ -196,6 +195,106 @@ macro_rules! relation_ast {
 
 relation_ast! { TopicityRelationAst, Topicity }
 relation_ast! { StereogenicityRelationAst, Stereogenicity }
+
+/// `#p` — a signed ligand-symmetry literal: an oriented permutation asserted
+/// present in (or absent from) the ligand symmetry group Π. Concrete (not a
+/// lattice); matchable. Non-unique — a site may carry several.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct LigandSymmetryAst {
+    pub perm: OrientedPermutationAst,
+    pub mem: MemOp,
+}
+
+impl LigandSymmetryAst {
+    pub fn matches(&self, target: &Self) -> bool {
+        self.perm.matches(&target.perm) && self.mem == target.mem
+    }
+}
+
+/// `#f` — a fluxionality move: a proper ligand-position permutation realized by
+/// dynamics. Concrete (not a lattice); matchable. Non-unique.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FluxionalityAst {
+    pub perm: PermutationAst,
+}
+
+impl FluxionalityAst {
+    pub fn matches(&self, target: &Self) -> bool {
+        self.perm.matches(&target.perm)
+    }
+}
+
+/// `#o` — a per-pair topicity constraint: the relation holding between one ligand
+/// pair. Keyed by `pair`; the lattice operates on the relation, per pair.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TopicityAst {
+    pub pair: LigandPairAst,
+    pub rel: TopicityRelationAst,
+}
+
+impl Lattice for TopicityAst {
+    fn is_undetermined(&self) -> bool {
+        self.rel.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.rel.is_ground()
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        debug_assert_eq!(self.pair, other.pair, "topicity meet is per-pair");
+        self.rel.meet(&other.rel).map(|rel| Self {
+            pair: self.pair,
+            rel,
+        })
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        debug_assert_eq!(self.pair, other.pair, "topicity join is per-pair");
+        Self {
+            pair: self.pair,
+            rel: self.rel.join(&other.rel),
+        }
+    }
+
+    fn matches(&self, target: &Self) -> bool {
+        self.pair == target.pair && self.rel.matches(&target.rel)
+    }
+}
+
+/// `#g` — the stereogenicity classification constraint (unique per site).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StereogenicityAst(pub StereogenicityRelationAst);
+
+impl Lattice for StereogenicityAst {
+    fn is_undetermined(&self) -> bool {
+        self.0.is_undetermined()
+    }
+
+    fn is_ground(&self) -> bool {
+        self.0.is_ground()
+    }
+
+    fn meet(&self, other: &Self) -> Option<Self> {
+        self.0.meet(&other.0).map(Self)
+    }
+
+    fn join(&self, other: &Self) -> Self {
+        Self(self.0.join(&other.0))
+    }
+
+    fn matches(&self, target: &Self) -> bool {
+        self.0.matches(&target.0)
+    }
+}
+
+impl AsLit for StereogenicityAst {
+    type Lit = Stereogenicity;
+
+    fn as_lit(&self) -> Option<Stereogenicity> {
+        self.0.as_lit()
+    }
+}
 
 /// Atom-centered stereo constraint.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -512,6 +611,74 @@ mod tests {
         assert!(!TopicityRelationAst::Undetermined.is_ground());
         assert!(TopicityRelationAst::Undetermined.is_undetermined());
         assert!(!h.is_undetermined());
+    }
+
+    #[rstest]
+    fn test_ligand_symmetry_ast_matches() {
+        let perm = OrientedPermutationAst {
+            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+            orientation: Orientation::Proper,
+        };
+        let present = LigandSymmetryAst { perm, mem: MemOp::In };
+        let same = LigandSymmetryAst { perm, mem: MemOp::In };
+        let absent = LigandSymmetryAst { perm, mem: MemOp::NotIn };
+        let other = LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::identity(4)),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        };
+        assert!(present.matches(&same));
+        assert!(!present.matches(&absent)); // different membership op
+        assert!(!present.matches(&other)); // different permutation
+    }
+
+    #[rstest]
+    fn test_fluxionality_ast_matches() {
+        let a = FluxionalityAst {
+            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+        };
+        let same = FluxionalityAst {
+            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+        };
+        let other = FluxionalityAst {
+            perm: PermutationAst(Permutation::identity(4)),
+        };
+        assert!(a.matches(&same));
+        assert!(!a.matches(&other));
+    }
+
+    #[rstest]
+    fn test_topicity_ast_lattice() {
+        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let h = TopicityAst { pair, rel: TopicityRelationAst::Lit(Topicity::Homotopic) };
+        let e = TopicityAst { pair, rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) };
+        let open = TopicityAst { pair, rel: TopicityRelationAst::Undetermined };
+        assert_eq!(h.meet(&e), None); // disjoint relations on the same pair
+        assert_eq!(open.meet(&h), Some(h.clone()));
+        assert!(open.matches(&h));
+        assert!(h.matches(&h));
+        assert!(!h.matches(&e));
+        assert!(h.is_ground());
+        assert!(open.is_undetermined());
+        // A constraint on a different pair never matches.
+        let elsewhere = TopicityAst {
+            pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(2)),
+            rel: TopicityRelationAst::Undetermined,
+        };
+        assert!(!elsewhere.matches(&h));
+    }
+
+    #[rstest]
+    fn test_stereogenicity_ast_lattice_and_as_lit() {
+        let g = StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic));
+        let open = StereogenicityAst(StereogenicityRelationAst::Undetermined);
+        assert_eq!(g.as_lit(), Some(Stereogenicity::Stereogenic));
+        assert_eq!(open.as_lit(), None);
+        assert_eq!(open.meet(&g), Some(g.clone()));
+        assert!(open.matches(&g));
+        assert!(g.is_ground());
     }
 
     #[rstest]

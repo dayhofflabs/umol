@@ -499,7 +499,8 @@ constraint enum + collection now (split later if they diverge).
   `LitSet([H,E]) == NotSet([D])`; `from_set` canonicalizes (full⇒`Undetermined`, singleton⇒`Lit`, else smaller
   of subset/complement).
 - **C3g.3 — constraint variant types**: `LigandSymmetryAst`, `FluxionalityAst` (concrete + `matches`),
-  `TopicityAst` (keyed Lattice, JointDomainAst-style), `StereogenicityAst` (Lattice + AsLit, delegate).
+  `TopicityAst` (keyed Lattice — `meet`/`join` debug-assert same pair, operate on the relation),
+  `StereogenicityAst` (Lattice + AsLit, delegates to the inner relation). **Done**
 - **C3g.4 — inhabit the unions**: `StereoAtomConstraint`/`StereoBondConstraint` (4 variants) +
   `…Kind` + `kind()`/`is_unique()`, replacing today's uninhabited `enum {}` (macro-generated atom/bond).
 - **C3g.5 — collections** `StereoAtomConstraints`/`StereoBondConstraints`: full surface mirroring
