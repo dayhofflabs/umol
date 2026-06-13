@@ -731,14 +731,16 @@ impl MoleculeAst {
         }
         for i in 0..stereo_atom_count {
             let id = StereoAtomId::from(i);
+            let kind = self.stereo_atom_mut(id).kind;
             for c in self.stereo_atom_mut(id).constraints.take() {
-                additions.push(Constraint::StereoAtom(id, c));
+                additions.push(Constraint::StereoAtom(id, kind, c));
             }
         }
         for i in 0..stereo_bond_count {
             let id = StereoBondId::from(i);
+            let kind = self.stereo_bond_mut(id).kind;
             for c in self.stereo_bond_mut(id).constraints.take() {
-                additions.push(Constraint::StereoBond(id, c));
+                additions.push(Constraint::StereoBond(id, kind, c));
             }
         }
         for c in additions {
@@ -777,10 +779,12 @@ impl MoleculeAst {
                     self.multicenter_bond_mut(id).constraints.add(inner);
                 }
                 Constraint::NoncovalentBond(_, inner) => match inner {},
-                Constraint::StereoAtom(id, inner) => {
+                // The carried kind is dropped here; kind/degree consistency
+                // against the element is the C4 validator's job.
+                Constraint::StereoAtom(id, _kind, inner) => {
                     self.stereo_atom_mut(id).constraints.add(inner);
                 }
-                Constraint::StereoBond(id, inner) => {
+                Constraint::StereoBond(id, _kind, inner) => {
                     self.stereo_bond_mut(id).constraints.add(inner);
                 }
                 c @ (Constraint::Relational(_)

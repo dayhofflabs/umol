@@ -1,11 +1,15 @@
 //! Stereo config-string DSL.
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnStreamDeserializer, FromEdn, ToEdn};
-use umol_perm::Permutation;
+use strum::VariantArray;
+use umol_edn::{
+    DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnSet, EdnStreamDeserializer, FromEdn, ToEdn,
+};
+use umol_perm::{Orientation, Permutation};
 use winnow::ascii::{digit1, multispace0};
 use winnow::combinator::{alt, delimited, opt, preceded, separated, terminated};
 use winnow::error::ErrMode;
@@ -14,9 +18,15 @@ use winnow::Parser;
 use super::atom::single_key_map;
 use super::error::{PResult, ParseError};
 use super::value::{id, terminator};
-use crate::ast::constraint::{StereoAtomConstraint, StereoBondConstraint};
+use crate::ast::constraint::{
+    FluxionalityAst, LigandPairAst, LigandSymmetryAst, MemOp, OrientedPermutationAst,
+    PermutationAst, StereoAtomConstraint, StereoBondConstraint, StereogenicityAst,
+    StereogenicityRelationAst, TopicityAst, TopicityRelationAst,
+};
+use crate::ast::ids::StereoLigandId;
 use crate::ast::stereo::{
     StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
+    Stereogenicity, Topicity,
 };
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::dsl::config::{StereoAtomDefaults, StereoBondDefaults};
@@ -493,76 +503,427 @@ fn fmt_perm_image(f: &mut fmt::Formatter<'_>, perm: Permutation) -> fmt::Result 
     Ok(())
 }
 
-/// DSL for `StereoAtomConstraint`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StereoAtomConstraintDsl {}
-
-impl<'de> FromEdn<'de> for StereoAtomConstraintDsl {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Err(DeError::TypeMismatch {
-            expected: "no value-only stereo atom constraints exist yet",
-            got: edn.kind(),
-            path: vec!["stereo-atom-constraint".into()],
+/// A permutation as a vector of disjoint cycles (`[[0 1 2] [3 4]]`; identity `[]`).
+/// The degree is not encoded — fixed points drop out — so the reader supplies it
+/// from the stereo kind.
+fn perm_to_vov(perm: Permutation) -> Edn<'static> {
+    let cycles: Vec<Edn<'static>> = perm
+        .cycles()
+        .into_iter()
+        .map(|cycle| {
+            Edn::Vector(
+                cycle
+                    .into_iter()
+                    .map(|p| Edn::Int(p as i64))
+                    .collect::<Vec<_>>()
+                    .into(),
+            )
         })
-    }
+        .collect();
+    Edn::Vector(cycles.into())
 }
 
-impl ToEdn for StereoAtomConstraintDsl {
-    fn to_edn(&self) -> Edn<'static> {
-        match *self {}
-    }
-}
-
-impl FromAst<StereoAtomConstraint> for StereoAtomConstraintDsl {
-    type Ctx = ();
-
-    fn from_ast(ast: &StereoAtomConstraint, _ctx: &Self::Ctx) -> Self {
-        match *ast {}
-    }
-}
-
-impl IntoAst<StereoAtomConstraint> for StereoAtomConstraintDsl {
-    type Ctx = ();
-
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereoAtomConstraint {
-        match self {}
-    }
-}
-
-/// DSL for `StereoBondConstraint`
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum StereoBondConstraintDsl {}
-
-impl<'de> FromEdn<'de> for StereoBondConstraintDsl {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Err(DeError::TypeMismatch {
-            expected: "no value-only stereo bond constraints exist yet",
+fn perm_from_vov(edn: &Edn, degree: usize) -> Result<Permutation, DeError> {
+    let Edn::Vector(cycles_edn) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "vector of cycles",
             got: edn.kind(),
-            path: vec!["stereo-bond-constraint".into()],
-        })
+            path: Vec::new(),
+        });
+    };
+    let mut seen = vec![false; degree];
+    let mut cycles: Vec<Vec<usize>> = Vec::with_capacity(cycles_edn.len());
+    for cycle_edn in cycles_edn.iter() {
+        let Edn::Vector(points) = cycle_edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "cycle (vector of ints)",
+                got: cycle_edn.kind(),
+                path: Vec::new(),
+            });
+        };
+        let mut cycle = Vec::with_capacity(points.len());
+        for p in points.iter() {
+            let Edn::Int(n) = p else {
+                return Err(DeError::TypeMismatch {
+                    expected: "int (cycle point)",
+                    got: p.kind(),
+                    path: Vec::new(),
+                });
+            };
+            let point = usize::try_from(*n)
+                .ok()
+                .filter(|&x| x < degree && !seen[x])
+                .ok_or_else(|| DeError::OutOfRange {
+                    value: n.to_string(),
+                    target: "ligand position",
+                    path: Vec::new(),
+                })?;
+            seen[point] = true;
+            cycle.push(point);
+        }
+        cycles.push(cycle);
+    }
+    Ok(Permutation::from_cycles(degree, &cycles))
+}
+
+/// Generates the structured-EDN serialization/deserialization for a relation type:
+/// `:undetermined` (the full domain), a single keyword (singleton), or a keyword set `#{…}`.
+/// Keyword names map 1:1 to the domain variants per the table; the AST itself carries none.
+macro_rules! relation_serde {
+    ($to:ident, $from:ident, $relation:ident, $domain:ty, $($variant:path => $kw:literal),+ $(,)?) => {
+        fn $to(rel: &$relation) -> Edn<'static> {
+            let members = rel.to_set();
+            if members.len() == <$domain as VariantArray>::VARIANTS.len() {
+                Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
+            } else if members.len() == 1 {
+                let kw = match members.into_iter().next().unwrap() {
+                    $($variant => $kw,)+
+                };
+                Edn::Keyword(EdnKeyword::owned(kw.to_string()))
+            } else {
+                let set: EdnSet<'static> = members
+                    .into_iter()
+                    .map(|m| {
+                        let kw = match m {
+                            $($variant => $kw,)+
+                        };
+                        Edn::Keyword(EdnKeyword::owned(kw.to_string()))
+                    })
+                    .collect();
+                Edn::Set(set)
+            }
+        }
+
+        fn $from(edn: &Edn) -> Result<$relation, DeError> {
+            fn keyword_member(name: &str) -> Option<$domain> {
+                match name {
+                    $($kw => Some($variant),)+
+                    _ => None,
+                }
+            }
+            match edn {
+                Edn::Keyword(k) if k.name() == "undetermined" => Ok($relation::Undetermined),
+                Edn::Keyword(k) => {
+                    let m = keyword_member(k.name()).ok_or_else(|| DeError::TypeMismatch {
+                        expected: concat!(stringify!($relation), " keyword"),
+                        got: edn.kind(),
+                        path: Vec::new(),
+                    })?;
+                    Ok($relation::from_set(BTreeSet::from([m])).unwrap())
+                }
+                Edn::Set(s) => {
+                    let mut members = BTreeSet::new();
+                    for e in s.iter() {
+                        let Edn::Keyword(k) = e else {
+                            return Err(DeError::TypeMismatch {
+                                expected: "relation keyword",
+                                got: e.kind(),
+                                path: Vec::new(),
+                            });
+                        };
+                        let m = keyword_member(k.name()).ok_or_else(|| DeError::TypeMismatch {
+                            expected: "relation keyword",
+                            got: e.kind(),
+                            path: Vec::new(),
+                        })?;
+                        members.insert(m);
+                    }
+                    $relation::from_set(members).ok_or_else(|| DeError::TypeMismatch {
+                        expected: "non-empty relation set",
+                        got: edn.kind(),
+                        path: Vec::new(),
+                    })
+                }
+                other => Err(DeError::TypeMismatch {
+                    expected: "relation (keyword, set, or :undetermined)",
+                    got: other.kind(),
+                    path: Vec::new(),
+                }),
+            }
+        }
+    };
+}
+
+relation_serde! {
+    topicity_relation_to_edn, topicity_relation_from_edn, TopicityRelationAst, Topicity,
+    Topicity::Homotopic => "homotopic",
+    Topicity::Enantiotopic => "enantiotopic",
+    Topicity::Diastereotopic => "diastereotopic",
+}
+
+relation_serde! {
+    stereogenicity_relation_to_edn, stereogenicity_relation_from_edn,
+    StereogenicityRelationAst, Stereogenicity,
+    Stereogenicity::Symmetric => "symmetric",
+    Stereogenicity::Prochiral => "prochiral",
+    Stereogenicity::Stereogenic => "stereogenic",
+}
+
+/// `StereoKind` ↔ kebab keyword (`:tetrahedral`, `:cis-trans`, …).
+pub(crate) fn stereo_kind_to_edn(kind: StereoKind) -> Edn<'static> {
+    let name = match kind {
+        StereoKind::Tetrahedral => "tetrahedral",
+        StereoKind::CisTrans => "cis-trans",
+        StereoKind::Axial => "axial",
+        StereoKind::SquarePlanar => "square-planar",
+        StereoKind::TrigonalBipyramidal => "trigonal-bipyramidal",
+        StereoKind::Octahedral => "octahedral",
+    };
+    Edn::keyword(name)
+}
+
+pub(crate) fn stereo_kind_from_edn(edn: &Edn) -> Result<StereoKind, DeError> {
+    let Edn::Keyword(k) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-kind keyword",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    match k.name() {
+        "tetrahedral" => Ok(StereoKind::Tetrahedral),
+        "cis-trans" => Ok(StereoKind::CisTrans),
+        "axial" => Ok(StereoKind::Axial),
+        "square-planar" => Ok(StereoKind::SquarePlanar),
+        "trigonal-bipyramidal" => Ok(StereoKind::TrigonalBipyramidal),
+        "octahedral" => Ok(StereoKind::Octahedral),
+        other => Err(DeError::Custom(format!("unknown stereo kind :{other}"))),
     }
 }
 
-impl ToEdn for StereoBondConstraintDsl {
-    fn to_edn(&self) -> Edn<'static> {
-        match *self {}
-    }
+fn ligand_position(edn: &Edn) -> Result<StereoLigandId, DeError> {
+    let Edn::Int(n) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "int (ligand position)",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    let v = u8::try_from(*n).map_err(|_| DeError::OutOfRange {
+        value: n.to_string(),
+        target: "ligand position",
+        path: Vec::new(),
+    })?;
+    Ok(StereoLigandId(v))
 }
 
-impl FromAst<StereoBondConstraint> for StereoBondConstraintDsl {
-    type Ctx = ();
-
-    fn from_ast(ast: &StereoBondConstraint, _ctx: &Self::Ctx) -> Self {
-        match *ast {}
+fn ligand_symmetry_to_edn(ls: &LigandSymmetryAst) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(3);
+    m.insert(Edn::keyword("perm"), perm_to_vov(ls.perm.perm.0));
+    if ls.perm.orientation == Orientation::Improper {
+        m.insert(Edn::keyword("orientation"), Edn::keyword("improper"));
     }
+    if ls.mem == MemOp::NotIn {
+        m.insert(Edn::keyword("member"), Edn::keyword("not-in"));
+    }
+    Edn::Map(m)
 }
 
-impl IntoAst<StereoBondConstraint> for StereoBondConstraintDsl {
-    type Ctx = ();
+fn ligand_symmetry_from_edn(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetryAst, DeError> {
+    let Edn::Map(m) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "ligand-symmetry map",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    let perm_edn = m.get_keyword("perm").ok_or_else(|| DeError::MissingField {
+        key: "perm".into(),
+        path: vec!["ligand-symmetry".into()],
+    })?;
+    let perm = PermutationAst(perm_from_vov(perm_edn, kind.degree())?);
+    let orientation = match m.get_keyword("orientation") {
+        None => Orientation::Proper,
+        Some(Edn::Keyword(k)) if k.name() == "proper" => Orientation::Proper,
+        Some(Edn::Keyword(k)) if k.name() == "improper" => Orientation::Improper,
+        Some(other) => {
+            return Err(DeError::TypeMismatch {
+                expected: ":proper | :improper",
+                got: other.kind(),
+                path: vec!["ligand-symmetry".into()],
+            })
+        }
+    };
+    let mem = match m.get_keyword("member") {
+        None => MemOp::In,
+        Some(Edn::Keyword(k)) if k.name() == "in" => MemOp::In,
+        Some(Edn::Keyword(k)) if k.name() == "not-in" => MemOp::NotIn,
+        Some(other) => {
+            return Err(DeError::TypeMismatch {
+                expected: ":in | :not-in",
+                got: other.kind(),
+                path: vec!["ligand-symmetry".into()],
+            })
+        }
+    };
+    Ok(LigandSymmetryAst {
+        perm: OrientedPermutationAst { perm, orientation },
+        mem,
+    })
+}
 
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereoBondConstraint {
-        match self {}
+fn topicity_to_edn(t: &TopicityAst) -> Edn<'static> {
+    let mut m = EdnMap::with_capacity(2);
+    m.insert(
+        Edn::keyword("pair"),
+        Edn::Vector(
+            vec![
+                Edn::Int(t.pair.first().0 as i64),
+                Edn::Int(t.pair.second().0 as i64),
+            ]
+            .into(),
+        ),
+    );
+    m.insert(Edn::keyword("relation"), topicity_relation_to_edn(&t.rel));
+    Edn::Map(m)
+}
+
+fn topicity_from_edn(edn: &Edn) -> Result<TopicityAst, DeError> {
+    let Edn::Map(m) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "topicity map",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    let pair_edn = m.get_keyword("pair").ok_or_else(|| DeError::MissingField {
+        key: "pair".into(),
+        path: vec!["topicity".into()],
+    })?;
+    let Edn::Vector(p) = pair_edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "[i j] (ligand pair)",
+            got: pair_edn.kind(),
+            path: vec!["topicity".into()],
+        });
+    };
+    if p.len() != 2 {
+        return Err(DeError::Custom("topicity pair must have 2 positions".into()));
     }
+    let pair = LigandPairAst::new(ligand_position(&p[0])?, ligand_position(&p[1])?);
+    let rel_edn = m.get_keyword("relation").ok_or_else(|| DeError::MissingField {
+        key: "relation".into(),
+        path: vec!["topicity".into()],
+    })?;
+    Ok(TopicityAst {
+        pair,
+        rel: topicity_relation_from_edn(rel_edn)?,
+    })
+}
+
+/// Render/parse a stereo constraint as its keyword tag plus value (the single
+/// constraint entry inside the kind-bearing map). Atom and bond share the four
+/// variants, so the codec is generated for each.
+macro_rules! stereo_constraint_entry_codec {
+    ($to:ident, $from:ident, $constraint:ident) => {
+        fn $to(c: &$constraint) -> (&'static str, Edn<'static>) {
+            match c {
+                $constraint::LigandSymmetry(ls) => ("ligand-symmetry", ligand_symmetry_to_edn(ls)),
+                $constraint::Fluxionality(f) => ("fluxionality", perm_to_vov(f.perm.0)),
+                $constraint::Topicity(t) => ("topicity", topicity_to_edn(t)),
+                $constraint::Stereogenicity(g) => {
+                    ("stereogenicity", stereogenicity_relation_to_edn(&g.0))
+                }
+            }
+        }
+
+        fn $from(key: &str, value: &Edn, kind: StereoKind) -> Result<$constraint, DeError> {
+            match key {
+                "ligand-symmetry" => Ok($constraint::LigandSymmetry(ligand_symmetry_from_edn(
+                    value, kind,
+                )?)),
+                "fluxionality" => Ok($constraint::Fluxionality(FluxionalityAst {
+                    perm: PermutationAst(perm_from_vov(value, kind.degree())?),
+                })),
+                "topicity" => Ok($constraint::Topicity(topicity_from_edn(value)?)),
+                "stereogenicity" => Ok($constraint::Stereogenicity(StereogenicityAst(
+                    stereogenicity_relation_from_edn(value)?,
+                ))),
+                other => Err(DeError::Custom(format!(
+                    "unknown stereo constraint keyword :{other}"
+                ))),
+            }
+        }
+    };
+}
+
+stereo_constraint_entry_codec! {
+    stereo_atom_constraint_entry, stereo_atom_constraint_from_entry, StereoAtomConstraint
+}
+stereo_constraint_entry_codec! {
+    stereo_bond_constraint_entry, stereo_bond_constraint_from_entry, StereoBondConstraint
+}
+
+/// Molecule-scope DSL wrapper for a stereo constraint. It carries the element
+/// kind (the stereo subtype) so the permutation degree is known when parsing —
+/// the EDN is a single map `{:kind <kind> <constraint-key> <value>}`, self-
+/// contained, so the generic 2-field entity-leaf machinery applies.
+macro_rules! stereo_constraint_dsl {
+    ($dsl:ident, $constraint:ident, $entry:ident, $from_entry:ident, $context:literal) => {
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        pub struct $dsl(pub StereoKind, pub $constraint);
+
+        impl ToEdn for $dsl {
+            fn to_edn(&self) -> Edn<'static> {
+                let mut m = EdnMap::with_capacity(2);
+                m.insert(Edn::keyword("kind"), stereo_kind_to_edn(self.0));
+                let (key, value) = $entry(&self.1);
+                m.insert(Edn::keyword(key), value);
+                Edn::Map(m)
+            }
+        }
+
+        impl<'de> FromEdn<'de> for $dsl {
+            fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+                let Edn::Map(m) = edn else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "stereo constraint map",
+                        got: edn.kind(),
+                        path: vec![$context.into()],
+                    });
+                };
+                let kind = stereo_kind_from_edn(m.get_keyword("kind").ok_or_else(|| {
+                    DeError::MissingField {
+                        key: "kind".into(),
+                        path: vec![$context.into()],
+                    }
+                })?)?;
+                let mut entry = None;
+                for (k, v) in m.iter() {
+                    let Edn::Keyword(key) = k else {
+                        return Err(DeError::TypeMismatch {
+                            expected: "keyword key",
+                            got: k.kind(),
+                            path: vec![$context.into()],
+                        });
+                    };
+                    if key.name() == "kind" {
+                        continue;
+                    }
+                    if entry.is_some() {
+                        return Err(DeError::Custom(format!(
+                            "{} map has multiple constraint keys",
+                            $context
+                        )));
+                    }
+                    entry = Some((key.name().to_string(), v));
+                }
+                let (key, value) = entry.ok_or_else(|| {
+                    DeError::Custom(format!("{} map missing the constraint key", $context))
+                })?;
+                Ok($dsl(kind, $from_entry(&key, value, kind)?))
+            }
+        }
+    };
+}
+
+stereo_constraint_dsl! {
+    StereoAtomConstraintDsl, StereoAtomConstraint,
+    stereo_atom_constraint_entry, stereo_atom_constraint_from_entry, "stereo-atom-constraint"
+}
+stereo_constraint_dsl! {
+    StereoBondConstraintDsl, StereoBondConstraint,
+    stereo_bond_constraint_entry, stereo_bond_constraint_from_entry, "stereo-bond-constraint"
 }
 
 pub(crate) fn coset_lit(n: i64) -> Result<u32, DeError> {

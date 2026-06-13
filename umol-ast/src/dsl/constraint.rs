@@ -17,7 +17,10 @@ use super::molecule::{Metadata, MoleculeDsl};
 use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
-use super::stereo::{coset_lit, parse_stereo_coset, StereoConfigurationDsl, StereoCosetDsl};
+use super::stereo::{
+    coset_lit, parse_stereo_coset, StereoAtomConstraintDsl, StereoBondConstraintDsl,
+    StereoConfigurationDsl, StereoCosetDsl,
+};
 use super::value::{parse_value, ValueDsl};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints,
@@ -1050,6 +1053,24 @@ pub(super) fn read_constraint_dsl(
             )?;
             ConstraintDsl::NoncovalentBond(r, inner)
         }
+        "stereo-atom" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_stereo_atom_ref,
+                read_stereo_atom_constraint_dsl,
+                "stereo-atom",
+            )?;
+            ConstraintDsl::StereoAtom(r, inner)
+        }
+        "stereo-bond" => {
+            let (r, inner) = read_entity_leaf(
+                de,
+                read_stereo_bond_ref,
+                read_stereo_bond_constraint_dsl,
+                "stereo-bond",
+            )?;
+            ConstraintDsl::StereoBond(r, inner)
+        }
         "and" => ConstraintDsl::And(read_vec(de, read_constraint_dsl)?),
         "or" => ConstraintDsl::Or(read_vec(de, read_constraint_dsl)?),
         "not" => ConstraintDsl::Not(Box::new(read_constraint_dsl(de)?)),
@@ -1069,6 +1090,26 @@ pub(super) fn read_constraint_dsl(
     };
     consume_single_key_map_close(de, "constraint")?;
     Ok(c)
+}
+
+/// Read a stereo constraint payload (the kind-bearing map) by capturing its value
+/// slice and parsing it via `FromEdn` — the kind-aware build lives in the
+/// `StereoAtomConstraintDsl::from_edn` impl, so the streaming path bridges rather
+/// than reimplementing the map parse incrementally.
+fn read_stereo_atom_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoAtomConstraintDsl, EdnError> {
+    let slice = de.read_value_slice()?;
+    let edn = umol_edn::read_string(slice)?;
+    Ok(StereoAtomConstraintDsl::from_edn(&edn)?)
+}
+
+fn read_stereo_bond_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoBondConstraintDsl, EdnError> {
+    let slice = de.read_value_slice()?;
+    let edn = umol_edn::read_string(slice)?;
+    Ok(StereoBondConstraintDsl::from_edn(&edn)?)
 }
 
 fn read_entity_leaf<R, C>(
@@ -1776,6 +1817,8 @@ pub enum ConstraintDsl {
     AromaticSystem(AromaticSystemRef, AromaticSystemConstraintDsl),
     MulticenterBond(MulticenterBondRef, MulticenterBondConstraintDsl),
     NoncovalentBond(NoncovalentBondRef, NoncovalentBondConstraintDsl),
+    StereoAtom(StereoAtomRef, StereoAtomConstraintDsl),
+    StereoBond(StereoBondRef, StereoBondConstraintDsl),
     Relational(RelationalConstraintDsl),
     Molecule(MoleculeConstraintDsl),
     And(Vec<ConstraintDsl>),
@@ -1835,6 +1878,16 @@ impl<'de> FromEdn<'de> for ConstraintDsl {
                 )?;
                 Self::NoncovalentBond(r, c)
             }
+            "stereo-atom" => {
+                let (r, c) =
+                    parse_entity_leaf::<StereoAtomRef, StereoAtomConstraintDsl>(v, "stereo-atom")?;
+                Self::StereoAtom(r, c)
+            }
+            "stereo-bond" => {
+                let (r, c) =
+                    parse_entity_leaf::<StereoBondRef, StereoBondConstraintDsl>(v, "stereo-bond")?;
+                Self::StereoBond(r, c)
+            }
             "and" => Self::And(parse_constraint_vec(v, "and")?),
             "or" => Self::Or(parse_constraint_vec(v, "or")?),
             "not" => Self::Not(Box::new(ConstraintDsl::from_edn(v)?)),
@@ -1864,6 +1917,8 @@ impl ToEdn for ConstraintDsl {
             Self::AromaticSystem(r, c) => entity_leaf_edn("aromatic-system", r, c),
             Self::MulticenterBond(r, c) => entity_leaf_edn("multicenter-bond", r, c),
             Self::NoncovalentBond(_, c) => match *c {},
+            Self::StereoAtom(r, c) => entity_leaf_edn("stereo-atom", r, c),
+            Self::StereoBond(r, c) => entity_leaf_edn("stereo-bond", r, c),
             Self::Relational(r) => r.to_edn(),
             Self::Molecule(m) => m.to_edn(),
             Self::And(xs) => combinator_edn("and", xs),
@@ -1901,8 +1956,14 @@ impl ConstraintDsl {
                 MulticenterBondConstraintDsl::from_ast(c),
             ),
             Constraint::NoncovalentBond(_, c) => match *c {},
-            Constraint::StereoAtom(_, c) => match *c {},
-            Constraint::StereoBond(_, c) => match *c {},
+            Constraint::StereoAtom(id, kind, c) => Self::StereoAtom(
+                StereoAtomRef::from_ast(*id, meta),
+                StereoAtomConstraintDsl(*kind, c.clone()),
+            ),
+            Constraint::StereoBond(id, kind, c) => Self::StereoBond(
+                StereoBondRef::from_ast(*id, meta),
+                StereoBondConstraintDsl(*kind, c.clone()),
+            ),
             Constraint::Relational(rel) => {
                 Self::Relational(RelationalConstraintDsl::from_ast(rel, meta))
             }
@@ -1945,6 +2006,12 @@ impl ConstraintDsl {
                 c.into_ast(),
             ),
             Self::NoncovalentBond(_, c) => match c {},
+            Self::StereoAtom(r, StereoAtomConstraintDsl(kind, c)) => {
+                Constraint::StereoAtom(r.into_ast(counts.stereo_atom_count, meta)?, kind, c)
+            }
+            Self::StereoBond(r, StereoBondConstraintDsl(kind, c)) => {
+                Constraint::StereoBond(r.into_ast(counts.stereo_bond_count, meta)?, kind, c)
+            }
             Self::Relational(r) => Constraint::Relational(r.into_ast(counts, meta)?),
             Self::Molecule(m) => Constraint::Molecule(m.into_ast(counts, meta)?),
             Self::And(xs) => Constraint::And(
@@ -2077,12 +2144,18 @@ mod tests {
     use rstest::*;
     use umol_edn::{read_string, EdnKeyword};
 
+    use umol_perm::{Orientation, Permutation};
+
     use super::*;
     use crate::ast::constraint::{
-        AromaticValenceAst, AtomConstraint, BondConstraint, DativeBondConstraint,
-        MulticenterValenceAst, RelationalConstraint,
+        AromaticValenceAst, AtomConstraint, BondConstraint, DativeBondConstraint, FluxionalityAst,
+        LigandPairAst, LigandSymmetryAst, MemOp, MulticenterValenceAst, OrientedPermutationAst,
+        PermutationAst, RelationalConstraint, StereoAtomConstraint, StereogenicityAst,
+        StereogenicityRelationAst, TopicityAst, TopicityRelationAst,
     };
+    use crate::ast::ids::StereoLigandId;
     use crate::ast::molecule::MoleculeAst;
+    use crate::ast::stereo::{Stereogenicity, StereoKind, Topicity};
     use crate::ast::value::ValueAst;
 
     #[fixture]
@@ -2220,6 +2293,50 @@ mod tests {
         assert_eq!(edn, expected, "render mismatch");
         let parsed = MoleculeConstraintDsl::from_edn(&edn).unwrap();
         let back = parsed.into_ast(&counts, &meta).unwrap();
+        assert_eq!(back, input, "parse-back mismatch");
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::fluxionality(
+        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
+            StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])) })),
+        "{:stereo-atom [0 {:kind :tetrahedral :fluxionality [[0 1]]}]}")]
+    #[case::ligand_symmetry(
+        Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
+            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+                perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
+                mem: MemOp::NotIn })),
+        "{:stereo-atom [1 {:kind :tetrahedral :ligand-symmetry {:perm [[0 1]] :orientation :improper :member :not-in}}]}")]
+    #[case::ligand_symmetry_defaults(
+        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
+            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+                perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
+                mem: MemOp::In })),
+        "{:stereo-atom [0 {:kind :tetrahedral :ligand-symmetry {:perm [[0 1]]}}]}")]
+    #[case::topicity(
+        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,
+            StereoAtomConstraint::Topicity(TopicityAst {
+                pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)),
+                rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        "{:stereo-atom [0 {:kind :octahedral :topicity {:pair [0 1] :relation :enantiotopic}}]}")]
+    #[case::stereogenicity(
+        Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
+            StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic)))),
+        "{:stereo-atom [0 {:kind :tetrahedral :stereogenicity :stereogenic}]}")]
+    fn test_constraint_dsl_stereo_atom_roundtrip(
+        #[from(full_counts)] counts: EntityCounts,
+        #[case] input: Constraint,
+        #[case] edn_source: &str,
+    ) {
+        let meta = Metadata::default();
+        let dsl = ConstraintDsl::from_ast(&input, &meta).unwrap();
+        let edn = dsl.to_edn();
+        assert_eq!(edn, read_string(edn_source).unwrap(), "render mismatch");
+        let back = ConstraintDsl::from_edn(&edn)
+            .unwrap()
+            .into_ast(&counts, &meta)
+            .unwrap();
         assert_eq!(back, input, "parse-back mismatch");
     }
 

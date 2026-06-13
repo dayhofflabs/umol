@@ -13,6 +13,7 @@ use super::super::ids::{
 use super::super::molecule::MoleculeAst;
 use super::super::remap::IdRemapping;
 use super::super::spin::SpinStateAst;
+use super::super::stereo::StereoKind;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic::AromaticSystemConstraint;
@@ -40,8 +41,8 @@ pub enum Constraint {
     AromaticSystem(AromaticSystemId, AromaticSystemConstraint),
     MulticenterBond(MulticenterBondId, MulticenterBondConstraint),
     NoncovalentBond(NoncovalentBondId, NoncovalentBondConstraint),
-    StereoAtom(StereoAtomId, StereoAtomConstraint),
-    StereoBond(StereoBondId, StereoBondConstraint),
+    StereoAtom(StereoAtomId, StereoKind, StereoAtomConstraint),
+    StereoBond(StereoBondId, StereoKind, StereoBondConstraint),
     Relational(RelationalConstraint),
     Molecule(MoleculeConstraint),
     And(Vec<Constraint>),
@@ -55,8 +56,10 @@ impl Constraint {
     /// leaves delegate to `MoleculeConstraint::is_vacuous`. Combinators
     /// (`And`/`Or`) are vacuous only when empty; `Not(c)` is treated as
     /// non-vacuous (negating a vacuous claim is a meaningful unsat claim).
-    /// `Relational`, `NoncovalentBond`, and the stereo leaves are always
-    /// non-vacuous (no `Undetermined` payload to elide).
+    /// `Relational` and `NoncovalentBond` are always non-vacuous (no
+    /// `Undetermined` payload to elide); the stereo leaves delegate to the
+    /// inner `is_undetermined` (a `#o`/`#g` with an `Undetermined` relation
+    /// constrains nothing).
     pub fn is_vacuous(&self) -> bool {
         match self {
             Self::Atom(_, c) => c.is_undetermined(),
@@ -65,8 +68,8 @@ impl Constraint {
             Self::AromaticSystem(_, c) => c.is_undetermined(),
             Self::MulticenterBond(_, c) => c.is_undetermined(),
             Self::NoncovalentBond(_, _) => false,
-            Self::StereoAtom(_, _) => false,
-            Self::StereoBond(_, _) => false,
+            Self::StereoAtom(_, _, c) => c.is_undetermined(),
+            Self::StereoBond(_, _, c) => c.is_undetermined(),
             Self::Relational(_) => false,
             Self::Molecule(c) => c.is_vacuous(),
             Self::And(xs) | Self::Or(xs) => xs.is_empty(),
@@ -85,8 +88,8 @@ impl Constraint {
             Constraint::AromaticSystem(id, c) => Constraint::AromaticSystem(id, c.simplify()),
             Constraint::MulticenterBond(id, c) => Constraint::MulticenterBond(id, c.simplify()),
             Constraint::NoncovalentBond(_, c) => match c {},
-            Constraint::StereoAtom(id, c) => Constraint::StereoAtom(id, c),
-            Constraint::StereoBond(id, c) => Constraint::StereoBond(id, c),
+            Constraint::StereoAtom(id, kind, c) => Constraint::StereoAtom(id, kind, c),
+            Constraint::StereoBond(id, kind, c) => Constraint::StereoBond(id, kind, c),
             Constraint::Relational(r) => Constraint::Relational(r.simplify()),
             Constraint::Molecule(m) => Constraint::Molecule(m.simplify()),
             Constraint::And(xs) => Constraint::And(xs.into_iter().map(|c| c.simplify()).collect()),
@@ -115,13 +118,13 @@ impl Constraint {
                 let i = remap.noncovalent_bond(id)?;
                 c.remap(remap).map(|c| Constraint::NoncovalentBond(i, c))
             }
-            Constraint::StereoAtom(id, c) => {
+            Constraint::StereoAtom(id, kind, c) => {
                 let i = remap.stereo_atom(id)?;
-                c.remap(remap).map(|c| Constraint::StereoAtom(i, c))
+                c.remap(remap).map(|c| Constraint::StereoAtom(i, kind, c))
             }
-            Constraint::StereoBond(id, c) => {
+            Constraint::StereoBond(id, kind, c) => {
                 let i = remap.stereo_bond(id)?;
-                c.remap(remap).map(|c| Constraint::StereoBond(i, c))
+                c.remap(remap).map(|c| Constraint::StereoBond(i, kind, c))
             }
             Constraint::Relational(r) => r.remap(remap).map(Constraint::Relational),
             Constraint::Molecule(m) => m.remap(remap).map(Constraint::Molecule),
