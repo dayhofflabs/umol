@@ -1,15 +1,11 @@
-//! Stereo-element constraints — atom-centered and bond-centered.
-//!
-//! Both are empty in practice and split per site (atom vs bond), since their
-//! projected structure will diverge as inhabited variants land. Each mirrors
-//! `NoncovalentBondConstraint`: an uninhabited per-element enum plus a `Vec`
-//! container exposing the uniform collection surface and a trivial `Lattice`.
+//! Stereo-element constraints.
 
 use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
-use std::mem;
+use std::mem::{self, replace};
 use std::slice::Iter;
 
+use smallvec::SmallVec;
 use strum::VariantArray;
 use umol_perm::{Orientation, Permutation};
 
@@ -196,9 +192,7 @@ macro_rules! relation_ast {
 relation_ast! { TopicityRelationAst, Topicity }
 relation_ast! { StereogenicityRelationAst, Stereogenicity }
 
-/// `#p` — a signed ligand-symmetry literal: an oriented permutation asserted
-/// present in (or absent from) the ligand symmetry group Π. Concrete (not a
-/// lattice); matchable. Non-unique — a site may carry several.
+/// Ligand permutations with membership assertion. Non-unique.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LigandSymmetryAst {
     pub perm: OrientedPermutationAst,
@@ -211,8 +205,7 @@ impl LigandSymmetryAst {
     }
 }
 
-/// `#f` — a fluxionality move: a proper ligand-position permutation realized by
-/// dynamics. Concrete (not a lattice); matchable. Non-unique.
+/// Fluxionality move: proper ligand permutation realized by dynamics. Non-unique.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FluxionalityAst {
     pub perm: PermutationAst,
@@ -224,8 +217,7 @@ impl FluxionalityAst {
     }
 }
 
-/// `#o` — a per-pair topicity constraint: the relation holding between one ligand
-/// pair. Keyed by `pair`; the lattice operates on the relation, per pair.
+/// Per-pair topicity constraint: relation between pair of ligands.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TopicityAst {
     pub pair: LigandPairAst,
@@ -262,7 +254,7 @@ impl Lattice for TopicityAst {
     }
 }
 
-/// `#g` — the stereogenicity classification constraint (unique per site).
+/// Stereogenicity constraint per site
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct StereogenicityAst(pub StereogenicityRelationAst);
 
@@ -296,12 +288,9 @@ impl AsLit for StereogenicityAst {
     }
 }
 
-/// Generates a per-element stereo constraint as a 4-variant tagged union plus its
-/// kind tag. Atom- and bond-centered share the same variants for now (split if
-/// they diverge). The collection (`StereoAtomConstraints`/…) dispatches; the enum
-/// impls neither `Lattice` nor `AsLit`, like `AtomConstraint`.
+/// Per-element stereo constraint for stereo atoms and bonds.
 macro_rules! stereo_constraint {
-    ($constraint:ident, $kind:ident) => {
+    ($constraint:ident, $kind:ident, $constraints:ident) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
         pub enum $kind {
             LigandSymmetry,
@@ -328,9 +317,7 @@ macro_rules! stereo_constraint {
                 }
             }
 
-            /// Whether at most one constraint of this kind may be stored. Only
-            /// stereogenicity (`#g`) is unique; `#p`/`#f` are non-unique literals
-            /// and `#o` is keyed per ligand pair.
+            /// Whether at most one constraint of this kind may be stored.
             pub fn is_unique(&self) -> bool {
                 matches!(self, Self::Stereogenicity(_))
             }
@@ -348,192 +335,309 @@ macro_rules! stereo_constraint {
                 Some(self)
             }
         }
+
+        /// Stereo constraint container for stereo atoms and bonds.
+        #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+        pub struct $constraints {
+            entries: SmallVec<[$constraint; 2]>,
+        }
+
+        impl $constraints {
+            pub fn new() -> Self {
+                Self::default()
+            }
+
+            pub fn is_empty(&self) -> bool {
+                self.entries.is_empty()
+            }
+
+            pub fn len(&self) -> usize {
+                self.entries.len()
+            }
+
+            pub fn contains(&self, kind: $kind) -> bool {
+                self.find(kind).is_ok()
+            }
+
+            pub fn get(&self, kind: $kind) -> Option<&$constraint> {
+                self.find(kind).ok().map(|i| &self.entries[i])
+            }
+
+            /// Ligand-symmetry literals (non-unique).
+            pub fn ligand_symmetry(&self) -> impl Iterator<Item = &LigandSymmetryAst> {
+                self.entries.iter().filter_map(|c| match c {
+                    $constraint::LigandSymmetry(p) => Some(p),
+                    _ => None,
+                })
+            }
+
+            /// Fluxionality moves (non-unique).
+            pub fn fluxionality(&self) -> impl Iterator<Item = &FluxionalityAst> {
+                self.entries.iter().filter_map(|c| match c {
+                    $constraint::Fluxionality(f) => Some(f),
+                    _ => None,
+                })
+            }
+
+            /// pair-specific topicity constraint.
+            pub fn topicities(&self) -> impl Iterator<Item = &TopicityAst> {
+                self.entries.iter().filter_map(|c| match c {
+                    $constraint::Topicity(t) => Some(t),
+                    _ => None,
+                })
+            }
+
+            /// Topicity relation per ligand pair.
+            pub fn topicity(&self, pair: LigandPairAst) -> TopicityRelationAst {
+                self.topicities()
+                    .find(|t| t.pair == pair)
+                    .map(|t| t.rel.clone())
+                    .unwrap_or_default()
+            }
+
+            /// Stored stereogenicity relation (unique); `Undetermined` if absent.
+            pub fn stereogenicity(&self) -> StereogenicityRelationAst {
+                match self.get($kind::Stereogenicity) {
+                    Some($constraint::Stereogenicity(g)) => g.0.clone(),
+                    _ => StereogenicityRelationAst::Undetermined,
+                }
+            }
+
+            /// Add a constraint to the container. Unique constraint replace,
+            /// non-unique constraint append.
+            pub fn add(&mut self, c: $constraint) -> Option<$constraint> {
+                let kind = c.kind();
+                let start = self
+                    .entries
+                    .partition_point(|e| (e.kind() as u8) < (kind as u8));
+                let end = start
+                    + self.entries[start..]
+                        .iter()
+                        .take_while(|e| e.kind() == kind)
+                        .count();
+                if c.is_unique() {
+                    if start < end {
+                        return Some(replace(&mut self.entries[start], c));
+                    }
+                    self.entries.insert(start, c);
+                    None
+                } else if let $constraint::Topicity(ref t) = c {
+                    let pair = t.pair;
+                    let existing = self.entries[start..end]
+                        .iter()
+                        .position(|e| matches!(e, $constraint::Topicity(x) if x.pair == pair));
+                    match existing {
+                        Some(j) => Some(replace(&mut self.entries[start + j], c)),
+                        None => {
+                            self.entries.insert(end, c);
+                            None
+                        }
+                    }
+                } else {
+                    self.entries.insert(end, c);
+                    None
+                }
+            }
+
+            /// Add multiple constraints at once, using the semantics of `add`.
+            pub fn extend(&mut self, constraints: impl IntoIterator<Item = $constraint>) {
+                for constraint in constraints {
+                    self.add(constraint);
+                }
+            }
+
+            pub fn retain(&mut self, mut f: impl FnMut(&$constraint) -> bool) {
+                self.entries.retain(|c| f(c));
+            }
+
+            pub fn clear(&mut self) {
+                self.entries.clear();
+            }
+
+            /// Move the entries out of the store, leaving it empty.
+            pub fn take(&mut self) -> impl Iterator<Item = $constraint> {
+                mem::take(&mut self.entries).into_iter()
+            }
+
+            /// No-op: stereo constraints hold no `ValueAst`; relations are already canonical.
+            pub fn simplify_each(&mut self) {}
+
+            pub fn remove(&mut self, kind: $kind) -> Option<$constraint> {
+                self.find(kind).ok().map(|i| self.entries.remove(i))
+            }
+
+            /// Remove every entry of `kind`, returning them in store order.
+            pub fn remove_all(&mut self, kind: $kind) -> Vec<$constraint> {
+                let start = self
+                    .entries
+                    .partition_point(|e| (e.kind() as u8) < (kind as u8));
+                let end = start
+                    + self.entries[start..]
+                        .iter()
+                        .take_while(|e| e.kind() == kind)
+                        .count();
+                self.entries.drain(start..end).collect()
+            }
+
+            /// Iterate over every entry of `kind`.
+            pub fn get_all(&self, kind: $kind) -> impl Iterator<Item = &$constraint> {
+                let start = self
+                    .entries
+                    .partition_point(|c| (c.kind() as u8) < (kind as u8));
+                self.entries[start..]
+                    .iter()
+                    .take_while(move |c| c.kind() == kind)
+            }
+
+            pub fn iter(&self) -> Iter<'_, $constraint> {
+                self.entries.iter()
+            }
+
+            pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut $constraint> {
+                self.entries.iter_mut()
+            }
+
+            /// True if any entry exactly equals `constraint`.
+            pub fn contains_entry(&self, constraint: &$constraint) -> bool {
+                self.entries.iter().any(|c| c == constraint)
+            }
+
+            /// No-op: frame-relative ligand positions carry no entity index.
+            pub fn remap(self, _remap: &IdRemapping) -> Self {
+                self
+            }
+
+            fn find(&self, kind: $kind) -> Result<usize, usize> {
+                self.entries
+                    .binary_search_by_key(&(kind as u8), |c| c.kind() as u8)
+            }
+        }
+
+        impl Lattice for $constraints {
+            fn is_undetermined(&self) -> bool {
+                self.entries.iter().all(|c| c.is_undetermined())
+            }
+
+            fn is_ground(&self) -> bool {
+                self.entries.iter().all(|c| match c {
+                    $constraint::LigandSymmetry(_) | $constraint::Fluxionality(_) => true,
+                    $constraint::Topicity(t) => t.is_ground(),
+                    $constraint::Stereogenicity(g) => g.is_ground(),
+                })
+            }
+
+            fn meet(&self, other: &Self) -> Option<Self> {
+                let mut result = Self::new();
+                for p in self.ligand_symmetry().chain(other.ligand_symmetry()) {
+                    let entry = $constraint::LigandSymmetry(*p);
+                    if !result.contains_entry(&entry) {
+                        result.add(entry);
+                    }
+                }
+                for f in self.fluxionality().chain(other.fluxionality()) {
+                    let entry = $constraint::Fluxionality(*f);
+                    if !result.contains_entry(&entry) {
+                        result.add(entry);
+                    }
+                }
+                let pairs: BTreeSet<LigandPairAst> = self
+                    .topicities()
+                    .chain(other.topicities())
+                    .map(|t| t.pair)
+                    .collect();
+                for pair in pairs {
+                    let rel = self.topicity(pair).meet(&other.topicity(pair))?;
+                    if !rel.is_undetermined() {
+                        result.add($constraint::Topicity(TopicityAst { pair, rel }));
+                    }
+                }
+                let g = self.stereogenicity().meet(&other.stereogenicity())?;
+                if !g.is_undetermined() {
+                    result.add($constraint::Stereogenicity(StereogenicityAst(g)));
+                }
+                Some(result)
+            }
+
+            fn join(&self, other: &Self) -> Self {
+                let mut result = Self::new();
+                for p in self.ligand_symmetry() {
+                    if other.ligand_symmetry().any(|o| o == p) {
+                        result.add($constraint::LigandSymmetry(*p));
+                    }
+                }
+                for f in self.fluxionality() {
+                    if other.fluxionality().any(|o| o == f) {
+                        result.add($constraint::Fluxionality(*f));
+                    }
+                }
+                for t in self.topicities() {
+                    if other.topicities().any(|o| o.pair == t.pair) {
+                        let rel = t.rel.join(&other.topicity(t.pair));
+                        if !rel.is_undetermined() {
+                            result.add($constraint::Topicity(TopicityAst {
+                                pair: t.pair,
+                                rel,
+                            }));
+                        }
+                    }
+                }
+                if self.contains($kind::Stereogenicity) && other.contains($kind::Stereogenicity) {
+                    let g = self.stereogenicity().join(&other.stereogenicity());
+                    if !g.is_undetermined() {
+                        result.add($constraint::Stereogenicity(StereogenicityAst(g)));
+                    }
+                }
+                result
+            }
+
+            fn matches(&self, target: &Self) -> bool {
+                self.ligand_symmetry()
+                    .all(|p| target.ligand_symmetry().any(|t| p.matches(t)))
+                    && self
+                        .fluxionality()
+                        .all(|p| target.fluxionality().any(|t| p.matches(t)))
+                    && self
+                        .topicities()
+                        .all(|t| t.rel.matches(&target.topicity(t.pair)))
+                    && self.stereogenicity().matches(&target.stereogenicity())
+            }
+        }
+
+        impl FromIterator<$constraint> for $constraints {
+            fn from_iter<I: IntoIterator<Item = $constraint>>(iter: I) -> Self {
+                let mut out = Self::new();
+                for c in iter {
+                    out.add(c);
+                }
+                out
+            }
+        }
+
+        impl IntoIterator for $constraints {
+            type Item = $constraint;
+            type IntoIter = smallvec::IntoIter<[$constraint; 2]>;
+
+            fn into_iter(self) -> Self::IntoIter {
+                self.entries.into_iter()
+            }
+        }
+
+        impl From<$constraint> for $constraints {
+            fn from(c: $constraint) -> Self {
+                Self::from_iter([c])
+            }
+        }
+
+        impl From<Vec<$constraint>> for $constraints {
+            fn from(cs: Vec<$constraint>) -> Self {
+                Self::from_iter(cs)
+            }
+        }
     };
 }
 
-stereo_constraint! { StereoAtomConstraint, StereoAtomConstraintKind }
-
-/// Per-stereo-atom constraint container.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct StereoAtomConstraints(Vec<StereoAtomConstraint>);
-
-impl StereoAtomConstraints {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn as_slice(&self) -> &[StereoAtomConstraint] {
-        &self.0
-    }
-
-    pub fn iter(&self) -> Iter<'_, StereoAtomConstraint> {
-        self.0.iter()
-    }
-
-    pub fn add(&mut self, c: StereoAtomConstraint) -> Option<StereoAtomConstraint> {
-        self.0.push(c);
-        None
-    }
-
-    /// Add multiple constraints at once, using the semantics of `add`.
-    pub fn extend(&mut self, constraints: impl IntoIterator<Item = StereoAtomConstraint>) {
-        for constraint in constraints {
-            self.add(constraint);
-        }
-    }
-
-    pub fn retain(&mut self, mut f: impl FnMut(&StereoAtomConstraint) -> bool) {
-        self.0.retain(|c| f(c));
-    }
-
-    pub fn clear(&mut self) {
-        self.0.clear();
-    }
-
-    /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = StereoAtomConstraint> {
-        mem::take(&mut self.0).into_iter()
-    }
-
-    /// No-op: stereo constraints hold no `ValueAst`; relations are already canonical.
-    pub fn simplify_each(&mut self) {}
-
-    pub fn remap(self, _remap: &IdRemapping) -> Self {
-        self
-    }
-}
-
-impl Lattice for StereoAtomConstraints {
-    fn is_undetermined(&self) -> bool {
-        true
-    }
-
-    fn is_ground(&self) -> bool {
-        true
-    }
-
-    fn meet(&self, _other: &Self) -> Option<Self> {
-        Some(Self::new())
-    }
-
-    fn join(&self, _other: &Self) -> Self {
-        Self::new()
-    }
-
-    fn matches(&self, _target: &Self) -> bool {
-        true
-    }
-}
-
-impl FromIterator<StereoAtomConstraint> for StereoAtomConstraints {
-    fn from_iter<I: IntoIterator<Item = StereoAtomConstraint>>(iter: I) -> Self {
-        let mut out = Self::new();
-        for c in iter {
-            out.add(c);
-        }
-        out
-    }
-}
-
-stereo_constraint! { StereoBondConstraint, StereoBondConstraintKind }
-
-/// Per-stereo-bond constraint container.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct StereoBondConstraints(Vec<StereoBondConstraint>);
-
-impl StereoBondConstraints {
-    pub fn new() -> Self {
-        Self(Vec::new())
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn as_slice(&self) -> &[StereoBondConstraint] {
-        &self.0
-    }
-
-    pub fn iter(&self) -> Iter<'_, StereoBondConstraint> {
-        self.0.iter()
-    }
-
-    pub fn add(&mut self, c: StereoBondConstraint) -> Option<StereoBondConstraint> {
-        self.0.push(c);
-        None
-    }
-
-    /// Add multiple constraints at once, using the semantics of `add`.
-    pub fn extend(&mut self, constraints: impl IntoIterator<Item = StereoBondConstraint>) {
-        for constraint in constraints {
-            self.add(constraint);
-        }
-    }
-
-    pub fn retain(&mut self, mut f: impl FnMut(&StereoBondConstraint) -> bool) {
-        self.0.retain(|c| f(c));
-    }
-
-    pub fn clear(&mut self) {
-        self.0.clear();
-    }
-
-    /// Move the entries out of the store, leaving it empty.
-    pub fn take(&mut self) -> impl Iterator<Item = StereoBondConstraint> {
-        mem::take(&mut self.0).into_iter()
-    }
-
-    /// No-op: stereo constraints hold no `ValueAst`; relations are already canonical.
-    pub fn simplify_each(&mut self) {}
-
-    pub fn remap(self, _remap: &IdRemapping) -> Self {
-        self
-    }
-}
-
-impl Lattice for StereoBondConstraints {
-    fn is_undetermined(&self) -> bool {
-        true
-    }
-
-    fn is_ground(&self) -> bool {
-        true
-    }
-
-    fn meet(&self, _other: &Self) -> Option<Self> {
-        Some(Self::new())
-    }
-
-    fn join(&self, _other: &Self) -> Self {
-        Self::new()
-    }
-
-    fn matches(&self, _target: &Self) -> bool {
-        true
-    }
-}
-
-impl FromIterator<StereoBondConstraint> for StereoBondConstraints {
-    fn from_iter<I: IntoIterator<Item = StereoBondConstraint>>(iter: I) -> Self {
-        let mut out = Self::new();
-        for c in iter {
-            out.add(c);
-        }
-        out
-    }
-}
+stereo_constraint! { StereoAtomConstraint, StereoAtomConstraintKind, StereoAtomConstraints }
+stereo_constraint! { StereoBondConstraint, StereoBondConstraintKind, StereoBondConstraints }
 
 #[cfg(test)]
 mod tests {
@@ -652,9 +756,18 @@ mod tests {
             perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
             orientation: Orientation::Proper,
         };
-        let present = LigandSymmetryAst { perm, mem: MemOp::In };
-        let same = LigandSymmetryAst { perm, mem: MemOp::In };
-        let absent = LigandSymmetryAst { perm, mem: MemOp::NotIn };
+        let present = LigandSymmetryAst {
+            perm,
+            mem: MemOp::In,
+        };
+        let same = LigandSymmetryAst {
+            perm,
+            mem: MemOp::In,
+        };
+        let absent = LigandSymmetryAst {
+            perm,
+            mem: MemOp::NotIn,
+        };
         let other = LigandSymmetryAst {
             perm: OrientedPermutationAst {
                 perm: PermutationAst(Permutation::identity(4)),
@@ -685,9 +798,18 @@ mod tests {
     #[rstest]
     fn test_topicity_ast_lattice() {
         let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
-        let h = TopicityAst { pair, rel: TopicityRelationAst::Lit(Topicity::Homotopic) };
-        let e = TopicityAst { pair, rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) };
-        let open = TopicityAst { pair, rel: TopicityRelationAst::Undetermined };
+        let h = TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Lit(Topicity::Homotopic),
+        };
+        let e = TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Lit(Topicity::Enantiotopic),
+        };
+        let open = TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Undetermined,
+        };
         assert_eq!(h.meet(&e), None); // disjoint relations on the same pair
         assert_eq!(open.meet(&h), Some(h.clone()));
         assert!(open.matches(&h));
@@ -719,16 +841,304 @@ mod tests {
         let cs = StereoAtomConstraints::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
-        assert_eq!(cs.as_slice(), &[] as &[StereoAtomConstraint]);
+        assert_eq!(cs.iter().count(), 0);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_add() {
+        let mut cs = StereoAtomConstraints::new();
+        let p1 = LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        };
+        let p2 = LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::from_image(4, &[0, 1, 3, 2])),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        };
+        // #p appends (non-unique), no replacement.
+        assert_eq!(cs.add(StereoAtomConstraint::LigandSymmetry(p1)), None);
+        assert_eq!(cs.add(StereoAtomConstraint::LigandSymmetry(p2)), None);
+        assert_eq!(
+            cs.ligand_symmetry().copied().collect::<Vec<_>>(),
+            vec![p1, p2]
+        );
+
+        // #g is unique: the second add replaces, returning the displaced entry.
+        let g0 = StereogenicityAst(StereogenicityRelationAst::Undetermined);
+        let g1 = StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic));
+        assert_eq!(
+            cs.add(StereoAtomConstraint::Stereogenicity(g0.clone())),
+            None
+        );
+        assert_eq!(
+            cs.add(StereoAtomConstraint::Stereogenicity(g1.clone())),
+            Some(StereoAtomConstraint::Stereogenicity(g0)),
+        );
+        assert_eq!(
+            cs.stereogenicity(),
+            StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_add_topicity_keyed() {
+        let mut cs = StereoAtomConstraints::new();
+        let pair01 = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let pair02 = LigandPairAst::new(StereoLigandId(0), StereoLigandId(2));
+        let e = TopicityAst {
+            pair: pair01,
+            rel: TopicityRelationAst::Lit(Topicity::Enantiotopic),
+        };
+        let h = TopicityAst {
+            pair: pair01,
+            rel: TopicityRelationAst::Lit(Topicity::Homotopic),
+        };
+        let d = TopicityAst {
+            pair: pair02,
+            rel: TopicityRelationAst::Lit(Topicity::Diastereotopic),
+        };
+        assert_eq!(cs.add(StereoAtomConstraint::Topicity(e.clone())), None);
+        // Same pair replaces, returning the displaced entry.
+        assert_eq!(
+            cs.add(StereoAtomConstraint::Topicity(h)),
+            Some(StereoAtomConstraint::Topicity(e)),
+        );
+        // A different pair appends.
+        assert_eq!(cs.add(StereoAtomConstraint::Topicity(d)), None);
+        assert_eq!(cs.topicities().count(), 2);
+        assert_eq!(
+            cs.topicity(pair01),
+            TopicityRelationAst::Lit(Topicity::Homotopic),
+        );
+        assert_eq!(
+            cs.topicity(pair02),
+            TopicityRelationAst::Lit(Topicity::Diastereotopic),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_add_kind_sorted() {
+        let mut cs = StereoAtomConstraints::new();
+        // Insert in reverse kind order; the store stays kind-sorted.
+        cs.add(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
+            StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
+        )));
+        cs.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)),
+            rel: TopicityRelationAst::Lit(Topicity::Enantiotopic),
+        }));
+        cs.add(StereoAtomConstraint::Fluxionality(FluxionalityAst {
+            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+        }));
+        cs.add(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        }));
+        let kinds: Vec<_> = cs.iter().map(|c| c.kind()).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                StereoAtomConstraintKind::LigandSymmetry,
+                StereoAtomConstraintKind::Fluxionality,
+                StereoAtomConstraintKind::Topicity,
+                StereoAtomConstraintKind::Stereogenicity,
+            ],
+        );
     }
 
     #[rstest]
     fn test_stereo_atom_constraints_meet() {
-        let cs = StereoAtomConstraints::new();
-        assert_eq!(cs.meet(&cs), Some(StereoAtomConstraints::new()));
-        assert!(cs.matches(&cs));
-        assert!(cs.is_ground());
-        assert!(cs.is_undetermined());
+        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let p1 = LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        };
+        let p2 = LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::from_image(4, &[0, 1, 3, 2])),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        };
+
+        let mut a = StereoAtomConstraints::new();
+        a.add(StereoAtomConstraint::LigandSymmetry(p1));
+        a.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair,
+            rel: TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic]),
+        }));
+
+        let mut b = StereoAtomConstraints::new();
+        b.add(StereoAtomConstraint::LigandSymmetry(p1));
+        b.add(StereoAtomConstraint::LigandSymmetry(p2));
+        b.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair,
+            rel: TopicityRelationAst::NotSet(vec![Topicity::Homotopic]),
+        }));
+        b.add(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
+            StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
+        )));
+
+        let m = a.meet(&b).unwrap();
+        // #p union+dedup.
+        assert_eq!(
+            m.ligand_symmetry().copied().collect::<Vec<_>>(),
+            vec![p1, p2]
+        );
+        // #o per-pair value-meet: {H,E} ∩ {E,D} = {E}.
+        assert_eq!(
+            m.topicity(pair),
+            TopicityRelationAst::Lit(Topicity::Enantiotopic)
+        );
+        // #g carried through from the side that has it.
+        assert_eq!(
+            m.stereogenicity(),
+            StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_meet_error() {
+        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let mut a = StereoAtomConstraints::new();
+        a.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Lit(Topicity::Homotopic),
+        }));
+        let mut b = StereoAtomConstraints::new();
+        b.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Lit(Topicity::Enantiotopic),
+        }));
+        // Disjoint relations on the same pair contradict.
+        assert_eq!(a.meet(&b), None);
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_join() {
+        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let p1 = LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        };
+        let p2 = LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::from_image(4, &[0, 1, 3, 2])),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        };
+
+        let mut a = StereoAtomConstraints::new();
+        a.add(StereoAtomConstraint::LigandSymmetry(p1));
+        a.add(StereoAtomConstraint::LigandSymmetry(p2));
+        a.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Lit(Topicity::Homotopic),
+        }));
+
+        let mut b = StereoAtomConstraints::new();
+        b.add(StereoAtomConstraint::LigandSymmetry(p1));
+        b.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Lit(Topicity::Enantiotopic),
+        }));
+
+        let j = a.join(&b);
+        // #p intersection.
+        assert_eq!(j.ligand_symmetry().copied().collect::<Vec<_>>(), vec![p1]);
+        // #o per-pair value-join: {H} ∪ {E} = {H,E}.
+        assert_eq!(
+            j.topicity(pair),
+            TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic]),
+        );
+    }
+
+    #[rstest]
+    fn test_stereo_atom_constraints_matches() {
+        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let p1 = LigandSymmetryAst {
+            perm: OrientedPermutationAst {
+                perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                orientation: Orientation::Proper,
+            },
+            mem: MemOp::In,
+        };
+
+        let mut pattern = StereoAtomConstraints::new();
+        pattern.add(StereoAtomConstraint::LigandSymmetry(p1));
+        pattern.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Lit(Topicity::Enantiotopic),
+        }));
+
+        let mut target = StereoAtomConstraints::new();
+        target.add(StereoAtomConstraint::LigandSymmetry(p1));
+        target.add(StereoAtomConstraint::Topicity(TopicityAst {
+            pair,
+            rel: TopicityRelationAst::Lit(Topicity::Enantiotopic),
+        }));
+        assert!(pattern.matches(&target));
+
+        // An empty target leaves both predicates unmatched.
+        assert!(!pattern.matches(&StereoAtomConstraints::new()));
+        // An empty pattern matches anything.
+        assert!(StereoAtomConstraints::new().matches(&target));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::empty(StereoAtomConstraints::new(), true, true)]
+    #[case::ligand_symmetry(
+        StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(
+            LigandSymmetryAst {
+                perm: OrientedPermutationAst {
+                    perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                    orientation: Orientation::Proper,
+                },
+                mem: MemOp::In,
+            },
+        )),
+        false,
+        true,
+    )]
+    #[case::topicity_open(
+        StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst {
+            pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)),
+            rel: TopicityRelationAst::Undetermined,
+        })),
+        true,
+        false,
+    )]
+    #[case::stereogenicity(
+        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
+            StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
+        ))),
+        false,
+        true,
+    )]
+    fn test_stereo_atom_constraints_is_undetermined_is_ground(
+        #[case] cs: StereoAtomConstraints,
+        #[case] is_undetermined: bool,
+        #[case] is_ground: bool,
+    ) {
+        assert_eq!(cs.is_undetermined(), is_undetermined);
+        assert_eq!(cs.is_ground(), is_ground);
     }
 
     #[rstest]
@@ -742,16 +1152,17 @@ mod tests {
         let cs = StereoBondConstraints::new();
         assert!(cs.is_empty());
         assert_eq!(cs.len(), 0);
-        assert_eq!(cs.as_slice(), &[] as &[StereoBondConstraint]);
+        assert_eq!(cs.iter().count(), 0);
     }
 
     #[rstest]
-    fn test_stereo_bond_constraints_meet() {
-        let cs = StereoBondConstraints::new();
-        assert_eq!(cs.meet(&cs), Some(StereoBondConstraints::new()));
-        assert!(cs.matches(&cs));
-        assert!(cs.is_ground());
-        assert!(cs.is_undetermined());
+    fn test_stereo_bond_constraints_add() {
+        let mut cs = StereoBondConstraints::new();
+        let f = FluxionalityAst {
+            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+        };
+        assert_eq!(cs.add(StereoBondConstraint::Fluxionality(f)), None);
+        assert_eq!(cs.fluxionality().copied().collect::<Vec<_>>(), vec![f]);
     }
 
     #[rstest]

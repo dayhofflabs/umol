@@ -513,7 +513,12 @@ constraint enum + collection now (split later if they diverge).
   once there rather than as a throwaway `Err`. Tree is red on exactly those four sites until C3h.
 - **C3g.5 — collections** `StereoAtomConstraints`/`StereoBondConstraints`: full surface mirroring
   `AtomConstraints` + `Lattice` (per-kind meet/join: `#p`/`#f` union+dedup, `#o` per-pair value-meet, `#g`
-  value-meet).
+  value-meet). **Done.** Folded into `stereo_constraint!` (3rd param = collection name) since atom/bond are
+  identical: kind-sorted `SmallVec<[_; 2]>`, `add` policy = `#g` unique-replace / `#o` keyed-replace per
+  `LigandPairAst` / `#p`/`#f` append. `with_constraints` on the element (was a no-op stub) now wires
+  `extend`. Verified by type-check (`cargo build --tests` clean apart from the four C3h DSL sites); tests
+  cover add cardinality, kind-sort, accessors, meet (incl. `None` clash), join, matches, and
+  is_undetermined/is_ground — they run once C3h closes the red.
 
 The constraint AST. Trait coverage follows the codebase convention: **value-bearing AST types impl
 `Lattice` (`is_undetermined`/`is_ground`/`meet`/`join`/`matches`) + `AsLit`; keyed values impl `Lattice`

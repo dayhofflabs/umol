@@ -415,11 +415,12 @@ macro_rules! stereo_element {
             }
 
             /// Add each constraint from iterator.
-            pub fn with_constraints<I>(self, _constraints: I) -> Self
+            pub fn with_constraints<I>(mut self, constraints: I) -> Self
             where
                 I: IntoIterator,
                 I::Item: Into<$constraint>,
             {
+                self.constraints.extend(constraints.into_iter().map(Into::into));
                 self
             }
 
