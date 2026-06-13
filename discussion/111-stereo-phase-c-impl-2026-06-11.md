@@ -662,10 +662,11 @@ Substeps:
                         #g: = symmetric ' prochiral    / stereogenic
   ```
   `(* | [!]<glyph>)` is exactly complete over the 3-element relation domain: `*` = `Undetermined`, glyph =
-  `Lit`, `!`glyph = `NotSet([v])` (the 2-element complement) — all 7 non-empty subsets. Render is the inverse
-  via `to_set().len()` (3 → `*`, 1 → glyph, 2 → `!`+complement-glyph). `*` (a stored `Undetermined` relation)
-  is distinct from *omitting* the predicate (no constraint at all); the collection stores vacuous entries (per
-  C3g.5), so both round-trip.
+  `Lit`, `!`glyph = `NotSet([v])` (the 2-element complement) — all 7 non-empty subsets. Render: 1 → glyph,
+  2 → `!`+complement-glyph. A full-domain (`Undetermined`) relation is **vacuous** — it follows the same
+  convention as the atom `#a*`/`#T*` special forms: stored on parse (the collection keeps vacuous entries, per
+  C3g.5) but **elided** from the canonical render (§7.1), so `#o*`/`#g*` parse but render as the bare element,
+  equivalent to omitting the predicate. The element render loop skips `is_undetermined()` constraints.
 
   **`~` sugar = `kind.involution()`, eager, bidirectional.** It is the key binary-kind assertion: its
   Π-membership *is* the stereogenic-vs-symmetric bit. `#p~`/`#p!~` → `LigandSymmetryAst { perm: involution,
@@ -730,9 +731,21 @@ structured EDN — `PermutationAst` = vector-of-cycles `[[0 1 2] [3 4]]` (identi
 encoding the molecule-level symmetry assertions reuse — doc 110.) `lift_constraints`/`inline_constraints`
 move per-element constraints between the inline and molecule-scope forms, exactly as for atoms.
 
-### C3i · `umol-ast/spec/umol-dsl-spec.md` (update — normative surface)
+### C3i · `umol-ast/spec/umol-dsl-spec.md` (update — normative surface) **Done**
 
-Bring the spec in line with C3a–C3h (the planned evolution: stereo elements gain entity constraints).
+Brought the spec in line with C3a–C3h. Edits made: **§7.14** — `stereo-string ::= class coset
+stereo-predicate*` plus the predicate subgrammar (`#p`/`#f`/`#o`/`#g`; disjoint-cycle notation; `[!]`/`[']`;
+`=`/`'`/`/` glyphs; `~` involution sugar; `*` = vacuous, **parse-admissible / render-elided** per §7.1, matching
+the atom `#a*`/`#T*` special-forms convention; chiral-class restriction on `'` deferred to the validator).
+**§7.9** — added `:stereo-atom`/`:stereo-bond` to `entity-constraint`; defined `stereo-{atom,bond}-constraint-form`
+(`:kind` + one predicate key) with the structured encodings (`permutation-form` vector-of-cycles, `ligand-pair`,
+`ligand-symmetry-form`, relation keyword/`#{…}`/`:undetermined`); revised the "stereo elements carry no entity
+constraint" paragraph; updated inline-form coverage. **§6.1** — added the symmetry-derived stereo predicates
+(ligand symmetry, topicity, stereogenicity) as derived predicates (filter, no grounding, validator
+cross-check; `#f` is a stored dynamical assertion). The vacuous-`*` alignment also fixed the inline render to
+elide `Undetermined` predicates (consistent with atoms); tests split into `_render` (elision) /
+`_render_identity` (roundtrip) per the test-writing identity pattern. (Original section-edit plan below.)
+
 Sections to edit:
 
 - **§7.14 (stereo-string):** extend the `:type` grammar past `class coset` with the inline predicates

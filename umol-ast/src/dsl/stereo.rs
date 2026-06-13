@@ -692,7 +692,9 @@ stereo_constraint_fmt! { fmt_stereo_bond_constraint, StereoBondConstraint }
 pub(crate) fn fmt_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) -> fmt::Result {
     fmt_stereo_kind(f, atom.kind)?;
     fmt_stereo_coset(f, &atom.coset)?;
-    for c in atom.constraints.iter() {
+    // Vacuous (Undetermined) predicates are elided on canonical render, as for
+    // the atom-string (§7.1); they remain admissible on parse.
+    for c in atom.constraints.iter().filter(|c| !c.is_undetermined()) {
         fmt_stereo_atom_constraint(f, c, atom.kind)?;
     }
     Ok(())
@@ -702,7 +704,7 @@ pub(crate) fn fmt_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) 
 pub(crate) fn fmt_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) -> fmt::Result {
     fmt_stereo_kind(f, bond.kind)?;
     fmt_stereo_coset(f, &bond.coset)?;
-    for c in bond.constraints.iter() {
+    for c in bond.constraints.iter().filter(|c| !c.is_undetermined()) {
         fmt_stereo_bond_constraint(f, c, bond.kind)?;
     }
     Ok(())
@@ -1420,12 +1422,18 @@ mod tests {
     #[case::ligand_symmetry_explicit("Th2#p(0,1,2)")]
     #[case::topicity("Th2#o=(0,1)")]
     #[case::topicity_negated("Th2#o!'(0,1)")]
-    #[case::topicity_open("Th2#o*(0,1)")]
     #[case::stereogenicity("Th2#g/")]
-    #[case::stereogenicity_open("Th2#g*")]
     #[case::multiple("Th2#f(0,1,2)#o=(0,1)#g/")]
-    fn test_stereo_atom_inline_roundtrip(#[case] s: &str) {
+    fn test_stereo_atom_inline_render_identity(#[case] s: &str) {
         assert_eq!(parse_stereo_atom(s).unwrap().to_string(), s);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::topicity_open("Th2#o*(0,1)", "Th2")]
+    #[case::stereogenicity_open("Th2#g*", "Th2")]
+    fn test_stereo_atom_inline_render(#[case] input: &str, #[case] canonical: &str) {
+        assert_eq!(parse_stereo_atom(input).unwrap().to_string(), canonical);
     }
 
     #[rustfmt::skip]
@@ -1541,7 +1549,7 @@ mod tests {
     #[case::fluxionality_involution("Ct1#f~")]
     #[case::topicity("Ct1#o=(0,1)")]
     #[case::stereogenicity("Ct1#g/")]
-    fn test_stereo_bond_inline_roundtrip(#[case] s: &str) {
+    fn test_stereo_bond_inline_render_identity(#[case] s: &str) {
         assert_eq!(parse_stereo_bond(s).unwrap().to_string(), s);
     }
 
