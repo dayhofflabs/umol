@@ -300,7 +300,7 @@ impl MoleculeAst {
 }
 ```
 
-### C3d · `ast/stereo_symmetry.rs` (new) — two steps
+### C3d · `ast/symmetry.rs` (new) — two steps **Done**
 
 The molecule's graph-automorphism symmetry under a coloring, **graded** into proper vs improper, and the
 per-carrier projection derived from it. **Two results at two granularities:**
@@ -344,7 +344,7 @@ struct GraphSymmetry {
     colors: Vec<u64>,                  // converged node colors (for step-2 stabilizer re-runs)
     proper_orbits: Vec<NodeId>,        // orbit rep per node, under proper generators
     star_orbits: Vec<NodeId>,          // under proper ∪ improper generators
-    improper_rep: Option<Vec<NodeId>>, // one improper (orientation-reversing) generator; None ⇒ chiral
+    chiral: bool,
 }
 
 impl MoleculeAst {
@@ -356,7 +356,8 @@ impl MoleculeAst {
     //   stop when stable, else one pass if !iterate_to_fixpoint; max_iterations caps.
     // grade the converged run's generators by coset action → proper set / improper set (discard mixed);
     // proper_orbits = union-find(proper set); star_orbits = union-find(proper ∪ improper);
-    // improper_rep = improper set.first().
+    // chiral = (some stereocenter is definite) && (no improper generator)  — an improper generator ⇒ achiral,
+    //   but a molecule with no stereocenters is trivially achiral despite having none, hence the first clause.
 }
 
 impl GraphSymmetry {
@@ -364,7 +365,7 @@ impl GraphSymmetry {
     fn same_star_orbit(&self, a: AtomId, b: AtomId) -> bool;       // star_orbits[a] == star_orbits[b]
     fn proper_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
     fn star_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
-    fn is_chiral(&self) -> bool;                                   // improper_rep.is_none()
+    fn is_chiral(&self) -> bool;
     pub(crate) fn site_stabilizer(&self, site: NodeId) -> Vec<Vec<NodeId>>;  // raw stabilizer gens, carrier bumped (step 2)
 }
 ```
@@ -396,15 +397,31 @@ impl MoleculeAst {
 }
 
 impl StereoSymmetry {
-    fn is_stereogenic(&self) -> bool;     // stored coset is a singleton class of space(kind).merge_under(Π⁺)
+    fn is_stereogenic(&self) -> bool;     // stored coset is a singleton class of merge_under(Π underlying perms,
+                                          // proper ∪ improper) — see note
     fn topicity(&self, a: usize, b: usize) -> Topicity;  // same Π⁺ orbit → homotopic; same star, not proper → enantiotopic; else diastereotopic
 }
 ```
 
-### C3e · `ast/stereo.rs` (extend)
+**`is_stereogenic` uses the full local group, not just Π⁺ (corrected 2026-06-13).** Doc 104's
+"singleton class of `merge_under(Π_proper)`" is necessary but not sufficient: it catches centers killed by a
+*proper* ligand symmetry (homotopic ligands) but labels **prochiral** centers (enantiotopic ligands, e.g.
+C(Cl,Cl,F,Br)) as stereogenic, since their identifying symmetry is *improper* (Π⁺ is trivial there). A center
+is genuinely stereogenic iff its stored coset is not identified with any other coset by the local symmetry —
+proper **or** improper. So merge over the underlying permutations of the whole oriented group `Π_s`; the coset's
+class is a singleton iff stereogenic. (An improper transposition of two identical ligands maps the coset to its
+enantiomer, collapsing the class — correctly non-stereogenic.)
+
+### C3e · `ast/stereo.rs` (extend) **Done**
 
 Add `Axial`; delegate chirality to umol-perm; add `MirrorOp` (`'`); add the two ground relation enums
 (no trait — glyph mapping lives in the DSL, C3h).
+
+Done notes: `is_chiral_class` and the `involution`'s chiral generator now delegate to umol-perm (added
+`CosetSpace::improper()` accessor; achiral kinds keep their chosen swap). `Topicity`/`Stereogenicity` live
+here (`Topicity` moved out of `symmetry.rs`). The DSL kind glyph for `Axial` is provisionally `Ax` and
+`MirrorOp` renders/parses as `'` (in `dsl/stereo.rs`, render+parse symmetric for roundtrip) — C3h owns the
+final glyph table and may revise.
 
 ```rust
 enum StereoKind { Tetrahedral, CisTrans, Axial, SquarePlanar, TrigonalBipyramidal, Octahedral }  // +Axial
@@ -424,7 +441,16 @@ enum Topicity { Homotopic, Enantiotopic, Diastereotopic }      // derived ground
 enum Stereogenicity { Symmetric, Prochiral, Stereogenic }      // derived ground (Lit payload)
 ```
 
-### C3f · `ast/views/stereo.rs` (extend); `StereoLigandId` in `ast/ids.rs`
+### C3f · `ast/views/stereo.rs` (extend); `StereoLigandId` in `ast/ids.rs` **Done**
+
+Done notes: `p` is the **per-carrier** `StereoSymmetry` (C3d), pre-computed by the op and passed to the view's
+pure-read queries — the methods delegate (`symmetry.topicity` etc.); `is_chiral`/`ligand_position`/
+`ligand_frame` use only the view. The two views share one `stereo_view_queries!` macro. `StereoSymmetry` gained
+`stereogenicity()` + `group()`/`kind()`/`coset()` accessors, and `topicity` migrated to `StereoLigandId`.
+`StereoLigandId` is a hand-written `u8` newtype (not `define_id!`, which is `u32`); no EDN derives yet — add in
+C3g if the constraint needs them. `ligand(idx)` migrated to `ligand(ligand_id: StereoLigandId)`.
+**Deferred**: `induced_ligand_permutation` — it overlaps C3d's internal projection (`project_onto_ligands` +
+grading) and has no consumer yet; expose it (with a shared helper) when one appears.
 
 Ligand positions get a newtype — bare `usize` is too loose for the id-rich design. `StereoLigandId` is the
 0-based position in a stereo element's **ordered ligand frame** (frame-relative, not a global id). It is `u8`,
@@ -600,7 +626,7 @@ and there is **no `StereoSymmetry` to share between them**:
 
 - the **resolver is structural** (C4b) — kind/coset/ligands from scope + topology — and computes **no**
   `StereoSymmetry`;
-- the **validator** is the **only** pipeline consumer — it computes `MoleculeAst::stereo_symmetry` **once**,
+- the **validator** is the **only** pipeline consumer — it computes `MoleculeAst::graph_symmetry` **once**,
   molecule-wide, on the *resolved* AST, then projects per element (cheap, `image_under`, doc 110).
 
 Sharing would be unsound anyway: the resolver **mutates** the molecule, so any symmetry computed before/during

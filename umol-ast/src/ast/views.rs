@@ -25,7 +25,7 @@ pub use bond::{BondBuilderView, BondBuilderViewMut, BondView, BondViewMut, BondV
 pub use dative::{
     DativeBondBuilderView, DativeBondBuilderViewMut, DativeBondView, DativeBondViews,
 };
-pub use graph::GraphView;
+pub use graph::{AtomAutomorphism, GraphView};
 pub use ligand::StereoLigandView;
 pub use multicenter::{
     MulticenterBondBuilderView, MulticenterBondBuilderViewMut, MulticenterBondView,

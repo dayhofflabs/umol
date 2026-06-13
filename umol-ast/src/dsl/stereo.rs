@@ -277,6 +277,7 @@ pub(crate) fn stereo_kind(i: &mut &str) -> PResult<StereoKind> {
     alt((
         "Th".value(StereoKind::Tetrahedral),
         "Ct".value(StereoKind::CisTrans),
+        "Ax".value(StereoKind::Axial),
         "Sp".value(StereoKind::SquarePlanar),
         "Tb".value(StereoKind::TrigonalBipyramidal),
         "Oh".value(StereoKind::Octahedral),
@@ -314,7 +315,7 @@ fn stereo_coset(i: &mut &str) -> PResult<StereoCosetAst> {
 /// `stereo-expr`: a `~`-prefixed base carrying zero or more left-associative
 /// `^image` postfixes.
 fn stereo_expr(i: &mut &str) -> PResult<StereoExpr> {
-    let mut e = stereo_swap(i)?;
+    let mut e = stereo_prefix(i)?;
     loop {
         multispace0.parse_next(i)?;
         if opt('^').parse_next(i)?.is_some() {
@@ -325,11 +326,14 @@ fn stereo_expr(i: &mut &str) -> PResult<StereoExpr> {
     }
 }
 
-/// `'~' prefix-term | base` — unary `~` binds tighter than `^`.
-fn stereo_swap(i: &mut &str) -> PResult<StereoExpr> {
+/// `('~' | '\'') prefix-term | base` — unary `~` (swap) and `'` (mirror) bind
+/// tighter than `^`.
+fn stereo_prefix(i: &mut &str) -> PResult<StereoExpr> {
     multispace0.parse_next(i)?;
     if opt('~').parse_next(i)?.is_some() {
-        Ok(StereoExpr::swap(stereo_swap(i)?))
+        Ok(StereoExpr::swap(stereo_prefix(i)?))
+    } else if opt('\'').parse_next(i)?.is_some() {
+        Ok(StereoExpr::mirror(stereo_prefix(i)?))
     } else {
         stereo_base(i)
     }
@@ -413,6 +417,7 @@ pub(crate) fn fmt_stereo_kind(f: &mut fmt::Formatter<'_>, kind: StereoKind) -> f
     match kind {
         StereoKind::Tetrahedral => f.write_str("Th"),
         StereoKind::CisTrans => f.write_str("Ct"),
+        StereoKind::Axial => f.write_str("Ax"),
         StereoKind::SquarePlanar => f.write_str("Sp"),
         StereoKind::TrigonalBipyramidal => f.write_str("Tb"),
         StereoKind::Octahedral => f.write_str("Oh"),
@@ -451,6 +456,10 @@ fn fmt_stereo_expr(f: &mut fmt::Formatter<'_>, e: &StereoExpr) -> fmt::Result {
         StereoExpr::Var(name) => write!(f, "?{name}"),
         StereoExpr::SwapOp(inner) => {
             write!(f, "~")?;
+            fmt_stereo_expr(f, inner)
+        }
+        StereoExpr::MirrorOp(inner) => {
+            write!(f, "'")?;
             fmt_stereo_expr(f, inner)
         }
         StereoExpr::ApplyOp(inner, perm) => {
@@ -866,6 +875,7 @@ mod tests {
     #[rstest]
     #[case::tetrahedral("Th", StereoKind::Tetrahedral)]
     #[case::cis_trans("Ct", StereoKind::CisTrans)]
+    #[case::axial("Ax", StereoKind::Axial)]
     #[case::square_planar("Sp", StereoKind::SquarePlanar)]
     #[case::trigonal_bipyramidal("Tb", StereoKind::TrigonalBipyramidal)]
     #[case::octahedral("Oh", StereoKind::Octahedral)]
@@ -883,8 +893,10 @@ mod tests {
     #[case::lit_set("{1,2}", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 2]))))]
     #[case::var_domain("?o :: {1,2}", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
     #[case::swap("~1", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))))]
+    #[case::mirror("'1", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::mirror(StereoExpr::Lit(1)))))]
     #[case::apply("1^2134", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_image(4, &[1, 0, 2, 3])))))]
     #[case::swap_binds_tighter_than_apply("~1^2134", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::swap(StereoExpr::Lit(1)), Permutation::from_image(4, &[1, 0, 2, 3])))))]
+    #[case::mirror_binds_tighter_than_apply("'1^2134", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::mirror(StereoExpr::Lit(1)), Permutation::from_image(4, &[1, 0, 2, 3])))))]
     #[case::whitespace_ignored("  ?o :: { 1 , 2 }", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
     fn test_stereo_config(#[case] input: &str, #[case] expected: StereoConfigurationAst) {
         assert_eq!(stereo_config.parse(input).unwrap(), expected);

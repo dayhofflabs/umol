@@ -49,6 +49,24 @@ define_id!(
     StereoBondId,
 );
 
+/// Position in a stereo element's ordered ligand frame — frame-relative (not a
+/// global id), `0..kind.degree()`. `u8` to match umol-perm `Permutation`'s
+/// position width; the boundary conversion to a `usize` position is `index()`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct StereoLigandId(pub u8);
+
+impl StereoLigandId {
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl From<u8> for StereoLigandId {
+    fn from(v: u8) -> Self {
+        Self(v)
+    }
+}
+
 impl From<NodeId> for AtomId {
     fn from(id: NodeId) -> Self {
         Self(id.0)

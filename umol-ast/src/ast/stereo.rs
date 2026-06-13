@@ -20,6 +20,7 @@ use super::traits::{AsLit, Lattice};
 pub enum StereoKind {
     Tetrahedral,
     CisTrans,
+    Axial,
     SquarePlanar,
     TrigonalBipyramidal,
     Octahedral,
@@ -31,6 +32,7 @@ impl StereoKind {
         match self {
             StereoKind::Tetrahedral => ClassKey::Tetrahedral,
             StereoKind::CisTrans => ClassKey::CisTrans,
+            StereoKind::Axial => ClassKey::Axial,
             StereoKind::SquarePlanar => ClassKey::SquarePlanar,
             StereoKind::TrigonalBipyramidal => ClassKey::TrigonalBipyramidal,
             StereoKind::Octahedral => ClassKey::Octahedral,
@@ -49,25 +51,24 @@ impl StereoKind {
 
     /// Whether this stereo kind can encode local handedness.
     pub fn is_chiral_class(self) -> bool {
-        matches!(
-            self,
-            StereoKind::Tetrahedral | StereoKind::TrigonalBipyramidal | StereoKind::Octahedral
-        )
+        space(self.class_key()).is_chiral()
     }
 
-    /// Kind-specific `~` involution:
-    /// - tetrahedral: swap the first two ligands
+    /// Kind-specific `~` involution. Chiral kinds borrow the orientation-reversing
+    /// generator from umol-perm; achiral kinds use a chosen ligand swap (no improper
+    /// generator to borrow — theirs is the identity):
     /// - cis/trans: swap the two configurations
     /// - square-planar: swap the diagonal ligand pair
-    /// - trigonal-bipyramidal: swap the axial ligand pair
-    /// - octahedral: swap the axial ligand pair
     fn involution(self) -> Permutation {
-        match self {
-            StereoKind::Tetrahedral => Permutation::from_image(4, &[1, 0, 2, 3]),
-            StereoKind::CisTrans => Permutation::from_image(4, &[1, 0, 2, 3]),
-            StereoKind::SquarePlanar => Permutation::from_image(4, &[2, 1, 0, 3]),
-            StereoKind::TrigonalBipyramidal => Permutation::from_image(5, &[4, 1, 2, 3, 0]),
-            StereoKind::Octahedral => Permutation::from_image(6, &[5, 1, 2, 3, 4, 0]),
+        let coset_space = space(self.class_key());
+        if coset_space.is_chiral() {
+            coset_space.improper()
+        } else {
+            match self {
+                StereoKind::CisTrans => Permutation::from_image(4, &[1, 0, 2, 3]),
+                StereoKind::SquarePlanar => Permutation::from_image(4, &[2, 1, 0, 3]),
+                _ => unreachable!("only achiral kinds reach the chosen-swap branch"),
+            }
         }
     }
 
@@ -75,6 +76,22 @@ impl StereoKind {
     fn act(self, index: u32, perm: Permutation) -> u32 {
         space(self.class_key()).reindex(index, perm)
     }
+}
+
+/// Topicity of two ligand positions of a stereo carrier (derived ground value).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Topicity {
+    Homotopic,
+    Enantiotopic,
+    Diastereotopic,
+}
+
+/// Stereogenicity classification of a stereo carrier (derived ground value).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Stereogenicity {
+    Symmetric,
+    Prochiral,
+    Stereogenic,
 }
 
 /// Stereo configuration AST.
@@ -270,6 +287,7 @@ pub enum StereoExpr {
     Lit(u32),
     Var(String),
     SwapOp(Box<StereoExpr>),
+    MirrorOp(Box<StereoExpr>),
     ApplyOp(Box<StereoExpr>, Permutation),
     LitSet(Vec<u32>),
     VarDomain(String, Vec<u32>),
@@ -279,6 +297,11 @@ impl StereoExpr {
     /// `~inner` — the involution operator applied to `inner`.
     pub fn swap(inner: Self) -> Self {
         Self::SwapOp(Box::new(inner))
+    }
+
+    /// `'inner` — the improper (mirror) operator: the enantiomer of `inner`.
+    pub fn mirror(inner: Self) -> Self {
+        Self::MirrorOp(Box::new(inner))
     }
 
     /// `inner ^ perm` — the generic group action of `perm` on `inner`.
@@ -300,6 +323,13 @@ impl StereoExpr {
                 StereoExpr::Lit(index) => StereoExpr::Lit(kind.act(index, kind.involution())),
                 other => StereoExpr::SwapOp(Box::new(other)),
             },
+            StereoExpr::MirrorOp(inner) => match inner.simplify(kind) {
+                StereoExpr::MirrorOp(inner2) => *inner2,
+                StereoExpr::Lit(index) => {
+                    StereoExpr::Lit(space(kind.class_key()).enantiomer(index))
+                }
+                other => StereoExpr::MirrorOp(Box::new(other)),
+            },
             StereoExpr::ApplyOp(inner, perm) => match inner.simplify(kind) {
                 StereoExpr::Lit(index) => StereoExpr::Lit(kind.act(index, perm)),
                 other => StereoExpr::ApplyOp(Box::new(other), perm),
@@ -315,6 +345,9 @@ impl StereoExpr {
             StereoExpr::LitSet(set) | StereoExpr::VarDomain(_, set) => set.contains(&value),
             StereoExpr::SwapOp(inner) => {
                 inner.matches_value(kind.act(value, kind.involution()), kind)
+            }
+            StereoExpr::MirrorOp(inner) => {
+                inner.matches_value(space(kind.class_key()).enantiomer(value), kind)
             }
             StereoExpr::ApplyOp(inner, perm) => {
                 inner.matches_value(kind.act(value, perm.inverse()), kind)
@@ -494,6 +527,7 @@ mod tests {
     #[rstest]
     #[case::tetrahedral(StereoKind::Tetrahedral, ClassKey::Tetrahedral)]
     #[case::cis_trans(StereoKind::CisTrans, ClassKey::CisTrans)]
+    #[case::axial(StereoKind::Axial, ClassKey::Axial)]
     #[case::square_planar(StereoKind::SquarePlanar, ClassKey::SquarePlanar)]
     #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, ClassKey::TrigonalBipyramidal)]
     #[case::octahedral(StereoKind::Octahedral, ClassKey::Octahedral)]
@@ -504,6 +538,7 @@ mod tests {
     #[rstest]
     #[case::tetrahedral(StereoKind::Tetrahedral, 4)]
     #[case::cis_trans(StereoKind::CisTrans, 4)]
+    #[case::axial(StereoKind::Axial, 4)]
     #[case::square_planar(StereoKind::SquarePlanar, 4)]
     #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, 5)]
     #[case::octahedral(StereoKind::Octahedral, 6)]
@@ -514,6 +549,7 @@ mod tests {
     #[rstest]
     #[case::tetrahedral(StereoKind::Tetrahedral, 2)]
     #[case::cis_trans(StereoKind::CisTrans, 2)]
+    #[case::axial(StereoKind::Axial, 2)]
     #[case::square_planar(StereoKind::SquarePlanar, 3)]
     #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, 20)]
     #[case::octahedral(StereoKind::Octahedral, 30)]
@@ -524,6 +560,7 @@ mod tests {
     #[rstest]
     #[case::tetrahedral(StereoKind::Tetrahedral, true)]
     #[case::cis_trans(StereoKind::CisTrans, false)]
+    #[case::axial(StereoKind::Axial, true)]
     #[case::square_planar(StereoKind::SquarePlanar, false)]
     #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, true)]
     #[case::octahedral(StereoKind::Octahedral, true)]
@@ -570,6 +607,10 @@ mod tests {
     #[case::tb_swap_other(StereoKind::TrigonalBipyramidal, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(2))), StereoExpr::Lit(17))]
     #[case::oh_swap_axial(StereoKind::Octahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
     #[case::oh_swap_other(StereoKind::Octahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(2))), StereoExpr::Lit(21))]
+    #[case::mirror_chiral(StereoKind::Tetrahedral, StereoExpr::MirrorOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
+    #[case::mirror_achiral_noop(StereoKind::CisTrans, StereoExpr::MirrorOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(0))]
+    #[case::double_mirror_lit(StereoKind::Tetrahedral, StereoExpr::MirrorOp(Box::new(StereoExpr::MirrorOp(Box::new(StereoExpr::Lit(1))))), StereoExpr::Lit(1))]
+    #[case::mirror_var_stays(StereoKind::Tetrahedral, StereoExpr::MirrorOp(Box::new(StereoExpr::Var("o".into()))), StereoExpr::MirrorOp(Box::new(StereoExpr::Var("o".into()))))]
     fn test_stereo_expr_simplify(#[case] kind: StereoKind, #[case] input: StereoExpr, #[case] expected: StereoExpr) {
         assert_eq!(input.simplify(kind), expected);
     }

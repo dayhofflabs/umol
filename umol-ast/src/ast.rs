@@ -2,7 +2,6 @@
 
 pub(crate) mod aromatic;
 pub(crate) mod atom;
-pub(crate) mod automorphism;
 pub(crate) mod bond;
 pub(crate) mod coloring;
 pub(crate) mod constraint;
@@ -22,6 +21,7 @@ pub(crate) mod remap;
 pub(crate) mod rings;
 pub(crate) mod spin;
 pub(crate) mod stereo;
+pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod value;
 pub(crate) mod views;
@@ -29,7 +29,6 @@ pub(crate) mod entity;
 
 pub use aromatic::AromaticSystemAst;
 pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
-pub use automorphism::AtomAutomorphism;
 pub use bond::BondAst;
 pub use coloring::{ConstitutionFeatures, ConstitutionColoring, MoleculeColoring};
 pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
@@ -58,7 +57,7 @@ pub use embedding::MoleculeEmbedding;
 pub use error::{Contradiction, EvaluationError, JointDomainError, RewriteError};
 pub use ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId,
+    StereoAtomId, StereoBondId, StereoLigandId,
 };
 pub use entity::{Entity, EntityKind};
 pub use incidence::{IncidenceGraph, IncidenceNodeSelection};
@@ -73,13 +72,15 @@ pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use stereo::{
-    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
+    Stereogenicity, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst,
+    StereoExpr, StereoKind, Topicity,
 };
+pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{AsLit, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst};
 pub use value::{ArithOp, Bindings, MemOp, RelOp, ValueAst, ValueExpr};
 pub use views::{
-    AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
-    BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,
+    AromaticSystemView, AromaticSystemViews, AtomAutomorphism, AtomView, AtomViewMut, AtomViews,
+    BondView, BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,
     MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews, StereoAtomView,
     StereoAtomViews, StereoBondView, StereoBondViews, StereoLigandView,
 };

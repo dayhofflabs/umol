@@ -5,13 +5,14 @@ use std::iter;
 use std::ops::Index;
 
 use umol_graph_core::{EdgeId, FixedVarBirelationSet, NodeId, Ordered, RelationId};
-use umol_perm::Permutation;
+use umol_perm::{OrientedPermutationGroup, Permutation};
 
-use super::super::ids::{AtomId, BondId, StereoAtomId, StereoBondId};
+use super::super::ids::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
 use super::super::rings::RingView;
-use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoKind};
+use super::super::stereo::{Stereogenicity, StereoAtomAst, StereoBondAst, StereoKind, Topicity};
+use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;
 use super::atom::AtomView;
 use super::bond::BondView;
@@ -244,13 +245,13 @@ impl<'a> StereoAtomView<'a> {
             .map(move |ligand| StereoLigandView::new(*ligand, molecule))
     }
 
-    /// View of the ligand at coordination position `idx`. Panics if `idx` is
+    /// View of the ligand at the given coordination position. Panics if it is
     /// not a coordination position of this stereo atom.
-    pub fn ligand(&self, idx: usize) -> StereoLigandView<'a> {
+    pub fn ligand(&self, ligand_id: StereoLigandId) -> StereoLigandView<'a> {
         let ligand = *self
             .ligands
-            .get(idx)
-            .expect("ligand index must refer to a ligand of this stereo atom");
+            .get(ligand_id.index())
+            .expect("ligand id must refer to a ligand of this stereo atom");
         StereoLigandView::new(ligand, self.molecule)
     }
 
@@ -592,13 +593,13 @@ impl<'a> StereoBondView<'a> {
             .map(move |ligand| StereoLigandView::new(*ligand, molecule))
     }
 
-    /// View of the ligand at coordination position `idx`. Panics if `idx` is
+    /// View of the ligand at the given coordination position. Panics if it is
     /// not a coordination position of this stereo bond.
-    pub fn ligand(&self, idx: usize) -> StereoLigandView<'a> {
+    pub fn ligand(&self, ligand_id: StereoLigandId) -> StereoLigandView<'a> {
         let ligand = *self
             .ligands
-            .get(idx)
-            .expect("ligand index must refer to a ligand of this stereo bond");
+            .get(ligand_id.index())
+            .expect("ligand id must refer to a ligand of this stereo bond");
         StereoLigandView::new(ligand, self.molecule)
     }
 
@@ -685,6 +686,96 @@ impl<'a> StereoBondView<'a> {
     }
 }
 
+/// Stereo query methods shared by `StereoAtomView` and `StereoBondView`. The
+/// orbit/stereogenicity queries are pure reads over a per-carrier `StereoSymmetry`
+/// the caller has already computed (`MoleculeAst::stereo_atom_symmetry` /
+/// `stereo_bond_symmetry`); ops compute it once and never share it across ops.
+macro_rules! stereo_view_queries {
+    ($view:ident) => {
+        impl $view<'_> {
+            /// The local oriented ligand-position symmetry group.
+            pub fn ligand_symmetry(&self, symmetry: &StereoSymmetry) -> OrientedPermutationGroup {
+                symmetry.group().clone()
+            }
+
+            /// Stereogenicity classification of this carrier.
+            pub fn stereogenicity(&self, symmetry: &StereoSymmetry) -> Stereogenicity {
+                symmetry.stereogenicity()
+            }
+
+            /// Whether this carrier is a genuine stereocenter.
+            pub fn is_stereogenic(&self, symmetry: &StereoSymmetry) -> bool {
+                symmetry.is_stereogenic()
+            }
+
+            /// Whether this carrier is prochiral (some enantiotopic ligand pair).
+            pub fn is_prochiral(&self, symmetry: &StereoSymmetry) -> bool {
+                symmetry.stereogenicity() == Stereogenicity::Prochiral
+            }
+
+            /// Kind-level chirality — whether the geometry can encode handedness.
+            /// No symmetry computation.
+            pub fn is_chiral(&self) -> bool {
+                self.kind().is_chiral_class()
+            }
+
+            /// Topicity of two ligand positions.
+            pub fn topicity(
+                &self,
+                a: StereoLigandId,
+                b: StereoLigandId,
+                symmetry: &StereoSymmetry,
+            ) -> Topicity {
+                symmetry.topicity(a, b)
+            }
+
+            pub fn is_homotopic(
+                &self,
+                a: StereoLigandId,
+                b: StereoLigandId,
+                symmetry: &StereoSymmetry,
+            ) -> bool {
+                symmetry.topicity(a, b) == Topicity::Homotopic
+            }
+
+            pub fn is_enantiotopic(
+                &self,
+                a: StereoLigandId,
+                b: StereoLigandId,
+                symmetry: &StereoSymmetry,
+            ) -> bool {
+                symmetry.topicity(a, b) == Topicity::Enantiotopic
+            }
+
+            pub fn is_diastereotopic(
+                &self,
+                a: StereoLigandId,
+                b: StereoLigandId,
+                symmetry: &StereoSymmetry,
+            ) -> bool {
+                symmetry.topicity(a, b) == Topicity::Diastereotopic
+            }
+
+            /// The frame position of an atom ligand, if `atom` is one.
+            pub fn ligand_position(&self, atom: AtomId) -> Option<StereoLigandId> {
+                self.ligands()
+                    .position(|l| l.kind() == StereoLigandKind::Atom && l.atom_id() == atom)
+                    .map(|i| StereoLigandId(i as u8))
+            }
+
+            /// The ordered ligand frame (atom ligands + virtual implicit-H / lone-pair slots).
+            pub fn ligand_frame(&self) -> Vec<StereoLigand> {
+                self.ligands()
+                    .map(|l| StereoLigand::new(l.atom_id(), l.kind()))
+                    .collect()
+            }
+        }
+    };
+}
+
+stereo_view_queries!(StereoAtomView);
+stereo_view_queries!(StereoBondView);
+
 fn has_unique_ligands(ligands: &[StereoLigand]) -> bool {
     ligands.iter().copied().collect::<HashSet<_>>().len() == ligands.len()
 }
@@ -747,11 +838,15 @@ mod tests {
 
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
+    use crate::ast::coloring::ConstitutionColoring;
     use crate::ast::constraint::Constraints;
-    use crate::ast::ids::{AtomId, BondId, StereoAtomId, StereoBondId};
+    use crate::ast::ids::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::MoleculeAst;
-    use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{
+        Stereogenicity, StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, Topicity,
+    };
+    use crate::ast::symmetry::GraphSymmetryConfig;
 
     #[fixture]
     fn molecule() -> MoleculeAst {
@@ -1016,23 +1111,76 @@ mod tests {
     }
 
     #[rstest]
-    #[case::first(0, StereoLigandKind::Atom, AtomId(1))]
-    #[case::last(3, StereoLigandKind::Atom, AtomId(4))]
+    #[case::first(StereoLigandId(0), StereoLigandKind::Atom, AtomId(1))]
+    #[case::last(StereoLigandId(3), StereoLigandKind::Atom, AtomId(4))]
     fn test_stereo_atom_view_ligand(
         molecule: MoleculeAst,
-        #[case] idx: usize,
+        #[case] ligand_id: StereoLigandId,
         #[case] kind: StereoLigandKind,
         #[case] atom: AtomId,
     ) {
-        let ligand = molecule.stereo_atom(StereoAtomId(0)).ligand(idx);
+        let ligand = molecule.stereo_atom(StereoAtomId(0)).ligand(ligand_id);
         assert_eq!(ligand.kind(), kind);
         assert_eq!(ligand.atom_id(), atom);
     }
 
     #[rstest]
+    fn test_stereo_atom_view_stereo_queries() {
+        // A clean stereocenter: C bonded to four distinct halogens.
+        let mol = MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::F),
+                AtomAst::from_element(Element::Cl),
+                AtomAst::from_element(Element::Br),
+                AtomAst::from_element(Element::I),
+            ],
+            (1..=4)
+                .map(|i| (AtomId(0), AtomId(i), BondAst::from_order(1)))
+                .collect(),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                AtomId(0),
+                vec![
+                    StereoLigand::new(AtomId(1), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                ],
+                StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+            )],
+            vec![],
+            Constraints::default(),
+        );
+        let gs = mol.graph_symmetry(&GraphSymmetryConfig {
+            coloring: ConstitutionColoring::full(),
+            iterate_to_fixpoint: true,
+            max_iterations: 16,
+        });
+        let symmetry = mol.stereo_atom_symmetry(&gs, StereoAtomId(0));
+        let view = mol.stereo_atom(StereoAtomId(0));
+
+        assert!(view.is_chiral()); // tetrahedral kind, no symmetry computation
+        assert!(view.is_stereogenic(&symmetry));
+        assert_eq!(view.stereogenicity(&symmetry), Stereogenicity::Stereogenic);
+        assert_eq!(
+            view.topicity(StereoLigandId(0), StereoLigandId(1), &symmetry),
+            Topicity::Diastereotopic,
+        );
+        assert!(view.is_diastereotopic(StereoLigandId(0), StereoLigandId(1), &symmetry));
+        assert_eq!(view.ligand_symmetry(&symmetry).order(), 1);
+        assert_eq!(view.ligand_position(AtomId(2)), Some(StereoLigandId(1)));
+        assert_eq!(view.ligand_position(AtomId(99)), None);
+        assert_eq!(view.ligand_frame().len(), 4);
+    }
+
+    #[rstest]
     #[should_panic]
     fn test_stereo_atom_view_ligand_error(molecule: MoleculeAst) {
-        molecule.stereo_atom(StereoAtomId(0)).ligand(4);
+        molecule.stereo_atom(StereoAtomId(0)).ligand(StereoLigandId(4));
     }
 
     #[rstest]
@@ -1424,17 +1572,17 @@ mod tests {
     }
 
     #[rstest]
-    #[case::first(0, StereoLigandKind::Atom, AtomId(4))]
-    #[case::second(1, StereoLigandKind::Atom, AtomId(5))]
-    #[case::third(2, StereoLigandKind::Atom, AtomId(0))]
-    #[case::fourth(3, StereoLigandKind::Atom, AtomId(1))]
+    #[case::first(StereoLigandId(0), StereoLigandKind::Atom, AtomId(4))]
+    #[case::second(StereoLigandId(1), StereoLigandKind::Atom, AtomId(5))]
+    #[case::third(StereoLigandId(2), StereoLigandKind::Atom, AtomId(0))]
+    #[case::fourth(StereoLigandId(3), StereoLigandKind::Atom, AtomId(1))]
     fn test_stereo_bond_view_ligand(
         molecule: MoleculeAst,
-        #[case] idx: usize,
+        #[case] ligand_id: StereoLigandId,
         #[case] kind: StereoLigandKind,
         #[case] atom: AtomId,
     ) {
-        let ligand = molecule.stereo_bond(StereoBondId(0)).ligand(idx);
+        let ligand = molecule.stereo_bond(StereoBondId(0)).ligand(ligand_id);
         assert_eq!(ligand.kind(), kind);
         assert_eq!(ligand.atom_id(), atom);
     }
@@ -1442,7 +1590,7 @@ mod tests {
     #[rstest]
     #[should_panic]
     fn test_stereo_bond_view_ligand_error(molecule: MoleculeAst) {
-        molecule.stereo_bond(StereoBondId(0)).ligand(4);
+        molecule.stereo_bond(StereoBondId(0)).ligand(StereoLigandId(4));
     }
 
     #[rstest]

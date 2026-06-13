@@ -80,6 +80,12 @@ impl CosetSpace {
         &self.group
     }
 
+    /// The orientation-reversing generator (the improper/mirror operation). The
+    /// identity for achiral classes.
+    pub fn improper(&self) -> Permutation {
+        self.improper
+    }
+
     /// The number of cosets, `n! / |R|`.
     pub fn count(&self) -> usize {
         self.representatives.len()
