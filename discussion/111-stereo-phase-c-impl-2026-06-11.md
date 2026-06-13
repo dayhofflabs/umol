@@ -684,7 +684,14 @@ Substeps:
   codecs); `Permutation::involution` is now `pub(crate)`. Verified by `test_stereo_atom_inline_roundtrip`
   (10 cases incl. `~`/`!~`/`*`/`!glyph`/multiple), `test_stereo_atom_predicate` (+`_involution`) for parse
   semantics, and `test_stereo_bond_inline_roundtrip`.
-- **C3h.4 — roundtrip tests** for both surfaces (structured EDN and inline string).
+- **C3h.4 — roundtrip tests** for both surfaces (structured EDN and inline string). **Done.** Full-molecule
+  integration added to `dsl/molecule/tests.rs`: `test_molecule_dsl_stereo_edn_roundtrip` gains inline
+  (`:type "Th1#f(0,1,2)#g/"`, `Ct1#g/`) and molecule-scope (`:constraints [{:stereo-atom …}]`,
+  `{:stereo-bond …}`) cases for both atom and bond; `test_molecule_dsl_from_edn_str_matches_from_edn` gains the
+  same (streaming-vs-tree agreement, exercising the bridge reader). This surfaced a real pre-existing bug:
+  `stereo_atom_keyword_for`/`stereo_bond_keyword_for` rendered the canonical `:ccw`/`:cw`/`:z`/`:e` keyword
+  shortcut from `(kind, coset)` alone, **silently dropping inline constraints** — fixed to require an empty
+  constraint set before using the shortcut. Full suite 3245 green; workspace builds; clippy clean.
 
 The per-element constraints serialize **inline in the stereo-string**, exactly as `dsl/atom.rs` does for the
 atom-string: the `StereoAtomDsl` round-trips through `Edn::Str(to_string())`; the `:type` payload carries

@@ -126,6 +126,9 @@ impl ToEdn for StereoAtomDsl {
 /// Return the stereo atom keyword for canonical stereo atom shapes, or `None`
 /// when the full definition is required. Inverse of `expand_stereo_atom_keyword`.
 fn stereo_atom_keyword_for(ast: &StereoAtomAst) -> Option<&'static str> {
+    if !ast.constraints.is_empty() {
+        return None;
+    }
     match (ast.kind, &ast.coset) {
         (StereoKind::Tetrahedral, &StereoCosetAst::Lit(1)) => Some("ccw"),
         (StereoKind::Tetrahedral, &StereoCosetAst::Lit(2)) => Some("cw"),
@@ -256,6 +259,9 @@ impl ToEdn for StereoBondDsl {
 /// Return the stereo bond keyword for canonical stereo bond shapes, or `None`
 /// when the full definition is required. Inverse of `expand_stereo_bond_keyword`.
 fn stereo_bond_keyword_for(ast: &StereoBondAst) -> Option<&'static str> {
+    if !ast.constraints.is_empty() {
+        return None;
+    }
     match (ast.kind, &ast.coset) {
         (StereoKind::CisTrans, &StereoCosetAst::Lit(1)) => Some("z"),
         (StereoKind::CisTrans, &StereoCosetAst::Lit(2)) => Some("e"),
