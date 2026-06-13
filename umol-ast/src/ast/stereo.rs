@@ -79,7 +79,7 @@ impl StereoKind {
 }
 
 /// Topicity of two ligand positions of a stereo carrier (derived ground value).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, strum::VariantArray)]
 pub enum Topicity {
     Homotopic,
     Enantiotopic,
@@ -87,7 +87,7 @@ pub enum Topicity {
 }
 
 /// Stereogenicity classification of a stereo carrier (derived ground value).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, strum::VariantArray)]
 pub enum Stereogenicity {
     Symmetric,
     Prochiral,

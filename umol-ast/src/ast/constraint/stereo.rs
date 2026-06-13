@@ -5,14 +5,18 @@
 //! `NoncovalentBondConstraint`: an uninhabited per-element enum plus a `Vec`
 //! container exposing the uniform collection surface and a trivial `Lattice`.
 
+use std::collections::BTreeSet;
+use std::hash::{Hash, Hasher};
 use std::mem;
 use std::slice::Iter;
 
+use strum::VariantArray;
 use umol_perm::{Orientation, Permutation};
 
 use super::super::ids::StereoLigandId;
 use super::super::remap::IdRemapping;
-use super::super::traits::Lattice;
+use super::super::stereo::{Stereogenicity, Topicity};
+use super::super::traits::{AsLit, Lattice};
 
 /// A concrete permutation literal. A thin wrapper hosting AST-side impls that the
 /// foreign `Permutation` cannot carry (matching, and EDN once the DSL lands). Not
@@ -63,9 +67,15 @@ impl LigandPairAst {
     /// Normalizes the pair so the lower position is `first`.
     pub fn new(a: StereoLigandId, b: StereoLigandId) -> Self {
         if a.0 <= b.0 {
-            Self { first: a, second: b }
+            Self {
+                first: a,
+                second: b,
+            }
         } else {
-            Self { first: b, second: a }
+            Self {
+                first: b,
+                second: a,
+            }
         }
     }
 
@@ -78,7 +88,116 @@ impl LigandPairAst {
     }
 }
 
-/// Atom-centered stereo constraint. Uninhabited until value-only variants land.
+/// Generates a subset-lattice over finite domain enum.
+macro_rules! relation_ast {
+    ($name:ident, $domain:ty) => {
+        #[derive(Clone, Debug, Default)]
+        pub enum $name {
+            #[default]
+            Undetermined,
+            Lit($domain),
+            LitSet(Vec<$domain>),
+            NotSet(Vec<$domain>),
+        }
+
+        impl $name {
+            fn to_set(&self) -> BTreeSet<$domain> {
+                let domain = || <$domain as VariantArray>::VARIANTS.iter().copied();
+                match self {
+                    Self::Undetermined => domain().collect(),
+                    Self::Lit(t) => BTreeSet::from([*t]),
+                    Self::LitSet(values) => values.iter().copied().collect(),
+                    Self::NotSet(values) => {
+                        let excluded: BTreeSet<$domain> = values.iter().copied().collect();
+                        domain().filter(|t| !excluded.contains(t)).collect()
+                    }
+                }
+            }
+
+            /// The canonical relation for a set of domain values; `None` if empty.
+            fn from_set(set: BTreeSet<$domain>) -> Option<Self> {
+                let domain: BTreeSet<$domain> = <$domain as VariantArray>::VARIANTS
+                    .iter()
+                    .copied()
+                    .collect();
+                if set.is_empty() {
+                    None
+                } else if set == domain {
+                    Some(Self::Undetermined)
+                } else if set.len() == 1 {
+                    Some(Self::Lit(set.into_iter().next().unwrap()))
+                } else {
+                    let complement: Vec<$domain> = domain.difference(&set).copied().collect();
+                    if set.len() <= complement.len() {
+                        Some(Self::LitSet(set.into_iter().collect()))
+                    } else {
+                        Some(Self::NotSet(complement))
+                    }
+                }
+            }
+        }
+
+        impl PartialEq for $name {
+            fn eq(&self, other: &Self) -> bool {
+                self.to_set() == other.to_set()
+            }
+        }
+
+        impl Eq for $name {}
+
+        impl Hash for $name {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                self.to_set().hash(state);
+            }
+        }
+
+        impl Lattice for $name {
+            fn is_undetermined(&self) -> bool {
+                self.to_set().len() == <$domain as VariantArray>::VARIANTS.len()
+            }
+
+            fn is_ground(&self) -> bool {
+                self.to_set().len() == 1
+            }
+
+            fn meet(&self, other: &Self) -> Option<Self> {
+                Self::from_set(
+                    self.to_set()
+                        .intersection(&other.to_set())
+                        .copied()
+                        .collect(),
+                )
+            }
+
+            fn join(&self, other: &Self) -> Self {
+                Self::from_set(self.to_set().union(&other.to_set()).copied().collect())
+                    .expect("union of two non-empty sets is non-empty")
+            }
+
+            fn matches(&self, target: &Self) -> bool {
+                target.to_set().is_subset(&self.to_set())
+            }
+        }
+
+        impl AsLit for $name {
+            type Lit = $domain;
+
+            fn as_lit(&self) -> Option<$domain> {
+                let set = self.to_set();
+                if set.len() == 1 {
+                    set.into_iter().next()
+                } else {
+                    None
+                }
+            }
+        }
+    };
+}
+
+relation_ast! { TopicityRelationAst, Topicity }
+relation_ast! { StereogenicityRelationAst, Stereogenicity }
+
+/// Atom-centered stereo constraint.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StereoAtomConstraint {}
 
@@ -92,8 +211,7 @@ impl StereoAtomConstraint {
     }
 }
 
-/// Per-stereo-atom constraint container. Empty until variants land on
-/// `StereoAtomConstraint`.
+/// Per-stereo-atom constraint container.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoAtomConstraints(Vec<StereoAtomConstraint>);
 
@@ -182,7 +300,7 @@ impl FromIterator<StereoAtomConstraint> for StereoAtomConstraints {
     }
 }
 
-/// Bond-centered stereo constraint. Uninhabited until value-only variants land.
+/// Bond-centered stereo constraint.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum StereoBondConstraint {}
 
@@ -196,8 +314,7 @@ impl StereoBondConstraint {
     }
 }
 
-/// Per-stereo-bond constraint container. Empty until variants land on
-/// `StereoBondConstraint`.
+/// Per-stereo-bond constraint container.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct StereoBondConstraints(Vec<StereoBondConstraint>);
 
@@ -307,9 +424,18 @@ mod tests {
     #[rstest]
     fn test_oriented_permutation_ast_matches() {
         let perm = PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3]));
-        let proper = OrientedPermutationAst { perm, orientation: Orientation::Proper };
-        let same = OrientedPermutationAst { perm, orientation: Orientation::Proper };
-        let flipped = OrientedPermutationAst { perm, orientation: Orientation::Improper };
+        let proper = OrientedPermutationAst {
+            perm,
+            orientation: Orientation::Proper,
+        };
+        let same = OrientedPermutationAst {
+            perm,
+            orientation: Orientation::Proper,
+        };
+        let flipped = OrientedPermutationAst {
+            perm,
+            orientation: Orientation::Improper,
+        };
         let other = OrientedPermutationAst {
             perm: PermutationAst(Permutation::identity(4)),
             orientation: Orientation::Proper,
@@ -319,6 +445,7 @@ mod tests {
         assert!(!proper.matches(&other));
     }
 
+    #[rustfmt::skip]
     #[rstest]
     #[case::ordered(StereoLigandId(1), StereoLigandId(2), StereoLigandId(1), StereoLigandId(2))]
     #[case::reversed(StereoLigandId(2), StereoLigandId(1), StereoLigandId(1), StereoLigandId(2))]
@@ -332,6 +459,59 @@ mod tests {
         let pair = LigandPairAst::new(a, b);
         assert_eq!(pair.first(), first);
         assert_eq!(pair.second(), second);
+    }
+
+    #[rstest]
+    fn test_topicity_relation_ast_as_lit() {
+        assert_eq!(
+            TopicityRelationAst::Lit(Topicity::Homotopic).as_lit(),
+            Some(Topicity::Homotopic),
+        );
+        assert_eq!(TopicityRelationAst::Undetermined.as_lit(), None);
+        // NotSet([H]) denotes {E,D} — not a singleton.
+        assert_eq!(
+            TopicityRelationAst::NotSet(vec![Topicity::Homotopic]).as_lit(),
+            None,
+        );
+    }
+
+    #[rstest]
+    fn test_topicity_relation_ast_eq_representation_independent() {
+        // {H,E}: LitSet([H,E]) and NotSet([D]) denote the same set.
+        assert_eq!(
+            TopicityRelationAst::LitSet(vec![Topicity::Homotopic, Topicity::Enantiotopic]),
+            TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic]),
+        );
+        // The full set ≡ Undetermined.
+        assert_eq!(
+            TopicityRelationAst::LitSet(vec![
+                Topicity::Homotopic,
+                Topicity::Enantiotopic,
+                Topicity::Diastereotopic,
+            ]),
+            TopicityRelationAst::Undetermined,
+        );
+    }
+
+    #[rstest]
+    fn test_topicity_relation_ast_lattice() {
+        let h = TopicityRelationAst::Lit(Topicity::Homotopic);
+        let e = TopicityRelationAst::Lit(Topicity::Enantiotopic);
+        assert_eq!(h.meet(&h), Some(h.clone()));
+        assert_eq!(h.meet(&e), None); // disjoint singletons ⇒ contradiction
+        assert_eq!(TopicityRelationAst::Undetermined.meet(&h), Some(h.clone()));
+        // {H} ∪ {E} = {H,E}, canonically NotSet([D]) on a 3-domain.
+        assert_eq!(
+            h.join(&e),
+            TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic])
+        );
+        assert!(TopicityRelationAst::Undetermined.matches(&h));
+        assert!(h.matches(&h));
+        assert!(!h.matches(&e));
+        assert!(h.is_ground());
+        assert!(!TopicityRelationAst::Undetermined.is_ground());
+        assert!(TopicityRelationAst::Undetermined.is_undetermined());
+        assert!(!h.is_undetermined());
     }
 
     #[rstest]

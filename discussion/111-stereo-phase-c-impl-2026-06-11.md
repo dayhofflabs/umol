@@ -494,7 +494,10 @@ constraint enum + collection now (split later if they diverge).
   `Eq`/`Hash` + inherent `matches`; `LigandPairAst::new` normalizes (private fields + `first()`/`second()`).
   PermutationAst EDN host deferred to C3h (constraints round-trip via the inline stereo-string, not per-type EDN). **Done**
 - **C3g.2 — `relation_ast!` macro** + `TopicityRelationAst`, `StereogenicityRelationAst` (Lattice + AsLit), the
-  4-variant subset lattice above.
+  4-variant subset lattice above. **Done** — domain via `strum::VariantArray` on the domain enum (which also
+  derives `Ord`); equality/hash/lattice ops are by the represented set (representation-independent), so
+  `LitSet([H,E]) == NotSet([D])`; `from_set` canonicalizes (full⇒`Undetermined`, singleton⇒`Lit`, else smaller
+  of subset/complement).
 - **C3g.3 — constraint variant types**: `LigandSymmetryAst`, `FluxionalityAst` (concrete + `matches`),
   `TopicityAst` (keyed Lattice, JointDomainAst-style), `StereogenicityAst` (Lattice + AsLit, delegate).
 - **C3g.4 — inhabit the unions**: `StereoAtomConstraint`/`StereoBondConstraint` (4 variants) +

@@ -41,7 +41,7 @@ pub use constraint::{
     MulticenterBondConstraints, MulticenterValenceAst, NoncovalentBondConstraint,
     NoncovalentBondConstraints, OrientedPermutationAst, PermutationAst, RelationalConstraint,
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
-    SubPatternAnchor,
+    StereogenicityRelationAst, SubPatternAnchor, TopicityRelationAst,
 };
 pub use dative::DativeBondAst;
 pub use edit::{
