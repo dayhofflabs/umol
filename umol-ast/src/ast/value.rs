@@ -6,6 +6,7 @@ use std::ops::{Add, Div, Mul, Sub};
 use umol_shared::spin::SpinMultiplicity;
 
 use super::error::EvaluationError;
+use super::operators::{ArithOp, RelOp};
 use super::traits::{AsLit, Lattice};
 
 /// Variable bindings used by [`ValueExpr::evaluate`] and [`ValueExpr::evaluate_bool`].
@@ -624,35 +625,6 @@ fn flatten_simplified(
         }
     }
     out
-}
-
-/// Arithmetic operators for `ValueExpr::BinOp`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ArithOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-}
-
-/// Relational operators for `ValueExpr::Rel`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum RelOp {
-    Le,
-    Ge,
-    Eq,
-    Lt,
-    Gt,
-}
-
-/// Set-membership operator for `ElementAst::Bind` and `IsotopeAst::Bind`:
-/// `In` admits values in the set (`?e :: {F, Cl}`), `NotIn` admits values
-/// outside it (`?e :: !{F, Cl}`). Parallels the `Set`/`NotSet` split.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum MemOp {
-    In,
-    NotIn,
 }
 
 #[cfg(test)]

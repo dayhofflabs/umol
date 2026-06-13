@@ -19,20 +19,21 @@ use winnow::token::one_of;
 use winnow::Parser;
 
 use super::atom::single_key_map;
+use super::config::{StereoAtomDefaults, StereoBondDefaults};
 use super::error::{PResult, ParseError};
 use super::value::{id, terminator};
 use crate::ast::constraint::{
-    FluxionalityAst, LigandPairAst, LigandSymmetryAst, MemOp, OrientedPermutationAst,
-    PermutationAst, StereoAtomConstraint, StereoBondConstraint, StereogenicityAst,
-    StereogenicityRelationAst, TopicityAst, TopicityRelationAst,
+    FluxionalityAst, LigandPairAst, LigandSymmetryAst, OrientedPermutationAst, PermutationAst,
+    StereoAtomConstraint, StereoBondConstraint, StereogenicityAst, StereogenicityRelationAst,
+    TopicityAst, TopicityRelationAst,
 };
 use crate::ast::ids::StereoLigandId;
+use crate::ast::operators::MemOp;
 use crate::ast::stereo::{
     StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
     Stereogenicity, Topicity,
 };
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::dsl::config::{StereoAtomDefaults, StereoBondDefaults};
 
 /// Surface DSL wrapper for `StereoAtomAst`
 #[repr(transparent)]
@@ -622,7 +623,11 @@ fn fmt_stereogenicity_relation(
 ) -> fmt::Result {
     let members = rel.to_set();
     match members.len() {
-        1 => write!(f, "{}", stereogenicity_char(members.into_iter().next().unwrap())),
+        1 => write!(
+            f,
+            "{}",
+            stereogenicity_char(members.into_iter().next().unwrap())
+        ),
         2 => {
             let complement = Stereogenicity::VARIANTS
                 .iter()
@@ -640,11 +645,7 @@ fn fmt_stereogenicity_relation(
 /// orientation for `#p`); otherwise explicit cycles.
 macro_rules! stereo_constraint_fmt {
     ($name:ident, $constraint:ident) => {
-        fn $name(
-            f: &mut fmt::Formatter<'_>,
-            c: &$constraint,
-            kind: StereoKind,
-        ) -> fmt::Result {
+        fn $name(f: &mut fmt::Formatter<'_>, c: &$constraint, kind: StereoKind) -> fmt::Result {
             match c {
                 $constraint::LigandSymmetry(ls) => {
                     f.write_str("#p")?;
@@ -1086,13 +1087,17 @@ fn topicity_from_edn(edn: &Edn) -> Result<TopicityAst, DeError> {
         });
     };
     if p.len() != 2 {
-        return Err(DeError::Custom("topicity pair must have 2 positions".into()));
+        return Err(DeError::Custom(
+            "topicity pair must have 2 positions".into(),
+        ));
     }
     let pair = LigandPairAst::new(ligand_position(&p[0])?, ligand_position(&p[1])?);
-    let rel_edn = m.get_keyword("relation").ok_or_else(|| DeError::MissingField {
-        key: "relation".into(),
-        path: vec!["topicity".into()],
-    })?;
+    let rel_edn = m
+        .get_keyword("relation")
+        .ok_or_else(|| DeError::MissingField {
+            key: "relation".into(),
+            path: vec!["topicity".into()],
+        })?;
     Ok(TopicityAst {
         pair,
         rel: topicity_relation_from_edn(rel_edn)?,
@@ -1672,7 +1677,13 @@ mod tests {
     #[rstest]
     fn test_stereo_coset_dsl_from_edn_rejects_invalid_string() {
         let err = StereoCosetDsl::from_edn(&read_string("\"???\"").unwrap()).unwrap_err();
-        assert!(matches!(err, DeError::Subgrammar { grammar: "stereo coset", .. }));
+        assert!(matches!(
+            err,
+            DeError::Subgrammar {
+                grammar: "stereo coset",
+                ..
+            }
+        ));
     }
 
     #[rustfmt::skip]

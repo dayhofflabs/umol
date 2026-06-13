@@ -371,7 +371,8 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::DativeBondConstraints;
-    use crate::ast::value::{RelOp, ValueExpr};
+    use crate::ast::operators::RelOp;
+    use crate::ast::value::ValueExpr;
 
     fn dative(order: ValueAst, constraints: DativeBondConstraints) -> DativeBondAst {
         DativeBondAst {

@@ -458,7 +458,10 @@ where
     removed
 }
 
-fn var_relation_removed<P, O, D>(storage: &VarSetStorage<P, O, D>, remap: &Remapping) -> Vec<RelationId>
+fn var_relation_removed<P, O, D>(
+    storage: &VarSetStorage<P, O, D>,
+    remap: &Remapping,
+) -> Vec<RelationId>
 where
     P: RelationParticipant,
     O: FactorOrdering,
@@ -682,11 +685,7 @@ impl MoleculeBuilder {
         let endpoints = self.graph.edge_endpoints(EdgeId::from(id));
         let atoms = [AtomId::from(endpoints[0]), AtomId::from(endpoints[1])];
         let ast = &mut Arc::make_mut(&mut self.bonds)[id.index()];
-        BondBuilderViewMut {
-            id,
-            ast,
-            atoms,
-        }
+        BondBuilderViewMut { id, ast, atoms }
     }
 
     pub fn dative_bond(&self, id: DativeBondId) -> DativeBondBuilderView<'_> {

@@ -13,8 +13,9 @@ use winnow::token::one_of;
 use winnow::Parser;
 
 use super::error::{PResult, ParseError};
+use crate::ast::operators::{ArithOp, RelOp};
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::{ArithOp, RelOp, ValueAst, ValueExpr};
+use crate::ast::value::{ValueAst, ValueExpr};
 
 /// Surface DSL wrapper around `ValueAst`. EDN form is hybrid: `Lit` → `Int`,
 /// `Undetermined` → `:undetermined`, `Set` → vector of ints, `ValueExpr` →

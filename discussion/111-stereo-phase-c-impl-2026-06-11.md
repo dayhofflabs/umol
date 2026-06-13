@@ -768,7 +768,27 @@ Sections to edit:
 
 (Spec edits are part of the implementation — recorded here, not made now.)
 
-### C3j · add to property testing and fuzz corpora
+### C3j · add to property testing and fuzz corpora **Done**
+
+**Prereq (MemOp unification):** the stereo ligand-symmetry `MemOp` duplicated `value::MemOp` (byte-identical
+`{In, NotIn}`) and the stereo copy wasn't publicly reachable (clash at the crate root), blocking randomized
+`#p`. Resolved by extracting the shared operator enums (`ArithOp`, `RelOp`, `MemOp`) into a new foundation
+module `ast/operators.rs` (re-exported at `umol_ast::ast::{ArithOp, MemOp, RelOp}`); `value.rs` and the stereo
+constraints both import from it. One `MemOp` now, publicly reachable.
+
+**Property tests** (`tests/property.rs`): added `permutation_strategy(degree)` (shuffled one-line image),
+`ligand_pair_strategy`, `topicity`/`stereogenicity` relation strategies (non-vacuous only — `Undetermined`
+elides on render), `orientation`/`mem_op` strategies, and a `stereo_constraint_strategy!` macro generating
+`StereoAtomConstraint`/`StereoBondConstraint` (all four kinds, perm degree = `kind.degree()`).
+`stereo_atom_ast_strategy`/`stereo_bond_ast_strategy` now attach inline constraints, so the existing
+Display↔FromStr and molecule EDN roundtrip props cover the **inline shorthand**. Two new props
+(`test_stereo_{atom,bond}_constraint_dsl_to_edn_from_edn_roundtrip`) cover the **EDN-shaped** molecule-scope
+form. 42 props green.
+
+**Fuzz corpora** (`fuzz/seeds/`): added `fuzz_entity_strings/stereo_{atom,bond}_predicates` (inline
+`#p`/`#f`/`#o`/`#g`), `fuzz_constraints/stereo_atom_{ligand_symmetry,fluxionality,topicity}` +
+`stereo_bond_stereogenicity` (EDN entity-constraint forms), and `fuzz_molecule/stereo_atom_{inline_predicates,
+entity_constraint}` (both surfaces in a full molecule).
 
 ---
 

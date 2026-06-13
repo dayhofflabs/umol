@@ -10,10 +10,11 @@ use super::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
 use super::error::Contradiction;
+use super::operators::MemOp;
 use super::spin::SpinStateAst;
 use super::stereo::StereoConfigurationAst;
 use super::traits::{AsLit, Lattice};
-use super::value::{set_is_ground, MemOp, ValueAst};
+use super::value::{set_is_ground, ValueAst};
 
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern

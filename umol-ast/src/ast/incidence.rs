@@ -100,12 +100,36 @@ impl MoleculeAst {
         let entity_counts = [
             atom_count as u32,
             self.bonds().ids().count() as u32,
-            if overlays { self.dative_bonds().count() as u32 } else { 0 },
-            if overlays { self.aromatic_systems().count() as u32 } else { 0 },
-            if overlays { self.multicenter_bonds().count() as u32 } else { 0 },
-            if overlays { self.noncovalent_bonds().count() as u32 } else { 0 },
-            if stereo { self.stereo_atoms().count() as u32 } else { 0 },
-            if stereo { self.stereo_bonds().count() as u32 } else { 0 },
+            if overlays {
+                self.dative_bonds().count() as u32
+            } else {
+                0
+            },
+            if overlays {
+                self.aromatic_systems().count() as u32
+            } else {
+                0
+            },
+            if overlays {
+                self.multicenter_bonds().count() as u32
+            } else {
+                0
+            },
+            if overlays {
+                self.noncovalent_bonds().count() as u32
+            } else {
+                0
+            },
+            if stereo {
+                self.stereo_atoms().count() as u32
+            } else {
+                0
+            },
+            if stereo {
+                self.stereo_bonds().count() as u32
+            } else {
+                0
+            },
         ];
 
         // Pseudonodes follow the atom block in the same fixed order as `entity_counts`,
@@ -161,7 +185,10 @@ impl MoleculeAst {
         }
 
         let graph = Graph::new(node as usize, &edges);
-        IncidenceGraph { graph, entity_counts }
+        IncidenceGraph {
+            graph,
+            entity_counts,
+        }
     }
 }
 

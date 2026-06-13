@@ -492,9 +492,10 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::BondConstraints;
+    use crate::ast::operators::RelOp;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::{StereoCosetAst, StereoExpr};
-    use crate::ast::value::{RelOp, ValueExpr};
+    use crate::ast::value::ValueExpr;
 
     #[rustfmt::skip]
     #[rstest]

@@ -445,8 +445,8 @@ pub(super) fn read_stereo_coset_dsl(
     match de.peek_byte()?.ok_or_else(eof_err)? {
         b'"' => {
             let s = de.read_string()?;
-            let coset =
-                parse_stereo_coset(s.as_ref()).map_err(|e| DeError::subgrammar("stereo coset", e))?;
+            let coset = parse_stereo_coset(s.as_ref())
+                .map_err(|e| DeError::subgrammar("stereo coset", e))?;
             Ok(StereoCosetDsl(coset))
         }
         b'[' => {
@@ -470,7 +470,9 @@ pub(super) fn read_stereo_coset_dsl(
                 )
             }
         }
-        _ => Ok(StereoCosetDsl(StereoCosetAst::Lit(coset_lit(de.read_i64()?)?))),
+        _ => Ok(StereoCosetDsl(StereoCosetAst::Lit(coset_lit(
+            de.read_i64()?,
+        )?))),
     }
 }
 
@@ -481,9 +483,7 @@ pub(super) fn read_stereo_configuration_dsl(
         b':' => {
             let name = de.read_keyword_name()?;
             match name.as_ref() {
-                "undetermined" => {
-                    Ok(StereoConfigurationDsl(StereoConfigurationAst::Undetermined))
-                }
+                "undetermined" => Ok(StereoConfigurationDsl(StereoConfigurationAst::Undetermined)),
                 "not-stereo" => Ok(StereoConfigurationDsl(StereoConfigurationAst::NotStereo)),
                 other => Err(DeError::Custom(format!(
                     "unknown stereo-configuration keyword :{}",
@@ -498,7 +498,9 @@ pub(super) fn read_stereo_configuration_dsl(
                 "stereo" => {
                     let coset = read_stereo_coset_dsl(de)?.into_ast(&());
                     consume_single_key_map_close(de, "stereo-configuration")?;
-                    Ok(StereoConfigurationDsl(StereoConfigurationAst::Stereo(coset)))
+                    Ok(StereoConfigurationDsl(StereoConfigurationAst::Stereo(
+                        coset,
+                    )))
                 }
                 other => Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -2143,19 +2145,19 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_edn::{read_string, EdnKeyword};
-
     use umol_perm::{Orientation, Permutation};
 
     use super::*;
     use crate::ast::constraint::{
         AromaticValenceAst, AtomConstraint, BondConstraint, DativeBondConstraint, FluxionalityAst,
-        LigandPairAst, LigandSymmetryAst, MemOp, MulticenterValenceAst, OrientedPermutationAst,
+        LigandPairAst, LigandSymmetryAst, MulticenterValenceAst, OrientedPermutationAst,
         PermutationAst, RelationalConstraint, StereoAtomConstraint, StereogenicityAst,
         StereogenicityRelationAst, TopicityAst, TopicityRelationAst,
     };
     use crate::ast::ids::StereoLigandId;
     use crate::ast::molecule::MoleculeAst;
-    use crate::ast::stereo::{Stereogenicity, StereoKind, Topicity};
+    use crate::ast::operators::MemOp;
+    use crate::ast::stereo::{StereoKind, Stereogenicity, Topicity};
     use crate::ast::value::ValueAst;
 
     #[fixture]

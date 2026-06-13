@@ -15,19 +15,25 @@ use umol_ast::ast::{
     AtomConstraintKind, AtomConstraints, AtomFieldChange, AtomId, AtomRef, BondAst, BondConstraint,
     BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, Constraint, Constraints,
     DativeBondAst, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
-    DativeBondId, Edit, ElementAst, IsotopeMassAst, Lattice, MemOp, MoleculeAst,
-    MoleculeConstraint, MulticenterBondAst, MulticenterBondConstraint,
-    MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterBondId,
-    MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId, NoncovalentBondKind,
-    NoncovalentBondKindAst, RelOp, RelationalConstraint, SpinStateAst, StereoAtomAst, StereoAtomId,
-    StereoBondAst, StereoBondId, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
-    StereoLigand, StereoLigandKind, SubPatternAnchor, ValueAst, ValueExpr,
+    DativeBondId, Edit, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice, LigandPairAst,
+    LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
+    MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
+    MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
+    NoncovalentBondKind, NoncovalentBondKindAst, OrientedPermutationAst, PermutationAst, RelOp,
+    RelationalConstraint, SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomId,
+    StereoBondAst, StereoBondConstraint, StereoBondId, StereoConfigurationAst, StereoCosetAst,
+    StereoExpr, StereoKind, StereoLigand, StereoLigandId, StereoLigandKind, Stereogenicity,
+    StereogenicityAst,
+    StereogenicityRelationAst, SubPatternAnchor, Topicity, TopicityAst, TopicityRelationAst,
+    ValueAst, ValueExpr,
 };
 use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
-    MulticenterBondDsl, NoncovalentBondDsl, StereoAtomDsl, StereoBondDsl, ValueDsl,
+    MulticenterBondDsl, NoncovalentBondDsl, StereoAtomConstraintDsl, StereoAtomDsl,
+    StereoBondConstraintDsl, StereoBondDsl, ValueDsl,
 };
 use umol_edn::{read_string, Edn, FromEdn, ToEdn};
+use umol_perm::{Orientation, Permutation};
 use umol_shared::element::Element;
 
 const ELEMENTS: &[Element] = &[
@@ -666,18 +672,123 @@ fn stereo_config_strategy() -> impl Strategy<Value = StereoConfigurationAst> {
     ]
 }
 
-fn stereo_atom_ast_strategy() -> impl Strategy<Value = StereoAtomAst> {
-    let kind = prop_oneof![
+fn stereo_atom_kind_strategy() -> impl Strategy<Value = StereoKind> {
+    prop_oneof![
         Just(StereoKind::Tetrahedral),
         Just(StereoKind::SquarePlanar),
         Just(StereoKind::TrigonalBipyramidal),
         Just(StereoKind::Octahedral),
-    ];
-    (kind, stereo_coset_strategy()).prop_map(|(kind, coset)| StereoAtomAst::new(kind, coset))
+    ]
+}
+
+/// A permutation of the kind's `degree` positions, as a shuffled one-line image.
+fn permutation_strategy(degree: usize) -> impl Strategy<Value = Permutation> {
+    Just((0..degree as u8).collect::<Vec<u8>>())
+        .prop_shuffle()
+        .prop_map(move |image| Permutation::from_image(degree, &image))
+}
+
+fn orientation_strategy() -> impl Strategy<Value = Orientation> {
+    prop_oneof![Just(Orientation::Proper), Just(Orientation::Improper)]
+}
+
+fn mem_op_strategy() -> impl Strategy<Value = MemOp> {
+    prop_oneof![Just(MemOp::In), Just(MemOp::NotIn)]
+}
+
+fn ligand_pair_strategy(degree: usize) -> impl Strategy<Value = LigandPairAst> {
+    (0..degree as u8, 0..degree as u8)
+        .prop_map(|(a, b)| LigandPairAst::new(StereoLigandId(a), StereoLigandId(b)))
+}
+
+/// Non-vacuous topicity relations only (`Undetermined` elides on render, so it
+/// would break the render → reparse roundtrip — mirrors `stereo_config_strategy`).
+fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRelationAst> {
+    prop_oneof![
+        Just(TopicityRelationAst::Lit(Topicity::Homotopic)),
+        Just(TopicityRelationAst::Lit(Topicity::Enantiotopic)),
+        Just(TopicityRelationAst::Lit(Topicity::Diastereotopic)),
+        Just(TopicityRelationAst::NotSet(vec![Topicity::Homotopic])),
+        Just(TopicityRelationAst::NotSet(vec![Topicity::Enantiotopic])),
+        Just(TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic])),
+    ]
+}
+
+fn stereogenicity_relation_strategy() -> impl Strategy<Value = StereogenicityRelationAst> {
+    prop_oneof![
+        Just(StereogenicityRelationAst::Lit(Stereogenicity::Symmetric)),
+        Just(StereogenicityRelationAst::Lit(Stereogenicity::Prochiral)),
+        Just(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic)),
+        Just(StereogenicityRelationAst::NotSet(vec![Stereogenicity::Symmetric])),
+        Just(StereogenicityRelationAst::NotSet(vec![Stereogenicity::Prochiral])),
+        Just(StereogenicityRelationAst::NotSet(vec![Stereogenicity::Stereogenic])),
+    ]
+}
+
+/// One stereo constraint of each kind, with permutation degree = `kind.degree()`.
+/// Atom- and bond-centered share the leaf types; only the enum wrapper differs.
+macro_rules! stereo_constraint_strategy {
+    ($name:ident, $constraint:ident) => {
+        fn $name(kind: StereoKind) -> BoxedStrategy<$constraint> {
+            let degree = kind.degree();
+            prop_oneof![
+                (
+                    permutation_strategy(degree),
+                    orientation_strategy(),
+                    mem_op_strategy()
+                )
+                    .prop_map(|(perm, orientation, mem)| $constraint::LigandSymmetry(
+                        LigandSymmetryAst {
+                            perm: OrientedPermutationAst {
+                                perm: PermutationAst(perm),
+                                orientation,
+                            },
+                            mem,
+                        }
+                    )),
+                permutation_strategy(degree).prop_map(|perm| $constraint::Fluxionality(
+                    FluxionalityAst {
+                        perm: PermutationAst(perm),
+                    }
+                )),
+                (ligand_pair_strategy(degree), topicity_relation_strategy())
+                    .prop_map(|(pair, rel)| $constraint::Topicity(TopicityAst { pair, rel })),
+                stereogenicity_relation_strategy()
+                    .prop_map(|rel| $constraint::Stereogenicity(StereogenicityAst(rel))),
+            ]
+            .boxed()
+        }
+    };
+}
+
+stereo_constraint_strategy! { stereo_atom_constraint_strategy, StereoAtomConstraint }
+stereo_constraint_strategy! { stereo_bond_constraint_strategy, StereoBondConstraint }
+
+fn stereo_atom_constraints_strategy(
+    kind: StereoKind,
+) -> impl Strategy<Value = Vec<StereoAtomConstraint>> {
+    prop::collection::vec(stereo_atom_constraint_strategy(kind), 0..=3)
+}
+
+fn stereo_bond_constraints_strategy(
+    kind: StereoKind,
+) -> impl Strategy<Value = Vec<StereoBondConstraint>> {
+    prop::collection::vec(stereo_bond_constraint_strategy(kind), 0..=3)
+}
+
+fn stereo_atom_ast_strategy() -> impl Strategy<Value = StereoAtomAst> {
+    (stereo_atom_kind_strategy(), stereo_coset_strategy()).prop_flat_map(|(kind, coset)| {
+        stereo_atom_constraints_strategy(kind)
+            .prop_map(move |cs| StereoAtomAst::new(kind, coset.clone()).with_constraints(cs))
+    })
 }
 
 fn stereo_bond_ast_strategy() -> impl Strategy<Value = StereoBondAst> {
-    stereo_coset_strategy().prop_map(|coset| StereoBondAst::new(StereoKind::CisTrans, coset))
+    stereo_coset_strategy().prop_flat_map(|coset| {
+        stereo_bond_constraints_strategy(StereoKind::CisTrans).prop_map(move |cs| {
+            StereoBondAst::new(StereoKind::CisTrans, coset.clone()).with_constraints(cs)
+        })
+    })
 }
 
 /// Stereo-atom entries for a molecule of `atom_count` atoms. Sites are the
@@ -841,7 +952,8 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
             );
 
             let stereo_atoms = stereo_atom_entries_strategy(atom_count, atom_count.min(2));
-            let stereo_bonds = stereo_bond_entries_strategy(atom_count, bond_count, bond_count.min(2));
+            let stereo_bonds =
+                stereo_bond_entries_strategy(atom_count, bond_count, bond_count.min(2));
 
             (
                 Just(atoms),
@@ -855,7 +967,16 @@ fn molecule_ast_strategy() -> impl Strategy<Value = MoleculeAst> {
             )
         })
         .prop_map(
-            |(atoms, bonds, datives, aromatics, multicenters, noncovalents, stereo_atoms, stereo_bonds)| {
+            |(
+                atoms,
+                bonds,
+                datives,
+                aromatics,
+                multicenters,
+                noncovalents,
+                stereo_atoms,
+                stereo_bonds,
+            )| {
                 let dative_triples: Vec<_> = datives
                     .into_iter()
                     .filter_map(|(atoms, data)| match atoms.as_slice() {
@@ -1240,12 +1361,21 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
             .boxed();
         let contains = (sa_idx.clone(), atom_idx.clone())
             .prop_map(|(stereo_atom, atom)| {
-                Constraint::Relational(RelationalConstraint::StereoAtomContains { stereo_atom, atom })
+                Constraint::Relational(RelationalConstraint::StereoAtomContains {
+                    stereo_atom,
+                    atom,
+                })
             })
             .boxed();
-        let ligands = (sa_idx.clone(), prop::collection::vec(atom_idx, 1..=max_atoms))
+        let ligands = (
+            sa_idx.clone(),
+            prop::collection::vec(atom_idx, 1..=max_atoms),
+        )
             .prop_map(|(stereo_atom, atoms)| {
-                Constraint::Relational(RelationalConstraint::StereoAtomLigands { stereo_atom, atoms })
+                Constraint::Relational(RelationalConstraint::StereoAtomLigands {
+                    stereo_atom,
+                    atoms,
+                })
             })
             .boxed();
         let all_ligands = (sa_idx.clone(), atom_constraint_strategy())
@@ -1278,7 +1408,10 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
             let bond_idx = bond_idx_strategy(counts.bond);
             let site = (sb_idx.clone(), bond_idx)
                 .prop_map(|(stereo_bond, bond)| {
-                    Constraint::Relational(RelationalConstraint::StereoBondSite { stereo_bond, bond })
+                    Constraint::Relational(RelationalConstraint::StereoBondSite {
+                        stereo_bond,
+                        bond,
+                    })
                 })
                 .boxed();
             choices.push(site);
@@ -1296,7 +1429,10 @@ fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrategy<Constrain
                     })
                 })
                 .boxed();
-            let ligands = (sb_idx.clone(), prop::collection::vec(atom_idx, 1..=max_atoms))
+            let ligands = (
+                sb_idx.clone(),
+                prop::collection::vec(atom_idx, 1..=max_atoms),
+            )
                 .prop_map(|(stereo_bond, atoms)| {
                     Constraint::Relational(RelationalConstraint::StereoBondLigands {
                         stereo_bond,
@@ -2116,6 +2252,35 @@ proptest! {
         );
         let parsed = StereoBondDsl::from_edn(&edn).map_err(|e| {
             TestCaseError::fail(format!("parse failed: {e}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    /// Molecule-scope (EDN-shaped) stereo atom constraint: `to_edn` → `from_edn`
+    /// roundtrips for every kind and constraint variant.
+    #[test]
+    fn test_stereo_atom_constraint_dsl_to_edn_from_edn_roundtrip(
+        args in stereo_atom_kind_strategy().prop_flat_map(|kind| {
+            stereo_atom_constraint_strategy(kind).prop_map(move |c| (kind, c))
+        }),
+    ) {
+        let (kind, constraint) = args;
+        let dsl = StereoAtomConstraintDsl(kind, constraint);
+        let edn = dsl.to_edn();
+        let parsed = StereoAtomConstraintDsl::from_edn(&edn).map_err(|e| {
+            TestCaseError::fail(format!("from_edn failed for {edn:?}: {e}"))
+        })?;
+        prop_assert_eq!(dsl, parsed);
+    }
+
+    #[test]
+    fn test_stereo_bond_constraint_dsl_to_edn_from_edn_roundtrip(
+        constraint in stereo_bond_constraint_strategy(StereoKind::CisTrans),
+    ) {
+        let dsl = StereoBondConstraintDsl(StereoKind::CisTrans, constraint);
+        let edn = dsl.to_edn();
+        let parsed = StereoBondConstraintDsl::from_edn(&edn).map_err(|e| {
+            TestCaseError::fail(format!("from_edn failed for {edn:?}: {e}"))
         })?;
         prop_assert_eq!(dsl, parsed);
     }

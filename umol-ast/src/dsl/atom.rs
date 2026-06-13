@@ -28,9 +28,10 @@ use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
+use crate::ast::operators::MemOp;
 use crate::ast::stereo::StereoConfigurationAst;
 use crate::ast::traits::{FromAst, IntoAst};
-use crate::ast::value::{MemOp, ValueAst};
+use crate::ast::value::ValueAst;
 
 /// Surface DSL wrapper around `AtomAst`. Parses and renders the atom-string form
 /// (element plus `#…` predicates); inline-capable constraints land in
@@ -1094,9 +1095,9 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             }
             "ring-count" => AtomConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
             "ring-size" => AtomConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
-            "tetrahedral-stereo" => {
-                AtomConstraint::TetrahedralStereo(StereoConfigurationDsl::from_edn(v)?.into_ast(&()))
-            }
+            "tetrahedral-stereo" => AtomConstraint::TetrahedralStereo(
+                StereoConfigurationDsl::from_edn(v)?.into_ast(&()),
+            ),
             "joint-domain" => todo!("JointDomainAst EDN parsing lands in 2l"),
             other => {
                 return Err(DeError::UnknownField {
@@ -1191,9 +1192,10 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
+    use crate::ast::operators::{ArithOp, RelOp};
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::{StereoCosetAst, StereoExpr};
-    use crate::ast::value::{ArithOp, RelOp, ValueExpr};
+    use crate::ast::value::ValueExpr;
 
     #[rstest]
     #[case::single("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]

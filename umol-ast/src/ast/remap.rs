@@ -161,15 +161,24 @@ impl UndoRemapping {
     }
 
     pub fn aromatic_system(&self, id: AromaticSystemId) -> AromaticSystemId {
-        AromaticSystemId::from(unmap_dense(&self.forward.removed_aromatic_systems, id.into()))
+        AromaticSystemId::from(unmap_dense(
+            &self.forward.removed_aromatic_systems,
+            id.into(),
+        ))
     }
 
     pub fn multicenter_bond(&self, id: MulticenterBondId) -> MulticenterBondId {
-        MulticenterBondId::from(unmap_dense(&self.forward.removed_multicenter_bonds, id.into()))
+        MulticenterBondId::from(unmap_dense(
+            &self.forward.removed_multicenter_bonds,
+            id.into(),
+        ))
     }
 
     pub fn noncovalent_bond(&self, id: NoncovalentBondId) -> NoncovalentBondId {
-        NoncovalentBondId::from(unmap_dense(&self.forward.removed_noncovalent_bonds, id.into()))
+        NoncovalentBondId::from(unmap_dense(
+            &self.forward.removed_noncovalent_bonds,
+            id.into(),
+        ))
     }
 
     pub fn stereo_atom(&self, id: StereoAtomId) -> StereoAtomId {

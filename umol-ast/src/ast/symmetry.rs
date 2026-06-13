@@ -12,7 +12,7 @@ use super::ids::{AtomId, StereoAtomId, StereoBondId, StereoLigandId};
 use super::incidence::{IncidenceGraph, IncidenceNodeSelection};
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::MoleculeAst;
-use super::stereo::{Stereogenicity, StereoCosetAst, StereoKind, Topicity};
+use super::stereo::{StereoCosetAst, StereoKind, Stereogenicity, Topicity};
 use super::traits::AsLit;
 
 /// Configuration for [`MoleculeAst::graph_symmetry`].
@@ -131,7 +131,10 @@ impl MoleculeAst {
         for i in 0..classes.len() {
             for j in (i + 1)..classes.len() {
                 if classes[i] == classes[j] {
-                    generators.push(Permutation::from_cycles(coset_space.degree(), &[vec![i, j]]));
+                    generators.push(Permutation::from_cycles(
+                        coset_space.degree(),
+                        &[vec![i, j]],
+                    ));
                 }
             }
         }
@@ -140,16 +143,20 @@ impl MoleculeAst {
 
     /// A generator's orientation = its uniform action on every stereocenter's coset.
     /// `None` ⇒ discard (mixed across centers, or inconsistent).
-    fn grade_generator(&self, incidence: &IncidenceGraph, generator: &[NodeId]) -> Option<Orientation> {
+    fn grade_generator(
+        &self,
+        incidence: &IncidenceGraph,
+        generator: &[NodeId],
+    ) -> Option<Orientation> {
         let mut net: Option<Orientation> = None;
         for kind in [EntityKind::StereoAtom, EntityKind::StereoBond] {
             for index in 0..incidence.entity_count(kind) {
-                let contribution = match self.grade_center(incidence, kind.with_id(index as u32), generator)
-                {
-                    Err(()) => return None,
-                    Ok(None) => continue,
-                    Ok(Some(orientation)) => orientation,
-                };
+                let contribution =
+                    match self.grade_center(incidence, kind.with_id(index as u32), generator) {
+                        Err(()) => return None,
+                        Ok(None) => continue,
+                        Ok(Some(orientation)) => orientation,
+                    };
                 match net {
                     None => net = Some(contribution),
                     Some(previous) if previous == contribution => {}
@@ -221,7 +228,10 @@ impl MoleculeAst {
 
     /// The kind, stored coset, and ordered ligands of a stereo entity; `None` for
     /// non-stereo entities or out-of-range ids.
-    fn stereo_center(&self, entity: Entity) -> Option<(StereoKind, &StereoCosetAst, Vec<StereoLigand>)> {
+    fn stereo_center(
+        &self,
+        entity: Entity,
+    ) -> Option<(StereoKind, &StereoCosetAst, Vec<StereoLigand>)> {
         match entity {
             Entity::StereoAtom(id) => {
                 let view = self.stereo_atoms().get(id)?;
@@ -302,19 +312,29 @@ pub struct StereoSymmetry {
 impl MoleculeAst {
     /// Project the molecule symmetry onto a stereo atom's ligand positions.
     pub fn stereo_atom_symmetry(&self, gs: &GraphSymmetry, id: StereoAtomId) -> StereoSymmetry {
-        let site = self.stereo_atoms().get(id).expect("stereo atom id in range").site_id();
+        let site = self
+            .stereo_atoms()
+            .get(id)
+            .expect("stereo atom id in range")
+            .site_id();
         self.project_stereo(gs, Entity::StereoAtom(id), Entity::Atom(site))
     }
 
     /// Project the molecule symmetry onto a stereo bond's ligand positions.
     pub fn stereo_bond_symmetry(&self, gs: &GraphSymmetry, id: StereoBondId) -> StereoSymmetry {
-        let site = self.stereo_bonds().get(id).expect("stereo bond id in range").site_id();
+        let site = self
+            .stereo_bonds()
+            .get(id)
+            .expect("stereo bond id in range")
+            .site_id();
         self.project_stereo(gs, Entity::StereoBond(id), Entity::Bond(site))
     }
 
     fn project_stereo(&self, gs: &GraphSymmetry, carrier: Entity, site: Entity) -> StereoSymmetry {
         let (kind, coset, ligands) = {
-            let (k, c, l) = self.stereo_center(carrier).expect("carrier is a stereo element");
+            let (k, c, l) = self
+                .stereo_center(carrier)
+                .expect("carrier is a stereo element");
             (k, c.clone(), l)
         };
         let degree = ligands.len();
@@ -451,7 +471,10 @@ fn project_onto_ligands(ligands: &[StereoLigand], generator: &[NodeId]) -> Optio
 fn virtual_block_swaps(ligands: &[StereoLigand]) -> Vec<Permutation> {
     let degree = ligands.len();
     let mut swaps = Vec::new();
-    for kind in [StereoLigandKind::ImplicitHydrogen, StereoLigandKind::LonePair] {
+    for kind in [
+        StereoLigandKind::ImplicitHydrogen,
+        StereoLigandKind::LonePair,
+    ] {
         let positions: Vec<usize> = (0..degree).filter(|&i| ligands[i].kind == kind).collect();
         for pair in positions.windows(2) {
             swaps.push(Permutation::from_cycles(degree, &[vec![pair[0], pair[1]]]));
@@ -465,8 +488,7 @@ fn virtual_block_swaps(ligands: &[StereoLigand]) -> Vec<Permutation> {
 fn grade_local(kind: StereoKind, coset: &StereoCosetAst, perm: Permutation) -> Option<Orientation> {
     let index = coset.as_lit()?;
     let coset_space = space(kind.class_key());
-    let StereoCosetAst::Lit(transported) =
-        StereoCosetAst::Lit(index).apply_permutation(kind, perm)
+    let StereoCosetAst::Lit(transported) = StereoCosetAst::Lit(index).apply_permutation(kind, perm)
     else {
         return None;
     };

@@ -11,7 +11,7 @@ use super::super::ids::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigand
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
 use super::super::rings::RingView;
-use super::super::stereo::{Stereogenicity, StereoAtomAst, StereoBondAst, StereoKind, Topicity};
+use super::super::stereo::{StereoAtomAst, StereoBondAst, StereoKind, Stereogenicity, Topicity};
 use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;
 use super::atom::AtomView;
@@ -844,7 +844,7 @@ mod tests {
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::stereo::{
-        Stereogenicity, StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, Topicity,
+        StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind, Stereogenicity, Topicity,
     };
     use crate::ast::symmetry::GraphSymmetryConfig;
 
@@ -1180,7 +1180,9 @@ mod tests {
     #[rstest]
     #[should_panic]
     fn test_stereo_atom_view_ligand_error(molecule: MoleculeAst) {
-        molecule.stereo_atom(StereoAtomId(0)).ligand(StereoLigandId(4));
+        molecule
+            .stereo_atom(StereoAtomId(0))
+            .ligand(StereoLigandId(4));
     }
 
     #[rstest]
@@ -1374,10 +1376,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_atom_view_atom_ids(
-        molecule: MoleculeAst,
-        virtual_ligand_molecule: MoleculeAst,
-    ) {
+    fn test_stereo_atom_view_atom_ids(molecule: MoleculeAst, virtual_ligand_molecule: MoleculeAst) {
         assert_eq!(
             molecule
                 .stereo_atom(StereoAtomId(0))
@@ -1590,7 +1589,9 @@ mod tests {
     #[rstest]
     #[should_panic]
     fn test_stereo_bond_view_ligand_error(molecule: MoleculeAst) {
-        molecule.stereo_bond(StereoBondId(0)).ligand(StereoLigandId(4));
+        molecule
+            .stereo_bond(StereoBondId(0))
+            .ligand(StereoLigandId(4));
     }
 
     #[rstest]
@@ -1772,16 +1773,20 @@ mod tests {
     }
 
     #[rstest]
-    fn test_stereo_bond_view_atom_ids(
-        molecule: MoleculeAst,
-        virtual_ligand_molecule: MoleculeAst,
-    ) {
+    fn test_stereo_bond_view_atom_ids(molecule: MoleculeAst, virtual_ligand_molecule: MoleculeAst) {
         assert_eq!(
             molecule
                 .stereo_bond(StereoBondId(0))
                 .atom_ids()
                 .collect::<Vec<_>>(),
-            vec![AtomId(2), AtomId(3), AtomId(4), AtomId(5), AtomId(0), AtomId(1)],
+            vec![
+                AtomId(2),
+                AtomId(3),
+                AtomId(4),
+                AtomId(5),
+                AtomId(0),
+                AtomId(1)
+            ],
         );
         // Virtual ligands sit on the site-bond endpoints, so they are not repeated.
         assert_eq!(

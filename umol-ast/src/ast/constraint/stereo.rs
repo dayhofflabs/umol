@@ -10,6 +10,7 @@ use strum::VariantArray;
 use umol_perm::{Orientation, Permutation};
 
 use super::super::ids::StereoLigandId;
+use super::super::operators::MemOp;
 use super::super::remap::IdRemapping;
 use super::super::stereo::{Stereogenicity, Topicity};
 use super::super::traits::{AsLit, Lattice};
@@ -39,15 +40,6 @@ impl OrientedPermutationAst {
     pub fn matches(&self, target: &Self) -> bool {
         self.perm.matches(&target.perm) && self.orientation == target.orientation
     }
-}
-
-/// Membership operator for a `±` ligand-symmetry literal: the permutation is
-/// asserted present in (`In`) or absent from (`NotIn`) the ligand symmetry group.
-/// Module-local (distinct from `value::MemOp`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum MemOp {
-    In,
-    NotIn,
 }
 
 /// The key of a per-pair topicity constraint: an unordered pair of ligand
