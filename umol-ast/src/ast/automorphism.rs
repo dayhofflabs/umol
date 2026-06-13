@@ -156,4 +156,5 @@ mod tests {
         // Linear C-C-C: only identity and the endpoint-swap reflection.
         assert_eq!(chain_3.auto_group_order(), AutoGroupOrder::Exact(2));
     }
+
 }

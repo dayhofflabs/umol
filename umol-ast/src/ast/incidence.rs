@@ -1,10 +1,10 @@
 //! Incidence (Levi) graph: relations lifted to pseudonodes for symmetry analysis.
 
 use bitflags::bitflags;
+use strum::EnumCount;
 use umol_graph_core::{Graph, NodeId};
 
-use super::entity::Entity;
-use super::ids::AtomId;
+use super::entity::{Entity, EntityKind};
 use super::molecule::MoleculeAst;
 
 bitflags! {
@@ -46,7 +46,10 @@ impl IncidenceNodeSelection {
 #[derive(Clone, Debug)]
 pub struct IncidenceGraph {
     graph: Graph,
-    node_entity: Vec<Entity>,
+    // Per-kind block sizes, indexed by `EntityKind as usize` (node-layout order).
+    // An entity's id is its index within its block, so node↔entity is offset
+    // arithmetic — no per-node table.
+    entity_counts: [u32; EntityKind::COUNT],
 }
 
 impl IncidenceGraph {
@@ -54,12 +57,31 @@ impl IncidenceGraph {
         &self.graph
     }
 
-    pub fn entity(&self, node: NodeId) -> Entity {
-        self.node_entity[node.index()]
+    /// Number of nodes of the given kind.
+    pub fn entity_count(&self, kind: EntityKind) -> usize {
+        self.entity_counts[kind as usize] as usize
     }
 
-    pub fn entities(&self) -> &[Entity] {
-        &self.node_entity
+    /// The molecule entity a node represents.
+    pub fn entity(&self, node: NodeId) -> Entity {
+        let n = node.index();
+        let mut offset = 0usize;
+        for (block, &count) in self.entity_counts.iter().enumerate() {
+            let end = offset + count as usize;
+            if n < end {
+                let kind = EntityKind::from_repr(block as u8).expect("block is a valid kind index");
+                return kind.with_id((n - offset) as u32);
+            }
+            offset = end;
+        }
+        panic!("incidence node {n} out of range");
+    }
+
+    /// The node representing `entity` — inverse of [`entity`](Self::entity).
+    pub fn node_of(&self, entity: Entity) -> NodeId {
+        let block = entity.kind() as usize;
+        let offset: u32 = self.entity_counts[..block].iter().sum();
+        NodeId(offset + entity.id_index() as u32)
     }
 }
 
@@ -72,57 +94,74 @@ impl MoleculeAst {
     /// its stereo label.
     pub fn incidence_graph(&self, selection: IncidenceNodeSelection) -> IncidenceGraph {
         let atom_count = self.raw_graph().node_count();
-        let mut node_entity: Vec<Entity> =
-            (0..atom_count).map(|i| Entity::Atom(AtomId::from(i))).collect();
+        let overlays = selection.contains(IncidenceNodeSelection::OVERLAYS);
+        let stereo = selection.contains(IncidenceNodeSelection::STEREO);
+
+        let entity_counts = [
+            atom_count as u32,
+            self.bonds().ids().count() as u32,
+            if overlays { self.dative_bonds().count() as u32 } else { 0 },
+            if overlays { self.aromatic_systems().count() as u32 } else { 0 },
+            if overlays { self.multicenter_bonds().count() as u32 } else { 0 },
+            if overlays { self.noncovalent_bonds().count() as u32 } else { 0 },
+            if stereo { self.stereo_atoms().count() as u32 } else { 0 },
+            if stereo { self.stereo_bonds().count() as u32 } else { 0 },
+        ];
+
+        // Pseudonodes follow the atom block in the same fixed order as `entity_counts`,
+        // each wired to its participant atoms. Bonds come first, fixing BondId(k)
+        // at atom_count + k — relied on by the stereo-bond site link. Stereo nodes
+        // attach to their site only (atom, or the site bond's pseudonode).
         let mut edges: Vec<[u32; 2]> = Vec::new();
+        let mut node = atom_count as u32;
 
-        let mut add = |entity: Entity, neighbors: &[u32]| {
-            let node = node_entity.len() as u32;
-            node_entity.push(entity);
-            for &n in neighbors {
-                edges.push([node, n]);
-            }
-        };
-
-        // Localized bonds always: one pseudonode per bond, in BondId order, wired
-        // to both endpoints. This fixes the bond pseudonode of BondId(k) at
-        // atom_count + k, relied on by the stereo-bond site link below.
         for id in self.bonds().ids() {
             let [a, b] = self.bond(id).atom_ids();
-            add(Entity::Bond(id), &[a.index() as u32, b.index() as u32]);
+            edges.push([node, a.index() as u32]);
+            edges.push([node, b.index() as u32]);
+            node += 1;
         }
 
-        if selection.contains(IncidenceNodeSelection::OVERLAYS) {
+        if overlays {
             for v in self.dative_bonds().iter() {
-                let atoms: Vec<u32> = v.atom_ids().map(|a| a.index() as u32).collect();
-                add(Entity::DativeBond(v.id), &atoms);
+                for a in v.atom_ids() {
+                    edges.push([node, a.index() as u32]);
+                }
+                node += 1;
             }
             for v in self.aromatic_systems().iter() {
-                let atoms: Vec<u32> = v.atom_ids().map(|a| a.index() as u32).collect();
-                add(Entity::AromaticSystem(v.id), &atoms);
+                for a in v.atom_ids() {
+                    edges.push([node, a.index() as u32]);
+                }
+                node += 1;
             }
             for v in self.multicenter_bonds().iter() {
-                let atoms: Vec<u32> = v.atom_ids().map(|a| a.index() as u32).collect();
-                add(Entity::MulticenterBond(v.id), &atoms);
+                for a in v.atom_ids() {
+                    edges.push([node, a.index() as u32]);
+                }
+                node += 1;
             }
             for v in self.noncovalent_bonds().iter() {
-                let atoms: Vec<u32> = v.atom_ids().into_iter().map(|a| a.index() as u32).collect();
-                add(Entity::NoncovalentBond(v.id), &atoms);
+                for a in v.atom_ids() {
+                    edges.push([node, a.index() as u32]);
+                }
+                node += 1;
             }
         }
 
-        if selection.contains(IncidenceNodeSelection::STEREO) {
+        if stereo {
             for v in self.stereo_atoms().iter() {
-                add(Entity::StereoAtom(v.id), &[v.site_id().index() as u32]);
+                edges.push([node, v.site_id().index() as u32]);
+                node += 1;
             }
             for v in self.stereo_bonds().iter() {
-                let bond_node = (atom_count + v.site_id().index()) as u32;
-                add(Entity::StereoBond(v.id), &[bond_node]);
+                edges.push([node, atom_count as u32 + v.site_id().index() as u32]);
+                node += 1;
             }
         }
 
-        let graph = Graph::new(node_entity.len(), &edges);
-        IncidenceGraph { graph, node_entity }
+        let graph = Graph::new(node as usize, &edges);
+        IncidenceGraph { graph, entity_counts }
     }
 }
 
@@ -139,8 +178,8 @@ mod tests {
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
     use crate::ast::ids::{
-        AromaticSystemId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId, StereoAtomId,
-        StereoBondId,
+        AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
+        StereoAtomId, StereoBondId,
     };
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::multicenter::MulticenterBondAst;
@@ -229,8 +268,14 @@ mod tests {
         #[case] expected: Vec<Entity>,
     ) {
         let inc = molecule.incidence_graph(selection);
-        assert_eq!(inc.entities(), expected.as_slice());
         assert_eq!(inc.graph().node_count(), expected.len());
+        let got: Vec<Entity> = (0..expected.len())
+            .map(|i| inc.entity(NodeId(i as u32)))
+            .collect();
+        assert_eq!(got, expected);
+        for (i, &e) in expected.iter().enumerate() {
+            assert_eq!(inc.node_of(e), NodeId(i as u32));
+        }
     }
 
     #[rstest]

@@ -44,6 +44,8 @@ bitflags! {
         const MULTICENTER_SPIN = 1 << 15;
         // noncovalent bond
         const NONCOVALENT_KIND = 1 << 16;
+        // stereo atom / bond
+        const STEREO_KIND = 1 << 17;
     }
 }
 
@@ -70,12 +72,12 @@ impl ConstitutionColoring {
 
 impl MoleculeColoring for ConstitutionColoring {
     fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64 {
-        // A leading kind tag keeps kinds in disjoint color ranges; then the
-        // entity's inherent fields, each gated by `features`.
+        // The leading `EntityKind` tag keeps kinds in disjoint color ranges; then
+        // the entity's inherent fields, each gated by `features`.
         let mut hasher = DefaultHasher::new();
+        (entity.kind() as u8).hash(&mut hasher);
         match entity {
             Entity::Atom(id) => {
-                0u8.hash(&mut hasher);
                 let atom = mol.atom(id);
                 if self.features.contains(ConstitutionFeatures::ELEMENT) {
                     atom.element().hash(&mut hasher);
@@ -100,7 +102,6 @@ impl MoleculeColoring for ConstitutionColoring {
                 }
             }
             Entity::Bond(id) => {
-                1u8.hash(&mut hasher);
                 let bond = mol.bond(id);
                 if self.features.contains(ConstitutionFeatures::BOND_ORDER) {
                     bond.order().hash(&mut hasher);
@@ -113,7 +114,6 @@ impl MoleculeColoring for ConstitutionColoring {
                 }
             }
             Entity::AromaticSystem(id) => {
-                2u8.hash(&mut hasher);
                 let system = mol
                     .aromatic_systems()
                     .get(id)
@@ -135,7 +135,6 @@ impl MoleculeColoring for ConstitutionColoring {
                 }
             }
             Entity::MulticenterBond(id) => {
-                3u8.hash(&mut hasher);
                 let bond = mol
                     .multicenter_bonds()
                     .get(id)
@@ -160,14 +159,12 @@ impl MoleculeColoring for ConstitutionColoring {
                 }
             }
             Entity::DativeBond(id) => {
-                4u8.hash(&mut hasher);
                 let bond = mol.dative_bonds().get(id).expect("dative id in range");
                 if self.features.contains(ConstitutionFeatures::DATIVE_ORDER) {
                     bond.order().hash(&mut hasher);
                 }
             }
             Entity::NoncovalentBond(id) => {
-                5u8.hash(&mut hasher);
                 let bond = mol
                     .noncovalent_bonds()
                     .get(id)
@@ -179,8 +176,24 @@ impl MoleculeColoring for ConstitutionColoring {
                     bond.kind().hash(&mut hasher);
                 }
             }
-            // Stereo atoms and bonds are not part of constitution coloring.
-            Entity::StereoAtom(_) | Entity::StereoBond(_) => {}
+            Entity::StereoAtom(id) => {
+                if self.features.contains(ConstitutionFeatures::STEREO_KIND) {
+                    mol.stereo_atoms()
+                        .get(id)
+                        .expect("stereo atom id in range")
+                        .kind()
+                        .hash(&mut hasher);
+                }
+            }
+            Entity::StereoBond(id) => {
+                if self.features.contains(ConstitutionFeatures::STEREO_KIND) {
+                    mol.stereo_bonds()
+                        .get(id)
+                        .expect("stereo bond id in range")
+                        .kind()
+                        .hash(&mut hasher);
+                }
+            }
         }
         hasher.finish()
     }
@@ -195,9 +208,12 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::ids::{AtomId, BondId};
+    use crate::ast::constraint::Constraints;
+    use crate::ast::ids::{AtomId, BondId, StereoAtomId, StereoBondId};
+    use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::spin::SpinStateAst;
+    use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[fixture]
@@ -232,6 +248,69 @@ mod tests {
         let coloring = ConstitutionColoring::new(features);
         let equal =
             coloring.color(&ethanol_fragment, left) == coloring.color(&ethanol_fragment, right);
+        assert_eq!(equal, expected_equal);
+    }
+
+    #[fixture]
+    fn stereo_molecule() -> MoleculeAst {
+        // Two stereo atoms of different kinds (Tetrahedral, SquarePlanar) and a
+        // stereo bond, on a C₆ chain — enough to exercise kind + tag distinction.
+        MoleculeAst::from_parts(
+            vec![AtomAst::from_element(Element::C); 6],
+            vec![
+                (AtomId(0), AtomId(1), BondAst::from_order(1)),
+                (AtomId(1), AtomId(2), BondAst::from_order(1)),
+                (AtomId(2), AtomId(3), BondAst::from_order(1)),
+                (AtomId(3), AtomId(4), BondAst::from_order(1)),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![
+                (
+                    AtomId(1),
+                    vec![
+                        StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+                ),
+                (
+                    AtomId(3),
+                    vec![
+                        StereoLigand::new(AtomId(2), StereoLigandKind::Atom),
+                        StereoLigand::new(AtomId(4), StereoLigandKind::Atom),
+                    ],
+                    StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(1)),
+                ),
+            ],
+            vec![(
+                BondId(1),
+                vec![
+                    StereoLigand::new(AtomId(0), StereoLigandKind::Atom),
+                    StereoLigand::new(AtomId(3), StereoLigandKind::Atom),
+                ],
+                StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            )],
+            Constraints::default(),
+        )
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::kind_distinct(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), ConstitutionFeatures::STEREO_KIND, false)]
+    #[case::kind_blind(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoAtom(StereoAtomId(1)), ConstitutionFeatures::empty(), true)]
+    #[case::atom_bond_tag_disjoint(Entity::StereoAtom(StereoAtomId(0)), Entity::StereoBond(StereoBondId(0)), ConstitutionFeatures::empty(), false)]
+    fn test_constitution_coloring_color_stereo(
+        stereo_molecule: MoleculeAst,
+        #[case] left: Entity,
+        #[case] right: Entity,
+        #[case] features: ConstitutionFeatures,
+        #[case] expected_equal: bool,
+    ) {
+        let coloring = ConstitutionColoring::new(features);
+        let equal = coloring.color(&stereo_molecule, left) == coloring.color(&stereo_molecule, right);
         assert_eq!(equal, expected_equal);
     }
 

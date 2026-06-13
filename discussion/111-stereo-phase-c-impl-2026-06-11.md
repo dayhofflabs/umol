@@ -196,27 +196,28 @@ enum Entity {
 
 // ast/coloring.rs
 trait MoleculeColoring {
-    fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64;   // stereo kinds → kind tag only (no fields)
+    fn color(&self, mol: &MoleculeAst, entity: Entity) -> u64;   // stereo node → kind tag + geometric kind; coset folded by C3d
 }
 
-bitflags! struct ColorFeatures: u32 {              // inherent fields only (§6.1) — derived excluded (free)
+bitflags! struct ConstitutionFeatures: u32 {              // inherent fields only (§6.1) — derived excluded (free)
     ELEMENT, ISOTOPE, CHARGE, IMPLICIT_HYDROGENS, LONE_PAIRS, SPIN,   // atom
     BOND_ORDER, BOND_CHARGE, BOND_SPIN,                       // localized bond
     DATIVE_ORDER,                                             // dative bond
     AROMATIC_ELECTRONS, AROMATIC_CHARGE, AROMATIC_SPIN,       // aromatic system (electrons = order-indep π-count)
     MULTICENTER_ELECTRONS, MULTICENTER_CHARGE, MULTICENTER_SPIN, // multicenter bond
     NONCOVALENT_KIND,                                         // noncovalent bond
+    STEREO_KIND,                                              // stereo atom/bond geometric kind (partition-free)
     // bit values are arbitrary (runtime config, never serialized); append freely.
 }
 
-struct ConstitutionColoring { features: ColorFeatures }   // the one impl now (pre-stereo inherent fields)
-impl ConstitutionColoring { fn new(features: ColorFeatures) -> Self; fn full() -> Self; }
+struct ConstitutionColoring { features: ConstitutionFeatures }   // the one impl now (pre-stereo inherent fields)
+impl ConstitutionColoring { fn new(features: ConstitutionFeatures) -> Self; fn full() -> Self; }
 impl MoleculeColoring for ConstitutionColoring;
-// color(): match entity kind → hash (kind tag, that kind's inherent fields, each gated by ColorFeatures):
+// color(): match entity kind → hash (kind tag, that kind's inherent fields, each gated by ConstitutionFeatures):
 //   Atom → element/isotope/charge/#h/lone-pairs/spin;  Bond → order/charge/spin;
 //   Aromatic → π-count/charge/spin;  Multicenter → e-count/charge/spin;
 //   Dative → order (direction is gadget-encoded, C3c);  Noncovalent → kind.
-//   StereoAtom/StereoBond → kind tag only (not constitution fields; stereo isn't a graph node).
+//   StereoAtom/StereoBond → kind tag + geometric kind (STEREO_KIND); partition-dependent coset folded in C3d.
 //   per-atom electron vectors are NOT node fields (order-dependent) → incidence-edge colors, C3c.
 // the kind tag keeps kinds in disjoint color ranges (no pseudonode maps onto an atom or another kind).
 ```
@@ -225,13 +226,17 @@ impl MoleculeColoring for ConstitutionColoring;
 are **separate** impls owning their own fields (ring, aromaticity, functional class) — they carry derived
 props because their consumer is per-atom hashing, not an automorphism, so "relational ⇒ free" doesn't apply
 to them. Stereo is **not** a coloring impl: its descriptor is partition-dependent, so the symmetry-refinement loop
-folds it on top (C3d); the trait stays stereo-free (and fingerprint-reusable). `Entity`'s `StereoAtom`/
-`StereoBond` variants exist for the general enum; `ConstitutionColoring` colors them by kind tag only
-(no constitution fields), since stereo isn't a graph node.
+folds it on top (C3d); the trait stays stereo-free (and fingerprint-reusable). Stereo atoms/bonds **are**
+graph nodes (present in the full incidence selection); `ConstitutionColoring` gives them their kind tag +
+partition-free geometric `kind` (gated by `STEREO_KIND`, like any field). Their partition-dependent observable
+coset is the single term C3d folds on top — which is exactly why stereo is not itself a coloring impl.
 
-### C3b · `ast/automorphism.rs` (extend) **Done**
+### C3b · `ast/automorphism.rs` (extend) **Superseded — reverted by C3d (2026-06-13)**
 
-Expose generators on `AtomAutomorphism`; add the orientation-graded holder (Â proper + Â* mirror).
+Originally: expose generators on `AtomAutomorphism`; add the orientation-graded holder. The corrected C3d
+grades **graph-core** generators over the incidence graph (`NodeId`) directly, so these atom-level wrappers are
+unused — the additions below are reverted; the pre-existing `AtomAutomorphism` (atom-only molecule graph) stays.
+Kept for the design record:
 
 ```rust
 impl AtomAutomorphism {
@@ -239,12 +244,13 @@ impl AtomAutomorphism {
 }
 
 struct GradedAutomorphism {
-    proper: AtomAutomorphism,                         // Â  (orientation-preserving)
-    improper: Option<Vec<Vec<AtomId>>>,              // Â* (molecule→mirror mapping generators)
+    proper: AtomAutomorphism,            // Â  (orientation-preserving)
+    improper: Option<Vec<AtomId>>,       // Â* — one molecule→mirror rep; None ⇒ chiral (a coset has no generators)
 }
 impl GradedAutomorphism {
+    fn new(proper: AtomAutomorphism, improper: Option<Vec<AtomId>>) -> Self;
     fn proper(&self) -> &AtomAutomorphism;
-    fn improper_generators(&self) -> Option<&[Vec<AtomId>]>;
+    fn improper_rep(&self) -> Option<&[AtomId]>;
 }
 ```
 
@@ -269,52 +275,129 @@ stereo label.
 **No dative-direction gadget.** A directed bond between automorphism-equivalent atoms is a contradiction in
 terms (dative-ness *is* the donor/acceptor asymmetry), so the coloring already separates the endpoints; the
 direction itself is retained in the AST (`acceptor_slot`). Noncovalent relations are stored unordered and
-need nothing. So `node_entity` stays `Vec<Entity>` — no marker nodes.
+need nothing. So no marker nodes.
+
+Nodes are laid out in fixed kind-blocks (atoms, bonds, then each selected overlay/stereo kind in order), so
+the node↔entity correspondence is fully determined by the **per-kind counts** — store those, not a per-node
+vec. `entity(node)` / `node_of(entity)` are O(1) offset arithmetic (atoms are identity, the rest subtract a
+block offset).
 
 ```rust
 bitflags! struct IncidenceNodeSelection: u8 { OVERLAYS, STEREO }   // atoms + localized bonds always in
 impl IncidenceNodeSelection { fn topological()/*empty*/; fn constitution()/*OVERLAYS*/; fn full()/*both*/; }
 
 struct IncidenceGraph {
-    graph: Graph,             // CSR (graph-core); nodes = atoms ++ selected relation-pseudonodes
-    node_entity: Vec<Entity>, // node → the molecule Entity it represents (atoms at 0..n; BondId(k) at n+k)
+    graph: Graph,         // CSR (graph-core); nodes = atoms ++ selected relation-pseudonodes
+    counts: [u32; 8],     // per-kind block sizes (Atom, Bond, Dative, Aromatic, Multicenter, Noncovalent, StereoAtom, StereoBond)
 }
-impl IncidenceGraph { fn graph(&self) -> &Graph; fn entity(&self, NodeId) -> Entity; fn entities(&self) -> &[Entity]; }
+impl IncidenceGraph {
+    fn graph(&self) -> &Graph;
+    fn entity(&self, node: NodeId) -> Entity;     // O(1) from block offsets
+    fn node_of(&self, entity: Entity) -> NodeId;  // inverse
+}
 impl MoleculeAst {
     fn incidence_graph(&self, selection: IncidenceNodeSelection) -> IncidenceGraph;
 }
 ```
 
-### C3d · `ast/stereo_symmetry.rs` (new)
+### C3d · `ast/stereo_symmetry.rs` (new) — two steps
 
-`stereo_symmetry` runs the automorphism over the incidence graph (C3c) with colors folded each round;
-**`StereoSymmetry`** is the *result* (the converged graded automorphism + partition + queries) — the noun
-names the result, not the process. Molecule-level orbit queries + the per-carrier projection
-(the `image_under` bridge to a small local group).
+The molecule's graph-automorphism symmetry under a coloring, **graded** into proper vs improper, and the
+per-carrier projection derived from it. **Two results at two granularities:**
+
+- **`GraphSymmetry`** — the general, *owned* artifact (RingSet rule: artifacts own, views borrow). The
+  converged automorphism over the **full** incidence graph (C3c) under a coloring, graded. Self-contained: it
+  stores the incidence graph + converged colors + proper orbits + star orbits + one improper rep, so every
+  query (molecule-level orbits **and** per-carrier stabilizer re-runs) works from it alone — no `&MoleculeAst`
+  ref, no generic-`C` leak (the coloring is applied during construction, then erased to the color vector).
+  Reusable beyond stereo; cacheable later. Node ids never leave it — public queries speak `AtomId`; node↔entity
+  is the compact block layout (C3c).
+- **`StereoSymmetry`** — the compact per-carrier projection (`OrientedPermutationGroup` on ≤6 ligand positions +
+  kind + stored coset). The assertion currency; produced from a `GraphSymmetry`, carries the predicates.
+
+**Why grading, not a single partition (corrected 2026-06-13).** A scalar stereo-node color cannot forbid an
+orientation-*reversing* ligand swap — the node is a degree-1 pendant carrying one number, and a swap that
+inverts handedness leaves it unchanged. So nauty over the folded coloring returns the **full** automorphism
+group, and its orbit array is the **star** partition (proper ∪ improper), *not* proper. Example: C(Cl,Cl,F,Br)
+with a tetrahedral coset — the two Cl are enantiotopic, but the Cl↔Cl swap preserves the colored graph, so
+nauty merges them; calling that "proper" reports them homotopic. To recover proper orbits we **grade the
+generators**: a generator's orientation = its net action on stereocenter cosets (transport the stored coset by
+the induced ligand permutation via `StereoCosetAst::apply_permutation` — equals the target center's coset ⇒
+proper there, equals its enantiomer ⇒ improper; uniform across all centers ⇒ the generator's grade). This
+**subsumes Route A**: an improper element exists iff some generator is improper (proper is index-2 normal), so a
+separate molecule→mirror canonical run and `mirror_colors` are unnecessary.
+
+**Engine + known limit.** nauty (fast) over the folded coloring + generator grading. Exact except for **false
+automorphisms** at molecules with ≥2 independent prochiral centers: collapsed observable cosets can admit a
+*mixed* generator (proper at one center, improper at another) that is not a real symmetry. Mixed generators are
+**discarded** in grading (orbits become correctly finer); the residual gap (a true symmetry expressible only via
+a mixed generator) is pathological and is the deferred **VF2-carrying-parity** exact path (doc 104). For the
+common case (≤1 independent prochiral axis, resolved centers) this is exact.
+
+**Step 1 — `GraphSymmetry` (build + molecule-level queries).**
 
 ```rust
-struct StereoSymmetryConfig<C: MoleculeColoring> { coloring: C, para_stereo: bool, max_iterations: usize }
+struct GraphSymmetryConfig<C: MoleculeColoring> { coloring: C, iterate_to_fixpoint: bool, max_iterations: usize }
 
-struct StereoSymmetry { automorphism: GradedAutomorphism /* + converged partition */ }
+struct GraphSymmetry {
+    incidence: IncidenceGraph,         // full selection
+    colors: Vec<u64>,                  // converged node colors (for step-2 stabilizer re-runs)
+    proper_orbits: Vec<NodeId>,        // orbit rep per node, under proper generators
+    star_orbits: Vec<NodeId>,          // under proper ∪ improper generators
+    improper_rep: Option<Vec<NodeId>>, // one improper (orientation-reversing) generator; None ⇒ chiral
+}
 
 impl MoleculeAst {
-    fn stereo_symmetry<C: MoleculeColoring>(&self, cfg: &StereoSymmetryConfig<C>) -> StereoSymmetry;
-    // inc = self.incidence_graph();
-    // loop: color(node) = cfg.coloring.color(self, inc.node_entity[node]) ⊕ stereo_descriptor(partition);
-    //   auto = inc.graph.automorphisms(color); converge when partition stable or !para (one pass).
-    //   Â* from a molecule↔mirror isomorphism.
+    fn graph_symmetry<C: MoleculeColoring>(&self, cfg: &GraphSymmetryConfig<C>) -> GraphSymmetry;
+    // inc = self.incidence_graph(IncidenceNodeSelection::full());
+    // base = cfg.coloring.color(self, inc.entity(node))                       // static, all kinds
+    // fixpoint: recolor(node) = base ⊕ (stereo ? observable_coset(elem, orbits_{k-1}) : 0);
+    //   orbits_k = inc.graph.automorphisms(recolor).orbit array (refinement signal, star granularity);
+    //   stop when stable, else one pass if !iterate_to_fixpoint; max_iterations caps.
+    // grade the converged run's generators by coset action → proper set / improper set (discard mixed);
+    // proper_orbits = union-find(proper set); star_orbits = union-find(proper ∪ improper);
+    // improper_rep = improper set.first().
+}
+
+impl GraphSymmetry {
+    fn same_proper_orbit(&self, a: AtomId, b: AtomId) -> bool;     // proper_orbits[a] == proper_orbits[b]
+    fn same_star_orbit(&self, a: AtomId, b: AtomId) -> bool;       // star_orbits[a] == star_orbits[b]
+    fn proper_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
+    fn star_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
+    fn is_chiral(&self) -> bool;                                   // improper_rep.is_none()
+    pub(crate) fn site_stabilizer(&self, site: NodeId) -> Vec<Vec<NodeId>>;  // raw stabilizer gens, carrier bumped (step 2)
+}
+```
+
+The orientation grading lives **molecule-side** (it needs coset transport over the stereo elements) and is
+shared by the build and the step-2 projection. `AtomAutomorphism::generators()` + `GradedAutomorphism` (C3b)
+were scoped for an atom-level graded design; the corrected build grades **graph-core** generators over the
+incidence graph (`NodeId`) directly, so those umol-ast wrappers are unused — **revert the C3b additions** (keep
+the pre-existing `AtomAutomorphism`).
+
+**Step 2 — `StereoSymmetry` (per-carrier projection + predicates).**
+
+Entry on `MoleculeAst` (it owns the stereo elements / ligand order); `GraphSymmetry` is consulted and stays a
+pure symmetry object.
+
+```rust
+enum Topicity { Homotopic, Enantiotopic, Diastereotopic }
+
+struct StereoSymmetry { group: OrientedPermutationGroup, kind: StereoKind, coset: StereoCosetAst }
+
+impl MoleculeAst {
+    fn stereo_atom_symmetry(&self, gs: &GraphSymmetry, id: StereoAtomId) -> StereoSymmetry;
+    fn stereo_bond_symmetry(&self, gs: &GraphSymmetry, id: StereoBondId) -> StereoSymmetry;
+    // site = atom node (atom carrier) | bond pseudonode (bond carrier).
+    // raw = gs.site_stabilizer(site); grade raw molecule-side → proper stabilizer gens + optional improper rep.
+    // project each onto stored ligand positions (atom ligand p ↦ position holding σ(atom_p));
+    //   add Sₖ per same-kind virtual-ligand block.
+    // OrientedPermutationGroup::generate(ligand_count, proper ∪ improper rep).
 }
 
 impl StereoSymmetry {
-    // molecule-level
-    fn same_proper_orbit(&self, a: AtomId, b: AtomId) -> bool;
-    fn same_star_orbit(&self, a: AtomId, b: AtomId) -> bool;
-    fn proper_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
-    fn star_orbit_of(&self, a: AtomId) -> Vec<AtomId>;
-    fn graded(&self) -> &GradedAutomorphism;
-    // per-carrier projection: site stabilizer (targeted re-run, now) → local ligand-position group.
-    // Later a BSGS stabilizer feeds the same projection — the API is unchanged (doc 110).
-    fn ligand_symmetry(&self, site: AtomId, ligands: &[StereoLigand]) -> OrientedPermutationGroup;
+    fn is_stereogenic(&self) -> bool;     // stored coset is a singleton class of space(kind).merge_under(Π⁺)
+    fn topicity(&self, a: usize, b: usize) -> Topicity;  // same Π⁺ orbit → homotopic; same star, not proper → enantiotopic; else diastereotopic
 }
 ```
 

@@ -60,7 +60,7 @@ pub use ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
-pub use entity::Entity;
+pub use entity::{Entity, EntityKind};
 pub use incidence::{IncidenceGraph, IncidenceNodeSelection};
 pub use ligand::{StereoLigand, StereoLigandKind};
 pub use matching::BondMatching;
