@@ -160,7 +160,8 @@ pub fn parse_stereo_atom(input: &str) -> Result<StereoAtomDsl, ParseError> {
 
 pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
     let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
-    let coset = terminated(stereo_coset, multispace0).parse_next(i)?;
+    let coset =
+        terminated(move |i: &mut &str| stereo_coset(i, kind.degree()), multispace0).parse_next(i)?;
     let constraints: Vec<StereoAtomConstraint> =
         repeat(0.., move |i: &mut &str| stereo_atom_predicate(i, kind)).parse_next(i)?;
     Ok(StereoAtomDsl(
@@ -292,7 +293,8 @@ pub fn parse_stereo_bond(input: &str) -> Result<StereoBondDsl, ParseError> {
 
 pub(crate) fn stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
     let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
-    let coset = terminated(stereo_coset, multispace0).parse_next(i)?;
+    let coset =
+        terminated(move |i: &mut &str| stereo_coset(i, kind.degree()), multispace0).parse_next(i)?;
     let constraints: Vec<StereoBondConstraint> =
         repeat(0.., move |i: &mut &str| stereo_bond_predicate(i, kind)).parse_next(i)?;
     Ok(StereoBondDsl(
@@ -313,41 +315,47 @@ pub(crate) fn stereo_kind(i: &mut &str) -> PResult<StereoKind> {
     .parse_next(i)
 }
 
-/// Parse the `config` grammar into `StereoConfigurationAst` for constraints.
-pub(crate) fn stereo_config(i: &mut &str) -> PResult<StereoConfigurationAst> {
+/// Parse the `config` grammar into `StereoConfigurationAst` over a
+/// `degree`-position ligand frame (a coset-expression's `^` permutation acts on
+/// those positions).
+pub(crate) fn stereo_config(i: &mut &str, degree: usize) -> PResult<StereoConfigurationAst> {
     alt((
         '*'.value(StereoConfigurationAst::Undetermined),
         '!'.value(StereoConfigurationAst::NotStereo),
         '+'.value(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined)),
         terminated(stereo_lit, (multispace0, terminator))
             .map(|n| StereoConfigurationAst::Stereo(StereoCosetAst::Lit(n))),
-        stereo_expr.map(|e| StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(e)))),
+        (move |i: &mut &str| stereo_expr(i, degree))
+            .map(|e| StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(e)))),
     ))
     .parse_next(i)
 }
 
-pub(crate) fn parse_stereo_coset(input: &str) -> Result<StereoCosetAst, ParseError> {
-    stereo_coset.parse(input).map_err(|e| e.into_inner())
+pub(crate) fn parse_stereo_coset(input: &str, degree: usize) -> Result<StereoCosetAst, ParseError> {
+    (move |i: &mut &str| stereo_coset(i, degree))
+        .parse(input)
+        .map_err(|e| e.into_inner())
 }
 
-/// Parse the `coset` grammar into `StereoCosetAst` (used in stereo elements).
-fn stereo_coset(i: &mut &str) -> PResult<StereoCosetAst> {
+/// Parse the `coset` grammar into `StereoCosetAst` over a `degree`-position
+/// ligand frame (a coset-expression's `^` permutation acts on those positions).
+fn stereo_coset(i: &mut &str, degree: usize) -> PResult<StereoCosetAst> {
     alt((
         '*'.value(StereoCosetAst::Undetermined),
         terminated(stereo_lit, (multispace0, terminator)).map(StereoCosetAst::Lit),
-        stereo_expr.map(|e| StereoCosetAst::Expr(Box::new(e))),
+        (|i: &mut &str| stereo_expr(i, degree)).map(|e| StereoCosetAst::Expr(Box::new(e))),
     ))
     .parse_next(i)
 }
 
 /// `stereo-expr`: a `~`-prefixed base carrying zero or more left-associative
-/// `^image` postfixes.
-fn stereo_expr(i: &mut &str) -> PResult<StereoExpr> {
+/// `^cycles` postfixes (the permutation in 0-indexed disjoint-cycle notation).
+fn stereo_expr(i: &mut &str, degree: usize) -> PResult<StereoExpr> {
     let mut e = stereo_prefix(i)?;
     loop {
         multispace0.parse_next(i)?;
         if opt('^').parse_next(i)?.is_some() {
-            e = StereoExpr::apply(e, perm_image(i)?);
+            e = StereoExpr::apply(e, perm_cycles(i, degree)?);
         } else {
             return Ok(e);
         }
@@ -405,27 +413,6 @@ fn stereo_lit_set(i: &mut &str) -> PResult<Vec<u32>> {
         ),
     )
     .parse_next(i)
-}
-
-/// The 1-indexed one-line image read as digits → `Permutation`. Kept literal
-/// (never canonicalized); validated as a bijection of `1..=degree`.
-fn perm_image(i: &mut &str) -> PResult<Permutation> {
-    let digits: &str = digit1.parse_next(i)?;
-    let img: Vec<u8> = digits
-        .bytes()
-        .map(|b| b.checked_sub(b'1'))
-        .collect::<Option<Vec<u8>>>()
-        .ok_or(ErrMode::Cut(ParseError::Syntax))?;
-    let degree = img.len();
-    let mut seen = [false; 6];
-    for &x in &img {
-        let x = x as usize;
-        if x >= degree || x >= 6 || seen[x] {
-            return Err(ErrMode::Cut(ParseError::Syntax));
-        }
-        seen[x] = true;
-    }
-    Ok(Permutation::from_image(degree, &img))
 }
 
 fn cycle_point(i: &mut &str) -> PResult<usize> {
@@ -763,8 +750,7 @@ fn fmt_stereo_expr(f: &mut fmt::Formatter<'_>, e: &StereoExpr) -> fmt::Result {
         }
         StereoExpr::ApplyOp(inner, perm) => {
             fmt_stereo_expr(f, inner)?;
-            write!(f, "^")?;
-            fmt_perm_image(f, *perm)
+            write!(f, "^{perm}")
         }
         StereoExpr::LitSet(set) => fmt_stereo_lit_set(f, set),
         StereoExpr::VarDomain(name, set) => {
@@ -785,12 +771,6 @@ fn fmt_stereo_lit_set(f: &mut fmt::Formatter<'_>, set: &[u32]) -> fmt::Result {
     write!(f, "}}")
 }
 
-fn fmt_perm_image(f: &mut fmt::Formatter<'_>, perm: Permutation) -> fmt::Result {
-    for i in 0..perm.degree() {
-        write!(f, "{}", perm.apply(i) + 1)?;
-    }
-    Ok(())
-}
 
 /// A permutation as a vector of disjoint cycles (`[[0 1 2] [3 4]]`; identity `[]`).
 /// The degree is not encoded — fixed points drop out — so the reader supplies it
@@ -1275,7 +1255,8 @@ impl<'de> FromEdn<'de> for StereoCosetDsl {
                 StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(set)))
             }
             Edn::Str(s) => {
-                parse_stereo_coset(s).map_err(|e| DeError::subgrammar("stereo coset", e))?
+                // The coset-form is the payload of a `#T` / `#C` config, both degree 4.
+                parse_stereo_coset(s, 4).map_err(|e| DeError::subgrammar("stereo coset", e))?
             }
             other => {
                 return Err(DeError::TypeMismatch {
@@ -1613,12 +1594,16 @@ mod tests {
     #[case::var_domain("?o :: {1,2}", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
     #[case::swap("~1", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))))]
     #[case::mirror("'1", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::mirror(StereoExpr::Lit(1)))))]
-    #[case::apply("1^2134", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_image(4, &[1, 0, 2, 3])))))]
-    #[case::swap_binds_tighter_than_apply("~1^2134", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::swap(StereoExpr::Lit(1)), Permutation::from_image(4, &[1, 0, 2, 3])))))]
-    #[case::mirror_binds_tighter_than_apply("'1^2134", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::mirror(StereoExpr::Lit(1)), Permutation::from_image(4, &[1, 0, 2, 3])))))]
+    #[case::apply("1^(0,1)", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))))]
+    #[case::swap_binds_tighter_than_apply("~1^(0,1)", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::swap(StereoExpr::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
+    #[case::mirror_binds_tighter_than_apply("'1^(0,1)", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::mirror(StereoExpr::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
     #[case::whitespace_ignored("  ?o :: { 1 , 2 }", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
     fn test_stereo_config(#[case] input: &str, #[case] expected: StereoConfigurationAst) {
-        assert_eq!(stereo_config.parse(input).unwrap(), expected);
+        // `#T` / `#C` configs are degree 4.
+        assert_eq!(
+            (|i: &mut &str| stereo_config(i, 4)).parse(input).unwrap(),
+            expected
+        );
     }
 
     #[rustfmt::skip]
@@ -1631,7 +1616,8 @@ mod tests {
     #[case::lit_set(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 2]))), "{1,2}")]
     #[case::var_domain(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))), "?o :: {1,2}")]
     #[case::swap(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))), "~1")]
-    #[case::apply(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_image(4, &[1, 0, 2, 3])))), "1^2134")]
+    #[case::mirror(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::mirror(StereoExpr::Lit(1)))), "'1")]
+    #[case::apply(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))), "1^(0,1)")]
     fn test_fmt_stereo_config(#[case] c: StereoConfigurationAst, #[case] expected: &str) {
         struct W<'a>(&'a StereoConfigurationAst);
         impl fmt::Display for W<'_> {

@@ -24,7 +24,7 @@ use super::value::{fmt_value, value, ValueDsl};
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
 use crate::ast::spin::SpinStateAst;
-use crate::ast::stereo::StereoConfigurationAst;
+use crate::ast::stereo::{StereoConfigurationAst, StereoKind};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
@@ -243,7 +243,7 @@ fn bond_predicate(i: &mut &str) -> PResult<BondPredicate> {
         "#r" => optional_value
             .map(|v| BondPredicate::Constraint(BondConstraint::RingSize(v)))
             .parse_next(i),
-        "#C" => stereo_config
+        "#C" => (|i: &mut &str| stereo_config(i, StereoKind::CisTrans.degree()))
             .map(|c| BondPredicate::Constraint(BondConstraint::CisTransStereo(c)))
             .parse_next(i),
         p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownBondPredicate(

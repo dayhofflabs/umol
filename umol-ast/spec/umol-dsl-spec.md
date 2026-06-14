@@ -981,13 +981,13 @@ class ::= 'Th' | 'Ct' | 'Sp' | 'Tb' | 'Oh'
 coset ::= '*' | nat | coset-expr
 
 coset-expr ::= '~' coset-expr             (* involution operator             *)
-             | coset-expr '^' image       (* group action by a permutation   *)
+             | '\'' coset-expr            (* mirror operator                 *)
+             | coset-expr '^' cycles      (* group action by a permutation   *)
              | nat                        (* literal coset index             *)
              | '?' id [ '::' coset-set ]  (* coset variable / domain         *)
              | coset-set                  (* literal coset set               *)
 
 coset-set ::= '{' nat (',' nat)* '}'
-image     ::= digit+                      (* 1-indexed one-line permutation  *)
 
 stereo-predicate ::=
     '#p' ['!'] ( '~' | ['\''] cycles )    (* ligand symmetry: ! not-in, ' improper, ~ kind involution *)
@@ -1007,7 +1007,7 @@ glyph       ::= '=' | '\'' | '/'
 
 **`config`** (atom **`#T`** / bond **`#C`** / **`{:stereo …}`**).** The constraint payload extends **`coset`** with two leading sentinels: **`*`** = **`Undetermined`** (no stereo constraint — equivalent to omitting the predicate), **`!`** = **`NotStereo`** (the site is **not** a stereocenter), **`+`** = **`Stereo`** with an **undetermined** coset (the site **is** a stereocenter, coset unspecified). A bare **`nat`** / **`coset-expr`** is **`Stereo`** with that coset. The EDN equivalents are **`:undetermined`** / **`:not-stereo`** / **`{:stereo :undetermined}`** / **`{:stereo coset-form}`** (**§7.9**); a **`coset-set`** serializes to the EDN vector form **`[ int+ ]`**, every other **`coset-expr`** to a **`"coset-string"`**.
 
-**Coset operators (reserved).** The **`~`** (involution) and **`^`*image*** (group action by a one-line **`image`** permutation) operators, and the coset variable / set forms (**`?id`**, **`?id :: {…}`**, **`{…}`**), **parse** as **`coset-expr`** and **round-trip**, but their **matching** semantics are **staged** — relative-stereo binding and non-tetrahedral coset domains land incrementally. Only **ground literal cosets** (and the **`*`** / **`!`** / **`+`** sentinels) are presently matched; a conforming matcher **MAY** reject an operator / variable **`coset-expr`** until the corresponding stage lands.
+**Coset operators (reserved).** The **`~`** (involution) and **`^`*cycles*** (group action by a permutation in 0-indexed disjoint-cycle notation, **§7.14**) operators, and the coset variable / set forms (**`?id`**, **`?id :: {…}`**, **`{…}`**), **parse** as **`coset-expr`** and **round-trip**, but their **matching** semantics are **staged** — relative-stereo binding and non-tetrahedral coset domains land incrementally. Only **ground literal cosets** (and the **`*`** / **`!`** / **`+`** sentinels) are presently matched; a conforming matcher **MAY** reject an operator / variable **`coset-expr`** until the corresponding stage lands.
 
 **Inline predicates (`#p` / `#f` / `#o` / `#g`).** After the leading **`class coset`**, a **`stereo-string`** carries **zero or more** stereo predicates — the inline form of the per-element stereo constraints (the molecule-scope structured peers are **§7.9**). Each predicate's permutation degree is the **`class`** degree (number of ligand positions). The four predicates are:
 

@@ -902,7 +902,7 @@ fn resolve_atom(&self, ast: &MoleculeAst, id: AtomId) -> Option<Edit> {
   add, cis/trans add, two-coordinate arity skip, aromatic skip via declared `:aromatic-systems`, no-stereo) +
   `_out_of_scope` (restricted `kind_models` scope) + `_idempotent` (double resolve → no duplicate).
 
-### C4c · `ops/validator/stereo.rs` (new) + `ops/validator.rs` (export) — `StereoValidator`
+### C4c · `ops/validator/stereo.rs` (new) + `ops/validator.rs` (export) — `StereoValidator` **Done**
 
 `StereoValidator { model: StereoModel }`, `new(&StereoModel)`,
 `validate(&MoleculeAst) -> Result<Solution<(), StereoValidatorContradiction>, StereoValidatorError>`. Read-only
@@ -958,10 +958,16 @@ resolver's `InconsistencyPolicy` governs redundancy, not the validator); CIP/chi
   §7 keyword-shorthand mapping (`:ccw`→`Th0` …). Out-of-range fixtures → in-range across `dsl/stereo.rs`,
   `macros.rs`, `dsl/molecule/tests.rs`, `transact.rs`, `property.rs`, and the `th2`/`ct2` fuzz seeds
   (→ `th0`/`ct0`). The numeric string form (`"Th1"`=`Lit(1)`, digit = index) was already correct.
-- **C4c.6** — replace the 1-indexed one-line image notation in `ApplyOp` (`^`) with 0-indexed disjoint-cycle
-  notation: `perm_image`/`fmt_perm_image` → the existing `cycles` parser/formatter (the one `#p`/`#f` use);
-  spec §7.14 (`coset-expr '^' cycles`, drop `image ::= digit+`) + the §7.14 reserved-operators prose; tests
-  (`1^2134` → `1^(0,1)`).
+- **C4c.6** **Done** — replaced `ApplyOp` (`^`) 1-indexed one-line image with 0-indexed disjoint-cycle
+  notation. Parse: `perm_image` removed; `stereo_expr` now `perm_cycles(i, degree)` (the parser `#p`/`#f`
+  use). Render: `fmt_perm_image` removed; `ApplyOp` → `write!("^{perm}")` (Permutation `Display` = cycles).
+  Degree threaded from the kind: `stereo_coset`/`stereo_expr`/`stereo_config`/`parse_stereo_coset` and the EDN
+  readers (`read_stereo_coset_dsl`/`read_stereo_configuration_dsl`) take a `degree`; stereo-strings pass
+  `kind.degree()` (class), `#T`/`#C` pass `Tetrahedral`/`CisTrans.degree()`. The only literal degree is the
+  one context-free `FromEdn` leaf (`StereoCosetDsl::from_edn`, a `#T`/`#C` config coset-form → 4). Spec §7.14
+  (`coset-expr '^' cycles`, dropped `image ::= digit+`) + reserved-operators prose. Tests `1^2134` → `1^(0,1)`.
+  Also surfaced + fixed a pre-existing spec gap: the `'` **mirror** coset operator (`StereoExpr::MirrorOp`,
+  parsed + now render-tested) was missing from the §7.14 `coset-expr` grammar; added.
 
 ### C4d · `ops/resolver/aromaticity.rs` (fix — idempotency) **Done**
 

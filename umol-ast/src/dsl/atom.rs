@@ -29,7 +29,7 @@ use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
 use crate::ast::operators::MemOp;
-use crate::ast::stereo::StereoConfigurationAst;
+use crate::ast::stereo::{StereoConfigurationAst, StereoKind};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
@@ -279,7 +279,7 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
         "#r" => optional_value
             .map(|v| AtomPredicate::Constraint(AtomConstraint::RingSize(v)))
             .parse_next(i),
-        "#T" => stereo_config
+        "#T" => (|i: &mut &str| stereo_config(i, StereoKind::Tetrahedral.degree()))
             .map(|c| AtomPredicate::Constraint(AtomConstraint::TetrahedralStereo(c)))
             .parse_next(i),
         p if p.starts_with('#') => Err(ErrMode::Cut(ParseError::UnknownAtomPredicate(
