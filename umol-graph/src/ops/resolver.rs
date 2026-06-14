@@ -144,7 +144,7 @@ mod tests {
     use super::*;
     use crate::ops::model::{
         AromaticityModel, AtomTypingModel, ChemistryModel, CountsModel, ElementScope, RingLimits,
-        ValenceModel,
+        StereoModel, ValenceModel,
     };
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
@@ -170,6 +170,7 @@ mod tests {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
             },
+            stereo: StereoModel::default(),
         }
     }
 
@@ -182,6 +183,7 @@ mod tests {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
             },
+            stereo: StereoModel::default(),
         }
     }
 

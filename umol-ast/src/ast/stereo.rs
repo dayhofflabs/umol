@@ -16,7 +16,7 @@ use super::constraint::{
 use super::traits::{AsLit, Lattice};
 
 /// Stereo kind: the atom-centered coordination geometries and the bond-centered cis/trans kind.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, strum::EnumCount)]
 pub enum StereoKind {
     Tetrahedral,
     CisTrans,

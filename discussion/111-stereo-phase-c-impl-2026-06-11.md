@@ -811,17 +811,32 @@ resolution is stale for the validator (which needs the final ground state). The 
 many `topicity`/`stereogenicity`/`ligand_symmetry` queries on one resolved molecule — is served by a cache on
 the **immutable `Molecule`** (doc 086, keyed by config), not by op-to-op passing.
 
-### C4a · `ops/model.rs` (extend) — `StereoModel` + `KindScope`
+### C4a · `ops/model.rs` (extend) — `StereoModel` **Done**
 
-Folded into `ChemistryModel` beside `valence`/`aromaticity`; mirrors `AromaticityModel` / `ElementScope`.
+Folded into `ChemistryModel` beside `valence`/`aromaticity`; `ElementScope` (existing) is reused.
 
 ```rust
 struct ChemistryModel { valence: ValenceModel, aromaticity: AromaticityModel, stereo: StereoModel }
 
-struct StereoModel { kind_scopes: KindScopes, fluxionality: FluxionalitySetting, para_stereo: bool, inconsistency: InconsistencyPolicy }
-enum KindScope { /* per-kind: element + coordination/bond-order scope, mirror ElementScope */ }
-// StereoModel produces the umol-ast `StereoSymmetryConfig { coloring, para_stereo, max_iterations }`.
+struct StereoModel {
+    kind_models: [Option<StereoKindModel>; StereoKind::COUNT],  // slotmap by kind discriminant; None = off
+    para_stereo: bool,
+    max_iterations: usize,
+    inconsistency: InconsistencyPolicy,
+}
+struct StereoKindModel { scope: ElementScope, fluxionality: bool }   // per-kind: which elements, fluxional?
+enum InconsistencyPolicy { Keep, Strip, Error }                     // resolver coverage policy (C4b)
 ```
+
+Design notes vs the original sketch: `kind_scopes`/`KindScope`/`FluxionalitySetting` collapsed into the
+per-kind-slot array `[Option<StereoKindModel>; StereoKind::COUNT]` (`StereoKind` gained `strum::EnumCount`;
+indexed by `kind as usize`), with `fluxionality` a per-kind `bool` (not a global setting). There is no
+`StereoSymmetryConfig` in umol-ast — `StereoModel::graph_symmetry_config()` builds the existing
+`GraphSymmetryConfig<ConstitutionColoring> { coloring: full(), iterate_to_fixpoint: para_stereo, max_iterations }`
+(the doc's `para_stereo` *is* `iterate_to_fixpoint` — the fixpoint pass resolves para-stereocenters).
+**Default**: tetrahedral + cis-trans on (`ElementScope::Any`), the higher geometries off, `para_stereo: false`,
+`max_iterations: 16`, `inconsistency: Error`. `strum` added to umol-graph (trait only). Tests:
+`test_stereo_model_default`, `_kind_model` (per-kind table), `_graph_symmetry_config`.
 
 ### C4b · `ops/resolver/stereo.rs` (new) — `StereoResolver` (mirror `ops/resolver/aromaticity.rs`)
 

@@ -100,7 +100,8 @@ mod tests {
 
     use super::parse_mol_bytes_with;
     use crate::ops::model::{
-        AromaticityModel, ChemistryModel, CountsModel, ElementScope, RingLimits, ValenceModel,
+        AromaticityModel, ChemistryModel, CountsModel, ElementScope, RingLimits, StereoModel,
+        ValenceModel,
     };
     use crate::ops::valence::{CountsValence, ValenceTable};
 
@@ -150,6 +151,7 @@ mod tests {
                 scope: ElementScope::AllowList(vec![Element::C]),
                 ring_limits: RingLimits::default(),
             },
+            stereo: StereoModel::default(),
         };
         let ast =
             parse_mol_bytes_with(METHANE_MOL.as_bytes(), &CtfileIoConfig::basic(), &model).unwrap();

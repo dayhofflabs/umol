@@ -7,9 +7,12 @@
 //! share one model. The model carries no resolution behavior of its own — the
 //! resolver and validator engines do the work.
 
+use std::array;
 use std::borrow::Cow;
 
+use strum::EnumCount;
 use thiserror::Error;
+use umol_ast::ast::{ConstitutionColoring, GraphSymmetryConfig, StereoKind};
 use umol_shared::element::Element;
 
 use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
@@ -18,6 +21,7 @@ use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 pub struct ChemistryModel {
     pub valence: ValenceModel,
     pub aromaticity: AromaticityModel,
+    pub stereo: StereoModel,
 }
 
 impl Default for ChemistryModel {
@@ -27,6 +31,7 @@ impl Default for ChemistryModel {
                 registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
             }),
             aromaticity: AromaticityModel::daylight(),
+            stereo: StereoModel::default(),
         }
     }
 }
@@ -139,6 +144,79 @@ impl Default for RingLimits {
     }
 }
 
+/// Stereo perception model. `kind_models` is a per-`StereoKind` slot map (indexed
+/// by the kind's discriminant); a `None` slot means that kind is not perceived.
+/// `para_stereo` enables the graph-symmetry fixpoint iteration that resolves
+/// para-stereocenters; `inconsistency` governs how the resolver handles a
+/// `#T`/`#C` assertion it cannot realize.
+#[derive(Debug, Clone)]
+pub struct StereoModel {
+    pub kind_models: [Option<StereoKindModel>; StereoKind::COUNT],
+    pub para_stereo: bool,
+    pub max_iterations: usize,
+    pub inconsistency: InconsistencyPolicy,
+}
+
+/// Per-kind perception settings: the elements eligible to bear this kind and
+/// whether the kind's sites are treated as fluxional.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StereoKindModel {
+    pub scope: ElementScope,
+    pub fluxionality: bool,
+}
+
+/// How the stereo resolver handles a `#T`/`#C` assertion it cannot (fully)
+/// realize: keep what it can, strip the unrealizable element, or error. Never a
+/// silent drop.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InconsistencyPolicy {
+    Keep,
+    Strip,
+    Error,
+}
+
+impl StereoModel {
+    /// The per-kind model for `kind`, or `None` if the kind is not perceived.
+    pub fn kind_model(&self, kind: StereoKind) -> Option<&StereoKindModel> {
+        self.kind_models[kind as usize].as_ref()
+    }
+
+    /// Build the umol-ast graph-symmetry config the validator runs: full
+    /// constitution coloring, fixpoint iteration gated by `para_stereo`.
+    pub fn graph_symmetry_config(&self) -> GraphSymmetryConfig<ConstitutionColoring> {
+        GraphSymmetryConfig {
+            coloring: ConstitutionColoring::full(),
+            iterate_to_fixpoint: self.para_stereo,
+            max_iterations: self.max_iterations,
+        }
+    }
+}
+
+impl Default for StereoModel {
+    /// Perceive the two realized binary kinds — tetrahedral atoms and cis/trans
+    /// bonds — for any element; the higher geometries (square-planar,
+    /// trigonal-bipyramidal, octahedral, axial) are staged off. No para-stereo
+    /// fixpoint by default; inconsistency is an error.
+    fn default() -> Self {
+        let mut kind_models: [Option<StereoKindModel>; StereoKind::COUNT] =
+            array::from_fn(|_| None);
+        kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel {
+            scope: ElementScope::Any,
+            fluxionality: false,
+        });
+        kind_models[StereoKind::CisTrans as usize] = Some(StereoKindModel {
+            scope: ElementScope::Any,
+            fluxionality: false,
+        });
+        Self {
+            kind_models,
+            para_stereo: false,
+            max_iterations: 16,
+            inconsistency: InconsistencyPolicy::Error,
+        }
+    }
+}
+
 /// Setup-time errors loading model data (TOML registries / valence tables).
 /// Distinct from the per-engine `*Error` types that surface at resolve time.
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -164,6 +242,7 @@ mod tests {
             model.aromaticity,
             AromaticityModel::HueckelRule { .. }
         ));
+        assert!(!model.stereo.para_stereo);
     }
 
     #[rstest]
@@ -212,5 +291,44 @@ mod tests {
             }
             other => panic!("expected HueckelRule, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_stereo_model_default() {
+        let model = StereoModel::default();
+        assert!(!model.para_stereo);
+        assert_eq!(model.max_iterations, 16);
+        assert_eq!(model.inconsistency, InconsistencyPolicy::Error);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::tetrahedral(StereoKind::Tetrahedral, Some(StereoKindModel { scope: ElementScope::Any, fluxionality: false }))]
+    #[case::cis_trans(StereoKind::CisTrans, Some(StereoKindModel { scope: ElementScope::Any, fluxionality: false }))]
+    #[case::axial(StereoKind::Axial, None)]
+    #[case::square_planar(StereoKind::SquarePlanar, None)]
+    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, None)]
+    #[case::octahedral(StereoKind::Octahedral, None)]
+    fn test_stereo_model_kind_model(
+        #[case] kind: StereoKind,
+        #[case] expected: Option<StereoKindModel>,
+    ) {
+        assert_eq!(StereoModel::default().kind_model(kind), expected.as_ref());
+    }
+
+    #[rstest]
+    #[case::no_para(false, false)]
+    #[case::para(true, true)]
+    fn test_stereo_model_graph_symmetry_config(
+        #[case] para_stereo: bool,
+        #[case] expected_fixpoint: bool,
+    ) {
+        let model = StereoModel {
+            para_stereo,
+            ..StereoModel::default()
+        };
+        let cfg = model.graph_symmetry_config();
+        assert_eq!(cfg.iterate_to_fixpoint, expected_fixpoint);
+        assert_eq!(cfg.max_iterations, 16);
     }
 }
