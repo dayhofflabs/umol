@@ -838,7 +838,7 @@ indexed by `kind as usize`), with `fluxionality` a per-kind `bool` (not a global
 `max_iterations: 16`, `inconsistency: Error`. `strum` added to umol-graph (trait only). Tests:
 `test_stereo_model_default`, `_kind_model` (per-kind table), `_graph_symmetry_config`.
 
-### C4b · `ops/resolver/stereo.rs` (new) — `StereoResolver`
+### C4b · `ops/resolver/stereo.rs` (new) — `StereoResolver` **Done**
 
 Structural resolver, mirroring `AromaticityResolver` (thin, `Solution`-typed): from each atom `#T` / bond `#C`
 it adds a `:stereo-atom` / `:stereo-bond` element with the canonical ligand frame and the coset copied
@@ -898,7 +898,9 @@ fn resolve_atom(&self, ast: &MoleculeAst, id: AtomId) -> Option<Edit> {
   side_b.first, side_b.second]` via `bond_side_ligands` (per-end substituents ascending + one virtual when an
   end has a single substituent), endpoints canonical `[min,max]` = raise `[start,end]`. Scope requires **both**
   end elements eligible.
-- **C4b.4** — tests: atom + bond add, idempotency skip, aromatic skip, out-of-scope / arity skip.
+- **C4b.4** **Done** — tests (`mol_ground!` inputs): `test_stereo_resolver_resolve` (table: tetrahedral
+  add, cis/trans add, two-coordinate arity skip, aromatic skip via declared `:aromatic-systems`, no-stereo) +
+  `_out_of_scope` (restricted `kind_models` scope) + `_idempotent` (double resolve → no duplicate).
 
 ### C4c · `ops/validator/stereo.rs` (new) + `ops/validator.rs` (wire) — `StereoValidator` (mirror `ops/validator/aromaticity.rs`)
 

@@ -43,12 +43,12 @@ impl StereoResolver {
         let atom_adds: Vec<(AtomId, Vec<StereoLigand>, StereoAtomAst)> = ast
             .atoms()
             .ids()
-            .filter_map(|id| self.resolve_atom(ast, id))
+            .filter_map(|id| self.resolve_stereo_atom(ast, id))
             .collect();
         let bond_adds: Vec<(BondId, Vec<StereoLigand>, StereoBondAst)> = ast
             .bonds()
             .ids()
-            .filter_map(|id| self.resolve_bond(ast, id))
+            .filter_map(|id| self.resolve_stereo_bond(ast, id))
             .collect();
 
         if atom_adds.is_empty() && bond_adds.is_empty() {
@@ -67,7 +67,7 @@ impl StereoResolver {
         Ok(Solution::Determined(()))
     }
 
-    fn resolve_atom(
+    fn resolve_stereo_atom(
         &self,
         ast: &MoleculeAst,
         id: AtomId,
@@ -81,7 +81,8 @@ impl StereoResolver {
         }
 
         let kind = StereoKind::Tetrahedral;
-        let StereoConfigurationAst::Stereo(coset) = atom.ast.constraints.tetrahedral_stereo() else {
+        let StereoConfigurationAst::Stereo(coset) = atom.ast.constraints.tetrahedral_stereo()
+        else {
             return None;
         };
         let model = self.model.kind_model(kind)?;
@@ -110,7 +111,7 @@ impl StereoResolver {
         Some((id, ligands, StereoAtomAst::new(kind, coset.simplify(kind))))
     }
 
-    fn resolve_bond(
+    fn resolve_stereo_bond(
         &self,
         ast: &MoleculeAst,
         id: BondId,
@@ -171,5 +172,123 @@ impl StereoResolver {
             }
         };
         Some([first, second])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use umol_ast::ast::{
+        AtomId, BondId, StereoAtomId, StereoCosetAst, StereoKind, StereoLigandKind,
+    };
+    use umol_ast::mol_ground;
+    use umol_shared::element::Element;
+
+    use super::StereoResolver;
+    use crate::ops::model::{ElementScope, StereoKindModel, StereoModel};
+    use crate::ops::solution::Solution;
+
+    #[rstest]
+    #[case::tetrahedral_atom(
+        r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"] :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#,
+        vec![(AtomId(1), StereoKind::Tetrahedral, StereoCosetAst::Lit(1),
+        vec![(AtomId(0), StereoLigandKind::Atom), (AtomId(2), StereoLigandKind::Atom),
+             (AtomId(3), StereoLigandKind::Atom), (AtomId(1), StereoLigandKind::ImplicitHydrogen)])], vec![])]
+    #[case::cis_trans_bond(
+        r#"{:atoms ["C #h3" "C #h1" "C #h1" "C #h3"] :bonds [[0 1 "1"] [1 2 "2#C1"] [2 3 "1"]]}"#,
+        vec![], vec![(BondId(1), StereoKind::CisTrans, StereoCosetAst::Lit(1),
+        vec![(AtomId(0), StereoLigandKind::Atom), (AtomId(1), StereoLigandKind::ImplicitHydrogen),
+             (AtomId(3), StereoLigandKind::Atom), (AtomId(2), StereoLigandKind::ImplicitHydrogen)])])]
+    #[case::two_coordinate_skip(r#"{:atoms ["C #h3" "S #h0 #T1" "C #h3"] :bonds [[0 1 "1"] [1 2 "1"]]}"#, vec![], vec![])]
+    #[case::aromatic_skip(
+        r##"{:atoms ["C #h #T1" "C #h" "C #h" "C #h" "C #h" "C #h"]
+            :bonds [[0 1 "1"] [1 2 "1"] [2 3 "1"] [3 4 "1"] [4 5 "1"] [5 0 "1"]]
+            :aromatic-systems [{:atoms [0 1 2 3 4 5] :type "#e6"}]}"##, vec![], vec![])]
+    #[case::no_stereo( r#"{:atoms ["C #h3" "C #h3"] :bonds [[0 1 "1"]]}"#, vec![], vec![])]
+    fn test_stereo_resolver_resolve(
+        #[case] input: &str,
+        #[case] expected_atoms: Vec<(
+            AtomId,
+            StereoKind,
+            StereoCosetAst,
+            Vec<(AtomId, StereoLigandKind)>,
+        )>,
+        #[case] expected_bonds: Vec<(
+            BondId,
+            StereoKind,
+            StereoCosetAst,
+            Vec<(AtomId, StereoLigandKind)>,
+        )>,
+    ) {
+        let mut ast = mol_ground!(input);
+        let solution = StereoResolver::new(&StereoModel::default())
+            .resolve(&mut ast)
+            .unwrap();
+        assert!(matches!(solution, Solution::Determined(())));
+
+        let atoms: Vec<(
+            AtomId,
+            StereoKind,
+            StereoCosetAst,
+            Vec<(AtomId, StereoLigandKind)>,
+        )> = ast
+            .stereo_atoms()
+            .iter()
+            .map(|s| {
+                (
+                    s.site().id,
+                    s.kind(),
+                    s.coset().clone(),
+                    s.ligands().map(|l| (l.atom_id(), l.kind())).collect(),
+                )
+            })
+            .collect();
+        let bonds: Vec<(
+            BondId,
+            StereoKind,
+            StereoCosetAst,
+            Vec<(AtomId, StereoLigandKind)>,
+        )> = ast
+            .stereo_bonds()
+            .iter()
+            .map(|s| {
+                (
+                    s.site().id,
+                    s.kind(),
+                    s.coset().clone(),
+                    s.ligands().map(|l| (l.atom_id(), l.kind())).collect(),
+                )
+            })
+            .collect();
+        assert_eq!(atoms, expected_atoms);
+        assert_eq!(bonds, expected_bonds);
+    }
+
+    #[rstest]
+    fn test_stereo_resolver_resolve_out_of_scope() {
+        let mut model = StereoModel::default();
+        model.kind_models[StereoKind::Tetrahedral as usize] = Some(StereoKindModel {
+            scope: ElementScope::AllowList(vec![Element::N]),
+            fluxionality: false,
+        });
+        let mut ast = mol_ground!(
+            r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"] :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
+        );
+        StereoResolver::new(&model).resolve(&mut ast).unwrap();
+        assert_eq!(ast.stereo_atoms().iter().count(), 0);
+    }
+
+    #[rstest]
+    fn test_stereo_resolver_resolve_idempotent() {
+        let resolver = StereoResolver::new(&StereoModel::default());
+        let mut ast = mol_ground!(
+            r#"{:atoms ["C #h3" "C #h1 #T1" "N #h2" "O #h1"] :bonds [[0 1 "1"] [1 2 "1"] [1 3 "1"]]}"#
+        );
+        resolver.resolve(&mut ast).unwrap();
+        resolver.resolve(&mut ast).unwrap();
+        assert_eq!(ast.stereo_atoms().iter().count(), 1);
+        let s = ast.stereo_atom(StereoAtomId(0));
+        assert_eq!(s.kind(), StereoKind::Tetrahedral);
+        assert_eq!(*s.coset(), StereoCosetAst::Lit(1));
     }
 }
