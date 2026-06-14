@@ -902,25 +902,48 @@ fn resolve_atom(&self, ast: &MoleculeAst, id: AtomId) -> Option<Edit> {
   add, cis/trans add, two-coordinate arity skip, aromatic skip via declared `:aromatic-systems`, no-stereo) +
   `_out_of_scope` (restricted `kind_models` scope) + `_idempotent` (double resolve → no duplicate).
 
-### C4c · `ops/validator/stereo.rs` (new) + `ops/validator.rs` (wire) — `StereoValidator` (mirror `ops/validator/aromaticity.rs`)
+### C4c · `ops/validator/stereo.rs` (new) + `ops/validator.rs` (export) — `StereoValidator`
 
-Carries the `StereoModel` and computes the `StereoSymmetry` **once** (molecule-wide, on the resolved AST),
-projecting per element — like `AromaticityValidator` carries its model; runs **last**, after
-`AromaticityValidator`. (It is the **only** pipeline consumer of `StereoSymmetry`; the resolver is structural.) Pass/fail, never mutates (doc 092: validators are tier-2
-+ constraint↔data agreement; tier-1 structural is enforced at `MoleculeAst::new`; always-on). Invariants:
+`StereoValidator { model: StereoModel }`, `new(&StereoModel)`,
+`validate(&MoleculeAst) -> Result<Solution<(), StereoValidatorContradiction>, StereoValidatorError>`. Read-only
+(`graph_symmetry` / `stereo_atom_symmetry` are `&self`). Mirrors `AromaticityValidator`: a separate
+model-carrying validator, **not** a field of the composite `Validator` (which holds only the model-free ones);
+wiring = re-export from `validator.rs`. No top-level orchestrator chains the model-carrying validators yet
+(parse.rs runs only the resolver; `AromaticityValidator` is invoked explicitly), so the "after aromaticity"
+order applies whenever one is added. Pass/fail, never mutates (doc 092 tier-2 constraint↔data; tier-1 is
+enforced at `MoleculeAst::new`). `StereoValidatorError` is empty unless `graph_symmetry` turns out fallible.
 
-1. **Coset in range** — `0 ≤ index < kind.count()` for the resolved kind.
-2. **Ligand-frame arity = kind degree** (port count).
-3. **Achiral-kind gate** — improper `'` relations/literals (`#o'`/`#g'`) are invalid on achiral kinds (no
-   enantiomers).
-4. **Asserted-constraint ↔ derived agreement** (tier-2 constraint↔data, docs 087/092): every ground asserted
-   `#p`/`#o`/`#f` / `#g` is verified against the validator's `StereoSymmetry`; mismatch = contradiction. This
-   is the derived-vs-stored cross-check — the stereo analog of the topology-derived/stored field pairs
-   (doc 086) that the constraint validator already cross-checks.
+**Flow:** compute `gs = ast.graph_symmetry(&model.graph_symmetry_config())` once; loop stereo atoms then stereo
+bonds; first `Contradictory` wins; non-ground assertions yield `Underdetermined`.
+
+**Invariants (per element):**
+
+1. **Coset in range** — `coset.as_lit()` ⇒ `n < kind.count()`; else underdetermined.
+2. **Ligand arity** — ligand count == `kind.degree()`.
+3. **Achiral-kind gate** — `!kind.is_chiral_class()` (CisTrans, SquarePlanar) ⇒ no asserted `#o` / `#g`
+   relation may admit the improper value (`Topicity::Enantiotopic` / `Stereogenicity::Prochiral`).
+4. **Asserted ↔ derived** — project `sym = ast.stereo_atom_symmetry(&gs, id)` (bond analog):
+   - `#g` `StereogenicityAst` rel vs `sym.stereogenicity()`.
+   - `#o` each `TopicityAst{pair, rel}` vs `sym.topicity(pair.first, pair.second)`.
+   - `#p` each asserted ligand permutation ∈ proper elements of `sym.group()`.
+   - `#f` **not checked** — fluxionality is a dynamics property, not graph-derivable (decided).
+
+   A non-ground asserted relation contradicts **only when the derived value falls outside the set**
+   (`!rel.matches(derived)`); a derived value inside a multi-valued set leaves the element `Underdetermined`
+   (decided).
 
 **Not** validator errors: a concrete coset on a non-stereogenic site (legitimate labeled data, doc 104 — the
 resolver's `InconsistencyPolicy` governs redundancy, not the validator); CIP/chirality-label invention
 (doc 080 — deferred, out of scope). No transformer at this stage.
+
+**Substeps:**
+- **C4c.1** **Done** — `StereoValidator` skeleton (empty contradiction/error types) + `validator.rs` export +
+  `gs` computation + atom/bond element loop (`validate_stereo_atom`/`_bond` stubbed `Determined`).
+- **C4c.2** **Done** — invariants 1–3 in `check_structural` (`CosetOutOfRange` / `LigandArity` /
+  `ImproperOnAchiral`); achiral gate fires only on an explicit improper relation that is **not**
+  `Undetermined` (bare/wildcard elements pass).
+- **C4c.3** — invariant 4 (per-element projection: `#g` / `#o` / `#p`; `#f` skipped).
+- **C4c.4** — tests: passing center + coset-range / arity / achiral-gate / asserted-mismatch contradictions.
 
 ### C4d · `ops/resolver/aromaticity.rs` (fix — idempotency) **Done**
 

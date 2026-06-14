@@ -14,12 +14,14 @@
 //! `AromaticityValidator` is configured separately because it carries a model.
 
 pub mod aromaticity;
+pub mod stereo;
 pub mod constraint;
 pub mod entity;
 pub mod invariants;
 pub mod spin;
 
 pub use aromaticity::{AromaticityValidator, AromaticityValidatorContradiction};
+pub use stereo::{StereoValidator, StereoValidatorContradiction, StereoValidatorError};
 pub use constraint::{ConstraintContradiction, ConstraintError, ConstraintValidator};
 pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};
 pub use invariants::{ValenceInvariantsError, ValenceInvariantsValidator};
