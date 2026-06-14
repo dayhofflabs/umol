@@ -134,6 +134,7 @@ impl<'a> AtomView<'a> {
     /// `self.molecule.neighbors(self.id)` but exposed on the view so closures
     /// that take `&AtomView` (e.g. perception electron-counting) can inspect
     /// bonds without reaching back to the molecule.
+    /// Incident neighbors, ordered by ascending neighbor atom id.
     pub fn neighbors(&self) -> impl Iterator<Item = NeighborView<'a>> {
         self.molecule.neighbors(self.id)
     }

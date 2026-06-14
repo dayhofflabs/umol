@@ -894,7 +894,10 @@ fn resolve_atom(&self, ast: &MoleculeAst, id: AtomId) -> Option<Edit> {
   `StereoError` are empty (mirror `BondsContradiction`/`BondsError`). `model` field unread until C4b.2.
 - **C4b.2** **Done** — `resolve_atom` (`#T` → `Tetrahedral`): guards (coincident, aromatic, `#T` config,
   kind/scope via `as_lit`), canonical frame (neighbors + one virtual last), arity check, coset verbatim.
-- **C4b.3** — `resolve_bond` (`#C` → `CisTrans`): mirror with the cis/trans 4-ligand frame.
+- **C4b.3** **Done** — `resolve_bond` (`#C` → `CisTrans`): 4-ligand frame `[side_a.first, side_a.second,
+  side_b.first, side_b.second]` via `bond_side_ligands` (per-end substituents ascending + one virtual when an
+  end has a single substituent), endpoints canonical `[min,max]` = raise `[start,end]`. Scope requires **both**
+  end elements eligible.
 - **C4b.4** — tests: atom + bond add, idempotency skip, aromatic skip, out-of-scope / arity skip.
 
 ### C4c · `ops/validator/stereo.rs` (new) + `ops/validator.rs` (wire) — `StereoValidator` (mirror `ops/validator/aromaticity.rs`)

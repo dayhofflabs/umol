@@ -112,9 +112,64 @@ impl StereoResolver {
 
     fn resolve_bond(
         &self,
-        _ast: &MoleculeAst,
-        _id: BondId,
+        ast: &MoleculeAst,
+        id: BondId,
     ) -> Option<(BondId, Vec<StereoLigand>, StereoBondAst)> {
-        None
+        if ast.stereo_bonds().has_coincident(id) {
+            return None;
+        }
+        let bond = ast.bond(id);
+
+        let kind = StereoKind::CisTrans;
+        let StereoConfigurationAst::Stereo(coset) = bond.ast.constraints.cis_trans_stereo() else {
+            return None;
+        };
+        let model = self.model.kind_model(kind)?;
+        // Endpoints are canonical (min, max) = raise's (start, end), so side_a/side_b
+        // match the coset frame raise stored.
+        let [a, b] = bond.atom_ids();
+        if !model.scope.contains(ast.atom(a).element().as_lit()?)
+            || !model.scope.contains(ast.atom(b).element().as_lit()?)
+        {
+            return None;
+        }
+
+        let side_a = self.bond_side_ligands(ast, a, b)?;
+        let side_b = self.bond_side_ligands(ast, b, a)?;
+        let ligands = vec![side_a[0], side_a[1], side_b[0], side_b[1]];
+
+        Some((id, ligands, StereoBondAst::new(kind, coset.simplify(kind))))
+    }
+
+    /// The two ligands of one double-bond end, in `cis_trans_side` order: the
+    /// `atom`'s neighbors (ascending, excluding the `partner` across the bond),
+    /// the first as `Atom`; the second as `Atom`, or a single virtual ligand
+    /// (implicit hydrogen / lone pair) appended when the end has one substituent.
+    fn bond_side_ligands(
+        &self,
+        ast: &MoleculeAst,
+        atom: AtomId,
+        partner: AtomId,
+    ) -> Option<[StereoLigand; 2]> {
+        let view = ast.atom(atom);
+        let mut substituents = view
+            .neighbors()
+            .map(|n| n.atom_id())
+            .filter(|&n| n != partner);
+        let first = StereoLigand::new(substituents.next()?, StereoLigandKind::Atom);
+        let second = match substituents.next() {
+            Some(second) => StereoLigand::new(second, StereoLigandKind::Atom),
+            None => {
+                let virtual_kind = if view.implicit_hydrogens().as_lit()? >= 1 {
+                    StereoLigandKind::ImplicitHydrogen
+                } else if view.lone_pairs().as_lit()? >= 1 {
+                    StereoLigandKind::LonePair
+                } else {
+                    return None;
+                };
+                StereoLigand::new(atom, virtual_kind)
+            }
+        };
+        Some([first, second])
     }
 }
