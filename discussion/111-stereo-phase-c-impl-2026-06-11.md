@@ -992,6 +992,41 @@ deferred together with C4b's.
     `StereoAtomConstraints` `Lattice` laws (meet commutative/associative/absorptive, `matches` ⇔
     `meet == Some(target)`); `LigandPairAst` normalization; the concrete-literal inherent `matches`.
 
+**Substeps:**
+- **C4e.1** **Done** — umol-perm proptests (`umol-perm/tests/property.rs`, `proptest` feature): `Permutation`
+  cycle / rank round-trips, inverse involution, compose-inverse identity, associativity, sign
+  homomorphism / inverse / identity; `OrientedPermutationGroup` closure (compose + inverse, `order` =
+  `|elements|`); `CosetSpace` index round-trip, enantiomer involution, reindex-identity, observable-coset
+  (no fluxional), merge-under-empty. 15 proptests. (Display↔parse stays in umol-ast — the cycle parser lives
+  there.)
+- **C4e.2** **Done** — umol-ast stereo proptests (`tests/property.rs`, +5): relation Lattice laws
+  (`assert_relation_lattice_laws` over Topicity + Stereogenicity — meet/join commutativity & associativity,
+  absorption, idempotence, `matches(t) ⇔ meet(t) == Some(t)`, full-lattice strategy incl. `Undetermined`);
+  `LigandPairAst::new` normalization (`first <= second`, symmetric); concrete-literal `matches` = equality
+  (`PermutationAst`, `LigandSymmetryAst`). DSL parse↔render + keyword/constraint EDN round-trips already
+  landed in C3j.
+- **C4e.3** — fuzz: verify stereo coverage (`fuzz_entity_strings` already parses stereo strings; the
+  molecule / constraint targets + C3j seeds cover the molecule-scope forms), fill any seed gaps.
+- **C4e.4** — **Done.** Restructured `tests/property.rs` (2485 lines) into a single-binary subdir suite:
+  entry `tests/property.rs` (crate doc + `#[path = "property/…"] mod` declarations) + `tests/property/strategies.rs`
+  (~1900 lines: shared generators, all `pub(crate)`, with domain imports re-exported via `pub(crate) use` so each
+  test module needs only `use proptest::prelude::*; use crate::strategies::*;`) + per-area
+  `tests/property/{value,entity,molecule,stereo,edit}.rs` (each wrapping its area's `proptest!` block; the two
+  `#[rstest]` unit tests live with `entity`/`molecule`). The entry is a test-binary crate root, so its `mod`
+  declarations resolve against `tests/`, not `tests/property/`; `#[path]` redirects them into the subdir (no
+  `mod.rs`, no extra `[[test]]` target). 47 tests, now namespaced by module (`stereo::…`, `edit::…`); no logic
+  change. `lattice.rs` deferred to C4e.5 (nothing to put there until the generic sweep). Precedes C4e.5.
+- **C4e.5** — proptest gap sweep on the new structure: (1) **Lattice laws for all 20 `impl Lattice` types** via
+  a generic `assert_lattice_laws<L: Lattice>` + per-type value strategy — only the two stereo relations are
+  covered today; gap: `ValueAst`, `ElementAst`, `IsotopeMassAst`, `AromaticValenceAst`, `MulticenterValenceAst`,
+  `NoncovalentBondKindAst`, `StereoConfigurationAst`, `StereoCosetAst`, `TopicityAst`, `StereogenicityAst`,
+  `DativeBondAst`, `MulticenterBondAst`, `AromaticSystemAst`, and the six `*Constraints` collections. (2) DSL
+  roundtrip completeness — atom-DSL has no dedicated roundtrip (only transitive via molecule). (3) `simplify`
+  idempotence beyond `ValueAst` (`StereoCosetAst` / `StereoExpr`).
+
+**Iterations.** proptest defaults to 256 cases; not hardcoded — raise globally via `PROPTEST_CASES=N` or
+per-block `#![proptest_config(ProptestConfig::with_cases(N))]` for a rigorous CI pass.
+
 ### C4f · conformance suite
 
 Extend the **feature-gated** conformance suite (`umol-graph`, `--features conformance`, the resolution test)
