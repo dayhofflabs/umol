@@ -59,43 +59,43 @@ Reply
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
      3    trigonal planar                      TP-3                          (D_3), order 6                     1
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     3    trigonal pyramidal                   TPY-3                         (C_3), order 3                     2
+     3    trigonal pyramidal (Ty)              TPY-3                         (C_3), order 3                     2
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     3    T-shaped                             TS-3                          (C_2), order 2                     3
+     3    T-shaped (Ts)                        TS-3                          (C_2), order 2                     3
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     4    tetrahedral                          T-4                   (T\cong A_4), order 12                     2
+     4    tetrahedral  (Th)                    T-4                   (T\cong A_4), order 12                     2
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     4    square planar                        SP-4                          (D_4), order 8                     3
+     4    square planar (Sp)                   SP-4                          (D_4), order 8                     3
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     4    square-pyramidal arrangement         SPY-4                         (C_4), order 4                     6
+     4    square-pyramidal arrangement (Py)    SPY-4                         (C_4), order 4                     6
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     4    seesaw                               SS-4                          (C_2), order 2                    12
+     4    seesaw (Sw)                          SS-4                          (C_2), order 2                    12
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     5    trigonal bipyramidal                 TBPY-5                        (D_3), order 6                    20
+     5    trigonal bipyramidal (Tb)            TBPY-5                        (D_3), order 6                    20
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     5    square pyramidal                     SPY-5                         (C_4), order 4                    30
+     5    square pyramidal (Sy)                SPY-5                         (C_4), order 4                    30
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     6    octahedral                           OC-6                  (O\cong S_4), order 24                    30
+     6    octahedral (Oh)                      OC-6                  (O\cong S_4), order 24                    30
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     6    trigonal prismatic                   TPR-6                         (D_3), order 6                   120
+     6    trigonal prismatic (Tr)              TPR-6                         (D_3), order 6                   120
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     7    pentagonal bipyramidal               PBPY-7                       (D_5), order 10                   504
+     7    pentagonal bipyramidal (Pb)          PBPY-7                       (D_5), order 10                   504
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     7    face-capped octahedral               OCF-7                         (C_3), order 3                  1680
+     7    face-capped octahedral (Of)          OCF-7                         (C_3), order 3                  1680
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     7    square-face-capped trigonal prism    TPRS-7          approximately (C_2), order 2                  2520
+     7    square-face-capped trigonal prism (Pf) TPRS-7          approximately (C_2), order 2                  2520
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     8    cubic                                CU-8                           (O), order 24                  1680
+     8    cubic (Cu)                           CU-8                           (O), order 24                  1680
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     8    square antiprismatic                 SAPR-8                        (D_4), order 8                  5040
+     8    square antiprismatic (Sa)            SAPR-8                        (D_4), order 8                  5040
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     8    triangular dodecahedral              DD-8                          (D_2), order 4                 10080
+     8    triangular dodecahedral (Dt)         DD-8                          (D_2), order 4                 10080
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     8    hexagonal bipyramidal                HBPY-8                       (D_6), order 12                  3360
+     8    hexagonal bipyramidal (Xb)           HBPY-8                       (D_6), order 12                  3360
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     9    tricapped trigonal prismatic         TPRS-9                        (D_3), order 6                 60480
+     9    tricapped trigonal prismatic (Tt)    TPRS-9                        (D_3), order 6                 60480
   ─────  ───────────────────────────────────  ──────────────  ──────────────────────────────  ────────────────────
-     9    heptagonal bipyramidal               HBPY-9                       (D_7), order 14                 25920
+     9    heptagonal bipyramidal (Hb)          HBPY-9                       (D_7), order 14                 25920
 
   For example, a trigonal-prismatic object with six distinct ports has
 

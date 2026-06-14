@@ -2551,8 +2551,8 @@ mod tests {
                 ligands: (1u32..=4)
                     .map(|t| (AtomRef::Id(AtomId(t)), StereoLigandKind::Atom))
                     .collect(),
-                // Wrong recorded coset (Th2 vs the stored Th1).
-                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(2)),
+                // Wrong recorded coset (Th0 vs the stored Th1).
+                ast: StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
             }])
             .unwrap_err();
         assert_eq!(err, TransactionError::OldStateMismatch);
@@ -2679,8 +2679,8 @@ mod tests {
             .transact(vec![Edit::SetStereoAtomField {
                 id: StereoAtomRef::Id(StereoAtomId(0)),
                 change: StereoAtomFieldChange::Coset {
-                    // Wrong recorded coset (Th2 vs the stored Th1).
-                    old: StereoCosetAst::Lit(2),
+                    // Wrong recorded coset (Th0 vs the stored Th1).
+                    old: StereoCosetAst::Lit(0),
                     new: StereoCosetAst::Lit(1),
                 },
             }])

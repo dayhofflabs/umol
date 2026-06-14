@@ -644,8 +644,8 @@ fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> 
 fn stereo_coset_strategy() -> impl Strategy<Value = StereoCosetAst> {
     prop_oneof![
         Just(StereoCosetAst::Undetermined),
-        (1u32..=6).prop_map(StereoCosetAst::Lit),
-        prop::collection::vec(1u32..=6, 1..=3).prop_map(|mut v| {
+        (0u32..=6).prop_map(StereoCosetAst::Lit),
+        prop::collection::vec(0u32..=6, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
             v.dedup();
             StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(v)))
@@ -2215,11 +2215,11 @@ proptest! {
         prop_assert_eq!(dsl, parsed);
     }
 
-    /// Canonical `Th1`/`Th2` render to the `:ccw`/`:cw` EDN keyword shorthand
+    /// Canonical `Th0`/`Th1` render to the `:ccw`/`:cw` EDN keyword shorthand
     /// and parse back to the same AST.
     #[test]
     fn test_stereo_atom_dsl_keyword_to_edn_from_edn_roundtrip(
-        coset in prop_oneof![Just(1u32), Just(2u32)],
+        coset in prop_oneof![Just(0u32), Just(1u32)],
     ) {
         let dsl = StereoAtomDsl(StereoAtomAst::new(
             StereoKind::Tetrahedral,
@@ -2236,10 +2236,10 @@ proptest! {
         prop_assert_eq!(dsl, parsed);
     }
 
-    /// Canonical `Ct1`/`Ct2` render to the `:z`/`:e` EDN keyword shorthand.
+    /// Canonical `Ct0`/`Ct1` render to the `:z`/`:e` EDN keyword shorthand.
     #[test]
     fn test_stereo_bond_dsl_keyword_to_edn_from_edn_roundtrip(
-        coset in prop_oneof![Just(1u32), Just(2u32)],
+        coset in prop_oneof![Just(0u32), Just(1u32)],
     ) {
         let dsl = StereoBondDsl(StereoBondAst::new(
             StereoKind::CisTrans,

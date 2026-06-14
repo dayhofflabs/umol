@@ -585,9 +585,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ccw("Th1", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
     #[case::undetermined("Th*", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
-    #[case::square_planar("Sp3", StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(3)))]
+    #[case::square_planar("Sp2", StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(2)))]
     fn test_stereo_atom_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
         assert_eq!(stereo_atom!(input), expected);
     }
@@ -600,14 +600,14 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ccw("Th1", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
     fn test_stereo_atom_ground_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
         assert_eq!(stereo_atom_ground!(input), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ccw("Th1", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::ccw("Th0", StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
     fn test_stereo_atom_zeroed_macro(#[case] input: &str, #[case] expected: StereoAtomAst) {
         assert_eq!(stereo_atom_zeroed!(input), expected);
     }

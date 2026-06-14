@@ -947,13 +947,17 @@ resolver's `InconsistencyPolicy` governs redundancy, not the validator); CIP/chi
   symmetry projected only for a structurally-sound, resolved element. Added `umol-perm` dep.
 - **C4c.4** **Done** — tests: `test_stereo_validator_validate` (bare + matching `#g` → Determined) +
   `test_stereo_validator_validate_error` (coset-range / arity / achiral-gate / `#g`/`#o`/`#p` mismatch). Found
-  + fixed: `graph_symmetry` panics on an out-of-range coset, so invariant 1's range check moved to a pre-pass
-  **before** `graph_symmetry` (dropped from `validate_kind`).
-- **C4c.5** — fix 1-indexed coset references in code, comments, and spec (raise is already 0-indexed,
-  `@`→`Lit(0)`/`@@`→`Lit(1)`): the off-by-one keyword shortcuts in `dsl/stereo.rs` (`ccw`/`z`→`Lit(0)`,
-  `cw`/`e`→`Lit(1)`; `"ccw"`→`"Th0"`, `"cw"`→`"Th1"`, `:z`→`"Ct0"`, `:e`→`"Ct1"`); the `StereoCosetAst`
-  doc comment ("0/1 for TH, CT"); affected round-trip tests + out-of-range fixtures (`Th2`/`Sp3`/`Oh6` →
-  in-range); spec coset/keyword examples (§7.14, §4).
+  + fixed: `MoleculeAst::graph_symmetry` (public) panicked on an out-of-range coset — hardened in umol-ast
+  (`observable_descriptor` + `reexpress` now treat an out-of-range coset as non-contributing, like a non-`Lit`
+  coset), with a `graph_symmetry` regression test. The coset-range check then lives in `validate_kind`
+  alongside arity / achiral gate, so every per-element check is reached at one depth (`validate` →
+  `validate_stereo_*` → `validate_kind` / `validate_symmetry`).
+- **C4c.5** **Done** — fixed 1-indexed coset references (raise is 0-indexed: `@`/cis→`Lit(0)`, `@@`/trans→
+  `Lit(1)`). Keyword shortcuts in `dsl/stereo.rs` corrected (`ccw`/`z`↔`Lit(0)`, `cw`/`e`↔`Lit(1)`; expand
+  `:ccw`→`"Th0"` etc.; `keyword_for` `Lit(0)`→`ccw` etc.); `StereoCosetAst` doc comment → "0-indexed"; spec
+  §7 keyword-shorthand mapping (`:ccw`→`Th0` …). Out-of-range fixtures → in-range across `dsl/stereo.rs`,
+  `macros.rs`, `dsl/molecule/tests.rs`, `transact.rs`, `property.rs`, and the `th2`/`ct2` fuzz seeds
+  (→ `th0`/`ct0`). The numeric string form (`"Th1"`=`Lit(1)`, digit = index) was already correct.
 - **C4c.6** — replace the 1-indexed one-line image notation in `ApplyOp` (`^`) with 0-indexed disjoint-cycle
   notation: `perm_image`/`fmt_perm_image` → the existing `cycles` parser/formatter (the one `#p`/`#f` use);
   spec §7.14 (`coset-expr '^' cycles`, drop `image ::= digit+`) + the §7.14 reserved-operators prose; tests

@@ -186,7 +186,7 @@ impl Lattice for StereoConfigurationAst {
     }
 }
 
-/// Dense coset index AST. 1/2 for TH, CT, follows OpenSMILES numbering for SP, TB, OH.
+/// Dense coset index AST, 0-indexed: 0/1 for TH, CT; 0-based dense numbering for SP, TB, OH.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoCosetAst {
     #[default]

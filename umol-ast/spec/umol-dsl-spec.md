@@ -1024,7 +1024,7 @@ glyph       ::= '=' | '\'' | '/'
 
 **Chiral-class restriction.** The **`'`** value — **`#p`** improper, **`#o`** enantiotopic, **`#g`** prochiral — is meaningful only on a **chiral class** (**`Th`** atom; **`Ct`** / **`Sp`** are achiral). It **parses** on any class; an inconsistent class/value pairing is rejected by the **validator** (the resolved-symmetry cross-check, **§6.1**), not at parse.
 
-**`stereo-keyword` shorthand (`§4`).** The four **`stereo-keyword`** values expand to canonical **`class`**+**`coset`** literals: **`:ccw`** → **`Th1`**, **`:cw`** → **`Th2`**, **`:z`** → **`Ct1`**, **`:e`** → **`Ct2`**. They are a ground EDN shorthand on the **`stereo-spec`**'s **`:type`** and are semantically identical to the expanded string. On serialization, implementations **MUST** emit the **`stereo-keyword`** for these four canonical shapes **only when the element carries no inline predicates**, falling back to the **`stereo-string`** otherwise.
+**`stereo-keyword` shorthand (`§4`).** The four **`stereo-keyword`** values expand to canonical **`class`**+**`coset`** literals: **`:ccw`** → **`Th0`**, **`:cw`** → **`Th1`**, **`:z`** → **`Ct0`**, **`:e`** → **`Ct1`**. They are a ground EDN shorthand on the **`stereo-spec`**'s **`:type`** and are semantically identical to the expanded string. On serialization, implementations **MUST** emit the **`stereo-keyword`** for these four canonical shapes **only when the element carries no inline predicates**, falling back to the **`stereo-string`** otherwise.
 
 ---
 
