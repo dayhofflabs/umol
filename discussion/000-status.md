@@ -113,3 +113,4 @@
 | [109-permutation-infrastructure-2026-06-09.md](109-permutation-infrastructure-2026-06-09.md)                                       | Informational | 2026-06-09   |
 | [110-molecular-symmetry-structure-2026-06-11.md](110-molecular-symmetry-structure-2026-06-11.md)                                   | Active        | 2026-06-11   |
 | [111-stereo-phase-c-impl-2026-06-11.md](111-stereo-phase-c-impl-2026-06-11.md)                                                     | Active        | 2026-06-11   |
+| [112-ctfile-winnow-migration-2026-06-13.md](112-ctfile-winnow-migration-2026-06-13.md)                                           | Active        | 2026-06-13   |
