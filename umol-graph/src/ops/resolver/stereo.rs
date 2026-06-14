@@ -6,7 +6,10 @@
 //! already bear a stereo element, so re-runs are a no-op.
 
 use thiserror::Error;
-use umol_ast::ast::{AtomId, BondId, MoleculeAst, StereoAtomAst, StereoBondAst, StereoLigand};
+use umol_ast::ast::{
+    AsLit, AtomId, BondId, MoleculeAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst,
+    StereoKind, StereoLigand, StereoLigandKind,
+};
 
 use crate::ops::model::StereoModel;
 use crate::ops::solution::Solution;
@@ -66,10 +69,45 @@ impl StereoResolver {
 
     fn resolve_atom(
         &self,
-        _ast: &MoleculeAst,
-        _id: AtomId,
+        ast: &MoleculeAst,
+        id: AtomId,
     ) -> Option<(AtomId, Vec<StereoLigand>, StereoAtomAst)> {
-        None
+        if ast.stereo_atoms().has_coincident(id) {
+            return None;
+        }
+        let atom = ast.atom(id);
+        if atom.is_in_aromatic_system() {
+            return None;
+        }
+
+        let kind = StereoKind::Tetrahedral;
+        let StereoConfigurationAst::Stereo(coset) = atom.ast.constraints.tetrahedral_stereo() else {
+            return None;
+        };
+        let model = self.model.kind_model(kind)?;
+        if !model.scope.contains(atom.element().as_lit()?) {
+            return None;
+        }
+
+        let mut ligands: Vec<StereoLigand> = atom
+            .neighbors()
+            .map(|n| StereoLigand::new(n.atom_id(), StereoLigandKind::Atom))
+            .collect();
+        if ligands.len() + 1 == kind.degree() {
+            let virtual_kind = if atom.implicit_hydrogens().as_lit()? >= 1 {
+                StereoLigandKind::ImplicitHydrogen
+            } else if atom.lone_pairs().as_lit()? >= 1 {
+                StereoLigandKind::LonePair
+            } else {
+                return None;
+            };
+            ligands.push(StereoLigand::new(id, virtual_kind));
+        }
+        if ligands.len() != kind.degree() {
+            return None;
+        }
+
+        Some((id, ligands, StereoAtomAst::new(kind, coset.simplify(kind))))
     }
 
     fn resolve_bond(
