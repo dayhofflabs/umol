@@ -922,12 +922,14 @@ projecting per element — like `AromaticityValidator` carries its model; runs *
 resolver's `InconsistencyPolicy` governs redundancy, not the validator); CIP/chirality-label invention
 (doc 080 — deferred, out of scope). No transformer at this stage.
 
-### C4d · `ops/resolver/aromaticity.rs` (fix — idempotency)
+### C4d · `ops/resolver/aromaticity.rs` (fix — idempotency) **Done**
 
-`AromaticityResolver::resolve` calls `find_systems` + `add_systems` unconditionally, so re-running an
-already-aromatized molecule **duplicates** systems. Skip atoms already in an aromatic system (the membership
-query), making re-runs a stable no-op — the analog of the stereo resolver's `has_coincident` guard (C4b). The
-inconsistency policy that previously also lived here is deferred together with C4b's.
+`AromaticityResolver::resolve` called `find_systems` + `add_systems` unconditionally, so re-running an
+already-aromatized molecule **duplicated** systems. Fix: the `electrons_at` eligibility closure now returns
+`None` for any atom where `v.is_in_aromatic_system()`, so a re-run finds no eligible atoms and adds nothing —
+the analog of the stereo resolver's `has_coincident` guard (C4b). Test `test_resolver_resolve_benzene_idempotent`
+(double resolve → still one aromatic system). The inconsistency policy that previously also lived here is
+deferred together with C4b's.
 
 ### C4e · fuzz corpora + proptests
 

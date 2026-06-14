@@ -26,12 +26,16 @@ impl AromaticityResolver {
         &self,
         ast: &mut MoleculeAst,
     ) -> Result<Solution<(), AromaticityContradiction>, AromaticityError> {
-        let outcome =
-            self.perception
-                .find_systems(ast, |v| match v.ast.constraints.aromatic_valence() {
-                    AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
-                    _ => None,
-                })?;
+        let outcome = self.perception.find_systems(ast, |v| {
+            // Skip atoms already in an aromatic system so re-runs don't re-add it.
+            if v.is_in_aromatic_system() {
+                return None;
+            }
+            match v.ast.constraints.aromatic_valence() {
+                AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
+                _ => None,
+            }
+        })?;
         match outcome {
             Solution::Determined(systems) => {
                 self.perception.add_systems(ast, systems);

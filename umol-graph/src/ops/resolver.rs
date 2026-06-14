@@ -228,4 +228,14 @@ mod tests {
         assert!(matches!(solution, Solution::Determined(())));
         assert_eq!(ast.aromatic_systems().count(), 1);
     }
+
+    #[rstest]
+    fn test_resolver_resolve_benzene_idempotent() {
+        let model = counts_model();
+        let resolver = Resolver::new(&model);
+        let mut ast = benzene();
+        resolver.resolve(&mut ast).unwrap();
+        resolver.resolve(&mut ast).unwrap();
+        assert_eq!(ast.aromatic_systems().count(), 1);
+    }
 }
