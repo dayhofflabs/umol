@@ -5,6 +5,7 @@
 //! systems, multicenter bonds, noncovalent bonds) to be ground.
 
 pub mod aromaticity;
+pub mod stereo;
 pub mod bonds;
 pub mod multicenter;
 pub mod valence;
@@ -12,6 +13,7 @@ pub mod valence;
 use std::any::Any;
 
 pub use aromaticity::AromaticityResolver;
+pub use stereo::{StereoContradiction, StereoError, StereoResolver};
 pub use bonds::{BondsContradiction, BondsError, BondsResolver};
 pub use multicenter::{
     MulticenterBondsContradiction, MulticenterBondsError, MulticenterBondsResolver,
@@ -29,6 +31,7 @@ use crate::ops::solution::Solution;
 pub struct Resolver<'a> {
     pub valence: ValenceResolver<'a>,
     pub aromaticity: AromaticityResolver,
+    pub stereo: StereoResolver,
     pub bonds: BondsResolver,
     pub multicenter_bonds: MulticenterBondsResolver,
 }
@@ -39,6 +42,8 @@ pub enum ResolverContradiction {
     Valence(#[from] ValenceContradiction),
     #[error(transparent)]
     Aromaticity(#[from] AromaticityContradiction),
+    #[error(transparent)]
+    Stereo(#[from] StereoContradiction),
     #[error(transparent)]
     Bonds(#[from] BondsContradiction),
     #[error(transparent)]
@@ -51,6 +56,8 @@ pub enum ResolverError {
     Valence(#[from] ValenceError),
     #[error(transparent)]
     Aromaticity(#[from] AromaticityError),
+    #[error(transparent)]
+    Stereo(#[from] StereoError),
     #[error(transparent)]
     Bonds(#[from] BondsError),
     #[error(transparent)]
@@ -86,6 +93,7 @@ impl<'a> Resolver<'a> {
         Self {
             valence: ValenceResolver::new(&model.valence),
             aromaticity: AromaticityResolver::new(&model.aromaticity),
+            stereo: StereoResolver::new(&model.stereo),
             bonds: BondsResolver::new(),
             multicenter_bonds: MulticenterBondsResolver::new(),
         }
@@ -107,6 +115,12 @@ impl<'a> Resolver<'a> {
                 return Ok(Solution::Contradictory(ResolverContradiction::Aromaticity(
                     c,
                 )));
+            }
+        }
+        match self.stereo.resolve(ast)? {
+            Solution::Determined(()) | Solution::Underdetermined(()) => {}
+            Solution::Contradictory(c) => {
+                return Ok(Solution::Contradictory(ResolverContradiction::Stereo(c)));
             }
         }
         match self.bonds.resolve(ast)? {

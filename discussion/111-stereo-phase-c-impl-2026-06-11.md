@@ -838,26 +838,64 @@ indexed by `kind as usize`), with `fluxionality` a per-kind `bool` (not a global
 `max_iterations: 16`, `inconsistency: Error`. `strum` added to umol-graph (trait only). Tests:
 `test_stereo_model_default`, `_kind_model` (per-kind table), `_graph_symmetry_config`.
 
-### C4b · `ops/resolver/stereo.rs` (new) — `StereoResolver` (mirror `ops/resolver/aromaticity.rs`)
+### C4b · `ops/resolver/stereo.rs` (new) — `StereoResolver`
 
-Unlike valence (which narrows atoms in place), this **adds and resolves new entities**: from each atom `#T` /
-bond `#C` it builds a `:stereo-atoms` / `:stereo-bonds` element — kind by `KindScope` + coordination/order,
-ligand frame from neighbors + virtuals, and the **coset resolved** against the kind's `CosetSpace`. Stereo
-elements are **not** ground-by-default (unlike aromatic systems) — they need this resolution.
+Structural resolver, mirroring `AromaticityResolver` (thin, `Solution`-typed): from each atom `#T` / bond `#C`
+it adds a `:stereo-atom` / `:stereo-bond` element with the canonical ligand frame and the coset copied
+**verbatim**. Computes no `StereoSymmetry`.
 
-- **Idempotency is site-membership, not `is_ground`.** The valence `is_ground` skip is the wrong test here
-  (valence narrows atoms; this adds entities). Re-running must not re-add — skip sites that already bear a
-  stereo element, via the existing site query (`StereoAtomViews::has_coincident(atom)` / `coincident`;
-  `StereoBondViews` parallel). (Aromaticity's analog: skip atoms already in an aromatic system — that
-  membership query exists.)
-- **Coverage + inconsistency policy (configurable, never silent).** When a `#T`/`#C` assertion can't be
-  (fully) realized, a policy `{ Keep | Strip | Error }` decides — never a silent drop. It covers both
-  (i) **partial coverage** (some asserting sites get an element, others can't) and (ii) an **unsatisfiable
-  assertion** (a site that can't bear a stereo element of the scoped kind). All of this is **structural**
-  (scope / coordination / topology), so the **resolver computes no `StereoSymmetry`** — non-stereogenicity is
-  *not* an inconsistency here (a coset on a non-stereogenic site is legitimate labeled data, doc 104).
-- The **same two gaps affect `AromaticityResolver`** — these are general entity-adding-resolver concerns,
-  not stereo, so they're pulled out into **C4d**.
+**Changes:**
+- New `StereoResolver { model: StereoModel }` with `new(&StereoModel)` and
+  `resolve(&self, &mut MoleculeAst) -> Result<Solution<(), StereoContradiction>, StereoError>`.
+- Wire into `ops/resolver.rs` **directly after `aromaticity`**: the `Resolver` field, `new()`, the `resolve()`
+  call (after aromaticity, before bonds), and a `Stereo` arm in `ResolverContradiction` / `ResolverError`.
+- **No coset conversion.** raise (`tetrahedral_ligand_ordering` / `raise_cis_trans_stereo`) already stored the
+  coset in the canonical ligand frame; the resolver reproduces that frame and copies the coset — no
+  permutation.
+
+**Deferred (later pass):** `InconsistencyPolicy` (Keep/Strip/Error) and the `StereoContradiction` variants it
+produces. For now a `#T`/`#C` that can't be realized is simply **not added** (`None`); the resolver never
+mutates atom constraints. When that policy lands it is shared with `AromaticityResolver`, not stereo-specific.
+
+```rust
+fn resolve_atom(&self, ast: &MoleculeAst, id: AtomId) -> Option<Edit> {
+    if ast.stereo_atoms().has_coincident(id) { return None; }   // already a stereo center here → skip
+    let atom = ast.atom(id);
+    if atom.is_in_aromatic_system() { return None; }            // aromatic atom → not tetrahedral
+
+    let kind = StereoKind::Tetrahedral;
+    let StereoConfigurationAst::Stereo(coset) = atom.ast.constraints.tetrahedral_stereo()
+        else { return None; };                                  // Undetermined / NotStereo (#T!) → skip
+    let model = self.model.kind_model(kind)?;                    // kind off → skip
+    if !model.scope.contains(atom.element()?) { return None; }  // out of scope → skip
+
+    let mut ligands: Vec<(AtomRef, StereoLigandKind)> =
+        atom.neighbors().map(|n| (AtomRef::Id(n.id()), StereoLigandKind::Atom)).collect();
+    if ligands.len() + 1 == kind.degree() {                     // 3 real → one virtual, appended last
+        let ValueAst::Lit(h)  = *atom.implicit_hydrogens() else { return None; };
+        let ValueAst::Lit(lp) = *atom.lone_pairs()         else { return None; };
+        ligands.push((AtomRef::Id(id),
+            if h >= 1 { ImplicitHydrogen } else if lp >= 1 { LonePair } else { return None }));
+    }
+    if ligands.len() != kind.degree() { return None; }          // arity off → skip
+
+    Some(Edit::AddStereoAtom { site: AtomRef::Id(id), ligands, ast: StereoAtomAst::new(kind, coset) })
+}
+```
+
+`resolve` collects the `Some`s over all atom ids, then all bond ids, `transact`s them, returns
+`Solution::Determined(())`. `resolve_bond` mirrors `resolve_atom`: `cis_trans_stereo()`, `kind = CisTrans`,
+`site: BondRef`, and the 4-ligand frame reproducing `raise_cis_trans_stereo`'s order
+(`[side_1.first, side_1.second, side_2.first, side_2.second]`).
+
+**Substeps:**
+- **C4b.1** **Done** — `StereoResolver` skeleton + `resolve` loop + wiring into `Resolver` (field / `new` /
+  `resolve` / enums, after aromaticity). `resolve_atom`/`resolve_bond` stubbed to `None`; `StereoContradiction`/
+  `StereoError` are empty (mirror `BondsContradiction`/`BondsError`). `model` field unread until C4b.2.
+- **C4b.2** — `resolve_atom` (`#T` → `Tetrahedral`): guards (coincident, aromatic, config, kind/scope),
+  canonical frame, `AddStereoAtom`.
+- **C4b.3** — `resolve_bond` (`#C` → `CisTrans`): mirror with the cis/trans 4-ligand frame.
+- **C4b.4** — tests: atom + bond add, idempotency skip, aromatic skip, out-of-scope / arity skip.
 
 ### C4c · `ops/validator/stereo.rs` (new) + `ops/validator.rs` (wire) — `StereoValidator` (mirror `ops/validator/aromaticity.rs`)
 
@@ -879,20 +917,12 @@ projecting per element — like `AromaticityValidator` carries its model; runs *
 resolver's `InconsistencyPolicy` governs redundancy, not the validator); CIP/chirality-label invention
 (doc 080 — deferred, out of scope). No transformer at this stage.
 
-### C4d · `ops/resolver/aromaticity.rs` (fix — non-stereo, surfaced here)
+### C4d · `ops/resolver/aromaticity.rs` (fix — idempotency)
 
-`AromaticityResolver` has the same two entity-adding-resolver gaps the stereo resolver must avoid (C4b).
-They're **general, not stereo-specific** — fixed here so both resolvers behave consistently:
-
-- **Idempotency = membership, not re-perception.** Today `resolve` calls `find_systems` + `add_systems`
-  unconditionally, so re-running an already-aromatized molecule **duplicates** systems. Skip atoms already in
-  an aromatic system (the membership query), making re-runs a stable no-op.
-- **Coverage + inconsistency policy** (`{ Keep | Strip | Error }`, never silent) — replaces today's silent
-  discard of failing proposals (doc 080). Handles **partial coverage** (some but not all `#a` atoms land in
-  systems) and an **unsatisfiable assertion** (a lone `#a+` atom that can't form a ring system).
-
-The policy type is shared with the stereo resolver (one `InconsistencyPolicy`, model-layer); this is the
-principled home for it rather than duplicating per resolver.
+`AromaticityResolver::resolve` calls `find_systems` + `add_systems` unconditionally, so re-running an
+already-aromatized molecule **duplicates** systems. Skip atoms already in an aromatic system (the membership
+query), making re-runs a stable no-op — the analog of the stereo resolver's `has_coincident` guard (C4b). The
+inconsistency policy that previously also lived here is deferred together with C4b's.
 
 ### C4e · fuzz corpora + proptests
 
