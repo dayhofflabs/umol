@@ -2,9 +2,11 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, GraphSymmetry, Lattice, MoleculeAst, StereoAtomId, StereoBondId, StereoKind,
-    Stereogenicity, StereogenicityRelationAst, Topicity, TopicityRelationAst,
+    AsLit, GraphSymmetry, Lattice, LigandPairAst, LigandSymmetryAst, MemOp, MoleculeAst,
+    StereoAtomId, StereoBondId, StereoKind, StereoSymmetry, Stereogenicity,
+    StereogenicityRelationAst, Topicity, TopicityAst, TopicityRelationAst,
 };
+use umol_perm::OrientedPermutation;
 
 use crate::ops::model::StereoModel;
 use crate::ops::solution::Solution;
@@ -30,6 +32,19 @@ pub enum StereoValidatorContradiction {
     },
     #[error("improper (enantio-) relation asserted on achiral stereo {kind:?}")]
     ImproperOnAchiral { kind: StereoKind },
+    #[error("stereogenicity {derived:?} contradicts asserted {asserted:?}")]
+    StereogenicityMismatch {
+        asserted: StereogenicityRelationAst,
+        derived: Stereogenicity,
+    },
+    #[error("ligand pair {pair:?} topicity {derived:?} contradicts asserted {asserted:?}")]
+    TopicityMismatch {
+        pair: LigandPairAst,
+        asserted: TopicityRelationAst,
+        derived: Topicity,
+    },
+    #[error("asserted ligand symmetry {asserted:?} not satisfied by the derived group")]
+    LigandSymmetryViolation { asserted: LigandSymmetryAst },
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -78,60 +93,65 @@ impl StereoValidator {
         &self,
         ast: &MoleculeAst,
         id: StereoAtomId,
-        _symmetry: &GraphSymmetry,
+        symmetry: &GraphSymmetry,
     ) -> Solution<(), StereoValidatorContradiction> {
         let view = ast.stereo_atom(id);
         let constraints = view.constraints();
-        let improper_topicity = constraints.topicities().any(|t| {
-            !t.rel.is_undetermined()
-                && t.rel
-                    .matches(&TopicityRelationAst::Lit(Topicity::Enantiotopic))
-        });
         let stereogenicity = constraints.stereogenicity();
-        let improper_stereogenicity = !stereogenicity.is_undetermined()
-            && stereogenicity.matches(&StereogenicityRelationAst::Lit(Stereogenicity::Prochiral));
-        self.validate_kind(
+        let topicities: Vec<TopicityAst> = constraints.topicities().cloned().collect();
+        let ligand_symmetries: Vec<LigandSymmetryAst> =
+            constraints.ligand_symmetry().copied().collect();
+        match self.validate_kind(
             view.kind(),
             view.coset().as_lit(),
             view.ligands().count(),
-            improper_topicity || improper_stereogenicity,
-        )
+            &stereogenicity,
+            &topicities,
+        ) {
+            Solution::Contradictory(c) => return Solution::Contradictory(c),
+            Solution::Underdetermined(()) => return Solution::Underdetermined(()),
+            Solution::Determined(()) => {}
+        }
+        let sym = ast.stereo_atom_symmetry(symmetry, id);
+        self.validate_symmetry(&sym, &stereogenicity, &topicities, &ligand_symmetries)
     }
 
     fn validate_stereo_bond(
         &self,
         ast: &MoleculeAst,
         id: StereoBondId,
-        _symmetry: &GraphSymmetry,
+        symmetry: &GraphSymmetry,
     ) -> Solution<(), StereoValidatorContradiction> {
         let view = ast.stereo_bond(id);
         let constraints = view.constraints();
-        let improper_topicity = constraints.topicities().any(|t| {
-            !t.rel.is_undetermined()
-                && t.rel
-                    .matches(&TopicityRelationAst::Lit(Topicity::Enantiotopic))
-        });
         let stereogenicity = constraints.stereogenicity();
-        let improper_stereogenicity = !stereogenicity.is_undetermined()
-            && stereogenicity.matches(&StereogenicityRelationAst::Lit(Stereogenicity::Prochiral));
-        self.validate_kind(
+        let topicities: Vec<TopicityAst> = constraints.topicities().cloned().collect();
+        let ligand_symmetries: Vec<LigandSymmetryAst> =
+            constraints.ligand_symmetry().copied().collect();
+        match self.validate_kind(
             view.kind(),
             view.coset().as_lit(),
             view.ligands().count(),
-            improper_topicity || improper_stereogenicity,
-        )
+            &stereogenicity,
+            &topicities,
+        ) {
+            Solution::Contradictory(c) => return Solution::Contradictory(c),
+            Solution::Underdetermined(()) => return Solution::Underdetermined(()),
+            Solution::Determined(()) => {}
+        }
+        let sym = ast.stereo_bond_symmetry(symmetry, id);
+        self.validate_symmetry(&sym, &stereogenicity, &topicities, &ligand_symmetries)
     }
 
-    /// Validate the kind-dependent invariants of a stereo element:
-    /// 1. Ligand arity must equal the kind's degree.
-    /// 2. An achiral kind admits no improper (enantio-) relation.
-    /// 3. The coset must be in range (`None` coset → underdetermined).
+    /// Ligand arity (= kind degree), the achiral-kind relation gate, and coset
+    /// range; an absent coset leaves the element underdetermined.
     fn validate_kind(
         &self,
         kind: StereoKind,
         coset: Option<u32>,
         ligand_count: usize,
-        has_improper_relation: bool,
+        stereogenicity: &StereogenicityRelationAst,
+        topicities: &[TopicityAst],
     ) -> Solution<(), StereoValidatorContradiction> {
         if ligand_count != kind.degree() {
             return Solution::Contradictory(StereoValidatorContradiction::LigandArity {
@@ -140,10 +160,14 @@ impl StereoValidator {
                 degree: kind.degree(),
             });
         }
-        if !kind.is_chiral_class() && has_improper_relation {
-            return Solution::Contradictory(StereoValidatorContradiction::ImproperOnAchiral {
-                kind,
+        let has_improper = (!stereogenicity.is_undetermined()
+            && stereogenicity.matches(&StereogenicityRelationAst::Lit(Stereogenicity::Prochiral)))
+            || topicities.iter().any(|t| {
+                !t.rel.is_undetermined()
+                    && t.rel.matches(&TopicityRelationAst::Lit(Topicity::Enantiotopic))
             });
+        if !kind.is_chiral_class() && has_improper {
+            return Solution::Contradictory(StereoValidatorContradiction::ImproperOnAchiral { kind });
         }
         match coset {
             Some(n) if (n as usize) >= kind.count() => {
@@ -156,5 +180,211 @@ impl StereoValidator {
             Some(_) => Solution::Determined(()),
             None => Solution::Underdetermined(()),
         }
+    }
+
+    /// Compare derived symmetry against constraints.
+    fn validate_symmetry(
+        &self,
+        sym: &StereoSymmetry,
+        stereogenicity: &StereogenicityRelationAst,
+        topicities: &[TopicityAst],
+        ligand_symmetries: &[LigandSymmetryAst],
+    ) -> Solution<(), StereoValidatorContradiction> {
+        let mut any_undetermined = false;
+
+        if !stereogenicity.is_undetermined() {
+            let derived = sym.stereogenicity();
+            if !stereogenicity.matches(&StereogenicityRelationAst::Lit(derived)) {
+                return Solution::Contradictory(
+                    StereoValidatorContradiction::StereogenicityMismatch {
+                        asserted: stereogenicity.clone(),
+                        derived,
+                    },
+                );
+            }
+            any_undetermined |= !stereogenicity.is_ground();
+        }
+
+        for t in topicities {
+            if t.rel.is_undetermined() {
+                continue;
+            }
+            let derived = sym.topicity(t.pair.first(), t.pair.second());
+            if !t.rel.matches(&TopicityRelationAst::Lit(derived)) {
+                return Solution::Contradictory(StereoValidatorContradiction::TopicityMismatch {
+                    pair: t.pair,
+                    asserted: t.rel.clone(),
+                    derived,
+                });
+            }
+            any_undetermined |= !t.rel.is_ground();
+        }
+
+        for ls in ligand_symmetries {
+            let op = OrientedPermutation::new(ls.perm.perm.0, ls.perm.orientation);
+            let in_group = sym.group().contains(op);
+            let holds = match ls.mem {
+                MemOp::In => in_group,
+                MemOp::NotIn => !in_group,
+            };
+            if !holds {
+                return Solution::Contradictory(
+                    StereoValidatorContradiction::LigandSymmetryViolation { asserted: *ls },
+                );
+            }
+        }
+
+        if any_undetermined {
+            Solution::Underdetermined(())
+        } else {
+            Solution::Determined(())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::rstest;
+    use umol_ast::ast::{
+        OrientedPermutationAst, PermutationAst, StereoAtomConstraint, StereoBondConstraint,
+        StereoCosetAst, StereoLigandId, StereogenicityAst,
+    };
+    use umol_ast::mol_ground;
+    use umol_perm::{Orientation, Permutation};
+
+    use super::*;
+
+    // Tetrahedral stereocenter, four distinct halide ligands → trivial ligand
+    // symmetry, genuinely stereogenic, every ligand pair diastereotopic.
+    const CFCLBRI: &str = r#"{:atoms ["C" "F" "Cl" "Br" "I"]
+        :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]]
+        :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}]}"#;
+
+    // Cis/trans double bond, each terminus bearing two distinct substituents.
+    const BUTENE: &str = r#"{:atoms ["C" "C" "F" "Cl" "Br" "I"]
+        :bonds [[0 1 "2"] [0 2 "1"] [0 3 "1"] [1 4 "1"] [1 5 "1"]]
+        :stereo-bonds [{:site 0 :ligands [2 3 4 5] :type "Ct1"}]}"#;
+
+    #[rstest]
+    #[case::bare(CFCLBRI, (|_: &mut MoleculeAst| {}) as fn(&mut MoleculeAst))]
+    #[case::matching_stereogenicity(
+        CFCLBRI,
+        (|ast: &mut MoleculeAst| {
+            ast.stereo_atom_mut(StereoAtomId(0))
+                .constraints
+                .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
+                    StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
+                )));
+        }) as fn(&mut MoleculeAst)
+    )]
+    fn test_stereo_validator_validate(#[case] dsl: &str, #[case] mutate: fn(&mut MoleculeAst)) {
+        let mut ast = mol_ground!(dsl);
+        mutate(&mut ast);
+        let solution = StereoValidator::new(&StereoModel::default())
+            .validate(&ast)
+            .unwrap();
+        assert_eq!(solution, Solution::Determined(()));
+    }
+
+    #[rstest]
+    #[case::coset_out_of_range(
+        CFCLBRI,
+        (|ast: &mut MoleculeAst| {
+            ast.stereo_atom_mut(StereoAtomId(0)).coset = StereoCosetAst::Lit(9);
+        }) as fn(&mut MoleculeAst),
+        StereoValidatorContradiction::CosetOutOfRange {
+            kind: StereoKind::Tetrahedral,
+            coset: 9,
+            count: 2,
+        }
+    )]
+    #[case::arity(
+        CFCLBRI,
+        (|ast: &mut MoleculeAst| {
+            ast.stereo_atom_mut(StereoAtomId(0)).kind = StereoKind::TrigonalBipyramidal;
+        }) as fn(&mut MoleculeAst),
+        StereoValidatorContradiction::LigandArity {
+            kind: StereoKind::TrigonalBipyramidal,
+            ligands: 4,
+            degree: 5,
+        }
+    )]
+    #[case::improper_on_achiral(
+        BUTENE,
+        (|ast: &mut MoleculeAst| {
+            ast.stereo_bond_mut(StereoBondId(0))
+                .constraints
+                .add(StereoBondConstraint::Stereogenicity(StereogenicityAst(
+                    StereogenicityRelationAst::Lit(Stereogenicity::Prochiral),
+                )));
+        }) as fn(&mut MoleculeAst),
+        StereoValidatorContradiction::ImproperOnAchiral {
+            kind: StereoKind::CisTrans,
+        }
+    )]
+    #[case::stereogenicity_mismatch(
+        CFCLBRI,
+        (|ast: &mut MoleculeAst| {
+            ast.stereo_atom_mut(StereoAtomId(0))
+                .constraints
+                .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
+                    StereogenicityRelationAst::Lit(Stereogenicity::Symmetric),
+                )));
+        }) as fn(&mut MoleculeAst),
+        StereoValidatorContradiction::StereogenicityMismatch {
+            asserted: StereogenicityRelationAst::Lit(Stereogenicity::Symmetric),
+            derived: Stereogenicity::Stereogenic,
+        }
+    )]
+    #[case::topicity_mismatch(
+        CFCLBRI,
+        (|ast: &mut MoleculeAst| {
+            ast.stereo_atom_mut(StereoAtomId(0))
+                .constraints
+                .add(StereoAtomConstraint::Topicity(TopicityAst {
+                    pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)),
+                    rel: TopicityRelationAst::Lit(Topicity::Homotopic),
+                }));
+        }) as fn(&mut MoleculeAst),
+        StereoValidatorContradiction::TopicityMismatch {
+            pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)),
+            asserted: TopicityRelationAst::Lit(Topicity::Homotopic),
+            derived: Topicity::Diastereotopic,
+        }
+    )]
+    #[case::ligand_symmetry_violation(
+        CFCLBRI,
+        (|ast: &mut MoleculeAst| {
+            ast.stereo_atom_mut(StereoAtomId(0))
+                .constraints
+                .add(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
+                    perm: OrientedPermutationAst {
+                        perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                        orientation: Orientation::Proper,
+                    },
+                    mem: MemOp::In,
+                }));
+        }) as fn(&mut MoleculeAst),
+        StereoValidatorContradiction::LigandSymmetryViolation {
+            asserted: LigandSymmetryAst {
+                perm: OrientedPermutationAst {
+                    perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                    orientation: Orientation::Proper,
+                },
+                mem: MemOp::In,
+            },
+        }
+    )]
+    fn test_stereo_validator_validate_error(
+        #[case] dsl: &str,
+        #[case] mutate: fn(&mut MoleculeAst),
+        #[case] expected: StereoValidatorContradiction,
+    ) {
+        let mut ast = mol_ground!(dsl);
+        mutate(&mut ast);
+        let solution = StereoValidator::new(&StereoModel::default())
+            .validate(&ast)
+            .unwrap();
+        assert_eq!(solution, Solution::Contradictory(expected));
     }
 }

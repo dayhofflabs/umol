@@ -120,7 +120,9 @@ impl MoleculeAst {
             return None;
         };
         let coset_space = space(kind.class_key());
-        if ligands.len() != coset_space.degree() {
+        // An out-of-range coset yields no observable descriptor (it would index
+        // the coset algebra out of bounds).
+        if ligands.len() != coset_space.degree() || raw as usize >= coset_space.count() {
             return None;
         }
         let classes: Vec<(StereoLigandKind, NodeId)> = ligands
@@ -548,6 +550,13 @@ fn reexpress(
     if stored_set != requested_set {
         return None;
     }
+    // An out-of-range coset has no re-expression (applying a permutation would
+    // index the coset algebra out of bounds).
+    if let StereoCosetAst::Lit(n) = coset {
+        if *n as usize >= space(kind.class_key()).count() {
+            return None;
+        }
+    }
     match coset.apply_permutation(kind, Permutation::between(stored, requested)) {
         StereoCosetAst::Lit(index) => Some(index),
         _ => None,
@@ -679,6 +688,17 @@ mod tests {
             stereo.topicity(StereoLigandId(0), StereoLigandId(1)),
             Topicity::Diastereotopic
         );
+    }
+
+    #[rstest]
+    fn test_molecule_ast_graph_symmetry_out_of_range_coset() {
+        // A malformed (out-of-range) coset must not panic graph_symmetry: the
+        // element contributes no observable descriptor and the orbit partition
+        // is still computed.
+        let mut mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
+        mol.stereo_atom_mut(StereoAtomId(0)).coset = StereoCosetAst::Lit(9);
+        let gs = mol.graph_symmetry(&config());
+        assert_eq!(gs.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);
     }
 
     #[rstest]

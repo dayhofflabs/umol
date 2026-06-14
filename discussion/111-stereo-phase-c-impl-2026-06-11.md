@@ -942,8 +942,22 @@ resolver's `InconsistencyPolicy` governs redundancy, not the validator); CIP/chi
 - **C4c.2** **Done** — invariants 1–3 in `check_structural` (`CosetOutOfRange` / `LigandArity` /
   `ImproperOnAchiral`); achiral gate fires only on an explicit improper relation that is **not**
   `Undetermined` (bare/wildcard elements pass).
-- **C4c.3** — invariant 4 (per-element projection: `#g` / `#o` / `#p`; `#f` skipped).
-- **C4c.4** — tests: passing center + coset-range / arity / achiral-gate / asserted-mismatch contradictions.
+- **C4c.3** **Done** — invariant 4 in `validate_symmetry` (`#g` vs `stereogenicity()`, `#o` vs `topicity()`,
+  `#p` via `OrientedPermutation` membership in `group()` + `MemOp`; `#f` skipped). `validate_kind` runs first;
+  symmetry projected only for a structurally-sound, resolved element. Added `umol-perm` dep.
+- **C4c.4** **Done** — tests: `test_stereo_validator_validate` (bare + matching `#g` → Determined) +
+  `test_stereo_validator_validate_error` (coset-range / arity / achiral-gate / `#g`/`#o`/`#p` mismatch). Found
+  + fixed: `graph_symmetry` panics on an out-of-range coset, so invariant 1's range check moved to a pre-pass
+  **before** `graph_symmetry` (dropped from `validate_kind`).
+- **C4c.5** — fix 1-indexed coset references in code, comments, and spec (raise is already 0-indexed,
+  `@`→`Lit(0)`/`@@`→`Lit(1)`): the off-by-one keyword shortcuts in `dsl/stereo.rs` (`ccw`/`z`→`Lit(0)`,
+  `cw`/`e`→`Lit(1)`; `"ccw"`→`"Th0"`, `"cw"`→`"Th1"`, `:z`→`"Ct0"`, `:e`→`"Ct1"`); the `StereoCosetAst`
+  doc comment ("0/1 for TH, CT"); affected round-trip tests + out-of-range fixtures (`Th2`/`Sp3`/`Oh6` →
+  in-range); spec coset/keyword examples (§7.14, §4).
+- **C4c.6** — replace the 1-indexed one-line image notation in `ApplyOp` (`^`) with 0-indexed disjoint-cycle
+  notation: `perm_image`/`fmt_perm_image` → the existing `cycles` parser/formatter (the one `#p`/`#f` use);
+  spec §7.14 (`coset-expr '^' cycles`, drop `image ::= digit+`) + the §7.14 reserved-operators prose; tests
+  (`1^2134` → `1^(0,1)`).
 
 ### C4d · `ops/resolver/aromaticity.rs` (fix — idempotency) **Done**
 
@@ -968,7 +982,7 @@ deferred together with C4b's.
     `StereoAtomConstraints` `Lattice` laws (meet commutative/associative/absorptive, `matches` ⇔
     `meet == Some(target)`); `LigandPairAst` normalization; the concrete-literal inherent `matches`.
 
-### C4f · conformance suite (large chunk)
+### C4f · conformance suite
 
 Extend the **feature-gated** conformance suite (`umol-graph`, `--features conformance`, the resolution test)
 with stereo — the bulk of Phase C's verification:
