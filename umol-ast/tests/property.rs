@@ -8,6 +8,8 @@ mod strategies;
 mod edit;
 #[path = "property/entity.rs"]
 mod entity;
+#[path = "property/lattice.rs"]
+mod lattice;
 #[path = "property/molecule.rs"]
 mod molecule;
 #[path = "property/stereo.rs"]

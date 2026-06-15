@@ -629,6 +629,13 @@ pub(crate) fn multicenter_bond_ast_for(atom_count: usize) -> impl Strategy<Value
         })
 }
 
+pub(crate) fn noncovalent_bond_kind_ast_strategy() -> impl Strategy<Value = NoncovalentBondKindAst> {
+    prop_oneof![
+        Just(NoncovalentBondKindAst::Undetermined),
+        prop::sample::select(NONCOVALENT_KINDS).prop_map(NoncovalentBondKindAst::Lit),
+    ]
+}
+
 pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = NoncovalentBondAst> {
     prop::sample::select(NONCOVALENT_KINDS).prop_map(|kind| NoncovalentBondAst {
         kind: NoncovalentBondKindAst::Lit(kind),
@@ -757,7 +764,7 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
 
 /// Lattice laws for a stereo relation: meet / join commutativity and
 /// associativity, absorption, idempotence, and `matches(t) ⇔ meet(t) == Some(t)`.
-pub(crate) fn assert_relation_lattice_laws<L: Lattice + Debug>(
+pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     a: &L,
     b: &L,
     c: &L,

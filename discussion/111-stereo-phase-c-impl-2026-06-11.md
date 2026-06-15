@@ -1024,6 +1024,17 @@ deferred together with C4b's.
   roundtrip completeness — atom-DSL has no dedicated roundtrip (only transitive via molecule). (3) `simplify`
   idempotence beyond `ValueAst` (`StereoCosetAst` / `StereoExpr`).
 
+  **C4e.5(1) — Done (sweep landed), fix blocked on doc 113.** `assert_relation_lattice_laws` renamed
+  `assert_lattice_laws` (it was already the generic law set); `lattice.rs` holds 20 lattice-law tests (the
+  13 reusable + 5 new/inline + 2 relation tests moved out of `stereo.rs`). `NoncovalentBondConstraints`
+  omitted (uninhabited inner enum → single value → vacuous). The sweep **caught real canonicalization bugs**:
+  14 value-carrying lattices fail (non-canonical `Set`/`NotSet` order + non-collapsed singletons in
+  `meet`/`join`; plus `StereoCosetAst::matches` non-reflexive on `Expr`). The finding was reframed as a
+  foundational AST equality/lattice redesign — **doc 113** (canonical-by-construction; derive `matches` from
+  `meet`; `Lattice` only on value/constraint types with `join` staying `Self`; graph-shaped entity/molecule
+  types demoted to inherent `matches`). The fix follows that design; the retained lattice tests go green after
+  it, the demoted types leave the sweep. The 14 failures are left red meanwhile. C4e.5(2)/(3) not yet started.
+
 **Iterations.** proptest defaults to 256 cases; not hardcoded — raise globally via `PROPTEST_CASES=N` or
 per-block `#![proptest_config(ProptestConfig::with_cases(N))]` for a rigorous CI pass.
 

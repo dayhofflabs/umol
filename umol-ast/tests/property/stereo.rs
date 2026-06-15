@@ -96,24 +96,6 @@ proptest! {
         prop_assert_eq!(dsl, parsed);
     }
 
-    #[test]
-    fn test_topicity_relation_lattice_laws(
-        a in topicity_relation_lattice_strategy(),
-        b in topicity_relation_lattice_strategy(),
-        c in topicity_relation_lattice_strategy(),
-    ) {
-        assert_relation_lattice_laws(&a, &b, &c)?;
-    }
-
-    #[test]
-    fn test_stereogenicity_relation_lattice_laws(
-        a in stereogenicity_relation_lattice_strategy(),
-        b in stereogenicity_relation_lattice_strategy(),
-        c in stereogenicity_relation_lattice_strategy(),
-    ) {
-        assert_relation_lattice_laws(&a, &b, &c)?;
-    }
-
     /// `LigandPairAst::new` normalizes to `first <= second` and is symmetric.
     #[test]
     fn test_ligand_pair_ast_normalization(a in 0u8..6, b in 0u8..6) {

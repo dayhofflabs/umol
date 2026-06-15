@@ -16,8 +16,7 @@ use super::super::stereo::{Stereogenicity, Topicity};
 use super::super::traits::{AsLit, Lattice};
 
 /// A concrete permutation literal. A thin wrapper hosting AST-side impls that the
-/// foreign `Permutation` cannot carry (matching, and EDN once the DSL lands). Not
-/// a lattice — a single permutation has no top, so no `join`.
+/// foreign `Permutation` cannot carry. Not a lattice — a single permutation has no top, so no `join`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PermutationAst(pub Permutation);
 
