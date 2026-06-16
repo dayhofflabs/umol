@@ -1,6 +1,18 @@
 # JointDomain constraint design
 
-Status: AST + Lattice + saturate **Done** (doc 96 substeps 2f–2j). DSL surface and EDN roundtrip **Deferred** to a later pass — see doc 96 step 2 status table and doc 98 (bind scope).
+Status: **Removed (2026-06-16).** Subsumed by the general variable-constraint facility (doc 115).
+
+> **Removed (113, 2026-06-16).** `JointDomain` was a finite-domain field-tuple constraint
+> over atom *fields* (`JointVar` tags) — which, after 113's var-uniformity decision, is a
+> **parallel premature system**: it correlates fields, not variables, so it only expresses
+> the bare-var case, forces a privileged-bare-var position, and its serde "blocker" (name ↔
+> field resolution) is an artifact of that field-tag representation. Its one real capability
+> (e.g. the Fe²⁺ high/low-spin split, `(?lp,?u) :: {(3,0),(1,4)}`) is subsumed by the general
+> molecule-level **variable-constraint facility** (doc 115: typed vars + arithmetic + tuple/
+> table constraints over *variables*). `JointDomainAst`, `JointVar`, `JointValue`,
+> `AtomConstraint::JointDomain`, `saturate_atom`, the `#[lattice(saturate)]` attribute, the
+> `Lattice::saturate` hook, and the `#E` DSL are deleted. The design below is retained for the
+> relational/CSP reasoning, which doc 115 inherits.
 
 ## Why this exists
 
@@ -128,6 +140,12 @@ Same dependency chain: EDN serialization needs to express the JD, which needs bi
 
 Lifted out into doc 98. Originally an open question in this doc's predecessor; the work to give atoms an explicit variable scope is large enough to be its own design doc. The JointDomain AST already commits to `JointVar` (not strings), so the scope question is about the DSL surface and validation paths, not the AST shape.
 
+**Update (113, 2026-06-16):** doc 113 removed atom-level `Bind`/`Ref` (vars are bare
+`Var(String)`), so variable scope, cross-entity references, and storage move to the
+**molecule** level (not removed — relocated; see doc 98's update). Per-atom `JointDomain`
+above is unaffected; the molecule-level engine and cross-atom `JointVar` extensions
+remain the open frontier.
+
 ### JointVar extensions
 
 Reserved (not yet implemented): `Element`, `Isotope`, `AromaticValence`, `MulticenterValence`, `HapticValence`. Each requires a corresponding `JointValue` variant and lattice handling for the projection step. The `#[non_exhaustive]` markers on `JointVar` / `JointValue` make adding them backward-compatible.
@@ -175,7 +193,7 @@ Vocabulary coexistence is fine: lattice and CSP are equivalent views of the algo
 | domain                          | `Set` / `Lit` / `Undetermined` on field AST                                               |
 | propagator                      | `Lattice::narrow_from`                                                                    |
 | arc consistency                 | meet-driven narrowing in resolver passes                                                  |
-| named variable                  | `ElementAst::Bind` / `Ref`, `ValueAst::Bind` / `Ref`, `IsotopeAst::Bind` / `Ref`          |
+| named variable                  | `Var(String)` in `ValueTerm` / `ElementAst` / `StereoTerm` (molecule-scoped; atom-level `Bind`/`Ref` removed by 113) |
 | cross-variable constraint       | `JointDomainAst` (per-atom, value-typed slots only today)                                 |
 | labeling / search               | not yet — resolver enumerates candidates but has no general search driver                 |
 | fixed-point engine              | `Lattice::saturate` loops per-entity to fixpoint; no molecule-level engine yet            |
