@@ -257,7 +257,7 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::ValueTerm;
 
     #[rstest]
     #[case::electron_count(
@@ -301,7 +301,7 @@ mod tests {
 
     #[rstest]
     #[case::folds_expr(
-        AromaticSystemConstraint::ElectronCount(ValueAst::Expr(Box::new(ValueExpr::Lit(6)))),
+        AromaticSystemConstraint::ElectronCount(ValueAst::term(ValueTerm::Lit(6))),
         AromaticSystemConstraint::electron_count(6)
     )]
     fn test_aromatic_system_constraint_simplify(
@@ -445,7 +445,7 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_constraints_simplify_each() {
         let mut cs = AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(
-            ValueAst::Expr(Box::new(ValueExpr::Lit(6))),
+            ValueAst::term(ValueTerm::Lit(6)),
         ));
         cs.simplify_each();
         assert_eq!(

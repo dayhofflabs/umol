@@ -187,7 +187,7 @@ impl AromaticValenceAst {
     /// Pattern matches value.
     pub fn matches_value(&self, value: i64) -> bool {
         match self {
-            Self::Aromatic(v) => v.matches_value(value),
+            Self::Aromatic(v) => v.matches(&ValueAst::Lit(value)),
             Self::NotAromatic => value == 0,
             Self::Undetermined => true,
         }
@@ -299,7 +299,7 @@ impl MulticenterValenceAst {
     /// Pattern matches value.
     pub fn matches_value(&self, value: i64) -> bool {
         match self {
-            Self::Multicenter(v) => v.matches_value(value),
+            Self::Multicenter(v) => v.matches(&ValueAst::Lit(value)),
             Self::NotMulticenter => value == 0,
             Self::Undetermined => true,
         }
@@ -826,7 +826,7 @@ mod tests {
 
     use super::*;
     use crate::ast::stereo::{StereoCosetAst, StereoExpr};
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -906,11 +906,11 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence_folds_expr(AtomConstraint::Valence(ValueAst::Expr(Box::new(ValueExpr::Lit(4)))), AtomConstraint::valence(4))]
-    #[case::degree_folds_expr(AtomConstraint::Degree(ValueAst::Expr(Box::new(ValueExpr::Lit(3)))), AtomConstraint::degree(3))]
-    #[case::aromatic_valence_folds_inner(AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(ValueExpr::Lit(2))))),
+    #[case::valence_folds_expr(AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4))), AtomConstraint::valence(4))]
+    #[case::degree_folds_expr(AtomConstraint::Degree(ValueAst::term(ValueTerm::Lit(3))), AtomConstraint::degree(3))]
+    #[case::aromatic_valence_folds_inner(AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2)))),
         AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(2)))]
-    #[case::multicenter_valence_folds_inner(AtomConstraint::multicenter_valence(MulticenterValenceAst::Multicenter(ValueAst::Expr(Box::new(ValueExpr::Lit(3))))),
+    #[case::multicenter_valence_folds_inner(AtomConstraint::multicenter_valence(MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Lit(3)))),
         AtomConstraint::multicenter_valence(MulticenterValenceAst::multicenter(3)))]
     #[case::tetrahedral_lifts_expr(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Lit(1)))),
         AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::from(1_u32)))]
@@ -990,9 +990,9 @@ mod tests {
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, Some(0))]
     #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), None)]
     #[case::aromatic_lit(AromaticValenceAst::aromatic(3), Some(3))]
-    #[case::aromatic_expr_folds(
-        AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))),
-        Some(2)
+    #[case::aromatic_term_unresolved(
+        AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2))),
+        None
     )]
     fn test_aromatic_valence_ast_as_lit(
         #[case] v: AromaticValenceAst,
@@ -1003,7 +1003,7 @@ mod tests {
 
     #[rstest]
     #[case::aromatic_folds_expr(
-        AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))),
+        AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2))),
         AromaticValenceAst::aromatic(2)
     )]
     fn test_aromatic_valence_ast_simplify(
@@ -1115,7 +1115,7 @@ mod tests {
     #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, Some(0))]
     #[case::multicenter_undetermined(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), None)]
     #[case::multicenter_lit(MulticenterValenceAst::multicenter(2), Some(2))]
-    #[case::multicenter_expr_folds(MulticenterValenceAst::Multicenter(ValueAst::Expr(Box::new(ValueExpr::Lit(3)))), Some(3))]
+    #[case::multicenter_term_unresolved(MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Lit(3))), None)]
     fn test_multicenter_valence_ast_as_lit(
         #[case] v: MulticenterValenceAst,
         #[case] expected: Option<i64>,
@@ -1125,7 +1125,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::multicenter_folds_expr(MulticenterValenceAst::Multicenter(ValueAst::Expr(Box::new(ValueExpr::Lit(3)))), MulticenterValenceAst::multicenter(3))]
+    #[case::multicenter_folds_expr(MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Lit(3))), MulticenterValenceAst::multicenter(3))]
     fn test_multicenter_valence_ast_simplify(
         #[case] input: MulticenterValenceAst,
         #[case] expected: MulticenterValenceAst,
@@ -1273,9 +1273,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::folds_each_value(AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(Box::new(ValueExpr::Lit(4)))),
-            AtomConstraint::Degree(ValueAst::Expr(Box::new(ValueExpr::Lit(3)))),
-            AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))))]),
+    #[case::folds_each_value(AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4))),
+            AtomConstraint::Degree(ValueAst::term(ValueTerm::Lit(3))),
+            AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2))))]),
         AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(2)), AtomConstraint::degree(3)]))]
     #[case::lifts_stereo_expr(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Lit(1))))]),
         AtomConstraints::from_iter([AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::from(1_u32))]))]
@@ -1455,7 +1455,7 @@ mod tests {
     #[case::keeps_only_shared_kinds(AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(2)]), AtomConstraints::from_iter([AtomConstraint::valence(4)]),
         AtomConstraints::from_iter([AtomConstraint::valence(4)]))]
     #[case::widens_value(AtomConstraints::from_iter([AtomConstraint::valence(4)]), AtomConstraints::from_iter([AtomConstraint::valence(3)]),
-        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Set(Box::new(vec![4, 3])))]))]
+        AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::lit_set([4, 3]))]))]
     #[case::tetrahedral_same(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(StereoConfigurationAst::NotStereo)]),
         AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(StereoConfigurationAst::NotStereo)]),
         AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(StereoConfigurationAst::NotStereo)]))]

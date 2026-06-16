@@ -313,7 +313,7 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -363,11 +363,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_count_folds_expr(
-        DativeBondConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))),
+        DativeBondConstraint::RingCount(ValueAst::term(ValueTerm::Lit(2))),
         DativeBondConstraint::ring_count(2),
     )]
     #[case::ring_size_folds_expr(
-        DativeBondConstraint::RingSize(ValueAst::Expr(Box::new(ValueExpr::Lit(6)))),
+        DativeBondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(6))),
         DativeBondConstraint::ring_size(6),
     )]
     fn test_dative_bond_constraint_simplify(
@@ -532,8 +532,8 @@ mod tests {
     fn test_dative_bond_constraints_simplify_each() {
         let mut cs = DativeBondConstraints::from_iter([
             DativeBondConstraint::Aromatic,
-            DativeBondConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Lit(1)))),
-            DativeBondConstraint::RingSize(ValueAst::Expr(Box::new(ValueExpr::Lit(6)))),
+            DativeBondConstraint::RingCount(ValueAst::term(ValueTerm::Lit(1))),
+            DativeBondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(6))),
         ]);
         cs.simplify_each();
         assert_eq!(

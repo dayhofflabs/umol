@@ -396,7 +396,7 @@ fn enumeration_values(field: &ValueAst, bound: RangeInclusive<i64>) -> Vec<i64> 
     match field {
         ValueAst::Lit(n) => vec![*n],
         ValueAst::Undetermined => bound.collect(),
-        _ => bound.filter(|value| field.matches_value(*value)).collect(),
+        _ => bound.filter(|value| field.matches(&ValueAst::Lit(*value))).collect(),
     }
 }
 

@@ -321,7 +321,7 @@ pub(super) fn read_value_dsl(de: &mut EdnStreamDeserializer<'_>) -> Result<Value
         }
         b'[' => {
             let items = read_vec(de, |d| Ok(d.read_i64()?))?;
-            Ok(ValueDsl(ValueAst::Set(Box::new(items))))
+            Ok(ValueDsl(ValueAst::lit_set(items)))
         }
         b':' => {
             let name = de.read_keyword_name()?;

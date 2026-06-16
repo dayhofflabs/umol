@@ -732,7 +732,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{AtomConstraint, AtomConstraintKind};
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::ValueTerm;
     use crate::atom_zeroed;
 
     #[rstest]
@@ -855,15 +855,15 @@ mod tests {
         let mut atom = AtomAst {
             element: ElementAst::Lit(Element::C),
             isotope_mass: IsotopeMassAst::Lit(12),
-            charge: ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
-            implicit_hydrogens: ValueAst::Expr(Box::new(ValueExpr::Lit(3))),
-            lone_pairs: ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(2))))),
+            charge: ValueAst::term(ValueTerm::Lit(1)),
+            implicit_hydrogens: ValueAst::term(ValueTerm::Lit(3)),
+            lone_pairs: ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(2)))),
             spin: SpinStateAst {
-                unpaired: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
-                multiplicity: ValueAst::Expr(Box::new(ValueExpr::Lit(1))),
+                unpaired: ValueAst::term(ValueTerm::Lit(0)),
+                multiplicity: ValueAst::term(ValueTerm::Lit(1)),
             },
-            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Expr(
-                Box::new(ValueExpr::Lit(4)),
+            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::term(
+                ValueTerm::Lit(4),
             ))]),
         };
         atom.simplify_values();

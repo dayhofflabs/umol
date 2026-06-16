@@ -1,30 +1,60 @@
 //! Value AST.
 
-use std::collections::HashMap;
+use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::ops::{Add, Div, Mul, Sub};
 
 use umol_shared::spin::SpinMultiplicity;
 
-use super::error::EvaluationError;
-use super::operators::{ArithOp, RelOp};
-use super::traits::{AsLit, Lattice};
+use super::error::Contradiction;
+use super::operators::{MemOp, RelOp};
+use super::traits::{AsLit, Canonicalize, Lattice};
 
-/// Variable bindings used by [`ValueExpr::evaluate`] and [`ValueExpr::evaluate_bool`].
-pub type Bindings = HashMap<String, i64>;
-
-/// Integer-valued atom/bond field: undetermined (pattern wildcard), a
-/// literal, a finite literal set, an arithmetic/boolean expression
-/// pattern, or a named bind / reference for cross-field joint constraints.
-/// Used for charge, hydrogen count, isotope mass, valence, etc.
+/// Integer-valued atom/bond field: undetermined (pattern wildcard), a literal,
+/// a finite literal set, an arithmetic term over variables, or a boolean
+/// predicate constraining the field. Used for charge, hydrogen count, isotope
+/// mass, valence, bond order, etc.
+///
+/// Equality is **lazy**: derived `Eq`/`Hash`/`Ord` are structural ("same
+/// tree"); semantic equality is `Canonicalize::equiv`, which compares canonical
+/// forms.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ValueAst {
     #[default]
     Undetermined,
     Lit(i64),
-    Set(Box<Vec<i64>>),
-    Expr(Box<ValueExpr>),
-    Bind(Box<(String, Vec<i64>)>),
-    Ref(String),
+    LitSet(Box<BTreeSet<i64>>),
+    Term(Box<ValueTerm>),
+    Predicate(Box<ValuePredicate>),
+}
+
+/// Arithmetic term over `i64`, the value-sort half of the field grammar. `Sum`
+/// and `Product` are n-ary (associative + commutative by construction);
+/// subtraction lowers to `Sum([a, Neg(b)])`; `Div`/`Rem` stay binary. A ground
+/// term folds to a `Lit` (or `Neg(Lit)`), which `ValueAst` lifts to `Lit`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ValueTerm {
+    Lit(i64),
+    Var(String),
+    Neg(Box<ValueTerm>),
+    Sum(Vec<ValueTerm>),
+    Product(Vec<ValueTerm>),
+    Div(Box<ValueTerm>, Box<ValueTerm>),
+    Rem(Box<ValueTerm>, Box<ValueTerm>),
+}
+
+/// Boolean predicate over terms, the constraint-sort half of the field grammar.
+/// `Rel` and `Mem` operators are negation-closed (`RelOp` has `Ne`, `MemOp` has
+/// `NotIn`), so canonicalization eliminates `Not` entirely — it survives only as
+/// faithful parser input for `!`. ⊤/⊥ are not variants: a predicate that decides
+/// is lifted by `ValueAst` to `Undetermined` / `Err(Contradiction)`.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ValuePredicate {
+    Rel(ValueTerm, RelOp, ValueTerm),
+    Mem(ValueTerm, MemOp, BTreeSet<i64>),
+    Not(Box<ValuePredicate>),
+    And(Vec<ValuePredicate>),
+    Or(Vec<ValuePredicate>),
 }
 
 impl ValueAst {
@@ -36,135 +66,477 @@ impl ValueAst {
         Self::Lit(n)
     }
 
-    pub fn set(values: Vec<i64>) -> Self {
-        Self::Set(Box::new(values))
+    pub fn lit_set<I: IntoIterator<Item = i64>>(values: I) -> Self {
+        Self::LitSet(Box::new(values.into_iter().collect()))
     }
 
-    pub fn expr(e: ValueExpr) -> Self {
-        Self::Expr(Box::new(e))
+    /// A bare field variable `?name` — the common symbolic term.
+    pub fn var(name: impl Into<String>) -> Self {
+        Self::Term(Box::new(ValueTerm::Var(name.into())))
     }
 
-    pub fn bind(id: impl Into<String>, set: Vec<i64>) -> Self {
-        Self::Bind(Box::new((id.into(), set)))
+    /// The lower-bound pattern `?name >= bound` (the `+` sugar, e.g. `#r+`).
+    pub fn at_least(name: impl Into<String>, bound: i64) -> Self {
+        Self::Predicate(Box::new(ValuePredicate::Rel(
+            ValueTerm::Var(name.into()),
+            RelOp::Ge,
+            ValueTerm::Lit(bound),
+        )))
     }
 
-    pub fn reference(id: impl Into<String>) -> Self {
-        Self::Ref(id.into())
+    pub fn term(term: ValueTerm) -> Self {
+        Self::Term(Box::new(term))
     }
 
-    #[inline(never)]
-    #[cold]
-    fn is_ground_slow(&self) -> bool {
-        match self {
-            Self::Set(s) => set_is_ground(s),
-            Self::Expr(e) => e.is_ground(),
-            Self::Bind(_) | Self::Ref(_) => false,
-            Self::Lit(_) | Self::Undetermined => unreachable!(),
-        }
+    pub fn predicate(predicate: ValuePredicate) -> Self {
+        Self::Predicate(Box::new(predicate))
     }
 
-    #[inline(never)]
-    #[cold]
-    fn as_lit_slow(&self) -> Option<i64> {
-        match self {
-            Self::Set(s) => set_is_ground(s).then(|| s[0]),
-            Self::Expr(e) => e.evaluate_checked(&Bindings::new()),
-            Self::Bind(_) | Self::Ref(_) => None,
-            Self::Lit(_) | Self::Undetermined => unreachable!(),
-        }
-    }
-
-    /// Match a concrete integer value against this pattern.
-    pub fn matches_value(&self, value: i64) -> bool {
-        self.capture(value).is_some()
-    }
-
-    /// Match a concrete integer value against this pattern, returning variable bindings
-    ///
-    /// Variables in the pattern are bound to `value`. For boolean expressions the
-    /// predicate is evaluated with those bindings; for arithmetic expressions the
-    /// result is compared to `value`
-    /// Reduce to canonical form by lifting trivial `ValueExpr` wrappers and
-    /// recursively simplifying any inner expression. Specifically:
-    ///
-    /// - `ValueExpr(ValueExpr::Lit(n))` → `Lit(n)`
-    /// - `ValueExpr(ValueExpr::Neg(ValueExpr::Lit(n)))` → `Lit(-n)` when `-n` does not
-    ///   overflow `i64` (otherwise the wrapped form is preserved)
-    /// - `ValueExpr(ValueExpr::Var(id))` → `Ref(id)` (top-level bind reference)
-    /// - `ValueExpr(ValueExpr::Mem(Var(id), set))` → `Bind(id, set)` (named domain
-    ///   constraint at top level)
-    /// - `ValueExpr(e)` for any other shape → `ValueExpr(e.simplify())`
-    /// - `Lit` / `Set` / `Undetermined` / `Bind` / `Ref` → unchanged
+    /// Transitional alias for `canonicalize`, kept while entities/constraints
+    /// still call `simplify`; removed in the lattice-trait flip. Unsatisfiable
+    /// inputs map to `Undetermined`.
     pub fn simplify(self) -> Self {
-        match self {
-            Self::Expr(e) => match e.simplify() {
-                ValueExpr::Lit(n) => Self::Lit(n),
-                ValueExpr::Neg(inner) => match *inner {
-                    ValueExpr::Lit(n) => Self::Lit(-n),
-                    other => Self::Expr(Box::new(ValueExpr::Neg(Box::new(other)))),
-                },
-                ValueExpr::Var(id) => Self::Ref(id),
-                ValueExpr::Mem(inner, set) => match *inner {
-                    ValueExpr::Var(id) => Self::Bind(Box::new((id, set))),
-                    other => Self::Expr(Box::new(ValueExpr::Mem(Box::new(other), set))),
-                },
-                other => Self::Expr(Box::new(other)),
+        self.canonicalize().unwrap_or(Self::Undetermined)
+    }
+}
+
+impl Canonicalize for ValueAst {
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            ValueAst::Undetermined => ValueAst::Undetermined,
+            ValueAst::Lit(n) => ValueAst::Lit(n),
+            ValueAst::LitSet(set) => lift_set(*set)?,
+            ValueAst::Term(term) => lift_term(canon_term(*term)),
+            ValueAst::Predicate(predicate) => match canon_predicate(*predicate) {
+                PredicateForm::Top => ValueAst::Undetermined,
+                PredicateForm::Bottom => return Err(Contradiction),
+                PredicateForm::Predicate(p) => ValueAst::Predicate(Box::new(p)),
             },
-            other => other,
-        }
+        })
     }
 
-    pub fn capture(&self, value: i64) -> Option<Bindings> {
+    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
         match self {
-            ValueAst::Undetermined => Some(Bindings::new()),
-            ValueAst::Lit(n) => {
-                if *n == value {
-                    Some(Bindings::new())
-                } else {
-                    None
-                }
-            }
-            ValueAst::Set(s) => {
-                if s.contains(&value) {
-                    Some(Bindings::new())
-                } else {
-                    None
-                }
-            }
-            ValueAst::Expr(e) => {
-                let mut bindings = Bindings::new();
-                collect_bindings(e, value, &mut bindings);
-                if e.is_arithmetic() {
-                    match e.evaluate(&bindings) {
-                        Ok(v) if v == value => Some(bindings),
-                        _ => None,
-                    }
-                } else {
-                    match e.evaluate_bool(&bindings) {
-                        Ok(true) => Some(bindings),
-                        _ => None,
-                    }
-                }
-            }
-            ValueAst::Bind(b) => {
-                let (id, set) = &**b;
-                if set.contains(&value) {
-                    let mut bindings = Bindings::new();
-                    bindings.insert(id.clone(), value);
-                    Some(bindings)
-                } else {
-                    None
-                }
-            }
-            ValueAst::Ref(_) => None,
+            ValueAst::Undetermined | ValueAst::Lit(_) => Ok(Cow::Borrowed(self)),
+            _ => Ok(Cow::Owned(self.clone().canonicalize()?)),
         }
     }
 }
 
+impl Canonicalize for ValueTerm {
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(canon_term(self))
+    }
+}
+
+/// Lift a canonical set: empty is unsatisfiable, a singleton is a `Lit`.
+fn lift_set(set: BTreeSet<i64>) -> Result<ValueAst, Contradiction> {
+    match set.len() {
+        0 => Err(Contradiction),
+        1 => Ok(ValueAst::Lit(*set.iter().next().unwrap())),
+        _ => Ok(ValueAst::LitSet(Box::new(set))),
+    }
+}
+
+/// Lift a canonical term: a ground term (`Lit` or `Neg(Lit)`) becomes `Lit`.
+fn lift_term(term: ValueTerm) -> ValueAst {
+    match term_const(&term) {
+        Some(n) => ValueAst::Lit(n),
+        None => ValueAst::Term(Box::new(term)),
+    }
+}
+
+/// Canonical literal term: the sign lives in `Neg`, so `Lit` is always ≥ 0.
+fn term_lit(n: i64) -> ValueTerm {
+    if n < 0 {
+        ValueTerm::Neg(Box::new(ValueTerm::Lit(-n)))
+    } else {
+        ValueTerm::Lit(n)
+    }
+}
+
+/// The integer a canonical term denotes, if ground (`Lit(n)` or `Neg(Lit(n))`).
+fn term_const(term: &ValueTerm) -> Option<i64> {
+    match term {
+        ValueTerm::Lit(n) => Some(*n),
+        ValueTerm::Neg(inner) => match inner.as_ref() {
+            ValueTerm::Lit(n) => Some(-n),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn canon_term(term: ValueTerm) -> ValueTerm {
+    match term {
+        ValueTerm::Lit(n) => term_lit(n),
+        ValueTerm::Var(_) => term,
+        ValueTerm::Neg(inner) => canon_neg(canon_term(*inner)),
+        ValueTerm::Sum(operands) => canon_sum(operands),
+        ValueTerm::Product(operands) => canon_product(operands),
+        ValueTerm::Div(a, b) => canon_div_rem(canon_term(*a), canon_term(*b), false),
+        ValueTerm::Rem(a, b) => canon_div_rem(canon_term(*a), canon_term(*b), true),
+    }
+}
+
+/// `inner` is already canonical.
+fn canon_neg(inner: ValueTerm) -> ValueTerm {
+    match inner {
+        ValueTerm::Neg(grand) => *grand,
+        ValueTerm::Lit(0) => ValueTerm::Lit(0),
+        other => ValueTerm::Neg(Box::new(other)),
+    }
+}
+
+fn canon_sum(operands: Vec<ValueTerm>) -> ValueTerm {
+    let mut terms = Vec::new();
+    let mut constant: i64 = 0;
+    flatten_sum(operands, &mut terms, &mut constant);
+    if constant != 0 {
+        terms.push(term_lit(constant));
+    }
+    terms.sort();
+    match terms.len() {
+        0 => ValueTerm::Lit(0),
+        1 => terms.pop().unwrap(),
+        _ => ValueTerm::Sum(terms),
+    }
+}
+
+fn flatten_sum(operands: Vec<ValueTerm>, terms: &mut Vec<ValueTerm>, constant: &mut i64) {
+    for operand in operands {
+        match canon_term(operand) {
+            ValueTerm::Sum(inner) => flatten_sum(inner, terms, constant),
+            other => match term_const(&other) {
+                Some(n) => *constant += n,
+                None => terms.push(other),
+            },
+        }
+    }
+}
+
+fn canon_product(operands: Vec<ValueTerm>) -> ValueTerm {
+    let mut terms = Vec::new();
+    let mut constant: i64 = 1;
+    flatten_product(operands, &mut terms, &mut constant);
+    if constant == 0 {
+        return ValueTerm::Lit(0);
+    }
+    if constant != 1 {
+        terms.push(term_lit(constant));
+    }
+    terms.sort();
+    match terms.len() {
+        0 => ValueTerm::Lit(1),
+        1 => terms.pop().unwrap(),
+        _ => ValueTerm::Product(terms),
+    }
+}
+
+fn flatten_product(operands: Vec<ValueTerm>, terms: &mut Vec<ValueTerm>, constant: &mut i64) {
+    for operand in operands {
+        match canon_term(operand) {
+            ValueTerm::Product(inner) => flatten_product(inner, terms, constant),
+            other => match term_const(&other) {
+                Some(n) => *constant *= n,
+                None => terms.push(other),
+            },
+        }
+    }
+}
+
+/// `a`/`b` already canonical; folds a ground `(Lit) op (Lit)` when divisor ≠ 0.
+fn canon_div_rem(a: ValueTerm, b: ValueTerm, is_rem: bool) -> ValueTerm {
+    if let (Some(x), Some(y)) = (term_const(&a), term_const(&b)) {
+        if y != 0 {
+            return term_lit(if is_rem { x % y } else { x / y });
+        }
+    }
+    let (a, b) = (Box::new(a), Box::new(b));
+    if is_rem {
+        ValueTerm::Rem(a, b)
+    } else {
+        ValueTerm::Div(a, b)
+    }
+}
+
+/// Predicate canonical form, threading ⊤/⊥ that no `ValuePredicate` variant can
+/// hold. Lifted to `ValueAst` (⊤ → `Undetermined`, ⊥ → `Err`).
+enum PredicateForm {
+    Top,
+    Bottom,
+    Predicate(ValuePredicate),
+}
+
+fn canon_predicate(predicate: ValuePredicate) -> PredicateForm {
+    match predicate {
+        ValuePredicate::Rel(a, op, b) => canon_rel(canon_term(a), op, canon_term(b)),
+        ValuePredicate::Mem(e, op, set) => canon_mem(canon_term(e), op, set),
+        ValuePredicate::Not(inner) => negate(canon_predicate(*inner)),
+        ValuePredicate::And(operands) => canon_junction(operands, true),
+        ValuePredicate::Or(operands) => canon_junction(operands, false),
+    }
+}
+
+/// `a`/`b` already canonical.
+fn canon_rel(a: ValueTerm, op: RelOp, b: ValueTerm) -> PredicateForm {
+    if let (Some(x), Some(y)) = (term_const(&a), term_const(&b)) {
+        let holds = match op {
+            RelOp::Lt => x < y,
+            RelOp::Le => x <= y,
+            RelOp::Gt => x > y,
+            RelOp::Ge => x >= y,
+            RelOp::Eq => x == y,
+            RelOp::Ne => x != y,
+        };
+        return if holds {
+            PredicateForm::Top
+        } else {
+            PredicateForm::Bottom
+        };
+    }
+    let rel = match op {
+        RelOp::Gt => ValuePredicate::Rel(b, RelOp::Lt, a),
+        RelOp::Ge => ValuePredicate::Rel(b, RelOp::Le, a),
+        RelOp::Eq | RelOp::Ne => {
+            let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+            ValuePredicate::Rel(lo, op, hi)
+        }
+        RelOp::Lt | RelOp::Le => ValuePredicate::Rel(a, op, b),
+    };
+    PredicateForm::Predicate(rel)
+}
+
+fn neg_rel_op(op: RelOp) -> RelOp {
+    match op {
+        RelOp::Lt => RelOp::Ge,
+        RelOp::Le => RelOp::Gt,
+        RelOp::Gt => RelOp::Le,
+        RelOp::Ge => RelOp::Lt,
+        RelOp::Eq => RelOp::Ne,
+        RelOp::Ne => RelOp::Eq,
+    }
+}
+
+fn neg_mem_op(op: MemOp) -> MemOp {
+    match op {
+        MemOp::In => MemOp::NotIn,
+        MemOp::NotIn => MemOp::In,
+    }
+}
+
+/// `e` already canonical; `set` is sorted/deduped by type.
+fn canon_mem(e: ValueTerm, op: MemOp, set: BTreeSet<i64>) -> PredicateForm {
+    if let Some(x) = term_const(&e) {
+        let present = set.contains(&x);
+        let holds = match op {
+            MemOp::In => present,
+            MemOp::NotIn => !present,
+        };
+        return if holds {
+            PredicateForm::Top
+        } else {
+            PredicateForm::Bottom
+        };
+    }
+    match set.len() {
+        0 => match op {
+            MemOp::In => PredicateForm::Bottom,
+            MemOp::NotIn => PredicateForm::Top,
+        },
+        1 => {
+            let only = *set.iter().next().unwrap();
+            let rel_op = match op {
+                MemOp::In => RelOp::Eq,
+                MemOp::NotIn => RelOp::Ne,
+            };
+            canon_rel(e, rel_op, term_lit(only))
+        }
+        _ => PredicateForm::Predicate(ValuePredicate::Mem(e, op, set)),
+    }
+}
+
+fn negate(form: PredicateForm) -> PredicateForm {
+    match form {
+        PredicateForm::Top => PredicateForm::Bottom,
+        PredicateForm::Bottom => PredicateForm::Top,
+        PredicateForm::Predicate(p) => negate_predicate(p),
+    }
+}
+
+/// `predicate` is already canonical (so it carries no `Not`).
+fn negate_predicate(predicate: ValuePredicate) -> PredicateForm {
+    match predicate {
+        ValuePredicate::Rel(a, op, b) => canon_rel(a, neg_rel_op(op), b),
+        ValuePredicate::Mem(e, op, set) => canon_mem(e, neg_mem_op(op), set),
+        ValuePredicate::Not(inner) => canon_predicate(*inner),
+        ValuePredicate::And(operands) => {
+            canon_junction_forms(operands.into_iter().map(negate_predicate).collect(), false)
+        }
+        ValuePredicate::Or(operands) => {
+            canon_junction_forms(operands.into_iter().map(negate_predicate).collect(), true)
+        }
+    }
+}
+
+fn canon_junction(operands: Vec<ValuePredicate>, is_and: bool) -> PredicateForm {
+    canon_junction_forms(operands.into_iter().map(canon_predicate).collect(), is_and)
+}
+
+fn canon_junction_forms(forms: Vec<PredicateForm>, is_and: bool) -> PredicateForm {
+    let mut operands: Vec<ValuePredicate> = Vec::new();
+    for form in forms {
+        match form {
+            PredicateForm::Top => {
+                if !is_and {
+                    return PredicateForm::Top;
+                }
+            }
+            PredicateForm::Bottom => {
+                if is_and {
+                    return PredicateForm::Bottom;
+                }
+            }
+            PredicateForm::Predicate(p) => match p {
+                ValuePredicate::And(inner) if is_and => operands.extend(inner),
+                ValuePredicate::Or(inner) if !is_and => operands.extend(inner),
+                other => operands.push(other),
+            },
+        }
+    }
+    operands.sort();
+    operands.dedup();
+    match operands.len() {
+        0 => {
+            if is_and {
+                PredicateForm::Top
+            } else {
+                PredicateForm::Bottom
+            }
+        }
+        1 => PredicateForm::Predicate(operands.pop().unwrap()),
+        _ => PredicateForm::Predicate(if is_and {
+            ValuePredicate::And(operands)
+        } else {
+            ValuePredicate::Or(operands)
+        }),
+    }
+}
+
+impl AsLit for ValueAst {
+    type Lit = i64;
+
+    /// The single integer this value denotes, only when it is a literal.
+    /// Non-canonicalizing: a `Term` or `LitSet` that would fold to a literal
+    /// still returns `None` (canonicalize first if folding is wanted).
+    #[inline]
+    fn as_lit(&self) -> Option<i64> {
+        match self {
+            ValueAst::Lit(n) => Some(*n),
+            _ => None,
+        }
+    }
+}
+
+impl Lattice for ValueAst {
+    #[inline]
+    fn is_undetermined(&self) -> bool {
+        matches!(self, ValueAst::Undetermined)
+    }
+
+    /// Bottom of the lattice — resolves to a single concrete integer. Aligned
+    /// with `as_lit`: literal only, not canonicalizing.
+    #[inline]
+    fn is_ground(&self) -> bool {
+        matches!(self, ValueAst::Lit(_))
+    }
+
+    /// Greatest lower bound, canonicalizing both operands and the result.
+    /// Distinct symbolic forms (`Term`/`Predicate`) meet only when equal once
+    /// canonical; symbolic versus concrete is rejected.
+    fn meet(&self, other: &Self) -> Option<Self> {
+        let a = self.canonical().ok()?;
+        let b = other.canonical().ok()?;
+        use ValueAst::*;
+        Some(match (a.as_ref(), b.as_ref()) {
+            (Undetermined, _) => b.as_ref().clone(),
+            (_, Undetermined) => a.as_ref().clone(),
+            (Lit(x), Lit(y)) => {
+                if x == y {
+                    Lit(*x)
+                } else {
+                    return None;
+                }
+            }
+            (Lit(x), LitSet(s)) | (LitSet(s), Lit(x)) => {
+                if s.contains(x) {
+                    Lit(*x)
+                } else {
+                    return None;
+                }
+            }
+            (LitSet(s), LitSet(t)) => return lift_set(s.intersection(t).copied().collect()).ok(),
+            (x, y) => {
+                if x == y {
+                    x.clone()
+                } else {
+                    return None;
+                }
+            }
+        })
+    }
+
+    /// Least upper bound, canonicalizing both operands and the result.
+    fn join(&self, other: &Self) -> Self {
+        let a = self.canonical().unwrap_or(Cow::Owned(ValueAst::Undetermined));
+        let b = other.canonical().unwrap_or(Cow::Owned(ValueAst::Undetermined));
+        use ValueAst::*;
+        match (a.as_ref(), b.as_ref()) {
+            (Undetermined, _) | (_, Undetermined) => Undetermined,
+            (Lit(x), Lit(y)) => {
+                if x == y {
+                    Lit(*x)
+                } else {
+                    LitSet(Box::new([*x, *y].into_iter().collect()))
+                }
+            }
+            (Lit(x), LitSet(s)) | (LitSet(s), Lit(x)) => {
+                let mut union = s.as_ref().clone();
+                union.insert(*x);
+                litset_or_lit(union)
+            }
+            (LitSet(s), LitSet(t)) => litset_or_lit(s.union(t).copied().collect()),
+            (x, y) => {
+                if x == y {
+                    x.clone()
+                } else {
+                    Undetermined
+                }
+            }
+        }
+    }
+
+    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
+    fn matches(&self, target: &Self) -> bool {
+        match (self.meet(target), target.canonical()) {
+            (Some(meet), Ok(target)) => meet == *target,
+            _ => false,
+        }
+    }
+}
+
+/// A non-empty canonical set as a `ValueAst`: a singleton collapses to `Lit`.
+fn litset_or_lit(set: BTreeSet<i64>) -> ValueAst {
+    match set.len() {
+        0 => ValueAst::Undetermined,
+        1 => ValueAst::Lit(*set.iter().next().unwrap()),
+        _ => ValueAst::LitSet(Box::new(set)),
+    }
+}
+
 /// A `Set` is ground iff non-empty and all elements are equal (semantic
-/// singleton). Shared by `ValueAst::is_ground` and the atom-field types that
-/// embed a `Set` directly (`IsotopeAst`, ``), so they
-/// avoid cloning the Vec just to delegate.
+/// singleton). Shared with the atom-field types that still embed a `Vec`-backed
+/// set directly (`IsotopeMassAst`), so they avoid cloning to delegate.
 #[inline(never)]
 pub(crate) fn set_is_ground(s: &[i64]) -> bool {
     match s {
@@ -173,169 +545,9 @@ pub(crate) fn set_is_ground(s: &[i64]) -> bool {
     }
 }
 
-/// Recursively bind every variable in `expr` to `value`
-fn collect_bindings(expr: &ValueExpr, value: i64, bindings: &mut Bindings) {
-    match expr {
-        ValueExpr::Var(name) => {
-            bindings.insert(name.clone(), value);
-        }
-        ValueExpr::Neg(e) => collect_bindings(e, value, bindings),
-        ValueExpr::BinOp(l, _, r) => {
-            collect_bindings(l, value, bindings);
-            collect_bindings(r, value, bindings);
-        }
-        ValueExpr::Mem(e, _) => collect_bindings(e, value, bindings),
-        ValueExpr::Rel(l, _, r) => {
-            collect_bindings(l, value, bindings);
-            collect_bindings(r, value, bindings);
-        }
-        ValueExpr::Not(e) => collect_bindings(e, value, bindings),
-        ValueExpr::And(exprs) | ValueExpr::Or(exprs) => {
-            for e in exprs {
-                collect_bindings(e, value, bindings);
-            }
-        }
-        ValueExpr::Lit(_) => {}
-    }
-}
-
-impl AsLit for ValueAst {
-    type Lit = i64;
-
-    /// The single integer this value denotes when ground; `None` otherwise.
-    /// Aligned with [`Lattice::is_ground`]: `is_ground() == as_lit().is_some()`.
-    /// Non-destructive — does not mutate or simplify in place.
-    #[inline]
-    fn as_lit(&self) -> Option<i64> {
-        match self {
-            Self::Lit(n) => Some(*n),
-            Self::Undetermined => None,
-            _ => self.as_lit_slow(),
-        }
-    }
-}
-
-impl Lattice for ValueAst {
-    #[inline]
-    fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
-    }
-
-    /// The pattern denotes a single concrete integer. Semantic, not
-    /// syntactic: `ValueExpr` that folds to a constant is ground, and a
-    /// `Set` of a single value (regardless of duplicates) is ground.
-    ///
-    /// Fast path — `Lit` and `Undetermined` dispatch with two tag compares
-    /// so the common case (a fully-lowered ground molecule) doesn't pay
-    /// for the `Set`/`ValueExpr` logic.
-    #[inline]
-    fn is_ground(&self) -> bool {
-        match self {
-            Self::Lit(_) => true,
-            Self::Undetermined => false,
-            _ => self.is_ground_slow(),
-        }
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
-            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
-            (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
-            (Self::Lit(a), Self::Set(s)) | (Self::Set(s), Self::Lit(a)) => {
-                s.contains(a).then_some(Self::Lit(*a))
-            }
-            (Self::Set(s), Self::Set(t)) => {
-                let intersection: Vec<i64> = s.iter().filter(|x| t.contains(x)).copied().collect();
-                match intersection.len() {
-                    0 => None,
-                    1 => Some(Self::Lit(intersection[0])),
-                    _ => Some(Self::Set(Box::new(intersection))),
-                }
-            }
-            (Self::Expr(e), Self::Expr(f)) => (e == f).then(|| Self::Expr(e.clone())),
-            (Self::Ref(a), Self::Ref(b)) if a == b => Some(Self::Ref(a.clone())),
-            (Self::Bind(a), Self::Bind(b)) if a == b => Some(self.clone()),
-            (Self::Expr(_), _) | (_, Self::Expr(_)) => None,
-            (Self::Bind(_) | Self::Ref(_), _) | (_, Self::Bind(_) | Self::Ref(_)) => None,
-        }
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        match (self, other) {
-            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
-            (Self::Lit(a), Self::Lit(b)) => {
-                if a == b {
-                    Self::Lit(*a)
-                } else {
-                    Self::Set(Box::new(vec![*a, *b]))
-                }
-            }
-            (Self::Lit(a), Self::Set(s)) => {
-                let mut v: Vec<i64> = Vec::with_capacity(s.len() + 1);
-                v.push(*a);
-                for &x in s.iter() {
-                    if x != *a {
-                        v.push(x);
-                    }
-                }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::Set(Box::new(v))
-                }
-            }
-            (Self::Set(s), Self::Lit(a)) => {
-                let mut v: Vec<i64> = s.to_vec();
-                if !v.contains(a) {
-                    v.push(*a);
-                }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::Set(Box::new(v))
-                }
-            }
-            (Self::Set(s), Self::Set(t)) => {
-                let mut v: Vec<i64> = s.to_vec();
-                for &x in t.iter() {
-                    if !v.contains(&x) {
-                        v.push(x);
-                    }
-                }
-                if v.len() == 1 {
-                    Self::Lit(v[0])
-                } else {
-                    Self::Set(Box::new(v))
-                }
-            }
-            (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
-            (Self::Ref(a), Self::Ref(b)) if a == b => Self::Ref(a.clone()),
-            (Self::Bind(a), Self::Bind(b)) if a == b => self.clone(),
-            _ => Self::Undetermined,
-        }
-    }
-
-    /// Pattern matches target iff every integer target admits is also
-    /// admitted by pattern (superset semantics). `ValueExpr` and `Ref` targets
-    /// cannot be certified generically and are rejected. `Bind` is treated
-    /// as a `Set` of its admissible values on either side.
-    fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::Ref(_), _) | (_, Self::Ref(_)) => false,
-            (_, Self::Expr(_)) => false,
-            (pattern, Self::Lit(n)) => pattern.matches_value(*n),
-            (pattern, Self::Set(ns)) => ns.iter().all(|n| pattern.matches_value(*n)),
-            (pattern, Self::Bind(b)) => b.1.iter().all(|n| pattern.matches_value(*n)),
-        }
-    }
-}
-
-// Arithmetic on `ValueAst` propagates `Undetermined`. Every binop has impls
-// for all four `(owned|ref) × (owned|ref)` combinations; the owned forms
-// delegate to the ref-ref form so the match is written once. Each binop
-// additionally accepts a bare `i64` on either side.
+// Arithmetic on `ValueAst` propagates `Undetermined`: only `Lit op Lit` yields a
+// `Lit`. Every binop has impls for all four `(owned|ref) × (owned|ref)`
+// combinations delegating to the ref-ref form, plus a bare `i64` on either side.
 macro_rules! impl_value_binop {
     ($Op:ident, $op:ident, $lit_op:tt) => {
         impl $Op<&ValueAst> for &ValueAst {
@@ -397,234 +609,14 @@ impl From<SpinMultiplicity> for ValueAst {
 
 impl From<Vec<i64>> for ValueAst {
     fn from(values: Vec<i64>) -> Self {
-        Self::Set(Box::new(values))
+        Self::lit_set(values)
     }
 }
 
-impl From<ValueExpr> for ValueAst {
-    fn from(e: ValueExpr) -> Self {
-        Self::Expr(Box::new(e))
+impl From<BTreeSet<i64>> for ValueAst {
+    fn from(values: BTreeSet<i64>) -> Self {
+        Self::LitSet(Box::new(values))
     }
-}
-
-/// Arithmetic / boolean expression tree over `ValueAst`. Captures
-/// atom/bond field constraints that can't be expressed as a literal or
-/// literal set, including bound variables (`Var`), membership tests
-/// (`Mem`), relational comparisons (`Rel`), and boolean combinators.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ValueExpr {
-    Lit(i64),
-    Var(String),
-    Neg(Box<ValueExpr>),
-    BinOp(Box<ValueExpr>, ArithOp, Box<ValueExpr>),
-    Mem(Box<ValueExpr>, Vec<i64>),
-    Rel(Box<ValueExpr>, RelOp, Box<ValueExpr>),
-    Not(Box<ValueExpr>),
-    And(Vec<ValueExpr>),
-    Or(Vec<ValueExpr>),
-}
-
-impl ValueExpr {
-    /// Reduce to canonical form. Recursively simplifies children, then
-    /// applies one round of structural folding:
-    ///
-    /// - `Lit(n)` for `n < 0` → `Neg(Lit(-n))`. Inside an `ValueExpr` context
-    ///   the parser always produces `Neg(Lit(n))` for `-n`; only the
-    ///   ValueAst-level `Lit` slot reads signed integers directly.
-    /// - `Neg(Neg(e))` → `e`
-    /// - `Or(... Or(inner) ...)` flattens the inner `Or` one level
-    ///   (recursively, so the result has no `Or` direct child)
-    /// - `And(... And(inner) ...)` flattens identically
-    /// - `And([single])` / `Or([single])` → `single`. The renderer emits a
-    ///   single-child And/Or as just the child, and the parser reads it
-    ///   back without the wrapper.
-    ///
-    /// Idempotent. Mirrors the parser's normalization.
-    pub fn simplify(self) -> Self {
-        match self {
-            ValueExpr::Lit(n) if n < 0 => ValueExpr::Neg(Box::new(ValueExpr::Lit(-n))),
-            ValueExpr::Lit(_) | ValueExpr::Var(_) => self,
-            ValueExpr::Neg(inner) => match inner.simplify() {
-                ValueExpr::Neg(grand) => *grand,
-                other => ValueExpr::Neg(Box::new(other)),
-            },
-            ValueExpr::BinOp(l, op, r) => {
-                ValueExpr::BinOp(Box::new(l.simplify()), op, Box::new(r.simplify()))
-            }
-            ValueExpr::Mem(e, set) => ValueExpr::Mem(Box::new(e.simplify()), set),
-            ValueExpr::Rel(l, op, r) => {
-                ValueExpr::Rel(Box::new(l.simplify()), op, Box::new(r.simplify()))
-            }
-            ValueExpr::Not(e) => ValueExpr::Not(Box::new(e.simplify())),
-            ValueExpr::And(exprs) => {
-                let mut flat = flatten_simplified(exprs, |e| matches!(e, ValueExpr::And(_)));
-                if flat.len() == 1 {
-                    flat.pop().unwrap()
-                } else {
-                    ValueExpr::And(flat)
-                }
-            }
-            ValueExpr::Or(exprs) => {
-                let mut flat = flatten_simplified(exprs, |e| matches!(e, ValueExpr::Or(_)));
-                if flat.len() == 1 {
-                    flat.pop().unwrap()
-                } else {
-                    ValueExpr::Or(flat)
-                }
-            }
-        }
-    }
-
-    pub fn is_arithmetic(&self) -> bool {
-        matches!(
-            self,
-            ValueExpr::Lit(..) | ValueExpr::Var(..) | ValueExpr::Neg(..) | ValueExpr::BinOp(..)
-        )
-    }
-
-    /// The expression denotes a single concrete integer: it is arithmetic
-    /// (not a boolean-domain predicate) and evaluates without free variables
-    /// or error (including i64 overflow via the checked evaluator). A
-    /// `ValueAst::Expr` containing a ground expression is itself ground.
-    pub fn is_ground(&self) -> bool {
-        self.is_arithmetic() && self.evaluate_checked(&Bindings::new()).is_some()
-    }
-
-    /// Arithmetic evaluation. Returns `None` for free variables and type
-    /// mismatch (boolean-domain ValueExpr). Uses standard Rust arithmetic — `i64`
-    /// overflow follows debug-panic / release-wrap semantics, and division
-    /// or remainder by zero panics. Intended as the foundation of
-    /// [`ValueExpr::is_ground`]; for error-reporting callers use [`ValueExpr::evaluate`].
-    pub fn evaluate_checked(&self, vars: &Bindings) -> Option<i64> {
-        match self {
-            ValueExpr::Lit(n) => Some(*n),
-            ValueExpr::Var(name) => vars.get(name).copied(),
-            ValueExpr::Neg(e) => Some(-e.evaluate_checked(vars)?),
-            ValueExpr::BinOp(l, op, r) => {
-                let l = l.evaluate_checked(vars)?;
-                let r = r.evaluate_checked(vars)?;
-                Some(match op {
-                    ArithOp::Add => l + r,
-                    ArithOp::Sub => l - r,
-                    ArithOp::Mul => l * r,
-                    ArithOp::Div => l / r,
-                    ArithOp::Rem => l % r,
-                })
-            }
-            ValueExpr::Rel(..)
-            | ValueExpr::Mem(..)
-            | ValueExpr::Not(..)
-            | ValueExpr::And(..)
-            | ValueExpr::Or(..) => None,
-        }
-    }
-
-    /// Evaluate an arithmetic expression to an `i64`
-    ///
-    /// Returns [`EvaluationError::TypeMismatch`] if called on a boolean-domain
-    /// expression (`Rel`, `Mem`, `Not`, `And`, `Or`)
-    pub fn evaluate(&self, vars: &Bindings) -> Result<i64, EvaluationError> {
-        match self {
-            ValueExpr::Lit(n) => Ok(*n),
-            ValueExpr::Var(name) => vars
-                .get(name)
-                .copied()
-                .ok_or_else(|| EvaluationError::UnboundVariable(name.clone())),
-            ValueExpr::Neg(e) => Ok(-e.evaluate(vars)?),
-            ValueExpr::BinOp(l, op, r) => {
-                let l = l.evaluate(vars)?;
-                let r = r.evaluate(vars)?;
-                match op {
-                    ArithOp::Add => Ok(l + r),
-                    ArithOp::Sub => Ok(l - r),
-                    ArithOp::Mul => Ok(l * r),
-                    ArithOp::Div => {
-                        if r == 0 {
-                            Err(EvaluationError::DivisionByZero)
-                        } else {
-                            Ok(l / r)
-                        }
-                    }
-                    ArithOp::Rem => {
-                        if r == 0 {
-                            Err(EvaluationError::DivisionByZero)
-                        } else {
-                            Ok(l % r)
-                        }
-                    }
-                }
-            }
-            ValueExpr::Rel(..)
-            | ValueExpr::Mem(..)
-            | ValueExpr::Not(..)
-            | ValueExpr::And(..)
-            | ValueExpr::Or(..) => Err(EvaluationError::TypeMismatch),
-        }
-    }
-
-    /// Evaluate a boolean expression to a `bool`
-    ///
-    /// Returns [`EvaluationError::TypeMismatch`] if called on an arithmetic-domain
-    /// expression (`Lit`, `Var`, `Neg`, `BinOp`)
-    pub fn evaluate_bool(&self, vars: &Bindings) -> Result<bool, EvaluationError> {
-        match self {
-            ValueExpr::Rel(l, op, r) => {
-                let l = l.evaluate(vars)?;
-                let r = r.evaluate(vars)?;
-                Ok(match op {
-                    RelOp::Le => l <= r,
-                    RelOp::Ge => l >= r,
-                    RelOp::Eq => l == r,
-                    RelOp::Lt => l < r,
-                    RelOp::Gt => l > r,
-                })
-            }
-            ValueExpr::Mem(e, set) => Ok(set.contains(&e.evaluate(vars)?)),
-            ValueExpr::Not(e) => Ok(!e.evaluate_bool(vars)?),
-            ValueExpr::And(exprs) => {
-                for e in exprs {
-                    if !e.evaluate_bool(vars)? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            ValueExpr::Or(exprs) => {
-                for e in exprs {
-                    if e.evaluate_bool(vars)? {
-                        return Ok(true);
-                    }
-                }
-                Ok(false)
-            }
-            ValueExpr::Lit(..) | ValueExpr::Var(..) | ValueExpr::Neg(..) | ValueExpr::BinOp(..) => {
-                Err(EvaluationError::TypeMismatch)
-            }
-        }
-    }
-}
-
-/// Simplify each child, then flatten any whose simplified form satisfies
-/// `is_same_op` (i.e. an `Or` child of an `Or` parent, or `And` of `And`).
-/// One level of flattening is enough: each child has already been simplified,
-/// so its own children are themselves not same-op containers.
-fn flatten_simplified(
-    exprs: Vec<ValueExpr>,
-    is_same_op: impl Fn(&ValueExpr) -> bool,
-) -> Vec<ValueExpr> {
-    let mut out = Vec::with_capacity(exprs.len());
-    for child in exprs {
-        let simplified = child.simplify();
-        if is_same_op(&simplified) {
-            match simplified {
-                ValueExpr::And(inner) | ValueExpr::Or(inner) => out.extend(inner),
-                _ => unreachable!("is_same_op rejects non-And/Or"),
-            }
-        } else {
-            out.push(simplified);
-        }
-    }
-    out
 }
 
 #[cfg(test)]
@@ -634,301 +626,103 @@ mod tests {
 
     use super::*;
 
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit(ValueExpr::Lit(5), Bindings::new(), 5)]
-    #[case::var_bound(ValueExpr::Var("x".to_string()), Bindings::from([("x".to_string(), 3)]), 3)]
-    #[case::neg(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))), Bindings::new(), -3)]
-    #[case::add(ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Add, Box::new(ValueExpr::Lit(3))), Bindings::new(), 5)]
-    #[case::sub(ValueExpr::BinOp(Box::new(ValueExpr::Lit(5)), ArithOp::Sub, Box::new(ValueExpr::Lit(3))), Bindings::new(), 2)]
-    #[case::mul(ValueExpr::BinOp(Box::new(ValueExpr::Lit(3)), ArithOp::Mul, Box::new(ValueExpr::Lit(4))), Bindings::new(), 12)]
-    #[case::div(ValueExpr::BinOp(Box::new(ValueExpr::Lit(10)), ArithOp::Div, Box::new(ValueExpr::Lit(3))), Bindings::new(), 3)]
-    #[case::rem(ValueExpr::BinOp(Box::new(ValueExpr::Lit(10)), ArithOp::Rem, Box::new(ValueExpr::Lit(3))), Bindings::new(), 1)]
-    fn test_evaluate(#[case] expr: ValueExpr, #[case] vars: Bindings, #[case] expected: i64) {
-        let result = expr.evaluate(&vars);
-        assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", expr, result.clone().unwrap_err());
-        assert_eq!(result.unwrap(), expected);
+    fn var(name: &str) -> ValueTerm {
+        ValueTerm::Var(name.to_string())
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::var_unbound(ValueExpr::Var("x".to_string()), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
-    #[case::div_zero(ValueExpr::BinOp(Box::new(ValueExpr::Lit(10)), ArithOp::Div, Box::new(ValueExpr::Lit(0))), Bindings::new(), EvaluationError::DivisionByZero)]
-    #[case::rem_zero(ValueExpr::BinOp(Box::new(ValueExpr::Lit(10)), ArithOp::Rem, Box::new(ValueExpr::Lit(0))), Bindings::new(), EvaluationError::DivisionByZero)]
-    #[case::type_mismatch(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(1))), Bindings::new(), EvaluationError::TypeMismatch)]
-    fn test_evaluate_invalid(#[case] expr: ValueExpr, #[case] vars: Bindings, #[case] expected: EvaluationError) {
-        let result = expr.evaluate(&vars);
-        assert!(result.is_err(), "{:?} should have failed, error: {:?}", expr, result.clone().unwrap_err());
-        assert_eq!(result.unwrap_err(), expected);
+    #[case::undetermined(ValueAst::Undetermined, Ok(ValueAst::Undetermined))]
+    #[case::lit(ValueAst::Lit(3), Ok(ValueAst::Lit(3)))]
+    #[case::litset_multi(ValueAst::lit_set([2, 1, 2, 3]), Ok(ValueAst::lit_set([1, 2, 3])))]
+    #[case::litset_singleton(ValueAst::lit_set([7]), Ok(ValueAst::Lit(7)))]
+    #[case::litset_empty(ValueAst::lit_set([]), Err(Contradiction))]
+    #[case::term_var(ValueAst::term(var("x")), Ok(ValueAst::term(var("x"))))]
+    #[case::term_ground(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(2), ValueTerm::Lit(3)])), Ok(ValueAst::Lit(5)))]
+    #[case::term_neg_lit(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(4)))), Ok(ValueAst::Lit(-4)))]
+    #[case::term_neg_neg(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Neg(Box::new(var("x")))))), Ok(ValueAst::term(var("x"))))]
+    #[case::term_sum_identity(ValueAst::term(ValueTerm::Sum(vec![var("x"), ValueTerm::Lit(0)])), Ok(ValueAst::term(var("x"))))]
+    #[case::term_sum_sorted_const_first(ValueAst::term(ValueTerm::Sum(vec![var("x"), ValueTerm::Lit(1)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), var("x")]))))]
+    #[case::term_sum_flatten(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Sum(vec![var("x"), ValueTerm::Lit(1)]), ValueTerm::Lit(2)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(3), var("x")]))))]
+    #[case::term_product_annihilator(ValueAst::term(ValueTerm::Product(vec![var("x"), ValueTerm::Lit(0)])), Ok(ValueAst::Lit(0)))]
+    #[case::term_product_identity(ValueAst::term(ValueTerm::Product(vec![var("x"), ValueTerm::Lit(1)])), Ok(ValueAst::term(var("x"))))]
+    #[case::term_div_fold(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), Ok(ValueAst::Lit(3)))]
+    #[case::term_rem_fold(ValueAst::term(ValueTerm::Rem(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), Ok(ValueAst::Lit(1)))]
+    #[case::pred_rel_true(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))), Ok(ValueAst::Undetermined))]
+    #[case::pred_rel_false(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))), Err(Contradiction))]
+    #[case::pred_rel_orient_ge(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Ge, ValueTerm::Lit(1))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Le, var("x")))))]
+    #[case::pred_rel_eq_sorted(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Eq, ValueTerm::Lit(0))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(0), RelOp::Eq, var("x")))))]
+    #[case::pred_not_eq_to_ne(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(var("x"), RelOp::Eq, ValueTerm::Lit(0))))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(0), RelOp::Ne, var("x")))))]
+    #[case::pred_mem_singleton(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([5]))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(5), RelOp::Eq, var("x")))))]
+    #[case::pred_mem_notin_empty(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::new())), Ok(ValueAst::Undetermined))]
+    #[case::pred_mem_in_empty(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::new())), Err(Contradiction))]
+    #[case::pred_not_mem_to_notin(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2]))))), Ok(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::from([1, 2])))))]
+    #[case::pred_and_drops_top(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Rel(var("x"), RelOp::Le, ValueTerm::Lit(3)), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))])), Ok(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Le, ValueTerm::Lit(3)))))]
+    #[case::pred_demorgan(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4]))])))), Ok(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::NotIn, BTreeSet::from([3, 4]))]))))]
+    #[case::term_sum_neg_const(ValueAst::term(ValueTerm::Sum(vec![var("x"), ValueTerm::Lit(-3)])), Ok(ValueAst::term(ValueTerm::Sum(vec![var("x"), ValueTerm::Neg(Box::new(ValueTerm::Lit(3)))]))))]
+    #[case::term_neg_zero(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(0)))), Ok(ValueAst::Lit(0)))]
+    #[case::term_product_flatten(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Product(vec![var("x"), var("y")]), var("z")])), Ok(ValueAst::term(ValueTerm::Product(vec![var("x"), var("y"), var("z")]))))]
+    #[case::term_product_sort(ValueAst::term(ValueTerm::Product(vec![var("b"), var("a")])), Ok(ValueAst::term(ValueTerm::Product(vec![var("a"), var("b")]))))]
+    #[case::term_product_const_fold(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(2), ValueTerm::Lit(3), var("x")])), Ok(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(6), var("x")]))))]
+    #[case::term_sum_empty(ValueAst::term(ValueTerm::Sum(vec![])), Ok(ValueAst::Lit(0)))]
+    #[case::term_product_empty(ValueAst::term(ValueTerm::Product(vec![])), Ok(ValueAst::Lit(1)))]
+    #[case::term_div_by_zero(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(0)))), Ok(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(0))))))]
+    #[case::pred_and_flatten(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4]))]), ValuePredicate::Mem(var("z"), MemOp::In, BTreeSet::from([5, 6]))])), Ok(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(var("z"), MemOp::In, BTreeSet::from([5, 6]))]))))]
+    #[case::pred_and_sort_dedup(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2]))])), Ok(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4]))]))))]
+    #[case::pred_and_bottom(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))])), Err(Contradiction))]
+    #[case::pred_or_drops_bottom(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))])), Ok(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])))))]
+    #[case::pred_or_top(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))])), Ok(ValueAst::Undetermined))]
+    #[case::pred_and_empty(ValueAst::predicate(ValuePredicate::And(vec![])), Ok(ValueAst::Undetermined))]
+    #[case::pred_or_empty(ValueAst::predicate(ValuePredicate::Or(vec![])), Err(Contradiction))]
+    #[case::pred_not_not(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Not(Box::new(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2]))))))), Ok(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])))))]
+    #[case::pred_not_le(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(var("x"), RelOp::Le, ValueTerm::Lit(3))))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(3), RelOp::Lt, var("x")))))]
+    #[case::pred_rel_orient_gt(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Gt, ValueTerm::Lit(1))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Lt, var("x")))))]
+    #[case::pred_mem_notin_singleton(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::from([5]))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(5), RelOp::Ne, var("x")))))]
+    fn test_value_ast_canonicalize(
+        #[case] input: ValueAst,
+        #[case] expected: Result<ValueAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::rel_eq_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(1))), Bindings::new(), true)]
-    #[case::rel_eq_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(2))), Bindings::new(), false)]
-    #[case::rel_lt_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Lt, Box::new(ValueExpr::Lit(2))), Bindings::new(), true)]
-    #[case::rel_lt_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(2)), RelOp::Lt, Box::new(ValueExpr::Lit(1))), Bindings::new(), false)]
-    #[case::rel_le_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Le, Box::new(ValueExpr::Lit(1))), Bindings::new(), true)]
-    #[case::rel_le_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(2)), RelOp::Le, Box::new(ValueExpr::Lit(1))), Bindings::new(), false)]
-    #[case::rel_gt_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(2)), RelOp::Gt, Box::new(ValueExpr::Lit(1))), Bindings::new(), true)]
-    #[case::rel_gt_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Gt, Box::new(ValueExpr::Lit(2))), Bindings::new(), false)]
-    #[case::rel_ge_true(ValueExpr::Rel(Box::new(ValueExpr::Lit(2)), RelOp::Ge, Box::new(ValueExpr::Lit(2))), Bindings::new(), true)]
-    #[case::rel_ge_false(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Ge, Box::new(ValueExpr::Lit(2))), Bindings::new(), false)]
-    #[case::mem_true(ValueExpr::Mem(Box::new(ValueExpr::Lit(2)), vec![1, 2, 3]), Bindings::new(), true)]
-    #[case::mem_false(ValueExpr::Mem(Box::new(ValueExpr::Lit(4)), vec![1, 2, 3]), Bindings::new(), false)]
-    #[case::not_true(ValueExpr::Not(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(2))))), Bindings::new(), true)]
-    #[case::not_false(ValueExpr::Not(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(1))))), Bindings::new(), false)]
-    #[case::and_true(ValueExpr::And(vec![ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Lt, Box::new(ValueExpr::Lit(2))), ValueExpr::Rel(Box::new(ValueExpr::Lit(3)), RelOp::Gt, Box::new(ValueExpr::Lit(2)))]), Bindings::new(), true)]
-    #[case::and_false(ValueExpr::And(vec![ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Lt, Box::new(ValueExpr::Lit(2))), ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Gt, Box::new(ValueExpr::Lit(2)))]), Bindings::new(), false)]
-    #[case::or_true(ValueExpr::Or(vec![ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(2))), ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Lt, Box::new(ValueExpr::Lit(2)))]), Bindings::new(), true)]
-    #[case::or_false(ValueExpr::Or(vec![ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(2))), ValueExpr::Rel(Box::new(ValueExpr::Lit(3)), RelOp::Lt, Box::new(ValueExpr::Lit(2)))]), Bindings::new(), false)]
-    #[case::var_in_rel(ValueExpr::Rel(Box::new(ValueExpr::Var("x".to_string())), RelOp::Gt, Box::new(ValueExpr::Lit(0))), Bindings::from([("x".to_string(), 5)]), true)]
-    fn test_evaluate_bool(#[case] expr: ValueExpr, #[case] vars: Bindings, #[case] expected: bool) {
-        let result = expr.evaluate_bool(&vars);
-        assert!(result.is_ok(), "{:?} should have succeeded, error: {:?}", expr, result.clone().unwrap_err());
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::unbound_in_rel(ValueExpr::Rel(Box::new(ValueExpr::Var("x".to_string())), RelOp::Gt, Box::new(ValueExpr::Lit(0))), Bindings::new(), EvaluationError::UnboundVariable("x".to_string()))]
-    #[case::type_mismatch(ValueExpr::Lit(1), Bindings::new(), EvaluationError::TypeMismatch)]
-    fn test_evaluate_bool_invalid(#[case] expr: ValueExpr, #[case] vars: Bindings, #[case] expected: EvaluationError) {
-        let result = expr.evaluate_bool(&vars);
-        assert!(result.is_err(), "{:?} should have failed, error: {:?}", expr, result.clone().unwrap_err());
-        assert_eq!(result.unwrap_err(), expected);
+    #[case::sum(ValueAst::term(ValueTerm::Sum(vec![var("b"), ValueTerm::Lit(2), var("a"), ValueTerm::Lit(3)])))]
+    #[case::product(ValueAst::term(ValueTerm::Product(vec![var("b"), var("a")])))]
+    #[case::rel(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Ge, ValueTerm::Lit(1))))]
+    #[case::or(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::from([1, 2]))])))]
+    fn test_value_ast_canonicalize_idempotent(#[case] input: ValueAst) {
+        let once = input.canonicalize().unwrap();
+        let twice = once.clone().canonicalize().unwrap();
+        assert_eq!(once, twice);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::lit(ValueAst::Lit(3), Some(3))]
-    #[case::lit_zero(ValueAst::Lit(0), Some(0))]
     #[case::lit_neg(ValueAst::Lit(-5), Some(-5))]
     #[case::undetermined(ValueAst::Undetermined, None)]
-    #[case::set_empty(ValueAst::Set(Box::default()), None)]
-    #[case::set_singleton(ValueAst::Set(Box::new(vec![7])), Some(7))]
-    #[case::set_all_equal(ValueAst::Set(Box::new(vec![3, 3, 3])), Some(3))]
-    #[case::set_multi(ValueAst::Set(Box::new(vec![1, 2])), None)]
-    #[case::expr_lit(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), Some(5))]
-    #[case::expr_neg_lit(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))))), Some(-3))]
-    #[case::expr_const_add(
-        ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Add, Box::new(ValueExpr::Lit(3))))),
-        Some(5),
-    )]
-    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("x".to_string()))), None)]
-    #[case::expr_boolean(
-        ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Lit(1)), RelOp::Eq, Box::new(ValueExpr::Lit(1))))),
-        None,
-    )]
-    #[case::bind(ValueAst::bind("n", vec![1, 2]), None)]
-    #[case::bind_singleton(ValueAst::bind("n", vec![3]), None)]
-    #[case::reference(ValueAst::reference("n"), None)]
-    fn test_value_ast_literal_and_is_ground(
-        #[case] ast: ValueAst,
-        #[case] expected_literal: Option<i64>,
-    ) {
-        assert_eq!(ast.as_lit(), expected_literal);
-        assert_eq!(ast.is_ground(), expected_literal.is_some());
+    #[case::litset(ValueAst::lit_set([1, 2]), None)]
+    #[case::term(ValueAst::term(var("x")), None)]
+    fn test_value_ast_as_lit(#[case] ast: ValueAst, #[case] expected: Option<i64>) {
+        assert_eq!(ast.as_lit(), expected);
+        assert_eq!(ast.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(ValueAst::Undetermined, 3, true)]
-    #[case::lit_match(ValueAst::Lit(3), 3,  true)]
-    #[case::set_match(ValueAst::Set(Box::new(vec![1, 2, 3])), 2, true)]
-    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("h".to_string()))), 5, true)]
-    #[case::expr_lit_match(ValueAst::Expr(Box::new(ValueExpr::Lit(3))), 3, true)]
-    #[case::expr_rel_match(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), 3, true)]
-    #[case::expr_mem_match(ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".to_string())), vec![0, 1]))), 1, true)]
-    #[case::bind_in_set(ValueAst::bind("n", vec![1, 2, 3]), 2, true)]
-    #[case::lit_no_match(ValueAst::Lit(3), 4, false)]
-    #[case::expr_lit_no_match(ValueAst::Expr(Box::new(ValueExpr::Lit(3))), 4, false)]
-    #[case::expr_rel_no_match(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), 0, false)]
-    #[case::bind_not_in_set(ValueAst::bind("n", vec![1, 2]), 5, false)]
-    #[case::reference_no_capture(ValueAst::reference("n"), 3, false)]
-    fn test_matches_value(#[case] pattern: ValueAst, #[case] value: i64, #[case] expected: bool) {
-        assert_eq!(pattern.matches_value(value), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(ValueAst::Undetermined, 3, Bindings::new())]
-    #[case::lit_match(ValueAst::Lit(3), 3, Bindings::new())]
-    #[case::set_match(ValueAst::Set(Box::new(vec![1, 2, 3])), 2, Bindings::new())]
-    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("h".to_string()))), 5, Bindings::from([("h".to_string(), 5)]))]
-    #[case::expr_lit_match(ValueAst::Expr(Box::new(ValueExpr::Lit(3))), 3, Bindings::new())]
-    #[case::expr_rel_match(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), 3, Bindings::from([("h".to_string(), 3)]))]
-    #[case::expr_mem_match(ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".to_string())), vec![0, 1]))), 1, Bindings::from([("h".to_string(), 1)]))]
-    #[case::bind_in_set(ValueAst::bind("n", vec![1, 2, 3]), 2, Bindings::from([("n".to_string(), 2)]))]
-    fn test_capture(#[case] pattern: ValueAst, #[case] value: i64, #[case] expected: Bindings) {
-        assert_eq!(pattern.capture(value), Some(expected));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit_no_match(ValueAst::Lit(3), 4)]
-    #[case::expr_lit_no_match(ValueAst::Expr(Box::new(ValueExpr::Lit(3))), 4)]
-    #[case::expr_rel_no_match(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), 0)]
-    #[case::bind_not_in_set(ValueAst::bind("n", vec![1, 2]), 5)]
-    #[case::reference(ValueAst::reference("n"), 3)]
-    fn test_capture_no_match(#[case] pattern: ValueAst, #[case] value: i64) {
-        assert_eq!(pattern.capture(value), None);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit(ValueExpr::Lit(5), ValueExpr::Lit(5))]
-    #[case::var(ValueExpr::Var("x".into()), ValueExpr::Var("x".into()))]
-    #[case::neg_lit(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))), ValueExpr::Neg(Box::new(ValueExpr::Lit(3))))]
-    #[case::neg_neg_collapses(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))))), ValueExpr::Lit(3))]
-    #[case::neg_neg_neg_collapses_to_one(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))))),
-        ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))]
-    #[case::or_flattens_or_child(ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::Or(vec![ValueExpr::Var("b".into()), ValueExpr::Var("c".into())])]),
-        ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into()), ValueExpr::Var("c".into())]))]
-    #[case::and_flattens_and_child(ValueExpr::And(vec![ValueExpr::And(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into())]), ValueExpr::Var("c".into())]),
-        ValueExpr::And(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into()), ValueExpr::Var("c".into())]))]
-    #[case::or_does_not_flatten_and(ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::And(vec![ValueExpr::Var("b".into()), ValueExpr::Var("c".into())])]),
-        ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::And(vec![ValueExpr::Var("b".into()), ValueExpr::Var("c".into())])]))]
-    #[case::recursive_into_binop(ValueExpr::BinOp(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(2)))))), ArithOp::Add, Box::new(ValueExpr::Lit(3))),
-        ValueExpr::BinOp(Box::new(ValueExpr::Lit(2)), ArithOp::Add, Box::new(ValueExpr::Lit(3))))]
-    #[case::recursive_into_rel(ValueExpr::Rel(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("h".into())))))), RelOp::Ge, Box::new(ValueExpr::Lit(1))),
-        ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))]
-    fn test_expr_simplify(#[case] input: ValueExpr, #[case] expected: ValueExpr) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit(ValueAst::Lit(5), ValueAst::Lit(5))]
-    #[case::undetermined(ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::set(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![1, 2])))]
-    #[case::ref_stays(ValueAst::reference("h"), ValueAst::reference("h"))]
-    #[case::bind_stays(ValueAst::bind("h", vec![1, 2]), ValueAst::bind("h", vec![1, 2]))]
-    #[case::expr_lit_lifts(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Lit(5))]
-    #[case::expr_neg_lit_lifts(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(7))))), ValueAst::Lit(-7))]
-    #[case::expr_neg_neg_lit_lifts(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(4))))))), ValueAst::Lit(4))]
-    #[case::expr_var_lifts_to_ref(ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::reference("x"))]
-    #[case::expr_mem_var_lifts_to_bind(
-        ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".into())), vec![1, 2, 3]))),
-        ValueAst::bind("h", vec![1, 2, 3]),
-    )]
-    #[case::expr_neg_var_stays(ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))),
-        ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Var("x".into()))))))]
-    #[case::expr_binop_var_stays(
-        ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1))))),
-        ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1))))),
-    )]
-    #[case::expr_mem_compound_first_stays(
-        ValueAst::Expr(Box::new(ValueExpr::Mem(
-            Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1)))),
-            vec![2, 3],
-        ))),
-        ValueAst::Expr(Box::new(ValueExpr::Mem(
-            Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1)))),
-            vec![2, 3],
-        ))),
-    )]
-    fn test_value_ast_simplify(#[case] input: ValueAst, #[case] expected: ValueAst) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::expr_var(ValueAst::Expr(Box::new(ValueExpr::Var("h".into()))))]
-    #[case::expr_mem_var(ValueAst::Expr(Box::new(ValueExpr::Mem(Box::new(ValueExpr::Var("h".into())), vec![1, 2]))))]
-    #[case::ref_(ValueAst::reference("h"))]
-    #[case::bind(ValueAst::bind("h", vec![1, 2, 3]))]
-    #[case::expr_binop(ValueAst::Expr(Box::new(ValueExpr::BinOp(Box::new(ValueExpr::Var("h".into())), ArithOp::Add, Box::new(ValueExpr::Lit(1))))))]
-    fn test_value_ast_simplify_idempotent(#[case] input: ValueAst) {
-        let once = input.clone().simplify();
-        let twice = once.clone().simplify();
-        assert_eq!(once, twice);
-    }
-
-    #[rstest]
-    #[case::neg_neg(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(3))))))]
-    #[case::nested_or(ValueExpr::Or(vec![ValueExpr::Or(vec![ValueExpr::Var("a".into()), ValueExpr::Var("b".into())]),
-        ValueExpr::Or(vec![ValueExpr::Var("c".into()), ValueExpr::Var("d".into())])]))]
-    #[case::deep_neg(ValueExpr::Neg(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Neg(
-        Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(1))))
-    ))))))]
-    fn test_expr_simplify_idempotent(#[case] input: ValueExpr) {
-        let once = input.clone().simplify();
-        let twice = once.clone().simplify();
-        assert_eq!(once, twice);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit_lit(ValueAst::Lit(2), ValueAst::Lit(3), ValueAst::Lit(5))]
-    #[case::lit_negative(ValueAst::Lit(1), ValueAst::Lit(-4), ValueAst::Lit(-3))]
-    #[case::lit_undetermined(ValueAst::Lit(2), ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::undetermined_lit(ValueAst::Undetermined, ValueAst::Lit(2), ValueAst::Undetermined)]
-    #[case::set_lit(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Lit(3), ValueAst::Undetermined)]
-    #[case::lit_expr(ValueAst::Lit(2), ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::Undetermined)]
-    fn test_value_ast_add(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
-        assert_eq!(lhs + rhs, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit_lit(ValueAst::Lit(5), ValueAst::Lit(3), ValueAst::Lit(2))]
-    #[case::lit_negative_result(ValueAst::Lit(1), ValueAst::Lit(4), ValueAst::Lit(-3))]
-    #[case::lit_undetermined(ValueAst::Lit(5), ValueAst::Undetermined, ValueAst::Undetermined)]
-    fn test_value_ast_sub(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
-        assert_eq!(lhs - rhs, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit_lit(ValueAst::Lit(4), ValueAst::Lit(3), ValueAst::Lit(12))]
-    #[case::lit_undetermined(ValueAst::Lit(4), ValueAst::Undetermined, ValueAst::Undetermined)]
-    fn test_value_ast_mul(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
-        assert_eq!(lhs * rhs, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit_lit(ValueAst::Lit(10), ValueAst::Lit(3), ValueAst::Lit(3))]
-    #[case::lit_undetermined(ValueAst::Lit(10), ValueAst::Undetermined, ValueAst::Undetermined)]
-    #[case::undetermined_lit_zero(ValueAst::Undetermined, ValueAst::Lit(0), ValueAst::Undetermined)]
-    fn test_value_ast_div(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
-        assert_eq!(lhs / rhs, expected);
-    }
-
-    #[rstest]
-    #[should_panic]
-    fn test_value_ast_div_by_zero_panics() {
-        let _ = ValueAst::Lit(5) / ValueAst::Lit(0);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::und_und(ValueAst::Undetermined, ValueAst::Undetermined, Some(ValueAst::Undetermined))]
     #[case::und_lit(ValueAst::Undetermined, ValueAst::Lit(3), Some(ValueAst::Lit(3)))]
     #[case::lit_und(ValueAst::Lit(3), ValueAst::Undetermined, Some(ValueAst::Lit(3)))]
     #[case::lit_lit_eq(ValueAst::Lit(3), ValueAst::Lit(3), Some(ValueAst::Lit(3)))]
     #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), None)]
-    #[case::lit_set_in(ValueAst::Lit(2), ValueAst::Set(Box::new(vec![1, 2, 3])), Some(ValueAst::Lit(2)))]
-    #[case::lit_set_out(ValueAst::Lit(5), ValueAst::Set(Box::new(vec![1, 2, 3])), None)]
-    #[case::set_lit_in(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Lit(2), Some(ValueAst::Lit(2)))]
-    #[case::set_set_multi(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Set(Box::new(vec![2, 3, 4])),
-        Some(ValueAst::Set(Box::new(vec![2, 3]))))]
-    #[case::set_set_singleton(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![2, 3])), Some(ValueAst::Lit(2)))]
-    #[case::set_set_empty(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![3, 4])), None)]
-    #[case::expr_expr_eq(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(5))), Some(ValueAst::Expr(Box::new(ValueExpr::Lit(5)))))]
-    #[case::expr_expr_neq(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(6))), None)]
-    #[case::expr_lit(ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::Lit(5), None)]
-    #[case::expr_und(ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::Undetermined, Some(ValueAst::Expr(Box::new(ValueExpr::Var("x".into())))))]
-    #[case::bind_und(ValueAst::bind("n", vec![1, 2]), ValueAst::Undetermined, Some(ValueAst::bind("n", vec![1, 2])))]
-    #[case::bind_bind_eq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("n", vec![1, 2]), Some(ValueAst::bind("n", vec![1, 2])))]
-    #[case::bind_bind_id_neq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("m", vec![1, 2]), None)]
-    #[case::bind_bind_set_neq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("n", vec![3, 4]), None)]
-    #[case::bind_lit(ValueAst::bind("n", vec![1, 2]), ValueAst::Lit(1), None)]
-    #[case::ref_ref_eq(ValueAst::reference("n"), ValueAst::reference("n"), Some(ValueAst::reference("n")))]
-    #[case::ref_ref_neq(ValueAst::reference("n"), ValueAst::reference("m"), None)]
-    #[case::ref_und(ValueAst::reference("n"), ValueAst::Undetermined, Some(ValueAst::reference("n")))]
-    #[case::ref_lit(ValueAst::reference("n"), ValueAst::Lit(1), None)]
-    #[case::bind_ref(ValueAst::bind("n", vec![1, 2]), ValueAst::reference("n"), None)]
+    #[case::lit_set_in(ValueAst::Lit(2), ValueAst::lit_set([1, 2, 3]), Some(ValueAst::Lit(2)))]
+    #[case::lit_set_out(ValueAst::Lit(5), ValueAst::lit_set([1, 2, 3]), None)]
+    #[case::set_set_multi(ValueAst::lit_set([1, 2, 3]), ValueAst::lit_set([2, 3, 4]), Some(ValueAst::lit_set([2, 3])))]
+    #[case::set_set_singleton(ValueAst::lit_set([1, 2]), ValueAst::lit_set([2, 3]), Some(ValueAst::Lit(2)))]
+    #[case::set_set_empty(ValueAst::lit_set([1, 2]), ValueAst::lit_set([3, 4]), None)]
+    #[case::term_term_eq(ValueAst::term(var("x")), ValueAst::term(var("x")), Some(ValueAst::term(var("x"))))]
+    #[case::term_term_neq(ValueAst::term(var("x")), ValueAst::term(var("y")), None)]
+    #[case::term_lit(ValueAst::term(var("x")), ValueAst::Lit(5), None)]
     fn test_value_ast_meet(
         #[case] a: ValueAst,
         #[case] b: ValueAst,
@@ -939,34 +733,36 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::und_und(ValueAst::Undetermined, ValueAst::Undetermined, ValueAst::Undetermined)]
     #[case::und_lit(ValueAst::Undetermined, ValueAst::Lit(3), ValueAst::Undetermined)]
-    #[case::lit_und(ValueAst::Lit(3), ValueAst::Undetermined, ValueAst::Undetermined)]
     #[case::lit_lit_eq(ValueAst::Lit(3), ValueAst::Lit(3), ValueAst::Lit(3))]
-    #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), ValueAst::Set(Box::new(vec![3, 4])))]
-    #[case::lit_set_in(ValueAst::Lit(2), ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Set(Box::new(vec![2, 1, 3])))]
-    #[case::lit_set_out(ValueAst::Lit(5), ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Set(Box::new(vec![5, 1, 2, 3])))]
-    #[case::set_lit_in(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Lit(2), ValueAst::Set(Box::new(vec![1, 2, 3])))]
-    #[case::set_lit_out(ValueAst::Set(Box::new(vec![1, 2, 3])), ValueAst::Lit(4), ValueAst::Set(Box::new(vec![1, 2, 3, 4])))]
-    #[case::set_set_overlap(ValueAst::Set(Box::new(vec![1, 2])), ValueAst::Set(Box::new(vec![2, 3])),
-        ValueAst::Set(Box::new(vec![1, 2, 3])))]
-    #[case::expr_expr_eq(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(5))))]
-    #[case::expr_expr_neq(ValueAst::Expr(Box::new(ValueExpr::Lit(5))), ValueAst::Expr(Box::new(ValueExpr::Lit(6))), ValueAst::Undetermined)]
-    #[case::expr_lit(ValueAst::Expr(Box::new(ValueExpr::Var("x".into()))), ValueAst::Lit(5), ValueAst::Undetermined)]
-    #[case::bind_bind_eq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("n", vec![1, 2]), ValueAst::bind("n", vec![1, 2]))]
-    #[case::bind_bind_neq(ValueAst::bind("n", vec![1, 2]), ValueAst::bind("m", vec![1, 2]), ValueAst::Undetermined)]
-    #[case::bind_lit(ValueAst::bind("n", vec![1, 2]), ValueAst::Lit(1), ValueAst::Undetermined)]
-    #[case::ref_ref_eq(ValueAst::reference("n"), ValueAst::reference("n"), ValueAst::reference("n"))]
-    #[case::ref_ref_neq(ValueAst::reference("n"), ValueAst::reference("m"), ValueAst::Undetermined)]
-    #[case::ref_lit(ValueAst::reference("n"), ValueAst::Lit(1), ValueAst::Undetermined)]
-    fn test_value_ast_join(
-        #[case] a: ValueAst,
-        #[case] b: ValueAst,
-        #[case] expected: ValueAst,
-    ) {
+    #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), ValueAst::lit_set([3, 4]))]
+    #[case::lit_set(ValueAst::Lit(5), ValueAst::lit_set([1, 2, 3]), ValueAst::lit_set([1, 2, 3, 5]))]
+    #[case::set_set(ValueAst::lit_set([1, 2]), ValueAst::lit_set([2, 3]), ValueAst::lit_set([1, 2, 3]))]
+    #[case::term_term_eq(ValueAst::term(var("x")), ValueAst::term(var("x")), ValueAst::term(var("x")))]
+    #[case::term_term_neq(ValueAst::term(var("x")), ValueAst::term(var("y")), ValueAst::Undetermined)]
+    fn test_value_ast_join(#[case] a: ValueAst, #[case] b: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(a.join(&b), expected);
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und_und(ValueAst::Undetermined, ValueAst::Undetermined, true)]
+    #[case::und_lit(ValueAst::Undetermined, ValueAst::Lit(3), true)]
+    #[case::lit_und(ValueAst::Lit(3), ValueAst::Undetermined, false)]
+    #[case::lit_lit(ValueAst::Lit(3), ValueAst::Lit(3), true)]
+    #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), false)]
+    #[case::set_lit_in(ValueAst::lit_set([1, 2, 3]), ValueAst::Lit(2), true)]
+    #[case::set_lit_out(ValueAst::lit_set([1, 2, 3]), ValueAst::Lit(5), false)]
+    #[case::set_set(ValueAst::lit_set([1, 2, 3]), ValueAst::lit_set([1, 2]), true)]
+    fn test_value_ast_matches(
+        #[case] pattern: ValueAst,
+        #[case] target: ValueAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rustfmt::skip]
     #[rstest]
     #[case::no_change(ValueAst::Lit(3), ValueAst::Lit(3), false, ValueAst::Lit(3))]
     #[case::tighten(ValueAst::Undetermined, ValueAst::Lit(3), true, ValueAst::Lit(3))]
@@ -985,7 +781,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::no_change(ValueAst::Lit(3), ValueAst::Lit(3), false, ValueAst::Lit(3))]
-    #[case::widen_to_set(ValueAst::Lit(3), ValueAst::Lit(4), true, ValueAst::Set(Box::new(vec![3, 4])))]
+    #[case::widen_to_set(ValueAst::Lit(3), ValueAst::Lit(4), true, ValueAst::lit_set([3, 4]))]
     #[case::widen_to_top(ValueAst::Lit(3), ValueAst::Undetermined, true, ValueAst::Undetermined)]
     fn test_value_ast_widen_with(
         #[case] mut target: ValueAst,
@@ -996,5 +792,43 @@ mod tests {
         let changed = target.widen_with(&source);
         assert_eq!(changed, expected_changed);
         assert_eq!(target, expected_after);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(ValueAst::Lit(2), ValueAst::Lit(3), ValueAst::Lit(5))]
+    #[case::lit_undetermined(ValueAst::Lit(2), ValueAst::Undetermined, ValueAst::Undetermined)]
+    fn test_value_ast_add(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(lhs + rhs, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(ValueAst::Lit(5), ValueAst::Lit(3), ValueAst::Lit(2))]
+    #[case::lit_undetermined(ValueAst::Lit(5), ValueAst::Undetermined, ValueAst::Undetermined)]
+    fn test_value_ast_sub(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(lhs - rhs, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(ValueAst::Lit(4), ValueAst::Lit(3), ValueAst::Lit(12))]
+    #[case::lit_undetermined(ValueAst::Lit(4), ValueAst::Undetermined, ValueAst::Undetermined)]
+    fn test_value_ast_mul(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(lhs * rhs, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_lit(ValueAst::Lit(10), ValueAst::Lit(3), ValueAst::Lit(3))]
+    #[case::lit_undetermined(ValueAst::Lit(10), ValueAst::Undetermined, ValueAst::Undetermined)]
+    fn test_value_ast_div(#[case] lhs: ValueAst, #[case] rhs: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(lhs / rhs, expected);
+    }
+
+    #[rstest]
+    #[should_panic]
+    fn test_value_ast_div_error() {
+        let _ = ValueAst::Lit(5) / ValueAst::Lit(0);
     }
 }

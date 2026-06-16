@@ -18,19 +18,6 @@ pub enum RewriteError {
     UnmappedAssignmentAtom(AtomId),
 }
 
-/// Error raised by `ValueExpr::evaluate` / `ValueExpr::evaluate_bool` when the
-/// expression cannot be reduced (unbound variable, division by zero, or
-/// arithmetic-vs-boolean domain mismatch).
-#[derive(Clone, Debug, PartialEq, Error)]
-pub enum EvaluationError {
-    #[error("Unbound variable: {0}")]
-    UnboundVariable(String),
-    #[error("Division by zero")]
-    DivisionByZero,
-    #[error("Type mismatch")]
-    TypeMismatch,
-}
-
 /// Signal that a value is unsatisfiable — no admissible assignment remains.
 /// Raised by fallible canonicalization/construction (e.g. an empty set);
 /// `Lattice::meet` surfaces the same condition as `None`.

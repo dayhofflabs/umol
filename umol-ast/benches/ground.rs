@@ -6,18 +6,17 @@
 //! - `indole_ground`: realistic, fully-lowered ground molecule (nearly every
 //!   field is `Lit`). Represents the common case.
 //! - `indole_bool_expr`: indole with a few fields replaced by boolean-domain
-//!   `ValueAst::Expr` patterns (`Rel`, `Mem`). Simulates matcher workloads
-//!   where `is_arithmetic()` short-circuits.
-//! - `arith_expr_heavy`: pathological upper bound — every numeric field on
-//!   every atom carries an arithmetic `ValueExpr` of depth 3. Exercises the
-//!   evaluator walk.
+//!   `ValueAst::Predicate` patterns (`Rel`, `Mem`).
+//! - `arith_expr_heavy`: every numeric field on every atom carries an
+//!   arithmetic `ValueAst::Term` of depth 3 (non-ground symbolic values).
 
+use std::collections::BTreeSet;
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use umol_ast::ast::{
-    ArithOp, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst,
-    MoleculeAst, RelOp, SpinStateAst, ValueAst, ValueExpr,
+    AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, IntoAst, IsotopeMassAst, MemOp,
+    MoleculeAst, RelOp, SpinStateAst, ValueAst, ValuePredicate, ValueTerm,
 };
 use umol_ast::dsl::{MoleculeDefaults, MoleculeDsl};
 use umol_edn::FromEdn;
@@ -40,40 +39,34 @@ fn indole_with_bool_expr_fields() -> MoleculeAst {
     // is_arithmetic()).
     let mut ast = indole_ground();
     let mut b = ast.edit();
-    b.atom_mut(AtomId(0)).ast.charge = ValueAst::Expr(Box::new(ValueExpr::Rel(
-        Box::new(ValueExpr::Var("c".into())),
+    b.atom_mut(AtomId(0)).ast.charge = ValueAst::predicate(ValuePredicate::Rel(
+        ValueTerm::Var("c".into()),
         RelOp::Eq,
-        Box::new(ValueExpr::Lit(0)),
-    )));
-    b.atom_mut(AtomId(2)).ast.lone_pairs = ValueAst::Expr(Box::new(ValueExpr::Mem(
-        Box::new(ValueExpr::Var("n".into())),
-        vec![0, 1, 2],
-    )));
+        ValueTerm::Lit(0),
+    ));
+    b.atom_mut(AtomId(2)).ast.lone_pairs = ValueAst::predicate(ValuePredicate::Mem(
+        ValueTerm::Var("n".into()),
+        MemOp::In,
+        BTreeSet::from([0, 1, 2]),
+    ));
     ast = b.build();
     ast
 }
 
 fn arith_expr_heavy() -> MoleculeAst {
-    // Upper bound: every numeric field is an arithmetic ValueExpr of depth 3.
-    // The tree is constant-valued (evaluator can fold it), so semantic
-    // is_ground will walk the full tree; syntactic is_ground fails on the
-    // first `ValueExpr` encountered.
+    // Every numeric field is an arithmetic `ValueTerm` of depth 3 — a
+    // non-ground symbolic value, so `is_ground` (literal-only) returns false.
     let arith = || {
-        ValueAst::Expr(Box::new(ValueExpr::BinOp(
-            Box::new(ValueExpr::BinOp(
-                Box::new(ValueExpr::Lit(2)),
-                ArithOp::Add,
-                Box::new(ValueExpr::Lit(3)),
-            )),
-            ArithOp::Mul,
-            Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(1)))),
-        )))
+        ValueAst::term(ValueTerm::Product(vec![
+            ValueTerm::Sum(vec![ValueTerm::Lit(2), ValueTerm::Lit(3)]),
+            ValueTerm::Neg(Box::new(ValueTerm::Lit(1))),
+        ]))
     };
     let make_atom = |el: Element| AtomAst {
         element: ElementAst::Lit(el),
         isotope_mass: IsotopeMassAst::Lit(12),
         charge: arith(),
-        implicit_hydrogens: ValueAst::Expr(Box::new(ValueExpr::Neg(Box::new(ValueExpr::Lit(1))))),
+        implicit_hydrogens: ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(1)))),
         lone_pairs: arith(),
         spin: SpinStateAst {
             unpaired: arith(),

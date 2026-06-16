@@ -88,6 +88,17 @@ pub trait AsLit {
     fn as_lit_expect(&self, msg: &str) -> Self::Lit {
         self.as_lit().expect(msg)
     }
+
+    /// `true` iff `self` resolves to exactly the literal `value`. Non-canonicalizing,
+    /// mirroring `as_lit`: a non-literal that would fold to `value` is not matched.
+    /// The clean replacement for the old ad-hoc `matches_value`.
+    #[inline]
+    fn as_lit_matches(&self, value: Self::Lit) -> bool
+    where
+        Self::Lit: PartialEq,
+    {
+        self.as_lit() == Some(value)
+    }
 }
 
 /// Refinement lattice on AST value types.

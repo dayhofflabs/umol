@@ -259,14 +259,14 @@ mod tests {
 
     #[rstest]
     fn test_bond_ast_simplify_values() {
-        use super::super::value::ValueExpr;
+        use super::super::value::ValueTerm;
         let mut bond = BondAst {
-            order: ValueAst::Expr(Box::new(ValueExpr::Lit(2))),
-            charge: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
+            order: ValueAst::term(ValueTerm::Lit(2)),
+            charge: ValueAst::term(ValueTerm::Lit(0)),
             spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::RingSize(ValueAst::Expr(Box::new(
-                ValueExpr::Lit(6),
-            )))),
+            constraints: BondConstraints::from(BondConstraint::RingSize(ValueAst::term(
+                ValueTerm::Lit(6),
+            ))),
         };
         bond.simplify_values();
         assert_eq!(
@@ -298,7 +298,7 @@ mod tests {
 
     #[rstest]
     #[case::widens_to_set(BondAst::from_order(2), BondAst::from_order(3),
-        BondAst { order: ValueAst::Set(Box::new(vec![2, 3])), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+        BondAst { order: ValueAst::lit_set([2, 3]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
         constraints: BondConstraints::new() },
     )]
     fn test_bond_ast_join(#[case] a: BondAst, #[case] b: BondAst, #[case] expected: BondAst) {

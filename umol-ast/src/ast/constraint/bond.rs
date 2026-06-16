@@ -348,7 +348,7 @@ mod tests {
 
     use super::*;
     use crate::ast::stereo::{StereoCosetAst, StereoExpr};
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -399,9 +399,9 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::ring_count_folds_expr(BondConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))),
+    #[case::ring_count_folds_expr(BondConstraint::RingCount(ValueAst::term(ValueTerm::Lit(2))),
         BondConstraint::ring_count(2))]
-    #[case::ring_size_folds_expr(BondConstraint::RingSize(ValueAst::Expr(Box::new(ValueExpr::Lit(6)))),
+    #[case::ring_size_folds_expr(BondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(6))),
         BondConstraint::ring_size(6))]
     #[case::cis_trans_lifts_expr(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Lit(1)))),
         BondConstraint::cis_trans_stereo(StereoConfigurationAst::from(1_u32)))]
@@ -560,8 +560,8 @@ mod tests {
     fn test_bond_constraints_simplify_each() {
         let mut cs = BondConstraints::from_iter([
             BondConstraint::Aromatic,
-            BondConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Lit(1)))),
-            BondConstraint::RingSize(ValueAst::Expr(Box::new(ValueExpr::Lit(6)))),
+            BondConstraint::RingCount(ValueAst::term(ValueTerm::Lit(1))),
+            BondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(6))),
         ]);
         cs.simplify_each();
         assert_eq!(

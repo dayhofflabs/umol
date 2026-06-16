@@ -134,7 +134,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -245,9 +245,9 @@ mod tests {
     fn test_dative_bond_ast_simplify_values() {
         let mut bond = DativeBondAst {
             acceptor_slot: 0,
-            order: ValueAst::Expr(Box::new(ValueExpr::Lit(2))),
+            order: ValueAst::term(ValueTerm::Lit(2)),
             constraints: DativeBondConstraints::from(DativeBondConstraint::RingSize(
-                ValueAst::Expr(Box::new(ValueExpr::Lit(6))),
+                ValueAst::term(ValueTerm::Lit(6)),
             )),
         };
         bond.simplify_values();

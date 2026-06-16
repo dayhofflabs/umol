@@ -57,7 +57,7 @@ pub use edit::{
 };
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
-pub use error::{Contradiction, EvaluationError, RewriteError};
+pub use error::{Contradiction, RewriteError};
 pub use ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandId,
@@ -69,7 +69,7 @@ pub use molecule::transact::{Transaction, TransactionError};
 pub use molecule::{MoleculeAst, MoleculeBuilder};
 pub use multicenter::MulticenterBondAst;
 pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
-pub use operators::{ArithOp, MemOp, RelOp};
+pub use operators::{MemOp, RelOp};
 pub use reaction::{Assignment, ReactionRuleAst};
 pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
@@ -82,7 +82,7 @@ pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
     AsLit, Canonical, Canonicalize, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst,
 };
-pub use value::{Bindings, ValueAst, ValueExpr};
+pub use value::{ValueAst, ValuePredicate, ValueTerm};
 pub use views::{
     AromaticSystemView, AromaticSystemViews, AtomAutomorphism, AtomView, AtomViewMut, AtomViews,
     BondView, BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,

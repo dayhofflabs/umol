@@ -23,7 +23,7 @@ use super::predicates::{
     raise_spin, ring_count, SpinPredicate,
 };
 use super::stereo::{fmt_stereo_config, stereo_config, StereoConfigurationDsl};
-use super::value::{fmt_value, id, signed_int, terminator, value, ValueDsl};
+use super::value::{fmt_set, fmt_value, id, signed_int, terminator, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
@@ -434,10 +434,9 @@ fn aromatic_valence(i: &mut &str) -> PResult<AromaticValenceAst> {
         alt((
             "*".value(AromaticValenceAst::Undetermined),
             "!".value(AromaticValenceAst::NotAromatic),
-            // `#a+` encodes "aromatic, count unspecified" — semantically the
-            // same as the (a >= 0) ValueExpr form but structurally distinct from
-            // the outer Undetermined. Older sugar used ValueExpr(Rel(Var("a"),
-            // Ge, Lit(0))); the canonical form is now Aromatic(Undetermined).
+            // `#a+` encodes "aromatic, count unspecified" — structurally
+            // distinct from the outer Undetermined; canonical form is
+            // Aromatic(Undetermined).
             "+".value(AromaticValenceAst::Aromatic(ValueAst::Undetermined)),
             value.map(AromaticValenceAst::Aromatic),
             empty.value(AromaticValenceAst::Aromatic(ValueAst::Lit(1))),
@@ -556,12 +555,12 @@ fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeMassAst) -> fmt::Re
         IsotopeMassAst::Lit(n) => write!(f, "#i{}", n),
         IsotopeMassAst::Set(s) => {
             write!(f, "#i")?;
-            fmt_value(f, &ValueAst::Set(s.clone()))
+            fmt_set(f, s.iter().copied())
         }
         IsotopeMassAst::Not(n) => write!(f, "#i!{}", n),
         IsotopeMassAst::NotSet(s) => {
             write!(f, "#i!")?;
-            fmt_value(f, &ValueAst::Set(s.clone()))
+            fmt_set(f, s.iter().copied())
         }
         IsotopeMassAst::Bind(b) => {
             let (id, op, set) = &**b;
@@ -569,7 +568,7 @@ fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeMassAst) -> fmt::Re
             if matches!(op, MemOp::NotIn) {
                 write!(f, "!")?;
             }
-            fmt_value(f, &ValueAst::Set(Box::new(set.clone())))
+            fmt_set(f, set.iter().copied())
         }
         IsotopeMassAst::Ref(id) => write!(f, "#i?{}", id),
     }
@@ -1186,10 +1185,12 @@ mod tests {
     use umol_shared::element::Element;
 
     use super::*;
-    use crate::ast::operators::{ArithOp, RelOp};
+    use crate::ast::operators::MemOp;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::{StereoCosetAst, StereoExpr};
-    use crate::ast::value::ValueExpr;
+    use std::collections::BTreeSet;
+
+    use crate::ast::value::{ValuePredicate, ValueTerm};
 
     #[rstest]
     #[case::single("C", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
@@ -1236,9 +1237,9 @@ mod tests {
     #[case::charge_zero("C#c0", AtomDsl(AtomAst { charge: ValueAst::Lit(0), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_count("C#h3", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(3), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_undetermined("C#h*", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Undetermined, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Ref("h".to_string()), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::bind("h", vec![2, 3]), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
-    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_bind("C#h(?h)", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::var("h"), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::h_set("N#h?h :: {2,3}", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::In, BTreeSet::from([2, 3]))), ..AtomAst::new(ElementAst::Lit(Element::N)) }))]
+    #[case::h_expr("C#h?h >= 1", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::at_least("h", 1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::h_omit("C#h", AtomDsl(AtomAst { implicit_hydrogens: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
     #[case::lone_pairs_omit("O#n", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
@@ -1270,7 +1271,7 @@ mod tests {
     #[case::total_hydrogens("C#H1", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::TotalHydrogens(ValueAst::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_bare("C#R", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_undetermined("C#R*", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Undetermined)]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
-    #[case::ring_plus("C#R+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("r".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::ring_plus("C#R+", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::at_least("r", 1))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_bang("C#R!", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_zero("C#R0", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(0))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::ring_count("C#R2", AtomDsl(AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::RingCount(ValueAst::Lit(2))]), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1476,7 +1477,7 @@ mod tests {
     #[case::total_hydrogens("#H1", AtomPredicate::Constraint(AtomConstraint::TotalHydrogens(ValueAst::Lit(1))))]
     #[case::ring_bare("#R", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Lit(1))))]
     #[case::ring_undetermined("#R*", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Undetermined)))]
-    #[case::ring_plus("#R+", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("r".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))))))]
+    #[case::ring_plus("#R+", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::at_least("r", 1))))]
     #[case::ring_count("#R2", AtomPredicate::Constraint(AtomConstraint::RingCount(ValueAst::Lit(2))))]
     fn test_atom_predicate(#[case] input: &str, #[case] expected: AtomPredicate) {
         let result = atom_predicate.parse(input);
@@ -1617,7 +1618,7 @@ mod tests {
     #[rstest]
     #[case::valence(AtomConstraint::Valence(ValueAst::Lit(4)), "{:valence 4}")]
     #[case::valence_undetermined(AtomConstraint::Valence(ValueAst::Undetermined), "{:valence :undetermined}")]
-    #[case::valence_set(AtomConstraint::Valence(ValueAst::Set(Box::new(vec![3, 4]))), "{:valence [3 4]}")]
+    #[case::valence_set(AtomConstraint::Valence(ValueAst::lit_set([3, 4])), "{:valence [3 4]}")]
     #[case::degree(AtomConstraint::Degree(ValueAst::Lit(3)), "{:degree 3}")]
     #[case::total_degree(AtomConstraint::TotalDegree(ValueAst::Lit(4)), "{:total-degree 4}")]
     #[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Lit(2)), "{:ring-degree 2}")]
@@ -1632,8 +1633,8 @@ mod tests {
     #[case::aromatic_value(AtomConstraint::AromaticValence(AromaticValenceAst::Aromatic(ValueAst::Lit(6))), "{:aromatic-valence {:aromatic 6}}")]
     #[case::multicenter_not(AtomConstraint::MulticenterValence(MulticenterValenceAst::NotMulticenter), "{:multicenter-valence :not-multicenter}")]
     #[case::multicenter_value(AtomConstraint::MulticenterValence(MulticenterValenceAst::Multicenter(ValueAst::Lit(3))), "{:multicenter-valence {:multicenter 3}}")]
-    #[case::valence_expr(AtomConstraint::Valence(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("h".into())), RelOp::Ge, Box::new(ValueExpr::Lit(1)))))), "{:valence \"?h >= 1\"}")]
-    #[case::ring_size_set(AtomConstraint::RingSize(ValueAst::Set(Box::new(vec![5, 6]))), "{:ring-size [5 6]}")]
+    #[case::valence_expr(AtomConstraint::Valence(ValueAst::at_least("h", 1)), "{:valence \"?h >= 1\"}")]
+    #[case::ring_size_set(AtomConstraint::RingSize(ValueAst::lit_set([5, 6])), "{:ring-size [5 6]}")]
     #[case::tetrahedral_stereo_undetermined(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Undetermined), "{:tetrahedral-stereo :undetermined}")]
     #[case::tetrahedral_stereo_not_stereo(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
     #[case::tetrahedral_stereo_lit(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
@@ -1675,11 +1676,10 @@ mod tests {
         let parsed = AtomConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
             parsed.into_ast(&()),
-            AtomConstraint::Valence(ValueAst::Expr(Box::new(ValueExpr::BinOp(
-                Box::new(ValueExpr::Var("h".into())),
-                ArithOp::Add,
-                Box::new(ValueExpr::Lit(1)),
-            ))))
+            AtomConstraint::Valence(ValueAst::term(ValueTerm::Sum(vec![
+                ValueTerm::Var("h".into()),
+                ValueTerm::Lit(1),
+            ])))
         );
     }
 

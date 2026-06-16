@@ -76,7 +76,7 @@ make `meet`/`join` canonicalize their output → faithful parser + canonical ren
 (`*Dsl`) → update the type's unit tests **and its `lattice::` proptest strategy**. Each
 type greens its own `lattice::` test.
 
-### P0 · Foundation (additive — compiles, no behavior change)
+### P0 · Foundation (additive — compiles, no behavior change) **Done**
 - `traits.rs`: `Canonicalize: Clone + PartialEq` (`canonicalize(self) -> Result<Self,
   Contradiction>`, `canonical(&self) -> Result<Cow<'_,Self>, Contradiction>` default
   clone+canonicalize, `equiv` default); `Canonical<T>` newtype (`new` canonicalizes once;
@@ -90,6 +90,23 @@ type greens its own `lattice::` test.
    NNF, lifts). Parser: build `Sum`/`Product`/`Div`/`Rem`, drop the `unary_expr` sign-XOR;
    delete `ValueAst::simplify`/`ValueExpr::simplify`. The biggest single change (all of
    `dsl/value.rs` + every `ValueAst` consumer).
+
+  P1.1.d — Lattice (meet/join rewritten over new variants, canonicalizing output; LitSet = BTreeSet so set ops are sorted-by-type). matches stays hand-written for now (P6 flips to the
+  default). AsLit: Lit→Some, else None (see decision 2).
+
+  P1.1.f — DSL (dsl/value.rs): parser builds Sum/Product/Sub→Sum([a,Neg b])/Div/Rem, Rel/Mem/Not/And/Or — faithful, no folding; drop the unary_expr sign-XOR. Formatter renders the
+  canonical surface. Update is_plus_sugar (dsl/predicates.rs).
+
+  P1.1.g — removals: simplify, ValueExpr::simplify, flatten_simplified, is_ground_slow/as_lit_slow, From<Vec<i64>>(→TryFrom), From<ValueExpr>. (Keep the Add/Sub/Mul/Div operator impls —
+  they only do Lit∘Lit→Lit, touch nothing removed.)
+
+  P1.1.h — the resolver-coupling decision (this is the one that matters): matches_value/capture/collect_bindings/evaluate*/Bindings match on the old variants and are used by the resolver.
+  Two ways:
+  - (A) Port them to Term/Predicate — resolver + conformance stay green through P1.1; remove later in P7. More code now, P1.1 stays AST-local.
+  - (B) Remove now and update counts.rs/invariants.rs to evaluate resolver-side — no wasted porting, but P1.1 spills into the resolver and risks the conformance baseline you just fixed.
+
+  P1.1.i — tests: rewrite value.rs unit tests for the new variants; update the value + lattice proptest strategies → greens test_value_ast_lattice_laws.
+
 2. **`ElementAst`** — `Undetermined|Lit|LitSet|NotSet|Var`; cardinality-canonical; drop `Not`.
 3. **`IsotopeMassAst`** — `Undetermined|Natural|Lit|LitSet|Var`; positive-only; `u32`.
 4. **`NoncovalentBondKindAst`**, **`StereoKindAst`** — `Undetermined|Lit`; identity

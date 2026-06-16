@@ -171,7 +171,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -304,11 +304,11 @@ mod tests {
     #[rstest]
     fn test_aromatic_system_ast_simplify_values() {
         let mut system = AromaticSystemAst {
-            electrons: vec![ValueAst::Expr(Box::new(ValueExpr::Lit(1)))],
-            charge: ValueAst::Expr(Box::new(ValueExpr::Lit(0))),
+            electrons: vec![ValueAst::term(ValueTerm::Lit(1))],
+            charge: ValueAst::term(ValueTerm::Lit(0)),
             spin: SpinStateAst::default(),
             constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(
-                ValueAst::Expr(Box::new(ValueExpr::Lit(6))),
+                ValueAst::term(ValueTerm::Lit(6)),
             )),
         };
         system.simplify_values();

@@ -148,7 +148,7 @@ impl<'a> CountsValence<'a> {
         for implicit_hydrogens in
             implicit_hydrogen_values(&atom.implicit_hydrogens, bonding_budget, entry.is_none())?
         {
-            if !atom.implicit_hydrogens.matches_value(implicit_hydrogens) {
+            if !atom.implicit_hydrogens.matches(&ValueAst::Lit(implicit_hydrogens)) {
                 continue;
             }
             for &aromatic_valence in &aromatic_values {
@@ -244,7 +244,7 @@ fn derive_lone_pairs_unpaired(
         }
         (Some(lone_pairs), None) => {
             let unpaired = nonbonding - 2 * lone_pairs;
-            if unpaired < 0 || !atom.spin.unpaired.matches_value(unpaired) {
+            if unpaired < 0 || !atom.spin.unpaired.matches(&ValueAst::Lit(unpaired)) {
                 return None;
             }
             Some((lone_pairs, unpaired))
@@ -255,7 +255,7 @@ fn derive_lone_pairs_unpaired(
                 return None;
             }
             let lone_pairs = remaining / 2;
-            if lone_pairs > max_lone_pairs || !atom.lone_pairs.matches_value(lone_pairs) {
+            if lone_pairs > max_lone_pairs || !atom.lone_pairs.matches(&ValueAst::Lit(lone_pairs)) {
                 return None;
             }
             Some((lone_pairs, unpaired))

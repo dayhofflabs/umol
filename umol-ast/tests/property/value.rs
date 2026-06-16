@@ -11,11 +11,9 @@ proptest! {
     }
 
     /// `simplify()` is the canonical form: for any generated `ValueAst`,
-    /// rendering and parsing yields a value that — once simplified —
-    /// equals `simplify()` on the original. The parser produces a partly
-    /// canonical form (it folds within `ValueExpr` but doesn't always lift
-    /// `ValueExpr(Lit(n))` to `ValueAst::Lit(n)`); simplify completes the
-    /// canonicalization on both sides.
+    /// rendering and parsing yields a value that — once simplified — equals
+    /// `simplify()` on the original. The parser is faithful (no folding);
+    /// `simplify` (canonicalize) completes the canonicalization on both sides.
     #[test]
     fn test_value_ast_render_parse_equals_simplify(v in any_value_ast_strategy()) {
         let dsl = ValueDsl(v.clone());

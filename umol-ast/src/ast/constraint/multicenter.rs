@@ -257,7 +257,7 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::ValueTerm;
 
     #[rstest]
     #[case::electron_count(
@@ -301,7 +301,7 @@ mod tests {
 
     #[rstest]
     #[case::folds_expr(
-        MulticenterBondConstraint::ElectronCount(ValueAst::Expr(Box::new(ValueExpr::Lit(2)))),
+        MulticenterBondConstraint::ElectronCount(ValueAst::term(ValueTerm::Lit(2))),
         MulticenterBondConstraint::electron_count(2)
     )]
     fn test_multicenter_bond_constraint_simplify(
@@ -450,7 +450,7 @@ mod tests {
     #[rstest]
     fn test_multicenter_bond_constraints_simplify_each() {
         let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::ElectronCount(
-            ValueAst::Expr(Box::new(ValueExpr::Lit(2))),
+            ValueAst::term(ValueTerm::Lit(2)),
         ));
         cs.simplify_each();
         assert_eq!(

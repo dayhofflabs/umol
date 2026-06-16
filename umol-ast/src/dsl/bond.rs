@@ -492,10 +492,12 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::BondConstraints;
-    use crate::ast::operators::RelOp;
+    use std::collections::BTreeSet;
+
+    use crate::ast::operators::MemOp;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::{StereoCosetAst, StereoExpr};
-    use crate::ast::value::ValueExpr;
+    use crate::ast::value::{ValuePredicate, ValueTerm};
 
     #[rustfmt::skip]
     #[rstest]
@@ -519,7 +521,7 @@ mod tests {
     #[case::charged_aromatic("1#c+#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) }))]
     #[case::ring_count("1#R2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(2))]) }))]
     #[case::ring_bare("1#R", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(1))]) }))]
-    #[case::ring_plus("1#R+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Expr(Box::new(ValueExpr::Rel(Box::new(ValueExpr::Var("r".to_string())), RelOp::Ge, Box::new(ValueExpr::Lit(1))))))]) }))]
+    #[case::ring_plus("1#R+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::at_least("r", 1))]) }))]
     #[case::ring_bang("1#R!", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(0))]) }))]
     #[case::ring_zero("1#R0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(0))]) }))]
     #[case::ring_undetermined("1#R*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Undetermined)]) }))]
@@ -663,7 +665,7 @@ mod tests {
     #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
     #[case::ring_count_undetermined(BondConstraint::RingCount(ValueAst::Undetermined), "{:ring-count :undetermined}")]
     #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
-    #[case::ring_size_set(BondConstraint::RingSize(ValueAst::Set(Box::new(vec![5, 6]))), "{:ring-size [5 6]}")]
+    #[case::ring_size_set(BondConstraint::RingSize(ValueAst::lit_set([5, 6])), "{:ring-size [5 6]}")]
     #[case::cis_trans_stereo_undetermined(BondConstraint::CisTransStereo(StereoConfigurationAst::Undetermined), "{:cis-trans-stereo :undetermined}")]
     #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo), "{:cis-trans-stereo :not-stereo}")]
     #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1))), "{:cis-trans-stereo {:stereo 1}}")]
@@ -720,7 +722,11 @@ mod tests {
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
             parsed.into_ast(&()),
-            BondConstraint::RingSize(ValueAst::bind("n", vec![5, 6])),
+            BondConstraint::RingSize(ValueAst::predicate(ValuePredicate::Mem(
+                ValueTerm::Var("n".to_string()),
+                MemOp::In,
+                BTreeSet::from([5, 6]),
+            ))),
         );
     }
 
