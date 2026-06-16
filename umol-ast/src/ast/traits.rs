@@ -13,6 +13,10 @@
 //! The split mirrors `From` / `TryFrom` in `std`. There is no blanket impl
 //! between the pairs.
 
+use std::borrow::Cow;
+
+use super::error::Contradiction;
+
 /// Build `Self` from a borrowed AST of type `A` plus a configuration context.
 /// AST → DSL direction. Infallible.
 pub trait FromAst<A>: Sized {
@@ -149,5 +153,53 @@ pub trait Lattice: Sized + Clone + PartialEq {
         } else {
             false
         }
+    }
+}
+
+/// Normal (canonical) form of an AST value. The per-type `canonicalize` puts a
+/// value into its one canonical form — sorted/deduped sets, singleton collapse,
+/// folded decidable expressions — returning `Err(Contradiction)` for an
+/// unsatisfiable value (e.g. an empty set).
+///
+/// Equality is **lazy**: `==`/`Hash`/`Ord` stay derived-structural ("same
+/// tree"); semantic equality is `equiv`, comparing canonical forms. The hot
+/// path is cheap — `canonical` borrows values that are already canonical.
+pub trait Canonicalize: Sized + Clone + PartialEq {
+    /// By-value canonical form (the folding lives here). Idempotent.
+    fn canonicalize(self) -> Result<Self, Contradiction>;
+
+    /// By-reference canonical form: `Cow::Borrowed` when already canonical (the
+    /// fast path), else clone + `canonicalize`. `Err` = unsatisfiable. The
+    /// default always clones; override to borrow the trivial variants.
+    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+        Ok(Cow::Owned(self.clone().canonicalize()?))
+    }
+
+    /// Semantic equality: equal canonical forms (two unsatisfiable values count
+    /// as equal). Structural short-circuit first, then compare canonical forms
+    /// with the derived structural `==` (on `Result<Cow<_>, _>`) — no recursion.
+    fn equiv(&self, other: &Self) -> bool {
+        self == other || self.canonical() == other.canonical()
+    }
+}
+
+/// A value carrying the guarantee that it is canonical. Built via `new` (which
+/// canonicalizes once); its derived structural `Eq`/`Hash`/`Ord` are therefore
+/// *semantic*, so it can key a `HashMap` / `BiBTreeMap` for semantic dedup.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Canonical<T>(T);
+
+impl<T: Canonicalize> Canonical<T> {
+    /// Canonicalize `value` once; `Err` if it is unsatisfiable.
+    pub fn new(value: T) -> Result<Self, Contradiction> {
+        Ok(Self(value.canonicalize()?))
+    }
+
+    pub fn get(&self) -> &T {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> T {
+        self.0
     }
 }

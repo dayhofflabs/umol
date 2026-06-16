@@ -79,7 +79,9 @@ pub use stereo::{
     Stereogenicity, Topicity,
 };
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
-pub use traits::{AsLit, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst};
+pub use traits::{
+    AsLit, Canonical, Canonicalize, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst,
+};
 pub use value::{Bindings, ValueAst, ValueExpr};
 pub use views::{
     AromaticSystemView, AromaticSystemViews, AtomAutomorphism, AtomView, AtomViewMut, AtomViews,

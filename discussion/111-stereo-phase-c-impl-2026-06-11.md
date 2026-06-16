@@ -1030,15 +1030,13 @@ deferred together with C4b's.
   omitted (uninhabited inner enum → single value → vacuous). The sweep **caught real canonicalization bugs**:
   14 value-carrying lattices fail (non-canonical `Set`/`NotSet` order + non-collapsed singletons in
   `meet`/`join`; plus `StereoCosetAst::matches` non-reflexive on `Expr`). The finding was reframed as a
-  foundational AST equality/lattice redesign — **doc 113** (canonical-by-construction; derive `matches` from
-  `meet`; `Lattice` only on value/constraint types with `join` staying `Self`; graph-shaped entity/molecule
-  types demoted to inherent `matches`). The fix follows that design; the retained lattice tests go green after
-  it, the demoted types leave the sweep. The 14 failures are left red meanwhile. C4e.5(2)/(3) not yet started.
+  foundational AST equality/lattice redesign — **doc 113** .  The fix follows that design; the lattice tests
+  go green after it. The 14 failures are left red meanwhile. C4e.5(2)/(3) not yet started.
 
 **Iterations.** proptest defaults to 256 cases; not hardcoded — raise globally via `PROPTEST_CASES=N` or
 per-block `#![proptest_config(ProptestConfig::with_cases(N))]` for a rigorous CI pass.
 
-### C4f · conformance suite
+### C4f · conformance suite **Done**
 
 Extend the **feature-gated** conformance suite (`umol-graph`, `--features conformance`, the resolution test)
 with stereo — the bulk of Phase C's verification:

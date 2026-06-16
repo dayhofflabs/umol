@@ -9,3 +9,4 @@ cc 3a82e2efcf5d4441d49dc7926f5adb801e6ca38c3046257ddd84f1bc51c26446 # shrinks to
 cc b844153aa274e37c6931045b9d0e80830116c4725a9f4dc14b15061369ff95b3 # shrinks to a = Aromatic(Lit(2)), b = Aromatic(Lit(0)), c = NotAromatic
 cc 17d21a81e590ed26b5dce1e8db44d3e1f0d6531d794a734956064659e9836495 # shrinks to a = Lit(H), b = Lit(C), c = Lit(H)
 cc c2dd541d3501c37ceb63889012cfe7a4e640485c6f682f7f0933c963a6079638 # shrinks to a = Stereo(Expr(LitSet([1]))), b = Stereo(Expr(LitSet([1]))), c = NotStereo
+cc 8cee6e7d7d96c823529a549916b9b298cd4c02266bb1753677b06a158b290a5f # shrinks to a = Expr(LitSet([2])), b = Expr(LitSet([2])), c = Undetermined

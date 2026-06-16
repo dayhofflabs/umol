@@ -5,8 +5,6 @@ Resolves: 095 open questions 1–3 (equality model, leak inventory, canonical fo
 
 ## General
 
-
-
 - AST types are **open, transparent data carriers** (public variants, raw
   construction; no facade) — so canonical-by-construction is unenforceable and
   rejected; smart constructors are convenience.
@@ -59,21 +57,102 @@ occurrence in the meantime.
 
 ## Implementation Plan
 
-Built **bottom-up** from the per-type detail (below): each AST type is settled on
-storage/naming, `Lattice` disposition, boundary `*Dsl`, canonicalization, and
-equality before the types that embed it. The per-type dispositions are in the detail
-and review tables; the cross-cutting architecture (equality, lattice, identity) is in
-**Decisions**, after the types. Sequencing (one extended red period):
+Built **bottom-up**; one extended red period (atomic in-place, no shims — broken tree
+mid-refactor is acceptable). The per-type *designs* are in the detail + review tables
+below; this section sequences the *work*. (`JointDomain` is already removed; `AtomAst` is
+already field-wise.)
 
-1. Traits: add `Canonicalize` (+ field-wise derive); `Lattice: Canonicalize` with the
-   `matches`-from-`meet` default; `meet`/`join` = fast-path + `canonicalize`.
-2. Set-typed (`BTreeSet`) storage + smart/`try_*` constructors for the leaf value
-   types; derive structural `Eq`/`Hash`/`Ord`; add `equiv` / `Canonical<T>`.
-3. Strip folding from parsers (parser faithful); folding lives in `canonicalize`, run
-   **lazily** at compare/`meet` and at the `*Dsl` boundary for canonical rendering.
-4. Boundary cleanup: literal renames + `*Dsl` types, no manual DSL serde.
-5. Drop **`matches_value`.
-6. Per-type changes bottom-up (detail section); test-expectation updates.
+**What lazy buys us.** `Eq`/`Hash`/`Ord` stay **derived-structural** (no change) — so the
+C4e.5 `lattice::` sweep (which compares with `==`) greens for a type the moment its
+`meet`/`join` produce *canonical* output. The variant redesign, `Canonicalize`, and
+`meet`/`join`-canonicalize therefore land **together per type** (the redesign is what
+makes canonicalization clean). The broader semantic-equality adoption (`equiv` /
+`Canonical<T>`, the 095 leak sites) and boundary cleanup come after — they don't gate the
+sweep.
+
+**Per-type recipe** (P1–P5): retype variants (detail) → impl `Canonicalize` (the step
+list) → `canonical()` fast-path (borrow `Undetermined`/`Lit`, see the fast-path table) →
+make `meet`/`join` canonicalize their output → faithful parser + canonical render
+(`*Dsl`) → update the type's unit tests **and its `lattice::` proptest strategy**. Each
+type greens its own `lattice::` test.
+
+### P0 · Foundation (additive — compiles, no behavior change)
+- `traits.rs`: `Canonicalize: Clone + PartialEq` (`canonicalize(self) -> Result<Self,
+  Contradiction>`, `canonical(&self) -> Result<Cow<'_,Self>, Contradiction>` default
+  clone+canonicalize, `equiv` default); `Canonical<T>` newtype (`new` canonicalizes once;
+  derived structural `Eq`/`Hash`/`Ord`). Re-export from `ast.rs`.
+- `umol-ast-macros`: add `#[derive(Canonicalize)]` (field-wise). **Do not** yet change
+  `#[derive(Lattice)]` (that's P6) — keep P0 additive.
+
+### P1 · Leaf value types (bottom-up)
+1. **`ValueAst`** — split `Expr`→`ValueTerm`(i64)/`ValuePredicate`(bool); `Bind`/`Ref`→
+   `Var`; `Set`→`LitSet(BTreeSet)`; the full canonicalize step list (term fold, predicate
+   NNF, lifts). Parser: build `Sum`/`Product`/`Div`/`Rem`, drop the `unary_expr` sign-XOR;
+   delete `ValueAst::simplify`/`ValueExpr::simplify`. The biggest single change (all of
+   `dsl/value.rs` + every `ValueAst` consumer).
+2. **`ElementAst`** — `Undetermined|Lit|LitSet|NotSet|Var`; cardinality-canonical; drop `Not`.
+3. **`IsotopeMassAst`** — `Undetermined|Natural|Lit|LitSet|Var`; positive-only; `u32`.
+4. **`NoncovalentBondKindAst`**, **`StereoKindAst`** — `Undetermined|Lit`; identity
+   `canonicalize`; `canonical` always borrows.
+5. **`ElectronCountsAst`** (new) — `Undetermined|Lit(Vec<u8>)`; identity (positional).
+
+### P2 · Predicate / relation types
+- **`SpinStateAst`** — hand `canonicalize` with the `are_compatible` parity gate;
+  `From<(u8,u8)>`/`From<SpinState>` → `TryFrom`.
+- **`AromaticValenceAst`/`MulticenterValenceAst`** — delegate inner `ValueAst`; drop the
+  hand `matches`.
+- **`TopicityRelationAst`/`StereogenicityAst`** — `relation_ast!` over `BTreeSet`; flatten
+  stereogenicity (drop `StereogenicityRelationAst` + the wrapper).
+- **`TopicityAst`** — drop `impl Lattice` → matches-only `{pair, rel}`; remove its
+  fixed-pair lattice proptest (covered by `test_topicity_relation_ast_lattice_laws`).
+
+### P3 · Stereo configuration cluster
+- `StereoExpr`→**`StereoTerm`** (`Var(name, opt domain)` | `Swap` | `Mirror` | `Apply`; no
+  `Lit`/`LitSet`). `StereoCosetAst = Undetermined|Lit|LitSet|NotSet|Term` — **no**
+  `Lattice`/`Canonicalize` (kind-relative).
+- **`StereoConfigurationAst { kind: StereoKindAst, coset }`** (element side) +
+  **`StereoSiteAst = Undetermined|NotStereo|Stereo(StereoKind, coset)`** (constraint side;
+  renames the old tristate). Both: `Canonicalize`+`Lattice` reading `self`'s kind, the
+  `are_compatible(kind, coset)` gate, the Term compose→priority(`Mirror>Swap>Apply`)
+  normal form; `AsLit = StereoConfiguration { kind, coset }`. Update `dsl/stereo.rs`, the
+  stereo views, and `StereoAtomAst`/`StereoBondAst` to carry the joint config.
+
+### P4 · Entities (pure field-wise)
+- `AtomAst`, `BondAst`, `NoncovalentBondAst` — `#[derive(Lattice, Canonicalize)]`; delete
+  `simplify_values`. Fix `NoncovalentBondAst` direct `Display`/`FromStr`/`FromEdn` (move to
+  `NoncovalentBondDsl`).
+- `AromaticSystemAst`/`MulticenterBondAst` — `electrons: Vec<ValueAst>` → `ElectronCountsAst`;
+  retype ctors; derive.
+- `DativeBondAst` — derive after the birelation `acceptor_slot` drop.
+
+### P5 · Constraint types
+- `AtomConstraint` & siblings — `Canonicalize` = delegate inner (replaces `simplify`).
+- Collections (`AtomConstraints` …) — kind-keyed `Lattice`+`Canonicalize`: fixed kind
+  order, dedup, **drop vacuous (`Undetermined`-payload) entries**, multi-valued
+  (`RingSize`) set-canonical. Delete `simplify_each`.
+- Molecule-level `Constraints`/`Constraint` — `Canonicalize` (flatten/sort/dedup the
+  `And`/`Or`/`Not` tree, ID-bearing); **not** a `Lattice`.
+
+### P6 · `Lattice`-trait flip + macro (lands once P1–P5 all impl `Canonicalize`)
+- `Lattice: Canonicalize`; `matches` becomes the `meet`-derived default; `join` stays
+  `Self`. `#[derive(Lattice)]` generates `meet`/`join` = field-wise + `canonicalize`.
+  Remove the now-redundant hand-written `matches` impls (keep only genuine cheaper
+  overrides). Hand-written leaf `meet`/`join` already canonicalize from P1–P5.
+
+### P7 · Semantic-equality adoption + boundary cleanup
+- 095 Q2 leak audit → route to `equiv`/`Canonical<T>` where semantic keys are needed:
+  `MoleculeAst::PartialEq` (graph-canonical), `HashMap`/`HashSet` AST keys, alias
+  `BiBTreeMap`, constraint dedup. Decide structural-vs-semantic per site.
+- Drop `matches_value` (≡ `matches(lift(v))`); relocate `capture`/`evaluate` to the
+  resolver or delete.
+- Literal renames + `*Dsl` per [[feedback_dsl_boundary_types]]
+  (`StereoConfigurationDsl`→`StereoSiteDsl`; add `TopicityDsl`/`StereogenicityDsl`).
+
+### P8 · Verification (doc 111)
+- C4e.5(1): all retained `lattice::` tests green (raised `PROPTEST_CASES`); demoted types
+  leave the sweep.
+- C4e.5(2): atom-DSL roundtrip; C4e.5(3): `canonicalize` idempotence beyond `ValueAst`.
+- `umol-ast` lib + `--features proptest` + workspace build + conformance all green.
 
 ## Per-type review
 
