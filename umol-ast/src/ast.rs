@@ -32,7 +32,6 @@ pub use aromatic::AromaticSystemAst;
 pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
 pub use bond::BondAst;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
-pub use constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
 pub use constraint::{
     aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKind,
     AromaticSystemConstraints, AromaticValenceAst, AtomConstraint, AtomConstraintKind,
@@ -58,7 +57,7 @@ pub use edit::{
 };
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
-pub use error::{Contradiction, EvaluationError, JointDomainError, RewriteError};
+pub use error::{Contradiction, EvaluationError, RewriteError};
 pub use ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandId,

@@ -19,7 +19,6 @@ mod aromatic;
 mod atom;
 mod bond;
 mod dative;
-pub(crate) mod joint_domain;
 mod molecule;
 mod multicenter;
 mod noncovalent;

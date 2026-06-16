@@ -202,7 +202,6 @@ fn constraint_tag(kind: AtomConstraintKind) -> &'static str {
         AtomConstraintKind::RingCount => "#R",
         AtomConstraintKind::RingSize => "#r",
         AtomConstraintKind::TetrahedralStereo => "#T",
-        AtomConstraintKind::JointDomain => "#E",
     }
 }
 
@@ -645,7 +644,6 @@ fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &AtomConstraint) -> fmt::Result
             write!(f, "#T")?;
             fmt_stereo_config(f, c)
         }
-        AtomConstraint::JointDomain(_) => todo!("JointDomainAst DSL formatting lands in 2k"),
     }
 }
 
@@ -757,8 +755,7 @@ fn raise_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
             | AtomConstraintKind::RingValence
             | AtomConstraintKind::TotalHydrogens
             | AtomConstraintKind::RingCount
-            | AtomConstraintKind::RingSize
-            | AtomConstraintKind::JointDomain => {
+            | AtomConstraintKind::RingSize => {
                 // Pattern-only constraint: no defaulting mode in AtomDefaults.
             }
         }
@@ -890,8 +887,7 @@ fn lower_atom_constraints(constraints: &mut AtomConstraints, cfg: &AtomDefaults)
             | AtomConstraintKind::RingValence
             | AtomConstraintKind::TotalHydrogens
             | AtomConstraintKind::RingCount
-            | AtomConstraintKind::RingSize
-            | AtomConstraintKind::JointDomain => {
+            | AtomConstraintKind::RingSize => {
                 // Pattern-only constraint: no defaulting mode in AtomDefaults.
             }
         }
@@ -1098,7 +1094,6 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             "tetrahedral-stereo" => AtomConstraint::TetrahedralStereo(
                 StereoConfigurationDsl::from_edn(v)?.into_ast(&()),
             ),
-            "joint-domain" => todo!("JointDomainAst EDN parsing lands in 2l"),
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -1158,7 +1153,6 @@ impl ToEdn for AtomConstraintDsl {
                 "tetrahedral-stereo",
                 StereoConfigurationDsl::from_ast(c, &()).to_edn(),
             ),
-            AtomConstraint::JointDomain(_) => todo!("JointDomainAst EDN serialization lands in 2l"),
         }
     }
 }

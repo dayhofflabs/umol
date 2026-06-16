@@ -150,15 +150,4 @@ pub trait Lattice: Sized + Clone + PartialEq {
             false
         }
     }
-
-    /// Cross-field constraint propagation. Default no-op for types without
-    /// relational constraints. Types with relational constraints (e.g.,
-    /// `AtomAst` carrying `JointDomain` entries) override this to project
-    /// constraints across fields. `Err(Contradiction)` signals that no
-    /// admissible value assignment remains; the derived `meet` converts this
-    /// to `None` so it propagates through the standard `Option<Self>`
-    /// contract.
-    fn saturate(&mut self) -> Result<(), super::error::Contradiction> {
-        Ok(())
-    }
 }

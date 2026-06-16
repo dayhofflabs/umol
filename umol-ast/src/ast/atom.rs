@@ -5,11 +5,9 @@ use std::{mem, slice};
 use umol_ast_macros::Lattice;
 use umol_shared::element::Element;
 
-use super::constraint::joint_domain::{JointDomainAst, JointValue, JointVar};
 use super::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
 };
-use super::error::Contradiction;
 use super::operators::MemOp;
 use super::spin::SpinStateAst;
 use super::stereo::StereoConfigurationAst;
@@ -20,7 +18,6 @@ use super::value::{set_is_ground, ValueAst};
 /// constraints (valence, degree, ring membership, etc.) that pattern
 /// against the surrounding topology.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice)]
-#[lattice(saturate = "saturate_atom")]
 pub struct AtomAst {
     pub element: ElementAst,
     pub isotope_mass: IsotopeMassAst,
@@ -181,100 +178,6 @@ impl AtomAst {
         self.lone_pairs = mem::take(&mut self.lone_pairs).simplify();
         self.spin.simplify_values();
         self.constraints.simplify_each();
-    }
-}
-
-/// Cross-field saturation for `AtomAst`. Walks every `JointDomain`
-/// constraint, projects its tuples against current field values (forward
-/// propagation only), and either keeps the pruned JD, narrows fields to
-/// the surviving tuple's literals and drops the JD (single tuple remains),
-/// or reports `Err(Contradiction)` (no tuples remain). Narrowing is
-/// inline — subsequent JDs in the same pass observe the just-narrowed
-/// fields. Loops to a fixpoint so that cascading narrowings (one JD
-/// narrowing a field that another JD reads) are resolved.
-///
-/// Wired into `AtomAst`'s derived `Lattice::meet` via
-/// `#[lattice(saturate = "saturate_atom")]`; every `meet` call runs this
-/// after the field-wise meet completes.
-pub fn saturate_atom(atom: &mut AtomAst) -> Result<(), Contradiction> {
-    loop {
-        let jds: Vec<JointDomainAst> = atom.constraints.joint_domains().cloned().collect();
-        atom.constraints.remove_all(AtomConstraintKind::JointDomain);
-        let mut changed = false;
-        for jd in jds {
-            let pruned = jd.project(|var| field_value_for_joint_var(atom, var))?;
-            let Some(tuples) = pruned.tuples() else {
-                continue;
-            };
-            if tuples.len() == 1 {
-                let vars = pruned.vars().expect("Domain has vars");
-                let tuple = tuples[0].clone();
-                for (var, value) in vars.iter().zip(tuple.iter()) {
-                    narrow_joint_var_to_lit(atom, *var, value);
-                }
-                changed = true;
-            } else {
-                if pruned != jd {
-                    changed = true;
-                }
-                atom.constraints.add(AtomConstraint::JointDomain(pruned));
-            }
-        }
-        if !changed {
-            return Ok(());
-        }
-    }
-}
-
-/// Read the atom field corresponding to a `JointVar`. Struct fields
-/// (`charge`, etc.) read directly; constraint-backed vars (`Valence`,
-/// `DonatedPairs`, `AcceptedPairs`) read through the constraint
-/// container's typed accessors, which return `Undetermined` when absent.
-fn field_value_for_joint_var(atom: &AtomAst, var: JointVar) -> ValueAst {
-    match var {
-        JointVar::Charge => atom.charge.clone(),
-        JointVar::ImplicitHydrogens => atom.implicit_hydrogens.clone(),
-        JointVar::LonePairs => atom.lone_pairs.clone(),
-        JointVar::UnpairedElectrons => atom.spin.unpaired.clone(),
-        JointVar::Multiplicity => atom.spin.multiplicity.clone(),
-        JointVar::Valence => atom.constraints.valence(),
-        JointVar::DonatedPairs => atom.constraints.donated_pairs(),
-        JointVar::AcceptedPairs => atom.constraints.accepted_pairs(),
-    }
-}
-
-/// Narrow the atom field corresponding to `var` to `ValueAst::Lit(value)`.
-/// For struct fields, calls `narrow_from`. For constraint-backed vars,
-/// `add`s a `Lit(value)` constraint (last-wins per `AtomConstraints::add`
-/// for unique-kind variants).
-fn narrow_joint_var_to_lit(atom: &mut AtomAst, var: JointVar, value: &JointValue) {
-    let JointValue::Int(n) = value;
-    let lit = ValueAst::Lit(*n);
-    match var {
-        JointVar::Charge => {
-            atom.charge.narrow_from(&lit);
-        }
-        JointVar::ImplicitHydrogens => {
-            atom.implicit_hydrogens.narrow_from(&lit);
-        }
-        JointVar::LonePairs => {
-            atom.lone_pairs.narrow_from(&lit);
-        }
-        JointVar::UnpairedElectrons => {
-            atom.spin.unpaired.narrow_from(&lit);
-        }
-        JointVar::Multiplicity => {
-            atom.spin.multiplicity.narrow_from(&lit);
-        }
-        JointVar::Valence => {
-            atom.constraints.add(AtomConstraint::Valence(lit));
-        }
-        JointVar::DonatedPairs => {
-            atom.constraints.add(AtomConstraint::DonatedPairs(lit));
-        }
-        JointVar::AcceptedPairs => {
-            atom.constraints.add(AtomConstraint::AcceptedPairs(lit));
-        }
     }
 }
 
@@ -985,16 +888,6 @@ mod tests {
     )]
     #[case::narrows_charge(AtomAst::from_element(Element::C), AtomAst::from_element(Element::C).with_charge(1),
         Some(AtomAst::from_element(Element::C).with_charge(1)))]
-    #[case::saturate_contradiction(
-        AtomAst::from_element(Element::C).with_constraint(AtomConstraint::JointDomain(
-            JointDomainAst::from_ints(
-                vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-                vec![vec![0, 1], vec![1, 2]],
-            )
-            .unwrap(),
-        )),
-        AtomAst::from_element(Element::C).with_charge(5_i64),
-        None)]
     fn test_atom_ast_meet(
         #[case] a: AtomAst,
         #[case] b: AtomAst,
@@ -1034,83 +927,6 @@ mod tests {
         assert_eq!(target, expected_after);
     }
 
-    #[rstest]
-    #[case::prunes_to_pruned_jd(
-        AtomAst::from_element(Element::C)
-            .with_charge(ValueAst::Set(Box::new(vec![0, 1])))
-            .with_constraint(AtomConstraint::JointDomain(
-                JointDomainAst::from_ints(
-                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-                    vec![vec![0, 1], vec![1, 2], vec![2, 3]],
-                )
-                .unwrap(),
-            )),
-        AtomAst::from_element(Element::C)
-            .with_charge(ValueAst::Set(Box::new(vec![0, 1])))
-            .with_constraint(AtomConstraint::JointDomain(
-                JointDomainAst::from_ints(
-                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-                    vec![vec![0, 1], vec![1, 2]],
-                )
-                .unwrap(),
-            )),
-    )]
-    #[case::collapses_to_lits(
-        AtomAst::from_element(Element::C)
-            .with_charge(0_i64)
-            .with_constraint(AtomConstraint::JointDomain(
-                JointDomainAst::from_ints(
-                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-                    vec![vec![0, 1], vec![1, 2]],
-                )
-                .unwrap(),
-            )),
-        AtomAst::from_element(Element::C)
-            .with_charge(0_i64)
-            .with_implicit_hydrogens(1_i64),
-    )]
-    #[case::cascades_across_domains(
-        AtomAst::from_element(Element::C)
-            .with_charge(0_i64)
-            .with_constraint(AtomConstraint::JointDomain(
-                JointDomainAst::from_ints(
-                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-                    vec![vec![0, 1], vec![1, 2]],
-                )
-                .unwrap(),
-            ))
-            .with_constraint(AtomConstraint::JointDomain(
-                JointDomainAst::from_ints(
-                    vec![JointVar::ImplicitHydrogens, JointVar::LonePairs],
-                    vec![vec![1, 3], vec![2, 4]],
-                )
-                .unwrap(),
-            )),
-        AtomAst::from_element(Element::C)
-            .with_charge(0_i64)
-            .with_implicit_hydrogens(1_i64)
-            .with_lone_pairs(3_i64),
-    )]
-    fn test_saturate_atom(#[case] mut atom: AtomAst, #[case] expected: AtomAst) {
-        saturate_atom(&mut atom).unwrap();
-        assert_eq!(atom, expected);
-    }
-
-    #[rstest]
-    #[case::no_admissible_tuple(
-        AtomAst::from_element(Element::C)
-            .with_charge(5_i64)
-            .with_constraint(AtomConstraint::JointDomain(
-                JointDomainAst::from_ints(
-                    vec![JointVar::Charge, JointVar::ImplicitHydrogens],
-                    vec![vec![0, 1], vec![1, 2]],
-                )
-                .unwrap(),
-            )),
-    )]
-    fn test_saturate_atom_error(#[case] mut atom: AtomAst) {
-        assert_eq!(saturate_atom(&mut atom).unwrap_err(), Contradiction);
-    }
 
     #[rstest]
     #[case::carbon(Element::C, ElementAst::Lit(Element::C))]
