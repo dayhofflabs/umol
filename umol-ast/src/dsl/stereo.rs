@@ -926,6 +926,84 @@ relation_serde! {
     Stereogenicity::Stereogenic => "stereogenic",
 }
 
+/// EDN boundary for the `#g` stereogenicity constraint value. `StereogenicityAst`
+/// is itself the relation, so this is its (de)serialization at the constraints map.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StereogenicityDsl(pub StereogenicityAst);
+
+impl ToEdn for StereogenicityDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        stereogenicity_relation_to_edn(&self.0)
+    }
+}
+
+impl<'de> FromEdn<'de> for StereogenicityDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        Ok(Self(stereogenicity_relation_from_edn(edn)?))
+    }
+}
+
+/// EDN boundary for the `#o` topicity constraint value: `{:pair [i j] :relation
+/// <rel>}`. The `TopicityRelationAst` rides inside (no separate relation DSL).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TopicityDsl(pub TopicityAst);
+
+impl ToEdn for TopicityDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        let t = &self.0;
+        let mut m = EdnMap::with_capacity(2);
+        m.insert(
+            Edn::keyword("pair"),
+            Edn::Vector(
+                vec![
+                    Edn::Int(t.pair.first().0 as i64),
+                    Edn::Int(t.pair.second().0 as i64),
+                ]
+                .into(),
+            ),
+        );
+        m.insert(Edn::keyword("relation"), topicity_relation_to_edn(&t.rel));
+        Edn::Map(m)
+    }
+}
+
+impl<'de> FromEdn<'de> for TopicityDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let Edn::Map(m) = edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "topicity map",
+                got: edn.kind(),
+                path: Vec::new(),
+            });
+        };
+        let pair_edn = m.get_keyword("pair").ok_or_else(|| DeError::MissingField {
+            key: "pair".into(),
+            path: vec!["topicity".into()],
+        })?;
+        let Edn::Vector(p) = pair_edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "[i j] (ligand pair)",
+                got: pair_edn.kind(),
+                path: vec!["topicity".into()],
+            });
+        };
+        if p.len() != 2 {
+            return Err(DeError::Custom("topicity pair must have 2 positions".into()));
+        }
+        let pair = LigandPairAst::new(ligand_position(&p[0])?, ligand_position(&p[1])?);
+        let rel_edn = m
+            .get_keyword("relation")
+            .ok_or_else(|| DeError::MissingField {
+                key: "relation".into(),
+                path: vec!["topicity".into()],
+            })?;
+        Ok(Self(TopicityAst {
+            pair,
+            rel: topicity_relation_from_edn(rel_edn)?,
+        }))
+    }
+}
+
 /// `StereoKind` ↔ kebab keyword (`:tetrahedral`, `:cis-trans`, …).
 pub(crate) fn stereo_kind_to_edn(kind: StereoKind) -> Edn<'static> {
     let name = match kind {
@@ -1029,59 +1107,6 @@ fn ligand_symmetry_from_edn(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetr
     })
 }
 
-fn topicity_to_edn(t: &TopicityAst) -> Edn<'static> {
-    let mut m = EdnMap::with_capacity(2);
-    m.insert(
-        Edn::keyword("pair"),
-        Edn::Vector(
-            vec![
-                Edn::Int(t.pair.first().0 as i64),
-                Edn::Int(t.pair.second().0 as i64),
-            ]
-            .into(),
-        ),
-    );
-    m.insert(Edn::keyword("relation"), topicity_relation_to_edn(&t.rel));
-    Edn::Map(m)
-}
-
-fn topicity_from_edn(edn: &Edn) -> Result<TopicityAst, DeError> {
-    let Edn::Map(m) = edn else {
-        return Err(DeError::TypeMismatch {
-            expected: "topicity map",
-            got: edn.kind(),
-            path: Vec::new(),
-        });
-    };
-    let pair_edn = m.get_keyword("pair").ok_or_else(|| DeError::MissingField {
-        key: "pair".into(),
-        path: vec!["topicity".into()],
-    })?;
-    let Edn::Vector(p) = pair_edn else {
-        return Err(DeError::TypeMismatch {
-            expected: "[i j] (ligand pair)",
-            got: pair_edn.kind(),
-            path: vec!["topicity".into()],
-        });
-    };
-    if p.len() != 2 {
-        return Err(DeError::Custom(
-            "topicity pair must have 2 positions".into(),
-        ));
-    }
-    let pair = LigandPairAst::new(ligand_position(&p[0])?, ligand_position(&p[1])?);
-    let rel_edn = m
-        .get_keyword("relation")
-        .ok_or_else(|| DeError::MissingField {
-            key: "relation".into(),
-            path: vec!["topicity".into()],
-        })?;
-    Ok(TopicityAst {
-        pair,
-        rel: topicity_relation_from_edn(rel_edn)?,
-    })
-}
-
 /// Render/parse a stereo constraint as its keyword tag plus value (the single
 /// constraint entry inside the kind-bearing map). Atom and bond share the four
 /// variants, so the codec is generated for each.
@@ -1091,9 +1116,9 @@ macro_rules! stereo_constraint_entry_codec {
             match c {
                 $constraint::LigandSymmetry(ls) => ("ligand-symmetry", ligand_symmetry_to_edn(ls)),
                 $constraint::Fluxionality(f) => ("fluxionality", perm_to_vov(f.perm.0)),
-                $constraint::Topicity(t) => ("topicity", topicity_to_edn(t)),
+                $constraint::Topicity(t) => ("topicity", TopicityDsl(t.clone()).to_edn()),
                 $constraint::Stereogenicity(g) => {
-                    ("stereogenicity", stereogenicity_relation_to_edn(&g))
+                    ("stereogenicity", StereogenicityDsl(g.clone()).to_edn())
                 }
             }
         }
@@ -1106,8 +1131,8 @@ macro_rules! stereo_constraint_entry_codec {
                 "fluxionality" => Ok($constraint::Fluxionality(FluxionalityAst {
                     perm: PermutationAst(perm_from_vov(value, kind.degree())?),
                 })),
-                "topicity" => Ok($constraint::Topicity(topicity_from_edn(value)?)),
-                "stereogenicity" => Ok($constraint::Stereogenicity(stereogenicity_relation_from_edn(value)?)),
+                "topicity" => Ok($constraint::Topicity(TopicityDsl::from_edn(value)?.0)),
+                "stereogenicity" => Ok($constraint::Stereogenicity(StereogenicityDsl::from_edn(value)?.0)),
                 other => Err(DeError::Custom(format!(
                     "unknown stereo constraint keyword :{other}"
                 ))),
@@ -1715,5 +1740,58 @@ mod tests {
     #[case::stereo_undetermined(StereoConfigurationDsl(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined)), "{:stereo :undetermined}")]
     fn test_stereo_configuration_dsl_to_edn(#[case] form: StereoConfigurationDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) }), "{:pair [0 1] :relation :homotopic}")]
+    #[case::undetermined(TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Undetermined }), "{:pair [0 1] :relation :undetermined}")]
+    #[case::notset_renders_member_set(TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }), "{:pair [1 2] :relation #{:homotopic :enantiotopic}}")]
+    fn test_topicity_dsl_to_edn(#[case] form: TopicityDsl, #[case] expected: &str) {
+        assert_eq!(form.to_edn(), read_string(expected).unwrap());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit("{:pair [0 1] :relation :homotopic}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) }))]
+    #[case::undetermined("{:pair [0 1] :relation :undetermined}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Undetermined }))]
+    #[case::member_set("{:pair [1 2] :relation #{:homotopic :enantiotopic}}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))]
+    fn test_topicity_dsl_from_edn(#[case] input: &str, #[case] expected: TopicityDsl) {
+        assert_eq!(TopicityDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wrong_type("nil", DeError::TypeMismatch { expected: "topicity map", got: "nil", path: Vec::new() })]
+    #[case::missing_pair("{:relation :homotopic}", DeError::MissingField { key: "pair".into(), path: vec!["topicity".into()] })]
+    #[case::missing_relation("{:pair [0 1]}", DeError::MissingField { key: "relation".into(), path: vec!["topicity".into()] })]
+    fn test_topicity_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
+        assert_eq!(TopicityDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(StereogenicityDsl(StereogenicityAst::Lit(Stereogenicity::Stereogenic)), ":stereogenic")]
+    #[case::undetermined(StereogenicityDsl(StereogenicityAst::Undetermined), ":undetermined")]
+    #[case::notset_renders_member_set(StereogenicityDsl(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))), "#{:prochiral :stereogenic}")]
+    fn test_stereogenicity_dsl_to_edn(#[case] form: StereogenicityDsl, #[case] expected: &str) {
+        assert_eq!(form.to_edn(), read_string(expected).unwrap());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(":stereogenic", StereogenicityDsl(StereogenicityAst::Lit(Stereogenicity::Stereogenic)))]
+    #[case::undetermined(":undetermined", StereogenicityDsl(StereogenicityAst::Undetermined))]
+    #[case::member_set("#{:prochiral :stereogenic}", StereogenicityDsl(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))))]
+    fn test_stereogenicity_dsl_from_edn(#[case] input: &str, #[case] expected: StereogenicityDsl) {
+        assert_eq!(StereogenicityDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wrong_type("nil", DeError::TypeMismatch { expected: "relation (keyword, set, or :undetermined)", got: "nil", path: Vec::new() })]
+    #[case::unknown_keyword(":bogus", DeError::TypeMismatch { expected: "StereogenicityAst keyword", got: "keyword", path: Vec::new() })]
+    fn test_stereogenicity_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
+        assert_eq!(StereogenicityDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
     }
 }

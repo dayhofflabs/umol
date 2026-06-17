@@ -103,7 +103,7 @@ type greens its own `lattice::` test.
    stays infallible.
 2. **`AromaticValenceAst`/`MulticenterValenceAst`** **Done** — delegate inner `ValueAst`; drop the
    hand `matches`.
-3. **`TopicityRelationAst`/`StereogenicityAst`** — `relation_ast!` over `BTreeSet`; flatten
+3. **`TopicityRelationAst`/`StereogenicityAst`** **Done** — `relation_ast!` over `BTreeSet`; flatten
    stereogenicity (drop `StereogenicityRelationAst` + the wrapper).
 4. **`TopicityAst`** — drop `impl Lattice` → matches-only `{pair, rel}`; remove its
    fixed-pair lattice proptest (covered by `test_topicity_relation_ast_lattice_laws`).
