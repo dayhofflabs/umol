@@ -7,6 +7,7 @@ pub(crate) mod coloring;
 pub(crate) mod constraint;
 pub(crate) mod dative;
 pub(crate) mod edit;
+pub(crate) mod electrons;
 pub(crate) mod embedding;
 pub(crate) mod entity;
 pub(crate) mod error;
@@ -29,6 +30,7 @@ pub(crate) mod value;
 pub(crate) mod views;
 
 pub use aromatic::AromaticSystemAst;
+pub use electrons::ElectronCountsAst;
 pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
 pub use bond::BondAst;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};

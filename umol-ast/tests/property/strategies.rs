@@ -15,7 +15,8 @@ pub(crate) use umol_ast::ast::{
     BondConstraintKind, BondConstraints, BondFieldChange, BondId, BondRef, Canonicalize, Constraint,
     Constraints,
     DativeBondAst, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
-    DativeBondId, Edit, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice, LigandPairAst,
+    DativeBondId, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice,
+    LigandPairAst,
     LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
     MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
@@ -456,6 +457,13 @@ pub(crate) fn electron_count_value_strategy(range: RangeInclusive<i64>) -> impl 
 /// Stand-alone strategy for entity-string roundtrip tests. The per-atom
 /// `electrons` vec is empty because the entity string carries no per-atom
 /// data; the `ElectronCount` constraint is exercised here via `#e<n>`.
+pub(crate) fn electron_counts_ast_strategy() -> impl Strategy<Value = ElectronCountsAst> {
+    prop_oneof![
+        Just(ElectronCountsAst::Undetermined),
+        prop::collection::vec(0i64..=8, 1..=4).prop_map(ElectronCountsAst::Lit),
+    ]
+}
+
 pub(crate) fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
     (value_basic(-2..=2), optional_aromatic_electron_count()).prop_map(|(charge, constraints)| {
         AromaticSystemAst {
