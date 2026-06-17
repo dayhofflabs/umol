@@ -90,8 +90,8 @@ type greens its own `lattice::` test.
    NNF, lifts). Parser: build `Sum`/`Product`/`Div`/`Rem`, drop the `unary_expr` sign-XOR;
    delete `ValueAst::simplify`/`ValueExpr::simplify`. The biggest single change (all of
    `dsl/value.rs` + every `ValueAst` consumer).
-2. **`ElementAst`** — `Undetermined|Lit|LitSet|NotSet|Var`; cardinality-canonical; drop `Not`.
-3. **`IsotopeMassAst`** — `Undetermined|Natural|Lit|LitSet|Var`; positive-only; `u32`.
+2. **`ElementAst`** **Done** — `Undetermined|Lit|LitSet|NotSet|Var`; cardinality-canonical; drop `Not`.
+3. **`IsotopeMassAst`** **Done** — `Undetermined|Natural|Lit|LitSet|Var`; positive-only; `u32`.
 4. **`NoncovalentBondKindAst`**, **`StereoKindAst`** — `Undetermined|Lit`; identity
    `canonicalize`; `canonical` always borrows.
 5. **`ElectronCountsAst`** (new) — `Undetermined|Lit(Vec<u8>)`; identity (positional).
