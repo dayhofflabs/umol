@@ -25,7 +25,7 @@ pub(crate) use umol_ast::ast::{
     StereoExpr, StereoKind, StereoLigand, StereoLigandId, StereoLigandKind, Stereogenicity,
     StereogenicityAst,
     StereogenicityRelationAst, SubPatternAnchor, Topicity, TopicityAst, TopicityRelationAst,
-    ValueAst,
+    RelOp, ValueAst, ValuePredicate, ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
     parse_value, AromaticSystemDsl, AtomDsl, BondDsl, DativeBondDsl, Metadata, MoleculeDsl,
@@ -68,29 +68,80 @@ pub(crate) fn element_ast_strategy() -> impl Strategy<Value = ElementAst> {
     prop_oneof![
         6 => element_strategy().prop_map(ElementAst::Lit),
         2 => Just(ElementAst::Undetermined),
-        2 => prop::collection::vec(element_strategy(), 1..=3).prop_map(|mut v| {
-            // Deduplicate to keep shape canonical for roundtrip.
-            v.dedup();
-            ElementAst::Set(v)
-        }),
-        1 => (id_strategy(), prop::collection::vec(element_strategy(), 1..=3))
-            .prop_map(|(id, mut set)| {
-                set.dedup();
-                ElementAst::bind(id, set, MemOp::In)
-            }),
-        1 => id_strategy().prop_map(ElementAst::Ref),
+        2 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(|v| ElementAst::lit_set(v)),
+        1 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(|v| ElementAst::not_set(v)),
+        1 => id_strategy().prop_map(|s| ElementAst::var(s)),
+        1 => (id_strategy(), prop::sample::subsequence(Element::all().to_vec(), 1..=118))
+            .prop_map(|(id, set)| ElementAst::var_in(id, set)),
+        1 => (id_strategy(), prop::sample::subsequence(Element::all().to_vec(), 1..=118))
+            .prop_map(|(id, set)| ElementAst::var_not_in(id, set)),
     ]
+    .prop_map(|e| e.canonicalize().unwrap_or(ElementAst::Undetermined))
 }
 
 pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     prop_oneof![
         4 => Just(ValueAst::Undetermined),
         4 => range.clone().prop_map(ValueAst::Lit),
-        1 => prop::collection::vec(range.clone(), 2..=3).prop_map(|v| ValueAst::lit_set(v)),
-        1 => id_strategy().prop_map(|s| ValueAst::var(s)),
-        1 => (id_strategy(), range).prop_map(|(id, n)| ValueAst::var_at_least(id, n)),
+        1 => prop::collection::vec(range, 2..=3).prop_map(|v| ValueAst::lit_set(v)),
+        2 => value_term_strategy().prop_map(ValueAst::term),
+        2 => value_predicate_strategy().prop_map(ValueAst::predicate),
     ]
     .prop_map(canonicalize_value)
+}
+
+/// Full `ValueTerm` grammar: `Lit`/`Var` leaves under `Neg`, n-ary `Sum`/
+/// `Product`, and binary `Div`/`Rem`. Generated raw; `value_basic` canonicalizes.
+fn value_term_strategy() -> BoxedStrategy<ValueTerm> {
+    let leaf = prop_oneof![
+        (-10i64..=10).prop_map(ValueTerm::Lit),
+        id_strategy().prop_map(ValueTerm::Var),
+    ]
+    .boxed();
+    leaf.prop_recursive(3, 8, 3, |inner| {
+        prop_oneof![
+            inner.clone().prop_map(|t| ValueTerm::Neg(Box::new(t))),
+            prop::collection::vec(inner.clone(), 2..=3).prop_map(ValueTerm::Sum),
+            prop::collection::vec(inner.clone(), 2..=3).prop_map(ValueTerm::Product),
+            (inner.clone(), inner.clone()).prop_map(|(a, b)| ValueTerm::Div(Box::new(a), Box::new(b))),
+            (inner.clone(), inner).prop_map(|(a, b)| ValueTerm::Rem(Box::new(a), Box::new(b))),
+        ]
+        .boxed()
+    })
+    .boxed()
+}
+
+/// Full `ValuePredicate` grammar: `Rel`/`Mem` leaves over terms, under `Not`,
+/// `And`, `Or`. Generated raw; `value_basic` canonicalizes (folding/NNF).
+fn value_predicate_strategy() -> BoxedStrategy<ValuePredicate> {
+    let term = value_term_strategy();
+    let leaf = prop_oneof![
+        (term.clone(), rel_op_strategy(), term.clone())
+            .prop_map(|(a, op, b)| ValuePredicate::Rel(a, op, b)),
+        (term, mem_op_strategy(), prop::collection::vec(-10i64..=10, 1..=3))
+            .prop_map(|(e, op, s)| ValuePredicate::Mem(e, op, s.into_iter().collect())),
+    ]
+    .boxed();
+    leaf.prop_recursive(2, 6, 3, |inner| {
+        prop_oneof![
+            inner.clone().prop_map(|p| ValuePredicate::Not(Box::new(p))),
+            prop::collection::vec(inner.clone(), 2..=3).prop_map(ValuePredicate::And),
+            prop::collection::vec(inner, 2..=3).prop_map(ValuePredicate::Or),
+        ]
+        .boxed()
+    })
+    .boxed()
+}
+
+fn rel_op_strategy() -> impl Strategy<Value = RelOp> {
+    prop_oneof![
+        Just(RelOp::Le),
+        Just(RelOp::Ge),
+        Just(RelOp::Eq),
+        Just(RelOp::Lt),
+        Just(RelOp::Gt),
+        Just(RelOp::Ne),
+    ]
 }
 
 /// Canonicalize a generated value so the property suite operates on canonical
@@ -109,28 +160,13 @@ pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassAst> {
     prop_oneof![
         3 => Just(IsotopeMassAst::Natural),
         3 => Just(IsotopeMassAst::Undetermined),
-        3 => (1i64..=250).prop_map(IsotopeMassAst::Lit),
-        1 => prop::collection::vec(1i64..=250, 1..=3).prop_map(|mut v| {
-            v.sort_unstable();
-            v.dedup();
-            IsotopeMassAst::set(v)
-        }),
-        1 => (1i64..=250).prop_map(IsotopeMassAst::Not),
-        1 => prop::collection::vec(1i64..=250, 1..=3).prop_map(|mut v| {
-            v.sort_unstable();
-            v.dedup();
-            IsotopeMassAst::not_set(v)
-        }),
-        1 => id_strategy().prop_map(IsotopeMassAst::reference),
-        1 => (id_strategy(), prop::collection::vec(1i64..=250, 1..=3), prop_oneof![
-            Just(MemOp::In),
-            Just(MemOp::NotIn),
-        ]).prop_map(|(id, mut v, polarity)| {
-            v.sort_unstable();
-            v.dedup();
-            IsotopeMassAst::bind(id, v, polarity)
-        }),
+        3 => (1u32..=250).prop_map(IsotopeMassAst::Lit),
+        2 => prop::collection::vec(1u32..=250, 1..=3).prop_map(|v| IsotopeMassAst::lit_set(v)),
+        1 => id_strategy().prop_map(|s| IsotopeMassAst::var(s)),
+        1 => (id_strategy(), prop::collection::vec(1u32..=250, 1..=3))
+            .prop_map(|(id, v)| IsotopeMassAst::var_in(id, v)),
     ]
+    .prop_map(|i| i.canonicalize().unwrap_or(IsotopeMassAst::Undetermined))
 }
 
 pub(crate) fn spin_state_strategy() -> impl Strategy<Value = SpinStateAst> {

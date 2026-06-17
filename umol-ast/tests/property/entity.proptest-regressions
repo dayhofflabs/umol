@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 7e3332422227207f9c97a0ede3e8e4207a41e3eed2fd6948c0f07af34aeb0dcb # shrinks to bond = BondAst { order: Predicate(Rel(Product([Lit(2), Var("a"), Var("a")]), Lt, Lit(0))), charge: Undetermined, spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: BondConstraints([]) }
+cc 32135dda4110ef3ded1d5e4f0aeeb6e41c909c4d846a1bee610464bb85a11750 # shrinks to atom = AtomAst { element: Lit(H), isotope_mass: Natural, charge: Undetermined, implicit_hydrogens: Undetermined, lone_pairs: Undetermined, spin: SpinStateAst { unpaired: Predicate(Rel(Lit(0), Eq, Product([Lit(2), Var("A"), Var("a")]))), multiplicity: Undetermined }, constraints: AtomConstraints { entries: [] } }
+cc b83f86b38977129d4872d52fad62befda628944dfd827ed954ba680f16a73c40 # shrinks to system = AromaticSystemAst { electrons: [], charge: Predicate(And([Rel(Lit(0), Le, Var("A")), Rel(Lit(0), Le, Product([Var("a"), Var("a"), Neg(Lit(1))]))])), spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: AromaticSystemConstraints([]) }
+cc f189cc44d3f8d21faa5f6da8468e8e9cf38572e38cc595a9adcfbc96ffd4520e # shrinks to bond = BondAst { order: Undetermined, charge: Predicate(Or([Rel(Lit(0), Le, Var("a")), Rel(Lit(0), Eq, Product([Lit(2), Var("A"), Var("a")]))])), spin: SpinStateAst { unpaired: Undetermined, multiplicity: Undetermined }, constraints: BondConstraints([]) }

@@ -140,7 +140,7 @@ impl TryIntoAst<AtomAst> for &TableAtom {
         let mut atom = AtomAst {
             element: ElementAst::Lit(self.element),
             isotope_mass: match self.isotope_mass {
-                Some(m) => IsotopeMassAst::Lit(m as i64),
+                Some(m) => IsotopeMassAst::Lit(m as u32),
                 None => IsotopeMassAst::Undetermined,
             },
             charge: match self.charge {

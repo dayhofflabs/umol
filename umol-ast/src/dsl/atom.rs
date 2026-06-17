@@ -7,8 +7,8 @@ use std::str::FromStr;
 use strum::IntoEnumIterator;
 use umol_edn::{DeError, Edn, EdnError, EdnStreamDeserializer, FromEdn, ToEdn};
 use umol_shared::element::Element;
-use winnow::ascii::multispace0;
-use winnow::combinator::{alt, delimited, empty, preceded, repeat, separated, terminated};
+use winnow::ascii::{dec_uint, multispace0};
+use winnow::combinator::{alt, delimited, empty, opt, preceded, repeat, separated, terminated};
 use winnow::error::{ErrMode, ParserError};
 use winnow::token::{one_of, take};
 use winnow::Parser;
@@ -23,7 +23,7 @@ use super::predicates::{
     raise_spin, ring_count, SpinPredicate,
 };
 use super::stereo::{fmt_stereo_config, stereo_config, StereoConfigurationDsl};
-use super::value::{fmt_set, fmt_value, id, signed_int, terminator, value, ValueDsl};
+use super::value::{fmt_set, fmt_value, id, terminator, value, ValueDsl};
 use crate::ast::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints, MulticenterValenceAst,
@@ -291,11 +291,14 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
 fn element(i: &mut &str) -> PResult<ElementAst> {
     alt((
         '*'.value(ElementAst::Undetermined),
-        preceded('!', element_set).map(ElementAst::NotSet),
-        preceded('!', element_literal).map(ElementAst::Not),
-        element_set.map(ElementAst::Set),
-        element_bind.map(|(id, set, polarity)| ElementAst::bind(id, set, polarity)),
-        element_ref.map(ElementAst::Ref),
+        preceded('!', element_set).map(|s| ElementAst::not_set(s)),
+        preceded('!', element_literal).map(ElementAst::not),
+        element_set.map(|s| ElementAst::lit_set(s)),
+        element_bind.map(|(id, set, polarity)| match polarity {
+            MemOp::In => ElementAst::var_in(id, set),
+            MemOp::NotIn => ElementAst::var_not_in(id, set),
+        }),
+        element_ref.map(|s| ElementAst::var(s)),
         element_literal.map(ElementAst::Lit),
     ))
     .parse_next(i)
@@ -370,25 +373,24 @@ fn isotope(i: &mut &str) -> PResult<IsotopeMassAst> {
         alt((
             '='.value(IsotopeMassAst::Natural),
             '*'.value(IsotopeMassAst::Undetermined),
-            preceded('!', isotope_set).map(|s| IsotopeMassAst::NotSet(Box::new(s))),
-            preceded('!', signed_int).map(IsotopeMassAst::Not),
-            isotope_set.map(|s| IsotopeMassAst::Set(Box::new(s))),
-            terminated(isotope_bind, (multispace0, terminator))
-                .map(|(id, set, polarity)| IsotopeMassAst::bind(id, set, polarity)),
-            terminated(isotope_ref, (multispace0, terminator)).map(IsotopeMassAst::Ref),
-            terminated(signed_int, (multispace0, terminator)).map(IsotopeMassAst::Lit),
+            isotope_set.map(IsotopeMassAst::lit_set),
+            terminated(isotope_var, (multispace0, terminator)).map(|(id, domain)| match domain {
+                Some(set) => IsotopeMassAst::var_in(id, set),
+                None => IsotopeMassAst::var(id),
+            }),
+            terminated(dec_uint::<_, u32, _>, (multispace0, terminator)).map(IsotopeMassAst::Lit),
         )),
     )
     .parse_next(i)
     .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))
 }
 
-fn isotope_set(i: &mut &str) -> PResult<Vec<i64>> {
+fn isotope_set(i: &mut &str) -> PResult<Vec<u32>> {
     delimited(
         '{',
         delimited(
             multispace0,
-            separated(1.., signed_int, delimited(multispace0, ',', multispace0)),
+            separated(1.., dec_uint::<_, u32, _>, delimited(multispace0, ',', multispace0)),
             multispace0,
         ),
         '}',
@@ -396,34 +398,16 @@ fn isotope_set(i: &mut &str) -> PResult<Vec<i64>> {
     .parse_next(i)
 }
 
-fn isotope_bind(i: &mut &str) -> PResult<(String, Vec<i64>, MemOp)> {
+fn isotope_var(i: &mut &str) -> PResult<(String, Option<Vec<u32>>)> {
     alt((
-        delimited('(', delimited(multispace0, isotope_bind, multispace0), ')'),
+        delimited('(', delimited(multispace0, isotope_var, multispace0), ')'),
         (
             preceded('?', id),
-            preceded(
+            opt(preceded(
                 delimited(multispace0, "::", multispace0),
-                isotope_bind_domain,
-            ),
-        )
-            .map(|(id, (set, polarity))| (id, set, polarity)),
-    ))
-    .parse_next(i)
-}
-
-fn isotope_bind_domain(i: &mut &str) -> PResult<(Vec<i64>, MemOp)> {
-    alt((
-        preceded('!', isotope_set).map(|s| (s, MemOp::NotIn)),
-        preceded('!', signed_int).map(|n| (vec![n], MemOp::NotIn)),
-        isotope_set.map(|s| (s, MemOp::In)),
-    ))
-    .parse_next(i)
-}
-
-fn isotope_ref(i: &mut &str) -> PResult<String> {
-    alt((
-        delimited('(', delimited(multispace0, isotope_ref, multispace0), ')'),
-        preceded('?', id),
+                isotope_set,
+            )),
+        ),
     ))
     .parse_next(i)
 }
@@ -519,27 +503,36 @@ fn fmt_element(f: &mut fmt::Formatter<'_>, expr: &ElementAst) -> fmt::Result {
     match expr {
         ElementAst::Lit(e) => write!(f, "{}", e),
         ElementAst::Undetermined => write!(f, "*"),
-        ElementAst::Set(es) => fmt_element_set(f, es),
-        ElementAst::Not(e) => write!(f, "!{}", e),
+        ElementAst::LitSet(es) => fmt_element_set(f, es.iter().copied()),
+        ElementAst::NotSet(es) if es.len() == 1 => {
+            // A singleton complement renders as `!e` (no braces), e.g. `!H`.
+            write!(f, "!{}", es.iter().next().unwrap())
+        }
         ElementAst::NotSet(es) => {
             write!(f, "!")?;
-            fmt_element_set(f, es)
+            fmt_element_set(f, es.iter().copied())
         }
-        ElementAst::Bind(b) => {
-            let (id, op, set) = &**b;
-            write!(f, "?{} :: ", id)?;
-            if matches!(op, MemOp::NotIn) {
-                write!(f, "!")?;
+        ElementAst::Var(v) => {
+            let (id, domain) = &**v;
+            write!(f, "?{}", id)?;
+            if let Some((op, set)) = domain {
+                write!(f, " :: ")?;
+                if matches!(op, MemOp::NotIn) {
+                    write!(f, "!")?;
+                }
+                fmt_element_set(f, set.iter().copied())?;
             }
-            fmt_element_set(f, set)
+            Ok(())
         }
-        ElementAst::Ref(id) => write!(f, "?{}", id),
     }
 }
 
-fn fmt_element_set(f: &mut fmt::Formatter<'_>, es: &[Element]) -> fmt::Result {
+fn fmt_element_set(
+    f: &mut fmt::Formatter<'_>,
+    es: impl IntoIterator<Item = Element>,
+) -> fmt::Result {
     write!(f, "{{")?;
-    for (i, e) in es.iter().enumerate() {
+    for (i, e) in es.into_iter().enumerate() {
         if i > 0 {
             write!(f, ",")?;
         }
@@ -553,24 +546,21 @@ fn fmt_isotope_mass(f: &mut fmt::Formatter<'_>, iso: &IsotopeMassAst) -> fmt::Re
         IsotopeMassAst::Undetermined => Ok(()),
         IsotopeMassAst::Natural => write!(f, "#i="),
         IsotopeMassAst::Lit(n) => write!(f, "#i{}", n),
-        IsotopeMassAst::Set(s) => {
+        IsotopeMassAst::LitSet(s) => {
             write!(f, "#i")?;
             fmt_set(f, s.iter().copied())
         }
-        IsotopeMassAst::Not(n) => write!(f, "#i!{}", n),
-        IsotopeMassAst::NotSet(s) => {
-            write!(f, "#i!")?;
-            fmt_set(f, s.iter().copied())
-        }
-        IsotopeMassAst::Bind(b) => {
-            let (id, op, set) = &**b;
-            write!(f, "#i?{} :: ", id)?;
-            if matches!(op, MemOp::NotIn) {
-                write!(f, "!")?;
+        IsotopeMassAst::Var(v) => {
+            let (id, domain) = &**v;
+            write!(f, "#i?{}", id)?;
+            match domain {
+                Some(set) => {
+                    write!(f, " :: ")?;
+                    fmt_set(f, set.iter().copied())
+                }
+                None => Ok(()),
             }
-            fmt_set(f, set.iter().copied())
         }
-        IsotopeMassAst::Ref(id) => write!(f, "#i?{}", id),
     }
 }
 
@@ -1225,9 +1215,9 @@ mod tests {
     #[case::chlorine("Cl", AtomDsl(AtomAst::new(ElementAst::Lit(Element::Cl))))]
     #[case::whitespace("  C  ", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
     #[case::undetermined("*", AtomDsl(AtomAst::new(ElementAst::Undetermined)))]
-    #[case::element_set("{C,N,O}", AtomDsl(AtomAst::new(ElementAst::Set(vec![Element::C, Element::N, Element::O]))))]
-    #[case::element_bind("(?e :: {C,N})", AtomDsl(AtomAst::new(ElementAst::bind("e", vec![Element::C, Element::N], MemOp::In))))]
-    #[case::element_ref("(?e)", AtomDsl(AtomAst::new(ElementAst::Ref("e".to_string()))))]
+    #[case::element_set("{C,N,O}", AtomDsl(AtomAst::new(ElementAst::lit_set(vec![Element::C, Element::N, Element::O]))))]
+    #[case::element_bind("(?e :: {C,N})", AtomDsl(AtomAst::new(ElementAst::var_in("e", vec![Element::C, Element::N]))))]
+    #[case::element_ref("(?e)", AtomDsl(AtomAst::new(ElementAst::var("e".to_string()))))]
     #[case::isotope("C#i12", AtomDsl(AtomAst { isotope_mass: IsotopeMassAst::Lit(12), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::isotope_natural("C#i=", AtomDsl(AtomAst { isotope_mass: IsotopeMassAst::Natural, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::charge_pos("C#c+2", AtomDsl(AtomAst { charge: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1373,19 +1363,19 @@ mod tests {
     #[case::iron("Fe", ElementAst::Lit(Element::Fe))]
     #[case::chlorine("Cl", ElementAst::Lit(Element::Cl))]
     #[case::undetermined("*", ElementAst::Undetermined)]
-    #[case::set("{C,N,O}", ElementAst::Set(vec![Element::C, Element::N, Element::O]))]
-    #[case::set_spaced("{ C, N}", ElementAst::Set(vec![Element::C, Element::N]))]
-    #[case::bind_paren("(?e :: {C,N})", ElementAst::bind("e", vec![Element::C, Element::N], MemOp::In))]
-    #[case::bind_bare("?e :: {C,N}", ElementAst::bind("e", vec![Element::C, Element::N], MemOp::In))]
-    #[case::bind_paren_paren("((?e :: {C,N}))", ElementAst::bind("e", vec![Element::C, Element::N], MemOp::In))]
-    #[case::bind_not_in_lit("?e :: !H", ElementAst::bind("e", vec![Element::H], MemOp::NotIn))]
-    #[case::bind_not_in_set("?e :: !{F,Cl}", ElementAst::bind("e", vec![Element::F, Element::Cl], MemOp::NotIn))]
-    #[case::bind_not_in_paren("(?e :: !{F,Cl})", ElementAst::bind("e", vec![Element::F, Element::Cl], MemOp::NotIn))]
-    #[case::ref_bare("?e", ElementAst::Ref("e".to_string()))]
-    #[case::ref_paren("(?e)", ElementAst::Ref("e".to_string()))]
-    #[case::ref_paren_paren("((?e))", ElementAst::Ref("e".to_string()))]
-    #[case::not_lit("!H", ElementAst::Not(Element::H))]
-    #[case::not_set("!{F,Cl}", ElementAst::NotSet(vec![Element::F, Element::Cl]))]
+    #[case::set("{C,N,O}", ElementAst::lit_set(vec![Element::C, Element::N, Element::O]))]
+    #[case::set_spaced("{ C, N}", ElementAst::lit_set(vec![Element::C, Element::N]))]
+    #[case::bind_paren("(?e :: {C,N})", ElementAst::var_in("e", vec![Element::C, Element::N]))]
+    #[case::bind_bare("?e :: {C,N}", ElementAst::var_in("e", vec![Element::C, Element::N]))]
+    #[case::bind_paren_paren("((?e :: {C,N}))", ElementAst::var_in("e", vec![Element::C, Element::N]))]
+    #[case::bind_not_in_lit("?e :: !H", ElementAst::var_not_in("e", vec![Element::H]))]
+    #[case::bind_not_in_set("?e :: !{F,Cl}", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
+    #[case::bind_not_in_paren("(?e :: !{F,Cl})", ElementAst::var_not_in("e", vec![Element::F, Element::Cl]))]
+    #[case::ref_bare("?e", ElementAst::var("e".to_string()))]
+    #[case::ref_paren("(?e)", ElementAst::var("e".to_string()))]
+    #[case::ref_paren_paren("((?e))", ElementAst::var("e".to_string()))]
+    #[case::not_lit("!H", ElementAst::not(Element::H))]
+    #[case::not_set("!{F,Cl}", ElementAst::not_set(vec![Element::F, Element::Cl]))]
     fn test_element(#[case] input: &str, #[case] expected: ElementAst) {
         let result = element.parse(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
@@ -1412,22 +1402,30 @@ mod tests {
     #[case::natural("=", IsotopeMassAst::Natural)]
     #[case::lit("12", IsotopeMassAst::Lit(12))]
     #[case::undetermined("*", IsotopeMassAst::Undetermined)]
-    #[case::set("{12,13,14}", IsotopeMassAst::Set(Box::new(vec![12, 13, 14])))]
-    #[case::bind_paren("(?m :: {12,13})", IsotopeMassAst::bind("m", vec![12, 13], MemOp::In))]
-    #[case::bind_bare("?m :: {12,13}", IsotopeMassAst::bind("m", vec![12, 13], MemOp::In))]
-    #[case::bind_paren_paren("((?m :: {12,13}))", IsotopeMassAst::bind("m", vec![12, 13], MemOp::In))]
-    #[case::bind_not_in_lit("?m :: !14", IsotopeMassAst::bind("m", vec![14], MemOp::NotIn))]
-    #[case::bind_not_in_set("?m :: !{12,13}", IsotopeMassAst::bind("m", vec![12, 13], MemOp::NotIn))]
-    #[case::ref_paren("(?m)", IsotopeMassAst::Ref("m".to_string()))]
-    #[case::ref_bare("?m", IsotopeMassAst::Ref("m".to_string()))]
-    #[case::ref_paren_paren("((?m))", IsotopeMassAst::Ref("m".to_string()))]
-    #[case::not_lit("!14", IsotopeMassAst::Not(14))]
-    #[case::not_set("!{12,13}", IsotopeMassAst::NotSet(Box::new(vec![12, 13])))]
+    #[case::set("{12,13,14}", IsotopeMassAst::lit_set([12, 13, 14]))]
+    #[case::set_spaced("{ 12, 13 }", IsotopeMassAst::lit_set([12, 13]))]
+    #[case::set_singleton("{12}", IsotopeMassAst::lit_set([12]))]
+    #[case::var_in_paren("(?m :: {12,13})", IsotopeMassAst::var_in("m", [12, 13]))]
+    #[case::var_in_bare("?m :: {12,13}", IsotopeMassAst::var_in("m", [12, 13]))]
+    #[case::var_in_paren_paren("((?m :: {12,13}))", IsotopeMassAst::var_in("m", [12, 13]))]
+    #[case::var_paren("(?m)", IsotopeMassAst::var("m"))]
+    #[case::var_bare("?m", IsotopeMassAst::var("m"))]
+    #[case::var_paren_paren("((?m))", IsotopeMassAst::var("m"))]
     fn test_isotope(#[case] input: &str, #[case] expected: IsotopeMassAst) {
         let result = isotope.parse(input);
         assert!(result.is_ok(), "{input:?} should succeed, got {:?}", result.unwrap_err());
         let expr = result.unwrap();
         assert_eq!(expr, expected);
+    }
+
+    #[rstest]
+    #[case::empty("")]
+    #[case::negative("-14")]
+    #[case::not_lit("!14")]
+    #[case::not_set("!{12,13}")]
+    #[case::var_not_in("?m :: !14")]
+    fn test_isotope_error(#[case] input: &str) {
+        assert!(isotope.parse(input).is_err(), "{input:?} should fail");
     }
 
     #[rustfmt::skip]

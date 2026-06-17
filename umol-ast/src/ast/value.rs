@@ -99,6 +99,30 @@ impl ValueAst {
     }
 }
 
+impl From<i64> for ValueAst {
+    fn from(value: i64) -> Self {
+        Self::Lit(value)
+    }
+}
+
+impl From<SpinMultiplicity> for ValueAst {
+    fn from(m: SpinMultiplicity) -> Self {
+        Self::Lit(u8::from(m) as i64)
+    }
+}
+
+impl From<Vec<i64>> for ValueAst {
+    fn from(values: Vec<i64>) -> Self {
+        Self::lit_set(values)
+    }
+}
+
+impl From<BTreeSet<i64>> for ValueAst {
+    fn from(values: BTreeSet<i64>) -> Self {
+        Self::LitSet(Box::new(values))
+    }
+}
+
 impl Canonicalize for ValueAst {
     fn canonicalize(self) -> Result<Self, Contradiction> {
         Ok(match self {
@@ -537,17 +561,6 @@ fn litset_or_lit(set: BTreeSet<i64>) -> ValueAst {
     }
 }
 
-/// A `Set` is ground iff non-empty and all elements are equal (semantic
-/// singleton). Shared with the atom-field types that still embed a `Vec`-backed
-/// set directly (`IsotopeMassAst`), so they avoid cloning to delegate.
-#[inline(never)]
-pub(crate) fn set_is_ground(s: &[i64]) -> bool {
-    match s {
-        [] => false,
-        [first, rest @ ..] => rest.iter().all(|x| x == first),
-    }
-}
-
 // Arithmetic on `ValueAst` propagates `Undetermined`: only `Lit op Lit` yields a
 // `Lit`. Every binop has impls for all four `(owned|ref) × (owned|ref)`
 // combinations delegating to the ref-ref form, plus a bare `i64` on either side.
@@ -598,30 +611,6 @@ impl_value_binop!(Sub, sub, -);
 impl_value_binop!(Mul, mul, *);
 impl_value_binop!(Div, div, /);
 
-impl From<i64> for ValueAst {
-    fn from(value: i64) -> Self {
-        Self::Lit(value)
-    }
-}
-
-impl From<SpinMultiplicity> for ValueAst {
-    fn from(m: SpinMultiplicity) -> Self {
-        Self::Lit(u8::from(m) as i64)
-    }
-}
-
-impl From<Vec<i64>> for ValueAst {
-    fn from(values: Vec<i64>) -> Self {
-        Self::lit_set(values)
-    }
-}
-
-impl From<BTreeSet<i64>> for ValueAst {
-    fn from(values: BTreeSet<i64>) -> Self {
-        Self::LitSet(Box::new(values))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -629,58 +618,71 @@ mod tests {
 
     use super::*;
 
-    fn var(name: &str) -> ValueTerm {
-        ValueTerm::Var(name.to_string())
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_set(ValueAst::lit_set([2, 1, 2]), ValueAst::LitSet(Box::new(BTreeSet::from([1, 2]))))]
+    #[case::var(ValueAst::var("x"), ValueAst::Term(Box::new(ValueTerm::Var("x".to_string()))))]
+    #[case::var_at_least(ValueAst::var_at_least("r", 1), ValueAst::Predicate(Box::new(ValuePredicate::Rel(ValueTerm::Var("r".to_string()), RelOp::Ge, ValueTerm::Lit(1)))))]
+    #[case::term(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::Term(Box::new(ValueTerm::Var("x".to_string()))))]
+    #[case::predicate(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))), ValueAst::Predicate(Box::new(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
+    fn test_value_ast_constructors(#[case] actual: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(ValueAst::Undetermined, Ok(ValueAst::Undetermined))]
-    #[case::lit(ValueAst::Lit(3), Ok(ValueAst::Lit(3)))]
-    #[case::litset_multi(ValueAst::lit_set([2, 1, 2, 3]), Ok(ValueAst::lit_set([1, 2, 3])))]
+    #[case::i64(ValueAst::from(5_i64), ValueAst::Lit(5))]
+    #[case::spin_multiplicity(ValueAst::from(SpinMultiplicity::Triplet), ValueAst::Lit(3))]
+    #[case::vec(ValueAst::from(vec![2, 1, 2]), ValueAst::LitSet(Box::new(BTreeSet::from([1, 2]))))]
+    #[case::btreeset(ValueAst::from(BTreeSet::from([3, 1])), ValueAst::LitSet(Box::new(BTreeSet::from([1, 3]))))]
+    fn test_value_ast_from(#[case] actual: ValueAst, #[case] expected: ValueAst) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
     #[case::litset_singleton(ValueAst::lit_set([7]), Ok(ValueAst::Lit(7)))]
     #[case::litset_empty(ValueAst::lit_set([]), Err(Contradiction))]
-    #[case::term_var(ValueAst::term(var("x")), Ok(ValueAst::term(var("x"))))]
     #[case::term_ground(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(2), ValueTerm::Lit(3)])), Ok(ValueAst::Lit(5)))]
     #[case::term_neg_lit(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(4)))), Ok(ValueAst::Lit(-4)))]
-    #[case::term_neg_neg(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Neg(Box::new(var("x")))))), Ok(ValueAst::term(var("x"))))]
-    #[case::term_sum_identity(ValueAst::term(ValueTerm::Sum(vec![var("x"), ValueTerm::Lit(0)])), Ok(ValueAst::term(var("x"))))]
-    #[case::term_sum_sorted_const_first(ValueAst::term(ValueTerm::Sum(vec![var("x"), ValueTerm::Lit(1)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), var("x")]))))]
-    #[case::term_sum_flatten(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Sum(vec![var("x"), ValueTerm::Lit(1)]), ValueTerm::Lit(2)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(3), var("x")]))))]
-    #[case::term_product_annihilator(ValueAst::term(ValueTerm::Product(vec![var("x"), ValueTerm::Lit(0)])), Ok(ValueAst::Lit(0)))]
-    #[case::term_product_identity(ValueAst::term(ValueTerm::Product(vec![var("x"), ValueTerm::Lit(1)])), Ok(ValueAst::term(var("x"))))]
+    #[case::term_neg_neg(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Neg(Box::new(ValueTerm::Var("x".to_string())))))), Ok(ValueAst::term(ValueTerm::Var("x".to_string()))))]
+    #[case::term_sum_identity(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(0)])), Ok(ValueAst::term(ValueTerm::Var("x".to_string()))))]
+    #[case::term_sum_sorted_const_first(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(1)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Var("x".to_string())]))))]
+    #[case::term_sum_flatten(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(1)]), ValueTerm::Lit(2)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(3), ValueTerm::Var("x".to_string())]))))]
+    #[case::term_product_annihilator(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(0)])), Ok(ValueAst::Lit(0)))]
+    #[case::term_product_identity(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(1)])), Ok(ValueAst::term(ValueTerm::Var("x".to_string()))))]
     #[case::term_div_fold(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), Ok(ValueAst::Lit(3)))]
     #[case::term_rem_fold(ValueAst::term(ValueTerm::Rem(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), Ok(ValueAst::Lit(1)))]
     #[case::pred_rel_true(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))), Ok(ValueAst::Undetermined))]
     #[case::pred_rel_false(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))), Err(Contradiction))]
-    #[case::pred_rel_orient_ge(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Ge, ValueTerm::Lit(1))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Le, var("x")))))]
-    #[case::pred_rel_eq_sorted(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Eq, ValueTerm::Lit(0))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(0), RelOp::Eq, var("x")))))]
-    #[case::pred_not_eq_to_ne(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(var("x"), RelOp::Eq, ValueTerm::Lit(0))))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(0), RelOp::Ne, var("x")))))]
-    #[case::pred_mem_singleton(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([5]))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(5), RelOp::Eq, var("x")))))]
-    #[case::pred_mem_notin_empty(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::new())), Ok(ValueAst::Undetermined))]
-    #[case::pred_mem_in_empty(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::new())), Err(Contradiction))]
-    #[case::pred_not_mem_to_notin(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2]))))), Ok(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::from([1, 2])))))]
-    #[case::pred_and_drops_top(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Rel(var("x"), RelOp::Le, ValueTerm::Lit(3)), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))])), Ok(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Le, ValueTerm::Lit(3)))))]
-    #[case::pred_demorgan(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4]))])))), Ok(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::NotIn, BTreeSet::from([3, 4]))]))))]
-    #[case::term_sum_neg_const(ValueAst::term(ValueTerm::Sum(vec![var("x"), ValueTerm::Lit(-3)])), Ok(ValueAst::term(ValueTerm::Sum(vec![var("x"), ValueTerm::Neg(Box::new(ValueTerm::Lit(3)))]))))]
+    #[case::pred_rel_orient_ge(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Ge, ValueTerm::Lit(1))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Le, ValueTerm::Var("x".to_string())))))]
+    #[case::pred_rel_eq_sorted(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Eq, ValueTerm::Lit(0))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(0), RelOp::Eq, ValueTerm::Var("x".to_string())))))]
+    #[case::pred_not_eq_to_ne(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Eq, ValueTerm::Lit(0))))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(0), RelOp::Ne, ValueTerm::Var("x".to_string())))))]
+    #[case::pred_mem_singleton(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([5]))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(5), RelOp::Eq, ValueTerm::Var("x".to_string())))))]
+    #[case::pred_mem_notin_empty(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::new())), Ok(ValueAst::Undetermined))]
+    #[case::pred_mem_in_empty(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::new())), Err(Contradiction))]
+    #[case::pred_not_mem_to_notin(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))))), Ok(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2])))))]
+    #[case::pred_and_drops_top(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Le, ValueTerm::Lit(3)), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))])), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Le, ValueTerm::Lit(3)))))]
+    #[case::pred_demorgan(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))])))), Ok(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::NotIn, BTreeSet::from([3, 4]))]))))]
+    #[case::term_sum_neg_const(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Lit(-3)])), Ok(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("x".to_string()), ValueTerm::Neg(Box::new(ValueTerm::Lit(3)))]))))]
     #[case::term_neg_zero(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(0)))), Ok(ValueAst::Lit(0)))]
-    #[case::term_product_flatten(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Product(vec![var("x"), var("y")]), var("z")])), Ok(ValueAst::term(ValueTerm::Product(vec![var("x"), var("y"), var("z")]))))]
-    #[case::term_product_sort(ValueAst::term(ValueTerm::Product(vec![var("b"), var("a")])), Ok(ValueAst::term(ValueTerm::Product(vec![var("a"), var("b")]))))]
-    #[case::term_product_const_fold(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(2), ValueTerm::Lit(3), var("x")])), Ok(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(6), var("x")]))))]
+    #[case::term_product_flatten(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Product(vec![ValueTerm::Var("x".to_string()), ValueTerm::Var("y".to_string())]), ValueTerm::Var("z".to_string())])), Ok(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("x".to_string()), ValueTerm::Var("y".to_string()), ValueTerm::Var("z".to_string())]))))]
+    #[case::term_product_sort(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("b".to_string()), ValueTerm::Var("a".to_string())])), Ok(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("a".to_string()), ValueTerm::Var("b".to_string())]))))]
+    #[case::term_product_const_fold(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(2), ValueTerm::Lit(3), ValueTerm::Var("x".to_string())])), Ok(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(6), ValueTerm::Var("x".to_string())]))))]
     #[case::term_sum_empty(ValueAst::term(ValueTerm::Sum(vec![])), Ok(ValueAst::Lit(0)))]
     #[case::term_product_empty(ValueAst::term(ValueTerm::Product(vec![])), Ok(ValueAst::Lit(1)))]
     #[case::term_div_by_zero(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(0)))), Ok(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(0))))))]
-    #[case::pred_and_flatten(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4]))]), ValuePredicate::Mem(var("z"), MemOp::In, BTreeSet::from([5, 6]))])), Ok(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(var("z"), MemOp::In, BTreeSet::from([5, 6]))]))))]
-    #[case::pred_and_sort_dedup(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2]))])), Ok(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4]))]))))]
-    #[case::pred_and_bottom(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))])), Err(Contradiction))]
-    #[case::pred_or_drops_bottom(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))])), Ok(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])))))]
-    #[case::pred_or_top(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))])), Ok(ValueAst::Undetermined))]
+    #[case::pred_and_flatten(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))]), ValuePredicate::Mem(ValueTerm::Var("z".to_string()), MemOp::In, BTreeSet::from([5, 6]))])), Ok(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(ValueTerm::Var("z".to_string()), MemOp::In, BTreeSet::from([5, 6]))]))))]
+    #[case::pred_and_sort_dedup(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))])), Ok(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4]))]))))]
+    #[case::pred_and_bottom(ValueAst::predicate(ValuePredicate::And(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))])), Err(Contradiction))]
+    #[case::pred_or_drops_bottom(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(2))])), Ok(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
+    #[case::pred_or_top(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])), ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Eq, ValueTerm::Lit(1))])), Ok(ValueAst::Undetermined))]
     #[case::pred_and_empty(ValueAst::predicate(ValuePredicate::And(vec![])), Ok(ValueAst::Undetermined))]
     #[case::pred_or_empty(ValueAst::predicate(ValuePredicate::Or(vec![])), Err(Contradiction))]
-    #[case::pred_not_not(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Not(Box::new(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2]))))))), Ok(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::In, BTreeSet::from([1, 2])))))]
-    #[case::pred_not_le(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(var("x"), RelOp::Le, ValueTerm::Lit(3))))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(3), RelOp::Lt, var("x")))))]
-    #[case::pred_rel_orient_gt(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Gt, ValueTerm::Lit(1))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Lt, var("x")))))]
-    #[case::pred_mem_notin_singleton(ValueAst::predicate(ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::from([5]))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(5), RelOp::Ne, var("x")))))]
+    #[case::pred_not_not(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Not(Box::new(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2]))))))), Ok(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::In, BTreeSet::from([1, 2])))))]
+    #[case::pred_not_le(ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Le, ValueTerm::Lit(3))))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(3), RelOp::Lt, ValueTerm::Var("x".to_string())))))]
+    #[case::pred_rel_orient_gt(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Gt, ValueTerm::Lit(1))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(1), RelOp::Lt, ValueTerm::Var("x".to_string())))))]
+    #[case::pred_mem_notin_singleton(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([5]))), Ok(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Lit(5), RelOp::Ne, ValueTerm::Var("x".to_string())))))]
     fn test_value_ast_canonicalize(
         #[case] input: ValueAst,
         #[case] expected: Result<ValueAst, Contradiction>,
@@ -690,10 +692,20 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::sum(ValueAst::term(ValueTerm::Sum(vec![var("b"), ValueTerm::Lit(2), var("a"), ValueTerm::Lit(3)])))]
-    #[case::product(ValueAst::term(ValueTerm::Product(vec![var("b"), var("a")])))]
-    #[case::rel(ValueAst::predicate(ValuePredicate::Rel(var("x"), RelOp::Ge, ValueTerm::Lit(1))))]
-    #[case::or(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(var("y"), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(var("x"), MemOp::NotIn, BTreeSet::from([1, 2]))])))]
+    #[case::undetermined(ValueAst::Undetermined)]
+    #[case::lit(ValueAst::Lit(3))]
+    #[case::litset(ValueAst::lit_set([1, 2, 3]))]
+    #[case::term_var(ValueAst::term(ValueTerm::Var("x".to_string())))]
+    fn test_value_ast_canonicalize_identity(#[case] input: ValueAst) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::sum(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Var("b".to_string()), ValueTerm::Lit(2), ValueTerm::Var("a".to_string()), ValueTerm::Lit(3)])))]
+    #[case::product(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Var("b".to_string()), ValueTerm::Var("a".to_string())])))]
+    #[case::rel(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("x".to_string()), RelOp::Ge, ValueTerm::Lit(1))))]
+    #[case::or(ValueAst::predicate(ValuePredicate::Or(vec![ValuePredicate::Mem(ValueTerm::Var("y".to_string()), MemOp::In, BTreeSet::from([3, 4])), ValuePredicate::Mem(ValueTerm::Var("x".to_string()), MemOp::NotIn, BTreeSet::from([1, 2]))])))]
     fn test_value_ast_canonicalize_idempotent(#[case] input: ValueAst) {
         let once = input.canonicalize().unwrap();
         let twice = once.clone().canonicalize().unwrap();
@@ -706,10 +718,35 @@ mod tests {
     #[case::lit_neg(ValueAst::Lit(-5), Some(-5))]
     #[case::undetermined(ValueAst::Undetermined, None)]
     #[case::litset(ValueAst::lit_set([1, 2]), None)]
-    #[case::term(ValueAst::term(var("x")), None)]
+    #[case::term(ValueAst::term(ValueTerm::Var("x".to_string())), None)]
     fn test_value_ast_as_lit(#[case] ast: ValueAst, #[case] expected: Option<i64>) {
         assert_eq!(ast.as_lit(), expected);
         assert_eq!(ast.is_ground(), expected.is_some());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit_match(ValueAst::Lit(3), 3, true)]
+    #[case::lit_mismatch(ValueAst::Lit(3), 4, false)]
+    #[case::undetermined(ValueAst::Undetermined, 3, false)]
+    #[case::litset(ValueAst::lit_set([1, 2]), 1, false)]
+    fn test_value_ast_as_lit_matches(
+        #[case] ast: ValueAst,
+        #[case] value: i64,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(ast.as_lit_matches(value), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(ValueAst::Undetermined, true)]
+    #[case::lit(ValueAst::Lit(3), false)]
+    #[case::litset(ValueAst::lit_set([1, 2]), false)]
+    #[case::term(ValueAst::var("x"), false)]
+    #[case::predicate(ValueAst::var_at_least("r", 1), false)]
+    fn test_value_ast_is_undetermined(#[case] ast: ValueAst, #[case] expected: bool) {
+        assert_eq!(ast.is_undetermined(), expected);
     }
 
     #[rustfmt::skip]
@@ -723,9 +760,9 @@ mod tests {
     #[case::set_set_multi(ValueAst::lit_set([1, 2, 3]), ValueAst::lit_set([2, 3, 4]), Some(ValueAst::lit_set([2, 3])))]
     #[case::set_set_singleton(ValueAst::lit_set([1, 2]), ValueAst::lit_set([2, 3]), Some(ValueAst::Lit(2)))]
     #[case::set_set_empty(ValueAst::lit_set([1, 2]), ValueAst::lit_set([3, 4]), None)]
-    #[case::term_term_eq(ValueAst::term(var("x")), ValueAst::term(var("x")), Some(ValueAst::term(var("x"))))]
-    #[case::term_term_neq(ValueAst::term(var("x")), ValueAst::term(var("y")), None)]
-    #[case::term_lit(ValueAst::term(var("x")), ValueAst::Lit(5), None)]
+    #[case::term_term_eq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())), Some(ValueAst::term(ValueTerm::Var("x".to_string()))))]
+    #[case::term_term_neq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("y".to_string())), None)]
+    #[case::term_lit(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::Lit(5), None)]
     fn test_value_ast_meet(
         #[case] a: ValueAst,
         #[case] b: ValueAst,
@@ -741,8 +778,8 @@ mod tests {
     #[case::lit_lit_neq(ValueAst::Lit(3), ValueAst::Lit(4), ValueAst::lit_set([3, 4]))]
     #[case::lit_set(ValueAst::Lit(5), ValueAst::lit_set([1, 2, 3]), ValueAst::lit_set([1, 2, 3, 5]))]
     #[case::set_set(ValueAst::lit_set([1, 2]), ValueAst::lit_set([2, 3]), ValueAst::lit_set([1, 2, 3]))]
-    #[case::term_term_eq(ValueAst::term(var("x")), ValueAst::term(var("x")), ValueAst::term(var("x")))]
-    #[case::term_term_neq(ValueAst::term(var("x")), ValueAst::term(var("y")), ValueAst::Undetermined)]
+    #[case::term_term_eq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("x".to_string())))]
+    #[case::term_term_neq(ValueAst::term(ValueTerm::Var("x".to_string())), ValueAst::term(ValueTerm::Var("y".to_string())), ValueAst::Undetermined)]
     fn test_value_ast_join(#[case] a: ValueAst, #[case] b: ValueAst, #[case] expected: ValueAst) {
         assert_eq!(a.join(&b), expected);
     }

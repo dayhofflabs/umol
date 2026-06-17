@@ -116,7 +116,10 @@ pub(crate) fn fmt_value(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result
     }
 }
 
-pub(crate) fn fmt_set(f: &mut fmt::Formatter<'_>, values: impl Iterator<Item = i64>) -> fmt::Result {
+pub(crate) fn fmt_set<T: fmt::Display>(
+    f: &mut fmt::Formatter<'_>,
+    values: impl Iterator<Item = T>,
+) -> fmt::Result {
     f.write_char('{')?;
     for (i, n) in values.enumerate() {
         if i > 0 {
@@ -483,7 +486,13 @@ fn mult_expr(i: &mut &str) -> PResult<Parsed> {
     for (op, rhs) in tail {
         let rhs = require_term(rhs)?;
         acc = match op {
-            '*' => ValueTerm::Product(vec![acc, rhs]),
+            '*' => match acc {
+                ValueTerm::Product(mut factors) => {
+                    factors.push(rhs);
+                    ValueTerm::Product(factors)
+                }
+                other => ValueTerm::Product(vec![other, rhs]),
+            },
             '/' => ValueTerm::Div(Box::new(acc), Box::new(rhs)),
             _ => ValueTerm::Rem(Box::new(acc), Box::new(rhs)),
         };
@@ -525,10 +534,6 @@ mod tests {
 
     use super::*;
 
-    fn var(name: &str) -> ValueTerm {
-        ValueTerm::Var(name.to_string())
-    }
-
     #[rustfmt::skip]
     #[rstest]
     #[case::star("*", ValueAst::Undetermined)]
@@ -538,26 +543,29 @@ mod tests {
     #[case::num_i64_min("-9223372036854775808", ValueAst::Lit(i64::MIN))]
     #[case::set("{0,1,2}", ValueAst::lit_set([0, 1, 2]))]
     #[case::set_spaced("{ 0, 1 ,2}", ValueAst::lit_set([0, 1, 2]))]
-    #[case::var("?h", ValueAst::term(var("h")))]
+    #[case::var("?h", ValueAst::term(ValueTerm::Var("h".to_string())))]
     #[case::sum("1 + 2", ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(2)])))]
     #[case::diff("1 - 2", ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Neg(Box::new(ValueTerm::Lit(2)))])))]
-    #[case::mult("3 * ?h", ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(3), var("h")])))]
+    #[case::mult("3 * ?h", ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(3), ValueTerm::Var("h".to_string())])))]
     #[case::div("10 / 3", ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))))]
     #[case::rem("10 % 3", ValueAst::term(ValueTerm::Rem(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))))]
-    #[case::neg_var("-?x", ValueAst::term(ValueTerm::Neg(Box::new(var("x")))))]
-    #[case::rel_eq("?h == 0", ValueAst::predicate(ValuePredicate::Rel(var("h"), RelOp::Eq, ValueTerm::Lit(0))))]
-    #[case::rel_ne("?h != 0", ValueAst::predicate(ValuePredicate::Rel(var("h"), RelOp::Ne, ValueTerm::Lit(0))))]
-    #[case::rel_ge("?h >= 1", ValueAst::predicate(ValuePredicate::Rel(var("h"), RelOp::Ge, ValueTerm::Lit(1))))]
-    #[case::mem_in("?h :: {0,1}", ValueAst::predicate(ValuePredicate::Mem(var("h"), MemOp::In, BTreeSet::from([0, 1]))))]
-    #[case::mem_notin("?h !: {0,1}", ValueAst::predicate(ValuePredicate::Mem(var("h"), MemOp::NotIn, BTreeSet::from([0, 1]))))]
-    #[case::not("!?h == 0", ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(var("h"), RelOp::Eq, ValueTerm::Lit(0))))))]
+    #[case::neg_var("-?x", ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Var("x".to_string())))))]
+    #[case::rel_eq("?h == 0", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))))]
+    #[case::rel_ne("?h != 0", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ne, ValueTerm::Lit(0))))]
+    #[case::rel_ge("?h >= 1", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))))]
+    #[case::rel_le("?h <= 1", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Le, ValueTerm::Lit(1))))]
+    #[case::rel_lt("?h < 0", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Lt, ValueTerm::Lit(0))))]
+    #[case::rel_gt("?h > 0", ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Gt, ValueTerm::Lit(0))))]
+    #[case::mem_in("?h :: {0,1}", ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1]))))]
+    #[case::mem_notin("?h !: {0,1}", ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))))]
+    #[case::not("!?h == 0", ValueAst::predicate(ValuePredicate::Not(Box::new(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))))))]
     #[case::and("?h == 0 & ?v == 1", ValueAst::predicate(ValuePredicate::And(vec![
-        ValuePredicate::Rel(var("h"), RelOp::Eq, ValueTerm::Lit(0)),
-        ValuePredicate::Rel(var("v"), RelOp::Eq, ValueTerm::Lit(1)),
+        ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
+        ValuePredicate::Rel(ValueTerm::Var("v".to_string()), RelOp::Eq, ValueTerm::Lit(1)),
     ])))]
     #[case::or("?h == 0 | ?v == 1", ValueAst::predicate(ValuePredicate::Or(vec![
-        ValuePredicate::Rel(var("h"), RelOp::Eq, ValueTerm::Lit(0)),
-        ValuePredicate::Rel(var("v"), RelOp::Eq, ValueTerm::Lit(1)),
+        ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
+        ValuePredicate::Rel(ValueTerm::Var("v".to_string()), RelOp::Eq, ValueTerm::Lit(1)),
     ])))]
     #[case::paren_arith("(0 + 1) * 1", ValueAst::term(ValueTerm::Product(vec![
         ValueTerm::Sum(vec![ValueTerm::Lit(0), ValueTerm::Lit(1)]),
@@ -589,20 +597,26 @@ mod tests {
     #[case::undetermined(ValueAst::Undetermined, "*")]
     #[case::lit_neg(ValueAst::Lit(-3), "-3")]
     #[case::set(ValueAst::lit_set([0, 1, 2]), "{0,1,2}")]
-    #[case::term_var(ValueAst::term(var("h")), "?h")]
-    #[case::term_neg(ValueAst::term(ValueTerm::Neg(Box::new(var("x")))), "-?x")]
+    #[case::term_var(ValueAst::term(ValueTerm::Var("h".to_string())), "?h")]
+    #[case::term_neg(ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Var("x".to_string())))), "-?x")]
     #[case::term_sum(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(2)])), "1 + 2")]
-    #[case::term_mul(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(3), var("h")])), "3 * ?h")]
-    #[case::pred_rel(ValueAst::predicate(ValuePredicate::Rel(var("h"), RelOp::Eq, ValueTerm::Lit(0))), "?h == 0")]
-    #[case::pred_ne(ValueAst::predicate(ValuePredicate::Rel(var("h"), RelOp::Ne, ValueTerm::Lit(0))), "?h != 0")]
-    #[case::pred_mem(ValueAst::predicate(ValuePredicate::Mem(var("h"), MemOp::In, BTreeSet::from([0, 1, 2]))), "?h :: {0,1,2}")]
-    #[case::pred_mem_notin(ValueAst::predicate(ValuePredicate::Mem(var("h"), MemOp::NotIn, BTreeSet::from([0, 1]))), "?h !: {0,1}")]
+    #[case::term_mul(ValueAst::term(ValueTerm::Product(vec![ValueTerm::Lit(3), ValueTerm::Var("h".to_string())])), "3 * ?h")]
+    #[case::term_div(ValueAst::term(ValueTerm::Div(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), "10 / 3")]
+    #[case::term_rem(ValueAst::term(ValueTerm::Rem(Box::new(ValueTerm::Lit(10)), Box::new(ValueTerm::Lit(3)))), "10 % 3")]
+    #[case::pred_rel(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))), "?h == 0")]
+    #[case::pred_ne(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ne, ValueTerm::Lit(0))), "?h != 0")]
+    #[case::pred_lt(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Lt, ValueTerm::Lit(0))), "?h < 0")]
+    #[case::pred_le(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Le, ValueTerm::Lit(1))), "?h <= 1")]
+    #[case::pred_gt(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Gt, ValueTerm::Lit(0))), "?h > 0")]
+    #[case::pred_ge(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))), "?h >= 1")]
+    #[case::pred_mem(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::In, BTreeSet::from([0, 1, 2]))), "?h :: {0,1,2}")]
+    #[case::pred_mem_notin(ValueAst::predicate(ValuePredicate::Mem(ValueTerm::Var("h".to_string()), MemOp::NotIn, BTreeSet::from([0, 1]))), "?h !: {0,1}")]
     #[case::pred_and_of_or(ValueAst::predicate(ValuePredicate::And(vec![
         ValuePredicate::Or(vec![
-            ValuePredicate::Rel(var("a"), RelOp::Eq, ValueTerm::Lit(0)),
-            ValuePredicate::Rel(var("b"), RelOp::Eq, ValueTerm::Lit(0)),
+            ValuePredicate::Rel(ValueTerm::Var("a".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
+            ValuePredicate::Rel(ValueTerm::Var("b".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
         ]),
-        ValuePredicate::Rel(var("c"), RelOp::Eq, ValueTerm::Lit(0)),
+        ValuePredicate::Rel(ValueTerm::Var("c".to_string()), RelOp::Eq, ValueTerm::Lit(0)),
     ])), "(?a == 0 | ?b == 0) & ?c == 0")]
     fn test_value_display(#[case] input: ValueAst, #[case] expected: &str) {
         assert_eq!(ValueDsl::from_ast(&input, &()).to_string(), expected);
@@ -617,8 +631,14 @@ mod tests {
     #[case::add("1 + 2")]
     #[case::sub("1 + -2")]
     #[case::mul_of_add("(0 + 1) * 1")]
+    #[case::div("10 / 3")]
+    #[case::rem("10 % 3")]
     #[case::rel("?h == 0")]
     #[case::ne("?h != 0")]
+    #[case::lt("?h < 0")]
+    #[case::le("?h <= 1")]
+    #[case::gt("?h > 0")]
+    #[case::ge("?h >= 1")]
     #[case::not("!?h == 0")]
     #[case::and("?h == 0 & ?v == 1")]
     #[case::or("?h == 0 | ?v == 1")]
@@ -637,9 +657,9 @@ mod tests {
     #[case::lit(ValueAst::Lit(4), Edn::Int(4))]
     #[case::undetermined(ValueAst::Undetermined, Edn::Keyword(EdnKeyword::owned("undetermined".into())))]
     #[case::set(ValueAst::lit_set([1, 2, 3]), Edn::Vector(vec![Edn::Int(1), Edn::Int(2), Edn::Int(3)].into()))]
-    #[case::term_var(ValueAst::term(var("h")), Edn::Str(Cow::Borrowed("?h")))]
+    #[case::term_var(ValueAst::term(ValueTerm::Var("h".to_string())), Edn::Str(Cow::Borrowed("?h")))]
     #[case::pred_rel(
-        ValueAst::predicate(ValuePredicate::Rel(var("h"), RelOp::Eq, ValueTerm::Lit(0))),
+        ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))),
         Edn::Str(Cow::Borrowed("?h == 0")),
     )]
     fn test_value_dsl_to_edn(#[case] v: ValueAst, #[case] expected: Edn<'static>) {
@@ -656,7 +676,7 @@ mod tests {
     #[case::str_set(Edn::Str(Cow::Borrowed("{1,2}")), ValueAst::lit_set([1, 2]))]
     #[case::str_pred(
         Edn::Str(Cow::Borrowed("?h == 0")),
-        ValueAst::predicate(ValuePredicate::Rel(var("h"), RelOp::Eq, ValueTerm::Lit(0))),
+        ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Eq, ValueTerm::Lit(0))),
     )]
     fn test_value_dsl_from_edn(#[case] input: Edn<'static>, #[case] expected: ValueAst) {
         use umol_edn::FromEdn;
@@ -675,7 +695,7 @@ mod tests {
     #[case::lit(ValueAst::Lit(3))]
     #[case::undetermined(ValueAst::Undetermined)]
     #[case::set(ValueAst::lit_set([1, 2, 3]))]
-    #[case::pred(ValueAst::predicate(ValuePredicate::Rel(var("h"), RelOp::Ge, ValueTerm::Lit(1))))]
+    #[case::pred(ValueAst::predicate(ValuePredicate::Rel(ValueTerm::Var("h".to_string()), RelOp::Ge, ValueTerm::Lit(1))))]
     fn test_value_dsl_edn_roundtrip(#[case] v: ValueAst) {
         use umol_edn::{FromEdn, ToEdn};
         let edn = ValueDsl::from_ast(&v, &()).to_edn();
