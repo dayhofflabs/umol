@@ -1039,6 +1039,7 @@ mod tests {
         #[case] expected: Option<i64>,
     ) {
         assert_eq!(v.as_lit(), expected);
+        assert_eq!(v.is_ground(), expected.is_some());
     }
 
     #[rstest]
@@ -1081,6 +1082,37 @@ mod tests {
     #[case::aromatic_zero(AromaticValenceAst::aromatic(0))]
     fn test_aromatic_valence_ast_canonicalize_identity(#[case] input: AromaticValenceAst) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und_aromatic(AromaticValenceAst::Undetermined, AromaticValenceAst::aromatic(1), Some(AromaticValenceAst::aromatic(1)))]
+    #[case::not_not(AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic, Some(AromaticValenceAst::NotAromatic))]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::aromatic(1), None)]
+    #[case::aromatic_eq(AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1), Some(AromaticValenceAst::aromatic(1)))]
+    #[case::aromatic_neq(AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(2), None)]
+    #[case::aromatic_inner_wildcard(AromaticValenceAst::Aromatic(ValueAst::Undetermined), AromaticValenceAst::aromatic(2), Some(AromaticValenceAst::aromatic(2)))]
+    fn test_aromatic_valence_ast_meet(
+        #[case] a: AromaticValenceAst,
+        #[case] b: AromaticValenceAst,
+        #[case] expected: Option<AromaticValenceAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und(AromaticValenceAst::Undetermined, AromaticValenceAst::aromatic(1), AromaticValenceAst::Undetermined)]
+    #[case::not_not(AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic)]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::aromatic(1), AromaticValenceAst::Undetermined)]
+    #[case::aromatic_eq(AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1), AromaticValenceAst::aromatic(1))]
+    #[case::aromatic_inner_wildcard(AromaticValenceAst::Aromatic(ValueAst::Undetermined), AromaticValenceAst::aromatic(1), AromaticValenceAst::Aromatic(ValueAst::Undetermined))]
+    fn test_aromatic_valence_ast_join(
+        #[case] a: AromaticValenceAst,
+        #[case] b: AromaticValenceAst,
+        #[case] expected: AromaticValenceAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 
     #[rstest]
@@ -1183,6 +1215,7 @@ mod tests {
         #[case] expected: Option<i64>,
     ) {
         assert_eq!(v.as_lit(), expected);
+        assert_eq!(v.is_ground(), expected.is_some());
     }
 
     #[rustfmt::skip]
@@ -1223,6 +1256,37 @@ mod tests {
     #[case::multicenter_zero(MulticenterValenceAst::multicenter(0))]
     fn test_multicenter_valence_ast_canonicalize_identity(#[case] input: MulticenterValenceAst) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und_multicenter(MulticenterValenceAst::Undetermined, MulticenterValenceAst::multicenter(2), Some(MulticenterValenceAst::multicenter(2)))]
+    #[case::not_not(MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::NotMulticenter, Some(MulticenterValenceAst::NotMulticenter))]
+    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::multicenter(2), None)]
+    #[case::multicenter_eq(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(2), Some(MulticenterValenceAst::multicenter(2)))]
+    #[case::multicenter_neq(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(3), None)]
+    #[case::multicenter_inner_wildcard(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), MulticenterValenceAst::multicenter(3), Some(MulticenterValenceAst::multicenter(3)))]
+    fn test_multicenter_valence_ast_meet(
+        #[case] a: MulticenterValenceAst,
+        #[case] b: MulticenterValenceAst,
+        #[case] expected: Option<MulticenterValenceAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und(MulticenterValenceAst::Undetermined, MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Undetermined)]
+    #[case::not_not(MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::NotMulticenter)]
+    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Undetermined)]
+    #[case::multicenter_eq(MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(2), MulticenterValenceAst::multicenter(2))]
+    #[case::multicenter_inner_wildcard(MulticenterValenceAst::Multicenter(ValueAst::Undetermined), MulticenterValenceAst::multicenter(2), MulticenterValenceAst::Multicenter(ValueAst::Undetermined))]
+    fn test_multicenter_valence_ast_join(
+        #[case] a: MulticenterValenceAst,
+        #[case] b: MulticenterValenceAst,
+        #[case] expected: MulticenterValenceAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 
     #[rustfmt::skip]

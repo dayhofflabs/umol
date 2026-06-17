@@ -110,12 +110,56 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case(SpinStateAst::default(), false)]
-    #[case(spin!("#u2").into(), true)]
-    #[case((2, 3).into(), true)]
-    #[case(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, false)]
+    #[case::default_undetermined(SpinStateAst::default(), false)]
+    #[case::from_dsl(spin!("#u2").into(), true)]
+    #[case::from_pair((2, 3).into(), true)]
+    #[case::partial(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, false)]
     fn test_spin_state_ast_is_ground(#[case] ast: SpinStateAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::both_undetermined(SpinStateAst::default(), true)]
+    #[case::ground((2_u8, 3_u8).into(), false)]
+    #[case::partial(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, false)]
+    fn test_spin_state_ast_is_undetermined(#[case] ast: SpinStateAst, #[case] expected: bool) {
+        assert_eq!(ast.is_undetermined(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und_ground(SpinStateAst::default(), (2_u8, 3_u8).into(), Some((2_u8, 3_u8).into()))]
+    #[case::exact((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), Some((2_u8, 3_u8).into()))]
+    #[case::unpaired_conflict((2_u8, 3_u8).into(), (0_u8, 1_u8).into(), None)]
+    #[case::field_wise(
+        SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) },
+        SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined },
+        Some((2_u8, 3_u8).into()),
+    )]
+    fn test_spin_state_ast_meet(
+        #[case] a: SpinStateAst,
+        #[case] b: SpinStateAst,
+        #[case] expected: Option<SpinStateAst>,
+    ) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und((2_u8, 3_u8).into(), SpinStateAst::default(), SpinStateAst::default())]
+    #[case::exact((2_u8, 3_u8).into(), (2_u8, 3_u8).into(), (2_u8, 3_u8).into())]
+    #[case::field_wise_widen(
+        (2_u8, 3_u8).into(),
+        SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(1) },
+        SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::lit_set([1, 3]) },
+    )]
+    fn test_spin_state_ast_join(
+        #[case] a: SpinStateAst,
+        #[case] b: SpinStateAst,
+        #[case] expected: SpinStateAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
     }
 
     #[rustfmt::skip]
@@ -158,22 +202,22 @@ mod tests {
         assert_eq!(ast.as_lit(), expected);
     }
 
-    #[test]
+    #[rstest]
     fn test_spin_state_ast_from_spin_state() {
         let ast: SpinStateAst = spin!("#u2").into();
         assert_eq!(ast.unpaired, ValueAst::Lit(2));
         assert_eq!(ast.multiplicity, ValueAst::Lit(3));
     }
 
-    #[test]
+    #[rstest]
     fn test_spin_state_ast_closed_shell() {
         let ast = SpinStateAst::closed_shell();
         assert_eq!(ast.unpaired, ValueAst::Lit(0));
         assert_eq!(ast.multiplicity, ValueAst::Lit(1));
     }
 
-    #[test]
-    fn test_spin_state_from_str_roundtrip() {
+    #[rstest]
+    fn test_spin_state_ast_from_str_roundtrip() {
         let s = SpinState::from_str("#u0#s1").unwrap();
         let ast: SpinStateAst = s.into();
         assert_eq!(ast, SpinStateAst::closed_shell());
