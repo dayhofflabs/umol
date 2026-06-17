@@ -1,7 +1,8 @@
 //! Stereo-element constraints.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::mem::{self, replace};
 use std::slice::Iter;
 
@@ -9,11 +10,12 @@ use smallvec::SmallVec;
 use strum::VariantArray;
 use umol_perm::{Orientation, Permutation};
 
+use super::super::error::Contradiction;
 use super::super::ids::StereoLigandId;
 use super::super::operators::MemOp;
 use super::super::remap::IdRemapping;
 use super::super::stereo::{Stereogenicity, Topicity};
-use super::super::traits::{AsLit, Lattice};
+use super::super::traits::{AsLit, Canonicalize, Lattice};
 
 /// A concrete permutation literal. A thin wrapper hosting AST-side impls that the
 /// foreign `Permutation` cannot carry. Not a lattice — a single permutation has no top, so no `join`.
@@ -77,30 +79,30 @@ impl LigandPairAst {
 /// Generates a subset-lattice over finite domain enum.
 macro_rules! relation_ast {
     ($name:ident, $domain:ty) => {
-        #[derive(Clone, Debug, Default)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
         pub enum $name {
             #[default]
             Undetermined,
             Lit($domain),
-            LitSet(Vec<$domain>),
-            NotSet(Vec<$domain>),
+            LitSet(BTreeSet<$domain>),
+            NotSet(BTreeSet<$domain>),
         }
 
         impl $name {
+            /// The semantic set of admissible domain values.
             pub(crate) fn to_set(&self) -> BTreeSet<$domain> {
                 let domain = || <$domain as VariantArray>::VARIANTS.iter().copied();
                 match self {
                     Self::Undetermined => domain().collect(),
                     Self::Lit(t) => BTreeSet::from([*t]),
-                    Self::LitSet(values) => values.iter().copied().collect(),
-                    Self::NotSet(values) => {
-                        let excluded: BTreeSet<$domain> = values.iter().copied().collect();
-                        domain().filter(|t| !excluded.contains(t)).collect()
-                    }
+                    Self::LitSet(values) => values.clone(),
+                    Self::NotSet(values) => domain().filter(|t| !values.contains(t)).collect(),
                 }
             }
 
-            /// The canonical relation for a set of domain values; `None` if empty.
+            /// The canonical relation for a set of admissible values; `None` if empty.
+            /// Singleton → `Lit`, full → `Undetermined`, else the smaller of
+            /// positive/complement (tiebreak positive).
             pub(crate) fn from_set(set: BTreeSet<$domain>) -> Option<Self> {
                 let domain: BTreeSet<$domain> = <$domain as VariantArray>::VARIANTS
                     .iter()
@@ -113,9 +115,9 @@ macro_rules! relation_ast {
                 } else if set.len() == 1 {
                     Some(Self::Lit(set.into_iter().next().unwrap()))
                 } else {
-                    let complement: Vec<$domain> = domain.difference(&set).copied().collect();
+                    let complement: BTreeSet<$domain> = domain.difference(&set).copied().collect();
                     if set.len() <= complement.len() {
-                        Some(Self::LitSet(set.into_iter().collect()))
+                        Some(Self::LitSet(set))
                     } else {
                         Some(Self::NotSet(complement))
                     }
@@ -123,29 +125,31 @@ macro_rules! relation_ast {
             }
         }
 
-        impl PartialEq for $name {
-            fn eq(&self, other: &Self) -> bool {
-                self.to_set() == other.to_set()
+        impl Canonicalize for $name {
+            /// Finite-domain canonical form: sort/dedup (`BTreeSet`), singleton → `Lit`,
+            /// full → `Undetermined`, empty → `Err`, polarity (store the smaller side).
+            fn canonicalize(self) -> Result<Self, Contradiction> {
+                Self::from_set(self.to_set()).ok_or(Contradiction)
             }
-        }
 
-        impl Eq for $name {}
-
-        impl Hash for $name {
-            fn hash<H: Hasher>(&self, state: &mut H) {
-                self.to_set().hash(state);
+            fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+                match self {
+                    Self::Undetermined | Self::Lit(_) => Ok(Cow::Borrowed(self)),
+                    _ => Ok(Cow::Owned(self.clone().canonicalize()?)),
+                }
             }
         }
 
         impl Lattice for $name {
             fn is_undetermined(&self) -> bool {
-                self.to_set().len() == <$domain as VariantArray>::VARIANTS.len()
+                matches!(self, Self::Undetermined)
             }
 
             fn is_ground(&self) -> bool {
-                self.to_set().len() == 1
+                matches!(self, Self::Lit(_))
             }
 
+            /// Intersection of the admissible sets, canonicalized (∅ → `None`).
             fn meet(&self, other: &Self) -> Option<Self> {
                 Self::from_set(
                     self.to_set()
@@ -169,11 +173,9 @@ macro_rules! relation_ast {
             type Lit = $domain;
 
             fn as_lit(&self) -> Option<$domain> {
-                let set = self.to_set();
-                if set.len() == 1 {
-                    set.into_iter().next()
-                } else {
-                    None
+                match self {
+                    Self::Lit(t) => Some(*t),
+                    _ => None,
                 }
             }
         }
@@ -181,7 +183,7 @@ macro_rules! relation_ast {
 }
 
 relation_ast! { TopicityRelationAst, Topicity }
-relation_ast! { StereogenicityRelationAst, Stereogenicity }
+relation_ast! { StereogenicityAst, Stereogenicity }
 
 /// Ligand permutations with membership assertion. Non-unique.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -215,67 +217,12 @@ pub struct TopicityAst {
     pub rel: TopicityRelationAst,
 }
 
-impl Lattice for TopicityAst {
-    fn is_undetermined(&self) -> bool {
-        self.rel.is_undetermined()
-    }
-
-    fn is_ground(&self) -> bool {
-        self.rel.is_ground()
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        debug_assert_eq!(self.pair, other.pair, "topicity meet is per-pair");
-        self.rel.meet(&other.rel).map(|rel| Self {
-            pair: self.pair,
-            rel,
-        })
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        debug_assert_eq!(self.pair, other.pair, "topicity join is per-pair");
-        Self {
-            pair: self.pair,
-            rel: self.rel.join(&other.rel),
-        }
-    }
-
-    fn matches(&self, target: &Self) -> bool {
+impl TopicityAst {
+    /// Matches-only (not a `Lattice`): different pairs are incomparable, so there
+    /// is no global top. `matches` = same `pair` and the per-pair `rel` matches;
+    /// the per-pair lattice lives in [`TopicityRelationAst`].
+    pub fn matches(&self, target: &Self) -> bool {
         self.pair == target.pair && self.rel.matches(&target.rel)
-    }
-}
-
-/// Stereogenicity constraint per site
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct StereogenicityAst(pub StereogenicityRelationAst);
-
-impl Lattice for StereogenicityAst {
-    fn is_undetermined(&self) -> bool {
-        self.0.is_undetermined()
-    }
-
-    fn is_ground(&self) -> bool {
-        self.0.is_ground()
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        self.0.meet(&other.0).map(Self)
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        Self(self.0.join(&other.0))
-    }
-
-    fn matches(&self, target: &Self) -> bool {
-        self.0.matches(&target.0)
-    }
-}
-
-impl AsLit for StereogenicityAst {
-    type Lit = Stereogenicity;
-
-    fn as_lit(&self) -> Option<Stereogenicity> {
-        self.0.as_lit()
     }
 }
 
@@ -316,7 +263,7 @@ macro_rules! stereo_constraint {
             pub fn is_undetermined(&self) -> bool {
                 match self {
                     Self::LigandSymmetry(_) | Self::Fluxionality(_) => false,
-                    Self::Topicity(t) => t.is_undetermined(),
+                    Self::Topicity(t) => t.rel.is_undetermined(),
                     Self::Stereogenicity(g) => g.is_undetermined(),
                 }
             }
@@ -387,10 +334,10 @@ macro_rules! stereo_constraint {
             }
 
             /// Stored stereogenicity relation (unique); `Undetermined` if absent.
-            pub fn stereogenicity(&self) -> StereogenicityRelationAst {
+            pub fn stereogenicity(&self) -> StereogenicityAst {
                 match self.get($kind::Stereogenicity) {
-                    Some($constraint::Stereogenicity(g)) => g.0.clone(),
-                    _ => StereogenicityRelationAst::Undetermined,
+                    Some($constraint::Stereogenicity(g)) => g.clone(),
+                    _ => StereogenicityAst::Undetermined,
                 }
             }
 
@@ -512,7 +459,7 @@ macro_rules! stereo_constraint {
             fn is_ground(&self) -> bool {
                 self.entries.iter().all(|c| match c {
                     $constraint::LigandSymmetry(_) | $constraint::Fluxionality(_) => true,
-                    $constraint::Topicity(t) => t.is_ground(),
+                    $constraint::Topicity(t) => t.rel.is_ground(),
                     $constraint::Stereogenicity(g) => g.is_ground(),
                 })
             }
@@ -544,7 +491,7 @@ macro_rules! stereo_constraint {
                 }
                 let g = self.stereogenicity().meet(&other.stereogenicity())?;
                 if !g.is_undetermined() {
-                    result.add($constraint::Stereogenicity(StereogenicityAst(g)));
+                    result.add($constraint::Stereogenicity(g));
                 }
                 Some(result)
             }
@@ -575,7 +522,7 @@ macro_rules! stereo_constraint {
                 if self.contains($kind::Stereogenicity) && other.contains($kind::Stereogenicity) {
                     let g = self.stereogenicity().join(&other.stereogenicity());
                     if !g.is_undetermined() {
-                        result.add($constraint::Stereogenicity(StereogenicityAst(g)));
+                        result.add($constraint::Stereogenicity(g));
                     }
                 }
                 result
@@ -688,59 +635,94 @@ mod tests {
         assert_eq!(pair.second(), second);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_topicity_relation_ast_as_lit() {
-        assert_eq!(
-            TopicityRelationAst::Lit(Topicity::Homotopic).as_lit(),
-            Some(Topicity::Homotopic),
-        );
-        assert_eq!(TopicityRelationAst::Undetermined.as_lit(), None);
-        // NotSet([H]) denotes {E,D} — not a singleton.
-        assert_eq!(
-            TopicityRelationAst::NotSet(vec![Topicity::Homotopic]).as_lit(),
-            None,
-        );
+    #[case::singleton_to_lit(TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic])), Ok(TopicityRelationAst::Lit(Topicity::Homotopic)))]
+    #[case::litset_polarity_to_notset(TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), Ok(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic]))))]
+    #[case::full_litset_to_undetermined(TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), Ok(TopicityRelationAst::Undetermined))]
+    #[case::empty_litset_err(TopicityRelationAst::LitSet(BTreeSet::new()), Err(Contradiction))]
+    #[case::notset_complement_to_lit(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), Ok(TopicityRelationAst::Lit(Topicity::Diastereotopic)))]
+    #[case::empty_notset_to_undetermined(TopicityRelationAst::NotSet(BTreeSet::new()), Ok(TopicityRelationAst::Undetermined))]
+    #[case::full_notset_err(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic, Topicity::Diastereotopic])), Err(Contradiction))]
+    fn test_topicity_relation_ast_canonicalize(
+        #[case] input: TopicityRelationAst,
+        #[case] expected: Result<TopicityRelationAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rstest]
-    #[case::lit_set_eq_complement_not_set(
-        TopicityRelationAst::LitSet(vec![Topicity::Homotopic, Topicity::Enantiotopic]),
-        TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic]),
-    )]
-    #[case::full_set_eq_undetermined(
-        TopicityRelationAst::LitSet(vec![
-            Topicity::Homotopic,
-            Topicity::Enantiotopic,
-            Topicity::Diastereotopic,
-        ]),
-        TopicityRelationAst::Undetermined,
-    )]
-    fn test_topicity_relation_ast_eq(
+    #[case::undetermined(TopicityRelationAst::Undetermined)]
+    #[case::lit(TopicityRelationAst::Lit(Topicity::Homotopic))]
+    #[case::notset(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])))]
+    fn test_topicity_relation_ast_canonicalize_identity(#[case] input: TopicityRelationAst) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(TopicityRelationAst::Lit(Topicity::Homotopic), Some(Topicity::Homotopic))]
+    #[case::undetermined(TopicityRelationAst::Undetermined, None)]
+    #[case::notset(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])), None)]
+    #[case::litset(TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])), None)]
+    fn test_topicity_relation_ast_as_lit(#[case] r: TopicityRelationAst, #[case] expected: Option<Topicity>) {
+        assert_eq!(r.as_lit(), expected);
+        assert_eq!(r.is_ground(), expected.is_some());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(TopicityRelationAst::Undetermined, true)]
+    #[case::lit(TopicityRelationAst::Lit(Topicity::Homotopic), false)]
+    #[case::notset(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])), false)]
+    fn test_topicity_relation_ast_is_undetermined(#[case] r: TopicityRelationAst, #[case] expected: bool) {
+        assert_eq!(r.is_undetermined(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und_lit(TopicityRelationAst::Undetermined, TopicityRelationAst::Lit(Topicity::Homotopic), Some(TopicityRelationAst::Lit(Topicity::Homotopic)))]
+    #[case::lit_eq(TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Lit(Topicity::Homotopic), Some(TopicityRelationAst::Lit(Topicity::Homotopic)))]
+    #[case::lit_disjoint(TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Lit(Topicity::Enantiotopic), None)]
+    #[case::lit_notset_in(TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])), Some(TopicityRelationAst::Lit(Topicity::Homotopic)))]
+    #[case::lit_notset_out(TopicityRelationAst::Lit(Topicity::Diastereotopic), TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])), None)]
+    #[case::notset_notset_to_lit(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Enantiotopic])), Some(TopicityRelationAst::Lit(Topicity::Homotopic)))]
+    fn test_topicity_relation_ast_meet(
         #[case] a: TopicityRelationAst,
         #[case] b: TopicityRelationAst,
+        #[case] expected: Option<TopicityRelationAst>,
     ) {
-        assert_eq!(a, b);
+        assert_eq!(a.meet(&b), expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    fn test_topicity_relation_ast_lattice() {
-        let h = TopicityRelationAst::Lit(Topicity::Homotopic);
-        let e = TopicityRelationAst::Lit(Topicity::Enantiotopic);
-        assert_eq!(h.meet(&h), Some(h.clone()));
-        assert_eq!(h.meet(&e), None); // disjoint singletons ⇒ contradiction
-        assert_eq!(TopicityRelationAst::Undetermined.meet(&h), Some(h.clone()));
-        // {H} ∪ {E} = {H,E}, canonically NotSet([D]) on a 3-domain.
-        assert_eq!(
-            h.join(&e),
-            TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic])
-        );
-        assert!(TopicityRelationAst::Undetermined.matches(&h));
-        assert!(h.matches(&h));
-        assert!(!h.matches(&e));
-        assert!(h.is_ground());
-        assert!(!TopicityRelationAst::Undetermined.is_ground());
-        assert!(TopicityRelationAst::Undetermined.is_undetermined());
-        assert!(!h.is_undetermined());
+    #[case::und(TopicityRelationAst::Undetermined, TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Undetermined)]
+    #[case::lit_eq(TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Lit(Topicity::Homotopic))]
+    #[case::lit_union_to_notset(TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Lit(Topicity::Enantiotopic), TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])))]
+    #[case::lit_notset_to_full(TopicityRelationAst::Lit(Topicity::Diastereotopic), TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationAst::Undetermined)]
+    fn test_topicity_relation_ast_join(
+        #[case] a: TopicityRelationAst,
+        #[case] b: TopicityRelationAst,
+        #[case] expected: TopicityRelationAst,
+    ) {
+        assert_eq!(a.join(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::und_lit(TopicityRelationAst::Undetermined, TopicityRelationAst::Lit(Topicity::Homotopic), true)]
+    #[case::lit_und(TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Undetermined, false)]
+    #[case::lit_eq(TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Lit(Topicity::Homotopic), true)]
+    #[case::lit_neq(TopicityRelationAst::Lit(Topicity::Homotopic), TopicityRelationAst::Lit(Topicity::Enantiotopic), false)]
+    #[case::notset_in(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationAst::Lit(Topicity::Homotopic), true)]
+    #[case::notset_out(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])), TopicityRelationAst::Lit(Topicity::Diastereotopic), false)]
+    fn test_topicity_relation_ast_matches(
+        #[case] pattern: TopicityRelationAst,
+        #[case] target: TopicityRelationAst,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(pattern.matches(&target), expected);
     }
 
     #[rstest]
@@ -789,7 +771,7 @@ mod tests {
     }
 
     #[rstest]
-    fn test_topicity_ast_lattice() {
+    fn test_topicity_ast_matches() {
         let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
         let h = TopicityAst {
             pair,
@@ -803,13 +785,9 @@ mod tests {
             pair,
             rel: TopicityRelationAst::Undetermined,
         };
-        assert_eq!(h.meet(&e), None); // disjoint relations on the same pair
-        assert_eq!(open.meet(&h), Some(h.clone()));
         assert!(open.matches(&h));
         assert!(h.matches(&h));
         assert!(!h.matches(&e));
-        assert!(h.is_ground());
-        assert!(open.is_undetermined());
         // A constraint on a different pair never matches.
         let elsewhere = TopicityAst {
             pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(2)),
@@ -818,15 +796,30 @@ mod tests {
         assert!(!elsewhere.matches(&h));
     }
 
+    // `StereogenicityAst` is the second `relation_ast!` instantiation; the macro's
+    // full lattice/canonicalize logic is covered by the `TopicityRelationAst` tests
+    // above and `test_stereogenicity_ast_lattice_laws` (property). These confirm the
+    // instantiation over the `Stereogenicity` domain.
+    #[rustfmt::skip]
     #[rstest]
-    fn test_stereogenicity_ast_lattice_and_as_lit() {
-        let g = StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic));
-        let open = StereogenicityAst(StereogenicityRelationAst::Undetermined);
-        assert_eq!(g.as_lit(), Some(Stereogenicity::Stereogenic));
-        assert_eq!(open.as_lit(), None);
-        assert_eq!(open.meet(&g), Some(g.clone()));
-        assert!(open.matches(&g));
-        assert!(g.is_ground());
+    #[case::lit(StereogenicityAst::Lit(Stereogenicity::Stereogenic), Some(Stereogenicity::Stereogenic))]
+    #[case::undetermined(StereogenicityAst::Undetermined, None)]
+    #[case::notset(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Stereogenic])), None)]
+    fn test_stereogenicity_ast_as_lit(#[case] g: StereogenicityAst, #[case] expected: Option<Stereogenicity>) {
+        assert_eq!(g.as_lit(), expected);
+        assert_eq!(g.is_ground(), expected.is_some());
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::singleton_to_lit(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Stereogenic])), Ok(StereogenicityAst::Lit(Stereogenicity::Stereogenic)))]
+    #[case::full_to_undetermined(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Symmetric, Stereogenicity::Prochiral, Stereogenicity::Stereogenic])), Ok(StereogenicityAst::Undetermined))]
+    #[case::empty_err(StereogenicityAst::LitSet(BTreeSet::new()), Err(Contradiction))]
+    fn test_stereogenicity_ast_canonicalize(
+        #[case] input: StereogenicityAst,
+        #[case] expected: Result<StereogenicityAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rstest]
@@ -852,11 +845,11 @@ mod tests {
     )]
     #[case::unique_replace(
         vec![
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Undetermined)),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic))),
+            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined),
+            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ],
-        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic)))],
-        Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Undetermined))),
+        vec![StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))],
+        Some(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Undetermined)),
     )]
     #[case::keyed_replace(
         vec![
@@ -879,7 +872,7 @@ mod tests {
     )]
     #[case::kind_sorted(
         vec![
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic))),
+            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
             StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
             StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])) }),
             StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
@@ -888,7 +881,7 @@ mod tests {
             StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
             StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])) }),
             StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic))),
+            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ],
         None,
     )]
@@ -928,7 +921,7 @@ mod tests {
         a.add(StereoAtomConstraint::LigandSymmetry(p1));
         a.add(StereoAtomConstraint::Topicity(TopicityAst {
             pair,
-            rel: TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic]),
+            rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])),
         }));
 
         let mut b = StereoAtomConstraints::new();
@@ -936,11 +929,9 @@ mod tests {
         b.add(StereoAtomConstraint::LigandSymmetry(p2));
         b.add(StereoAtomConstraint::Topicity(TopicityAst {
             pair,
-            rel: TopicityRelationAst::NotSet(vec![Topicity::Homotopic]),
+            rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])),
         }));
-        b.add(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
-            StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
-        )));
+        b.add(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)));
 
         let m = a.meet(&b).unwrap();
         // #p union+dedup.
@@ -956,7 +947,7 @@ mod tests {
         // #g carried through from the side that has it.
         assert_eq!(
             m.stereogenicity(),
-            StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
+            StereogenicityAst::Lit(Stereogenicity::Stereogenic),
         );
     }
 
@@ -1016,7 +1007,7 @@ mod tests {
         // #o per-pair value-join: {H} ∪ {E} = {H,E}.
         assert_eq!(
             j.topicity(pair),
-            TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic]),
+            TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])),
         );
     }
 
@@ -1077,9 +1068,7 @@ mod tests {
         false,
     )]
     #[case::stereogenicity(
-        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
-            StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
-        ))),
+        StereoAtomConstraints::from(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         false,
         true,
     )]

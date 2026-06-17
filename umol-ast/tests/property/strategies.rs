@@ -7,6 +7,7 @@ pub(crate) use std::fmt::Debug;
 pub(crate) use std::iter::repeat_with;
 pub(crate) use std::ops::RangeInclusive;
 
+use std::collections::BTreeSet;
 use proptest::prelude::*;
 pub(crate) use umol_ast::ast::{
     AddBond, AromaticSystemAst, AromaticSystemConstraint, AromaticSystemConstraintKind,
@@ -25,8 +26,7 @@ pub(crate) use umol_ast::ast::{
     StereoBondAst, StereoBondConstraint, StereoBondId, StereoConfigurationAst, StereoCosetAst,
     StereoExpr, StereoKind, StereoKindAst, StereoLigand, StereoLigandId, StereoLigandKind,
     Stereogenicity,
-    StereogenicityAst,
-    StereogenicityRelationAst, SubPatternAnchor, Topicity, TopicityAst, TopicityRelationAst,
+    StereogenicityAst, SubPatternAnchor, Topicity, TopicityAst, TopicityRelationAst,
     RelOp, ValueAst, ValuePredicate, ValueTerm,
 };
 pub(crate) use umol_ast::dsl::{
@@ -612,20 +612,20 @@ pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRela
         Just(TopicityRelationAst::Lit(Topicity::Homotopic)),
         Just(TopicityRelationAst::Lit(Topicity::Enantiotopic)),
         Just(TopicityRelationAst::Lit(Topicity::Diastereotopic)),
-        Just(TopicityRelationAst::NotSet(vec![Topicity::Homotopic])),
-        Just(TopicityRelationAst::NotSet(vec![Topicity::Enantiotopic])),
-        Just(TopicityRelationAst::NotSet(vec![Topicity::Diastereotopic])),
+        Just(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic]))),
+        Just(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Enantiotopic]))),
+        Just(TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic]))),
     ]
 }
 
-pub(crate) fn stereogenicity_relation_strategy() -> impl Strategy<Value = StereogenicityRelationAst> {
+pub(crate) fn stereogenicity_relation_strategy() -> impl Strategy<Value = StereogenicityAst> {
     prop_oneof![
-        Just(StereogenicityRelationAst::Lit(Stereogenicity::Symmetric)),
-        Just(StereogenicityRelationAst::Lit(Stereogenicity::Prochiral)),
-        Just(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic)),
-        Just(StereogenicityRelationAst::NotSet(vec![Stereogenicity::Symmetric])),
-        Just(StereogenicityRelationAst::NotSet(vec![Stereogenicity::Prochiral])),
-        Just(StereogenicityRelationAst::NotSet(vec![Stereogenicity::Stereogenic])),
+        Just(StereogenicityAst::Lit(Stereogenicity::Symmetric)),
+        Just(StereogenicityAst::Lit(Stereogenicity::Prochiral)),
+        Just(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
+        Just(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))),
+        Just(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Prochiral]))),
+        Just(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Stereogenic]))),
     ]
 }
 
@@ -638,9 +638,9 @@ pub(crate) fn topicity_relation_lattice_strategy() -> impl Strategy<Value = Topi
     ]
 }
 
-pub(crate) fn stereogenicity_relation_lattice_strategy() -> impl Strategy<Value = StereogenicityRelationAst> {
+pub(crate) fn stereogenicity_relation_lattice_strategy() -> impl Strategy<Value = StereogenicityAst> {
     prop_oneof![
-        Just(StereogenicityRelationAst::Undetermined),
+        Just(StereogenicityAst::Undetermined),
         stereogenicity_relation_strategy(),
     ]
 }
@@ -710,7 +710,7 @@ macro_rules! stereo_constraint_strategy {
                 (ligand_pair_strategy(degree), topicity_relation_strategy())
                     .prop_map(|(pair, rel)| $constraint::Topicity(TopicityAst { pair, rel })),
                 stereogenicity_relation_strategy()
-                    .prop_map(|rel| $constraint::Stereogenicity(StereogenicityAst(rel))),
+                    .prop_map(|rel| $constraint::Stereogenicity(rel)),
             ]
             .boxed()
         }

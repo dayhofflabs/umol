@@ -43,5 +43,5 @@ pub use relational::RelationalConstraint;
 pub use stereo::{
     FluxionalityAst, LigandPairAst, LigandSymmetryAst, OrientedPermutationAst, PermutationAst,
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
-    StereogenicityAst, StereogenicityRelationAst, TopicityAst, TopicityRelationAst,
+    StereogenicityAst, TopicityAst, TopicityRelationAst,
 };

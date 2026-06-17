@@ -24,7 +24,7 @@ use super::error::{PResult, ParseError};
 use super::value::{id, terminator};
 use crate::ast::constraint::{
     FluxionalityAst, LigandPairAst, LigandSymmetryAst, OrientedPermutationAst, PermutationAst,
-    StereoAtomConstraint, StereoBondConstraint, StereogenicityAst, StereogenicityRelationAst,
+    StereoAtomConstraint, StereoBondConstraint, StereogenicityAst,
     TopicityAst, TopicityRelationAst,
 };
 use crate::ast::ids::StereoLigandId;
@@ -486,22 +486,22 @@ fn topicity_relation_inline(i: &mut &str) -> PResult<TopicityRelationAst> {
     let neg = opt('!').parse_next(i)?.is_some();
     let v = topicity_glyph(i)?;
     Ok(if neg {
-        TopicityRelationAst::NotSet(vec![v])
+        TopicityRelationAst::NotSet(BTreeSet::from([v]))
     } else {
         TopicityRelationAst::Lit(v)
     })
 }
 
-fn stereogenicity_relation_inline(i: &mut &str) -> PResult<StereogenicityRelationAst> {
+fn stereogenicity_relation_inline(i: &mut &str) -> PResult<StereogenicityAst> {
     if opt('*').parse_next(i)?.is_some() {
-        return Ok(StereogenicityRelationAst::Undetermined);
+        return Ok(StereogenicityAst::Undetermined);
     }
     let neg = opt('!').parse_next(i)?.is_some();
     let v = stereogenicity_glyph(i)?;
     Ok(if neg {
-        StereogenicityRelationAst::NotSet(vec![v])
+        StereogenicityAst::NotSet(BTreeSet::from([v]))
     } else {
-        StereogenicityRelationAst::Lit(v)
+        StereogenicityAst::Lit(v)
     })
 }
 
@@ -550,9 +550,7 @@ macro_rules! stereo_predicate_parser {
                     let pair = ligand_pair(i)?;
                     Ok($constraint::Topicity(TopicityAst { pair, rel }))
                 }
-                'g' => Ok($constraint::Stereogenicity(StereogenicityAst(
-                    stereogenicity_relation_inline(i)?,
-                ))),
+                'g' => Ok($constraint::Stereogenicity(stereogenicity_relation_inline(i)?)),
                 _ => unreachable!("one_of restricts the tag"),
             }
         }
@@ -606,7 +604,7 @@ fn fmt_topicity_relation(f: &mut fmt::Formatter<'_>, rel: &TopicityRelationAst) 
 
 fn fmt_stereogenicity_relation(
     f: &mut fmt::Formatter<'_>,
-    rel: &StereogenicityRelationAst,
+    rel: &StereogenicityAst,
 ) -> fmt::Result {
     let members = rel.to_set();
     match members.len() {
@@ -666,7 +664,7 @@ macro_rules! stereo_constraint_fmt {
                 }
                 $constraint::Stereogenicity(g) => {
                     f.write_str("#g")?;
-                    fmt_stereogenicity_relation(f, &g.0)
+                    fmt_stereogenicity_relation(f, &g)
                 }
             }
         }
@@ -922,7 +920,7 @@ relation_serde! {
 
 relation_serde! {
     stereogenicity_relation_to_edn, stereogenicity_relation_from_edn,
-    StereogenicityRelationAst, Stereogenicity,
+    StereogenicityAst, Stereogenicity,
     Stereogenicity::Symmetric => "symmetric",
     Stereogenicity::Prochiral => "prochiral",
     Stereogenicity::Stereogenic => "stereogenic",
@@ -1095,7 +1093,7 @@ macro_rules! stereo_constraint_entry_codec {
                 $constraint::Fluxionality(f) => ("fluxionality", perm_to_vov(f.perm.0)),
                 $constraint::Topicity(t) => ("topicity", topicity_to_edn(t)),
                 $constraint::Stereogenicity(g) => {
-                    ("stereogenicity", stereogenicity_relation_to_edn(&g.0))
+                    ("stereogenicity", stereogenicity_relation_to_edn(&g))
                 }
             }
         }
@@ -1109,9 +1107,7 @@ macro_rules! stereo_constraint_entry_codec {
                     perm: PermutationAst(perm_from_vov(value, kind.degree())?),
                 })),
                 "topicity" => Ok($constraint::Topicity(topicity_from_edn(value)?)),
-                "stereogenicity" => Ok($constraint::Stereogenicity(StereogenicityAst(
-                    stereogenicity_relation_from_edn(value)?,
-                ))),
+                "stereogenicity" => Ok($constraint::Stereogenicity(stereogenicity_relation_from_edn(value)?)),
                 other => Err(DeError::Custom(format!(
                     "unknown stereo constraint keyword :{other}"
                 ))),
@@ -1431,11 +1427,11 @@ mod tests {
             perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_cycles(4, &[vec![0, 1, 2]])), orientation: Orientation::Proper },
             mem: MemOp::In }))]
     #[case::topicity_negated("Th1#o!'(0,1)",
-        StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::NotSet(vec![Topicity::Enantiotopic]) }))]
+        StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Enantiotopic])) }))]
     #[case::topicity_open("Th1#o*(0,1)",
         StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Undetermined }))]
     #[case::stereogenicity("Th1#g/",
-        StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic))))]
+        StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)))]
     fn test_stereo_atom_predicate(#[case] input: &str, #[case] expected: StereoAtomConstraint) {
         let dsl = parse_stereo_atom(input).unwrap();
         assert_eq!(dsl.0.constraints.iter().cloned().collect::<Vec<_>>(), vec![expected]);

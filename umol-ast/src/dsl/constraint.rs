@@ -2158,8 +2158,7 @@ mod tests {
     use crate::ast::constraint::{
         AromaticValenceAst, AtomConstraint, BondConstraint, DativeBondConstraint, FluxionalityAst,
         LigandPairAst, LigandSymmetryAst, MulticenterValenceAst, OrientedPermutationAst,
-        PermutationAst, RelationalConstraint, StereoAtomConstraint, StereogenicityAst,
-        StereogenicityRelationAst, TopicityAst, TopicityRelationAst,
+        PermutationAst, RelationalConstraint, StereoAtomConstraint, StereogenicityAst, TopicityAst, TopicityRelationAst,
     };
     use crate::ast::ids::StereoLigandId;
     use crate::ast::molecule::MoleculeAst;
@@ -2331,7 +2330,7 @@ mod tests {
         "{:stereo-atom [0 {:kind :octahedral :topicity {:pair [0 1] :relation :enantiotopic}}]}")]
     #[case::stereogenicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraint::Stereogenicity(StereogenicityAst(StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic)))),
+            StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
         "{:stereo-atom [0 {:kind :tetrahedral :stereogenicity :stereogenic}]}")]
     fn test_constraint_dsl_stereo_atom_roundtrip(
         #[from(full_counts)] counts: EntityCounts,

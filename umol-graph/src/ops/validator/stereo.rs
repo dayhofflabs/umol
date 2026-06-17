@@ -4,7 +4,7 @@ use thiserror::Error;
 use umol_ast::ast::{
     AsLit, GraphSymmetry, Lattice, LigandPairAst, LigandSymmetryAst, MemOp, MoleculeAst,
     StereoAtomId, StereoBondId, StereoKind, StereoSymmetry, Stereogenicity,
-    StereogenicityRelationAst, Topicity, TopicityAst, TopicityRelationAst,
+    StereogenicityAst, Topicity, TopicityAst, TopicityRelationAst,
 };
 use umol_perm::OrientedPermutation;
 
@@ -34,7 +34,7 @@ pub enum StereoValidatorContradiction {
     ImproperOnAchiral { kind: StereoKind },
     #[error("stereogenicity {derived:?} contradicts asserted {asserted:?}")]
     StereogenicityMismatch {
-        asserted: StereogenicityRelationAst,
+        asserted: StereogenicityAst,
         derived: Stereogenicity,
     },
     #[error("ligand pair {pair:?} topicity {derived:?} contradicts asserted {asserted:?}")]
@@ -150,7 +150,7 @@ impl StereoValidator {
         kind: StereoKind,
         coset: Option<u32>,
         ligand_count: usize,
-        stereogenicity: &StereogenicityRelationAst,
+        stereogenicity: &StereogenicityAst,
         topicities: &[TopicityAst],
     ) -> Solution<(), StereoValidatorContradiction> {
         if ligand_count != kind.degree() {
@@ -161,7 +161,7 @@ impl StereoValidator {
             });
         }
         let has_improper = (!stereogenicity.is_undetermined()
-            && stereogenicity.matches(&StereogenicityRelationAst::Lit(Stereogenicity::Prochiral)))
+            && stereogenicity.matches(&StereogenicityAst::Lit(Stereogenicity::Prochiral)))
             || topicities.iter().any(|t| {
                 !t.rel.is_undetermined()
                     && t.rel.matches(&TopicityRelationAst::Lit(Topicity::Enantiotopic))
@@ -186,7 +186,7 @@ impl StereoValidator {
     fn validate_symmetry(
         &self,
         sym: &StereoSymmetry,
-        stereogenicity: &StereogenicityRelationAst,
+        stereogenicity: &StereogenicityAst,
         topicities: &[TopicityAst],
         ligand_symmetries: &[LigandSymmetryAst],
     ) -> Solution<(), StereoValidatorContradiction> {
@@ -194,7 +194,7 @@ impl StereoValidator {
 
         if !stereogenicity.is_undetermined() {
             let derived = sym.stereogenicity();
-            if !stereogenicity.matches(&StereogenicityRelationAst::Lit(derived)) {
+            if !stereogenicity.matches(&StereogenicityAst::Lit(derived)) {
                 return Solution::Contradictory(
                     StereoValidatorContradiction::StereogenicityMismatch {
                         asserted: stereogenicity.clone(),
@@ -272,9 +272,7 @@ mod tests {
         (|ast: &mut MoleculeAst| {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
-                .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
-                    StereogenicityRelationAst::Lit(Stereogenicity::Stereogenic),
-                )));
+                .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)));
         }) as fn(&mut MoleculeAst)
     )]
     fn test_stereo_validator_validate(#[case] dsl: &str, #[case] mutate: fn(&mut MoleculeAst)) {
@@ -314,9 +312,7 @@ mod tests {
         (|ast: &mut MoleculeAst| {
             ast.stereo_bond_mut(StereoBondId(0))
                 .constraints
-                .add(StereoBondConstraint::Stereogenicity(StereogenicityAst(
-                    StereogenicityRelationAst::Lit(Stereogenicity::Prochiral),
-                )));
+                .add(StereoBondConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Prochiral)));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::ImproperOnAchiral {
             kind: StereoKind::CisTrans,
@@ -327,12 +323,10 @@ mod tests {
         (|ast: &mut MoleculeAst| {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
-                .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst(
-                    StereogenicityRelationAst::Lit(Stereogenicity::Symmetric),
-                )));
+                .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Symmetric)));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::StereogenicityMismatch {
-            asserted: StereogenicityRelationAst::Lit(Stereogenicity::Symmetric),
+            asserted: StereogenicityAst::Lit(Stereogenicity::Symmetric),
             derived: Stereogenicity::Stereogenic,
         }
     )]

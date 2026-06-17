@@ -98,30 +98,15 @@ proptest! {
         assert_lattice_laws(&a, &b, &c)?;
     }
 
-    /// `TopicityAst::meet`/`join` are per-pair (the pair is a precondition,
-    /// not a lattice axis), so the triple shares one `pair` and varies `rel`.
-    #[test]
-    fn test_topicity_ast_lattice_laws(
-        pair in ligand_pair_strategy(6),
-        ra in topicity_relation_lattice_strategy(),
-        rb in topicity_relation_lattice_strategy(),
-        rc in topicity_relation_lattice_strategy(),
-    ) {
-        let a = TopicityAst { pair, rel: ra };
-        let b = TopicityAst { pair, rel: rb };
-        let c = TopicityAst { pair, rel: rc };
-        assert_lattice_laws(&a, &b, &c)?;
-    }
-
     #[test]
     fn test_stereogenicity_ast_lattice_laws(
         ra in stereogenicity_relation_lattice_strategy(),
         rb in stereogenicity_relation_lattice_strategy(),
         rc in stereogenicity_relation_lattice_strategy(),
     ) {
-        let a = StereogenicityAst(ra);
-        let b = StereogenicityAst(rb);
-        let c = StereogenicityAst(rc);
+        let a = ra;
+        let b = rb;
+        let c = rc;
         assert_lattice_laws(&a, &b, &c)?;
     }
 
@@ -206,12 +191,4 @@ proptest! {
         assert_lattice_laws(&a, &b, &c)?;
     }
 
-    #[test]
-    fn test_stereogenicity_relation_ast_lattice_laws(
-        a in stereogenicity_relation_lattice_strategy(),
-        b in stereogenicity_relation_lattice_strategy(),
-        c in stereogenicity_relation_lattice_strategy(),
-    ) {
-        assert_lattice_laws(&a, &b, &c)?;
-    }
 }
