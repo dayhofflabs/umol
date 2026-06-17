@@ -2,16 +2,14 @@
 
 use std::mem;
 
-use umol_ast_macros::Lattice;
+use umol_ast_macros::{Canonicalize, Lattice};
 use umol_shared::spin::{SpinMultiplicity, SpinState};
 
 use super::traits::AsLit;
 use super::value::ValueAst;
 
-/// Spin state: unpaired-electron count and multiplicity as independent
-/// `ValueAst` fields. Both may be `Undetermined`, a literal, or an
-/// expression pattern.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice)]
+/// Spin state: unpaired-electron count and multiplicity as independent `ValueAst` fields. 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice, Canonicalize)]
 pub struct SpinStateAst {
     pub unpaired: ValueAst,
     pub multiplicity: ValueAst,
@@ -80,7 +78,35 @@ mod tests {
     use umol_shared::spin;
 
     use super::*;
-    use crate::ast::traits::Lattice;
+    use crate::ast::error::Contradiction;
+    use crate::ast::traits::{Canonicalize, Lattice};
+    use crate::ast::value::ValueTerm;
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::folds_field(
+        SpinStateAst { unpaired: ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(1)])), multiplicity: ValueAst::Lit(3) },
+        Ok(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) }),
+    )]
+    #[case::parity_invalid_is_allowed(
+        SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) },
+        Ok(SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) }),
+    )]
+    fn test_spin_state_ast_canonicalize(
+        #[case] input: SpinStateAst,
+        #[case] expected: Result<SpinStateAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::both_undetermined(SpinStateAst::default())]
+    #[case::valid_triplet(SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Lit(3) })]
+    #[case::parity_invalid(SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Lit(1) })]
+    fn test_spin_state_ast_canonicalize_identity(#[case] input: SpinStateAst) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
+    }
 
     #[rustfmt::skip]
     #[rstest]

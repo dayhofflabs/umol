@@ -94,11 +94,13 @@ type greens its own `lattice::` test.
 3. **`IsotopeMassAst`** **Done** — `Undetermined|Natural|Lit|LitSet|Var`; positive-only; `u32`.
 4. **`NoncovalentBondKindAst`**, **`StereoKindAst`**  **Done** — `Undetermined|Lit`; identity
    `canonicalize`; `canonical` always borrows.
-5. **`ElectronCountsAst`** (new) — `Undetermined|Lit(Vec<u8>)`; identity (positional).
+5. **`ElectronCountsAst`** (new) **Done** — `Undetermined|Lit(Vec<u8>)`; identity (positional).
 
 ### P2 · Predicate / relation types
-- **`SpinStateAst`** — hand `canonicalize` with the `are_compatible` parity gate;
-  `From<(u8,u8)>`/`From<SpinState>` → `TryFrom`.
+- **`SpinStateAst`** — pure field-wise `#[derive(Canonicalize)]`; **no** cross-field
+  parity gate (`unpaired`↔`multiplicity` parity is a tier-2 physical invariant, enforced
+  at resolution, not the AST — invalid pairs like `(1,1)` are legal AST states); `From`
+  stays infallible.
 - **`AromaticValenceAst`/`MulticenterValenceAst`** — delegate inner `ValueAst`; drop the
   hand `matches`.
 - **`TopicityRelationAst`/`StereogenicityAst`** — `relation_ast!` over `BTreeSet`; flatten
@@ -112,9 +114,12 @@ type greens its own `lattice::` test.
   `Lattice`/`Canonicalize` (kind-relative).
 - **`StereoConfigurationAst { kind: StereoKindAst, coset }`** (element side) +
   **`StereoSiteAst = Undetermined|NotStereo|Stereo(StereoKind, coset)`** (constraint side;
-  renames the old tristate). Both: `Canonicalize`+`Lattice` reading `self`'s kind, the
-  `are_compatible(kind, coset)` gate, the Term compose→priority(`Mirror>Swap>Apply`)
-  normal form; `AsLit = StereoConfiguration { kind, coset }`. Update `dsl/stereo.rs`, the
+  renames the old tristate). Both: `Canonicalize`+`Lattice`; the coset's kind-relative
+  *syntactic* folds (set sort/dedup, `Lit` collapse) and Term
+  compose→priority(`Mirror>Swap>Apply`) normal form. **No `are_compatible(kind, coset)`
+  validity gate** — kind↔coset-index validity is tier-2, not enforced at the AST
+  (kind/coset independent, like spin's u/m). `AsLit = StereoConfiguration { kind, coset }`.
+  Update `dsl/stereo.rs`, the
   stereo views, and `StereoAtomAst`/`StereoBondAst` to carry the joint config.
 
 ### P4 · Entities (pure field-wise)
@@ -148,7 +153,10 @@ type greens its own `lattice::` test.
 - Literal renames + `*Dsl` per [[feedback_dsl_boundary_types]]
   (`StereoConfigurationDsl`→`StereoSiteDsl`; add `TopicityDsl`/`StereogenicityDsl`).
 
-### P8 · Verification (doc 111)
+### P8 . Remove simplify, simplify_* 
+- Sweep AST types, replace simplify and simplify_* methods by canonicalization calls.
+
+### P9 · Verification (doc 111)
 - C4e.5(1): all retained `lattice::` tests green (raised `PROPTEST_CASES`); demoted types
   leave the sweep.
 - C4e.5(2): atom-DSL roundtrip; C4e.5(3): `canonicalize` idempotence beyond `ValueAst`.
@@ -204,7 +212,7 @@ hand-written step where present.
 | `StereoTerm` | — (kind-relative sub-part) | — | `Var`-rooted; word composes to one net perm → `Var`/`Mirror`/`Swap`/`Apply` by priority Mirror>Swap>Apply (owner folds under `kind`) |
 | `AromaticValenceAst` | hand (enum) | — | delegate `ValueAst`; `NotAromatic` ≠ `Aromatic(_)` |
 | `MulticenterValenceAst` | hand (enum) | — | delegate `ValueAst`; `NotMulticenter` ≠ `Multicenter(_)` |
-| `SpinStateAst` | derive (field-wise `unpaired`, `multiplicity`) | — | cross-field parity: ground pair satisfies `are_compatible` else `Err` |
+| `SpinStateAst` | derive (field-wise `unpaired`, `multiplicity`) | — | derive (field-wise; **no** cross-field parity gate — tier-2, not enforced at the AST) |
 | `TopicityRelationAst` | hand (`relation_ast!`) | — | finite-domain `LitSet`/`NotSet` sort/dedup/collapse + negation polarity |
 | `StereogenicityAst` | hand (`relation_ast!`) | — | as above; flattened — `relation_ast! { StereogenicityAst, Stereogenicity }`, no `*RelationAst`, no wrapper; macro also generates `AsLit` (`Lit`→`Some`) |
 | `TopicityAst` | **matches** | `pair` (essential — topicity is per-pair) | per-pair `rel` (`TopicityRelationAst`) is the lattice |
@@ -480,8 +488,10 @@ enum, no collapse: the physical relation `m ≤ u+1 ∧ m ≡ u+1 (mod 2)` admit
 
 **Lattice** (`#[derive(Lattice)]`, field-wise over the two `ValueAst` lattices; top is
 `(Undetermined, Undetermined)`). `matches` from `meet`. `AsLit = SpinState` — `as_lit`
-succeeds only when both fields are `Lit` (parity now guaranteed by canonicalize, so the
-old parity re-check there is redundant).
+succeeds only when both fields are `Lit` **and** form a valid `SpinState`; an invalid pair
+(e.g. `(1,1)`) is a legal AST state with no `SpinState` literal (`as_lit = None`), so
+`is_ground ≠ as_lit.is_some()` there. The validity check is *projection* to the domain
+type, not invariant enforcement.
 
 **Boundary.** No `*Dsl` (pragmatic policy — field component of `AtomAst`/`BondAst`).
 Round-trips inline via the shared `#u`/`#s` predicates (`apply_spin_pair` /
@@ -489,15 +499,17 @@ Round-trips inline via the shared `#u`/`#s` predicates (`apply_spin_pair` /
 own `Display`/`FromStr` in `umol-shared` is the *literal's* surface — a ground domain
 type, not an `*Ast` — so not the serde-on-AST violation.)
 
-**Canonicalization** (hand-written `Canonicalize`, like `AtomAst`):
-1. field-wise canonicalize `unpaired`, `multiplicity`.
-2. **cross-field parity:** both `Lit` and `!are_compatible(u, m)` → `Err(Contradiction)`
-   (enforce the physical invariant on construction; matches the practice elsewhere). No
-   cross-pruning of non-ground sets. **[new]**
+**Canonicalization** (`#[derive(Canonicalize)]`, pure field-wise): canonicalize each
+`ValueAst` field; **no cross-field parity gate.** The `unpaired`↔`multiplicity` parity
+relation is a **tier-2 physical, model-independent invariant** — the AST/parsing layer
+enforces only tier-1 syntactic invariants, so parity is checked later (resolution) and
+syntactically-valid-but-physically-invalid pairs are allowed. `From<(u8,u8)>` /
+`From<SpinState>` **stay infallible** (no `TryFrom`). `Contradiction` here is only for a
+field's own tier-1 failure (e.g. an empty `LitSet`), never parity.
 
-Parallel removals: drop `simplify_values` (`spin.rs:27`, subsumed); update
-`is_plus_sugar` (`predicates.rs:83`) — it still matches the old `ValueAst::Expr` /
-`ValueExpr`, now `Term`/`Predicate`.
+Parallel removals: `simplify_values` (`spin.rs:27`) is subsumed by `canonicalize` but kept
+until P4 (entity `simplify_values` still call it). `is_plus_sugar` was already retyped in
+P1.
 
 **Equality/hash.** Derived structural, semantic once each field is canonical;
 `(2,1) ≠ (0,1)` (distinct states) is correct.
@@ -672,36 +684,41 @@ only the group-action `Term`. The set ops (complement, "store the smaller side")
 finite but **kind-relative** (universe = `kind.count()`), which is why they live in the
 kind-aware algebra, not on the bare `StereoCosetAst`.
 
-**Cross-field predicate `are_compatible(kind, coset)`** (parallel to
-`SpinStateAst::are_compatible`): the kind↔coset-index validity — when `kind = Lit(k)`,
-every coset index (in `Lit`/`LitSet`/`NotSet` and any `Var` domain) lies in
-`[0, k.count())`. `canonicalize` gates on it (out-of-range → `Err`), and `canonical()`
-borrows only when it holds. `StereoSiteAst::Stereo(kind, coset)` uses the same predicate.
+**No kind↔coset validity gate (tier-2).** The kind↔coset-index validity — when
+`kind = Lit(k)`, coset indices lie in `[0, k.count())` — is a **tier-2 physical,
+model-independent invariant**, so (like spin's u↔m parity) it is **not enforced at the
+AST**: `canonicalize` does **not** range-check (an out-of-range index is a legal AST
+state), and `meet`/`join` carry no gate. Validity is checked at resolution. The
+kind-relative *syntactic* folds below (set sort/dedup, `Lit` collapse, operator compose)
+are tier-1 and remain; they require a concrete `kind = Lit(k)` to run, so when
+`kind = Undetermined` the coset keeps its kind-independent form (the exact handling is a
+P3 detail).
 
 **`StereoConfigurationAst::canonicalize` — full step list.**
 
-Field-wise + kind gate:
+Field-wise (the original draft's `i ≥ n` / `s ⊆ [0,n)` range-checks are **removed** —
+tier-2 validity, not enforced here; see the no-gate note above):
 1. canonicalize `kind` (`StereoKindAst`: identity).
-2. **kind gate:** `kind = Undetermined` ⇒ set `coset = Undetermined`, return `Ok` (no
-   concrete configuration without a concrete geometry — `SpinStateAst`-style hook).
+2. `kind = Undetermined`: the kind-relative folds can't run; keep `coset`'s
+   kind-independent form (exact handling a P3 detail — do **not** coerce or gate).
 
-Otherwise `kind = Lit(k)`, `n = k.count()`; fold `coset` under `k`:
+Otherwise `kind = Lit(k)`, `n = k.count()`; fold `coset` under `k` (no range-check):
 
 `coset` = literal / set forms:
-3. `Lit(i)`: `i ≥ n` → `Err(Contradiction)` (kind ↔ coset-index).
-4. `LitSet(s)`: range-check `s ⊆ [0,n)` (else `Err`); `s = ∅` → `Err`; `|s| = 1` →
-   `Lit`; `s` = full → `Undetermined`; else sorted/deduped `BTreeSet`.
-5. `NotSet(s)`: range-check; `s = ∅` → `Undetermined`; `s` = full → `Err`; cardinality
-   polarity vs `n` — keep `NotSet(s)` iff `|s| < n − |s|`, else `LitSet([0,n) \ s)`
-   (tiebreak positive), then re-apply step 4's collapse.
+3. `Lit(i)`: identity.
+4. `LitSet(s)`: `s = ∅` → `Err`; `|s| = 1` → `Lit`; `s` = full (`[0,n)`) → `Undetermined`;
+   else sorted/deduped `BTreeSet`.
+5. `NotSet(s)`: `s = ∅` → `Undetermined`; `s` = full → `Err`; cardinality polarity vs `n`
+   — keep `NotSet(s)` iff `|s| < n − |s|`, else `LitSet([0,n) \ s)` (tiebreak positive),
+   then re-apply step 4's collapse.
 6. `Undetermined`: identity.
 
 `coset` = `Term(t)` — operators are all permutation actions, so:
 7. compose the operator word into **one net permutation `g_total`** over the inner `Var`
    (`Mirror` = μ_k, `Swap` = ι_k, `Apply(g)` = g; identity factors drop).
-8. canonicalize the inner `Var(name, dom)`: if `dom = Some(s)`, range-check `s ⊆ [0,n)`
-   (else `Err`), sort/dedup, `s = ∅` → `Err`, `s` = full → `None`. `name` always kept;
-   a `Var`-rooted term never folds to a `Lit`.
+8. canonicalize the inner `Var(name, dom)`: if `dom = Some(s)`, sort/dedup, `s = ∅` →
+   `Err`, `s` = full → `None` (no range-check — tier-2). `name` always kept; a `Var`-rooted
+   term never folds to a `Lit`.
 9. choose the representation by **priority Mirror > Swap > Apply**: `g_total = identity` →
    bare `Var`; `= μ_k` → `Mirror(Var)`; `= ι_k` → `Swap(Var)`; else → `Apply(Var,
    g_total)`. Consequence (since chiral `ι_k = μ_k`, achiral `μ_k = identity`): canonical
