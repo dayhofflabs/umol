@@ -97,22 +97,22 @@ type greens its own `lattice::` test.
 5. **`ElectronCountsAst`** (new) **Done** — `Undetermined|Lit(Vec<u8>)`; identity (positional).
 
 ### P2 · Predicate / relation types
-- **`SpinStateAst`** — pure field-wise `#[derive(Canonicalize)]`; **no** cross-field
-  parity gate (`unpaired`↔`multiplicity` parity is a tier-2 physical invariant, enforced
-  at resolution, not the AST — invalid pairs like `(1,1)` are legal AST states); `From`
-  stays infallible.
-- **`AromaticValenceAst`/`MulticenterValenceAst`** — delegate inner `ValueAst`; drop the
-  hand `matches`.
-- **`TopicityRelationAst`/`StereogenicityAst`** — `relation_ast!` over `BTreeSet`; flatten
-  stereogenicity (drop `StereogenicityRelationAst` + the wrapper).
-- **`TopicityAst`** — drop `impl Lattice` → matches-only `{pair, rel}`; remove its
-  fixed-pair lattice proptest (covered by `test_topicity_relation_ast_lattice_laws`).
+1. **`SpinStateAst`** **Done** — pure field-wise `#[derive(Canonicalize)]`; **no** cross-field
+   parity gate (`unpaired`↔`multiplicity` parity is a tier-2 physical invariant, enforced
+   at resolution, not the AST — invalid pairs like `(1,1)` are legal AST states); `From`
+   stays infallible.
+2. **`AromaticValenceAst`/`MulticenterValenceAst`** **Done** — delegate inner `ValueAst`; drop the
+   hand `matches`.
+3. **`TopicityRelationAst`/`StereogenicityAst`** — `relation_ast!` over `BTreeSet`; flatten
+   stereogenicity (drop `StereogenicityRelationAst` + the wrapper).
+4. **`TopicityAst`** — drop `impl Lattice` → matches-only `{pair, rel}`; remove its
+   fixed-pair lattice proptest (covered by `test_topicity_relation_ast_lattice_laws`).
 
 ### P3 · Stereo configuration cluster
-- `StereoExpr`→**`StereoTerm`** (`Var(name, opt domain)` | `Swap` | `Mirror` | `Apply`; no
+1. `StereoExpr`→**`StereoTerm`** (`Var(name, opt domain)` | `Swap` | `Mirror` | `Apply`; no
   `Lit`/`LitSet`). `StereoCosetAst = Undetermined|Lit|LitSet|NotSet|Term` — **no**
   `Lattice`/`Canonicalize` (kind-relative).
-- **`StereoConfigurationAst { kind: StereoKindAst, coset }`** (element side) +
+2. **`StereoConfigurationAst { kind: StereoKindAst, coset }`** (element side) +
   **`StereoSiteAst = Undetermined|NotStereo|Stereo(StereoKind, coset)`** (constraint side;
   renames the old tristate). Both: `Canonicalize`+`Lattice`; the coset's kind-relative
   *syntactic* folds (set sort/dedup, `Lit` collapse) and Term
@@ -123,20 +123,23 @@ type greens its own `lattice::` test.
   stereo views, and `StereoAtomAst`/`StereoBondAst` to carry the joint config.
 
 ### P4 · Entities (pure field-wise)
-- `AtomAst`, `BondAst`, `NoncovalentBondAst` — `#[derive(Lattice, Canonicalize)]`; delete
-  `simplify_values`. Fix `NoncovalentBondAst` direct `Display`/`FromStr`/`FromEdn` (move to
+1. `AtomAst`
+2. `BondAst`
+3. `NoncovalentBondAst` — `#[derive(Lattice, Canonicalize)]`; delete `simplify_values`.
+4. Fix `NoncovalentBondAst` direct `Display`/`FromStr`/`FromEdn` (move to
   `NoncovalentBondDsl`).
-- `AromaticSystemAst`/`MulticenterBondAst` — `electrons: Vec<ValueAst>` → `ElectronCountsAst`;
-  retype ctors; derive.
-- `DativeBondAst` — derive after the birelation `acceptor_slot` drop.
+5. `AromaticSystemAst`/`MulticenterBondAst` — `electrons: Vec<ValueAst>` → `ElectronCountsAst`;
+   retype ctors; derive.
+6. `DativeBondAst` — derive after the birelation `acceptor_slot` drop.
 
 ### P5 · Constraint types
-- `AtomConstraint` & siblings — `Canonicalize` = delegate inner (replaces `simplify`).
-- Collections (`AtomConstraints` …) — kind-keyed `Lattice`+`Canonicalize`: fixed kind
-  order, dedup, **drop vacuous (`Undetermined`-payload) entries**, multi-valued
-  (`RingSize`) set-canonical. Delete `simplify_each`.
-- Molecule-level `Constraints`/`Constraint` — `Canonicalize` (flatten/sort/dedup the
-  `And`/`Or`/`Not` tree, ID-bearing); **not** a `Lattice`.
+1. `AtomConstraint` & siblings — `Canonicalize` = delegate inner (replaces `simplify`).
+2. Collections (`AtomConstraints` …) — kind-keyed `Lattice`+`Canonicalize`: fixed kind
+   order, dedup, **drop vacuous (`Undetermined`-payload) entries**, multi-valued
+   (`RingSize`) set-canonical. Delete `simplify_each`.
+3. Molecule-level `Constraints`/`Constraint` — `Canonicalize` (flatten/sort/dedup the
+   `And`/`Or`/`Not` tree, ID-bearing); **not** a `Lattice`.
+4. Sweep all AST types, replace simplify and simplify_* methods by canonicalization calls.
 
 ### P6 · `Lattice`-trait flip + macro (lands once P1–P5 all impl `Canonicalize`)
 - `Lattice: Canonicalize`; `matches` becomes the `meet`-derived default; `join` stays
@@ -145,22 +148,19 @@ type greens its own `lattice::` test.
   overrides). Hand-written leaf `meet`/`join` already canonicalize from P1–P5.
 
 ### P7 · Semantic-equality adoption + boundary cleanup
-- 095 Q2 leak audit → route to `equiv`/`Canonical<T>` where semantic keys are needed:
-  `MoleculeAst::PartialEq` (graph-canonical), `HashMap`/`HashSet` AST keys, alias
-  `BiBTreeMap`, constraint dedup. Decide structural-vs-semantic per site.
-- Drop `matches_value` (≡ `matches(lift(v))`); relocate `capture`/`evaluate` to the
-  resolver or delete.
-- Literal renames + `*Dsl` per [[feedback_dsl_boundary_types]]
-  (`StereoConfigurationDsl`→`StereoSiteDsl`; add `TopicityDsl`/`StereogenicityDsl`).
+1. 095 Q2 leak audit → route to `equiv`/`Canonical<T>` where semantic keys are needed:
+   `MoleculeAst::PartialEq` (graph-canonical), `HashMap`/`HashSet` AST keys, alias
+   `BiBTreeMap`, constraint dedup. Decide structural-vs-semantic per site.
+2. Drop `matches_value` (≡ `matches(lift(v))`); relocate `capture`/`evaluate` to the
+   resolver or delete.
+3. Literal renames + `*Dsl` per [[feedback_dsl_boundary_types]]
+   (`StereoConfigurationDsl`→`StereoSiteDsl`; add `TopicityDsl`/`StereogenicityDsl`).
 
-### P8 . Remove simplify, simplify_* 
-- Sweep AST types, replace simplify and simplify_* methods by canonicalization calls.
-
-### P9 · Verification (doc 111)
-- C4e.5(1): all retained `lattice::` tests green (raised `PROPTEST_CASES`); demoted types
-  leave the sweep.
-- C4e.5(2): atom-DSL roundtrip; C4e.5(3): `canonicalize` idempotence beyond `ValueAst`.
-- `umol-ast` lib + `--features proptest` + workspace build + conformance all green.
+### P8 · Verification (doc 111)
+1. C4e.5(1): all retained `lattice::` tests green (raised `PROPTEST_CASES`); demoted types
+   leave the sweep.
+2. C4e.5(2): atom-DSL roundtrip; C4e.5(3): `canonicalize` idempotence beyond `ValueAst`.
+3. `umol-ast` lib + `--features proptest` + workspace build + conformance all green.
 
 ## Per-type review
 

@@ -1,13 +1,15 @@
 //! Atom constraints.
 
+use std::borrow::Cow;
 use std::mem::{self, replace};
 
 use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
+use super::super::error::Contradiction;
 use super::super::remap::IdRemapping;
 use super::super::stereo::{StereoConfigurationAst, StereoKind};
-use super::super::traits::{AsLit, Lattice};
+use super::super::traits::{AsLit, Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
 /// Atom-scope constraint: a predicate that pattern-matches a single atom
@@ -194,6 +196,27 @@ impl AromaticValenceAst {
     }
 }
 
+impl Canonicalize for AromaticValenceAst {
+    /// Delegate to the inner `ValueAst`; `NotAromatic`/`Undetermined` identity.
+    /// No cross-variant fold (`Aromatic(Lit(0))` stays distinct from `NotAromatic`).
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::Aromatic(v) => Self::Aromatic(v.canonicalize()?),
+            other => other,
+        })
+    }
+
+    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+        match self {
+            Self::Aromatic(v) => Ok(match v.canonical()? {
+                Cow::Borrowed(_) => Cow::Borrowed(self),
+                Cow::Owned(cv) => Cow::Owned(Self::Aromatic(cv)),
+            }),
+            _ => Ok(Cow::Borrowed(self)),
+        }
+    }
+}
+
 impl Lattice for AromaticValenceAst {
     #[inline]
     fn is_undetermined(&self) -> bool {
@@ -208,38 +231,36 @@ impl Lattice for AromaticValenceAst {
         }
     }
 
+    /// Greatest lower bound, canonicalizing operands and output.
     fn meet(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
+        let a = self.canonical().ok()?;
+        let b = other.canonical().ok()?;
+        match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::NotAromatic, Self::NotAromatic) => Some(Self::NotAromatic),
             (Self::NotAromatic, Self::Aromatic(_)) | (Self::Aromatic(_), Self::NotAromatic) => None,
-            (Self::Aromatic(a), Self::Aromatic(b)) => a.meet(b).map(Self::Aromatic),
+            (Self::Aromatic(p), Self::Aromatic(q)) => p.meet(q).map(Self::Aromatic),
         }
     }
 
     fn join(&self, other: &Self) -> Self {
-        match (self, other) {
+        let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::NotAromatic, Self::NotAromatic) => Self::NotAromatic,
             (Self::NotAromatic, Self::Aromatic(_)) | (Self::Aromatic(_), Self::NotAromatic) => {
                 Self::Undetermined
             }
-            (Self::Aromatic(a), Self::Aromatic(b)) => Self::Aromatic(a.join(b)),
+            (Self::Aromatic(p), Self::Aromatic(q)) => Self::Aromatic(p.join(q)),
         }
     }
 
-    /// Pattern matches target. `Undetermined` is a wildcard pattern.
-    /// `NotAromatic` and `Aromatic(_)` are mutually exclusive; an `Aromatic`
-    /// pattern recurses on the inner `ValueAst::matches`.
+    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
     fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::NotAromatic, Self::NotAromatic) => true,
-            (Self::NotAromatic, Self::Aromatic(_)) | (Self::Aromatic(_), Self::NotAromatic) => {
-                false
-            }
-            (Self::Aromatic(p), Self::Aromatic(t)) => p.matches(t),
+        match (self.meet(target), target.canonical()) {
+            (Some(meet), Ok(target)) => meet == *target,
+            _ => false,
         }
     }
 }
@@ -306,6 +327,26 @@ impl MulticenterValenceAst {
     }
 }
 
+impl Canonicalize for MulticenterValenceAst {
+    /// Delegate to the inner `ValueAst`; `NotMulticenter`/`Undetermined` identity.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::Multicenter(v) => Self::Multicenter(v.canonicalize()?),
+            other => other,
+        })
+    }
+
+    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+        match self {
+            Self::Multicenter(v) => Ok(match v.canonical()? {
+                Cow::Borrowed(_) => Cow::Borrowed(self),
+                Cow::Owned(cv) => Cow::Owned(Self::Multicenter(cv)),
+            }),
+            _ => Ok(Cow::Borrowed(self)),
+        }
+    }
+}
+
 impl Lattice for MulticenterValenceAst {
     #[inline]
     fn is_undetermined(&self) -> bool {
@@ -320,37 +361,36 @@ impl Lattice for MulticenterValenceAst {
         }
     }
 
+    /// Greatest lower bound, canonicalizing operands and output.
     fn meet(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
+        let a = self.canonical().ok()?;
+        let b = other.canonical().ok()?;
+        match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
             (Self::NotMulticenter, Self::NotMulticenter) => Some(Self::NotMulticenter),
             (Self::NotMulticenter, Self::Multicenter(_))
             | (Self::Multicenter(_), Self::NotMulticenter) => None,
-            (Self::Multicenter(a), Self::Multicenter(b)) => a.meet(b).map(Self::Multicenter),
+            (Self::Multicenter(p), Self::Multicenter(q)) => p.meet(q).map(Self::Multicenter),
         }
     }
 
     fn join(&self, other: &Self) -> Self {
-        match (self, other) {
+        let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
             (Self::NotMulticenter, Self::NotMulticenter) => Self::NotMulticenter,
             (Self::NotMulticenter, Self::Multicenter(_))
             | (Self::Multicenter(_), Self::NotMulticenter) => Self::Undetermined,
-            (Self::Multicenter(a), Self::Multicenter(b)) => Self::Multicenter(a.join(b)),
+            (Self::Multicenter(p), Self::Multicenter(q)) => Self::Multicenter(p.join(q)),
         }
     }
 
-    /// Pattern matches target. `Undetermined` is a wildcard pattern.
-    /// `NotMulticenter` and `Multicenter(_)` are mutually exclusive; a
-    /// `Multicenter` pattern recurses on the inner `ValueAst::matches`.
+    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
     fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::NotMulticenter, Self::NotMulticenter) => true,
-            (Self::NotMulticenter, Self::Multicenter(_))
-            | (Self::Multicenter(_), Self::NotMulticenter) => false,
-            (Self::Multicenter(p), Self::Multicenter(t)) => p.matches(t),
+        match (self.meet(target), target.canonical()) {
+            (Some(meet), Ok(target)) => meet == *target,
+            _ => false,
         }
     }
 }
@@ -1022,6 +1062,28 @@ mod tests {
     }
 
     #[rstest]
+    #[case::aromatic_folds_inner(
+        AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(1)]))),
+        Ok(AromaticValenceAst::aromatic(2)),
+    )]
+    #[case::aromatic_zero_not_collapsed(AromaticValenceAst::aromatic(0), Ok(AromaticValenceAst::aromatic(0)))]
+    fn test_aromatic_valence_ast_canonicalize(
+        #[case] input: AromaticValenceAst,
+        #[case] expected: Result<AromaticValenceAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(AromaticValenceAst::Undetermined)]
+    #[case::not_aromatic(AromaticValenceAst::NotAromatic)]
+    #[case::aromatic_lit(AromaticValenceAst::aromatic(1))]
+    #[case::aromatic_zero(AromaticValenceAst::aromatic(0))]
+    fn test_aromatic_valence_ast_canonicalize_identity(#[case] input: AromaticValenceAst) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
+    }
+
+    #[rstest]
     #[case::wildcard_vs_not_aromatic(
         AromaticValenceAst::Undetermined,
         AromaticValenceAst::NotAromatic,
@@ -1139,6 +1201,28 @@ mod tests {
     #[case::multicenter_lit(MulticenterValenceAst::multicenter(1))]
     fn test_multicenter_valence_ast_simplify_identity(#[case] input: MulticenterValenceAst) {
         assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rstest]
+    #[case::multicenter_folds_inner(
+        MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Sum(vec![ValueTerm::Lit(1), ValueTerm::Lit(2)]))),
+        Ok(MulticenterValenceAst::multicenter(3)),
+    )]
+    #[case::multicenter_zero_not_collapsed(MulticenterValenceAst::multicenter(0), Ok(MulticenterValenceAst::multicenter(0)))]
+    fn test_multicenter_valence_ast_canonicalize(
+        #[case] input: MulticenterValenceAst,
+        #[case] expected: Result<MulticenterValenceAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(MulticenterValenceAst::Undetermined)]
+    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter)]
+    #[case::multicenter_lit(MulticenterValenceAst::multicenter(1))]
+    #[case::multicenter_zero(MulticenterValenceAst::multicenter(0))]
+    fn test_multicenter_valence_ast_canonicalize_identity(#[case] input: MulticenterValenceAst) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
     #[rustfmt::skip]

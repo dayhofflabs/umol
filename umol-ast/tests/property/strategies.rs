@@ -70,9 +70,9 @@ pub(crate) fn element_ast_strategy() -> impl Strategy<Value = ElementAst> {
     prop_oneof![
         6 => element_strategy().prop_map(ElementAst::Lit),
         2 => Just(ElementAst::Undetermined),
-        2 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(|v| ElementAst::lit_set(v)),
-        1 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(|v| ElementAst::not_set(v)),
-        1 => id_strategy().prop_map(|s| ElementAst::var(s)),
+        2 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(ElementAst::lit_set),
+        1 => prop::sample::subsequence(Element::all().to_vec(), 1..=118).prop_map(ElementAst::not_set),
+        1 => id_strategy().prop_map(ElementAst::var),
         1 => (id_strategy(), prop::sample::subsequence(Element::all().to_vec(), 1..=118))
             .prop_map(|(id, set)| ElementAst::var_in(id, set)),
         1 => (id_strategy(), prop::sample::subsequence(Element::all().to_vec(), 1..=118))
@@ -85,7 +85,7 @@ pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = V
     prop_oneof![
         4 => Just(ValueAst::Undetermined),
         4 => range.clone().prop_map(ValueAst::Lit),
-        1 => prop::collection::vec(range, 2..=3).prop_map(|v| ValueAst::lit_set(v)),
+        1 => prop::collection::vec(range, 2..=3).prop_map(ValueAst::lit_set),
         2 => value_term_strategy().prop_map(ValueAst::term),
         2 => value_predicate_strategy().prop_map(ValueAst::predicate),
     ]
@@ -163,8 +163,8 @@ pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassAst> {
         3 => Just(IsotopeMassAst::Natural),
         3 => Just(IsotopeMassAst::Undetermined),
         3 => (1u32..=250).prop_map(IsotopeMassAst::Lit),
-        2 => prop::collection::vec(1u32..=250, 1..=3).prop_map(|v| IsotopeMassAst::lit_set(v)),
-        1 => id_strategy().prop_map(|s| IsotopeMassAst::var(s)),
+        2 => prop::collection::vec(1u32..=250, 1..=3).prop_map(IsotopeMassAst::lit_set),
+        1 => id_strategy().prop_map(IsotopeMassAst::var),
         1 => (id_strategy(), prop::collection::vec(1u32..=250, 1..=3))
             .prop_map(|(id, v)| IsotopeMassAst::var_in(id, v)),
     ]
@@ -234,6 +234,7 @@ pub(crate) fn aromatic_valence_ast_strategy() -> impl Strategy<Value = AromaticV
         Just(AromaticValenceAst::NotAromatic),
         constraint_value_strategy(0..=6).prop_map(AromaticValenceAst::Aromatic),
     ]
+    .prop_map(|v| v.canonicalize().unwrap_or(AromaticValenceAst::Undetermined))
 }
 
 pub(crate) fn multicenter_valence_ast_strategy() -> impl Strategy<Value = MulticenterValenceAst> {
@@ -241,6 +242,7 @@ pub(crate) fn multicenter_valence_ast_strategy() -> impl Strategy<Value = Multic
         Just(MulticenterValenceAst::NotMulticenter),
         constraint_value_strategy(0..=6).prop_map(MulticenterValenceAst::Multicenter),
     ]
+    .prop_map(|v| v.canonicalize().unwrap_or(MulticenterValenceAst::Undetermined))
 }
 
 /// Atom constraints route through `fmt_value_field_required` (or

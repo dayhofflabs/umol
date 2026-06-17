@@ -196,6 +196,7 @@ pub enum ElementAst {
     Lit(Element),
     LitSet(Box<BTreeSet<Element>>),
     NotSet(Box<BTreeSet<Element>>),
+    #[allow(clippy::type_complexity)]
     Var(Box<(String, Option<(MemOp, BTreeSet<Element>)>)>),
 }
 

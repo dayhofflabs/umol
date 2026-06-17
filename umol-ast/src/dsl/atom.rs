@@ -291,14 +291,14 @@ fn atom_predicate(i: &mut &str) -> PResult<AtomPredicate> {
 fn element(i: &mut &str) -> PResult<ElementAst> {
     alt((
         '*'.value(ElementAst::Undetermined),
-        preceded('!', element_set).map(|s| ElementAst::not_set(s)),
+        preceded('!', element_set).map(ElementAst::not_set),
         preceded('!', element_literal).map(ElementAst::not),
-        element_set.map(|s| ElementAst::lit_set(s)),
+        element_set.map(ElementAst::lit_set),
         element_bind.map(|(id, set, polarity)| match polarity {
             MemOp::In => ElementAst::var_in(id, set),
             MemOp::NotIn => ElementAst::var_not_in(id, set),
         }),
-        element_ref.map(|s| ElementAst::var(s)),
+        element_ref.map(ElementAst::var),
         element_literal.map(ElementAst::Lit),
     ))
     .parse_next(i)
