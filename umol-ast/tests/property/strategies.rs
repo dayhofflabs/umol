@@ -88,7 +88,7 @@ pub(crate) fn value_basic(range: RangeInclusive<i64>) -> impl Strategy<Value = V
         4 => range.clone().prop_map(ValueAst::Lit),
         1 => prop::collection::vec(range.clone(), 2..=3).prop_map(|v| ValueAst::lit_set(v)),
         1 => id_strategy().prop_map(|s| ValueAst::var(s)),
-        1 => (id_strategy(), range).prop_map(|(id, n)| ValueAst::at_least(id, n)),
+        1 => (id_strategy(), range).prop_map(|(id, n)| ValueAst::var_at_least(id, n)),
     ]
     .prop_map(canonicalize_value)
 }

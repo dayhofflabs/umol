@@ -70,13 +70,12 @@ impl ValueAst {
         Self::LitSet(Box::new(values.into_iter().collect()))
     }
 
-    /// A bare field variable `?name` — the common symbolic term.
     pub fn var(name: impl Into<String>) -> Self {
         Self::Term(Box::new(ValueTerm::Var(name.into())))
     }
 
-    /// The lower-bound pattern `?name >= bound` (the `+` sugar, e.g. `#r+`).
-    pub fn at_least(name: impl Into<String>, bound: i64) -> Self {
+    /// The lower-bound pattern `?name >= bound`
+    pub fn var_at_least(name: impl Into<String>, bound: i64) -> Self {
         Self::Predicate(Box::new(ValuePredicate::Rel(
             ValueTerm::Var(name.into()),
             RelOp::Ge,
@@ -488,8 +487,12 @@ impl Lattice for ValueAst {
 
     /// Least upper bound, canonicalizing both operands and the result.
     fn join(&self, other: &Self) -> Self {
-        let a = self.canonical().unwrap_or(Cow::Owned(ValueAst::Undetermined));
-        let b = other.canonical().unwrap_or(Cow::Owned(ValueAst::Undetermined));
+        let a = self
+            .canonical()
+            .unwrap_or(Cow::Owned(ValueAst::Undetermined));
+        let b = other
+            .canonical()
+            .unwrap_or(Cow::Owned(ValueAst::Undetermined));
         use ValueAst::*;
         match (a.as_ref(), b.as_ref()) {
             (Undetermined, _) | (_, Undetermined) => Undetermined,
