@@ -22,7 +22,8 @@ pub(crate) use umol_ast::ast::{
     NoncovalentBondKind, NoncovalentBondKindAst, OrientedPermutationAst, PermutationAst,
     RelationalConstraint, SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomId,
     StereoBondAst, StereoBondConstraint, StereoBondId, StereoConfigurationAst, StereoCosetAst,
-    StereoExpr, StereoKind, StereoLigand, StereoLigandId, StereoLigandKind, Stereogenicity,
+    StereoExpr, StereoKind, StereoKindAst, StereoLigand, StereoLigandId, StereoLigandKind,
+    Stereogenicity,
     StereogenicityAst,
     StereogenicityRelationAst, SubPatternAnchor, Topicity, TopicityAst, TopicityRelationAst,
     RelOp, ValueAst, ValuePredicate, ValueTerm,
@@ -564,6 +565,13 @@ pub(crate) fn stereo_atom_kind_strategy() -> impl Strategy<Value = StereoKind> {
         Just(StereoKind::SquarePlanar),
         Just(StereoKind::TrigonalBipyramidal),
         Just(StereoKind::Octahedral),
+    ]
+}
+
+pub(crate) fn stereo_kind_ast_strategy() -> impl Strategy<Value = StereoKindAst> {
+    prop_oneof![
+        Just(StereoKindAst::Undetermined),
+        stereo_atom_kind_strategy().prop_map(StereoKindAst::Lit),
     ]
 }
 

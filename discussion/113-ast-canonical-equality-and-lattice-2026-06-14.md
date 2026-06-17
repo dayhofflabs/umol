@@ -92,7 +92,7 @@ type greens its own `lattice::` test.
    `dsl/value.rs` + every `ValueAst` consumer).
 2. **`ElementAst`** **Done** — `Undetermined|Lit|LitSet|NotSet|Var`; cardinality-canonical; drop `Not`.
 3. **`IsotopeMassAst`** **Done** — `Undetermined|Natural|Lit|LitSet|Var`; positive-only; `u32`.
-4. **`NoncovalentBondKindAst`**, **`StereoKindAst`** — `Undetermined|Lit`; identity
+4. **`NoncovalentBondKindAst`**, **`StereoKindAst`**  **Done** — `Undetermined|Lit`; identity
    `canonicalize`; `canonical` always borrows.
 5. **`ElectronCountsAst`** (new) — `Undetermined|Lit(Vec<u8>)`; identity (positional).
 

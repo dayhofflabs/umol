@@ -63,6 +63,15 @@ proptest! {
     }
 
     #[test]
+    fn test_stereo_kind_ast_lattice_laws(
+        a in stereo_kind_ast_strategy(),
+        b in stereo_kind_ast_strategy(),
+        c in stereo_kind_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
     fn test_stereo_configuration_ast_lattice_laws(
         a in stereo_config_strategy(),
         b in stereo_config_strategy(),

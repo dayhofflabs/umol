@@ -76,7 +76,7 @@ pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, Ring
 pub use spin::SpinStateAst;
 pub use stereo::{
     StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
-    Stereogenicity, Topicity,
+    StereoKindAst, Stereogenicity, Topicity,
 };
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
