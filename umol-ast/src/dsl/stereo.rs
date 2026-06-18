@@ -1514,6 +1514,7 @@ mod tests {
     #[case::square_planar("Sp2", StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(2))))]
     #[case::octahedral("Oh6", StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoCosetAst::Lit(6))))]
     #[case::undetermined("*", StereoAtomDsl(StereoAtomAst::default()))]
+    #[case::no_canonicalization("Th~1", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1))))))]
     fn test_parse_stereo_atom(#[case] input: &str, #[case] expected: StereoAtomDsl) {
         assert_eq!(parse_stereo_atom(input).unwrap(), expected);
     }
@@ -1651,6 +1652,7 @@ mod tests {
     #[case::cis_trans_e("Ct1", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))))]
     #[case::open("Ct*", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined)))]
     #[case::undetermined("*", StereoBondDsl(StereoBondAst::default()))]
+    #[case::no_canonicalization("Ct~1", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1))))))]
     fn test_parse_stereo_bond(#[case] input: &str, #[case] expected: StereoBondDsl) {
         assert_eq!(parse_stereo_bond(input).unwrap(), expected);
     }
@@ -1732,7 +1734,7 @@ mod tests {
     #[rstest]
     #[case::undetermined("*", TetrahedralStereoAst::Undetermined)]
     #[case::not_stereo("!", TetrahedralStereoAst::NotStereo)]
-    #[case::stereogenic("+", TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined))]
+    #[case::stereo_undetermined("+", TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined))]
     #[case::lit("1", TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)))]
     #[case::var("?o", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var("o"))))]
     #[case::lit_set("{1,2}", TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2])))]
@@ -1743,9 +1745,24 @@ mod tests {
     #[case::swap_binds_tighter_than_apply("~1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::swap(StereoTerm::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
     #[case::mirror_binds_tighter_than_apply("'1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::mirror(StereoTerm::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
     #[case::whitespace_ignored("  ?o :: { 1 , 2 }", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var_in("o", [1, 2]))))]
+    #[case::no_canonicalization("{1}", TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1])))]
     fn test_tetrahedral_stereo_config(#[case] input: &str, #[case] expected: TetrahedralStereoAst) {
         assert_eq!(
             (|i: &mut &str| tetrahedral_stereo_config(i)).parse(input).unwrap(),
+            expected
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined("*", CisTransStereoAst::Undetermined)]
+    #[case::not_stereo("!", CisTransStereoAst::NotStereo)]
+    #[case::stereo_undetermined("+", CisTransStereoAst::Stereo(StereoCosetAst::Undetermined))]
+    #[case::lit("1", CisTransStereoAst::Stereo(StereoCosetAst::Lit(1)))]
+    #[case::no_canonicalization("~1", CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
+    fn test_cis_trans_stereo_config(#[case] input: &str, #[case] expected: CisTransStereoAst) {
+        assert_eq!(
+            (|i: &mut &str| cis_trans_stereo_config(i)).parse(input).unwrap(),
             expected
         );
     }

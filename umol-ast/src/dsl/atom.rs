@@ -1218,6 +1218,8 @@ mod tests {
     #[case::whitespace("  C  ", AtomDsl(AtomAst::new(ElementAst::Lit(Element::C))))]
     #[case::undetermined("*", AtomDsl(AtomAst::new(ElementAst::Undetermined)))]
     #[case::element_set("{C,N,O}", AtomDsl(AtomAst::new(ElementAst::lit_set(vec![Element::C, Element::N, Element::O]))))]
+    // Parse is mechanical: a singleton element set is kept raw (canon folds to `Lit`).
+    #[case::element_set_singleton("{C}", AtomDsl(AtomAst::new(ElementAst::lit_set(vec![Element::C]))))]
     #[case::element_bind("(?e :: {C,N})", AtomDsl(AtomAst::new(ElementAst::var_in("e", vec![Element::C, Element::N]))))]
     #[case::element_ref("(?e)", AtomDsl(AtomAst::new(ElementAst::var("e".to_string()))))]
     #[case::isotope("C#i12", AtomDsl(AtomAst { isotope_mass: IsotopeMassAst::Lit(12), ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1236,6 +1238,7 @@ mod tests {
     #[case::lone_pairs("O#n2", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(2), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
     #[case::lone_pairs_omit("O#n", AtomDsl(AtomAst { lone_pairs: ValueAst::Lit(1), ..AtomAst::new(ElementAst::Lit(Element::O)) }))]
     #[case::unpaired("C#u2", AtomDsl(AtomAst { spin: SpinStateAst { unpaired: ValueAst::Lit(2), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
+    #[case::unpaired_no_canonicalization("C#u{1}", AtomDsl(AtomAst { spin: SpinStateAst { unpaired: ValueAst::lit_set([1]), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::unpaired_omit("C#u", AtomDsl(AtomAst { spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multiplicity("C#s3", AtomDsl(AtomAst { spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
     #[case::multiplicity_omit("C#s", AtomDsl(AtomAst { spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(1) }, ..AtomAst::new(ElementAst::Lit(Element::C)) }))]
@@ -1572,6 +1575,7 @@ mod tests {
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, ":not-aromatic")]
     #[case::aromatic_lit(AromaticValenceAst::Aromatic(ValueAst::Lit(6)), "{:aromatic 6}")]
     #[case::aromatic_undetermined(AromaticValenceAst::Aromatic(ValueAst::Undetermined), "{:aromatic :undetermined}")]
+    #[case::aromatic_no_canonicalization(AromaticValenceAst::Aromatic(ValueAst::lit_set([5])), "{:aromatic [5]}")]
     fn test_aromatic_valence_dsl_roundtrip(
         #[case] input: AromaticValenceAst,
         #[case] edn_source: &str,
@@ -1589,6 +1593,7 @@ mod tests {
     #[case::undetermined(MulticenterValenceAst::Undetermined, ":undetermined")]
     #[case::not_multicenter(MulticenterValenceAst::NotMulticenter, ":not-multicenter")]
     #[case::multicenter_lit(MulticenterValenceAst::Multicenter(ValueAst::Lit(3)), "{:multicenter 3}")]
+    #[case::multicenter_no_canonicalization(MulticenterValenceAst::Multicenter(ValueAst::lit_set([5])), "{:multicenter [5]}")]
     fn test_multicenter_valence_dsl_roundtrip(
         #[case] input: MulticenterValenceAst,
         #[case] edn_source: &str,

@@ -76,6 +76,7 @@ impl StereoKind {
     }
 
     /// Act on coset index `index` by `perm`, through the class's coset algebra.
+    #[allow(unused)]
     fn act(self, index: u32, perm: Permutation) -> u32 {
         space(self.class_key()).reindex(index, perm)
     }
@@ -170,9 +171,9 @@ impl AsLit for StereoConfigurationAst {
 
     fn as_lit(&self) -> Option<StereoConfiguration> {
         match self {
-            Self::Kinded(kind, coset) => {
-                coset.as_lit().map(|coset| StereoConfiguration { kind: *kind, coset })
-            }
+            Self::Kinded(kind, coset) => coset
+                .as_lit()
+                .map(|coset| StereoConfiguration { kind: *kind, coset }),
             Self::Undetermined => None,
         }
     }
@@ -527,7 +528,8 @@ pub(crate) fn canon_coset(
                     let id = Permutation::identity(kind.degree());
                     let term = if kind.coset_action_eq(g, id) {
                         var
-                    } else if kind.is_chiral_class() && kind.coset_action_eq(g, kind.mirror_perm()) {
+                    } else if kind.is_chiral_class() && kind.coset_action_eq(g, kind.mirror_perm())
+                    {
                         StereoTerm::Mirror(Box::new(var))
                     } else if kind.coset_action_eq(g, kind.involution()) {
                         StereoTerm::Swap(Box::new(var))
@@ -611,7 +613,10 @@ pub(crate) fn coset_matches(
     target: &StereoCosetAst,
     kind: StereoKind,
 ) -> bool {
-    match (coset_meet(pattern, target, kind), canon_coset(target.clone(), kind)) {
+    match (
+        coset_meet(pattern, target, kind),
+        canon_coset(target.clone(), kind),
+    ) {
         (Some(m), Ok(ct)) => m == ct,
         _ => false,
     }
@@ -630,10 +635,11 @@ pub(crate) fn coset_apply_permutation(
         StereoCosetAst::LitSet(set) => {
             StereoCosetAst::LitSet(set.iter().map(|i| s.reindex(*i, perm)).collect())
         }
-        StereoCosetAst::Term(t) => {
-            canon_coset(StereoCosetAst::term(StereoTerm::apply((**t).clone(), perm)), kind)
-                .unwrap_or(StereoCosetAst::Undetermined)
-        }
+        StereoCosetAst::Term(t) => canon_coset(
+            StereoCosetAst::term(StereoTerm::apply((**t).clone(), perm)),
+            kind,
+        )
+        .unwrap_or(StereoCosetAst::Undetermined),
     }
 }
 
@@ -804,8 +810,14 @@ mod tests {
 
     #[rstest]
     #[case::undetermined(StereoConfigurationAst::Undetermined)]
-    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
-    #[case::kind_open(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
+    #[case::kind_lit(StereoConfigurationAst::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCosetAst::Lit(0)
+    ))]
+    #[case::kind_open(StereoConfigurationAst::Kinded(
+        StereoKind::Tetrahedral,
+        StereoCosetAst::Undetermined
+    ))]
     // Multi-element / full coset sets are preserved (no complement or full→Undetermined fold).
     #[case::multi_element_set(StereoConfigurationAst::Kinded(StereoKind::SquarePlanar, StereoCosetAst::lit_set([0, 1])))]
     #[case::full_set(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::lit_set([0, 1])))]
@@ -814,7 +826,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::empty_set(StereoConfigurationAst::Kinded(StereoKind::SquarePlanar, StereoCosetAst::LitSet(BTreeSet::new())))]
+    #[case::empty_set(StereoConfigurationAst::Kinded(
+        StereoKind::SquarePlanar,
+        StereoCosetAst::LitSet(BTreeSet::new())
+    ))]
     fn test_stereo_configuration_ast_canonicalize_error(#[case] input: StereoConfigurationAst) {
         assert_eq!(input.canonicalize(), Err(Contradiction));
     }

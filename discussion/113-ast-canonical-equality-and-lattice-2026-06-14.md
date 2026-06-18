@@ -84,7 +84,7 @@ type greens its own `lattice::` test.
 - `umol-ast-macros`: add `#[derive(Canonicalize)]` (field-wise). **Do not** yet change
   `#[derive(Lattice)]` (that's P6) — keep P0 additive.
 
-### P1 · Leaf value types (bottom-up)
+### P1 · Leaf value types **Done**
 1. **`ValueAst`** **Done** - split `Expr`→`ValueTerm`(i64)/`ValuePredicate`(bool); `Bind`/`Ref`→
    `Var`; `Set`→`LitSet(BTreeSet)`; the full canonicalize step list (term fold, predicate
    NNF, lifts). Parser: build `Sum`/`Product`/`Div`/`Rem`, drop the `unary_expr` sign-XOR;
@@ -96,7 +96,7 @@ type greens its own `lattice::` test.
    `canonicalize`; `canonical` always borrows.
 5. **`ElectronCountsAst`** (new) **Done** — `Undetermined|Lit(Vec<u8>)`; identity (positional).
 
-### P2 · Predicate / relation types
+### P2 · Predicate / relation types **Done**
 1. **`SpinStateAst`** **Done** — pure field-wise `#[derive(Canonicalize)]`; **no** cross-field
    parity gate (`unpaired`↔`multiplicity` parity is a tier-2 physical invariant, enforced
    at resolution, not the AST — invalid pairs like `(1,1)` are legal AST states); `From`
