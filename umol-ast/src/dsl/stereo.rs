@@ -7,7 +7,7 @@ use std::str::FromStr;
 
 use strum::VariantArray;
 use umol_edn::{
-    DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnSet, EdnStreamDeserializer, FromEdn, ToEdn,
+    DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn,
 };
 use umol_perm::{Orientation, Permutation};
 use winnow::ascii::{digit1, multispace0};
@@ -387,7 +387,6 @@ pub(crate) fn parse_stereo_coset(input: &str, degree: usize) -> Result<StereoCos
 fn stereo_coset(i: &mut &str, degree: usize) -> PResult<StereoCosetAst> {
     alt((
         '*'.value(StereoCosetAst::Undetermined),
-        preceded('!', stereo_lit_set).map(StereoCosetAst::not_set),
         (|i: &mut &str| stereo_term(i, degree)).map(|t| match t {
             StereoTerm::Lit(n) => StereoCosetAst::Lit(n),
             StereoTerm::LitSet(s) => StereoCosetAst::LitSet(s),
@@ -783,10 +782,6 @@ fn fmt_stereo_coset(f: &mut fmt::Formatter<'_>, coset: &StereoCosetAst) -> fmt::
         StereoCosetAst::Undetermined => write!(f, "*"),
         StereoCosetAst::Lit(n) => write!(f, "{n}"),
         StereoCosetAst::LitSet(s) => fmt_stereo_lit_set(f, s),
-        StereoCosetAst::NotSet(s) => {
-            write!(f, "!")?;
-            fmt_stereo_lit_set(f, s)
-        }
         StereoCosetAst::Term(t) => fmt_stereo_term(f, t),
     }
 }
@@ -892,74 +887,98 @@ fn perm_from_vov(edn: &Edn, degree: usize) -> Result<Permutation, DeError> {
     Ok(Permutation::from_cycles(degree, &cycles))
 }
 
-/// Generates the structured-EDN serialization/deserialization for a relation type:
-/// `:undetermined` (the full domain), a single keyword (singleton), or a keyword set `#{…}`.
-/// Keyword names map 1:1 to the domain variants per the table; the AST itself carries none.
+/// Generates the structured-EDN serialization/deserialization for a relation type
+/// into/out of the owning constraint map: `:relation` is `:undetermined`, a single
+/// keyword (`Lit`), or a member vector (`LitSet`/`NotSet`), and a sibling
+/// `:member :in`/`:not-in` (default `:in`) carries the `NotSet` polarity — mirroring
+/// `:member` on `ligand-symmetry`. Mechanical (no folding); keyword names map 1:1 to
+/// the domain variants per the table.
 macro_rules! relation_serde {
     ($to:ident, $from:ident, $relation:ident, $domain:ty, $($variant:path => $kw:literal),+ $(,)?) => {
-        fn $to(rel: &$relation) -> Edn<'static> {
-            let members = rel.to_set();
-            if members.len() == <$domain as VariantArray>::VARIANTS.len() {
-                Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
-            } else if members.len() == 1 {
-                let kw = match members.into_iter().next().unwrap() {
-                    $($variant => $kw,)+
-                };
-                Edn::Keyword(EdnKeyword::owned(kw.to_string()))
-            } else {
-                let set: EdnSet<'static> = members
-                    .into_iter()
-                    .map(|m| {
-                        let kw = match m {
-                            $($variant => $kw,)+
-                        };
-                        Edn::Keyword(EdnKeyword::owned(kw.to_string()))
-                    })
-                    .collect();
-                Edn::Set(set)
+        fn $to(rel: &$relation, m: &mut EdnMap<'static>) {
+            fn member_kw(v: $domain) -> Edn<'static> {
+                let name = match v { $($variant => $kw,)+ };
+                Edn::Keyword(EdnKeyword::owned(name.to_string()))
+            }
+            let (value, not_in) = match rel {
+                $relation::Undetermined => (Edn::keyword("undetermined"), false),
+                $relation::Lit(v) => (member_kw(*v), false),
+                $relation::LitSet(s) => (
+                    Edn::Vector(s.iter().map(|v| member_kw(*v)).collect::<Vec<_>>().into()),
+                    false,
+                ),
+                $relation::NotSet(s) => (
+                    Edn::Vector(s.iter().map(|v| member_kw(*v)).collect::<Vec<_>>().into()),
+                    true,
+                ),
+            };
+            m.insert(Edn::keyword("relation"), value);
+            if not_in {
+                m.insert(Edn::keyword("member"), Edn::keyword("not-in"));
             }
         }
 
-        fn $from(edn: &Edn) -> Result<$relation, DeError> {
+        fn $from(m: &EdnMap, path: &'static str) -> Result<$relation, DeError> {
             fn keyword_member(name: &str) -> Option<$domain> {
                 match name {
                     $($kw => Some($variant),)+
                     _ => None,
                 }
             }
-            match edn {
+            let value = m.get_keyword("relation").ok_or_else(|| DeError::MissingField {
+                key: "relation".into(),
+                path: vec![path.into()],
+            })?;
+            let not_in = match m.get_keyword("member") {
+                None => false,
+                Some(Edn::Keyword(k)) if k.name() == "in" => false,
+                Some(Edn::Keyword(k)) if k.name() == "not-in" => true,
+                Some(other) => {
+                    return Err(DeError::TypeMismatch {
+                        expected: ":in | :not-in",
+                        got: other.kind(),
+                        path: vec![path.into()],
+                    })
+                }
+            };
+            match value {
                 Edn::Keyword(k) if k.name() == "undetermined" => Ok($relation::Undetermined),
                 Edn::Keyword(k) => {
-                    let m = keyword_member(k.name()).ok_or_else(|| DeError::TypeMismatch {
+                    let v = keyword_member(k.name()).ok_or_else(|| DeError::TypeMismatch {
                         expected: concat!(stringify!($relation), " keyword"),
-                        got: edn.kind(),
-                        path: Vec::new(),
+                        got: value.kind(),
+                        path: vec![path.into()],
                     })?;
-                    Ok($relation::lit(m))
+                    Ok($relation::lit(v))
                 }
-                Edn::Set(s) => {
+                Edn::Vector(xs) => {
                     let mut members = BTreeSet::new();
-                    for e in s.iter() {
+                    for e in xs.iter() {
                         let Edn::Keyword(k) = e else {
                             return Err(DeError::TypeMismatch {
                                 expected: "relation keyword",
                                 got: e.kind(),
-                                path: Vec::new(),
+                                path: vec![path.into()],
                             });
                         };
-                        let m = keyword_member(k.name()).ok_or_else(|| DeError::TypeMismatch {
-                            expected: "relation keyword",
-                            got: e.kind(),
-                            path: Vec::new(),
-                        })?;
-                        members.insert(m);
+                        members.insert(keyword_member(k.name()).ok_or_else(|| {
+                            DeError::TypeMismatch {
+                                expected: "relation keyword",
+                                got: e.kind(),
+                                path: vec![path.into()],
+                            }
+                        })?);
                     }
-                    Ok($relation::lit_set(members))
+                    Ok(if not_in {
+                        $relation::not_set(members)
+                    } else {
+                        $relation::lit_set(members)
+                    })
                 }
                 other => Err(DeError::TypeMismatch {
-                    expected: "relation (keyword, set, or :undetermined)",
+                    expected: ":undetermined | keyword | [members]",
                     got: other.kind(),
-                    path: Vec::new(),
+                    path: vec![path.into()],
                 }),
             }
         }
@@ -988,13 +1007,22 @@ pub struct StereogenicityDsl(pub StereogenicityAst);
 
 impl ToEdn for StereogenicityDsl {
     fn to_edn(&self) -> Edn<'static> {
-        stereogenicity_relation_to_edn(&self.0)
+        let mut m = EdnMap::with_capacity(2);
+        stereogenicity_relation_to_edn(&self.0, &mut m);
+        Edn::Map(m)
     }
 }
 
 impl<'de> FromEdn<'de> for StereogenicityDsl {
     fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        Ok(Self(stereogenicity_relation_from_edn(edn)?))
+        let Edn::Map(m) = edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "stereogenicity map",
+                got: edn.kind(),
+                path: Vec::new(),
+            });
+        };
+        Ok(Self(stereogenicity_relation_from_edn(m, "stereogenicity")?))
     }
 }
 
@@ -1006,7 +1034,7 @@ pub struct TopicityDsl(pub TopicityAst);
 impl ToEdn for TopicityDsl {
     fn to_edn(&self) -> Edn<'static> {
         let t = &self.0;
-        let mut m = EdnMap::with_capacity(2);
+        let mut m = EdnMap::with_capacity(3);
         m.insert(
             Edn::keyword("pair"),
             Edn::Vector(
@@ -1017,7 +1045,7 @@ impl ToEdn for TopicityDsl {
                 .into(),
             ),
         );
-        m.insert(Edn::keyword("relation"), topicity_relation_to_edn(&t.rel));
+        topicity_relation_to_edn(&t.rel, &mut m);
         Edn::Map(m)
     }
 }
@@ -1046,15 +1074,9 @@ impl<'de> FromEdn<'de> for TopicityDsl {
             return Err(DeError::Custom("topicity pair must have 2 positions".into()));
         }
         let pair = LigandPairAst::new(ligand_position(&p[0])?, ligand_position(&p[1])?);
-        let rel_edn = m
-            .get_keyword("relation")
-            .ok_or_else(|| DeError::MissingField {
-                key: "relation".into(),
-                path: vec!["topicity".into()],
-            })?;
         Ok(Self(TopicityAst {
             pair,
-            rel: topicity_relation_from_edn(rel_edn)?,
+            rel: topicity_relation_from_edn(m, "topicity")?,
         }))
     }
 }
@@ -1359,7 +1381,7 @@ impl ToEdn for StereoCosetDsl {
                     .collect::<Vec<_>>()
                     .into(),
             ),
-            StereoCosetAst::NotSet(_) | StereoCosetAst::Term(_) => {
+            StereoCosetAst::Term(_) => {
                 Edn::Str(Cow::Owned(self.to_string()))
             }
         }
@@ -1847,7 +1869,8 @@ mod tests {
     #[rstest]
     #[case::lit(TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) }), "{:pair [0 1] :relation :homotopic}")]
     #[case::undetermined(TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Undetermined }), "{:pair [0 1] :relation :undetermined}")]
-    #[case::notset_renders_member_set(TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }), "{:pair [1 2] :relation #{:homotopic :enantiotopic}}")]
+    #[case::lit_set(TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }), "{:pair [1 2] :relation [:homotopic :enantiotopic]}")]
+    #[case::not_set(TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }), "{:pair [1 2] :relation [:diastereotopic] :member :not-in}")]
     fn test_topicity_dsl_to_edn(#[case] form: TopicityDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }
@@ -1856,7 +1879,8 @@ mod tests {
     #[rstest]
     #[case::lit("{:pair [0 1] :relation :homotopic}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) }))]
     #[case::undetermined("{:pair [0 1] :relation :undetermined}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Undetermined }))]
-    #[case::member_set("{:pair [1 2] :relation #{:homotopic :enantiotopic}}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
+    #[case::lit_set("{:pair [1 2] :relation [:homotopic :enantiotopic]}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
+    #[case::not_set("{:pair [1 2] :relation [:diastereotopic] :member :not-in}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))]
     fn test_topicity_dsl_from_edn(#[case] input: &str, #[case] expected: TopicityDsl) {
         assert_eq!(TopicityDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }
@@ -1872,26 +1896,27 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(StereogenicityDsl(StereogenicityAst::Lit(Stereogenicity::Stereogenic)), ":stereogenic")]
-    #[case::undetermined(StereogenicityDsl(StereogenicityAst::Undetermined), ":undetermined")]
-    #[case::notset_renders_member_set(StereogenicityDsl(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))), "#{:prochiral :stereogenic}")]
+    #[case::lit(StereogenicityDsl(StereogenicityAst::Lit(Stereogenicity::Stereogenic)), "{:relation :stereogenic}")]
+    #[case::undetermined(StereogenicityDsl(StereogenicityAst::Undetermined), "{:relation :undetermined}")]
+    #[case::not_set(StereogenicityDsl(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))), "{:relation [:symmetric] :member :not-in}")]
     fn test_stereogenicity_dsl_to_edn(#[case] form: StereogenicityDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit(":stereogenic", StereogenicityDsl(StereogenicityAst::Lit(Stereogenicity::Stereogenic)))]
-    #[case::undetermined(":undetermined", StereogenicityDsl(StereogenicityAst::Undetermined))]
-    #[case::member_set("#{:prochiral :stereogenic}", StereogenicityDsl(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Prochiral, Stereogenicity::Stereogenic]))))]
+    #[case::lit("{:relation :stereogenic}", StereogenicityDsl(StereogenicityAst::Lit(Stereogenicity::Stereogenic)))]
+    #[case::undetermined("{:relation :undetermined}", StereogenicityDsl(StereogenicityAst::Undetermined))]
+    #[case::lit_set("{:relation [:prochiral :stereogenic]}", StereogenicityDsl(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Prochiral, Stereogenicity::Stereogenic]))))]
+    #[case::not_set("{:relation [:symmetric] :member :not-in}", StereogenicityDsl(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))))]
     fn test_stereogenicity_dsl_from_edn(#[case] input: &str, #[case] expected: StereogenicityDsl) {
         assert_eq!(StereogenicityDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wrong_type("nil", DeError::TypeMismatch { expected: "relation (keyword, set, or :undetermined)", got: "nil", path: Vec::new() })]
-    #[case::unknown_keyword(":bogus", DeError::TypeMismatch { expected: "StereogenicityAst keyword", got: "keyword", path: Vec::new() })]
+    #[case::wrong_type("nil", DeError::TypeMismatch { expected: "stereogenicity map", got: "nil", path: Vec::new() })]
+    #[case::unknown_keyword("{:relation :bogus}", DeError::TypeMismatch { expected: "StereogenicityAst keyword", got: "keyword", path: vec!["stereogenicity".into()] })]
     fn test_stereogenicity_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
         assert_eq!(StereogenicityDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
     }

@@ -427,9 +427,9 @@ fn test_molecule_dsl_from_edn_str_matches_from_edn(#[case] source: &str) {
 #[case::stereo_bond_id_ref(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] {:id :db :a 1 :b 2 :type "2"} [2 3 "1"]] :stereo-bonds [{:site :db :ligands [0 3] :type "Ct1"}]}"##)]
 #[case::stereo_bond_own_id(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:id :sb1 :site 1 :ligands [0 3] :type "Ct1"}]}"##)]
 #[case::stereo_atom_inline_constraints(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1#f(0,1,2)#g/"}]}"##)]
-#[case::stereo_atom_molecule_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [0 {:kind :tetrahedral :stereogenicity :stereogenic}]}]}"##)]
+#[case::stereo_atom_molecule_constraint(r##"{:atoms ["C" "F" "Cl" "Br" "I"] :bonds [[0 1 "1"] [0 2 "1"] [0 3 "1"] [0 4 "1"]] :stereo-atoms [{:site 0 :ligands [1 2 3 4] :type "Th1"}] :constraints [{:stereo-atom [0 {:kind :tetrahedral :stereogenicity {:relation :stereogenic}}]}]}"##)]
 #[case::stereo_bond_inline_constraints(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1#g/"}]}"##)]
-#[case::stereo_bond_molecule_constraint(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}] :constraints [{:stereo-bond [0 {:kind :cis-trans :stereogenicity :stereogenic}]}]}"##)]
+#[case::stereo_bond_molecule_constraint(r##"{:atoms ["C" "C" "C" "C"] :bonds [[0 1 "1"] [1 2 "2"] [2 3 "1"]] :stereo-bonds [{:site 1 :ligands [0 3] :type "Ct1"}] :constraints [{:stereo-bond [0 {:kind :cis-trans :stereogenicity {:relation :stereogenic}}]}]}"##)]
 fn test_molecule_dsl_stereo_edn_roundtrip(#[case] source: &str) {
     let dsl = MoleculeDsl::from_edn(&read_string(source).unwrap()).unwrap();
     let reparsed = MoleculeDsl::from_edn(&dsl.to_edn()).unwrap();

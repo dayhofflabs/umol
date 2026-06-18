@@ -2332,7 +2332,7 @@ mod tests {
     #[case::stereogenicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        "{:stereo-atom [0 {:kind :tetrahedral :stereogenicity :stereogenic}]}")]
+        "{:stereo-atom [0 {:kind :tetrahedral :stereogenicity {:relation :stereogenic}}]}")]
     fn test_constraint_dsl_stereo_atom_roundtrip(
         #[from(full_counts)] counts: EntityCounts,
         #[case] input: Constraint,

@@ -63,15 +63,6 @@ proptest! {
     }
 
     #[test]
-    fn test_stereo_kind_ast_lattice_laws(
-        a in stereo_kind_ast_strategy(),
-        b in stereo_kind_ast_strategy(),
-        c in stereo_kind_ast_strategy(),
-    ) {
-        assert_lattice_laws(&a, &b, &c)?;
-    }
-
-    #[test]
     fn test_electron_counts_ast_lattice_laws(
         a in electron_counts_ast_strategy(),
         b in electron_counts_ast_strategy(),
@@ -82,18 +73,27 @@ proptest! {
 
     #[test]
     fn test_stereo_configuration_ast_lattice_laws(
-        a in stereo_config_strategy(),
-        b in stereo_config_strategy(),
-        c in stereo_config_strategy(),
+        a in stereo_configuration_lattice_strategy(),
+        b in stereo_configuration_lattice_strategy(),
+        c in stereo_configuration_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
-    fn test_stereo_coset_ast_lattice_laws(
-        a in stereo_coset_strategy(),
-        b in stereo_coset_strategy(),
-        c in stereo_coset_strategy(),
+    fn test_tetrahedral_stereo_ast_lattice_laws(
+        a in tetrahedral_stereo_lattice_strategy(),
+        b in tetrahedral_stereo_lattice_strategy(),
+        c in tetrahedral_stereo_lattice_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_cis_trans_stereo_ast_lattice_laws(
+        a in cis_trans_stereo_lattice_strategy(),
+        b in cis_trans_stereo_lattice_strategy(),
+        c in cis_trans_stereo_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
     }

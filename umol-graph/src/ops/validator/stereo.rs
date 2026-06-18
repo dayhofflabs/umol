@@ -3,8 +3,8 @@
 use thiserror::Error;
 use umol_ast::ast::{
     AsLit, GraphSymmetry, Lattice, LigandPairAst, LigandSymmetryAst, MemOp, MoleculeAst,
-    StereoAtomId, StereoBondId, StereoKind, StereoSymmetry, Stereogenicity,
-    StereogenicityAst, Topicity, TopicityAst, TopicityRelationAst,
+    StereoAtomId, StereoBondId, StereoKind, StereoSymmetry, Stereogenicity, StereogenicityAst,
+    Topicity, TopicityAst, TopicityRelationAst,
 };
 use umol_perm::OrientedPermutation;
 
@@ -164,10 +164,13 @@ impl StereoValidator {
             && stereogenicity.matches(&StereogenicityAst::Lit(Stereogenicity::Prochiral)))
             || topicities.iter().any(|t| {
                 !t.rel.is_undetermined()
-                    && t.rel.matches(&TopicityRelationAst::Lit(Topicity::Enantiotopic))
+                    && t.rel
+                        .matches(&TopicityRelationAst::Lit(Topicity::Enantiotopic))
             });
         if !kind.is_chiral_class() && has_improper {
-            return Solution::Contradictory(StereoValidatorContradiction::ImproperOnAchiral { kind });
+            return Solution::Contradictory(StereoValidatorContradiction::ImproperOnAchiral {
+                kind,
+            });
         }
         match coset {
             Some(n) if (n as usize) >= kind.count() => {
@@ -247,7 +250,7 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         OrientedPermutationAst, PermutationAst, StereoAtomConstraint, StereoBondConstraint,
-        StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigandId, StereogenicityAst,
+        StereoConfigurationAst, StereoKind, StereoLigandId, StereogenicityAst,
     };
     use umol_ast::mol_ground;
     use umol_perm::{Orientation, Permutation};

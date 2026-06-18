@@ -23,8 +23,8 @@ pub(crate) use umol_ast::ast::{
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
     NoncovalentBondKind, NoncovalentBondKindAst, OrientedPermutationAst, PermutationAst,
     RelationalConstraint, SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomId,
-    StereoBondAst, StereoBondConstraint, StereoBondId, StereoSiteAst, StereoConfigurationAst,
-    StereoExpr, StereoKind, StereoKindAst, StereoLigand, StereoLigandId, StereoLigandKind,
+    CisTransStereoAst, StereoBondAst, StereoBondConstraint, StereoBondId, StereoConfigurationAst,
+    StereoCosetAst, StereoKind, StereoLigand, StereoLigandId, StereoLigandKind, TetrahedralStereoAst,
     Stereogenicity,
     StereogenicityAst, SubPatternAnchor, Topicity, TopicityAst, TopicityRelationAst,
     RelOp, ValueAst, ValuePredicate, ValueTerm,
@@ -264,7 +264,7 @@ pub(crate) fn atom_constraint_strategy() -> BoxedStrategy<AtomConstraint> {
         constraint_inner_value_strategy(3..=10).prop_map(AtomConstraint::RingSize),
         aromatic_valence_ast_strategy().prop_map(AtomConstraint::AromaticValence),
         multicenter_valence_ast_strategy().prop_map(AtomConstraint::MulticenterValence),
-        stereo_config_strategy().prop_map(AtomConstraint::TetrahedralStereo),
+        tetrahedral_stereo_strategy().prop_map(AtomConstraint::TetrahedralStereo),
     ]
     .boxed()
 }
@@ -284,7 +284,7 @@ pub(crate) fn bond_constraint_strategy() -> BoxedStrategy<BondConstraint> {
         Just(BondConstraint::Aromatic),
         constraint_inner_value_strategy(0..=6).prop_map(BondConstraint::RingCount),
         constraint_inner_value_strategy(3..=10).prop_map(BondConstraint::RingSize),
-        stereo_config_strategy().prop_map(BondConstraint::CisTransStereo),
+        cis_trans_stereo_strategy().prop_map(BondConstraint::CisTransStereo),
     ]
     .boxed()
 }
@@ -538,15 +538,11 @@ pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = Noncovale
 /// EDN coset-form: `Undetermined` (`*`), `Lit`, and a literal set
 /// (`{a,b,…}` ↔ EDN vector). The `~`/`^`/`?var` operator-exprs are reserved
 /// (§7.14) and excluded.
-pub(crate) fn stereo_coset_strategy() -> impl Strategy<Value = StereoConfigurationAst> {
+pub(crate) fn stereo_coset_strategy() -> impl Strategy<Value = StereoCosetAst> {
     prop_oneof![
-        Just(StereoConfigurationAst::Undetermined),
+        Just(StereoCosetAst::Undetermined),
         (0u32..=6).prop_map(StereoCosetAst::Lit),
-        prop::collection::vec(0u32..=6, 1..=3).prop_map(|mut v| {
-            v.sort_unstable();
-            v.dedup();
-            StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(v)))
-        }),
+        prop::collection::vec(0u32..=6, 1..=3).prop_map(StereoCosetAst::lit_set),
     ]
 }
 
@@ -558,15 +554,50 @@ pub(crate) fn stereo_ligand_kind_strategy() -> impl Strategy<Value = StereoLigan
     ]
 }
 
-/// `StereoSiteAst` for `#T` / `#C` constraints, excluding the vacuous
-/// `Undetermined` config (it renders empty per the canonical-rendering rule,
-/// breaking render → reparse — mirrors `aromatic_valence_ast_strategy`).
-/// `Stereo(Undetermined)` (the `+` form) is non-vacuous and kept.
-pub(crate) fn stereo_config_strategy() -> impl Strategy<Value = StereoSiteAst> {
+/// Per-kind `#T` / `#C` constraint values, excluding the vacuous `Undetermined`
+/// site (it is dropped on render, breaking render → reparse). `Stereo(coset)`
+/// (incl. the `+` form `Stereo(Undetermined)`) and `NotStereo` are kept. The
+/// `_lattice_strategy` variants add `Undetermined` (the lattice top).
+pub(crate) fn tetrahedral_stereo_strategy() -> impl Strategy<Value = TetrahedralStereoAst> {
     prop_oneof![
-        Just(StereoSiteAst::NotStereo),
-        stereo_coset_strategy().prop_map(StereoSiteAst::Stereo),
+        Just(TetrahedralStereoAst::NotStereo),
+        stereo_coset_strategy().prop_map(TetrahedralStereoAst::Stereo),
     ]
+    .prop_map(|s| s.canonicalize().unwrap_or(TetrahedralStereoAst::Undetermined))
+}
+
+pub(crate) fn tetrahedral_stereo_lattice_strategy() -> impl Strategy<Value = TetrahedralStereoAst> {
+    prop_oneof![
+        Just(TetrahedralStereoAst::Undetermined),
+        tetrahedral_stereo_strategy(),
+    ]
+}
+
+pub(crate) fn cis_trans_stereo_strategy() -> impl Strategy<Value = CisTransStereoAst> {
+    prop_oneof![
+        Just(CisTransStereoAst::NotStereo),
+        stereo_coset_strategy().prop_map(CisTransStereoAst::Stereo),
+    ]
+    .prop_map(|s| s.canonicalize().unwrap_or(CisTransStereoAst::Undetermined))
+}
+
+pub(crate) fn cis_trans_stereo_lattice_strategy() -> impl Strategy<Value = CisTransStereoAst> {
+    prop_oneof![
+        Just(CisTransStereoAst::Undetermined),
+        cis_trans_stereo_strategy(),
+    ]
+}
+
+/// `StereoConfigurationAst` over the atom geometry kinds, including the kindless
+/// `Undetermined` top.
+pub(crate) fn stereo_configuration_lattice_strategy(
+) -> impl Strategy<Value = StereoConfigurationAst> {
+    prop_oneof![
+        Just(StereoConfigurationAst::Undetermined),
+        (stereo_atom_kind_strategy(), stereo_coset_strategy())
+            .prop_map(|(kind, coset)| StereoConfigurationAst::kinded(kind, coset)),
+    ]
+    .prop_map(|c| c.canonicalize().unwrap_or(StereoConfigurationAst::Undetermined))
 }
 
 pub(crate) fn stereo_atom_kind_strategy() -> impl Strategy<Value = StereoKind> {
@@ -578,12 +609,6 @@ pub(crate) fn stereo_atom_kind_strategy() -> impl Strategy<Value = StereoKind> {
     ]
 }
 
-pub(crate) fn stereo_kind_ast_strategy() -> impl Strategy<Value = StereoKindAst> {
-    prop_oneof![
-        Just(StereoKindAst::Undetermined),
-        stereo_atom_kind_strategy().prop_map(StereoKindAst::Lit),
-    ]
-}
 
 /// A permutation of the kind's `degree` positions, as a shuffled one-line image.
 pub(crate) fn permutation_strategy(degree: usize) -> impl Strategy<Value = Permutation> {
@@ -606,7 +631,7 @@ pub(crate) fn ligand_pair_strategy(degree: usize) -> impl Strategy<Value = Ligan
 }
 
 /// Non-vacuous topicity relations only (`Undetermined` elides on render, so it
-/// would break the render → reparse roundtrip — mirrors `stereo_config_strategy`).
+/// would break the render → reparse roundtrip — mirrors `tetrahedral_stereo_strategy`).
 pub(crate) fn topicity_relation_strategy() -> impl Strategy<Value = TopicityRelationAst> {
     prop_oneof![
         Just(TopicityRelationAst::Lit(Topicity::Homotopic)),
