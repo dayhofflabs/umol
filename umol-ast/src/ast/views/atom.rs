@@ -15,7 +15,7 @@ use super::super::ids::{
 use super::super::molecule::MoleculeAst;
 use super::super::rings::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
-use super::super::stereo::{StereoConfigurationAst, StereoKind};
+use super::super::stereo::{StereoKind, TetrahedralStereoAst};
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
 use super::aromatic::AromaticSystemView;
@@ -477,8 +477,8 @@ impl<'a> AtomView<'a> {
         };
 
         let tetrahedral_stereo = match self.tetrahedral_stereo() {
-            Some(stereo) => StereoConfigurationAst::stereo(stereo.coset().clone()),
-            None => StereoConfigurationAst::NotStereo,
+            Some(stereo) => TetrahedralStereoAst::stereo(stereo.coset().clone()),
+            None => TetrahedralStereoAst::NotStereo,
         };
 
         AtomConstraints::from_iter([
@@ -543,7 +543,7 @@ mod tests {
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::rings::RingFamily;
-    use crate::ast::stereo::{StereoAtomAst, StereoConfigurationAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{StereoAtomAst, TetrahedralStereoAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
     use crate::mol;
 
@@ -1029,7 +1029,7 @@ mod tests {
         AtomConstraint::accepted_pairs(ValueAst::Lit(0)),
         AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
         AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
-        AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::stereo(StereoCosetAst::Lit(1))),
+        AtomConstraint::tetrahedral_stereo(TetrahedralStereoAst::stereo(StereoCosetAst::Lit(1))),
     ]))]
     #[case::non_stereo_ligand(AtomId(1), AtomConstraints::from_iter([
         AtomConstraint::valence(ValueAst::Lit(1)),
@@ -1037,7 +1037,7 @@ mod tests {
         AtomConstraint::accepted_pairs(ValueAst::Lit(0)),
         AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
         AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
-        AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::NotStereo),
+        AtomConstraint::tetrahedral_stereo(TetrahedralStereoAst::NotStereo),
     ]))]
     #[case::square_planar_site(AtomId(5), AtomConstraints::from_iter([
         AtomConstraint::valence(ValueAst::Lit(4)),
@@ -1045,7 +1045,7 @@ mod tests {
         AtomConstraint::accepted_pairs(ValueAst::Lit(0)),
         AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
         AtomConstraint::multicenter_valence(MulticenterValenceAst::NotMulticenter),
-        AtomConstraint::tetrahedral_stereo(StereoConfigurationAst::NotStereo),
+        AtomConstraint::tetrahedral_stereo(TetrahedralStereoAst::NotStereo),
     ]))]
     fn test_atom_view_derive_constraints(
         stereo_molecule: MoleculeAst,

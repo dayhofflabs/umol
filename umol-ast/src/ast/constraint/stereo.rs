@@ -89,6 +89,26 @@ macro_rules! relation_ast {
         }
 
         impl $name {
+            pub fn undetermined() -> Self {
+                Self::Undetermined
+            }
+
+            pub fn lit(value: $domain) -> Self {
+                Self::Lit(value)
+            }
+
+            pub fn lit_set(values: impl IntoIterator<Item = $domain>) -> Self {
+                Self::LitSet(values.into_iter().collect())
+            }
+
+            pub fn not(value: $domain) -> Self {
+                Self::NotSet(BTreeSet::from([value]))
+            }
+
+            pub fn not_set(values: impl IntoIterator<Item = $domain>) -> Self {
+                Self::NotSet(values.into_iter().collect())
+            }
+
             /// The semantic set of admissible domain values.
             pub(crate) fn to_set(&self) -> BTreeSet<$domain> {
                 let domain = || <$domain as VariantArray>::VARIANTS.iter().copied();
@@ -99,37 +119,37 @@ macro_rules! relation_ast {
                     Self::NotSet(values) => domain().filter(|t| !values.contains(t)).collect(),
                 }
             }
+        }
 
-            /// The canonical relation for a set of admissible values; `None` if empty.
-            /// Singleton → `Lit`, full → `Undetermined`, else the smaller of
-            /// positive/complement (tiebreak positive).
-            pub(crate) fn from_set(set: BTreeSet<$domain>) -> Option<Self> {
-                let domain: BTreeSet<$domain> = <$domain as VariantArray>::VARIANTS
-                    .iter()
-                    .copied()
-                    .collect();
-                if set.is_empty() {
-                    None
-                } else if set == domain {
-                    Some(Self::Undetermined)
-                } else if set.len() == 1 {
-                    Some(Self::Lit(set.into_iter().next().unwrap()))
-                } else {
-                    let complement: BTreeSet<$domain> = domain.difference(&set).copied().collect();
-                    if set.len() <= complement.len() {
-                        Some(Self::LitSet(set))
-                    } else {
-                        Some(Self::NotSet(complement))
-                    }
-                }
+        impl From<$domain> for $name {
+            fn from(value: $domain) -> Self {
+                Self::Lit(value)
             }
         }
 
         impl Canonicalize for $name {
-            /// Finite-domain canonical form: sort/dedup (`BTreeSet`), singleton → `Lit`,
-            /// full → `Undetermined`, empty → `Err`, polarity (store the smaller side).
+            /// Finite-domain canonical form over `to_set`: empty → `Err`, full →
+            /// `Undetermined`, singleton → `Lit`, else the smaller of positive /
+            /// complement (tiebreak positive).
             fn canonicalize(self) -> Result<Self, Contradiction> {
-                Self::from_set(self.to_set()).ok_or(Contradiction)
+                let set = self.to_set();
+                let domain: BTreeSet<$domain> =
+                    <$domain as VariantArray>::VARIANTS.iter().copied().collect();
+                if set.is_empty() {
+                    Err(Contradiction)
+                } else if set == domain {
+                    Ok(Self::Undetermined)
+                } else if set.len() == 1 {
+                    Ok(Self::Lit(set.into_iter().next().unwrap()))
+                } else {
+                    let complement: BTreeSet<$domain> =
+                        domain.difference(&set).copied().collect();
+                    Ok(if set.len() <= complement.len() {
+                        Self::LitSet(set)
+                    } else {
+                        Self::NotSet(complement)
+                    })
+                }
             }
 
             fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
@@ -149,19 +169,17 @@ macro_rules! relation_ast {
                 matches!(self, Self::Lit(_))
             }
 
-            /// Intersection of the admissible sets, canonicalized (∅ → `None`).
+            /// Intersection of the admissible sets, folded by `canonicalize` (∅ → `None`).
             fn meet(&self, other: &Self) -> Option<Self> {
-                Self::from_set(
-                    self.to_set()
-                        .intersection(&other.to_set())
-                        .copied()
-                        .collect(),
-                )
+                Self::LitSet(self.to_set().intersection(&other.to_set()).copied().collect())
+                    .canonicalize()
+                    .ok()
             }
 
             fn join(&self, other: &Self) -> Self {
-                Self::from_set(self.to_set().union(&other.to_set()).copied().collect())
-                    .expect("union of two non-empty sets is non-empty")
+                Self::LitSet(self.to_set().union(&other.to_set()).copied().collect())
+                    .canonicalize()
+                    .unwrap_or(Self::Undetermined)
             }
 
             fn matches(&self, target: &Self) -> bool {
@@ -633,6 +651,25 @@ mod tests {
         let pair = LigandPairAst::new(a, b);
         assert_eq!(pair.first(), first);
         assert_eq!(pair.second(), second);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(TopicityRelationAst::undetermined(), TopicityRelationAst::Undetermined)]
+    #[case::lit(TopicityRelationAst::lit(Topicity::Homotopic), TopicityRelationAst::Lit(Topicity::Homotopic))]
+    #[case::lit_set(TopicityRelationAst::lit_set([Topicity::Homotopic, Topicity::Enantiotopic]), TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])))]
+    #[case::lit_set_singleton_raw(TopicityRelationAst::lit_set([Topicity::Homotopic]), TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic])))]
+    #[case::not(TopicityRelationAst::not(Topicity::Homotopic), TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])))]
+    #[case::not_set(TopicityRelationAst::not_set([Topicity::Homotopic, Topicity::Enantiotopic]), TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])))]
+    fn test_topicity_relation_ast_constructors(#[case] actual: TopicityRelationAst, #[case] expected: TopicityRelationAst) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rstest]
+    #[case::homotopic(Topicity::Homotopic, TopicityRelationAst::Lit(Topicity::Homotopic))]
+    #[case::diastereotopic(Topicity::Diastereotopic, TopicityRelationAst::Lit(Topicity::Diastereotopic))]
+    fn test_topicity_relation_ast_from(#[case] value: Topicity, #[case] expected: TopicityRelationAst) {
+        assert_eq!(TopicityRelationAst::from(value), expected);
     }
 
     #[rustfmt::skip]

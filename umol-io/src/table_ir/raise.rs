@@ -11,7 +11,7 @@ use thiserror::Error;
 use umol_ast::ast::{
     AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
     DativeBondAst, ElementAst, IsotopeMassAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
-    SpinStateAst, StereoConfigurationAst, StereoCosetAst, TryIntoAst, ValueAst,
+    CisTransStereoAst, SpinStateAst, StereoCosetAst, TetrahedralStereoAst, TryIntoAst, ValueAst,
 };
 use umol_perm::{space, ClassKey, Permutation};
 use umol_shared::error::UmolError;
@@ -243,7 +243,7 @@ fn raise_tetrahedral_stereo(
         Some(Chirality::Unspecified) => {
             validate_tetrahedral_geometry(mol, atom_idx)?;
             return Ok(Some(AtomConstraint::TetrahedralStereo(
-                StereoConfigurationAst::stereo(StereoCosetAst::Undetermined),
+                TetrahedralStereoAst::stereo(StereoCosetAst::Undetermined),
             )));
         }
         Some(symbol) => {
@@ -320,7 +320,7 @@ fn raise_tetrahedral_stereo(
     };
     let coset = space(ClassKey::Tetrahedral).reindex(source_coset as u32, relabeling);
     Ok(Some(AtomConstraint::TetrahedralStereo(
-        StereoConfigurationAst::stereo(StereoCosetAst::Lit(coset)),
+        TetrahedralStereoAst::stereo(StereoCosetAst::Lit(coset)),
     )))
 }
 
@@ -335,7 +335,7 @@ fn raise_cis_trans_stereo(
     }
     if bond.stereo == Some(BondStereo::Either) {
         return Ok(Some(BondConstraint::CisTransStereo(
-            StereoConfigurationAst::stereo(StereoCosetAst::Undetermined),
+            CisTransStereoAst::stereo(StereoCosetAst::Undetermined),
         )));
     }
     let atom_1_idx = bond.start_atom() as usize;
@@ -364,7 +364,7 @@ fn raise_cis_trans_stereo(
     ];
     let coset = space(ClassKey::CisTrans).index(Permutation::between(&source, &target));
     Ok(Some(BondConstraint::CisTransStereo(
-        StereoConfigurationAst::stereo(StereoCosetAst::Lit(coset)),
+        CisTransStereoAst::stereo(StereoCosetAst::Lit(coset)),
     )))
 }
 
@@ -556,7 +556,7 @@ mod tests {
         #[case] expected: Option<StereoCosetAst>,
     ) {
         let expected = expected
-            .map(|coset| AtomConstraint::TetrahedralStereo(StereoConfigurationAst::stereo(coset)));
+            .map(|coset| AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::stereo(coset)));
         assert_eq!(raise_tetrahedral_stereo(&mol, atom_idx), Ok(expected));
     }
 
@@ -612,7 +612,7 @@ mod tests {
         #[case] expected: Option<StereoCosetAst>,
     ) {
         let expected = expected
-            .map(|coset| BondConstraint::CisTransStereo(StereoConfigurationAst::stereo(coset)));
+            .map(|coset| BondConstraint::CisTransStereo(CisTransStereoAst::stereo(coset)));
         assert_eq!(raise_cis_trans_stereo(&mol, bond_idx), Ok(expected));
     }
 

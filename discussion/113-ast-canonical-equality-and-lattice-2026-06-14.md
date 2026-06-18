@@ -108,19 +108,106 @@ type greens its own `lattice::` test.
 4. **`TopicityAst`** — drop `impl Lattice` → matches-only `{pair, rel}`; remove its
    fixed-pair lattice proptest (covered by `test_topicity_relation_ast_lattice_laws`).
 
-### P3 · Stereo configuration cluster
-1. `StereoExpr`→**`StereoTerm`** (`Var(name, opt domain)` | `Swap` | `Mirror` | `Apply`; no
-  `Lit`/`LitSet`). `StereoCosetAst = Undetermined|Lit|LitSet|NotSet|Term` — **no**
-  `Lattice`/`Canonicalize` (kind-relative).
-2. **`StereoConfigurationAst { kind: StereoKindAst, coset }`** (element side) +
-  **`StereoSiteAst = Undetermined|NotStereo|Stereo(StereoKind, coset)`** (constraint side;
-  renames the old tristate). Both: `Canonicalize`+`Lattice`; the coset's kind-relative
-  *syntactic* folds (set sort/dedup, `Lit` collapse) and Term
-  compose→priority(`Mirror>Swap>Apply`) normal form. **No `are_compatible(kind, coset)`
-  validity gate** — kind↔coset-index validity is tier-2, not enforced at the AST
-  (kind/coset independent, like spin's u/m). `AsLit = StereoConfiguration { kind, coset }`.
-  Update `dsl/stereo.rs`, the
-  stereo views, and `StereoAtomAst`/`StereoBondAst` to carry the joint config.
+### P3 · Stereo configuration cluster **Done**
+
+Restart from the AST and reason outward. Two facts drive the shape: a coset index
+is meaningless without a `StereoKind`, and the kind reaches the two sides
+differently — the **element** carries it as data (a pattern may leave the geometry
+open), the **constraint** is split into one type *per kind* so the kind is the type's
+identity. Canonicalization is **lazy**, so the DSL only places kind + coset next to
+each other; no folding on the parse side.
+
+Names and `AsLit` targets are settled: element type stays `StereoConfigurationAst` with
+variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST trait matrix.
+
+#### P3a · Sub-part AST leaves (kind-relative — **no** `Canonicalize`/`Lattice`) **Done**
+1. `StereoTerm = Var(Box<(String, Option<BTreeSet<u32>>)>) | Lit(u32) | LitSet(BTreeSet<u32>)
+   | Swap(Box) | Mirror(Box) | Apply(Box, Permutation)`. Structural `Clone/Eq/Hash/Ord`
+   only. **No `AsLit`** — a term is never a bare literal (even `Lit`/`LitSet` bases are
+   pre-fold operands). (`Lit`/`LitSet` operands are approved: operator-on-literal parses
+   faithfully and **folds at canonicalize**, not on parse; a canonical term is `Var`-rooted.)
+2. `StereoCosetAst = Undetermined | Lit(u32) | LitSet(BTreeSet) | NotSet(BTreeSet) |
+   Term(Box<StereoTerm>)`. Structural, **plus `impl AsLit<Lit = u32>`** (`Lit(i)`→`Some(i)`,
+   else `None`) — extracting the literal index is kind-independent, so it lives on the
+   sub-part; still **no `Canonicalize`/`Lattice`** (those need the kind). Replaces the
+   `coset_as_lit` free fn.
+3. Kind-aware coset algebra — free fns, each takes `kind: StereoKind`: `canon_coset`,
+   `coset_meet`, `coset_join`, `coset_matches`, `coset_apply_permutation`
+   (+ private `coset_to_set`/`coset_from_set`/`compose_term`). `NotSet` cardinality
+   polarity per `ElementAst`. (Already implemented; keep.) Owners pass their kind — the
+   element from its variant, each constraint type from its constant.
+
+#### P3b · Element-side config — **remove `StereoKindAst`** **Done**
+4. Delete `StereoKindAst` (only the config field + its own tests + the re-export use it).
+5. `enum StereoConfigurationAst { Undetermined | Kind(StereoKind, StereoCosetAst) }`. The
+   top-level `Undetermined` has **no coset** (kind unknown ⇒ coset meaningless); `Kind`
+   binds a concrete geometry to a coset that may still be open. `*` (Undetermined) and
+   `Th*` (`Kind(Tetrahedral, Undetermined)`) are **distinct**.
+6. `StereoAtomAst`/`StereoBondAst` carry `configuration: StereoConfigurationAst`.
+
+#### P3c · Constraint-side per-kind types — **replace `StereoSiteAst`** **Done**
+7. `enum TetrahedralStereoAst { Undetermined | NotStereo | Stereo(StereoCosetAst) }`
+   (kind ≡ `Tetrahedral` constant) and `enum CisTransStereoAst { … }` (kind ≡ `CisTrans`).
+   No kind field — the type *is* the kind. (Tetrahedral/CisTrans have coset count 2, so
+   their cosets are only `Undetermined`/`Lit`/`Term`; `LitSet`/`NotSet` never arise here.)
+8. `AtomConstraint::TetrahedralStereo(TetrahedralStereoAst)`,
+   `BondConstraint::CisTransStereo(CisTransStereoAst)`.
+
+#### AST trait matrix
+| Type | `Canonicalize` | `Lattice` | `AsLit` |
+|---|---|---|---|
+| `StereoKind` (plain enum) | — | — | — |
+| `StereoTerm` | — | — | — |
+| `StereoCosetAst` | — | — | `u32` (literal coset index; replaces `coset_as_lit`) |
+| `StereoConfigurationAst` | ✓ `Undetermined`→id; `Kind(k,c)`→`Kind(k, canon_coset(c,k)?)` (never collapses `Kind`→`Undetermined`) | ✓ meet `(Und,x)`→`x`, `(Kind(k1,a),Kind(k2,b))`→ `k1≠k2?None:Kind(k1,coset_meet(a,b,k1)?)`; join same-kind→`Kind(k,coset_join)`, cross-kind→`Undetermined`; `is_undetermined`=top only (`Th*` is *not*); `is_ground`=`Kind(k,Lit)` | `StereoConfiguration{kind,coset}` (`Kind(k,Lit(i))`→`Some`) |
+| `TetrahedralStereoAst` / `CisTransStereoAst` | ✓ `Stereo(c)`→`Stereo(canon_coset(c, KIND)?)`; others id | ✓ `Undetermined` wildcard; `NotStereo∧NotStereo`; `NotStereo∧Stereo`→`None`(meet)/`Undetermined`(join); `Stereo(a)∧Stereo(b)`→`Stereo(coset_meet/join(a,b,KIND))` | `StereoConfiguration{kind,coset}` (kind = type constant; `Stereo(Lit(i))`→`Some`, `NotStereo`/`Undetermined`→`None`) |
+
+#### P3d · AST tests + property tests
+9. Per-method `#[rstest]`/`#[case]` units for `StereoConfigurationAst`,
+   `TetrahedralStereoAst`, `CisTransStereoAst`: `canonicalize`/`_identity`, `meet`, `join`,
+   `matches`, `as_lit`, `is_undetermined`/`is_ground` (incl. the `*` vs `Th*` distinction).
+   Fold the deleted `StereoKindAst` coverage into `StereoConfigurationAst`. Free-fn tests
+   for the coset algebra (`canon_coset` incl. `NotSet` polarity + `Term` compose→priority
+   `Mirror>Swap>Apply`, `coset_meet`/`coset_join`/`coset_matches`). **Done**
+10. Property (lattice-law) tests for the three trait-bearing AST types under
+    `--features proptest` (meet idempotent/commutative/associative, absorption,
+    `canonicalize` idempotence).
+
+#### P3e · DSL — element side **Done**
+11. `StereoAtomDsl(StereoAtomAst)` / `StereoBondDsl(StereoBondAst)` — `Display`+`FromStr`
+    (compact string), `FromEdn`+`ToEdn` (string/keyword in molecule EDN), `IntoAst`+`FromAst`.
+12. `StereoConfigurationDsl(StereoConfigurationAst)` — `IntoAst`+`FromAst` only; **no
+    `FromEdn`/`ToEdn`** (element side has no standalone EDN). String parse `*`→`Undetermined`,
+    `<glyph><coset>`→`Kind`; render `Undetermined`→`*`, `Kind(k,c)`→glyph + coset.
+13. Coset string round-trip via free fns `parse_stereo_coset(s, degree)` / `fmt_stereo_coset`.
+    Coset EDN keeps the `StereoCosetDsl(StereoCosetAst)` boundary type
+    (`FromEdn`/`ToEdn`/`IntoAst`/`FromAst`); degree fixed at 4 for `#T`/`#C`. The per-kind
+    `TetrahedralStereoDsl`/`CisTransStereoDsl` and the streaming `read_stereo_coset_dsl` parse
+    the `{:stereo <coset>}` value through it, then `into_ast` → `StereoCosetAst` wrapped as
+    `Stereo(coset)`. No `StereoTermDsl` (term is inline in the coset grammar). `NotSet`↔`!{0,1}`.
+
+#### P3f · DSL — constraint side **Done**
+14. `TetrahedralStereoDsl(TetrahedralStereoAst)` / `CisTransStereoDsl(CisTransStereoAst)` —
+    `FromEdn`+`ToEdn`, `IntoAst`+`FromAst`. The kind-free `FromEdn(edn)` signature **works**
+    because the kind is the type's constant; parse from atom/bond DSL (`#T`/`#C` tag) and
+    from EDN (`:tetrahedral-stereo`/`:cis-trans-stereo`). Render value
+    `:undetermined`/`:not-stereo`/`{:stereo <coset>}`; kind emitted by the constraint key.
+15. Remove the unauthorized `stereo_site_from_edn` fn and the `StereoSiteDsl` rename —
+    superseded by the per-kind Dsl types' `FromEdn`.
+
+#### DSL trait matrix
+| Type | `FromEdn` | `ToEdn` | `IntoAst` | `FromAst` | string |
+|---|---|---|---|---|---|
+| `StereoAtomDsl` / `StereoBondDsl` | ✓ | ✓ | ✓ | ✓ | `Display`+`FromStr` |
+| `TetrahedralStereoDsl` / `CisTransStereoDsl` | ✓ | ✓ | ✓ | ✓ | inline via `#T`/`#C` |
+
+#### P3g · Consumers **Done**
+16. Views `kind()`/`coset()` and `molecule.rs`/`transact.rs`/`symmetry.rs` field accesses
+    (`.configuration.coset`) destructure the enum; the validator's `view.coset().as_lit()`
+    resolves via `AsLit for StereoCosetAst` (drop the `coset_as_lit` free fn); `ast.rs`
+    re-exports drop `StereoKindAst`
+    /`StereoSiteAst`, add the enum `StereoConfigurationAst`, `TetrahedralStereoAst`,
+    `CisTransStereoAst`, and the `*Dsl` types.
 
 ### P4 · Entities (pure field-wise)
 1. `AtomAst`
@@ -151,8 +238,7 @@ type greens its own `lattice::` test.
 1. 095 Q2 leak audit → route to `equiv`/`Canonical<T>` where semantic keys are needed:
    `MoleculeAst::PartialEq` (graph-canonical), `HashMap`/`HashSet` AST keys, alias
    `BiBTreeMap`, constraint dedup. Decide structural-vs-semantic per site.
-2. Drop `matches_value` (≡ `matches(lift(v))`); relocate `capture`/`evaluate` to the
-   resolver or delete.
+2. Drop `matches_value` (replace by as_lit_matches where appropriate); delete `capture`/`evaluate`.
 3. Literal renames + `*Dsl` per [[feedback_dsl_boundary_types]]
    (`StereoConfigurationDsl`→`StereoSiteDsl`; add `TopicityDsl`/`StereogenicityDsl`).
 
@@ -645,6 +731,12 @@ fixed-`pair` lattice-law proptest (`property/lattice.rs:86`
 noted above.
 
 ### Stereo configuration cluster (`StereoConfigurationAst` / `StereoSiteAst` / `StereoCosetAst` / `StereoTerm`)
+
+> **Superseded in part by P3 (revised 2026-06-17).** Current shapes: element config is
+> `enum StereoConfigurationAst { Undetermined | Kind(StereoKind, StereoCosetAst) }`
+> (`StereoKindAst` removed); the constraint side is two per-kind types
+> `TetrahedralStereoAst`/`CisTransStereoAst` (not `StereoSiteAst`). The reasoning below
+> about kind-relativity, the coset algebra, and `StereoTerm` still holds.
 
 **Cosets are kind-relative.** A coset index/set/term is meaningless without its
 `StereoKind` — and not only for evaluation: operator folding (`~Lit`), the identity

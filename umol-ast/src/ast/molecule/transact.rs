@@ -1735,11 +1735,11 @@ impl MoleculeBuilder {
     ) -> Result<(), TransactionError> {
         let sa = self.stereo_atom_mut(id);
         match change {
-            StereoAtomFieldChange::Coset { old, new } => {
-                if sa.ast.coset != old {
+            StereoAtomFieldChange::Configuration { old, new } => {
+                if sa.ast.configuration != old {
                     return Err(TransactionError::OldStateMismatch);
                 }
-                sa.ast.coset = new;
+                sa.ast.configuration = new;
             }
         }
         Ok(())
@@ -1752,11 +1752,11 @@ impl MoleculeBuilder {
     ) -> Result<(), TransactionError> {
         let sb = self.stereo_bond_mut(id);
         match change {
-            StereoBondFieldChange::Coset { old, new } => {
-                if sb.ast.coset != old {
+            StereoBondFieldChange::Configuration { old, new } => {
+                if sb.ast.configuration != old {
                     return Err(TransactionError::OldStateMismatch);
                 }
-                sb.ast.coset = new;
+                sb.ast.configuration = new;
             }
         }
         Ok(())
@@ -2057,7 +2057,9 @@ mod tests {
     use super::super::super::noncovalent::{
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
-    use super::super::super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
+    use super::super::super::stereo::{
+        StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoKind,
+    };
     use super::super::super::value::ValueAst;
     use super::super::MoleculeAst;
     use super::*;
@@ -2652,15 +2654,24 @@ mod tests {
         let tx = stereo_atom_skeleton
             .transact(vec![Edit::SetStereoAtomField {
                 id: StereoAtomRef::Id(StereoAtomId(0)),
-                change: StereoAtomFieldChange::Coset {
-                    old: StereoCosetAst::Lit(1),
-                    new: StereoCosetAst::Lit(2),
+                change: StereoAtomFieldChange::Configuration {
+                    old: StereoConfigurationAst::kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(1),
+                    ),
+                    new: StereoConfigurationAst::kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(0),
+                    ),
                 },
             }])
             .unwrap();
         assert_eq!(
-            stereo_atom_skeleton.stereo_atom(StereoAtomId(0)).ast.coset,
-            StereoCosetAst::Lit(2),
+            stereo_atom_skeleton
+                .stereo_atom(StereoAtomId(0))
+                .ast
+                .configuration,
+            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0),),
         );
         tx.rollback(&mut stereo_atom_skeleton).unwrap();
         assert_eq!(stereo_atom_skeleton.build(), before);
@@ -2678,10 +2689,16 @@ mod tests {
         let err = stereo_atom_skeleton
             .transact(vec![Edit::SetStereoAtomField {
                 id: StereoAtomRef::Id(StereoAtomId(0)),
-                change: StereoAtomFieldChange::Coset {
+                change: StereoAtomFieldChange::Configuration {
                     // Wrong recorded coset (Th0 vs the stored Th1).
-                    old: StereoCosetAst::Lit(0),
-                    new: StereoCosetAst::Lit(1),
+                    old: StereoConfigurationAst::kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(0),
+                    ),
+                    new: StereoConfigurationAst::kinded(
+                        StereoKind::Tetrahedral,
+                        StereoCosetAst::Lit(1),
+                    ),
                 },
             }])
             .unwrap_err();
@@ -2704,15 +2721,24 @@ mod tests {
         let tx = stereo_bond_skeleton
             .transact(vec![Edit::SetStereoBondField {
                 id: StereoBondRef::Id(StereoBondId(0)),
-                change: StereoBondFieldChange::Coset {
-                    old: StereoCosetAst::Lit(1),
-                    new: StereoCosetAst::Lit(2),
+                change: StereoBondFieldChange::Configuration {
+                    old: StereoConfigurationAst::kinded(
+                        StereoKind::CisTrans,
+                        StereoCosetAst::Lit(1),
+                    ),
+                    new: StereoConfigurationAst::kinded(
+                        StereoKind::CisTrans,
+                        StereoCosetAst::Lit(0),
+                    ),
                 },
             }])
             .unwrap();
         assert_eq!(
-            stereo_bond_skeleton.stereo_bond(StereoBondId(0)).ast.coset,
-            StereoCosetAst::Lit(2),
+            stereo_bond_skeleton
+                .stereo_bond(StereoBondId(0))
+                .ast
+                .configuration,
+            StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)),
         );
         tx.rollback(&mut stereo_bond_skeleton).unwrap();
         assert_eq!(stereo_bond_skeleton.build(), before);
@@ -2733,10 +2759,16 @@ mod tests {
         let err = stereo_bond_skeleton
             .transact(vec![Edit::SetStereoBondField {
                 id: StereoBondRef::Id(StereoBondId(0)),
-                change: StereoBondFieldChange::Coset {
+                change: StereoBondFieldChange::Configuration {
                     // Wrong recorded coset (vs the stored 1).
-                    old: StereoCosetAst::Lit(2),
-                    new: StereoCosetAst::Lit(1),
+                    old: StereoConfigurationAst::kinded(
+                        StereoKind::CisTrans,
+                        StereoCosetAst::Lit(0),
+                    ),
+                    new: StereoConfigurationAst::kinded(
+                        StereoKind::CisTrans,
+                        StereoCosetAst::Lit(1),
+                    ),
                 },
             }])
             .unwrap_err();

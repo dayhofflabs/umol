@@ -3,10 +3,11 @@
 //!
 //! A configuration value is a dense coset index per stereo kind, corresponds to OpenSMILES
 //! numbering for SP, TB, and OH.
-//! `~` and `^` are group actions on the index; [`StereoConfigurationAst::simplify`]
-//! folds closed operator-expressions against the coset algebra.
+//! `~` and `^` are group actions on the index; the owning configuration's
+//! `canonicalize` folds closed operator-expressions against the coset algebra.
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::mem;
 
 use umol_perm::{space, ClassKey, Permutation};
@@ -61,7 +62,7 @@ impl StereoKind {
     /// generator to borrow — theirs is the identity):
     /// - cis/trans: swap the two configurations
     /// - square-planar: swap the diagonal ligand pair
-    pub(crate) fn involution(self) -> Permutation {
+    pub fn involution(self) -> Permutation {
         let coset_space = space(self.class_key());
         if coset_space.is_chiral() {
             coset_space.improper()
@@ -77,84 +78,6 @@ impl StereoKind {
     /// Act on coset index `index` by `perm`, through the class's coset algebra.
     fn act(self, index: u32, perm: Permutation) -> u32 {
         space(self.class_key()).reindex(index, perm)
-    }
-}
-
-/// Stereo-kind expression: undetermined (any geometry) or a specific
-/// [`StereoKind`]. Flat two-state lattice (no kind-sets — deferred); it is the
-/// `kind` field of the element-side stereo configuration, letting a pattern mean
-/// "a stereo center of any geometry." The `kind`↔`coset` coupling is enforced by
-/// the owning configuration AST, not here.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub enum StereoKindAst {
-    #[default]
-    Undetermined,
-    Lit(StereoKind),
-}
-
-impl From<StereoKind> for StereoKindAst {
-    fn from(kind: StereoKind) -> Self {
-        Self::Lit(kind)
-    }
-}
-
-impl Canonicalize for StereoKindAst {
-    /// Both variants are already canonical — nothing folds.
-    fn canonicalize(self) -> Result<Self, Contradiction> {
-        Ok(self)
-    }
-
-    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
-        Ok(Cow::Borrowed(self))
-    }
-}
-
-impl AsLit for StereoKindAst {
-    type Lit = StereoKind;
-
-    /// The specific geometry, only when it is a literal.
-    #[inline]
-    fn as_lit(&self) -> Option<StereoKind> {
-        match self {
-            Self::Lit(k) => Some(*k),
-            Self::Undetermined => None,
-        }
-    }
-}
-
-impl Lattice for StereoKindAst {
-    #[inline]
-    fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
-    }
-
-    #[inline]
-    fn is_ground(&self) -> bool {
-        matches!(self, Self::Lit(_))
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
-            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
-            (Self::Lit(a), Self::Lit(b)) if a == b => Some(Self::Lit(*a)),
-            _ => None,
-        }
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        match (self, other) {
-            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
-            (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),
-            _ => Self::Undetermined,
-        }
-    }
-
-    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
-    fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
-            (Some(meet), Ok(target)) => meet == *target,
-            _ => false,
-        }
     }
 }
 
@@ -174,50 +97,83 @@ pub enum Stereogenicity {
     Stereogenic,
 }
 
-/// Stereo configuration AST.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// Element-side stereo configuration: either undetermined (geometry not yet
+/// known, so no coset) or `Kinded` — a concrete geometry bound to a coset that
+/// may still be open. `*` (`Undetermined`) and `Th*` (`Kinded(Tetrahedral,
+/// Undetermined)`) are distinct. `canonicalize` folds the coset under the kind;
+/// no physical range-check (tier-2; the validator does it).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum StereoConfigurationAst {
     #[default]
     Undetermined,
-    NotStereo,
-    Stereo(StereoCosetAst),
+    Kinded(StereoKind, StereoCosetAst),
 }
 
 impl StereoConfigurationAst {
-    pub fn stereo(v: impl Into<StereoCosetAst>) -> Self {
-        Self::Stereo(v.into())
+    pub fn undetermined() -> Self {
+        Self::Undetermined
     }
 
-    pub fn is_stereo(&self) -> bool {
-        matches!(self, Self::Stereo(_))
+    pub fn kinded(kind: StereoKind, coset: impl Into<StereoCosetAst>) -> Self {
+        Self::Kinded(kind, coset.into())
     }
 
-    /// Reduce to canonical form under the kind context: lift trivial `StereoExpr`
-    /// wrappers and fold closed operator-expressions via the coset algebra.
-    pub fn simplify(self, kind: StereoKind) -> Self {
+    /// The coordination-geometry kind, or `None` when undetermined.
+    pub fn kind(&self) -> Option<StereoKind> {
         match self {
-            Self::Stereo(index) => Self::Stereo(index.simplify(kind)),
-            other => other,
+            Self::Kinded(kind, _) => Some(*kind),
+            Self::Undetermined => None,
         }
     }
 
-    /// Matches literal coset index `value` under `kind`.
-    pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
+    /// The coset, or `None` when undetermined.
+    pub fn coset(&self) -> Option<&StereoCosetAst> {
         match self {
-            Self::Stereo(v) => v.matches_value(value, kind),
-            Self::NotStereo => false,
-            Self::Undetermined => true,
+            Self::Kinded(_, coset) => Some(coset),
+            Self::Undetermined => None,
+        }
+    }
+
+    /// Mutable access to the coset, or `None` when undetermined.
+    pub fn coset_mut(&mut self) -> Option<&mut StereoCosetAst> {
+        match self {
+            Self::Kinded(_, coset) => Some(coset),
+            Self::Undetermined => None,
+        }
+    }
+}
+
+impl From<(StereoKind, u32)> for StereoConfigurationAst {
+    fn from((kind, coset): (StereoKind, u32)) -> Self {
+        Self::Kinded(kind, StereoCosetAst::Lit(coset))
+    }
+}
+
+impl Canonicalize for StereoConfigurationAst {
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::Kinded(kind, coset) => Self::Kinded(kind, canon_coset(coset, kind)?),
+            Self::Undetermined => Self::Undetermined,
+        })
+    }
+
+    fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+        match self {
+            Self::Kinded(..) => Ok(Cow::Owned(self.clone().canonicalize()?)),
+            Self::Undetermined => Ok(Cow::Borrowed(self)),
         }
     }
 }
 
 impl AsLit for StereoConfigurationAst {
-    type Lit = u32;
+    type Lit = StereoConfiguration;
 
-    fn as_lit(&self) -> Option<u32> {
+    fn as_lit(&self) -> Option<StereoConfiguration> {
         match self {
-            Self::Stereo(index) => index.as_lit(),
-            Self::Undetermined | Self::NotStereo => None,
+            Self::Kinded(kind, coset) => {
+                coset.as_lit().map(|coset| StereoConfiguration { kind: *kind, coset })
+            }
+            Self::Undetermined => None,
         }
     }
 }
@@ -228,229 +184,245 @@ impl Lattice for StereoConfigurationAst {
     }
 
     fn is_ground(&self) -> bool {
-        match self {
-            Self::NotStereo => true,
-            Self::Stereo(index) => index.is_ground(),
-            Self::Undetermined => false,
-        }
+        matches!(self, Self::Kinded(_, StereoCosetAst::Lit(_)))
     }
 
     fn meet(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
+        let a = self.canonical().ok()?;
+        let b = other.canonical().ok()?;
+        match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
-            (Self::NotStereo, Self::NotStereo) => Some(Self::NotStereo),
-            (Self::Stereo(a), Self::Stereo(b)) => a.meet(b).map(Self::Stereo),
-            (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => None,
+            (Self::Kinded(k1, ca), Self::Kinded(k2, cb)) => {
+                if k1 != k2 {
+                    return None;
+                }
+                Some(Self::Kinded(*k1, coset_meet(ca, cb, *k1)?))
+            }
         }
     }
 
     fn join(&self, other: &Self) -> Self {
-        match (self, other) {
+        let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+        match (a.as_ref(), b.as_ref()) {
             (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
-            (Self::NotStereo, Self::NotStereo) => Self::NotStereo,
-            (Self::Stereo(a), Self::Stereo(b)) => Self::Stereo(a.join(b)),
-            (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => {
-                Self::Undetermined
+            (Self::Kinded(k1, ca), Self::Kinded(k2, cb)) => {
+                if k1 != k2 {
+                    Self::Undetermined
+                } else {
+                    Self::Kinded(*k1, coset_join(ca, cb, *k1))
+                }
             }
         }
     }
 
     fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::NotStereo, Self::NotStereo) => true,
-            (Self::Stereo(p), Self::Stereo(t)) => p.matches(t),
-            (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => false,
+        match (self.meet(target), target.canonical()) {
+            (Some(meet), Ok(target)) => meet == *target,
+            _ => false,
         }
     }
 }
 
-/// Dense coset index AST, 0-indexed: 0/1 for TH, CT; 0-based dense numbering for SP, TB, OH.
+/// Generates a constraint-side stereo state for a fixed geometry (`#T`/`#C`):
+/// undetermined, explicitly not-stereo, or a stereo center with a coset. The
+/// geometry is the type's identity (`$kind`), so the coset folds/meets under that
+/// constant kind — no kind field.
+macro_rules! stereo_site {
+    ($name:ident, $kind:expr) => {
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        pub enum $name {
+            #[default]
+            Undetermined,
+            NotStereo,
+            Stereo(StereoCosetAst),
+        }
+
+        impl $name {
+            pub fn undetermined() -> Self {
+                Self::Undetermined
+            }
+
+            pub fn not_stereo() -> Self {
+                Self::NotStereo
+            }
+
+            pub fn stereo(coset: impl Into<StereoCosetAst>) -> Self {
+                Self::Stereo(coset.into())
+            }
+
+            pub fn is_stereo(&self) -> bool {
+                matches!(self, Self::Stereo(_))
+            }
+
+            /// Matches literal coset index `value` under the type's kind.
+            pub fn matches_value(&self, value: u32) -> bool {
+                match self {
+                    Self::Stereo(coset) => coset_matches(coset, &StereoCosetAst::Lit(value), $kind),
+                    Self::NotStereo => false,
+                    Self::Undetermined => true,
+                }
+            }
+        }
+
+        impl Canonicalize for $name {
+            fn canonicalize(self) -> Result<Self, Contradiction> {
+                Ok(match self {
+                    Self::Stereo(coset) => Self::Stereo(canon_coset(coset, $kind)?),
+                    other => other,
+                })
+            }
+
+            fn canonical(&self) -> Result<Cow<'_, Self>, Contradiction> {
+                match self {
+                    Self::Stereo(_) => Ok(Cow::Owned(self.clone().canonicalize()?)),
+                    _ => Ok(Cow::Borrowed(self)),
+                }
+            }
+        }
+
+        impl AsLit for $name {
+            type Lit = StereoConfiguration;
+
+            /// The ground configuration (kind = the type's constant) when the coset
+            /// is a literal; `NotStereo`/`Undetermined`/non-literal → `None`.
+            fn as_lit(&self) -> Option<StereoConfiguration> {
+                match self {
+                    Self::Stereo(StereoCosetAst::Lit(coset)) => Some(StereoConfiguration {
+                        kind: $kind,
+                        coset: *coset,
+                    }),
+                    _ => None,
+                }
+            }
+        }
+
+        impl Lattice for $name {
+            fn is_undetermined(&self) -> bool {
+                matches!(self, Self::Undetermined)
+            }
+
+            fn is_ground(&self) -> bool {
+                match self {
+                    Self::NotStereo => true,
+                    Self::Stereo(coset) => matches!(coset, StereoCosetAst::Lit(_)),
+                    Self::Undetermined => false,
+                }
+            }
+
+            fn meet(&self, other: &Self) -> Option<Self> {
+                let a = self.canonical().ok()?;
+                let b = other.canonical().ok()?;
+                match (a.as_ref(), b.as_ref()) {
+                    (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
+                    (Self::NotStereo, Self::NotStereo) => Some(Self::NotStereo),
+                    (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => None,
+                    (Self::Stereo(ca), Self::Stereo(cb)) => {
+                        Some(Self::Stereo(coset_meet(ca, cb, $kind)?))
+                    }
+                }
+            }
+
+            fn join(&self, other: &Self) -> Self {
+                let a = self.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+                let b = other.canonical().unwrap_or(Cow::Owned(Self::Undetermined));
+                match (a.as_ref(), b.as_ref()) {
+                    (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
+                    (Self::NotStereo, Self::NotStereo) => Self::NotStereo,
+                    (Self::NotStereo, Self::Stereo(_)) | (Self::Stereo(_), Self::NotStereo) => {
+                        Self::Undetermined
+                    }
+                    (Self::Stereo(ca), Self::Stereo(cb)) => Self::Stereo(coset_join(ca, cb, $kind)),
+                }
+            }
+
+            fn matches(&self, target: &Self) -> bool {
+                match (self.meet(target), target.canonical()) {
+                    (Some(meet), Ok(target)) => meet == *target,
+                    _ => false,
+                }
+            }
+        }
+    };
+}
+
+stereo_site! { TetrahedralStereoAst, StereoKind::Tetrahedral }
+stereo_site! { CisTransStereoAst, StereoKind::CisTrans }
+
+/// Operator-expression term: a `Var` (with optional finite domain), a literal
+/// `Lit`/`LitSet` base, or one of these under the permutation-action operators
+/// `~` (swap), `'` (mirror), `^` (apply). Kind-relative — **no
+/// `Lattice`/`Canonicalize`** (structural `Eq` only); the owning configuration
+/// normalizes it under its concrete kind. Canonicalization composes the operator
+/// word into one net permutation: over a literal base it folds to a concrete
+/// coset; over a `Var` it leaves at most one operator layer.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum StereoTerm {
+    Var(Box<(String, Option<BTreeSet<u32>>)>),
+    Lit(u32),
+    LitSet(BTreeSet<u32>),
+    Swap(Box<StereoTerm>),
+    Mirror(Box<StereoTerm>),
+    Apply(Box<StereoTerm>, Permutation),
+}
+
+impl StereoTerm {
+    /// A free coset variable `?name`.
+    pub fn var(name: impl Into<String>) -> Self {
+        Self::Var(Box::new((name.into(), None)))
+    }
+
+    /// A variable restricted to a finite coset domain `?name :: {…}`.
+    pub fn var_in(name: impl Into<String>, domain: impl IntoIterator<Item = u32>) -> Self {
+        Self::Var(Box::new((name.into(), Some(domain.into_iter().collect()))))
+    }
+
+    /// A finite literal-set base `{…}` (folds under the owner's kind).
+    pub fn lit_set(values: impl IntoIterator<Item = u32>) -> Self {
+        Self::LitSet(values.into_iter().collect())
+    }
+
+    /// `~inner` — the kind involution applied to `inner`.
+    pub fn swap(inner: Self) -> Self {
+        Self::Swap(Box::new(inner))
+    }
+
+    /// `'inner` — the enantiomer (mirror) of `inner`.
+    pub fn mirror(inner: Self) -> Self {
+        Self::Mirror(Box::new(inner))
+    }
+
+    /// `inner ^ perm` — the group action of `perm` on `inner`.
+    pub fn apply(inner: Self, perm: Permutation) -> Self {
+        Self::Apply(Box::new(inner), perm)
+    }
+}
+
+/// Dense coset-index expression (0-indexed per stereo kind): undetermined, a
+/// single index, a finite set, a complement set, or an operator `Term` over a
+/// variable. Kind-relative — **no `Lattice`/`Canonicalize`/`AsLit`**; the owning
+/// the owning configuration or site normalizes it under its kind.
 #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoCosetAst {
     #[default]
     Undetermined,
     Lit(u32),
-    Expr(Box<StereoExpr>),
+    LitSet(BTreeSet<u32>),
+    NotSet(BTreeSet<u32>),
+    Term(Box<StereoTerm>),
 }
 
 impl StereoCosetAst {
-    /// Wrap operator-expression as coset index.
-    pub fn expr(expr: StereoExpr) -> Self {
-        Self::Expr(Box::new(expr))
+    pub fn lit_set(values: impl IntoIterator<Item = u32>) -> Self {
+        Self::LitSet(values.into_iter().collect())
     }
 
-    /// Simplify the inner expression under `kind`'s coset algebra.
-    pub fn simplify(self, kind: StereoKind) -> Self {
-        match self {
-            Self::Expr(e) => match e.simplify(kind) {
-                StereoExpr::Lit(index) => Self::Lit(index),
-                other => Self::Expr(Box::new(other)),
-            },
-            other => other,
-        }
+    pub fn not_set(values: impl IntoIterator<Item = u32>) -> Self {
+        Self::NotSet(values.into_iter().collect())
     }
 
-    /// Apply a ligand-order permutation to this coset under `kind`.
-    pub fn apply_permutation(&self, kind: StereoKind, perm: Permutation) -> Self {
-        match self {
-            Self::Undetermined => Self::Undetermined,
-            Self::Lit(index) => Self::Lit(kind.act(*index, perm)),
-            Self::Expr(expr) => {
-                Self::Expr(Box::new(StereoExpr::ApplyOp(expr.clone(), perm))).simplify(kind)
-            }
-        }
-    }
-
-    /// Matches literal coset index `value` under `kind`.
-    pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
-        match self {
-            Self::Undetermined => true,
-            Self::Lit(v) => *v == value,
-            Self::Expr(e) => e.matches_value(value, kind),
-        }
-    }
-}
-
-impl AsLit for StereoCosetAst {
-    type Lit = u32;
-
-    fn as_lit(&self) -> Option<u32> {
-        match self {
-            Self::Lit(index) => Some(*index),
-            Self::Undetermined | Self::Expr(_) => None,
-        }
-    }
-}
-
-impl Lattice for StereoCosetAst {
-    fn is_undetermined(&self) -> bool {
-        matches!(self, Self::Undetermined)
-    }
-
-    fn is_ground(&self) -> bool {
-        matches!(self, Self::Lit(_))
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        match (self, other) {
-            (Self::Undetermined, x) | (x, Self::Undetermined) => Some(x.clone()),
-            (Self::Lit(a), Self::Lit(b)) => (a == b).then_some(Self::Lit(*a)),
-            (Self::Expr(e), Self::Expr(f)) => (e == f).then(|| Self::Expr(e.clone())),
-            (Self::Expr(_), _) | (_, Self::Expr(_)) => None,
-        }
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        match (self, other) {
-            (Self::Undetermined, _) | (_, Self::Undetermined) => Self::Undetermined,
-            (Self::Lit(a), Self::Lit(b)) if a == b => Self::Lit(*a),
-            (Self::Expr(e), Self::Expr(f)) if e == f => Self::Expr(e.clone()),
-            _ => Self::Undetermined,
-        }
-    }
-
-    fn matches(&self, target: &Self) -> bool {
-        match (self, target) {
-            (Self::Undetermined, _) => true,
-            (_, Self::Undetermined) => false,
-            (Self::Lit(p), Self::Lit(t)) => p == t,
-            (Self::Expr(_), _) | (_, Self::Expr(_)) => false,
-        }
-    }
-}
-
-/// Operator expression over coset algebra for `kind`. Includes ~ and ^ operators, and literals.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum StereoExpr {
-    Lit(u32),
-    Var(String),
-    SwapOp(Box<StereoExpr>),
-    MirrorOp(Box<StereoExpr>),
-    ApplyOp(Box<StereoExpr>, Permutation),
-    LitSet(Vec<u32>),
-    VarDomain(String, Vec<u32>),
-}
-
-impl StereoExpr {
-    /// `~inner` — the involution operator applied to `inner`.
-    pub fn swap(inner: Self) -> Self {
-        Self::SwapOp(Box::new(inner))
-    }
-
-    /// `'inner` — the improper (mirror) operator: the enantiomer of `inner`.
-    pub fn mirror(inner: Self) -> Self {
-        Self::MirrorOp(Box::new(inner))
-    }
-
-    /// `inner ^ perm` — the generic group action of `perm` on `inner`.
-    pub fn apply(inner: Self, perm: Permutation) -> Self {
-        Self::ApplyOp(Box::new(inner), perm)
-    }
-
-    /// Recursively simplify, folding closed operator nodes via the coset
-    /// algebra: `~~e → e` (involution); `~(Lit k) → Lit(k · involution)`;
-    /// `(Lit k) ^ g → Lit(k · g)`.
-    pub fn simplify(self, kind: StereoKind) -> Self {
-        match self {
-            StereoExpr::Lit(_)
-            | StereoExpr::Var(_)
-            | StereoExpr::LitSet(_)
-            | StereoExpr::VarDomain(..) => self,
-            StereoExpr::SwapOp(inner) => match inner.simplify(kind) {
-                StereoExpr::SwapOp(inner2) => *inner2,
-                StereoExpr::Lit(index) => StereoExpr::Lit(kind.act(index, kind.involution())),
-                other => StereoExpr::SwapOp(Box::new(other)),
-            },
-            StereoExpr::MirrorOp(inner) => match inner.simplify(kind) {
-                StereoExpr::MirrorOp(inner2) => *inner2,
-                StereoExpr::Lit(index) => {
-                    StereoExpr::Lit(space(kind.class_key()).enantiomer(index))
-                }
-                other => StereoExpr::MirrorOp(Box::new(other)),
-            },
-            StereoExpr::ApplyOp(inner, perm) => match inner.simplify(kind) {
-                StereoExpr::Lit(index) => StereoExpr::Lit(kind.act(index, perm)),
-                other => StereoExpr::ApplyOp(Box::new(other), perm),
-            },
-        }
-    }
-
-    /// Matches literal coset index `value` under `kind`'s coset algebra.
-    pub fn matches_value(&self, value: u32, kind: StereoKind) -> bool {
-        match self {
-            StereoExpr::Lit(n) => *n == value,
-            StereoExpr::Var(_) => true,
-            StereoExpr::LitSet(set) | StereoExpr::VarDomain(_, set) => set.contains(&value),
-            StereoExpr::SwapOp(inner) => {
-                inner.matches_value(kind.act(value, kind.involution()), kind)
-            }
-            StereoExpr::MirrorOp(inner) => {
-                inner.matches_value(space(kind.class_key()).enantiomer(value), kind)
-            }
-            StereoExpr::ApplyOp(inner, perm) => {
-                inner.matches_value(kind.act(value, perm.inverse()), kind)
-            }
-        }
-    }
-}
-
-impl From<StereoCosetAst> for StereoConfigurationAst {
-    fn from(index: StereoCosetAst) -> Self {
-        Self::Stereo(index)
-    }
-}
-
-impl From<u32> for StereoConfigurationAst {
-    fn from(index: u32) -> Self {
-        Self::Stereo(StereoCosetAst::Lit(index))
-    }
-}
-
-impl From<Vec<u32>> for StereoConfigurationAst {
-    fn from(values: Vec<u32>) -> Self {
-        Self::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(values))))
+    pub fn term(term: StereoTerm) -> Self {
+        Self::Term(Box::new(term))
     }
 }
 
@@ -460,9 +432,222 @@ impl From<u32> for StereoCosetAst {
     }
 }
 
-impl From<Vec<u32>> for StereoCosetAst {
-    fn from(values: Vec<u32>) -> Self {
-        Self::Expr(Box::new(StereoExpr::LitSet(values)))
+impl AsLit for StereoCosetAst {
+    type Lit = u32;
+
+    /// The single coset index, only when literal. Kind-independent — so it lives on
+    /// the bare coset, unlike the kind-aware folding ops.
+    #[inline]
+    fn as_lit(&self) -> Option<u32> {
+        match self {
+            Self::Lit(i) => Some(*i),
+            _ => None,
+        }
+    }
+}
+
+/// A ground stereo configuration: a concrete geometry plus its coset index. The
+/// `AsLit` target of `StereoConfigurationAst` and the per-kind site types.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct StereoConfiguration {
+    pub kind: StereoKind,
+    pub coset: u32,
+}
+
+impl StereoKind {
+    /// The mirror (improper, μ) generator as a permutation: chiral kinds use the
+    /// orientation-reversing generator; achiral kinds act trivially on cosets.
+    pub(crate) fn mirror_perm(self) -> Permutation {
+        if self.is_chiral_class() {
+            space(self.class_key()).improper()
+        } else {
+            Permutation::identity(self.degree())
+        }
+    }
+
+    /// Whether `g` and `h` induce the same coset relabeling for this kind.
+    fn coset_action_eq(self, g: Permutation, h: Permutation) -> bool {
+        let s = space(self.class_key());
+        (0..s.count() as u32).all(|i| s.reindex(i, g) == s.reindex(i, h))
+    }
+}
+
+/// The admissible coset-index set a non-`Term` coset denotes under `kind`.
+fn coset_to_set(coset: &StereoCosetAst, kind: StereoKind) -> Option<BTreeSet<u32>> {
+    let n = kind.count() as u32;
+    match coset {
+        StereoCosetAst::Undetermined => Some((0..n).collect()),
+        StereoCosetAst::Lit(i) => Some(BTreeSet::from([*i])),
+        StereoCosetAst::LitSet(s) => Some(s.clone()),
+        StereoCosetAst::NotSet(s) => Some((0..n).filter(|i| !s.contains(i)).collect()),
+        StereoCosetAst::Term(_) => None,
+    }
+}
+
+/// Walk a term's operator word into one net coset permutation (composed inner →
+/// outer), returning the base leaf (`Var`/`Lit`/`LitSet`) and that permutation.
+fn compose_term(term: &StereoTerm, kind: StereoKind) -> (&StereoTerm, Permutation) {
+    match term {
+        StereoTerm::Swap(inner) => {
+            let (base, g) = compose_term(inner, kind);
+            (base, g.compose(kind.involution()))
+        }
+        StereoTerm::Mirror(inner) => {
+            let (base, g) = compose_term(inner, kind);
+            (base, g.compose(kind.mirror_perm()))
+        }
+        StereoTerm::Apply(inner, p) => {
+            let (base, g) = compose_term(inner, kind);
+            (base, g.compose(*p))
+        }
+        base => (base, Permutation::identity(kind.degree())),
+    }
+}
+
+/// Canonicalize a coset under `kind`. A `Term` over a `Var` renders by priority
+/// Mirror > Swap > Apply (canonicalizing the domain); every other form reduces to
+/// an admissible index set, which then folds: ∅ → `Err`, full → `Undetermined`,
+/// singleton → `Lit`, else the smaller of positive/complement (tiebreak positive).
+/// No range-check on members (tier-2; the validator does it).
+pub(crate) fn canon_coset(
+    coset: StereoCosetAst,
+    kind: StereoKind,
+) -> Result<StereoCosetAst, Contradiction> {
+    let n = kind.count() as u32;
+    let s = space(kind.class_key());
+    let set: BTreeSet<u32> = match &coset {
+        StereoCosetAst::Term(t) => {
+            let (base, g) = compose_term(t, kind);
+            match base {
+                StereoTerm::Var(v) => {
+                    let domain = match &v.1 {
+                        Some(set) if set.is_empty() => return Err(Contradiction),
+                        Some(set) if set.len() as u32 == n => None,
+                        Some(set) => Some(set.clone()),
+                        None => None,
+                    };
+                    let var = StereoTerm::Var(Box::new((v.0.clone(), domain)));
+                    let id = Permutation::identity(kind.degree());
+                    let term = if kind.coset_action_eq(g, id) {
+                        var
+                    } else if kind.is_chiral_class() && kind.coset_action_eq(g, kind.mirror_perm()) {
+                        StereoTerm::Mirror(Box::new(var))
+                    } else if kind.coset_action_eq(g, kind.involution()) {
+                        StereoTerm::Swap(Box::new(var))
+                    } else {
+                        StereoTerm::Apply(Box::new(var), g)
+                    };
+                    return Ok(StereoCosetAst::term(term));
+                }
+                StereoTerm::Lit(i) => BTreeSet::from([s.reindex(*i, g)]),
+                StereoTerm::LitSet(values) => values.iter().map(|i| s.reindex(*i, g)).collect(),
+                StereoTerm::Swap(_) | StereoTerm::Mirror(_) | StereoTerm::Apply(..) => {
+                    unreachable!("compose_term returns a base leaf")
+                }
+            }
+        }
+        other => coset_to_set(other, kind).unwrap(),
+    };
+    if set.is_empty() {
+        Err(Contradiction)
+    } else if set.len() as u32 == n {
+        Ok(StereoCosetAst::Undetermined)
+    } else if set.len() == 1 {
+        Ok(StereoCosetAst::Lit(set.into_iter().next().unwrap()))
+    } else {
+        let complement: BTreeSet<u32> = (0..n).filter(|i| !set.contains(i)).collect();
+        Ok(if set.len() <= complement.len() {
+            StereoCosetAst::LitSet(set)
+        } else {
+            StereoCosetAst::NotSet(complement)
+        })
+    }
+}
+
+/// Greatest lower bound of two cosets under `kind` (canonicalizing operands);
+/// `Term` meets only an equal canonical `Term`.
+pub(crate) fn coset_meet(
+    a: &StereoCosetAst,
+    b: &StereoCosetAst,
+    kind: StereoKind,
+) -> Option<StereoCosetAst> {
+    let ca = canon_coset(a.clone(), kind).ok()?;
+    let cb = canon_coset(b.clone(), kind).ok()?;
+    use StereoCosetAst::{Term, Undetermined};
+    match (&ca, &cb) {
+        (Undetermined, _) => Some(cb),
+        (_, Undetermined) => Some(ca),
+        (Term(_), Term(_)) => (ca == cb).then_some(ca),
+        (Term(_), _) | (_, Term(_)) => None,
+        _ => {
+            let sa = coset_to_set(&ca, kind).unwrap();
+            let sb = coset_to_set(&cb, kind).unwrap();
+            canon_coset(
+                StereoCosetAst::LitSet(sa.intersection(&sb).copied().collect()),
+                kind,
+            )
+            .ok()
+        }
+    }
+}
+
+/// Least upper bound of two cosets under `kind`.
+pub(crate) fn coset_join(
+    a: &StereoCosetAst,
+    b: &StereoCosetAst,
+    kind: StereoKind,
+) -> StereoCosetAst {
+    let ca = canon_coset(a.clone(), kind).unwrap_or(StereoCosetAst::Undetermined);
+    let cb = canon_coset(b.clone(), kind).unwrap_or(StereoCosetAst::Undetermined);
+    use StereoCosetAst::{Term, Undetermined};
+    match (&ca, &cb) {
+        (Undetermined, _) | (_, Undetermined) => StereoCosetAst::Undetermined,
+        (Term(_), Term(_)) if ca == cb => ca,
+        (Term(_), _) | (_, Term(_)) => StereoCosetAst::Undetermined,
+        _ => {
+            let sa = coset_to_set(&ca, kind).unwrap();
+            let sb = coset_to_set(&cb, kind).unwrap();
+            canon_coset(
+                StereoCosetAst::LitSet(sa.union(&sb).copied().collect()),
+                kind,
+            )
+            .unwrap_or(StereoCosetAst::Undetermined)
+        }
+    }
+}
+
+/// `target` refines `pattern` under `kind` (meet-derived).
+pub(crate) fn coset_matches(
+    pattern: &StereoCosetAst,
+    target: &StereoCosetAst,
+    kind: StereoKind,
+) -> bool {
+    match (coset_meet(pattern, target, kind), canon_coset(target.clone(), kind)) {
+        (Some(m), Ok(ct)) => m == ct,
+        _ => false,
+    }
+}
+
+/// Apply a ligand-order permutation to a coset under `kind`.
+pub(crate) fn coset_apply_permutation(
+    coset: &StereoCosetAst,
+    perm: Permutation,
+    kind: StereoKind,
+) -> StereoCosetAst {
+    let s = space(kind.class_key());
+    match coset {
+        StereoCosetAst::Undetermined => StereoCosetAst::Undetermined,
+        StereoCosetAst::Lit(i) => StereoCosetAst::Lit(s.reindex(*i, perm)),
+        StereoCosetAst::LitSet(set) => {
+            StereoCosetAst::LitSet(set.iter().map(|i| s.reindex(*i, perm)).collect())
+        }
+        StereoCosetAst::NotSet(set) => {
+            StereoCosetAst::NotSet(set.iter().map(|i| s.reindex(*i, perm)).collect())
+        }
+        StereoCosetAst::Term(t) => {
+            canon_coset(StereoCosetAst::term(StereoTerm::apply((**t).clone(), perm)), kind)
+                .unwrap_or(StereoCosetAst::Undetermined)
+        }
     }
 }
 
@@ -473,18 +658,16 @@ macro_rules! stereo_element {
         $name:ident, $constraints:ident, $constraint:ident
     ) => {
         $(#[doc = $doc])+
-        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
         pub struct $name {
-            pub kind: StereoKind,
-            pub coset: StereoCosetAst,
+            pub configuration: StereoConfigurationAst,
             pub constraints: $constraints,
         }
 
         impl $name {
             pub fn new(kind: StereoKind, coset: impl Into<StereoCosetAst>) -> Self {
                 Self {
-                    kind,
-                    coset: coset.into(),
+                    configuration: StereoConfigurationAst::kinded(kind, coset),
                     constraints: $constraints::new(),
                 }
             }
@@ -505,8 +688,7 @@ macro_rules! stereo_element {
             }
 
             /// No-op. A stereo element is always stereogenic, so its coset has no
-            /// zero default — an unspecified coset has no canonical ground term.
-            /// The element is ground iff its coset is ground.
+            /// zero default; it is ground iff its coset is ground.
             pub fn into_ground(self) -> Self {
                 self
             }
@@ -516,50 +698,40 @@ macro_rules! stereo_element {
                 self.into_ground()
             }
 
-            /// Fold the coset's closed operator-expressions (under `kind`) and
-            /// simplify each constraint's value in place.
+            /// Canonicalize the configuration (fold the coset under its kind) and
+            /// simplify each constraint in place.
             pub fn simplify_values(&mut self) {
-                self.coset = mem::take(&mut self.coset).simplify(self.kind);
+                let cfg = mem::take(&mut self.configuration);
+                self.configuration = cfg.clone().canonicalize().unwrap_or(cfg);
                 self.constraints.simplify_each();
             }
         }
 
         impl Lattice for $name {
             fn is_undetermined(&self) -> bool {
-                self.coset.is_undetermined() && self.constraints.is_undetermined()
+                self.configuration.is_undetermined() && self.constraints.is_undetermined()
             }
 
             fn is_ground(&self) -> bool {
-                self.coset.is_ground() && self.constraints.is_ground()
+                self.configuration.is_ground() && self.constraints.is_ground()
             }
 
             fn meet(&self, other: &Self) -> Option<Self> {
-                if self.kind != other.kind {
-                    return None;
-                }
                 Some(Self {
-                    kind: self.kind,
-                    coset: self.coset.meet(&other.coset)?,
+                    configuration: self.configuration.meet(&other.configuration)?,
                     constraints: self.constraints.meet(&other.constraints)?,
                 })
             }
 
-            /// Per-kind lattices. Cross-kind join is a precondition violation.
             fn join(&self, other: &Self) -> Self {
-                debug_assert_eq!(
-                    self.kind, other.kind,
-                    "stereo elements join only within a kind"
-                );
                 Self {
-                    kind: self.kind,
-                    coset: self.coset.join(&other.coset),
+                    configuration: self.configuration.join(&other.configuration),
                     constraints: self.constraints.join(&other.constraints),
                 }
             }
 
             fn matches(&self, target: &Self) -> bool {
-                self.kind == target.kind
-                    && self.coset.matches(&target.coset)
+                self.configuration.matches(&target.configuration)
                     && self.constraints.matches(&target.constraints)
             }
         }
@@ -576,30 +748,10 @@ stereo_element! {
     StereoBondAst, StereoBondConstraints, StereoBondConstraint
 }
 
-/// Default implementation for StereoAtomAst.
-impl Default for StereoAtomAst {
-    fn default() -> Self {
-        Self {
-            kind: StereoKind::Tetrahedral,
-            coset: StereoCosetAst::Undetermined,
-            constraints: StereoAtomConstraints::new(),
-        }
-    }
-}
-
-/// Default implementation for StereoBondAst.
-impl Default for StereoBondAst {
-    fn default() -> Self {
-        Self {
-            kind: StereoKind::CisTrans,
-            coset: StereoCosetAst::Undetermined,
-            constraints: StereoBondConstraints::new(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
@@ -649,319 +801,294 @@ mod tests {
         assert_eq!(kind.is_chiral_class(), expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::tetrahedral(StereoKind::Tetrahedral, StereoKindAst::Lit(StereoKind::Tetrahedral))]
-    #[case::octahedral(StereoKind::Octahedral, StereoKindAst::Lit(StereoKind::Octahedral))]
-    fn test_stereo_kind_ast_from(#[case] kind: StereoKind, #[case] expected: StereoKindAst) {
-        assert_eq!(StereoKindAst::from(kind), expected);
+    #[case::tetrahedral((StereoKind::Tetrahedral, 1), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::octahedral((StereoKind::Octahedral, 5), StereoConfigurationAst::Kinded(StereoKind::Octahedral, StereoCosetAst::Lit(5)))]
+    fn test_stereo_configuration_ast_from(#[case] input: (StereoKind, u32), #[case] expected: StereoConfigurationAst) {
+        assert_eq!(StereoConfigurationAst::from(input), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::term_swap_folds_to_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(0)))), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)))]
+    #[case::set_complements(StereoConfigurationAst::Kinded(StereoKind::SquarePlanar, StereoCosetAst::lit_set([0, 1])), StereoConfigurationAst::Kinded(StereoKind::SquarePlanar, StereoCosetAst::NotSet(BTreeSet::from([2]))))]
+    #[case::set_full_to_undetermined(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::lit_set([0, 1])), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
+    fn test_stereo_configuration_ast_canonicalize(#[case] input: StereoConfigurationAst, #[case] expected: StereoConfigurationAst) {
+        assert_eq!(input.canonicalize(), Ok(expected));
     }
 
     #[rstest]
-    #[case::undetermined(StereoKindAst::Undetermined)]
-    #[case::lit(StereoKindAst::Lit(StereoKind::Tetrahedral))]
-    fn test_stereo_kind_ast_canonicalize_identity(#[case] input: StereoKindAst) {
+    #[case::undetermined(StereoConfigurationAst::Undetermined)]
+    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)))]
+    #[case::kind_open(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
+    fn test_stereo_configuration_ast_canonicalize_identity(#[case] input: StereoConfigurationAst) {
         assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
-    #[rustfmt::skip]
     #[rstest]
-    #[case::lit(StereoKindAst::Lit(StereoKind::CisTrans), Some(StereoKind::CisTrans))]
-    #[case::undetermined(StereoKindAst::Undetermined, None)]
-    fn test_stereo_kind_ast_as_lit(#[case] ast: StereoKindAst, #[case] expected: Option<StereoKind>) {
-        assert_eq!(ast.as_lit(), expected);
-        assert_eq!(ast.is_ground(), expected.is_some());
+    #[case::empty_set(StereoConfigurationAst::Kinded(StereoKind::SquarePlanar, StereoCosetAst::LitSet(BTreeSet::new())))]
+    fn test_stereo_configuration_ast_canonicalize_error(#[case] input: StereoConfigurationAst) {
+        assert_eq!(input.canonicalize(), Err(Contradiction));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::lit_match(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKind::Tetrahedral, true)]
-    #[case::lit_mismatch(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKind::CisTrans, false)]
-    #[case::undetermined(StereoKindAst::Undetermined, StereoKind::Tetrahedral, false)]
-    fn test_stereo_kind_ast_as_lit_matches(
-        #[case] ast: StereoKindAst,
-        #[case] value: StereoKind,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(ast.as_lit_matches(value), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(StereoKindAst::Undetermined, true)]
-    #[case::lit(StereoKindAst::Lit(StereoKind::Tetrahedral), false)]
-    fn test_stereo_kind_ast_is_undetermined(#[case] ast: StereoKindAst, #[case] expected: bool) {
-        assert_eq!(ast.is_undetermined(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::und_lit(StereoKindAst::Undetermined, StereoKindAst::Lit(StereoKind::Tetrahedral), Some(StereoKindAst::Lit(StereoKind::Tetrahedral)))]
-    #[case::lit_und(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Undetermined, Some(StereoKindAst::Lit(StereoKind::Tetrahedral)))]
-    #[case::und_und(StereoKindAst::Undetermined, StereoKindAst::Undetermined, Some(StereoKindAst::Undetermined))]
-    #[case::lit_lit_eq(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Lit(StereoKind::Tetrahedral), Some(StereoKindAst::Lit(StereoKind::Tetrahedral)))]
-    #[case::lit_lit_neq(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Lit(StereoKind::Octahedral), None)]
-    fn test_stereo_kind_ast_meet(
-        #[case] a: StereoKindAst,
-        #[case] b: StereoKindAst,
-        #[case] expected: Option<StereoKindAst>,
-    ) {
-        assert_eq!(a.meet(&b), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::und_lit(StereoKindAst::Undetermined, StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Undetermined)]
-    #[case::und_und(StereoKindAst::Undetermined, StereoKindAst::Undetermined, StereoKindAst::Undetermined)]
-    #[case::lit_lit_eq(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Lit(StereoKind::Tetrahedral))]
-    #[case::lit_lit_neq(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Lit(StereoKind::Octahedral), StereoKindAst::Undetermined)]
-    fn test_stereo_kind_ast_join(
-        #[case] a: StereoKindAst,
-        #[case] b: StereoKindAst,
-        #[case] expected: StereoKindAst,
-    ) {
-        assert_eq!(a.join(&b), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined_lit(StereoKindAst::Undetermined, StereoKindAst::Lit(StereoKind::Tetrahedral), true)]
-    #[case::undetermined_undetermined(StereoKindAst::Undetermined, StereoKindAst::Undetermined, true)]
-    #[case::lit_undetermined(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Undetermined, false)]
-    #[case::lit_lit_match(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Lit(StereoKind::Tetrahedral), true)]
-    #[case::lit_lit_mismatch(StereoKindAst::Lit(StereoKind::Tetrahedral), StereoKindAst::Lit(StereoKind::Octahedral), false)]
-    fn test_stereo_kind_ast_matches(
-        #[case] pattern: StereoKindAst,
-        #[case] target: StereoKindAst,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    fn test_stereo_expr_swap() {
-        assert_eq!(
-            StereoExpr::swap(StereoExpr::Lit(0)).simplify(StereoKind::Tetrahedral),
-            StereoExpr::Lit(1),
-        );
-    }
-
-    #[rstest]
-    fn test_stereo_expr_apply() {
-        assert_eq!(
-            StereoExpr::apply(
-                StereoExpr::Lit(0),
-                Permutation::from_image(4, &[1, 0, 2, 3])
-            )
-            .simplify(StereoKind::Tetrahedral),
-            StereoExpr::Lit(1),
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit(StereoKind::Tetrahedral, StereoExpr::Lit(1), StereoExpr::Lit(1))]
-    #[case::var(StereoKind::Tetrahedral, StereoExpr::Var("o".into()), StereoExpr::Var("o".into()))]
-    #[case::swap_lit_even(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
-    #[case::swap_lit_odd(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(1))), StereoExpr::Lit(0))]
-    #[case::double_swap_lit(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(1))))), StereoExpr::Lit(1))]
-    #[case::double_swap_var(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Var("o".into()))))), StereoExpr::Var("o".into()))]
-    #[case::swap_var_stays(StereoKind::Tetrahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Var("o".into()))), StereoExpr::SwapOp(Box::new(StereoExpr::Var("o".into()))))]
-    #[case::apply_lit(StereoKind::Tetrahedral, StereoExpr::ApplyOp(Box::new(StereoExpr::Lit(0)), Permutation::from_image(4, &[1, 0, 2, 3])), StereoExpr::Lit(1))]
-    #[case::apply_identity(StereoKind::Tetrahedral, StereoExpr::ApplyOp(Box::new(StereoExpr::Lit(1)), Permutation::from_image(4, &[0, 1, 2, 3])), StereoExpr::Lit(1))]
-    #[case::apply_var_stays(StereoKind::Tetrahedral, StereoExpr::ApplyOp(Box::new(StereoExpr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])), StereoExpr::ApplyOp(Box::new(StereoExpr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])))]
-    #[case::cistrans_swap(StereoKind::CisTrans, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
-    #[case::sp_swap_u_fixed(StereoKind::SquarePlanar, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(0))]
-    #[case::sp_swap_four_z(StereoKind::SquarePlanar, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(1))), StereoExpr::Lit(2))]
-    #[case::tb_swap_axial(StereoKind::TrigonalBipyramidal, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
-    #[case::tb_swap_other(StereoKind::TrigonalBipyramidal, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(2))), StereoExpr::Lit(17))]
-    #[case::oh_swap_axial(StereoKind::Octahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
-    #[case::oh_swap_other(StereoKind::Octahedral, StereoExpr::SwapOp(Box::new(StereoExpr::Lit(2))), StereoExpr::Lit(21))]
-    #[case::mirror_chiral(StereoKind::Tetrahedral, StereoExpr::MirrorOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(1))]
-    #[case::mirror_achiral_noop(StereoKind::CisTrans, StereoExpr::MirrorOp(Box::new(StereoExpr::Lit(0))), StereoExpr::Lit(0))]
-    #[case::double_mirror_lit(StereoKind::Tetrahedral, StereoExpr::MirrorOp(Box::new(StereoExpr::MirrorOp(Box::new(StereoExpr::Lit(1))))), StereoExpr::Lit(1))]
-    #[case::mirror_var_stays(StereoKind::Tetrahedral, StereoExpr::MirrorOp(Box::new(StereoExpr::Var("o".into()))), StereoExpr::MirrorOp(Box::new(StereoExpr::Var("o".into()))))]
-    fn test_stereo_expr_simplify(#[case] kind: StereoKind, #[case] input: StereoExpr, #[case] expected: StereoExpr) {
-        assert_eq!(input.simplify(kind), expected);
-    }
-
-    #[rstest]
-    #[case::swap_var(StereoExpr::SwapOp(Box::new(StereoExpr::Var("o".into()))))]
-    #[case::apply_var(StereoExpr::ApplyOp(Box::new(StereoExpr::Var("o".into())), Permutation::from_image(4, &[1, 0, 2, 3])))]
-    #[case::double_swap_lit(StereoExpr::SwapOp(Box::new(StereoExpr::SwapOp(Box::new(
-        StereoExpr::Lit(0)
-    )))))]
-    fn test_stereo_expr_simplify_idempotent(#[case] input: StereoExpr) {
-        let once = input.simplify(StereoKind::Tetrahedral);
-        let twice = once.clone().simplify(StereoKind::Tetrahedral);
-        assert_eq!(once, twice);
-    }
-
-    #[rstest]
-    #[case::tetrahedral(StereoKind::Tetrahedral, 0)]
-    #[case::cis_trans(StereoKind::CisTrans, 0)]
-    #[case::square_planar(StereoKind::SquarePlanar, 1)]
-    #[case::trigonal_bipyramidal(StereoKind::TrigonalBipyramidal, 2)]
-    #[case::octahedral(StereoKind::Octahedral, 2)]
-    fn test_stereo_expr_simplify_involution(#[case] kind: StereoKind, #[case] index: u32) {
-        let double = StereoExpr::SwapOp(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(
-            index,
-        )))));
-        assert_eq!(double.simplify(kind), StereoExpr::Lit(index));
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::lit(StereoCosetAst::Lit(1), StereoCosetAst::Lit(1))]
-    #[case::undetermined(StereoCosetAst::Undetermined, StereoCosetAst::Undetermined)]
-    #[case::expr_lit_lifts(StereoCosetAst::Expr(Box::new(StereoExpr::Lit(2))), StereoCosetAst::Lit(2))]
-    #[case::expr_swap_lifts(StereoCosetAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))))), StereoCosetAst::Lit(1))]
-    #[case::expr_var_stays(StereoCosetAst::Expr(Box::new(StereoExpr::Var("o".into()))), StereoCosetAst::Expr(Box::new(StereoExpr::Var("o".into()))))]
-    fn test_stereo_coset_ast_simplify(#[case] input: StereoCosetAst, #[case] expected: StereoCosetAst) {
-        assert_eq!(input.simplify(StereoKind::Tetrahedral), expected);
-    }
-
-    #[rstest]
-    fn test_stereo_coset_ast_expr() {
-        assert_eq!(
-            StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(0)))
-                .simplify(StereoKind::Tetrahedral),
-            StereoCosetAst::Lit(1),
-        );
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::undetermined(StereoConfigurationAst::Undetermined, StereoConfigurationAst::Undetermined)]
-    #[case::not_stereo(StereoConfigurationAst::NotStereo, StereoConfigurationAst::NotStereo)]
-    #[case::stereo_lit(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1)), StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1)))]
-    #[case::stereo_expr_lifts(
-        StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0)))))),
-        StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1)),
-    )]
-    fn test_stereo_configuration_ast_simplify(
-        #[case] input: StereoConfigurationAst,
-        #[case] expected: StereoConfigurationAst,
-    ) {
-        assert_eq!(input.simplify(StereoKind::Tetrahedral), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::u32(StereoConfigurationAst::from(2u32), StereoConfigurationAst::Stereo(StereoCosetAst::Lit(2)))]
-    #[case::index(StereoConfigurationAst::from(StereoCosetAst::Lit(3)), StereoConfigurationAst::Stereo(StereoCosetAst::Lit(3)))]
-    fn test_stereo_configuration_ast_from(
-        #[case] actual: StereoConfigurationAst,
-        #[case] expected: StereoConfigurationAst,
-    ) {
-        assert_eq!(actual, expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::stereo_lit(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(2)), Some(2))]
-    #[case::not_stereo(StereoConfigurationAst::NotStereo, None)]
+    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)), Some(StereoConfiguration { kind: StereoKind::Tetrahedral, coset: 1 }))]
     #[case::undetermined(StereoConfigurationAst::Undetermined, None)]
-    #[case::stereo_undetermined(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined), None)]
-    fn test_stereo_configuration_ast_as_lit(
-        #[case] config: StereoConfigurationAst,
-        #[case] expected: Option<u32>,
-    ) {
+    #[case::kind_open(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), None)]
+    fn test_stereo_configuration_ast_as_lit(#[case] config: StereoConfigurationAst, #[case] expected: Option<StereoConfiguration>) {
         assert_eq!(config.as_lit(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
+    #[case::undetermined(StereoConfigurationAst::Undetermined, true)]
+    #[case::kind_open(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), false)]
+    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)), false)]
+    fn test_stereo_configuration_ast_is_undetermined(#[case] config: StereoConfigurationAst, #[case] expected: bool) {
+        assert_eq!(config.is_undetermined(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::kind_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)), true)]
     #[case::undetermined(StereoConfigurationAst::Undetermined, false)]
-    #[case::not_stereo(StereoConfigurationAst::NotStereo, true)]
-    #[case::stereo_lit(StereoConfigurationAst::from(1u32), true)]
-    #[case::stereo_undetermined(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined), false)]
-    fn test_stereo_configuration_ast_is_ground(
-        #[case] config: StereoConfigurationAst,
-        #[case] expected: bool,
-    ) {
+    #[case::kind_open(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), false)]
+    fn test_stereo_configuration_ast_is_ground(#[case] config: StereoConfigurationAst, #[case] expected: bool) {
         assert_eq!(config.is_ground(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_narrows(StereoConfigurationAst::Undetermined, StereoConfigurationAst::from(1u32), Some(StereoConfigurationAst::from(1u32)))]
-    #[case::lit_same(StereoConfigurationAst::from(1u32), StereoConfigurationAst::from(1u32), Some(StereoConfigurationAst::from(1u32)))]
-    #[case::lit_conflict(StereoConfigurationAst::from(1u32), StereoConfigurationAst::from(2u32), None)]
-    #[case::not_stereo_same(StereoConfigurationAst::NotStereo, StereoConfigurationAst::NotStereo, Some(StereoConfigurationAst::NotStereo))]
-    #[case::not_stereo_vs_stereo(StereoConfigurationAst::NotStereo, StereoConfigurationAst::from(0u32), None)]
-    fn test_stereo_configuration_ast_meet(
-        #[case] a: StereoConfigurationAst,
-        #[case] b: StereoConfigurationAst,
-        #[case] expected: Option<StereoConfigurationAst>,
-    ) {
+    #[case::undetermined_narrows(StereoConfigurationAst::Undetermined, StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0))))]
+    #[case::coset_same(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0))))]
+    #[case::open_narrows(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), Some(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0))))]
+    #[case::coset_conflict(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 1)), None)]
+    #[case::kind_conflict(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::CisTrans, 0)), None)]
+    fn test_stereo_configuration_ast_meet(#[case] a: StereoConfigurationAst, #[case] b: StereoConfigurationAst, #[case] expected: Option<StereoConfigurationAst>) {
         assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_matches_any(StereoConfigurationAst::Undetermined, StereoConfigurationAst::from(1u32), true)]
-    #[case::specific_vs_undetermined(StereoConfigurationAst::from(1u32), StereoConfigurationAst::Undetermined, false)]
-    #[case::lit_match(StereoConfigurationAst::from(1u32), StereoConfigurationAst::from(1u32), true)]
-    #[case::lit_mismatch(StereoConfigurationAst::from(1u32), StereoConfigurationAst::from(2u32), false)]
-    #[case::not_stereo_match(StereoConfigurationAst::NotStereo, StereoConfigurationAst::NotStereo, true)]
-    #[case::not_stereo_vs_stereo(StereoConfigurationAst::NotStereo, StereoConfigurationAst::from(0u32), false)]
-    fn test_stereo_configuration_ast_matches(
-        #[case] pattern: StereoConfigurationAst,
-        #[case] target: StereoConfigurationAst,
-        #[case] expected: bool,
-    ) {
+    #[case::undetermined_absorbs(StereoConfigurationAst::Undetermined, StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::Undetermined)]
+    #[case::coset_same(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)))]
+    #[case::coset_widens(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 1)), StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined))]
+    #[case::kind_conflict(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::CisTrans, 0)), StereoConfigurationAst::Undetermined)]
+    fn test_stereo_configuration_ast_join(#[case] a: StereoConfigurationAst, #[case] b: StereoConfigurationAst, #[case] expected: StereoConfigurationAst) {
+        assert_eq!(a.join(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined_matches_any(StereoConfigurationAst::Undetermined, StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), true)]
+    #[case::open_matches_lit(StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), true)]
+    #[case::specific_vs_undetermined(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::Undetermined, false)]
+    #[case::coset_match(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), true)]
+    #[case::coset_mismatch(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::Tetrahedral, 1)), false)]
+    #[case::kind_mismatch(StereoConfigurationAst::from((StereoKind::Tetrahedral, 0)), StereoConfigurationAst::from((StereoKind::CisTrans, 0)), false)]
+    fn test_stereo_configuration_ast_matches(#[case] pattern: StereoConfigurationAst, #[case] target: StereoConfigurationAst, #[case] expected: bool) {
         assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::term_swap_folds(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(0)))), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)))]
+    fn test_tetrahedral_stereo_ast_canonicalize(#[case] input: TetrahedralStereoAst, #[case] expected: TetrahedralStereoAst) {
+        assert_eq!(input.canonicalize(), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::undetermined(TetrahedralStereoAst::Undetermined)]
+    #[case::not_stereo(TetrahedralStereoAst::NotStereo)]
+    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)))]
+    #[case::stereo_open(TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined))]
+    fn test_tetrahedral_stereo_ast_canonicalize_identity(#[case] input: TetrahedralStereoAst) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)), Some(StereoConfiguration { kind: StereoKind::Tetrahedral, coset: 1 }))]
+    #[case::not_stereo(TetrahedralStereoAst::NotStereo, None)]
+    #[case::undetermined(TetrahedralStereoAst::Undetermined, None)]
+    #[case::stereo_open(TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined), None)]
+    fn test_tetrahedral_stereo_ast_as_lit(#[case] site: TetrahedralStereoAst, #[case] expected: Option<StereoConfiguration>) {
+        assert_eq!(site.as_lit(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(TetrahedralStereoAst::Undetermined, true)]
+    #[case::not_stereo(TetrahedralStereoAst::NotStereo, false)]
+    #[case::stereo(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), false)]
+    fn test_tetrahedral_stereo_ast_is_undetermined(#[case] site: TetrahedralStereoAst, #[case] expected: bool) {
+        assert_eq!(site.is_undetermined(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::not_stereo(TetrahedralStereoAst::NotStereo, true)]
+    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), true)]
+    #[case::undetermined(TetrahedralStereoAst::Undetermined, false)]
+    #[case::stereo_open(TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined), false)]
+    fn test_tetrahedral_stereo_ast_is_ground(#[case] site: TetrahedralStereoAst, #[case] expected: bool) {
+        assert_eq!(site.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard(TetrahedralStereoAst::Undetermined, TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), Some(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0))))]
+    #[case::not_stereo_same(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::NotStereo, Some(TetrahedralStereoAst::NotStereo))]
+    #[case::not_stereo_vs_stereo(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), None)]
+    #[case::stereo_same(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), Some(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0))))]
+    #[case::stereo_disjoint(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)), None)]
+    #[case::open_narrows(TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), Some(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0))))]
+    fn test_tetrahedral_stereo_ast_meet(#[case] a: TetrahedralStereoAst, #[case] b: TetrahedralStereoAst, #[case] expected: Option<TetrahedralStereoAst>) {
+        assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard(TetrahedralStereoAst::Undetermined, TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Undetermined)]
+    #[case::not_stereo_same(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::NotStereo)]
+    #[case::not_stereo_vs_stereo(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Undetermined)]
+    #[case::stereo_same(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)))]
+    #[case::stereo_widens(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)), TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined))]
+    fn test_tetrahedral_stereo_ast_join(#[case] a: TetrahedralStereoAst, #[case] b: TetrahedralStereoAst, #[case] expected: TetrahedralStereoAst) {
+        assert_eq!(a.join(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard(TetrahedralStereoAst::Undetermined, TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), true)]
+    #[case::open_matches_lit(TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), true)]
+    #[case::specific_vs_undetermined(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Undetermined, false)]
+    #[case::lit_match(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), true)]
+    #[case::lit_mismatch(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)), false)]
+    #[case::not_stereo_match(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::NotStereo, true)]
+    #[case::not_stereo_vs_stereo(TetrahedralStereoAst::NotStereo, TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), false)]
+    fn test_tetrahedral_stereo_ast_matches(#[case] pattern: TetrahedralStereoAst, #[case] target: TetrahedralStereoAst, #[case] expected: bool) {
+        assert_eq!(pattern.matches(&target), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard(TetrahedralStereoAst::Undetermined, 0, true)]
+    #[case::not_stereo(TetrahedralStereoAst::NotStereo, 0, false)]
+    #[case::stereo_match(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), 0, true)]
+    #[case::stereo_miss(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(0)), 1, false)]
+    fn test_tetrahedral_stereo_ast_matches_value(#[case] site: TetrahedralStereoAst, #[case] value: u32, #[case] expected: bool) {
+        assert_eq!(site.matches_value(value), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::term_swap_folds(CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(0)))), CisTransStereoAst::Stereo(StereoCosetAst::Lit(1)))]
+    fn test_cis_trans_stereo_ast_canonicalize(#[case] input: CisTransStereoAst, #[case] expected: CisTransStereoAst) {
+        assert_eq!(input.canonicalize(), Ok(expected));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::stereo_lit(CisTransStereoAst::Stereo(StereoCosetAst::Lit(0)), Some(StereoConfiguration { kind: StereoKind::CisTrans, coset: 0 }))]
+    #[case::not_stereo(CisTransStereoAst::NotStereo, None)]
+    fn test_cis_trans_stereo_ast_as_lit(#[case] site: CisTransStereoAst, #[case] expected: Option<StereoConfiguration>) {
+        assert_eq!(site.as_lit(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard(CisTransStereoAst::Undetermined, CisTransStereoAst::Stereo(StereoCosetAst::Lit(0)), Some(CisTransStereoAst::Stereo(StereoCosetAst::Lit(0))))]
+    #[case::not_stereo_vs_stereo(CisTransStereoAst::NotStereo, CisTransStereoAst::Stereo(StereoCosetAst::Lit(0)), None)]
+    #[case::stereo_disjoint(CisTransStereoAst::Stereo(StereoCosetAst::Lit(0)), CisTransStereoAst::Stereo(StereoCosetAst::Lit(1)), None)]
+    fn test_cis_trans_stereo_ast_meet(#[case] a: CisTransStereoAst, #[case] b: CisTransStereoAst, #[case] expected: Option<CisTransStereoAst>) {
+        assert_eq!(a.meet(&b), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
     #[case::lit(StereoCosetAst::Lit(2), Some(2))]
     #[case::undetermined(StereoCosetAst::Undetermined, None)]
-    #[case::expr(StereoCosetAst::Expr(Box::new(StereoExpr::Var("o".into()))), None)]
-    fn test_stereo_coset_ast_as_lit(#[case] index: StereoCosetAst, #[case] expected: Option<u32>) {
-        assert_eq!(index.as_lit(), expected);
+    #[case::lit_set(StereoCosetAst::lit_set([1, 3]), None)]
+    #[case::term(StereoCosetAst::term(StereoTerm::var("o")), None)]
+    fn test_stereo_coset_ast_as_lit(#[case] coset: StereoCosetAst, #[case] expected: Option<u32>) {
+        assert_eq!(coset.as_lit(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined_narrows(StereoCosetAst::Undetermined, StereoCosetAst::Lit(1), Some(StereoCosetAst::Lit(1)))]
-    #[case::lit_same(StereoCosetAst::Lit(1), StereoCosetAst::Lit(1), Some(StereoCosetAst::Lit(1)))]
-    #[case::lit_conflict(StereoCosetAst::Lit(1), StereoCosetAst::Lit(2), None)]
-    #[case::expr_vs_lit(StereoCosetAst::Expr(Box::new(StereoExpr::Var("o".into()))), StereoCosetAst::Lit(1), None)]
-    fn test_stereo_coset_ast_meet(
-        #[case] a: StereoCosetAst,
-        #[case] b: StereoCosetAst,
-        #[case] expected: Option<StereoCosetAst>,
-    ) {
-        assert_eq!(a.meet(&b), expected);
+    #[case::lit_identity(StereoCosetAst::Lit(1), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::swap_lit_even(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(0))), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::swap_lit_odd(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1))), StereoKind::Tetrahedral, StereoCosetAst::Lit(0))]
+    #[case::mirror_chiral(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(0))), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::mirror_achiral_noop(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(0))), StereoKind::CisTrans, StereoCosetAst::Lit(0))]
+    #[case::apply_lit(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(0), Permutation::from_image(4, &[1, 0, 2, 3]))), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::sp_swap_four(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1))), StereoKind::SquarePlanar, StereoCosetAst::Lit(2))]
+    #[case::swap_var_chiral_to_mirror(StereoCosetAst::term(StereoTerm::swap(StereoTerm::var("o"))), StereoKind::Tetrahedral, StereoCosetAst::term(StereoTerm::mirror(StereoTerm::var("o"))))]
+    #[case::swap_var_achiral_stays(StereoCosetAst::term(StereoTerm::swap(StereoTerm::var("o"))), StereoKind::CisTrans, StereoCosetAst::term(StereoTerm::swap(StereoTerm::var("o"))))]
+    #[case::set_complements(StereoCosetAst::lit_set([0, 1]), StereoKind::SquarePlanar, StereoCosetAst::NotSet(BTreeSet::from([2])))]
+    #[case::singleton_set_to_lit(StereoCosetAst::lit_set([1]), StereoKind::Octahedral, StereoCosetAst::Lit(1))]
+    fn test_canon_coset(#[case] coset: StereoCosetAst, #[case] kind: StereoKind, #[case] expected: StereoCosetAst) {
+        assert_eq!(canon_coset(coset, kind), Ok(expected));
+    }
+
+    #[rstest]
+    #[case::empty_set(StereoCosetAst::LitSet(BTreeSet::new()), StereoKind::SquarePlanar)]
+    fn test_canon_coset_error(#[case] coset: StereoCosetAst, #[case] kind: StereoKind) {
+        assert_eq!(canon_coset(coset, kind), Err(Contradiction));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::wildcard(StereoCosetAst::Undetermined, 1, StereoKind::Tetrahedral, true)]
-    #[case::lit_match(StereoCosetAst::Lit(2), 2, StereoKind::Octahedral, true)]
-    #[case::lit_miss(StereoCosetAst::Lit(2), 3, StereoKind::Octahedral, false)]
-    #[case::var_wildcard(StereoCosetAst::expr(StereoExpr::Var("o".into())), 4, StereoKind::Octahedral, true)]
-    #[case::lit_set_member(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 3])), 3, StereoKind::Octahedral, true)]
-    #[case::lit_set_nonmember(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 3])), 2, StereoKind::Octahedral, false)]
-    #[case::var_domain_member(StereoCosetAst::expr(StereoExpr::VarDomain("o".into(), vec![1, 3])), 1, StereoKind::Octahedral, true)]
-    #[case::var_domain_nonmember(StereoCosetAst::expr(StereoExpr::VarDomain("o".into(), vec![1, 3])), 2, StereoKind::Octahedral, false)]
-    #[case::swap_pulls_back(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(0))), 1, StereoKind::Tetrahedral, true)]
-    #[case::swap_pulls_back_miss(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(0))), 0, StereoKind::Tetrahedral, false)]
-    fn test_stereo_coset_ast_matches_value(
-        #[case] coset: StereoCosetAst,
-        #[case] value: u32,
-        #[case] kind: StereoKind,
-        #[case] expected: bool,
-    ) {
-        assert_eq!(coset.matches_value(value, kind), expected);
+    #[case::wildcard(StereoCosetAst::Undetermined, StereoCosetAst::Lit(1), StereoKind::Tetrahedral, Some(StereoCosetAst::Lit(1)))]
+    #[case::lit_same(StereoCosetAst::Lit(1), StereoCosetAst::Lit(1), StereoKind::Tetrahedral, Some(StereoCosetAst::Lit(1)))]
+    #[case::lit_disjoint(StereoCosetAst::Lit(0), StereoCosetAst::Lit(1), StereoKind::Tetrahedral, None)]
+    #[case::set_intersect(StereoCosetAst::lit_set([1, 3]), StereoCosetAst::lit_set([3, 5]), StereoKind::Octahedral, Some(StereoCosetAst::Lit(3)))]
+    #[case::term_equal(StereoCosetAst::term(StereoTerm::var("o")), StereoCosetAst::term(StereoTerm::var("o")), StereoKind::Tetrahedral, Some(StereoCosetAst::term(StereoTerm::var("o"))))]
+    #[case::term_distinct(StereoCosetAst::term(StereoTerm::var("o")), StereoCosetAst::term(StereoTerm::var("p")), StereoKind::Tetrahedral, None)]
+    fn test_coset_meet(#[case] a: StereoCosetAst, #[case] b: StereoCosetAst, #[case] kind: StereoKind, #[case] expected: Option<StereoCosetAst>) {
+        assert_eq!(coset_meet(&a, &b, kind), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard(StereoCosetAst::Undetermined, StereoCosetAst::Lit(1), StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
+    #[case::lit_same(StereoCosetAst::Lit(1), StereoCosetAst::Lit(1), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::lit_union_full(StereoCosetAst::Lit(0), StereoCosetAst::Lit(1), StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
+    #[case::set_union(StereoCosetAst::lit_set([1, 3]), StereoCosetAst::lit_set([3, 5]), StereoKind::Octahedral, StereoCosetAst::lit_set([1, 3, 5]))]
+    fn test_coset_join(#[case] a: StereoCosetAst, #[case] b: StereoCosetAst, #[case] kind: StereoKind, #[case] expected: StereoCosetAst) {
+        assert_eq!(coset_join(&a, &b, kind), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::wildcard(StereoCosetAst::Undetermined, StereoCosetAst::Lit(1), StereoKind::Tetrahedral, true)]
+    #[case::lit_match(StereoCosetAst::Lit(1), StereoCosetAst::Lit(1), StereoKind::Tetrahedral, true)]
+    #[case::lit_miss(StereoCosetAst::Lit(0), StereoCosetAst::Lit(1), StereoKind::Tetrahedral, false)]
+    #[case::set_member(StereoCosetAst::lit_set([1, 3]), StereoCosetAst::Lit(3), StereoKind::Octahedral, true)]
+    #[case::set_nonmember(StereoCosetAst::lit_set([1, 3]), StereoCosetAst::Lit(2), StereoKind::Octahedral, false)]
+    #[case::specific_vs_wildcard(StereoCosetAst::Lit(0), StereoCosetAst::Undetermined, StereoKind::Tetrahedral, false)]
+    fn test_coset_matches(#[case] pattern: StereoCosetAst, #[case] target: StereoCosetAst, #[case] kind: StereoKind, #[case] expected: bool) {
+        assert_eq!(coset_matches(&pattern, &target, kind), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::lit(StereoCosetAst::Lit(0), Permutation::from_image(4, &[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
+    #[case::undetermined(StereoCosetAst::Undetermined, Permutation::from_image(4, &[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
+    fn test_coset_apply_permutation(#[case] coset: StereoCosetAst, #[case] perm: Permutation, #[case] kind: StereoKind, #[case] expected: StereoCosetAst) {
+        assert_eq!(coset_apply_permutation(&coset, perm, kind), expected);
     }
 
     #[rstest]
     fn test_stereo_atom_ast_new() {
         let stereo_atom = StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined);
-        assert_eq!(stereo_atom.kind, StereoKind::Tetrahedral);
-        assert_eq!(stereo_atom.coset, StereoCosetAst::Undetermined);
+        assert_eq!(
+            stereo_atom.configuration,
+            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined)
+        );
         assert_eq!(stereo_atom.constraints, StereoAtomConstraints::new());
     }
 
@@ -969,10 +1096,13 @@ mod tests {
     fn test_stereo_atom_ast_simplify_values() {
         let mut atom = StereoAtomAst::new(
             StereoKind::Tetrahedral,
-            StereoCosetAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))))),
+            StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(0))),
         );
         atom.simplify_values();
-        assert_eq!(atom.coset, StereoCosetAst::Lit(1));
+        assert_eq!(
+            atom.configuration,
+            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))
+        );
     }
 
     #[rustfmt::skip]
@@ -1029,8 +1159,10 @@ mod tests {
     #[rstest]
     fn test_stereo_bond_ast_new() {
         let stereo_bond = StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined);
-        assert_eq!(stereo_bond.kind, StereoKind::CisTrans);
-        assert_eq!(stereo_bond.coset, StereoCosetAst::Undetermined);
+        assert_eq!(
+            stereo_bond.configuration,
+            StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Undetermined)
+        );
         assert_eq!(stereo_bond.constraints, StereoBondConstraints::new())
     }
 

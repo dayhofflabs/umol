@@ -76,8 +76,9 @@ pub use remap::{IdRemapping, UndoRemapping};
 pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use stereo::{
-    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
-    StereoKindAst, Stereogenicity, Topicity,
+    CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfiguration, StereoConfigurationAst,
+    StereoCosetAst, StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst,
+    Topicity,
 };
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{

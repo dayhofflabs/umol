@@ -23,7 +23,7 @@ pub(crate) use umol_ast::ast::{
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
     NoncovalentBondKind, NoncovalentBondKindAst, OrientedPermutationAst, PermutationAst,
     RelationalConstraint, SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomId,
-    StereoBondAst, StereoBondConstraint, StereoBondId, StereoConfigurationAst, StereoCosetAst,
+    StereoBondAst, StereoBondConstraint, StereoBondId, StereoSiteAst, StereoConfigurationAst,
     StereoExpr, StereoKind, StereoKindAst, StereoLigand, StereoLigandId, StereoLigandKind,
     Stereogenicity,
     StereogenicityAst, SubPatternAnchor, Topicity, TopicityAst, TopicityRelationAst,
@@ -538,9 +538,9 @@ pub(crate) fn noncovalent_bond_ast_strategy() -> impl Strategy<Value = Noncovale
 /// EDN coset-form: `Undetermined` (`*`), `Lit`, and a literal set
 /// (`{a,b,…}` ↔ EDN vector). The `~`/`^`/`?var` operator-exprs are reserved
 /// (§7.14) and excluded.
-pub(crate) fn stereo_coset_strategy() -> impl Strategy<Value = StereoCosetAst> {
+pub(crate) fn stereo_coset_strategy() -> impl Strategy<Value = StereoConfigurationAst> {
     prop_oneof![
-        Just(StereoCosetAst::Undetermined),
+        Just(StereoConfigurationAst::Undetermined),
         (0u32..=6).prop_map(StereoCosetAst::Lit),
         prop::collection::vec(0u32..=6, 1..=3).prop_map(|mut v| {
             v.sort_unstable();
@@ -558,14 +558,14 @@ pub(crate) fn stereo_ligand_kind_strategy() -> impl Strategy<Value = StereoLigan
     ]
 }
 
-/// `StereoConfigurationAst` for `#T` / `#C` constraints, excluding the vacuous
+/// `StereoSiteAst` for `#T` / `#C` constraints, excluding the vacuous
 /// `Undetermined` config (it renders empty per the canonical-rendering rule,
 /// breaking render → reparse — mirrors `aromatic_valence_ast_strategy`).
 /// `Stereo(Undetermined)` (the `+` form) is non-vacuous and kept.
-pub(crate) fn stereo_config_strategy() -> impl Strategy<Value = StereoConfigurationAst> {
+pub(crate) fn stereo_config_strategy() -> impl Strategy<Value = StereoSiteAst> {
     prop_oneof![
-        Just(StereoConfigurationAst::NotStereo),
-        stereo_coset_strategy().prop_map(StereoConfigurationAst::Stereo),
+        Just(StereoSiteAst::NotStereo),
+        stereo_coset_strategy().prop_map(StereoSiteAst::Stereo),
     ]
 }
 

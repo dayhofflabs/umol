@@ -25,7 +25,7 @@ use super::multicenter::MulticenterBondAst;
 use super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use super::remap::{IdRemapping, UndoRemapping};
 use super::spin::SpinStateAst;
-use super::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst};
+use super::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst};
 use super::value::ValueAst;
 
 /// Symbolic reference to an atom: either an existing `AtomId` or the Nth
@@ -201,16 +201,16 @@ impl NoncovalentBondFieldChange {
 /// configuration — kind changes go through remove + add.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StereoAtomFieldChange {
-    Coset {
-        old: StereoCosetAst,
-        new: StereoCosetAst,
+    Configuration {
+        old: StereoConfigurationAst,
+        new: StereoConfigurationAst,
     },
 }
 
 impl StereoAtomFieldChange {
     pub fn inverse(self) -> Self {
         match self {
-            Self::Coset { old, new } => Self::Coset { old: new, new: old },
+            Self::Configuration { old, new } => Self::Configuration { old: new, new: old },
         }
     }
 }
@@ -219,16 +219,16 @@ impl StereoAtomFieldChange {
 /// same reason as `StereoAtomFieldChange`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StereoBondFieldChange {
-    Coset {
-        old: StereoCosetAst,
-        new: StereoCosetAst,
+    Configuration {
+        old: StereoConfigurationAst,
+        new: StereoConfigurationAst,
     },
 }
 
 impl StereoBondFieldChange {
     pub fn inverse(self) -> Self {
         match self {
-            Self::Coset { old, new } => Self::Coset { old: new, new: old },
+            Self::Configuration { old, new } => Self::Configuration { old: new, new: old },
         }
     }
 }
@@ -755,6 +755,7 @@ mod tests {
     use rstest::*;
     use umol_shared::element::Element;
 
+    use super::super::stereo::{StereoConfigurationAst, StereoCosetAst, StereoKind};
     use super::*;
 
     #[fixture]
@@ -814,14 +815,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::coset(
-        StereoAtomFieldChange::Coset {
-            old: StereoCosetAst::Lit(1),
-            new: StereoCosetAst::Lit(2),
+    #[case::configuration(
+        StereoAtomFieldChange::Configuration {
+            old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
+            new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
         },
-        StereoAtomFieldChange::Coset {
-            old: StereoCosetAst::Lit(2),
-            new: StereoCosetAst::Lit(1),
+        StereoAtomFieldChange::Configuration {
+            old: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)),
+            new: StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)),
         },
     )]
     fn test_stereo_atom_field_change_inverse(
@@ -833,14 +834,14 @@ mod tests {
     }
 
     #[rstest]
-    #[case::coset(
-        StereoBondFieldChange::Coset {
-            old: StereoCosetAst::Lit(1),
-            new: StereoCosetAst::Lit(2),
+    #[case::configuration(
+        StereoBondFieldChange::Configuration {
+            old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)),
+            new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
         },
-        StereoBondFieldChange::Coset {
-            old: StereoCosetAst::Lit(2),
-            new: StereoCosetAst::Lit(1),
+        StereoBondFieldChange::Configuration {
+            old: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(1)),
+            new: StereoConfigurationAst::kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)),
         },
     )]
     fn test_stereo_bond_field_change_inverse(

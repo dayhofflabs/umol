@@ -7,8 +7,8 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, AtomId, BondId, MoleculeAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst,
-    StereoKind, StereoLigand, StereoLigandKind,
+    AsLit, AtomId, BondId, CisTransStereoAst, MoleculeAst, StereoAtomAst, StereoBondAst,
+    StereoKind, StereoLigand, StereoLigandKind, TetrahedralStereoAst,
 };
 
 use crate::ops::model::StereoModel;
@@ -81,8 +81,7 @@ impl StereoResolver {
         }
 
         let kind = StereoKind::Tetrahedral;
-        let StereoConfigurationAst::Stereo(coset) = atom.ast.constraints.tetrahedral_stereo()
-        else {
+        let TetrahedralStereoAst::Stereo(coset) = atom.ast.constraints.tetrahedral_stereo() else {
             return None;
         };
         let model = self.model.kind_model(kind)?;
@@ -108,7 +107,7 @@ impl StereoResolver {
             return None;
         }
 
-        Some((id, ligands, StereoAtomAst::new(kind, coset.simplify(kind))))
+        Some((id, ligands, StereoAtomAst::new(kind, coset)))
     }
 
     fn resolve_stereo_bond(
@@ -122,7 +121,7 @@ impl StereoResolver {
         let bond = ast.bond(id);
 
         let kind = StereoKind::CisTrans;
-        let StereoConfigurationAst::Stereo(coset) = bond.ast.constraints.cis_trans_stereo() else {
+        let CisTransStereoAst::Stereo(coset) = bond.ast.constraints.cis_trans_stereo() else {
             return None;
         };
         let model = self.model.kind_model(kind)?;
@@ -139,7 +138,7 @@ impl StereoResolver {
         let side_b = self.bond_side_ligands(ast, b, a)?;
         let ligands = vec![side_a[0], side_a[1], side_b[0], side_b[1]];
 
-        Some((id, ligands, StereoBondAst::new(kind, coset.simplify(kind))))
+        Some((id, ligands, StereoBondAst::new(kind, coset)))
     }
 
     /// The two ligands of one double-bond end, in `cis_trans_side` order: the

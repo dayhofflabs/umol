@@ -6,7 +6,7 @@ use umol_ast_macros::Lattice;
 
 use super::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
 use super::spin::SpinStateAst;
-use super::stereo::StereoConfigurationAst;
+use super::stereo::CisTransStereoAst;
 use super::traits::Lattice;
 use super::value::ValueAst;
 
@@ -95,7 +95,7 @@ impl BondAst {
             .contains(BondConstraintKind::CisTransStereo)
         {
             self.constraints.add(BondConstraint::CisTransStereo(
-                StereoConfigurationAst::NotStereo,
+                CisTransStereoAst::NotStereo,
             ));
         }
         self

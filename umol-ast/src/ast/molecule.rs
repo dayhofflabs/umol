@@ -732,14 +732,14 @@ impl MoleculeAst {
         }
         for i in 0..stereo_atom_count {
             let id = StereoAtomId::from(i);
-            let kind = self.stereo_atom_mut(id).kind;
+            let kind = self.stereo_atom_mut(id).configuration.kind().expect("molecule stereo atom has a concrete kind");
             for c in self.stereo_atom_mut(id).constraints.take() {
                 additions.push(Constraint::StereoAtom(id, kind, c));
             }
         }
         for i in 0..stereo_bond_count {
             let id = StereoBondId::from(i);
-            let kind = self.stereo_bond_mut(id).kind;
+            let kind = self.stereo_bond_mut(id).configuration.kind().expect("molecule stereo bond has a concrete kind");
             for c in self.stereo_bond_mut(id).constraints.take() {
                 additions.push(Constraint::StereoBond(id, kind, c));
             }

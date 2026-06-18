@@ -12,7 +12,9 @@ use super::ids::{AtomId, StereoAtomId, StereoBondId, StereoLigandId};
 use super::incidence::{IncidenceGraph, IncidenceNodeSelection};
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::MoleculeAst;
-use super::stereo::{StereoCosetAst, StereoKind, Stereogenicity, Topicity};
+use super::stereo::{
+    coset_apply_permutation, StereoCosetAst, StereoKind, Stereogenicity, Topicity,
+};
 use super::traits::AsLit;
 
 /// Configuration for [`MoleculeAst::graph_symmetry`].
@@ -490,7 +492,7 @@ fn virtual_block_swaps(ligands: &[StereoLigand]) -> Vec<Permutation> {
 fn grade_local(kind: StereoKind, coset: &StereoCosetAst, perm: Permutation) -> Option<Orientation> {
     let index = coset.as_lit()?;
     let coset_space = space(kind.class_key());
-    let StereoCosetAst::Lit(transported) = StereoCosetAst::Lit(index).apply_permutation(kind, perm)
+    let StereoCosetAst::Lit(transported) = coset_apply_permutation(&StereoCosetAst::Lit(index), perm, kind)
     else {
         return None;
     };
@@ -557,7 +559,7 @@ fn reexpress(
             return None;
         }
     }
-    match coset.apply_permutation(kind, Permutation::between(stored, requested)) {
+    match coset_apply_permutation(coset, Permutation::between(stored, requested), kind) {
         StereoCosetAst::Lit(index) => Some(index),
         _ => None,
     }
@@ -579,7 +581,7 @@ mod tests {
     use crate::ast::coloring::ConstitutionColoring;
     use crate::ast::constraint::Constraints;
     use crate::ast::ids::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
-    use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind};
 
     fn config() -> GraphSymmetryConfig<ConstitutionColoring> {
         GraphSymmetryConfig {
@@ -696,7 +698,7 @@ mod tests {
         // element contributes no observable descriptor and the orbit partition
         // is still computed.
         let mut mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        mol.stereo_atom_mut(StereoAtomId(0)).coset = StereoCosetAst::Lit(9);
+        mol.stereo_atom_mut(StereoAtomId(0)).configuration = StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 9);
         let gs = mol.graph_symmetry(&config());
         assert_eq!(gs.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);
     }

@@ -15,23 +15,23 @@ use winnow::combinator::{
     alt, delimited, opt, preceded, repeat, separated, separated_pair, terminated,
 };
 use winnow::error::ErrMode;
-use winnow::token::one_of;
+use winnow::token::any;
 use winnow::Parser;
 
 use super::atom::single_key_map;
 use super::config::{StereoAtomDefaults, StereoBondDefaults};
 use super::error::{PResult, ParseError};
-use super::value::{id, terminator};
+use super::value::id;
 use crate::ast::constraint::{
     FluxionalityAst, LigandPairAst, LigandSymmetryAst, OrientedPermutationAst, PermutationAst,
-    StereoAtomConstraint, StereoBondConstraint, StereogenicityAst,
-    TopicityAst, TopicityRelationAst,
+    StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
+    StereogenicityAst, TopicityAst, TopicityRelationAst,
 };
 use crate::ast::ids::StereoLigandId;
 use crate::ast::operators::MemOp;
 use crate::ast::stereo::{
-    StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind,
-    Stereogenicity, Topicity,
+    CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst,
+    StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst, Topicity,
 };
 use crate::ast::traits::{FromAst, IntoAst};
 
@@ -130,9 +130,9 @@ fn stereo_atom_keyword_for(ast: &StereoAtomAst) -> Option<&'static str> {
     if !ast.constraints.is_empty() {
         return None;
     }
-    match (ast.kind, &ast.coset) {
-        (StereoKind::Tetrahedral, &StereoCosetAst::Lit(0)) => Some("ccw"),
-        (StereoKind::Tetrahedral, &StereoCosetAst::Lit(1)) => Some("cw"),
+    match &ast.configuration {
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(0)) => Some("ccw"),
+        StereoConfigurationAst::Kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1)) => Some("cw"),
         _ => None,
     }
 }
@@ -158,15 +158,53 @@ pub fn parse_stereo_atom(input: &str) -> Result<StereoAtomDsl, ParseError> {
     stereo_atom.parse(input).map_err(|e| e.into_inner())
 }
 
-pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
+/// Parse the configuration head of a stereo element: `*` (undetermined geometry,
+/// no coset) or `<glyph><coset>` (a concrete kind with a coset). The element
+/// analog of `element` in the atom DSL; `*` and `Th*` are distinct.
+fn stereo_configuration(i: &mut &str) -> PResult<StereoConfigurationAst> {
+    multispace0.parse_next(i)?;
+    if opt('*').parse_next(i)?.is_some() {
+        multispace0.parse_next(i)?;
+        return Ok(StereoConfigurationAst::Undetermined);
+    }
     let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
     let coset =
         terminated(move |i: &mut &str| stereo_coset(i, kind.degree()), multispace0).parse_next(i)?;
-    let constraints: Vec<StereoAtomConstraint> =
-        repeat(0.., move |i: &mut &str| stereo_atom_predicate(i, kind)).parse_next(i)?;
-    Ok(StereoAtomDsl(
-        StereoAtomAst::new(kind, coset).with_constraints(constraints),
-    ))
+    Ok(StereoConfigurationAst::kinded(kind, coset))
+}
+
+pub(crate) fn stereo_atom(i: &mut &str) -> PResult<StereoAtomDsl> {
+    let configuration = stereo_configuration(i)?;
+    let mut constraints = StereoAtomConstraints::new();
+    if let StereoConfigurationAst::Kinded(kind, _) = &configuration {
+        let kind = *kind;
+        loop {
+            let before = *i;
+            match stereo_atom_predicate(i, kind) {
+                Ok(c) => {
+                    if c.is_unique() && constraints.contains(c.kind()) {
+                        return Err(ErrMode::Cut(ParseError::DuplicateStereoPredicate(
+                            before[..2].to_string(),
+                        )));
+                    }
+                    constraints.add(c);
+                }
+                Err(ErrMode::Backtrack(_)) => {
+                    *i = before;
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    multispace0.parse_next(i)?;
+    if !i.is_empty() {
+        return Err(ErrMode::Cut(ParseError::TrailingInput((*i).to_string())));
+    }
+    Ok(StereoAtomDsl(StereoAtomAst {
+        configuration,
+        constraints,
+    }))
 }
 
 /// Surface DSL wrapper for `StereoBondAst`
@@ -264,9 +302,9 @@ fn stereo_bond_keyword_for(ast: &StereoBondAst) -> Option<&'static str> {
     if !ast.constraints.is_empty() {
         return None;
     }
-    match (ast.kind, &ast.coset) {
-        (StereoKind::CisTrans, &StereoCosetAst::Lit(0)) => Some("z"),
-        (StereoKind::CisTrans, &StereoCosetAst::Lit(1)) => Some("e"),
+    match &ast.configuration {
+        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCosetAst::Lit(0)) => Some("z"),
+        StereoConfigurationAst::Kinded(StereoKind::CisTrans, StereoCosetAst::Lit(1)) => Some("e"),
         _ => None,
     }
 }
@@ -292,14 +330,37 @@ pub fn parse_stereo_bond(input: &str) -> Result<StereoBondDsl, ParseError> {
 }
 
 pub(crate) fn stereo_bond(i: &mut &str) -> PResult<StereoBondDsl> {
-    let kind = delimited(multispace0, stereo_kind, multispace0).parse_next(i)?;
-    let coset =
-        terminated(move |i: &mut &str| stereo_coset(i, kind.degree()), multispace0).parse_next(i)?;
-    let constraints: Vec<StereoBondConstraint> =
-        repeat(0.., move |i: &mut &str| stereo_bond_predicate(i, kind)).parse_next(i)?;
-    Ok(StereoBondDsl(
-        StereoBondAst::new(kind, coset).with_constraints(constraints),
-    ))
+    let configuration = stereo_configuration(i)?;
+    let mut constraints = StereoBondConstraints::new();
+    if let StereoConfigurationAst::Kinded(kind, _) = &configuration {
+        let kind = *kind;
+        loop {
+            let before = *i;
+            match stereo_bond_predicate(i, kind) {
+                Ok(c) => {
+                    if c.is_unique() && constraints.contains(c.kind()) {
+                        return Err(ErrMode::Cut(ParseError::DuplicateStereoPredicate(
+                            before[..2].to_string(),
+                        )));
+                    }
+                    constraints.add(c);
+                }
+                Err(ErrMode::Backtrack(_)) => {
+                    *i = before;
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+    multispace0.parse_next(i)?;
+    if !i.is_empty() {
+        return Err(ErrMode::Cut(ParseError::TrailingInput((*i).to_string())));
+    }
+    Ok(StereoBondDsl(StereoBondAst {
+        configuration,
+        constraints,
+    }))
 }
 
 /// `Th` / `Ct` / `Sp` / `Tb` / `Oh` symbol → `StereoKind`.
@@ -315,22 +376,6 @@ pub(crate) fn stereo_kind(i: &mut &str) -> PResult<StereoKind> {
     .parse_next(i)
 }
 
-/// Parse the `config` grammar into `StereoConfigurationAst` over a
-/// `degree`-position ligand frame (a coset-expression's `^` permutation acts on
-/// those positions).
-pub(crate) fn stereo_config(i: &mut &str, degree: usize) -> PResult<StereoConfigurationAst> {
-    alt((
-        '*'.value(StereoConfigurationAst::Undetermined),
-        '!'.value(StereoConfigurationAst::NotStereo),
-        '+'.value(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined)),
-        terminated(stereo_lit, (multispace0, terminator))
-            .map(|n| StereoConfigurationAst::Stereo(StereoCosetAst::Lit(n))),
-        (move |i: &mut &str| stereo_expr(i, degree))
-            .map(|e| StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(e)))),
-    ))
-    .parse_next(i)
-}
-
 pub(crate) fn parse_stereo_coset(input: &str, degree: usize) -> Result<StereoCosetAst, ParseError> {
     (move |i: &mut &str| stereo_coset(i, degree))
         .parse(input)
@@ -342,20 +387,24 @@ pub(crate) fn parse_stereo_coset(input: &str, degree: usize) -> Result<StereoCos
 fn stereo_coset(i: &mut &str, degree: usize) -> PResult<StereoCosetAst> {
     alt((
         '*'.value(StereoCosetAst::Undetermined),
-        terminated(stereo_lit, (multispace0, terminator)).map(StereoCosetAst::Lit),
-        (|i: &mut &str| stereo_expr(i, degree)).map(|e| StereoCosetAst::Expr(Box::new(e))),
+        preceded('!', stereo_lit_set).map(StereoCosetAst::not_set),
+        (|i: &mut &str| stereo_term(i, degree)).map(|t| match t {
+            StereoTerm::Lit(n) => StereoCosetAst::Lit(n),
+            StereoTerm::LitSet(s) => StereoCosetAst::LitSet(s),
+            other => StereoCosetAst::term(other),
+        }),
     ))
     .parse_next(i)
 }
 
 /// `stereo-expr`: a `~`-prefixed base carrying zero or more left-associative
 /// `^cycles` postfixes (the permutation in 0-indexed disjoint-cycle notation).
-fn stereo_expr(i: &mut &str, degree: usize) -> PResult<StereoExpr> {
+fn stereo_term(i: &mut &str, degree: usize) -> PResult<StereoTerm> {
     let mut e = stereo_prefix(i)?;
     loop {
         multispace0.parse_next(i)?;
         if opt('^').parse_next(i)?.is_some() {
-            e = StereoExpr::apply(e, perm_cycles(i, degree)?);
+            e = StereoTerm::apply(e, perm_cycles(i, degree)?);
         } else {
             return Ok(e);
         }
@@ -364,36 +413,36 @@ fn stereo_expr(i: &mut &str, degree: usize) -> PResult<StereoExpr> {
 
 /// `('~' | '\'') prefix-term | base` — unary `~` (swap) and `'` (mirror) bind
 /// tighter than `^`.
-fn stereo_prefix(i: &mut &str) -> PResult<StereoExpr> {
+fn stereo_prefix(i: &mut &str) -> PResult<StereoTerm> {
     multispace0.parse_next(i)?;
     if opt('~').parse_next(i)?.is_some() {
-        Ok(StereoExpr::swap(stereo_prefix(i)?))
+        Ok(StereoTerm::swap(stereo_prefix(i)?))
     } else if opt('\'').parse_next(i)?.is_some() {
-        Ok(StereoExpr::mirror(stereo_prefix(i)?))
+        Ok(StereoTerm::mirror(stereo_prefix(i)?))
     } else {
         stereo_base(i)
     }
 }
 
 /// `nat | '?' id ('::' set)? | set`.
-fn stereo_base(i: &mut &str) -> PResult<StereoExpr> {
+fn stereo_base(i: &mut &str) -> PResult<StereoTerm> {
     preceded(
         multispace0,
         alt((
-            stereo_lit_set.map(StereoExpr::LitSet),
+            stereo_lit_set.map(StereoTerm::lit_set),
             stereo_var,
-            stereo_lit.map(StereoExpr::Lit),
+            stereo_lit.map(StereoTerm::Lit),
         )),
     )
     .parse_next(i)
 }
 
-fn stereo_var(i: &mut &str) -> PResult<StereoExpr> {
+fn stereo_var(i: &mut &str) -> PResult<StereoTerm> {
     let name = preceded('?', id).parse_next(i)?;
     let domain = opt(preceded((multispace0, "::", multispace0), stereo_lit_set)).parse_next(i)?;
     Ok(match domain {
-        Some(set) => StereoExpr::VarDomain(name, set),
-        None => StereoExpr::Var(name),
+        Some(set) => StereoTerm::var_in(name, set),
+        None => StereoTerm::var(name),
     })
 }
 
@@ -511,7 +560,7 @@ macro_rules! stereo_predicate_parser {
     ($name:ident, $constraint:ident) => {
         fn $name(i: &mut &str, kind: StereoKind) -> PResult<$constraint> {
             '#'.parse_next(i)?;
-            let tag = one_of(['p', 'f', 'o', 'g']).parse_next(i)?;
+            let tag = any.parse_next(i)?;
             match tag {
                 'p' => {
                     let mem = if opt('!').parse_next(i)?.is_some() {
@@ -551,7 +600,9 @@ macro_rules! stereo_predicate_parser {
                     Ok($constraint::Topicity(TopicityAst { pair, rel }))
                 }
                 'g' => Ok($constraint::Stereogenicity(stereogenicity_relation_inline(i)?)),
-                _ => unreachable!("one_of restricts the tag"),
+                other => Err(ErrMode::Cut(ParseError::UnknownStereoPredicate(format!(
+                    "#{other}"
+                )))),
             }
         }
     };
@@ -675,23 +726,39 @@ stereo_constraint_fmt! { fmt_stereo_atom_constraint, StereoAtomConstraint }
 stereo_constraint_fmt! { fmt_stereo_bond_constraint, StereoBondConstraint }
 
 /// Write the stereo atom DSL
+/// Render the configuration head of a stereo element: `*` or `<glyph><coset>`.
+fn fmt_stereo_configuration(
+    f: &mut fmt::Formatter<'_>,
+    configuration: &StereoConfigurationAst,
+) -> fmt::Result {
+    match configuration {
+        StereoConfigurationAst::Undetermined => write!(f, "*"),
+        StereoConfigurationAst::Kinded(kind, coset) => {
+            fmt_stereo_kind(f, *kind)?;
+            fmt_stereo_coset(f, coset)
+        }
+    }
+}
+
 pub(crate) fn fmt_stereo_atom(f: &mut fmt::Formatter<'_>, atom: &StereoAtomAst) -> fmt::Result {
-    fmt_stereo_kind(f, atom.kind)?;
-    fmt_stereo_coset(f, &atom.coset)?;
+    fmt_stereo_configuration(f, &atom.configuration)?;
     // Vacuous (Undetermined) predicates are elided on canonical render, as for
     // the atom-string (§7.1); they remain admissible on parse.
-    for c in atom.constraints.iter().filter(|c| !c.is_undetermined()) {
-        fmt_stereo_atom_constraint(f, c, atom.kind)?;
+    if let StereoConfigurationAst::Kinded(kind, _) = &atom.configuration {
+        for c in atom.constraints.iter().filter(|c| !c.is_undetermined()) {
+            fmt_stereo_atom_constraint(f, c, *kind)?;
+        }
     }
     Ok(())
 }
 
 /// Write the stereo bond DSL
 pub(crate) fn fmt_stereo_bond(f: &mut fmt::Formatter<'_>, bond: &StereoBondAst) -> fmt::Result {
-    fmt_stereo_kind(f, bond.kind)?;
-    fmt_stereo_coset(f, &bond.coset)?;
-    for c in bond.constraints.iter().filter(|c| !c.is_undetermined()) {
-        fmt_stereo_bond_constraint(f, c, bond.kind)?;
+    fmt_stereo_configuration(f, &bond.configuration)?;
+    if let StereoConfigurationAst::Kinded(kind, _) = &bond.configuration {
+        for c in bond.constraints.iter().filter(|c| !c.is_undetermined()) {
+            fmt_stereo_bond_constraint(f, c, *kind)?;
+        }
     }
     Ok(())
 }
@@ -708,21 +775,6 @@ pub(crate) fn fmt_stereo_kind(f: &mut fmt::Formatter<'_>, kind: StereoKind) -> f
     }
 }
 
-/// Write the `config` for `c` (no class head — the caller writes `#T`/`#C` or
-/// the `Th`/`Ct` head).
-pub(crate) fn fmt_stereo_config(
-    f: &mut fmt::Formatter<'_>,
-    config: &StereoConfigurationAst,
-) -> fmt::Result {
-    match config {
-        StereoConfigurationAst::Undetermined => write!(f, "*"),
-        StereoConfigurationAst::NotStereo => write!(f, "!"),
-        StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined) => write!(f, "+"),
-        StereoConfigurationAst::Stereo(StereoCosetAst::Lit(n)) => write!(f, "{n}"),
-        StereoConfigurationAst::Stereo(StereoCosetAst::Expr(e)) => fmt_stereo_expr(f, e),
-    }
-}
-
 /// Write a `StereoCosetAst` for the element `:type` body: `*` (open coset), a
 /// literal, or an operator expression. `fmt_stereo_config` reuses the literal
 /// and expression arms but writes its own `+` for `Stereo(Undetermined)`.
@@ -730,35 +782,42 @@ fn fmt_stereo_coset(f: &mut fmt::Formatter<'_>, coset: &StereoCosetAst) -> fmt::
     match coset {
         StereoCosetAst::Undetermined => write!(f, "*"),
         StereoCosetAst::Lit(n) => write!(f, "{n}"),
-        StereoCosetAst::Expr(e) => fmt_stereo_expr(f, e),
+        StereoCosetAst::LitSet(s) => fmt_stereo_lit_set(f, s),
+        StereoCosetAst::NotSet(s) => {
+            write!(f, "!")?;
+            fmt_stereo_lit_set(f, s)
+        }
+        StereoCosetAst::Term(t) => fmt_stereo_term(f, t),
     }
 }
 
-fn fmt_stereo_expr(f: &mut fmt::Formatter<'_>, e: &StereoExpr) -> fmt::Result {
-    match e {
-        StereoExpr::Lit(n) => write!(f, "{n}"),
-        StereoExpr::Var(name) => write!(f, "?{name}"),
-        StereoExpr::SwapOp(inner) => {
+fn fmt_stereo_term(f: &mut fmt::Formatter<'_>, t: &StereoTerm) -> fmt::Result {
+    match t {
+        StereoTerm::Var(v) => match &v.1 {
+            None => write!(f, "?{}", v.0),
+            Some(set) => {
+                write!(f, "?{} :: ", v.0)?;
+                fmt_stereo_lit_set(f, set)
+            }
+        },
+        StereoTerm::Lit(n) => write!(f, "{n}"),
+        StereoTerm::LitSet(set) => fmt_stereo_lit_set(f, set),
+        StereoTerm::Swap(inner) => {
             write!(f, "~")?;
-            fmt_stereo_expr(f, inner)
+            fmt_stereo_term(f, inner)
         }
-        StereoExpr::MirrorOp(inner) => {
+        StereoTerm::Mirror(inner) => {
             write!(f, "'")?;
-            fmt_stereo_expr(f, inner)
+            fmt_stereo_term(f, inner)
         }
-        StereoExpr::ApplyOp(inner, perm) => {
-            fmt_stereo_expr(f, inner)?;
+        StereoTerm::Apply(inner, perm) => {
+            fmt_stereo_term(f, inner)?;
             write!(f, "^{perm}")
         }
-        StereoExpr::LitSet(set) => fmt_stereo_lit_set(f, set),
-        StereoExpr::VarDomain(name, set) => {
-            write!(f, "?{name} :: ")?;
-            fmt_stereo_lit_set(f, set)
-        }
     }
 }
 
-fn fmt_stereo_lit_set(f: &mut fmt::Formatter<'_>, set: &[u32]) -> fmt::Result {
+fn fmt_stereo_lit_set(f: &mut fmt::Formatter<'_>, set: &BTreeSet<u32>) -> fmt::Result {
     write!(f, "{{")?;
     for (i, n) in set.iter().enumerate() {
         if i > 0 {
@@ -876,7 +935,7 @@ macro_rules! relation_serde {
                         got: edn.kind(),
                         path: Vec::new(),
                     })?;
-                    Ok($relation::from_set(BTreeSet::from([m])).unwrap())
+                    Ok($relation::lit(m))
                 }
                 Edn::Set(s) => {
                     let mut members = BTreeSet::new();
@@ -895,11 +954,7 @@ macro_rules! relation_serde {
                         })?;
                         members.insert(m);
                     }
-                    $relation::from_set(members).ok_or_else(|| DeError::TypeMismatch {
-                        expected: "non-empty relation set",
-                        got: edn.kind(),
-                        path: Vec::new(),
-                    })
+                    Ok($relation::lit_set(members))
                 }
                 other => Err(DeError::TypeMismatch {
                     expected: "relation (keyword, set, or :undetermined)",
@@ -1262,7 +1317,7 @@ impl<'de> FromEdn<'de> for StereoCosetDsl {
             Edn::Int(n) => StereoCosetAst::Lit(coset_lit(*n)?),
             Edn::Keyword(k) if k.name() == "undetermined" => StereoCosetAst::Undetermined,
             Edn::Vector(xs) => {
-                let mut set = Vec::with_capacity(xs.len());
+                let mut set = BTreeSet::new();
                 for e in xs.iter() {
                     let Edn::Int(n) = e else {
                         return Err(DeError::TypeMismatch {
@@ -1271,9 +1326,9 @@ impl<'de> FromEdn<'de> for StereoCosetDsl {
                             path: Vec::new(),
                         });
                     };
-                    set.push(coset_lit(*n)?);
+                    set.insert(coset_lit(*n)?);
                 }
-                StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(set)))
+                StereoCosetAst::LitSet(set)
             }
             Edn::Str(s) => {
                 // The coset-form is the payload of a `#T` / `#C` config, both degree 4.
@@ -1298,92 +1353,127 @@ impl ToEdn for StereoCosetDsl {
             StereoCosetAst::Undetermined => {
                 Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
             }
-            StereoCosetAst::Expr(e) => match e.as_ref() {
-                StereoExpr::LitSet(set) => Edn::Vector(
-                    set.iter()
-                        .map(|n| Edn::Int(*n as i64))
-                        .collect::<Vec<_>>()
-                        .into(),
-                ),
-                _ => Edn::Str(Cow::Owned(self.to_string())),
-            },
+            StereoCosetAst::LitSet(set) => Edn::Vector(
+                set.iter()
+                    .map(|n| Edn::Int(*n as i64))
+                    .collect::<Vec<_>>()
+                    .into(),
+            ),
+            StereoCosetAst::NotSet(_) | StereoCosetAst::Term(_) => {
+                Edn::Str(Cow::Owned(self.to_string()))
+            }
         }
     }
 }
 
-/// Surface DSL wrapper around `StereoConfigurationAst` — the value under a
-/// `:tetrahedral-stereo` / `:cis-trans-stereo` key. EDN form: `:undetermined`,
-/// `:not-stereo`, or `{:stereo <coset>}`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StereoConfigurationDsl(pub StereoConfigurationAst);
+/// Generates the constraint-side DSL for a fixed-kind stereo site (`#T`/`#C`):
+/// the surface config-string parser/formatter and the EDN boundary type
+/// (`:undetermined`, `:not-stereo`, or `{:stereo <coset>}`). `$kind` fixes the
+/// coset degree; the per-kind type's `Stereo` arm carries the coset.
+macro_rules! stereo_site_dsl {
+    ($dsl:ident, $ast:ident, $kind:expr, $parse:ident, $fmt:ident) => {
+        pub(crate) fn $parse(i: &mut &str) -> PResult<$ast> {
+            alt((
+                '*'.value($ast::Undetermined),
+                '!'.value($ast::NotStereo),
+                '+'.value($ast::Stereo(StereoCosetAst::Undetermined)),
+                (|i: &mut &str| stereo_coset(i, $kind.degree())).map($ast::Stereo),
+            ))
+            .parse_next(i)
+        }
 
-impl FromAst<StereoConfigurationAst> for StereoConfigurationDsl {
-    type Ctx = ();
-
-    fn from_ast(ast: &StereoConfigurationAst, _ctx: &Self::Ctx) -> Self {
-        Self(ast.clone())
-    }
-}
-
-impl IntoAst<StereoConfigurationAst> for StereoConfigurationDsl {
-    type Ctx = ();
-
-    fn into_ast(self, _ctx: &Self::Ctx) -> StereoConfigurationAst {
-        self.0
-    }
-}
-
-impl<'de> FromEdn<'de> for StereoConfigurationDsl {
-    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-        match edn {
-            Edn::Keyword(k) if k.name() == "undetermined" => {
-                Ok(Self(StereoConfigurationAst::Undetermined))
+        pub(crate) fn $fmt(f: &mut fmt::Formatter<'_>, config: &$ast) -> fmt::Result {
+            match config {
+                $ast::Undetermined => write!(f, "*"),
+                $ast::NotStereo => write!(f, "!"),
+                $ast::Stereo(StereoCosetAst::Undetermined) => write!(f, "+"),
+                $ast::Stereo(coset) => fmt_stereo_coset(f, coset),
             }
-            Edn::Keyword(k) if k.name() == "not-stereo" => {
-                Ok(Self(StereoConfigurationAst::NotStereo))
+        }
+
+        #[derive(Clone, Debug, PartialEq, Eq)]
+        pub struct $dsl(pub $ast);
+
+        impl FromAst<$ast> for $dsl {
+            type Ctx = ();
+
+            fn from_ast(ast: &$ast, _ctx: &Self::Ctx) -> Self {
+                Self(ast.clone())
             }
-            Edn::Map(m) if m.len() == 1 => {
-                let (k, v) = m.iter().next().unwrap();
-                let Edn::Keyword(key) = k else {
-                    return Err(DeError::TypeMismatch {
-                        expected: "keyword key",
-                        got: k.kind(),
+        }
+
+        impl IntoAst<$ast> for $dsl {
+            type Ctx = ();
+
+            fn into_ast(self, _ctx: &Self::Ctx) -> $ast {
+                self.0
+            }
+        }
+
+        impl<'de> FromEdn<'de> for $dsl {
+            fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+                match edn {
+                    Edn::Keyword(k) if k.name() == "undetermined" => Ok(Self($ast::Undetermined)),
+                    Edn::Keyword(k) if k.name() == "not-stereo" => Ok(Self($ast::NotStereo)),
+                    Edn::Map(m) if m.len() == 1 => {
+                        let (k, v) = m.iter().next().unwrap();
+                        let Edn::Keyword(key) = k else {
+                            return Err(DeError::TypeMismatch {
+                                expected: "keyword key",
+                                got: k.kind(),
+                                path: Vec::new(),
+                            });
+                        };
+                        match key.name() {
+                            "stereo" => Ok(Self($ast::Stereo(
+                                StereoCosetDsl::from_edn(v)?.into_ast(&()),
+                            ))),
+                            other => Err(DeError::UnknownField {
+                                key: other.to_string(),
+                                path: vec!["stereo-configuration".into()],
+                            }),
+                        }
+                    }
+                    other => Err(DeError::TypeMismatch {
+                        expected: ":undetermined / :not-stereo / {:stereo <coset>}",
+                        got: other.kind(),
                         path: Vec::new(),
-                    });
-                };
-                match key.name() {
-                    "stereo" => Ok(Self(StereoConfigurationAst::Stereo(
-                        StereoCosetDsl::from_edn(v)?.into_ast(&()),
-                    ))),
-                    other => Err(DeError::UnknownField {
-                        key: other.to_string(),
-                        path: vec!["stereo-configuration".into()],
                     }),
                 }
             }
-            other => Err(DeError::TypeMismatch {
-                expected: ":undetermined / :not-stereo / {:stereo <coset>}",
-                got: other.kind(),
-                path: Vec::new(),
-            }),
         }
-    }
+
+        impl ToEdn for $dsl {
+            fn to_edn(&self) -> Edn<'static> {
+                match &self.0 {
+                    $ast::Undetermined => {
+                        Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
+                    }
+                    $ast::NotStereo => {
+                        Edn::Keyword(EdnKeyword::owned("not-stereo".to_string()))
+                    }
+                    $ast::Stereo(coset) => {
+                        single_key_map("stereo", StereoCosetDsl::from_ast(coset, &()).to_edn())
+                    }
+                }
+            }
+        }
+    };
 }
 
-impl ToEdn for StereoConfigurationDsl {
-    fn to_edn(&self) -> Edn<'static> {
-        match &self.0 {
-            StereoConfigurationAst::Undetermined => {
-                Edn::Keyword(EdnKeyword::owned("undetermined".to_string()))
-            }
-            StereoConfigurationAst::NotStereo => {
-                Edn::Keyword(EdnKeyword::owned("not-stereo".to_string()))
-            }
-            StereoConfigurationAst::Stereo(coset) => {
-                single_key_map("stereo", StereoCosetDsl::from_ast(coset, &()).to_edn())
-            }
-        }
-    }
+stereo_site_dsl! {
+    TetrahedralStereoDsl,
+    TetrahedralStereoAst,
+    StereoKind::Tetrahedral,
+    tetrahedral_stereo_config,
+    fmt_tetrahedral_stereo_config
+}
+stereo_site_dsl! {
+    CisTransStereoDsl,
+    CisTransStereoAst,
+    StereoKind::CisTrans,
+    cis_trans_stereo_config,
+    fmt_cis_trans_stereo_config
 }
 
 #[cfg(test)]
@@ -1401,14 +1491,20 @@ mod tests {
     #[case::open("Th*", StereoAtomDsl(StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::Undetermined)))]
     #[case::square_planar("Sp2", StereoAtomDsl(StereoAtomAst::new(StereoKind::SquarePlanar, StereoCosetAst::Lit(2))))]
     #[case::octahedral("Oh6", StereoAtomDsl(StereoAtomAst::new(StereoKind::Octahedral, StereoCosetAst::Lit(6))))]
+    #[case::undetermined("*", StereoAtomDsl(StereoAtomAst::default()))]
     fn test_parse_stereo_atom(#[case] input: &str, #[case] expected: StereoAtomDsl) {
         assert_eq!(parse_stereo_atom(input).unwrap(), expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::not_stereo("Th!")]
-    fn test_parse_stereo_atom_error(#[case] input: &str) {
-        assert_eq!(parse_stereo_atom(input).unwrap_err(), ParseError::Syntax);
+    #[case::not_stereo("Th!", ParseError::Syntax)]
+    #[case::trailing_after_coset("Th1x", ParseError::TrailingInput("x".to_string()))]
+    #[case::unknown_predicate("Th1#x", ParseError::UnknownStereoPredicate("#x".to_string()))]
+    #[case::duplicate("Th1#g/#g=", ParseError::DuplicateStereoPredicate("#g".to_string()))]
+    #[case::undetermined_rejects_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
+    fn test_parse_stereo_atom_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_stereo_atom(input).unwrap_err(), expected);
     }
 
     #[rustfmt::skip]
@@ -1532,14 +1628,20 @@ mod tests {
     #[case::cis_trans_z("Ct0", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(0))))]
     #[case::cis_trans_e("Ct1", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Lit(1))))]
     #[case::open("Ct*", StereoBondDsl(StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined)))]
+    #[case::undetermined("*", StereoBondDsl(StereoBondAst::default()))]
     fn test_parse_stereo_bond(#[case] input: &str, #[case] expected: StereoBondDsl) {
         assert_eq!(parse_stereo_bond(input).unwrap(), expected);
     }
 
+    #[rustfmt::skip]
     #[rstest]
-    #[case::not_stereo("Ct!")]
-    fn test_parse_stereo_bond_error(#[case] input: &str) {
-        assert_eq!(parse_stereo_bond(input).unwrap_err(), ParseError::Syntax);
+    #[case::not_stereo("Ct!", ParseError::Syntax)]
+    #[case::trailing_after_coset("Ct1x", ParseError::TrailingInput("x".to_string()))]
+    #[case::unknown_predicate("Ct1#x", ParseError::UnknownStereoPredicate("#x".to_string()))]
+    #[case::duplicate("Ct1#g/#g=", ParseError::DuplicateStereoPredicate("#g".to_string()))]
+    #[case::undetermined_rejects_constraint("*#g/", ParseError::TrailingInput("#g/".to_string()))]
+    fn test_parse_stereo_bond_error(#[case] input: &str, #[case] expected: ParseError) {
+        assert_eq!(parse_stereo_bond(input).unwrap_err(), expected);
     }
 
     #[rustfmt::skip]
@@ -1606,44 +1708,43 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined("*", StereoConfigurationAst::Undetermined)]
-    #[case::not_stereo("!", StereoConfigurationAst::NotStereo)]
-    #[case::stereogenic("+", StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined))]
-    #[case::lit("1", StereoConfigurationAst::from(1_u32))]
-    #[case::var("?o", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Var("o".to_string()))))]
-    #[case::lit_set("{1,2}", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 2]))))]
-    #[case::var_domain("?o :: {1,2}", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
-    #[case::swap("~1", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))))]
-    #[case::mirror("'1", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::mirror(StereoExpr::Lit(1)))))]
-    #[case::apply("1^(0,1)", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))))]
-    #[case::swap_binds_tighter_than_apply("~1^(0,1)", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::swap(StereoExpr::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
-    #[case::mirror_binds_tighter_than_apply("'1^(0,1)", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::mirror(StereoExpr::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
-    #[case::whitespace_ignored("  ?o :: { 1 , 2 }", StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))))]
-    fn test_stereo_config(#[case] input: &str, #[case] expected: StereoConfigurationAst) {
-        // `#T` / `#C` configs are degree 4.
+    #[case::undetermined("*", TetrahedralStereoAst::Undetermined)]
+    #[case::not_stereo("!", TetrahedralStereoAst::NotStereo)]
+    #[case::stereogenic("+", TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined))]
+    #[case::lit("1", TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)))]
+    #[case::var("?o", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var("o"))))]
+    #[case::lit_set("{1,2}", TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2])))]
+    #[case::var_domain("?o :: {1,2}", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var_in("o", [1, 2]))))]
+    #[case::swap("~1", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
+    #[case::mirror("'1", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(1)))))]
+    #[case::apply("1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))))]
+    #[case::swap_binds_tighter_than_apply("~1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::swap(StereoTerm::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
+    #[case::mirror_binds_tighter_than_apply("'1^(0,1)", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::mirror(StereoTerm::Lit(1)), Permutation::from_cycles(4, &[vec![0, 1]])))))]
+    #[case::whitespace_ignored("  ?o :: { 1 , 2 }", TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var_in("o", [1, 2]))))]
+    fn test_tetrahedral_stereo_config(#[case] input: &str, #[case] expected: TetrahedralStereoAst) {
         assert_eq!(
-            (|i: &mut &str| stereo_config(i, 4)).parse(input).unwrap(),
+            (|i: &mut &str| tetrahedral_stereo_config(i)).parse(input).unwrap(),
             expected
         );
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(StereoConfigurationAst::Undetermined, "*")]
-    #[case::not_stereo(StereoConfigurationAst::NotStereo, "!")]
-    #[case::stereogenic(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined), "+")]
-    #[case::lit(StereoConfigurationAst::from(1_u32), "1")]
-    #[case::var(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Var("o".to_string()))), "?o")]
-    #[case::lit_set(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::LitSet(vec![1, 2]))), "{1,2}")]
-    #[case::var_domain(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::VarDomain("o".to_string(), vec![1, 2]))), "?o :: {1,2}")]
-    #[case::swap(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::swap(StereoExpr::Lit(1)))), "~1")]
-    #[case::mirror(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::mirror(StereoExpr::Lit(1)))), "'1")]
-    #[case::apply(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::apply(StereoExpr::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))), "1^(0,1)")]
-    fn test_fmt_stereo_config(#[case] c: StereoConfigurationAst, #[case] expected: &str) {
-        struct W<'a>(&'a StereoConfigurationAst);
+    #[case::undetermined(TetrahedralStereoAst::Undetermined, "*")]
+    #[case::not_stereo(TetrahedralStereoAst::NotStereo, "!")]
+    #[case::stereogenic(TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined), "+")]
+    #[case::lit(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)), "1")]
+    #[case::var(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var("o"))), "?o")]
+    #[case::lit_set(TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2])), "{1,2}")]
+    #[case::var_domain(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::var_in("o", [1, 2]))), "?o :: {1,2}")]
+    #[case::swap(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1)))), "~1")]
+    #[case::mirror(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::mirror(StereoTerm::Lit(1)))), "'1")]
+    #[case::apply(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::apply(StereoTerm::Lit(1), Permutation::from_cycles(4, &[vec![0, 1]])))), "1^(0,1)")]
+    fn test_fmt_tetrahedral_stereo_config(#[case] c: TetrahedralStereoAst, #[case] expected: &str) {
+        struct W<'a>(&'a TetrahedralStereoAst);
         impl fmt::Display for W<'_> {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt_stereo_config(f, self.0)
+                fmt_tetrahedral_stereo_config(f, self.0)
             }
         }
         assert_eq!(W(&c).to_string(), expected);
@@ -1653,8 +1754,8 @@ mod tests {
     #[rstest]
     #[case::lit(StereoCosetAst::Lit(2))]
     #[case::undetermined(StereoCosetAst::Undetermined)]
-    #[case::expr_lit_set(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(vec![1, 2]))))]
-    #[case::expr_swap(StereoCosetAst::Expr(Box::new(StereoExpr::swap(StereoExpr::Lit(1)))))]
+    #[case::lit_set(StereoCosetAst::lit_set([1, 2]))]
+    #[case::term_swap(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1))))]
     fn test_stereo_coset_dsl_into_ast(#[case] ast: StereoCosetAst) {
         assert_eq!(StereoCosetDsl(ast.clone()).into_ast(&()), ast);
         assert_eq!(StereoCosetDsl::from_ast(&ast, &()), StereoCosetDsl(ast));
@@ -1664,9 +1765,9 @@ mod tests {
     #[rstest]
     #[case::int("2", StereoCosetDsl(StereoCosetAst::Lit(2)))]
     #[case::undetermined(":undetermined", StereoCosetDsl(StereoCosetAst::Undetermined))]
-    #[case::vector("[1 2]", StereoCosetDsl(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(vec![1, 2])))))]
+    #[case::vector("[1 2]", StereoCosetDsl(StereoCosetAst::lit_set([1, 2])))]
     #[case::string_lit("\"3\"", StereoCosetDsl(StereoCosetAst::Lit(3)))]
-    #[case::string_expr("\"~1\"", StereoCosetDsl(StereoCosetAst::Expr(Box::new(StereoExpr::swap(StereoExpr::Lit(1))))))]
+    #[case::string_term("\"~1\"", StereoCosetDsl(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1)))))]
     fn test_stereo_coset_dsl_from_edn(#[case] input: &str, #[case] expected: StereoCosetDsl) {
         assert_eq!(StereoCosetDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }
@@ -1696,31 +1797,31 @@ mod tests {
     #[rstest]
     #[case::lit(StereoCosetDsl(StereoCosetAst::Lit(2)), "2")]
     #[case::undetermined(StereoCosetDsl(StereoCosetAst::Undetermined), ":undetermined")]
-    #[case::expr_lit_set(StereoCosetDsl(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(vec![1, 2])))), "[1 2]")]
-    #[case::expr_swap(StereoCosetDsl(StereoCosetAst::Expr(Box::new(StereoExpr::swap(StereoExpr::Lit(1))))), "\"~1\"")]
+    #[case::lit_set(StereoCosetDsl(StereoCosetAst::lit_set([1, 2])), "[1 2]")]
+    #[case::term_swap(StereoCosetDsl(StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(1)))), "\"~1\"")]
     fn test_stereo_coset_dsl_to_edn(#[case] form: StereoCosetDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(StereoConfigurationAst::Undetermined)]
-    #[case::not_stereo(StereoConfigurationAst::NotStereo)]
-    #[case::stereo_lit(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1)))]
-    fn test_stereo_configuration_dsl_into_ast(#[case] ast: StereoConfigurationAst) {
-        assert_eq!(StereoConfigurationDsl(ast.clone()).into_ast(&()), ast);
-        assert_eq!(StereoConfigurationDsl::from_ast(&ast, &()), StereoConfigurationDsl(ast));
+    #[case::undetermined(TetrahedralStereoAst::Undetermined)]
+    #[case::not_stereo(TetrahedralStereoAst::NotStereo)]
+    #[case::stereo_lit(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1)))]
+    fn test_tetrahedral_stereo_dsl_into_ast(#[case] ast: TetrahedralStereoAst) {
+        assert_eq!(TetrahedralStereoDsl(ast.clone()).into_ast(&()), ast);
+        assert_eq!(TetrahedralStereoDsl::from_ast(&ast, &()), TetrahedralStereoDsl(ast));
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(":undetermined", StereoConfigurationDsl(StereoConfigurationAst::Undetermined))]
-    #[case::not_stereo(":not-stereo", StereoConfigurationDsl(StereoConfigurationAst::NotStereo))]
-    #[case::stereo_lit("{:stereo 1}", StereoConfigurationDsl(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1))))]
-    #[case::stereo_undetermined("{:stereo :undetermined}", StereoConfigurationDsl(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined)))]
-    #[case::stereo_set("{:stereo [1 2]}", StereoConfigurationDsl(StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(vec![1, 2]))))))]
-    fn test_stereo_configuration_dsl_from_edn(#[case] input: &str, #[case] expected: StereoConfigurationDsl) {
-        assert_eq!(StereoConfigurationDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
+    #[case::undetermined(":undetermined", TetrahedralStereoDsl(TetrahedralStereoAst::Undetermined))]
+    #[case::not_stereo(":not-stereo", TetrahedralStereoDsl(TetrahedralStereoAst::NotStereo))]
+    #[case::stereo_lit("{:stereo 1}", TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1))))]
+    #[case::stereo_undetermined("{:stereo :undetermined}", TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined)))]
+    #[case::stereo_set("{:stereo [1 2]}", TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))))]
+    fn test_tetrahedral_stereo_dsl_from_edn(#[case] input: &str, #[case] expected: TetrahedralStereoDsl) {
+        assert_eq!(TetrahedralStereoDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }
 
     #[rustfmt::skip]
@@ -1728,17 +1829,17 @@ mod tests {
     #[case::unknown_keyword(":bogus", DeError::TypeMismatch { expected: ":undetermined / :not-stereo / {:stereo <coset>}", got: "keyword", path: Vec::new() })]
     #[case::unknown_key("{:bogus 1}", DeError::UnknownField { key: "bogus".to_string(), path: vec!["stereo-configuration".into()] })]
     #[case::wrong_type("1", DeError::TypeMismatch { expected: ":undetermined / :not-stereo / {:stereo <coset>}", got: "int", path: Vec::new() })]
-    fn test_stereo_configuration_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
-        assert_eq!(StereoConfigurationDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
+    fn test_tetrahedral_stereo_dsl_from_edn_error(#[case] input: &str, #[case] expected: DeError) {
+        assert_eq!(TetrahedralStereoDsl::from_edn(&read_string(input).unwrap()).unwrap_err(), expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::undetermined(StereoConfigurationDsl(StereoConfigurationAst::Undetermined), ":undetermined")]
-    #[case::not_stereo(StereoConfigurationDsl(StereoConfigurationAst::NotStereo), ":not-stereo")]
-    #[case::stereo_lit(StereoConfigurationDsl(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1))), "{:stereo 1}")]
-    #[case::stereo_undetermined(StereoConfigurationDsl(StereoConfigurationAst::Stereo(StereoCosetAst::Undetermined)), "{:stereo :undetermined}")]
-    fn test_stereo_configuration_dsl_to_edn(#[case] form: StereoConfigurationDsl, #[case] expected: &str) {
+    #[case::undetermined(TetrahedralStereoDsl(TetrahedralStereoAst::Undetermined), ":undetermined")]
+    #[case::not_stereo(TetrahedralStereoDsl(TetrahedralStereoAst::NotStereo), ":not-stereo")]
+    #[case::stereo_lit(TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:stereo 1}")]
+    #[case::stereo_undetermined(TetrahedralStereoDsl(TetrahedralStereoAst::Stereo(StereoCosetAst::Undetermined)), "{:stereo :undetermined}")]
+    fn test_tetrahedral_stereo_dsl_to_edn(#[case] form: TetrahedralStereoDsl, #[case] expected: &str) {
         assert_eq!(form.to_edn(), read_string(expected).unwrap());
     }
 
@@ -1755,7 +1856,7 @@ mod tests {
     #[rstest]
     #[case::lit("{:pair [0 1] :relation :homotopic}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) }))]
     #[case::undetermined("{:pair [0 1] :relation :undetermined}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Undetermined }))]
-    #[case::member_set("{:pair [1 2] :relation #{:homotopic :enantiotopic}}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Diastereotopic])) }))]
+    #[case::member_set("{:pair [1 2] :relation #{:homotopic :enantiotopic}}", TopicityDsl(TopicityAst { pair: LigandPairAst::new(StereoLigandId(1), StereoLigandId(2)), rel: TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic, Topicity::Enantiotopic])) }))]
     fn test_topicity_dsl_from_edn(#[case] input: &str, #[case] expected: TopicityDsl) {
         assert_eq!(TopicityDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }
@@ -1782,7 +1883,7 @@ mod tests {
     #[rstest]
     #[case::lit(":stereogenic", StereogenicityDsl(StereogenicityAst::Lit(Stereogenicity::Stereogenic)))]
     #[case::undetermined(":undetermined", StereogenicityDsl(StereogenicityAst::Undetermined))]
-    #[case::member_set("#{:prochiral :stereogenic}", StereogenicityDsl(StereogenicityAst::NotSet(BTreeSet::from([Stereogenicity::Symmetric]))))]
+    #[case::member_set("#{:prochiral :stereogenic}", StereogenicityDsl(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Prochiral, Stereogenicity::Stereogenic]))))]
     fn test_stereogenicity_dsl_from_edn(#[case] input: &str, #[case] expected: StereogenicityDsl) {
         assert_eq!(StereogenicityDsl::from_edn(&read_string(input).unwrap()).unwrap(), expected);
     }

@@ -66,16 +66,22 @@ impl NoncovalentBondAst {
     }
 }
 
-/// Noncovalent interaction kind. Two-variant lattice: `Undetermined` is
-/// the top (wildcard); `Lit(...)` constrains to a specific interaction kind. No
-/// set/bind/ref machinery — sets over noncovalent kinds are not a common
-/// modeling need, and the AST is kept minimal until one arises.
-/// TODO: Compare to stereo kind and decide on harmonized approach.
+/// Noncovalent interaction kind.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum NoncovalentBondKindAst {
     #[default]
     Undetermined,
     Lit(NoncovalentBondKind),
+}
+
+impl NoncovalentBondKindAst {
+    pub fn undetermined() -> Self {
+        Self::Undetermined
+    }
+
+    pub fn lit(kind: NoncovalentBondKind) -> Self {
+        Self::Lit(kind)
+    }
 }
 
 impl From<NoncovalentBondKind> for NoncovalentBondKindAst {
@@ -243,6 +249,18 @@ mod tests {
         assert_eq!(bond, original);
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::undetermined(NoncovalentBondKindAst::Undetermined, NoncovalentBondKindAst::Undetermined)]
+    #[case::lit(NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond), NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond))]
+    fn test_noncovalent_bond_kind_ast_constructors(
+        #[case] actual: NoncovalentBondKindAst,
+        #[case] expected: NoncovalentBondKindAst,
+    ) {
+        assert_eq!(actual, expected);
+    }
+
+    #[rustfmt::skip]
     #[rstest]
     #[case::hydrogen(NoncovalentBondKind::HydrogenBond, NoncovalentBondKindAst::Lit(NoncovalentBondKind::HydrogenBond))]
     #[case::ionic(NoncovalentBondKind::Ionic, NoncovalentBondKindAst::Lit(NoncovalentBondKind::Ionic))]

@@ -26,7 +26,7 @@ use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
 use super::super::rings::{RingFamily, RingSet};
 use super::super::spin::SpinStateAst;
-use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoExpr, StereoKind};
+use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoKind, StereoTerm};
 use super::super::value::{ValueAst, ValueTerm};
 use super::MoleculeAst;
 use crate::{mol, mol_ground};
@@ -2267,14 +2267,14 @@ fn test_molecule_ast_simplify_values_reduces_stereo() {
             vec![],
             StereoAtomAst::new(
                 StereoKind::Tetrahedral,
-                StereoCosetAst::Expr(Box::new(StereoExpr::SwapOp(Box::new(StereoExpr::Lit(0))))),
+                StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(0))),
             ),
         )],
         Vec::new(),
         Constraints::default(),
     );
     ast.simplify_values();
-    assert_eq!(ast[StereoAtomId(0)].coset, StereoCosetAst::Lit(1));
+    assert_eq!(ast[StereoAtomId(0)].configuration.coset(), Some(&StereoCosetAst::Lit(1)));
 }
 
 // endregion: simplify_values

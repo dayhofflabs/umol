@@ -13,7 +13,7 @@ use super::constraint::{
 use super::error::Contradiction;
 use super::operators::MemOp;
 use super::spin::SpinStateAst;
-use super::stereo::StereoConfigurationAst;
+use super::stereo::TetrahedralStereoAst;
 use super::traits::{AsLit, Canonicalize, Lattice};
 use super::value::ValueAst;
 
@@ -166,7 +166,7 @@ impl AtomAst {
             .contains(AtomConstraintKind::TetrahedralStereo)
         {
             self.constraints.add(AtomConstraint::TetrahedralStereo(
-                StereoConfigurationAst::NotStereo,
+                TetrahedralStereoAst::NotStereo,
             ));
         }
         self
@@ -415,7 +415,12 @@ impl Lattice for ElementAst {
                     (true, false) => (difference(&sb, &sa), false),
                     (true, true) => (union(&sa, &sb), true),
                 };
-                canon_set(set, negated).ok()
+                let raw = if negated {
+                    NotSet(Box::new(set))
+                } else {
+                    LitSet(Box::new(set))
+                };
+                raw.canonicalize().ok()
             }
         }
     }
@@ -438,7 +443,12 @@ impl Lattice for ElementAst {
                     (true, false) => (difference(&sa, &sb), true),
                     (true, true) => (intersect(&sa, &sb), true),
                 };
-                canon_set(set, negated).unwrap_or(Undetermined)
+                let raw = if negated {
+                    NotSet(Box::new(set))
+                } else {
+                    LitSet(Box::new(set))
+                };
+                raw.canonicalize().unwrap_or(Undetermined)
             }
         }
     }
@@ -599,7 +609,7 @@ impl Lattice for IsotopeMassAst {
                 let sa = mass_set_view(a.as_ref()).unwrap();
                 let sb = mass_set_view(b.as_ref()).unwrap();
                 let intersection: BTreeSet<u32> = sa.intersection(&sb).copied().collect();
-                canon_mass_set(intersection).ok()
+                LitSet(Box::new(intersection)).canonicalize().ok()
             }
         }
     }
@@ -620,7 +630,7 @@ impl Lattice for IsotopeMassAst {
                 let sa = mass_set_view(a.as_ref()).unwrap();
                 let sb = mass_set_view(b.as_ref()).unwrap();
                 let union: BTreeSet<u32> = sa.union(&sb).copied().collect();
-                canon_mass_set(union).unwrap_or(Undetermined)
+                LitSet(Box::new(union)).canonicalize().unwrap_or(Undetermined)
             }
         }
     }

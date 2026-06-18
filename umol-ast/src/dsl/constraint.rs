@@ -18,8 +18,7 @@ use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
 use super::stereo::{
-    coset_lit, parse_stereo_coset, StereoAtomConstraintDsl, StereoBondConstraintDsl,
-    StereoConfigurationDsl, StereoCosetDsl,
+    coset_lit, parse_stereo_coset, StereoAtomConstraintDsl, StereoBondConstraintDsl, StereoCosetDsl,
 };
 use super::value::{parse_value, ValueDsl};
 use crate::ast::constraint::{
@@ -32,7 +31,7 @@ use crate::ast::ids::{
 };
 use crate::ast::molecule::MoleculeAst;
 use crate::ast::spin::SpinStateAst;
-use crate::ast::stereo::{StereoConfigurationAst, StereoCosetAst, StereoExpr, StereoKind};
+use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
 
@@ -456,9 +455,9 @@ pub(super) fn read_stereo_coset_dsl(
                 .into_iter()
                 .map(coset_lit)
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(StereoCosetDsl(StereoCosetAst::Expr(Box::new(
-                StereoExpr::LitSet(set),
-            ))))
+            Ok(StereoCosetDsl(StereoCosetAst::LitSet(
+                set.into_iter().collect(),
+            )))
         }
         b':' => {
             let name = de.read_keyword_name()?;
@@ -477,48 +476,55 @@ pub(super) fn read_stereo_coset_dsl(
     }
 }
 
-pub(super) fn read_stereo_configuration_dsl(
-    de: &mut EdnStreamDeserializer<'_>,
-    degree: usize,
-) -> Result<StereoConfigurationDsl, EdnError> {
-    match de.peek_byte()?.ok_or_else(eof_err)? {
-        b':' => {
-            let name = de.read_keyword_name()?;
-            match name.as_ref() {
-                "undetermined" => Ok(StereoConfigurationDsl(StereoConfigurationAst::Undetermined)),
-                "not-stereo" => Ok(StereoConfigurationDsl(StereoConfigurationAst::NotStereo)),
-                other => Err(DeError::Custom(format!(
-                    "unknown stereo-configuration keyword :{}",
-                    other
-                ))
-                .into()),
-            }
-        }
-        b'{' => {
-            let key = read_single_key_map_header(de)?;
-            match key.as_str() {
-                "stereo" => {
-                    let coset = read_stereo_coset_dsl(de, degree)?.into_ast(&());
-                    consume_single_key_map_close(de, "stereo-configuration")?;
-                    Ok(StereoConfigurationDsl(StereoConfigurationAst::Stereo(
-                        coset,
-                    )))
+/// Streaming counterpart of `stereo_site_dsl!`'s `FromEdn`: reads a fixed-kind
+/// site value (`:undetermined`, `:not-stereo`, or `{:stereo <coset>}`) straight
+/// from the deserializer. `$kind` fixes the coset degree.
+macro_rules! read_stereo_site_dsl {
+    ($name:ident, $ast:ident, $kind:expr) => {
+        pub(super) fn $name(
+            de: &mut EdnStreamDeserializer<'_>,
+        ) -> Result<$ast, EdnError> {
+            match de.peek_byte()?.ok_or_else(eof_err)? {
+                b':' => {
+                    let name = de.read_keyword_name()?;
+                    match name.as_ref() {
+                        "undetermined" => Ok($ast::Undetermined),
+                        "not-stereo" => Ok($ast::NotStereo),
+                        other => Err(DeError::Custom(format!(
+                            "unknown stereo-configuration keyword :{}",
+                            other
+                        ))
+                        .into()),
+                    }
                 }
-                other => Err(DeError::UnknownField {
-                    key: other.to_string(),
+                b'{' => {
+                    let key = read_single_key_map_header(de)?;
+                    match key.as_str() {
+                        "stereo" => {
+                            let coset = read_stereo_coset_dsl(de, $kind.degree())?.into_ast(&());
+                            consume_single_key_map_close(de, "stereo-configuration")?;
+                            Ok($ast::Stereo(coset))
+                        }
+                        other => Err(DeError::UnknownField {
+                            key: other.to_string(),
+                            path: vec!["stereo-configuration".into()],
+                        }
+                        .into()),
+                    }
+                }
+                b => Err(DeError::TypeMismatch {
+                    expected: ":undetermined / :not-stereo / {:stereo <coset>}",
+                    got: unexpected_byte_kind(b),
                     path: vec!["stereo-configuration".into()],
                 }
                 .into()),
             }
         }
-        b => Err(DeError::TypeMismatch {
-            expected: ":undetermined / :not-stereo / {:stereo <coset>}",
-            got: unexpected_byte_kind(b),
-            path: vec!["stereo-configuration".into()],
-        }
-        .into()),
-    }
+    };
 }
+
+read_stereo_site_dsl! { read_tetrahedral_stereo_dsl, TetrahedralStereoAst, StereoKind::Tetrahedral }
+read_stereo_site_dsl! { read_cis_trans_stereo_dsl, CisTransStereoAst, StereoKind::CisTrans }
 
 pub(super) fn read_atom_constraint_dsl(
     de: &mut EdnStreamDeserializer<'_>,
@@ -543,9 +549,7 @@ pub(super) fn read_atom_constraint_dsl(
         "ring-count" => AtomConstraint::RingCount(read_value_dsl(de)?.into_ast(&())),
         "ring-size" => AtomConstraint::RingSize(read_value_dsl(de)?.into_ast(&())),
         "tetrahedral-stereo" => {
-            AtomConstraint::TetrahedralStereo(
-                read_stereo_configuration_dsl(de, StereoKind::Tetrahedral.degree())?.into_ast(&()),
-            )
+            AtomConstraint::TetrahedralStereo(read_tetrahedral_stereo_dsl(de)?)
         }
         other => {
             return Err(DeError::UnknownField {
@@ -580,10 +584,7 @@ pub(super) fn read_bond_constraint_dsl(
                 "ring-count" => BondConstraint::RingCount(read_value_dsl(de)?.into_ast(&())),
                 "ring-size" => BondConstraint::RingSize(read_value_dsl(de)?.into_ast(&())),
                 "cis-trans-stereo" => {
-                    BondConstraint::CisTransStereo(
-                        read_stereo_configuration_dsl(de, StereoKind::CisTrans.degree())?
-                            .into_ast(&()),
-                    )
+                    BondConstraint::CisTransStereo(read_cis_trans_stereo_dsl(de)?)
                 }
                 other => {
                     return Err(DeError::UnknownField {
@@ -2163,7 +2164,7 @@ mod tests {
     use crate::ast::ids::StereoLigandId;
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::operators::MemOp;
-    use crate::ast::stereo::{StereoKind, Stereogenicity, Topicity};
+    use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, Stereogenicity, TetrahedralStereoAst, Topicity};
     use crate::ast::value::ValueAst;
 
     #[fixture]
@@ -2513,9 +2514,9 @@ mod tests {
     #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
     #[case::ring_count(AtomConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
     #[case::ring_size(AtomConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
-    #[case::tetrahedral_stereo_not_stereo(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
-    #[case::tetrahedral_stereo_lit(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
-    #[case::tetrahedral_stereo_set(AtomConstraint::TetrahedralStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Expr(Box::new(StereoExpr::LitSet(vec![1, 2]))))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
+    #[case::tetrahedral_stereo_not_stereo(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
+    #[case::tetrahedral_stereo_lit(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
+    #[case::tetrahedral_stereo_set(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
     fn test_atom_constraint_dsl_roundtrip(
         #[case] input: AtomConstraint,
         #[case] edn_source: &str,
@@ -2534,8 +2535,8 @@ mod tests {
     #[case::aromatic(BondConstraint::Aromatic, "{:bond [0 :aromatic]}")]
     #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)), "{:bond [0 {:ring-count 1}]}")]
     #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), "{:bond [0 {:ring-size 6}]}")]
-    #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
-    #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoCosetAst::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
+    #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
+    #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
     fn test_bond_constraint_dsl_roundtrip(
         #[from(full_counts)] counts: EntityCounts,
         #[case] input: BondConstraint,

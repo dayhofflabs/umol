@@ -247,7 +247,7 @@ mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
         OrientedPermutationAst, PermutationAst, StereoAtomConstraint, StereoBondConstraint,
-        StereoCosetAst, StereoLigandId, StereogenicityAst,
+        StereoConfigurationAst, StereoCosetAst, StereoKind, StereoLigandId, StereogenicityAst,
     };
     use umol_ast::mol_ground;
     use umol_perm::{Orientation, Permutation};
@@ -288,7 +288,7 @@ mod tests {
     #[case::coset_out_of_range(
         CFCLBRI,
         (|ast: &mut MoleculeAst| {
-            ast.stereo_atom_mut(StereoAtomId(0)).coset = StereoCosetAst::Lit(9);
+            ast.stereo_atom_mut(StereoAtomId(0)).configuration = StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 9);
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::CosetOutOfRange {
             kind: StereoKind::Tetrahedral,
@@ -299,7 +299,7 @@ mod tests {
     #[case::arity(
         CFCLBRI,
         (|ast: &mut MoleculeAst| {
-            ast.stereo_atom_mut(StereoAtomId(0)).kind = StereoKind::TrigonalBipyramidal;
+            ast.stereo_atom_mut(StereoAtomId(0)).configuration = StereoConfigurationAst::kinded(StereoKind::TrigonalBipyramidal, 0);
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::LigandArity {
             kind: StereoKind::TrigonalBipyramidal,

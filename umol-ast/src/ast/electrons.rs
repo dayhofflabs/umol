@@ -17,6 +17,16 @@ pub enum ElectronCountsAst {
     Lit(Vec<i64>),
 }
 
+impl ElectronCountsAst {
+    pub fn undetermined() -> Self {
+        Self::Undetermined
+    }
+
+    pub fn lit(counts: Vec<i64>) -> Self {
+        Self::Lit(counts)
+    }
+}
+
 impl From<Vec<i64>> for ElectronCountsAst {
     fn from(counts: Vec<i64>) -> Self {
         Self::Lit(counts)
@@ -95,8 +105,21 @@ mod tests {
     #[rstest]
     #[case::triple(vec![1, 1, 1], ElectronCountsAst::Lit(vec![1, 1, 1]))]
     #[case::mixed(vec![2, 0, 2], ElectronCountsAst::Lit(vec![2, 0, 2]))]
-    fn test_electron_counts_ast_from(#[case] counts: Vec<i64>, #[case] expected: ElectronCountsAst) {
+    fn test_electron_counts_ast_from(
+        #[case] counts: Vec<i64>,
+        #[case] expected: ElectronCountsAst,
+    ) {
         assert_eq!(ElectronCountsAst::from(counts), expected);
+    }
+
+    #[rstest]
+    #[case::undetermined(ElectronCountsAst::Undetermined, ElectronCountsAst::Undetermined)]
+    #[case::lit(ElectronCountsAst::Lit(vec![1, 1, 1]), ElectronCountsAst::Lit(vec![1, 1, 1]))]
+    fn test_electron_counts_ast_constructors(
+        #[case] actual: ElectronCountsAst,
+        #[case] expected: ElectronCountsAst,
+    ) {
+        assert_eq!(actual, expected);
     }
 
     #[rstest]
@@ -132,7 +155,10 @@ mod tests {
     #[rstest]
     #[case::undetermined(ElectronCountsAst::Undetermined, true)]
     #[case::lit(ElectronCountsAst::Lit(vec![1, 1, 1]), false)]
-    fn test_electron_counts_ast_is_undetermined(#[case] ast: ElectronCountsAst, #[case] expected: bool) {
+    fn test_electron_counts_ast_is_undetermined(
+        #[case] ast: ElectronCountsAst,
+        #[case] expected: bool,
+    ) {
         assert_eq!(ast.is_undetermined(), expected);
     }
 

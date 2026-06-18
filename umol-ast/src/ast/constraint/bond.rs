@@ -6,8 +6,8 @@ use std::vec::IntoIter;
 use strum::{EnumDiscriminants, EnumIter};
 
 use super::super::remap::IdRemapping;
-use super::super::stereo::{StereoConfigurationAst, StereoKind};
-use super::super::traits::Lattice;
+use super::super::stereo::CisTransStereoAst;
+use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
 /// Localized bond constraint. Held inline on `BondAst` via
@@ -18,7 +18,7 @@ pub enum BondConstraint {
     Aromatic,
     RingCount(ValueAst),
     RingSize(ValueAst),
-    CisTransStereo(StereoConfigurationAst),
+    CisTransStereo(CisTransStereoAst),
 }
 
 impl BondConstraint {
@@ -30,7 +30,7 @@ impl BondConstraint {
         Self::RingSize(v.into())
     }
 
-    pub fn cis_trans_stereo(c: StereoConfigurationAst) -> Self {
+    pub fn cis_trans_stereo(c: CisTransStereoAst) -> Self {
         Self::CisTransStereo(c)
     }
 
@@ -63,7 +63,7 @@ impl BondConstraint {
             Self::Aromatic => Self::Aromatic,
             Self::RingCount(v) => Self::RingCount(v.simplify()),
             Self::RingSize(v) => Self::RingSize(v.simplify()),
-            Self::CisTransStereo(c) => Self::CisTransStereo(c.simplify(StereoKind::CisTrans)),
+            Self::CisTransStereo(c) => Self::CisTransStereo(c.clone().canonicalize().unwrap_or(c)),
         }
     }
 }
@@ -115,10 +115,10 @@ impl BondConstraints {
         }
     }
 
-    pub fn cis_trans_stereo(&self) -> StereoConfigurationAst {
+    pub fn cis_trans_stereo(&self) -> CisTransStereoAst {
         match self.get(BondConstraintKind::CisTransStereo) {
             Some(BondConstraint::CisTransStereo(c)) => c.clone(),
-            _ => StereoConfigurationAst::Undetermined,
+            _ => CisTransStereoAst::Undetermined,
         }
     }
 
@@ -347,14 +347,14 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::stereo::{StereoCosetAst, StereoExpr};
+    use crate::ast::stereo::{StereoCosetAst, StereoTerm};
     use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_count(BondConstraint::ring_count(1), BondConstraint::RingCount(ValueAst::Lit(1)))]
     #[case::ring_size(BondConstraint::ring_size(6), BondConstraint::RingSize(ValueAst::Lit(6)))]
-    #[case::cis_trans_stereo(BondConstraint::cis_trans_stereo(StereoConfigurationAst::NotStereo), BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo))]
+    #[case::cis_trans_stereo(BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo), BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo))]
     fn test_bond_constraint_constructors(
         #[case] actual: BondConstraint,
         #[case] expected: BondConstraint,
@@ -367,7 +367,7 @@ mod tests {
     #[case::aromatic(BondConstraint::Aromatic, BondConstraintKind::Aromatic)]
     #[case::ring_count(BondConstraint::ring_count(1), BondConstraintKind::RingCount)]
     #[case::ring_size(BondConstraint::ring_size(6), BondConstraintKind::RingSize)]
-    #[case::cis_trans_stereo(BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo), BondConstraintKind::CisTransStereo)]
+    #[case::cis_trans_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), BondConstraintKind::CisTransStereo)]
     fn test_bond_constraint_kind(#[case] c: BondConstraint, #[case] expected: BondConstraintKind) {
         assert_eq!(c.kind(), expected);
     }
@@ -377,7 +377,7 @@ mod tests {
     #[case::ring_count(BondConstraint::ring_count(1), true)]
     #[case::ring_size(BondConstraint::ring_size(6), false)]
     #[case::cis_trans_stereo(
-        BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo),
+        BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo),
         true
     )]
     fn test_bond_constraint_is_unique(#[case] c: BondConstraint, #[case] expected: bool) {
@@ -391,8 +391,8 @@ mod tests {
     #[case::ring_count_undetermined(BondConstraint::RingCount(ValueAst::Undetermined), true)]
     #[case::ring_size_lit(BondConstraint::ring_size(6), false)]
     #[case::ring_size_undetermined(BondConstraint::RingSize(ValueAst::Undetermined), true)]
-    #[case::cis_trans_not_stereo(BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo), false)]
-    #[case::cis_trans_undetermined(BondConstraint::CisTransStereo(StereoConfigurationAst::Undetermined), true)]
+    #[case::cis_trans_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), false)]
+    #[case::cis_trans_undetermined(BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined), true)]
     fn test_bond_constraint_is_undetermined(#[case] c: BondConstraint, #[case] expected: bool) {
         assert_eq!(c.is_undetermined(), expected);
     }
@@ -403,8 +403,8 @@ mod tests {
         BondConstraint::ring_count(2))]
     #[case::ring_size_folds_expr(BondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(6))),
         BondConstraint::ring_size(6))]
-    #[case::cis_trans_lifts_expr(BondConstraint::CisTransStereo(StereoConfigurationAst::Stereo(StereoCosetAst::expr(StereoExpr::Lit(1)))),
-        BondConstraint::cis_trans_stereo(StereoConfigurationAst::from(1_u32)))]
+    #[case::cis_trans_lifts_term(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1)))),
+        BondConstraint::cis_trans_stereo(CisTransStereoAst::stereo(1_u32)))]
     fn test_bond_constraint_simplify(
         #[case] input: BondConstraint,
         #[case] expected: BondConstraint,
@@ -417,7 +417,7 @@ mod tests {
     #[case::ring_count_lit(BondConstraint::ring_count(1))]
     #[case::ring_size_undetermined(BondConstraint::RingSize(ValueAst::Undetermined))]
     #[case::cis_trans_not_stereo(BondConstraint::CisTransStereo(
-        StereoConfigurationAst::NotStereo
+        CisTransStereoAst::NotStereo
     ))]
     fn test_bond_constraint_simplify_identity(#[case] input: BondConstraint) {
         assert_eq!(input.clone().simplify(), input);
@@ -622,9 +622,9 @@ mod tests {
         BondConstraints::from_iter([BondConstraint::ring_size(5), BondConstraint::ring_size(6)]), true)]
     #[case::ring_size_not_in_target(BondConstraints::from_iter([BondConstraint::ring_size(7)]),
         BondConstraints::from_iter([BondConstraint::ring_size(5)]), false)]
-    #[case::cis_trans_match(BondConstraints::from_iter([BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo)]),
-        BondConstraints::from_iter([BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo)]), true)]
-    #[case::cis_trans_pattern_more_specific(BondConstraints::from_iter([BondConstraint::CisTransStereo(StereoConfigurationAst::NotStereo)]),
+    #[case::cis_trans_match(BondConstraints::from_iter([BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo)]),
+        BondConstraints::from_iter([BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo)]), true)]
+    #[case::cis_trans_pattern_more_specific(BondConstraints::from_iter([BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo)]),
         BondConstraints::new(), false)]
     fn test_bond_constraints_matches(
         #[case] pattern: BondConstraints,
