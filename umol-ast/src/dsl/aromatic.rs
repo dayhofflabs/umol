@@ -360,23 +360,24 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::AromaticSystemConstraints;
+    use crate::ast::electrons::ElectronCountsAst;
     use crate::ast::spin::SpinStateAst;
 
     #[rustfmt::skip]
     #[rstest]
     #[case::empty("", AromaticSystemDsl(AromaticSystemAst::default()))]
     #[case::whitespace("   ", AromaticSystemDsl(AromaticSystemAst::default()))]
-    #[case::charge_pos("#c+1", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::new() }))]
-    #[case::charge_neg("#c-2", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::new() }))]
-    #[case::charge_plus_only("#c+", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::new() }))]
-    #[case::charge_minus_only("#c-", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::new() }))]
-    #[case::electrons("#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
-    #[case::electrons_bare("#e", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(1))]) }))]
-    #[case::electrons_wild("#e*", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined)]) }))]
-    #[case::unpaired("#u1", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: Vec::new(), constraints: AromaticSystemConstraints::new() }))]
-    #[case::mult("#s2", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: Vec::new(), constraints: AromaticSystemConstraints::new() }))]
-    #[case::charge_electrons("#c+#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
-    #[case::full("#c0#u0#s1#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), electrons: Vec::new(), constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
+    #[case::charge_pos("#c+1", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::new() }))]
+    #[case::charge_neg("#c-2", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::new() }))]
+    #[case::charge_plus_only("#c+", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::new() }))]
+    #[case::charge_minus_only("#c-", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-1), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::new() }))]
+    #[case::electrons("#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
+    #[case::electrons_bare("#e", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(1))]) }))]
+    #[case::electrons_wild("#e*", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined)]) }))]
+    #[case::unpaired("#u1", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Lit(1), multiplicity: ValueAst::Undetermined }, electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::new() }))]
+    #[case::mult("#s2", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(2) }, electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::new() }))]
+    #[case::charge_electrons("#c+#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
+    #[case::full("#c0#u0#s1#e6", AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }))]
     fn test_parse_aromatic(#[case] input: &str, #[case] expected: AromaticSystemDsl) {
         let result = aromatic_system.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -407,11 +408,11 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::empty(AromaticSystemDsl::default(), "")]
-    #[case::charge_one(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::new() }), "#c+")]
-    #[case::charge_neg_two(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::new() }), "#c-2")]
-    #[case::electrons_six(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }), "#e6")]
-    #[case::electrons_one(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: Vec::new(), constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(1))]) }), "#e")]
-    #[case::full(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), electrons: Vec::new(), constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }), "#c0#u0#s#e6")]
+    #[case::charge_one(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(1), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::new() }), "#c+")]
+    #[case::charge_neg_two(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(-2), spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::new() }), "#c-2")]
+    #[case::electrons_six(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }), "#e6")]
+    #[case::electrons_one(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Undetermined, spin: SpinStateAst::default(), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(1))]) }), "#e")]
+    #[case::full(AromaticSystemDsl(AromaticSystemAst { charge: ValueAst::Lit(0), spin: SpinStateAst::from((0_u8, 1_u8)), electrons: ElectronCountsAst::Undetermined, constraints: AromaticSystemConstraints::from_iter([AromaticSystemConstraint::ElectronCount(ValueAst::Lit(6))]) }), "#c0#u0#s#e6")]
     fn test_display_aromatic(#[case] form: AromaticSystemDsl, #[case] expected: &str) {
         assert_eq!(form.to_string(), expected);
     }
@@ -436,7 +437,7 @@ mod tests {
         let ast = dsl.into_ast(&cfg);
         assert_eq!(ast.charge, ValueAst::Lit(0));
         assert_eq!(ast.spin, SpinStateAst::from((0_u8, 1_u8)));
-        assert!(ast.electrons.is_empty());
+        assert_eq!(ast.electrons, ElectronCountsAst::Undetermined);
         assert!(ast.constraints.is_empty());
     }
 
@@ -445,14 +446,14 @@ mod tests {
         let ast = AromaticSystemAst {
             charge: ValueAst::Lit(0),
             spin: SpinStateAst::from((0_u8, 1_u8)),
-            electrons: Vec::new(),
+            electrons: ElectronCountsAst::Undetermined,
             constraints: AromaticSystemConstraints::new(),
         };
         let cfg = AromaticSystemDefaults::zeroed();
         let dsl = AromaticSystemDsl::from_ast(&ast, &cfg);
         assert_eq!(dsl.0.charge, ValueAst::Undetermined);
         assert_eq!(dsl.0.spin, SpinStateAst::default());
-        assert!(dsl.0.electrons.is_empty());
+        assert_eq!(dsl.0.electrons, ElectronCountsAst::Undetermined);
         assert!(dsl.0.constraints.is_empty());
     }
 

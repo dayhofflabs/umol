@@ -456,9 +456,7 @@ pub(crate) fn electron_count_value_strategy(range: RangeInclusive<i64>) -> impl 
     ]
 }
 
-/// Stand-alone strategy for entity-string roundtrip tests. The per-atom
-/// `electrons` vec is empty because the entity string carries no per-atom
-/// data; the `ElectronCount` constraint is exercised here via `#e<n>`.
+/// Leaf strategy: `Undetermined` or a concrete `Lit` count vector (length 1–4).
 pub(crate) fn electron_counts_ast_strategy() -> impl Strategy<Value = ElectronCountsAst> {
     prop_oneof![
         Just(ElectronCountsAst::Undetermined),
@@ -466,10 +464,13 @@ pub(crate) fn electron_counts_ast_strategy() -> impl Strategy<Value = ElectronCo
     ]
 }
 
+/// Stand-alone strategy for entity-string roundtrip tests. `electrons` is
+/// `Undetermined` because the entity string carries no per-atom data; the
+/// `ElectronCount` constraint is exercised here via `#e<n>`.
 pub(crate) fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSystemAst> {
     (value_basic(-2..=2), optional_aromatic_electron_count()).prop_map(|(charge, constraints)| {
         AromaticSystemAst {
-            electrons: Vec::new(),
+            electrons: ElectronCountsAst::Undetermined,
             charge,
             spin: SpinStateAst::default(),
             constraints,
@@ -478,17 +479,17 @@ pub(crate) fn aromatic_system_ast_strategy() -> impl Strategy<Value = AromaticSy
 }
 
 /// Atom-count-aware variant: generates an `AromaticSystemAst` whose
-/// `electrons` vec has exactly `atom_count` entries. Includes an optional
-/// `ElectronCount` constraint so the molecule-level prop tests exercise
-/// both the per-atom vec and the asserted total in the same pass.
+/// `electrons` `Lit` vector has exactly `atom_count` entries. Includes an
+/// optional `ElectronCount` constraint so the molecule-level prop tests
+/// exercise both the per-atom counts and the asserted total in the same pass.
 pub(crate) fn aromatic_system_ast_for(atom_count: usize) -> impl Strategy<Value = AromaticSystemAst> {
     (
         value_basic(-2..=2),
-        prop::collection::vec(value_basic(0..=2), atom_count),
+        prop::collection::vec(0i64..=2, atom_count),
         optional_aromatic_electron_count(),
     )
         .prop_map(|(charge, electrons, constraints)| AromaticSystemAst {
-            electrons,
+            electrons: ElectronCountsAst::Lit(electrons),
             charge,
             spin: SpinStateAst::default(),
             constraints,
@@ -498,7 +499,7 @@ pub(crate) fn aromatic_system_ast_for(atom_count: usize) -> impl Strategy<Value 
 pub(crate) fn multicenter_bond_ast_strategy() -> impl Strategy<Value = MulticenterBondAst> {
     (value_basic(-2..=2), optional_multicenter_electron_count()).prop_map(
         |(charge, constraints)| MulticenterBondAst {
-            electrons: Vec::new(),
+            electrons: ElectronCountsAst::Undetermined,
             charge,
             spin: SpinStateAst::default(),
             constraints,
@@ -509,11 +510,11 @@ pub(crate) fn multicenter_bond_ast_strategy() -> impl Strategy<Value = Multicent
 pub(crate) fn multicenter_bond_ast_for(atom_count: usize) -> impl Strategy<Value = MulticenterBondAst> {
     (
         value_basic(-2..=2),
-        prop::collection::vec(value_basic(0..=2), atom_count),
+        prop::collection::vec(0i64..=2, atom_count),
         optional_multicenter_electron_count(),
     )
         .prop_map(|(charge, electrons, constraints)| MulticenterBondAst {
-            electrons,
+            electrons: ElectronCountsAst::Lit(electrons),
             charge,
             spin: SpinStateAst::default(),
             constraints,
@@ -1025,35 +1026,35 @@ impl ConstraintCounts {
     }
 }
 
-pub(crate) fn atom_idx_strategy(atom_count: usize) -> BoxedStrategy<AtomId> {
+pub(crate) fn atom_id_strategy(atom_count: usize) -> BoxedStrategy<AtomId> {
     (0u32..atom_count as u32).prop_map(AtomId).boxed()
 }
 
-pub(crate) fn bond_idx_strategy(bond_count: usize) -> BoxedStrategy<BondId> {
+pub(crate) fn bond_id_strategy(bond_count: usize) -> BoxedStrategy<BondId> {
     (0u32..bond_count as u32).prop_map(BondId).boxed()
 }
 
-pub(crate) fn dative_bond_idx_strategy(count: usize) -> BoxedStrategy<DativeBondId> {
+pub(crate) fn dative_bond_id_strategy(count: usize) -> BoxedStrategy<DativeBondId> {
     (0u32..count as u32).prop_map(DativeBondId).boxed()
 }
 
-pub(crate) fn aromatic_system_idx_strategy(count: usize) -> BoxedStrategy<AromaticSystemId> {
+pub(crate) fn aromatic_system_id_strategy(count: usize) -> BoxedStrategy<AromaticSystemId> {
     (0u32..count as u32).prop_map(AromaticSystemId).boxed()
 }
 
-pub(crate) fn multicenter_bond_idx_strategy(count: usize) -> BoxedStrategy<MulticenterBondId> {
+pub(crate) fn multicenter_bond_id_strategy(count: usize) -> BoxedStrategy<MulticenterBondId> {
     (0u32..count as u32).prop_map(MulticenterBondId).boxed()
 }
 
-pub(crate) fn noncovalent_bond_idx_strategy(count: usize) -> BoxedStrategy<NoncovalentBondId> {
+pub(crate) fn noncovalent_bond_id_strategy(count: usize) -> BoxedStrategy<NoncovalentBondId> {
     (0u32..count as u32).prop_map(NoncovalentBondId).boxed()
 }
 
-pub(crate) fn stereo_atom_idx_strategy(count: usize) -> BoxedStrategy<StereoAtomId> {
+pub(crate) fn stereo_atom_id_strategy(count: usize) -> BoxedStrategy<StereoAtomId> {
     (0u32..count as u32).prop_map(StereoAtomId).boxed()
 }
 
-pub(crate) fn stereo_bond_idx_strategy(count: usize) -> BoxedStrategy<StereoBondId> {
+pub(crate) fn stereo_bond_id_strategy(count: usize) -> BoxedStrategy<StereoBondId> {
     (0u32..count as u32).prop_map(StereoBondId).boxed()
 }
 
@@ -1063,16 +1064,16 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     let mut choices: Vec<BoxedStrategy<Constraint>> = Vec::new();
 
     if counts.atom > 0 {
-        let atom_idx = atom_idx_strategy(counts.atom);
+        let atom_id = atom_id_strategy(counts.atom);
 
         // Constraint::Atom carrying any AtomConstraint variant.
-        let atom_leaf = (atom_idx.clone(), atom_constraint_strategy())
-            .prop_map(|(idx, c)| Constraint::Atom(idx, c));
+        let atom_leaf = (atom_id.clone(), atom_constraint_strategy())
+            .prop_map(|(id, c)| Constraint::Atom(id, c));
         choices.push(atom_leaf.boxed());
 
         // MoleculeConstraint variants over atom refs.
         let max_atoms = counts.atom.min(3);
-        let atoms_vec = prop::collection::vec(atom_idx.clone(), 1..=max_atoms);
+        let atoms_vec = prop::collection::vec(atom_id.clone(), 1..=max_atoms);
         let optional_atoms = prop::option::of(atoms_vec.clone()).boxed();
         let molecule_connected = optional_atoms
             .clone()
@@ -1100,15 +1101,15 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     }
 
     if counts.bond > 0 {
-        let bond_idx = bond_idx_strategy(counts.bond);
-        let bond_leaf = (bond_idx.clone(), bond_constraint_strategy())
-            .prop_map(|(idx, c)| Constraint::Bond(idx, c))
+        let bond_id = bond_id_strategy(counts.bond);
+        let bond_leaf = (bond_id.clone(), bond_constraint_strategy())
+            .prop_map(|(id, c)| Constraint::Bond(id, c))
             .boxed();
         choices.push(bond_leaf);
 
         let max_bonds = counts.bond.min(3);
         let optional_bonds =
-            prop::option::of(prop::collection::vec(bond_idx, 1..=max_bonds)).boxed();
+            prop::option::of(prop::collection::vec(bond_id, 1..=max_bonds)).boxed();
         let molecule_bond_order_sum = (optional_bonds, constraint_inner_value_strategy(0..=8))
             .prop_map(|(bonds, sum)| {
                 Constraint::Molecule(MoleculeConstraint::BondOrderSum { bonds, sum })
@@ -1118,25 +1119,25 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     }
 
     if counts.dative > 0 {
-        let dative_idx = dative_bond_idx_strategy(counts.dative);
-        let dative_leaf = (dative_idx.clone(), dative_bond_constraint_strategy())
-            .prop_map(|(idx, c)| Constraint::DativeBond(idx, c))
+        let dative_id = dative_bond_id_strategy(counts.dative);
+        let dative_leaf = (dative_id.clone(), dative_bond_constraint_strategy())
+            .prop_map(|(id, c)| Constraint::DativeBond(id, c))
             .boxed();
         choices.push(dative_leaf);
 
         if counts.atom > 0 {
-            let atom_idx = atom_idx_strategy(counts.atom);
-            let donor = (dative_idx.clone(), atom_idx.clone())
+            let atom_id = atom_id_strategy(counts.atom);
+            let donor = (dative_id.clone(), atom_id.clone())
                 .prop_map(|(bond, atom)| {
                     Constraint::Relational(RelationalConstraint::DativeBondDonor { bond, atom })
                 })
                 .boxed();
-            let acceptor = (dative_idx.clone(), atom_idx.clone())
+            let acceptor = (dative_id.clone(), atom_id.clone())
                 .prop_map(|(bond, atom)| {
                     Constraint::Relational(RelationalConstraint::DativeBondAcceptor { bond, atom })
                 })
                 .boxed();
-            let donor_satisfies = (dative_idx.clone(), atom_constraint_strategy())
+            let donor_satisfies = (dative_id.clone(), atom_constraint_strategy())
                 .prop_map(|(bond, predicate)| {
                     Constraint::Relational(RelationalConstraint::DativeBondDonorSatisfies {
                         bond,
@@ -1144,7 +1145,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let acceptor_satisfies = (dative_idx.clone(), atom_constraint_strategy())
+            let acceptor_satisfies = (dative_id.clone(), atom_constraint_strategy())
                 .prop_map(|(bond, predicate)| {
                     Constraint::Relational(RelationalConstraint::DativeBondAcceptorSatisfies {
                         bond,
@@ -1158,7 +1159,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
             choices.push(acceptor_satisfies);
         }
         if counts.bond > 0 {
-            let parallels = (dative_idx, bond_idx_strategy(counts.bond))
+            let parallels = (dative_id, bond_id_strategy(counts.bond))
                 .prop_map(|(dative, parallel)| {
                     Constraint::Relational(RelationalConstraint::DativeBondParallels {
                         dative,
@@ -1171,9 +1172,9 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     }
 
     if counts.aromatic > 0 {
-        let system_idx = aromatic_system_idx_strategy(counts.aromatic);
+        let system_id = aromatic_system_id_strategy(counts.aromatic);
 
-        let aromatic_leaf = (system_idx.clone(), electron_count_value_strategy(0..=12))
+        let aromatic_leaf = (system_id.clone(), electron_count_value_strategy(0..=12))
             .prop_map(|(system, v)| {
                 Constraint::AromaticSystem(system, AromaticSystemConstraint::ElectronCount(v))
             })
@@ -1181,11 +1182,11 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
         choices.push(aromatic_leaf);
 
         if counts.atom > 0 {
-            let atom_idx = atom_idx_strategy(counts.atom);
+            let atom_id = atom_id_strategy(counts.atom);
             let max_atoms = counts.atom.min(3);
-            let atoms_vec = prop::collection::vec(atom_idx.clone(), 1..=max_atoms);
+            let atoms_vec = prop::collection::vec(atom_id.clone(), 1..=max_atoms);
 
-            let atoms = (system_idx.clone(), atoms_vec.clone())
+            let atoms = (system_id.clone(), atoms_vec.clone())
                 .prop_map(|(system, atoms)| {
                     Constraint::Relational(RelationalConstraint::AromaticSystemAtoms {
                         system,
@@ -1193,7 +1194,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let contains = (system_idx.clone(), atom_idx)
+            let contains = (system_id.clone(), atom_id)
                 .prop_map(|(system, atom)| {
                     Constraint::Relational(RelationalConstraint::AromaticSystemContains {
                         system,
@@ -1201,7 +1202,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let contains_all = (system_idx.clone(), atoms_vec)
+            let contains_all = (system_id.clone(), atoms_vec)
                 .prop_map(|(system, atoms)| {
                     Constraint::Relational(RelationalConstraint::AromaticSystemContainsAll {
                         system,
@@ -1209,7 +1210,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let all_atoms = (system_idx.clone(), atom_constraint_strategy())
+            let all_atoms = (system_id.clone(), atom_constraint_strategy())
                 .prop_map(|(system, predicate)| {
                     Constraint::Relational(RelationalConstraint::AromaticSystemAllAtoms {
                         system,
@@ -1217,7 +1218,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let any_atom = (system_idx, atom_constraint_strategy())
+            let any_atom = (system_id, atom_constraint_strategy())
                 .prop_map(|(system, predicate)| {
                     Constraint::Relational(RelationalConstraint::AromaticSystemAnyAtom {
                         system,
@@ -1234,9 +1235,9 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     }
 
     if counts.multicenter > 0 {
-        let bond_idx = multicenter_bond_idx_strategy(counts.multicenter);
+        let bond_id = multicenter_bond_id_strategy(counts.multicenter);
 
-        let multicenter_leaf = (bond_idx.clone(), electron_count_value_strategy(0..=8))
+        let multicenter_leaf = (bond_id.clone(), electron_count_value_strategy(0..=8))
             .prop_map(|(bond, v)| {
                 Constraint::MulticenterBond(bond, MulticenterBondConstraint::ElectronCount(v))
             })
@@ -1244,11 +1245,11 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
         choices.push(multicenter_leaf);
 
         if counts.atom > 0 {
-            let atom_idx = atom_idx_strategy(counts.atom);
+            let atom_id = atom_id_strategy(counts.atom);
             let max_atoms = counts.atom.min(3);
-            let atoms_vec = prop::collection::vec(atom_idx.clone(), 1..=max_atoms);
+            let atoms_vec = prop::collection::vec(atom_id.clone(), 1..=max_atoms);
 
-            let atoms = (bond_idx.clone(), atoms_vec.clone())
+            let atoms = (bond_id.clone(), atoms_vec.clone())
                 .prop_map(|(bond, atoms)| {
                     Constraint::Relational(RelationalConstraint::MulticenterBondAtoms {
                         bond,
@@ -1256,7 +1257,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let contains = (bond_idx.clone(), atom_idx)
+            let contains = (bond_id.clone(), atom_id)
                 .prop_map(|(bond, atom)| {
                     Constraint::Relational(RelationalConstraint::MulticenterBondContains {
                         bond,
@@ -1264,7 +1265,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let contains_all = (bond_idx.clone(), atoms_vec)
+            let contains_all = (bond_id.clone(), atoms_vec)
                 .prop_map(|(bond, atoms)| {
                     Constraint::Relational(RelationalConstraint::MulticenterBondContainsAll {
                         bond,
@@ -1272,7 +1273,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let all_atoms = (bond_idx.clone(), atom_constraint_strategy())
+            let all_atoms = (bond_id.clone(), atom_constraint_strategy())
                 .prop_map(|(bond, predicate)| {
                     Constraint::Relational(RelationalConstraint::MulticenterBondAllAtoms {
                         bond,
@@ -1280,7 +1281,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let any_atom = (bond_idx, atom_constraint_strategy())
+            let any_atom = (bond_id, atom_constraint_strategy())
                 .prop_map(|(bond, predicate)| {
                     Constraint::Relational(RelationalConstraint::MulticenterBondAnyAtom {
                         bond,
@@ -1297,10 +1298,10 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     }
 
     if counts.noncovalent > 0 && counts.atom > 0 {
-        let bond_idx = noncovalent_bond_idx_strategy(counts.noncovalent);
-        let atom_idx = atom_idx_strategy(counts.atom);
+        let bond_id = noncovalent_bond_id_strategy(counts.noncovalent);
+        let atom_id = atom_id_strategy(counts.atom);
 
-        let ends = (bond_idx.clone(), atom_idx.clone(), atom_idx.clone())
+        let ends = (bond_id.clone(), atom_id.clone(), atom_id.clone())
             .prop_map(|(bond, a, b)| {
                 Constraint::Relational(RelationalConstraint::NoncovalentBondEnds {
                     bond,
@@ -1308,13 +1309,13 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                 })
             })
             .boxed();
-        let contains = (bond_idx.clone(), atom_idx)
+        let contains = (bond_id.clone(), atom_id)
             .prop_map(|(bond, atom)| {
                 Constraint::Relational(RelationalConstraint::NoncovalentBondContains { bond, atom })
             })
             .boxed();
         let ends_satisfy = (
-            bond_idx,
+            bond_id,
             atom_constraint_strategy(),
             atom_constraint_strategy(),
         )
@@ -1331,16 +1332,16 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     }
 
     if counts.stereo_atom > 0 && counts.atom > 0 {
-        let sa_idx = stereo_atom_idx_strategy(counts.stereo_atom);
-        let atom_idx = atom_idx_strategy(counts.atom);
+        let sa_id = stereo_atom_id_strategy(counts.stereo_atom);
+        let atom_id = atom_id_strategy(counts.atom);
         let max_atoms = counts.atom.min(3);
 
-        let site = (sa_idx.clone(), atom_idx.clone())
+        let site = (sa_id.clone(), atom_id.clone())
             .prop_map(|(stereo_atom, atom)| {
                 Constraint::Relational(RelationalConstraint::StereoAtomSite { stereo_atom, atom })
             })
             .boxed();
-        let contains = (sa_idx.clone(), atom_idx.clone())
+        let contains = (sa_id.clone(), atom_id.clone())
             .prop_map(|(stereo_atom, atom)| {
                 Constraint::Relational(RelationalConstraint::StereoAtomContains {
                     stereo_atom,
@@ -1349,8 +1350,8 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
             })
             .boxed();
         let ligands = (
-            sa_idx.clone(),
-            prop::collection::vec(atom_idx, 1..=max_atoms),
+            sa_id.clone(),
+            prop::collection::vec(atom_id, 1..=max_atoms),
         )
             .prop_map(|(stereo_atom, atoms)| {
                 Constraint::Relational(RelationalConstraint::StereoAtomLigands {
@@ -1359,7 +1360,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                 })
             })
             .boxed();
-        let all_ligands = (sa_idx.clone(), atom_constraint_strategy())
+        let all_ligands = (sa_id.clone(), atom_constraint_strategy())
             .prop_map(|(stereo_atom, c)| {
                 Constraint::Relational(RelationalConstraint::StereoAtomAllLigands {
                     stereo_atom,
@@ -1367,7 +1368,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                 })
             })
             .boxed();
-        let any_ligand = (sa_idx, atom_constraint_strategy())
+        let any_ligand = (sa_id, atom_constraint_strategy())
             .prop_map(|(stereo_atom, c)| {
                 Constraint::Relational(RelationalConstraint::StereoAtomAnyLigand {
                     stereo_atom,
@@ -1383,11 +1384,11 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
     }
 
     if counts.stereo_bond > 0 {
-        let sb_idx = stereo_bond_idx_strategy(counts.stereo_bond);
+        let sb_id = stereo_bond_id_strategy(counts.stereo_bond);
 
         if counts.bond > 0 {
-            let bond_idx = bond_idx_strategy(counts.bond);
-            let site = (sb_idx.clone(), bond_idx)
+            let bond_id = bond_id_strategy(counts.bond);
+            let site = (sb_id.clone(), bond_id)
                 .prop_map(|(stereo_bond, bond)| {
                     Constraint::Relational(RelationalConstraint::StereoBondSite {
                         stereo_bond,
@@ -1399,10 +1400,10 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
         }
 
         if counts.atom > 0 {
-            let atom_idx = atom_idx_strategy(counts.atom);
+            let atom_id = atom_id_strategy(counts.atom);
             let max_atoms = counts.atom.min(3);
 
-            let contains = (sb_idx.clone(), atom_idx.clone())
+            let contains = (sb_id.clone(), atom_id.clone())
                 .prop_map(|(stereo_bond, atom)| {
                     Constraint::Relational(RelationalConstraint::StereoBondContains {
                         stereo_bond,
@@ -1411,8 +1412,8 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                 })
                 .boxed();
             let ligands = (
-                sb_idx.clone(),
-                prop::collection::vec(atom_idx, 1..=max_atoms),
+                sb_id.clone(),
+                prop::collection::vec(atom_id, 1..=max_atoms),
             )
                 .prop_map(|(stereo_bond, atoms)| {
                     Constraint::Relational(RelationalConstraint::StereoBondLigands {
@@ -1421,7 +1422,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let all_ligands = (sb_idx.clone(), atom_constraint_strategy())
+            let all_ligands = (sb_id.clone(), atom_constraint_strategy())
                 .prop_map(|(stereo_bond, c)| {
                     Constraint::Relational(RelationalConstraint::StereoBondAllLigands {
                         stereo_bond,
@@ -1429,7 +1430,7 @@ pub(crate) fn constraint_leaf_strategy(counts: ConstraintCounts) -> BoxedStrateg
                     })
                 })
                 .boxed();
-            let any_ligand = (sb_idx, atom_constraint_strategy())
+            let any_ligand = (sb_id, atom_constraint_strategy())
                 .prop_map(|(stereo_bond, c)| {
                     Constraint::Relational(RelationalConstraint::StereoBondAnyLigand {
                         stereo_bond,
@@ -1657,8 +1658,8 @@ pub(crate) fn transaction_atom_count_strategy() -> impl Strategy<Value = usize> 
 
 pub(crate) fn transaction_atoms(count: usize) -> Vec<AtomAst> {
     (0..count)
-        .map(|idx| {
-            let element = ELEMENTS[idx % ELEMENTS.len()];
+        .map(|id| {
+            let element = ELEMENTS[id % ELEMENTS.len()];
             AtomAst::from_element(element)
         })
         .collect()
@@ -1666,11 +1667,11 @@ pub(crate) fn transaction_atoms(count: usize) -> Vec<AtomAst> {
 
 pub(crate) fn transaction_path_bonds(count: usize) -> Vec<AddBond> {
     (0..count.saturating_sub(1))
-        .map(|idx| {
+        .map(|id| {
             Edit::add_bond(
-                AtomRef::New(idx),
-                AtomRef::New(idx + 1),
-                BondAst::from_order((idx % 3 + 1) as u8),
+                AtomRef::New(id),
+                AtomRef::New(id + 1),
+                BondAst::from_order((id % 3 + 1) as u8),
             )
         })
         .map(|edit| match edit {
@@ -1683,11 +1684,11 @@ pub(crate) fn transaction_path_bonds(count: usize) -> Vec<AddBond> {
 pub(crate) fn transaction_path_molecule(count: usize) -> MoleculeAst {
     let atoms = transaction_atoms(count);
     let bonds = (0..count.saturating_sub(1))
-        .map(|idx| {
+        .map(|id| {
             (
-                AtomId(idx as u32),
-                AtomId((idx + 1) as u32),
-                BondAst::from_order((idx % 3 + 1) as u8),
+                AtomId(id as u32),
+                AtomId((id + 1) as u32),
+                BondAst::from_order((id % 3 + 1) as u8),
             )
         })
         .collect();
@@ -1712,25 +1713,25 @@ pub(crate) enum TransactionCase {
     },
     RemoveAtom {
         count: usize,
-        idx: usize,
+        id: usize,
     },
     RemoveBond {
         count: usize,
-        idx: usize,
+        id: usize,
     },
     SetAtomCharge {
         count: usize,
-        idx: usize,
+        id: usize,
         charge: i64,
     },
     SetBondOrder {
         count: usize,
-        idx: usize,
+        id: usize,
         order: u8,
     },
     AddAtomConstraint {
         count: usize,
-        idx: usize,
+        id: usize,
         size: i64,
     },
     AddDativeBond {
@@ -1756,34 +1757,34 @@ impl TransactionCase {
     pub(crate) fn edits(&self) -> Vec<Edit> {
         match self {
             Self::AddPath { count } => transaction_add_path_edits(*count),
-            Self::RemoveAtom { count, idx } => {
-                vec![Edit::remove_atom(AtomRef::Id(AtomId((idx % count) as u32)))]
+            Self::RemoveAtom { count, id } => {
+                vec![Edit::remove_atom(AtomRef::Id(AtomId((id % count) as u32)))]
             }
-            Self::RemoveBond { count, idx } => vec![Edit::remove_bond(BondRef::Id(BondId(
-                (idx % (count - 1)) as u32,
+            Self::RemoveBond { count, id } => vec![Edit::remove_bond(BondRef::Id(BondId(
+                (id % (count - 1)) as u32,
             )))],
-            Self::SetAtomCharge { count, idx, charge } => {
+            Self::SetAtomCharge { count, id, charge } => {
                 vec![Edit::SetAtomField {
-                    id: AtomRef::Id(AtomId((idx % count) as u32)),
+                    id: AtomRef::Id(AtomId((id % count) as u32)),
                     change: AtomFieldChange::Charge {
                         old: ValueAst::default(),
                         new: ValueAst::Lit(*charge),
                     },
                 }]
             }
-            Self::SetBondOrder { count, idx, order } => {
-                let bond_idx = idx % (count - 1);
+            Self::SetBondOrder { count, id, order } => {
+                let bond_id = id % (count - 1);
                 vec![Edit::SetBondField {
-                    id: BondRef::Id(BondId(bond_idx as u32)),
+                    id: BondRef::Id(BondId(bond_id as u32)),
                     change: BondFieldChange::Order {
-                        old: ValueAst::Lit((bond_idx % 3 + 1) as i64),
+                        old: ValueAst::Lit((bond_id % 3 + 1) as i64),
                         new: ValueAst::Lit(*order as i64),
                     },
                 }]
             }
-            Self::AddAtomConstraint { count, idx, size } => {
+            Self::AddAtomConstraint { count, id, size } => {
                 vec![Edit::AddAtomConstraint {
-                    id: AtomRef::Id(AtomId((idx % count) as u32)),
+                    id: AtomRef::Id(AtomId((id % count) as u32)),
                     constraint: AtomConstraint::ring_size(*size),
                 }]
             }
@@ -1812,16 +1813,16 @@ impl TransactionCase {
 pub(crate) fn transaction_case_strategy() -> impl Strategy<Value = TransactionCase> {
     prop_oneof![
         transaction_atom_count_strategy().prop_map(|count| TransactionCase::AddPath { count }),
-        (1usize..=6, 0usize..6).prop_map(|(count, idx)| TransactionCase::RemoveAtom { count, idx }),
-        (2usize..=6, 0usize..5).prop_map(|(count, idx)| TransactionCase::RemoveBond { count, idx }),
-        (1usize..=6, 0usize..6, -3i64..=3).prop_map(|(count, idx, charge)| {
-            TransactionCase::SetAtomCharge { count, idx, charge }
+        (1usize..=6, 0usize..6).prop_map(|(count, id)| TransactionCase::RemoveAtom { count, id }),
+        (2usize..=6, 0usize..5).prop_map(|(count, id)| TransactionCase::RemoveBond { count, id }),
+        (1usize..=6, 0usize..6, -3i64..=3).prop_map(|(count, id, charge)| {
+            TransactionCase::SetAtomCharge { count, id, charge }
         }),
-        (2usize..=6, 0usize..5, 1u8..=3).prop_map(|(count, idx, order)| {
-            TransactionCase::SetBondOrder { count, idx, order }
+        (2usize..=6, 0usize..5, 1u8..=3).prop_map(|(count, id, order)| {
+            TransactionCase::SetBondOrder { count, id, order }
         }),
-        (1usize..=6, 0usize..6, 3i64..=8).prop_map(|(count, idx, size)| {
-            TransactionCase::AddAtomConstraint { count, idx, size }
+        (1usize..=6, 0usize..6, 3i64..=8).prop_map(|(count, id, size)| {
+            TransactionCase::AddAtomConstraint { count, id, size }
         }),
         (2usize..=6, 0usize..6, 0usize..6).prop_map(|(count, donor, acceptor)| {
             TransactionCase::AddDativeBond {

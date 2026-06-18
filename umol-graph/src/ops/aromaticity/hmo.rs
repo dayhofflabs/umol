@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use nalgebra::{DMatrix, SymmetricEigen};
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, SpinStateAst, ValueAst,
+    AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingSet, SpinStateAst,
 };
 use umol_graph_core::ConnectedComponentsAlgorithm;
 use umol_params::quantum::ppp::van_catledge::VanCatledgeParams;
@@ -112,17 +112,14 @@ impl HmoAromaticity {
                 let mut atoms = result.atom_indices.clone();
                 atoms.sort_unstable();
 
-                let electrons: Vec<ValueAst> = atoms
+                let electrons: Vec<i64> = atoms
                     .iter()
-                    .map(|&atom| {
-                        let pi = electrons_at(&ast.atom(atom)).unwrap_or(0);
-                        ValueAst::Lit(pi as i64)
-                    })
+                    .map(|&atom| electrons_at(&ast.atom(atom)).unwrap_or(0) as i64)
                     .collect();
 
                 candidates.push((
                     atoms,
-                    AromaticSystemAst::new(electrons)
+                    AromaticSystemAst::from_counts(electrons)
                         .with_charge(0)
                         .with_spin(SpinStateAst::closed_shell()),
                 ));

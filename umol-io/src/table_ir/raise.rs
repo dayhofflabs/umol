@@ -108,11 +108,7 @@ impl TryIntoAst<MoleculeAst> for &TableMolecule {
                     .filter(|a| seen.insert(*a))
                     .map(AtomId)
                     .collect();
-                let n = atoms.len();
-                (
-                    atoms,
-                    MulticenterBondAst::new(vec![ValueAst::Undetermined; n]),
-                )
+                (atoms, MulticenterBondAst::default())
             })
             .collect();
 

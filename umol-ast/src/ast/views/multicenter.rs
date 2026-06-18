@@ -6,6 +6,7 @@ use std::ops::Index;
 use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::constraint::MulticenterBondConstraints;
+use super::super::electrons::ElectronCountsAst;
 use super::super::ids::{AtomId, MulticenterBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::multicenter::MulticenterBondAst;
@@ -175,7 +176,7 @@ pub struct MulticenterBondView<'a> {
 
 impl<'a> MulticenterBondView<'a> {
     #[inline]
-    pub fn electrons(&self) -> &'a [ValueAst] {
+    pub fn electrons(&self) -> &'a ElectronCountsAst {
         &self.ast.electrons
     }
 
@@ -206,14 +207,12 @@ impl<'a> MulticenterBondView<'a> {
     }
 
     /// Sum of per-atom electron contributions on this multicenter bond.
-    /// `Lit(n)` when every entry is `Lit`; collapses to `Undetermined` if
-    /// any entry is non-`Lit`.
+    /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
     pub fn electron_count(&self) -> ValueAst {
-        self.ast
-            .electrons
-            .iter()
-            .cloned()
-            .fold(ValueAst::Lit(0), |acc, e| acc + e)
+        match &self.ast.electrons {
+            ElectronCountsAst::Lit(counts) => ValueAst::Lit(counts.iter().sum()),
+            ElectronCountsAst::Undetermined => ValueAst::Undetermined,
+        }
     }
 
     pub fn atom_count(&self) -> usize {
@@ -411,7 +410,7 @@ mod tests {
             molecule
                 .multicenter_bond(MulticenterBondId(0))
                 .electron_count(),
-            ValueAst::Lit(0),
+            ValueAst::Undetermined,
         );
     }
 

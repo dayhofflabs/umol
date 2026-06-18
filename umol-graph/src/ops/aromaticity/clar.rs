@@ -10,7 +10,6 @@ use std::collections::HashSet;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, SpinStateAst,
-    ValueAst,
 };
 use umol_graph_core::Graph;
 use umol_shared::element::Element;
@@ -78,17 +77,14 @@ impl ClarAromaticity {
         let mut atoms: Vec<AtomId> = selected_atoms.into_iter().collect();
         atoms.sort_unstable();
 
-        let electrons: Vec<ValueAst> = atoms
+        let electrons: Vec<i64> = atoms
             .iter()
-            .map(|&atom| {
-                let pi = electrons_at(&ast.atom(atom)).unwrap_or(0);
-                ValueAst::Lit(pi as i64)
-            })
+            .map(|&atom| electrons_at(&ast.atom(atom)).unwrap_or(0) as i64)
             .collect();
 
         Ok(vec![(
             atoms,
-            AromaticSystemAst::new(electrons)
+            AromaticSystemAst::from_counts(electrons)
                 .with_charge(0)
                 .with_spin(SpinStateAst::closed_shell()),
         )])

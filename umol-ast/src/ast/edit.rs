@@ -16,6 +16,7 @@ use super::constraint::{
     DativeBondConstraint, MulticenterBondConstraint,
 };
 use super::dative::DativeBondAst;
+use super::electrons::ElectronCountsAst;
 use super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -131,8 +132,8 @@ impl DativeBondFieldChange {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AromaticSystemFieldChange {
     Electrons {
-        old: Vec<ValueAst>,
-        new: Vec<ValueAst>,
+        old: ElectronCountsAst,
+        new: ElectronCountsAst,
     },
     Charge {
         old: ValueAst,
@@ -157,8 +158,8 @@ impl AromaticSystemFieldChange {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MulticenterBondFieldChange {
     Electrons {
-        old: Vec<ValueAst>,
-        new: Vec<ValueAst>,
+        old: ElectronCountsAst,
+        new: ElectronCountsAst,
     },
     Charge {
         old: ValueAst,

@@ -22,7 +22,8 @@ pub use hueckel_rule::HueckelRuleAromaticity;
 use thiserror::Error;
 use umol_ast::ast::{
     AromaticSystemAst, AromaticSystemId, AromaticValenceAst, AsLit, AtomConstraint, AtomId,
-    AtomView, BondConstraint, BondId, ElementAst, MoleculeAst, RingFamily, ValueAst,
+    AtomView, BondConstraint, BondId, ElectronCountsAst, ElementAst, MoleculeAst, RingFamily,
+    ValueAst,
 };
 use umol_shared::element::Element;
 
@@ -206,16 +207,20 @@ fn equalize_charges(
     let v: ValueAst = (element.valence_electrons() as i64).into();
 
     // Phase 1: validate + compute. No mutations until every atom is ground.
+    let old_electrons = ast.aromatic_system(system_idx).ast.electrons.clone();
     let mut atom_updates = Vec::with_capacity(atoms.len());
     for (i, atom_idx) in atoms.iter().copied().enumerate() {
         let atom = ast.atom(atom_idx);
         let err = || AromaticityError::NonGroundAtom(atom_idx);
         let k = &v - atom.degree() - atom.implicit_hydrogens() - 2 * atom.lone_pairs();
+        let e = match &old_electrons {
+            ElectronCountsAst::Lit(counts) => counts[i],
+            ElectronCountsAst::Undetermined => return Err(err()),
+        };
         atom_updates.push((
-            i,
             atom_idx,
             atom.charge().as_lit_ok_or_else(err)?,
-            ast.aromatic_system(system_idx).ast.electrons[i].as_lit_ok_or_else(err)?,
+            e,
             k.as_lit_ok_or_else(err)?,
         ));
     }
@@ -223,11 +228,12 @@ fn equalize_charges(
     // Phase 2: apply. All atoms are ground; the system charge fallback to 0
     // covers the case where it's still Undetermined on a fresh system entry.
     let mut accumulated = ast.aromatic_system(system_idx).charge().as_lit_or(0);
-    for (i, atom_idx, c, e, k) in atom_updates {
+    let mut new_counts = Vec::with_capacity(atom_updates.len());
+    for (atom_idx, c, e, k) in atom_updates {
+        new_counts.push(k);
         if e == k {
             continue;
         }
-        ast.aromatic_system_mut(system_idx).electrons[i] = ValueAst::Lit(k);
         accumulated += c;
         let atom_mut = ast.atom_mut(atom_idx).ast;
         atom_mut.charge = ValueAst::Lit(0);
@@ -235,6 +241,7 @@ fn equalize_charges(
             AromaticValenceAst::Aromatic(ValueAst::Lit(k)),
         ));
     }
+    ast.aromatic_system_mut(system_idx).electrons = ElectronCountsAst::Lit(new_counts);
     ast.aromatic_system_mut(system_idx).charge = ValueAst::Lit(accumulated);
     Ok(())
 }
@@ -262,7 +269,7 @@ mod tests {
     use rstest::*;
     use umol_ast::ast::{
         AromaticSystemId, AromaticValenceAst, AtomAst, AtomConstraint, AtomConstraintKind, AtomId,
-        BondAst, BondConstraintKind, MoleculeAst, SpinStateAst, ValueAst,
+        BondAst, BondConstraintKind, ElectronCountsAst, MoleculeAst, SpinStateAst, ValueAst,
     };
     use umol_ast::mol_ground;
     use umol_shared::element::Element;
@@ -456,10 +463,7 @@ mod tests {
 
         let system = ast.aromatic_system(AromaticSystemId(0));
         assert_eq!(system.ast.charge, ValueAst::Lit(system_charge));
-        assert_eq!(
-            system.ast.electrons,
-            electrons.into_iter().map(ValueAst::Lit).collect::<Vec<_>>(),
-        );
+        assert_eq!(system.ast.electrons, ElectronCountsAst::Lit(electrons));
         for (i, (q, k)) in atom_charges
             .iter()
             .zip(aromatic_valences.iter())

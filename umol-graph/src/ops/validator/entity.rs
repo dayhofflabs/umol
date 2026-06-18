@@ -1,9 +1,11 @@
-//! Structural shape checks on per-relation entities: the `electrons:
-//! Vec<ValueAst>` field on each aromatic system and multicenter bond must
-//! match the participants list in length.
+//! Structural shape checks on per-relation entities: when the `electrons:
+//! ElectronCountsAst` field on an aromatic system or multicenter bond is
+//! `Lit`, its length must match the participants list.
 
 use thiserror::Error;
-use umol_ast::ast::{AromaticSystemView, MoleculeAst, MulticenterBondView};
+use umol_ast::ast::{
+    AromaticSystemView, ElectronCountsAst, MoleculeAst, MulticenterBondView,
+};
 
 use crate::ops::solution::Solution;
 
@@ -50,9 +52,12 @@ impl EntityStructureValidator {
 fn aromatic_system_length_check(
     view: &AromaticSystemView<'_>,
 ) -> Option<EntityStructureContradiction> {
+    let ElectronCountsAst::Lit(counts) = &view.ast.electrons else {
+        return None;
+    };
     let atoms_len = view.atoms().count();
-    let electrons_len = view.ast.electrons.len();
-    if electrons_len != 0 && electrons_len != atoms_len {
+    let electrons_len = counts.len();
+    if electrons_len != atoms_len {
         Some(
             EntityStructureContradiction::AromaticSystemElectronsLengthMismatch {
                 electrons_len,
@@ -67,9 +72,12 @@ fn aromatic_system_length_check(
 fn multicenter_length_check(
     view: &MulticenterBondView<'_>,
 ) -> Option<EntityStructureContradiction> {
+    let ElectronCountsAst::Lit(counts) = &view.ast.electrons else {
+        return None;
+    };
     let atoms_len = view.atoms().count();
-    let electrons_len = view.ast.electrons.len();
-    if electrons_len != 0 && electrons_len != atoms_len {
+    let electrons_len = counts.len();
+    if electrons_len != atoms_len {
         Some(
             EntityStructureContradiction::MulticenterElectronsLengthMismatch {
                 electrons_len,
@@ -85,7 +93,7 @@ fn multicenter_length_check(
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        AromaticSystemAst, AtomAst, AtomId, Constraints, MoleculeAst, MulticenterBondAst, ValueAst,
+        AromaticSystemAst, AtomAst, AtomId, Constraints, MoleculeAst, MulticenterBondAst,
     };
     use umol_shared::element::Element;
 
@@ -100,7 +108,7 @@ mod tests {
         ];
         let aromatic = vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::new(vec![ValueAst::Lit(1), ValueAst::Lit(1)]),
+            AromaticSystemAst::from_counts(vec![1, 1]),
         )];
         let ast = MoleculeAst::from_parts(
             atoms,
@@ -135,7 +143,7 @@ mod tests {
         ];
         let multicenter = vec![(
             vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondAst::new(vec![ValueAst::Lit(1)]),
+            MulticenterBondAst::from_counts(vec![1]),
         )];
         let ast = MoleculeAst::from_parts(
             atoms,

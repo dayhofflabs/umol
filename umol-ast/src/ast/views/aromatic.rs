@@ -7,6 +7,7 @@ use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::aromatic::AromaticSystemAst;
 use super::super::constraint::AromaticSystemConstraints;
+use super::super::electrons::ElectronCountsAst;
 use super::super::ids::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
 use super::super::rings::RingView;
@@ -178,7 +179,7 @@ pub struct AromaticSystemView<'a> {
 
 impl<'a> AromaticSystemView<'a> {
     #[inline]
-    pub fn electrons(&self) -> &'a [ValueAst] {
+    pub fn electrons(&self) -> &'a ElectronCountsAst {
         &self.ast.electrons
     }
 
@@ -224,14 +225,12 @@ impl<'a> AromaticSystemView<'a> {
     }
 
     /// Sum of per-atom electron contributions on this aromatic system.
-    /// `Lit(n)` when every entry is `Lit`; collapses to `Undetermined` if
-    /// any entry is non-`Lit`.
+    /// `Lit(n)` when the counts are concrete; `Undetermined` otherwise.
     pub fn electron_count(&self) -> ValueAst {
-        self.ast
-            .electrons
-            .iter()
-            .cloned()
-            .fold(ValueAst::Lit(0), |acc, e| acc + e)
+        match &self.ast.electrons {
+            ElectronCountsAst::Lit(counts) => ValueAst::Lit(counts.iter().sum()),
+            ElectronCountsAst::Undetermined => ValueAst::Undetermined,
+        }
     }
 
     pub fn atom_count(&self) -> usize {
@@ -481,7 +480,7 @@ mod tests {
             molecule
                 .aromatic_system(AromaticSystemId(0))
                 .electron_count(),
-            ValueAst::Lit(0),
+            ValueAst::Undetermined,
         );
     }
 

@@ -8,6 +8,7 @@ use umol_shared::element::Element;
 
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
 use super::super::constraint::AtomConstraints;
+use super::super::electrons::ElectronCountsAst;
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId,
@@ -196,11 +197,13 @@ impl<'a> AtomView<'a> {
         let Some(pos) = sys.atom_ids().position(|a| a == self.id) else {
             return ValueAst::Undetermined;
         };
-        sys.ast
-            .electrons
-            .get(pos)
-            .cloned()
-            .unwrap_or(ValueAst::Undetermined)
+        match &sys.ast.electrons {
+            ElectronCountsAst::Lit(counts) => counts
+                .get(pos)
+                .map(|&n| ValueAst::Lit(n))
+                .unwrap_or(ValueAst::Undetermined),
+            ElectronCountsAst::Undetermined => ValueAst::Undetermined,
+        }
     }
 
     /// Electrons gained from aromatic system this atom belongs to.
@@ -218,7 +221,7 @@ impl<'a> AtomView<'a> {
     pub fn multicenter_degree(&self) -> ValueAst {
         let count: usize = self
             .multicenter_bonds()
-            .map(|mc| mc.electrons().len().saturating_sub(1))
+            .map(|mc| mc.atom_count().saturating_sub(1))
             .sum();
         ValueAst::Lit(count as i64)
     }
@@ -232,12 +235,13 @@ impl<'a> AtomView<'a> {
             let Some(pos) = view.atom_ids().position(|a| a == self.id) else {
                 return ValueAst::Undetermined;
             };
-            let term = view
-                .ast
-                .electrons
-                .get(pos)
-                .cloned()
-                .unwrap_or(ValueAst::Undetermined);
+            let term = match &view.ast.electrons {
+                ElectronCountsAst::Lit(counts) => counts
+                    .get(pos)
+                    .map(|&n| ValueAst::Lit(n))
+                    .unwrap_or(ValueAst::Undetermined),
+                ElectronCountsAst::Undetermined => ValueAst::Undetermined,
+            };
             sum = sum + term;
         }
         sum
@@ -534,6 +538,7 @@ mod tests {
         AromaticValenceAst, AtomConstraint, AtomConstraints, Constraints, MulticenterValenceAst,
     };
     use crate::ast::dative::DativeBondAst;
+    use crate::ast::electrons::ElectronCountsAst;
     use crate::ast::ids::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId,
@@ -1070,22 +1075,22 @@ mod tests {
 
     #[rstest]
     #[case::single_bond(
-        vec![(vec![AtomId(0), AtomId(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)])],
+        vec![(vec![AtomId(0), AtomId(1)], ElectronCountsAst::Lit(vec![2, 2]))],
         ValueAst::Lit(2),
     )]
     #[case::two_bonds(
         vec![
-            (vec![AtomId(0), AtomId(1)], vec![ValueAst::Lit(2), ValueAst::Lit(2)]),
-            (vec![AtomId(0), AtomId(2)], vec![ValueAst::Lit(1), ValueAst::Lit(1)]),
+            (vec![AtomId(0), AtomId(1)], ElectronCountsAst::Lit(vec![2, 2])),
+            (vec![AtomId(0), AtomId(2)], ElectronCountsAst::Lit(vec![1, 1])),
         ],
         ValueAst::Lit(3),
     )]
     #[case::undetermined_aborts(
-        vec![(vec![AtomId(0), AtomId(1)], vec![ValueAst::Undetermined, ValueAst::Lit(2)])],
+        vec![(vec![AtomId(0), AtomId(1)], ElectronCountsAst::Undetermined)],
         ValueAst::Undetermined,
     )]
     fn test_atom_view_multicenter_valence(
-        #[case] bonds: Vec<(Vec<AtomId>, Vec<ValueAst>)>,
+        #[case] bonds: Vec<(Vec<AtomId>, ElectronCountsAst)>,
         #[case] expected: ValueAst,
     ) {
         let multicenter: Vec<_> = bonds
@@ -1239,7 +1244,7 @@ mod tests {
             vec![],
             vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                AromaticSystemAst::new(vec![ValueAst::Lit(1), ValueAst::Lit(2), ValueAst::Lit(0)]),
+                AromaticSystemAst::from_counts(vec![1, 2, 0]),
             )],
             vec![],
             vec![],
@@ -1305,7 +1310,7 @@ mod tests {
             vec![],
             vec![(
                 vec![AtomId(0), AtomId(1), AtomId(2)],
-                MulticenterBondAst::new(vec![ValueAst::Lit(2), ValueAst::Lit(2), ValueAst::Lit(2)]),
+                MulticenterBondAst::from_counts(vec![2, 2, 2]),
             )],
             vec![],
             Vec::new(),

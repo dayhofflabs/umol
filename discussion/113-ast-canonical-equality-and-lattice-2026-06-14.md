@@ -215,8 +215,36 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
 3. `NoncovalentBondAst` — `#[derive(Lattice, Canonicalize)]`; delete `simplify_values`.
 4. Fix `NoncovalentBondAst` direct `Display`/`FromStr`/`FromEdn` (move to
   `NoncovalentBondDsl`).
-5. `AromaticSystemAst`/`MulticenterBondAst` — `electrons: Vec<ValueAst>` → `ElectronCountsAst`;
-   retype ctors; derive.
+5. `AromaticSystemAst`/`MulticenterBondAst` — `electrons: Vec<ValueAst>` → `ElectronCountsAst`
+   (whole-vector `Undetermined | Lit(Vec<i64>)`). This narrows the field: per-cell partials,
+   sets, terms, and mixed-undetermined are no longer representable. EDN: `:electrons [i j k]`
+   → `Lit`, `:electrons :undetermined` (or the key omitted) → `Undetermined`. The `Canonicalize`
+   derive on these two entities still waits on P5 (they hold constraint collections); this entry
+   is the field retype only, keeping the existing hand `meet`/`join` and routing electrons through
+   `ElectronCountsAst`.
+   a. **AST (both types)** — retype the field; ctors become `new(ElectronCountsAst)`,
+      `from_counts(Vec<i64>)` (→ `Lit`), `with_electrons(impl Into<ElectronCountsAst>)`
+      (drop `from_electrons(Vec<u8>)` / `new(Vec<ValueAst>)` / `with_electrons(Vec<ValueAst>)`);
+      hand `meet`/`join`/`is_ground`/`into_ground` route electrons via `ElectronCountsAst`
+      `Lattice`/`AsLit` (whole-vector, not per-cell); the From-table lift builds `Lit` when every
+      source cell is known else `Undetermined`; drop the per-cell electron step in
+      `simplify_values`; retype the unit tests.
+   b. **Views** — `AromaticSystemView::electrons` / `MulticenterBondView::electrons` return
+      `&ElectronCountsAst` (not `&[ValueAst]`).
+   c. **transact / edit** — `AromaticSystemFieldChange::Electrons` /
+      `MulticenterBondFieldChange::Electrons` payload `Vec<ValueAst>` → `ElectronCountsAst`; the
+      apply stays a whole-value set.
+   d. **DSL** (`dsl/aromatic.rs`, `dsl/multicenter.rs`, `dsl/molecule.rs`) — `:electrons`
+      parses/renders `[i j k]` → `Lit` and `:undetermined` → `Undetermined`; remove the per-cell
+      set/term/undetermined grammar. Update `dsl/molecule/tests.rs`: drop `[[1 2] 1]`,
+      `["?n + 1" 1]`, `[:undetermined :undetermined]`; add an `:electrons :undetermined` case.
+   e. **umol-graph** — `ops/aromaticity.rs` aromatizer builds the whole `Vec<i64>` and assigns
+      `electrons = Lit(v)` once (replacing the per-cell `electrons[i] = …` write); reads go through
+      `as_lit`. `ops/validator/entity.rs` takes the length via `as_lit().map(Vec::len)`.
+   f. **umol-io** — `table_ir/raise.rs` constructs `ElectronCountsAst::Undetermined` (replacing
+      `vec![ValueAst::Undetermined; n]`) for aromatic systems and multicenter bonds.
+   g. **doc comments** in `constraint/aromatic.rs` / `constraint/multicenter.rs` referencing the
+      `electrons` field type.
 6. `DativeBondAst` — derive after the birelation `acceptor_slot` drop.
 
 ### P5 · Constraint types

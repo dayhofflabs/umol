@@ -7,6 +7,7 @@ use super::*;
 use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{Constraint, Constraints, MoleculeConstraint};
+use crate::ast::electrons::ElectronCountsAst;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::ValueAst;
 use crate::{dsl, mol};
@@ -513,21 +514,40 @@ fn test_molecule_dsl_from_ast_has_empty_metadata() {
 #[case::aromatic_minimal(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2 3 4 5] :type ""}]}"##)]
 #[case::aromatic_with_id_and_type(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:id :a1 :atoms [0 1] :type "#e6"}]}"##)]
 #[case::aromatic_with_electrons_literals(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type ""}]}"##)]
-#[case::aromatic_with_electrons_undetermined(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons [:undetermined :undetermined] :type ""}]}"##)]
-#[case::aromatic_with_electrons_set(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons [[1 2] 1] :type ""}]}"##)]
-#[case::aromatic_with_electrons_expr(r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons ["?n + 1" 1] :type ""}]}"##)]
 #[case::aromatic_with_electrons_and_total(r##"{:atoms ["C" "C" "C" "C" "C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1 2 3 4 5] :electrons [1 1 1 1 1 1] :type "#e6"}]}"##)]
 #[case::multicenter_minimal(r##"{:atoms ["C" "C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :type ""}]}"##)]
 #[case::multicenter_with_id_and_type(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:id :m1 :atoms [0 1] :type "#e2"}]}"##)]
 #[case::multicenter_with_electrons_literals(r##"{:atoms ["B" "H" "B"] :bonds [] :multicenter-bonds [{:atoms [0 1 2] :electrons [1 0 1] :type ""}]}"##)]
-#[case::multicenter_with_electrons_undetermined(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :electrons [:undetermined :undetermined] :type ""}]}"##)]
-#[case::multicenter_with_electrons_expr(r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :electrons ["?n - 1" 1] :type ""}]}"##)]
 #[case::noncovalent(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:a 0 :b 1 :type "Hbd"}]}"##)]
 #[case::noncovalent_with_id(r##"{:atoms ["N" "H"] :bonds [] :noncovalent-bonds [{:id :n1 :a 0 :b 1 :type "Hbd"}]}"##)]
 fn test_molecule_dsl_edn_roundtrip_non_localized_entities(#[case] source: &str) {
     let edn = read_string(source).unwrap();
     let dsl = MoleculeDsl::from_edn(&edn).unwrap();
     assert_eq!(dsl.to_edn(), edn);
+}
+
+/// Explicit `:electrons :undetermined` parses to `Undetermined` (the same
+/// state as an omitted key); it is not a stable-roundtrip form because
+/// rendering `Undetermined` omits the key.
+#[rstest]
+#[case::aromatic(
+    r##"{:atoms ["C" "C"] :bonds [] :aromatic-systems [{:atoms [0 1] :electrons :undetermined :type ""}]}"##
+)]
+#[case::multicenter(
+    r##"{:atoms ["C" "C"] :bonds [] :multicenter-bonds [{:atoms [0 1] :electrons :undetermined :type ""}]}"##
+)]
+fn test_molecule_dsl_edn_parse_electrons_undetermined(#[case] source: &str) {
+    let edn = read_string(source).unwrap();
+    let dsl = MoleculeDsl::from_edn(&edn).unwrap();
+    let ast = dsl.ast();
+    let electrons = ast
+        .aromatic_systems()
+        .iter()
+        .map(|v| v.ast.electrons.clone())
+        .chain(ast.multicenter_bonds().iter().map(|v| v.ast.electrons.clone()))
+        .next()
+        .unwrap();
+    assert_eq!(electrons, ElectronCountsAst::Undetermined);
 }
 
 #[rstest]

@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use umol_ast::ast::{
     AromaticSystemAst, AtomId, AtomView, ElementAst, MoleculeAst, RingId, RingSet, RingView,
-    SpinStateAst, ValueAst,
+    SpinStateAst,
 };
 use umol_graph_core::UnionFind;
 
@@ -80,11 +80,11 @@ impl HueckelRuleAromaticity {
             let mut atoms: Vec<AtomId> = atom_set.into_iter().collect();
             atoms.sort_unstable();
 
-            let mut electrons: Vec<ValueAst> = Vec::with_capacity(atoms.len());
+            let mut electrons: Vec<i64> = Vec::with_capacity(atoms.len());
             let mut valid = true;
             for &atom in &atoms {
                 if let Some(e) = electrons_at(&ast.atom(atom)) {
-                    electrons.push(ValueAst::Lit(e as i64));
+                    electrons.push(e as i64);
                 } else {
                     valid = false;
                     break;
@@ -96,7 +96,7 @@ impl HueckelRuleAromaticity {
 
             candidates.push((
                 atoms,
-                AromaticSystemAst::new(electrons)
+                AromaticSystemAst::from_counts(electrons)
                     .with_charge(0)
                     .with_spin(SpinStateAst::closed_shell()),
             ));
@@ -249,8 +249,8 @@ fn merge_overlapping_systems(aromatic_systems: &[HashSet<AtomId>]) -> Vec<HashSe
 mod tests {
     use rstest::*;
     use umol_ast::ast::{
-        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElementAst, MoleculeAst,
-        RingFamily, ValueAst,
+        AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, ElectronCountsAst, ElementAst,
+        MoleculeAst, RingFamily, ValueAst,
     };
     use umol_shared::element::Element;
 
@@ -500,15 +500,10 @@ mod tests {
     }
 
     fn electron_total(system: &(Vec<AtomId>, AromaticSystemAst)) -> i64 {
-        system
-            .1
-            .electrons
-            .iter()
-            .map(|v| match v {
-                ValueAst::Lit(n) => *n,
-                _ => 0,
-            })
-            .sum()
+        match &system.1.electrons {
+            ElectronCountsAst::Lit(counts) => counts.iter().sum(),
+            ElectronCountsAst::Undetermined => 0,
+        }
     }
 
     #[rstest]

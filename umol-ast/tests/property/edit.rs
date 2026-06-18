@@ -101,7 +101,7 @@ proptest! {
 
     /// `inline_constraints` deposits each top-level narrow leaf into the
     /// targeted entity's inline `constraints` store, indexed by the leaf's
-    /// `kind()`. Last-wins per kind: if the same `(idx, kind)` appeared
+    /// `kind()`. Last-wins per kind: if the same `(id, kind)` appeared
     /// multiple times, or if the entity already had an inline same-kind
     /// entry, the kind is still present after the call.
     #[test]
@@ -117,20 +117,20 @@ proptest! {
             HashSet::new();
         for c in ast.constraints().iter() {
             match c {
-                Constraint::Atom(idx, inner) => {
-                    atom_kinds.insert((*idx, inner.kind()));
+                Constraint::Atom(id, inner) => {
+                    atom_kinds.insert((*id, inner.kind()));
                 }
-                Constraint::Bond(idx, inner) => {
-                    bond_kinds.insert((*idx, inner.kind()));
+                Constraint::Bond(id, inner) => {
+                    bond_kinds.insert((*id, inner.kind()));
                 }
-                Constraint::DativeBond(idx, inner) => {
-                    dative_kinds.insert((*idx, inner.kind()));
+                Constraint::DativeBond(id, inner) => {
+                    dative_kinds.insert((*id, inner.kind()));
                 }
-                Constraint::AromaticSystem(idx, inner) => {
-                    aromatic_kinds.insert((*idx, inner.kind()));
+                Constraint::AromaticSystem(id, inner) => {
+                    aromatic_kinds.insert((*id, inner.kind()));
                 }
-                Constraint::MulticenterBond(idx, inner) => {
-                    multicenter_kinds.insert((*idx, inner.kind()));
+                Constraint::MulticenterBond(id, inner) => {
+                    multicenter_kinds.insert((*id, inner.kind()));
                 }
                 _ => {}
             }
@@ -139,34 +139,34 @@ proptest! {
         let mut a = ast;
         a.inline_constraints();
 
-        for (idx, kind) in atom_kinds {
+        for (id, kind) in atom_kinds {
             prop_assert!(
-                a[idx].constraints.contains(kind),
-                "atom {idx:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(kind),
+                "atom {id:?} missing kind {kind:?} after inline",
             );
         }
-        for (idx, kind) in bond_kinds {
+        for (id, kind) in bond_kinds {
             prop_assert!(
-                a[idx].constraints.contains(kind),
-                "bond {idx:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(kind),
+                "bond {id:?} missing kind {kind:?} after inline",
             );
         }
-        for (idx, kind) in dative_kinds {
+        for (id, kind) in dative_kinds {
             prop_assert!(
-                a[idx].constraints.contains(kind),
-                "dative bond {idx:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(kind),
+                "dative bond {id:?} missing kind {kind:?} after inline",
             );
         }
-        for (idx, kind) in aromatic_kinds {
+        for (id, kind) in aromatic_kinds {
             prop_assert!(
-                a[idx].constraints.contains(kind),
-                "aromatic system {idx:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(kind),
+                "aromatic system {id:?} missing kind {kind:?} after inline",
             );
         }
-        for (idx, kind) in multicenter_kinds {
+        for (id, kind) in multicenter_kinds {
             prop_assert!(
-                a[idx].constraints.contains(kind),
-                "multicenter bond {idx:?} missing kind {kind:?} after inline",
+                a[id].constraints.contains(kind),
+                "multicenter bond {id:?} missing kind {kind:?} after inline",
             );
         }
     }

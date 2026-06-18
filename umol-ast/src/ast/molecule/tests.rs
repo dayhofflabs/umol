@@ -18,6 +18,7 @@ use super::super::constraint::{
     SubPatternAnchor,
 };
 use super::super::dative::DativeBondAst;
+use super::super::electrons::ElectronCountsAst;
 use super::super::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId,
@@ -1343,11 +1344,11 @@ fn test_molecule_builder_aromatic_system_mut(#[from(rich_molecule)] ast: Molecul
 fn test_molecule_builder_multicenter_bond_mut(#[from(rich_molecule)] ast: MoleculeAst) {
     let mut b = ast.edit();
     b.multicenter_bond_mut(MulticenterBondId(0)).ast.electrons =
-        vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)];
+        ElectronCountsAst::Lit(vec![1, 1, 0]);
     let result = b.build();
     assert_eq!(
         result[MulticenterBondId(0)].electrons,
-        vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)],
+        ElectronCountsAst::Lit(vec![1, 1, 0]),
     );
 }
 
@@ -1691,12 +1692,12 @@ fn test_molecule_ast_index_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) 
 
 #[rstest]
 fn test_molecule_ast_index_aromatic_system(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert!(ast[AromaticSystemId(0)].electrons.is_empty());
+    assert_eq!(ast[AromaticSystemId(0)].electrons, ElectronCountsAst::Undetermined);
 }
 
 #[rstest]
 fn test_molecule_ast_index_multicenter_bond(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert!(ast[MulticenterBondId(0)].electrons.is_empty());
+    assert_eq!(ast[MulticenterBondId(0)].electrons, ElectronCountsAst::Undetermined);
 }
 
 #[rstest]
@@ -1749,49 +1750,49 @@ fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst
 
 #[rstest]
 fn test_molecule_ast_aromatic_system_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
-    ast.aromatic_system_mut(AromaticSystemId(0)).electrons = vec![ValueAst::Lit(1); 3];
+    ast.aromatic_system_mut(AromaticSystemId(0)).electrons = ElectronCountsAst::Lit(vec![1; 3]);
     assert_eq!(
         ast[AromaticSystemId(0)].electrons,
-        vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(1)],
+        ElectronCountsAst::Lit(vec![1, 1, 1]),
     );
 }
 
 #[rstest]
 fn test_molecule_ast_aromatic_systems_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
     for a in ast.aromatic_systems_mut() {
-        a.electrons = vec![ValueAst::Lit(1); 3];
+        a.electrons = ElectronCountsAst::Lit(vec![1; 3]);
     }
-    let electrons: Vec<Vec<ValueAst>> = ast
+    let electrons: Vec<ElectronCountsAst> = ast
         .aromatic_systems()
         .iter()
         .map(|v| v.ast.electrons.clone())
         .collect();
-    assert_eq!(electrons, vec![vec![ValueAst::Lit(1); 3]]);
+    assert_eq!(electrons, vec![ElectronCountsAst::Lit(vec![1; 3])]);
 }
 
 #[rstest]
 fn test_molecule_ast_multicenter_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
     ast.multicenter_bond_mut(MulticenterBondId(0)).electrons =
-        vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)];
+        ElectronCountsAst::Lit(vec![1, 1, 0]);
     assert_eq!(
         ast[MulticenterBondId(0)].electrons,
-        vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)],
+        ElectronCountsAst::Lit(vec![1, 1, 0]),
     );
 }
 
 #[rstest]
 fn test_molecule_ast_multicenter_bonds_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
     for m in ast.multicenter_bonds_mut() {
-        m.electrons = vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)];
+        m.electrons = ElectronCountsAst::Lit(vec![1, 1, 0]);
     }
-    let electrons: Vec<Vec<ValueAst>> = ast
+    let electrons: Vec<ElectronCountsAst> = ast
         .multicenter_bonds()
         .iter()
         .map(|v| v.ast.electrons.clone())
         .collect();
     assert_eq!(
         electrons,
-        vec![vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)]],
+        vec![ElectronCountsAst::Lit(vec![1, 1, 0])],
     );
 }
 
@@ -2100,11 +2101,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     {
         let ar = ast.aromatic_system_mut(AromaticSystemId(0));
         ar.charge = ValueAst::term(ValueTerm::Lit(0));
-        ar.electrons = vec![
-            ValueAst::term(ValueTerm::Lit(1)),
-            ValueAst::term(ValueTerm::Lit(1)),
-            ValueAst::term(ValueTerm::Lit(1)),
-        ];
+        ar.electrons = ElectronCountsAst::Lit(vec![1, 1, 1]);
         ar.spin = SpinStateAst {
             unpaired: ValueAst::term(ValueTerm::Lit(0)),
             multiplicity: ValueAst::term(ValueTerm::Lit(1)),
@@ -2115,11 +2112,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     {
         let mc = ast.multicenter_bond_mut(MulticenterBondId(0));
         mc.charge = ValueAst::term(ValueTerm::Lit(0));
-        mc.electrons = vec![
-            ValueAst::term(ValueTerm::Lit(1)),
-            ValueAst::term(ValueTerm::Lit(1)),
-            ValueAst::term(ValueTerm::Lit(0)),
-        ];
+        mc.electrons = ElectronCountsAst::Lit(vec![1, 1, 0]);
         mc.spin = SpinStateAst {
             unpaired: ValueAst::term(ValueTerm::Lit(0)),
             multiplicity: ValueAst::term(ValueTerm::Lit(1)),
@@ -2205,7 +2198,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     assert_eq!(ar.charge, ValueAst::Lit(0));
     assert_eq!(
         ar.electrons,
-        vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(1)],
+        ElectronCountsAst::Lit(vec![1, 1, 1]),
     );
     assert_eq!(ar.spin, SpinStateAst::from((0_u8, 1_u8)));
 
@@ -2214,7 +2207,7 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     assert_eq!(mc.charge, ValueAst::Lit(0));
     assert_eq!(
         mc.electrons,
-        vec![ValueAst::Lit(1), ValueAst::Lit(1), ValueAst::Lit(0)],
+        ElectronCountsAst::Lit(vec![1, 1, 0]),
     );
     assert_eq!(mc.spin, SpinStateAst::from((0_u8, 1_u8)));
 

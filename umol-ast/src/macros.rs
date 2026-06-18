@@ -343,7 +343,7 @@ mod tests {
         AromaticSystemAst, AromaticSystemConstraint, AtomAst, AtomConstraint, AtomId, BondAst,
         BondConstraint, Constraints, DativeBondAst, DativeBondConstraint, MoleculeAst,
         MulticenterBondAst, NoncovalentBondAst, NoncovalentBondKind, StereoAtomAst, StereoBondAst,
-        StereoCosetAst, StereoKind, ValueAst,
+        StereoCosetAst, StereoKind,
     };
     use crate::dsl::molecule::Metadata;
     use crate::dsl::{AtomDsl, MoleculeDsl};
@@ -358,7 +358,7 @@ mod tests {
         MoleculeAst::from_parts(vec![AtomAst::from_element(Element::C); 3],
             vec![(AtomId(0), AtomId(1), BondAst::from_order(1)), (AtomId(1), AtomId(2), BondAst::from_order(1)), (AtomId(2), AtomId(0), BondAst::from_order(1))],
             vec![], vec![(vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::new(vec![ValueAst::Lit(1); 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
+            AromaticSystemAst::from_counts(vec![1; 3]).with_constraint(AromaticSystemConstraint::electron_count(3)))],
             vec![], vec![],
             Vec::new(), Vec::new(), Constraints::default()))]
     fn test_mol_macro(#[case] input: &str, #[case] expected: MoleculeAst) {
