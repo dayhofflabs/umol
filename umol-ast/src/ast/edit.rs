@@ -116,14 +116,12 @@ impl BondFieldChange {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DativeBondFieldChange {
-    AcceptorSlot { old: u8, new: u8 },
     Order { old: ValueAst, new: ValueAst },
 }
 
 impl DativeBondFieldChange {
     pub fn inverse(self) -> Self {
         match self {
-            Self::AcceptorSlot { old, new } => Self::AcceptorSlot { old: new, new: old },
             Self::Order { old, new } => Self::Order { old: new, new: old },
         }
     }

@@ -373,11 +373,7 @@ mod tests {
     use crate::ast::constraint::DativeBondConstraints;
 
     fn dative(order: ValueAst, constraints: DativeBondConstraints) -> DativeBondAst {
-        DativeBondAst {
-            acceptor_slot: 0,
-            order,
-            constraints,
-        }
+        DativeBondAst { order, constraints }
     }
 
     #[rustfmt::skip]

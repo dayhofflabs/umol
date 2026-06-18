@@ -1637,12 +1637,6 @@ impl MoleculeBuilder {
     ) -> Result<(), TransactionError> {
         let dat = self.dative_bond_mut(id);
         match change {
-            DativeBondFieldChange::AcceptorSlot { old, new } => {
-                if dat.ast.acceptor_slot != old {
-                    return Err(TransactionError::OldStateMismatch);
-                }
-                dat.ast.acceptor_slot = new;
-            }
             DativeBondFieldChange::Order { old, new } => {
                 if dat.ast.order != old {
                     return Err(TransactionError::OldStateMismatch);
@@ -2948,7 +2942,6 @@ mod tests {
                 id: DativeBondRef::Id(DativeBondId(0)),
                 atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
                 ast: DativeBondAst {
-                    acceptor_slot: 1,
                     order: ValueAst::Lit(1),
                     constraints: Default::default(),
                 },
@@ -2966,7 +2959,6 @@ mod tests {
                 id: DativeBondRef::Id(DativeBondId(0)),
                 atoms: vec![AtomRef::Id(AtomId(1)), AtomRef::Id(AtomId(0))], // wrong order
                 ast: DativeBondAst {
-                    acceptor_slot: 1,
                     order: ValueAst::Lit(1),
                     constraints: Default::default(),
                 },
@@ -3278,7 +3270,6 @@ mod tests {
                     id: DativeBondRef::Id(DativeBondId(0)),
                     atoms: vec![AtomRef::Id(AtomId(0)), AtomRef::Id(AtomId(1))],
                     ast: DativeBondAst {
-                        acceptor_slot: 1,
                         order: ValueAst::Lit(1),
                         constraints: Default::default(),
                     },

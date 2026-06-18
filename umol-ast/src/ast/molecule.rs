@@ -2,7 +2,6 @@
 
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
-use std::iter;
 use std::ops::Index;
 use std::sync::{Arc, OnceLock};
 
@@ -59,7 +58,7 @@ pub struct MoleculeAst {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
     bonds: Arc<Vec<BondAst>>,
-    dative_bonds: Arc<VarRelationSet<NodeId, Unordered, DativeBondAst>>,
+    dative_bonds: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>>,
     aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
     multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
     noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
@@ -165,23 +164,15 @@ impl MoleculeAst {
         let bond_data: Vec<BondAst> = bonds.into_iter().map(|(_, _, d)| d).collect();
         let graph = Graph::new(node_count, &edges);
 
-        let dative_bonds = VarRelationSet::new(
+        let dative_bonds = FixedVarBirelationSet::new(
             dative
                 .into_iter()
-                .map(|(donors, acceptor, mut d)| {
-                    let acceptor_node = NodeId::from(acceptor);
-                    let mut participants: Vec<NodeId> = donors
-                        .into_iter()
-                        .map(NodeId::from)
-                        .chain(iter::once(acceptor_node))
-                        .collect();
-                    participants.sort_unstable();
-                    let slot = participants
-                        .iter()
-                        .position(|&n| n == acceptor_node)
-                        .expect("acceptor must appear in participants");
-                    d.acceptor_slot = slot as u8;
-                    (participants, d)
+                .map(|(donors, acceptor, d)| {
+                    (
+                        [NodeId::from(acceptor)],
+                        donors.into_iter().map(NodeId::from).collect(),
+                        d,
+                    )
                 })
                 .collect(),
         );
@@ -241,7 +232,7 @@ impl MoleculeAst {
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
         bonds: Arc<Vec<BondAst>>,
-        dative_bonds: Arc<VarRelationSet<NodeId, Unordered, DativeBondAst>>,
+        dative_bonds: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>>,
         aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
         multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
         noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,

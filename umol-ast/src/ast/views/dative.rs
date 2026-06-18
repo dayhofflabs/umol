@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::ops::Index;
 
-use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
+use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
 
 use super::super::constraint::DativeBondConstraints;
 use super::super::dative::DativeBondAst;
@@ -17,13 +17,20 @@ use super::atom::AtomView;
 #[derive(Clone, Copy)]
 pub struct DativeBondViews<'a> {
     molecule: &'a MoleculeAst,
-    dative_bonds: &'a VarRelationSet<NodeId, Unordered, DativeBondAst>,
+    dative_bonds: &'a FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
 }
 
 impl<'a> DativeBondViews<'a> {
     pub(crate) fn new(
         molecule: &'a MoleculeAst,
-        dative_bonds: &'a VarRelationSet<NodeId, Unordered, DativeBondAst>,
+        dative_bonds: &'a FixedVarBirelationSet<
+            NodeId,
+            Ordered,
+            1,
+            NodeId,
+            Unordered,
+            DativeBondAst,
+        >,
     ) -> Self {
         Self {
             molecule,
@@ -42,17 +49,12 @@ impl<'a> DativeBondViews<'a> {
     pub fn iter(&self) -> impl Iterator<Item = DativeBondView<'a>> {
         let molecule = self.molecule;
         let set = self.dative_bonds;
-        set.relation_ids().map(move |rid| {
-            let atoms = set.participants(rid);
-            let ast = set.data(rid);
-            let acceptor_id = atoms[ast.acceptor_slot as usize];
-            DativeBondView {
-                id: DativeBondId::from(rid),
-                ast,
-                acceptor_id,
-                atoms,
-                molecule,
-            }
+        set.relation_ids().map(move |rid| DativeBondView {
+            id: DativeBondId::from(rid),
+            ast: set.data(rid),
+            acceptor_id: set.participants_1(rid)[0],
+            donors: set.participants_2(rid),
+            molecule,
         })
     }
 
@@ -65,14 +67,11 @@ impl<'a> DativeBondViews<'a> {
             return None;
         }
         let rid = RelationId::from(id);
-        let atoms = self.dative_bonds.participants(rid);
-        let ast = self.dative_bonds.data(rid);
-        let acceptor_id = atoms[ast.acceptor_slot as usize];
         Some(DativeBondView {
             id,
-            ast,
-            acceptor_id,
-            atoms,
+            ast: self.dative_bonds.data(rid),
+            acceptor_id: self.dative_bonds.participants_1(rid)[0],
+            donors: self.dative_bonds.participants_2(rid),
             molecule: self.molecule,
         })
     }
@@ -96,14 +95,11 @@ impl<'a> DativeBondViews<'a> {
         let set = self.dative_bonds;
         self.incident_ids(atom).map(move |id| {
             let rid = RelationId::from(id);
-            let atoms = set.participants(rid);
-            let ast = set.data(rid);
-            let acceptor_id = atoms[ast.acceptor_slot as usize];
             DativeBondView {
                 id,
-                ast,
-                acceptor_id,
-                atoms,
+                ast: set.data(rid),
+                acceptor_id: set.participants_1(rid)[0],
+                donors: set.participants_2(rid),
                 molecule,
             }
         })
@@ -114,10 +110,12 @@ impl<'a> DativeBondViews<'a> {
         let target: HashSet<AtomId> = atoms.into_iter().collect();
         let &first = target.iter().next()?;
         self.incident_ids(first).find(|&id| {
+            let rid = RelationId::from(id);
             let parts: HashSet<AtomId> = self
                 .dative_bonds
-                .participants(RelationId::from(id))
+                .participants_1(rid)
                 .iter()
+                .chain(self.dative_bonds.participants_2(rid))
                 .map(|&n| AtomId::from(n))
                 .collect();
             parts == target
@@ -143,8 +141,9 @@ impl<'a> DativeBondViews<'a> {
             .relation_ids()
             .filter(|&rid| {
                 self.dative_bonds
-                    .participants(rid)
+                    .participants_1(rid)
                     .iter()
+                    .chain(self.dative_bonds.participants_2(rid))
                     .all(|p| set.contains(p))
             })
             .map(DativeBondId::from)
@@ -172,23 +171,18 @@ impl<'a> Index<DativeBondId> for DativeBondViews<'a> {
 }
 
 /// Borrowed view of a dative bond: index, the designated acceptor atom,
-/// and underlying `DativeBondAst`. Donor atoms and the full participant
-/// set are reachable through `donors()` and `atoms()`.
+/// and underlying `DativeBondAst`. Donor atoms via `donors()` / `donor_ids()`;
+/// the full participant set (donors then acceptor) via `atoms()` / `atom_ids()`.
 #[derive(Clone, Copy, Debug)]
 pub struct DativeBondView<'a> {
     pub id: DativeBondId,
     acceptor_id: NodeId,
-    atoms: &'a [NodeId],
+    donors: &'a [NodeId],
     pub ast: &'a DativeBondAst,
     molecule: &'a MoleculeAst,
 }
 
 impl<'a> DativeBondView<'a> {
-    #[inline]
-    pub fn acceptor_slot(&self) -> u8 {
-        self.ast.acceptor_slot
-    }
-
     #[inline]
     pub fn order(&self) -> &'a ValueAst {
         &self.ast.order
@@ -199,34 +193,25 @@ impl<'a> DativeBondView<'a> {
         &self.ast.constraints
     }
 
+    /// Donor atom ids.
+    pub fn donor_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
+        self.donors.iter().map(|&n| AtomId::from(n))
+    }
+
     pub fn acceptor_id(&self) -> AtomId {
         AtomId::from(self.acceptor_id)
     }
 
-    /// All atoms in this dative bond (donors + acceptor), sorted by `AtomId`.
+    /// All atoms in this dative bond: the donors followed by the acceptor.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        self.atoms.iter().map(|&n| AtomId::from(n))
-    }
-
-    /// Views of all atoms in this dative bond (donors + acceptor).
-    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
-        let molecule = self.molecule;
-        self.atoms
+        self.donors
             .iter()
-            .map(move |&n| molecule.atom(AtomId::from(n)))
+            .copied()
+            .chain(std::iter::once(self.acceptor_id))
+            .map(AtomId::from)
     }
 
-    /// Donor atom ids (participants minus the acceptor slot).
-    pub fn donor_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        let acceptor_slot = self.ast.acceptor_slot as usize;
-        self.atoms
-            .iter()
-            .enumerate()
-            .filter(move |(i, _)| *i != acceptor_slot)
-            .map(|(_, &n)| AtomId::from(n))
-    }
-
-    /// Donor atom views (participants minus the acceptor slot).
+    /// Donor atom views.
     pub fn donors(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
         let molecule = self.molecule;
         self.donor_ids().map(move |id| molecule.atom(id))
@@ -237,8 +222,18 @@ impl<'a> DativeBondView<'a> {
         self.molecule.atom(self.acceptor_id())
     }
 
+    /// Views of all atoms in this dative bond (donors then acceptor).
+    pub fn atoms(&self) -> impl Iterator<Item = AtomView<'a>> + 'a {
+        let molecule = self.molecule;
+        self.atom_ids().map(move |id| molecule.atom(id))
+    }
+
+    pub fn donor_count(&self) -> usize {
+        self.donors.len()
+    }
+
     pub fn atom_count(&self) -> usize {
-        self.atoms.len()
+        self.donor_count() + 1
     }
 
     /// Is dative bond ground
@@ -257,26 +252,36 @@ impl<'a> DativeBondView<'a> {
 pub struct DativeBondBuilderView<'a> {
     pub id: DativeBondId,
     pub ast: &'a DativeBondAst,
-    pub(crate) atoms: &'a [NodeId],
+    pub(crate) donors: &'a [NodeId],
     pub acceptor_id: AtomId,
 }
 
 impl<'a> DativeBondBuilderView<'a> {
+    /// All atoms: donors followed by the acceptor.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + 'a {
-        self.atoms.iter().map(|&n| AtomId::from(n))
+        let acceptor = self.acceptor_id;
+        self.donors
+            .iter()
+            .map(|&n| AtomId::from(n))
+            .chain(std::iter::once(acceptor))
     }
 }
 
 pub struct DativeBondBuilderViewMut<'a> {
     pub id: DativeBondId,
     pub ast: &'a mut DativeBondAst,
-    pub(crate) atoms: &'a [NodeId],
+    pub(crate) donors: &'a [NodeId],
     pub acceptor_id: AtomId,
 }
 
 impl<'a> DativeBondBuilderViewMut<'a> {
+    /// All atoms: donors followed by the acceptor.
     pub fn atom_ids(&self) -> impl Iterator<Item = AtomId> + '_ {
-        self.atoms.iter().map(|&n| AtomId::from(n))
+        let acceptor = self.acceptor_id;
+        self.donors
+            .iter()
+            .map(|&n| AtomId::from(n))
+            .chain(std::iter::once(acceptor))
     }
 }
 
@@ -353,11 +358,7 @@ mod tests {
             .collect();
         assert_eq!(
             collected,
-            vec![(
-                DativeBondId(0),
-                AtomId(3),
-                DativeBondAst::from_order(1).with_acceptor_slot(1),
-            )],
+            vec![(DativeBondId(0), AtomId(3), DativeBondAst::from_order(1))],
         );
     }
 

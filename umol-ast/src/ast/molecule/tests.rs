@@ -1273,8 +1273,6 @@ fn test_molecule_builder_add_dative_bond(#[from(rich_molecule)] ast: MoleculeAst
     let view = result.dative_bond(id);
     assert_eq!(view.acceptor_id(), AtomId(0));
     assert_eq!(view.donor_ids().collect::<Vec<_>>(), vec![AtomId(1)]);
-    // Participants are sorted by NodeId; acceptor=0 lands at slot 0.
-    assert_eq!(view.ast.acceptor_slot, 0);
 }
 
 #[rstest]
@@ -1511,12 +1509,11 @@ fn test_molecule_builder_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst)
 }
 
 #[rstest]
-#[case::donor_below_acceptor(AtomId(0), AtomId(1), 1)]
-#[case::donor_above_acceptor(AtomId(1), AtomId(0), 0)]
-fn test_molecule_ast_dative_acceptor_slot(
+#[case::donor_below_acceptor(AtomId(0), AtomId(1))]
+#[case::donor_above_acceptor(AtomId(1), AtomId(0))]
+fn test_molecule_ast_dative_acceptor_donor(
     #[case] donor: AtomId,
     #[case] acceptor: AtomId,
-    #[case] expected_slot: u8,
 ) {
     let atoms = vec![ground_atom(), ground_atom()];
     let ast = MoleculeAst::from_parts(
@@ -1533,7 +1530,6 @@ fn test_molecule_ast_dative_acceptor_slot(
     let view = ast.dative_bond(DativeBondId(0));
     assert_eq!(view.acceptor_id(), acceptor);
     assert_eq!(view.donor_ids().collect::<Vec<_>>(), vec![donor]);
-    assert_eq!(view.ast.acceptor_slot, expected_slot);
 }
 
 #[rstest]

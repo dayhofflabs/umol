@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{iter, mem};
+use std::mem;
 
 use umol_graph_core::{
     EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,
@@ -505,7 +505,7 @@ pub struct MoleculeBuilder {
     graph: Graph,
     atoms: Arc<Vec<AtomAst>>,
     bonds: Arc<Vec<BondAst>>,
-    dative_bonds: VarSetStorage<NodeId, Unordered, DativeBondAst>,
+    dative_bonds: FixedVarSetStorage<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
     aromatic_systems: VarSetStorage<NodeId, Unordered, AromaticSystemAst>,
     multicenter_bonds: VarSetStorage<NodeId, Unordered, MulticenterBondAst>,
     noncovalent_bonds: FixedSetStorage<NodeId, Unordered, NoncovalentBondAst, 2>,
@@ -520,7 +520,9 @@ impl MoleculeBuilder {
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
         bonds: Arc<Vec<BondAst>>,
-        dative_bonds: Arc<VarRelationSet<NodeId, Unordered, DativeBondAst>>,
+        dative_bonds: Arc<
+            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
+        >,
         aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
         multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
         noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
@@ -536,7 +538,7 @@ impl MoleculeBuilder {
             graph,
             atoms,
             bonds,
-            dative_bonds: VarSetStorage::Shared(dative_bonds),
+            dative_bonds: FixedVarSetStorage::Shared(dative_bonds),
             aromatic_systems: VarSetStorage::Shared(aromatic_systems),
             multicenter_bonds: VarSetStorage::Shared(multicenter_bonds),
             noncovalent_bonds: FixedSetStorage::Shared(noncovalent_bonds),
@@ -567,30 +569,20 @@ impl MoleculeBuilder {
         BondId::from(id)
     }
 
-    /// Append a dative-bond overlay directly to the builder.
-    ///
-    /// The participant list is sorted into dense atom-id order and the
-    /// acceptor slot is normalized into that sorted representation.
+    /// Append a dative-bond overlay directly to the builder. The acceptor is
+    /// factor 1; the donors are factor 2 (sorted by the `Unordered`
+    /// canonicalization).
     pub fn add_dative_bond(
         &mut self,
         donors: Vec<AtomId>,
         acceptor: AtomId,
-        mut bond: DativeBondAst,
+        bond: DativeBondAst,
     ) -> DativeBondId {
-        let acceptor_node = NodeId::from(acceptor);
-        let mut participants: Vec<NodeId> = donors
-            .into_iter()
-            .map(NodeId::from)
-            .chain(iter::once(acceptor_node))
-            .collect();
-        participants.sort_unstable();
-        let slot = participants
-            .iter()
-            .position(|&n| n == acceptor_node)
-            .expect("acceptor must appear in participants");
-        bond.acceptor_slot = slot as u8;
-        let i = self.dative_bonds.push(participants, bond);
-        DativeBondId(i)
+        let donors: Vec<NodeId> = donors.into_iter().map(NodeId::from).collect();
+        DativeBondId(
+            self.dative_bonds
+                .push([NodeId::from(acceptor)], donors, bond),
+        )
     }
 
     /// Append an aromatic-system overlay directly to the builder.
@@ -690,26 +682,22 @@ impl MoleculeBuilder {
 
     pub fn dative_bond(&self, id: DativeBondId) -> DativeBondBuilderView<'_> {
         match &self.dative_bonds {
-            VarSetStorage::Shared(arc) => {
+            FixedVarSetStorage::Shared(arc) => {
                 let rid = RelationId(id.0);
-                let atoms = arc.participants(rid);
-                let ast = arc.data(rid);
-                let acceptor_id = AtomId::from(atoms[ast.acceptor_slot as usize]);
                 DativeBondBuilderView {
                     id,
-                    ast,
-                    atoms,
-                    acceptor_id,
+                    ast: arc.data(rid),
+                    acceptor_id: AtomId::from(arc.participants_1(rid)[0]),
+                    donors: arc.participants_2(rid),
                 }
             }
-            VarSetStorage::Mutable(vec) => {
+            FixedVarSetStorage::Mutable(vec) => {
                 let entry = &vec[id.index()];
-                let acceptor_id = AtomId::from(entry.0[entry.1.acceptor_slot as usize]);
                 DativeBondBuilderView {
                     id,
-                    ast: &entry.1,
-                    atoms: &entry.0,
-                    acceptor_id,
+                    ast: &entry.2,
+                    acceptor_id: AtomId::from(entry.0[0]),
+                    donors: &entry.1,
                 }
             }
         }
@@ -717,16 +705,16 @@ impl MoleculeBuilder {
 
     pub fn dative_bond_mut(&mut self, id: DativeBondId) -> DativeBondBuilderViewMut<'_> {
         self.dative_bonds.materialize();
-        let VarSetStorage::Mutable(vec) = &mut self.dative_bonds else {
+        let FixedVarSetStorage::Mutable(vec) = &mut self.dative_bonds else {
             unreachable!()
         };
         let entry = &mut vec[id.index()];
-        let acceptor_id = AtomId::from(entry.0[entry.1.acceptor_slot as usize]);
+        let acceptor_id = AtomId::from(entry.0[0]);
         DativeBondBuilderViewMut {
             id,
-            atoms: &entry.0,
-            ast: &mut entry.1,
             acceptor_id,
+            donors: &entry.1,
+            ast: &mut entry.2,
         }
     }
 
@@ -1095,7 +1083,7 @@ impl MoleculeBuilder {
         self.atoms = Arc::new(new_atoms);
         self.bonds = Arc::new(new_bonds);
 
-        let removed_dative = var_relation_removed(&self.dative_bonds, &remap);
+        let removed_dative = birelation_removed(&self.dative_bonds, &remap);
         let removed_aromatic = var_relation_removed(&self.aromatic_systems, &remap);
         let removed_multicenter = var_relation_removed(&self.multicenter_bonds, &remap);
         let removed_noncovalent = fixed_relation_removed(&self.noncovalent_bonds, &remap);
@@ -1104,7 +1092,7 @@ impl MoleculeBuilder {
 
         let dative = mem::replace(
             &mut self.dative_bonds,
-            VarSetStorage::Shared(Arc::new(VarRelationSet::default())),
+            FixedVarSetStorage::Shared(Arc::new(FixedVarBirelationSet::default())),
         );
         self.dative_bonds = dative.apply_remapping(&remap);
 
@@ -1304,17 +1292,25 @@ impl MoleculeBuilder {
     ) {
         let current = self.dative_bonds.entries();
         let mut next = vec![None; current.len() + removed.len()];
-        for (idx, (parts, data)) in current.into_iter().enumerate() {
+        for (idx, (acceptor, donors, data)) in current.into_iter().enumerate() {
             let old_id = undo_remapping.dative_bond(DativeBondId(idx as u32));
-            next[old_id.index()] = Some((restore_var_participants(parts, undo_remapping), data));
+            let (acceptor, donors) =
+                restore_birelation_participants(acceptor, donors, undo_remapping);
+            next[old_id.index()] = Some((acceptor, donors, data));
         }
         for removed in removed {
+            let (acceptor, donors) = removed
+                .atoms
+                .split_last()
+                .expect("dative bond has an acceptor");
             next[removed.id.index()] = Some((
-                removed.atoms.into_iter().map(NodeId::from).collect(),
+                [NodeId::from(*acceptor)],
+                donors.iter().map(|&a| NodeId::from(a)).collect(),
                 removed.ast,
             ));
         }
-        self.dative_bonds = VarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
+        self.dative_bonds =
+            FixedVarSetStorage::Mutable(next.into_iter().map(Option::unwrap).collect());
     }
 
     fn restore_aromatic_systems(

@@ -117,4 +117,4 @@
 | [113-ast-canonical-equality-and-lattice-2026-06-14.md](113-ast-canonical-equality-and-lattice-2026-06-14.md)                       | Active        | 2026-06-14   |
 | [114-atom-bond-interning-2026-06-16.md](114-atom-bond-interning-2026-06-16.md)                                                     | Active        | 2026-06-16   |
 | [115-variable-facility-2026-06-16.md](115-variable-facility-2026-06-16.md)                                                         | Active        | 2026-06-16   |
-| [116-dative-bond-birelation-2026-06-18.md](116-dative-bond-birelation-2026-06-18.md)                                               | Active        | 2026-06-18   |
+| [116-dative-bond-birelation-2026-06-18.md](116-dative-bond-birelation-2026-06-18.md)                                               | Completed     | 2026-06-18   |

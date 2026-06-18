@@ -400,7 +400,6 @@ pub(crate) fn edge_set_strategy(atom_count: usize) -> impl Strategy<Value = Vec<
 }
 
 pub(crate) fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
-    // `acceptor_slot` is set by the owning molecule from endpoint ordering.
     // Order is sampled from the small literal range that the DSL keyword
     // shorthands cover (`:single` / `:double` / `:triple`), keeping
     // canonical-form roundtrip exercised across haptic-pair counts.
@@ -410,13 +409,8 @@ pub(crate) fn dative_bond_strategy() -> impl Strategy<Value = DativeBondAst> {
         Just(ValueAst::Lit(3)),
         Just(ValueAst::Undetermined),
     ];
-    (order_strategy, dative_bond_constraints_strategy()).prop_map(|(order, constraints)| {
-        DativeBondAst {
-            acceptor_slot: 0,
-            order,
-            constraints,
-        }
-    })
+    (order_strategy, dative_bond_constraints_strategy())
+        .prop_map(|(order, constraints)| DativeBondAst { order, constraints })
 }
 
 /// Optional `ElectronCount` constraint (the asserted total). The strategy

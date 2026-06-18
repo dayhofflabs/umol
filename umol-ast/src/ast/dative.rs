@@ -6,17 +6,11 @@ use super::constraint::{DativeBondConstraint, DativeBondConstraints};
 use super::traits::Lattice;
 use super::value::ValueAst;
 
-/// Dative bond: variable-arity coordinative bond with a designated acceptor
-/// atom. Donors and acceptor live together in the molecule's relation
-/// participants array (sorted ascending by `NodeId`); `acceptor_slot` is the
-/// index of the acceptor in that array. The two-atom case has a single donor;
-/// larger participant sets describe a multi-donor / single-acceptor bond.
+/// Dative bond data: bond order (number of electron pairs donated) and
+/// constraints. The acceptor and donor atoms are the participants of the
+/// owning molecule's dative relation; this value holds no participant refs.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DativeBondAst {
-    /// Index of the acceptor in the relation's sorted participants array.
-    /// Always meaningful in the context of a `MoleculeAst`; meaningless on a
-    /// standalone `DativeBondAst`.
-    pub acceptor_slot: u8,
     /// Bond order — number of electron pairs donated.
     pub order: ValueAst,
     pub constraints: DativeBondConstraints,
@@ -25,7 +19,6 @@ pub struct DativeBondAst {
 impl DativeBondAst {
     pub fn new(order: ValueAst) -> Self {
         Self {
-            acceptor_slot: 0,
             order,
             constraints: DativeBondConstraints::new(),
         }
@@ -33,11 +26,6 @@ impl DativeBondAst {
 
     pub fn from_order(order: u8) -> Self {
         Self::new(ValueAst::Lit(order as i64))
-    }
-
-    pub fn with_acceptor_slot(mut self, slot: u8) -> Self {
-        self.acceptor_slot = slot;
-        self
     }
 
     pub fn with_order(mut self, order: impl Into<ValueAst>) -> Self {
@@ -95,36 +83,23 @@ impl Lattice for DativeBondAst {
         self.order.is_ground() && self.constraints.is_ground()
     }
 
-    /// `acceptor_slot` is a structural anchor (u8 equality required).
     fn meet(&self, other: &Self) -> Option<Self> {
-        if self.acceptor_slot != other.acceptor_slot {
-            return None;
-        }
         Some(Self {
-            acceptor_slot: self.acceptor_slot,
             order: self.order.meet(&other.order)?,
             constraints: self.constraints.meet(&other.constraints)?,
         })
     }
 
-    /// Mismatched `acceptor_slot` widens to `Self::default()` (entity-level
-    /// undetermined).
     fn join(&self, other: &Self) -> Self {
-        if self.acceptor_slot != other.acceptor_slot {
-            return Self::default();
-        }
         Self {
-            acceptor_slot: self.acceptor_slot,
             order: self.order.join(&other.order),
             constraints: self.constraints.join(&other.constraints),
         }
     }
 
-    /// `acceptor_slot` is a structural anchor: equality required.
+    /// Field-wise: `order` and `constraints` must each match.
     fn matches(&self, target: &Self) -> bool {
-        self.acceptor_slot == target.acceptor_slot
-            && self.order.matches(&target.order)
-            && self.constraints.matches(&target.constraints)
+        self.order.matches(&target.order) && self.constraints.matches(&target.constraints)
     }
 }
 
@@ -139,27 +114,25 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::new(DativeBondAst::new(ValueAst::Lit(2)),
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(2), constraints: DativeBondConstraints::new() })]
+        DativeBondAst { order: ValueAst::Lit(2), constraints: DativeBondConstraints::new() })]
     #[case::from_order(DativeBondAst::from_order(3),
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(3), constraints: DativeBondConstraints::new() })]
+        DativeBondAst { order: ValueAst::Lit(3), constraints: DativeBondConstraints::new() })]
     fn test_dative_bond_ast_new(#[case] actual: DativeBondAst, #[case] expected: DativeBondAst) {
         assert_eq!(actual, expected);
     }
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::with_acceptor_slot(DativeBondAst::from_order(1).with_acceptor_slot(2),
-        DativeBondAst { acceptor_slot: 2, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() })]
     #[case::with_order(DativeBondAst::default().with_order(2),
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(2), constraints: DativeBondConstraints::new() })]
+        DativeBondAst { order: ValueAst::Lit(2), constraints: DativeBondConstraints::new() })]
     #[case::with_constraint(DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic),
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1),
+        DativeBondAst { order: ValueAst::Lit(1),
             constraints: DativeBondConstraints::from(DativeBondConstraint::Aromatic) })]
     #[case::with_constraints_extends(
         DativeBondAst::from_order(1)
             .with_constraint(DativeBondConstraint::Aromatic)
             .with_constraints([DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_size(6)]),
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1),
+        DativeBondAst { order: ValueAst::Lit(1),
             constraints: DativeBondConstraints::from_iter([
                 DativeBondConstraint::Aromatic,
                 DativeBondConstraint::ring_count(1),
@@ -169,7 +142,7 @@ mod tests {
         DativeBondAst::from_order(1)
             .with_constraint(DativeBondConstraint::ring_size(5))
             .with_constraint(DativeBondConstraint::ring_size(6)),
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1),
+        DativeBondAst { order: ValueAst::Lit(1),
             constraints: DativeBondConstraints::from(DativeBondConstraint::ring_size(6)) })]
     fn test_dative_bond_ast_with_methods(#[case] actual: DativeBondAst, #[case] expected: DativeBondAst) {
         assert_eq!(actual, expected);
@@ -194,7 +167,7 @@ mod tests {
     #[case::default_(DativeBondAst::default(), false)]
     #[case::order_lit(DativeBondAst::from_order(1), true)]
     #[case::order_undetermined(DativeBondAst::new(ValueAst::Undetermined), false)]
-    #[case::ground_with_constraint(DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1),
+    #[case::ground_with_constraint(DativeBondAst { order: ValueAst::Lit(1),
         constraints: DativeBondConstraints::from(DativeBondConstraint::ring_size(6)) }, true)]
     fn test_dative_bond_ast_is_ground(#[case] ast: DativeBondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
@@ -212,16 +185,6 @@ mod tests {
         DativeBondAst::from_order(2),
         DativeBondAst::new(ValueAst::Undetermined),
         false
-    )]
-    #[case::acceptor_slot_mismatch(
-        DativeBondAst::from_order(1).with_acceptor_slot(0),
-        DativeBondAst::from_order(1).with_acceptor_slot(1),
-        false
-    )]
-    #[case::acceptor_slot_match_with_wildcard_order(
-        DativeBondAst::new(ValueAst::Undetermined).with_acceptor_slot(2),
-        DativeBondAst::from_order(1).with_acceptor_slot(2),
-        true
     )]
     #[case::constraint_required_present(
         DativeBondAst::from_order(1).with_constraint(DativeBondConstraint::Aromatic),
@@ -244,7 +207,6 @@ mod tests {
     #[rstest]
     fn test_dative_bond_ast_simplify_values() {
         let mut bond = DativeBondAst {
-            acceptor_slot: 0,
             order: ValueAst::term(ValueTerm::Lit(2)),
             constraints: DativeBondConstraints::from(DativeBondConstraint::RingSize(
                 ValueAst::term(ValueTerm::Lit(6)),
@@ -254,7 +216,6 @@ mod tests {
         assert_eq!(
             bond,
             DativeBondAst {
-                acceptor_slot: 0,
                 order: ValueAst::Lit(2),
                 constraints: DativeBondConstraints::from(DativeBondConstraint::ring_size(6)),
             }
@@ -267,15 +228,15 @@ mod tests {
         DativeBondAst::default(),
         Some(DativeBondAst::default())
     )]
-    #[case::acceptor_slot_mismatch(
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
-        DativeBondAst { acceptor_slot: 1, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
+    #[case::order_mismatch(
+        DativeBondAst::from_order(1),
+        DativeBondAst::from_order(2),
         None,
     )]
     #[case::narrows_order(
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Undetermined, constraints: DativeBondConstraints::new() },
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
-        Some(DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() }),
+        DativeBondAst { order: ValueAst::Undetermined, constraints: DativeBondConstraints::new() },
+        DativeBondAst { order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
+        Some(DativeBondAst { order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() }),
     )]
     fn test_dative_bond_ast_meet(
         #[case] a: DativeBondAst,
@@ -286,10 +247,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::acceptor_slot_mismatch_widens_to_default(
-        DativeBondAst { acceptor_slot: 0, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
-        DativeBondAst { acceptor_slot: 1, order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },
-        DativeBondAst::default(),
+    #[case::order_widens_to_lit_set(
+        DativeBondAst::from_order(1),
+        DativeBondAst::from_order(2),
+        DativeBondAst { order: ValueAst::lit_set([1, 2]), constraints: DativeBondConstraints::new() },
     )]
     fn test_dative_bond_ast_join(
         #[case] a: DativeBondAst,

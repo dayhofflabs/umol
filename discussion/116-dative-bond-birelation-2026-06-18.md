@@ -1,6 +1,6 @@
 # 116 — Dative bond → fixed-var birelation
 
-Status: Active · 2026-06-18
+Status: Completed · 2026-06-18
 
 ## Problem
 
@@ -77,35 +77,36 @@ and the slot change. The DSL render/parse go through the view API
 `FixedVarSetStorage` already exist and are exercised by stereo, so no new
 infrastructure is required.
 
-## Combined accessors removed
+## Combined accessors kept, unsorted
 
-`DativeBondView::atoms()` / `atom_ids()` returned the union of donors and
-acceptor as one sorted list — a shape that only made sense while storage held a
-single flat participant list. They have no current consumers (only their own
-view tests), so they are dropped for now rather than reconstructed from the two
-factors. Callers use `donor_ids()` / `donors()` and `acceptor_id()` /
-`acceptor()`; `connecting_id` / `induced_ids` and the builder's undo records
-compute the participant union internally from the two factors. If a combined
-accessor is needed later, it returns over `participants_1 ∪ participants_2` with
-an order chosen then.
+`DativeBondView::atoms()` / `atom_ids()` / `atom_count()` return the union of
+donors and acceptor. They have real consumers — incidence-graph construction
+(`incidence.rs`), host-subgraph filtering (`molecule.rs`), and reaction rewrite
+(`molecule/rewrite.rs`) — every one of which uses the union as an *unordered
+set* (membership tests, edge building). So they stay, and the ordering question
+is moot: `atom_ids()` yields donors (factor 2, already sorted by the `Unordered`
+canonicalization) followed by the acceptor (factor 1), with no extra sort.
+`connecting_id` / `induced_ids` build the same union internally from the two
+factors.
 
 ## Plan
 
 | Phase | File(s) | Change |
 |---|---|---|
 | 1 | umol-graph-core | none — `FixedVarBirelationSet` already present |
-| 2 | `ast/dative.rs` | drop `acceptor_slot` field, `with_acceptor_slot`, and slot handling in `meet`/`join`/`matches`; struct → `{ order, constraints }`; retype tests; land `Canonicalize` (the deferred P4.6) as a plain value-type derive |
+| 2 | `ast/dative.rs` | drop `acceptor_slot` field, `with_acceptor_slot`, and slot handling in `meet`/`join`/`matches`; struct → `{ order, constraints }`; retype tests. **`Canonicalize` is *not* landed here** — `DativeBondConstraints` doesn't impl it yet, so no entity has `Canonicalize`; dropping `acceptor_slot` clears one of P4.6's two blockers, the constraint-collection blocker remains (P5) |
 | 3 | `ast/molecule.rs` | field + `from_arcs` type → `FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>`; `from_parts` maps `(donors, acceptor, d)` → `([acceptor.into()], donors→NodeId, d)` with no sort/slot; update clone/eq |
-| 4 | `ast/views/dative.rs` | views hold the birelation; `acceptor_id` ← `participants_1(rid)[0]`, donors ← `participants_2(rid)`; **remove `atoms()` / `atom_ids()`** (no consumers); drop `acceptor_slot()` accessor; `connecting_id`/`induced_ids` union both factors internally; remove the `atom_ids`/`atoms` view tests, retype the rest |
-| 5 | `ast/molecule/builder.rs` | storage → `FixedVarSetStorage<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>`; `add_dative_bond(donors, acceptor, bond)` pushes `([acceptor], donors)` — no slot; builder views read the factor split; remap/restore via the FixedVar paths (mirror stereo) |
+| 4 | `ast/views/dative.rs` | views hold the birelation; `acceptor_id` ← `participants_1(rid)[0]`, donors ← `participants_2(rid)`; drop `acceptor_slot()` accessor; `atom_ids`/`atoms`/`atom_count` kept, yielding donors-then-acceptor unsorted; `connecting_id`/`induced_ids` union both factors internally; retype tests |
+| 5 | `ast/molecule/builder.rs` | storage → `FixedVarSetStorage<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>`; `add_dative_bond(donors, acceptor, bond)` pushes `([acceptor], donors)` — no slot; builder views read the factor split; build-remove uses `birelation_removed` + FixedVar default; restore: current entries via `restore_birelation_participants`, removed records via `atoms.split_last()` → `([acceptor], donors)`. `Added/RemovedDativeBond` keep a flat `atoms: Vec<AtomId>` (acceptor last, matching `atom_ids()` and the Edit layer's `split_last`) rather than splitting into `acceptor`/`donors` like the stereo records — keeps the change off the `edit.rs`/`transact.rs` record construction |
 | 6 | `ast/edit.rs`, `ast/molecule/transact.rs` | remove `DativeBondFieldChange::AcceptorSlot` (variant, apply arm, inverse); keep `Order`; retype affected transact tests |
 | 7 | `dsl/dative.rs` (tests), `dsl/molecule.rs` | no structural change (render/parse use the view API); drop the `acceptor_slot` struct field from the `dsl/dative.rs` test |
 | 8 | `tests/property/strategies.rs` | drop `acceptor_slot` from the dative strategy; molecule-level strategy emits `(donors, acceptor)` |
 
 ## Consequence
 
-`DativeBondAst` joins the other entity value types as a clean
-`{ order, constraints }` lattice value with a derivable `Canonicalize`, closing
-the P4.6 item from doc 113. The acceptor/donor distinction is expressed once,
-structurally, in the birelation — no offset markers, no standalone-meaningless
-fields, and no slot special-casing in the lattice ops.
+`DativeBondAst` becomes a clean `{ order, constraints }` lattice value. P4.6
+(`Canonicalize`) is no longer blocked by `acceptor_slot`, but still waits on P5
+(constraint collections implementing `Canonicalize`) like every other entity —
+it is not landed by this migration. The acceptor/donor distinction is expressed
+once, structurally, in the birelation — no offset markers, no
+standalone-meaningless fields, and no slot special-casing in the lattice ops.
