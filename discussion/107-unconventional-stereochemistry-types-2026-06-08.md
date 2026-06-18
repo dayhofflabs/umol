@@ -99,20 +99,20 @@ Reply
 
   For example, a trigonal-prismatic object with six distinct ports has
 
-  # [
+  [
   \frac{6!}{|D_3|}
 
-  # \frac{720}{6}
+  \frac{720}{6}
 
   120
   ]
 
   configurations, compared with only
 
-  # [
+  [
   \frac{6!}{|O|}
 
-  # \frac{720}{24}
+  \frac{720}{24}
 
   30
   ]
