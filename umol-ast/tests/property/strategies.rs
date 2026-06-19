@@ -313,7 +313,7 @@ pub(crate) fn dative_bond_constraints_strategy() -> impl Strategy<Value = Dative
         for c in list {
             cs.add(c);
         }
-        cs
+        cs.canonicalize().unwrap_or_default()
     })
 }
 

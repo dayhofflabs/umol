@@ -34,7 +34,9 @@ pub use atom::{
     AtomConstraints, MulticenterValenceAst,
 };
 pub use bond::{BondConstraint, BondConstraintKey, BondConstraintKind, BondConstraints};
-pub use dative::{DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints};
+pub use dative::{
+    DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraintKind, DativeBondConstraints,
+};
 pub use molecule::{Constraint, Constraints, MoleculeConstraint, SubPatternAnchor};
 pub use multicenter::{
     MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
