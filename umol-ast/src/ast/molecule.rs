@@ -635,40 +635,6 @@ impl MoleculeAst {
             || self.has_stereo_bonds()
     }
 
-    /// Recursively reduce every contained `ValueAst` to canonical form
-    /// via [`ValueAst::simplify`]. Walks every entity (atoms, bonds,
-    /// dative/aromatic/multicenter/noncovalent/stereo), each entity's inline
-    /// constraint store, and the molecule-scope `Constraints` tree —
-    /// including `SubPattern` patterns recursively. Entity counts and
-    /// topology are unchanged.
-    pub fn simplify_values(&mut self) {
-        for atom in self.atoms_mut() {
-            atom.simplify_values();
-        }
-        for bond in self.bonds_mut() {
-            bond.simplify_values();
-        }
-        for db in self.dative_bonds_mut() {
-            db.simplify_values();
-        }
-        for ar in self.aromatic_systems_mut() {
-            ar.simplify_values();
-        }
-        for mc in self.multicenter_bonds_mut() {
-            mc.simplify_values();
-        }
-        for nc in self.noncovalent_bonds_mut() {
-            nc.simplify_values();
-        }
-        for sa in self.stereo_atoms_mut() {
-            sa.simplify_values();
-        }
-        for sb in self.stereo_bonds_mut() {
-            sb.simplify_values();
-        }
-        self.constraints.simplify_each();
-    }
-
     /// Drain every entity's inline `constraints` store into `self.constraints`
     /// as `Constraint::Atom` / `Bond` / `DativeBond` / `AromaticSystem` /
     /// `MulticenterBond` / `NoncovalentBond` / `StereoAtom` / `StereoBond`

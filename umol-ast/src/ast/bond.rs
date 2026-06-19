@@ -1,7 +1,5 @@
 //! Bond-level AST fragments shared across crates.
 
-use std::mem;
-
 use umol_ast_macros::{Canonicalize, Lattice};
 
 use super::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
@@ -101,13 +99,6 @@ impl BondAst {
         self
     }
 
-    /// Simplify every value-bearing field in place.
-    pub fn simplify_values(&mut self) {
-        self.order = mem::take(&mut self.order).simplify();
-        self.charge = mem::take(&mut self.charge).simplify();
-        self.spin.simplify_values();
-        self.constraints.simplify_each();
-    }
 }
 
 #[cfg(test)]
@@ -116,7 +107,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::constraint::{RingMembershipAst, RingScope};
+    use crate::ast::constraint::RingScope;
     use crate::ast::error::Contradiction;
     use crate::ast::traits::{Canonicalize, Lattice};
     use crate::bond_zeroed;
@@ -277,27 +268,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    fn test_bond_ast_simplify_values() {
-        use super::super::value::ValueTerm;
-        let mut bond = BondAst {
-            order: ValueAst::term(ValueTerm::Lit(2)),
-            charge: ValueAst::term(ValueTerm::Lit(0)),
-            spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) })),
-        };
-        bond.simplify_values();
-        assert_eq!(
-            bond,
-            BondAst {
-                order: ValueAst::Lit(2),
-                charge: ValueAst::Lit(0),
-                spin: SpinStateAst::default(),
-                constraints: BondConstraints::from(BondConstraint::ring_membership(RingScope::Size(6), 1)),
-            }
-        );
     }
 
     #[rstest]

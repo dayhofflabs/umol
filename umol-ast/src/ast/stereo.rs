@@ -8,7 +8,6 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::mem;
 
 use strum::VariantArray;
 use umol_ast_macros::Canonicalize;
@@ -693,13 +692,6 @@ macro_rules! stereo_element {
                 self.into_ground()
             }
 
-            /// Canonicalize the configuration (fold the coset under its kind) and
-            /// simplify each constraint in place.
-            pub fn simplify_values(&mut self) {
-                let cfg = mem::take(&mut self.configuration);
-                self.configuration = cfg.clone().canonicalize().unwrap_or(cfg);
-                self.constraints.simplify_each();
-            }
         }
 
         impl Lattice for $name {
@@ -1095,19 +1087,6 @@ mod tests {
             StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Undetermined)
         );
         assert_eq!(stereo_atom.constraints, StereoAtomConstraints::new());
-    }
-
-    #[rstest]
-    fn test_stereo_atom_ast_simplify_values() {
-        let mut atom = StereoAtomAst::new(
-            StereoKind::Tetrahedral,
-            StereoCosetAst::term(StereoTerm::swap(StereoTerm::Lit(0))),
-        );
-        atom.simplify_values();
-        assert_eq!(
-            atom.configuration,
-            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, StereoCosetAst::Lit(1))
-        );
     }
 
     #[rustfmt::skip]

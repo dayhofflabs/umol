@@ -461,9 +461,6 @@ macro_rules! stereo_constraint {
                 mem::take(&mut self.entries).into_iter()
             }
 
-            /// No-op: stereo constraints hold no `ValueAst`; relations are already canonical.
-            pub fn simplify_each(&mut self) {}
-
             pub fn remove(&mut self, kind: $kind) -> Option<$constraint> {
                 self.find(kind).ok().map(|i| self.entries.remove(i))
             }

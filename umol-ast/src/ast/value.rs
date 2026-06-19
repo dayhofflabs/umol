@@ -91,12 +91,6 @@ impl ValueAst {
         Self::Predicate(Box::new(predicate))
     }
 
-    /// Transitional alias for `canonicalize`, kept while entities/constraints
-    /// still call `simplify`; removed in the lattice-trait flip. Unsatisfiable
-    /// inputs map to `Undetermined`.
-    pub fn simplify(self) -> Self {
-        self.canonicalize().unwrap_or(Self::Undetermined)
-    }
 }
 
 impl From<i64> for ValueAst {

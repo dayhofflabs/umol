@@ -1,7 +1,5 @@
 //! Multicenter bond AST.
 
-use std::mem;
-
 use umol_ast_macros::Canonicalize;
 
 use super::constraint::{MulticenterBondConstraint, MulticenterBondConstraints};
@@ -87,11 +85,6 @@ impl MulticenterBondAst {
         self.into_ground()
     }
 
-    pub fn simplify_values(&mut self) {
-        self.charge = mem::take(&mut self.charge).simplify();
-        self.spin.simplify_values();
-        self.constraints.simplify_each();
-    }
 }
 
 impl Lattice for MulticenterBondAst {
@@ -145,7 +138,6 @@ mod tests {
     use super::*;
     use crate::ast::error::Contradiction;
     use crate::ast::traits::Canonicalize;
-    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -344,30 +336,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_ast_simplify_values() {
-        let mut bond = MulticenterBondAst {
-            electrons: ElectronCountsAst::Lit(vec![1]),
-            charge: ValueAst::term(ValueTerm::Lit(0)),
-            spin: SpinStateAst::default(),
-            constraints: MulticenterBondConstraints::from(
-                MulticenterBondConstraint::ElectronCount(ValueAst::term(ValueTerm::Lit(2))),
-            ),
-        };
-        bond.simplify_values();
-        assert_eq!(
-            bond,
-            MulticenterBondAst {
-                electrons: ElectronCountsAst::Lit(vec![1]),
-                charge: ValueAst::Lit(0),
-                spin: SpinStateAst::default(),
-                constraints: MulticenterBondConstraints::from(
-                    MulticenterBondConstraint::electron_count(2),
-                ),
-            },
-        );
     }
 
     #[rstest]

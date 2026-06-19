@@ -1,7 +1,5 @@
 //! Aromatic system AST.
 
-use std::mem;
-
 use umol_ast_macros::Canonicalize;
 
 use super::constraint::{AromaticSystemConstraint, AromaticSystemConstraints};
@@ -87,11 +85,6 @@ impl AromaticSystemAst {
         self.into_ground()
     }
 
-    pub fn simplify_values(&mut self) {
-        self.charge = mem::take(&mut self.charge).simplify();
-        self.spin.simplify_values();
-        self.constraints.simplify_each();
-    }
 }
 
 impl Lattice for AromaticSystemAst {
@@ -145,7 +138,6 @@ mod tests {
     use super::*;
     use crate::ast::error::Contradiction;
     use crate::ast::traits::Canonicalize;
-    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -289,30 +281,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    fn test_aromatic_system_ast_simplify_values() {
-        let mut system = AromaticSystemAst {
-            electrons: ElectronCountsAst::Lit(vec![1]),
-            charge: ValueAst::term(ValueTerm::Lit(0)),
-            spin: SpinStateAst::default(),
-            constraints: AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(
-                ValueAst::term(ValueTerm::Lit(6)),
-            )),
-        };
-        system.simplify_values();
-        assert_eq!(
-            system,
-            AromaticSystemAst {
-                electrons: ElectronCountsAst::Lit(vec![1]),
-                charge: ValueAst::Lit(0),
-                spin: SpinStateAst::default(),
-                constraints: AromaticSystemConstraints::from(
-                    AromaticSystemConstraint::electron_count(6),
-                ),
-            },
-        );
     }
 
     #[rstest]

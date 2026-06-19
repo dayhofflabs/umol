@@ -59,11 +59,6 @@ impl NoncovalentBondAst {
         self.into_ground()
     }
 
-    /// Simplify every constraint's inner value in place. `kind` carries no
-    /// `ValueAst`, so it is unchanged.
-    pub fn simplify_values(&mut self) {
-        self.constraints.simplify_each();
-    }
 }
 
 /// Noncovalent interaction kind.
@@ -246,14 +241,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    fn test_noncovalent_bond_ast_simplify_values() {
-        let mut bond = NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond);
-        let original = bond.clone();
-        bond.simplify_values();
-        assert_eq!(bond, original);
     }
 
     #[rustfmt::skip]

@@ -48,12 +48,6 @@ impl AromaticSystemConstraint {
         }
     }
 
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::ElectronCount(v) => Self::ElectronCount(v.simplify()),
-        }
-    }
-
     pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
@@ -191,16 +185,6 @@ impl AromaticSystemConstraints {
         mem::take(&mut self.0).into_iter()
     }
 
-    pub fn simplify_each(&mut self) {
-        for c in self.0.iter_mut() {
-            *c = mem::replace(
-                c,
-                AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined),
-            )
-            .simplify();
-        }
-    }
-
     pub fn remove(
         &mut self,
         kind: AromaticSystemConstraintKind,
@@ -333,8 +317,6 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::value::ValueTerm;
-
     #[rstest]
     #[case::electron_count(
         AromaticSystemConstraint::electron_count(6),
@@ -397,25 +379,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_undetermined(), expected);
-    }
-
-    #[rstest]
-    #[case::folds_expr(
-        AromaticSystemConstraint::ElectronCount(ValueAst::term(ValueTerm::Lit(6))),
-        AromaticSystemConstraint::electron_count(6)
-    )]
-    fn test_aromatic_system_constraint_simplify(
-        #[case] input: AromaticSystemConstraint,
-        #[case] expected: AromaticSystemConstraint,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::lit(AromaticSystemConstraint::electron_count(6))]
-    #[case::undetermined(AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined))]
-    fn test_aromatic_system_constraint_simplify_identity(#[case] input: AromaticSystemConstraint) {
-        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rustfmt::skip]
@@ -611,18 +574,6 @@ mod tests {
         let drained: Vec<_> = cs.take().collect();
         assert_eq!(drained, vec![AromaticSystemConstraint::electron_count(6)]);
         assert_eq!(cs, AromaticSystemConstraints::new());
-    }
-
-    #[rstest]
-    fn test_aromatic_system_constraints_simplify_each() {
-        let mut cs = AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(
-            ValueAst::term(ValueTerm::Lit(6)),
-        ));
-        cs.simplify_each();
-        assert_eq!(
-            cs,
-            AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6)),
-        );
     }
 
     #[rustfmt::skip]

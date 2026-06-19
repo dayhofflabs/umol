@@ -60,17 +60,6 @@ impl BondConstraint {
         }
     }
 
-    /// Recursively simplify the contained value; the constraint kind is
-    /// preserved.
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::Aromatic => Self::Aromatic,
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.simplify()))
-            }
-            Self::CisTransStereo(c) => Self::CisTransStereo(c.clone().canonicalize().unwrap_or(c)),
-        }
-    }
 }
 
 /// Entry identity: discriminant + sub-key. Variant order matches `BondConstraint`,
@@ -232,13 +221,6 @@ impl BondConstraints {
     /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = BondConstraint> {
         mem::take(&mut self.0).into_iter()
-    }
-
-    /// Simplify each contained constraint's inner value in place.
-    pub fn simplify_each(&mut self) {
-        for c in self.0.iter_mut() {
-            *c = mem::replace(c, BondConstraint::Aromatic).simplify();
-        }
     }
 
     pub fn remove(&mut self, kind: BondConstraintKind) -> Option<BondConstraint> {
@@ -424,8 +406,6 @@ mod tests {
 
     use super::*;
     use crate::ast::stereo::{StereoCosetAst, StereoTerm};
-    use crate::ast::value::ValueTerm;
-
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)))]
@@ -487,33 +467,6 @@ mod tests {
     #[case::cis_trans_undetermined(BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined), true)]
     fn test_bond_constraint_is_undetermined(#[case] c: BondConstraint, #[case] expected: bool) {
         assert_eq!(c.is_undetermined(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::ring_membership_all_folds_expr(BondConstraint::ring_membership(RingScope::All, ValueAst::term(ValueTerm::Lit(2))),
-        BondConstraint::ring_membership(RingScope::All, 2))]
-    #[case::ring_membership_size_folds_expr(BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) }),
-        BondConstraint::ring_membership(RingScope::Size(6), 1))]
-    #[case::cis_trans_lifts_term(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1)))),
-        BondConstraint::cis_trans_stereo(CisTransStereoAst::stereo(1_u32)))]
-    fn test_bond_constraint_simplify(
-        #[case] input: BondConstraint,
-        #[case] expected: BondConstraint,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::aromatic(BondConstraint::Aromatic)]
-    #[case::ring_membership_all_lit(BondConstraint::ring_membership(RingScope::All, 1))]
-    #[case::ring_membership_size_undetermined(BondConstraint::ring_membership(
-        RingScope::All,
-        ValueAst::Undetermined
-    ))]
-    #[case::cis_trans_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo))]
-    fn test_bond_constraint_simplify_identity(#[case] input: BondConstraint) {
-        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rustfmt::skip]
@@ -784,27 +737,6 @@ mod tests {
             ],
         );
         assert_eq!(cs, BondConstraints::new());
-    }
-
-    #[rstest]
-    fn test_bond_constraints_simplify_each() {
-        let mut cs = BondConstraints::from_iter([
-            BondConstraint::Aromatic,
-            BondConstraint::ring_membership(RingScope::All, ValueAst::term(ValueTerm::Lit(1))),
-            BondConstraint::RingMembership(RingMembershipAst {
-                scope: RingScope::Size(6),
-                count: ValueAst::term(ValueTerm::Lit(1)),
-            }),
-        ]);
-        cs.simplify_each();
-        assert_eq!(
-            cs,
-            BondConstraints::from_iter([
-                BondConstraint::Aromatic,
-                BondConstraint::ring_membership(RingScope::All, 1),
-                BondConstraint::ring_membership(RingScope::Size(6), 1),
-            ]),
-        );
     }
 
     #[rustfmt::skip]

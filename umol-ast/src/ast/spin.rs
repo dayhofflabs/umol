@@ -1,7 +1,5 @@
 //! Spin-state AST.
 
-use std::mem;
-
 use umol_ast_macros::{Canonicalize, Lattice};
 use umol_shared::spin::{SpinMultiplicity, SpinState};
 
@@ -20,12 +18,6 @@ impl SpinStateAst {
         SpinState::closed_shell().into()
     }
 
-    /// Simplify both `unpaired` and `multiplicity` in place via
-    /// [`ValueAst::simplify`].
-    pub fn simplify_values(&mut self) {
-        self.unpaired = mem::take(&mut self.unpaired).simplify();
-        self.multiplicity = mem::take(&mut self.multiplicity).simplify();
-    }
 }
 
 impl Default for SpinStateAst {

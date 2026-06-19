@@ -48,12 +48,6 @@ impl MulticenterBondConstraint {
         }
     }
 
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::ElectronCount(v) => Self::ElectronCount(v.simplify()),
-        }
-    }
-
     pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
@@ -197,16 +191,6 @@ impl MulticenterBondConstraints {
         mem::take(&mut self.0).into_iter()
     }
 
-    pub fn simplify_each(&mut self) {
-        for c in self.0.iter_mut() {
-            *c = mem::replace(
-                c,
-                MulticenterBondConstraint::ElectronCount(ValueAst::Undetermined),
-            )
-            .simplify();
-        }
-    }
-
     pub fn remove(
         &mut self,
         kind: MulticenterBondConstraintKind,
@@ -339,8 +323,6 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::value::ValueTerm;
-
     #[rstest]
     #[case::electron_count(
         MulticenterBondConstraint::electron_count(2),
@@ -403,27 +385,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_undetermined(), expected);
-    }
-
-    #[rstest]
-    #[case::folds_expr(
-        MulticenterBondConstraint::ElectronCount(ValueAst::term(ValueTerm::Lit(2))),
-        MulticenterBondConstraint::electron_count(2)
-    )]
-    fn test_multicenter_bond_constraint_simplify(
-        #[case] input: MulticenterBondConstraint,
-        #[case] expected: MulticenterBondConstraint,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::lit(MulticenterBondConstraint::electron_count(2))]
-    #[case::undetermined(MulticenterBondConstraint::ElectronCount(ValueAst::Undetermined))]
-    fn test_multicenter_bond_constraint_simplify_identity(
-        #[case] input: MulticenterBondConstraint,
-    ) {
-        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rustfmt::skip]
@@ -623,18 +584,6 @@ mod tests {
         let drained: Vec<_> = cs.take().collect();
         assert_eq!(drained, vec![MulticenterBondConstraint::electron_count(2)]);
         assert_eq!(cs, MulticenterBondConstraints::new());
-    }
-
-    #[rstest]
-    fn test_multicenter_bond_constraints_simplify_each() {
-        let mut cs = MulticenterBondConstraints::from(MulticenterBondConstraint::ElectronCount(
-            ValueAst::term(ValueTerm::Lit(2)),
-        ));
-        cs.simplify_each();
-        assert_eq!(
-            cs,
-            MulticenterBondConstraints::from(MulticenterBondConstraint::electron_count(2)),
-        );
     }
 
     #[rustfmt::skip]

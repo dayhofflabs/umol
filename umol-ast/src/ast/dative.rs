@@ -1,7 +1,5 @@
 //! Dative bond AST.
 
-use std::mem;
-
 use umol_ast_macros::Canonicalize;
 
 use super::constraint::{DativeBondConstraint, DativeBondConstraints};
@@ -69,11 +67,6 @@ impl DativeBondAst {
         self.into_ground()
     }
 
-    /// Simplify every value-bearing field in place.
-    pub fn simplify_values(&mut self) {
-        self.order = mem::take(&mut self.order).simplify();
-        self.constraints.simplify_each();
-    }
 }
 
 impl Lattice for DativeBondAst {
@@ -111,10 +104,9 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::constraint::{RingMembershipAst, RingScope};
+    use crate::ast::constraint::RingScope;
     use crate::ast::error::Contradiction;
     use crate::ast::traits::Canonicalize;
-    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -227,22 +219,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    fn test_dative_bond_ast_simplify_values() {
-        let mut bond = DativeBondAst {
-            order: ValueAst::term(ValueTerm::Lit(2)),
-            constraints: DativeBondConstraints::from(DativeBondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) })),
-        };
-        bond.simplify_values();
-        assert_eq!(
-            bond,
-            DativeBondAst {
-                order: ValueAst::Lit(2),
-                constraints: DativeBondConstraints::from(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),
-            }
-        );
     }
 
     #[rstest]

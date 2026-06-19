@@ -117,10 +117,6 @@ impl NoncovalentBondConstraints {
         mem::take(&mut self.0).into_iter()
     }
 
-    /// No-op: the inner enum is uninhabited so the store has no values to
-    /// simplify. Kept for API symmetry with the inhabited containers.
-    pub fn simplify_each(&mut self) {}
-
     pub fn remap(self, _remap: &IdRemapping) -> Self {
         self
     }
@@ -208,13 +204,6 @@ mod tests {
         let mut cs = NoncovalentBondConstraints::new();
         let drained: Vec<_> = cs.take().collect();
         assert!(drained.is_empty());
-        assert_eq!(cs, NoncovalentBondConstraints::new());
-    }
-
-    #[rstest]
-    fn test_noncovalent_bond_constraints_simplify_each() {
-        let mut cs = NoncovalentBondConstraints::new();
-        cs.simplify_each();
         assert_eq!(cs, NoncovalentBondConstraints::new());
     }
 

@@ -79,27 +79,6 @@ impl Constraint {
         }
     }
 
-    /// Recursively simplify every contained `ValueAst`. Refs are unchanged;
-    /// constraint kinds are preserved. SubPattern's inner `MoleculeAst` is
-    /// recursively simplified via [`MoleculeAst::simplify_values`].
-    pub fn simplify(self) -> Self {
-        match self {
-            Constraint::Atom(id, c) => Constraint::Atom(id, c.simplify()),
-            Constraint::Bond(id, c) => Constraint::Bond(id, c.simplify()),
-            Constraint::DativeBond(id, c) => Constraint::DativeBond(id, c.simplify()),
-            Constraint::AromaticSystem(id, c) => Constraint::AromaticSystem(id, c.simplify()),
-            Constraint::MulticenterBond(id, c) => Constraint::MulticenterBond(id, c.simplify()),
-            Constraint::NoncovalentBond(_, c) => match c {},
-            Constraint::StereoAtom(id, kind, c) => Constraint::StereoAtom(id, kind, c),
-            Constraint::StereoBond(id, kind, c) => Constraint::StereoBond(id, kind, c),
-            Constraint::Relational(r) => Constraint::Relational(r.simplify()),
-            Constraint::Molecule(m) => Constraint::Molecule(m.simplify()),
-            Constraint::And(xs) => Constraint::And(xs.into_iter().map(|c| c.simplify()).collect()),
-            Constraint::Or(xs) => Constraint::Or(xs.into_iter().map(|c| c.simplify()).collect()),
-            Constraint::Not(c) => Constraint::Not(Box::new((*c).simplify())),
-        }
-    }
-
     pub fn remap(self, remap: &IdRemapping) -> Option<Self> {
         match self {
             Constraint::Atom(id, c) => remap.atom(id).map(|i| Constraint::Atom(i, c)),
@@ -282,14 +261,6 @@ impl Constraints {
         update
     }
 
-    /// Simplify every contained constraint's value(s) in place by
-    /// recursively calling [`Constraint::simplify`].
-    pub fn simplify_each(&mut self) {
-        self.0 = mem::take(&mut self.0)
-            .into_iter()
-            .map(|c| c.simplify())
-            .collect();
-    }
 }
 
 impl FromIterator<Constraint> for Constraints {
@@ -364,33 +335,6 @@ impl MoleculeConstraint {
         }
     }
 
-    /// Simplify every contained `ValueAst` and `SpinStateAst` in place.
-    /// `Connected` carries no values to simplify; `SubPattern`'s pattern
-    /// recurses via [`MoleculeAst::simplify_values`].
-    pub fn simplify(self) -> Self {
-        match self {
-            MoleculeConstraint::ChargeSum { atoms, sum } => MoleculeConstraint::ChargeSum {
-                atoms,
-                sum: sum.simplify(),
-            },
-            MoleculeConstraint::SpinSum { atoms, mut spin } => {
-                spin.simplify_values();
-                MoleculeConstraint::SpinSum { atoms, spin }
-            }
-            MoleculeConstraint::BondOrderSum { bonds, sum } => MoleculeConstraint::BondOrderSum {
-                bonds,
-                sum: sum.simplify(),
-            },
-            MoleculeConstraint::Connected { atoms } => MoleculeConstraint::Connected { atoms },
-            MoleculeConstraint::SubPattern {
-                anchor,
-                mut pattern,
-            } => {
-                pattern.simplify_values();
-                MoleculeConstraint::SubPattern { anchor, pattern }
-            }
-        }
-    }
 
     pub fn remap(self, remap: &IdRemapping) -> Option<Self> {
         match self {
@@ -699,7 +643,7 @@ mod tests {
 
     use super::*;
     use crate::ast::atom::AtomAst;
-    use crate::ast::constraint::{RingMembershipAst, RingScope};
+    use crate::ast::constraint::RingScope;
     use crate::ast::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
@@ -764,63 +708,6 @@ mod tests {
     #[case::not(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)))), false)]
     fn test_constraint_is_vacuous(#[case] c: Constraint, #[case] expected: bool) {
         assert_eq!(c.is_vacuous(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::atom_folds(
-        Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4)))),
-        Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-    )]
-    #[case::bond_folds(
-        Constraint::Bond(BondId(0), BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) })),
-        Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::Size(6), 1)),
-    )]
-    #[case::dative_folds(
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::term(ValueTerm::Lit(2)))),
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, 2)),
-    )]
-    #[case::aromatic_system_folds(
-        Constraint::AromaticSystem(AromaticSystemId(0),
-            AromaticSystemConstraint::ElectronCount(ValueAst::term(ValueTerm::Lit(6)))),
-        Constraint::AromaticSystem(AromaticSystemId(0),
-            AromaticSystemConstraint::electron_count(6)),
-    )]
-    #[case::multicenter_folds(
-        Constraint::MulticenterBond(MulticenterBondId(0),
-            MulticenterBondConstraint::ElectronCount(ValueAst::term(ValueTerm::Lit(2)))),
-        Constraint::MulticenterBond(MulticenterBondId(0),
-            MulticenterBondConstraint::electron_count(2)),
-    )]
-    #[case::molecule_folds(
-        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::term(ValueTerm::Lit(1)) }),
-        Constraint::Molecule(MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(1) }),
-    )]
-    #[case::and_folds_recursively(
-        Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4)))),
-            Constraint::Bond(BondId(0), BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) })),
-        ]),
-        Constraint::And(vec![
-            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::Size(6), 1)),
-        ]),
-    )]
-    #[case::or_folds_recursively(
-        Constraint::Or(vec![
-            Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4)))),
-        ]),
-        Constraint::Or(vec![
-            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-        ]),
-    )]
-    #[case::not_folds_child(
-        Constraint::Not(Box::new(Constraint::Atom(AtomId(0),
-            AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4)))))),
-        Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)))),
-    )]
-    fn test_constraint_simplify(#[case] input: Constraint, #[case] expected: Constraint) {
-        assert_eq!(input.simplify(), expected);
     }
 
     #[rustfmt::skip]
@@ -1261,33 +1148,6 @@ mod tests {
         );
     }
 
-    #[rstest]
-    fn test_constraints_simplify_each() {
-        let mut cs = Constraints::new();
-        cs.push(Constraint::Atom(
-            AtomId(0),
-            AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4))),
-        ));
-        cs.push(Constraint::Bond(
-            BondId(0),
-            BondConstraint::RingMembership(RingMembershipAst {
-                scope: RingScope::Size(6),
-                count: ValueAst::term(ValueTerm::Lit(1)),
-            }),
-        ));
-        cs.simplify_each();
-        assert_eq!(
-            cs.as_slice(),
-            &[
-                Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-                Constraint::Bond(
-                    BondId(0),
-                    BondConstraint::ring_membership(RingScope::Size(6), 1)
-                ),
-            ],
-        );
-    }
-
     #[rustfmt::skip]
     #[rstest]
     #[case::flattens_top_level_and_then_sorts(
@@ -1334,35 +1194,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_vacuous(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::charge_sum_folds(
-        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::term(ValueTerm::Lit(1)) },
-        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(1) },
-    )]
-    #[case::bond_order_sum_folds(
-        MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::term(ValueTerm::Lit(4)) },
-        MoleculeConstraint::BondOrderSum { bonds: None, sum: ValueAst::Lit(4) },
-    )]
-    #[case::spin_sum_folds(
-        MoleculeConstraint::SpinSum { atoms: None,
-            spin: SpinStateAst { unpaired: ValueAst::term(ValueTerm::Lit(0)), multiplicity: ValueAst::term(ValueTerm::Lit(1)) } },
-        MoleculeConstraint::SpinSum { atoms: None, spin: SpinStateAst::from((0_u8, 1_u8)) },
-    )]
-    fn test_molecule_constraint_simplify(
-        #[case] input: MoleculeConstraint,
-        #[case] expected: MoleculeConstraint,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::connected(MoleculeConstraint::Connected { atoms: None })]
-    #[case::sub_pattern(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) })]
-    fn test_molecule_constraint_simplify_identity(#[case] input: MoleculeConstraint) {
-        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rustfmt::skip]

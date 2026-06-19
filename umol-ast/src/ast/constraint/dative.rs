@@ -53,15 +53,6 @@ impl DativeBondConstraint {
         }
     }
 
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::Aromatic => Self::Aromatic,
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.simplify()))
-            }
-        }
-    }
-
     pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
@@ -221,13 +212,6 @@ impl DativeBondConstraints {
     /// Move the entries out of the store, leaving it empty.
     pub fn take(&mut self) -> impl Iterator<Item = DativeBondConstraint> {
         mem::take(&mut self.0).into_iter()
-    }
-
-    /// Simplify each contained constraint's inner value in place.
-    pub fn simplify_each(&mut self) {
-        for c in self.0.iter_mut() {
-            *c = mem::replace(c, DativeBondConstraint::Aromatic).simplify();
-        }
     }
 
     pub fn remove(&mut self, kind: DativeBondConstraintKind) -> Option<DativeBondConstraint> {
@@ -401,8 +385,6 @@ mod tests {
     use umol_graph_core::Remapping;
 
     use super::*;
-    use crate::ast::value::ValueTerm;
-
     #[rustfmt::skip]
     #[rstest]
     #[case::ring_membership_all(DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)))]
@@ -469,34 +451,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(c.is_undetermined(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::ring_membership_all_folds_expr(
-        DativeBondConstraint::ring_membership(RingScope::All, ValueAst::term(ValueTerm::Lit(2))),
-        DativeBondConstraint::ring_membership(RingScope::All, 2),
-    )]
-    #[case::ring_membership_size_folds_expr(
-        DativeBondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) }),
-        DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
-    )]
-    fn test_dative_bond_constraint_simplify(
-        #[case] input: DativeBondConstraint,
-        #[case] expected: DativeBondConstraint,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::aromatic(DativeBondConstraint::Aromatic)]
-    #[case::ring_membership_all_lit(DativeBondConstraint::ring_membership(RingScope::All, 1))]
-    #[case::ring_membership_size_undetermined(DativeBondConstraint::ring_membership(
-        RingScope::All,
-        ValueAst::Undetermined
-    ))]
-    fn test_dative_bond_constraint_simplify_identity(#[case] input: DativeBondConstraint) {
-        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rustfmt::skip]
@@ -759,30 +713,6 @@ mod tests {
             ],
         );
         assert_eq!(cs, DativeBondConstraints::new());
-    }
-
-    #[rstest]
-    fn test_dative_bond_constraints_simplify_each() {
-        let mut cs = DativeBondConstraints::from_iter([
-            DativeBondConstraint::Aromatic,
-            DativeBondConstraint::ring_membership(
-                RingScope::All,
-                ValueAst::term(ValueTerm::Lit(1)),
-            ),
-            DativeBondConstraint::RingMembership(RingMembershipAst {
-                scope: RingScope::Size(6),
-                count: ValueAst::term(ValueTerm::Lit(1)),
-            }),
-        ]);
-        cs.simplify_each();
-        assert_eq!(
-            cs,
-            DativeBondConstraints::from_iter([
-                DativeBondConstraint::Aromatic,
-                DativeBondConstraint::ring_membership(RingScope::All, 1),
-                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
-            ]),
-        );
     }
 
     #[rustfmt::skip]

@@ -135,29 +135,6 @@ impl AtomConstraint {
         }
     }
 
-    /// Recursively simplify the contained value. The constraint kind is
-    /// preserved.
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::Valence(v) => Self::Valence(v.simplify()),
-            Self::TotalValence(v) => Self::TotalValence(v.simplify()),
-            Self::AromaticValence(c) => Self::AromaticValence(c.simplify()),
-            Self::MulticenterValence(c) => Self::MulticenterValence(c.simplify()),
-            Self::DonatedPairs(v) => Self::DonatedPairs(v.simplify()),
-            Self::AcceptedPairs(v) => Self::AcceptedPairs(v.simplify()),
-            Self::Degree(v) => Self::Degree(v.simplify()),
-            Self::TotalDegree(v) => Self::TotalDegree(v.simplify()),
-            Self::RingDegree(v) => Self::RingDegree(v.simplify()),
-            Self::RingValence(v) => Self::RingValence(v.simplify()),
-            Self::TotalHydrogens(v) => Self::TotalHydrogens(v.simplify()),
-            Self::RingMembership(m) => {
-                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.simplify()))
-            }
-            Self::TetrahedralStereo(c) => {
-                Self::TetrahedralStereo(c.clone().canonicalize().unwrap_or(c))
-            }
-        }
-    }
 }
 
 impl Canonicalize for AtomConstraint {
@@ -258,15 +235,6 @@ impl AromaticValenceAst {
             },
             Self::NotAromatic => ValueAst::Lit(0),
             Self::Undetermined => ValueAst::Undetermined,
-        }
-    }
-
-    /// Simplify the inner `ValueAst` of `Aromatic(_)`. Other variants are
-    /// already canonical.
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::Aromatic(v) => Self::Aromatic(v.simplify()),
-            other => other,
         }
     }
 
@@ -398,15 +366,6 @@ impl MulticenterValenceAst {
 
     pub fn is_multicenter(&self) -> bool {
         matches!(self, Self::Multicenter(_))
-    }
-
-    /// Simplify the inner `ValueAst` of `Multicenter(_)`. Other variants
-    /// are already canonical.
-    pub fn simplify(self) -> Self {
-        match self {
-            Self::Multicenter(v) => Self::Multicenter(v.simplify()),
-            other => other,
-        }
     }
 
     /// Pattern matches value.
@@ -682,15 +641,6 @@ impl AtomConstraints {
     /// are in the store's internal sorted-by-kind order.
     pub fn take(&mut self) -> impl Iterator<Item = AtomConstraint> {
         mem::take(&mut self.entries).into_iter()
-    }
-
-    /// Simplify each contained constraint's value in place. Kind is
-    /// preserved by `AtomConstraint::simplify`, so the sorted-by-kind
-    /// invariant holds without re-sorting.
-    pub fn simplify_each(&mut self) {
-        for c in self.entries.iter_mut() {
-            *c = mem::replace(c, AtomConstraint::Valence(ValueAst::Undetermined)).simplify();
-        }
     }
 
     pub fn remove(&mut self, kind: AtomConstraintKind) -> Option<AtomConstraint> {
@@ -989,9 +939,7 @@ mod tests {
     use rstest::*;
     use umol_graph_core::Remapping;
 
-    use super::*;
-    use crate::ast::stereo::{StereoCosetAst, StereoTerm};
-    use crate::ast::value::ValueTerm;
+    use super::*;    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]
@@ -1121,33 +1069,6 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::valence_folds_expr(AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4))), AtomConstraint::valence(4))]
-    #[case::degree_folds_expr(AtomConstraint::Degree(ValueAst::term(ValueTerm::Lit(3))), AtomConstraint::degree(3))]
-    #[case::aromatic_valence_folds_inner(AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2)))),
-        AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(2)))]
-    #[case::multicenter_valence_folds_inner(AtomConstraint::multicenter_valence(MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Lit(3)))),
-        AtomConstraint::multicenter_valence(MulticenterValenceAst::multicenter(3)))]
-    #[case::tetrahedral_lifts_term(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1)))),
-        AtomConstraint::tetrahedral_stereo(TetrahedralStereoAst::stereo(1_u32)))]
-    fn test_atom_constraint_simplify(
-        #[case] input: AtomConstraint,
-        #[case] expected: AtomConstraint,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::valence_lit(AtomConstraint::valence(4))]
-    #[case::aromatic_not_aromatic(AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic))]
-    #[case::multicenter_undetermined(AtomConstraint::multicenter_valence(MulticenterValenceAst::Undetermined))]
-    #[case::tetrahedral_not_stereo(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo))]
-    fn test_atom_constraint_simplify_identity(#[case] input: AtomConstraint) {
-        assert_eq!(input.clone().simplify(), input);
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
     #[case::undetermined(AromaticValenceAst::Undetermined, AromaticValenceAst::Undetermined)]
     #[case::not_aromatic(AromaticValenceAst::NotAromatic, AromaticValenceAst::NotAromatic)]
     #[case::aromatic(AromaticValenceAst::aromatic(1), AromaticValenceAst::Aromatic(ValueAst::Lit(1)))]
@@ -1217,26 +1138,6 @@ mod tests {
     ) {
         assert_eq!(v.as_lit(), expected);
         assert_eq!(v.is_ground(), expected.is_some());
-    }
-
-    #[rstest]
-    #[case::aromatic_folds_expr(
-        AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2))),
-        AromaticValenceAst::aromatic(2)
-    )]
-    fn test_aromatic_valence_ast_simplify(
-        #[case] input: AromaticValenceAst,
-        #[case] expected: AromaticValenceAst,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::undetermined(AromaticValenceAst::Undetermined)]
-    #[case::not_aromatic(AromaticValenceAst::NotAromatic)]
-    #[case::aromatic_lit(AromaticValenceAst::aromatic(1))]
-    fn test_aromatic_valence_ast_simplify_identity(#[case] input: AromaticValenceAst) {
-        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rstest]
@@ -1398,24 +1299,6 @@ mod tests {
     ) {
         assert_eq!(v.as_lit(), expected);
         assert_eq!(v.is_ground(), expected.is_some());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::multicenter_folds_expr(MulticenterValenceAst::Multicenter(ValueAst::term(ValueTerm::Lit(3))), MulticenterValenceAst::multicenter(3))]
-    fn test_multicenter_valence_ast_simplify(
-        #[case] input: MulticenterValenceAst,
-        #[case] expected: MulticenterValenceAst,
-    ) {
-        assert_eq!(input.simplify(), expected);
-    }
-
-    #[rstest]
-    #[case::undetermined(MulticenterValenceAst::Undetermined)]
-    #[case::not_multicenter(MulticenterValenceAst::NotMulticenter)]
-    #[case::multicenter_lit(MulticenterValenceAst::multicenter(1))]
-    fn test_multicenter_valence_ast_simplify_identity(#[case] input: MulticenterValenceAst) {
-        assert_eq!(input.clone().simplify(), input);
     }
 
     #[rstest]
@@ -1709,23 +1592,6 @@ mod tests {
             vec![AtomConstraint::valence(4), AtomConstraint::degree(3)],
         );
         assert_eq!(cs, AtomConstraints::new());
-    }
-
-    #[rustfmt::skip]
-    #[rstest]
-    #[case::folds_each_value(AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4))),
-            AtomConstraint::Degree(ValueAst::term(ValueTerm::Lit(3))),
-            AtomConstraint::aromatic_valence(AromaticValenceAst::Aromatic(ValueAst::term(ValueTerm::Lit(2))))]),
-        AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(2)), AtomConstraint::degree(3)]))]
-    #[case::lifts_stereo_term(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1))))]),
-        AtomConstraints::from_iter([AtomConstraint::tetrahedral_stereo(TetrahedralStereoAst::stereo(1_u32))]))]
-    #[case::empty(AtomConstraints::new(), AtomConstraints::new())]
-    fn test_atom_constraints_simplify_each(
-        #[case] mut input: AtomConstraints,
-        #[case] expected: AtomConstraints,
-    ) {
-        input.simplify_each();
-        assert_eq!(input, expected);
     }
 
     #[rustfmt::skip]

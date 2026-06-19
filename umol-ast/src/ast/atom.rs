@@ -2,7 +2,6 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::mem;
 
 use umol_ast_macros::{Canonicalize, Lattice};
 use umol_shared::element::Element;
@@ -172,16 +171,6 @@ impl AtomAst {
         self
     }
 
-    /// Simplify every value-bearing field in place: `isotope_mass`,
-    /// `charge`, `implicit_hydrogens`, `lone_pairs`, both `spin` slots,
-    /// and each constraint. `element` has no value to simplify.
-    pub fn simplify_values(&mut self) {
-        self.charge = mem::take(&mut self.charge).simplify();
-        self.implicit_hydrogens = mem::take(&mut self.implicit_hydrogens).simplify();
-        self.lone_pairs = mem::take(&mut self.lone_pairs).simplify();
-        self.spin.simplify_values();
-        self.constraints.simplify_each();
-    }
 }
 
 /// Element expression: undetermined, a single element, a finite element set, a
@@ -650,8 +639,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::constraint::{AtomConstraint, AtomConstraintKind, RingScope};
-    use crate::ast::value::ValueTerm;
+    use crate::ast::constraint::{AtomConstraint, RingScope};
     use crate::atom_zeroed;
 
     #[rstest]
@@ -784,35 +772,6 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(pattern.matches(&target), expected);
-    }
-
-    #[rstest]
-    fn test_atom_ast_simplify_values() {
-        let mut atom = AtomAst {
-            element: ElementAst::Lit(Element::C),
-            isotope_mass: IsotopeMassAst::Lit(12),
-            charge: ValueAst::term(ValueTerm::Lit(1)),
-            implicit_hydrogens: ValueAst::term(ValueTerm::Lit(3)),
-            lone_pairs: ValueAst::term(ValueTerm::Neg(Box::new(ValueTerm::Lit(2)))),
-            spin: SpinStateAst {
-                unpaired: ValueAst::term(ValueTerm::Lit(0)),
-                multiplicity: ValueAst::term(ValueTerm::Lit(1)),
-            },
-            constraints: AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::term(
-                ValueTerm::Lit(4),
-            ))]),
-        };
-        atom.simplify_values();
-        assert_eq!(atom.isotope_mass, IsotopeMassAst::Lit(12));
-        assert_eq!(atom.charge, ValueAst::Lit(1));
-        assert_eq!(atom.implicit_hydrogens, ValueAst::Lit(3));
-        assert_eq!(atom.lone_pairs, ValueAst::Lit(-2));
-        assert_eq!(atom.spin.unpaired, ValueAst::Lit(0));
-        assert_eq!(atom.spin.multiplicity, ValueAst::Lit(1));
-        assert_eq!(
-            atom.constraints.get(AtomConstraintKind::Valence),
-            Some(&AtomConstraint::valence(4)),
-        );
     }
 
     #[rstest]
