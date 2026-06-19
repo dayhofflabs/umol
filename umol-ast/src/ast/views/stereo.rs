@@ -10,7 +10,7 @@ use umol_perm::{OrientedPermutationGroup, Permutation};
 use super::super::ids::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
-use super::super::rings::RingView;
+use super::super::ring::RingView;
 use super::super::stereo::{coset_apply_permutation, StereoAtomAst, StereoBondAst, StereoKind, Stereogenicity, Topicity};
 use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;

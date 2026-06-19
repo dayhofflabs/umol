@@ -14,7 +14,7 @@ use super::super::ids::{
     StereoAtomId,
 };
 use super::super::molecule::MoleculeAst;
-use super::super::rings::{RingSet, RingView};
+use super::super::ring::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
 use super::super::stereo::{StereoKind, TetrahedralStereoAst};
 use super::super::traits::Lattice;
@@ -547,7 +547,7 @@ mod tests {
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
-    use crate::ast::rings::RingFamily;
+    use crate::ast::ring::RingFamily;
     use crate::ast::stereo::{StereoAtomAst, TetrahedralStereoAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
     use crate::mol;

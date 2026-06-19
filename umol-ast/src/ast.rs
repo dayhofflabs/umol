@@ -21,7 +21,7 @@ pub(crate) mod noncovalent;
 pub(crate) mod operators;
 pub(crate) mod reaction;
 pub(crate) mod remap;
-pub(crate) mod rings;
+pub(crate) mod ring;
 pub(crate) mod spin;
 pub(crate) mod stereo;
 pub(crate) mod symmetry;
@@ -73,7 +73,7 @@ pub use noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKi
 pub use operators::{MemOp, RelOp};
 pub use reaction::{Assignment, ReactionRuleAst};
 pub use remap::{IdRemapping, UndoRemapping};
-pub use rings::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
+pub use ring::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingSet, RingView};
 pub use spin::SpinStateAst;
 pub use stereo::{
     CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfiguration, StereoConfigurationAst,

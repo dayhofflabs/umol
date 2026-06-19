@@ -247,14 +247,61 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
       `electrons` field type.
 6. `DativeBondAst` — derive after the birelation `acceptor_slot` drop.
 
-### P5 · Constraint types
-1. `AtomConstraint` & siblings — `Canonicalize` = delegate inner (replaces `simplify`).
-2. Collections (`AtomConstraints` …) — kind-keyed `Lattice`+`Canonicalize`: fixed kind
-   order, dedup, **drop vacuous (`Undetermined`-payload) entries**, multi-valued
-   (`RingSize`) set-canonical. Delete `simplify_each`.
-3. Molecule-level `Constraints`/`Constraint` — `Canonicalize` (flatten/sort/dedup the
-   `And`/`Or`/`Not` tree, ID-bearing); **not** a `Lattice`.
-4. Sweep all AST types, replace simplify and simplify_* methods by canonicalization calls.
+### P5 · Constraint types — impl plan (bottom-up)
+
+Design, lattice contracts, and notation: see *Per-type detail → Constraint types*. This
+is the build order.
+
+1. **Ring membership** — replaces `RingCount` + `RingSize` on **three** enums
+   (`AtomConstraint`, `BondConstraint`, `DativeBondConstraint`; `RingDegree`/`RingValence`,
+   atom-only, stay). Establishes the keyed-map value machinery the later keyed constraints
+   reuse. Phased:
+   a. **Foundational types** *(done)* — `constraint/ring.rs`: `RingScope { All, Size(u8) }`
+      (`Ord`: `All` first) + `RingMembershipAst` (scope-sorted `SmallVec` map
+      `RingScope → ValueAst`; `Canonicalize` drops vacuous; `Lattice` = per-scope product,
+      `matches` meet-derived — modeled on `AromaticValenceAst`). Registered in
+      `constraint.rs`; 15 tests.
+   b. **Atom** — `AtomConstraint`: `{RingCount, RingSize}` →
+      `RingMembership(RingMembershipAst)`; update `AtomConstraintKind`, `is_unique` (drop the
+      `RingSize` non-unique special-case — `RingMembership` is unique),
+      `is_undetermined`/`is_ground`, `simplify` → canonicalize the inner. `AtomConstraints`:
+      replace `ring_count()`/`ring_sizes()`/`get_all`/`remove_all`-for-ring with
+      `ring_membership()`/`total()`/`size(s)`; drop the `RingSize` loop in `meet`/`join`/
+      `matches` (route `RingMembership` through its `Lattice`); `add` (now replace, not
+      append); tests.
+   c. **Bond** — same for `BondConstraint` / `BondConstraints`.
+   d. **Dative** — same for `DativeBondConstraint` / `DativeBondConstraints`.
+   e. **DSL** — `dsl/predicates.rs` + `dsl/{atom,bond,dative,constraint}.rs`: collapse the
+      old separate ring-count/ring-size glyphs into `#R<count>` (`All`) / `#R(s)<count>`
+      (`Size(s)`). Count: bare→`Lit(1)`, `+`→`var_at_least("r", 1)` (≥1; non-correlation
+      deferred — doc 115), `!`→`Lit(0)`, `n`→`Lit`, `{a,b}`→`LitSet`, `?v`→`Var`,
+      `*`→`Undetermined`. Canonical render: `#R!` (0), bare `#R` (1). EDN boundary in
+      `dsl/constraint.rs`.
+   f. **Consumers + tests** — `transact.rs` ring `FieldChange`s; producers that derive/set
+      ring constraints; the `All = Σ Size(s)` validator check; molecule/dsl test suites.
+      Geometric ring-size refs (`ast/ring.rs` perception, umol-graph aromaticity) are likely
+      unaffected — verify, don't convert.
+2. **Other keyed non-unique constraints — stereo `#o`/`#f`/`#p`.** In
+   `StereoAtomConstraints` / `StereoBondConstraints`, `canonicalize` enforces per-key
+   uniqueness (`#o` per-pair value-`meet` → `Err` on contradiction; `#f`/`#p`
+   drop-duplicate; keys already canonical by construction); `Lattice` via the keyed
+   contract.
+3. **Per-entity enums + collections** — `atom`, `bond`, `dative`, `aromatic`,
+   `multicenter`, `noncovalent`, each:
+   - enum: `Canonicalize` = delegate inner; remove `simplify`.
+   - collection: `Canonicalize` (keyed contract + drop-vacuous); remove `simplify_each`.
+   - Write the shared collection macro; apply to the five `Vec`-newtypes (reuse for the
+     stereo collections from step 2); `AtomConstraints` stays hand-written.
+4. **Relational** (`RelationalConstraint`) — `Canonicalize` (canonicalize inner values;
+   refs unchanged); **not** a `Lattice`.
+5. **Molecule** (`MoleculeConstraint`) — `Canonicalize` (canonicalize payloads; atom-sets
+   sorted; `SubPattern` recurses into the inner `MoleculeAst`); **not** a `Lattice`.
+6. **Logical** (`Constraint` `And`/`Or`/`Not` + the `Constraints` `Vec`) — `Canonicalize`:
+   recurse, flatten nested same-combinator, sort + dedup children and the top `Vec` by the
+   `Constraint` declaration order, drop empty `And`/`Or`; **not** a `Lattice`.
+7. **Sweep + exit.** Replace remaining `simplify`/`simplify_*` with canonicalize calls;
+   add the deferred P4 entity `Canonicalize` derives (`Atom/Bond/Aromatic/Multicenter/
+   Dative`), now unblocked.
 
 ### P6 · `Lattice`-trait flip + macro (lands once P1–P5 all impl `Canonicalize`)
 - `Lattice: Canonicalize`; `matches` becomes the `meet`-derived default; `join` stays
@@ -412,7 +459,7 @@ by `fmt_value`, inline through the owning entity's `*Dsl`.
 | `implicit_hydrogens` | `AtomAst` | H count |
 | `lone_pairs` | `AtomAst` | lone-pair count |
 | `unpaired`, `multiplicity` | `SpinStateAst` | spin |
-| `RingCount`, `RingSize` value | `BondConstraint` | ring constraints |
+| ring counts (`RingMembership` value, keyed by `RingScope`) | `AtomConstraint`, `BondConstraint` | ring membership |
 
 (`edit.rs` `old`/`new` pairs are deltas over these same fields, not new semantics.)
 **Bond order** carries no fractional/aromatic value: an aromatic bond is localized
@@ -941,48 +988,94 @@ audit the other entities.
 
 **Per-entity enums** (`AtomConstraint`, `BondConstraint`, …) are **not** `Lattice` (a
 fixed-kind constraint has no cross-kind meet). They impl `Canonicalize` = delegate to the
-inner value's `canonicalize` (replacing `AtomConstraint::simplify`). Each is a
-boundary-independent payload → keeps its `*Dsl` (`AtomConstraintDsl`, …).
+inner value's `canonicalize` (replacing `<Enum>::simplify`). Boundary-independent payloads
+→ each keeps its `*Dsl`. `AtomConstraint::TetrahedralStereo`'s payload retypes
+`StereoConfigurationAst` → `StereoSiteAst` (the rename); per-kind variants stay
+(`TetrahedralStereo`, `CisTransStereo`): `#T` tetrahedral-specific, `#C` cis/trans-specific
+(the duplicated concrete `StereoKind` in `StereoSiteAst::Stereo` is accepted). `JointDomain`
+is removed (cross-field/cross-atom correlations → the molecule-level variable facility, doc
+115).
 
-**Per-entity collections** (`AtomConstraints`, `BondConstraints`,
-`DativeBondConstraints`, `MulticenterBondConstraints`, `AromaticSystemConstraints`,
-`StereoAtomConstraints`, `StereoBondConstraints`; `NoncovalentBondConstraints` trivial —
-inner enum uninhabited) are `Lattice` + `Canonicalize`:
-- **Lattice** (hand): kind-keyed field-wise. Each unique kind is read via a typed
-  accessor that returns `Undetermined` when absent; `meet` per kind (`None` if any kind
-  contradicts), `join` per kind. The multi-valued kind (`RingSize`) meets by
-  set-union + dedup. Top = empty.
-- **Canonicalize**: fixed kind order; dedup unique kinds (last-wins); **drop entries
-  whose value is `Undetermined`**; canonicalize each inner value; multi-valued kinds
-  sorted + deduped.
+**Per-entity collections** (`AtomConstraints`, `BondConstraints`, `DativeBondConstraints`,
+`MulticenterBondConstraints`, `AromaticSystemConstraints`, `StereoAtomConstraints`,
+`StereoBondConstraints`; `NoncovalentBondConstraints` trivial — inner enum uninhabited) are
+`Lattice` + `Canonicalize`, and are **keyed maps** (key → value-lattice, unique per key).
+Shape differs only in storage: `AtomConstraints` is a hand-written kind-sorted `SmallVec`
+struct; the other five `Vec`-newtypes + the two stereo collections come from one shared
+collection macro. `simplify_each` removed everywhere; collections render inline via the
+owning entity's `*Dsl`.
 
-**Key step — drop-vacuous moves into `canonicalize`.** Today a vacuous
-(`payload = Undetermined`) constraint may sit in the AST and is only elided at *render*
-time (`dsl/predicates.rs` canonical-rendering note); `meet` already refuses to add them.
-Canonical-by-construction *requires* dropping them in `canonicalize` so that
-`{Valence(Undetermined)}` and `{}` are structurally equal. Consequence: a parsed
-`#v*` (valence-undetermined) normalizes to no entry — faithful (same meaning, like
-`1+1 → 2`), AST-level elision rather than just surface. **Accepted** — it only drops
-information-free tops, so roundtrip fidelity is preserved.
+**Keyed-collection lattice contract** (unique-per-key). The *product lattice over the
+per-key value lattices*, each extended with a top; **absent key = top ≡ an
+`Undetermined`-value entry**, which canonicalize drops. Laws hold whenever every value is a
+proper lattice (`TopicityRelationAst`, `ValueAst`, the valence/stereo value enums; `unit`
+trivially).
+- **canonicalize** — group by key (one entry/key), merging same-key entries by `meet`-ing
+  their values; drop vacuous (top/`Undetermined`-value ≡ absent); fixed key order. Same-key
+  value contradiction → `Err(Contradiction)`. Unit-valued merge = dedup.
+- **meet** (`a ∧ b`) — union of keys; key in both → value-`meet` (`None` if any
+  contradicts); key in one → carried through; then canonical.
+- **join** (`a ∨ b`) — keys present in **both** only; per shared key, value-`join`; keys on
+  one side dropped (`join(top, x) = top`).
+- **matches** — every key of `pattern` present in `target` with value-`matches`; ≡
+  meet-derived `pattern.meet(target) == canonical(target)` (the form the P6 flip installs).
+- **is_undetermined** = no entries; **is_ground** = every value ground.
 
-(`JointDomain` is removed — see Scope; cross-field/cross-atom correlations move to the
-molecule-level variable-constraint facility, doc 115.)
-`AtomConstraint::TetrahedralStereo`'s payload retypes `StereoConfigurationAst` →
-`StereoSiteAst` (the rename). **Per-kind constraint variants stay** (`TetrahedralStereo`,
-`CisTransStereo`): `#T` is tetrahedral-specific, `#C` cis/trans-specific. The concrete
-`StereoKind` duplicated in `StereoSiteAst::Stereo` is accepted.
+**drop-vacuous moves into `canonicalize`.** Today a vacuous (`payload = Undetermined`)
+constraint may sit in the AST, elided only at *render* time; `meet` already refuses to add
+them. Canonical-by-construction *requires* dropping them in `canonicalize` so
+`{Valence(Undetermined)}` and `{}` are structurally equal. A parsed `#v*` normalizes to no
+entry — faithful (information-free top, like `1+1 → 2`), AST-level not just surface.
+**Accepted** — roundtrip fidelity preserved.
 
-**Boundary.** Collections render inline via the owning entity's `*Dsl`; the enums have
-`*Dsl`. **Parallel removals:** `simplify_each` on every collection;
-`<Enum>::simplify` → `Canonicalize`.
+**`add` semantics (decided).** `add` / `with_constraint` keep **replace** (set, last-wins,
+infallible). Contradictions are *not* caught at add-time; they surface lazily at
+canonicalize / `meet`, consistent with lazy canonicalization. So `add` (set) and the
+canonical/lattice conjunction (per-key `meet`) intentionally diverge — `meet`/canonicalize
+is the authority for the canonical form. An explicit conjoining verb, if ever wanted, is a
+*separate* fallible `narrow` (= per-key `meet`), not an overload of `add`.
 
-**Molecule-level `Constraints` / `Constraint`.** `Constraint = And(Vec) | Or(Vec) |
-Not(Box) | Atom(AtomId, AtomConstraint) | Bond(BondId, BondConstraint) | <molecule-scope
-predicates>` — a boolean combinator tree over **ID-scoped** predicates; `Constraints` is
-a flat (conjunctive) `Vec<Constraint>`. **Not a `Lattice`** (ID-bearing; the molecule
-order is graph subsumption, not algebraic). `Canonicalize` mirrors `ValuePredicate`:
-recurse into children, flatten nested same-combinator, sort + dedup, drop empty
-`And`/`Or`; inner predicates canonical. Equality is structural **with** the IDs.
+**Non-unique kinds — all keyed maps** (no subsumption multisets remain):
+
+*Ring membership* (atom, bond) replaces `RingCount` + `RingSize`. Membership is a multiset
+`M : size → count` (`RingCount = |M|`, per-size = `M(s)`); we store bounds on its
+projections. Value `RingMembershipAst` = keyed map `RingScope → ValueAst`, key
+`RingScope { All, Size(u8) }` (`All` = total, `Size(s)` = `M(s)`; `Ord` `All` first), count
+a `ValueAst`. One unique constraint `RingMembership(RingMembershipAst)`; literal-int `Size`
+keys are disjoint → no subsumption, clean `join` (per-component box-hull). The count is a
+`ValueAst` (the per-key value lattice; the value-type pattern mirrors `AromaticValenceAst`
+— hand `Canonicalize`/`Lattice`, `matches` = meet-derived). Count sugar:
+`n`→`Lit`, `+`→`var_at_least("r", 1)` (= `?r >= 1`; `ValueAst` has **no** `NotSet`, so `≥1`
+is a `Predicate(Rel(Var, Ge, 1))` — the existing `dsl/predicates.rs` `+` sugar; the fixed
+name `"r"` is fine here because nothing unifies variables yet — the anonymous-bound-vs-named-
+var fix is deferred to doc 115), `0`→`Lit(0)` (canonical render `#R!`; bare `#R`→`Lit(1)`),
+`{a,b}`→`LitSet`, `?v`→`Var`, `*`→`Undetermined`. Notation
+`#R<count>` (`All`) / `#R(s)<count>` (`Size(s)`) — `#R+` (= SMARTS `R`), `#R2` (= `R2`),
+`#R!` (acyclic, = `R0`), `#R(6)+` (= SMARTS `r6`), `#R(6)2` (naphthalene, beyond SMARTS),
+`#R(6)!` (no six-ring). Cross-size disjunction ("5 or 6") is not a
+map key (keys stay literal ints) — it goes through a variable size `#R(?r)…` (the variable
+path); rings-as-entities (option B) would make it clean but needs graph-matching infra we
+don't have. `All = Σ_s Size(s)` is a tier-2 validator check, not an AST-lattice invariant.
+
+*Stereo `#o`/`#f`/`#p`* (stereo atoms and bonds) are keyed maps one level down; keys
+canonical by construction, so dedup is exact-key grouping:
+- `#o` Topicity — key `LigandPairAst` (unordered, normalized lower-first), value
+  `TopicityRelationAst`. Per-pair dedup **meet**s the `rel`s (→ `Err` on contradiction) —
+  stronger than `add`'s per-pair last-wins replace; canonicalize/meet is the authority.
+- `#f` Fluxionality — key `PermutationAst`, **unit** value; dedup = drop identical.
+- `#p` LigandSymmetry — key `(OrientedPermutationAst, MemOp)`, **unit** value; dedup = drop
+  identical.
+Only `#o` is per-pair (merges values); `#f`/`#p` are per-perm (drop duplicates).
+
+**Molecule-level `Constraints` / `Constraint`.** `Constraint = Atom(AtomId, …) | Bond(…) |
+… | Relational(…) | Molecule(…) | And(Vec) | Or(Vec) | Not(Box)` — a boolean combinator
+tree over **ID-scoped** predicates; `Constraints` is a flat (conjunctive) `Vec<Constraint>`.
+**Not a `Lattice`** (ID-bearing; the molecule order is graph subsumption, not algebraic).
+`Canonicalize`: recurse into children, flatten nested same-combinator, sort + dedup, drop
+empty `And`/`Or`; inner predicates canonical. **Canonical order = the `Constraint`
+declaration order** (ABDAMNSS → `Relational` → `Molecule` → `And`/`Or`/`Not`); within a
+variant by payload (ids / atom-sets / inner values, each canonicalized); combinator children
+sorted recursively by the same total order. Equality is structural **with** the IDs.
 `Constraint::simplify` → `Canonicalize`; boundary is `ConstraintsDsl`.
 
 ## Naming and boundary types

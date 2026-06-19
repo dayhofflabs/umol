@@ -24,7 +24,7 @@ use super::ids::{
 use super::ligand::StereoLigand;
 use super::multicenter::MulticenterBondAst;
 use super::noncovalent::NoncovalentBondAst;
-use super::rings::{RingFamily, RingSet};
+use super::ring::{RingFamily, RingSet};
 use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::Lattice;
 use super::views::{

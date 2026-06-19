@@ -86,3 +86,39 @@ field resolution, no serde blocker), expresses the general case (vars in arithme
 expressions, cross-atom), and the Fe²⁺ high/low-spin split is just
 `(?lp, ?u) :: {(3,0),(1,4)}` over two vars. So the table-shaped constraint comes back as
 part of this facility, var-based — not as the removed `JointDomain`.
+
+## Anonymous bounds vs named variables (the `+` problem)
+
+113's bound sugars introduce variables *implicitly*: `+` (≥1) lowers to
+`var_at_least("r", 1)` = `Predicate(Rel(Var("r"), Ge, Lit(1)))`, because `ValueAst` has no
+bare field lower-bound — a relation needs a term subject, and the only subject available is
+a named variable. That conflates two things this facility must keep apart:
+
+- an **anonymous, field-local bound** — "this count is ≥1," no name, no reuse, each
+  occurrence independent;
+- a **molecule-scoped named variable** — `?n`, same name = same variable, *deliberately*
+  correlating (how `(?lp,?u) :: {…}` ties fields together).
+
+Because `+` uses a *fixed* name (`"r"`), once this facility unifies same-named variables,
+multiple bounds correlate spuriously — `#R(5)+#R(6)+` would force `M(5) == M(6)`. **No
+correctness bug today** (113 has no unification; `var_at_least` just matches
+`value ≥ threshold` per occurrence), which is why 113 ships `+` as `var_at_least("r", 1)`
+unchanged. The facility must resolve it on arrival. Options:
+
+1. **A `Self`/`Field` term** — a distinguished `ValueTerm` meaning "the value being
+   constrained." `+` → `Rel(Field, Ge, 1)`: non-variable (nothing to unify), structurally
+   canonical (identical across occurrences), composes by construction. Cleanly splits
+   `Field` (anonymous/local) from `Var` (named/scoped). Cost: the term + field-relative
+   handling in `matches`/`meet`/canonicalize (bound intersection). Fixes *every* bound
+   sugar, not just `+`.
+2. **A bound/range `ValueAst` form** (`AtLeast(n)` / interval) — `+` → `AtLeast(1)`, no
+   predicate, no variable; reverses 113's "bounds via `Predicate`" choice; new lattice.
+3. **Reserved anonymous name + alpha-normalization** — `+` mints a reserved,
+   non-user-writable name the facility excludes from unification; canonicalize alpha-renames
+   gensyms. Keeps the predicate encoding but needs the local/scoped flag *and*
+   alpha-equivalence.
+
+All three need the same core: **distinguish anonymous local bounds from molecule-scoped
+variables, treat the anonymous ones as non-correlating**, keep them structurally canonical.
+(1) is the most contained principled answer. Until then, 113 uses the fixed name `"r"` —
+the one place to revisit when this facility lands.

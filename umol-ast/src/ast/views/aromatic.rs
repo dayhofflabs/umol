@@ -10,7 +10,7 @@ use super::super::constraint::AromaticSystemConstraints;
 use super::super::electrons::ElectronCountsAst;
 use super::super::ids::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
-use super::super::rings::RingView;
+use super::super::ring::RingView;
 use super::super::spin::SpinStateAst;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;

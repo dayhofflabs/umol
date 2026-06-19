@@ -25,7 +25,7 @@ use super::super::ids::{
 };
 use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst};
-use super::super::rings::{RingFamily, RingSet};
+use super::super::ring::{RingFamily, RingSet};
 use super::super::spin::SpinStateAst;
 use super::super::stereo::{StereoAtomAst, StereoCosetAst, StereoKind, StereoTerm};
 use super::super::value::{ValueAst, ValueTerm};
