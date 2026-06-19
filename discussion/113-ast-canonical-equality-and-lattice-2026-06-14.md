@@ -364,13 +364,21 @@ is the build order.
       `pub(crate)`). `read_stereo_*_constraint_dsl` now read the 2-vector incrementally (kind first,
       then the single-key payload); the `read_value_slice → read_string → FromEdn` bridge and both
       `// TODO` are gone. (Module-size cleanup of `dsl/constraint.rs` deferred.)
-   e. Replace the `_from_edn`/`_to_edn` helpers (including inside macros) by inlined
-      `FromEdn`/`ToEdn` impls.
+   e. **DSL serde structure cleanup. Done** (per skill `dsl-serialization`). Banished
+      `_to_edn`/`_from_edn` free helpers → `render_edn_<type>`/`read_edn_<type>` (tree) and
+      `render_<type>`/`read_<type>` (streaming) — distinguished by **name, not module**. Added
+      `FromAst`/`IntoAst` to all four constraint `*Dsl` (`TopicityDsl`/`StereogenicityDsl`
+      transparent `Ctx=()`; `StereoAtomConstraintDsl`/`StereoBondConstraintDsl` with
+      `Ctx = StereoKind`, wired into `ConstraintDsl::from_ast`). Folded the `*_entry`/`*_from_entry`
+      codecs into the `*Dsl` `ToEdn`/`FromEdn`; inlined single-use `ligand_position`.
+      `OrientedLigandPermutation` stays decomposed in `ligand_symmetry` (not an EDN unit, single
+      use); `stereo_kind` is composition-only (no `parse_` wrapper).
    f. **Tests** — DSL string + EDN streaming roundtrip (incl. a fluxionality streaming case in
       `from_edn_str_matches_from_edn`); the key/by-key/`Canonicalize` unit tests (a–c); and the
       stereo collection lattice-law property tests `test_stereo_{atom,bond}_constraints_lattice_laws`
       (canonical fixed-kind container strategies) — **Done**. Remaining: (e) inline the residual
       `_from_edn`/`_to_edn` helpers.
+    g. Review struct and field names for stereo element constraints. Remove abbreviations.
 3. **Per-entity enums + collections. Each per-entity enum gets
    `Canonicalize` = delegate to the inner value (replacing `simplify`); each collection gets
    `Canonicalize` (per-kind canonicalize + drop-vacuous) and keeps its **hand-written**

@@ -18,8 +18,8 @@ use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
 use super::stereo::{
-    coset_lit, parse_stereo_coset, stereo_kind_from_name, stereogenicity_relation_from_parts,
-    topicity_relation_from_parts, RelationValue, StereoAtomConstraintDsl, StereoBondConstraintDsl,
+    coset_lit, parse_stereo_coset, stereo_kind_from_name, read_stereogenicity_relation,
+    read_topicity_relation, RelationValue, StereoAtomConstraintDsl, StereoBondConstraintDsl,
     StereoCosetDsl,
 };
 use super::value::{parse_value, ValueDsl};
@@ -802,7 +802,7 @@ fn read_member(de: &mut EdnStreamDeserializer<'_>) -> Result<MemOp, EdnError> {
 
 /// A permutation as a vector of disjoint cycles `[[0 1 2] [3 4]]`; degree from the
 /// stereo kind. Manual loops so the disjoint-cycle `seen` check borrows linearly.
-fn read_perm_vov(de: &mut EdnStreamDeserializer<'_>, degree: usize) -> Result<Permutation, EdnError> {
+fn read_permutation(de: &mut EdnStreamDeserializer<'_>, degree: usize) -> Result<Permutation, EdnError> {
     let mut seen = vec![false; degree];
     let mut cycles: Vec<Vec<usize>> = Vec::new();
     de.consume_byte(b'[')?;
@@ -852,7 +852,7 @@ fn read_ligand_symmetry(
     let mut mem = MemOp::In;
     read_map(de, |de, key| {
         match key {
-            "perm" => perm = Some(read_perm_vov(de, kind.degree())?),
+            "perm" => perm = Some(read_permutation(de, kind.degree())?),
             "orientation" => {
                 orientation = match de.read_keyword_name()?.as_ref() {
                     "proper" => Orientation::Proper,
@@ -918,7 +918,7 @@ fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnE
     let value = value.ok_or_else(|| DeError::Custom("topicity missing :relation".to_string()))?;
     Ok(TopicityAst {
         pair,
-        rel: topicity_relation_from_parts(value, not_in)?,
+        rel: read_topicity_relation(value, not_in)?,
     })
 }
 
@@ -941,7 +941,7 @@ fn read_stereogenicity(de: &mut EdnStreamDeserializer<'_>) -> Result<Stereogenic
     })?;
     let value =
         value.ok_or_else(|| DeError::Custom("stereogenicity missing :relation".to_string()))?;
-    Ok(stereogenicity_relation_from_parts(value, not_in)?)
+    Ok(read_stereogenicity_relation(value, not_in)?)
 }
 
 /// Stream a stereo constraint as the positional 2-vector `[<kind> {<key> <value>}]`:
@@ -956,7 +956,7 @@ macro_rules! read_stereo_constraint_dsl {
             let constraint = match key.as_str() {
                 "ligand-symmetry" => $constraint::LigandSymmetry(read_ligand_symmetry(de, kind)?),
                 "fluxionality" => $constraint::Fluxionality(FluxionalityAst {
-                    perm: LigandPermutation(read_perm_vov(de, kind.degree())?),
+                    perm: LigandPermutation(read_permutation(de, kind.degree())?),
                 }),
                 "topicity" => $constraint::Topicity(read_topicity(de)?),
                 "stereogenicity" => $constraint::Stereogenicity(read_stereogenicity(de)?),
@@ -2236,11 +2236,11 @@ impl ConstraintDsl {
             Constraint::NoncovalentBond(_, c) => match *c {},
             Constraint::StereoAtom(id, kind, c) => Self::StereoAtom(
                 StereoAtomRef::from_ast(*id, meta),
-                StereoAtomConstraintDsl(*kind, c.clone()),
+                StereoAtomConstraintDsl::from_ast(c, kind),
             ),
             Constraint::StereoBond(id, kind, c) => Self::StereoBond(
                 StereoBondRef::from_ast(*id, meta),
-                StereoBondConstraintDsl(*kind, c.clone()),
+                StereoBondConstraintDsl::from_ast(c, kind),
             ),
             Constraint::Relational(rel) => {
                 Self::Relational(RelationalConstraintDsl::from_ast(rel, meta))

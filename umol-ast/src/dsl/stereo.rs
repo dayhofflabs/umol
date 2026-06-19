@@ -827,7 +827,7 @@ fn fmt_stereo_lit_set(f: &mut fmt::Formatter<'_>, set: &BTreeSet<u32>) -> fmt::R
 /// A permutation as a vector of disjoint cycles (`[[0 1 2] [3 4]]`; identity `[]`).
 /// The degree is not encoded — fixed points drop out — so the reader supplies it
 /// from the stereo kind.
-fn perm_to_vov(perm: Permutation) -> Edn<'static> {
+fn render_edn_permutation(perm: Permutation) -> Edn<'static> {
     let cycles: Vec<Edn<'static>> = perm
         .cycles()
         .into_iter()
@@ -844,7 +844,7 @@ fn perm_to_vov(perm: Permutation) -> Edn<'static> {
     Edn::Vector(cycles.into())
 }
 
-fn perm_from_vov(edn: &Edn, degree: usize) -> Result<Permutation, DeError> {
+fn read_edn_permutation(edn: &Edn, degree: usize) -> Result<Permutation, DeError> {
     let Edn::Vector(cycles_edn) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "vector of cycles",
@@ -1029,7 +1029,7 @@ macro_rules! relation_serde {
 }
 
 relation_serde! {
-    topicity_relation_to_edn, topicity_relation_from_edn, topicity_relation_from_parts,
+    render_edn_topicity_relation, read_edn_topicity_relation, read_topicity_relation,
     TopicityRelationAst, Topicity,
     Topicity::Homotopic => "homotopic",
     Topicity::Enantiotopic => "enantiotopic",
@@ -1037,8 +1037,8 @@ relation_serde! {
 }
 
 relation_serde! {
-    stereogenicity_relation_to_edn, stereogenicity_relation_from_edn,
-    stereogenicity_relation_from_parts, StereogenicityAst, Stereogenicity,
+    render_edn_stereogenicity_relation, read_edn_stereogenicity_relation,
+    read_stereogenicity_relation, StereogenicityAst, Stereogenicity,
     Stereogenicity::Symmetric => "symmetric",
     Stereogenicity::Prochiral => "prochiral",
     Stereogenicity::Stereogenic => "stereogenic",
@@ -1052,7 +1052,7 @@ pub struct StereogenicityDsl(pub StereogenicityAst);
 impl ToEdn for StereogenicityDsl {
     fn to_edn(&self) -> Edn<'static> {
         let mut m = EdnMap::with_capacity(2);
-        stereogenicity_relation_to_edn(&self.0, &mut m);
+        render_edn_stereogenicity_relation(&self.0, &mut m);
         Edn::Map(m)
     }
 }
@@ -1066,7 +1066,23 @@ impl<'de> FromEdn<'de> for StereogenicityDsl {
                 path: Vec::new(),
             });
         };
-        Ok(Self(stereogenicity_relation_from_edn(m, "stereogenicity")?))
+        Ok(Self(read_edn_stereogenicity_relation(m, "stereogenicity")?))
+    }
+}
+
+impl FromAst<StereogenicityAst> for StereogenicityDsl {
+    type Ctx = ();
+
+    fn from_ast(ast: &StereogenicityAst, _ctx: &Self::Ctx) -> Self {
+        Self(ast.clone())
+    }
+}
+
+impl IntoAst<StereogenicityAst> for StereogenicityDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> StereogenicityAst {
+        self.0
     }
 }
 
@@ -1089,7 +1105,7 @@ impl ToEdn for TopicityDsl {
                 .into(),
             ),
         );
-        topicity_relation_to_edn(&t.rel, &mut m);
+        render_edn_topicity_relation(&t.rel, &mut m);
         Edn::Map(m)
     }
 }
@@ -1117,16 +1133,47 @@ impl<'de> FromEdn<'de> for TopicityDsl {
         if p.len() != 2 {
             return Err(DeError::Custom("topicity pair must have 2 positions".into()));
         }
-        let pair = StereoLigandPair::new(ligand_position(&p[0])?, ligand_position(&p[1])?);
+        let position = |e: &Edn| -> Result<StereoLigandId, DeError> {
+            let Edn::Int(n) = e else {
+                return Err(DeError::TypeMismatch {
+                    expected: "int (ligand position)",
+                    got: e.kind(),
+                    path: vec!["topicity".into()],
+                });
+            };
+            let v = u8::try_from(*n).map_err(|_| DeError::OutOfRange {
+                value: n.to_string(),
+                target: "ligand position",
+                path: Vec::new(),
+            })?;
+            Ok(StereoLigandId(v))
+        };
+        let pair = StereoLigandPair::new(position(&p[0])?, position(&p[1])?);
         Ok(Self(TopicityAst {
             pair,
-            rel: topicity_relation_from_edn(m, "topicity")?,
+            rel: read_edn_topicity_relation(m, "topicity")?,
         }))
     }
 }
 
+impl FromAst<TopicityAst> for TopicityDsl {
+    type Ctx = ();
+
+    fn from_ast(ast: &TopicityAst, _ctx: &Self::Ctx) -> Self {
+        Self(ast.clone())
+    }
+}
+
+impl IntoAst<TopicityAst> for TopicityDsl {
+    type Ctx = ();
+
+    fn into_ast(self, _ctx: &Self::Ctx) -> TopicityAst {
+        self.0
+    }
+}
+
 /// `StereoKind` ↔ kebab keyword (`:tetrahedral`, `:cis-trans`, …).
-pub(crate) fn stereo_kind_to_edn(kind: StereoKind) -> Edn<'static> {
+pub(crate) fn render_edn_stereo_kind(kind: StereoKind) -> Edn<'static> {
     let name = match kind {
         StereoKind::Tetrahedral => "tetrahedral",
         StereoKind::CisTrans => "cis-trans",
@@ -1150,7 +1197,7 @@ pub(crate) fn stereo_kind_from_name(name: &str) -> Result<StereoKind, DeError> {
     }
 }
 
-pub(crate) fn stereo_kind_from_edn(edn: &Edn) -> Result<StereoKind, DeError> {
+pub(crate) fn read_edn_stereo_kind(edn: &Edn) -> Result<StereoKind, DeError> {
     let Edn::Keyword(k) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "stereo-kind keyword",
@@ -1161,25 +1208,10 @@ pub(crate) fn stereo_kind_from_edn(edn: &Edn) -> Result<StereoKind, DeError> {
     stereo_kind_from_name(k.name())
 }
 
-fn ligand_position(edn: &Edn) -> Result<StereoLigandId, DeError> {
-    let Edn::Int(n) = edn else {
-        return Err(DeError::TypeMismatch {
-            expected: "int (ligand position)",
-            got: edn.kind(),
-            path: Vec::new(),
-        });
-    };
-    let v = u8::try_from(*n).map_err(|_| DeError::OutOfRange {
-        value: n.to_string(),
-        target: "ligand position",
-        path: Vec::new(),
-    })?;
-    Ok(StereoLigandId(v))
-}
 
-fn ligand_symmetry_to_edn(ls: &LigandSymmetryAst) -> Edn<'static> {
+fn render_edn_ligand_symmetry(ls: &LigandSymmetryAst) -> Edn<'static> {
     let mut m = EdnMap::with_capacity(3);
-    m.insert(Edn::keyword("perm"), perm_to_vov(ls.perm.perm.0));
+    m.insert(Edn::keyword("perm"), render_edn_permutation(ls.perm.perm.0));
     if ls.perm.orientation == Orientation::Improper {
         m.insert(Edn::keyword("orientation"), Edn::keyword("improper"));
     }
@@ -1189,7 +1221,7 @@ fn ligand_symmetry_to_edn(ls: &LigandSymmetryAst) -> Edn<'static> {
     Edn::Map(m)
 }
 
-fn ligand_symmetry_from_edn(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetryAst, DeError> {
+fn read_edn_ligand_symmetry(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetryAst, DeError> {
     let Edn::Map(m) = edn else {
         return Err(DeError::TypeMismatch {
             expected: "ligand-symmetry map",
@@ -1201,7 +1233,7 @@ fn ligand_symmetry_from_edn(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetr
         key: "perm".into(),
         path: vec!["ligand-symmetry".into()],
     })?;
-    let perm = LigandPermutation(perm_from_vov(perm_edn, kind.degree())?);
+    let perm = LigandPermutation(read_edn_permutation(perm_edn, kind.degree())?);
     let orientation = match m.get_keyword("orientation") {
         None => Orientation::Proper,
         Some(Edn::Keyword(k)) if k.name() == "proper" => Orientation::Proper,
@@ -1232,47 +1264,6 @@ fn ligand_symmetry_from_edn(edn: &Edn, kind: StereoKind) -> Result<LigandSymmetr
     })
 }
 
-/// Render/parse a stereo constraint as its keyword tag plus value (the single
-/// constraint entry inside the kind-bearing map). Atom and bond share the four
-/// variants, so the codec is generated for each.
-macro_rules! stereo_constraint_entry_codec {
-    ($to:ident, $from:ident, $constraint:ident) => {
-        fn $to(c: &$constraint) -> (&'static str, Edn<'static>) {
-            match c {
-                $constraint::LigandSymmetry(ls) => ("ligand-symmetry", ligand_symmetry_to_edn(ls)),
-                $constraint::Fluxionality(f) => ("fluxionality", perm_to_vov(f.perm.0)),
-                $constraint::Topicity(t) => ("topicity", TopicityDsl(t.clone()).to_edn()),
-                $constraint::Stereogenicity(g) => {
-                    ("stereogenicity", StereogenicityDsl(g.clone()).to_edn())
-                }
-            }
-        }
-
-        fn $from(key: &str, value: &Edn, kind: StereoKind) -> Result<$constraint, DeError> {
-            match key {
-                "ligand-symmetry" => Ok($constraint::LigandSymmetry(ligand_symmetry_from_edn(
-                    value, kind,
-                )?)),
-                "fluxionality" => Ok($constraint::Fluxionality(FluxionalityAst {
-                    perm: LigandPermutation(perm_from_vov(value, kind.degree())?),
-                })),
-                "topicity" => Ok($constraint::Topicity(TopicityDsl::from_edn(value)?.0)),
-                "stereogenicity" => Ok($constraint::Stereogenicity(StereogenicityDsl::from_edn(value)?.0)),
-                other => Err(DeError::Custom(format!(
-                    "unknown stereo constraint keyword :{other}"
-                ))),
-            }
-        }
-    };
-}
-
-stereo_constraint_entry_codec! {
-    stereo_atom_constraint_entry, stereo_atom_constraint_from_entry, StereoAtomConstraint
-}
-stereo_constraint_entry_codec! {
-    stereo_bond_constraint_entry, stereo_bond_constraint_from_entry, StereoBondConstraint
-}
-
 /// Molecule-scope DSL wrapper for a stereo constraint. It carries the element
 /// kind (the stereo subtype) so the permutation degree is known when parsing.
 /// The EDN is a positional 2-vector `[<kind> {<constraint-key> <value>}]`,
@@ -1280,14 +1271,25 @@ stereo_constraint_entry_codec! {
 /// then the single-key constraint payload. Self-contained, so the generic
 /// entity-leaf machinery applies, and `kind` is readable before the value.
 macro_rules! stereo_constraint_dsl {
-    ($dsl:ident, $constraint:ident, $entry:ident, $from_entry:ident, $context:literal) => {
+    ($dsl:ident, $constraint:ident, $context:literal) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
         pub struct $dsl(pub StereoKind, pub $constraint);
 
         impl ToEdn for $dsl {
             fn to_edn(&self) -> Edn<'static> {
-                let (key, value) = $entry(&self.1);
-                Edn::Vector(vec![stereo_kind_to_edn(self.0), single_key_map(key, value)].into())
+                let (key, value) = match &self.1 {
+                    $constraint::LigandSymmetry(ls) => {
+                        ("ligand-symmetry", render_edn_ligand_symmetry(ls))
+                    }
+                    $constraint::Fluxionality(f) => {
+                        ("fluxionality", render_edn_permutation(f.perm.0))
+                    }
+                    $constraint::Topicity(t) => ("topicity", TopicityDsl(t.clone()).to_edn()),
+                    $constraint::Stereogenicity(g) => {
+                        ("stereogenicity", StereogenicityDsl(g.clone()).to_edn())
+                    }
+                };
+                Edn::Vector(vec![render_edn_stereo_kind(self.0), single_key_map(key, value)].into())
             }
         }
 
@@ -1307,7 +1309,7 @@ macro_rules! stereo_constraint_dsl {
                         v.len()
                     )));
                 }
-                let kind = stereo_kind_from_edn(&v[0])?;
+                let kind = read_edn_stereo_kind(&v[0])?;
                 let Edn::Map(m) = &v[1] else {
                     return Err(DeError::TypeMismatch {
                         expected: "single-key constraint map",
@@ -1330,19 +1332,50 @@ macro_rules! stereo_constraint_dsl {
                         path: vec![$context.into()],
                     });
                 };
-                Ok($dsl(kind, $from_entry(key.name(), value, kind)?))
+                let constraint = match key.name() {
+                    "ligand-symmetry" => {
+                        $constraint::LigandSymmetry(read_edn_ligand_symmetry(value, kind)?)
+                    }
+                    "fluxionality" => $constraint::Fluxionality(FluxionalityAst {
+                        perm: LigandPermutation(read_edn_permutation(value, kind.degree())?),
+                    }),
+                    "topicity" => $constraint::Topicity(TopicityDsl::from_edn(value)?.0),
+                    "stereogenicity" => {
+                        $constraint::Stereogenicity(StereogenicityDsl::from_edn(value)?.0)
+                    }
+                    other => {
+                        return Err(DeError::Custom(format!(
+                            "unknown stereo constraint keyword :{other}"
+                        )))
+                    }
+                };
+                Ok($dsl(kind, constraint))
+            }
+        }
+
+        impl FromAst<$constraint> for $dsl {
+            type Ctx = StereoKind;
+
+            fn from_ast(ast: &$constraint, ctx: &Self::Ctx) -> Self {
+                Self(*ctx, ast.clone())
+            }
+        }
+
+        impl IntoAst<$constraint> for $dsl {
+            type Ctx = ();
+
+            fn into_ast(self, _ctx: &Self::Ctx) -> $constraint {
+                self.1
             }
         }
     };
 }
 
 stereo_constraint_dsl! {
-    StereoAtomConstraintDsl, StereoAtomConstraint,
-    stereo_atom_constraint_entry, stereo_atom_constraint_from_entry, "stereo-atom-constraint"
+    StereoAtomConstraintDsl, StereoAtomConstraint, "stereo-atom-constraint"
 }
 stereo_constraint_dsl! {
-    StereoBondConstraintDsl, StereoBondConstraint,
-    stereo_bond_constraint_entry, stereo_bond_constraint_from_entry, "stereo-bond-constraint"
+    StereoBondConstraintDsl, StereoBondConstraint, "stereo-bond-constraint"
 }
 
 pub(crate) fn coset_lit(n: i64) -> Result<u32, DeError> {
