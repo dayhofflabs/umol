@@ -30,8 +30,8 @@ pub use aromatic::{
     AromaticSystemConstraint, AromaticSystemConstraintKind, AromaticSystemConstraints,
 };
 pub use atom::{
-    aromatic_increment, AromaticValenceAst, AtomConstraint, AtomConstraintKind, AtomConstraints,
-    MulticenterValenceAst,
+    aromatic_increment, AromaticValenceAst, AtomConstraint, AtomConstraintKey, AtomConstraintKind,
+    AtomConstraints, MulticenterValenceAst,
 };
 pub use bond::{BondConstraint, BondConstraintKind, BondConstraints};
 pub use dative::{DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints};

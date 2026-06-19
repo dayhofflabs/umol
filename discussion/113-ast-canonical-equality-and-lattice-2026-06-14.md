@@ -260,7 +260,7 @@ is the build order.
    single-entry struct parallel to `TopicityAst { pair, rel }` (**not** a sub-map, **not** a
    shared keyed container). Several ring facts (one per `RingScope`) sit on an entity; each of
    the three collections hand-writes the per-scope handling inline (the former `RingSize` loop,
-   now grouped by `RingScope`). **Done**
+   now grouped by `RingScope`). **Reopened (was marked Done) — `Canonicalize` never landed; see (h).**
 
    a. **`RingScope` + `RingMembershipAst` + variant.** `constraint/ring.rs` (shared foundation
       module for the three sibling enums) holds `RingScope { All, Size(u8) }` (`Ord`: `All`
@@ -300,14 +300,66 @@ is the build order.
       `All = Σ_s Size(s)` cross-check is a **tier-2 validator** concern, **not** part of this
       AST/DSL work (deferred).
    g. Update umol-dsl-spec.md with the new syntax. **Done**
-2. **Other keyed constraints — stereo `#o`/`#f`/`#p`.** In `StereoAtomConstraints` /
-   `StereoBondConstraints`, several entries share a kind, distinguished by a sub-key: `#o`
-   Topicity by `LigandPair` (value `TopicityRelationAst`); `#f` Fluxionality by
-   `LigandPermutation` (unit); `#p` LigandSymmetry by `(OrientedLigandPermutation, MemOp)`
-   (unit). `canonicalize` groups by that sub-key and merges (per-pair value-`meet` for `#o` →
-   `Err` on contradiction; drop-duplicate for `#f`/`#p`; keys canonical by construction);
-   `Lattice` per the same per-sub-key product. Hand-written in each stereo collection (WET),
-   mirroring the ring handling in item 1.
+   h. **NOT DONE — `Canonicalize` (the item-3 requirement, applied to ring).** P5.1(b) already
+      references per-scope dedup "at `meet`/`canonicalize`", but **no `Canonicalize` was added**:
+      neither the per-enum `Canonicalize` (delegate to the inner `count`, replacing `simplify`)
+      nor `impl Canonicalize for {Atom,Bond,Dative}Constraints` (group by `RingScope`, merge by
+      value-`meet` → `Err` on contradiction, drop vacuous, order by scope). `meet` dedups lazily
+      but there is **no container canonical form**, so equality/hashing see un-normalized
+      collections. P5.1 is **not complete** until these land (identical shape to P5.2(c)); this
+      also blocks P6 (`Lattice: Canonicalize`).
+   i. **NOT DONE — `key()` infra.** The accepted design (a **dedicated key enum** + a **by-key
+      API mirroring the by-kind one**) was conflated with "WET" and never landed — no `key()`
+      method exists on any constraint. Each family needs a `<Enum>ConstraintKey` (kind +
+      sub-key: `RingMembership(RingScope)`, every other kind unit) + `fn key(&self)` + a by-key
+      collection API (`contains_key` / `get` / `remove` / update, mirroring the by-kind
+      methods). "WET" means hand-written **per family**, **not** the absence of `key()` and
+      **not** a generic shared keyed container. Same infra as P5.2(a); do together.
+2. **Stereo constraints — `#g`/`#o`/`#f`/`#p` (align with ring; add `key()`, `Canonicalize`,
+   streaming DSL).** In `StereoAtomConstraint` / `StereoBondConstraint` (WET, macro-generated for
+   atom + bond), several entries share a kind, distinguished by a sub-key. Each entry is a
+   `(key, value)` pair:
+
+   | glyph | kind | unique | sub-key | value | value-lattice |
+   |---|---|---|---|---|---|
+   | `#g` | Stereogenicity | yes | — (unit) | `StereogenicityAst` | finite subset-lattice |
+   | `#o` | Topicity | no | `LigandPairAst` | `TopicityRelationAst` | finite subset-lattice |
+   | `#p` | LigandSymmetry | no | `OrientedPermutationAst` | `MemOp` | 2-elt lattice, `In ∧ NotIn = ⊥` |
+   | `#f` | Fluxionality | no | `PermutationAst` | — (unit) | none (set presence) |
+
+   a. **`key()` + dedicated key enum.** Add
+      `StereoConstraintKey { Stereogenicity, Topicity(LigandPairAst), Fluxionality(PermutationAst),
+      LigandSymmetry(OrientedPermutationAst) }` and `fn key(&self) -> StereoConstraintKey` on each
+      stereo constraint. Stereo-specific (hand-written, not a generic cross-family key); it
+      drives dedup + indexing + a by-key collection API (`contains_key` / `get` / `remove` / …,
+      mirroring by-kind), the same infra as P5.1(i). `mem` is the LigandSymmetry **value**, not
+      part of its key — so `(P,In)` and `(P,NotIn)` collide on key `P` and contradict (decided
+      2026-06-19).
+   b. **Two-regime `Lattice`.** A product over `key()` of two regimes — `key()` unifies
+      dedup/indexing but **not** the lattice, because "absent key" means opposite things:
+      - *value-keyed* (`#g`, `#o`, `#p` — absent key = **top**): `meet` = key-union with per-key
+        `value.meet` (drop vacuous, `⊥`/`None` on empty); `join` = keys-in-both with `value.join`;
+        `matches` = ∀ self-key `value.matches(target's value-or-top)`.
+      - *set / presence* (`#f` — absent key = **bottom**): `meet` = union, `join` = intersection,
+        `matches` = self ⊆ target.
+      `MemOp` gains a 2-element lattice (`In`/`NotIn`; `meet` of conflicting = `⊥`; `join` =
+      top/drop), which moves `#p` into the value-keyed regime — only `#f` stays pure-set.
+   c. **`Canonicalize` (trait).** `impl Canonicalize for StereoAtomConstraints /
+      StereoBondConstraints`: group by `key()`, merge same-key by value-`meet` (`Err` on `⊥`),
+      drop vacuous (`Undetermined` value-keyed entries; `#f` never vacuous), order by `key()`.
+      Per-enum `Canonicalize` delegates to the inner value. `add` appends + lazy-dedups (matching
+      ring), replacing the current eager same-pair / unique-kind replace. (Same `Canonicalize`
+      requirement as P5.1(h) — do both together.)
+   d. **DSL streaming serde.** Rewrite `read_stereo_atom_constraint_dsl` /
+      `read_stereo_bond_constraint_dsl` (`dsl/constraint.rs`) as true streaming readers
+      (`read_map` collecting `:kind` + the single constraint key, kind in either position),
+      dropping the `read_value_slice → read_string → FromEdn` bridge and the two
+      `// TODO: FIX THIS TO USE streaming parser`. Matches every other constraint reader and the
+      P5.1 `read_ring_membership_dsl` pattern. The inline string grammar (`#g`/`#o`/`#f`/`#p`) and
+      the per-constraint EDN map (`{:kind … <constraint-key> <value>}`) are unchanged.
+   e. **Tests** — collection unit tests (`key`/`add`/dedup/`meet`/`join`/`matches`/`canonicalize`
+      incl. `MemOp` `⊥` and `(P,In)∧(P,NotIn)`), DSL string + EDN streaming roundtrip, proptest
+      generators.
 3. **Per-entity enums + collections (WET — no shared container).** Each per-entity enum gets
    `Canonicalize` = delegate to the inner value (replacing `simplify`); each collection gets
    `Canonicalize` (per-kind canonicalize + drop-vacuous) and keeps its **hand-written**
@@ -318,10 +370,12 @@ is the build order.
    The only collection whose `meet`/`join`/`canonicalize`/`matches` gain new logic are the
    three ring-bearing ones (atom/bond/dative): they must **group ring entries by `RingScope`**
    and merge per scope (the former `RingSize` loop, now keyed). That is done inline, per
-   collection, in P5.1(b–d) — there is no generic key machinery, no `<Enum>ConstraintKey`,
-   no generic by-key API. Ring's keyed accessors are just `total()` / `size(s)` /
-   `ring_memberships()` on each of the three collections. Every other kind stays one-per-kind;
-   its existing per-accessor `meet`/`join` is untouched.
+   collection, in P5.1(b–d). WET means **no generic / shared** key machinery (no cross-family
+   trait, macro, or `KeyedConstraints`) — each family still hand-writes its **own**
+   `<Enum>ConstraintKey` + `key()` + by-key API mirroring its by-kind API (P5.1(i)). Ring's
+   keyed accessors are `ring_count()` / `ring_size_count(s)` / `ring_memberships()` on each of
+   the three collections. Every other kind stays one-per-kind; its existing per-accessor
+   `meet`/`join` is untouched.
 
    (A future DRY pass could fold the 6 duplicated collection surfaces into one generic keyed
    container — explicitly deferred, not part of this work.)
