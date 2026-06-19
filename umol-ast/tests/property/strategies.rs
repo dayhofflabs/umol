@@ -17,11 +17,11 @@ pub(crate) use umol_ast::ast::{
     Constraints,
     DativeBondAst, DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints,
     DativeBondId, Edit, ElectronCountsAst, ElementAst, FluxionalityAst, IsotopeMassAst, Lattice,
-    LigandPairAst,
+    StereoLigandPair,
     LigandSymmetryAst, MemOp, MoleculeAst, MoleculeConstraint, MulticenterBondAst,
     MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
-    NoncovalentBondKind, NoncovalentBondKindAst, OrientedPermutationAst, PermutationAst,
+    NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation, LigandPermutation,
     RelationalConstraint, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomId,
     CisTransStereoAst, StereoBondAst, StereoBondConstraint, StereoBondId, StereoConfigurationAst,
     StereoCosetAst, StereoKind, StereoLigand, StereoLigandId, StereoLigandKind, TetrahedralStereoAst,
@@ -619,9 +619,9 @@ pub(crate) fn mem_op_strategy() -> impl Strategy<Value = MemOp> {
     prop_oneof![Just(MemOp::In), Just(MemOp::NotIn)]
 }
 
-pub(crate) fn ligand_pair_strategy(degree: usize) -> impl Strategy<Value = LigandPairAst> {
+pub(crate) fn ligand_pair_strategy(degree: usize) -> impl Strategy<Value = StereoLigandPair> {
     (0..degree as u8, 0..degree as u8)
-        .prop_map(|(a, b)| LigandPairAst::new(StereoLigandId(a), StereoLigandId(b)))
+        .prop_map(|(a, b)| StereoLigandPair::new(StereoLigandId(a), StereoLigandId(b)))
 }
 
 /// Non-vacuous topicity relations only (`Undetermined` elides on render, so it
@@ -671,8 +671,8 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
         mem_op_strategy(),
     )
         .prop_map(|(perm, orientation, mem)| LigandSymmetryAst {
-            perm: OrientedPermutationAst {
-                perm: PermutationAst(perm),
+            perm: OrientedLigandPermutation {
+                perm: LigandPermutation(perm),
                 orientation,
             },
             mem,
@@ -714,8 +714,8 @@ macro_rules! stereo_constraint_strategy {
                 )
                     .prop_map(|(perm, orientation, mem)| $constraint::LigandSymmetry(
                         LigandSymmetryAst {
-                            perm: OrientedPermutationAst {
-                                perm: PermutationAst(perm),
+                            perm: OrientedLigandPermutation {
+                                perm: LigandPermutation(perm),
                                 orientation,
                             },
                             mem,
@@ -723,7 +723,7 @@ macro_rules! stereo_constraint_strategy {
                     )),
                 permutation_strategy(degree).prop_map(|perm| $constraint::Fluxionality(
                     FluxionalityAst {
-                        perm: PermutationAst(perm),
+                        perm: LigandPermutation(perm),
                     }
                 )),
                 (ligand_pair_strategy(degree), topicity_relation_strategy())

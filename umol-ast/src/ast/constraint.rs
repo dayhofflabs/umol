@@ -43,7 +43,7 @@ pub use noncovalent::{NoncovalentBondConstraint, NoncovalentBondConstraints};
 pub use relational::RelationalConstraint;
 pub use ring::{RingMembershipAst, RingScope};
 pub use stereo::{
-    FluxionalityAst, LigandPairAst, LigandSymmetryAst, OrientedPermutationAst, PermutationAst,
+    FluxionalityAst, StereoLigandPair, LigandSymmetryAst, OrientedLigandPermutation, LigandPermutation,
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
     StereogenicityAst, TopicityAst, TopicityRelationAst,
 };

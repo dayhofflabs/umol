@@ -308,7 +308,6 @@ is the build order.
    `Err` on contradiction; drop-duplicate for `#f`/`#p`; keys canonical by construction);
    `Lattice` per the same per-sub-key product. Hand-written in each stereo collection (WET),
    mirroring the ring handling in item 1.
-   P5.2, review the stereo constraint types in AST and DSL modules. Show me the structures of the data types, their parse/render
 3. **Per-entity enums + collections (WET — no shared container).** Each per-entity enum gets
    `Canonicalize` = delegate to the inner value (replacing `simplify`); each collection gets
    `Canonicalize` (per-kind canonicalize + drop-vacuous) and keeps its **hand-written**

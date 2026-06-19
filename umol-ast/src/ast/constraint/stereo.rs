@@ -17,27 +17,25 @@ use super::super::remap::IdRemapping;
 use super::super::stereo::{Stereogenicity, Topicity};
 use super::super::traits::{AsLit, Canonicalize, Lattice};
 
-/// A concrete permutation literal. A thin wrapper hosting AST-side impls that the
-/// foreign `Permutation` cannot carry. Not a lattice — a single permutation has no top, so no `join`.
+/// Ligand permutation literal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct PermutationAst(pub Permutation);
+pub struct LigandPermutation(pub Permutation);
 
-impl PermutationAst {
+impl LigandPermutation {
     /// A pattern matches a target iff they are the same permutation.
     pub fn matches(&self, target: &Self) -> bool {
         self.0 == target.0
     }
 }
 
-/// A concrete oriented-permutation literal: a permutation with a proper/improper
-/// grade. Concrete (not a lattice); matchable.
+// Ligand permutation with proper/improper grade.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct OrientedPermutationAst {
-    pub perm: PermutationAst,
+pub struct OrientedLigandPermutation {
+    pub perm: LigandPermutation,
     pub orientation: Orientation,
 }
 
-impl OrientedPermutationAst {
+impl OrientedLigandPermutation {
     pub fn matches(&self, target: &Self) -> bool {
         self.perm.matches(&target.perm) && self.orientation == target.orientation
     }
@@ -46,12 +44,12 @@ impl OrientedPermutationAst {
 /// The key of a per-pair topicity constraint: an unordered pair of ligand
 /// positions, normalized so the lower position is `first`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct LigandPairAst {
+pub struct StereoLigandPair {
     first: StereoLigandId,
     second: StereoLigandId,
 }
 
-impl LigandPairAst {
+impl StereoLigandPair {
     /// Normalizes the pair so the lower position is `first`.
     pub fn new(a: StereoLigandId, b: StereoLigandId) -> Self {
         if a.0 <= b.0 {
@@ -133,8 +131,10 @@ macro_rules! relation_ast {
             /// complement (tiebreak positive).
             fn canonicalize(self) -> Result<Self, Contradiction> {
                 let set = self.to_set();
-                let domain: BTreeSet<$domain> =
-                    <$domain as VariantArray>::VARIANTS.iter().copied().collect();
+                let domain: BTreeSet<$domain> = <$domain as VariantArray>::VARIANTS
+                    .iter()
+                    .copied()
+                    .collect();
                 if set.is_empty() {
                     Err(Contradiction)
                 } else if set == domain {
@@ -142,8 +142,7 @@ macro_rules! relation_ast {
                 } else if set.len() == 1 {
                     Ok(Self::Lit(set.into_iter().next().unwrap()))
                 } else {
-                    let complement: BTreeSet<$domain> =
-                        domain.difference(&set).copied().collect();
+                    let complement: BTreeSet<$domain> = domain.difference(&set).copied().collect();
                     Ok(if set.len() <= complement.len() {
                         Self::LitSet(set)
                     } else {
@@ -171,9 +170,14 @@ macro_rules! relation_ast {
 
             /// Intersection of the admissible sets, folded by `canonicalize` (∅ → `None`).
             fn meet(&self, other: &Self) -> Option<Self> {
-                Self::LitSet(self.to_set().intersection(&other.to_set()).copied().collect())
-                    .canonicalize()
-                    .ok()
+                Self::LitSet(
+                    self.to_set()
+                        .intersection(&other.to_set())
+                        .copied()
+                        .collect(),
+                )
+                .canonicalize()
+                .ok()
             }
 
             fn join(&self, other: &Self) -> Self {
@@ -206,7 +210,7 @@ relation_ast! { StereogenicityAst, Stereogenicity }
 /// Ligand permutations with membership assertion. Non-unique.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LigandSymmetryAst {
-    pub perm: OrientedPermutationAst,
+    pub perm: OrientedLigandPermutation,
     pub mem: MemOp,
 }
 
@@ -219,7 +223,7 @@ impl LigandSymmetryAst {
 /// Fluxionality move: proper ligand permutation realized by dynamics. Non-unique.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct FluxionalityAst {
-    pub perm: PermutationAst,
+    pub perm: LigandPermutation,
 }
 
 impl FluxionalityAst {
@@ -231,7 +235,7 @@ impl FluxionalityAst {
 /// Per-pair topicity constraint: relation between pair of ligands.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TopicityAst {
-    pub pair: LigandPairAst,
+    pub pair: StereoLigandPair,
     pub rel: TopicityRelationAst,
 }
 
@@ -344,7 +348,7 @@ macro_rules! stereo_constraint {
             }
 
             /// Topicity relation per ligand pair.
-            pub fn topicity(&self, pair: LigandPairAst) -> TopicityRelationAst {
+            pub fn topicity(&self, pair: StereoLigandPair) -> TopicityRelationAst {
                 self.topicities()
                     .find(|t| t.pair == pair)
                     .map(|t| t.rel.clone())
@@ -496,7 +500,7 @@ macro_rules! stereo_constraint {
                         result.add(entry);
                     }
                 }
-                let pairs: BTreeSet<LigandPairAst> = self
+                let pairs: BTreeSet<StereoLigandPair> = self
                     .topicities()
                     .chain(other.topicities())
                     .map(|t| t.pair)
@@ -606,30 +610,30 @@ mod tests {
 
     #[rstest]
     fn test_permutation_ast_matches() {
-        let a = PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3]));
-        let b = PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3]));
-        let c = PermutationAst(Permutation::identity(4));
+        let a = LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3]));
+        let b = LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3]));
+        let c = LigandPermutation(Permutation::identity(4));
         assert!(a.matches(&b));
         assert!(!a.matches(&c));
     }
 
     #[rstest]
     fn test_oriented_permutation_ast_matches() {
-        let perm = PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3]));
-        let proper = OrientedPermutationAst {
+        let perm = LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3]));
+        let proper = OrientedLigandPermutation {
             perm,
             orientation: Orientation::Proper,
         };
-        let same = OrientedPermutationAst {
+        let same = OrientedLigandPermutation {
             perm,
             orientation: Orientation::Proper,
         };
-        let flipped = OrientedPermutationAst {
+        let flipped = OrientedLigandPermutation {
             perm,
             orientation: Orientation::Improper,
         };
-        let other = OrientedPermutationAst {
-            perm: PermutationAst(Permutation::identity(4)),
+        let other = OrientedLigandPermutation {
+            perm: LigandPermutation(Permutation::identity(4)),
             orientation: Orientation::Proper,
         };
         assert!(proper.matches(&same));
@@ -648,7 +652,7 @@ mod tests {
         #[case] first: StereoLigandId,
         #[case] second: StereoLigandId,
     ) {
-        let pair = LigandPairAst::new(a, b);
+        let pair = StereoLigandPair::new(a, b);
         assert_eq!(pair.first(), first);
         assert_eq!(pair.second(), second);
     }
@@ -667,8 +671,14 @@ mod tests {
 
     #[rstest]
     #[case::homotopic(Topicity::Homotopic, TopicityRelationAst::Lit(Topicity::Homotopic))]
-    #[case::diastereotopic(Topicity::Diastereotopic, TopicityRelationAst::Lit(Topicity::Diastereotopic))]
-    fn test_topicity_relation_ast_from(#[case] value: Topicity, #[case] expected: TopicityRelationAst) {
+    #[case::diastereotopic(
+        Topicity::Diastereotopic,
+        TopicityRelationAst::Lit(Topicity::Diastereotopic)
+    )]
+    fn test_topicity_relation_ast_from(
+        #[case] value: Topicity,
+        #[case] expected: TopicityRelationAst,
+    ) {
         assert_eq!(TopicityRelationAst::from(value), expected);
     }
 
@@ -764,8 +774,8 @@ mod tests {
 
     #[rstest]
     fn test_ligand_symmetry_ast_matches() {
-        let perm = OrientedPermutationAst {
-            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+        let perm = OrientedLigandPermutation {
+            perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
             orientation: Orientation::Proper,
         };
         let present = LigandSymmetryAst {
@@ -781,8 +791,8 @@ mod tests {
             mem: MemOp::NotIn,
         };
         let other = LigandSymmetryAst {
-            perm: OrientedPermutationAst {
-                perm: PermutationAst(Permutation::identity(4)),
+            perm: OrientedLigandPermutation {
+                perm: LigandPermutation(Permutation::identity(4)),
                 orientation: Orientation::Proper,
             },
             mem: MemOp::In,
@@ -795,13 +805,13 @@ mod tests {
     #[rstest]
     fn test_fluxionality_ast_matches() {
         let a = FluxionalityAst {
-            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+            perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
         };
         let same = FluxionalityAst {
-            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+            perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
         };
         let other = FluxionalityAst {
-            perm: PermutationAst(Permutation::identity(4)),
+            perm: LigandPermutation(Permutation::identity(4)),
         };
         assert!(a.matches(&same));
         assert!(!a.matches(&other));
@@ -809,7 +819,7 @@ mod tests {
 
     #[rstest]
     fn test_topicity_ast_matches() {
-        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let pair = StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1));
         let h = TopicityAst {
             pair,
             rel: TopicityRelationAst::Lit(Topicity::Homotopic),
@@ -827,7 +837,7 @@ mod tests {
         assert!(!h.matches(&e));
         // A constraint on a different pair never matches.
         let elsewhere = TopicityAst {
-            pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(2)),
+            pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(2)),
             rel: TopicityRelationAst::Undetermined,
         };
         assert!(!elsewhere.matches(&h));
@@ -871,12 +881,12 @@ mod tests {
     #[rstest]
     #[case::append(
         vec![
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, mem: MemOp::In }),
+            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
+            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, mem: MemOp::In }),
         ],
         vec![
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, mem: MemOp::In }),
+            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
+            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])), orientation: Orientation::Proper }, mem: MemOp::In }),
         ],
         None,
     )]
@@ -890,34 +900,34 @@ mod tests {
     )]
     #[case::keyed_replace(
         vec![
-            StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) }),
+            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) }),
         ],
-        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) })],
-        Some(StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+        vec![StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Homotopic) })],
+        Some(StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
     )]
     #[case::keyed_new_pair(
         vec![
-            StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(2)), rel: TopicityRelationAst::Lit(Topicity::Diastereotopic) }),
+            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(2)), rel: TopicityRelationAst::Lit(Topicity::Diastereotopic) }),
         ],
         vec![
-            StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(2)), rel: TopicityRelationAst::Lit(Topicity::Diastereotopic) }),
+            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(2)), rel: TopicityRelationAst::Lit(Topicity::Diastereotopic) }),
         ],
         None,
     )]
     #[case::kind_sorted(
         vec![
             StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
-            StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])) }),
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
+            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+            StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])) }),
+            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
         ],
         vec![
-            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedPermutationAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
-            StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])) }),
-            StereoAtomConstraint::Topicity(TopicityAst { pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
+            StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst { perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper }, mem: MemOp::In }),
+            StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])) }),
+            StereoAtomConstraint::Topicity(TopicityAst { pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)), rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) }),
             StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)),
         ],
         None,
@@ -938,17 +948,17 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_constraints_meet() {
-        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let pair = StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1));
         let p1 = LigandSymmetryAst {
-            perm: OrientedPermutationAst {
-                perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+            perm: OrientedLigandPermutation {
+                perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                 orientation: Orientation::Proper,
             },
             mem: MemOp::In,
         };
         let p2 = LigandSymmetryAst {
-            perm: OrientedPermutationAst {
-                perm: PermutationAst(Permutation::from_image(4, &[0, 1, 3, 2])),
+            perm: OrientedLigandPermutation {
+                perm: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])),
                 orientation: Orientation::Proper,
             },
             mem: MemOp::In,
@@ -968,7 +978,9 @@ mod tests {
             pair,
             rel: TopicityRelationAst::NotSet(BTreeSet::from([Topicity::Homotopic])),
         }));
-        b.add(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)));
+        b.add(StereoAtomConstraint::Stereogenicity(
+            StereogenicityAst::Lit(Stereogenicity::Stereogenic),
+        ));
 
         let m = a.meet(&b).unwrap();
         // #p union+dedup.
@@ -990,7 +1002,7 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_constraints_meet_error() {
-        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let pair = StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1));
         let mut a = StereoAtomConstraints::new();
         a.add(StereoAtomConstraint::Topicity(TopicityAst {
             pair,
@@ -1007,17 +1019,17 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_constraints_join() {
-        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let pair = StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1));
         let p1 = LigandSymmetryAst {
-            perm: OrientedPermutationAst {
-                perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+            perm: OrientedLigandPermutation {
+                perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                 orientation: Orientation::Proper,
             },
             mem: MemOp::In,
         };
         let p2 = LigandSymmetryAst {
-            perm: OrientedPermutationAst {
-                perm: PermutationAst(Permutation::from_image(4, &[0, 1, 3, 2])),
+            perm: OrientedLigandPermutation {
+                perm: LigandPermutation(Permutation::from_image(4, &[0, 1, 3, 2])),
                 orientation: Orientation::Proper,
             },
             mem: MemOp::In,
@@ -1050,10 +1062,10 @@ mod tests {
 
     #[rstest]
     fn test_stereo_atom_constraints_matches() {
-        let pair = LigandPairAst::new(StereoLigandId(0), StereoLigandId(1));
+        let pair = StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1));
         let p1 = LigandSymmetryAst {
-            perm: OrientedPermutationAst {
-                perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+            perm: OrientedLigandPermutation {
+                perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                 orientation: Orientation::Proper,
             },
             mem: MemOp::In,
@@ -1086,8 +1098,8 @@ mod tests {
     #[case::ligand_symmetry(
         StereoAtomConstraints::from(StereoAtomConstraint::LigandSymmetry(
             LigandSymmetryAst {
-                perm: OrientedPermutationAst {
-                    perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                perm: OrientedLigandPermutation {
+                    perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                     orientation: Orientation::Proper,
                 },
                 mem: MemOp::In,
@@ -1098,7 +1110,7 @@ mod tests {
     )]
     #[case::topicity_open(
         StereoAtomConstraints::from(StereoAtomConstraint::Topicity(TopicityAst {
-            pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)),
+            pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
             rel: TopicityRelationAst::Undetermined,
         })),
         true,
@@ -1136,7 +1148,7 @@ mod tests {
     fn test_stereo_bond_constraints_add() {
         let mut cs = StereoBondConstraints::new();
         let f = FluxionalityAst {
-            perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+            perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
         };
         assert_eq!(cs.add(StereoBondConstraint::Fluxionality(f)), None);
         assert_eq!(cs.fluxionality().copied().collect::<Vec<_>>(), vec![f]);

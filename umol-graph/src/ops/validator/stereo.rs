@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AsLit, GraphSymmetry, Lattice, LigandPairAst, LigandSymmetryAst, MemOp, MoleculeAst,
+    AsLit, GraphSymmetry, Lattice, StereoLigandPair, LigandSymmetryAst, MemOp, MoleculeAst,
     StereoAtomId, StereoBondId, StereoKind, StereoSymmetry, Stereogenicity, StereogenicityAst,
     Topicity, TopicityAst, TopicityRelationAst,
 };
@@ -39,7 +39,7 @@ pub enum StereoValidatorContradiction {
     },
     #[error("ligand pair {pair:?} topicity {derived:?} contradicts asserted {asserted:?}")]
     TopicityMismatch {
-        pair: LigandPairAst,
+        pair: StereoLigandPair,
         asserted: TopicityRelationAst,
         derived: Topicity,
     },
@@ -249,7 +249,7 @@ impl StereoValidator {
 mod tests {
     use rstest::rstest;
     use umol_ast::ast::{
-        OrientedPermutationAst, PermutationAst, StereoAtomConstraint, StereoBondConstraint,
+        OrientedLigandPermutation, LigandPermutation, StereoAtomConstraint, StereoBondConstraint,
         StereoConfigurationAst, StereoKind, StereoLigandId, StereogenicityAst,
     };
     use umol_ast::mol_ground;
@@ -339,12 +339,12 @@ mod tests {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
                 .add(StereoAtomConstraint::Topicity(TopicityAst {
-                    pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)),
+                    pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
                     rel: TopicityRelationAst::Lit(Topicity::Homotopic),
                 }));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::TopicityMismatch {
-            pair: LigandPairAst::new(StereoLigandId(0), StereoLigandId(1)),
+            pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
             asserted: TopicityRelationAst::Lit(Topicity::Homotopic),
             derived: Topicity::Diastereotopic,
         }
@@ -355,8 +355,8 @@ mod tests {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
                 .add(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
-                    perm: OrientedPermutationAst {
-                        perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                    perm: OrientedLigandPermutation {
+                        perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                         orientation: Orientation::Proper,
                     },
                     mem: MemOp::In,
@@ -364,8 +364,8 @@ mod tests {
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::LigandSymmetryViolation {
             asserted: LigandSymmetryAst {
-                perm: OrientedPermutationAst {
-                    perm: PermutationAst(Permutation::from_image(4, &[1, 0, 2, 3])),
+                perm: OrientedLigandPermutation {
+                    perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                     orientation: Orientation::Proper,
                 },
                 mem: MemOp::In,

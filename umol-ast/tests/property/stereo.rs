@@ -96,12 +96,12 @@ proptest! {
         prop_assert_eq!(dsl, parsed);
     }
 
-    /// `LigandPairAst::new` normalizes to `first <= second` and is symmetric.
+    /// `StereoLigandPair::new` normalizes to `first <= second` and is symmetric.
     #[test]
     fn test_ligand_pair_ast_normalization(a in 0u8..6, b in 0u8..6) {
-        let pair = LigandPairAst::new(StereoLigandId(a), StereoLigandId(b));
+        let pair = StereoLigandPair::new(StereoLigandId(a), StereoLigandId(b));
         prop_assert!(pair.first().0 <= pair.second().0);
-        prop_assert_eq!(pair, LigandPairAst::new(StereoLigandId(b), StereoLigandId(a)));
+        prop_assert_eq!(pair, StereoLigandPair::new(StereoLigandId(b), StereoLigandId(a)));
     }
 
     /// Concrete (non-lattice) literal `matches` is exactly equality.
@@ -109,7 +109,7 @@ proptest! {
     fn test_permutation_ast_matches_is_equality(
         (a, b) in (2usize..=6).prop_flat_map(|d| (permutation_strategy(d), permutation_strategy(d))),
     ) {
-        let (x, y) = (PermutationAst(a), PermutationAst(b));
+        let (x, y) = (LigandPermutation(a), LigandPermutation(b));
         prop_assert!(x.matches(&x));
         prop_assert_eq!(x.matches(&y), x == y);
     }
