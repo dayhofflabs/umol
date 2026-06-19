@@ -22,8 +22,9 @@ pub(crate) use umol_ast::ast::{
     MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
     NoncovalentBondKind, NoncovalentBondKindAst, OrientedLigandPermutation, LigandPermutation,
-    RelationalConstraint, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomId,
-    CisTransStereoAst, StereoBondAst, StereoBondConstraint, StereoBondId, StereoConfigurationAst,
+    RelationalConstraint, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraint,
+    StereoAtomConstraints, StereoAtomId, CisTransStereoAst, StereoBondAst, StereoBondConstraint,
+    StereoBondConstraints, StereoBondId, StereoConfigurationAst,
     StereoCosetAst, StereoKind, StereoLigand, StereoLigandId, StereoLigandKind, TetrahedralStereoAst,
     Stereogenicity,
     StereogenicityAst, SubPatternAnchor, Topicity, TopicityAst, TopicityRelationAst,
@@ -741,14 +742,26 @@ stereo_constraint_strategy! { stereo_bond_constraint_strategy, StereoBondConstra
 
 pub(crate) fn stereo_atom_constraints_strategy(
     kind: StereoKind,
-) -> impl Strategy<Value = Vec<StereoAtomConstraint>> {
-    prop::collection::vec(stereo_atom_constraint_strategy(kind), 0..=3)
+) -> impl Strategy<Value = StereoAtomConstraints> {
+    prop::collection::vec(stereo_atom_constraint_strategy(kind), 0..=3).prop_map(|list| {
+        let mut cs = StereoAtomConstraints::new();
+        for c in list {
+            cs.add(c);
+        }
+        cs.canonicalize().unwrap_or_default()
+    })
 }
 
 pub(crate) fn stereo_bond_constraints_strategy(
     kind: StereoKind,
-) -> impl Strategy<Value = Vec<StereoBondConstraint>> {
-    prop::collection::vec(stereo_bond_constraint_strategy(kind), 0..=3)
+) -> impl Strategy<Value = StereoBondConstraints> {
+    prop::collection::vec(stereo_bond_constraint_strategy(kind), 0..=3).prop_map(|list| {
+        let mut cs = StereoBondConstraints::new();
+        for c in list {
+            cs.add(c);
+        }
+        cs.canonicalize().unwrap_or_default()
+    })
 }
 
 pub(crate) fn stereo_atom_ast_strategy() -> impl Strategy<Value = StereoAtomAst> {

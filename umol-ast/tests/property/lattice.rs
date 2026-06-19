@@ -1,4 +1,5 @@
 use proptest::prelude::*;
+use umol_ast::ast::StereoKind;
 use crate::strategies::*;
 
 // Lattice-law sweep: every `impl Lattice` type satisfies commutativity,
@@ -178,6 +179,24 @@ proptest! {
         a in optional_multicenter_electron_count(),
         b in optional_multicenter_electron_count(),
         c in optional_multicenter_electron_count(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_stereo_atom_constraints_lattice_laws(
+        a in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
+        b in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
+        c in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_stereo_bond_constraints_lattice_laws(
+        a in stereo_bond_constraints_strategy(StereoKind::CisTrans),
+        b in stereo_bond_constraints_strategy(StereoKind::CisTrans),
+        c in stereo_bond_constraints_strategy(StereoKind::CisTrans),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
     }

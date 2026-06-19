@@ -366,8 +366,11 @@ is the build order.
       `// TODO` are gone. (Module-size cleanup of `dsl/constraint.rs` deferred.)
    e. Replace the `_from_edn`/`_to_edn` helpers (including inside macros) by inlined
       `FromEdn`/`ToEdn` impls.
-   f. **Tests** — DSL string + EDN streaming roundtrip; proptest generators; a stereo
-      collection lattice-law property test (the other six have one; stereo currently has none).
+   f. **Tests** — DSL string + EDN streaming roundtrip (incl. a fluxionality streaming case in
+      `from_edn_str_matches_from_edn`); the key/by-key/`Canonicalize` unit tests (a–c); and the
+      stereo collection lattice-law property tests `test_stereo_{atom,bond}_constraints_lattice_laws`
+      (canonical fixed-kind container strategies) — **Done**. Remaining: (e) inline the residual
+      `_from_edn`/`_to_edn` helpers.
 3. **Per-entity enums + collections. Each per-entity enum gets
    `Canonicalize` = delegate to the inner value (replacing `simplify`); each collection gets
    `Canonicalize` (per-kind canonicalize + drop-vacuous) and keeps its **hand-written**
