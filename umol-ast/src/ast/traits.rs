@@ -112,10 +112,9 @@ pub trait AsLit {
 /// and `join`; both return `true` iff `self` actually changed.
 ///
 /// `matches` is the partial-order check: `pattern.matches(target)` is true
-/// iff `target` refines `pattern`, i.e. `pattern.meet(target) == Some(target)`
-/// up to canonicalization of set-valued representations. Each impl provides
-/// its own direct implementation rather than delegating to `meet`.
-pub trait Lattice: Sized + Clone + PartialEq {
+/// iff `target` refines `pattern`, i.e. `pattern.meet(target) == canonical(target)`.
+/// It has a `meet`-derived default; impls override it only as a cheaper shortcut.
+pub trait Lattice: Canonicalize {
     /// Top of the lattice — `self` carries no value information.
     fn is_undetermined(&self) -> bool;
 
@@ -131,9 +130,15 @@ pub trait Lattice: Sized + Clone + PartialEq {
     fn join(&self, other: &Self) -> Self;
 
     /// Partial-order check: `self` (pattern) is true on `target` iff every
-    /// value `target` admits is also admitted by `self`. Equivalent to
-    /// `self.meet(target) == Some(target)` modulo canonicalization.
-    fn matches(&self, target: &Self) -> bool;
+    /// value `target` admits is also admitted by `self` — i.e. the meet refines
+    /// to `target`'s canonical form. Default is `meet`-derived; override only as
+    /// a cheaper shortcut that yields the same result.
+    fn matches(&self, target: &Self) -> bool {
+        match (self.meet(target), target.canonical()) {
+            (Some(meet), Ok(target)) => meet == *target,
+            _ => false,
+        }
+    }
 
     /// Symmetric compatibility: there exists a ground value that refines
     /// both `self` and `other`. Equivalent to `self.meet(other).is_some()`;

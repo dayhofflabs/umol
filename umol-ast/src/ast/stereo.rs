@@ -10,7 +10,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 use strum::VariantArray;
-use umol_ast_macros::Canonicalize;
+use umol_ast_macros::{Canonicalize, Lattice};
 use umol_perm::{space, ClassKey, Permutation};
 
 use super::constraint::{
@@ -217,13 +217,6 @@ impl Lattice for StereoConfigurationAst {
             }
         }
     }
-
-    fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
-            (Some(meet), Ok(target)) => meet == *target,
-            _ => false,
-        }
-    }
 }
 
 /// Generates a constraint-side stereo state for a fixed geometry (`#T`/`#C`):
@@ -335,13 +328,6 @@ macro_rules! stereo_site {
                         Self::Undetermined
                     }
                     (Self::Stereo(ca), Self::Stereo(cb)) => Self::Stereo(coset_join(ca, cb, $kind)),
-                }
-            }
-
-            fn matches(&self, target: &Self) -> bool {
-                match (self.meet(target), target.canonical()) {
-                    (Some(meet), Ok(target)) => meet == *target,
-                    _ => false,
                 }
             }
         }
@@ -652,7 +638,7 @@ macro_rules! stereo_element {
         $name:ident, $constraints:ident, $constraint:ident
     ) => {
         $(#[doc = $doc])+
-        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
         pub struct $name {
             pub configuration: StereoConfigurationAst,
             pub constraints: $constraints,
@@ -694,34 +680,6 @@ macro_rules! stereo_element {
 
         }
 
-        impl Lattice for $name {
-            fn is_undetermined(&self) -> bool {
-                self.configuration.is_undetermined() && self.constraints.is_undetermined()
-            }
-
-            fn is_ground(&self) -> bool {
-                self.configuration.is_ground() && self.constraints.is_ground()
-            }
-
-            fn meet(&self, other: &Self) -> Option<Self> {
-                Some(Self {
-                    configuration: self.configuration.meet(&other.configuration)?,
-                    constraints: self.constraints.meet(&other.constraints)?,
-                })
-            }
-
-            fn join(&self, other: &Self) -> Self {
-                Self {
-                    configuration: self.configuration.join(&other.configuration),
-                    constraints: self.constraints.join(&other.constraints),
-                }
-            }
-
-            fn matches(&self, target: &Self) -> bool {
-                self.configuration.matches(&target.configuration)
-                    && self.constraints.matches(&target.constraints)
-            }
-        }
     };
 }
 

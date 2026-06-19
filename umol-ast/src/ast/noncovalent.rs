@@ -132,14 +132,6 @@ impl Lattice for NoncovalentBondKindAst {
             _ => Self::Undetermined,
         }
     }
-
-    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
-    fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
-            (Some(meet), Ok(target)) => meet == *target,
-            _ => false,
-        }
-    }
 }
 
 /// Fundamental kind of a noncovalent interaction.

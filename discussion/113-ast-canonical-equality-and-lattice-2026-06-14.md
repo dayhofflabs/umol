@@ -162,7 +162,7 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
 | `StereoConfigurationAst` | ✓ `Undetermined`→id; `Kind(k,c)`→`Kind(k, canon_coset(c,k)?)` (never collapses `Kind`→`Undetermined`) | ✓ meet `(Und,x)`→`x`, `(Kind(k1,a),Kind(k2,b))`→ `k1≠k2?None:Kind(k1,coset_meet(a,b,k1)?)`; join same-kind→`Kind(k,coset_join)`, cross-kind→`Undetermined`; `is_undetermined`=top only (`Th*` is *not*); `is_ground`=`Kind(k,Lit)` | `StereoConfiguration{kind,coset}` (`Kind(k,Lit(i))`→`Some`) |
 | `TetrahedralStereoAst` / `CisTransStereoAst` | ✓ `Stereo(c)`→`Stereo(canon_coset(c, KIND)?)`; others id | ✓ `Undetermined` wildcard; `NotStereo∧NotStereo`; `NotStereo∧Stereo`→`None`(meet)/`Undetermined`(join); `Stereo(a)∧Stereo(b)`→`Stereo(coset_meet/join(a,b,KIND))` | `StereoConfiguration{kind,coset}` (kind = type constant; `Stereo(Lit(i))`→`Some`, `NotStereo`/`Undetermined`→`None`) |
 
-#### P3d · AST tests + property tests
+#### P3d · AST tests + property tests **Done**
 9. Per-method `#[rstest]`/`#[case]` units for `StereoConfigurationAst`,
    `TetrahedralStereoAst`, `CisTransStereoAst`: `canonicalize`/`_identity`, `meet`, `join`,
    `matches`, `as_lit`, `is_undetermined`/`is_ground` (incl. the `*` vs `Th*` distinction).
@@ -209,7 +209,7 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
     /`StereoSiteAst`, add the enum `StereoConfigurationAst`, `TetrahedralStereoAst`,
     `CisTransStereoAst`, and the `*Dsl` types.
 
-### P4 · Entities (pure field-wise)
+### P4 · Entities (pure field-wise) **Done**
 
 **Canonicalize derives done (P4.1–P4.6).** All eight entity ASTs now `#[derive(Canonicalize)]`
 (field-wise, fallible — `AtomConstraints`/config/electrons are the fallible fields); derive order is
@@ -269,8 +269,7 @@ Still pending: **P4.7** (delete the dead `simplify*` cluster) and the global **P
    `SubPattern`-recursion assertion is gone with its method (not ported — P5.5 `SubPattern` no-op).
    Verification: umol-ast lib 3540, property 67, resolution conformance 617, workspace builds.
 
-
-### P5 · Constraint types — impl plan (bottom-up)
+### P5 · Constraint types **Done**
 
 Design, lattice contracts, and notation: see *Per-type detail → Constraint types*. This
 is the build order.
@@ -523,20 +522,110 @@ dead). The original kind-in-map design existed precisely to keep `StereoAtomCons
 self-contained `C`; B preserves that while making `kind` positional. Form A (inline string) and the
 `#g`/`#o`/`#f`/`#p` grammar are untouched.
 
-### P6 · `Lattice`-trait flip + macro (lands once P1–P5 **and P4.7** all impl `Canonicalize`)
-- `Lattice: Canonicalize`; `matches` becomes the `meet`-derived default; `join` stays
-  `Self`. `#[derive(Lattice)]` generates `meet`/`join` = field-wise + `canonicalize`.
-  Remove the now-redundant hand-written `matches` impls (keep only genuine cheaper
-  overrides). Hand-written leaf `meet`/`join` already canonicalize from P1–P5.
+### P6 · `Lattice`-trait flip + macro (lands once P1–P5 **and P4.7** all impl `Canonicalize`) **Done**
+
+**Precondition (met).** Every `Lattice` type also impls `Canonicalize` (P1–P5 + P4): the four
+derived structs (`AtomAst`/`BondAst`/`NoncovalentBondAst`/`SpinStateAst`), the hand-Lattice leaves
+(`ValueAst`/`ElementAst`/`IsotopeMassAst`/`ElectronCountsAst`/`NoncovalentBondKindAst`/
+`AromaticValenceAst`/`MulticenterValenceAst`/`StereoConfigurationAst`/`stereo_site!`/`relation_ast!`),
+the hand-Lattice entities (`Dative`/`Aromatic`/`Multicenter`/stereo entity), and every collection.
+So the supertrait bound compiles; if anything is missed the supertrait line fails to build (cheap
+check).
+
+**Every field now has a proper lattice top.** Each entity field bottoms out in a type with a
+well-defined `Undetermined` top — `electrons` via `ElectronCountsAst` (not the old ambiguous
+`Vec<ValueAst>`, which had no single top), `configuration` via `StereoConfigurationAst`, and the
+value/spin/constraint fields likewise. So field-wise `meet`/`join`/`is_undetermined` is *complete and
+correct* for every entity, and the five "hand" entity `Lattice` impls are pure field-wise — identical
+to what `#[derive(Lattice)]` emits, hand-written only as historical residue (aromatic/multicenter
+predate the `electrons` retype; dative predates its post-`acceptor_slot` derive; the stereo entity's
+kind-aware meet lives inside `StereoConfigurationAst`, a field). They should all just derive.
+
+**Goal.** `trait Lattice: Canonicalize` with a `meet`-derived `matches` **default**, so new/most
+`Lattice` types need not write `matches`. `meet`/`join` stay required; `is_undetermined`/`is_ground`
+stay required. Equality stays lazy (P0); this only touches the `Lattice` surface.
+
+#### Steps
+
+1. **Trait (`ast/traits.rs`).** Change `pub trait Lattice: Sized + Clone + PartialEq` →
+   `pub trait Lattice: Canonicalize` (`Canonicalize` already requires `Sized + Clone + PartialEq`).
+   Give `matches` a default body — **the exact body `ValueAst::matches` already uses**, so no
+   semantic change for the types that adopt it:
+   ```rust
+   fn matches(&self, target: &Self) -> bool {
+       match (self.meet(target), target.canonical()) {
+           (Some(meet), Ok(target)) => meet == *target,
+           _ => false,
+       }
+   }
+   ```
+   (`self.meet(target)` is canonical; `target.canonical()` borrows when already canonical. Keep the
+   `_ => false` arm verbatim — incompatible meet and unsatisfiable target both → `false`, matching
+   today.)
+
+2. **Convert the five hand-entity `Lattice` impls to `#[derive(Lattice)]`** (they are pure
+   field-wise; every field has a proper top — see above):
+   - `DativeBondAst`, `AromaticSystemAst`, `MulticenterBondAst` — add `Lattice` to the `#[derive(...)]`
+     list, delete the hand `impl Lattice` (`is_undetermined`/`is_ground`/`meet`/`join`/`matches`).
+   - stereo entity — the `stereo_element!` macro emits `#[derive(Lattice)]` on the struct and drops
+     its hand `impl Lattice` block. (`StereoAtomAst`/`StereoBondAst`.)
+   After this, **all eight entities + `SpinStateAst` derive `Lattice`**; the only non-derived
+   `Lattice` impls left are the leaves and the collections.
+
+3. **Derive macro (`umol-ast-macros`).** `meet`/`join` stay field-wise with **no** `+canonicalize`
+   (**D2 resolved → omit**): every field's `meet`/`join` already returns a canonical value (P1–P5),
+   entities are pure field-wise with no cross-field invariant, and the derived `Canonicalize` is
+   field-wise — so a struct of canonical fields is itself canonical. An extra `canonicalize` would be
+   a guaranteed runtime no-op. The macro **stops generating `matches`** (the trait default takes
+   over); it keeps generating `is_undetermined`/`is_ground`/`meet`/`join`.
+
+4. **Delete the redundant meet-derived `matches` impls** (byte-identical to the new default):
+   `ValueAst`, `ElementAst`, `IsotopeMassAst`, `ElectronCountsAst`, `NoncovalentBondKindAst`,
+   `AromaticValenceAst`, `MulticenterValenceAst`, `StereoConfigurationAst`, and the `stereo_site!`
+   macro's `matches` (`TetrahedralStereoAst`/`CisTransStereoAst`). Pure removal — the default takes
+   over identically.
+
+5. **The collections (`Atom`/`Bond`/`Dative`/`Aromatic`/`Multicenter`/stereo `Constraints`)** keep
+   their hand `Lattice` `meet`/`join` — they are keyed `Vec`-newtypes (per-key merge), **not**
+   field-wise, so not derivable. Their `matches` is the only open question — **Decision D1**:
+   - **Keep** the hand field-wise/per-key `matches` (cheaper — `&&` of per-accessor `matches`, no meet
+     construction), or
+   - **Drop** to the meet-derived default (uniform, less code; each call builds + canonicalizes the
+     merged collection).
+   `NoncovalentBondConstraints` is trivial (uninhabited inner) — either way its `matches` is vacuous.
+
+6. **Keep the genuinely-cheaper custom override**: `relation_ast!`
+   (`TopicityRelationAst`/`StereogenicityAst`) uses `target.to_set().is_subset(&self.to_set())` — a
+   direct subset test, cheaper than constructing the meet, not a field-wise conjunction.
+
+7. **Tests.**
+   - **Existing coverage stands.** Every per-type `test_*_matches` unit test now exercises whichever
+     `matches` the type ends with (default or override); they pin behavior across the flip — a green
+     run is the regression gate. No expectations change (the default is byte-identical to the deleted
+     leaf bodies; the derived entities keep the same field-wise semantics).
+   - **Property (`tests/property/lattice.rs`).** `assert_lattice_laws` already asserts the
+     `matches`↔`meet` law for every `Lattice` type; post-flip this law *is* the default's definition,
+     so it validates the surviving overrides (collections if D1-keeps, `relation_ast!`) agree with it.
+     Tighten its RHS from `a.meet(b) == Some(b.clone())` to `a.meet(b) == b.canonical().ok()` (correct
+     even for a non-canonical generated `b`; strategies already canonicalize, so belt-and-suspenders).
+   - **No standalone `test_lattice_matches_default`** — it would be tautological: the nine deleted
+     leaf types' existing `test_*_matches` (e.g. `test_element_ast_matches`, which already covers
+     lit/set/notset/var membership + subset/superset) now route through the default verbatim, so they
+     *are* the default's test suite.
+
+#### Decisions (resolved)
+- **D1 → keep** the collections' hand `matches` as a **strict efficiency override** (per-key
+  conjunction, no merged-collection construction): it does not change the structure, just computes
+  the same result faster — exactly the "genuine cheaper override" the default is meant to allow.
+- **D2 → omit** `+canonicalize` in the derived `meet`/`join` (would be a runtime no-op).
+- **Hand entities → derive** (`Dative`/`Aromatic`/`Multicenter`/stereo entity).
 
 ### P7 · Semantic-equality adoption + boundary cleanup
 1. 095 Q2 leak audit → route to `equiv`/`Canonical<T>` where semantic keys are needed:
    `MoleculeAst::PartialEq` (graph-canonical), `HashMap`/`HashSet` AST keys, alias
    `BiBTreeMap`, constraint dedup. Decide structural-vs-semantic per site.
 2. Drop `matches_value` (replace by as_lit_matches where appropriate); delete `capture`/`evaluate`.
-3. Literal renames + `*Dsl` per the boundary-type convention (one `*Dsl` per
-   boundary-crossing type, owning its serde; literals drop `Ast`):
-   `StereoConfigurationDsl`→`StereoSiteDsl`; add `TopicityDsl`/`StereogenicityDsl`.
+3. **removed**
 
 ### P8 · Verification (doc 111)
 1. C4e.5(1): all retained `lattice::` tests green (raised `PROPTEST_CASES`); demoted types

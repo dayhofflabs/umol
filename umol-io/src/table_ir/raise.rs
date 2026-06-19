@@ -9,9 +9,10 @@ use std::collections::HashSet;
 
 use thiserror::Error;
 use umol_ast::ast::{
-    AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint, Constraints,
-    DativeBondAst, ElementAst, IsotopeMassAst, MoleculeAst, MulticenterBondAst, NoncovalentBondAst,
-    CisTransStereoAst, SpinStateAst, StereoCosetAst, TetrahedralStereoAst, TryIntoAst, ValueAst,
+    AromaticValenceAst, AtomAst, AtomConstraint, AtomId, BondAst, BondConstraint,
+    CisTransStereoAst, Constraints, DativeBondAst, ElementAst, IsotopeMassAst, MoleculeAst,
+    MulticenterBondAst, NoncovalentBondAst, SpinStateAst, StereoCosetAst, TetrahedralStereoAst,
+    TryIntoAst, ValueAst,
 };
 use umol_perm::{space, ClassKey, Permutation};
 use umol_shared::error::UmolError;
@@ -136,7 +137,7 @@ impl TryIntoAst<AtomAst> for &TableAtom {
         let mut atom = AtomAst {
             element: ElementAst::Lit(self.element),
             isotope_mass: match self.isotope_mass {
-                Some(m) => IsotopeMassAst::Lit(m as u32),
+                Some(m) => IsotopeMassAst::Lit(m),
                 None => IsotopeMassAst::Undetermined,
             },
             charge: match self.charge {
@@ -296,7 +297,7 @@ fn raise_tetrahedral_stereo(
                 atom_idx,
                 &target_ordering,
                 neighbor_idx,
-                &positions,
+                positions,
                 outofplane,
             );
             for &(neighbor_idx, outofplane) in &neighbors[1..] {
@@ -607,8 +608,8 @@ mod tests {
         #[case] bond_idx: usize,
         #[case] expected: Option<StereoCosetAst>,
     ) {
-        let expected = expected
-            .map(|coset| BondConstraint::CisTransStereo(CisTransStereoAst::stereo(coset)));
+        let expected =
+            expected.map(|coset| BondConstraint::CisTransStereo(CisTransStereoAst::stereo(coset)));
         assert_eq!(raise_cis_trans_stereo(&mol, bond_idx), Ok(expected));
     }
 

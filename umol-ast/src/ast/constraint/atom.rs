@@ -306,14 +306,6 @@ impl Lattice for AromaticValenceAst {
             (Self::Aromatic(p), Self::Aromatic(q)) => Self::Aromatic(p.join(q)),
         }
     }
-
-    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
-    fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
-            (Some(meet), Ok(target)) => meet == *target,
-            _ => false,
-        }
-    }
 }
 
 impl AsLit for AromaticValenceAst {
@@ -433,14 +425,6 @@ impl Lattice for MulticenterValenceAst {
             (Self::NotMulticenter, Self::Multicenter(_))
             | (Self::Multicenter(_), Self::NotMulticenter) => Self::Undetermined,
             (Self::Multicenter(p), Self::Multicenter(q)) => Self::Multicenter(p.join(q)),
-        }
-    }
-
-    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
-    fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
-            (Some(meet), Ok(target)) => meet == *target,
-            _ => false,
         }
     }
 }

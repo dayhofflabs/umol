@@ -1,15 +1,14 @@
 //! Dative bond AST.
 
-use umol_ast_macros::Canonicalize;
+use umol_ast_macros::{Canonicalize, Lattice};
 
 use super::constraint::{DativeBondConstraint, DativeBondConstraints};
-use super::traits::Lattice;
 use super::value::ValueAst;
 
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the
 /// owning molecule's dative relation; this value holds no participant refs.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct DativeBondAst {
     /// Bond order — number of electron pairs donated.
     pub order: ValueAst,
@@ -68,35 +67,6 @@ impl DativeBondAst {
     }
 }
 
-impl Lattice for DativeBondAst {
-    fn is_undetermined(&self) -> bool {
-        self.order.is_undetermined() && self.constraints.is_undetermined()
-    }
-
-    fn is_ground(&self) -> bool {
-        self.order.is_ground() && self.constraints.is_ground()
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        Some(Self {
-            order: self.order.meet(&other.order)?,
-            constraints: self.constraints.meet(&other.constraints)?,
-        })
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        Self {
-            order: self.order.join(&other.order),
-            constraints: self.constraints.join(&other.constraints),
-        }
-    }
-
-    /// Field-wise: `order` and `constraints` must each match.
-    fn matches(&self, target: &Self) -> bool {
-        self.order.matches(&target.order) && self.constraints.matches(&target.constraints)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -105,7 +75,7 @@ mod tests {
     use super::*;
     use crate::ast::constraint::RingScope;
     use crate::ast::error::Contradiction;
-    use crate::ast::traits::Canonicalize;
+    use crate::ast::traits::{Canonicalize, Lattice};
 
     #[rustfmt::skip]
     #[rstest]

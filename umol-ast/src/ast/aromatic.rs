@@ -1,6 +1,6 @@
 //! Aromatic system AST.
 
-use umol_ast_macros::Canonicalize;
+use umol_ast_macros::{Canonicalize, Lattice};
 
 use super::constraint::{AromaticSystemConstraint, AromaticSystemConstraints};
 use super::electrons::ElectronCountsAst;
@@ -8,7 +8,7 @@ use super::spin::SpinStateAst;
 use super::traits::Lattice;
 use super::value::ValueAst;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct AromaticSystemAst {
     pub electrons: ElectronCountsAst,
     pub charge: ValueAst,
@@ -83,49 +83,6 @@ impl AromaticSystemAst {
     /// defaults.
     pub fn into_zeroed(self) -> Self {
         self.into_ground()
-    }
-}
-
-impl Lattice for AromaticSystemAst {
-    fn is_undetermined(&self) -> bool {
-        self.electrons.is_undetermined()
-            && self.charge.is_undetermined()
-            && self.spin.is_undetermined()
-            && self.constraints.is_undetermined()
-    }
-
-    fn is_ground(&self) -> bool {
-        self.electrons.is_ground()
-            && self.charge.is_ground()
-            && self.spin.is_ground()
-            && self.constraints.is_ground()
-    }
-
-    fn meet(&self, other: &Self) -> Option<Self> {
-        Some(Self {
-            electrons: self.electrons.meet(&other.electrons)?,
-            charge: self.charge.meet(&other.charge)?,
-            spin: self.spin.meet(&other.spin)?,
-            constraints: self.constraints.meet(&other.constraints)?,
-        })
-    }
-
-    fn join(&self, other: &Self) -> Self {
-        Self {
-            electrons: self.electrons.join(&other.electrons),
-            charge: self.charge.join(&other.charge),
-            spin: self.spin.join(&other.spin),
-            constraints: self.constraints.join(&other.constraints),
-        }
-    }
-
-    /// `self` (pattern) matches `target` iff `electrons` (whole-vector),
-    /// `charge`, `spin`, and `constraints` all match field-wise.
-    fn matches(&self, target: &Self) -> bool {
-        self.electrons.matches(&target.electrons)
-            && self.charge.matches(&target.charge)
-            && self.spin.matches(&target.spin)
-            && self.constraints.matches(&target.constraints)
     }
 }
 

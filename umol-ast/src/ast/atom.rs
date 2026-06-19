@@ -443,14 +443,6 @@ impl Lattice for ElementAst {
             }
         }
     }
-
-    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
-    fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
-            (Some(meet), Ok(target)) => meet == *target,
-            _ => false,
-        }
-    }
 }
 
 /// Isotope-mass expression: undetermined, the natural isotopic mixture
@@ -625,14 +617,6 @@ impl Lattice for IsotopeMassAst {
                     .canonicalize()
                     .unwrap_or(Undetermined)
             }
-        }
-    }
-
-    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
-    fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
-            (Some(meet), Ok(target)) => meet == *target,
-            _ => false,
         }
     }
 }

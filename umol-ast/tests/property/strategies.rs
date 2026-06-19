@@ -741,7 +741,7 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     prop_assert_eq!(a.meet(&a.join(b)), Some(a.clone()));
     prop_assert_eq!(a.meet(a), Some(a.clone()));
     prop_assert_eq!(a.join(a), a.clone());
-    prop_assert_eq!(a.matches(b), a.meet(b) == Some(b.clone()));
+    prop_assert_eq!(a.matches(b), a.meet(b) == b.clone().canonicalize().ok());
     Ok(())
 }
 

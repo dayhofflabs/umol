@@ -535,14 +535,6 @@ impl Lattice for ValueAst {
             }
         }
     }
-
-    /// `target` refines `self`: `self.meet(target) == canonical(target)`.
-    fn matches(&self, target: &Self) -> bool {
-        match (self.meet(target), target.canonical()) {
-            (Some(meet), Ok(target)) => meet == *target,
-            _ => false,
-        }
-    }
 }
 
 /// A non-empty canonical set as a `ValueAst`: a singleton collapses to `Lit`.
