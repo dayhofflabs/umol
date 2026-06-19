@@ -771,8 +771,8 @@ stereo-kind          ::= :tetrahedral | :cis-trans | :axial | :square-planar
                        | :trigonal-bipyramidal | :octahedral
 permutation-form     ::= [ cycle* ]                 (* vector of disjoint cycles; identity [] *)
 cycle                ::= [ nat+ ]                    (* p0→p1→…→p0, 0-indexed positions *)
-ligand-symmetry-form ::= { :perm permutation-form [:orientation (:proper | :improper)]
-                                                   [:member (:in | :not-in)] }
+ligand-symmetry-form ::= { :permutation permutation-form [:orientation (:proper | :improper)]
+                                                         [:member (:in | :not-in)] }
 ligand-pair          ::= [ nat nat ]                (* two ligand-frame positions *)
 topicity-form        ::= { :pair ligand-pair :relation topicity-relation [:member (:in | :not-in)] }
 stereogenicity-form  ::= { :relation stereogenicity-relation [:member (:in | :not-in)] }
