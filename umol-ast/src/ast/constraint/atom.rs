@@ -160,6 +160,29 @@ impl AtomConstraint {
     }
 }
 
+impl Canonicalize for AtomConstraint {
+    /// Canonicalize the inner value; kind and sub-key are preserved.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::Valence(v) => Self::Valence(v.canonicalize()?),
+            Self::TotalValence(v) => Self::TotalValence(v.canonicalize()?),
+            Self::DonatedPairs(v) => Self::DonatedPairs(v.canonicalize()?),
+            Self::AcceptedPairs(v) => Self::AcceptedPairs(v.canonicalize()?),
+            Self::Degree(v) => Self::Degree(v.canonicalize()?),
+            Self::TotalDegree(v) => Self::TotalDegree(v.canonicalize()?),
+            Self::RingDegree(v) => Self::RingDegree(v.canonicalize()?),
+            Self::RingValence(v) => Self::RingValence(v.canonicalize()?),
+            Self::TotalHydrogens(v) => Self::TotalHydrogens(v.canonicalize()?),
+            Self::RingMembership(m) => {
+                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.canonicalize()?))
+            }
+            Self::AromaticValence(c) => Self::AromaticValence(c.canonicalize()?),
+            Self::MulticenterValence(c) => Self::MulticenterValence(c.canonicalize()?),
+            Self::TetrahedralStereo(c) => Self::TetrahedralStereo(c.canonicalize()?),
+        })
+    }
+}
+
 /// Entry identity: discriminant + sub-key. Variant order matches `AtomConstraint`,
 /// so `Ord` agrees with `kind as u8`; the ring run orders by `RingScope`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -750,6 +773,32 @@ impl AtomConstraints {
     }
 }
 
+impl Canonicalize for AtomConstraints {
+    /// Sort by `key()`, canonicalize each value, merge same-scope ring entries
+    /// by value-`meet` (`Err` on contradiction), drop vacuous entries.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        let mut input = self.entries;
+        input.sort_by_key(|c| c.key());
+        let mut entries: SmallVec<[AtomConstraint; 2]> = SmallVec::new();
+        for c in input {
+            let c = c.canonicalize()?;
+            if let (
+                Some(AtomConstraint::RingMembership(prev)),
+                AtomConstraint::RingMembership(next),
+            ) = (entries.last_mut(), &c)
+            {
+                if prev.scope == next.scope {
+                    prev.count = prev.count.meet(&next.count).ok_or(Contradiction)?;
+                    continue;
+                }
+            }
+            entries.push(c);
+        }
+        entries.retain(|c| !c.is_undetermined());
+        Ok(Self { entries })
+    }
+}
+
 impl Lattice for AtomConstraints {
     fn is_undetermined(&self) -> bool {
         self.iter().all(|c| c.is_undetermined())
@@ -1033,6 +1082,20 @@ mod tests {
         #[case] expected: AtomConstraintKind,
     ) {
         assert_eq!(key.kind(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::valence_litset_singleton(AtomConstraint::Valence(ValueAst::lit_set([4])), Ok(AtomConstraint::valence(4)))]
+    #[case::ring_count_litset_singleton(
+        AtomConstraint::RingMembership(RingMembershipAst::new(RingScope::Size(6), ValueAst::lit_set([2]))),
+        Ok(AtomConstraint::ring_membership(RingScope::Size(6), 2)))]
+    #[case::empty_litset_contradiction(AtomConstraint::Valence(ValueAst::lit_set(Vec::<i64>::new())), Err(Contradiction))]
+    fn test_atom_constraint_canonicalize(
+        #[case] constraint: AtomConstraint,
+        #[case] expected: Result<AtomConstraint, Contradiction>,
+    ) {
+        assert_eq!(constraint.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1557,6 +1620,39 @@ mod tests {
                 AtomConstraint::ring_membership(RingScope::All, 2),
             ],
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::merge_same_scope(
+        AtomConstraints::from_iter([
+            AtomConstraint::ring_membership(RingScope::All, ValueAst::lit_set([1, 2])),
+            AtomConstraint::ring_membership(RingScope::All, ValueAst::lit_set([2, 3])),
+        ]),
+        Ok(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::All, 2)])))]
+    #[case::drop_vacuous(
+        AtomConstraints::from_iter([
+            AtomConstraint::Valence(ValueAst::Undetermined),
+            AtomConstraint::degree(3),
+        ]),
+        Ok(AtomConstraints::from_iter([AtomConstraint::degree(3)])))]
+    #[case::canonicalizes_values(
+        AtomConstraints::from_iter([
+            AtomConstraint::Degree(ValueAst::lit_set([3])),
+            AtomConstraint::Valence(ValueAst::lit_set([4])),
+        ]),
+        Ok(AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)])))]
+    #[case::contradiction_same_scope(
+        AtomConstraints::from_iter([
+            AtomConstraint::ring_membership(RingScope::All, 1),
+            AtomConstraint::ring_membership(RingScope::All, 0),
+        ]),
+        Err(Contradiction))]
+    fn test_atom_constraints_canonicalize(
+        #[case] constraints: AtomConstraints,
+        #[case] expected: Result<AtomConstraints, Contradiction>,
+    ) {
+        assert_eq!(constraints.canonicalize(), expected);
     }
 
     #[rustfmt::skip]

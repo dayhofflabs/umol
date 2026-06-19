@@ -274,7 +274,7 @@ pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstrain
         for c in list {
             cs.add(c);
         }
-        cs
+        cs.canonicalize().unwrap_or_default()
     })
 }
 
