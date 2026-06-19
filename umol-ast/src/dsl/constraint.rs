@@ -18,22 +18,28 @@ use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
 use super::stereo::{
-    coset_lit, parse_stereo_coset, StereoAtomConstraintDsl, StereoBondConstraintDsl, StereoCosetDsl,
+    coset_lit, parse_stereo_coset, stereo_kind_from_name, stereogenicity_relation_from_parts,
+    topicity_relation_from_parts, RelationValue, StereoAtomConstraintDsl, StereoBondConstraintDsl,
+    StereoCosetDsl,
 };
 use super::value::{parse_value, ValueDsl};
 use crate::ast::constraint::{
-    AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints,
-    MoleculeConstraint, MulticenterValenceAst, RingMembershipAst, RingScope, SubPatternAnchor,
+    AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints, FluxionalityAst,
+    LigandPermutation, LigandSymmetryAst, MoleculeConstraint, MulticenterValenceAst,
+    OrientedLigandPermutation, RingMembershipAst, RingScope, StereoAtomConstraint,
+    StereoBondConstraint, StereoLigandPair, StereogenicityAst, SubPatternAnchor, TopicityAst,
 };
 use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
-    StereoAtomId, StereoBondId,
+    StereoAtomId, StereoBondId, StereoLigandId,
 };
 use crate::ast::molecule::MoleculeAst;
+use crate::ast::operators::MemOp;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
+use umol_perm::{Orientation, Permutation};
 
 /// Per-entity counts for numeric-index bounds checking during constraint
 /// resolution (DSL → AST). `from_ast` (AST → DSL) does not read counts.
@@ -785,26 +791,195 @@ pub(super) fn read_noncovalent_bond_constraint_dsl(
     Err(DeError::Custom("no value-only noncovalent-bond constraints exist yet".to_string()).into())
 }
 
-/// Read a stereo constraint payload (the kind-bearing map) by capturing its value
-/// slice and parsing it via `FromEdn` — the kind-aware build lives in the
-/// `StereoAtomConstraintDsl::from_edn` impl, so the streaming path bridges rather
-/// than reimplementing the map parse incrementally.
-/// TODO: FIX THIS TO USE streaming parser
-fn read_stereo_atom_constraint_dsl(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<StereoAtomConstraintDsl, EdnError> {
-    let slice = de.read_value_slice()?;
-    let edn = umol_edn::read_string(slice)?;
-    Ok(StereoAtomConstraintDsl::from_edn(&edn)?)
+/// Membership polarity `:in` / `:not-in`. Shared by `#p` and the `#o`/`#g` relations.
+fn read_member(de: &mut EdnStreamDeserializer<'_>) -> Result<MemOp, EdnError> {
+    match de.read_keyword_name()?.as_ref() {
+        "in" => Ok(MemOp::In),
+        "not-in" => Ok(MemOp::NotIn),
+        other => Err(DeError::Custom(format!("expected :in | :not-in, got :{other}")).into()),
+    }
 }
 
-/// TODO: FIX THIS TO USE streaming parser
-fn read_stereo_bond_constraint_dsl(
+/// A permutation as a vector of disjoint cycles `[[0 1 2] [3 4]]`; degree from the
+/// stereo kind. Manual loops so the disjoint-cycle `seen` check borrows linearly.
+fn read_perm_vov(de: &mut EdnStreamDeserializer<'_>, degree: usize) -> Result<Permutation, EdnError> {
+    let mut seen = vec![false; degree];
+    let mut cycles: Vec<Vec<usize>> = Vec::new();
+    de.consume_byte(b'[')?;
+    while !de.try_consume_byte(b']')? {
+        de.consume_byte(b'[')?;
+        let mut cycle = Vec::new();
+        while !de.try_consume_byte(b']')? {
+            let n = de.read_i64()?;
+            let point = usize::try_from(n)
+                .ok()
+                .filter(|&x| x < degree && !seen[x])
+                .ok_or_else(|| DeError::OutOfRange {
+                    value: n.to_string(),
+                    target: "ligand position",
+                    path: Vec::new(),
+                })?;
+            seen[point] = true;
+            cycle.push(point);
+        }
+        cycles.push(cycle);
+    }
+    Ok(Permutation::from_cycles(degree, &cycles))
+}
+
+/// The `:relation` value: `:undetermined`, one keyword, or a keyword vector.
+fn read_relation_value(de: &mut EdnStreamDeserializer<'_>) -> Result<RelationValue, EdnError> {
+    if de.peek_byte()? == Some(b'[') {
+        Ok(RelationValue::Many(read_vec(de, |de| {
+            Ok(de.read_keyword_name()?.into_owned())
+        })?))
+    } else {
+        let kw = de.read_keyword_name()?.into_owned();
+        Ok(if kw == "undetermined" {
+            RelationValue::Undetermined
+        } else {
+            RelationValue::One(kw)
+        })
+    }
+}
+
+fn read_ligand_symmetry(
     de: &mut EdnStreamDeserializer<'_>,
-) -> Result<StereoBondConstraintDsl, EdnError> {
-    let slice = de.read_value_slice()?;
-    let edn = umol_edn::read_string(slice)?;
-    Ok(StereoBondConstraintDsl::from_edn(&edn)?)
+    kind: StereoKind,
+) -> Result<LigandSymmetryAst, EdnError> {
+    let mut perm = None;
+    let mut orientation = Orientation::Proper;
+    let mut mem = MemOp::In;
+    read_map(de, |de, key| {
+        match key {
+            "perm" => perm = Some(read_perm_vov(de, kind.degree())?),
+            "orientation" => {
+                orientation = match de.read_keyword_name()?.as_ref() {
+                    "proper" => Orientation::Proper,
+                    "improper" => Orientation::Improper,
+                    other => {
+                        return Err(DeError::Custom(format!(
+                            "expected :proper | :improper, got :{other}"
+                        ))
+                        .into())
+                    }
+                }
+            }
+            "member" => mem = read_member(de)?,
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["ligand-symmetry".into()],
+                }
+                .into())
+            }
+        }
+        Ok(())
+    })?;
+    let perm = perm.ok_or_else(|| DeError::Custom("ligand-symmetry missing :perm".to_string()))?;
+    Ok(LigandSymmetryAst {
+        perm: OrientedLigandPermutation {
+            perm: LigandPermutation(perm),
+            orientation,
+        },
+        mem,
+    })
+}
+
+fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnError> {
+    let mut pair = None;
+    let mut value = None;
+    let mut not_in = false;
+    read_map(de, |de, key| {
+        match key {
+            "pair" => {
+                let v = read_vec(de, |de| Ok(de.read_i64()?))?;
+                let [a, b]: [i64; 2] = v[..]
+                    .try_into()
+                    .map_err(|_| DeError::Custom("topicity :pair must have 2 positions".to_string()))?;
+                pair = Some(StereoLigandPair::new(
+                    StereoLigandId(a as u8),
+                    StereoLigandId(b as u8),
+                ));
+            }
+            "relation" => value = Some(read_relation_value(de)?),
+            "member" => not_in = read_member(de)? == MemOp::NotIn,
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["topicity".into()],
+                }
+                .into())
+            }
+        }
+        Ok(())
+    })?;
+    let pair = pair.ok_or_else(|| DeError::Custom("topicity missing :pair".to_string()))?;
+    let value = value.ok_or_else(|| DeError::Custom("topicity missing :relation".to_string()))?;
+    Ok(TopicityAst {
+        pair,
+        rel: topicity_relation_from_parts(value, not_in)?,
+    })
+}
+
+fn read_stereogenicity(de: &mut EdnStreamDeserializer<'_>) -> Result<StereogenicityAst, EdnError> {
+    let mut value = None;
+    let mut not_in = false;
+    read_map(de, |de, key| {
+        match key {
+            "relation" => value = Some(read_relation_value(de)?),
+            "member" => not_in = read_member(de)? == MemOp::NotIn,
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["stereogenicity".into()],
+                }
+                .into())
+            }
+        }
+        Ok(())
+    })?;
+    let value =
+        value.ok_or_else(|| DeError::Custom("stereogenicity missing :relation".to_string()))?;
+    Ok(stereogenicity_relation_from_parts(value, not_in)?)
+}
+
+/// Stream a stereo constraint as the positional 2-vector `[<kind> {<key> <value>}]`:
+/// kind first (container-fixed) → degree known → the single-key payload streamed.
+/// The per-key dispatch is the only per-collection part.
+macro_rules! read_stereo_constraint_dsl {
+    ($name:ident, $constraint:ident, $dsl:ident, $context:literal) => {
+        fn $name(de: &mut EdnStreamDeserializer<'_>) -> Result<$dsl, EdnError> {
+            de.consume_byte(b'[')?;
+            let kind = stereo_kind_from_name(de.read_keyword_name()?.as_ref())?;
+            let key = read_single_key_map_header(de)?;
+            let constraint = match key.as_str() {
+                "ligand-symmetry" => $constraint::LigandSymmetry(read_ligand_symmetry(de, kind)?),
+                "fluxionality" => $constraint::Fluxionality(FluxionalityAst {
+                    perm: LigandPermutation(read_perm_vov(de, kind.degree())?),
+                }),
+                "topicity" => $constraint::Topicity(read_topicity(de)?),
+                "stereogenicity" => $constraint::Stereogenicity(read_stereogenicity(de)?),
+                other => {
+                    return Err(
+                        DeError::Custom(format!("unknown stereo constraint keyword :{other}")).into(),
+                    )
+                }
+            };
+            consume_single_key_map_close(de, $context)?;
+            de.consume_byte(b']')?;
+            Ok($dsl(kind, constraint))
+        }
+    };
+}
+
+read_stereo_constraint_dsl! {
+    read_stereo_atom_constraint_dsl, StereoAtomConstraint, StereoAtomConstraintDsl,
+    "stereo-atom-constraint"
+}
+read_stereo_constraint_dsl! {
+    read_stereo_bond_constraint_dsl, StereoBondConstraint, StereoBondConstraintDsl,
+    "stereo-bond-constraint"
 }
 
 fn read_atom_ref_vec(de: &mut EdnStreamDeserializer<'_>) -> Result<Vec<AtomRef>, EdnError> {

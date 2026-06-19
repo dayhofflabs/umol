@@ -887,14 +887,57 @@ fn perm_from_vov(edn: &Edn, degree: usize) -> Result<Permutation, DeError> {
     Ok(Permutation::from_cycles(degree, &cycles))
 }
 
+/// Streaming-read intermediate for a `:relation` value (`:undetermined`, a single
+/// keyword, or a vector of keywords) before the domain mapping is applied by
+/// `relation_serde!`'s `$from_parts`.
+#[derive(Clone, Debug)]
+pub(crate) enum RelationValue {
+    Undetermined,
+    One(String),
+    Many(Vec<String>),
+}
+
 /// Generates the structured-EDN serialization/deserialization for a relation type
 /// into/out of the owning constraint map: `:relation` is `:undetermined`, a single
 /// keyword (`Lit`), or a member vector (`LitSet`/`NotSet`), and a sibling
 /// `:member :in`/`:not-in` (default `:in`) carries the `NotSet` polarity — mirroring
 /// `:member` on `ligand-symmetry`. Mechanical (no folding); keyword names map 1:1 to
-/// the domain variants per the table.
+/// the domain variants per the table. `$from_parts` is the streaming twin of `$from`,
+/// mapping a `RelationValue` + `not_in` flag to the relation.
 macro_rules! relation_serde {
-    ($to:ident, $from:ident, $relation:ident, $domain:ty, $($variant:path => $kw:literal),+ $(,)?) => {
+    ($to:ident, $from:ident, $from_parts:ident, $relation:ident, $domain:ty, $($variant:path => $kw:literal),+ $(,)?) => {
+        pub(crate) fn $from_parts(value: RelationValue, not_in: bool) -> Result<$relation, DeError> {
+            fn keyword_member(name: &str) -> Option<$domain> {
+                match name {
+                    $($kw => Some($variant),)+
+                    _ => None,
+                }
+            }
+            let member = |k: &str| {
+                keyword_member(k).ok_or_else(|| {
+                    DeError::Custom(format!(
+                        concat!("unknown ", stringify!($relation), " keyword :{}"),
+                        k
+                    ))
+                })
+            };
+            match value {
+                RelationValue::Undetermined => Ok($relation::Undetermined),
+                RelationValue::One(k) => Ok($relation::lit(member(&k)?)),
+                RelationValue::Many(ks) => {
+                    let mut members = BTreeSet::new();
+                    for k in &ks {
+                        members.insert(member(k)?);
+                    }
+                    Ok(if not_in {
+                        $relation::not_set(members)
+                    } else {
+                        $relation::lit_set(members)
+                    })
+                }
+            }
+        }
+
         fn $to(rel: &$relation, m: &mut EdnMap<'static>) {
             fn member_kw(v: $domain) -> Edn<'static> {
                 let name = match v { $($variant => $kw,)+ };
@@ -986,7 +1029,8 @@ macro_rules! relation_serde {
 }
 
 relation_serde! {
-    topicity_relation_to_edn, topicity_relation_from_edn, TopicityRelationAst, Topicity,
+    topicity_relation_to_edn, topicity_relation_from_edn, topicity_relation_from_parts,
+    TopicityRelationAst, Topicity,
     Topicity::Homotopic => "homotopic",
     Topicity::Enantiotopic => "enantiotopic",
     Topicity::Diastereotopic => "diastereotopic",
@@ -994,7 +1038,7 @@ relation_serde! {
 
 relation_serde! {
     stereogenicity_relation_to_edn, stereogenicity_relation_from_edn,
-    StereogenicityAst, Stereogenicity,
+    stereogenicity_relation_from_parts, StereogenicityAst, Stereogenicity,
     Stereogenicity::Symmetric => "symmetric",
     Stereogenicity::Prochiral => "prochiral",
     Stereogenicity::Stereogenic => "stereogenic",
@@ -1094,15 +1138,8 @@ pub(crate) fn stereo_kind_to_edn(kind: StereoKind) -> Edn<'static> {
     Edn::keyword(name)
 }
 
-pub(crate) fn stereo_kind_from_edn(edn: &Edn) -> Result<StereoKind, DeError> {
-    let Edn::Keyword(k) = edn else {
-        return Err(DeError::TypeMismatch {
-            expected: "stereo-kind keyword",
-            got: edn.kind(),
-            path: Vec::new(),
-        });
-    };
-    match k.name() {
+pub(crate) fn stereo_kind_from_name(name: &str) -> Result<StereoKind, DeError> {
+    match name {
         "tetrahedral" => Ok(StereoKind::Tetrahedral),
         "cis-trans" => Ok(StereoKind::CisTrans),
         "axial" => Ok(StereoKind::Axial),
@@ -1111,6 +1148,17 @@ pub(crate) fn stereo_kind_from_edn(edn: &Edn) -> Result<StereoKind, DeError> {
         "octahedral" => Ok(StereoKind::Octahedral),
         other => Err(DeError::Custom(format!("unknown stereo kind :{other}"))),
     }
+}
+
+pub(crate) fn stereo_kind_from_edn(edn: &Edn) -> Result<StereoKind, DeError> {
+    let Edn::Keyword(k) = edn else {
+        return Err(DeError::TypeMismatch {
+            expected: "stereo-kind keyword",
+            got: edn.kind(),
+            path: Vec::new(),
+        });
+    };
+    stereo_kind_from_name(k.name())
 }
 
 fn ligand_position(edn: &Edn) -> Result<StereoLigandId, DeError> {

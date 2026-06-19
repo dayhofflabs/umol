@@ -344,8 +344,8 @@ is the build order.
       relation; `#f`/`#p` atomic) and the container (sort by `key()`, merge same-key by
       value-`meet` → `Err` on `⊥`, drop vacuous). `add` sort-inserts; `#o`/`#f`/`#p` lazy-append
       (was eager same-pair replace for `#o`).
-   d. **DSL — EDN redesign so `kind` is positional, then stream. Value path Done (B, 2-vector);
-      true streaming pending.** The blocker is that
+   d. **DSL — EDN redesign so `kind` is positional, then stream. Done (B, 2-vector + true
+      streaming).** The blocker was that
       `:ligand-symmetry`/`:fluxionality` values need `kind` (perm degree) to parse, but `kind` is a
       map key (`{:kind … <constraint-key> <value>}`) whose position EDN does not fix — so a
       streaming reader can't see it before the value, forcing the tree bridge. We will **not**
@@ -355,11 +355,15 @@ is the build order.
       `read_stereo_*_constraint_dsl` read `kind` positionally, then the value with kind known
       (fully incremental, no slice capture, no order assumption); drop the two
       `// TODO: FIX THIS TO USE streaming parser`.
-      **Done so far:** `StereoAtomConstraintDsl`/`StereoBondConstraintDsl` `FromEdn`/`ToEdn` are the
-      2-vector `[<kind> {<key> <value>}]` (all fixtures migrated). **Remaining:** convert the value
-      codecs to streaming (`perm_from_vov`, the `relation_serde` reader, `ligand_symmetry`) and
-      rewrite `read_stereo_*_constraint_dsl` to read the 2-vector incrementally, dropping the
-      bridge.
+      **Done:** `StereoAtomConstraintDsl`/`StereoBondConstraintDsl` `FromEdn`/`ToEdn` are the
+      2-vector `[<kind> {<key> <value>}]` (all fixtures migrated). Streaming value readers
+      (`read_member`, `read_perm_vov`, `read_relation_value` + `RelationValue`,
+      `read_ligand_symmetry`/`read_topicity`/`read_stereogenicity`) live in `dsl/constraint.rs`
+      with the other EDN constraint readers; `relation_serde!` gained a streaming `$from_parts`
+      and `stereo_kind_from_edn` was split to share `stereo_kind_from_name` (both in `dsl/stereo.rs`,
+      `pub(crate)`). `read_stereo_*_constraint_dsl` now read the 2-vector incrementally (kind first,
+      then the single-key payload); the `read_value_slice → read_string → FromEdn` bridge and both
+      `// TODO` are gone. (Module-size cleanup of `dsl/constraint.rs` deferred.)
    e. Replace the `_from_edn`/`_to_edn` helpers (including inside macros) by inlined
       `FromEdn`/`ToEdn` impls.
    f. **Tests** — DSL string + EDN streaming roundtrip; proptest generators; a stereo
