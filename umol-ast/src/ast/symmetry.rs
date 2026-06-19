@@ -350,10 +350,10 @@ impl MoleculeAst {
             let Some(orientation) = self.grade_generator(gs.incidence(), &generator) else {
                 continue;
             };
-            let Some(perm) = project_onto_ligands(&ligands, &generator) else {
+            let Some(permutation) = project_onto_ligands(&ligands, &generator) else {
                 continue;
             };
-            oriented.push(oriented_permutation(orientation, perm));
+            oriented.push(oriented_permutation(orientation, permutation));
         }
         // Same-kind virtual ligands are interchangeable; grade each swap locally.
         for swap in virtual_block_swaps(&ligands) {
@@ -394,7 +394,12 @@ impl StereoSymmetry {
         let Some(coset) = self.coset.as_lit() else {
             return false;
         };
-        let perms: Vec<Permutation> = self.group.elements().iter().map(|op| op.perm()).collect();
+        let perms: Vec<Permutation> = self
+            .group
+            .elements()
+            .iter()
+            .map(|op| op.permutation())
+            .collect();
         let classes = space(self.kind.class_key()).merge_under(&perms);
         let class = classes[coset as usize];
         classes.iter().filter(|&&c| c == class).count() == 1
@@ -434,10 +439,10 @@ impl StereoSymmetry {
     }
 }
 
-fn oriented_permutation(orientation: Orientation, perm: Permutation) -> OrientedPermutation {
+fn oriented_permutation(orientation: Orientation, permutation: Permutation) -> OrientedPermutation {
     match orientation {
-        Orientation::Proper => OrientedPermutation::proper(perm),
-        Orientation::Improper => OrientedPermutation::improper(perm),
+        Orientation::Proper => OrientedPermutation::proper(permutation),
+        Orientation::Improper => OrientedPermutation::improper(permutation),
     }
 }
 
@@ -489,10 +494,15 @@ fn virtual_block_swaps(ligands: &[StereoLigand]) -> Vec<Permutation> {
 
 /// Orientation of a local ligand-position permutation: does it preserve the coset
 /// (proper) or send it to its enantiomer (improper)?
-fn grade_local(kind: StereoKind, coset: &StereoCosetAst, perm: Permutation) -> Option<Orientation> {
+fn grade_local(
+    kind: StereoKind,
+    coset: &StereoCosetAst,
+    permutation: Permutation,
+) -> Option<Orientation> {
     let index = coset.as_lit()?;
     let coset_space = space(kind.class_key());
-    let StereoCosetAst::Lit(transported) = coset_apply_permutation(&StereoCosetAst::Lit(index), perm, kind)
+    let StereoCosetAst::Lit(transported) =
+        coset_apply_permutation(&StereoCosetAst::Lit(index), permutation, kind)
     else {
         return None;
     };
@@ -698,7 +708,8 @@ mod tests {
         // element contributes no observable descriptor and the orbit partition
         // is still computed.
         let mut mol = tetrahedral([Element::F, Element::Cl, Element::Br, Element::I]);
-        mol.stereo_atom_mut(StereoAtomId(0)).configuration = StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 9);
+        mol.stereo_atom_mut(StereoAtomId(0)).configuration =
+            StereoConfigurationAst::kinded(StereoKind::Tetrahedral, 9);
         let gs = mol.graph_symmetry(&config());
         assert_eq!(gs.proper_orbit_of(AtomId(0)), vec![AtomId(0)]);
     }

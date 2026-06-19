@@ -64,8 +64,8 @@ impl PermutationGroup {
         self.elements.len()
     }
 
-    pub fn contains(&self, perm: &Permutation) -> bool {
-        self.elements.binary_search(perm).is_ok()
+    pub fn contains(&self, permutation: &Permutation) -> bool {
+        self.elements.binary_search(permutation).is_ok()
     }
 
     pub fn elements(&self) -> &[Permutation] {

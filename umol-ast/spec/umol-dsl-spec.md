@@ -752,18 +752,20 @@ aromatic-system-constraint-form  ::= { :electron-count value-expr }
 multicenter-bond-constraint-form ::= { :electron-count value-expr }
 noncovalent-bond-constraint-form ::= (* uninhabited — no value-only variants yet *)
 
-(* A stereo entity-constraint form carries the element's :kind (its stereo *)
-(* subtype) plus exactly one predicate key. :kind is mandatory — a detached *)
-(* molecule-scope constraint is not well-formed without the subtype, since *)
-(* a permutation cannot recover its degree (the kind is many-to-one on degree). *)
-stereo-atom-constraint-form ::= { :kind stereo-kind stereo-predicate-pair }
-stereo-bond-constraint-form ::= { :kind stereo-kind stereo-predicate-pair }
+(* A stereo entity-constraint form is a positional 2-vector: the element's *)
+(* :kind (its stereo subtype) first, then a single-key predicate map. Kind is *)
+(* first so the permutation degree is known before the predicate value is read *)
+(* — a detached molecule-scope constraint cannot recover the degree otherwise *)
+(* (the kind is many-to-one on degree). The position is fixed by the vector, *)
+(* not by map-key order, so a streaming reader sees the kind before the value. *)
+stereo-atom-constraint-form ::= [ stereo-kind stereo-predicate-map ]
+stereo-bond-constraint-form ::= [ stereo-kind stereo-predicate-map ]
 
-stereo-predicate-pair ::=
-    :ligand-symmetry ligand-symmetry-form
-  | :fluxionality    permutation-form
-  | :topicity        { :pair ligand-pair :relation topicity-relation }
-  | :stereogenicity  stereogenicity-relation
+stereo-predicate-map ::=
+    { :ligand-symmetry ligand-symmetry-form }
+  | { :fluxionality    permutation-form }
+  | { :topicity        topicity-form }
+  | { :stereogenicity  stereogenicity-form }
 
 stereo-kind          ::= :tetrahedral | :cis-trans | :axial | :square-planar
                        | :trigonal-bipyramidal | :octahedral
@@ -772,8 +774,11 @@ cycle                ::= [ nat+ ]                    (* p0→p1→…→p0, 0-in
 ligand-symmetry-form ::= { :perm permutation-form [:orientation (:proper | :improper)]
                                                    [:member (:in | :not-in)] }
 ligand-pair          ::= [ nat nat ]                (* two ligand-frame positions *)
-topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | #{ keyword+ } | :undetermined
-stereogenicity-relation ::= :symmetric | :prochiral | :stereogenic       | #{ keyword+ } | :undetermined
+topicity-form        ::= { :pair ligand-pair :relation topicity-relation [:member (:in | :not-in)] }
+stereogenicity-form  ::= { :relation stereogenicity-relation [:member (:in | :not-in)] }
+(* :member defaults to :in; :not-in negates a vector value (set complement).   *)
+topicity-relation       ::= :homotopic | :enantiotopic | :diastereotopic | [ keyword+ ] | :undetermined
+stereogenicity-relation ::= :symmetric | :prochiral | :stereogenic       | [ keyword+ ] | :undetermined
 
 stereo-config-form ::= :undetermined | :not-stereo | { :stereo coset-form }
 coset-form ::= int | :undetermined | [ int+ ] | "coset-string"
@@ -802,7 +807,7 @@ stereo-bond-ref      ::= int | keyword
 
 **Narrow inner forms for DAMN entities.** **`:aromatic-system`** and **`:multicenter-bond`** narrow leaves carry only the **`:electron-count`** value-only variant; every other predicate on those entities is a relational leaf instead. **`:noncovalent-bond`** narrow leaves have no inhabited inner form yet; every noncovalent predicate is a relational leaf.
 
-**Stereo entity constraints carry the kind.** The **`:stereo-atom`** / **`:stereo-bond`** entity-constraint forms (**`#p`** / **`#f`** / **`#o`** / **`#g`**) carry a mandatory **`:kind`** naming the element's stereo subtype, plus exactly one predicate key. The **`:kind`** is redundant with the referenced element at the **entity** level (the inline form omits it — the **`:type`** **`class`** supplies it, **§7.14**) but is **required** at molecule scope, where the constraint is detached from its element: a permutation payload cannot recover its degree, and **`stereo-kind`** is many-to-one on degree (**`:tetrahedral`** and **`:square-planar`** are both degree 4). The kind/degree (and the chiral-class restriction on **`'`** values) is cross-checked against the resolved element by the validator (**§6.1**); **`inline_constraints`** drops the carried kind back into the element. These constraints are **distinct** from the atom/bond **`:tetrahedral-stereo`** (**`#T`**) / **`:cis-trans-stereo`** (**`#C`**) inline configurations (which assert the local **coset** at the bearing atom/bond) and from the stereo **relational leaves** (**`:stereo-atom-…`** / **`:stereo-bond-…`**, no inline form).
+**Stereo entity constraints carry the kind.** The **`:stereo-atom`** / **`:stereo-bond`** entity-constraint forms (**`#p`** / **`#f`** / **`#o`** / **`#g`**) are a positional **2-vector** **`[stereo-kind stereo-predicate-map]`** — the element's stereo subtype first, then a single-key predicate map (so the leaf is **`{:stereo-atom [<ref> [<kind> {<predicate>}]]}`**). The kind is redundant with the referenced element at the **entity** level (the inline form omits it — the **`:type`** **`class`** supplies it, **§7.14**) but is **required** at molecule scope, where the constraint is detached from its element: a permutation payload cannot recover its degree, and **`stereo-kind`** is many-to-one on degree (**`:tetrahedral`** and **`:square-planar`** are both degree 4). It is **first** (positional, container-fixed — not a map key) so the degree is known before the predicate value is read. The kind/degree (and the chiral-class restriction on **`'`** values) is cross-checked against the resolved element by the validator (**§6.1**); **`inline_constraints`** drops the carried kind back into the element. These constraints are **distinct** from the atom/bond **`:tetrahedral-stereo`** (**`#T`**) / **`:cis-trans-stereo`** (**`#C`**) inline configurations (which assert the local **coset** at the bearing atom/bond) and from the stereo **relational leaves** (**`:stereo-atom-…`** / **`:stereo-bond-…`**, no inline form).
 
 **Anchor cardinality.** Each keyed slot in **`anchor-spec`** is optional and may appear at most once; if present, it is a vector of **`(target-side-ref, pattern-side-ref)`** pairs of the same entity kind. An empty **`anchor-spec`** denotes an unanchored sub-pattern (the pattern can embed anywhere). Target-side refs resolve against the outer molecule's metadata; pattern-side refs against the pattern molecule's metadata.
 
@@ -825,7 +830,7 @@ Parsers **MUST** accept both. Bare per-entity predicates (not nested under **`:a
 - **Aromatic system** (**§7.10**): the single `aromatic-system-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
 - **Multicenter bond** (**§7.11**): the single `multicenter-bond-constraint-form` variant `:electron-count` has the inline form `#e<n>`.
 - **Noncovalent bond** (**§7.13**): `noncovalent-bond-constraint-form` is uninhabited; no inline-form question arises.
-- **Stereo atom / stereo bond** (**§7.14**): all four `stereo-atom-constraint-form` / `stereo-bond-constraint-form` predicates (`:ligand-symmetry`, `:fluxionality`, `:topicity`, `:stereogenicity`) have inline forms (`#p`, `#f`, `#o`, `#g` on the `:type` string). On **inline** the kind is omitted (the `:type` `class` supplies it); on **lift** the element's kind is written into the molecule-scope form's `:kind`. The atom/bond `:tetrahedral-stereo` / `:cis-trans-stereo` predicates (`#T` / `#C`) are separate atom/bond inline constraints; the `:stereo-atom-…` / `:stereo-bond-…` predicates are relational leaves with no inline form.
+- **Stereo atom / stereo bond** (**§7.14**): all four `stereo-atom-constraint-form` / `stereo-bond-constraint-form` predicates (`:ligand-symmetry`, `:fluxionality`, `:topicity`, `:stereogenicity`) have inline forms (`#p`, `#f`, `#o`, `#g` on the `:type` string). On **inline** the kind is omitted (the `:type` `class` supplies it); on **lift** the element's kind is written as the **first element** of the molecule-scope form's 2-vector (**§7.9**). The atom/bond `:tetrahedral-stereo` / `:cis-trans-stereo` predicates (`#T` / `#C`) are separate atom/bond inline constraints; the `:stereo-atom-…` / `:stereo-bond-…` predicates are relational leaves with no inline form.
 
 **Relational leaves** (**§7.9** `relational-constraint`) and **molecule-scope leaves** (`molecule-constraint`) have **no** inline form regardless of which entity they reference.
 

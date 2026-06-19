@@ -92,13 +92,13 @@ impl CosetSpace {
     }
 
     /// The canonical representative of σ's coset: the min-rank element of Rσ.
-    pub fn coset_rep(&self, perm: Permutation) -> Permutation {
-        coset_rep(&self.group, perm)
+    pub fn coset_rep(&self, permutation: Permutation) -> Permutation {
+        coset_rep(&self.group, permutation)
     }
 
     /// The arrangement number of σ's coset.
-    pub fn index(&self, perm: Permutation) -> u32 {
-        self.numbering[&self.coset_rep(perm)]
+    pub fn index(&self, permutation: Permutation) -> u32 {
+        self.numbering[&self.coset_rep(permutation)]
     }
 
     /// A representative permutation for arrangement number `index`.
@@ -161,11 +161,11 @@ impl CosetSpace {
     }
 }
 
-fn coset_rep(group: &PermutationGroup, perm: Permutation) -> Permutation {
+fn coset_rep(group: &PermutationGroup, permutation: Permutation) -> Permutation {
     group
         .elements()
         .iter()
-        .map(|&r| r.compose(perm))
+        .map(|&r| r.compose(permutation))
         .min()
         .expect("R contains the identity")
 }
@@ -182,7 +182,7 @@ impl Decomposition {
                 let mut reps: Vec<Permutation> = parent
                     .elements()
                     .iter()
-                    .map(|&perm| coset_rep(group, perm))
+                    .map(|&permutation| coset_rep(group, permutation))
                     .collect();
                 reps.sort();
                 reps.dedup();

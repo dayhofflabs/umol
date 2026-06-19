@@ -163,8 +163,8 @@ impl StereoValidator {
         let has_improper = (!stereogenicity.is_undetermined()
             && stereogenicity.matches(&StereogenicityAst::Lit(Stereogenicity::Prochiral)))
             || topicities.iter().any(|t| {
-                !t.rel.is_undetermined()
-                    && t.rel
+                !t.relation.is_undetermined()
+                    && t.relation
                         .matches(&TopicityRelationAst::Lit(Topicity::Enantiotopic))
             });
         if !kind.is_chiral_class() && has_improper {
@@ -209,24 +209,24 @@ impl StereoValidator {
         }
 
         for t in topicities {
-            if t.rel.is_undetermined() {
+            if t.relation.is_undetermined() {
                 continue;
             }
             let derived = sym.topicity(t.pair.first(), t.pair.second());
-            if !t.rel.matches(&TopicityRelationAst::Lit(derived)) {
+            if !t.relation.matches(&TopicityRelationAst::Lit(derived)) {
                 return Solution::Contradictory(StereoValidatorContradiction::TopicityMismatch {
                     pair: t.pair,
-                    asserted: t.rel.clone(),
+                    asserted: t.relation.clone(),
                     derived,
                 });
             }
-            any_undetermined |= !t.rel.is_ground();
+            any_undetermined |= !t.relation.is_ground();
         }
 
         for ls in ligand_symmetries {
-            let op = OrientedPermutation::new(ls.perm.perm.0, ls.perm.orientation);
+            let op = OrientedPermutation::new(ls.permutation.permutation.0, ls.permutation.orientation);
             let in_group = sym.group().contains(op);
-            let holds = match ls.mem {
+            let holds = match ls.member {
                 MemOp::In => in_group,
                 MemOp::NotIn => !in_group,
             };
@@ -340,7 +340,7 @@ mod tests {
                 .constraints
                 .add(StereoAtomConstraint::Topicity(TopicityAst {
                     pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
-                    rel: TopicityRelationAst::Lit(Topicity::Homotopic),
+                    relation: TopicityRelationAst::Lit(Topicity::Homotopic),
                 }));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::TopicityMismatch {
@@ -355,20 +355,20 @@ mod tests {
             ast.stereo_atom_mut(StereoAtomId(0))
                 .constraints
                 .add(StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
-                    perm: OrientedLigandPermutation {
-                        perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
+                    permutation: OrientedLigandPermutation {
+                        permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                         orientation: Orientation::Proper,
                     },
-                    mem: MemOp::In,
+                    member: MemOp::In,
                 }));
         }) as fn(&mut MoleculeAst),
         StereoValidatorContradiction::LigandSymmetryViolation {
             asserted: LigandSymmetryAst {
-                perm: OrientedLigandPermutation {
-                    perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
+                permutation: OrientedLigandPermutation {
+                    permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])),
                     orientation: Orientation::Proper,
                 },
-                mem: MemOp::In,
+                member: MemOp::In,
             },
         }
     )]

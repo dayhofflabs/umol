@@ -75,10 +75,10 @@ impl StereoKind {
         }
     }
 
-    /// Act on coset index `index` by `perm`, through the class's coset algebra.
+    /// Act on coset index `index` by `permutation`, through the class's coset algebra.
     #[allow(unused)]
-    fn act(self, index: u32, perm: Permutation) -> u32 {
-        space(self.class_key()).reindex(index, perm)
+    fn act(self, index: u32, permutation: Permutation) -> u32 {
+        space(self.class_key()).reindex(index, permutation)
     }
 }
 
@@ -393,9 +393,9 @@ impl StereoTerm {
         Self::Mirror(Box::new(inner))
     }
 
-    /// `inner ^ perm` — the group action of `perm` on `inner`.
-    pub fn apply(inner: Self, perm: Permutation) -> Self {
-        Self::Apply(Box::new(inner), perm)
+    /// `inner ^ permutation` — the group action of `permutation` on `inner`.
+    pub fn apply(inner: Self, permutation: Permutation) -> Self {
+        Self::Apply(Box::new(inner), permutation)
     }
 }
 
@@ -453,7 +453,7 @@ pub struct StereoConfiguration {
 impl StereoKind {
     /// The mirror (improper, μ) generator as a permutation: chiral kinds use the
     /// orientation-reversing generator; achiral kinds act trivially on cosets.
-    pub(crate) fn mirror_perm(self) -> Permutation {
+    pub(crate) fn mirror_permutation(self) -> Permutation {
         if self.is_chiral_class() {
             space(self.class_key()).improper()
         } else {
@@ -489,7 +489,7 @@ fn compose_term(term: &StereoTerm, kind: StereoKind) -> (&StereoTerm, Permutatio
         }
         StereoTerm::Mirror(inner) => {
             let (base, g) = compose_term(inner, kind);
-            (base, g.compose(kind.mirror_perm()))
+            (base, g.compose(kind.mirror_permutation()))
         }
         StereoTerm::Apply(inner, p) => {
             let (base, g) = compose_term(inner, kind);
@@ -528,7 +528,8 @@ pub(crate) fn canon_coset(
                     let id = Permutation::identity(kind.degree());
                     let term = if kind.coset_action_eq(g, id) {
                         var
-                    } else if kind.is_chiral_class() && kind.coset_action_eq(g, kind.mirror_perm())
+                    } else if kind.is_chiral_class()
+                        && kind.coset_action_eq(g, kind.mirror_permutation())
                     {
                         StereoTerm::Mirror(Box::new(var))
                     } else if kind.coset_action_eq(g, kind.involution()) {
@@ -625,18 +626,18 @@ pub(crate) fn coset_matches(
 /// Apply a ligand-order permutation to a coset under `kind`.
 pub(crate) fn coset_apply_permutation(
     coset: &StereoCosetAst,
-    perm: Permutation,
+    permutation: Permutation,
     kind: StereoKind,
 ) -> StereoCosetAst {
     let s = space(kind.class_key());
     match coset {
         StereoCosetAst::Undetermined => StereoCosetAst::Undetermined,
-        StereoCosetAst::Lit(i) => StereoCosetAst::Lit(s.reindex(*i, perm)),
+        StereoCosetAst::Lit(i) => StereoCosetAst::Lit(s.reindex(*i, permutation)),
         StereoCosetAst::LitSet(set) => {
-            StereoCosetAst::LitSet(set.iter().map(|i| s.reindex(*i, perm)).collect())
+            StereoCosetAst::LitSet(set.iter().map(|i| s.reindex(*i, permutation)).collect())
         }
         StereoCosetAst::Term(t) => canon_coset(
-            StereoCosetAst::term(StereoTerm::apply((**t).clone(), perm)),
+            StereoCosetAst::term(StereoTerm::apply((**t).clone(), permutation)),
             kind,
         )
         .unwrap_or(StereoCosetAst::Undetermined),
@@ -1080,8 +1081,8 @@ mod tests {
     #[rstest]
     #[case::lit(StereoCosetAst::Lit(0), Permutation::from_image(4, &[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Lit(1))]
     #[case::undetermined(StereoCosetAst::Undetermined, Permutation::from_image(4, &[1, 0, 2, 3]), StereoKind::Tetrahedral, StereoCosetAst::Undetermined)]
-    fn test_coset_apply_permutation(#[case] coset: StereoCosetAst, #[case] perm: Permutation, #[case] kind: StereoKind, #[case] expected: StereoCosetAst) {
-        assert_eq!(coset_apply_permutation(&coset, perm, kind), expected);
+    fn test_coset_apply_permutation(#[case] coset: StereoCosetAst, #[case] permutation: Permutation, #[case] kind: StereoKind, #[case] expected: StereoCosetAst) {
+        assert_eq!(coset_apply_permutation(&coset, permutation, kind), expected);
     }
 
     #[rstest]

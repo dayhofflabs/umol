@@ -7,6 +7,7 @@
 
 use indexmap::IndexMap;
 use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_perm::{Orientation, Permutation};
 
 use super::aromatic::AromaticSystemConstraintDsl;
 use super::atom::{AromaticValenceDsl, AtomConstraintDsl, MulticenterValenceDsl};
@@ -18,8 +19,8 @@ use super::multicenter::MulticenterBondConstraintDsl;
 use super::noncovalent::NoncovalentBondConstraintDsl;
 use super::relational::{RelationalConstraintDsl, RELATIONAL_KEYS};
 use super::stereo::{
-    coset_lit, parse_stereo_coset, stereo_kind_from_name, read_stereogenicity_relation,
-    read_topicity_relation, RelationValue, StereoAtomConstraintDsl, StereoBondConstraintDsl,
+    coset_lit, parse_stereo_coset, read_stereogenicity_relation, read_topicity_relation,
+    stereo_kind_from_name, RelationValue, StereoAtomConstraintDsl, StereoBondConstraintDsl,
     StereoCosetDsl,
 };
 use super::value::{parse_value, ValueDsl};
@@ -39,7 +40,6 @@ use crate::ast::spin::SpinStateAst;
 use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
 use crate::ast::traits::{FromAst, IntoAst};
 use crate::ast::value::ValueAst;
-use umol_perm::{Orientation, Permutation};
 
 /// Per-entity counts for numeric-index bounds checking during constraint
 /// resolution (DSL → AST). `from_ast` (AST → DSL) does not read counts.
@@ -531,7 +531,8 @@ impl<'de> FromEdn<'de> for RingMembershipDsl {
                 }
             }
         }
-        let count = count.ok_or_else(|| DeError::Custom("ring-membership missing :count".into()))?;
+        let count =
+            count.ok_or_else(|| DeError::Custom("ring-membership missing :count".into()))?;
         Ok(Self(RingMembershipAst::new(scope, count)))
     }
 }
@@ -579,9 +580,7 @@ pub(super) fn read_stereo_coset_dsl(
 /// from the deserializer. `$kind` fixes the coset degree.
 macro_rules! read_stereo_site_dsl {
     ($name:ident, $ast:ident, $kind:expr) => {
-        pub(super) fn $name(
-            de: &mut EdnStreamDeserializer<'_>,
-        ) -> Result<$ast, EdnError> {
+        pub(super) fn $name(de: &mut EdnStreamDeserializer<'_>) -> Result<$ast, EdnError> {
             match de.peek_byte()?.ok_or_else(eof_err)? {
                 b':' => {
                     let name = de.read_keyword_name()?;
@@ -645,9 +644,7 @@ pub(super) fn read_atom_constraint_dsl(
         "ring-valence" => AtomConstraint::RingValence(read_value_dsl(de)?.into_ast(&())),
         "total-hydrogens" => AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&())),
         "ring-membership" => AtomConstraint::RingMembership(read_ring_membership_dsl(de)?),
-        "tetrahedral-stereo" => {
-            AtomConstraint::TetrahedralStereo(read_tetrahedral_stereo_dsl(de)?)
-        }
+        "tetrahedral-stereo" => AtomConstraint::TetrahedralStereo(read_tetrahedral_stereo_dsl(de)?),
         other => {
             return Err(DeError::UnknownField {
                 key: other.to_string(),
@@ -678,9 +675,7 @@ pub(super) fn read_bond_constraint_dsl(
         b'{' => {
             let key = read_single_key_map_header(de)?;
             let c = match key.as_str() {
-                "ring-membership" => {
-                    BondConstraint::RingMembership(read_ring_membership_dsl(de)?)
-                }
+                "ring-membership" => BondConstraint::RingMembership(read_ring_membership_dsl(de)?),
                 "cis-trans-stereo" => {
                     BondConstraint::CisTransStereo(read_cis_trans_stereo_dsl(de)?)
                 }
@@ -802,7 +797,10 @@ fn read_member(de: &mut EdnStreamDeserializer<'_>) -> Result<MemOp, EdnError> {
 
 /// A permutation as a vector of disjoint cycles `[[0 1 2] [3 4]]`; degree from the
 /// stereo kind. Manual loops so the disjoint-cycle `seen` check borrows linearly.
-fn read_permutation(de: &mut EdnStreamDeserializer<'_>, degree: usize) -> Result<Permutation, EdnError> {
+fn read_permutation(
+    de: &mut EdnStreamDeserializer<'_>,
+    degree: usize,
+) -> Result<Permutation, EdnError> {
     let mut seen = vec![false; degree];
     let mut cycles: Vec<Vec<usize>> = Vec::new();
     de.consume_byte(b'[')?;
@@ -847,12 +845,12 @@ fn read_ligand_symmetry(
     de: &mut EdnStreamDeserializer<'_>,
     kind: StereoKind,
 ) -> Result<LigandSymmetryAst, EdnError> {
-    let mut perm = None;
+    let mut permutation = None;
     let mut orientation = Orientation::Proper;
     let mut mem = MemOp::In;
     read_map(de, |de, key| {
         match key {
-            "perm" => perm = Some(read_permutation(de, kind.degree())?),
+            "permutation" => permutation = Some(read_permutation(de, kind.degree())?),
             "orientation" => {
                 orientation = match de.read_keyword_name()?.as_ref() {
                     "proper" => Orientation::Proper,
@@ -876,13 +874,14 @@ fn read_ligand_symmetry(
         }
         Ok(())
     })?;
-    let perm = perm.ok_or_else(|| DeError::Custom("ligand-symmetry missing :perm".to_string()))?;
+    let permutation = permutation
+        .ok_or_else(|| DeError::Custom("ligand-symmetry missing :permutation".to_string()))?;
     Ok(LigandSymmetryAst {
-        perm: OrientedLigandPermutation {
-            perm: LigandPermutation(perm),
+        permutation: OrientedLigandPermutation {
+            permutation: LigandPermutation(permutation),
             orientation,
         },
-        mem,
+        member: mem,
     })
 }
 
@@ -894,9 +893,9 @@ fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnE
         match key {
             "pair" => {
                 let v = read_vec(de, |de| Ok(de.read_i64()?))?;
-                let [a, b]: [i64; 2] = v[..]
-                    .try_into()
-                    .map_err(|_| DeError::Custom("topicity :pair must have 2 positions".to_string()))?;
+                let [a, b]: [i64; 2] = v[..].try_into().map_err(|_| {
+                    DeError::Custom("topicity :pair must have 2 positions".to_string())
+                })?;
                 pair = Some(StereoLigandPair::new(
                     StereoLigandId(a as u8),
                     StereoLigandId(b as u8),
@@ -918,7 +917,7 @@ fn read_topicity(de: &mut EdnStreamDeserializer<'_>) -> Result<TopicityAst, EdnE
     let value = value.ok_or_else(|| DeError::Custom("topicity missing :relation".to_string()))?;
     Ok(TopicityAst {
         pair,
-        rel: read_topicity_relation(value, not_in)?,
+        relation: read_topicity_relation(value, not_in)?,
     })
 }
 
@@ -956,14 +955,15 @@ macro_rules! read_stereo_constraint_dsl {
             let constraint = match key.as_str() {
                 "ligand-symmetry" => $constraint::LigandSymmetry(read_ligand_symmetry(de, kind)?),
                 "fluxionality" => $constraint::Fluxionality(FluxionalityAst {
-                    perm: LigandPermutation(read_permutation(de, kind.degree())?),
+                    permutation: LigandPermutation(read_permutation(de, kind.degree())?),
                 }),
                 "topicity" => $constraint::Topicity(read_topicity(de)?),
                 "stereogenicity" => $constraint::Stereogenicity(read_stereogenicity(de)?),
                 other => {
-                    return Err(
-                        DeError::Custom(format!("unknown stereo constraint keyword :{other}")).into(),
-                    )
+                    return Err(DeError::Custom(format!(
+                        "unknown stereo constraint keyword :{other}"
+                    ))
+                    .into())
                 }
             };
             consume_single_key_map_close(de, $context)?;
@@ -2426,13 +2426,17 @@ mod tests {
     use super::*;
     use crate::ast::constraint::{
         AromaticValenceAst, AtomConstraint, BondConstraint, DativeBondConstraint, FluxionalityAst,
-        StereoLigandPair, LigandSymmetryAst, MulticenterValenceAst, OrientedLigandPermutation,
-        LigandPermutation, RelationalConstraint, StereoAtomConstraint, StereogenicityAst, TopicityAst, TopicityRelationAst,
+        LigandPermutation, LigandSymmetryAst, MulticenterValenceAst, OrientedLigandPermutation,
+        RelationalConstraint, StereoAtomConstraint, StereoLigandPair, StereogenicityAst,
+        TopicityAst, TopicityRelationAst,
     };
     use crate::ast::id::StereoLigandId;
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::operators::MemOp;
-    use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, Stereogenicity, TetrahedralStereoAst, Topicity};
+    use crate::ast::stereo::{
+        CisTransStereoAst, StereoCosetAst, StereoKind, Stereogenicity, TetrahedralStereoAst,
+        Topicity,
+    };
     use crate::ast::value::ValueAst;
 
     #[fixture]
@@ -2577,25 +2581,25 @@ mod tests {
     #[rstest]
     #[case::fluxionality(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
-            StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])) })),
+            StereoAtomConstraint::Fluxionality(FluxionalityAst { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])) })),
         "{:stereo-atom [0 [:tetrahedral {:fluxionality [[0 1]]}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
             StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
-                perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
-                mem: MemOp::NotIn })),
-        "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:perm [[0 1]] :orientation :improper :member :not-in}}]]}")]
+                permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
+                member: MemOp::NotIn })),
+        "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]] :orientation :improper :member :not-in}}]]}")]
     #[case::ligand_symmetry_defaults(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
-                perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
-                mem: MemOp::In })),
-        "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:perm [[0 1]]}}]]}")]
+                permutation: OrientedLigandPermutation { permutation: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
+                member: MemOp::In })),
+        "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:permutation [[0 1]]}}]]}")]
     #[case::topicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,
             StereoAtomConstraint::Topicity(TopicityAst {
                 pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
-                rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
+                relation: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
         "{:stereo-atom [0 [:octahedral {:topicity {:pair [0 1] :relation :enantiotopic}}]]}")]
     #[case::stereogenicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,

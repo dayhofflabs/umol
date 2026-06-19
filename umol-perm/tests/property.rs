@@ -32,7 +32,7 @@ fn oriented_of(degree: usize) -> impl Strategy<Value = OrientedPermutation> {
         perm_of(degree),
         prop_oneof![Just(Orientation::Proper), Just(Orientation::Improper)],
     )
-        .prop_map(|(perm, orientation)| OrientedPermutation::new(perm, orientation))
+        .prop_map(|(permutation, orientation)| OrientedPermutation::new(permutation, orientation))
 }
 
 /// A generated oriented group, paired with its degree. Degree is held low so the

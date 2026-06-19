@@ -38,29 +38,32 @@ impl Orientation {
 /// A permutation carrying a proper/improper grade.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct OrientedPermutation {
-    perm: Permutation,
+    permutation: Permutation,
     orientation: Orientation,
 }
 
 impl OrientedPermutation {
-    pub fn new(perm: Permutation, orientation: Orientation) -> Self {
-        Self { perm, orientation }
+    pub fn new(permutation: Permutation, orientation: Orientation) -> Self {
+        Self {
+            permutation,
+            orientation,
+        }
     }
 
-    pub fn proper(perm: Permutation) -> Self {
-        Self::new(perm, Orientation::Proper)
+    pub fn proper(permutation: Permutation) -> Self {
+        Self::new(permutation, Orientation::Proper)
     }
 
-    pub fn improper(perm: Permutation) -> Self {
-        Self::new(perm, Orientation::Improper)
+    pub fn improper(permutation: Permutation) -> Self {
+        Self::new(permutation, Orientation::Improper)
     }
 
     pub fn identity(degree: usize) -> Self {
         Self::proper(Permutation::identity(degree))
     }
 
-    pub fn perm(self) -> Permutation {
-        self.perm
+    pub fn permutation(self) -> Permutation {
+        self.permutation
     }
 
     pub fn orientation(self) -> Orientation {
@@ -72,24 +75,24 @@ impl OrientedPermutation {
     }
 
     pub fn degree(self) -> usize {
-        self.perm.degree()
+        self.permutation.degree()
     }
 
     /// σ(i). The orientation is a parity bit, not a point map.
     pub fn apply(self, i: usize) -> usize {
-        self.perm.apply(i)
+        self.permutation.apply(i)
     }
 
     /// `(σ, a) ∘ (τ, b) = (σ∘τ, a·b)`.
     pub fn compose(self, other: Self) -> Self {
         Self::new(
-            self.perm.compose(other.perm),
+            self.permutation.compose(other.permutation),
             self.orientation.compose(other.orientation),
         )
     }
 
     pub fn inverse(self) -> Self {
-        Self::new(self.perm.inverse(), self.orientation)
+        Self::new(self.permutation.inverse(), self.orientation)
     }
 }
 
@@ -121,8 +124,10 @@ impl OrientedPermutationGroup {
         let mut improper_rep: Option<OrientedPermutation> = None;
         for op in seen {
             if op.is_proper() {
-                proper.push(op.perm());
-            } else if improper_rep.is_none_or(|rep| op.perm().rank() < rep.perm().rank()) {
+                proper.push(op.permutation());
+            } else if improper_rep
+                .is_none_or(|rep| op.permutation().rank() < rep.permutation().rank())
+            {
                 improper_rep = Some(op);
             }
         }
@@ -142,10 +147,10 @@ impl OrientedPermutationGroup {
 
     pub fn contains(&self, op: OrientedPermutation) -> bool {
         if op.is_proper() {
-            self.proper.contains(&op.perm())
+            self.proper.contains(&op.permutation())
         } else {
             match self.improper_rep {
-                Some(rep) => self.proper.contains(&rep.inverse().compose(op).perm()),
+                Some(rep) => self.proper.contains(&rep.inverse().compose(op).permutation()),
                 None => false,
             }
         }
@@ -157,7 +162,7 @@ impl OrientedPermutationGroup {
             .proper
             .elements()
             .iter()
-            .map(|&p| OrientedPermutation::proper(p))
+            .map(|&permutation| OrientedPermutation::proper(permutation))
             .collect();
         if let Some(rep) = self.improper_rep {
             for &p in self.proper.elements() {

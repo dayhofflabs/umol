@@ -315,7 +315,7 @@ is the build order.
       collection API (`contains_key` / `get` / `remove` / update, mirroring the by-kind
       methods). "WET" means hand-written **per family**, **not** the absence of `key()` and
       **not** a generic shared keyed container. Same infra as P5.2(a); do together.
-2. **Stereo constraints — `#g`/`#o`/`#f`/`#p`.** In `StereoAtomConstraint` /
+2. **Stereo constraints — `#g`/`#o`/`#f`/`#p`.** In `StereoAtomConstraint` / **Done**
    `StereoBondConstraint` (WET, macro-generated for atom + bond), several entries share a kind,
    distinguished by a sub-key; each entry is a `(key, value)` pair. **AST (a–c) Done 2026-06-19;
    DSL (d–e) pending — see "Stereo constraint EDN" below.**
@@ -347,7 +347,7 @@ is the build order.
    d. **DSL — EDN redesign so `kind` is positional, then stream. Done (B, 2-vector + true
       streaming).** The blocker was that
       `:ligand-symmetry`/`:fluxionality` values need `kind` (perm degree) to parse, but `kind` is a
-      map key (`{:kind … <constraint-key> <value>}`) whose position EDN does not fix — so a
+      map key (`{:kind … <constrOrientedLigandPermutationaint-key> <value>}`) whose position EDN does not fix — so a
       streaming reader can't see it before the value, forcing the tree bridge. We will **not**
       force tree-parse, and **not** assume map-key order. Fix: mirror the AST tuple
       `Constraint::StereoAtom(id, kind, constraint)` in the EDN by giving `kind` a
