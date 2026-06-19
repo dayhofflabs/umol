@@ -11,6 +11,7 @@ use std::collections::BTreeSet;
 use std::mem;
 
 use strum::VariantArray;
+use umol_ast_macros::Canonicalize;
 use umol_perm::{space, ClassKey, Permutation};
 
 use super::constraint::{
@@ -652,7 +653,7 @@ macro_rules! stereo_element {
         $name:ident, $constraints:ident, $constraint:ident
     ) => {
         $(#[doc = $doc])+
-        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize)]
         pub struct $name {
             pub configuration: StereoConfigurationAst,
             pub constraints: $constraints,
@@ -1160,6 +1161,23 @@ mod tests {
         assert_eq!(pattern.matches(&target), expected);
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::folds_coset(
+        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::lit_set([1])),
+        Ok(StereoAtomAst::new(StereoKind::Tetrahedral, 1u32)),
+    )]
+    #[case::empty_coset_litset_contradiction(
+        StereoAtomAst::new(StereoKind::Tetrahedral, StereoCosetAst::lit_set(Vec::<u32>::new())),
+        Err(Contradiction),
+    )]
+    fn test_stereo_atom_ast_canonicalize(
+        #[case] input: StereoAtomAst,
+        #[case] expected: Result<StereoAtomAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
+    }
+
     #[rstest]
     fn test_stereo_bond_ast_new() {
         let stereo_bond = StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::Undetermined);
@@ -1181,5 +1199,22 @@ mod tests {
         #[case] expected: Option<StereoBondAst>,
     ) {
         assert_eq!(a.meet(&b), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::folds_coset(
+        StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::lit_set([1])),
+        Ok(StereoBondAst::new(StereoKind::CisTrans, 1u32)),
+    )]
+    #[case::empty_coset_litset_contradiction(
+        StereoBondAst::new(StereoKind::CisTrans, StereoCosetAst::lit_set(Vec::<u32>::new())),
+        Err(Contradiction),
+    )]
+    fn test_stereo_bond_ast_canonicalize(
+        #[case] input: StereoBondAst,
+        #[case] expected: Result<StereoBondAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 }

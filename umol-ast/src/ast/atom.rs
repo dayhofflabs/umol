@@ -4,7 +4,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::mem;
 
-use umol_ast_macros::Lattice;
+use umol_ast_macros::{Canonicalize, Lattice};
 use umol_shared::element::Element;
 
 use super::constraint::{
@@ -20,7 +20,7 @@ use super::value::ValueAst;
 /// Atom AST: structural representation of an atom plus the atom-level
 /// constraints (valence, degree, ring membership, etc.) that pattern
 /// against the surrounding topology.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct AtomAst {
     pub element: ElementAst,
     pub isotope_mass: IsotopeMassAst,
@@ -735,6 +735,23 @@ mod tests {
         constraints: AtomConstraints::new() }, false)]
     fn test_atom_ast_is_ground(#[case] ast: AtomAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::folds_charge(
+        AtomAst::from_element(Element::C).with_charge(ValueAst::lit_set([4])),
+        Ok(AtomAst::from_element(Element::C).with_charge(4)),
+    )]
+    #[case::charge_empty_litset_contradiction(
+        AtomAst::from_element(Element::C).with_charge(ValueAst::lit_set(Vec::<i64>::new())),
+        Err(Contradiction),
+    )]
+    fn test_atom_ast_canonicalize(
+        #[case] input: AtomAst,
+        #[case] expected: Result<AtomAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]

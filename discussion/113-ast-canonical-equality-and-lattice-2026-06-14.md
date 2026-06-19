@@ -210,10 +210,19 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
     `CisTransStereoAst`, and the `*Dsl` types.
 
 ### P4 · Entities (pure field-wise)
+
+**Canonicalize derives done (P4.1–P4.6).** All eight entity ASTs now `#[derive(Canonicalize)]`
+(field-wise, fallible — `AtomConstraints`/config/electrons are the fallible fields); derive order is
+`Canonicalize, Lattice` where both apply. Field retypes (electrons → `ElectronCountsAst`, P4.5) and
+the dative birelation restructure (P4.6) were already in place. Each entity has a
+`test_<entity>_ast_canonicalize` (fold + `Err(Contradiction)`; `NoncovalentBondAst` identity-only —
+nothing folds/contradicts); the pre-existing derived/hand `Lattice` is unchanged and still tested.
+Still pending: **P4.7** (delete the dead `simplify*` cluster) and the global **P6** `Lattice`-flip.
+
 1. `AtomAst`
 2. `BondAst`
 3. `NoncovalentBondAst` — `#[derive(Lattice, Canonicalize)]`; delete `simplify_values`.
-4. **removed**
+4. `StereoAtomAst`, `StereoBondAst`
 5. `AromaticSystemAst`/`MulticenterBondAst` — `electrons: Vec<ValueAst>` → `ElectronCountsAst`
    (whole-vector `Undetermined | Lit(Vec<i64>)`). This narrows the field: per-cell partials,
    sets, terms, and mixed-undetermined are no longer representable. EDN: `:electrons [i j k]`
@@ -245,6 +254,22 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
    g. **doc comments** in `constraint/aromatic.rs` / `constraint/multicenter.rs` referencing the
       `electrons` field type.
 6. `DativeBondAst` — derive after the birelation `acceptor_slot` drop.
+7. **Sweep + exit** (moved here from P5.7 — it is entity-level, not constraint-level).
+   Add the entity `Canonicalize` derives (`Atom`/`Bond`/`Aromatic`/`Multicenter`/`Dative` +
+   the stereo entities) — the last entity derive (entity `Hash`/`PartialOrd`/`Ord` were unified
+   during P5.6; `Lattice` stays derive-or-hand). Then **delete the dead `simplify*` cluster**:
+   `MoleculeAst::simplify_values`, every entity `simplify_values`, every collection
+   `simplify_each`, and every constraint/enum `simplify` (`AtomConstraint`/…, `RelationalConstraint`,
+   `MoleculeConstraint`, `Constraint`). Audit at P5-close confirmed the whole cluster is reachable
+   **only from tests** — no DSL / IO / graph / resolution caller — so `canonicalize` already
+   supersedes it in production. This is why the sweep moves to P4: it bottoms out at entity
+   `simplify_values` and can't be done "constraints-only" (`Constraint::simplify` fans out to every
+   per-entity constraint `simplify`; entity `simplify_values` drives the collection `simplify_each`).
+   Deleting it removes the `simplify` unit tests and `test_molecule_ast_simplify_values` — whose
+   `SubPattern`-recursion assertion `canonicalize` intentionally does **not** satisfy (P5.5
+   `SubPattern` no-op); that behavior is not being ported. `ValueAst::simplify` (the value leaf)
+   is **not** part of this — it stays.
+
 
 ### P5 · Constraint types — impl plan (bottom-up)
 
@@ -399,7 +424,7 @@ is the build order.
    `*AllLigands`/`*AnyLigand` variants), propagating `Err(Contradiction)`; all refs and atom-set
    `Vec`s pass through unchanged (atom-set sorting is the molecule-scope concern, P5.5). The
    pre-existing infallible `simplify` (still called by `Constraint::simplify`) stays until the
-   P5.7 sweep.
+   P4.7 sweep.
 5. **Molecule** (`MoleculeConstraint`) — `Canonicalize` (canonicalize payloads; atom-sets
    sorted); **not** a `Lattice`. **Done.** `impl Canonicalize` canonicalizes the value payload
    (`ChargeSum`/`BondOrderSum` `sum` via `ValueAst`, `SpinSum` `spin` via the derived
@@ -408,13 +433,13 @@ is the build order.
    semantics is a tier-2 concern, cf. P5.6's explicit dedup of logical children). **Decision:
    `SubPattern` canonicalize is a NO-OP** — it does **not** recurse into the inner `MoleculeAst`.
    Recursing would require a fallible `MoleculeAst` value/constraint-canonicalize method, which
-   would re-enter `Constraints::canonicalize` (P5.6) and the entity `Canonicalize` derives (P5.7),
-   making P5.5/P5.6/P5.7 one mutually-recursive landing for little gain: a nested pattern already
+   would re-enter `Constraints::canonicalize` (P5.6) and the entity `Canonicalize` derives (P4.7),
+   making P5.5/P5.6/P4.7 one mutually-recursive landing for little gain: a nested pattern already
    normalizes at its own top level (lift/inline + entity canonicalization). This supersedes the
    earlier "`SubPattern` recurses into the inner `MoleculeAst`" wording and keeps `MoleculeAst`
    free of an AST normal form (its canonical form is graph canonicalization, per *Per-type
    review*). The pre-existing infallible `simplify` (still called by `Constraint::simplify`, and
-   which *does* recurse via `simplify_values`) stays until the P5.7 sweep.
+   which *does* recurse via `simplify_values`) stays until the P4.7 sweep.
 6. **Logical** (`Constraint` `And`/`Or`/`Not` + the `Constraints` `Vec`) — `Canonicalize`:
    recurse, flatten nested same-combinator, sort + dedup children and the top `Vec` by the
    `Constraint` declaration order, drop empty `And`/`Or`; **not** a `Lattice`. **Done.**
@@ -438,16 +463,12 @@ is the build order.
    dedup, so it is sound (exact-dup dedup complete; same-anchor subpatterns keep input order). No
    "total order" requirement was introduced — the *Per-type detail* phrasing is realized by the
    derived/hand `Ord` with the `SubPattern`-by-anchor caveat. `Constraint::simplify` /
-   `Constraints::simplify_each` stay until the P5.7 sweep.
-7. **Sweep + exit.** Replace remaining `simplify`/`simplify_*` with canonicalize calls;
-   add the deferred P4 entity `Canonicalize` derives (`Atom/Bond/Aromatic/Multicenter/
-   Dative`), now unblocked.
+   `Constraints::simplify_each` (now dead in production) stay until the **P4.7** sweep.
 
-   Entity `Hash`/`PartialOrd`/`Ord` were unified **separately** (during P5.6): all eight ABDAMNSS
-   ASTs now derive `Hash, PartialOrd, Ord` (previously only `AtomAst` had `Ord`; Dative/Aromatic/
-   Multicenter also lacked `Hash`). Prerequisite `Ord` derives were added to the leaf payloads
-   `ElectronCountsAst`, `NoncovalentBondKindAst` (+ `NoncovalentBondKind`), `StereoConfigurationAst`.
-   `Lattice` stays derive-or-hand per P4; entity `Canonicalize` is the only remaining entity derive.
+**P5 is complete (items 1–6).** The simplify→canonicalize sweep and entity `Canonicalize`
+derives that were item 7 are **moved to P4.7** (entity-level; see P4 above): the `simplify*`
+cluster bottoms out at entity `simplify_values`, so it cannot be removed "constraints-only", and
+it is already dead in production (test-only) now that every constraint type has `Canonicalize`.
 
 #### Stereo constraint EDN (P5.2 d)
 
@@ -503,7 +524,7 @@ dead). The original kind-in-map design existed precisely to keep `StereoAtomCons
 self-contained `C`; B preserves that while making `kind` positional. Form A (inline string) and the
 `#g`/`#o`/`#f`/`#p` grammar are untouched.
 
-### P6 · `Lattice`-trait flip + macro (lands once P1–P5 all impl `Canonicalize`)
+### P6 · `Lattice`-trait flip + macro (lands once P1–P5 **and P4.7** all impl `Canonicalize`)
 - `Lattice: Canonicalize`; `matches` becomes the `meet`-derived default; `join` stays
   `Self`. `#[derive(Lattice)]` generates `meet`/`join` = field-wise + `canonicalize`.
   Remove the now-redundant hand-written `matches` impls (keep only genuine cheaper

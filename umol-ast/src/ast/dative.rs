@@ -2,6 +2,8 @@
 
 use std::mem;
 
+use umol_ast_macros::Canonicalize;
+
 use super::constraint::{DativeBondConstraint, DativeBondConstraints};
 use super::traits::Lattice;
 use super::value::ValueAst;
@@ -9,7 +11,7 @@ use super::value::ValueAst;
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the
 /// owning molecule's dative relation; this value holds no participant refs.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize)]
 pub struct DativeBondAst {
     /// Bond order — number of electron pairs donated.
     pub order: ValueAst,
@@ -110,6 +112,8 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{RingMembershipAst, RingScope};
+    use crate::ast::error::Contradiction;
+    use crate::ast::traits::Canonicalize;
     use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
@@ -175,6 +179,23 @@ mod tests {
         constraints: DativeBondConstraints::from(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)) }, true)]
     fn test_dative_bond_ast_is_ground(#[case] ast: DativeBondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::folds_order(
+        DativeBondAst::new(ValueAst::lit_set([1])),
+        Ok(DativeBondAst::from_order(1)),
+    )]
+    #[case::order_empty_litset_contradiction(
+        DativeBondAst::new(ValueAst::lit_set(Vec::<i64>::new())),
+        Err(Contradiction),
+    )]
+    fn test_dative_bond_ast_canonicalize(
+        #[case] input: DativeBondAst,
+        #[case] expected: Result<DativeBondAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rstest]

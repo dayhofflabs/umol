@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 
-use umol_ast_macros::Lattice;
+use umol_ast_macros::{Canonicalize, Lattice};
 
 use super::constraint::{NoncovalentBondConstraint, NoncovalentBondConstraints};
 use super::error::Contradiction;
@@ -11,7 +11,7 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
 /// interaction kind. No bond order, no charge or spin — these do not apply
 /// to noncovalent interactions.
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct NoncovalentBondAst {
     pub kind: NoncovalentBondKindAst,
     pub constraints: NoncovalentBondConstraints,
@@ -225,6 +225,13 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rstest]
+    #[case::ground(NoncovalentBondAst::from_kind(NoncovalentBondKind::HydrogenBond))]
+    #[case::undetermined(NoncovalentBondAst::default())]
+    fn test_noncovalent_bond_ast_canonicalize_identity(#[case] input: NoncovalentBondAst) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
     }
 
     #[rustfmt::skip]

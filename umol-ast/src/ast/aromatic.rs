@@ -2,13 +2,15 @@
 
 use std::mem;
 
+use umol_ast_macros::Canonicalize;
+
 use super::constraint::{AromaticSystemConstraint, AromaticSystemConstraints};
 use super::electrons::ElectronCountsAst;
 use super::spin::SpinStateAst;
 use super::traits::Lattice;
 use super::value::ValueAst;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize)]
 pub struct AromaticSystemAst {
     pub electrons: ElectronCountsAst,
     pub charge: ValueAst,
@@ -141,6 +143,8 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::error::Contradiction;
+    use crate::ast::traits::Canonicalize;
     use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
@@ -236,6 +240,23 @@ mod tests {
         #[case] expected: bool,
     ) {
         assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::folds_charge(
+        AromaticSystemAst::default().with_charge(ValueAst::lit_set([0])),
+        Ok(AromaticSystemAst::default().with_charge(0)),
+    )]
+    #[case::charge_empty_litset_contradiction(
+        AromaticSystemAst::default().with_charge(ValueAst::lit_set(Vec::<i64>::new())),
+        Err(Contradiction),
+    )]
+    fn test_aromatic_system_ast_canonicalize(
+        #[case] input: AromaticSystemAst,
+        #[case] expected: Result<AromaticSystemAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]

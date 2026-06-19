@@ -2,7 +2,7 @@
 
 use std::mem;
 
-use umol_ast_macros::Lattice;
+use umol_ast_macros::{Canonicalize, Lattice};
 
 use super::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
 use super::spin::SpinStateAst;
@@ -12,7 +12,7 @@ use super::value::ValueAst;
 
 /// Bond AST: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
-#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Canonicalize, Lattice)]
 pub struct BondAst {
     pub order: ValueAst,
     pub charge: ValueAst,
@@ -117,7 +117,8 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{RingMembershipAst, RingScope};
-    use crate::ast::traits::Lattice;
+    use crate::ast::error::Contradiction;
+    use crate::ast::traits::{Canonicalize, Lattice};
     use crate::bond_zeroed;
 
     #[rustfmt::skip]
@@ -227,6 +228,23 @@ mod tests {
         constraints: BondConstraints::from(BondConstraint::Aromatic) }, true)]
     fn test_bond_ast_is_ground(#[case] ast: BondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::folds_order(
+        BondAst { order: ValueAst::lit_set([2]), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
+        Ok(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() }),
+    )]
+    #[case::order_empty_litset_contradiction(
+        BondAst { order: ValueAst::lit_set(Vec::<i64>::new()), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::new() },
+        Err(Contradiction),
+    )]
+    fn test_bond_ast_canonicalize(
+        #[case] input: BondAst,
+        #[case] expected: Result<BondAst, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
