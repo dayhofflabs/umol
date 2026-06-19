@@ -11,7 +11,7 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 /// Noncovalent bond: two-atom non-bonded interaction tagged by an
 /// interaction kind. No bond order, no charge or spin — these do not apply
 /// to noncovalent interactions.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice)]
 pub struct NoncovalentBondAst {
     pub kind: NoncovalentBondKindAst,
     pub constraints: NoncovalentBondConstraints,
@@ -67,7 +67,7 @@ impl NoncovalentBondAst {
 }
 
 /// Noncovalent interaction kind.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NoncovalentBondKindAst {
     #[default]
     Undetermined,
@@ -149,7 +149,7 @@ impl Lattice for NoncovalentBondKindAst {
 }
 
 /// Fundamental kind of a noncovalent interaction.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NoncovalentBondKind {
     HydrogenBond,
     HalogenBond,

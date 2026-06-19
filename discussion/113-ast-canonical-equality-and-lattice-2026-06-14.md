@@ -443,6 +443,12 @@ is the build order.
    add the deferred P4 entity `Canonicalize` derives (`Atom/Bond/Aromatic/Multicenter/
    Dative`), now unblocked.
 
+   Entity `Hash`/`PartialOrd`/`Ord` were unified **separately** (during P5.6): all eight ABDAMNSS
+   ASTs now derive `Hash, PartialOrd, Ord` (previously only `AtomAst` had `Ord`; Dative/Aromatic/
+   Multicenter also lacked `Hash`). Prerequisite `Ord` derives were added to the leaf payloads
+   `ElectronCountsAst`, `NoncovalentBondKindAst` (+ `NoncovalentBondKind`), `StereoConfigurationAst`.
+   `Lattice` stays derive-or-hand per P4; entity `Canonicalize` is the only remaining entity derive.
+
 #### Stereo constraint EDN (P5.2 d)
 
 Stereo constraints have two serialization surfaces:

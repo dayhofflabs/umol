@@ -104,7 +104,7 @@ pub enum Stereogenicity {
 /// may still be open. `*` (`Undetermined`) and `Th*` (`Kinded(Tetrahedral,
 /// Undetermined)`) are distinct. `canonicalize` folds the coset under the kind;
 /// no physical range-check (tier-2; the validator does it).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum StereoConfigurationAst {
     #[default]
     Undetermined,
@@ -652,7 +652,7 @@ macro_rules! stereo_element {
         $name:ident, $constraints:ident, $constraint:ident
     ) => {
         $(#[doc = $doc])+
-        #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name {
             pub configuration: StereoConfigurationAst,
             pub constraints: $constraints,

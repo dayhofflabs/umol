@@ -9,7 +9,7 @@ use super::value::ValueAst;
 /// Dative bond data: bond order (number of electron pairs donated) and
 /// constraints. The acceptor and donor atoms are the participants of the
 /// owning molecule's dative relation; this value holds no participant refs.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DativeBondAst {
     /// Bond order — number of electron pairs donated.
     pub order: ValueAst,

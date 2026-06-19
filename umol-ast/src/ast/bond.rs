@@ -12,7 +12,7 @@ use super::value::ValueAst;
 
 /// Bond AST: structural representation of a bond plus bond-level constraints
 /// (aromatic flag, ring membership).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Lattice)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice)]
 pub struct BondAst {
     pub order: ValueAst,
     pub charge: ValueAst,

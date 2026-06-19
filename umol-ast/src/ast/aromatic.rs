@@ -8,7 +8,7 @@ use super::spin::SpinStateAst;
 use super::traits::Lattice;
 use super::value::ValueAst;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AromaticSystemAst {
     pub electrons: ElectronCountsAst,
     pub charge: ValueAst,

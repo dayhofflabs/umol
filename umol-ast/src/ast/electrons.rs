@@ -10,7 +10,7 @@ use super::traits::{AsLit, Canonicalize, Lattice};
 /// concrete vector. The vector is positional (cell = member atom), so it is
 /// compared whole — never sorted, deduped, or matched cell-by-cell. `i64` to
 /// mirror the other electron-count quantities (`charge`, the `#e` constraint).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ElectronCountsAst {
     #[default]
     Undetermined,
