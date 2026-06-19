@@ -294,7 +294,7 @@ pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstrain
         for c in list {
             cs.add(c);
         }
-        cs
+        cs.canonicalize().unwrap_or_default()
     })
 }
 

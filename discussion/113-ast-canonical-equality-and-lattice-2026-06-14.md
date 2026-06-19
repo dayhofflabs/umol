@@ -357,7 +357,8 @@ is the build order.
       `// TODO: FIX THIS TO USE streaming parser`. Matches every other constraint reader and the
       P5.1 `read_ring_membership_dsl` pattern. The inline string grammar (`#g`/`#o`/`#f`/`#p`) and
       the per-constraint EDN map (`{:kind … <constraint-key> <value>}`) are unchanged.
-   e. **Tests** — collection unit tests (`key`/`add`/dedup/`meet`/`join`/`matches`/`canonicalize`
+   e. Replace the _from_edn/_to_edn helpers (including inside macros) by inlined FromEdn/ToEdn impls.
+   f. **Tests** — collection unit tests (`key`/`add`/dedup/`meet`/`join`/`matches`/`canonicalize`
       incl. `MemOp` `⊥` and `(P,In)∧(P,NotIn)`), DSL string + EDN streaming roundtrip, proptest
       generators.
 3. **Per-entity enums + collections (WET — no shared container).** Each per-entity enum gets

@@ -37,8 +37,8 @@ pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring}
 pub use constraint::{
     aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKind,
     AromaticSystemConstraints, AromaticValenceAst, AtomConstraint, AtomConstraintKey,
-    AtomConstraintKind, AtomConstraints, BondConstraint, BondConstraintKind, BondConstraints,
-    Constraint, Constraints,
+    AtomConstraintKind, AtomConstraints, BondConstraint, BondConstraintKey, BondConstraintKind,
+    BondConstraints, Constraint, Constraints,
     DativeBondConstraint, DativeBondConstraintKind, DativeBondConstraints, FluxionalityAst,
     StereoLigandPair, LigandSymmetryAst, MoleculeConstraint, MulticenterBondConstraint,
     MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterValenceAst,

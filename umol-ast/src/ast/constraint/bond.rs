@@ -7,6 +7,7 @@ use std::vec::IntoIter;
 use strum::{EnumDiscriminants, EnumIter};
 
 use super::super::constraint::ring::{RingMembershipAst, RingScope};
+use super::super::error::Contradiction;
 use super::super::remap::IdRemapping;
 use super::super::stereo::CisTransStereoAst;
 use super::super::traits::{Canonicalize, Lattice};
@@ -33,6 +34,15 @@ impl BondConstraint {
 
     pub fn kind(&self) -> BondConstraintKind {
         self.into()
+    }
+
+    /// Entry identity for order/dedup: `kind()` plus `RingMembership`'s `RingScope`.
+    pub fn key(&self) -> BondConstraintKey {
+        match self {
+            Self::Aromatic => BondConstraintKey::Aromatic,
+            Self::RingMembership(m) => BondConstraintKey::RingMembership(m.scope),
+            Self::CisTransStereo(_) => BondConstraintKey::CisTransStereo,
+        }
     }
 
     /// `false` for `RingMembership` (several per bond, one per `RingScope`); `true` otherwise.
@@ -63,10 +73,40 @@ impl BondConstraint {
     }
 }
 
-/// Per-bond constraint container. Enforces the per-variant cardinality policy
-/// in [`BondConstraint::is_unique`] on insert: unique-kind variants replace any
-/// existing entry of the same discriminant (last-wins); multi-kind variants
-/// append.
+/// Entry identity: discriminant + sub-key. Variant order matches `BondConstraint`,
+/// so `Ord` agrees with `kind as u8`; the ring run orders by `RingScope`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BondConstraintKey {
+    Aromatic,
+    RingMembership(RingScope),
+    CisTransStereo,
+}
+
+impl BondConstraintKey {
+    pub fn kind(self) -> BondConstraintKind {
+        match self {
+            Self::Aromatic => BondConstraintKind::Aromatic,
+            Self::RingMembership(_) => BondConstraintKind::RingMembership,
+            Self::CisTransStereo => BondConstraintKind::CisTransStereo,
+        }
+    }
+}
+
+impl Canonicalize for BondConstraint {
+    /// Canonicalize the inner value; kind and sub-key are preserved.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::Aromatic => Self::Aromatic,
+            Self::RingMembership(m) => {
+                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.canonicalize()?))
+            }
+            Self::CisTransStereo(c) => Self::CisTransStereo(c.canonicalize()?),
+        })
+    }
+}
+
+/// Per-bond constraint container, kept `key()`-sorted. On insert, unique kinds
+/// replace the same-key entry (last-wins); ring appends at its scope position.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct BondConstraints(Vec<BondConstraint>);
 
@@ -137,21 +177,41 @@ impl BondConstraints {
         self.0.iter()
     }
 
-    /// Insert a constraint per the per-variant cardinality policy. Returns the
-    /// replaced entry if `c.is_unique()` and a same-discriminant entry already
-    /// existed; `None` otherwise.
+    /// Insert at the `key()`-sorted position: unique kinds replace the same-key
+    /// entry (returning it); ring appends, leaving duplicates for lazy dedup.
     pub fn add(&mut self, c: BondConstraint) -> Option<BondConstraint> {
-        if c.is_unique() {
-            if let Some(pos) = self
-                .0
-                .iter()
-                .position(|e| mem::discriminant(e) == mem::discriminant(&c))
-            {
-                return Some(mem::replace(&mut self.0[pos], c));
+        match self.find_by_key(c.key()) {
+            Ok(i) if c.is_unique() => Some(mem::replace(&mut self.0[i], c)),
+            Ok(i) => {
+                let end = i + self.0[i..].iter().take_while(|e| e.key() == c.key()).count();
+                self.0.insert(end, c);
+                None
+            }
+            Err(i) => {
+                self.0.insert(i, c);
+                None
             }
         }
-        self.0.push(c);
-        None
+    }
+
+    fn find_by_key(&self, key: BondConstraintKey) -> Result<usize, usize> {
+        self.0.binary_search_by(|c| c.key().cmp(&key))
+    }
+
+    pub fn contains_key(&self, key: BondConstraintKey) -> bool {
+        self.find_by_key(key).is_ok()
+    }
+
+    pub fn get_by_key(&self, key: BondConstraintKey) -> Option<&BondConstraint> {
+        self.find_by_key(key).ok().map(|i| &self.0[i])
+    }
+
+    pub fn get_by_key_mut(&mut self, key: BondConstraintKey) -> Option<&mut BondConstraint> {
+        self.find_by_key(key).ok().map(|i| &mut self.0[i])
+    }
+
+    pub fn remove_by_key(&mut self, key: BondConstraintKey) -> Option<BondConstraint> {
+        self.find_by_key(key).ok().map(|i| self.0.remove(i))
     }
 
     /// Add multiple constraints at once, using semantics of `add`.
@@ -221,6 +281,32 @@ impl BondConstraints {
     /// No-op: no `BondConstraint` variant carries an entity index.
     pub fn remap(self, _remap: &IdRemapping) -> Self {
         self
+    }
+}
+
+impl Canonicalize for BondConstraints {
+    /// Sort by `key()`, canonicalize each value, merge same-scope ring entries
+    /// by value-`meet` (`Err` on contradiction), drop vacuous entries.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        let mut input = self.0;
+        input.sort_by_key(|c| c.key());
+        let mut entries: Vec<BondConstraint> = Vec::new();
+        for c in input {
+            let c = c.canonicalize()?;
+            if let (
+                Some(BondConstraint::RingMembership(prev)),
+                BondConstraint::RingMembership(next),
+            ) = (entries.last_mut(), &c)
+            {
+                if prev.scope == next.scope {
+                    prev.count = prev.count.meet(&next.count).ok_or(Contradiction)?;
+                    continue;
+                }
+            }
+            entries.push(c);
+        }
+        entries.retain(|c| !c.is_undetermined());
+        Ok(Self(entries))
     }
 }
 
@@ -362,6 +448,26 @@ mod tests {
         assert_eq!(c.kind(), expected);
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(BondConstraint::Aromatic, BondConstraintKey::Aromatic)]
+    #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, 1), BondConstraintKey::RingMembership(RingScope::All))]
+    #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), BondConstraintKey::RingMembership(RingScope::Size(6)))]
+    #[case::cis_trans_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), BondConstraintKey::CisTransStereo)]
+    fn test_bond_constraint_key(#[case] c: BondConstraint, #[case] expected: BondConstraintKey) {
+        assert_eq!(c.key(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(BondConstraintKey::Aromatic, BondConstraintKind::Aromatic)]
+    #[case::ring_membership_all(BondConstraintKey::RingMembership(RingScope::All), BondConstraintKind::RingMembership)]
+    #[case::ring_membership_size(BondConstraintKey::RingMembership(RingScope::Size(6)), BondConstraintKind::RingMembership)]
+    #[case::cis_trans_stereo(BondConstraintKey::CisTransStereo, BondConstraintKind::CisTransStereo)]
+    fn test_bond_constraint_key_kind(#[case] key: BondConstraintKey, #[case] expected: BondConstraintKind) {
+        assert_eq!(key.kind(), expected);
+    }
+
     #[rstest]
     #[case::aromatic(BondConstraint::Aromatic, true)]
     #[case::ring_membership(BondConstraint::ring_membership(RingScope::Size(6), 1), false)]
@@ -408,6 +514,25 @@ mod tests {
     #[case::cis_trans_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo))]
     fn test_bond_constraint_simplify_identity(#[case] input: BondConstraint) {
         assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(BondConstraint::Aromatic, Ok(BondConstraint::Aromatic))]
+    #[case::ring_count_litset_singleton(
+        BondConstraint::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set([2]))),
+        Ok(BondConstraint::ring_membership(RingScope::All, 2)))]
+    #[case::cis_trans_lifts_term(
+        BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1)))),
+        Ok(BondConstraint::cis_trans_stereo(CisTransStereoAst::stereo(1_u32))))]
+    #[case::empty_litset_contradiction(
+        BondConstraint::RingMembership(RingMembershipAst::new(RingScope::All, ValueAst::lit_set(Vec::<i64>::new()))),
+        Err(Contradiction))]
+    fn test_bond_constraint_canonicalize(
+        #[case] constraint: BondConstraint,
+        #[case] expected: Result<BondConstraint, Contradiction>,
+    ) {
+        assert_eq!(constraint.canonicalize(), expected);
     }
 
     #[rstest]
@@ -473,6 +598,112 @@ mod tests {
         assert!(cs.get_mut(BondConstraintKind::RingMembership).is_none());
     }
 
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic_present(BondConstraintKey::Aromatic, true)]
+    #[case::ring_all_present(BondConstraintKey::RingMembership(RingScope::All), true)]
+    #[case::ring_size_present(BondConstraintKey::RingMembership(RingScope::Size(6)), true)]
+    #[case::ring_size_absent(BondConstraintKey::RingMembership(RingScope::Size(5)), false)]
+    #[case::cis_trans_absent(BondConstraintKey::CisTransStereo, false)]
+    fn test_bond_constraints_contains_key(
+        #[case] key: BondConstraintKey,
+        #[case] expected: bool,
+    ) {
+        let cs = BondConstraints::from_iter([
+            BondConstraint::Aromatic,
+            BondConstraint::ring_membership(RingScope::All, 2),
+            BondConstraint::ring_membership(RingScope::Size(6), 1),
+        ]);
+        assert_eq!(cs.contains_key(key), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::aromatic(BondConstraintKey::Aromatic, Some(BondConstraint::Aromatic))]
+    #[case::ring_all(BondConstraintKey::RingMembership(RingScope::All), Some(BondConstraint::ring_membership(RingScope::All, 2)))]
+    #[case::ring_size(BondConstraintKey::RingMembership(RingScope::Size(6)), Some(BondConstraint::ring_membership(RingScope::Size(6), 1)))]
+    #[case::ring_size_absent(BondConstraintKey::RingMembership(RingScope::Size(5)), None)]
+    fn test_bond_constraints_get_by_key(
+        #[case] key: BondConstraintKey,
+        #[case] expected: Option<BondConstraint>,
+    ) {
+        let cs = BondConstraints::from_iter([
+            BondConstraint::Aromatic,
+            BondConstraint::ring_membership(RingScope::All, 2),
+            BondConstraint::ring_membership(RingScope::Size(6), 1),
+        ]);
+        assert_eq!(cs.get_by_key(key), expected.as_ref());
+    }
+
+    #[rstest]
+    fn test_bond_constraints_get_by_key_mut() {
+        let mut cs = BondConstraints::from_iter([
+            BondConstraint::ring_membership(RingScope::All, 2),
+            BondConstraint::ring_membership(RingScope::Size(6), 1),
+        ]);
+        let slot = cs
+            .get_by_key_mut(BondConstraintKey::RingMembership(RingScope::Size(6)))
+            .unwrap();
+        *slot = BondConstraint::ring_membership(RingScope::Size(6), 2);
+        assert_eq!(
+            cs.get_by_key(BondConstraintKey::RingMembership(RingScope::Size(6))),
+            Some(&BondConstraint::ring_membership(RingScope::Size(6), 2)),
+        );
+    }
+
+    #[rstest]
+    fn test_bond_constraints_remove_by_key() {
+        let mut cs = BondConstraints::from_iter([
+            BondConstraint::Aromatic,
+            BondConstraint::ring_membership(RingScope::All, 2),
+            BondConstraint::ring_membership(RingScope::Size(6), 1),
+        ]);
+        let removed = cs.remove_by_key(BondConstraintKey::RingMembership(RingScope::Size(6)));
+        assert_eq!(
+            removed,
+            Some(BondConstraint::ring_membership(RingScope::Size(6), 1)),
+        );
+        assert_eq!(
+            cs.as_slice(),
+            &[
+                BondConstraint::Aromatic,
+                BondConstraint::ring_membership(RingScope::All, 2),
+            ],
+        );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::merge_same_scope(
+        BondConstraints::from_iter([
+            BondConstraint::ring_membership(RingScope::All, ValueAst::lit_set([1, 2])),
+            BondConstraint::ring_membership(RingScope::All, ValueAst::lit_set([2, 3])),
+        ]),
+        Ok(BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, 2)])))]
+    #[case::drop_vacuous(
+        BondConstraints::from_iter([
+            BondConstraint::Aromatic,
+            BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined),
+        ]),
+        Ok(BondConstraints::from_iter([BondConstraint::Aromatic])))]
+    #[case::canonicalizes_values(
+        BondConstraints::from_iter([
+            BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::term(StereoTerm::Lit(1)))),
+        ]),
+        Ok(BondConstraints::from_iter([BondConstraint::cis_trans_stereo(CisTransStereoAst::stereo(1_u32))])))]
+    #[case::contradiction_same_scope(
+        BondConstraints::from_iter([
+            BondConstraint::ring_membership(RingScope::All, 1),
+            BondConstraint::ring_membership(RingScope::All, 0),
+        ]),
+        Err(Contradiction))]
+    fn test_bond_constraints_canonicalize(
+        #[case] constraints: BondConstraints,
+        #[case] expected: Result<BondConstraints, Contradiction>,
+    ) {
+        assert_eq!(constraints.canonicalize(), expected);
+    }
+
     #[rstest]
     fn test_bond_constraints_iter() {
         let cs = BondConstraints::from_iter([
@@ -484,9 +715,9 @@ mod tests {
         assert_eq!(
             collected,
             vec![
-                BondConstraint::ring_membership(RingScope::Size(6), 1),
                 BondConstraint::Aromatic,
                 BondConstraint::ring_membership(RingScope::All, 1),
+                BondConstraint::ring_membership(RingScope::Size(6), 1),
             ],
         );
     }
