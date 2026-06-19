@@ -6,8 +6,9 @@ use std::vec::IntoIter;
 
 use strum::EnumDiscriminants;
 
+use super::super::error::Contradiction;
 use super::super::remap::IdRemapping;
-use super::super::traits::Lattice;
+use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemAst` via
@@ -27,6 +28,13 @@ impl AromaticSystemConstraint {
 
     pub fn kind(&self) -> AromaticSystemConstraintKind {
         self.into()
+    }
+
+    /// Entry identity for order/dedup. Every kind is single-valued, so no sub-key.
+    pub fn key(&self) -> AromaticSystemConstraintKey {
+        match self {
+            Self::ElectronCount(_) => AromaticSystemConstraintKey::ElectronCount,
+        }
     }
 
     /// Every `AromaticSystemConstraint` variant is single-valued per system.
@@ -49,6 +57,29 @@ impl AromaticSystemConstraint {
     pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
         // Value-only: no indices to remap.
         Some(self)
+    }
+}
+
+/// Entry identity: discriminant only (every kind is single-valued, no sub-key).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum AromaticSystemConstraintKey {
+    ElectronCount,
+}
+
+impl AromaticSystemConstraintKey {
+    pub fn kind(self) -> AromaticSystemConstraintKind {
+        match self {
+            Self::ElectronCount => AromaticSystemConstraintKind::ElectronCount,
+        }
+    }
+}
+
+impl Canonicalize for AromaticSystemConstraint {
+    /// Canonicalize the inner value; the kind is preserved.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::ElectronCount(v) => Self::ElectronCount(v.canonicalize()?),
+        })
     }
 }
 
@@ -98,17 +129,47 @@ impl AromaticSystemConstraints {
         self.0.iter()
     }
 
-    /// Insert a constraint per the per-variant cardinality policy. Returns
-    /// the replaced entry if `c.is_unique()` and a same-kind entry already
-    /// existed; `None` otherwise.
+    /// Insert at the `key()`-sorted position: unique kinds replace the same-key
+    /// entry (returning it); non-unique kinds append after the same-key run.
     pub fn add(&mut self, c: AromaticSystemConstraint) -> Option<AromaticSystemConstraint> {
-        if c.is_unique() {
-            if let Some(i) = self.0.iter().position(|x| x.kind() == c.kind()) {
-                return Some(replace(&mut self.0[i], c));
+        match self.find_by_key(c.key()) {
+            Ok(i) if c.is_unique() => Some(replace(&mut self.0[i], c)),
+            Ok(i) => {
+                let end = i + self.0[i..].iter().take_while(|e| e.key() == c.key()).count();
+                self.0.insert(end, c);
+                None
+            }
+            Err(i) => {
+                self.0.insert(i, c);
+                None
             }
         }
-        self.0.push(c);
-        None
+    }
+
+    fn find_by_key(&self, key: AromaticSystemConstraintKey) -> Result<usize, usize> {
+        self.0.binary_search_by(|c| c.key().cmp(&key))
+    }
+
+    pub fn contains_key(&self, key: AromaticSystemConstraintKey) -> bool {
+        self.find_by_key(key).is_ok()
+    }
+
+    pub fn get_by_key(&self, key: AromaticSystemConstraintKey) -> Option<&AromaticSystemConstraint> {
+        self.find_by_key(key).ok().map(|i| &self.0[i])
+    }
+
+    pub fn get_by_key_mut(
+        &mut self,
+        key: AromaticSystemConstraintKey,
+    ) -> Option<&mut AromaticSystemConstraint> {
+        self.find_by_key(key).ok().map(|i| &mut self.0[i])
+    }
+
+    pub fn remove_by_key(
+        &mut self,
+        key: AromaticSystemConstraintKey,
+    ) -> Option<AromaticSystemConstraint> {
+        self.find_by_key(key).ok().map(|i| self.0.remove(i))
     }
 
     /// Add multiple constraints at once, using semantics of `add`.
@@ -176,6 +237,21 @@ impl AromaticSystemConstraints {
 
     pub fn remap(self, remap: &IdRemapping) -> Self {
         Self(self.0.into_iter().filter_map(|c| c.remap(remap)).collect())
+    }
+}
+
+impl Canonicalize for AromaticSystemConstraints {
+    /// Sort by `key()`, canonicalize each value, drop vacuous entries. No merge
+    /// clause — every kind is single-valued, so `add` admits no same-key duplicates.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        let mut entries = self.0;
+        entries.sort_by_key(|c| c.key());
+        let mut out: Vec<AromaticSystemConstraint> = Vec::with_capacity(entries.len());
+        for c in entries {
+            out.push(c.canonicalize()?);
+        }
+        out.retain(|c| !c.is_undetermined());
+        Ok(Self(out))
     }
 }
 
@@ -284,6 +360,30 @@ mod tests {
     }
 
     #[rstest]
+    #[case::electron_count(
+        AromaticSystemConstraint::electron_count(6),
+        AromaticSystemConstraintKey::ElectronCount
+    )]
+    fn test_aromatic_system_constraint_key(
+        #[case] c: AromaticSystemConstraint,
+        #[case] expected: AromaticSystemConstraintKey,
+    ) {
+        assert_eq!(c.key(), expected);
+    }
+
+    #[rstest]
+    #[case::electron_count(
+        AromaticSystemConstraintKey::ElectronCount,
+        AromaticSystemConstraintKind::ElectronCount
+    )]
+    fn test_aromatic_system_constraint_key_kind(
+        #[case] key: AromaticSystemConstraintKey,
+        #[case] expected: AromaticSystemConstraintKind,
+    ) {
+        assert_eq!(key.kind(), expected);
+    }
+
+    #[rstest]
     #[case::electron_count(AromaticSystemConstraint::electron_count(6))]
     fn test_aromatic_system_constraint_is_unique(#[case] c: AromaticSystemConstraint) {
         assert!(c.is_unique());
@@ -316,6 +416,17 @@ mod tests {
     #[case::undetermined(AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined))]
     fn test_aromatic_system_constraint_simplify_identity(#[case] input: AromaticSystemConstraint) {
         assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::electron_count_litset_singleton(AromaticSystemConstraint::ElectronCount(ValueAst::lit_set([6])), Ok(AromaticSystemConstraint::electron_count(6)))]
+    #[case::empty_litset_contradiction(AromaticSystemConstraint::ElectronCount(ValueAst::lit_set(Vec::<i64>::new())), Err(Contradiction))]
+    fn test_aromatic_system_constraint_canonicalize(
+        #[case] constraint: AromaticSystemConstraint,
+        #[case] expected: Result<AromaticSystemConstraint, Contradiction>,
+    ) {
+        assert_eq!(constraint.canonicalize(), expected);
     }
 
     #[rstest]
@@ -376,6 +487,66 @@ mod tests {
         assert!(cs
             .get_mut(AromaticSystemConstraintKind::ElectronCount)
             .is_none());
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraints_contains_key() {
+        let cs = AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6));
+        assert!(cs.contains_key(AromaticSystemConstraintKey::ElectronCount));
+        assert!(!AromaticSystemConstraints::new()
+            .contains_key(AromaticSystemConstraintKey::ElectronCount));
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraints_get_by_key() {
+        let cs = AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6));
+        assert_eq!(
+            cs.get_by_key(AromaticSystemConstraintKey::ElectronCount),
+            Some(&AromaticSystemConstraint::electron_count(6)),
+        );
+        assert_eq!(
+            AromaticSystemConstraints::new().get_by_key(AromaticSystemConstraintKey::ElectronCount),
+            None,
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraints_get_by_key_mut() {
+        let mut cs = AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6));
+        *cs.get_by_key_mut(AromaticSystemConstraintKey::ElectronCount)
+            .unwrap() = AromaticSystemConstraint::electron_count(10);
+        assert_eq!(
+            cs.get_by_key(AromaticSystemConstraintKey::ElectronCount),
+            Some(&AromaticSystemConstraint::electron_count(10)),
+        );
+    }
+
+    #[rstest]
+    fn test_aromatic_system_constraints_remove_by_key() {
+        let mut cs = AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6));
+        assert_eq!(
+            cs.remove_by_key(AromaticSystemConstraintKey::ElectronCount),
+            Some(AromaticSystemConstraint::electron_count(6)),
+        );
+        assert_eq!(cs.as_slice(), &[] as &[AromaticSystemConstraint]);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::canonicalizes_value(
+        AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(ValueAst::lit_set([6]))),
+        Ok(AromaticSystemConstraints::from(AromaticSystemConstraint::electron_count(6))))]
+    #[case::drop_vacuous(
+        AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined)),
+        Ok(AromaticSystemConstraints::new()))]
+    #[case::contradiction(
+        AromaticSystemConstraints::from(AromaticSystemConstraint::ElectronCount(ValueAst::lit_set(Vec::<i64>::new()))),
+        Err(Contradiction))]
+    fn test_aromatic_system_constraints_canonicalize(
+        #[case] constraints: AromaticSystemConstraints,
+        #[case] expected: Result<AromaticSystemConstraints, Contradiction>,
+    ) {
+        assert_eq!(constraints.canonicalize(), expected);
     }
 
     #[rstest]

@@ -35,15 +35,17 @@ pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
 pub use bond::BondAst;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use constraint::{
-    aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKind,
-    AromaticSystemConstraints, AromaticValenceAst, AtomConstraint, AtomConstraintKey,
+    aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKey,
+    AromaticSystemConstraintKind, AromaticSystemConstraints, AromaticValenceAst, AtomConstraint,
+    AtomConstraintKey,
     AtomConstraintKind, AtomConstraints, BondConstraint, BondConstraintKey, BondConstraintKind,
     BondConstraints, Constraint, Constraints,
     DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraintKind, DativeBondConstraints,
     FluxionalityAst,
     StereoLigandPair, LigandSymmetryAst, MoleculeConstraint, MulticenterBondConstraint,
-    MulticenterBondConstraintKind, MulticenterBondConstraints, MulticenterValenceAst,
-    NoncovalentBondConstraint, NoncovalentBondConstraints, OrientedLigandPermutation, LigandPermutation,
+    MulticenterBondConstraintKey, MulticenterBondConstraintKind, MulticenterBondConstraints,
+    MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraintKey,
+    NoncovalentBondConstraints, OrientedLigandPermutation, LigandPermutation,
     RelationalConstraint, RingMembershipAst, RingScope, StereoAtomConstraint, StereoAtomConstraints,
     StereoBondConstraint, StereoBondConstraints, StereogenicityAst, SubPatternAnchor, TopicityAst,
     TopicityRelationAst,

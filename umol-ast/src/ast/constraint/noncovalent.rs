@@ -3,8 +3,9 @@
 use std::mem;
 use std::slice::Iter;
 
+use super::super::error::Contradiction;
 use super::super::remap::IdRemapping;
-use super::super::traits::Lattice;
+use super::super::traits::{Canonicalize, Lattice};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
@@ -12,6 +13,10 @@ use super::super::traits::Lattice;
 pub enum NoncovalentBondConstraint {}
 
 impl NoncovalentBondConstraint {
+    pub fn key(&self) -> NoncovalentBondConstraintKey {
+        match *self {}
+    }
+
     pub fn is_unique(&self) -> bool {
         match *self {}
     }
@@ -21,6 +26,17 @@ impl NoncovalentBondConstraint {
     }
 
     pub fn remap(self, _remap: &IdRemapping) -> Option<Self> {
+        match self {}
+    }
+}
+
+/// Entry identity for `NoncovalentBondConstraint`. Uninhabited, mirroring the
+/// constraint enum; exists for parity with the other constraint families.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum NoncovalentBondConstraintKey {}
+
+impl Canonicalize for NoncovalentBondConstraint {
+    fn canonicalize(self) -> Result<Self, Contradiction> {
         match self {}
     }
 }
@@ -55,6 +71,32 @@ impl NoncovalentBondConstraints {
         match c {}
     }
 
+    fn find_by_key(&self, key: NoncovalentBondConstraintKey) -> Result<usize, usize> {
+        match key {}
+    }
+
+    pub fn contains_key(&self, key: NoncovalentBondConstraintKey) -> bool {
+        self.find_by_key(key).is_ok()
+    }
+
+    pub fn get_by_key(&self, key: NoncovalentBondConstraintKey) -> Option<&NoncovalentBondConstraint> {
+        self.find_by_key(key).ok().map(|i| &self.0[i])
+    }
+
+    pub fn get_by_key_mut(
+        &mut self,
+        key: NoncovalentBondConstraintKey,
+    ) -> Option<&mut NoncovalentBondConstraint> {
+        self.find_by_key(key).ok().map(|i| &mut self.0[i])
+    }
+
+    pub fn remove_by_key(
+        &mut self,
+        key: NoncovalentBondConstraintKey,
+    ) -> Option<NoncovalentBondConstraint> {
+        self.find_by_key(key).ok().map(|i| self.0.remove(i))
+    }
+
     /// Add multiple constraints at once, using semantics of `add`.
     pub fn extend(&mut self, constraints: impl IntoIterator<Item = NoncovalentBondConstraint>) {
         for constraint in constraints {
@@ -81,6 +123,13 @@ impl NoncovalentBondConstraints {
 
     pub fn remap(self, _remap: &IdRemapping) -> Self {
         self
+    }
+}
+
+impl Canonicalize for NoncovalentBondConstraints {
+    /// Always empty (uninhabited element), so canonicalization is the identity.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(self)
     }
 }
 
@@ -188,5 +237,11 @@ mod tests {
     fn test_noncovalent_bond_constraints_from_iter() {
         let cs: NoncovalentBondConstraints = empty().collect();
         assert_eq!(cs, NoncovalentBondConstraints::new());
+    }
+
+    #[rstest]
+    fn test_noncovalent_bond_constraints_canonicalize() {
+        let cs = NoncovalentBondConstraints::new();
+        assert_eq!(cs.clone().canonicalize(), Ok(cs));
     }
 }

@@ -260,7 +260,7 @@ is the build order.
    single-entry struct parallel to `TopicityAst { pair, rel }` (**not** a sub-map, **not** a
    shared keyed container). Several ring facts (one per `RingScope`) sit on an entity; each of
    the three collections hand-writes the per-scope handling inline (the former `RingSize` loop,
-   now grouped by `RingScope`). **Reopened (was marked Done) — `Canonicalize` never landed; see (h).**
+   now grouped by `RingScope`). **Done**
 
    a. **`RingScope` + `RingMembershipAst` + variant.** `constraint/ring.rs` (shared foundation
       module for the three sibling enums) holds `RingScope { All, Size(u8) }` (`Ord`: `All`
@@ -300,7 +300,7 @@ is the build order.
       `All = Σ_s Size(s)` cross-check is a **tier-2 validator** concern, **not** part of this
       AST/DSL work (deferred).
    g. Update umol-dsl-spec.md with the new syntax. **Done**
-   h. **NOT DONE — `Canonicalize` (the item-3 requirement, applied to ring).** P5.1(b) already
+   h. `Canonicalize` (the item-3 requirement, applied to ring).** P5.1(b) already
       references per-scope dedup "at `meet`/`canonicalize`", but **no `Canonicalize` was added**:
       neither the per-enum `Canonicalize` (delegate to the inner `count`, replacing `simplify`)
       nor `impl Canonicalize for {Atom,Bond,Dative}Constraints` (group by `RingScope`, merge by
@@ -308,7 +308,7 @@ is the build order.
       but there is **no container canonical form**, so equality/hashing see un-normalized
       collections. P5.1 is **not complete** until these land (identical shape to P5.2(c)); this
       also blocks P6 (`Lattice: Canonicalize`).
-   i. **NOT DONE — `key()` infra.** The accepted design (a **dedicated key enum** + a **by-key
+   i. `key()` infra.** The accepted design (a **dedicated key enum** + a **by-key
       API mirroring the by-kind one**) was conflated with "WET" and never landed — no `key()`
       method exists on any constraint. Each family needs a `<Enum>ConstraintKey` (kind +
       sub-key: `RingMembership(RingScope)`, every other kind unit) + `fn key(&self)` + a by-key
@@ -377,9 +377,6 @@ is the build order.
    keyed accessors are `ring_count()` / `ring_size_count(s)` / `ring_memberships()` on each of
    the three collections. Every other kind stays one-per-kind; its existing per-accessor
    `meet`/`join` is untouched.
-
-   (A future DRY pass could fold the 6 duplicated collection surfaces into one generic keyed
-   container — explicitly deferred, not part of this work.)
 4. **Relational** (`RelationalConstraint`) — `Canonicalize` (canonicalize inner values;
    refs unchanged); **not** a `Lattice`.
 5. **Molecule** (`MoleculeConstraint`) — `Canonicalize` (canonicalize payloads; atom-sets

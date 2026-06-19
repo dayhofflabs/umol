@@ -424,7 +424,7 @@ pub(crate) fn optional_aromatic_electron_count() -> impl Strategy<Value = Aromat
         if let Some(v) = opt {
             cs.add(AromaticSystemConstraint::ElectronCount(v));
         }
-        cs
+        cs.canonicalize().unwrap_or_default()
     })
 }
 
@@ -434,7 +434,7 @@ pub(crate) fn optional_multicenter_electron_count() -> impl Strategy<Value = Mul
         if let Some(v) = opt {
             cs.add(MulticenterBondConstraint::ElectronCount(v));
         }
-        cs
+        cs.canonicalize().unwrap_or_default()
     })
 }
 
