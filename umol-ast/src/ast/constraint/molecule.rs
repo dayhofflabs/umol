@@ -260,7 +260,6 @@ impl Constraints {
         self.0 = next;
         update
     }
-
 }
 
 impl FromIterator<Constraint> for Constraints {
@@ -334,7 +333,6 @@ impl MoleculeConstraint {
             Self::SubPattern { .. } => false,
         }
     }
-
 
     pub fn remap(self, remap: &IdRemapping) -> Option<Self> {
         match self {

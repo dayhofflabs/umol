@@ -1,5 +1,6 @@
 use proptest::prelude::*;
 use umol_ast::ast::StereoKind;
+
 use crate::strategies::*;
 
 // Lattice-law sweep: every `impl Lattice` type satisfies commutativity,

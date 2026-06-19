@@ -11,7 +11,9 @@ use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandI
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
 use super::super::ring::RingView;
-use super::super::stereo::{coset_apply_permutation, StereoAtomAst, StereoBondAst, StereoKind, Stereogenicity, Topicity};
+use super::super::stereo::{
+    coset_apply_permutation, StereoAtomAst, StereoBondAst, StereoKind, Stereogenicity, Topicity,
+};
 use super::super::symmetry::StereoSymmetry;
 use super::super::traits::Lattice;
 use super::atom::AtomView;
@@ -207,13 +209,19 @@ impl<'a> StereoAtomView<'a> {
     #[inline]
     /// The coordination-geometry kind.
     pub fn kind(&self) -> StereoKind {
-        self.ast.configuration.kind().expect("stereo view has a concrete kind")
+        self.ast
+            .configuration
+            .kind()
+            .expect("stereo view has a concrete kind")
     }
 
     #[inline]
     /// The stereo coset.
     pub fn coset(&self) -> &'a StereoCosetAst {
-        self.ast.configuration.coset().expect("stereo view has a concrete coset")
+        self.ast
+            .configuration
+            .coset()
+            .expect("stereo view has a concrete coset")
     }
 
     #[inline]
@@ -307,7 +315,11 @@ impl<'a> StereoAtomView<'a> {
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCosetAst> {
         let permutation = self.permutation_for(ligands)?;
-        Some(coset_apply_permutation(self.coset(), permutation, self.kind()))
+        Some(coset_apply_permutation(
+            self.coset(),
+            permutation,
+            self.kind(),
+        ))
     }
 
     /// Site atom followed by the distinct ligand atoms — the relation's atom
@@ -555,13 +567,19 @@ impl<'a> StereoBondView<'a> {
     #[inline]
     /// The coordination-geometry kind.
     pub fn kind(&self) -> StereoKind {
-        self.ast.configuration.kind().expect("stereo view has a concrete kind")
+        self.ast
+            .configuration
+            .kind()
+            .expect("stereo view has a concrete kind")
     }
 
     #[inline]
     /// The stereo coset.
     pub fn coset(&self) -> &'a StereoCosetAst {
-        self.ast.configuration.coset().expect("stereo view has a concrete coset")
+        self.ast
+            .configuration
+            .coset()
+            .expect("stereo view has a concrete coset")
     }
 
     #[inline]
@@ -655,7 +673,11 @@ impl<'a> StereoBondView<'a> {
         ligands: impl IntoIterator<Item = StereoLigand>,
     ) -> Option<StereoCosetAst> {
         let permutation = self.permutation_for(ligands)?;
-        Some(coset_apply_permutation(self.coset(), permutation, self.kind()))
+        Some(coset_apply_permutation(
+            self.coset(),
+            permutation,
+            self.kind(),
+        ))
     }
 
     /// The site bond's two atoms followed by the distinct ligand atoms — the

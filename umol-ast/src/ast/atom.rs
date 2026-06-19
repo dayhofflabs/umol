@@ -170,7 +170,6 @@ impl AtomAst {
         }
         self
     }
-
 }
 
 /// Element expression: undetermined, a single element, a finite element set, a
@@ -224,7 +223,10 @@ impl ElementAst {
     }
 
     /// A variable restricted to non-membership `?name :: !{…}`.
-    pub fn var_not_in(name: impl Into<String>, elements: impl IntoIterator<Item = Element>) -> Self {
+    pub fn var_not_in(
+        name: impl Into<String>,
+        elements: impl IntoIterator<Item = Element>,
+    ) -> Self {
         Self::Var(Box::new((
             name.into(),
             Some((MemOp::NotIn, elements.into_iter().collect())),
@@ -619,7 +621,9 @@ impl Lattice for IsotopeMassAst {
                 let sa = mass_set_view(a.as_ref()).unwrap();
                 let sb = mass_set_view(b.as_ref()).unwrap();
                 let union: BTreeSet<u32> = sa.union(&sb).copied().collect();
-                LitSet(Box::new(union)).canonicalize().unwrap_or(Undetermined)
+                LitSet(Box::new(union))
+                    .canonicalize()
+                    .unwrap_or(Undetermined)
             }
         }
     }
@@ -822,7 +826,6 @@ mod tests {
         assert_eq!(target, expected_after);
     }
 
-
     #[rustfmt::skip]
     #[rstest]
     #[case::lit_set(ElementAst::lit_set([Element::C, Element::N]), ElementAst::LitSet(Box::new(BTreeSet::from([Element::C, Element::N]))))]
@@ -872,20 +875,43 @@ mod tests {
     /// so expected sets are computed from `Element::all()`, not hardcoded).
     #[rstest]
     fn test_element_ast_canonicalize_cardinality() {
-        let take = |n: usize| -> BTreeSet<Element> { Element::all().iter().take(n).copied().collect() };
-        let skip = |n: usize| -> BTreeSet<Element> { Element::all().iter().skip(n).copied().collect() };
+        let take =
+            |n: usize| -> BTreeSet<Element> { Element::all().iter().take(n).copied().collect() };
+        let skip =
+            |n: usize| -> BTreeSet<Element> { Element::all().iter().skip(n).copied().collect() };
 
         // Tiebreak: 59 stays positive; 60 flips to the complement.
-        assert_eq!(ElementAst::LitSet(Box::new(take(59))).canonicalize(), Ok(ElementAst::LitSet(Box::new(take(59)))));
-        assert_eq!(ElementAst::LitSet(Box::new(take(60))).canonicalize(), Ok(ElementAst::NotSet(Box::new(skip(60)))));
+        assert_eq!(
+            ElementAst::LitSet(Box::new(take(59))).canonicalize(),
+            Ok(ElementAst::LitSet(Box::new(take(59))))
+        );
+        assert_eq!(
+            ElementAst::LitSet(Box::new(take(60))).canonicalize(),
+            Ok(ElementAst::NotSet(Box::new(skip(60))))
+        );
         // Full positive set → Undetermined; NotSet of the full set → Err.
-        assert_eq!(ElementAst::LitSet(Box::new(take(118))).canonicalize(), Ok(ElementAst::Undetermined));
-        assert_eq!(ElementAst::NotSet(Box::new(take(118))).canonicalize(), Err(Contradiction));
+        assert_eq!(
+            ElementAst::LitSet(Box::new(take(118))).canonicalize(),
+            Ok(ElementAst::Undetermined)
+        );
+        assert_eq!(
+            ElementAst::NotSet(Box::new(take(118))).canonicalize(),
+            Err(Contradiction)
+        );
         // Large NotSet flips to a positive LitSet of its (small) complement.
-        assert_eq!(ElementAst::NotSet(Box::new(take(60))).canonicalize(), Ok(ElementAst::LitSet(Box::new(skip(60)))));
+        assert_eq!(
+            ElementAst::NotSet(Box::new(take(60))).canonicalize(),
+            Ok(ElementAst::LitSet(Box::new(skip(60))))
+        );
         // Var In over a large domain flips to NotIn of the complement; full domain → free.
-        assert_eq!(ElementAst::var_in("x", take(60)).canonicalize(), Ok(ElementAst::var_not_in("x", skip(60))));
-        assert_eq!(ElementAst::var_in("x", take(118)).canonicalize(), Ok(ElementAst::var("x")));
+        assert_eq!(
+            ElementAst::var_in("x", take(60)).canonicalize(),
+            Ok(ElementAst::var_not_in("x", skip(60)))
+        );
+        assert_eq!(
+            ElementAst::var_in("x", take(118)).canonicalize(),
+            Ok(ElementAst::var("x"))
+        );
     }
 
     #[rustfmt::skip]

@@ -134,7 +134,6 @@ impl AtomConstraint {
             Self::TetrahedralStereo(c) => c.is_undetermined(),
         }
     }
-
 }
 
 impl Canonicalize for AtomConstraint {
@@ -829,7 +828,9 @@ impl Lattice for AtomConstraints {
         let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
         scopes.extend(other.ring_memberships().map(|(s, _)| s));
         for scope in scopes {
-            let v = self.ring_membership_value(scope).meet(&other.ring_membership_value(scope))?;
+            let v = self
+                .ring_membership_value(scope)
+                .meet(&other.ring_membership_value(scope))?;
             if !v.is_undetermined() {
                 result.add(AtomConstraint::RingMembership(RingMembershipAst::new(
                     scope, v,
@@ -939,7 +940,8 @@ mod tests {
     use rstest::*;
     use umol_graph_core::Remapping;
 
-    use super::*;    use crate::ast::value::ValueTerm;
+    use super::*;
+    use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
     #[rstest]

@@ -129,7 +129,10 @@ impl AromaticSystemConstraints {
         match self.find_by_key(c.key()) {
             Ok(i) if c.is_unique() => Some(replace(&mut self.0[i], c)),
             Ok(i) => {
-                let end = i + self.0[i..].iter().take_while(|e| e.key() == c.key()).count();
+                let end = i + self.0[i..]
+                    .iter()
+                    .take_while(|e| e.key() == c.key())
+                    .count();
                 self.0.insert(end, c);
                 None
             }
@@ -148,7 +151,10 @@ impl AromaticSystemConstraints {
         self.find_by_key(key).is_ok()
     }
 
-    pub fn get_by_key(&self, key: AromaticSystemConstraintKey) -> Option<&AromaticSystemConstraint> {
+    pub fn get_by_key(
+        &self,
+        key: AromaticSystemConstraintKey,
+    ) -> Option<&AromaticSystemConstraint> {
         self.find_by_key(key).ok().map(|i| &self.0[i])
     }
 

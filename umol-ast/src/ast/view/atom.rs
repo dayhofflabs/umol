@@ -555,7 +555,7 @@ mod tests {
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::ring::RingFamily;
-    use crate::ast::stereo::{StereoAtomAst, TetrahedralStereoAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{StereoAtomAst, StereoCosetAst, StereoKind, TetrahedralStereoAst};
     use crate::ast::value::ValueAst;
     use crate::mol;
 

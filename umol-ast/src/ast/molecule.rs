@@ -232,7 +232,9 @@ impl MoleculeAst {
         graph: Graph,
         atoms: Arc<Vec<AtomAst>>,
         bonds: Arc<Vec<BondAst>>,
-        dative_bonds: Arc<FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>>,
+        dative_bonds: Arc<
+            FixedVarBirelationSet<NodeId, Ordered, 1, NodeId, Unordered, DativeBondAst>,
+        >,
         aromatic_systems: Arc<VarRelationSet<NodeId, Unordered, AromaticSystemAst>>,
         multicenter_bonds: Arc<VarRelationSet<NodeId, Unordered, MulticenterBondAst>>,
         noncovalent_bonds: Arc<FixedRelationSet<NodeId, Unordered, NoncovalentBondAst, 2>>,
@@ -689,14 +691,22 @@ impl MoleculeAst {
         }
         for i in 0..stereo_atom_count {
             let id = StereoAtomId::from(i);
-            let kind = self.stereo_atom_mut(id).configuration.kind().expect("molecule stereo atom has a concrete kind");
+            let kind = self
+                .stereo_atom_mut(id)
+                .configuration
+                .kind()
+                .expect("molecule stereo atom has a concrete kind");
             for c in self.stereo_atom_mut(id).constraints.take() {
                 additions.push(Constraint::StereoAtom(id, kind, c));
             }
         }
         for i in 0..stereo_bond_count {
             let id = StereoBondId::from(i);
-            let kind = self.stereo_bond_mut(id).configuration.kind().expect("molecule stereo bond has a concrete kind");
+            let kind = self
+                .stereo_bond_mut(id)
+                .configuration
+                .kind()
+                .expect("molecule stereo bond has a concrete kind");
             for c in self.stereo_bond_mut(id).constraints.take() {
                 additions.push(Constraint::StereoBond(id, kind, c));
             }

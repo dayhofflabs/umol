@@ -90,7 +90,6 @@ impl ValueAst {
     pub fn predicate(predicate: ValuePredicate) -> Self {
         Self::Predicate(Box::new(predicate))
     }
-
 }
 
 impl From<i64> for ValueAst {

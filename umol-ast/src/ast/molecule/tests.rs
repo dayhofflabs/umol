@@ -1510,10 +1510,7 @@ fn test_molecule_builder_add_and_remove(#[from(rich_molecule)] ast: MoleculeAst)
 #[rstest]
 #[case::donor_below_acceptor(AtomId(0), AtomId(1))]
 #[case::donor_above_acceptor(AtomId(1), AtomId(0))]
-fn test_molecule_ast_dative_acceptor_donor(
-    #[case] donor: AtomId,
-    #[case] acceptor: AtomId,
-) {
+fn test_molecule_ast_dative_acceptor_donor(#[case] donor: AtomId, #[case] acceptor: AtomId) {
     let atoms = vec![ground_atom(), ground_atom()];
     let ast = MoleculeAst::from_parts(
         atoms,
@@ -1687,12 +1684,18 @@ fn test_molecule_ast_index_dative_bond(#[from(rich_molecule)] ast: MoleculeAst) 
 
 #[rstest]
 fn test_molecule_ast_index_aromatic_system(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert_eq!(ast[AromaticSystemId(0)].electrons, ElectronCountsAst::Undetermined);
+    assert_eq!(
+        ast[AromaticSystemId(0)].electrons,
+        ElectronCountsAst::Undetermined
+    );
 }
 
 #[rstest]
 fn test_molecule_ast_index_multicenter_bond(#[from(rich_molecule)] ast: MoleculeAst) {
-    assert_eq!(ast[MulticenterBondId(0)].electrons, ElectronCountsAst::Undetermined);
+    assert_eq!(
+        ast[MulticenterBondId(0)].electrons,
+        ElectronCountsAst::Undetermined
+    );
 }
 
 #[rstest]
@@ -1739,7 +1742,10 @@ fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst
         .add(DativeBondConstraint::ring_membership(RingScope::Size(6), 1));
     assert_eq!(
         ast[DativeBondId(0)].constraints,
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(6), 1)])
+        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(
+            RingScope::Size(6),
+            1
+        )])
     );
 }
 
@@ -1785,10 +1791,7 @@ fn test_molecule_ast_multicenter_bonds_mut(#[from(rich_molecule)] mut ast: Molec
         .iter()
         .map(|v| v.ast.electrons.clone())
         .collect();
-    assert_eq!(
-        electrons,
-        vec![ElectronCountsAst::Lit(vec![1, 1, 0])],
-    );
+    assert_eq!(electrons, vec![ElectronCountsAst::Lit(vec![1, 1, 0])],);
 }
 
 #[rstest]
@@ -1838,7 +1841,10 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
         .add(BondConstraint::Aromatic);
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .add(DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)));
+        .add(DativeBondConstraint::ring_membership(
+            RingScope::All,
+            ValueAst::Lit(1),
+        ));
 
     ast.lift_constraints();
 
@@ -1917,7 +1923,10 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
     );
     assert_eq!(
         ast[DativeBondId(0)].constraints,
-        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(5), 1)])
+        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(
+            RingScope::Size(5),
+            1
+        )])
     );
 }
 
@@ -2011,7 +2020,10 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
         .add(BondConstraint::Aromatic);
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .add(DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)));
+        .add(DativeBondConstraint::ring_membership(
+            RingScope::All,
+            ValueAst::Lit(1),
+        ));
 
     let original = ast.clone();
 
@@ -2021,4 +2033,3 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
 
     assert_eq!(ast, original);
 }
-

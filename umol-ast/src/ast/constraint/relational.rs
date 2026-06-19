@@ -388,7 +388,10 @@ impl Canonicalize for RelationalConstraint {
                 let [a, b] = predicates;
                 Self::NoncovalentBondEndsSatisfy {
                     bond,
-                    predicates: [Box::new((*a).canonicalize()?), Box::new((*b).canonicalize()?)],
+                    predicates: [
+                        Box::new((*a).canonicalize()?),
+                        Box::new((*b).canonicalize()?),
+                    ],
                 }
             }
             Self::StereoAtomAllLigands {

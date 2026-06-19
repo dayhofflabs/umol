@@ -79,7 +79,10 @@ impl NoncovalentBondConstraints {
         self.find_by_key(key).is_ok()
     }
 
-    pub fn get_by_key(&self, key: NoncovalentBondConstraintKey) -> Option<&NoncovalentBondConstraint> {
+    pub fn get_by_key(
+        &self,
+        key: NoncovalentBondConstraintKey,
+    ) -> Option<&NoncovalentBondConstraint> {
         self.find_by_key(key).ok().map(|i| &self.0[i])
     }
 

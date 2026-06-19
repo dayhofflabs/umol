@@ -1,4 +1,5 @@
 use proptest::prelude::*;
+
 use crate::strategies::*;
 
 proptest! {

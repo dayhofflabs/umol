@@ -30,24 +30,21 @@ pub(crate) mod value;
 pub(crate) mod view;
 
 pub use aromatic::AromaticSystemAst;
-pub use electrons::ElectronCountsAst;
 pub use atom::{AtomAst, ElementAst, IsotopeMassAst};
 pub use bond::BondAst;
 pub use coloring::{ConstitutionColoring, ConstitutionFeatures, MoleculeColoring};
 pub use constraint::{
     aromatic_increment, AromaticSystemConstraint, AromaticSystemConstraintKey,
     AromaticSystemConstraintKind, AromaticSystemConstraints, AromaticValenceAst, AtomConstraint,
-    AtomConstraintKey,
-    AtomConstraintKind, AtomConstraints, BondConstraint, BondConstraintKey, BondConstraintKind,
-    BondConstraints, Constraint, Constraints,
-    DativeBondConstraint, DativeBondConstraintKey, DativeBondConstraintKind, DativeBondConstraints,
-    FluxionalityAst,
-    StereoLigandPair, LigandSymmetryAst, MoleculeConstraint, MulticenterBondConstraint,
+    AtomConstraintKey, AtomConstraintKind, AtomConstraints, BondConstraint, BondConstraintKey,
+    BondConstraintKind, BondConstraints, Constraint, Constraints, DativeBondConstraint,
+    DativeBondConstraintKey, DativeBondConstraintKind, DativeBondConstraints, FluxionalityAst,
+    LigandPermutation, LigandSymmetryAst, MoleculeConstraint, MulticenterBondConstraint,
     MulticenterBondConstraintKey, MulticenterBondConstraintKind, MulticenterBondConstraints,
     MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraintKey,
-    NoncovalentBondConstraints, OrientedLigandPermutation, LigandPermutation,
-    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomConstraint, StereoAtomConstraintKey,
-    StereoAtomConstraints, StereoBondConstraint, StereoBondConstraintKey, StereoBondConstraints,
+    NoncovalentBondConstraints, OrientedLigandPermutation, RelationalConstraint, RingMembershipAst,
+    RingScope, StereoAtomConstraint, StereoAtomConstraintKey, StereoAtomConstraints,
+    StereoBondConstraint, StereoBondConstraintKey, StereoBondConstraints, StereoLigandPair,
     StereogenicityAst, SubPatternAnchor, TopicityAst, TopicityRelationAst,
 };
 pub use dative::DativeBondAst;
@@ -61,6 +58,7 @@ pub use edit::{
     RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, RewrittenConstraint,
     StereoAtomFieldChange, StereoAtomRef, StereoBondFieldChange, StereoBondRef, Undo,
 };
+pub use electrons::ElectronCountsAst;
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
 pub use error::{Contradiction, RewriteError};
@@ -82,8 +80,7 @@ pub use ring::{RingFamily, RingGraph, RingGraphEdge, RingId, RingRelation, RingS
 pub use spin::SpinStateAst;
 pub use stereo::{
     CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfiguration, StereoConfigurationAst,
-    StereoCosetAst, StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst,
-    Topicity,
+    StereoCosetAst, StereoKind, StereoTerm, Stereogenicity, TetrahedralStereoAst, Topicity,
 };
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{

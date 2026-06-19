@@ -254,21 +254,20 @@ Still pending: **P4.7** (delete the dead `simplify*` cluster) and the global **P
    g. **doc comments** in `constraint/aromatic.rs` / `constraint/multicenter.rs` referencing the
       `electrons` field type.
 6. `DativeBondAst` — derive after the birelation `acceptor_slot` drop.
-7. **Sweep + exit** (moved here from P5.7 — it is entity-level, not constraint-level).
-   Add the entity `Canonicalize` derives (`Atom`/`Bond`/`Aromatic`/`Multicenter`/`Dative` +
-   the stereo entities) — the last entity derive (entity `Hash`/`PartialOrd`/`Ord` were unified
-   during P5.6; `Lattice` stays derive-or-hand). Then **delete the dead `simplify*` cluster**:
-   `MoleculeAst::simplify_values`, every entity `simplify_values`, every collection
-   `simplify_each`, and every constraint/enum `simplify` (`AtomConstraint`/…, `RelationalConstraint`,
-   `MoleculeConstraint`, `Constraint`). Audit at P5-close confirmed the whole cluster is reachable
-   **only from tests** — no DSL / IO / graph / resolution caller — so `canonicalize` already
-   supersedes it in production. This is why the sweep moves to P4: it bottoms out at entity
-   `simplify_values` and can't be done "constraints-only" (`Constraint::simplify` fans out to every
-   per-entity constraint `simplify`; entity `simplify_values` drives the collection `simplify_each`).
-   Deleting it removes the `simplify` unit tests and `test_molecule_ast_simplify_values` — whose
-   `SubPattern`-recursion assertion `canonicalize` intentionally does **not** satisfy (P5.5
-   `SubPattern` no-op); that behavior is not being ported. `ValueAst::simplify` (the value leaf)
-   is **not** part of this — it stays.
+7. **Sweep + exit** (moved here from P5.7 — it is entity-level, not constraint-level). **Done.**
+   Entity `Canonicalize` derives landed in P4.1–P4.6 (with tests). The **dead `simplify*` cluster
+   is deleted**: `MoleculeAst::simplify_values`, every entity `simplify_values`
+   (incl. `SpinStateAst`), every collection `simplify_each`, every constraint/enum `simplify`
+   (`AtomConstraint`/`AromaticValenceAst`/`MulticenterValenceAst`/`Bond`/`Dative`/`Aromatic`/
+   `Multicenter`/`Relational`/`Molecule`/`Constraint`), **and `ValueAst::simplify`** (it had no
+   non-cluster caller, so it went too — the earlier "it stays" was temporary). All `simplify*`
+   unit tests + `test_molecule_ast_simplify_values{,_reduces_stereo}` removed; the two property
+   tests in `tests/property/value.rs` were retargeted to `canonicalize`
+   (`test_value_ast_canonicalize_idempotent`, `test_value_ast_render_parse_equals_canonicalize`).
+   The cluster was confirmed test-only (no DSL/IO/graph/resolution caller), so this is a pure
+   deletion with no production behavior change; `test_molecule_ast_simplify_values`'s
+   `SubPattern`-recursion assertion is gone with its method (not ported — P5.5 `SubPattern` no-op).
+   Verification: umol-ast lib 3540, property 67, resolution conformance 617, workspace builds.
 
 
 ### P5 · Constraint types — impl plan (bottom-up)

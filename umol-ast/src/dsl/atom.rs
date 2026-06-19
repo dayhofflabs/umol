@@ -389,7 +389,11 @@ fn isotope_set(i: &mut &str) -> PResult<Vec<u32>> {
         '{',
         delimited(
             multispace0,
-            separated(1.., dec_uint::<_, u32, _>, delimited(multispace0, ',', multispace0)),
+            separated(
+                1..,
+                dec_uint::<_, u32, _>,
+                delimited(multispace0, ',', multispace0),
+            ),
             multispace0,
         ),
         '}',
@@ -1074,12 +1078,10 @@ impl<'de> FromEdn<'de> for AtomConstraintDsl {
             "total-hydrogens" => {
                 AtomConstraint::TotalHydrogens(ValueDsl::from_edn(v)?.into_ast(&()))
             }
-            "ring-membership" => {
-                AtomConstraint::RingMembership(RingMembershipDsl::from_edn(v)?.0)
+            "ring-membership" => AtomConstraint::RingMembership(RingMembershipDsl::from_edn(v)?.0),
+            "tetrahedral-stereo" => {
+                AtomConstraint::TetrahedralStereo(TetrahedralStereoDsl::from_edn(v)?.into_ast(&()))
             }
-            "tetrahedral-stereo" => AtomConstraint::TetrahedralStereo(
-                TetrahedralStereoDsl::from_edn(v)?.into_ast(&()),
-            ),
             other => {
                 return Err(DeError::UnknownField {
                     key: other.to_string(),
@@ -1164,6 +1166,8 @@ pub(crate) fn single_key_map(key: &str, value: Edn<'static>) -> Edn<'static> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_shared::element::Element;
@@ -1173,8 +1177,6 @@ mod tests {
     use crate::ast::operators::MemOp;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::{StereoCosetAst, StereoTerm};
-    use std::collections::BTreeSet;
-
     use crate::ast::value::{ValuePredicate, ValueTerm};
 
     #[rstest]

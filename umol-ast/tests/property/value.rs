@@ -1,5 +1,6 @@
 use proptest::prelude::*;
 use umol_ast::ast::Canonicalize;
+
 use crate::strategies::*;
 
 proptest! {

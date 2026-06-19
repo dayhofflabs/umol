@@ -338,8 +338,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_shared::element::Element;
-    use crate::ast::constraint::RingScope;
 
+    use crate::ast::constraint::RingScope;
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraint, AtomAst, AtomConstraint, AtomId, BondAst,
         BondConstraint, Constraints, DativeBondAst, DativeBondConstraint, MoleculeAst,

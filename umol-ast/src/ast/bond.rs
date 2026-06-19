@@ -92,13 +92,11 @@ impl BondAst {
             .constraints
             .contains(BondConstraintKind::CisTransStereo)
         {
-            self.constraints.add(BondConstraint::CisTransStereo(
-                CisTransStereoAst::NotStereo,
-            ));
+            self.constraints
+                .add(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo));
         }
         self
     }
-
 }
 
 #[cfg(test)]

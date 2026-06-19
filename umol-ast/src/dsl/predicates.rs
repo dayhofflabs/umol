@@ -158,7 +158,10 @@ pub(crate) fn fmt_spin_pair(f: &mut fmt::Formatter<'_>, spin: &SpinStateAst) -> 
 // render/parse cycle requires either generating only non-vacuous payloads
 // or normalizing the input before comparing.
 
-pub(crate) fn fmt_ring_membership(f: &mut fmt::Formatter<'_>, m: &RingMembershipAst) -> fmt::Result {
+pub(crate) fn fmt_ring_membership(
+    f: &mut fmt::Formatter<'_>,
+    m: &RingMembershipAst,
+) -> fmt::Result {
     let v = &m.count;
     if matches!(v, ValueAst::Undetermined) {
         return Ok(());

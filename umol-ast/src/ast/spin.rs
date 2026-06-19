@@ -6,7 +6,7 @@ use umol_shared::spin::{SpinMultiplicity, SpinState};
 use super::traits::AsLit;
 use super::value::ValueAst;
 
-/// Spin state: unpaired-electron count and multiplicity as independent `ValueAst` fields. 
+/// Spin state: unpaired-electron count and multiplicity as independent `ValueAst` fields.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Lattice, Canonicalize)]
 pub struct SpinStateAst {
     pub unpaired: ValueAst,
@@ -17,7 +17,6 @@ impl SpinStateAst {
     pub fn closed_shell() -> Self {
         SpinState::closed_shell().into()
     }
-
 }
 
 impl Default for SpinStateAst {

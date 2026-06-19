@@ -7,8 +7,8 @@
 //! re-wraps everything in `Arc`, reusing untouched shared data.
 
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::mem;
+use std::sync::Arc;
 
 use umol_graph_core::{
     EdgeId, FactorOrdering, FixedRelationSet, FixedVarBirelationSet, Graph, NodeId, Ordered,

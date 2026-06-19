@@ -424,13 +424,19 @@ mod tests {
     fn test_dative_dsl_to_ast_passthrough() {
         let dsl = DativeBondDsl(dative(
             ValueAst::Lit(1),
-            DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(2))]),
+            DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(
+                RingScope::All,
+                ValueAst::Lit(2),
+            )]),
         ));
         let cfg = DativeBondDefaults::zeroed();
         let ast = dsl.into_ast(&cfg);
         assert_eq!(
             ast.constraints,
-            DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(2))])
+            DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(
+                RingScope::All,
+                ValueAst::Lit(2)
+            )])
         );
     }
 

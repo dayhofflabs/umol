@@ -554,9 +554,7 @@ fn read_aromatic_system_entry(
     })
 }
 
-fn read_electron_counts(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<ElectronCountsAst, EdnError> {
+fn read_electron_counts(de: &mut EdnStreamDeserializer<'_>) -> Result<ElectronCountsAst, EdnError> {
     let slice = de.read_value_slice()?;
     let edn = umol_edn::read_string(slice)?;
     parse_electron_counts(&edn, ":electrons").map_err(EdnError::from)
@@ -987,10 +985,7 @@ fn render_aromatic(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                 view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
             if let ElectronCountsAst::Lit(counts) = &view.ast.electrons {
-                m.insert(
-                    Edn::keyword("electrons"),
-                    render_electron_counts(counts),
-                );
+                m.insert(Edn::keyword("electrons"), render_electron_counts(counts));
             }
             m.insert(
                 Edn::keyword("type"),
@@ -1020,10 +1015,7 @@ fn render_multicenter(ast: &MoleculeAst, meta: &Metadata) -> Edn<'static> {
                 view.atom_ids().map(|a| render_atom_ref(a, meta)).collect();
             m.insert(Edn::keyword("atoms"), Edn::Vector(atoms.into()));
             if let ElectronCountsAst::Lit(counts) = &view.ast.electrons {
-                m.insert(
-                    Edn::keyword("electrons"),
-                    render_electron_counts(counts),
-                );
+                m.insert(Edn::keyword("electrons"), render_electron_counts(counts));
             }
             m.insert(
                 Edn::keyword("type"),
@@ -1674,10 +1666,7 @@ fn parse_multicenter_bond_entry(edn: &Edn<'_>) -> Result<MulticenterBondEntryInp
     })
 }
 
-fn parse_electron_counts(
-    edn: &Edn<'_>,
-    label: &'static str,
-) -> Result<ElectronCountsAst, DeError> {
+fn parse_electron_counts(edn: &Edn<'_>, label: &'static str) -> Result<ElectronCountsAst, DeError> {
     if let Edn::Keyword(k) = edn {
         if k.name() == "undetermined" {
             return Ok(ElectronCountsAst::Undetermined);

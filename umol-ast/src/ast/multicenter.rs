@@ -84,7 +84,6 @@ impl MulticenterBondAst {
     pub fn into_zeroed(self) -> Self {
         self.into_ground()
     }
-
 }
 
 impl Lattice for MulticenterBondAst {

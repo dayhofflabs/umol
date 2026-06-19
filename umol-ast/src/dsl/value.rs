@@ -358,8 +358,11 @@ pub(crate) fn set(i: &mut &str) -> PResult<Vec<i64>> {
 
 fn or_expr(i: &mut &str) -> PResult<Parsed> {
     let head = and_expr.parse_next(i)?;
-    let rest: Vec<Parsed> =
-        repeat(0.., preceded(delimited(multispace0, '|', multispace0), and_expr)).parse_next(i)?;
+    let rest: Vec<Parsed> = repeat(
+        0..,
+        preceded(delimited(multispace0, '|', multispace0), and_expr),
+    )
+    .parse_next(i)?;
     if rest.is_empty() {
         return Ok(head);
     }
@@ -372,8 +375,11 @@ fn or_expr(i: &mut &str) -> PResult<Parsed> {
 
 fn and_expr(i: &mut &str) -> PResult<Parsed> {
     let head = not_expr.parse_next(i)?;
-    let rest: Vec<Parsed> =
-        repeat(0.., preceded(delimited(multispace0, '&', multispace0), not_expr)).parse_next(i)?;
+    let rest: Vec<Parsed> = repeat(
+        0..,
+        preceded(delimited(multispace0, '&', multispace0), not_expr),
+    )
+    .parse_next(i)?;
     if rest.is_empty() {
         return Ok(head);
     }
@@ -424,11 +430,8 @@ fn rel_op(i: &mut &str) -> PResult<RelOp> {
 
 fn mem_expr(i: &mut &str) -> PResult<Parsed> {
     let head = add_expr.parse_next(i)?;
-    let membership = opt(preceded(
-        multispace0,
-        (mem_op, preceded(multispace0, set)),
-    ))
-    .parse_next(i)?;
+    let membership =
+        opt(preceded(multispace0, (mem_op, preceded(multispace0, set)))).parse_next(i)?;
     match membership {
         None => Ok(head),
         Some((op, values)) => {
@@ -589,7 +592,11 @@ mod tests {
     #[case::not_term("!?h")]
     fn test_value_error(#[case] input: &str) {
         let res = value.parse(input);
-        assert!(res.is_err(), "{input:?} should fail, got {:?}", res.unwrap());
+        assert!(
+            res.is_err(),
+            "{input:?} should fail, got {:?}",
+            res.unwrap()
+        );
     }
 
     #[rustfmt::skip]

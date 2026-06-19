@@ -2052,7 +2052,8 @@ mod tests {
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
     use super::super::super::stereo::{
-        CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoKind,
+        CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst,
+        StereoKind,
     };
     use super::super::super::value::ValueAst;
     use super::super::MoleculeAst;
@@ -3032,7 +3033,9 @@ mod tests {
             .transact(vec![Edit::SetBondConstraint {
                 id: BondRef::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo)),
+                new: Some(BondConstraint::cis_trans_stereo(
+                    CisTransStereoAst::NotStereo,
+                )),
             }])
             .unwrap();
         assert_eq!(
@@ -3043,7 +3046,9 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo)],
+            vec![BondConstraint::cis_trans_stereo(
+                CisTransStereoAst::NotStereo
+            )],
         );
     }
 

@@ -66,7 +66,6 @@ impl DativeBondAst {
     pub fn into_zeroed(self) -> Self {
         self.into_ground()
     }
-
 }
 
 impl Lattice for DativeBondAst {
@@ -227,11 +226,7 @@ mod tests {
         DativeBondAst::default(),
         Some(DativeBondAst::default())
     )]
-    #[case::order_mismatch(
-        DativeBondAst::from_order(1),
-        DativeBondAst::from_order(2),
-        None,
-    )]
+    #[case::order_mismatch(DativeBondAst::from_order(1), DativeBondAst::from_order(2), None)]
     #[case::narrows_order(
         DativeBondAst { order: ValueAst::Undetermined, constraints: DativeBondConstraints::new() },
         DativeBondAst { order: ValueAst::Lit(1), constraints: DativeBondConstraints::new() },

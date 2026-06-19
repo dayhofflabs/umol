@@ -349,9 +349,8 @@ fn raise_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults)
                 if !constraints.contains(kind) {
                     match cfg.cis_trans_stereo {
                         StereoDefault::NotStereo => {
-                            constraints.add(BondConstraint::CisTransStereo(
-                                CisTransStereoAst::NotStereo,
-                            ));
+                            constraints
+                                .add(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo));
                         }
                         StereoDefault::Required => {}
                     }
@@ -371,9 +370,7 @@ fn lower_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults)
                 StereoDefault::NotStereo => {
                     if matches!(
                         constraints.get(kind),
-                        Some(BondConstraint::CisTransStereo(
-                            CisTransStereoAst::NotStereo
-                        ))
+                        Some(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo))
                     ) {
                         constraints.remove(kind);
                     }
@@ -464,13 +461,13 @@ impl ToEdn for BondConstraintDsl {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
     use crate::ast::constraint::{BondConstraints, RingScope};
-    use std::collections::BTreeSet;
-
     use crate::ast::operators::MemOp;
     use crate::ast::spin::SpinStateAst;
     use crate::ast::stereo::StereoCosetAst;
@@ -695,15 +692,19 @@ mod tests {
 
     #[rstest]
     fn test_bond_constraint_dsl_accepts_value_as_string_subgrammar() {
-        let edn = umol_edn::read_string(r##"{:ring-membership {:size 6 :count "?n :: {5,6}"}}"##).unwrap();
+        let edn = umol_edn::read_string(r##"{:ring-membership {:size 6 :count "?n :: {5,6}"}}"##)
+            .unwrap();
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
             parsed.into_ast(&()),
-            BondConstraint::ring_membership(RingScope::Size(6), ValueAst::predicate(ValuePredicate::Mem(
-                ValueTerm::Var("n".to_string()),
-                MemOp::In,
-                BTreeSet::from([5, 6]),
-            ))),
+            BondConstraint::ring_membership(
+                RingScope::Size(6),
+                ValueAst::predicate(ValuePredicate::Mem(
+                    ValueTerm::Var("n".to_string()),
+                    MemOp::In,
+                    BTreeSet::from([5, 6]),
+                ))
+            ),
         );
     }
 

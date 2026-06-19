@@ -545,7 +545,11 @@ fn test_molecule_dsl_edn_parse_electrons_undetermined(#[case] source: &str) {
         .aromatic_systems()
         .iter()
         .map(|v| v.ast.electrons.clone())
-        .chain(ast.multicenter_bonds().iter().map(|v| v.ast.electrons.clone()))
+        .chain(
+            ast.multicenter_bonds()
+                .iter()
+                .map(|v| v.ast.electrons.clone()),
+        )
         .next()
         .unwrap();
     assert_eq!(electrons, ElectronCountsAst::Undetermined);

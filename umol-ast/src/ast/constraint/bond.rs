@@ -59,7 +59,6 @@ impl BondConstraint {
             Self::CisTransStereo(c) => c.is_undetermined(),
         }
     }
-
 }
 
 /// Entry identity: discriminant + sub-key. Variant order matches `BondConstraint`,
@@ -172,7 +171,10 @@ impl BondConstraints {
         match self.find_by_key(c.key()) {
             Ok(i) if c.is_unique() => Some(mem::replace(&mut self.0[i], c)),
             Ok(i) => {
-                let end = i + self.0[i..].iter().take_while(|e| e.key() == c.key()).count();
+                let end = i + self.0[i..]
+                    .iter()
+                    .take_while(|e| e.key() == c.key())
+                    .count();
                 self.0.insert(end, c);
                 None
             }
@@ -321,7 +323,9 @@ impl Lattice for BondConstraints {
         let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
         scopes.extend(other.ring_memberships().map(|(s, _)| s));
         for scope in scopes {
-            let v = self.ring_membership_value(scope).meet(&other.ring_membership_value(scope))?;
+            let v = self
+                .ring_membership_value(scope)
+                .meet(&other.ring_membership_value(scope))?;
             if !v.is_undetermined() {
                 result.add(BondConstraint::RingMembership(RingMembershipAst::new(
                     scope, v,

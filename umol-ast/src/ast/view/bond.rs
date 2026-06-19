@@ -316,7 +316,7 @@ mod tests {
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};
     use crate::ast::ring::RingFamily;
-    use crate::ast::stereo::{StereoBondAst, CisTransStereoAst, StereoCosetAst, StereoKind};
+    use crate::ast::stereo::{CisTransStereoAst, StereoBondAst, StereoCosetAst, StereoKind};
     use crate::ast::value::ValueAst;
 
     #[fixture]

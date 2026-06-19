@@ -160,7 +160,10 @@ impl DativeBondConstraints {
         match self.find_by_key(c.key()) {
             Ok(i) if c.is_unique() => Some(mem::replace(&mut self.0[i], c)),
             Ok(i) => {
-                let end = i + self.0[i..].iter().take_while(|e| e.key() == c.key()).count();
+                let end = i + self.0[i..]
+                    .iter()
+                    .take_while(|e| e.key() == c.key())
+                    .count();
                 self.0.insert(end, c);
                 None
             }
@@ -310,7 +313,9 @@ impl Lattice for DativeBondConstraints {
         let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
         scopes.extend(other.ring_memberships().map(|(s, _)| s));
         for scope in scopes {
-            let v = self.ring_membership_value(scope).meet(&other.ring_membership_value(scope))?;
+            let v = self
+                .ring_membership_value(scope)
+                .meet(&other.ring_membership_value(scope))?;
             if !v.is_undetermined() {
                 result.add(DativeBondConstraint::RingMembership(
                     RingMembershipAst::new(scope, v),
@@ -435,7 +440,10 @@ mod tests {
     #[rstest]
     #[case::aromatic(DativeBondConstraint::Aromatic, true)]
     #[case::ring_membership(DativeBondConstraint::ring_membership(RingScope::Size(6), 1), false)]
-    fn test_dative_bond_constraint_is_unique(#[case] c: DativeBondConstraint, #[case] expected: bool) {
+    fn test_dative_bond_constraint_is_unique(
+        #[case] c: DativeBondConstraint,
+        #[case] expected: bool,
+    ) {
         assert_eq!(c.is_unique(), expected);
     }
 
@@ -582,7 +590,10 @@ mod tests {
         *slot = DativeBondConstraint::ring_membership(RingScope::Size(6), 2);
         assert_eq!(
             cs.get_by_key(DativeBondConstraintKey::RingMembership(RingScope::Size(6))),
-            Some(&DativeBondConstraint::ring_membership(RingScope::Size(6), 2)),
+            Some(&DativeBondConstraint::ring_membership(
+                RingScope::Size(6),
+                2
+            )),
         );
     }
 
@@ -593,8 +604,7 @@ mod tests {
             DativeBondConstraint::ring_membership(RingScope::All, 2),
             DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
         ]);
-        let removed =
-            cs.remove_by_key(DativeBondConstraintKey::RingMembership(RingScope::Size(6)));
+        let removed = cs.remove_by_key(DativeBondConstraintKey::RingMembership(RingScope::Size(6)));
         assert_eq!(
             removed,
             Some(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),

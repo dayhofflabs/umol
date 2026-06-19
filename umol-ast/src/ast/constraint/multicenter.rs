@@ -132,7 +132,10 @@ impl MulticenterBondConstraints {
         match self.find_by_key(c.key()) {
             Ok(i) if c.is_unique() => Some(replace(&mut self.0[i], c)),
             Ok(i) => {
-                let end = i + self.0[i..].iter().take_while(|e| e.key() == c.key()).count();
+                let end = i + self.0[i..]
+                    .iter()
+                    .take_while(|e| e.key() == c.key())
+                    .count();
                 self.0.insert(end, c);
                 None
             }

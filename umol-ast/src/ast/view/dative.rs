@@ -1,6 +1,7 @@
 //! Dative bond views.
 
 use std::collections::HashSet;
+use std::iter;
 use std::ops::Index;
 
 use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unordered};
@@ -207,7 +208,7 @@ impl<'a> DativeBondView<'a> {
         self.donors
             .iter()
             .copied()
-            .chain(std::iter::once(self.acceptor_id))
+            .chain(iter::once(self.acceptor_id))
             .map(AtomId::from)
     }
 
@@ -263,7 +264,7 @@ impl<'a> DativeBondBuilderView<'a> {
         self.donors
             .iter()
             .map(|&n| AtomId::from(n))
-            .chain(std::iter::once(acceptor))
+            .chain(iter::once(acceptor))
     }
 }
 
@@ -281,7 +282,7 @@ impl<'a> DativeBondBuilderViewMut<'a> {
         self.donors
             .iter()
             .map(|&n| AtomId::from(n))
-            .chain(std::iter::once(acceptor))
+            .chain(iter::once(acceptor))
     }
 }
 
