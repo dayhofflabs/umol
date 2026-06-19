@@ -1226,9 +1226,11 @@ stereo_constraint_entry_codec! {
 }
 
 /// Molecule-scope DSL wrapper for a stereo constraint. It carries the element
-/// kind (the stereo subtype) so the permutation degree is known when parsing —
-/// the EDN is a single map `{:kind <kind> <constraint-key> <value>}`, self-
-/// contained, so the generic 2-field entity-leaf machinery applies.
+/// kind (the stereo subtype) so the permutation degree is known when parsing.
+/// The EDN is a positional 2-vector `[<kind> {<constraint-key> <value>}]`,
+/// mirroring the `(StereoKind, _)` tuple: kind first (container-fixed position),
+/// then the single-key constraint payload. Self-contained, so the generic
+/// entity-leaf machinery applies, and `kind` is readable before the value.
 macro_rules! stereo_constraint_dsl {
     ($dsl:ident, $constraint:ident, $entry:ident, $from_entry:ident, $context:literal) => {
         #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -1236,53 +1238,51 @@ macro_rules! stereo_constraint_dsl {
 
         impl ToEdn for $dsl {
             fn to_edn(&self) -> Edn<'static> {
-                let mut m = EdnMap::with_capacity(2);
-                m.insert(Edn::keyword("kind"), stereo_kind_to_edn(self.0));
                 let (key, value) = $entry(&self.1);
-                m.insert(Edn::keyword(key), value);
-                Edn::Map(m)
+                Edn::Vector(vec![stereo_kind_to_edn(self.0), single_key_map(key, value)].into())
             }
         }
 
         impl<'de> FromEdn<'de> for $dsl {
             fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
-                let Edn::Map(m) = edn else {
+                let Edn::Vector(v) = edn else {
                     return Err(DeError::TypeMismatch {
-                        expected: "stereo constraint map",
+                        expected: "stereo constraint [kind {key value}]",
                         got: edn.kind(),
                         path: vec![$context.into()],
                     });
                 };
-                let kind = stereo_kind_from_edn(m.get_keyword("kind").ok_or_else(|| {
-                    DeError::MissingField {
-                        key: "kind".into(),
-                        path: vec![$context.into()],
-                    }
-                })?)?;
-                let mut entry = None;
-                for (k, v) in m.iter() {
-                    let Edn::Keyword(key) = k else {
-                        return Err(DeError::TypeMismatch {
-                            expected: "keyword key",
-                            got: k.kind(),
-                            path: vec![$context.into()],
-                        });
-                    };
-                    if key.name() == "kind" {
-                        continue;
-                    }
-                    if entry.is_some() {
-                        return Err(DeError::Custom(format!(
-                            "{} map has multiple constraint keys",
-                            $context
-                        )));
-                    }
-                    entry = Some((key.name().to_string(), v));
+                if v.len() != 2 {
+                    return Err(DeError::Custom(format!(
+                        "{} must be [kind {{key value}}], got {}-element vector",
+                        $context,
+                        v.len()
+                    )));
                 }
-                let (key, value) = entry.ok_or_else(|| {
-                    DeError::Custom(format!("{} map missing the constraint key", $context))
-                })?;
-                Ok($dsl(kind, $from_entry(&key, value, kind)?))
+                let kind = stereo_kind_from_edn(&v[0])?;
+                let Edn::Map(m) = &v[1] else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "single-key constraint map",
+                        got: v[1].kind(),
+                        path: vec![$context.into()],
+                    });
+                };
+                if m.len() != 1 {
+                    return Err(DeError::Custom(format!(
+                        "{} payload must have one key, got {}",
+                        $context,
+                        m.len()
+                    )));
+                }
+                let (k, value) = m.iter().next().unwrap();
+                let Edn::Keyword(key) = k else {
+                    return Err(DeError::TypeMismatch {
+                        expected: "keyword key",
+                        got: k.kind(),
+                        path: vec![$context.into()],
+                    });
+                };
+                Ok($dsl(kind, $from_entry(key.name(), value, kind)?))
             }
         }
     };

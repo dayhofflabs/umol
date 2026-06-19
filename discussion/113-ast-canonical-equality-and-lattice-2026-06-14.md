@@ -315,52 +315,55 @@ is the build order.
       collection API (`contains_key` / `get` / `remove` / update, mirroring the by-kind
       methods). "WET" means hand-written **per family**, **not** the absence of `key()` and
       **not** a generic shared keyed container. Same infra as P5.2(a); do together.
-2. **Stereo constraints — `#g`/`#o`/`#f`/`#p` (align with ring; add `key()`, `Canonicalize`,
-   streaming DSL).** In `StereoAtomConstraint` / `StereoBondConstraint` (WET, macro-generated for
-   atom + bond), several entries share a kind, distinguished by a sub-key. Each entry is a
-   `(key, value)` pair:
+2. **Stereo constraints — `#g`/`#o`/`#f`/`#p`.** In `StereoAtomConstraint` /
+   `StereoBondConstraint` (WET, macro-generated for atom + bond), several entries share a kind,
+   distinguished by a sub-key; each entry is a `(key, value)` pair. **AST (a–c) Done 2026-06-19;
+   DSL (d–e) pending — see "Stereo constraint EDN" below.**
 
-   | glyph | kind | unique | sub-key | value | value-lattice |
+   | glyph | kind | unique | sub-key | value | merge |
    |---|---|---|---|---|---|
    | `#g` | Stereogenicity | yes | — (unit) | `StereogenicityAst` | finite subset-lattice |
-   | `#o` | Topicity | no | `LigandPairAst` | `TopicityRelationAst` | finite subset-lattice |
-   | `#p` | LigandSymmetry | no | `OrientedPermutationAst` | `MemOp` | 2-elt lattice, `In ∧ NotIn = ⊥` |
-   | `#f` | Fluxionality | no | `PermutationAst` | — (unit) | none (set presence) |
+   | `#o` | Topicity | no | `StereoLigandPair` | `TopicityRelationAst` | finite subset-lattice |
+   | `#p` | LigandSymmetry | no | `OrientedLigandPermutation` | `MemOp` | equal→keep, differ→`⊥` |
+   | `#f` | Fluxionality | no | `LigandPermutation` | — (unit) | dedup (set presence) |
 
-   a. **`key()` + dedicated key enum.** Add
-      `StereoConstraintKey { Stereogenicity, Topicity(LigandPairAst), Fluxionality(PermutationAst),
-      LigandSymmetry(OrientedPermutationAst) }` and `fn key(&self) -> StereoConstraintKey` on each
-      stereo constraint. Stereo-specific (hand-written, not a generic cross-family key); it
-      drives dedup + indexing + a by-key collection API (`contains_key` / `get` / `remove` / …,
-      mirroring by-kind), the same infra as P5.1(i). `mem` is the LigandSymmetry **value**, not
-      part of its key — so `(P,In)` and `(P,NotIn)` collide on key `P` and contradict (decided
-      2026-06-19).
-   b. **Two-regime `Lattice`.** A product over `key()` of two regimes — `key()` unifies
-      dedup/indexing but **not** the lattice, because "absent key" means opposite things:
-      - *value-keyed* (`#g`, `#o`, `#p` — absent key = **top**): `meet` = key-union with per-key
-        `value.meet` (drop vacuous, `⊥`/`None` on empty); `join` = keys-in-both with `value.join`;
-        `matches` = ∀ self-key `value.matches(target's value-or-top)`.
-      - *set / presence* (`#f` — absent key = **bottom**): `meet` = union, `join` = intersection,
-        `matches` = self ⊆ target.
-      `MemOp` gains a 2-element lattice (`In`/`NotIn`; `meet` of conflicting = `⊥`; `join` =
-      top/drop), which moves `#p` into the value-keyed regime — only `#f` stays pure-set.
-   c. **`Canonicalize` (trait).** `impl Canonicalize for StereoAtomConstraints /
-      StereoBondConstraints`: group by `key()`, merge same-key by value-`meet` (`Err` on `⊥`),
-      drop vacuous (`Undetermined` value-keyed entries; `#f` never vacuous), order by `key()`.
-      Per-enum `Canonicalize` delegates to the inner value. `add` appends + lazy-dedups (matching
-      ring), replacing the current eager same-pair / unique-kind replace. (Same `Canonicalize`
-      requirement as P5.1(h) — do both together.)
-   d. **DSL streaming serde.** Rewrite `read_stereo_atom_constraint_dsl` /
-      `read_stereo_bond_constraint_dsl` (`dsl/constraint.rs`) as true streaming readers
-      (`read_map` collecting `:kind` + the single constraint key, kind in either position),
-      dropping the `read_value_slice → read_string → FromEdn` bridge and the two
-      `// TODO: FIX THIS TO USE streaming parser`. Matches every other constraint reader and the
-      P5.1 `read_ring_membership_dsl` pattern. The inline string grammar (`#g`/`#o`/`#f`/`#p`) and
-      the per-constraint EDN map (`{:kind … <constraint-key> <value>}`) are unchanged.
-   e. Replace the _from_edn/_to_edn helpers (including inside macros) by inlined FromEdn/ToEdn impls.
-   f. **Tests** — collection unit tests (`key`/`add`/dedup/`meet`/`join`/`matches`/`canonicalize`
-      incl. `MemOp` `⊥` and `(P,In)∧(P,NotIn)`), DSL string + EDN streaming roundtrip, proptest
-      generators.
+   a. **`key()` + key enum. Done.** Macro-generated **per collection**
+      (`StereoAtomConstraintKey` / `StereoBondConstraintKey` — not one shared key, so `key().kind()`
+      returns the collection's kind) with variants `{ LigandSymmetry(OrientedLigandPermutation),
+      Fluxionality(LigandPermutation), Topicity(StereoLigandPair), Stereogenicity }` + `fn key()` +
+      by-key API (`contains_key`/`get_by_key`/`get_by_key_mut`/`remove_by_key`).
+      `OrientedLigandPermutation` derives `Ord` (added `Ord` to `umol_perm::Orientation`) so the key
+      is orderable and the store key-sorted (binary-search by-key, parity with the other six).
+      `mem` is the LigandSymmetry **value**, not part of its key — `(P,In)`/`(P,NotIn)` collide on
+      key `P` and contradict.
+   b. **Two-regime `Lattice`. Done.** `meet` rewritten so `#p` merges per perm (conflicting `mem`
+      → `⊥`); `#o` per-pair `rel.meet`, `#g` `meet`, `#f` union. `join`/`matches` unchanged (already
+      correct under mem-in-value). **No `MemOp` `Lattice` impl** — the 2-element merge is inline
+      (equal→keep, differ→`⊥`), keeping `MemOp` a plain operator type.
+   c. **`Canonicalize` (trait). Done.** `impl Canonicalize` for the enum (canonicalize the inner
+      relation; `#f`/`#p` atomic) and the container (sort by `key()`, merge same-key by
+      value-`meet` → `Err` on `⊥`, drop vacuous). `add` sort-inserts; `#o`/`#f`/`#p` lazy-append
+      (was eager same-pair replace for `#o`).
+   d. **DSL — EDN redesign so `kind` is positional, then stream. Value path Done (B, 2-vector);
+      true streaming pending.** The blocker is that
+      `:ligand-symmetry`/`:fluxionality` values need `kind` (perm degree) to parse, but `kind` is a
+      map key (`{:kind … <constraint-key> <value>}`) whose position EDN does not fix — so a
+      streaming reader can't see it before the value, forcing the tree bridge. We will **not**
+      force tree-parse, and **not** assume map-key order. Fix: mirror the AST tuple
+      `Constraint::StereoAtom(id, kind, constraint)` in the EDN by giving `kind` a
+      **container-fixed** position — see "Stereo constraint EDN" below for the exact form. Then
+      `read_stereo_*_constraint_dsl` read `kind` positionally, then the value with kind known
+      (fully incremental, no slice capture, no order assumption); drop the two
+      `// TODO: FIX THIS TO USE streaming parser`.
+      **Done so far:** `StereoAtomConstraintDsl`/`StereoBondConstraintDsl` `FromEdn`/`ToEdn` are the
+      2-vector `[<kind> {<key> <value>}]` (all fixtures migrated). **Remaining:** convert the value
+      codecs to streaming (`perm_from_vov`, the `relation_serde` reader, `ligand_symmetry`) and
+      rewrite `read_stereo_*_constraint_dsl` to read the 2-vector incrementally, dropping the
+      bridge.
+   e. Replace the `_from_edn`/`_to_edn` helpers (including inside macros) by inlined
+      `FromEdn`/`ToEdn` impls.
+   f. **Tests** — DSL string + EDN streaming roundtrip; proptest generators; a stereo
+      collection lattice-law property test (the other six have one; stereo currently has none).
 3. **Per-entity enums + collections. Each per-entity enum gets
    `Canonicalize` = delegate to the inner value (replacing `simplify`); each collection gets
    `Canonicalize` (per-kind canonicalize + drop-vacuous) and keeps its **hand-written**
@@ -387,6 +390,60 @@ is the build order.
 7. **Sweep + exit.** Replace remaining `simplify`/`simplify_*` with canonicalize calls;
    add the deferred P4 entity `Canonicalize` derives (`Atom/Bond/Aromatic/Multicenter/
    Dative`), now unblocked.
+
+#### Stereo constraint EDN (P5.2 d)
+
+Stereo constraints have two serialization surfaces:
+
+- **Form A — entity inline string.** `StereoAtomDsl`/`StereoBondDsl` serialize the whole element as
+  one EDN string (`:type "Th0#o=(0,1)#g/"`, or `:ccw`/`:cw` shorthand); the `#p`/`#f`/`#o`/`#g`
+  predicates ride inside, after the `<Kind><coset>` head. Kind is read from the head before any
+  predicate, so perm degree is known. **No change** — Form A is fine.
+- **Form B — molecule-scope `Constraint`** (`Constraints(Vec<Constraint>)`). A single constraint
+  detached from its element. The AST variant is `Constraint::StereoAtom(StereoAtomId, StereoKind,
+  StereoAtomConstraint)` — **`kind` is a separate positional field**. The DSL boundary
+  `ConstraintDsl::StereoAtom(StereoAtomRef, StereoAtomConstraintDsl)` serializes as the single-key
+  map `{:stereo-atom [<ref> <constraint>]}` (the generic 2-element `[ref, constraint]` leaf), and
+  `StereoAtomConstraintDsl` re-bundles kind back as a **map key**: `{:kind <k> <constraint-key>
+  <value>}`.
+
+Per-kind value forms (`<vov>` = vector-of-cycles, degree from kind; `<rel>` = `:undetermined` |
+`:homotopic`… | `[:a :b]` | `[:x] :member :not-in`):
+
+| constraint-key | value | needs kind |
+|---|---|---|
+| `:ligand-symmetry` | `{:perm <vov> [:orientation :improper] [:member :not-in]}` | yes |
+| `:fluxionality` | `<vov>` | yes |
+| `:topicity` | `{:pair [i j] :relation <rel> [:member :not-in]}` | no |
+| `:stereogenicity` | `{:relation <rel> [:member :not-in]}` | no |
+
+**Problem:** the DSL discards the AST's positional `kind` and makes it a map key; EDN map-key order
+is not container-fixed, so the streaming reader can't read `kind` before a perm value → tree bridge.
+
+**Redesign (chosen: B — nested 2-vector).** Mirror the AST tuple `StereoAtomConstraintDsl(StereoKind,
+StereoAtomConstraint)` by making the *constraint's own* EDN a positional **2-vector**, leaving the
+generic entity leaf untouched:
+
+```
+{:stereo-atom [<ref> [<kind> {<constraint-key> <value>}]]}
+{:stereo-atom [a3 [:tetrahedral {:topicity {:pair [0 1] :relation :homotopic}}]]}
+```
+
+`<kind>` keyword (`:tetrahedral` | `:cis-trans` | `:axial` | `:square-planar` |
+`:trigonal-bipyramidal` | `:octahedral`); the constraint payload is its own single-key map
+`{<key> <value>}` (the four value forms above, **minus** the `:kind` key).
+`StereoAtomConstraintDsl`'s `FromEdn`/`ToEdn` change from the `{:kind …}` map to the 2-vector
+`[<kind> {<key> <value>}]` — it stays a **self-contained `C`**, so the generic `(ref, C)`
+machinery (`parse_entity_leaf` / `read_entity_leaf` / leaf `to_edn`) is unchanged. The streaming
+reader reads the 2-vector positionally: `kind` (elem 0) → degree known → stream the value (elem 1).
+
+**Why not A (flat `[<ref> <kind> <constraint>]`).** The entity leaf is generic over `(Ref, C: FromEdn
++ ToEdn)` and hard-codes 2 elements on all three paths (`parse_entity_leaf` len-2; `read_entity_leaf`
+`[`/ref/inner/`]`; leaf `to_edn` `[ref, c.to_edn()]`). A flat 3-element leaf forces 6 bespoke stereo
+leaf sites and strips `StereoAtomConstraintDsl` of any self-contained codec (its `FromEdn`/`ToEdn` go
+dead). The original kind-in-map design existed precisely to keep `StereoAtomConstraintDsl` a
+self-contained `C`; B preserves that while making `kind` positional. Form A (inline string) and the
+`#g`/`#o`/`#f`/`#p` grammar are untouched.
 
 ### P6 · `Lattice`-trait flip + macro (lands once P1–P5 all impl `Canonicalize`)
 - `Lattice: Canonicalize`; `matches` becomes the `meet`-derived default; `join` stays

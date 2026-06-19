@@ -2403,29 +2403,29 @@ mod tests {
     #[case::fluxionality(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraint::Fluxionality(FluxionalityAst { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])) })),
-        "{:stereo-atom [0 {:kind :tetrahedral :fluxionality [[0 1]]}]}")]
+        "{:stereo-atom [0 [:tetrahedral {:fluxionality [[0 1]]}]]}")]
     #[case::ligand_symmetry(
         Constraint::StereoAtom(StereoAtomId(1), StereoKind::Tetrahedral,
             StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
                 perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Improper },
                 mem: MemOp::NotIn })),
-        "{:stereo-atom [1 {:kind :tetrahedral :ligand-symmetry {:perm [[0 1]] :orientation :improper :member :not-in}}]}")]
+        "{:stereo-atom [1 [:tetrahedral {:ligand-symmetry {:perm [[0 1]] :orientation :improper :member :not-in}}]]}")]
     #[case::ligand_symmetry_defaults(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraint::LigandSymmetry(LigandSymmetryAst {
                 perm: OrientedLigandPermutation { perm: LigandPermutation(Permutation::from_image(4, &[1, 0, 2, 3])), orientation: Orientation::Proper },
                 mem: MemOp::In })),
-        "{:stereo-atom [0 {:kind :tetrahedral :ligand-symmetry {:perm [[0 1]]}}]}")]
+        "{:stereo-atom [0 [:tetrahedral {:ligand-symmetry {:perm [[0 1]]}}]]}")]
     #[case::topicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Octahedral,
             StereoAtomConstraint::Topicity(TopicityAst {
                 pair: StereoLigandPair::new(StereoLigandId(0), StereoLigandId(1)),
                 rel: TopicityRelationAst::Lit(Topicity::Enantiotopic) })),
-        "{:stereo-atom [0 {:kind :octahedral :topicity {:pair [0 1] :relation :enantiotopic}}]}")]
+        "{:stereo-atom [0 [:octahedral {:topicity {:pair [0 1] :relation :enantiotopic}}]]}")]
     #[case::stereogenicity(
         Constraint::StereoAtom(StereoAtomId(0), StereoKind::Tetrahedral,
             StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic))),
-        "{:stereo-atom [0 {:kind :tetrahedral :stereogenicity {:relation :stereogenic}}]}")]
+        "{:stereo-atom [0 [:tetrahedral {:stereogenicity {:relation :stereogenic}}]]}")]
     fn test_constraint_dsl_stereo_atom_roundtrip(
         #[from(full_counts)] counts: EntityCounts,
         #[case] input: Constraint,
