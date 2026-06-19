@@ -17,7 +17,7 @@ use super::super::value::ValueAst;
 /// `DativeBondConstraints`. `Aromatic` flags the dative bond as part of an
 /// aromatic system (e.g. the N→B π-donation in borazine, O→B in boroxine,
 /// or a C→M coordination spanning a metallaaromatic ring).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(DativeBondConstraintKind), derive(Hash))]
 pub enum DativeBondConstraint {
     Aromatic,
@@ -100,7 +100,7 @@ impl Canonicalize for DativeBondConstraint {
 
 /// Per-dative-bond constraint container, kept `key()`-sorted. On insert, unique
 /// kinds replace the same-key entry (last-wins); ring appends at its scope.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct DativeBondConstraints(Vec<DativeBondConstraint>);
 
 impl DativeBondConstraints {

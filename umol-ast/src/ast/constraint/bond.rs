@@ -15,7 +15,7 @@ use super::super::value::ValueAst;
 
 /// Localized bond constraint. Held inline on `BondAst` via
 /// `BondConstraints`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(BondConstraintKind), derive(Hash, EnumIter))]
 pub enum BondConstraint {
     Aromatic,
@@ -107,7 +107,7 @@ impl Canonicalize for BondConstraint {
 
 /// Per-bond constraint container, kept `key()`-sorted. On insert, unique kinds
 /// replace the same-key entry (last-wins); ring appends at its scope position.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BondConstraints(Vec<BondConstraint>);
 
 impl BondConstraints {

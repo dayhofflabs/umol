@@ -10,6 +10,7 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::mem;
 
+use strum::VariantArray;
 use umol_perm::{space, ClassKey, Permutation};
 
 use super::constraint::{
@@ -83,7 +84,7 @@ impl StereoKind {
 }
 
 /// Topicity of two ligand positions of a stereo carrier (derived ground value).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, strum::VariantArray)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, VariantArray)]
 pub enum Topicity {
     Homotopic,
     Enantiotopic,
@@ -91,7 +92,7 @@ pub enum Topicity {
 }
 
 /// Stereogenicity classification of a stereo carrier (derived ground value).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, strum::VariantArray)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, VariantArray)]
 pub enum Stereogenicity {
     Symmetric,
     Prochiral,

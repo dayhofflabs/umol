@@ -9,7 +9,7 @@ use super::super::traits::{Canonicalize, Lattice};
 
 /// Noncovalent-bond-scope constraint. Atom-ref and quantified-predicate forms
 /// live at molecule scope via `RelationalConstraint`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum NoncovalentBondConstraint {}
 
 impl NoncovalentBondConstraint {
@@ -43,7 +43,7 @@ impl Canonicalize for NoncovalentBondConstraint {
 
 /// Per-noncovalent-bond constraint container. Empty in practice until new
 /// value-only variants land on `NoncovalentBondConstraint`.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NoncovalentBondConstraints(Vec<NoncovalentBondConstraint>);
 
 impl NoncovalentBondConstraints {

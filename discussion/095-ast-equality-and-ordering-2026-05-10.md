@@ -75,7 +75,3 @@ Even with derived `Ord`:
 - [ ] Audit equality / hashing sites for any place where structural equality is unintentional.
 - [ ] Decide on simplification-aware equality (whole-codebase change; needs separate discussion).
 - [ ] Define and document the canonical form for each AST type (`simplify()` contract).
-
-## See also
-
-- `feedback_no_semantic_change_for_tests.md` — surfaced this discussion (proptest exposed BiMap iteration non-determinism; the wrong fix was patching the renderer to sort silently).

@@ -13,7 +13,7 @@ use super::super::value::ValueAst;
 
 /// Multicenter-bond-scope constraint. Held inline on `MulticenterBondAst` via
 /// `MulticenterBondConstraints`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(MulticenterBondConstraintKind), derive(Hash))]
 pub enum MulticenterBondConstraint {
     /// Asserted total electron count for the multicenter bond. Cross-checked
@@ -83,7 +83,7 @@ impl Canonicalize for MulticenterBondConstraint {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MulticenterBondConstraints(Vec<MulticenterBondConstraint>);
 
 impl MulticenterBondConstraints {

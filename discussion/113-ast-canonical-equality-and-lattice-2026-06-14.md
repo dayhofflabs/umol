@@ -213,8 +213,7 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
 1. `AtomAst`
 2. `BondAst`
 3. `NoncovalentBondAst` — `#[derive(Lattice, Canonicalize)]`; delete `simplify_values`.
-4. Fix `NoncovalentBondAst` direct `Display`/`FromStr`/`FromEdn` (move to
-  `NoncovalentBondDsl`).
+4. **removed**
 5. `AromaticSystemAst`/`MulticenterBondAst` — `electrons: Vec<ValueAst>` → `ElectronCountsAst`
    (whole-vector `Undetermined | Lit(Vec<i64>)`). This narrows the field: per-cell partials,
    sets, terms, and mixed-undetermined are no longer representable. EDN: `:electrons [i j k]`
@@ -246,7 +245,6 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
    g. **doc comments** in `constraint/aromatic.rs` / `constraint/multicenter.rs` referencing the
       `electrons` field type.
 6. `DativeBondAst` — derive after the birelation `acceptor_slot` drop.
-7. Fix writing of stereo atom / bond constraints to use streaming deserializer instead of the tree-based impl.
 
 ### P5 · Constraint types — impl plan (bottom-up)
 
@@ -378,7 +376,7 @@ is the build order.
       stereo collection lattice-law property tests `test_stereo_{atom,bond}_constraints_lattice_laws`
       (canonical fixed-kind container strategies) — **Done**. Remaining: (e) inline the residual
       `_from_edn`/`_to_edn` helpers.
-    g. Review struct and field names for stereo element constraints. Remove abbreviations.
+    g. Review struct and field names for stereo element constraints. Remove abbreviations. **Done**
 3. **Per-entity enums + collections. Each per-entity enum gets
    `Canonicalize` = delegate to the inner value (replacing `simplify`); each collection gets
    `Canonicalize` (per-kind canonicalize + drop-vacuous) and keeps its **hand-written**
@@ -396,12 +394,51 @@ is the build order.
    the three collections. Every other kind stays one-per-kind; its existing per-accessor
    `meet`/`join` is untouched.
 4. **Relational** (`RelationalConstraint`) — `Canonicalize` (canonicalize inner values;
-   refs unchanged); **not** a `Lattice`.
+   refs unchanged); **not** a `Lattice`. **Done.** `impl Canonicalize` canonicalizes each
+   inner `Box<AtomConstraint>` predicate (the `*Satisfies`/`*AllAtoms`/`*AnyAtom`/`EndsSatisfy`/
+   `*AllLigands`/`*AnyLigand` variants), propagating `Err(Contradiction)`; all refs and atom-set
+   `Vec`s pass through unchanged (atom-set sorting is the molecule-scope concern, P5.5). The
+   pre-existing infallible `simplify` (still called by `Constraint::simplify`) stays until the
+   P5.7 sweep.
 5. **Molecule** (`MoleculeConstraint`) — `Canonicalize` (canonicalize payloads; atom-sets
-   sorted; `SubPattern` recurses into the inner `MoleculeAst`); **not** a `Lattice`.
+   sorted); **not** a `Lattice`. **Done.** `impl Canonicalize` canonicalizes the value payload
+   (`ChargeSum`/`BondOrderSum` `sum` via `ValueAst`, `SpinSum` `spin` via the derived
+   `SpinStateAst` `Canonicalize`), propagating `Err(Contradiction)`, and sorts each `Some(Vec)`
+   atom/bond subset (`None` = all-atoms passes through; sort only, **no dedup** — duplicate-set
+   semantics is a tier-2 concern, cf. P5.6's explicit dedup of logical children). **Decision:
+   `SubPattern` canonicalize is a NO-OP** — it does **not** recurse into the inner `MoleculeAst`.
+   Recursing would require a fallible `MoleculeAst` value/constraint-canonicalize method, which
+   would re-enter `Constraints::canonicalize` (P5.6) and the entity `Canonicalize` derives (P5.7),
+   making P5.5/P5.6/P5.7 one mutually-recursive landing for little gain: a nested pattern already
+   normalizes at its own top level (lift/inline + entity canonicalization). This supersedes the
+   earlier "`SubPattern` recurses into the inner `MoleculeAst`" wording and keeps `MoleculeAst`
+   free of an AST normal form (its canonical form is graph canonicalization, per *Per-type
+   review*). The pre-existing infallible `simplify` (still called by `Constraint::simplify`, and
+   which *does* recurse via `simplify_values`) stays until the P5.7 sweep.
 6. **Logical** (`Constraint` `And`/`Or`/`Not` + the `Constraints` `Vec`) — `Canonicalize`:
    recurse, flatten nested same-combinator, sort + dedup children and the top `Vec` by the
-   `Constraint` declaration order, drop empty `And`/`Or`; **not** a `Lattice`.
+   `Constraint` declaration order, drop empty `And`/`Or`; **not** a `Lattice`. **Done.**
+   `Constraint::canonicalize` canonicalizes each leaf's inner predicate (propagating
+   `Err(Contradiction)`); `And`/`Or` recurse, flatten the same combinator (an empty
+   same-combinator child vanishes in the flatten splice), drop the empty *opposite* combinator,
+   then sort + dedup (shared free fn `canonicalize_combinator_children(children, is_and)`). `Not`
+   canonicalizes its inner node (no double-negation elimination — out of scope).
+   `Constraints::canonicalize` treats the store as an implicit conjunction (flatten top-level
+   `And`, same drop/sort/dedup).
+   **Ordering prerequisite — the whole constraint family is now `Ord`** (decision: make it
+   consistent, not just `AtomConstraints`): `PartialOrd, Ord` derived across the entity enums
+   (`Bond`/`Dative`/`AromaticSystem`/`Multicenter`/`Noncovalent` + the stereo enums) and their
+   collections, the stereo value leaves (`LigandSymmetryAst`/`FluxionalityAst`/`TopicityAst` + the
+   `relation_ast!` macro → `TopicityRelationAst`/`StereogenicityAst`), `RelationalConstraint`,
+   `SubPatternAnchor`, and `Constraint`/`Constraints`. **`MoleculeConstraint` has a hand-written
+   `Ord`** (can't derive — `SubPattern` holds `Box<MoleculeAst>`, no total order): variant order
+   then payload, with **`SubPattern` ordered by `anchor` only**. Consequence: that `Ord` is
+   intentionally **weaker than `Eq`** for `SubPattern` (same-anchor / different-pattern compare
+   `Equal` but are `!=`); canonicalize uses `Ord` only for a stable sort and `PartialEq` for
+   dedup, so it is sound (exact-dup dedup complete; same-anchor subpatterns keep input order). No
+   "total order" requirement was introduced — the *Per-type detail* phrasing is realized by the
+   derived/hand `Ord` with the `SubPattern`-by-anchor caveat. `Constraint::simplify` /
+   `Constraints::simplify_each` stay until the P5.7 sweep.
 7. **Sweep + exit.** Replace remaining `simplify`/`simplify_*` with canonicalize calls;
    add the deferred P4 entity `Canonicalize` derives (`Atom/Bond/Aromatic/Multicenter/
    Dative`), now unblocked.

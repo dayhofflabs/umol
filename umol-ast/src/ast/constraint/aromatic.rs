@@ -13,7 +13,7 @@ use super::super::value::ValueAst;
 
 /// Aromatic-system-scope constraint. Held inline on `AromaticSystemAst` via
 /// `AromaticSystemConstraints`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, EnumDiscriminants)]
 #[strum_discriminants(name(AromaticSystemConstraintKind), derive(Hash))]
 pub enum AromaticSystemConstraint {
     /// Asserted total π-electron count for the system. Cross-checked by the
@@ -83,7 +83,7 @@ impl Canonicalize for AromaticSystemConstraint {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AromaticSystemConstraints(Vec<AromaticSystemConstraint>);
 
 impl AromaticSystemConstraints {

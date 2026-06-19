@@ -1,11 +1,13 @@
 //! Molecule-scope constraints, the `Constraint` combinator tree, and the
 //! molecule-level `Constraints` store.
 
+use std::cmp::Ordering;
 use std::mem;
 use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::super::edit::{ConstraintUpdate, DroppedConstraint, RewrittenConstraint};
+use super::super::error::Contradiction;
 use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
@@ -14,7 +16,7 @@ use super::super::molecule::MoleculeAst;
 use super::super::remap::IdRemapping;
 use super::super::spin::SpinStateAst;
 use super::super::stereo::StereoKind;
-use super::super::traits::Lattice;
+use super::super::traits::{Canonicalize, Lattice};
 use super::super::value::ValueAst;
 use super::aromatic::AromaticSystemConstraint;
 use super::atom::AtomConstraint;
@@ -33,7 +35,7 @@ use super::stereo::{StereoAtomConstraint, StereoBondConstraint};
 /// ref-bearing constraints (e.g. a dative-bond donor identity, aromatic
 /// system membership, noncovalent endpoints) live only at molecule scope
 /// via `Relational`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Constraint {
     Atom(AtomId, AtomConstraint),
     Bond(BondId, BondConstraint),
@@ -143,11 +145,64 @@ impl Constraint {
     }
 }
 
+impl Canonicalize for Constraint {
+    /// Canonicalize the inner predicate of each leaf; for `And`/`Or`, recurse,
+    /// flatten the same combinator, drop empty `And`/`Or`, then sort + dedup
+    /// children by the `Constraint` order. `Not` canonicalizes its inner node.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::Atom(id, c) => Self::Atom(id, c.canonicalize()?),
+            Self::Bond(id, c) => Self::Bond(id, c.canonicalize()?),
+            Self::DativeBond(id, c) => Self::DativeBond(id, c.canonicalize()?),
+            Self::AromaticSystem(id, c) => Self::AromaticSystem(id, c.canonicalize()?),
+            Self::MulticenterBond(id, c) => Self::MulticenterBond(id, c.canonicalize()?),
+            Self::NoncovalentBond(_, c) => match c {},
+            Self::StereoAtom(id, kind, c) => Self::StereoAtom(id, kind, c.canonicalize()?),
+            Self::StereoBond(id, kind, c) => Self::StereoBond(id, kind, c.canonicalize()?),
+            Self::Relational(r) => Self::Relational(r.canonicalize()?),
+            Self::Molecule(m) => Self::Molecule(m.canonicalize()?),
+            Self::And(xs) => Self::And(canonicalize_logical_constraints(xs, true)?),
+            Self::Or(xs) => Self::Or(canonicalize_logical_constraints(xs, false)?),
+            Self::Not(c) => Self::Not(Box::new((*c).canonicalize()?)),
+        })
+    }
+}
+
+impl Canonicalize for Constraints {
+    /// The store is an implicit conjunction, so it canonicalizes like an `And`:
+    /// flatten top-level `And` entries, drop empty `And`/`Or`, sort + dedup.
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(Self(canonicalize_logical_constraints(self.0, true)?))
+    }
+}
+
+/// Canonicalize each child, splice same-combinator children (flatten), drop
+/// empty `And`/`Or`, then sort + dedup. `is_and` selects which combinator is the
+/// parent: `true` flattens nested `And` (and the conjunctive top-level store),
+/// `false` flattens nested `Or`.
+fn canonicalize_logical_constraints(
+    constraints: Vec<Constraint>,
+    is_and: bool,
+) -> Result<Vec<Constraint>, Contradiction> {
+    let mut out = Vec::new();
+    for child in constraints {
+        match child.canonicalize()? {
+            Constraint::And(inner) if is_and => out.extend(inner),
+            Constraint::Or(inner) if !is_and => out.extend(inner),
+            Constraint::And(inner) | Constraint::Or(inner) if inner.is_empty() => {}
+            other => out.push(other),
+        }
+    }
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
 /// Molecule-level constraint store: a flat list of `Constraint` tree nodes
 /// (molecule-scope predicates, combinators, and entity-leaves that appear
 /// inside combinators). Unconditional per-entity constraints live on the
 /// entity AST's own `constraints` field; the DSL parser lifts them there.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Constraints(Vec<Constraint>);
 
 impl Constraints {
@@ -362,6 +417,94 @@ impl MoleculeConstraint {
     }
 }
 
+impl Canonicalize for MoleculeConstraint {
+    /// Canonicalize the value payload (`sum` / `spin`) and sort each atom/bond
+    /// subset; refs are otherwise unchanged. `SubPattern` is a **no-op** — the
+    /// inner pattern is not recursed into (a nested pattern normalizes at its
+    /// own top level via lift/inline and entity canonicalization).
+    fn canonicalize(self) -> Result<Self, Contradiction> {
+        Ok(match self {
+            Self::ChargeSum { atoms, sum } => Self::ChargeSum {
+                atoms: atoms.map(|mut v| {
+                    v.sort_unstable();
+                    v
+                }),
+                sum: sum.canonicalize()?,
+            },
+            Self::SpinSum { atoms, spin } => Self::SpinSum {
+                atoms: atoms.map(|mut v| {
+                    v.sort_unstable();
+                    v
+                }),
+                spin: spin.canonicalize()?,
+            },
+            Self::BondOrderSum { bonds, sum } => Self::BondOrderSum {
+                bonds: bonds.map(|mut v| {
+                    v.sort_unstable();
+                    v
+                }),
+                sum: sum.canonicalize()?,
+            },
+            Self::Connected { atoms } => Self::Connected {
+                atoms: atoms.map(|mut v| {
+                    v.sort_unstable();
+                    v
+                }),
+            },
+            other @ Self::SubPattern { .. } => other,
+        })
+    }
+}
+
+impl PartialOrd for MoleculeConstraint {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MoleculeConstraint {
+    /// Variant declaration order, then payload. `SubPattern` orders by `anchor`
+    /// only — the inner `MoleculeAst` has no total order (graph), so same-anchor
+    /// patterns compare `Equal` here. This is intentionally weaker than `Eq`,
+    /// which does compare the pattern; canonicalization only needs the order for
+    /// a stable sort, and dedup falls back to `PartialEq`.
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Self::ChargeSum { atoms: a1, sum: s1 }, Self::ChargeSum { atoms: a2, sum: s2 }) => {
+                (a1, s1).cmp(&(a2, s2))
+            }
+            (
+                Self::SpinSum {
+                    atoms: a1,
+                    spin: s1,
+                },
+                Self::SpinSum {
+                    atoms: a2,
+                    spin: s2,
+                },
+            ) => (a1, s1).cmp(&(a2, s2)),
+            (
+                Self::BondOrderSum { bonds: b1, sum: s1 },
+                Self::BondOrderSum { bonds: b2, sum: s2 },
+            ) => (b1, s1).cmp(&(b2, s2)),
+            (Self::Connected { atoms: a1 }, Self::Connected { atoms: a2 }) => a1.cmp(a2),
+            (Self::SubPattern { anchor: a1, .. }, Self::SubPattern { anchor: a2, .. }) => {
+                a1.cmp(a2)
+            }
+            _ => {
+                let rank = |c: &Self| match c {
+                    Self::ChargeSum { .. } => 0u8,
+                    Self::SpinSum { .. } => 1,
+                    Self::BondOrderSum { .. } => 2,
+                    Self::Connected { .. } => 3,
+                    Self::SubPattern { .. } => 4,
+                };
+                rank(self).cmp(&rank(other))
+            }
+        }
+    }
+}
+
 /// Remap an `Option<Vec<AtomId>>`. `None` (all atoms) passes through.
 /// `Some(vec)` remaps each element; if any atom was removed the whole
 /// constraint is dropped (returns outer `None`).
@@ -398,7 +541,7 @@ fn remap_bond_subset(
 /// `(target, pattern)` pairs constraining a target-molecule entity to a
 /// pattern-molecule entity of the same kind. An empty anchor denotes an
 /// unanchored match (pattern can embed anywhere).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SubPatternAnchor {
     atoms: Vec<(AtomId, AtomId)>,
     bonds: Vec<(BondId, BondId)>,
@@ -548,11 +691,14 @@ impl SubPatternAnchor {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp::Ordering;
+
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_graph_core::{RelationId, Remapping};
 
     use super::*;
+    use crate::ast::atom::AtomAst;
     use crate::ast::constraint::{RingMembershipAst, RingScope};
     use crate::ast::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -675,6 +821,66 @@ mod tests {
     )]
     fn test_constraint_simplify(#[case] input: Constraint, #[case] expected: Constraint) {
         assert_eq!(input.simplify(), expected);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::leaf_folds(
+        Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4)))),
+        Ok(Constraint::Atom(AtomId(0), AtomConstraint::valence(4))),
+    )]
+    #[case::and_flattens_nested(
+        Constraint::And(vec![
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)]),
+        ]),
+        Ok(Constraint::And(vec![
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+        ])),
+    )]
+    #[case::and_drops_empty_or_child(
+        Constraint::And(vec![Constraint::Or(vec![]), Constraint::Atom(AtomId(0), AtomConstraint::valence(4))]),
+        Ok(Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraint::valence(4))])),
+    )]
+    #[case::and_sorts_and_dedups(
+        Constraint::And(vec![
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+        ]),
+        Ok(Constraint::And(vec![
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+        ])),
+    )]
+    #[case::or_flattens_nested(
+        Constraint::Or(vec![
+            Constraint::Or(vec![Constraint::Atom(AtomId(0), AtomConstraint::valence(4))]),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+        ]),
+        Ok(Constraint::Or(vec![
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+        ])),
+    )]
+    #[case::or_drops_empty_and_child(
+        Constraint::Or(vec![Constraint::And(vec![]), Constraint::Bond(BondId(0), BondConstraint::Aromatic)]),
+        Ok(Constraint::Or(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)])),
+    )]
+    #[case::not_folds_child(
+        Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4)))))),
+        Ok(Constraint::Not(Box::new(Constraint::Atom(AtomId(0), AtomConstraint::valence(4))))),
+    )]
+    #[case::inner_contradiction_propagates(
+        Constraint::And(vec![Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::lit_set(Vec::<i64>::new())))]),
+        Err(Contradiction),
+    )]
+    fn test_constraint_canonicalize(
+        #[case] input: Constraint,
+        #[case] expected: Result<Constraint, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -958,7 +1164,10 @@ mod tests {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)));
         cs.push(Constraint::Atom(AtomId(1), AtomConstraint::degree(3)));
-        cs.push(Constraint::Bond(BondId(2), BondConstraint::ring_membership(RingScope::Size(6), 1)));
+        cs.push(Constraint::Bond(
+            BondId(2),
+            BondConstraint::ring_membership(RingScope::Size(6), 1),
+        ));
         cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(2)]),
         }));
@@ -969,7 +1178,10 @@ mod tests {
             cs.as_slice(),
             &[
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-                Constraint::Bond(BondId(1), BondConstraint::ring_membership(RingScope::Size(6), 1)),
+                Constraint::Bond(
+                    BondId(1),
+                    BondConstraint::ring_membership(RingScope::Size(6), 1)
+                ),
                 Constraint::Molecule(MoleculeConstraint::Connected {
                     atoms: Some(vec![AtomId(0), AtomId(1)]),
                 }),
@@ -985,8 +1197,14 @@ mod tests {
                 rewritten: vec![
                     RewrittenConstraint {
                         position: 2,
-                        old: Constraint::Bond(BondId(2), BondConstraint::ring_membership(RingScope::Size(6), 1)),
-                        new: Constraint::Bond(BondId(1), BondConstraint::ring_membership(RingScope::Size(6), 1)),
+                        old: Constraint::Bond(
+                            BondId(2),
+                            BondConstraint::ring_membership(RingScope::Size(6), 1)
+                        ),
+                        new: Constraint::Bond(
+                            BondId(1),
+                            BondConstraint::ring_membership(RingScope::Size(6), 1)
+                        ),
                     },
                     RewrittenConstraint {
                         position: 3,
@@ -1006,7 +1224,10 @@ mod tests {
     fn test_constraint_update_rollback_into() {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)));
-        cs.push(Constraint::Bond(BondId(1), BondConstraint::ring_membership(RingScope::Size(6), 1)));
+        cs.push(Constraint::Bond(
+            BondId(1),
+            BondConstraint::ring_membership(RingScope::Size(6), 1),
+        ));
 
         ConstraintUpdate {
             dropped: vec![DroppedConstraint {
@@ -1015,8 +1236,14 @@ mod tests {
             }],
             rewritten: vec![RewrittenConstraint {
                 position: 2,
-                old: Constraint::Bond(BondId(2), BondConstraint::ring_membership(RingScope::Size(6), 1)),
-                new: Constraint::Bond(BondId(1), BondConstraint::ring_membership(RingScope::Size(6), 1)),
+                old: Constraint::Bond(
+                    BondId(2),
+                    BondConstraint::ring_membership(RingScope::Size(6), 1),
+                ),
+                new: Constraint::Bond(
+                    BondId(1),
+                    BondConstraint::ring_membership(RingScope::Size(6), 1),
+                ),
             }],
         }
         .rollback_into(&mut cs);
@@ -1026,7 +1253,10 @@ mod tests {
             &[
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
                 Constraint::Atom(AtomId(1), AtomConstraint::degree(3)),
-                Constraint::Bond(BondId(2), BondConstraint::ring_membership(RingScope::Size(6), 1)),
+                Constraint::Bond(
+                    BondId(2),
+                    BondConstraint::ring_membership(RingScope::Size(6), 1)
+                ),
             ],
         );
     }
@@ -1040,16 +1270,53 @@ mod tests {
         ));
         cs.push(Constraint::Bond(
             BondId(0),
-            BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) }),
+            BondConstraint::RingMembership(RingMembershipAst {
+                scope: RingScope::Size(6),
+                count: ValueAst::term(ValueTerm::Lit(1)),
+            }),
         ));
         cs.simplify_each();
         assert_eq!(
             cs.as_slice(),
             &[
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-                Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::Size(6), 1)),
+                Constraint::Bond(
+                    BondId(0),
+                    BondConstraint::ring_membership(RingScope::Size(6), 1)
+                ),
             ],
         );
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::flattens_top_level_and_then_sorts(
+        Constraints::from(vec![
+            Constraint::And(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)]),
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+        ]),
+        Ok(Constraints::from(vec![
+            Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+        ])),
+    )]
+    #[case::drops_empty_or_and_dedups(
+        Constraints::from(vec![
+            Constraint::Or(vec![]),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+            Constraint::Bond(BondId(0), BondConstraint::Aromatic),
+        ]),
+        Ok(Constraints::from(vec![Constraint::Bond(BondId(0), BondConstraint::Aromatic)])),
+    )]
+    #[case::inner_contradiction_propagates(
+        Constraints::from(vec![Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::lit_set(Vec::<i64>::new())))]),
+        Err(Contradiction),
+    )]
+    fn test_constraints_canonicalize(
+        #[case] input: Constraints,
+        #[case] expected: Result<Constraints, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
     }
 
     #[rustfmt::skip]
@@ -1096,6 +1363,76 @@ mod tests {
     #[case::sub_pattern(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) })]
     fn test_molecule_constraint_simplify_identity(#[case] input: MoleculeConstraint) {
         assert_eq!(input.clone().simplify(), input);
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::charge_sum_sorts_and_folds(
+        MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(2), AtomId(0)]), sum: ValueAst::term(ValueTerm::Lit(1)) },
+        Ok(MoleculeConstraint::ChargeSum { atoms: Some(vec![AtomId(0), AtomId(2)]), sum: ValueAst::Lit(1) }),
+    )]
+    #[case::spin_sum_sorts_and_folds(
+        MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(2), AtomId(0)]),
+            spin: SpinStateAst { unpaired: ValueAst::term(ValueTerm::Lit(0)), multiplicity: ValueAst::term(ValueTerm::Lit(1)) } },
+        Ok(MoleculeConstraint::SpinSum { atoms: Some(vec![AtomId(0), AtomId(2)]), spin: SpinStateAst::from((0_u8, 1_u8)) }),
+    )]
+    #[case::bond_order_sum_sorts_and_folds(
+        MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(2), BondId(0)]), sum: ValueAst::term(ValueTerm::Lit(4)) },
+        Ok(MoleculeConstraint::BondOrderSum { bonds: Some(vec![BondId(0), BondId(2)]), sum: ValueAst::Lit(4) }),
+    )]
+    #[case::connected_sorts(
+        MoleculeConstraint::Connected { atoms: Some(vec![AtomId(3), AtomId(1), AtomId(2)]) },
+        Ok(MoleculeConstraint::Connected { atoms: Some(vec![AtomId(1), AtomId(2), AtomId(3)]) }),
+    )]
+    #[case::charge_sum_empty_litset_contradiction(
+        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::lit_set(Vec::<i64>::new()) },
+        Err(Contradiction),
+    )]
+    fn test_molecule_constraint_canonicalize(
+        #[case] input: MoleculeConstraint,
+        #[case] expected: Result<MoleculeConstraint, Contradiction>,
+    ) {
+        assert_eq!(input.canonicalize(), expected);
+    }
+
+    #[rstest]
+    #[case::connected_none(MoleculeConstraint::Connected { atoms: None })]
+    #[case::sub_pattern_noop(MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) })]
+    fn test_molecule_constraint_canonicalize_identity(#[case] input: MoleculeConstraint) {
+        assert_eq!(input.clone().canonicalize(), Ok(input));
+    }
+
+    #[rustfmt::skip]
+    #[rstest]
+    #[case::charge_before_connected(
+        MoleculeConstraint::ChargeSum { atoms: None, sum: ValueAst::Lit(0) },
+        MoleculeConstraint::Connected { atoms: None },
+        Ordering::Less,
+    )]
+    #[case::connected_before_sub_pattern(
+        MoleculeConstraint::Connected { atoms: None },
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) },
+        Ordering::Less,
+    )]
+    #[case::sub_pattern_ignores_pattern(
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) },
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::from_atoms_and_bonds(vec![AtomAst::default()], vec![])) },
+        Ordering::Equal,
+    )]
+    #[case::sub_pattern_orders_by_anchor(
+        MoleculeConstraint::SubPattern { anchor: SubPatternAnchor::new(), pattern: Box::new(MoleculeAst::default()) },
+        MoleculeConstraint::SubPattern {
+            anchor: { let mut a = SubPatternAnchor::new(); a.push_atom(AtomId(0), AtomId(0)); a },
+            pattern: Box::new(MoleculeAst::default()),
+        },
+        Ordering::Less,
+    )]
+    fn test_molecule_constraint_cmp(
+        #[case] a: MoleculeConstraint,
+        #[case] b: MoleculeConstraint,
+        #[case] expected: Ordering,
+    ) {
+        assert_eq!(a.cmp(&b), expected);
     }
 
     #[rustfmt::skip]

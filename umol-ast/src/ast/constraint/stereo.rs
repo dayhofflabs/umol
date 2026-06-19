@@ -77,7 +77,7 @@ impl StereoLigandPair {
 /// Generates a subset-lattice over finite domain enum.
 macro_rules! relation_ast {
     ($name:ident, $domain:ty) => {
-        #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $name {
             #[default]
             Undetermined,
@@ -208,7 +208,7 @@ relation_ast! { TopicityRelationAst, Topicity }
 relation_ast! { StereogenicityAst, Stereogenicity }
 
 /// Ligand permutations with membership assertion. Non-unique.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LigandSymmetryAst {
     pub permutation: OrientedLigandPermutation,
     pub member: MemOp,
@@ -221,7 +221,7 @@ impl LigandSymmetryAst {
 }
 
 /// Fluxionality move: proper ligand permutation realized by dynamics. Non-unique.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FluxionalityAst {
     pub permutation: LigandPermutation,
 }
@@ -233,7 +233,7 @@ impl FluxionalityAst {
 }
 
 /// Per-pair topicity constraint: relation between pair of ligands.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TopicityAst {
     pub pair: StereoLigandPair,
     pub relation: TopicityRelationAst,
@@ -281,7 +281,7 @@ macro_rules! stereo_constraint {
             }
         }
 
-        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $constraint {
             LigandSymmetry(LigandSymmetryAst),
             Fluxionality(FluxionalityAst),
@@ -346,7 +346,7 @@ macro_rules! stereo_constraint {
         }
 
         /// Stereo constraint container for stereo atoms and bonds.
-        #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+        #[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $constraints {
             entries: SmallVec<[$constraint; 2]>,
         }
