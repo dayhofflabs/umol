@@ -2,14 +2,15 @@
 
 use std::{fmt, mem};
 
-use winnow::ascii::multispace0;
-use winnow::combinator::{alt, empty, preceded};
+use winnow::ascii::{dec_uint, multispace0};
+use winnow::combinator::{alt, delimited, empty, opt, preceded};
 use winnow::error::ErrMode;
 use winnow::Parser;
 
 use super::config::{MultiplicityDefault, UnpairedElectronsDefault};
 use super::error::{PResult, ParseError};
 use super::value::{fmt_value, value};
+use crate::ast::constraint::{RingMembershipAst, RingScope};
 use crate::ast::operators::RelOp;
 use crate::ast::spin::SpinStateAst;
 use crate::ast::value::{ValueAst, ValuePredicate, ValueTerm};
@@ -45,6 +46,19 @@ pub(crate) fn ring_count(i: &mut &str) -> PResult<ValueAst> {
     )
     .parse_next(i)
     .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))
+}
+
+/// Parse the body after `#R`: an optional `(size)` then a count, yielding the
+/// `RingScope` (`All` when no size) and its count.
+pub(crate) fn ring_membership(i: &mut &str) -> PResult<RingMembershipAst> {
+    let size: Option<u8> = opt(delimited('(', dec_uint::<_, u8, _>, ')'))
+        .parse_next(i)
+        .map_err(|_: ErrMode<ParseError>| ErrMode::Backtrack(ParseError::ExpectedPredicateBody))?;
+    let count = ring_count(i)?;
+    Ok(RingMembershipAst::new(
+        size.map_or(RingScope::All, RingScope::Size),
+        count,
+    ))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -144,19 +158,23 @@ pub(crate) fn fmt_spin_pair(f: &mut fmt::Formatter<'_>, spin: &SpinStateAst) -> 
 // render/parse cycle requires either generating only non-vacuous payloads
 // or normalizing the input before comparing.
 
-pub(crate) fn fmt_ring_count(f: &mut fmt::Formatter<'_>, v: &ValueAst) -> fmt::Result {
+pub(crate) fn fmt_ring_membership(f: &mut fmt::Formatter<'_>, m: &RingMembershipAst) -> fmt::Result {
+    let v = &m.count;
+    if matches!(v, ValueAst::Undetermined) {
+        return Ok(());
+    }
+    write!(f, "#R")?;
+    if let RingScope::Size(s) = m.scope {
+        write!(f, "({})", s)?;
+    }
     if is_plus_sugar(v, "r", 1) {
-        return write!(f, "#R+");
+        return write!(f, "+");
     }
     match v {
-        ValueAst::Undetermined => Ok(()),
-        ValueAst::Lit(0) => write!(f, "#R!"),
-        ValueAst::Lit(1) => write!(f, "#R"),
-        ValueAst::Lit(n) => write!(f, "#R{}", n),
-        v => {
-            write!(f, "#R")?;
-            fmt_value(f, v)
-        }
+        ValueAst::Lit(0) => write!(f, "!"),
+        ValueAst::Lit(1) => Ok(()),
+        ValueAst::Lit(n) => write!(f, "{}", n),
+        v => fmt_value(f, v),
     }
 }
 
@@ -301,21 +319,24 @@ mod tests {
     }
 
     #[rstest]
-    #[case::zero_renders_bang(ValueAst::Lit(0), "#R!")]
-    #[case::one_renders_bare(ValueAst::Lit(1), "#R")]
-    #[case::two(ValueAst::Lit(2), "#R2")]
-    #[case::plus_renders_plus(
-        ValueAst::var_at_least("r", 1),
-        "#R+",
-    )]
-    fn test_fmt_ring_count(#[case] v: ValueAst, #[case] expected: &str) {
-        struct W<'a>(&'a ValueAst);
-        impl<'a> fmt::Display for W<'a> {
+    #[case::all_zero_renders_bang(RingScope::All, ValueAst::Lit(0), "#R!")]
+    #[case::all_one_renders_bare(RingScope::All, ValueAst::Lit(1), "#R")]
+    #[case::all_two(RingScope::All, ValueAst::Lit(2), "#R2")]
+    #[case::all_plus(RingScope::All, ValueAst::var_at_least("r", 1), "#R+")]
+    #[case::size_bare(RingScope::Size(6), ValueAst::Lit(1), "#R(6)")]
+    #[case::size_plus(RingScope::Size(6), ValueAst::var_at_least("r", 1), "#R(6)+")]
+    fn test_fmt_ring_membership(
+        #[case] scope: RingScope,
+        #[case] count: ValueAst,
+        #[case] expected: &str,
+    ) {
+        struct W(RingMembershipAst);
+        impl fmt::Display for W {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                fmt_ring_count(f, self.0)
+                fmt_ring_membership(f, &self.0)
             }
         }
-        assert_eq!(W(&v).to_string(), expected);
+        assert_eq!(W(RingMembershipAst { scope, count }).to_string(), expected);
     }
 
     #[rustfmt::skip]

@@ -22,7 +22,7 @@ pub(crate) use umol_ast::ast::{
     MulticenterBondConstraint, MulticenterBondConstraintKind, MulticenterBondConstraints,
     MulticenterBondId, MulticenterValenceAst, NoncovalentBondAst, NoncovalentBondId,
     NoncovalentBondKind, NoncovalentBondKindAst, OrientedPermutationAst, PermutationAst,
-    RelationalConstraint, SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomId,
+    RelationalConstraint, RingScope, SpinStateAst, StereoAtomAst, StereoAtomConstraint, StereoAtomId,
     CisTransStereoAst, StereoBondAst, StereoBondConstraint, StereoBondId, StereoConfigurationAst,
     StereoCosetAst, StereoKind, StereoLigand, StereoLigandId, StereoLigandKind, TetrahedralStereoAst,
     Stereogenicity,
@@ -213,8 +213,7 @@ pub(crate) fn constraint_value_strategy(range: RangeInclusive<i64>) -> impl Stra
 
 /// `Lit`/`Set` only — still used by the ring-size strategies where
 /// `Undetermined` on the inner value collapses into a dropped constraint
-/// in the entity-level formatter (see `BondConstraint::RingSize` /
-/// `DativeBondConstraint::RingSize` — vacuous, intentionally dropped).
+/// in the entity-level formatter (see vacuous `RingMembership(_, Undetermined)`, intentionally dropped).
 pub(crate) fn constraint_inner_value_strategy(range: RangeInclusive<i64>) -> impl Strategy<Value = ValueAst> {
     prop_oneof![
         range.clone().prop_map(ValueAst::Lit),
@@ -260,8 +259,8 @@ pub(crate) fn atom_constraint_strategy() -> BoxedStrategy<AtomConstraint> {
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingDegree),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingValence),
         constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::TotalHydrogens),
-        constraint_inner_value_strategy(0..=6).prop_map(AtomConstraint::RingCount),
-        constraint_inner_value_strategy(3..=10).prop_map(AtomConstraint::RingSize),
+        constraint_inner_value_strategy(0..=6).prop_map(|v| AtomConstraint::ring_membership(RingScope::All, v)),
+        (3u8..=10, constraint_inner_value_strategy(0..=6)).prop_map(|(s, count)| AtomConstraint::ring_membership(RingScope::Size(s), count)),
         aromatic_valence_ast_strategy().prop_map(AtomConstraint::AromaticValence),
         multicenter_valence_ast_strategy().prop_map(AtomConstraint::MulticenterValence),
         tetrahedral_stereo_strategy().prop_map(AtomConstraint::TetrahedralStereo),
@@ -282,8 +281,8 @@ pub(crate) fn atom_constraints_strategy() -> impl Strategy<Value = AtomConstrain
 pub(crate) fn bond_constraint_strategy() -> BoxedStrategy<BondConstraint> {
     prop_oneof![
         Just(BondConstraint::Aromatic),
-        constraint_inner_value_strategy(0..=6).prop_map(BondConstraint::RingCount),
-        constraint_inner_value_strategy(3..=10).prop_map(BondConstraint::RingSize),
+        constraint_inner_value_strategy(0..=6).prop_map(|v| BondConstraint::ring_membership(RingScope::All, v)),
+        (3u8..=10, constraint_inner_value_strategy(0..=6)).prop_map(|(s, count)| BondConstraint::ring_membership(RingScope::Size(s), count)),
         cis_trans_stereo_strategy().prop_map(BondConstraint::CisTransStereo),
     ]
     .boxed()
@@ -302,8 +301,8 @@ pub(crate) fn bond_constraints_strategy() -> impl Strategy<Value = BondConstrain
 pub(crate) fn dative_bond_constraint_strategy() -> BoxedStrategy<DativeBondConstraint> {
     prop_oneof![
         Just(DativeBondConstraint::Aromatic),
-        constraint_inner_value_strategy(0..=6).prop_map(DativeBondConstraint::RingCount),
-        constraint_inner_value_strategy(3..=10).prop_map(DativeBondConstraint::RingSize),
+        constraint_inner_value_strategy(0..=6).prop_map(|v| DativeBondConstraint::ring_membership(RingScope::All, v)),
+        (3u8..=10, constraint_inner_value_strategy(0..=6)).prop_map(|(s, count)| DativeBondConstraint::ring_membership(RingScope::Size(s), count)),
     ]
     .boxed()
 }
@@ -1779,7 +1778,7 @@ impl TransactionCase {
             Self::AddAtomConstraint { count, id, size } => {
                 vec![Edit::AddAtomConstraint {
                     id: AtomRef::Id(AtomId((id % count) as u32)),
-                    constraint: AtomConstraint::ring_size(*size),
+                    constraint: AtomConstraint::ring_membership(RingScope::Size(*size as u8), 1),
                 }]
             }
             Self::AddDativeBond {

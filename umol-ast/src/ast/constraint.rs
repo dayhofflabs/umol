@@ -23,6 +23,7 @@ mod molecule;
 mod multicenter;
 mod noncovalent;
 mod relational;
+mod ring;
 mod stereo;
 
 pub use aromatic::{
@@ -40,6 +41,7 @@ pub use multicenter::{
 };
 pub use noncovalent::{NoncovalentBondConstraint, NoncovalentBondConstraints};
 pub use relational::RelationalConstraint;
+pub use ring::{RingMembershipAst, RingScope};
 pub use stereo::{
     FluxionalityAst, LigandPairAst, LigandSymmetryAst, OrientedPermutationAst, PermutationAst,
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,

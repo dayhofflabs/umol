@@ -338,6 +338,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
     use umol_shared::element::Element;
+    use crate::ast::constraint::RingScope;
 
     use crate::ast::{
         AromaticSystemAst, AromaticSystemConstraint, AtomAst, AtomConstraint, AtomId, BondAst,
@@ -475,7 +476,7 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::single("1", DativeBondAst::from_order(1))]
-    #[case::with_ring_size( "2 #r6", DativeBondAst::from_order(2).with_constraint(DativeBondConstraint::ring_size(6)),)]
+    #[case::with_ring_size( "2 #R(6)", DativeBondAst::from_order(2).with_constraint(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),)]
     fn test_dative_macro(#[case] input: &str, #[case] expected: DativeBondAst) {
         assert_eq!(dative!(input), expected);
     }

@@ -1,11 +1,13 @@
 //! Atom constraints.
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 use std::mem::{self, replace};
 
 use smallvec::SmallVec;
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
+use super::super::constraint::ring::{RingMembershipAst, RingScope};
 use super::super::error::Contradiction;
 use super::super::remap::IdRemapping;
 use super::super::stereo::TetrahedralStereoAst;
@@ -30,8 +32,7 @@ pub enum AtomConstraint {
     RingDegree(ValueAst),
     RingValence(ValueAst),
     TotalHydrogens(ValueAst),
-    RingCount(ValueAst),
-    RingSize(ValueAst),
+    RingMembership(RingMembershipAst),
     TetrahedralStereo(TetrahedralStereoAst),
 }
 
@@ -80,12 +81,8 @@ impl AtomConstraint {
         Self::TotalHydrogens(v.into())
     }
 
-    pub fn ring_count(v: impl Into<ValueAst>) -> Self {
-        Self::RingCount(v.into())
-    }
-
-    pub fn ring_size(v: impl Into<ValueAst>) -> Self {
-        Self::RingSize(v.into())
+    pub fn ring_membership(scope: RingScope, count: impl Into<ValueAst>) -> Self {
+        Self::RingMembership(RingMembershipAst::new(scope, count))
     }
 
     pub fn tetrahedral_stereo(c: TetrahedralStereoAst) -> Self {
@@ -96,11 +93,9 @@ impl AtomConstraint {
         self.into()
     }
 
-    /// `false` for variants that may legitimately appear multiple times on
-    /// the same atom: `RingSize` (an atom in fused rings satisfies multiple
-    /// ring-size assertions). `true` for variants that are single-valued.
+    /// `false` for `RingMembership` (several per atom, one per `RingScope`); `true` otherwise.
     pub fn is_unique(&self) -> bool {
-        !matches!(self.kind(), AtomConstraintKind::RingSize)
+        !matches!(self.kind(), AtomConstraintKind::RingMembership)
     }
 
     pub fn is_undetermined(&self) -> bool {
@@ -113,9 +108,8 @@ impl AtomConstraint {
             | Self::TotalDegree(v)
             | Self::RingDegree(v)
             | Self::RingValence(v)
-            | Self::TotalHydrogens(v)
-            | Self::RingCount(v)
-            | Self::RingSize(v) => v.is_undetermined(),
+            | Self::TotalHydrogens(v) => v.is_undetermined(),
+            Self::RingMembership(m) => m.count.is_undetermined(),
             Self::AromaticValence(c) => c.is_undetermined(),
             Self::MulticenterValence(c) => c.is_undetermined(),
             Self::TetrahedralStereo(c) => c.is_undetermined(),
@@ -137,8 +131,9 @@ impl AtomConstraint {
             Self::RingDegree(v) => Self::RingDegree(v.simplify()),
             Self::RingValence(v) => Self::RingValence(v.simplify()),
             Self::TotalHydrogens(v) => Self::TotalHydrogens(v.simplify()),
-            Self::RingCount(v) => Self::RingCount(v.simplify()),
-            Self::RingSize(v) => Self::RingSize(v.simplify()),
+            Self::RingMembership(m) => {
+                Self::RingMembership(RingMembershipAst::new(m.scope, m.count.simplify()))
+            }
             Self::TetrahedralStereo(c) => {
                 Self::TetrahedralStereo(c.clone().canonicalize().unwrap_or(c))
             }
@@ -525,11 +520,27 @@ impl AtomConstraints {
         }
     }
 
+    fn ring_memberships(&self) -> impl Iterator<Item = (RingScope, &ValueAst)> {
+        self.get_all(AtomConstraintKind::RingMembership)
+            .filter_map(|c| match c {
+                AtomConstraint::RingMembership(m) => Some((m.scope, &m.count)),
+                _ => None,
+            })
+    }
+
+    fn ring_value(&self, scope: RingScope) -> ValueAst {
+        self.ring_memberships()
+            .find(|(s, _)| *s == scope)
+            .map(|(_, v)| v.clone())
+            .unwrap_or(ValueAst::Undetermined)
+    }
+
     pub fn ring_count(&self) -> ValueAst {
-        match self.get(AtomConstraintKind::RingCount) {
-            Some(AtomConstraint::RingCount(v)) => v.clone(),
-            _ => ValueAst::Undetermined,
-        }
+        self.ring_value(RingScope::All)
+    }
+
+    pub fn ring_size_count(&self, s: u8) -> ValueAst {
+        self.ring_value(RingScope::Size(s))
     }
 
     pub fn aromatic_valence(&self) -> AromaticValenceAst {
@@ -551,16 +562,6 @@ impl AtomConstraints {
             Some(AtomConstraint::TetrahedralStereo(c)) => c.clone(),
             _ => TetrahedralStereoAst::Undetermined,
         }
-    }
-
-    /// Multi-valued ring-size assertions; an atom in fused rings may carry
-    /// several. Iterator yields entries in store order; empty if none.
-    pub fn ring_sizes(&self) -> impl Iterator<Item = &ValueAst> {
-        self.get_all(AtomConstraintKind::RingSize)
-            .filter_map(|c| match c {
-                AtomConstraint::RingSize(v) => Some(v),
-                _ => None,
-            })
     }
 
     /// Insert a constraint per the per-variant cardinality policy. Single-
@@ -637,7 +638,7 @@ impl AtomConstraints {
     }
 
     /// Iterate over every entry of `kind`. Single-valued kinds yield at most
-    /// one entry; multi-valued (`RingSize`) may yield several.
+    /// one entry; `RingMembership` may yield several (one per scope).
     pub fn get_all(&self, kind: AtomConstraintKind) -> impl Iterator<Item = &AtomConstraint> {
         let start = self
             .entries
@@ -695,9 +696,8 @@ impl Lattice for AtomConstraints {
             | AtomConstraint::TotalDegree(v)
             | AtomConstraint::RingDegree(v)
             | AtomConstraint::RingValence(v)
-            | AtomConstraint::TotalHydrogens(v)
-            | AtomConstraint::RingCount(v)
-            | AtomConstraint::RingSize(v) => v.is_ground(),
+            | AtomConstraint::TotalHydrogens(v) => v.is_ground(),
+            AtomConstraint::RingMembership(m) => m.count.is_ground(),
             AtomConstraint::AromaticValence(c) => c.is_ground(),
             AtomConstraint::MulticenterValence(c) => c.is_ground(),
             AtomConstraint::TetrahedralStereo(c) => c.is_ground(),
@@ -752,23 +752,20 @@ impl Lattice for AtomConstraints {
         if !v.is_undetermined() {
             result.add(AtomConstraint::TotalHydrogens(v));
         }
-        let v = self.ring_count().meet(&other.ring_count())?;
-        if !v.is_undetermined() {
-            result.add(AtomConstraint::RingCount(v));
-        }
         let v = self
             .tetrahedral_stereo()
             .meet(&other.tetrahedral_stereo())?;
         if !v.is_undetermined() {
             result.add(AtomConstraint::TetrahedralStereo(v));
         }
-        for v in self.ring_sizes().chain(other.ring_sizes()) {
-            if v.is_undetermined() {
-                continue;
-            }
-            let entry = AtomConstraint::RingSize(v.clone());
-            if !result.contains_entry(&entry) {
-                result.add(entry);
+        let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
+        scopes.extend(other.ring_memberships().map(|(s, _)| s));
+        for scope in scopes {
+            let v = self.ring_value(scope).meet(&other.ring_value(scope))?;
+            if !v.is_undetermined() {
+                result.add(AtomConstraint::RingMembership(RingMembershipAst::new(
+                    scope, v,
+                )));
             }
         }
         Some(result)
@@ -799,26 +796,21 @@ impl Lattice for AtomConstraints {
         join_unique_value!(RingDegree, ring_degree, RingDegree);
         join_unique_value!(RingValence, ring_valence, RingValence);
         join_unique_value!(TotalHydrogens, total_hydrogens, TotalHydrogens);
-        join_unique_value!(RingCount, ring_count, RingCount);
         join_unique_value!(TetrahedralStereo, tetrahedral_stereo, TetrahedralStereo);
-        for v in self.ring_sizes() {
-            if v.is_undetermined() {
-                continue;
-            }
-            let entry = AtomConstraint::RingSize(v.clone());
-            if other
-                .ring_sizes()
-                .any(|o| AtomConstraint::RingSize(o.clone()) == entry)
-            {
-                result.add(entry);
+        for (scope, v) in self.ring_memberships() {
+            if other.ring_memberships().any(|(s, _)| s == scope) {
+                let j = v.join(&other.ring_value(scope));
+                if !j.is_undetermined() {
+                    result.add(AtomConstraint::RingMembership(RingMembershipAst::new(
+                        scope, j,
+                    )));
+                }
             }
         }
         result
     }
 
-    /// Field-wise per-kind: single-valued kinds match via the corresponding
-    /// `Lattice::matches`; `RingSize` (multi-valued) requires every `self`
-    /// assertion to be matchable by some `target` assertion.
+    /// Per-kind match; ring membership matches per `RingScope`.
     fn matches(&self, target: &Self) -> bool {
         self.valence().matches(&target.valence())
             && self.total_valence().matches(&target.total_valence())
@@ -833,13 +825,12 @@ impl Lattice for AtomConstraints {
             && self.ring_degree().matches(&target.ring_degree())
             && self.ring_valence().matches(&target.ring_valence())
             && self.total_hydrogens().matches(&target.total_hydrogens())
-            && self.ring_count().matches(&target.ring_count())
             && self
                 .tetrahedral_stereo()
                 .matches(&target.tetrahedral_stereo())
             && self
-                .ring_sizes()
-                .all(|p| target.ring_sizes().any(|t| p.matches(t)))
+                .ring_memberships()
+                .all(|(scope, v)| v.matches(&target.ring_value(scope)))
     }
 }
 
@@ -895,8 +886,8 @@ mod tests {
     #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraint::RingDegree(ValueAst::Lit(2)))]
     #[case::ring_valence(AtomConstraint::ring_valence(3), AtomConstraint::RingValence(ValueAst::Lit(3)))]
     #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraint::TotalHydrogens(ValueAst::Lit(3)))]
-    #[case::ring_count(AtomConstraint::ring_count(1), AtomConstraint::RingCount(ValueAst::Lit(1)))]
-    #[case::ring_size(AtomConstraint::ring_size(6), AtomConstraint::RingSize(ValueAst::Lit(6)))]
+    #[case::ring_membership_all(AtomConstraint::ring_membership(RingScope::All, 1), AtomConstraint::RingMembership(RingMembershipAst { scope: RingScope::All, count: ValueAst::Lit(1) }))]
+    #[case::ring_membership_size(AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::Lit(1) }))]
     #[case::aromatic_valence(
         AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic),
         AtomConstraint::AromaticValence(AromaticValenceAst::NotAromatic),
@@ -929,8 +920,8 @@ mod tests {
     #[case::ring_degree(AtomConstraint::ring_degree(2), AtomConstraintKind::RingDegree)]
     #[case::ring_valence(AtomConstraint::ring_valence(3), AtomConstraintKind::RingValence)]
     #[case::total_hydrogens(AtomConstraint::total_hydrogens(3), AtomConstraintKind::TotalHydrogens)]
-    #[case::ring_count(AtomConstraint::ring_count(1), AtomConstraintKind::RingCount)]
-    #[case::ring_size(AtomConstraint::ring_size(6), AtomConstraintKind::RingSize)]
+    #[case::ring_membership_all(AtomConstraint::ring_membership(RingScope::All, 1), AtomConstraintKind::RingMembership)]
+    #[case::ring_membership_size(AtomConstraint::ring_membership(RingScope::Size(6), 1), AtomConstraintKind::RingMembership)]
     #[case::tetrahedral_stereo(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), AtomConstraintKind::TetrahedralStereo)]
     fn test_atom_constraint_kind(
         #[case] constraint: AtomConstraint,
@@ -944,7 +935,7 @@ mod tests {
     #[case::valence_lit(AtomConstraint::valence(4), false)]
     #[case::valence_undetermined(AtomConstraint::Valence(ValueAst::Undetermined), true)]
     #[case::degree_undetermined(AtomConstraint::Degree(ValueAst::Undetermined), true)]
-    #[case::ring_size_undetermined(AtomConstraint::RingSize(ValueAst::Undetermined), true)]
+    #[case::ring_membership_undetermined(AtomConstraint::ring_membership(RingScope::All, ValueAst::Undetermined), true)]
     #[case::aromatic_undetermined(AtomConstraint::aromatic_valence(AromaticValenceAst::Undetermined), true)]
     #[case::aromatic_not_aromatic(AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic), false)]
     #[case::aromatic_with_value(AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1)), false)]
@@ -1409,7 +1400,7 @@ mod tests {
 
     #[rustfmt::skip]
     #[rstest]
-    #[case::partial(|c: &AtomConstraint| matches!(c, AtomConstraint::Valence(_) | AtomConstraint::RingCount(_)), vec![AtomConstraint::valence(4), AtomConstraint::ring_count(2)])]
+    #[case::partial(|c: &AtomConstraint| matches!(c, AtomConstraint::Valence(_) | AtomConstraint::RingMembership(_)), vec![AtomConstraint::valence(4), AtomConstraint::ring_membership(RingScope::All, 2)])]
     #[case::all_dropped(|_: &AtomConstraint| false, vec![])]
     fn test_atom_constraints_retain(
         #[case] predicate: impl FnMut(&AtomConstraint) -> bool,
@@ -1418,7 +1409,7 @@ mod tests {
         let mut cs = AtomConstraints::from_iter([
             AtomConstraint::valence(4),
             AtomConstraint::degree(3),
-            AtomConstraint::ring_count(2),
+            AtomConstraint::ring_membership(RingScope::All, 2),
         ]);
         cs.retain(predicate);
         let collected: Vec<_> = cs.iter().cloned().collect();
@@ -1466,7 +1457,7 @@ mod tests {
     #[rstest]
     #[case::valence_present(AtomConstraintKind::Valence, Some(AtomConstraint::valence(4)), vec![AtomConstraint::degree(3)])]
     #[case::degree_present(AtomConstraintKind::Degree, Some(AtomConstraint::degree(3)), vec![AtomConstraint::valence(4)])]
-    #[case::absent(AtomConstraintKind::RingCount, None, vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
+    #[case::absent(AtomConstraintKind::RingMembership, None, vec![AtomConstraint::valence(4), AtomConstraint::degree(3)])]
     fn test_atom_constraints_remove(
         #[case] kind: AtomConstraintKind,
         #[case] expected_returned: Option<AtomConstraint>,
@@ -1484,7 +1475,7 @@ mod tests {
     #[rstest]
     fn test_atom_constraints_iter() {
         let cs = AtomConstraints::from_iter([
-            AtomConstraint::ring_size(6),
+            AtomConstraint::ring_membership(RingScope::Size(6), 1),
             AtomConstraint::valence(4),
             AtomConstraint::degree(3),
         ]);
@@ -1494,7 +1485,7 @@ mod tests {
             vec![
                 AtomConstraint::valence(4),
                 AtomConstraint::degree(3),
-                AtomConstraint::ring_size(6),
+                AtomConstraint::ring_membership(RingScope::Size(6), 1),
             ],
         );
     }
@@ -1590,10 +1581,10 @@ mod tests {
         Some(AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))])))]
     #[case::aromatic_valence_not_vs_aromatic_none(AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic)]),
         AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]), None)]
-    #[case::ring_size_unions(AtomConstraints::from_iter([AtomConstraint::ring_size(5)]), AtomConstraints::from_iter([AtomConstraint::ring_size(6)]),
-        Some(AtomConstraints::from_iter([AtomConstraint::ring_size(5), AtomConstraint::ring_size(6)])))]
-    #[case::ring_size_dedup(AtomConstraints::from_iter([AtomConstraint::ring_size(5)]), AtomConstraints::from_iter([AtomConstraint::ring_size(5)]),
-        Some(AtomConstraints::from_iter([AtomConstraint::ring_size(5)])))]
+    #[case::ring_membership_size_unions(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)]), AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(6), 1)]),
+        Some(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1), AtomConstraint::ring_membership(RingScope::Size(6), 1)])))]
+    #[case::ring_membership_size_dedup(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)]), AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)]),
+        Some(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)])))]
     #[case::prunes_vacuous(AtomConstraints::new(), AtomConstraints::from_iter([AtomConstraint::Valence(ValueAst::Undetermined)]), Some(AtomConstraints::new()))]
     #[case::tetrahedral_narrows_from_absent(AtomConstraints::new(),
         AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),
@@ -1652,10 +1643,10 @@ mod tests {
         AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]), true)]
     #[case::aromatic_not_vs_aromatic_mismatch(AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::NotAromatic)]),
         AtomConstraints::from_iter([AtomConstraint::aromatic_valence(AromaticValenceAst::aromatic(1))]), false)]
-    #[case::ring_size_subset(AtomConstraints::from_iter([AtomConstraint::ring_size(5)]),
-        AtomConstraints::from_iter([AtomConstraint::ring_size(5), AtomConstraint::ring_size(6)]), true)]
-    #[case::ring_size_not_present_in_target(AtomConstraints::from_iter([AtomConstraint::ring_size(7)]),
-        AtomConstraints::from_iter([AtomConstraint::ring_size(5), AtomConstraint::ring_size(6)]), false)]
+    #[case::ring_membership_size_subset(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1)]),
+        AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1), AtomConstraint::ring_membership(RingScope::Size(6), 1)]), true)]
+    #[case::ring_membership_size_not_present_in_target(AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(7), 1)]),
+        AtomConstraints::from_iter([AtomConstraint::ring_membership(RingScope::Size(5), 1), AtomConstraint::ring_membership(RingScope::Size(6), 1)]), false)]
     #[case::multi_kind_all_must_match(AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(3)]),
         AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::degree(2)]), false)]
     #[case::tetrahedral_same(AtomConstraints::from_iter([AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo)]),

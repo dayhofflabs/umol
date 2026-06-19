@@ -116,6 +116,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::constraint::{RingMembershipAst, RingScope};
     use crate::ast::traits::Lattice;
     use crate::bond_zeroed;
 
@@ -143,27 +144,30 @@ mod tests {
     #[case::with_constraints_extends(
         BondAst::from_order(1)
             .with_constraint(BondConstraint::Aromatic)
-            .with_constraints([BondConstraint::ring_count(1), BondConstraint::ring_size(6)]),
+            .with_constraints([BondConstraint::ring_membership(RingScope::All, 1), BondConstraint::ring_membership(RingScope::Size(6), 1)]),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
             constraints: BondConstraints::from_iter([
                 BondConstraint::Aromatic,
-                BondConstraint::ring_count(1),
-                BondConstraint::ring_size(6),
+                BondConstraint::ring_membership(RingScope::All, 1),
+                BondConstraint::ring_membership(RingScope::Size(6), 1),
             ]) })]
-    #[case::with_constraint_replaces_same_kind(
+    #[case::with_constraint_appends_same_scope(
         BondAst::from_order(1)
-            .with_constraint(BondConstraint::ring_count(1))
-            .with_constraint(BondConstraint::ring_count(2)),
-        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::ring_count(2)) })]
-    #[case::with_constraint_appends_multi_valued_ring_size(
-        BondAst::from_order(1)
-            .with_constraint(BondConstraint::ring_size(5))
-            .with_constraint(BondConstraint::ring_size(6)),
+            .with_constraint(BondConstraint::ring_membership(RingScope::All, 1))
+            .with_constraint(BondConstraint::ring_membership(RingScope::All, 2)),
         BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
             constraints: BondConstraints::from_iter([
-                BondConstraint::ring_size(5),
-                BondConstraint::ring_size(6),
+                BondConstraint::ring_membership(RingScope::All, 1),
+                BondConstraint::ring_membership(RingScope::All, 2),
+            ]) })]
+    #[case::with_constraint_appends_multi_valued_ring_size(
+        BondAst::from_order(1)
+            .with_constraint(BondConstraint::ring_membership(RingScope::Size(5), 1))
+            .with_constraint(BondConstraint::ring_membership(RingScope::Size(6), 1)),
+        BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(),
+            constraints: BondConstraints::from_iter([
+                BondConstraint::ring_membership(RingScope::Size(5), 1),
+                BondConstraint::ring_membership(RingScope::Size(6), 1),
             ]) })]
     fn test_bond_ast_with_methods(#[case] actual: BondAst, #[case] expected: BondAst) {
         assert_eq!(actual, expected);
@@ -264,9 +268,7 @@ mod tests {
             order: ValueAst::term(ValueTerm::Lit(2)),
             charge: ValueAst::term(ValueTerm::Lit(0)),
             spin: SpinStateAst::default(),
-            constraints: BondConstraints::from(BondConstraint::RingSize(ValueAst::term(
-                ValueTerm::Lit(6),
-            ))),
+            constraints: BondConstraints::from(BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) })),
         };
         bond.simplify_values();
         assert_eq!(
@@ -275,7 +277,7 @@ mod tests {
                 order: ValueAst::Lit(2),
                 charge: ValueAst::Lit(0),
                 spin: SpinStateAst::default(),
-                constraints: BondConstraints::from(BondConstraint::ring_size(6)),
+                constraints: BondConstraints::from(BondConstraint::ring_membership(RingScope::Size(6), 1)),
             }
         );
     }

@@ -109,6 +109,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
+    use crate::ast::constraint::{RingMembershipAst, RingScope};
     use crate::ast::value::ValueTerm;
 
     #[rustfmt::skip]
@@ -131,19 +132,22 @@ mod tests {
     #[case::with_constraints_extends(
         DativeBondAst::from_order(1)
             .with_constraint(DativeBondConstraint::Aromatic)
-            .with_constraints([DativeBondConstraint::ring_count(1), DativeBondConstraint::ring_size(6)]),
+            .with_constraints([DativeBondConstraint::ring_membership(RingScope::All, 1), DativeBondConstraint::ring_membership(RingScope::Size(6), 1)]),
         DativeBondAst { order: ValueAst::Lit(1),
             constraints: DativeBondConstraints::from_iter([
                 DativeBondConstraint::Aromatic,
-                DativeBondConstraint::ring_count(1),
-                DativeBondConstraint::ring_size(6),
+                DativeBondConstraint::ring_membership(RingScope::All, 1),
+                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
             ]) })]
-    #[case::with_constraint_replaces_same_kind(
+    #[case::with_constraint_appends_different_scopes(
         DativeBondAst::from_order(1)
-            .with_constraint(DativeBondConstraint::ring_size(5))
-            .with_constraint(DativeBondConstraint::ring_size(6)),
+            .with_constraint(DativeBondConstraint::ring_membership(RingScope::Size(5), 1))
+            .with_constraint(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),
         DativeBondAst { order: ValueAst::Lit(1),
-            constraints: DativeBondConstraints::from(DativeBondConstraint::ring_size(6)) })]
+            constraints: DativeBondConstraints::from_iter([
+                DativeBondConstraint::ring_membership(RingScope::Size(5), 1),
+                DativeBondConstraint::ring_membership(RingScope::Size(6), 1),
+            ]) })]
     fn test_dative_bond_ast_with_methods(#[case] actual: DativeBondAst, #[case] expected: DativeBondAst) {
         assert_eq!(actual, expected);
     }
@@ -168,7 +172,7 @@ mod tests {
     #[case::order_lit(DativeBondAst::from_order(1), true)]
     #[case::order_undetermined(DativeBondAst::new(ValueAst::Undetermined), false)]
     #[case::ground_with_constraint(DativeBondAst { order: ValueAst::Lit(1),
-        constraints: DativeBondConstraints::from(DativeBondConstraint::ring_size(6)) }, true)]
+        constraints: DativeBondConstraints::from(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)) }, true)]
     fn test_dative_bond_ast_is_ground(#[case] ast: DativeBondAst, #[case] expected: bool) {
         assert_eq!(ast.is_ground(), expected);
     }
@@ -208,16 +212,14 @@ mod tests {
     fn test_dative_bond_ast_simplify_values() {
         let mut bond = DativeBondAst {
             order: ValueAst::term(ValueTerm::Lit(2)),
-            constraints: DativeBondConstraints::from(DativeBondConstraint::RingSize(
-                ValueAst::term(ValueTerm::Lit(6)),
-            )),
+            constraints: DativeBondConstraints::from(DativeBondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) })),
         };
         bond.simplify_values();
         assert_eq!(
             bond,
             DativeBondAst {
                 order: ValueAst::Lit(2),
-                constraints: DativeBondConstraints::from(DativeBondConstraint::ring_size(6)),
+                constraints: DativeBondConstraints::from(DativeBondConstraint::ring_membership(RingScope::Size(6), 1)),
             }
         );
     }

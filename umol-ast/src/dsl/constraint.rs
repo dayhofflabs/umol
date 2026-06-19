@@ -23,7 +23,7 @@ use super::stereo::{
 use super::value::{parse_value, ValueDsl};
 use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints,
-    MoleculeConstraint, MulticenterValenceAst, SubPatternAnchor,
+    MoleculeConstraint, MulticenterValenceAst, RingMembershipAst, RingScope, SubPatternAnchor,
 };
 use crate::ast::ids::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
@@ -438,6 +438,98 @@ pub(super) fn read_multicenter_valence_dsl(
     }
 }
 
+/// Streaming-read the `{:size? :count}` map (value of a `:ring-membership` key).
+fn read_ring_membership_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<RingMembershipAst, EdnError> {
+    let mut size: Option<u8> = None;
+    let mut count: Option<ValueAst> = None;
+    read_map(de, |de, key| {
+        match key {
+            "size" => size = Some(de.read_i64()? as u8),
+            "count" => count = Some(read_value_dsl(de)?.into_ast(&())),
+            other => {
+                return Err(DeError::UnknownField {
+                    key: other.to_string(),
+                    path: vec!["ring-membership".into()],
+                }
+                .into())
+            }
+        }
+        Ok(())
+    })?;
+    let count =
+        count.ok_or_else(|| DeError::Custom("ring-membership missing :count".to_string()))?;
+    Ok(RingMembershipAst::new(
+        size.map_or(RingScope::All, RingScope::Size),
+        count,
+    ))
+}
+
+/// EDN boundary for a ring-membership fact: `{:size? <int> :count <value>}`.
+pub struct RingMembershipDsl(pub RingMembershipAst);
+
+impl ToEdn for RingMembershipDsl {
+    fn to_edn(&self) -> Edn<'static> {
+        let mut m = EdnMap::with_capacity(2);
+        if let RingScope::Size(s) = self.0.scope {
+            m.insert(
+                Edn::Keyword(EdnKeyword::owned("size".into())),
+                Edn::Int(s as i64),
+            );
+        }
+        m.insert(
+            Edn::Keyword(EdnKeyword::owned("count".into())),
+            ValueDsl::from_ast(&self.0.count, &()).to_edn(),
+        );
+        Edn::Map(m)
+    }
+}
+
+impl<'de> FromEdn<'de> for RingMembershipDsl {
+    fn from_edn(edn: &Edn<'de>) -> Result<Self, DeError> {
+        let Edn::Map(map) = edn else {
+            return Err(DeError::TypeMismatch {
+                expected: "map",
+                got: edn.kind(),
+                path: vec!["ring-membership".into()],
+            });
+        };
+        let mut scope = RingScope::All;
+        let mut count = None;
+        for (k, v) in map.iter() {
+            let Edn::Keyword(key) = k else {
+                return Err(DeError::TypeMismatch {
+                    expected: "keyword",
+                    got: k.kind(),
+                    path: vec!["ring-membership".into()],
+                });
+            };
+            match key.name() {
+                "size" => {
+                    let Edn::Int(n) = v else {
+                        return Err(DeError::TypeMismatch {
+                            expected: "int",
+                            got: v.kind(),
+                            path: vec!["ring-membership".into(), "size".into()],
+                        });
+                    };
+                    scope = RingScope::Size(*n as u8);
+                }
+                "count" => count = Some(ValueDsl::from_edn(v)?.into_ast(&())),
+                other => {
+                    return Err(DeError::UnknownField {
+                        key: other.to_string(),
+                        path: vec!["ring-membership".into()],
+                    })
+                }
+            }
+        }
+        let count = count.ok_or_else(|| DeError::Custom("ring-membership missing :count".into()))?;
+        Ok(Self(RingMembershipAst::new(scope, count)))
+    }
+}
+
 pub(super) fn read_stereo_coset_dsl(
     de: &mut EdnStreamDeserializer<'_>,
     degree: usize,
@@ -546,8 +638,7 @@ pub(super) fn read_atom_constraint_dsl(
         "ring-degree" => AtomConstraint::RingDegree(read_value_dsl(de)?.into_ast(&())),
         "ring-valence" => AtomConstraint::RingValence(read_value_dsl(de)?.into_ast(&())),
         "total-hydrogens" => AtomConstraint::TotalHydrogens(read_value_dsl(de)?.into_ast(&())),
-        "ring-count" => AtomConstraint::RingCount(read_value_dsl(de)?.into_ast(&())),
-        "ring-size" => AtomConstraint::RingSize(read_value_dsl(de)?.into_ast(&())),
+        "ring-membership" => AtomConstraint::RingMembership(read_ring_membership_dsl(de)?),
         "tetrahedral-stereo" => {
             AtomConstraint::TetrahedralStereo(read_tetrahedral_stereo_dsl(de)?)
         }
@@ -581,8 +672,9 @@ pub(super) fn read_bond_constraint_dsl(
         b'{' => {
             let key = read_single_key_map_header(de)?;
             let c = match key.as_str() {
-                "ring-count" => BondConstraint::RingCount(read_value_dsl(de)?.into_ast(&())),
-                "ring-size" => BondConstraint::RingSize(read_value_dsl(de)?.into_ast(&())),
+                "ring-membership" => {
+                    BondConstraint::RingMembership(read_ring_membership_dsl(de)?)
+                }
                 "cis-trans-stereo" => {
                     BondConstraint::CisTransStereo(read_cis_trans_stereo_dsl(de)?)
                 }
@@ -598,7 +690,7 @@ pub(super) fn read_bond_constraint_dsl(
             Ok(BondConstraintDsl(c))
         }
         b => Err(DeError::TypeMismatch {
-            expected: ":aromatic / {:ring-count …} / {:ring-size …}",
+            expected: ":aromatic / {:ring-membership …}",
             got: unexpected_byte_kind(b),
             path: vec!["bond-constraint".into()],
         }
@@ -624,10 +716,9 @@ pub(super) fn read_dative_bond_constraint_dsl(
         b'{' => {
             let key = read_single_key_map_header(de)?;
             let c = match key.as_str() {
-                "ring-count" => {
-                    DativeBondConstraintDsl::RingCount(read_value_dsl(de)?.into_ast(&()))
+                "ring-membership" => {
+                    DativeBondConstraintDsl::RingMembership(read_ring_membership_dsl(de)?)
                 }
-                "ring-size" => DativeBondConstraintDsl::RingSize(read_value_dsl(de)?.into_ast(&())),
                 other => {
                     return Err(DeError::UnknownField {
                         key: other.to_string(),
@@ -640,7 +731,7 @@ pub(super) fn read_dative_bond_constraint_dsl(
             Ok(c)
         }
         b => Err(DeError::TypeMismatch {
-            expected: ":aromatic / {:ring-count …} / {:ring-size …}",
+            expected: ":aromatic / {:ring-membership …}",
             got: unexpected_byte_kind(b),
             path: vec!["dative-bond-constraint".into()],
         }
@@ -692,6 +783,28 @@ pub(super) fn read_noncovalent_bond_constraint_dsl(
     _de: &mut EdnStreamDeserializer<'_>,
 ) -> Result<NoncovalentBondConstraintDsl, EdnError> {
     Err(DeError::Custom("no value-only noncovalent-bond constraints exist yet".to_string()).into())
+}
+
+/// Read a stereo constraint payload (the kind-bearing map) by capturing its value
+/// slice and parsing it via `FromEdn` — the kind-aware build lives in the
+/// `StereoAtomConstraintDsl::from_edn` impl, so the streaming path bridges rather
+/// than reimplementing the map parse incrementally.
+/// TODO: FIX THIS TO USE streaming parser
+fn read_stereo_atom_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoAtomConstraintDsl, EdnError> {
+    let slice = de.read_value_slice()?;
+    let edn = umol_edn::read_string(slice)?;
+    Ok(StereoAtomConstraintDsl::from_edn(&edn)?)
+}
+
+/// TODO: FIX THIS TO USE streaming parser
+fn read_stereo_bond_constraint_dsl(
+    de: &mut EdnStreamDeserializer<'_>,
+) -> Result<StereoBondConstraintDsl, EdnError> {
+    let slice = de.read_value_slice()?;
+    let edn = umol_edn::read_string(slice)?;
+    Ok(StereoBondConstraintDsl::from_edn(&edn)?)
 }
 
 fn read_atom_ref_vec(de: &mut EdnStreamDeserializer<'_>) -> Result<Vec<AtomRef>, EdnError> {
@@ -1100,26 +1213,6 @@ pub(super) fn read_constraint_dsl(
     };
     consume_single_key_map_close(de, "constraint")?;
     Ok(c)
-}
-
-/// Read a stereo constraint payload (the kind-bearing map) by capturing its value
-/// slice and parsing it via `FromEdn` — the kind-aware build lives in the
-/// `StereoAtomConstraintDsl::from_edn` impl, so the streaming path bridges rather
-/// than reimplementing the map parse incrementally.
-fn read_stereo_atom_constraint_dsl(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<StereoAtomConstraintDsl, EdnError> {
-    let slice = de.read_value_slice()?;
-    let edn = umol_edn::read_string(slice)?;
-    Ok(StereoAtomConstraintDsl::from_edn(&edn)?)
-}
-
-fn read_stereo_bond_constraint_dsl(
-    de: &mut EdnStreamDeserializer<'_>,
-) -> Result<StereoBondConstraintDsl, EdnError> {
-    let slice = de.read_value_slice()?;
-    let edn = umol_edn::read_string(slice)?;
-    Ok(StereoBondConstraintDsl::from_edn(&edn)?)
 }
 
 fn read_entity_leaf<R, C>(
@@ -2437,8 +2530,8 @@ mod tests {
     #[rstest]
     #[case::atom_leaf(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Lit(4))), "{:atom [0 {:valence 4}]}")]
     #[case::bond_leaf(Constraint::Bond(BondId(1), BondConstraint::Aromatic), "{:bond [1 :aromatic]}")]
-    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::RingCount(ValueAst::Lit(1))),
-        "{:dative-bond [0 {:ring-count 1}]}")]
+    #[case::dative_bond_leaf_ring_count(Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1))),
+        "{:dative-bond [0 {:ring-membership {:count 1}}]}")]
     #[case::dative_bond_leaf_donor(Constraint::Relational(RelationalConstraint::DativeBondDonor { bond: DativeBondId(0), atom: AtomId(2) }),
         "{:dative-bond-donor [0 2]}")]
     #[case::dative_bond_leaf_acceptor(Constraint::Relational(RelationalConstraint::DativeBondAcceptor { bond: DativeBondId(0), atom: AtomId(3) }),
@@ -2512,8 +2605,8 @@ mod tests {
     #[case::ring_valence(AtomConstraint::RingValence(ValueAst::Lit(3)), "{:ring-valence 3}")]
     #[case::total_valence(AtomConstraint::TotalValence(ValueAst::Lit(5)), "{:total-valence 5}")]
     #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Lit(3)), "{:total-hydrogens 3}")]
-    #[case::ring_count(AtomConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
-    #[case::ring_size(AtomConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
+    #[case::ring_membership_all(AtomConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:ring-membership {:count 1}}")]
+    #[case::ring_membership_size(AtomConstraint::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
     #[case::tetrahedral_stereo_not_stereo(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::NotStereo), "{:tetrahedral-stereo :not-stereo}")]
     #[case::tetrahedral_stereo_lit(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:tetrahedral-stereo {:stereo 1}}")]
     #[case::tetrahedral_stereo_set(AtomConstraint::TetrahedralStereo(TetrahedralStereoAst::Stereo(StereoCosetAst::lit_set([1, 2]))), "{:tetrahedral-stereo {:stereo [1 2]}}")]
@@ -2533,8 +2626,8 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(BondConstraint::Aromatic, "{:bond [0 :aromatic]}")]
-    #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)), "{:bond [0 {:ring-count 1}]}")]
-    #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), "{:bond [0 {:ring-size 6}]}")]
+    #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:bond [0 {:ring-membership {:count 1}}]}")]
+    #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), "{:bond [0 {:ring-membership {:size 6 :count 1}}]}")]
     #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), "{:bond [0 {:cis-trans-stereo :not-stereo}]}")]
     #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:bond [0 {:cis-trans-stereo {:stereo 1}}]}")]
     fn test_bond_constraint_dsl_roundtrip(

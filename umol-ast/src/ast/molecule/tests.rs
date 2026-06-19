@@ -15,7 +15,7 @@ use super::super::bond::BondAst;
 use super::super::constraint::{
     AtomConstraint, AtomConstraints, BondConstraint, BondConstraints, Constraint, Constraints,
     DativeBondConstraint, DativeBondConstraints, MoleculeConstraint, RelationalConstraint,
-    SubPatternAnchor,
+    RingMembershipAst, RingScope, SubPatternAnchor,
 };
 use super::super::dative::DativeBondAst;
 use super::super::electrons::ElectronCountsAst;
@@ -1324,7 +1324,7 @@ fn test_molecule_builder_dative_bond_mut(#[from(rich_molecule)] ast: MoleculeAst
     b.dative_bond_mut(DativeBondId(0))
         .ast
         .constraints
-        .add(DativeBondConstraint::RingSize(ValueAst::Lit(5)));
+        .add(DativeBondConstraint::ring_membership(RingScope::Size(5), 1));
     let result = b.build();
     assert!(!result[DativeBondId(0)].constraints.is_empty());
     assert!(ast[DativeBondId(0)].constraints.is_empty());
@@ -1737,10 +1737,10 @@ fn test_molecule_ast_bonds_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
 fn test_molecule_ast_dative_bond_mut(#[from(rich_molecule)] mut ast: MoleculeAst) {
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .add(DativeBondConstraint::RingSize(ValueAst::Lit(6)));
+        .add(DativeBondConstraint::ring_membership(RingScope::Size(6), 1));
     assert_eq!(
         ast[DativeBondId(0)].constraints,
-        DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(6))])
+        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(6), 1)])
     );
 }
 
@@ -1839,7 +1839,7 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
         .add(BondConstraint::Aromatic);
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .add(DativeBondConstraint::RingCount(ValueAst::Lit(1)));
+        .add(DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)));
 
     ast.lift_constraints();
 
@@ -1860,7 +1860,7 @@ fn test_molecule_ast_lift_constraints_drains_inline_stores(
     expected.push(Constraint::Bond(BondId(0), BondConstraint::Aromatic));
     expected.push(Constraint::DativeBond(
         DativeBondId(0),
-        DativeBondConstraint::RingCount(ValueAst::Lit(1)),
+        DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)),
     ));
     assert_same_constraints(ast.constraints(), &expected);
 }
@@ -1902,7 +1902,7 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
         .push(Constraint::Bond(BondId(0), BondConstraint::Aromatic));
     ast.constraints_mut().push(Constraint::DativeBond(
         DativeBondId(0),
-        DativeBondConstraint::RingSize(ValueAst::Lit(5)),
+        DativeBondConstraint::ring_membership(RingScope::Size(5), 1),
     ));
 
     ast.inline_constraints();
@@ -1918,7 +1918,7 @@ fn test_molecule_ast_inline_constraints_drains_top_level_leaves(
     );
     assert_eq!(
         ast[DativeBondId(0)].constraints,
-        DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(5))])
+        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(5), 1)])
     );
 }
 
@@ -2012,7 +2012,7 @@ fn test_molecule_ast_lift_then_inline_roundtrips_inline_state(
         .add(BondConstraint::Aromatic);
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .add(DativeBondConstraint::RingCount(ValueAst::Lit(1)));
+        .add(DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)));
 
     let original = ast.clone();
 
@@ -2084,13 +2084,13 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
             multiplicity: ValueAst::term(ValueTerm::Lit(1)),
         };
         bond.constraints
-            .add(BondConstraint::RingCount(ValueAst::term(ValueTerm::Lit(1))));
+            .add(BondConstraint::ring_membership(RingScope::All, ValueAst::term(ValueTerm::Lit(1))));
     }
 
     // Dative bond inline ring-size with non-canonical term.
     ast.dative_bond_mut(DativeBondId(0))
         .constraints
-        .add(DativeBondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(5))));
+        .add(DativeBondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(5), count: ValueAst::term(ValueTerm::Lit(1)) }));
 
     // Aromatic system 0: charge/electrons/spin wrapped. Three member atoms,
     // so electrons has three entries.
@@ -2180,13 +2180,13 @@ fn test_molecule_ast_simplify_values_reduces_throughout() {
     assert_eq!(bond.spin, SpinStateAst::from((0_u8, 1_u8)));
     assert_eq!(
         bond.constraints,
-        BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(1))]),
+        BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1))]),
     );
 
     // -- Dative bond 0 --------------------------------------------------
     assert_eq!(
         ast[DativeBondId(0)].constraints,
-        DativeBondConstraints::from_iter([DativeBondConstraint::RingSize(ValueAst::Lit(5))]),
+        DativeBondConstraints::from_iter([DativeBondConstraint::ring_membership(RingScope::Size(5), 1)]),
     );
 
     // -- Aromatic system 0 ---------------------------------------------

@@ -122,8 +122,8 @@ proptest! {
 #[case::ring_degree(AtomConstraint::RingDegree(ValueAst::Undetermined))]
 #[case::ring_valence(AtomConstraint::RingValence(ValueAst::Undetermined))]
 #[case::total_hydrogens(AtomConstraint::TotalHydrogens(ValueAst::Undetermined))]
-#[case::ring_count(AtomConstraint::RingCount(ValueAst::Undetermined))]
-#[case::ring_size(AtomConstraint::RingSize(ValueAst::Undetermined))]
+#[case::ring_membership_all(AtomConstraint::ring_membership(RingScope::All, ValueAst::Undetermined))]
+#[case::ring_membership_size(AtomConstraint::ring_membership(RingScope::All, ValueAst::Undetermined))]
 #[case::aromatic_valence_undetermined(AtomConstraint::AromaticValence(
     AromaticValenceAst::Undetermined
 ))]

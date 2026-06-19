@@ -553,6 +553,7 @@ mod tests {
     use umol_graph_core::{RelationId, Remapping};
 
     use super::*;
+    use crate::ast::constraint::{RingMembershipAst, RingScope};
     use crate::ast::ids::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
@@ -596,10 +597,10 @@ mod tests {
     #[rstest]
     #[case::atom_lit(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)), false)]
     #[case::atom_undetermined(Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::Undetermined)), true)]
-    #[case::bond_lit(Constraint::Bond(BondId(0), BondConstraint::ring_size(6)), false)]
-    #[case::bond_undetermined(Constraint::Bond(BondId(0), BondConstraint::RingSize(ValueAst::Undetermined)), true)]
+    #[case::bond_lit(Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::Size(6), 1)), false)]
+    #[case::bond_undetermined(Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)), true)]
     #[case::bond_aromatic_flag(Constraint::Bond(BondId(0), BondConstraint::Aromatic), false)]
-    #[case::dative_undetermined(Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::RingSize(ValueAst::Undetermined)), true)]
+    #[case::dative_undetermined(Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)), true)]
     #[case::aromatic_system_undetermined(Constraint::AromaticSystem(AromaticSystemId(0),
         AromaticSystemConstraint::ElectronCount(ValueAst::Undetermined)), true)]
     #[case::multicenter_undetermined(Constraint::MulticenterBond(MulticenterBondId(0),
@@ -626,12 +627,12 @@ mod tests {
         Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
     )]
     #[case::bond_folds(
-        Constraint::Bond(BondId(0), BondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(6)))),
-        Constraint::Bond(BondId(0), BondConstraint::ring_size(6)),
+        Constraint::Bond(BondId(0), BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) })),
+        Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::Size(6), 1)),
     )]
     #[case::dative_folds(
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::RingCount(ValueAst::term(ValueTerm::Lit(2)))),
-        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_count(2)),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, ValueAst::term(ValueTerm::Lit(2)))),
+        Constraint::DativeBond(DativeBondId(0), DativeBondConstraint::ring_membership(RingScope::All, 2)),
     )]
     #[case::aromatic_system_folds(
         Constraint::AromaticSystem(AromaticSystemId(0),
@@ -652,11 +653,11 @@ mod tests {
     #[case::and_folds_recursively(
         Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::Valence(ValueAst::term(ValueTerm::Lit(4)))),
-            Constraint::Bond(BondId(0), BondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(6)))),
+            Constraint::Bond(BondId(0), BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) })),
         ]),
         Constraint::And(vec![
             Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-            Constraint::Bond(BondId(0), BondConstraint::ring_size(6)),
+            Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::Size(6), 1)),
         ]),
     )]
     #[case::or_folds_recursively(
@@ -957,7 +958,7 @@ mod tests {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)));
         cs.push(Constraint::Atom(AtomId(1), AtomConstraint::degree(3)));
-        cs.push(Constraint::Bond(BondId(2), BondConstraint::ring_size(6)));
+        cs.push(Constraint::Bond(BondId(2), BondConstraint::ring_membership(RingScope::Size(6), 1)));
         cs.push(Constraint::Molecule(MoleculeConstraint::Connected {
             atoms: Some(vec![AtomId(0), AtomId(2)]),
         }));
@@ -968,7 +969,7 @@ mod tests {
             cs.as_slice(),
             &[
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-                Constraint::Bond(BondId(1), BondConstraint::ring_size(6)),
+                Constraint::Bond(BondId(1), BondConstraint::ring_membership(RingScope::Size(6), 1)),
                 Constraint::Molecule(MoleculeConstraint::Connected {
                     atoms: Some(vec![AtomId(0), AtomId(1)]),
                 }),
@@ -984,8 +985,8 @@ mod tests {
                 rewritten: vec![
                     RewrittenConstraint {
                         position: 2,
-                        old: Constraint::Bond(BondId(2), BondConstraint::ring_size(6)),
-                        new: Constraint::Bond(BondId(1), BondConstraint::ring_size(6)),
+                        old: Constraint::Bond(BondId(2), BondConstraint::ring_membership(RingScope::Size(6), 1)),
+                        new: Constraint::Bond(BondId(1), BondConstraint::ring_membership(RingScope::Size(6), 1)),
                     },
                     RewrittenConstraint {
                         position: 3,
@@ -1005,7 +1006,7 @@ mod tests {
     fn test_constraint_update_rollback_into() {
         let mut cs = Constraints::new();
         cs.push(Constraint::Atom(AtomId(0), AtomConstraint::valence(4)));
-        cs.push(Constraint::Bond(BondId(1), BondConstraint::ring_size(6)));
+        cs.push(Constraint::Bond(BondId(1), BondConstraint::ring_membership(RingScope::Size(6), 1)));
 
         ConstraintUpdate {
             dropped: vec![DroppedConstraint {
@@ -1014,8 +1015,8 @@ mod tests {
             }],
             rewritten: vec![RewrittenConstraint {
                 position: 2,
-                old: Constraint::Bond(BondId(2), BondConstraint::ring_size(6)),
-                new: Constraint::Bond(BondId(1), BondConstraint::ring_size(6)),
+                old: Constraint::Bond(BondId(2), BondConstraint::ring_membership(RingScope::Size(6), 1)),
+                new: Constraint::Bond(BondId(1), BondConstraint::ring_membership(RingScope::Size(6), 1)),
             }],
         }
         .rollback_into(&mut cs);
@@ -1025,7 +1026,7 @@ mod tests {
             &[
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
                 Constraint::Atom(AtomId(1), AtomConstraint::degree(3)),
-                Constraint::Bond(BondId(2), BondConstraint::ring_size(6)),
+                Constraint::Bond(BondId(2), BondConstraint::ring_membership(RingScope::Size(6), 1)),
             ],
         );
     }
@@ -1039,14 +1040,14 @@ mod tests {
         ));
         cs.push(Constraint::Bond(
             BondId(0),
-            BondConstraint::RingSize(ValueAst::term(ValueTerm::Lit(6))),
+            BondConstraint::RingMembership(RingMembershipAst { scope: RingScope::Size(6), count: ValueAst::term(ValueTerm::Lit(1)) }),
         ));
         cs.simplify_each();
         assert_eq!(
             cs.as_slice(),
             &[
                 Constraint::Atom(AtomId(0), AtomConstraint::valence(4)),
-                Constraint::Bond(BondId(0), BondConstraint::ring_size(6)),
+                Constraint::Bond(BondId(0), BondConstraint::ring_membership(RingScope::Size(6), 1)),
             ],
         );
     }

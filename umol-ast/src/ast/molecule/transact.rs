@@ -2043,7 +2043,7 @@ mod tests {
     use super::super::super::bond::BondAst;
     use super::super::super::constraint::{
         AromaticSystemConstraint, AtomConstraint, BondConstraint, Constraint, DativeBondConstraint,
-        MoleculeConstraint, MulticenterBondConstraint,
+        MoleculeConstraint, MulticenterBondConstraint, RingScope,
     };
     use super::super::super::dative::DativeBondAst;
     use super::super::super::ligand::StereoLigandKind;
@@ -2052,7 +2052,7 @@ mod tests {
         NoncovalentBondAst, NoncovalentBondKind, NoncovalentBondKindAst,
     };
     use super::super::super::stereo::{
-        StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoKind,
+        CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst, StereoKind,
     };
     use super::super::super::value::ValueAst;
     use super::super::MoleculeAst;
@@ -2265,11 +2265,11 @@ mod tests {
             .transact(vec![
                 Edit::AddAtomConstraint {
                     id: AtomRef::Id(AtomId(0)),
-                    constraint: AtomConstraint::ring_size(5),
+                    constraint: AtomConstraint::ring_membership(RingScope::Size(5), 1),
                 },
                 Edit::AddAtomConstraint {
                     id: AtomRef::Id(AtomId(0)),
-                    constraint: AtomConstraint::ring_size(6),
+                    constraint: AtomConstraint::ring_membership(RingScope::Size(6), 1),
                 },
             ])
             .unwrap();
@@ -2284,8 +2284,8 @@ mod tests {
         assert_eq!(
             cs,
             vec![
-                AtomConstraint::RingSize(ValueAst::Lit(5)),
-                AtomConstraint::RingSize(ValueAst::Lit(6)),
+                AtomConstraint::ring_membership(RingScope::Size(5), 1),
+                AtomConstraint::ring_membership(RingScope::Size(6), 1),
             ]
         );
     }
@@ -2306,7 +2306,7 @@ mod tests {
         let err = one_atom
             .transact(vec![Edit::RemoveAtomConstraint {
                 id: AtomRef::Id(AtomId(0)),
-                constraint: AtomConstraint::ring_size(5),
+                constraint: AtomConstraint::ring_membership(RingScope::Size(5), 1),
             }])
             .unwrap_err();
         assert_eq!(err, TransactionError::MissingEntry);
@@ -2348,7 +2348,7 @@ mod tests {
             .transact(vec![Edit::SetAtomConstraint {
                 id: AtomRef::Id(AtomId(0)),
                 old: None,
-                new: Some(AtomConstraint::ring_size(5)),
+                new: Some(AtomConstraint::ring_membership(RingScope::Size(5), 1)),
             }])
             .unwrap_err();
         assert_eq!(err, TransactionError::KindShapeMismatch);
@@ -3032,7 +3032,7 @@ mod tests {
             .transact(vec![Edit::SetBondConstraint {
                 id: BondRef::Id(BondId(0)),
                 old: None,
-                new: Some(BondConstraint::RingCount(ValueAst::Lit(1))),
+                new: Some(BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo)),
             }])
             .unwrap();
         assert_eq!(
@@ -3043,7 +3043,7 @@ mod tests {
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),
-            vec![BondConstraint::RingCount(ValueAst::Lit(1))],
+            vec![BondConstraint::cis_trans_stereo(CisTransStereoAst::NotStereo)],
         );
     }
 
@@ -3052,7 +3052,7 @@ mod tests {
         diatomic
             .transact(vec![Edit::AddBondConstraint {
                 id: BondRef::Id(BondId(0)),
-                constraint: BondConstraint::RingSize(ValueAst::Lit(5)),
+                constraint: BondConstraint::ring_membership(RingScope::Size(5), 1),
             }])
             .unwrap();
         assert!(diatomic
@@ -3060,7 +3060,7 @@ mod tests {
             .ast
             .constraints
             .iter()
-            .any(|c| *c == BondConstraint::RingSize(ValueAst::Lit(5))));
+            .any(|c| *c == BondConstraint::ring_membership(RingScope::Size(5), 1)));
     }
 
     #[rstest]
@@ -3068,7 +3068,7 @@ mod tests {
         let err = diatomic
             .transact(vec![Edit::RemoveBondConstraint {
                 id: BondRef::Id(BondId(0)),
-                constraint: BondConstraint::RingSize(ValueAst::Lit(5)),
+                constraint: BondConstraint::ring_membership(RingScope::Size(5), 1),
             }])
             .unwrap_err();
         assert_eq!(err, TransactionError::MissingEntry);
@@ -3097,12 +3097,12 @@ mod tests {
     fn test_molecule_builder_transact_add_dative_bond_constraint_error(
         mut diatomic_with_overlays: MoleculeBuilder,
     ) {
-        // All `DativeBondConstraint` variants are unique-per-dative-bond, so
-        // `Add` is rejected. Use `Set` for unique constraints.
+        // `Aromatic` is unique-per-dative-bond, so `Add` is rejected (use `Set`);
+        // `RingMembership` is the non-unique kind `Add` accepts.
         let err = diatomic_with_overlays
             .transact(vec![Edit::AddDativeBondConstraint {
                 id: DativeBondRef::Id(DativeBondId(0)),
-                constraint: DativeBondConstraint::RingSize(ValueAst::Lit(6)),
+                constraint: DativeBondConstraint::Aromatic,
             }])
             .unwrap_err();
         assert_eq!(err, TransactionError::KindShapeMismatch);
@@ -3276,7 +3276,7 @@ mod tests {
                 }],
                 RollbackCase::Constraint => vec![Edit::AddAtomConstraint {
                     id: AtomRef::Id(AtomId(0)),
-                    constraint: AtomConstraint::ring_size(5),
+                    constraint: AtomConstraint::ring_membership(RingScope::Size(5), 1),
                 }],
                 RollbackCase::ConstraintUpdate => vec![Edit::RemoveTopology {
                     atoms: vec![AtomRef::Id(AtomId(1))],

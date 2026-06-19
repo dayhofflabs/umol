@@ -5,7 +5,7 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use strum::IntoEnumIterator;
-use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnMap, EdnStreamDeserializer, FromEdn, ToEdn};
+use umol_edn::{DeError, Edn, EdnError, EdnKeyword, EdnStreamDeserializer, FromEdn, ToEdn};
 use winnow::ascii::multispace0;
 use winnow::combinator::{delimited, repeat, terminated};
 use winnow::error::ErrMode;
@@ -14,13 +14,14 @@ use winnow::Parser;
 
 use super::atom::single_key_map;
 use super::config::{BondDefaults, NumericDefault, StereoDefault};
+use super::constraint::RingMembershipDsl;
 use super::error::{PResult, ParseError};
 use super::predicates::{
-    apply_spin_pair, charge, fmt_charge, fmt_ring_count, fmt_spin_pair, lower_spin, optional_value,
-    raise_spin, ring_count, SpinPredicate,
+    apply_spin_pair, charge, fmt_charge, fmt_ring_membership, fmt_spin_pair, lower_spin,
+    optional_value, raise_spin, ring_membership, SpinPredicate,
 };
 use super::stereo::{cis_trans_stereo_config, fmt_cis_trans_stereo_config, CisTransStereoDsl};
-use super::value::{fmt_value, value, ValueDsl};
+use super::value::{fmt_value, value};
 use crate::ast::bond::BondAst;
 use crate::ast::constraint::{BondConstraint, BondConstraintKind, BondConstraints};
 use crate::ast::spin::SpinStateAst;
@@ -210,8 +211,7 @@ fn bond(i: &mut &str) -> PResult<BondDsl> {
 fn constraint_tag(c: &BondConstraint) -> &'static str {
     match c {
         BondConstraint::Aromatic => "#a",
-        BondConstraint::RingCount(_) => "#R",
-        BondConstraint::RingSize(_) => "#r",
+        BondConstraint::RingMembership(..) => "#R",
         BondConstraint::CisTransStereo(_) => "#C",
     }
 }
@@ -237,11 +237,8 @@ fn bond_predicate(i: &mut &str) -> PResult<BondPredicate> {
             .map(|v| BondPredicate::Spin(SpinPredicate::Multiplicity(v)))
             .parse_next(i),
         "#a" => Ok(BondPredicate::Constraint(BondConstraint::Aromatic)),
-        "#R" => ring_count
-            .map(|v| BondPredicate::Constraint(BondConstraint::RingCount(v)))
-            .parse_next(i),
-        "#r" => optional_value
-            .map(|v| BondPredicate::Constraint(BondConstraint::RingSize(v)))
+        "#R" => ring_membership
+            .map(|m| BondPredicate::Constraint(BondConstraint::RingMembership(m)))
             .parse_next(i),
         "#C" => (|i: &mut &str| cis_trans_stereo_config(i))
             .map(|c| BondPredicate::Constraint(BondConstraint::CisTransStereo(c)))
@@ -297,16 +294,7 @@ fn fmt_bond_ast(f: &mut fmt::Formatter<'_>, ast: &BondAst) -> fmt::Result {
 fn fmt_constraint(f: &mut fmt::Formatter<'_>, c: &BondConstraint) -> fmt::Result {
     match c {
         BondConstraint::Aromatic => write!(f, "#a"),
-        BondConstraint::RingCount(v) => fmt_ring_count(f, v),
-        BondConstraint::RingSize(v) => match v {
-            ValueAst::Undetermined => Ok(()),
-            ValueAst::Lit(1) => write!(f, "#r"),
-            ValueAst::Lit(n) => write!(f, "#r{}", n),
-            v => {
-                write!(f, "#r")?;
-                fmt_value(f, v)
-            }
-        },
+        BondConstraint::RingMembership(m) => fmt_ring_membership(f, m),
         BondConstraint::CisTransStereo(c) => {
             write!(f, "#C")?;
             fmt_cis_trans_stereo_config(f, c)
@@ -369,9 +357,7 @@ fn raise_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults)
                     }
                 }
             }
-            BondConstraintKind::Aromatic
-            | BondConstraintKind::RingCount
-            | BondConstraintKind::RingSize => {
+            BondConstraintKind::Aromatic | BondConstraintKind::RingMembership => {
                 // Pattern-only constraint: no defaulting mode in BondDefaults.
             }
         }
@@ -394,9 +380,7 @@ fn lower_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults)
                 }
                 StereoDefault::Required => {}
             },
-            BondConstraintKind::Aromatic
-            | BondConstraintKind::RingCount
-            | BondConstraintKind::RingSize => {
+            BondConstraintKind::Aromatic | BondConstraintKind::RingMembership => {
                 // Pattern-only constraint: no defaulting mode in BondDefaults.
             }
         }
@@ -405,7 +389,7 @@ fn lower_bond_constraints(constraints: &mut BondConstraints, cfg: &BondDefaults)
 
 /// Surface DSL wrapper around `BondConstraint`. EDN form: the keyword
 /// `:aromatic` (flag variant, no value) or a single-key map
-/// `{:ring-count <value>}` / `{:ring-size <value>}`.
+/// `{:ring-membership {:size? <int> :count <value>}}` / `{:cis-trans-stereo …}`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BondConstraintDsl(pub BondConstraint);
 
@@ -439,8 +423,9 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                     });
                 };
                 let c = match key.name() {
-                    "ring-count" => BondConstraint::RingCount(ValueDsl::from_edn(v)?.into_ast(&())),
-                    "ring-size" => BondConstraint::RingSize(ValueDsl::from_edn(v)?.into_ast(&())),
+                    "ring-membership" => {
+                        BondConstraint::RingMembership(RingMembershipDsl::from_edn(v)?.0)
+                    }
                     "cis-trans-stereo" => BondConstraint::CisTransStereo(
                         CisTransStereoDsl::from_edn(v)?.into_ast(&()),
                     ),
@@ -454,7 +439,7 @@ impl<'de> FromEdn<'de> for BondConstraintDsl {
                 Ok(Self(c))
             }
             other => Err(DeError::TypeMismatch {
-                expected: ":aromatic / {:ring-count <value>} / {:ring-size <value>}",
+                expected: ":aromatic / {:ring-membership …} / {:cis-trans-stereo …}",
                 got: other.kind(),
                 path: Vec::new(),
             }),
@@ -466,8 +451,9 @@ impl ToEdn for BondConstraintDsl {
     fn to_edn(&self) -> Edn<'static> {
         match &self.0 {
             BondConstraint::Aromatic => Edn::Keyword(EdnKeyword::owned("aromatic".into())),
-            BondConstraint::RingCount(v) => bond_constraint_single_key("ring-count", v),
-            BondConstraint::RingSize(v) => bond_constraint_single_key("ring-size", v),
+            BondConstraint::RingMembership(m) => {
+                single_key_map("ring-membership", RingMembershipDsl(m.clone()).to_edn())
+            }
             BondConstraint::CisTransStereo(c) => single_key_map(
                 "cis-trans-stereo",
                 CisTransStereoDsl::from_ast(c, &()).to_edn(),
@@ -476,22 +462,13 @@ impl ToEdn for BondConstraintDsl {
     }
 }
 
-fn bond_constraint_single_key(key: &str, v: &ValueAst) -> Edn<'static> {
-    let mut m = EdnMap::with_capacity(1);
-    m.insert(
-        Edn::Keyword(EdnKeyword::owned(key.into())),
-        ValueDsl::from_ast(v, &()).to_edn(),
-    );
-    Edn::Map(m)
-}
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
     use super::*;
-    use crate::ast::constraint::BondConstraints;
+    use crate::ast::constraint::{BondConstraints, RingScope};
     use std::collections::BTreeSet;
 
     use crate::ast::operators::MemOp;
@@ -519,14 +496,14 @@ mod tests {
     #[case::double_charge_mult("2#c-1#s3", BondDsl(BondAst { order: ValueAst::Lit(2), charge: ValueAst::Lit(-1), spin: SpinStateAst { unpaired: ValueAst::Undetermined, multiplicity: ValueAst::Lit(3) }, constraints: BondConstraints::new() }))]
     #[case::aromatic("1#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) }))]
     #[case::charged_aromatic("1#c+#a", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Lit(1), spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::Aromatic]) }))]
-    #[case::ring_count("1#R2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(2))]) }))]
-    #[case::ring_bare("1#R", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(1))]) }))]
-    #[case::ring_plus("1#R+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::var_at_least("r", 1))]) }))]
-    #[case::ring_bang("1#R!", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(0))]) }))]
-    #[case::ring_zero("1#R0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Lit(0))]) }))]
-    #[case::ring_undetermined("1#R*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingCount(ValueAst::Undetermined)]) }))]
-    #[case::ring_size("1#r6", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingSize(ValueAst::Lit(6))]) }))]
-    #[case::ring_size_conj("1#r5#r6", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::RingSize(ValueAst::Lit(5)), BondConstraint::RingSize(ValueAst::Lit(6))]) }))]
+    #[case::ring_membership_all("1#R2", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(2))]) }))]
+    #[case::ring_membership_all_bare("1#R", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1))]) }))]
+    #[case::ring_membership_all_plus("1#R+", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::var_at_least("r", 1))]) }))]
+    #[case::ring_bang("1#R!", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(0))]) }))]
+    #[case::ring_zero("1#R0", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(0))]) }))]
+    #[case::ring_membership_all_star("1#R*", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined)]) }))]
+    #[case::ring_membership_size("1#R(6)", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::Size(6), 1)]) }))]
+    #[case::ring_membership_size_conj("1#R(5)#R(6)", BondDsl(BondAst { order: ValueAst::Lit(1), charge: ValueAst::Undetermined, spin: SpinStateAst::default(), constraints: BondConstraints::from_iter([BondConstraint::ring_membership(RingScope::Size(5), 1), BondConstraint::ring_membership(RingScope::Size(6), 1)]) }))]
     fn test_parse_bond(#[case] input: &str, #[case] expected: BondDsl) {
         let result = bond.parse(input);
         assert!(result.is_ok(), "{:?} should succeed, got {:?}", input, result.clone().unwrap_err());
@@ -627,7 +604,7 @@ mod tests {
     #[rstest]
     #[case::single(r##""1""##)]
     #[case::aromatic(r##""1#a""##)]
-    #[case::ring_count(r##""2#R+""##)]
+    #[case::ring_membership_all(r##""2#R+""##)]
     #[case::with_cis_trans_stereo(r##""2#C1""##)]
     fn test_bond_dsl_from_edn_str_matches_from_edn(#[case] input: &str) {
         let via_stream = BondDsl::from_edn_str(input).unwrap();
@@ -662,10 +639,10 @@ mod tests {
     #[rustfmt::skip]
     #[rstest]
     #[case::aromatic(BondConstraint::Aromatic, ":aromatic")]
-    #[case::ring_count(BondConstraint::RingCount(ValueAst::Lit(1)), "{:ring-count 1}")]
-    #[case::ring_count_undetermined(BondConstraint::RingCount(ValueAst::Undetermined), "{:ring-count :undetermined}")]
-    #[case::ring_size(BondConstraint::RingSize(ValueAst::Lit(6)), "{:ring-size 6}")]
-    #[case::ring_size_set(BondConstraint::RingSize(ValueAst::lit_set([5, 6])), "{:ring-size [5 6]}")]
+    #[case::ring_membership_all(BondConstraint::ring_membership(RingScope::All, ValueAst::Lit(1)), "{:ring-membership {:count 1}}")]
+    #[case::ring_membership_all_undetermined(BondConstraint::ring_membership(RingScope::All, ValueAst::Undetermined), "{:ring-membership {:count :undetermined}}")]
+    #[case::ring_membership_size(BondConstraint::ring_membership(RingScope::Size(6), 1), "{:ring-membership {:size 6 :count 1}}")]
+    #[case::ring_membership_size_count_set(BondConstraint::ring_membership(RingScope::Size(6), ValueAst::lit_set([5, 6])), "{:ring-membership {:size 6 :count [5 6]}}")]
     #[case::cis_trans_stereo_undetermined(BondConstraint::CisTransStereo(CisTransStereoAst::Undetermined), "{:cis-trans-stereo :undetermined}")]
     #[case::cis_trans_stereo_not_stereo(BondConstraint::CisTransStereo(CisTransStereoAst::NotStereo), "{:cis-trans-stereo :not-stereo}")]
     #[case::cis_trans_stereo_lit(BondConstraint::CisTransStereo(CisTransStereoAst::Stereo(StereoCosetAst::Lit(1))), "{:cis-trans-stereo {:stereo 1}}")]
@@ -687,8 +664,8 @@ mod tests {
     /// rule, see `dsl::predicates`). `#R*` and `#r*` are admitted on
     /// parse but the rendered surface drops them.
     #[rstest]
-    #[case::ring_count("1#R*", "1")]
-    #[case::ring_size("1#r*", "1")]
+    #[case::ring_membership_all("1#R*", "1")]
+    #[case::ring_membership_size("1#R(6)*", "1")]
     fn test_bond_render_elides_vacuous_constraints(
         #[case] input: &str,
         #[case] expected_canonical: &str,
@@ -718,11 +695,11 @@ mod tests {
 
     #[rstest]
     fn test_bond_constraint_dsl_accepts_value_as_string_subgrammar() {
-        let edn = umol_edn::read_string(r##"{:ring-size "?n :: {5,6}"}"##).unwrap();
+        let edn = umol_edn::read_string(r##"{:ring-membership {:size 6 :count "?n :: {5,6}"}}"##).unwrap();
         let parsed = BondConstraintDsl::from_edn(&edn).unwrap();
         assert_eq!(
             parsed.into_ast(&()),
-            BondConstraint::RingSize(ValueAst::predicate(ValuePredicate::Mem(
+            BondConstraint::ring_membership(RingScope::Size(6), ValueAst::predicate(ValuePredicate::Mem(
                 ValueTerm::Var("n".to_string()),
                 MemOp::In,
                 BTreeSet::from([5, 6]),

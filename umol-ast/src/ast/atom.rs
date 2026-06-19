@@ -650,7 +650,7 @@ mod tests {
     use rstest::*;
 
     use super::*;
-    use crate::ast::constraint::{AtomConstraint, AtomConstraintKind};
+    use crate::ast::constraint::{AtomConstraint, AtomConstraintKind, RingScope};
     use crate::ast::value::ValueTerm;
     use crate::atom_zeroed;
 
@@ -676,8 +676,8 @@ mod tests {
     #[case::with_spin_tuple(AtomAst::default().with_spin((0_u8, 1_u8)), AtomAst { spin: SpinStateAst::from((0_u8, 1_u8)), ..Default::default() })]
     #[case::with_constraint(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)),
         AtomAst { constraints: AtomConstraints::from(AtomConstraint::valence(4)),..Default::default() })]
-    #[case::with_constraints_extends(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)).with_constraints([AtomConstraint::donated_pairs(1_i64), AtomConstraint::ring_size(6_i64)]),
-        AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::donated_pairs(1), AtomConstraint::ring_size(6)]), ..Default::default() })]
+    #[case::with_constraints_extends(AtomAst::default().with_constraint(AtomConstraint::valence(4_i64)).with_constraints([AtomConstraint::donated_pairs(1_i64), AtomConstraint::ring_membership(RingScope::Size(6), 1)]),
+        AtomAst { constraints: AtomConstraints::from_iter([AtomConstraint::valence(4), AtomConstraint::donated_pairs(1), AtomConstraint::ring_membership(RingScope::Size(6), 1)]), ..Default::default() })]
     #[case::with_constraint_replaces_same_kind(AtomAst::default().with_constraint(AtomConstraint::valence(3_i64)).with_constraint(AtomConstraint::valence(4_i64)),
         AtomAst { constraints: AtomConstraints::from(AtomConstraint::valence(4)), ..Default::default() })]
     fn test_atom_ast_with_methods(#[case] actual: AtomAst, #[case] expected: AtomAst) {

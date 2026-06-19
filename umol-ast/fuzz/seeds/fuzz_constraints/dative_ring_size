@@ -1,1 +1,1 @@
-{:dative-bond [0 {:ring-size 5}]}
+{:dative-bond [0 {:ring-membership {:size 5 :count 1}}]}

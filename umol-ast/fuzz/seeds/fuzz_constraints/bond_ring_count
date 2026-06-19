@@ -1,1 +1,1 @@
-{:bond [0 {:ring-count 1}]}
+{:bond [0 {:ring-membership {:count 1}}]}
