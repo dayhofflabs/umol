@@ -162,6 +162,22 @@ pub(crate) fn any_value_ast_strategy() -> BoxedStrategy<ValueAst> {
     value_basic(-10..=10).boxed()
 }
 
+/// Possibly **non-canonical** (but satisfiable) `ValueAst`: unlike `value_basic`
+/// it does not canonicalize, so it exercises the input-canonicality-independent
+/// lattice laws on raw `Term`/`Predicate` forms. Unsatisfiable draws are filtered
+/// out — on an unsatisfiable target the `matches` law's meet-derived RHS only
+/// agrees with the default for satisfiable targets.
+pub(crate) fn raw_value_ast_strategy() -> BoxedStrategy<ValueAst> {
+    prop_oneof![
+        2 => Just(ValueAst::Undetermined),
+        2 => (-10i64..=10).prop_map(ValueAst::Lit),
+        3 => value_term_strategy().prop_map(ValueAst::term),
+        3 => value_predicate_strategy().prop_map(ValueAst::predicate),
+    ]
+    .prop_filter("satisfiable", |v| v.clone().canonicalize().is_ok())
+    .boxed()
+}
+
 pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassAst> {
     prop_oneof![
         3 => Just(IsotopeMassAst::Natural),
@@ -724,8 +740,9 @@ pub(crate) fn ligand_symmetry_strategy(degree: usize) -> impl Strategy<Value = L
         })
 }
 
-/// Lattice laws for a stereo relation: meet / join commutativity and
-/// associativity, absorption, idempotence, and `matches(t) ⇔ meet(t) == Some(t)`.
+/// Universal lattice laws — hold for **any** inputs (canonical or not): meet/join
+/// commutativity and associativity, `matches` ⇔ meet-derived, and the
+/// Lattice→Canonicalize correspondence that `meet`/`join` land in canonical form.
 pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
     a: &L,
     b: &L,
@@ -738,10 +755,36 @@ pub(crate) fn assert_lattice_laws<L: Lattice + Debug>(
         b.meet(c).and_then(|bc| a.meet(&bc))
     );
     prop_assert_eq!(a.join(b).join(c), a.join(&b.join(c)));
-    prop_assert_eq!(a.meet(&a.join(b)), Some(a.clone()));
+    prop_assert_eq!(a.matches(b), a.meet(b) == b.clone().canonicalize().ok());
+    if let Some(m) = a.meet(b) {
+        prop_assert_eq!(m.clone().canonicalize(), Ok(m));
+    }
+    let j = a.join(b);
+    prop_assert_eq!(j.clone().canonicalize(), Ok(j));
+    // `canonical()` (the borrow fast-path) agrees with `canonicalize()`.
+    prop_assert_eq!(a.canonical().map(|c| c.into_owned()), a.clone().canonicalize());
+    // `equiv` is canonical equality.
+    prop_assert_eq!(
+        a.equiv(b),
+        a.clone().canonicalize().ok() == b.clone().canonicalize().ok()
+    );
+    Ok(())
+}
+
+/// Lattice laws that assume **canonical** inputs: each input is a `canonicalize`
+/// fixpoint, plus idempotence and absorption (whose RHS is the input verbatim,
+/// which only holds when the input is already canonical).
+pub(crate) fn assert_canonical_lattice_laws<L: Lattice + Debug>(
+    a: &L,
+    b: &L,
+    c: &L,
+) -> Result<(), TestCaseError> {
+    prop_assert_eq!(a.clone().canonicalize(), Ok(a.clone()));
+    prop_assert_eq!(b.clone().canonicalize(), Ok(b.clone()));
+    prop_assert_eq!(c.clone().canonicalize(), Ok(c.clone()));
     prop_assert_eq!(a.meet(a), Some(a.clone()));
     prop_assert_eq!(a.join(a), a.clone());
-    prop_assert_eq!(a.matches(b), a.meet(b) == b.clone().canonicalize().ok());
+    prop_assert_eq!(a.meet(&a.join(b)), Some(a.clone()));
     Ok(())
 }
 

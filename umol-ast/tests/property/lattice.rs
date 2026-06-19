@@ -17,6 +17,19 @@ proptest! {
         c in any_value_ast_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    /// The universal (input-canonicality-independent) laws on raw, non-canonical
+    /// inputs — `canonical()` fold path, `equiv`, `matches`↔meet, and meet/join
+    /// canonicality — which the canonicalized strategies above never reach.
+    #[test]
+    fn test_value_ast_lattice_laws_raw(
+        a in raw_value_ast_strategy(),
+        b in raw_value_ast_strategy(),
+        c in raw_value_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -26,6 +39,7 @@ proptest! {
         c in element_ast_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -35,6 +49,7 @@ proptest! {
         c in isotope_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -44,6 +59,7 @@ proptest! {
         c in aromatic_valence_ast_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -53,6 +69,7 @@ proptest! {
         c in multicenter_valence_ast_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -62,6 +79,7 @@ proptest! {
         c in noncovalent_bond_kind_ast_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -71,6 +89,7 @@ proptest! {
         c in electron_counts_ast_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -80,6 +99,7 @@ proptest! {
         c in stereo_configuration_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -89,6 +109,7 @@ proptest! {
         c in tetrahedral_stereo_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -98,6 +119,7 @@ proptest! {
         c in cis_trans_stereo_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -110,6 +132,7 @@ proptest! {
         let b = rb;
         let c = rc;
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -119,6 +142,7 @@ proptest! {
         c in dative_bond_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -128,6 +152,7 @@ proptest! {
         c in multicenter_bond_ast_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -137,6 +162,7 @@ proptest! {
         c in aromatic_system_ast_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -146,6 +172,7 @@ proptest! {
         c in atom_constraints_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -155,6 +182,7 @@ proptest! {
         c in bond_constraints_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -164,6 +192,7 @@ proptest! {
         c in optional_aromatic_electron_count(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -173,6 +202,7 @@ proptest! {
         c in dative_bond_constraints_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -182,6 +212,7 @@ proptest! {
         c in optional_multicenter_electron_count(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -191,6 +222,7 @@ proptest! {
         c in stereo_atom_constraints_strategy(StereoKind::Tetrahedral),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -200,6 +232,7 @@ proptest! {
         c in stereo_bond_constraints_strategy(StereoKind::CisTrans),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
     #[test]
@@ -209,6 +242,7 @@ proptest! {
         c in topicity_relation_lattice_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
 }

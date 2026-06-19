@@ -524,6 +524,17 @@ self-contained `C`; B preserves that while making `kind` positional. Form A (inl
 
 ### P6 · `Lattice`-trait flip + macro (lands once P1–P5 **and P4.7** all impl `Canonicalize`) **Done**
 
+**Coverage (landed).** `assert_lattice_laws` split into a **universal** helper (laws on *any* input:
+meet/join commutativity + associativity, `matches`↔meet, and the correspondence checks — `meet`/`join`
+land canonical [G1], `canonical()` == `canonicalize()` [G3], `equiv` == canonical-equality [G4]) and
+`assert_canonical_lattice_laws` (canonical-input only: each input a `canonicalize` fixpoint [G2],
+idempotence, absorption); the 22 law tests call both. Since every law strategy canonicalizes its
+output, `test_value_ast_lattice_laws_raw` feeds the universal helper **non-canonical (satisfiable)**
+values (`raw_value_ast_strategy`), exercising the `canonical()` fold path / `equiv` / `matches`↔meet on
+raw `Term`/`Predicate`. Residual: other `canonical()`-overriding leaves are covered on the borrow path
+only (canonical inputs), not raw-fuzzed on the fold path. Verification: lib 3540, property 68,
+resolution conformance 617.
+
 **Precondition (met).** Every `Lattice` type also impls `Canonicalize` (P1–P5 + P4): the four
 derived structs (`AtomAst`/`BondAst`/`NoncovalentBondAst`/`SpinStateAst`), the hand-Lattice leaves
 (`ValueAst`/`ElementAst`/`IsotopeMassAst`/`ElectronCountsAst`/`NoncovalentBondKindAst`/
