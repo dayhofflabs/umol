@@ -361,12 +361,12 @@ is the build order.
    f. **Tests** — collection unit tests (`key`/`add`/dedup/`meet`/`join`/`matches`/`canonicalize`
       incl. `MemOp` `⊥` and `(P,In)∧(P,NotIn)`), DSL string + EDN streaming roundtrip, proptest
       generators.
-3. **Per-entity enums + collections (WET — no shared container).** Each per-entity enum gets
+3. **Per-entity enums + collections. Each per-entity enum gets
    `Canonicalize` = delegate to the inner value (replacing `simplify`); each collection gets
    `Canonicalize` (per-kind canonicalize + drop-vacuous) and keeps its **hand-written**
    `Lattice`. **No shared trait / macro / generic `KeyedConstraints`** — the collections
    already each hand-write their full surface; we leave that duplicated (WET) rather than
-   abstract it. `simplify_each` removed everywhere.
+   abstract it. **Done**
 
    The only collection whose `meet`/`join`/`canonicalize`/`matches` gain new logic are the
    three ring-bearing ones (atom/bond/dative): they must **group ring entries by `RingScope`**

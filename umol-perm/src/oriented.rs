@@ -7,7 +7,7 @@ use crate::group::PermutationGroup;
 use crate::permutation::Permutation;
 
 /// Orientation grade: proper rotation vs improper (mirror) operation.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Orientation {
     Proper,
     Improper,

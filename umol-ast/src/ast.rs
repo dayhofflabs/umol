@@ -46,9 +46,9 @@ pub use constraint::{
     MulticenterBondConstraintKey, MulticenterBondConstraintKind, MulticenterBondConstraints,
     MulticenterValenceAst, NoncovalentBondConstraint, NoncovalentBondConstraintKey,
     NoncovalentBondConstraints, OrientedLigandPermutation, LigandPermutation,
-    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomConstraint, StereoAtomConstraints,
-    StereoBondConstraint, StereoBondConstraints, StereogenicityAst, SubPatternAnchor, TopicityAst,
-    TopicityRelationAst,
+    RelationalConstraint, RingMembershipAst, RingScope, StereoAtomConstraint, StereoAtomConstraintKey,
+    StereoAtomConstraints, StereoBondConstraint, StereoBondConstraintKey, StereoBondConstraints,
+    StereogenicityAst, SubPatternAnchor, TopicityAst, TopicityRelationAst,
 };
 pub use dative::DativeBondAst;
 pub use edit::{

@@ -50,6 +50,7 @@ pub use relational::RelationalConstraint;
 pub use ring::{RingMembershipAst, RingScope};
 pub use stereo::{
     FluxionalityAst, StereoLigandPair, LigandSymmetryAst, OrientedLigandPermutation, LigandPermutation,
-    StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
-    StereogenicityAst, TopicityAst, TopicityRelationAst,
+    StereoAtomConstraint, StereoAtomConstraintKey, StereoAtomConstraints, StereoBondConstraint,
+    StereoBondConstraintKey, StereoBondConstraints, StereogenicityAst, TopicityAst,
+    TopicityRelationAst,
 };
