@@ -6,7 +6,7 @@ use std::slice::Iter;
 use std::vec::IntoIter;
 
 use super::super::edit::{ConstraintUpdate, DroppedConstraint, RewrittenConstraint};
-use super::super::ids::{
+use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
@@ -554,7 +554,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::{RingMembershipAst, RingScope};
-    use crate::ast::ids::{
+    use crate::ast::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     };
     use crate::ast::molecule::MoleculeAst;

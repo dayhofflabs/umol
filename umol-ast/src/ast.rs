@@ -11,7 +11,7 @@ pub(crate) mod electrons;
 pub(crate) mod embedding;
 pub(crate) mod entity;
 pub(crate) mod error;
-pub(crate) mod ids;
+pub(crate) mod id;
 pub(crate) mod incidence;
 pub(crate) mod ligand;
 pub(crate) mod matching;
@@ -27,7 +27,7 @@ pub(crate) mod stereo;
 pub(crate) mod symmetry;
 pub(crate) mod traits;
 pub(crate) mod value;
-pub(crate) mod views;
+pub(crate) mod view;
 
 pub use aromatic::AromaticSystemAst;
 pub use electrons::ElectronCountsAst;
@@ -60,7 +60,7 @@ pub use edit::{
 pub use embedding::MoleculeEmbedding;
 pub use entity::{Entity, EntityKind};
 pub use error::{Contradiction, RewriteError};
-pub use ids::{
+pub use id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId, StereoLigandId,
 };
@@ -86,7 +86,7 @@ pub use traits::{
     AsLit, Canonical, Canonicalize, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst,
 };
 pub use value::{ValueAst, ValuePredicate, ValueTerm};
-pub use views::{
+pub use view::{
     AromaticSystemView, AromaticSystemViews, AtomAutomorphism, AtomView, AtomViewMut, AtomViews,
     BondView, BondViewMut, BondViews, DativeBondView, DativeBondViews, MulticenterBondView,
     MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews, StereoAtomView,

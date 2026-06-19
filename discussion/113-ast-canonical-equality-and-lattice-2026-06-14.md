@@ -253,44 +253,53 @@ variants `Undetermined | Kind(StereoKind, StereoCosetAst)`; `AsLit` per the AST 
 Design, lattice contracts, and notation: see *Per-type detail → Constraint types*. This
 is the build order.
 
-1. **Ring membership (model A, WET — no sub-map, no shared container).** Replaces `RingCount`
-   + `RingSize` on **three** enums (`AtomConstraint`, `BondConstraint`, `DativeBondConstraint`;
-   atom-only `RingDegree`/`RingValence` stay). Each ring fact is an **independent constraint
-   keyed by `RingScope`** — *not* collapsed into one map-valued uber-constraint, and *not*
-   routed through any generic keyed container. There is **no `RingMembershipAst`**; `RingScope`
-   is the only new type. Each of the three collections hand-writes the per-scope ring handling
-   inline (the former `RingSize` loop, now grouped by `RingScope`). **Done**
+1. **Ring membership (model B — single-entry `RingMembershipAst` carrier, WET).** Replaces
+   `RingCount` + `RingSize` on **three** enums (`AtomConstraint`, `BondConstraint`,
+   `DativeBondConstraint`; atom-only `RingDegree`/`RingValence` stay). Each ring fact is **one
+   constraint** carrying a `RingMembershipAst { scope: RingScope, count: ValueAst }` — a
+   single-entry struct parallel to `TopicityAst { pair, rel }` (**not** a sub-map, **not** a
+   shared keyed container). Several ring facts (one per `RingScope`) sit on an entity; each of
+   the three collections hand-writes the per-scope handling inline (the former `RingSize` loop,
+   now grouped by `RingScope`). **Done**
 
-   a. **`RingScope` + variant.** `constraint/ring.rs` holds `RingScope { All, Size(u8) }`
-      (`Ord`: `All` first, then sizes ascending) — the shared foundation module for the three
-      sibling enums (atom/bond/dative); it holds **only** this enum. On each of the three
-      enums replace `{RingCount(ValueAst), RingSize(ValueAst)}` with one tuple variant
-      `RingMembership(RingScope, ValueAst)` + a `ring_membership(scope, count)` ctor. `kind()`
-      collapses to one `RingMembership` discriminant (scope distinguishes entries within the
-      collection). `is_undetermined`/`is_ground`/`simplify` delegate to the inner `ValueAst`.
-      Drop `is_unique`'s `RingSize` non-unique special-case.
-   b. **Atom collection.** `AtomConstraints` (hand-written `SmallVec`): `add` for ring
-      replaces the same-`RingScope` entry last-wins, else appends; contradictions surface
-      lazily at `canonicalize`/`meet` (the decided `add` policy). Accessors `total()` (scope
-      `All`), `size(s: u8)` (scope `Size(s)`), `ring_memberships()` (all ring entries); drop
-      `ring_count()`/`ring_sizes()`. `canonicalize` groups ring entries by scope, merges
-      same-scope by value-`meet` (→ `Err` on contradiction), drops vacuous, orders by scope.
-      `meet`/`join`/`matches` run the per-scope product over `RingScope` (disjoint literal
-      sizes ⇒ no subsumption, box-hull `join`), replacing the old single-`RingCount` path +
-      `RingSize` loop. Tests.
+   a. **`RingScope` + `RingMembershipAst` + variant.** `constraint/ring.rs` (shared foundation
+      module for the three sibling enums) holds `RingScope { All, Size(u8) }` (`Ord`: `All`
+      first, then sizes ascending) **and** `RingMembershipAst { scope, count }` (pub fields +
+      `new` ctor; carrier only — no `Lattice`, mirroring `TopicityAst`). On each enum replace
+      `{RingCount(ValueAst), RingSize(ValueAst)}` with one variant
+      `RingMembership(RingMembershipAst)` + a `ring_membership(scope, count)` ctor. `kind()`
+      collapses to one `RingMembership` discriminant. `is_undetermined`/`is_ground`/`simplify`
+      delegate to the inner `count`. `is_unique` returns **false** for `RingMembership` (the
+      former `RingSize` non-unique case, renamed) — ring entries append.
+   b. **Atom collection.** `AtomConstraints` (hand-written `SmallVec`): `add` **appends** ring
+      entries (non-unique); per-scope dedup is **lazy** (at `meet`/`canonicalize`), consistent
+      with the decided `add` policy. Accessors `ring_count()` (scope `All`), `ring_size_count(s)`
+      (scope `Size(s)`), private `ring_memberships()` / `ring_membership_value(scope)`; the old
+      `ring_count()`/`ring_sizes()` are gone. `meet`/`join`/`matches` run the per-scope product
+      over `RingScope` (disjoint literal sizes ⇒ no subsumption, box-hull `join`), replacing the
+      old single-`RingCount` path + `RingSize` loop. Tests.
    c. **Bond collection** — same for `BondConstraint` / `BondConstraints`.
-   d. **Dative collection** — same for `DativeBondConstraint` / `DativeBondConstraints`.
-   e. **DSL** — `dsl/predicates.rs` + `dsl/{atom,bond,dative,constraint}.rs`: one ring glyph
-      `#R<count>` (scope `All`) / `#R(s)<count>` (scope `Size(s)`), each parsing to one
-      `RingMembership` entry. Count: bare→`Lit(1)`, `+`→`var_at_least("r", 1)` (≥1; the
-      existing `+` predicate sugar; fixed name `"r"` ok — nothing unifies yet, doc 115),
-      `!`→`Lit(0)`, `n`→`Lit`, `{a,b}`→`LitSet`, `?v`→`Var`, `*`→`Undetermined`. Canonical
-      render: `#R!` (0), bare `#R` (1). EDN boundary in `dsl/constraint.rs`.
-   f. **Consumers + tests** — `transact.rs` ring `FieldChange`s; producers that derive/set
-      ring constraints; the `All = Σ Size(s)` validator check; molecule/dsl test suites.
-      Geometric ring-size refs (`ast/ring.rs` perception, umol-graph aromaticity) are likely
-      unaffected — verify, don't convert.
-    g. Update umol-dsl-spec.md with the new syntax.
+   d. **Dative collection** — same for `DativeBondConstraint` / `DativeBondConstraints`. The
+      `DativeBondConstraintDsl` gains the `RingMembership(RingMembershipAst)` variant; the DSL
+      `apply_predicates` dup-check is gated on `is_unique` (matching bond), so multiple `#R`
+      scopes on one dative bond are allowed.
+   e. **DSL.** *String:* one glyph `#R<count>` (scope `All`) / `#R(s)<count>` (scope `Size(s)`),
+      parsed by `predicates::ring_membership` → `RingMembershipAst`, rendered by
+      `fmt_ring_membership`; `#r` is dropped. Count sugar: bare→`Lit(1)`, `+`→`var_at_least("r",
+      1)` (≥1; fixed name `"r"` ok — nothing unifies yet, doc 115), `!`→`Lit(0)`, `n`→`Lit`,
+      `{a,b}`→`LitSet`, `?v`→`Var`, `*`→`Undetermined`; canonical render `#R!` (0) / bare `#R`
+      (1). *EDN:* a `RingMembershipDsl(RingMembershipAst)` boundary type (`FromEdn`/`ToEdn`)
+      emitting `{:ring-membership {:size <int> :count <value>}}` (sized) /
+      `{:ring-membership {:count <value>}}` (total), plus the streaming
+      `read_ring_membership_dsl` in `dsl/constraint.rs` — the aromatic-valence pattern (a `*Dsl`
+      type for the value path + a free streaming reader).
+   f. **Consumers + tests** — `transact.rs` ring tests (ring is non-unique → the `Add`/`Remove`
+      multi-valued path, not `Set`); molecule/dsl/property test suites; proptest generators and
+      AST fuzzer seeds. Geometric ring refs (`ast/ring.rs` perception, umol-graph aromaticity,
+      `views::{atom,bond}::ring_count`/`ring_size`) are graph-derived and **unchanged**. The
+      `All = Σ_s Size(s)` cross-check is a **tier-2 validator** concern, **not** part of this
+      AST/DSL work (deferred).
+   g. Update umol-dsl-spec.md with the new syntax. **Done**
 2. **Other keyed constraints — stereo `#o`/`#f`/`#p`.** In `StereoAtomConstraints` /
    `StereoBondConstraints`, several entries share a kind, distinguished by a sub-key: `#o`
    Topicity by `LigandPair` (value `TopicityRelationAst`); `#f` Fluxionality by
@@ -299,6 +308,7 @@ is the build order.
    `Err` on contradiction; drop-duplicate for `#f`/`#p`; keys canonical by construction);
    `Lattice` per the same per-sub-key product. Hand-written in each stereo collection (WET),
    mirroring the ring handling in item 1.
+   P5.2, review the stereo constraint types in AST and DSL modules. Show me the structures of the data types, their parse/render
 3. **Per-entity enums + collections (WET — no shared container).** Each per-entity enum gets
    `Canonicalize` = delegate to the inner value (replacing `simplify`); each collection gets
    `Canonicalize` (per-kind canonicalize + drop-vacuous) and keeps its **hand-written**
@@ -1063,18 +1073,21 @@ canonical/lattice conjunction (per-key `meet`) intentionally diverge — `meet`/
 is the authority for the canonical form. An explicit conjoining verb, if ever wanted, is a
 *separate* fallible `narrow` (= per-key `meet`), not an overload of `add`.
 
-**Compound-key kinds** (no subsumption multisets remain): ring membership, and the stereo
-relations below. Each fact is **one constraint** — not a separate value-map type; the keyed
-container (P5.3) keys it by `(kind, sub-key)`.
+**Multi-entry kinds** (no subsumption multisets remain): ring membership, and the stereo
+relations below. Each fact is **one constraint**; several may share a kind, distinguished by a
+sub-key (`RingScope` for ring; the pair/permutation for stereo). They are **non-unique** —
+`add` appends, and per-sub-key dedup is **lazy** (at `meet`/`canonicalize`); each collection
+hand-writes the per-sub-key handling (WET — no shared container).
 
 *Ring membership* (atom, bond, dative) replaces `RingCount` + `RingSize`. Membership is a
 multiset `M : size → count` (`RingCount = |M|`, per-size = `M(s)`); we store bounds on its
-projections as **independent constraints** `RingMembership(RingScope, ValueAst)`, sub-key
-`RingScope { All, Size(u8) }` (`All` = total `|M|`, `Size(s)` = `M(s)`; `Ord` `All` first),
-count a `ValueAst`. The container key `(RingMembership, RingScope)` makes them
-unique-per-scope; literal-int `Size` keys are disjoint → no subsumption, clean per-scope
-`join` (box-hull). **No `RingMembershipAst`** — the keyed-map machinery is the container, not
-a sub-map value type. Count sugar:
+projections as constraints `RingMembership(RingMembershipAst)`, where
+`RingMembershipAst { scope: RingScope, count: ValueAst }` is a **single-entry carrier** (one
+fact, parallel to `TopicityAst { pair, rel }`). `RingScope { All, Size(u8) }` (`All` = total
+`|M|`, `Size(s)` = `M(s)`; `Ord` `All` first); the `count` is a `ValueAst`. One `RingMembership`
+per scope on an entity; literal-int `Size` sub-keys are disjoint → no subsumption, clean
+per-scope `join` (box-hull). The per-scope product lattice is hand-written in each collection's
+`meet`/`join`/`matches`. Count sugar:
 `n`→`Lit`, `+`→`var_at_least("r", 1)` (= `?r >= 1`; `ValueAst` has **no** `NotSet`, so `≥1`
 is a `Predicate(Rel(Var, Ge, 1))` — the existing `dsl/predicates.rs` `+` sugar; the fixed
 name `"r"` is fine here because nothing unifies variables yet — the anonymous-bound-vs-named-

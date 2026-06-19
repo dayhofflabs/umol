@@ -6,7 +6,7 @@ use std::ops::Index;
 use umol_graph_core::{FixedRelationSet, NodeId, RelationId, Unordered};
 
 use super::super::constraint::NoncovalentBondConstraints;
-use super::super::ids::{AtomId, NoncovalentBondId};
+use super::super::id::{AtomId, NoncovalentBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::noncovalent::{NoncovalentBondAst, NoncovalentBondKindAst};
 use super::super::traits::Lattice;
@@ -222,7 +222,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::ids::{AtomId, NoncovalentBondId};
+    use crate::ast::id::{AtomId, NoncovalentBondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

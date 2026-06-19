@@ -7,7 +7,7 @@ use umol_graph_core::{FixedVarBirelationSet, NodeId, Ordered, RelationId, Unorde
 
 use super::super::constraint::DativeBondConstraints;
 use super::super::dative::DativeBondAst;
-use super::super::ids::{AtomId, DativeBondId};
+use super::super::id::{AtomId, DativeBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::traits::Lattice;
 use super::super::value::ValueAst;
@@ -296,7 +296,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::ids::{AtomId, DativeBondId};
+    use crate::ast::id::{AtomId, DativeBondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

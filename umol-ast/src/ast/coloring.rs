@@ -209,7 +209,7 @@ mod tests {
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
-    use crate::ast::ids::{AtomId, BondId, StereoAtomId, StereoBondId};
+    use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::spin::SpinStateAst;

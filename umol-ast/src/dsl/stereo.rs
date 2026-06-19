@@ -27,7 +27,7 @@ use crate::ast::constraint::{
     StereoAtomConstraint, StereoAtomConstraints, StereoBondConstraint, StereoBondConstraints,
     StereogenicityAst, TopicityAst, TopicityRelationAst,
 };
-use crate::ast::ids::StereoLigandId;
+use crate::ast::id::StereoLigandId;
 use crate::ast::operators::MemOp;
 use crate::ast::stereo::{
     CisTransStereoAst, StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoCosetAst,

@@ -2,7 +2,7 @@
 
 use umol_graph_core::{Matching, NodeId};
 
-use super::ids::{AtomId, BondId};
+use super::id::{AtomId, BondId};
 
 /// Bond-level wrapper over `umol_graph_core::Matching`. Exposes matched
 /// bonds and matched-atom membership in terms of `AtomId` / `BondId`.

@@ -1,6 +1,6 @@
 //! Stereo ligand views.
 
-use super::super::ids::AtomId;
+use super::super::id::AtomId;
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
 use super::atom::AtomView;

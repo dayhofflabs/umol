@@ -1,6 +1,6 @@
 //! Reaction rule AST: L ← K → R as two molecule ASTs plus an atom map.
 
-use super::ids::{
+use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
 };
 use super::molecule::MoleculeAst;

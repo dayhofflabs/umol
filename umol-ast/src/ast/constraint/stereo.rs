@@ -11,7 +11,7 @@ use strum::VariantArray;
 use umol_perm::{Orientation, Permutation};
 
 use super::super::error::Contradiction;
-use super::super::ids::StereoLigandId;
+use super::super::id::StereoLigandId;
 use super::super::operators::MemOp;
 use super::super::remap::IdRemapping;
 use super::super::stereo::{Stereogenicity, Topicity};

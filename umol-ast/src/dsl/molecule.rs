@@ -41,7 +41,7 @@ use crate::ast::atom::AtomAst;
 use crate::ast::bond::BondAst;
 use crate::ast::dative::DativeBondAst;
 use crate::ast::electrons::ElectronCountsAst;
-use crate::ast::ids::{
+use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };

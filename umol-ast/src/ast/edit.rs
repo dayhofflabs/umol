@@ -17,7 +17,7 @@ use super::constraint::{
 };
 use super::dative::DativeBondAst;
 use super::electrons::ElectronCountsAst;
-use super::ids::{
+use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };

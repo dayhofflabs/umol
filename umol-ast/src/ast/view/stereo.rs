@@ -7,7 +7,7 @@ use std::ops::Index;
 use umol_graph_core::{EdgeId, FixedVarBirelationSet, NodeId, Ordered, RelationId};
 use umol_perm::{OrientedPermutationGroup, Permutation};
 
-use super::super::ids::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
+use super::super::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
 use super::super::ligand::{StereoLigand, StereoLigandKind};
 use super::super::molecule::MoleculeAst;
 use super::super::ring::RingView;
@@ -840,7 +840,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::coloring::ConstitutionColoring;
     use crate::ast::constraint::Constraints;
-    use crate::ast::ids::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
+    use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::stereo::{

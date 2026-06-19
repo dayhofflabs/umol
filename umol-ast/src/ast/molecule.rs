@@ -17,7 +17,7 @@ use super::bond::BondAst;
 use super::constraint::{Constraint, Constraints};
 use super::dative::DativeBondAst;
 use super::embedding::MoleculeEmbedding;
-use super::ids::{
+use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
@@ -27,7 +27,7 @@ use super::noncovalent::NoncovalentBondAst;
 use super::ring::{RingFamily, RingSet};
 use super::stereo::{StereoAtomAst, StereoBondAst};
 use super::traits::Lattice;
-use super::views::{
+use super::view::{
     AromaticSystemView, AromaticSystemViews, AtomView, AtomViewMut, AtomViews, BondView,
     BondViewMut, BondViews, DativeBondView, DativeBondViews, GraphView, MulticenterBondView,
     MulticenterBondViews, NeighborView, NoncovalentBondView, NoncovalentBondViews, StereoAtomView,

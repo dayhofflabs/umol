@@ -7,7 +7,7 @@ use umol_graph_core::{
     PerfectMatchingAlgorithm, ShortestCycleAlgorithm, SubgraphIsomorphismAlgorithm,
 };
 
-use super::super::ids::{AtomId, BondId};
+use super::super::id::{AtomId, BondId};
 use super::super::matching::BondMatching;
 
 /// AtomId/BondId-typed adapter over the underlying `Graph`. Holds the
@@ -214,7 +214,7 @@ mod tests {
     use super::*;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::ids::AtomId;
+    use crate::ast::id::AtomId;
     use crate::ast::molecule::MoleculeAst;
 
     fn ring(n: usize) -> MoleculeAst {

@@ -1,6 +1,6 @@
 //! Neighbor view: yielded by `MoleculeAst::neighbors`.
 
-use super::super::ids::{AtomId, BondId};
+use super::super::id::{AtomId, BondId};
 use super::super::molecule::MoleculeAst;
 use super::atom::AtomView;
 use super::bond::BondView;
@@ -52,7 +52,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::ids::{AtomId, BondId};
+    use crate::ast::id::{AtomId, BondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

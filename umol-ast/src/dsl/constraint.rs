@@ -25,7 +25,7 @@ use crate::ast::constraint::{
     AromaticValenceAst, AtomConstraint, BondConstraint, Constraint, Constraints,
     MoleculeConstraint, MulticenterValenceAst, RingMembershipAst, RingScope, SubPatternAnchor,
 };
-use crate::ast::ids::{
+use crate::ast::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
@@ -2254,7 +2254,7 @@ mod tests {
         LigandPairAst, LigandSymmetryAst, MulticenterValenceAst, OrientedPermutationAst,
         PermutationAst, RelationalConstraint, StereoAtomConstraint, StereogenicityAst, TopicityAst, TopicityRelationAst,
     };
-    use crate::ast::ids::StereoLigandId;
+    use crate::ast::id::StereoLigandId;
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::operators::MemOp;
     use crate::ast::stereo::{CisTransStereoAst, StereoCosetAst, StereoKind, Stereogenicity, TetrahedralStereoAst, Topicity};

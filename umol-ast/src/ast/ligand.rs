@@ -2,7 +2,7 @@
 
 use umol_graph_core::{NodeId, ParticipantRefs, RelationParticipant, Remapping};
 
-use super::ids::AtomId;
+use super::id::AtomId;
 
 /// Stereo ligand kind: atom, or virtual ligand (implicit hydrogen or lone pair).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]

@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 
 use super::edit::{AtomRef, BondRef, Edit};
-use super::ids::{
+use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };

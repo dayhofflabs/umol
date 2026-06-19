@@ -170,7 +170,7 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_edn_tagged_serialize_string_value() {
+    fn test_edn_tagged_serialize_string_membership_value() {
         let tagged: EdnTagged<String> = EdnTagged::new("inst", "2026-04-08T00:00:00Z".to_string());
         assert_eq!(
             to_string(&tagged).unwrap(),
@@ -196,7 +196,7 @@ mod tests {
 
     #[cfg(feature = "serde")]
     #[test]
-    fn test_edn_tagged_deserialize_string_value() {
+    fn test_edn_tagged_deserialize_string_membership_value() {
         let tagged: EdnTagged<String> = from_str("#inst \"2026-04-08T00:00:00Z\"").unwrap();
         assert_eq!(tagged.tag, "inst");
         assert_eq!(tagged.value, "2026-04-08T00:00:00Z");

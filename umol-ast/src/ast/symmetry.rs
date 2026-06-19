@@ -8,7 +8,7 @@ use umol_perm::{space, Orientation, OrientedPermutation, OrientedPermutationGrou
 
 use super::coloring::MoleculeColoring;
 use super::entity::{Entity, EntityKind};
-use super::ids::{AtomId, StereoAtomId, StereoBondId, StereoLigandId};
+use super::id::{AtomId, StereoAtomId, StereoBondId, StereoLigandId};
 use super::incidence::{IncidenceGraph, IncidenceNodeSelection};
 use super::ligand::{StereoLigand, StereoLigandKind};
 use super::molecule::MoleculeAst;
@@ -580,7 +580,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::coloring::ConstitutionColoring;
     use crate::ast::constraint::Constraints;
-    use crate::ast::ids::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
+    use crate::ast::id::{AtomId, BondId, StereoAtomId, StereoBondId, StereoLigandId};
     use crate::ast::stereo::{StereoAtomAst, StereoBondAst, StereoConfigurationAst, StereoKind};
 
     fn config() -> GraphSymmetryConfig<ConstitutionColoring> {

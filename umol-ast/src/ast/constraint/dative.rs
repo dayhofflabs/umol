@@ -105,7 +105,7 @@ impl DativeBondConstraints {
             })
     }
 
-    fn ring_value(&self, scope: RingScope) -> ValueAst {
+    fn ring_membership_value(&self, scope: RingScope) -> ValueAst {
         self.ring_memberships()
             .find(|(s, _)| *s == scope)
             .map(|(_, v)| v.clone())
@@ -113,11 +113,11 @@ impl DativeBondConstraints {
     }
 
     pub fn ring_count(&self) -> ValueAst {
-        self.ring_value(RingScope::All)
+        self.ring_membership_value(RingScope::All)
     }
 
     pub fn ring_size_count(&self, s: u8) -> ValueAst {
-        self.ring_value(RingScope::Size(s))
+        self.ring_membership_value(RingScope::Size(s))
     }
 
     pub fn iter(&self) -> Iter<'_, DativeBondConstraint> {
@@ -235,7 +235,7 @@ impl Lattice for DativeBondConstraints {
         let mut scopes: BTreeSet<RingScope> = self.ring_memberships().map(|(s, _)| s).collect();
         scopes.extend(other.ring_memberships().map(|(s, _)| s));
         for scope in scopes {
-            let v = self.ring_value(scope).meet(&other.ring_value(scope))?;
+            let v = self.ring_membership_value(scope).meet(&other.ring_membership_value(scope))?;
             if !v.is_undetermined() {
                 result.add(DativeBondConstraint::RingMembership(
                     RingMembershipAst::new(scope, v),
@@ -252,7 +252,7 @@ impl Lattice for DativeBondConstraints {
         }
         for (scope, v) in self.ring_memberships() {
             if other.ring_memberships().any(|(s, _)| s == scope) {
-                let j = v.join(&other.ring_value(scope));
+                let j = v.join(&other.ring_membership_value(scope));
                 if !j.is_undetermined() {
                     result.add(DativeBondConstraint::RingMembership(
                         RingMembershipAst::new(scope, j),
@@ -268,7 +268,7 @@ impl Lattice for DativeBondConstraints {
         (!self.aromatic() || target.aromatic())
             && self
                 .ring_memberships()
-                .all(|(scope, v)| v.matches(&target.ring_value(scope)))
+                .all(|(scope, v)| v.matches(&target.ring_membership_value(scope)))
     }
 }
 

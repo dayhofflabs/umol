@@ -204,7 +204,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::ids::{
+    use crate::ast::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId, StereoBondId,
     };

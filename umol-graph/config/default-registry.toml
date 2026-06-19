@@ -524,7 +524,7 @@
 ]
 1 = [
     "Kr #c+ #n3 #v",    # KrF+
-    "Kr #c+ #n3 #r #v", # FKrF->KrF+, HCN->KrF
+    "Kr #c+ #n3 #t #v", # FKrF->KrF+, HCN->KrF
 ]
 
 [Rb]
@@ -705,16 +705,16 @@
     "Xe #n3 #m2",   # XeF2, XeCl2, XeX2
     "Xe #n2 #m4",   # XeF4, XeOF2
     "Xe #n #m6",    # XeF6, XeOF4, XeO2F2, [HXeO4]-, [XeO3F]-
-    "Xe #n #r #m6", # MeCN->XeO3
+    "Xe #n #t #m6", # MeCN->XeO3
     "Xe #m8",       # XeO2F4, XeO3F2, XeO4, H4XeO6, [XeO6]3-, [XeO6]4-
     "Xe #n4",       # Xe atom, s2p6
 ]
 1 = [
     "Xe #c+ #n3 #v",       # XeF+, XeCl+, XeX+
-    "Xe #c+ #n3 #r #v",    # HF->XeF+, HCN->XeF+, MeCN->XeF+
+    "Xe #c+ #n3 #t #v",    # HF->XeF+, HCN->XeF+, MeCN->XeF+
     "Xe #c+ #n2 #v #m2",   # [XeF3]+, [XeF2X]+
     "Xe #c+ #n #v #m4",    # [XeF5]+, [XeOF3]+, XeO2F+
-    "Xe #c+ #n #r #v #m4", # F5XeF->[XeF5]+
+    "Xe #c+ #n #t #v #m4", # F5XeF->[XeF5]+
 ]
 -1 = [
     "Xe #c- #n2 #v #m4", # [XeF5]-

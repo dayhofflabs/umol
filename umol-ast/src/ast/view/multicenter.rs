@@ -7,7 +7,7 @@ use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 
 use super::super::constraint::MulticenterBondConstraints;
 use super::super::electrons::ElectronCountsAst;
-use super::super::ids::{AtomId, MulticenterBondId};
+use super::super::id::{AtomId, MulticenterBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::multicenter::MulticenterBondAst;
 use super::super::spin::SpinStateAst;
@@ -283,7 +283,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::ids::{AtomId, MulticenterBondId};
+    use crate::ast::id::{AtomId, MulticenterBondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

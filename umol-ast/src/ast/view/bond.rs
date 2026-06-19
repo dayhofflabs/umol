@@ -6,8 +6,8 @@ use std::ops::Index;
 use umol_graph_core::{EdgeId, NodeId};
 
 use super::super::bond::BondAst;
-use super::super::constraint::{BondConstraint, BondConstraints};
-use super::super::ids::{AtomId, BondId, StereoBondId};
+use super::super::constraint::{BondConstraint, BondConstraints, RingScope};
+use super::super::id::{AtomId, BondId, StereoBondId};
 use super::super::molecule::MoleculeAst;
 use super::super::ring::{RingSet, RingView};
 use super::super::spin::SpinStateAst;
@@ -226,17 +226,24 @@ impl<'a> BondView<'a> {
         rings.iter().filter(move |v| v.bonds().contains(&id))
     }
 
-    /// Count of canonical rings (Vismara / max ring size 22) containing
-    /// this bond. Always `Lit`.
-    pub fn ring_count(&self) -> ValueAst {
-        ValueAst::Lit(self.rings().count() as i64)
+    /// Derived count of canonical rings containing this bond matching
+    /// `scope` (`All` = any, `Size(s)` = size `s`). Always `Lit`.
+    pub fn ring_membership(&self, scope: RingScope) -> ValueAst {
+        let count = match scope {
+            RingScope::All => self.rings().count(),
+            RingScope::Size(s) => self.rings().filter(|r| r.len() == s as usize).count(),
+        };
+        ValueAst::Lit(count as i64)
     }
 
-    /// Sizes of canonical rings containing this bond, in iteration order.
-    /// Multi-valued: a bond shared between fused rings yields one size per
-    /// ring.
-    pub fn ring_size(&self) -> impl Iterator<Item = usize> + 'a {
-        self.rings().map(|r| r.len())
+    /// `ring_membership(RingScope::All)`.
+    pub fn ring_count(&self) -> ValueAst {
+        self.ring_membership(RingScope::All)
+    }
+
+    /// `ring_membership(RingScope::Size(s))`.
+    pub fn ring_size_count(&self, s: u8) -> ValueAst {
+        self.ring_membership(RingScope::Size(s))
     }
 
     /// Derive topological constraints from bond properties.
@@ -301,9 +308,9 @@ mod tests {
     use crate::ast::aromatic::AromaticSystemAst;
     use crate::ast::atom::AtomAst;
     use crate::ast::bond::BondAst;
-    use crate::ast::constraint::{BondConstraint, BondConstraints, Constraints};
+    use crate::ast::constraint::{BondConstraint, BondConstraints, Constraints, RingScope};
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::ids::{AromaticSystemId, AtomId, BondId, StereoBondId};
+    use crate::ast::id::{AromaticSystemId, AtomId, BondId, StereoBondId};
     use crate::ast::ligand::{StereoLigand, StereoLigandKind};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
@@ -582,6 +589,21 @@ mod tests {
     }
 
     #[rstest]
+    #[case::all_ring_bond(BondId(0), RingScope::All, ValueAst::Lit(1))]
+    #[case::size_match(BondId(0), RingScope::Size(6), ValueAst::Lit(1))]
+    #[case::size_no_match(BondId(0), RingScope::Size(5), ValueAst::Lit(0))]
+    #[case::all_chain_bond(BondId(6), RingScope::All, ValueAst::Lit(0))]
+    #[case::size_chain_bond(BondId(6), RingScope::Size(6), ValueAst::Lit(0))]
+    fn test_bond_view_ring_membership(
+        ring_with_chain: MoleculeAst,
+        #[case] bond: BondId,
+        #[case] scope: RingScope,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.bond(bond).ring_membership(scope), expected);
+    }
+
+    #[rstest]
     #[case::ring_bond(BondId(0), ValueAst::Lit(1))]
     #[case::chain_bond(BondId(6), ValueAst::Lit(0))]
     fn test_bond_view_ring_count(
@@ -593,14 +615,15 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ring_bond(BondId(0), vec![6])]
-    #[case::chain_bond(BondId(6), vec![])]
-    fn test_bond_view_ring_size(
+    #[case::size_match(BondId(0), 6, ValueAst::Lit(1))]
+    #[case::size_no_match(BondId(0), 5, ValueAst::Lit(0))]
+    #[case::chain_bond(BondId(6), 6, ValueAst::Lit(0))]
+    fn test_bond_view_ring_size_count(
         ring_with_chain: MoleculeAst,
         #[case] bond: BondId,
-        #[case] expected: Vec<usize>,
+        #[case] size: u8,
+        #[case] expected: ValueAst,
     ) {
-        let sizes: Vec<_> = ring_with_chain.bond(bond).ring_size().collect();
-        assert_eq!(sizes, expected);
+        assert_eq!(ring_with_chain.bond(bond).ring_size_count(size), expected);
     }
 }

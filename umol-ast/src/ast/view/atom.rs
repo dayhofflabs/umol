@@ -7,9 +7,9 @@ use umol_graph_core::NodeId;
 use umol_shared::element::Element;
 
 use super::super::atom::{AtomAst, ElementAst, IsotopeMassAst};
-use super::super::constraint::AtomConstraints;
+use super::super::constraint::{AtomConstraints, RingScope};
 use super::super::electrons::ElectronCountsAst;
-use super::super::ids::{
+use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId,
 };
@@ -418,24 +418,30 @@ impl<'a> AtomView<'a> {
         rings.iter().filter(move |v| v.atoms().contains(&id))
     }
 
-    /// Count of canonical rings (Vismara / max ring size 22) containing
-    /// this atom. Always `Lit`.
-    pub fn ring_count(&self) -> ValueAst {
-        ValueAst::Lit(self.rings().count() as i64)
+    /// Derived count of canonical rings containing this atom matching
+    /// `scope` (`All` = any, `Size(s)` = size `s`). Always `Lit`.
+    pub fn ring_membership(&self, scope: RingScope) -> ValueAst {
+        let count = match scope {
+            RingScope::All => self.rings().count(),
+            RingScope::Size(s) => self.rings().filter(|r| r.len() == s as usize).count(),
+        };
+        ValueAst::Lit(count as i64)
     }
 
-    /// Sizes of canonical rings containing this atom, in iteration order.
-    /// Multi-valued: an atom in fused rings yields one size per ring.
-    pub fn ring_size(&self) -> impl Iterator<Item = usize> + 'a {
-        self.rings().map(|r| r.len())
+    /// `ring_membership(RingScope::All)`.
+    pub fn ring_count(&self) -> ValueAst {
+        self.ring_membership(RingScope::All)
+    }
+
+    /// `ring_membership(RingScope::Size(s))`.
+    pub fn ring_size_count(&self, s: u8) -> ValueAst {
+        self.ring_membership(RingScope::Size(s))
     }
 
     /// Smallest containing canonical ring size, or `None` if not in any
-    /// ring. Chemistry-classification helper; not the constraint
-    /// counterpart of `RingSize` (which uses interpretation B — "in some
-    /// ring of size n").
+    /// ring. Chemistry-classification helper, not a constraint counterpart.
     pub fn smallest_ring_size(&self) -> Option<usize> {
-        self.ring_size().min()
+        self.rings().map(|r| r.len()).min()
     }
 
     /// Count of incident bonds that participate in any canonical ring.
@@ -536,10 +542,11 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::{
         AromaticValenceAst, AtomConstraint, AtomConstraints, Constraints, MulticenterValenceAst,
+        RingScope,
     };
     use crate::ast::dative::DativeBondAst;
     use crate::ast::electrons::ElectronCountsAst;
-    use crate::ast::ids::{
+    use crate::ast::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId,
     };
@@ -1324,6 +1331,22 @@ mod tests {
     }
 
     #[rstest]
+    #[case::all_ring_atom(AtomId(0), RingScope::All, ValueAst::Lit(1))]
+    #[case::all_ring_atom_alt(AtomId(3), RingScope::All, ValueAst::Lit(1))]
+    #[case::size_match(AtomId(0), RingScope::Size(6), ValueAst::Lit(1))]
+    #[case::size_no_match(AtomId(0), RingScope::Size(5), ValueAst::Lit(0))]
+    #[case::all_chain_atom(AtomId(6), RingScope::All, ValueAst::Lit(0))]
+    #[case::size_chain_atom(AtomId(6), RingScope::Size(6), ValueAst::Lit(0))]
+    fn test_atom_view_ring_membership(
+        ring_with_chain: MoleculeAst,
+        #[case] atom: AtomId,
+        #[case] scope: RingScope,
+        #[case] expected: ValueAst,
+    ) {
+        assert_eq!(ring_with_chain.atom(atom).ring_membership(scope), expected);
+    }
+
+    #[rstest]
     #[case::ring_atom(AtomId(0), ValueAst::Lit(1))]
     #[case::ring_atom_alt(AtomId(3), ValueAst::Lit(1))]
     #[case::chain_atom(AtomId(6), ValueAst::Lit(0))]
@@ -1336,15 +1359,16 @@ mod tests {
     }
 
     #[rstest]
-    #[case::ring_atom(AtomId(0), vec![6])]
-    #[case::chain_atom(AtomId(6), vec![])]
-    fn test_atom_view_ring_size(
+    #[case::size_match(AtomId(0), 6, ValueAst::Lit(1))]
+    #[case::size_no_match(AtomId(0), 5, ValueAst::Lit(0))]
+    #[case::chain_atom(AtomId(6), 6, ValueAst::Lit(0))]
+    fn test_atom_view_ring_size_count(
         ring_with_chain: MoleculeAst,
         #[case] atom: AtomId,
-        #[case] expected: Vec<usize>,
+        #[case] size: u8,
+        #[case] expected: ValueAst,
     ) {
-        let sizes: Vec<_> = ring_with_chain.atom(atom).ring_size().collect();
-        assert_eq!(sizes, expected);
+        assert_eq!(ring_with_chain.atom(atom).ring_size_count(size), expected);
     }
 
     #[rstest]

@@ -2,7 +2,7 @@
 
 use strum::{EnumCount, EnumDiscriminants, FromRepr};
 
-use super::ids::{
+use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };

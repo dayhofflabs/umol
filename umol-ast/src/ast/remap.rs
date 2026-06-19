@@ -6,7 +6,7 @@
 
 use umol_graph_core::{EdgeId, NodeId, RelationId, Remapping};
 
-use super::ids::{
+use super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };

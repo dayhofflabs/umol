@@ -19,7 +19,7 @@
 //!   `AnyAtom`, `EndsSatisfy` — delegate an `AtomConstraint` to a role slot,
 //!   quantified over the matching participants.
 
-use super::super::ids::{
+use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };

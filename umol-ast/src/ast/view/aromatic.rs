@@ -8,7 +8,7 @@ use umol_graph_core::{NodeId, RelationId, Unordered, VarRelationSet};
 use super::super::aromatic::AromaticSystemAst;
 use super::super::constraint::AromaticSystemConstraints;
 use super::super::electrons::ElectronCountsAst;
-use super::super::ids::{AromaticSystemId, AtomId, BondId};
+use super::super::id::{AromaticSystemId, AtomId, BondId};
 use super::super::molecule::MoleculeAst;
 use super::super::ring::RingView;
 use super::super::spin::SpinStateAst;
@@ -332,7 +332,7 @@ mod tests {
     use crate::ast::bond::BondAst;
     use crate::ast::constraint::Constraints;
     use crate::ast::dative::DativeBondAst;
-    use crate::ast::ids::{AromaticSystemId, AtomId, BondId};
+    use crate::ast::id::{AromaticSystemId, AtomId, BondId};
     use crate::ast::molecule::MoleculeAst;
     use crate::ast::multicenter::MulticenterBondAst;
     use crate::ast::noncovalent::{NoncovalentBondAst, NoncovalentBondKind};

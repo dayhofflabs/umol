@@ -969,7 +969,7 @@ mod tests {
 
     use super::*;
     use crate::ast::constraint::AtomConstraint;
-    use crate::ast::ids::{
+    use crate::ast::id::{
         AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
         StereoAtomId, StereoBondId,
     };

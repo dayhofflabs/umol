@@ -18,7 +18,7 @@ use super::super::edit::{
     RemovedOverlays, RemovedStereoAtom, RemovedStereoBond, StereoAtomFieldChange, StereoAtomRef,
     StereoBondFieldChange, StereoBondRef, Undo,
 };
-use super::super::ids::{
+use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };

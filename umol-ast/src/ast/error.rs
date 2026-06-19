@@ -2,7 +2,7 @@
 
 use thiserror::Error;
 
-use super::ids::AtomId;
+use super::id::AtomId;
 
 /// Error raised by `MoleculeAst::rewrite` when the L / R / assignment
 /// triple is not self-consistent.

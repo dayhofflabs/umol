@@ -26,7 +26,7 @@ use super::super::edit::{
     RemovedAromaticSystem, RemovedAtom, RemovedBond, RemovedDativeBond, RemovedMulticenterBond,
     RemovedNoncovalentBond, RemovedOverlays, RemovedStereoAtom, RemovedStereoBond,
 };
-use super::super::ids::{
+use super::super::id::{
     AromaticSystemId, AtomId, BondId, DativeBondId, MulticenterBondId, NoncovalentBondId,
     StereoAtomId, StereoBondId,
 };
@@ -35,7 +35,7 @@ use super::super::multicenter::MulticenterBondAst;
 use super::super::noncovalent::NoncovalentBondAst;
 use super::super::remap::{IdRemapping, UndoRemapping};
 use super::super::stereo::{StereoAtomAst, StereoBondAst};
-use super::super::views::{
+use super::super::view::{
     AromaticSystemBuilderView, AromaticSystemBuilderViewMut, AtomBuilderView, AtomBuilderViewMut,
     BondBuilderView, BondBuilderViewMut, DativeBondBuilderView, DativeBondBuilderViewMut,
     MulticenterBondBuilderView, MulticenterBondBuilderViewMut, NoncovalentBondBuilderView,
