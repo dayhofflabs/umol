@@ -7,9 +7,10 @@
 use thiserror::Error;
 use umol_ast::ast::{
     aromatic_increment, AromaticValenceAst, AsLit, AtomAst, AtomConstraint, AtomConstraints,
-    AtomId, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
+    AtomId, AtomView, IsotopeMassAst, Lattice, MoleculeAst, SpinStateAst, ValueAst,
 };
 use umol_shared::element::Element;
+use umol_shared::solution::Solution;
 use umol_shared::spin::{SpinMultiplicity, SpinState};
 
 use crate::ops::model::CountsModel;
@@ -29,6 +30,15 @@ pub enum CountsError {
     UndeterminedAromaticValence,
     #[error("undetermined element")]
     UndeterminedElement,
+}
+
+/// A ground atom that no valence-table state admits.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[error("no valence-table state: element {element}, charge {charge}, valence {valence}")]
+pub struct CountsMismatch {
+    pub element: Element,
+    pub charge: i64,
+    pub valence: i64,
 }
 
 impl<'a> CountsValence<'a> {
@@ -99,6 +109,34 @@ impl<'a> CountsValence<'a> {
         let derived = self.derive_fields(ast, valence, accepted_pairs, is_aromatic)?;
         *ast = ast.meet(&derived).ok_or(CountsError::NoMatch)?;
         Ok(())
+    }
+
+    /// Read-only conformance check for a resolved atom: `Determined` if some
+    /// valence-table state admits it, `Contradictory` if none does,
+    /// `Underdetermined` if the atom is not ground. Reuses `derive_fields`.
+    /// Unlike `resolve_atom` it does not skip ground atoms — that skip is why a
+    /// table-violating ground atom otherwise passes resolution unchecked.
+    pub fn conforms_atom(&self, atom: &AtomView<'_>) -> Solution<(), CountsMismatch> {
+        if !atom.is_ground() {
+            return Solution::Underdetermined(());
+        }
+        let Some(element) = atom.element().as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let charge = atom.charge().as_lit_or(0);
+        let valence = atom.valence().as_lit_or(0);
+        let accepted_pairs = atom.accepted_pairs().as_lit_or(0);
+        let is_aromatic = atom.is_in_aromatic_system()
+            || atom.neighbors().any(|n| n.bond().constraints().aromatic())
+            || atom.constraints().aromatic_valence().is_aromatic();
+        match self.derive_fields(atom.ast, valence, accepted_pairs, is_aromatic) {
+            Ok(_) => Solution::Determined(()),
+            Err(_) => Solution::Contradictory(CountsMismatch {
+                element,
+                charge,
+                valence,
+            }),
+        }
     }
 
     fn derive_fields(
@@ -316,6 +354,7 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::rstest;
+    use umol_ast::ast::Constraints;
     use umol_ast::{atom, mol};
 
     use super::*;
@@ -406,5 +445,38 @@ mod tests {
         };
         let resolver = CountsValence::new(&model);
         assert_eq!(resolver.resolve_atom(&mut atom), expected);
+    }
+
+    #[rstest]
+    #[case::methane_conforms("C#i=#c0#h4#n0#u0#s#v0#a!", Solution::Determined(()))]
+    #[case::excess_lone_pairs(
+        "C#i=#c0#h4#n2#u0#s#v0#a!",
+        Solution::Contradictory(CountsMismatch {
+            element: Element::C,
+            charge: 0,
+            valence: 0,
+        })
+    )]
+    #[case::not_ground("C", Solution::Underdetermined(()))]
+    fn test_counts_valence_conforms_atom(
+        #[case] input: &str,
+        #[case] expected: Solution<(), CountsMismatch>,
+    ) {
+        let model = CountsModel {
+            table: Cow::Borrowed(ValenceTable::default_table()),
+        };
+        let resolver = CountsValence::new(&model);
+        let molecule = MoleculeAst::from_parts(
+            vec![atom!(input)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Vec::new(),
+            Vec::new(),
+            Constraints::default(),
+        );
+        assert_eq!(resolver.conforms_atom(&molecule.atom(AtomId(0))), expected);
     }
 }

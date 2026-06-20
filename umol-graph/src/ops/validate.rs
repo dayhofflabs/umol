@@ -17,11 +17,15 @@ pub mod aromaticity;
 pub mod stereo;
 pub mod invariant;
 pub mod spin;
+pub mod valence;
 
 pub use aromaticity::{AromaticityConformanceValidator, AromaticityValidatorContradiction};
 pub use stereo::{StereoConformanceValidator, StereoValidatorContradiction, StereoValidatorError};
 pub use invariant::{ValenceInvariantsError, ValenceInvariantsValidator};
 pub use spin::{SpinInvariantsContradiction, SpinInvariantsError, SpinInvariantsValidator};
+pub use valence::{
+    ValenceConformanceContradiction, ValenceConformanceError, ValenceConformanceValidator,
+};
 use thiserror::Error;
 use umol_ast::ast::{
     AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidator,

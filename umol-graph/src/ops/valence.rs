@@ -1,5 +1,6 @@
-//! Valence-resolution algorithm primitives. The dispatch wrapper
-//! `ValenceResolver` lives in `ops/resolver/valence.rs`.
+//! Valence algorithm primitives. The dispatch wrappers `ValenceResolver` and
+//! `ValenceConformanceValidator` live in `ops/resolve/valence.rs` and
+//! `ops/validate/valence.rs`.
 
 pub mod atom_typing;
 pub mod compare;
@@ -7,7 +8,7 @@ pub mod counts;
 pub mod registry;
 pub mod table;
 
-pub use atom_typing::{AtomTypingError, AtomTypingValence};
-pub use counts::{CountsError, CountsValence};
+pub use atom_typing::{AtomTypingError, AtomTypingMismatch, AtomTypingValence};
+pub use counts::{CountsError, CountsMismatch, CountsValence};
 pub use registry::AtomTypeRegistry;
 pub use table::{ValenceEntry, ValenceTable};

@@ -232,11 +232,15 @@ post-rename names once a rename has happened in an earlier phase.
      `AromaticityValidator`→`AromaticityConformanceValidator`; `StereoValidator`→`StereoConformanceValidator`.
      Their `…ValidatorContradiction`/`…ValidatorError` names left as-is (doc-065 error survey).
 
-5. **umol-graph — tier-3 valence conformance.**
-   - `ops/valence/counts.rs`, `ops/valence/atom_typing.rs`: add read-only `conforms_atom`
-     (+ `CountsMismatch` / `AtomTypingMismatch`) reusing `derive_fields` / `registry.lookup`.
+5. **umol-graph — tier-3 valence conformance.** *(done)*
+   - `ops/valence/counts.rs`, `ops/valence/atom_typing.rs`: added read-only `conforms_atom(&AtomView)`
+     (+ `CountsMismatch` / `AtomTypingMismatch`) reusing `derive_fields` / `registry.lookup`. Takes
+     `AtomView` (not `AtomAst`) since atom-typing needs `derive_constraints` (topology). Guards
+     non-ground → `Underdetermined`; `Ok`/match → `Determined`; `Err`/no-match → `Contradictory`.
    - `ops/validate/valence.rs` (new): `ValenceConformanceValidator<'a>` enum (AtomTyping | Counts),
-     `new(&'a ValenceModel)` mirroring `ValenceResolver::new`, `validate` folding `conforms_atom` over atoms.
+     `new(&'a ValenceModel)` mirroring `ValenceResolver::new`, `validate` folding `conforms_atom` over
+     atoms (first `Contradictory` wins, else any `Underdetermined`). `ValenceConformanceContradiction`
+     (`#[from]` the two mismatches) + empty `ValenceConformanceError`.
 
 6. **umol-graph — compose `Validator`.**
    - `ops/validate.rs`: `Validator<'a>` with seven members (tier-1 from umol-ast, tier-2 invariants, tier-3

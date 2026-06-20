@@ -2,8 +2,9 @@
 //! `AtomAst` patterns keyed by element and (optionally) charge.
 
 use thiserror::Error;
-use umol_ast::ast::{AsLit, AtomAst, AtomId, Lattice, MoleculeAst};
+use umol_ast::ast::{AsLit, AtomAst, AtomId, AtomView, Lattice, MoleculeAst};
 use umol_shared::element::Element;
+use umol_shared::solution::Solution;
 
 use super::compare::compare_valence_preference;
 use crate::ops::model::AtomTypingModel;
@@ -21,6 +22,14 @@ pub enum AtomTypingError {
         element: Element,
         charge: Option<i8>,
     },
+}
+
+/// A ground atom that no registry pattern admits.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[error("no atom-typing pattern: element {element}, charge {charge:?}")]
+pub struct AtomTypingMismatch {
+    pub element: Element,
+    pub charge: Option<i8>,
 }
 
 impl<'a> AtomTypingValence<'a> {
@@ -79,6 +88,32 @@ impl<'a> AtomTypingValence<'a> {
         }
         Ok(())
     }
+
+    /// Read-only conformance check for a resolved atom: `Determined` if some
+    /// registry pattern admits it, `Contradictory` if none does,
+    /// `Underdetermined` if the atom is not ground.
+    pub fn conforms_atom(&self, atom: &AtomView<'_>) -> Solution<(), AtomTypingMismatch> {
+        if !atom.is_ground() {
+            return Solution::Underdetermined(());
+        }
+        let Some(element) = atom.element().as_lit() else {
+            return Solution::Underdetermined(());
+        };
+        let constraints = atom.derive_constraints();
+        let pattern = atom.ast.clone().with_constraints(constraints);
+        let charge = pattern.charge.as_lit().map(|n| n as i8);
+        let conforms = self
+            .model
+            .registry
+            .lookup(element, charge)
+            .iter()
+            .any(|entry| pattern.matches(entry));
+        if conforms {
+            Solution::Determined(())
+        } else {
+            Solution::Contradictory(AtomTypingMismatch { element, charge })
+        }
+    }
 }
 
 #[cfg(test)]
@@ -86,7 +121,8 @@ mod tests {
     use std::borrow::Cow;
 
     use rstest::*;
-    use umol_ast::{mol, mol_ground};
+    use umol_ast::ast::Constraints;
+    use umol_ast::{atom, mol, mol_ground};
 
     use super::*;
     use crate::ops::valence::AtomTypeRegistry;
@@ -122,5 +158,37 @@ mod tests {
                 charge: None,
             }
         );
+    }
+
+    #[rstest]
+    #[case::carbon_conforms("C#i=#c0#h4#n0#u0#s#v0#a!", Solution::Determined(()))]
+    #[case::wrong_carbon(
+        "C#i=#c0#h3#n0#u#s2#v0#a!",
+        Solution::Contradictory(AtomTypingMismatch {
+            element: Element::C,
+            charge: Some(0),
+        })
+    )]
+    #[case::not_ground("C", Solution::Underdetermined(()))]
+    fn test_atom_typing_valence_conforms_atom(
+        #[case] input: &str,
+        #[case] expected: Solution<(), AtomTypingMismatch>,
+    ) {
+        let model = AtomTypingModel {
+            registry: Cow::Owned(registry!["C#c0#h4#n0#u0#s#v0#a!"]),
+        };
+        let resolver = AtomTypingValence::new(&model);
+        let molecule = MoleculeAst::from_parts(
+            vec![atom!(input)],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            Vec::new(),
+            Vec::new(),
+            Constraints::default(),
+        );
+        assert_eq!(resolver.conforms_atom(&molecule.atom(AtomId(0))), expected);
     }
 }
