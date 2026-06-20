@@ -26,9 +26,9 @@ use umol_ast::ast::{
     ValueAst,
 };
 use umol_shared::element::Element;
+use umol_shared::solution::Solution;
 
 use crate::ops::model::AromaticityModel;
-use umol_shared::solution::Solution;
 
 /// Chemistry-level rejection: the algorithm decided the input doesn't satisfy
 /// the model. Carried inside `Solution::Contradictory`.
@@ -72,17 +72,13 @@ impl AromaticityPerception {
         }
     }
 
-    /// Find candidate aromatic systems via the configured algorithm. Takes
-    /// `&mut MoleculeAst` only so that the AST's ring cache can populate; no
-    /// chemistry mutation happens here. The closure `electrons_at` returns
-    /// each atom's π contribution if the atom is aromatic-eligible, else
-    /// `None`. Resolver / validator callers read `#a` from the atom's
-    /// `aromatic_valence()` constraint; the aromatizer derives π from bond
-    /// orders.
+    /// Find candidate aromatic systems via the configured algorithm.
+    /// The closure `electrons_at` returns each atom's π contribution if the
+    /// atom is aromatic-eligible, else `None`.
     #[allow(clippy::complexity)]
     pub fn find_systems<F>(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &MoleculeAst,
         electrons_at: F,
     ) -> Result<
         Solution<Vec<(Vec<AtomId>, AromaticSystemAst)>, AromaticityContradiction>,
@@ -125,9 +121,7 @@ impl AromaticityPerception {
         Ok(Solution::Determined(sorted))
     }
 
-    /// Add perceived systems to the AST. Insert system entries, apply
-    /// pattern-match charge equalization, mark induced bonds aromatic.
-    /// Mutates `ast`.
+    /// Add perceived systems to the AST.
     pub fn add_systems(
         &self,
         ast: &mut MoleculeAst,
@@ -451,7 +445,7 @@ mod tests {
         #[case] aromatic_valences: Vec<i64>,
     ) {
         let outcome = any_hueckel()
-            .find_systems(&mut ast, |v| match v.ast.constraints.aromatic_valence() {
+            .find_systems(&ast, |v| match v.ast.constraints.aromatic_valence() {
                 AromaticValenceAst::Aromatic(ValueAst::Lit(n)) if n >= 0 => Some(n as u8),
                 _ => None,
             })

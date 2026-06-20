@@ -1,7 +1,7 @@
 # Validator architecture — validation tiers and model-carrying wiring
 
-Status: **Active / design + impl plan.** Pseudo code agreed; open names and one layering
-question must close before coding. No code authorized yet.
+Status: **Completed**
+Raise auto-wiring of tier-1 is deferred to the error-handling pass (doc 065) — see Remaining.
 Date: 2026-06-20.
 Trigger: wiring the stereo validator (doc 104 Phase C / doc 111 C4c) surfaced that the composite
 `Validator` excludes the model-carrying validators, nothing invokes validation in production, and
@@ -242,18 +242,26 @@ post-rename names once a rename has happened in an earlier phase.
      atoms (first `Contradictory` wins, else any `Underdetermined`). `ValenceConformanceContradiction`
      (`#[from]` the two mismatches) + empty `ValenceConformanceError`.
 
-6. **umol-graph — compose `Validator`.**
-   - `ops/validate.rs`: `Validator<'a>` with seven members (tier-1 from umol-ast, tier-2 invariants, tier-3
-     conformance); `new(&'a ChemistryModel)`; `validate_integrity` / `validate_invariants` /
-     `validate_conformance` / `validate`; `validate_atom` unchanged. Add `#[from]` variants to
-     `ValidatorContradiction` / `ValidatorError` for the three tier-3 sub-validators.
+6. **umol-graph — compose `Validator`.** *(done)*
+   - `ops/validate.rs`: `Validator<'a>` (drops `Copy`/`Default`) with seven members (tier-1 from umol-ast,
+     tier-2 invariants, tier-3 conformance); `new(&'a ChemistryModel)`; `validate_integrity` /
+     `validate_invariants` / `validate_conformance` / `validate` (composes the three tiers) / `validate_atom`
+     (unchanged). `ValidatorContradiction` / `ValidatorError` gained `#[from]` variants for the three
+     tier-3 sub-validators (`AromaticityError` for aromaticity's error).
+   - **Aromaticity validator made read-only.** `AromaticityPerception::find_systems` and
+     `AromaticityConformanceValidator::validate` took `&mut MoleculeAst` with a doc comment blaming a
+     "ring cache" — but `rings_with` is `&self`/uncached and the canonical `rings()` cache is a `OnceLock`
+     (`&self`), and all `find_from_rings` take `&MoleculeAst`. The `&mut` was gratuitous; dropped it, so the
+     whole composite is uniformly read-only (matching the "validators never mutate" design). `&mut` callers
+     (resolver, aromatizer) reborrow to `&` unchanged.
 
-7. **tests.**
-   - new: `conforms_atom` (counts + atom-typing; determined / contradictory / underdetermined);
-     `ValenceConformanceValidator`; composite per-tier (`validate_integrity` / `_invariants` /
-     `_conformance`) and full `validate`; tier-1 enforced on the DSL and TableIR raise paths while
-     `from_parts` stays open.
-   - update: `Validator::new()` → `new(&ChemistryModel::default())`; references to renamed types/modules.
+7. **tests.** *(done, folded into steps 5–6)*
+   - `conforms_atom` (counts + atom-typing; determined / contradictory / underdetermined);
+     `ValenceConformanceValidator` (both models); composite `validate` (ground → Determined, non-ground →
+     Underdetermined) + per-tier (`validate_integrity` / `_invariants` / `_conformance`); `validate_atom`
+     retained. The Determined fixture uses a resolved (`mol_ground!`) molecule, since tier-3 conformance
+     requires ground atoms — the prior hand-built non-ground `ethane()` fixture was replaced.
+   - raise-path tier-1 tests deferred with the raise auto-wiring (step 2, error-handling pass).
 
 ## Remaining (error-handling pass — doc 065)
 - umol-graph error/contradiction type survey.

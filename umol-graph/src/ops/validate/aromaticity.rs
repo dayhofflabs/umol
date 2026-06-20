@@ -43,7 +43,7 @@ impl AromaticityConformanceValidator {
 
     pub fn validate(
         &self,
-        ast: &mut MoleculeAst,
+        ast: &MoleculeAst,
     ) -> Result<Solution<(), AromaticityValidatorContradiction>, AromaticityError> {
         let outcome =
             self.perception
@@ -109,24 +109,7 @@ mod tests {
     use crate::ops::model::{ElementScope, RingLimits};
     use crate::ops::resolve::aromaticity::AromaticityResolver;
 
-    fn aromatic(element: Element, pi: i64) -> AtomAst {
-        let mut atom = AtomAst::from_element(element);
-        atom.charge = ValueAst::Lit(0);
-        atom.spin = SpinStateAst::closed_shell();
-        atom.constraints.add(AtomConstraint::AromaticValence(
-            AromaticValenceAst::Aromatic(ValueAst::Lit(pi)),
-        ));
-        atom
-    }
-
-    fn benzene() -> MoleculeAst {
-        let atoms: Vec<AtomAst> = (0..6).map(|_| aromatic(Element::C, 1)).collect();
-        let bonds: Vec<_> = (0..6)
-            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
-            .collect();
-        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
-    }
-
+    #[fixture]
     fn carbon_only() -> AromaticityModel {
         AromaticityModel::HueckelRule {
             scope: ElementScope::AllowList(vec![Element::C]),
@@ -134,30 +117,55 @@ mod tests {
         }
     }
 
-    #[rstest]
-    fn test_aromaticity_validator_benzene_passes() {
-        let mut ast = benzene();
-        AromaticityResolver::new(&carbon_only())
-            .resolve(&mut ast)
-            .unwrap();
-        let solution = AromaticityConformanceValidator::new(&carbon_only())
-            .validate(&mut ast)
-            .unwrap();
-        assert!(matches!(solution, Solution::Determined(())));
+    #[fixture]
+    fn benzene() -> MoleculeAst {
+        let atoms: Vec<AtomAst> = (0..6)
+            .map(|_| {
+                let mut atom = AtomAst::from_element(Element::C);
+                atom.charge = ValueAst::Lit(0);
+                atom.spin = SpinStateAst::closed_shell();
+                atom.constraints.add(AtomConstraint::AromaticValence(
+                    AromaticValenceAst::Aromatic(ValueAst::Lit(1)),
+                ));
+                atom
+            })
+            .collect();
+        let bonds: Vec<_> = (0..6)
+            .map(|i| (AtomId(i), AtomId((i + 1) % 6), BondAst::from_order(1)))
+            .collect();
+        MoleculeAst::from_atoms_and_bonds(atoms, bonds)
     }
 
     #[rstest]
-    fn test_aromaticity_validator_missing_system_contradicts() {
-        let mut ast = benzene();
-        let solution = AromaticityConformanceValidator::new(&carbon_only())
-            .validate(&mut ast)
+    fn test_aromaticity_conformance_validator_validate(
+        benzene: MoleculeAst,
+        carbon_only: AromaticityModel,
+    ) {
+        let mut ast = benzene;
+        AromaticityResolver::new(&carbon_only)
+            .resolve(&mut ast)
             .unwrap();
-        assert!(matches!(
-            solution,
+        assert_eq!(
+            AromaticityConformanceValidator::new(&carbon_only)
+                .validate(&ast)
+                .unwrap(),
+            Solution::Determined(())
+        );
+    }
+
+    #[rstest]
+    fn test_aromaticity_conformance_validator_validate_error(
+        benzene: MoleculeAst,
+        carbon_only: AromaticityModel,
+    ) {
+        assert_eq!(
+            AromaticityConformanceValidator::new(&carbon_only)
+                .validate(&benzene)
+                .unwrap(),
             Solution::Contradictory(AromaticityValidatorContradiction::SystemCountMismatch {
                 ast_count: 0,
                 perception_count: 1,
             })
-        ));
+        );
     }
 }

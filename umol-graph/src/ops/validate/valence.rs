@@ -9,6 +9,7 @@ use umol_shared::solution::Solution;
 use crate::ops::model::ValenceModel;
 use crate::ops::valence::{AtomTypingMismatch, AtomTypingValence, CountsMismatch, CountsValence};
 
+#[derive(Clone, Debug)]
 pub enum ValenceConformanceValidator<'a> {
     AtomTyping(AtomTypingValence<'a>),
     Counts(CountsValence<'a>),
@@ -73,21 +74,13 @@ mod tests {
     use crate::ops::model::{AtomTypingModel, CountsModel};
     use crate::ops::valence::{AtomTypeRegistry, ValenceTable};
 
-    fn counts_model() -> ValenceModel {
-        ValenceModel::Counts(CountsModel {
-            table: Cow::Borrowed(ValenceTable::default_table()),
-        })
-    }
-
-    fn atom_typing_model() -> ValenceModel {
-        ValenceModel::AtomTyping(AtomTypingModel {
-            registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
-        })
-    }
-
     #[rstest]
-    #[case::counts(counts_model())]
-    #[case::atom_typing(atom_typing_model())]
+    #[case::counts(ValenceModel::Counts(CountsModel {
+        table: Cow::Borrowed(ValenceTable::default_table()),
+    }))]
+    #[case::atom_typing(ValenceModel::AtomTyping(AtomTypingModel {
+        registry: Cow::Borrowed(AtomTypeRegistry::default_registry()),
+    }))]
     fn test_valence_conformance_validator_validate(#[case] model: ValenceModel) {
         let molecule = mol_ground!(r#"{:atoms ["C #h4"] :bonds []}"#);
         let result = ValenceConformanceValidator::new(&model)

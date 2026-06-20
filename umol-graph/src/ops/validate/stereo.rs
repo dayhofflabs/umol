@@ -278,7 +278,10 @@ mod tests {
                 .add(StereoAtomConstraint::Stereogenicity(StereogenicityAst::Lit(Stereogenicity::Stereogenic)));
         }) as fn(&mut MoleculeAst)
     )]
-    fn test_stereo_validator_validate(#[case] dsl: &str, #[case] mutate: fn(&mut MoleculeAst)) {
+    fn test_stereo_conformance_validator_validate(
+        #[case] dsl: &str,
+        #[case] mutate: fn(&mut MoleculeAst),
+    ) {
         let mut ast = mol_ground!(dsl);
         mutate(&mut ast);
         let solution = StereoConformanceValidator::new(&StereoModel::default())
@@ -372,7 +375,7 @@ mod tests {
             },
         }
     )]
-    fn test_stereo_validator_validate_error(
+    fn test_stereo_conformance_validator_validate_error(
         #[case] dsl: &str,
         #[case] mutate: fn(&mut MoleculeAst),
         #[case] expected: StereoValidatorContradiction,

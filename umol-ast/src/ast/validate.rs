@@ -135,94 +135,83 @@ mod tests {
     use super::*;
 
     #[rstest]
-    fn test_entity_structure_validator_aromatic_length_mismatch() {
-        let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-        ];
-        let aromatic = vec![(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-            AromaticSystemAst::from_counts(vec![1, 1]),
-        )];
+    fn test_entity_structure_validator_validate() {
         let ast = MoleculeAst::from_parts(
-            atoms,
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
             vec![],
             vec![],
-            aromatic,
+            vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())],
             vec![],
             vec![],
             Vec::new(),
             Vec::new(),
             Constraints::default(),
         );
-        let v = EntityStructureValidator;
-        let result = v.validate(ast).unwrap();
-        assert!(matches!(
-            result,
-            Solution::Contradictory(
-                EntityStructureContradiction::AromaticSystemElectronsLengthMismatch {
-                    electrons_len: 2,
-                    atoms_len: 3,
-                }
-            )
-        ));
+        assert_eq!(
+            EntityStructureValidator.validate(ast).unwrap(),
+            Solution::Determined(())
+        );
     }
 
     #[rstest]
-    fn test_entity_structure_validator_multicenter_length_mismatch() {
-        let atoms = vec![
-            AtomAst::from_element(Element::B),
-            AtomAst::from_element(Element::B),
-            AtomAst::from_element(Element::H),
-        ];
-        let multicenter = vec![(
-            vec![AtomId(0), AtomId(1), AtomId(2)],
-            MulticenterBondAst::from_counts(vec![1]),
-        )];
-        let ast = MoleculeAst::from_parts(
-            atoms,
+    #[case::aromatic_electrons_length(
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+                AtomAst::from_element(Element::C),
+            ],
             vec![],
             vec![],
-            vec![],
-            multicenter,
-            vec![],
-            Vec::new(),
-            Vec::new(),
-            Constraints::default(),
-        );
-        let v = EntityStructureValidator;
-        let result = v.validate(ast).unwrap();
-        assert!(matches!(
-            result,
-            Solution::Contradictory(
-                EntityStructureContradiction::MulticenterElectronsLengthMismatch {
-                    electrons_len: 1,
-                    atoms_len: 3,
-                }
-            )
-        ));
-    }
-
-    #[rstest]
-    fn test_entity_structure_validator_empty_electrons_passes() {
-        let atoms = vec![
-            AtomAst::from_element(Element::C),
-            AtomAst::from_element(Element::C),
-        ];
-        let aromatic = vec![(vec![AtomId(0), AtomId(1)], AromaticSystemAst::default())];
-        let ast = MoleculeAst::from_parts(
-            atoms,
-            vec![],
-            vec![],
-            aromatic,
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                AromaticSystemAst::from_counts(vec![1, 1]),
+            )],
             vec![],
             vec![],
             Vec::new(),
             Vec::new(),
             Constraints::default(),
+        ),
+        EntityStructureContradiction::AromaticSystemElectronsLengthMismatch {
+            electrons_len: 2,
+            atoms_len: 3,
+        }
+    )]
+    #[case::multicenter_electrons_length(
+        MoleculeAst::from_parts(
+            vec![
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::B),
+                AtomAst::from_element(Element::H),
+            ],
+            vec![],
+            vec![],
+            vec![],
+            vec![(
+                vec![AtomId(0), AtomId(1), AtomId(2)],
+                MulticenterBondAst::from_counts(vec![1]),
+            )],
+            vec![],
+            Vec::new(),
+            Vec::new(),
+            Constraints::default(),
+        ),
+        EntityStructureContradiction::MulticenterElectronsLengthMismatch {
+            electrons_len: 1,
+            atoms_len: 3,
+        }
+    )]
+    fn test_entity_structure_validator_validate_error(
+        #[case] ast: MoleculeAst,
+        #[case] expected: EntityStructureContradiction,
+    ) {
+        assert_eq!(
+            EntityStructureValidator.validate(ast).unwrap(),
+            Solution::Contradictory(expected)
         );
-        let v = EntityStructureValidator;
-        assert!(matches!(v.validate(ast).unwrap(), Solution::Determined(())));
     }
 }
