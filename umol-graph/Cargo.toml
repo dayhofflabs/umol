@@ -43,7 +43,7 @@ name = "classify_smiles_strings"
 bench = false
 
 [[bin]]
-name = "stereo"
+name = "verify_stereo"
 bench = false
 
 [features]

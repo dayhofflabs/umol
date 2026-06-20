@@ -1,6 +1,6 @@
 # Stereochemistry Phase C — detailed implementation plan
 
-Status: **Active / implementation plan.** Design source:
+Status: **Complete.** All subphases C1–C4 done (C4f conformance suite closed out). Design source:
 [104-stereochemistry-implementation-plan-2026-05-31.md](104-stereochemistry-implementation-plan-2026-05-31.md)
 §C (perception → stereo elements: ligand symmetry, topicity, stereogenicity, fluxionality). This doc is the
 per-crate, per-module **API** breakdown; implementation bodies are settled at coding time. No code is written
@@ -1043,18 +1043,52 @@ deferred together with C4b's.
 **Iterations.** proptest defaults to 256 cases; not hardcoded — raise globally via `PROPTEST_CASES=N` or
 per-block `#![proptest_config(ProptestConfig::with_cases(N))]` for a rigorous CI pass.
 
-### C4f · conformance suite
+### C4f · conformance suite (stereo resolution) — **Done**
 
-Extend the **feature-gated** conformance suite (`umol-graph`, `--features conformance`, the resolution test)
-with stereo — the bulk of Phase C's verification:
+Extend the feature-gated resolution conformance suite (`umol-graph`, `--features conformance`,
+`tests/resolution`) with stereo. **Scope: resolution of inline stereo configurations only** — per-atom
+`#T` (tetrahedral) and per-bond `#C` (cis/trans) cosets.
 
-- **OpenSMILES arrangements** (docs 038/047): the `@TH`/`@SP`/`@TB`/`@OH` numbering cases (the `class.rs`
-  reindex pairs, scaled to the full corpus) through parse → resolve → coset.
-- **Constraints:** `#p`/`#o`/`#g`/`#f` parse + resolve + validate on reference molecules; topicity /
-  stereogenicity on known cases (CH₂Cl₂, ethanol's prochiral CH₂, 1,2- vs 1,1-dichloroethene, allene);
-  the achiral `'`-gate rejection; resolver idempotency (re-resolve is a no-op); `InconsistencyPolicy`
-  outcomes.
-- **Highly-symmetric integration** (doc 110): cubane, o-carborane `B10C2H12`, Cu-phthalocyanine, `C70` —
-  orbit/topicity/symmetry-number correctness.
-- **End-to-end round-trip:** parse (`F[C@H](Cl)Br`, `F/C=C/F`, …) → resolve → serialize `:stereo-*` →
-  reparse → equal.
+**Inputs are DSL** (`.edn` under `tests/resolution/data/stereo_tetrahedral/` and `.../stereo_cis_trans/`),
+not SMILES — the suite tests resolution, not the SMILES parser. Each input comes from a hand-picked
+SMILES via the `umol-graph` `verify_stereo` binary (parse the SMILES to an AST, then lower the AST to
+molecule DSL with **zeroed** defaults — the compact form, nothing elided that the harness can't restore;
+no resolve); the SMILES is drawn and verified by name in ChemDraw, then the lowered DSL is committed as
+the input. Each `.edn` is `{:config-overrides {:atom {:aromatic-valence :not-aromatic :charge :zero}}
+:input <molecule-DSL>}`: the override pins charge and aromatic valence (the fields
+`MoleculeDefaults::default()` — the harness's input-raise config — leaves undetermined), making
+resolution well-posed; implicit hydrogens are deliberately *not* pinned, so the resolver fills them
+(e.g. a bare `C` methyl resolves to `C#h3#v`). Atoms with a non-zero charge or aromatic flag carry it
+inline (≠ zeroed → rendered) and are unaffected by the override. The harness raises each input to an AST,
+runs the atom-typing **and** counts resolvers, lowers the resolved AST to DSL, and `insta`-snapshots it
+— so the snapshot records the resolved `#T` / `#C` cosets, reviewed against the ChemDraw structures.
+
+Coverage (one DSL input each; `verify_stereo` SMILES table drives generation):
+- **Tetrahedral (`#T`)** — different arrangements, multiple/ring/heteroatom stereocenters, varied
+  stereoatoms: R / S / unknown CFClBrI; L-alanine (heavy atoms + explicit α-H); (R)-butan-2-ol
+  (implicit H); methyl ethyl sulfoxide MeEtS⁺O⁻ (charge + implicit lone pair on the stereoatom); methyl
+  ethyl propyl isopropyl phosphonium and the analogous **ammonium** (charged P / N stereoatoms); the
+  2,3-dichlorobutane set (the (R,R)/(S,S) chiral pair + the (R,S) meso — note (2R,3S)≡(2S,3R) is a
+  single meso compound); **2,3,4-trichloropentane** (pseudoasymmetric C3, r/s); methyloxirane and
+  *trans*- and *cis*-1,2-dichlorocyclohexane (ring stereocenters; cis is the ring meso); *trans*- and
+  *cis*-decalin (ring-fusion / bridgehead stereocenters); α-D-glucopyranose (anomeric / cyclic-sugar
+  center); (R)-1-phenylethanol (stereocenter × aromaticity); 2,3-dichloropentane (one determined + one
+  undetermined center); ascorbic acid.
+- **Cis/trans (`#C`)** — implicit-H and lone-pair sides, rings, multiple/undetermined bonds: Z / E /
+  unknown 2,3-difluorobut-2-ene; (Z)-but-2-ene (implicit H both sides); (Z)-2-fluorobut-2-ene (implicit
+  H one side); E / Z azomethane (lone pair both sides); (Z)-butanone oxime (lone pair one side);
+  (2E,4E)- and (2E)-hexa-2,4-diene (conjugated; two bonds, one with an undetermined partner);
+  cyclohexene (ring, single geometry); (Z)- and (E)-cyclooctene (ring).
+- **Combined (`#T` + `#C`)** — (2R,3E)-pent-3-en-2-ol: a stereocenter and a stereo double bond in one
+  molecule, to confirm the two stereo kinds resolve independently.
+
+(Out of `#T`/`#C` representation: enantiotopic / diastereotopic hydrogens — e.g. ethanol's CH₂ or
+propene's terminal CH₂ — are *not* stereocenters or stereo bonds; their prochirality is topicity /
+stereogenicity, `#o`/`#g`, which are stereo element constraints outside resolution.)
+
+**Outcome.** 35 inputs committed — 22 `stereo_tetrahedral` + 13 `stereo_cis_trans` — each generated by
+`verify_stereo write` from the SMILES table and snapshotted. The counts resolver resolves all 35 and
+perceives the inline cosets into molecule-scope relations: `#T` → `:stereo-atoms [{:ligands … :site … :type
+:cw|:ccw}]` (lone-pair ligands as `[:lp i]`), `#C` → `:stereo-bonds [{:ligands … :type :z|:e}]` (implicit-H
+ligands as `[:h i]`); undetermined centers/bonds carry no relation. Atom-typing reports underdetermined
+where its model can't pin valence counts (expected). Suite: **652 passing** (`--features conformance`).

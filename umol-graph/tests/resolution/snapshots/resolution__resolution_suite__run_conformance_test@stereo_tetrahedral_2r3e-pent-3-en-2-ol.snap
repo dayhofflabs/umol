@@ -1,0 +1,13 @@
+---
+source: umol-graph/tests/resolution/mod.rs
+expression: "results.to_edn().to_string_with(&FormatConfig::default())"
+---
+{
+  :atom-typing {:error "resolution underdetermined" :success false}
+  :counts {
+    :output {
+      :atoms ["C#h3#v" "C#h#v3#T1" "O#h#n2#v" "C#h#v3" "C#h#v3" "C#h3#v"]
+      :bonds [[0 1 :single] [1 2 :single] [1 3 :single] [3 4 "2#C1"] [4 5 :single]]
+      :stereo-atoms [{:ligands [0 2 3 [:h 1]] :site 1 :type :cw}]
+      :stereo-bonds [{:ligands [1 [:h 3] 5 [:h 4]] :site 3 :type :e}]}
+    :success true}}

@@ -112,7 +112,7 @@
 | [108-mcs-algorithms-2026-06-09.md](108-mcs-algorithms-2026-06-09.md)                                                               | Completed     | 2026-06-09   |
 | [109-permutation-infrastructure-2026-06-09.md](109-permutation-infrastructure-2026-06-09.md)                                       | Informational | 2026-06-09   |
 | [110-molecular-symmetry-structure-2026-06-11.md](110-molecular-symmetry-structure-2026-06-11.md)                                   | Active        | 2026-06-11   |
-| [111-stereo-phase-c-impl-2026-06-11.md](111-stereo-phase-c-impl-2026-06-11.md)                                                     | Active        | 2026-06-11   |
+| [111-stereo-phase-c-impl-2026-06-11.md](111-stereo-phase-c-impl-2026-06-11.md)                                                     | Completed     | 2026-06-11   |
 | [112-ctfile-winnow-migration-2026-06-13.md](112-ctfile-winnow-migration-2026-06-13.md)                                             | Active        | 2026-06-13   |
 | [113-ast-canonical-equality-and-lattice-2026-06-14.md](113-ast-canonical-equality-and-lattice-2026-06-14.md)                       | Completed     | 2026-06-14   |
 | [114-atom-bond-interning-2026-06-16.md](114-atom-bond-interning-2026-06-16.md)                                                     | Active        | 2026-06-16   |
