@@ -6,5 +6,6 @@ pub mod error;
 pub mod isotope;
 mod isotope_data;
 pub mod occupation;
+pub mod solution;
 pub mod spin;
 pub mod units;

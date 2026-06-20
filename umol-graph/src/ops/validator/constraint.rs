@@ -8,7 +8,7 @@
 use thiserror::Error;
 use umol_ast::ast::MoleculeAst;
 
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ConstraintValidator;
@@ -26,7 +26,8 @@ impl ConstraintValidator {
     ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
         // TODO: stub. Per-relation constraint evaluators not yet implemented.
         // Aromatic systems: `ElectronCount(#e) == sum(electrons) - system.charge`.
-        // Multicenter bonds: analogous rule once settled.
+        // Multicenter bonds: analogous rule.
+        // Rings: sum of ring size counts == total ring count.
         // Molecule-scope constraints: `:connected`, `:total-charge`, etc.
         Ok(Solution::Determined(()))
     }

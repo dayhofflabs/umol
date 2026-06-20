@@ -13,7 +13,7 @@ use umol_ast::ast::{
 };
 use umol_shared::element::Element;
 
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 pub struct ValenceInvariants;
 

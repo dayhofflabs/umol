@@ -8,7 +8,7 @@ use umol_ast::ast::{AromaticValenceAst, MoleculeAst, ValueAst};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
 use crate::ops::model::AromaticityModel;
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct AromaticityResolver {

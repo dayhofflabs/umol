@@ -28,7 +28,7 @@ use umol_ast::ast::{
 use umol_shared::element::Element;
 
 use crate::ops::model::AromaticityModel;
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 /// Chemistry-level rejection: the algorithm decided the input doesn't satisfy
 /// the model. Carried inside `Solution::Contradictory`.

@@ -8,7 +8,6 @@ pub mod aromaticity;
 pub mod invariants;
 pub mod model;
 pub mod resolver;
-pub mod solution;
 pub mod transformer;
 pub mod valence;
 pub mod validator;

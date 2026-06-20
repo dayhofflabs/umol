@@ -7,7 +7,7 @@ use umol_ast::ast::{
     AromaticSystemView, ElectronCountsAst, MoleculeAst, MulticenterBondView,
 };
 
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EntityStructureValidator;

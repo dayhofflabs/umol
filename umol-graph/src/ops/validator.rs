@@ -30,7 +30,7 @@ use thiserror::Error;
 use umol_ast::ast::{AtomAst, MoleculeAst};
 
 use crate::ops::invariants::ValenceMismatch;
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Validator {

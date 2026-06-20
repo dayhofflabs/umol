@@ -13,7 +13,7 @@ use umol_shared::error::UmolError;
 
 use crate::ops::model::ChemistryModel;
 use crate::ops::resolver::{ResolveUnderdetermined, Resolver};
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 /// Parse SMILES to a resolved [`MoleculeAst`] using default IO config and model.
 pub fn parse_smiles(input: &str) -> Result<MoleculeAst, Box<dyn UmolError>> {

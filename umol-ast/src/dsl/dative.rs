@@ -24,10 +24,9 @@ use crate::ast::value::ValueAst;
 
 /// Surface DSL wrapper around `DativeBondAst`. The string form is the order
 /// (number of donated electron pairs) followed by `#…` predicates,
-/// paralleling `BondDsl`. Inline-capable constraints from
-/// `DativeBondConstraint` are `RingCount` (`#R`) and `RingSize` (`#r`); the
-/// remaining variants reference other entities and stay in the molecule
-/// constraints container.
+/// paralleling `BondDsl`. Both `DativeBondConstraint` variants are inline:
+/// `Aromatic` (`#a`) and `RingMembership` (`#R`, bare = total ring count,
+/// `(s)` = count of size-`s` rings).
 #[repr(transparent)]
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DativeBondDsl(pub DativeBondAst);

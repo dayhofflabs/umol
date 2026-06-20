@@ -442,8 +442,8 @@ Phases A–E are in scope; F (3D) and G follow.
       TB 20, OH 30). This is what lets B8's `#C` go through `space(ClassKey::CisTrans).reindex` on the 4-tuple
       `[atom_1's two ligands, atom_2's two ligands]` — consistent with `#T` — instead of a hand-rolled binary; B8's
       `#C` (below) uses it.
-  - **B8 — under-determined ligands: no inference at raise (2026-06-07; supersedes the implicit-H / lone-pair
-    inference in B1/B4/B5 and the degree-2 `#C` ordering).** A missing tetrahedral position or one-substituent
+  - **B8** — under-determined ligands: no inference at raise (2026-06-07; supersedes the implicit-H / lone-pair
+    inference in B1/B4/B5 and the degree-2 `#C` ordering). A missing tetrahedral position or one-substituent
     `#C` side may be an implicit H or a lone pair; raise does **not** decide which and does **not** write
     `atom.lone_pairs` / `implicit_hydrogens` — that is resolution's job. `#T`/`#C` assert only the coset, never what
     the ligands are, which is the point: an opaque virtual ligand stands in, placed last in the target frame.
@@ -788,6 +788,8 @@ Phases A–E are in scope; F (3D) and G follow.
   builders, remap/restore, and `stereo_ligands()` (real neighbors in adjacency order, then implicit-H ×h, then
   lone pairs — materializes the virtual ligands). Same-frame lift: the element's ligand order is `#T`'s incidence
   frame (equivariant, not canonical), so config copies through with no reindex.
+
+  Implementation in separate doc [111-stereo-phase-c-impl-2026-06-11.md](111-stereo-phase-c-impl-2026-06-11.md).
 
   - **Common core (the `AromaticityModel`/`AromaticityPerception` analog).**
     - `StereoModel` — policy (sibling of `AromaticityModel`, `ops/model.rs`): kinds in scope (TH/CT now),

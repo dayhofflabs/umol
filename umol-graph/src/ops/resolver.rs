@@ -25,7 +25,7 @@ pub use valence::{ValenceContradiction, ValenceError, ValenceResolver};
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError};
 use crate::ops::model::ChemistryModel;
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct Resolver<'a> {

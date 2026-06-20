@@ -12,7 +12,7 @@ use umol_ast::ast::{
 };
 
 use crate::ops::model::StereoModel;
-use crate::ops::solution::Solution;
+use umol_shared::solution::Solution;
 
 #[derive(Clone, Debug)]
 pub struct StereoResolver {
@@ -185,7 +185,7 @@ mod tests {
 
     use super::StereoResolver;
     use crate::ops::model::{ElementScope, StereoKindModel, StereoModel};
-    use crate::ops::solution::Solution;
+    use umol_shared::solution::Solution;
 
     #[rstest]
     #[case::tetrahedral_atom(
