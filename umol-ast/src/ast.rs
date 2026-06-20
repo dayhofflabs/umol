@@ -26,6 +26,7 @@ pub(crate) mod spin;
 pub(crate) mod stereo;
 pub(crate) mod symmetry;
 pub(crate) mod traits;
+pub(crate) mod validate;
 pub(crate) mod value;
 pub(crate) mod view;
 
@@ -85,6 +86,10 @@ pub use stereo::{
 pub use symmetry::{GraphSymmetry, GraphSymmetryConfig, StereoSymmetry};
 pub use traits::{
     AsLit, Canonical, Canonicalize, FromAst, IntoAst, Lattice, TryFromAst, TryIntoAst,
+};
+pub use validate::{
+    ConstraintContradiction, ConstraintError, ConstraintValidator, EntityStructureContradiction,
+    EntityStructureError, EntityStructureValidator,
 };
 pub use value::{ValueAst, ValuePredicate, ValueTerm};
 pub use view::{

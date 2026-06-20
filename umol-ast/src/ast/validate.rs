@@ -1,14 +1,17 @@
-//! Structural shape checks on per-relation entities: when the `electrons:
-//! ElectronCountsAst` field on an aromatic system or multicenter bond is
-//! `Lit`, its length must match the participants list.
+//! Tier-1 (data-integrity) validators: structural shape checks on per-relation
+//! entities, and cross-entity / molecule-scope constraint evaluation. Run at AST
+//! construction/raise and available standalone; never consult a chemistry model.
 
 use thiserror::Error;
-use umol_ast::ast::{
-    AromaticSystemView, ElectronCountsAst, MoleculeAst, MulticenterBondView,
-};
-
 use umol_shared::solution::Solution;
 
+use super::electrons::ElectronCountsAst;
+use super::molecule::MoleculeAst;
+use super::view::{AromaticSystemView, MulticenterBondView};
+
+/// Structural shape checks on per-relation entities: when the `electrons:
+/// ElectronCountsAst` field on an aromatic system or multicenter bond is `Lit`,
+/// its length must match the participants list.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EntityStructureValidator;
 
@@ -89,14 +92,46 @@ fn multicenter_length_check(
     }
 }
 
+/// Cross-check between local atom constraints and topology-derived values across
+/// all entity types, plus molecule-scope constraint evaluation (`:connected`,
+/// `:total-charge`, etc.).
+///
+/// Stub: always returns `Determined`. Filled in once the per-relation constraint
+/// evaluators land.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ConstraintValidator;
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ConstraintContradiction {}
+
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum ConstraintError {}
+
+impl ConstraintValidator {
+    pub fn validate(
+        &self,
+        _ast: impl AsRef<MoleculeAst>,
+    ) -> Result<Solution<(), ConstraintContradiction>, ConstraintError> {
+        // TODO: stub. Per-relation constraint evaluators not yet implemented.
+        // Aromatic systems: `ElectronCount(#e) == sum(electrons) - system.charge`.
+        // Multicenter bonds: analogous rule.
+        // Rings: sum of ring size counts == total ring count.
+        // Molecule-scope constraints: `:connected`, `:total-charge`, etc.
+        Ok(Solution::Determined(()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use umol_ast::ast::{
-        AromaticSystemAst, AtomAst, AtomId, Constraints, MoleculeAst, MulticenterBondAst,
-    };
     use umol_shared::element::Element;
 
+    use super::super::aromatic::AromaticSystemAst;
+    use super::super::atom::AtomAst;
+    use super::super::constraint::Constraints;
+    use super::super::id::AtomId;
+    use super::super::molecule::MoleculeAst;
+    use super::super::multicenter::MulticenterBondAst;
     use super::*;
 
     #[rstest]

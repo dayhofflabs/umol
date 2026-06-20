@@ -15,19 +15,18 @@
 
 pub mod aromaticity;
 pub mod stereo;
-pub mod constraint;
-pub mod entity;
 pub mod invariants;
 pub mod spin;
 
 pub use aromaticity::{AromaticityValidator, AromaticityValidatorContradiction};
 pub use stereo::{StereoValidator, StereoValidatorContradiction, StereoValidatorError};
-pub use constraint::{ConstraintContradiction, ConstraintError, ConstraintValidator};
-pub use entity::{EntityStructureContradiction, EntityStructureError, EntityStructureValidator};
 pub use invariants::{ValenceInvariantsError, ValenceInvariantsValidator};
 pub use spin::{SpinCouplingContradiction, SpinCouplingError, SpinCouplingValidator};
 use thiserror::Error;
-use umol_ast::ast::{AtomAst, MoleculeAst};
+use umol_ast::ast::{
+    AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidator,
+    EntityStructureContradiction, EntityStructureError, EntityStructureValidator, MoleculeAst,
+};
 
 use crate::ops::invariants::ValenceMismatch;
 use umol_shared::solution::Solution;
