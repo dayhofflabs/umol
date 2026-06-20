@@ -22,12 +22,94 @@ proptest! {
 
     /// The universal (input-canonicality-independent) laws on raw, non-canonical
     /// inputs — `canonical()` fold path, `equiv`, `matches`↔meet, and meet/join
-    /// canonicality — which the canonicalized strategies above never reach.
+    /// canonicality — which the canonicalized strategies above never reach. One
+    /// per `canonical()`-overriding leaf with a fold path.
     #[test]
     fn test_value_ast_lattice_laws_raw(
         a in raw_value_ast_strategy(),
         b in raw_value_ast_strategy(),
         c in raw_value_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_element_ast_lattice_laws_raw(
+        a in raw_element_ast_strategy(),
+        b in raw_element_ast_strategy(),
+        c in raw_element_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_isotope_mass_ast_lattice_laws_raw(
+        a in raw_isotope_strategy(),
+        b in raw_isotope_strategy(),
+        c in raw_isotope_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_aromatic_valence_ast_lattice_laws_raw(
+        a in raw_aromatic_valence_ast_strategy(),
+        b in raw_aromatic_valence_ast_strategy(),
+        c in raw_aromatic_valence_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_multicenter_valence_ast_lattice_laws_raw(
+        a in raw_multicenter_valence_ast_strategy(),
+        b in raw_multicenter_valence_ast_strategy(),
+        c in raw_multicenter_valence_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_tetrahedral_stereo_ast_lattice_laws_raw(
+        a in raw_tetrahedral_stereo_strategy(),
+        b in raw_tetrahedral_stereo_strategy(),
+        c in raw_tetrahedral_stereo_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_cis_trans_stereo_ast_lattice_laws_raw(
+        a in raw_cis_trans_stereo_strategy(),
+        b in raw_cis_trans_stereo_strategy(),
+        c in raw_cis_trans_stereo_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_stereo_configuration_ast_lattice_laws_raw(
+        a in raw_stereo_configuration_strategy(),
+        b in raw_stereo_configuration_strategy(),
+        c in raw_stereo_configuration_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_topicity_relation_ast_lattice_laws_raw(
+        a in raw_topicity_relation_strategy(),
+        b in raw_topicity_relation_strategy(),
+        c in raw_topicity_relation_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_stereogenicity_ast_lattice_laws_raw(
+        a in raw_stereogenicity_relation_strategy(),
+        b in raw_stereogenicity_relation_strategy(),
+        c in raw_stereogenicity_relation_strategy(),
     ) {
         assert_lattice_laws(&a, &b, &c)?;
     }

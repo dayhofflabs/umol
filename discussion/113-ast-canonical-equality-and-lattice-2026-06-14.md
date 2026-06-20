@@ -529,11 +529,14 @@ meet/join commutativity + associativity, `matches`↔meet, and the correspondenc
 land canonical [G1], `canonical()` == `canonicalize()` [G3], `equiv` == canonical-equality [G4]) and
 `assert_canonical_lattice_laws` (canonical-input only: each input a `canonicalize` fixpoint [G2],
 idempotence, absorption); the 22 law tests call both. Since every law strategy canonicalizes its
-output, `test_value_ast_lattice_laws_raw` feeds the universal helper **non-canonical (satisfiable)**
-values (`raw_value_ast_strategy`), exercising the `canonical()` fold path / `equiv` / `matches`↔meet on
-raw `Term`/`Predicate`. Residual: other `canonical()`-overriding leaves are covered on the borrow path
-only (canonical inputs), not raw-fuzzed on the fold path. Verification: lib 3540, property 68,
-resolution conformance 617.
+output, a `*_lattice_laws_raw` test feeds the universal helper **non-canonical (satisfiable)** values
+via a `raw_*_strategy` for **every `canonical()`-overriding leaf with a fold path** — `ValueAst`,
+`ElementAst`, `IsotopeMassAst`, `AromaticValenceAst`, `MulticenterValenceAst`, `TetrahedralStereoAst`,
+`CisTransStereoAst`, `StereoConfigurationAst`, `TopicityRelationAst`, `StereogenicityAst` — exercising
+the `canonical()` fold path / `equiv` / `matches`↔meet / meet+join canonicality on raw forms. (The
+identity-`canonicalize` leaves — `NoncovalentBondKindAst`, `ElectronCountsAst`, `StereoKindAst` — have
+no fold path; entities/collections use the derived/default `canonical()`, no override to fuzz.)
+Verification: lib 3540, property 77, resolution conformance 617.
 
 **Precondition (met).** Every `Lattice` type also impls `Canonicalize` (P1–P5 + P4): the four
 derived structs (`AtomAst`/`BondAst`/`NoncovalentBondAst`/`SpinStateAst`), the hand-Lattice leaves

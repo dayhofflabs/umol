@@ -178,6 +178,100 @@ pub(crate) fn raw_value_ast_strategy() -> BoxedStrategy<ValueAst> {
     .boxed()
 }
 
+// Raw (non-canonical, satisfiable) generators for the remaining
+// `canonical()`-overriding leaves, to fuzz the *fold* path of the universal
+// lattice laws (the canonicalizing strategies only ever reach the borrow path).
+// Each mixes deliberately non-canonical draws with the canonical strategy, then
+// filters to satisfiable values (the `matches` law's RHS only agrees with the
+// default on satisfiable targets).
+
+pub(crate) fn raw_element_ast_strategy() -> BoxedStrategy<ElementAst> {
+    prop_oneof![
+        3 => element_strategy().prop_map(|e| ElementAst::lit_set([e])),
+        3 => id_strategy().prop_map(|id| ElementAst::var_in(id, Element::all().to_vec())),
+        2 => element_ast_strategy(),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
+pub(crate) fn raw_isotope_strategy() -> BoxedStrategy<IsotopeMassAst> {
+    prop_oneof![
+        3 => (1u32..=250).prop_map(|m| IsotopeMassAst::lit_set(vec![m])),
+        2 => isotope_strategy(),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
+pub(crate) fn raw_aromatic_valence_ast_strategy() -> BoxedStrategy<AromaticValenceAst> {
+    prop_oneof![
+        3 => raw_value_ast_strategy().prop_map(AromaticValenceAst::Aromatic),
+        2 => aromatic_valence_ast_strategy(),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
+pub(crate) fn raw_multicenter_valence_ast_strategy() -> BoxedStrategy<MulticenterValenceAst> {
+    prop_oneof![
+        3 => raw_value_ast_strategy().prop_map(MulticenterValenceAst::Multicenter),
+        2 => multicenter_valence_ast_strategy(),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
+pub(crate) fn raw_tetrahedral_stereo_strategy() -> BoxedStrategy<TetrahedralStereoAst> {
+    prop_oneof![
+        Just(TetrahedralStereoAst::Undetermined),
+        Just(TetrahedralStereoAst::NotStereo),
+        stereo_coset_strategy().prop_map(TetrahedralStereoAst::Stereo),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
+pub(crate) fn raw_cis_trans_stereo_strategy() -> BoxedStrategy<CisTransStereoAst> {
+    prop_oneof![
+        Just(CisTransStereoAst::Undetermined),
+        Just(CisTransStereoAst::NotStereo),
+        stereo_coset_strategy().prop_map(CisTransStereoAst::Stereo),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
+pub(crate) fn raw_stereo_configuration_strategy() -> BoxedStrategy<StereoConfigurationAst> {
+    prop_oneof![
+        Just(StereoConfigurationAst::Undetermined),
+        (stereo_atom_kind_strategy(), stereo_coset_strategy())
+            .prop_map(|(kind, coset)| StereoConfigurationAst::kinded(kind, coset)),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
+pub(crate) fn raw_topicity_relation_strategy() -> BoxedStrategy<TopicityRelationAst> {
+    prop_oneof![
+        2 => Just(TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Homotopic]))),
+        2 => Just(TopicityRelationAst::LitSet(BTreeSet::from([Topicity::Diastereotopic]))),
+        3 => topicity_relation_strategy(),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
+pub(crate) fn raw_stereogenicity_relation_strategy() -> BoxedStrategy<StereogenicityAst> {
+    prop_oneof![
+        2 => Just(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Symmetric]))),
+        2 => Just(StereogenicityAst::LitSet(BTreeSet::from([Stereogenicity::Stereogenic]))),
+        3 => stereogenicity_relation_strategy(),
+    ]
+    .prop_filter("satisfiable", |x| x.clone().canonicalize().is_ok())
+    .boxed()
+}
+
 pub(crate) fn isotope_strategy() -> impl Strategy<Value = IsotopeMassAst> {
     prop_oneof![
         3 => Just(IsotopeMassAst::Natural),
