@@ -1,6 +1,6 @@
 # 113 · AST canonical equality and lattice algebra
 
-Status: Active · 2026-06-14
+Status: Completed · 2026-06-19
 Resolves: 095 open questions 1–3 (equality model, leak inventory, canonical form).
 
 ## General
@@ -634,18 +634,39 @@ stay required. Equality stays lazy (P0); this only touches the `Lattice` surface
 - **D2 → omit** `+canonicalize` in the derived `meet`/`join` (would be a runtime no-op).
 - **Hand entities → derive** (`Dative`/`Aromatic`/`Multicenter`/stereo entity).
 
-### P7 · Semantic-equality adoption + boundary cleanup
-1. 095 Q2 leak audit → route to `equiv`/`Canonical<T>` where semantic keys are needed:
-   `MoleculeAst::PartialEq` (graph-canonical), `HashMap`/`HashSet` AST keys, alias
-   `BiBTreeMap`, constraint dedup. Decide structural-vs-semantic per site.
-2. Drop `matches_value` (replace by as_lit_matches where appropriate); delete `capture`/`evaluate`.
+### P7 · Semantic-equality adoption + boundary cleanup **Done (no-op)**
+
+Audit conclusion: **no site needs semantic (`equiv`/`Canonical<T>`) equality**, and the helpers item 2
+targeted were already removed in P1–P6.
+1. **095 Q2 leak audit — no leak.** `MoleculeAst::PartialEq` is hand-written but field-wise
+   **structural** (`graph == graph && atoms == atoms && …`), which is what faithful roundtrip wants;
+   true graph-canonical (WL/isomorphism) equality is a separate graph subsystem, not this value-lattice
+   work. AST-typed `HashMap`/`HashSet`/`BTreeSet` keys are all **atomic/identity** (`Element`, `u32`,
+   `RingScope`, `StereoLigand`), never a canonicalizable value. Constraint dedup is `key()` + value-`meet`
+   (canonical) from P5. `BiBTreeMap` does not exist. `Canonical<T>` and `equiv` remain available infra,
+   intentionally unused.
+2. The ad-hoc `ValueAst::matches_value` is already gone (replaced by `as_lit_matches`); `capture`/
+   `evaluate` do not exist. The surviving `matches_value` (`AromaticValenceAst`/`MulticenterValenceAst`/
+   `StereoCosetAst`) are **pattern-admission** helpers (`Undetermined` = wildcard, inner `v.matches`) —
+   not literal checks, so `as_lit_matches` is not a semantic substitute; they stay.
 3. **removed**
 
-### P8 · Verification (doc 111)
-1. C4e.5(1): all retained `lattice::` tests green (raised `PROPTEST_CASES`); demoted types
-   leave the sweep.
-2. C4e.5(2): atom-DSL roundtrip; C4e.5(3): `canonicalize` idempotence beyond `ValueAst`.
-3. `umol-ast` lib + `--features proptest` + workspace build + conformance all green.
+### P8 · Verification (doc 111) **Done**
+1. C4e.5(1): `lattice::` sweep green at default cases **and** intensified `PROPTEST_CASES=4096`; the
+   universal/canonical split + 10 raw fold-path tests are included; demoted types (the per-entity
+   constraint *enums* — not `Lattice`, only the collections are) left the sweep.
+2. C4e.5(2): atom-DSL roundtrip — `test_atom_dsl_display_from_str_roundtrip` (+ stereo-atom DSL
+   roundtrips). C4e.5(3): `canonicalize` idempotence beyond `ValueAst` — `assert_canonical_lattice_laws`
+   asserts the `canonicalize` fixpoint across all 22 `Lattice` types, plus the raw fold-path tests.
+3. **All green:** `umol-ast` lib 3540, property 77 (`--features proptest`), resolution conformance 617,
+   umol-io conformance, workspace build.
+
+---
+
+**Doc 113 complete.** P0–P8 all landed. Lazy structural equality with `Canonicalize` (canonicalize-on-
+compare), `Lattice: Canonicalize` with the `meet`-derived `matches` default, every value/constraint/
+entity type canonicalizing, the `simplify*` cluster deleted, and the Lattice↔Canonicalize correspondence
+property-tested on canonical and raw inputs.
 
 ## Per-type review
 

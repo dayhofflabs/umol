@@ -96,7 +96,7 @@
 | [092-umol-graph-engines-restructure-2026-04-25.md](092-umol-graph-engines-restructure-2026-04-25.md)                               | Completed     | 2026-04-27   |
 | [093-aromatic-charge-and-transformer-2026-04-29.md](093-aromatic-charge-and-transformer-2026-04-29.md)                             | Completed     | 2026-05-07   |
 | [094-dsl-ast-io-ergonomics-2026-05-07.md](094-dsl-ast-io-ergonomics-2026-05-07.md)                                                 | Completed     | 2026-05-07   |
-| [095-ast-equality-and-ordering-2026-05-10.md](095-ast-equality-and-ordering-2026-05-10.md)                                         | Active        | 2026-05-10   |
+| [095-ast-equality-and-ordering-2026-05-10.md](095-ast-equality-and-ordering-2026-05-10.md)                                         | Completed     | 2026-05-10   |
 | [096-valence-resolution-plan-2026-05-21.md](096-valence-resolution-plan-2026-05-21.md)                                             | Completed     | 2026-05-27   |
 | [097-joint-domain-design-2026-05-23.md](097-joint-domain-design-2026-05-23.md)                                                     | Outdated      | 2026-06-16   |
 | [098-bind-scope-2026-05-23.md](098-bind-scope-2026-05-23.md)                                                                       | Active        | 2026-05-23   |
@@ -114,7 +114,7 @@
 | [110-molecular-symmetry-structure-2026-06-11.md](110-molecular-symmetry-structure-2026-06-11.md)                                   | Active        | 2026-06-11   |
 | [111-stereo-phase-c-impl-2026-06-11.md](111-stereo-phase-c-impl-2026-06-11.md)                                                     | Active        | 2026-06-11   |
 | [112-ctfile-winnow-migration-2026-06-13.md](112-ctfile-winnow-migration-2026-06-13.md)                                             | Active        | 2026-06-13   |
-| [113-ast-canonical-equality-and-lattice-2026-06-14.md](113-ast-canonical-equality-and-lattice-2026-06-14.md)                       | Active        | 2026-06-14   |
+| [113-ast-canonical-equality-and-lattice-2026-06-14.md](113-ast-canonical-equality-and-lattice-2026-06-14.md)                       | Completed     | 2026-06-14   |
 | [114-atom-bond-interning-2026-06-16.md](114-atom-bond-interning-2026-06-16.md)                                                     | Active        | 2026-06-16   |
 | [115-variable-facility-2026-06-16.md](115-variable-facility-2026-06-16.md)                                                         | Active        | 2026-06-16   |
 | [116-dative-bond-birelation-2026-06-18.md](116-dative-bond-birelation-2026-06-18.md)                                               | Completed     | 2026-06-18   |

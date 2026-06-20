@@ -1,6 +1,6 @@
 # AST equality and ordering — current model and open questions
 
-**Status**: Active (current decision recorded; deeper redesign deferred)
+**Status**: Resolved — the deferred equality redesign was carried out in doc 113 (AST canonical equality and lattice), now complete.
 **Date**: 2026-05-10
 **Trigger**: Need for deterministic alias rendering in `Metadata`'s `BiMap`. Considered switching to `BiBTreeMap` (which requires `Ord` on the value type, `Box<AtomDsl>`).
 
@@ -72,6 +72,27 @@ Even with derived `Ord`:
 
 ## Action items deferred
 
-- [ ] Audit equality / hashing sites for any place where structural equality is unintentional.
-- [ ] Decide on simplification-aware equality (whole-codebase change; needs separate discussion).
-- [ ] Define and document the canonical form for each AST type (`simplify()` contract).
+- [x] Audit equality / hashing sites for any place where structural equality is unintentional.
+- [x] Decide on simplification-aware equality (whole-codebase change; needs separate discussion).
+- [x] Define and document the canonical form for each AST type (`simplify()` contract).
+
+## Resolution (doc 113)
+
+The deferred redesign was taken up and completed in **doc 113** (P0–P8). Outcomes for the open
+questions here:
+
+- **Q1 (simplification-aware equality):** equality stays **lazy structural** (`==`/`Hash`/`Ord`
+  derived); the simplified-structural model is provided as opt-in **semantic** equality —
+  `Canonicalize::equiv` (canonicalize both, compare) and the `Canonical<T>` newtype for semantic
+  map/set keys. Callers choose per site rather than paying canonicalization on every `==`.
+- **Q2 (leak inventory):** audited (doc 113 P7). No site actually needs semantic equality:
+  `MoleculeAst::PartialEq` is structural by design (faithful roundtrip); AST-typed `HashMap`/`HashSet`
+  keys are atomic/identity only; constraint dedup is `key()` + value-`meet` (canonical). So no `==`
+  site was rerouted; `equiv`/`Canonical<T>` remain available infra.
+- **Q3 (canonical form):** defined as the `Canonicalize` trait — `fn canonicalize(self) -> Result<Self,
+  Contradiction>`, idempotent, covering every collapse (e.g. `LitSet({3,3}) → Lit(3)`, singleton/empty
+  sets), `Err` for unsatisfiable. `simplify`/`simplify_values` were **removed** entirely; `canonicalize`
+  is the sole canonical form. Idempotence is property-tested across all `Lattice` types, not just `ValueAst`.
+- **Q4 (ordering):** `Ord`/`PartialOrd` cascaded across the constraint family (doc 113 P5.6) for
+  sort/dedup; declaration-order dependence is noted at the ordered enums, and `MoleculeConstraint`'s
+  hand `Ord` orders `SubPattern` by anchor only (its `MoleculeAst` pattern has no total order).

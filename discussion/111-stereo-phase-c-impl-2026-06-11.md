@@ -1005,8 +1005,8 @@ deferred together with C4b's.
   `LigandPairAst::new` normalization (`first <= second`, symmetric); concrete-literal `matches` = equality
   (`PermutationAst`, `LigandSymmetryAst`). DSL parse↔render + keyword/constraint EDN round-trips already
   landed in C3j.
-- **C4e.3** — fuzz: verify stereo coverage (`fuzz_entity_strings` already parses stereo strings; the
-  molecule / constraint targets + C3j seeds cover the molecule-scope forms), fill any seed gaps.
+- **C4e.3** — **Done** — fuzz stereo coverage verified: `fuzz_entity_strings` parses stereo strings and
+  the molecule / constraint targets + C3j seeds cover the molecule-scope forms; no seed gaps remain.
 - **C4e.4** — **Done.** Restructured `tests/property.rs` (2485 lines) into a single-binary subdir suite:
   entry `tests/property.rs` (crate doc + `#[path = "property/…"] mod` declarations) + `tests/property/strategies.rs`
   (~1900 lines: shared generators, all `pub(crate)`, with domain imports re-exported via `pub(crate) use` so each
@@ -1024,19 +1024,26 @@ deferred together with C4b's.
   roundtrip completeness — atom-DSL has no dedicated roundtrip (only transitive via molecule). (3) `simplify`
   idempotence beyond `ValueAst` (`StereoCosetAst` / `StereoExpr`).
 
-  **C4e.5(1) — Done (sweep landed), fix blocked on doc 113.** `assert_relation_lattice_laws` renamed
-  `assert_lattice_laws` (it was already the generic law set); `lattice.rs` holds 20 lattice-law tests (the
-  13 reusable + 5 new/inline + 2 relation tests moved out of `stereo.rs`). `NoncovalentBondConstraints`
-  omitted (uninhabited inner enum → single value → vacuous). The sweep **caught real canonicalization bugs**:
-  14 value-carrying lattices fail (non-canonical `Set`/`NotSet` order + non-collapsed singletons in
-  `meet`/`join`; plus `StereoCosetAst::matches` non-reflexive on `Expr`). The finding was reframed as a
-  foundational AST equality/lattice redesign — **doc 113** .  The fix follows that design; the lattice tests
-  go green after it. The 14 failures are left red meanwhile. C4e.5(2)/(3) not yet started.
+  **C4e.5 — Done (doc 113 closed the fix).** The sweep (`assert_relation_lattice_laws` renamed
+  `assert_lattice_laws`, generic law set in `lattice.rs`) originally **caught real canonicalization bugs** —
+  14 value-carrying lattices failing on non-canonical `Set`/`NotSet` order, non-collapsed singletons in
+  `meet`/`join`, and `StereoCosetAst::matches` non-reflexivity on `Expr` — which was reframed as the
+  foundational AST equality/lattice redesign, **doc 113** (now complete, P0–P8). Post-113 all three substeps
+  are green:
+  - **(1) Done** — lattice laws green for every `Lattice` type, at default cases **and** intensified
+    `PROPTEST_CASES=4096`. `lattice.rs` now splits the laws into a universal helper (`assert_lattice_laws`)
+    and a canonical-input helper (`assert_canonical_lattice_laws`), and adds raw (non-canonical) fold-path
+    inputs for every `canonical()`-overriding leaf. `NoncovalentBondConstraints` omitted (uninhabited);
+    the per-entity constraint *enums* (no longer `Lattice` — only the collections are) left the sweep.
+  - **(2) Done** — atom-DSL roundtrip: `test_atom_dsl_display_from_str_roundtrip` (`tests/property/entity.rs`).
+  - **(3) Done** — idempotence beyond `ValueAst`: `simplify` was deleted in doc 113, so this is now
+    `canonicalize` idempotence — `assert_canonical_lattice_laws` asserts the `canonicalize` fixpoint across
+    all `Lattice` types, plus the raw fold-path tests.
 
 **Iterations.** proptest defaults to 256 cases; not hardcoded — raise globally via `PROPTEST_CASES=N` or
 per-block `#![proptest_config(ProptestConfig::with_cases(N))]` for a rigorous CI pass.
 
-### C4f · conformance suite **Done**
+### C4f · conformance suite
 
 Extend the **feature-gated** conformance suite (`umol-graph`, `--features conformance`, the resolution test)
 with stereo — the bulk of Phase C's verification:
