@@ -11,30 +11,30 @@
 //! their per-engine `Contradiction` and `Error` types into unions via `From`
 //! impls. `validate_atom` runs only those sub-validators that make sense
 //! without a surrounding molecule (atom-typing registry use).
-//! `AromaticityValidator` is configured separately because it carries a model.
+//! `AromaticityConformanceValidator` is configured separately because it carries a model.
 
 pub mod aromaticity;
 pub mod stereo;
-pub mod invariants;
+pub mod invariant;
 pub mod spin;
 
-pub use aromaticity::{AromaticityValidator, AromaticityValidatorContradiction};
-pub use stereo::{StereoValidator, StereoValidatorContradiction, StereoValidatorError};
-pub use invariants::{ValenceInvariantsError, ValenceInvariantsValidator};
-pub use spin::{SpinCouplingContradiction, SpinCouplingError, SpinCouplingValidator};
+pub use aromaticity::{AromaticityConformanceValidator, AromaticityValidatorContradiction};
+pub use stereo::{StereoConformanceValidator, StereoValidatorContradiction, StereoValidatorError};
+pub use invariant::{ValenceInvariantsError, ValenceInvariantsValidator};
+pub use spin::{SpinInvariantsContradiction, SpinInvariantsError, SpinInvariantsValidator};
 use thiserror::Error;
 use umol_ast::ast::{
     AtomAst, ConstraintContradiction, ConstraintError, ConstraintValidator,
     EntityStructureContradiction, EntityStructureError, EntityStructureValidator, MoleculeAst,
 };
 
-use crate::ops::invariants::ValenceMismatch;
+use crate::ops::invariant::ValenceMismatch;
 use umol_shared::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Validator {
     pub valence_invariants: ValenceInvariantsValidator,
-    pub spin_coupling: SpinCouplingValidator,
+    pub spin_invariants: SpinInvariantsValidator,
     pub constraint: ConstraintValidator,
     pub entity_structure: EntityStructureValidator,
 }
@@ -44,7 +44,7 @@ pub enum ValidatorContradiction {
     #[error(transparent)]
     ValenceInvariant(#[from] ValenceMismatch),
     #[error(transparent)]
-    SpinCoupling(#[from] SpinCouplingContradiction),
+    SpinInvariants(#[from] SpinInvariantsContradiction),
     #[error(transparent)]
     Constraint(#[from] ConstraintContradiction),
     #[error(transparent)]
@@ -56,7 +56,7 @@ pub enum ValidatorError {
     #[error(transparent)]
     ValenceInvariant(#[from] ValenceInvariantsError),
     #[error(transparent)]
-    SpinCoupling(#[from] SpinCouplingError),
+    SpinInvariants(#[from] SpinInvariantsError),
     #[error(transparent)]
     Constraint(#[from] ConstraintError),
     #[error(transparent)]
@@ -86,7 +86,7 @@ impl Validator {
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        match self.spin_coupling.validate(ast)? {
+        match self.spin_invariants.validate(ast)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
@@ -115,7 +115,7 @@ impl Validator {
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),
         }
-        match self.spin_coupling.validate_atom(atom)? {
+        match self.spin_invariants.validate_atom(atom)? {
             Solution::Determined(()) => {}
             Solution::Underdetermined(()) => any_undetermined = true,
             Solution::Contradictory(c) => return Ok(Solution::Contradictory(c.into())),

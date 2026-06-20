@@ -13,7 +13,7 @@ use umol_shared::element::Element;
 
 use crate::ops::aromaticity::{AromaticityContradiction, AromaticityError, AromaticityPerception};
 use crate::ops::model::AromaticityModel;
-use crate::ops::transformer::Transformer;
+use crate::ops::transform::Transformer;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum AromatizerError {

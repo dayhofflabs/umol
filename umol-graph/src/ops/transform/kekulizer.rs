@@ -19,7 +19,7 @@ use umol_ast::ast::{
 };
 use umol_graph_core::PerfectMatchingAlgorithm;
 
-use crate::ops::transformer::Transformer;
+use crate::ops::transform::Transformer;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum KekulizerError {

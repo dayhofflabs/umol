@@ -190,8 +190,9 @@ it **relocates to umol-shared** (umol-ast already depends on umol-shared; umol-g
 there). The lattice `Contradiction` (`Canonicalize::canonicalize`'s `Err`, a meet/⊥ failure) is genuine
 lattice algebra and **stays in umol-ast** — it is one possible `C`, not part of `Solution`.
 
-Construction stays **open**: `from_parts` builds any AST without enforcement (open data type); the raise
-paths run tier-1 after building, and tier-1 is callable standalone. The umol-graph composite `Validator`
+Construction stays **open**: `from_parts` builds any AST without enforcement (open data type). tier-1 is
+callable standalone; auto-running it at the fallible raise entries is folded into the error-handling pass
+(it needs a contradiction error channel — see the plan, steps 2–3). The umol-graph composite `Validator`
 composes the umol-ast tier-1 validators alongside its tier-2/3 members.
 
 ## Implementation plan
@@ -206,25 +207,30 @@ post-rename names once a rename has happened in an earlier phase.
    - umol-graph: repoint every `crate::ops::solution::Solution` to `umol_shared::solution::Solution`;
      delete `ops/solution.rs`. Mechanical sweep; umol-graph stays green.
 
-2. **umol-ast — tier-1 validators move in.**
-   - `umol-ast/src/ast/validate.rs` (new) ← move `EntityStructureValidator`, `ConstraintValidator` and
+2. **umol-ast — tier-1 validators move in.** *(done)*
+   - `umol-ast/src/ast/validate.rs` (new) ← moved `EntityStructureValidator`, `ConstraintValidator` and
      their contradiction/error types from `umol-graph/src/ops/validator/{entity,constraint}.rs`; return
-     `umol_shared::solution::Solution`. Register `mod validate`; re-export the two validators.
-   - DSL raise entry (umol-ast): run tier-1 after building the AST; `from_parts` stays open (no
-     enforcement); validators remain callable standalone. [confirm exact raise fn at code time]
-   - umol-graph: delete the two moved files from `ops/validator/`; the composite temporarily drops tier-1
-     (rewired in step 6).
+     `umol_shared::solution::Solution`. Registered `pub(crate) mod validate` + re-export from `ast.rs`.
+   - umol-graph: deleted the two files from `ops/validator/`; the composite now imports the tier-1
+     validators from `umol_ast::ast`.
+   - Tier-1 is available and standalone-callable. **Raise auto-wiring deferred** to the error-handling
+     pass: a tier-1 `Contradictory` must surface as `Err` at the fallible raise entry
+     (`MoleculeInput::into_ast`), but no suitable contradiction error channel exists yet (`ParseError` is
+     not the right home; doc 065). The mechanical `IntoAst::into_ast` stays infallible regardless.
 
-3. **umol-io — TableIR raise.**
-   - TableIR→AST raise path: call the umol-ast tier-1 validators after building, mirroring the DSL path, so
-     all construction routes enforce tier-1 uniformly.
+3. **umol-io — TableIR raise.** *(deferred — moot for now)*
+   - TableIR raise emits only atoms and bonds, so it cannot produce the inconsistencies tier-1 catches
+     (aromatic-system / multicenter electron-count length mismatches). Revisit when those entities can
+     arrive via TableIR, alongside the error-handling pass.
 
-4. **umol-graph — renames (mechanical).**
+4. **umol-graph — renames (mechanical).** *(done)*
    - modules: `ops/resolver.rs`+`resolver/`→`resolve`; `ops/validator.rs`+`validator/`→`validate`;
-     `ops/transformer.rs`+`transformer/`→`transform`; `ops/invariants.rs`→`invariant.rs`. Update `mod`/`use`
-     paths and `ops` re-exports.
-   - types: `SpinCouplingValidator`→`SpinInvariantsValidator` (+ its contradiction/error);
+     `ops/transformer.rs`+`transformer/`→`transform`; `ops/invariants.rs`→`invariant.rs`;
+     `ops/validate/invariants.rs`→`ops/validate/invariant.rs` (singular). `mod`/`use` paths updated.
+   - types: `SpinCouplingValidator`/`SpinInvariantsContradiction`/`SpinInvariantsError` (all `SpinCoupling`
+     → `SpinInvariants`) + the composite field `spin_coupling`→`spin_invariants`;
      `AromaticityValidator`→`AromaticityConformanceValidator`; `StereoValidator`→`StereoConformanceValidator`.
+     Their `…ValidatorContradiction`/`…ValidatorError` names left as-is (doc-065 error survey).
 
 5. **umol-graph — tier-3 valence conformance.**
    - `ops/valence/counts.rs`, `ops/valence/atom_typing.rs`: add read-only `conforms_atom`
@@ -245,8 +251,10 @@ post-rename names once a rename has happened in an earlier phase.
      `from_parts` stays open.
    - update: `Validator::new()` → `new(&ChemistryModel::default())`; references to renamed types/modules.
 
-## Remaining
-- umol-graph error/contradiction type survey (doc 065) — deferred; not a blocker for this work.
+## Remaining (error-handling pass — doc 065)
+- umol-graph error/contradiction type survey.
+- Raise auto-wiring of tier-1: surface a `Contradictory` as `Err` at `MoleculeInput::into_ast` (and the
+  TableIR path once it can emit the relevant entities) through a proper contradiction error channel.
 
 ## Out of scope
 - tier-0 validator (raise owns reference resolution; no AST to validate).

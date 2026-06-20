@@ -12,26 +12,26 @@ use umol_ast::ast::{AtomAst, MoleculeAst};
 use umol_shared::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]
-pub struct SpinCouplingValidator;
+pub struct SpinInvariantsValidator;
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum SpinCouplingContradiction {}
+pub enum SpinInvariantsContradiction {}
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
-pub enum SpinCouplingError {}
+pub enum SpinInvariantsError {}
 
-impl SpinCouplingValidator {
+impl SpinInvariantsValidator {
     pub fn validate(
         &self,
         _ast: impl AsRef<MoleculeAst>,
-    ) -> Result<Solution<(), SpinCouplingContradiction>, SpinCouplingError> {
+    ) -> Result<Solution<(), SpinInvariantsContradiction>, SpinInvariantsError> {
         Ok(Solution::Determined(()))
     }
 
     pub fn validate_atom(
         &self,
         _atom: &AtomAst,
-    ) -> Result<Solution<(), SpinCouplingContradiction>, SpinCouplingError> {
+    ) -> Result<Solution<(), SpinInvariantsContradiction>, SpinInvariantsError> {
         Ok(Solution::Determined(()))
     }
 }

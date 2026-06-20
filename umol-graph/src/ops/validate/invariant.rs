@@ -7,7 +7,7 @@
 use thiserror::Error;
 use umol_ast::ast::{AtomAst, MoleculeAst};
 
-use crate::ops::invariants::{ValenceInvariants, ValenceMismatch};
+use crate::ops::invariant::{ValenceInvariants, ValenceMismatch};
 use umol_shared::solution::Solution;
 
 #[derive(Clone, Copy, Debug, Default)]

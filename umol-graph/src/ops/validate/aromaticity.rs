@@ -12,7 +12,7 @@ use crate::ops::model::AromaticityModel;
 use umol_shared::solution::Solution;
 
 #[derive(Clone, Debug)]
-pub struct AromaticityValidator {
+pub struct AromaticityConformanceValidator {
     perception: AromaticityPerception,
 }
 
@@ -34,7 +34,7 @@ pub enum AromaticityValidatorContradiction {
     },
 }
 
-impl AromaticityValidator {
+impl AromaticityConformanceValidator {
     pub fn new(model: &AromaticityModel) -> Self {
         Self {
             perception: AromaticityPerception::new(model),
@@ -107,7 +107,7 @@ mod tests {
 
     use super::*;
     use crate::ops::model::{ElementScope, RingLimits};
-    use crate::ops::resolver::aromaticity::AromaticityResolver;
+    use crate::ops::resolve::aromaticity::AromaticityResolver;
 
     fn aromatic(element: Element, pi: i64) -> AtomAst {
         let mut atom = AtomAst::from_element(element);
@@ -140,7 +140,7 @@ mod tests {
         AromaticityResolver::new(&carbon_only())
             .resolve(&mut ast)
             .unwrap();
-        let solution = AromaticityValidator::new(&carbon_only())
+        let solution = AromaticityConformanceValidator::new(&carbon_only())
             .validate(&mut ast)
             .unwrap();
         assert!(matches!(solution, Solution::Determined(())));
@@ -149,7 +149,7 @@ mod tests {
     #[rstest]
     fn test_aromaticity_validator_missing_system_contradicts() {
         let mut ast = benzene();
-        let solution = AromaticityValidator::new(&carbon_only())
+        let solution = AromaticityConformanceValidator::new(&carbon_only())
             .validate(&mut ast)
             .unwrap();
         assert!(matches!(

@@ -12,7 +12,7 @@ use umol_io::smiles::parser::parse_smiles_bytes_to_table_ir_with;
 use umol_shared::error::UmolError;
 
 use crate::ops::model::ChemistryModel;
-use crate::ops::resolver::{ResolveUnderdetermined, Resolver};
+use crate::ops::resolve::{ResolveUnderdetermined, Resolver};
 use umol_shared::solution::Solution;
 
 /// Parse SMILES to a resolved [`MoleculeAst`] using default IO config and model.

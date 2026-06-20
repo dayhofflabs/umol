@@ -12,7 +12,7 @@ use crate::ops::model::StereoModel;
 use umol_shared::solution::Solution;
 
 #[derive(Clone, Debug)]
-pub struct StereoValidator {
+pub struct StereoConformanceValidator {
     model: StereoModel,
 }
 
@@ -50,7 +50,7 @@ pub enum StereoValidatorContradiction {
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum StereoValidatorError {}
 
-impl StereoValidator {
+impl StereoConformanceValidator {
     pub fn new(model: &StereoModel) -> Self {
         Self {
             model: model.clone(),
@@ -281,7 +281,7 @@ mod tests {
     fn test_stereo_validator_validate(#[case] dsl: &str, #[case] mutate: fn(&mut MoleculeAst)) {
         let mut ast = mol_ground!(dsl);
         mutate(&mut ast);
-        let solution = StereoValidator::new(&StereoModel::default())
+        let solution = StereoConformanceValidator::new(&StereoModel::default())
             .validate(&ast)
             .unwrap();
         assert_eq!(solution, Solution::Determined(()));
@@ -379,7 +379,7 @@ mod tests {
     ) {
         let mut ast = mol_ground!(dsl);
         mutate(&mut ast);
-        let solution = StereoValidator::new(&StereoModel::default())
+        let solution = StereoConformanceValidator::new(&StereoModel::default())
             .validate(&ast)
             .unwrap();
         assert_eq!(solution, Solution::Contradictory(expected));
