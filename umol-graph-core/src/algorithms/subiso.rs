@@ -10,6 +10,9 @@ pub enum SubgraphIsomorphismAlgorithm {
     Vf2,
     /// Ullmann — candidate-matrix refinement + backtracking (Ullmann 1976).
     Ullmann,
+    /// RI — static most-constrained-first pattern ordering, light matching, no
+    /// domain reduction (Bonnici et al. 2013).
+    Ri,
 }
 
 impl Graph {
@@ -30,6 +33,9 @@ impl Graph {
             SubgraphIsomorphismAlgorithm::Ullmann => {
                 self.subgraph_isomorphisms_ullmann(query, node_match, edge_match)
             }
+            SubgraphIsomorphismAlgorithm::Ri => {
+                self.subgraph_isomorphisms_ri(query, node_match, edge_match)
+            }
         }
     }
 
@@ -47,6 +53,9 @@ impl Graph {
             }
             SubgraphIsomorphismAlgorithm::Ullmann => {
                 self.subgraph_isomorphisms_at_ullmann(query, anchor, node_match, edge_match)
+            }
+            SubgraphIsomorphismAlgorithm::Ri => {
+                self.subgraph_isomorphisms_at_ri(query, anchor, node_match, edge_match)
             }
         }
     }
@@ -157,6 +166,69 @@ impl Graph {
         let mut mapping = vec![usize::MAX; query.node_count()];
         let mut used = vec![false; n2];
         ullmann_search(query, self, 0, &m, &mut mapping, &mut used, edge_match, &mut results);
+        results
+    }
+
+    // Bonnici et al. 2013 "A subgraph isomorphism algorithm and its application to
+    // biochemical data": a static most-constrained-first pattern ordering with light
+    // edge-consistency matching and no domain reduction. Monomorphism semantics.
+    fn subgraph_isomorphisms_ri(
+        &self,
+        query: &Graph,
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() {
+            return Vec::new();
+        }
+        if query.node_count() == 0 {
+            return vec![vec![]];
+        }
+        let order = ri_order(query, None);
+        let parents = ri_parents(query, &order);
+        let mut results = Vec::new();
+        let mut mapping = vec![0usize; order.len()];
+        let mut used = vec![false; self.node_count()];
+        ri_search(
+            self, &order, &parents, 0, &mut mapping, &mut used, None, node_match, edge_match,
+            &mut results,
+        );
+        results
+    }
+
+    fn subgraph_isomorphisms_at_ri(
+        &self,
+        query: &Graph,
+        anchor: (NodeId, NodeId),
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() || query.node_count() == 0 {
+            return Vec::new();
+        }
+        if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
+            return Vec::new();
+        }
+        if !node_match(anchor.0, anchor.1) {
+            return Vec::new();
+        }
+        let order = ri_order(query, Some(anchor.0.index()));
+        let parents = ri_parents(query, &order);
+        let mut results = Vec::new();
+        let mut mapping = vec![0usize; order.len()];
+        let mut used = vec![false; self.node_count()];
+        ri_search(
+            self,
+            &order,
+            &parents,
+            0,
+            &mut mapping,
+            &mut used,
+            Some(anchor.1.index()),
+            node_match,
+            edge_match,
+            &mut results,
+        );
         results
     }
 }
@@ -476,12 +548,148 @@ fn ullmann_search(
     }
 }
 
+/// RI GreatestConstraintFirst ordering of the query vertices: the root is the
+/// max-degree vertex (or `first`, for an anchored search); each next vertex
+/// maximizes, lexicographically, `(V_m, V_n, V_o)` — its counts of neighbors that
+/// are already ordered, adjacent to an ordered vertex, or neither.
+fn ri_order(query: &Graph, first: Option<usize>) -> Vec<usize> {
+    let n = query.node_count();
+    let mut order = Vec::with_capacity(n);
+    if n == 0 {
+        return order;
+    }
+    let mut ordered = vec![false; n];
+    let mut ordered_neighbors = vec![0usize; n];
+    let place = |v: usize, ordered: &mut [bool], ordered_neighbors: &mut [usize]| {
+        ordered[v] = true;
+        for nb in query.neighbors(NodeId(v as u32)).iter() {
+            ordered_neighbors[nb.node.index()] += 1;
+        }
+    };
+    let start = first.unwrap_or_else(|| {
+        (0..n)
+            .max_by_key(|&u| query.neighbors(NodeId(u as u32)).len())
+            .expect("non-empty")
+    });
+    order.push(start);
+    place(start, &mut ordered, &mut ordered_neighbors);
+    while order.len() < n {
+        let mut best: Option<((usize, usize, usize), usize)> = None;
+        for u in 0..n {
+            if ordered[u] {
+                continue;
+            }
+            let (mut vm, mut vn, mut vo) = (0usize, 0usize, 0usize);
+            for nb in query.neighbors(NodeId(u as u32)).iter() {
+                let x = nb.node.index();
+                if ordered[x] {
+                    vm += 1;
+                } else if ordered_neighbors[x] > 0 {
+                    vn += 1;
+                } else {
+                    vo += 1;
+                }
+            }
+            let key = (vm, vn, vo);
+            if best.is_none_or(|(bk, _)| key > bk) {
+                best = Some((key, u));
+            }
+        }
+        let next = best.expect("an unordered vertex remains").1;
+        order.push(next);
+        place(next, &mut ordered, &mut ordered_neighbors);
+    }
+    order
+}
+
+/// For each ordering position, the earlier-ordered query neighbors as
+/// `(their position, the query edge to them)` — the matcher's edge-consistency set.
+fn ri_parents(query: &Graph, order: &[usize]) -> Vec<Vec<(usize, EdgeId)>> {
+    let n = order.len();
+    let mut position = vec![0usize; n];
+    for (p, &u) in order.iter().enumerate() {
+        position[u] = p;
+    }
+    let mut parents = vec![Vec::new(); n];
+    for (d, &u) in order.iter().enumerate() {
+        for nb in query.neighbors(NodeId(u as u32)).iter() {
+            let p = position[nb.node.index()];
+            if p < d {
+                parents[d].push((p, nb.edge));
+            }
+        }
+    }
+    parents
+}
+
+/// Backtracking in RI order. Candidates for the next vertex come from the
+/// target-neighbors of an already-mapped ordered neighbor's image (all targets at
+/// a component root); edges to every ordered neighbor must match.
+#[allow(clippy::too_many_arguments)]
+fn ri_search(
+    target: &Graph,
+    order: &[usize],
+    parents: &[Vec<(usize, EdgeId)>],
+    depth: usize,
+    mapping: &mut [usize],
+    used: &mut [bool],
+    forced_root: Option<usize>,
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    results: &mut Vec<Vec<usize>>,
+) {
+    let n1 = order.len();
+    let n2 = target.node_count();
+    if depth == n1 {
+        let mut by_query = vec![0usize; n1];
+        for (p, &u) in order.iter().enumerate() {
+            by_query[u] = mapping[p];
+        }
+        results.push(by_query);
+        return;
+    }
+    let u = order[depth];
+    let candidates: Vec<usize> = match parents[depth].first() {
+        _ if depth == 0 => match forced_root {
+            Some(t) => vec![t],
+            None => (0..n2).collect(),
+        },
+        Some(&(parent, _)) => target
+            .neighbors(NodeId(mapping[parent] as u32))
+            .iter()
+            .map(|tn| tn.node.index())
+            .collect(),
+        None => (0..n2).collect(),
+    };
+    for v in candidates {
+        if used[v] || !node_match(NodeId(u as u32), NodeId(v as u32)) {
+            continue;
+        }
+        let consistent = parents[depth].iter().all(|&(p, e_q)| {
+            match target.find_edge(NodeId(v as u32), NodeId(mapping[p] as u32)) {
+                Some(f) => edge_match(e_q, f),
+                None => false,
+            }
+        });
+        if !consistent {
+            continue;
+        }
+        mapping[depth] = v;
+        used[v] = true;
+        ri_search(
+            target, order, parents, depth + 1, mapping, used, forced_root, node_match, edge_match,
+            results,
+        );
+        used[v] = false;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::SubgraphIsomorphismAlgorithm::{Ullmann, Vf2};
+    use super::SubgraphIsomorphismAlgorithm::{Ri, Ullmann, Vf2};
     use super::*;
 
     fn any_node(_: NodeId, _: NodeId) -> bool {
@@ -552,7 +760,7 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        for alg in [Vf2, Ullmann] {
+        for alg in [Vf2, Ullmann, Ri] {
             let mut r = target.subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg);
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
@@ -578,7 +786,7 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        for alg in [Vf2, Ullmann] {
+        for alg in [Vf2, Ullmann, Ri] {
             let mut r = target
                 .subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, alg);
             r.sort();
