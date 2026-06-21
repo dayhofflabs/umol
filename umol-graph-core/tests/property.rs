@@ -7,7 +7,9 @@
 use std::collections::HashMap;
 
 use proptest::prelude::*;
-use umol_graph_core::SubgraphIsomorphismAlgorithm::{ArcMatch, Ri, Ullmann, Vf2};
+use umol_graph_core::SubgraphIsomorphismAlgorithm::{
+    ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
+};
 use umol_graph_core::{
     EdgeId, Graph, NodeId, SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
@@ -109,7 +111,7 @@ proptest! {
         target in labeled_graph(6, 2, 2),
     ) {
         let reference = matches(&query, &target, Vf2);
-        for alg in [Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }] {
+        for alg in [Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, Vf2Rdkit, RayKirsch] {
             prop_assert_eq!(
                 matches(&query, &target, alg),
                 reference.clone(),
@@ -130,7 +132,7 @@ proptest! {
         let query = induced(&target, &nodes);
         let reference = matches(&query, &target, Vf2);
         prop_assert!(!reference.is_empty(), "planted query must embed in its source");
-        for alg in [Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }] {
+        for alg in [Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, Vf2Rdkit, RayKirsch] {
             prop_assert_eq!(
                 matches(&query, &target, alg),
                 reference.clone(),

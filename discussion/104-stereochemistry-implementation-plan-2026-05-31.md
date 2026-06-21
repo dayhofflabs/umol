@@ -1450,19 +1450,24 @@ Phases A–E are in scope; F (3D) and G follow.
 
     | variant | approach | source |
     |---|---|---|
-    | `Vf2` (exists) | terminal-set backtracking + look-ahead | Cordella et al. 2004 |
+    | `Vf2` (exists) | terminal-set backtracking + monomorphism look-ahead | Cordella et al. 2004 |
     | `Ullmann` | matrix-refinement backtracking | Ullmann 1976 (CDK) |
     | `Ri` | static most-constrained ordering, no domain reduction | Bonnici et al. 2013 |
-    | `ArcMatch` | vertex/edge-domain reduction (exploits bond labels) | Bonnici et al. 2024 |
+    | `ArcMatch { path_length }` | vertex/edge-domain reduction (exploits bond labels) | Bonnici et al. 2024 |
+    | `Vf2Rdkit` | RDKit `vf2.hpp` reference: neighbor-restricted candidates + degree bound, look-ahead off | vflib / Mayfield RDKit PR #2500 |
+    | `RayKirsch` | bond-based backtracking (advance over query bonds; no adjacency re-check) | Ray & Kirsch 1957; Sayle `parsmart.cpp` |
 
     Dropped: VF2++ (generic-graph ordering; not expected to beat RI/ArcMatch on sparse edge-labeled
     molecular graphs), DF (CDK `DfPattern` — unpublished), SD (vf2lib Schmidt-Druffel — superseded). All
-    ported natively; a one-time dev-only oracle wrap is acceptable while porting ArcMatch, not a standing
-    dependency. `Vf2` folds in one behavior-preserving optimization (always on, no flag): RDKit's
-    neighbor-restricted candidate generation (enumerate only the mapped query-neighbor's image's
-    neighbors, not all targets) — identical match set (subset of the terminal set the consistency check
-    already filters), changes enumeration order only (results stay set-based). RDKit's production variant
-    also disables look-ahead — kept only as a benchmark baseline, not shipped/configurable.
+    ported natively. `Vf2` stays the faithful Cordella baseline (its monomorphism look-ahead matches vf2lib
+    `VF2MonoState`: `q_term <= t_term && q_term + q_new <= t_term + t_new`) — it is NOT modified to carry
+    RDKit's optimizations. Instead, the two benchmark reference matchers are separate named variants:
+    `Vf2Rdkit` reproduces what RDKit's `GetSubstructMatches` actually runs (vflib VF2 with Mayfield's
+    chemical-graph tuning: candidates drawn from a mapped neighbor's image adjacency, an explicit
+    `deg(q) <= deg(t)` bound, and the terminal-set look-ahead disabled), and `RayKirsch` is the faster
+    bond-based search used by OpenBabel `parsmart.cpp` / NextMove Arthor (which RDKit does *not* use). All
+    six variants are cross-validated (rstest table + feature-gated `proptest`) to return the identical
+    match set.
 
   - **Substructure matching** (`SubstructureMatchAlgorithm`, `MoleculeAst::substructure_matches`), each
     strategy composing over a chosen subiso algorithm:

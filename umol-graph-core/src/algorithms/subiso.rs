@@ -22,6 +22,15 @@ pub enum SubgraphIsomorphismAlgorithm {
     /// path-based reduction (Thm 1: larger = more pruning, higher cost); `< 3`
     /// disables it (arc consistency only). See `ARCMATCH_DEFAULT_PATH_LENGTH`.
     ArcMatch { path_length: usize },
+    /// RDKit's substructure engine: vflib-derived VF2 with John Mayfield's
+    /// chemical-graph optimizations (RDKit PR #2500) — candidates restricted to a
+    /// mapped neighbor's adjacency, an explicit `deg(q) <= deg(t)` bound, and the
+    /// terminal-set look-ahead disabled. A benchmark reference.
+    Vf2Rdkit,
+    /// Ray-Kirsch bond-based backtracking (Ray & Kirsch 1957; Sayle `parsmart.cpp`):
+    /// the search advances over query *bonds*, so each extension's adjacency holds
+    /// by construction and no per-neighbor re-check is needed. A benchmark reference.
+    RayKirsch,
 }
 
 /// Paper's recommended ArcMatch path-length trade-off (Bonnici 2024 §3.1).
@@ -50,6 +59,12 @@ impl Graph {
             }
             SubgraphIsomorphismAlgorithm::ArcMatch { path_length } => {
                 self.subgraph_isomorphisms_arcmatch(query, node_match, edge_match, path_length)
+            }
+            SubgraphIsomorphismAlgorithm::Vf2Rdkit => {
+                self.subgraph_isomorphisms_vf2rdkit(query, node_match, edge_match)
+            }
+            SubgraphIsomorphismAlgorithm::RayKirsch => {
+                self.subgraph_isomorphisms_rk(query, node_match, edge_match)
             }
         }
     }
@@ -80,6 +95,12 @@ impl Graph {
                     edge_match,
                     path_length,
                 )
+            }
+            SubgraphIsomorphismAlgorithm::Vf2Rdkit => {
+                self.subgraph_isomorphisms_at_vf2rdkit(query, anchor, node_match, edge_match)
+            }
+            SubgraphIsomorphismAlgorithm::RayKirsch => {
+                self.subgraph_isomorphisms_at_rk(query, anchor, node_match, edge_match)
             }
         }
     }
@@ -368,6 +389,128 @@ impl Graph {
             0,
             &mut assigned,
             &mut used,
+            &mut results,
+        );
+        results
+    }
+
+    // RDKit's `vf2.hpp` (vflib-derived VF2 + Mayfield PR #2500): monomorphism with
+    // candidates drawn from a mapped neighbor's image adjacency, an explicit degree
+    // bound, and no terminal-set look-ahead. Benchmark reference for RDKit.
+    fn subgraph_isomorphisms_vf2rdkit(
+        &self,
+        query: &Graph,
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() {
+            return Vec::new();
+        }
+        if query.node_count() == 0 {
+            return vec![vec![]];
+        }
+        let mut mapping = vec![None; query.node_count()];
+        let mut used = vec![false; self.node_count()];
+        let mut results = Vec::new();
+        vf2rdkit_search(query, self, &mut mapping, &mut used, node_match, edge_match, &mut results);
+        results
+    }
+
+    fn subgraph_isomorphisms_at_vf2rdkit(
+        &self,
+        query: &Graph,
+        anchor: (NodeId, NodeId),
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() || query.node_count() == 0 {
+            return Vec::new();
+        }
+        if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
+            return Vec::new();
+        }
+        if !node_match(anchor.0, anchor.1) {
+            return Vec::new();
+        }
+        let mut mapping = vec![None; query.node_count()];
+        let mut used = vec![false; self.node_count()];
+        mapping[anchor.0.index()] = Some(anchor.1.index());
+        used[anchor.1.index()] = true;
+        let mut results = Vec::new();
+        vf2rdkit_search(query, self, &mut mapping, &mut used, node_match, edge_match, &mut results);
+        results
+    }
+
+    // Ray-Kirsch bond-based search (Sayle `parsmart.cpp`): backtrack over query
+    // bonds; degree-0 query atoms are mapped as a product afterwards. Benchmark
+    // reference.
+    fn subgraph_isomorphisms_rk(
+        &self,
+        query: &Graph,
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() {
+            return Vec::new();
+        }
+        if query.node_count() == 0 {
+            return vec![vec![]];
+        }
+        let bond_order = rk_bond_order(query);
+        let isolated: Vec<usize> = (0..query.node_count())
+            .filter(|&q| query.neighbors(NodeId(q as u32)).is_empty())
+            .collect();
+        let mut mapping = vec![None; query.node_count()];
+        let mut used = vec![false; self.node_count()];
+        let mut results = Vec::new();
+        rk_search(
+            self,
+            &bond_order,
+            &isolated,
+            0,
+            &mut mapping,
+            &mut used,
+            node_match,
+            edge_match,
+            &mut results,
+        );
+        results
+    }
+
+    fn subgraph_isomorphisms_at_rk(
+        &self,
+        query: &Graph,
+        anchor: (NodeId, NodeId),
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() || query.node_count() == 0 {
+            return Vec::new();
+        }
+        if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
+            return Vec::new();
+        }
+        if !node_match(anchor.0, anchor.1) {
+            return Vec::new();
+        }
+        let bond_order = rk_bond_order(query);
+        let isolated: Vec<usize> = (0..query.node_count())
+            .filter(|&q| query.neighbors(NodeId(q as u32)).is_empty())
+            .collect();
+        let mut mapping = vec![None; query.node_count()];
+        let mut used = vec![false; self.node_count()];
+        mapping[anchor.0.index()] = Some(anchor.1.index());
+        used[anchor.1.index()] = true;
+        let mut results = Vec::new();
+        rk_search(
+            self,
+            &bond_order,
+            &isolated,
+            0,
+            &mut mapping,
+            &mut used,
+            node_match,
+            edge_match,
             &mut results,
         );
         results
@@ -1334,6 +1477,232 @@ fn arcmatch_search(
     }
 }
 
+/// Next query atom for `Vf2Rdkit`: lowest-index unmapped atom adjacent to the
+/// mapped set (terminal), else the lowest-index unmapped atom (a component root).
+fn vf2rdkit_next(query: &Graph, mapping: &[Option<usize>]) -> Option<usize> {
+    let mut fallback = None;
+    for q in 0..query.node_count() {
+        if mapping[q].is_some() {
+            continue;
+        }
+        if fallback.is_none() {
+            fallback = Some(q);
+        }
+        if query
+            .neighbors(NodeId(q as u32))
+            .iter()
+            .any(|nb| mapping[nb.node.index()].is_some())
+        {
+            return Some(q);
+        }
+    }
+    fallback
+}
+
+/// `Vf2Rdkit` recursive search: candidates come from a mapped neighbor's image
+/// adjacency (else all atoms for a root), filtered by degree bound, node match, and
+/// edge consistency with every already-mapped query neighbor.
+fn vf2rdkit_search(
+    query: &Graph,
+    target: &Graph,
+    mapping: &mut [Option<usize>],
+    used: &mut [bool],
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    results: &mut Vec<Vec<usize>>,
+) {
+    let Some(q) = vf2rdkit_next(query, mapping) else {
+        results.push(mapping.iter().map(|m| m.expect("complete")).collect());
+        return;
+    };
+    let q_degree = query.neighbors(NodeId(q as u32)).len();
+    let parent = query
+        .neighbors(NodeId(q as u32))
+        .iter()
+        .find_map(|nb| mapping[nb.node.index()]);
+    let candidates: Vec<usize> = match parent {
+        Some(image) => target
+            .neighbors(NodeId(image as u32))
+            .iter()
+            .map(|nb| nb.node.index())
+            .collect(),
+        None => (0..target.node_count()).collect(),
+    };
+    for t in candidates {
+        if used[t]
+            || q_degree > target.neighbors(NodeId(t as u32)).len()
+            || !node_match(NodeId(q as u32), NodeId(t as u32))
+        {
+            continue;
+        }
+        let consistent = query.neighbors(NodeId(q as u32)).iter().all(|nb| {
+            let Some(image) = mapping[nb.node.index()] else {
+                return true;
+            };
+            match target.find_edge(NodeId(t as u32), NodeId(image as u32)) {
+                Some(te) => edge_match(nb.edge, te),
+                None => false,
+            }
+        });
+        if !consistent {
+            continue;
+        }
+        mapping[q] = Some(t);
+        used[t] = true;
+        vf2rdkit_search(query, target, mapping, used, node_match, edge_match, results);
+        used[t] = false;
+        mapping[q] = None;
+    }
+}
+
+/// Query bond order for `RayKirsch`: a DFS edge ordering per component. Each bond is
+/// `(from, to, edge)` with `from` already on the DFS path, so a bond after a
+/// component's first shares an atom with an earlier one (tree edges then recurse,
+/// back edges close rings).
+fn rk_bond_order(query: &Graph) -> Vec<(usize, usize, EdgeId)> {
+    let mut visited = vec![false; query.node_count()];
+    let mut emitted = vec![false; query.edge_count()];
+    let mut order = Vec::new();
+    for root in 0..query.node_count() {
+        if !visited[root] {
+            rk_dfs(query, root, &mut visited, &mut emitted, &mut order);
+        }
+    }
+    order
+}
+
+fn rk_dfs(
+    query: &Graph,
+    u: usize,
+    visited: &mut [bool],
+    emitted: &mut [bool],
+    order: &mut Vec<(usize, usize, EdgeId)>,
+) {
+    visited[u] = true;
+    for nb in query.neighbors(NodeId(u as u32)).iter() {
+        let v = nb.node.index();
+        if !emitted[nb.edge.index()] {
+            emitted[nb.edge.index()] = true;
+            order.push((u, v, nb.edge));
+        }
+        if !visited[v] {
+            rk_dfs(query, v, visited, emitted, order);
+        }
+    }
+}
+
+/// `RayKirsch` recursive search over `bond_order`. Each bond either closes a ring
+/// (both endpoints mapped), extends an unmapped endpoint along the mapped one's mol
+/// adjacency, or seeds a component root.
+#[allow(clippy::too_many_arguments)]
+fn rk_search(
+    target: &Graph,
+    bond_order: &[(usize, usize, EdgeId)],
+    isolated: &[usize],
+    i: usize,
+    mapping: &mut [Option<usize>],
+    used: &mut [bool],
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    results: &mut Vec<Vec<usize>>,
+) {
+    if i == bond_order.len() {
+        rk_finish(target, isolated, 0, mapping, used, node_match, results);
+        return;
+    }
+    let (qb, qe, qedge) = bond_order[i];
+    match (mapping[qb], mapping[qe]) {
+        (Some(mb), Some(me)) => {
+            if let Some(te) = target.find_edge(NodeId(mb as u32), NodeId(me as u32)) {
+                if edge_match(qedge, te) {
+                    rk_search(target, bond_order, isolated, i + 1, mapping, used, node_match, edge_match, results);
+                }
+            }
+        }
+        (Some(mb), None) => {
+            rk_extend(target, bond_order, isolated, i, qe, mb, qedge, mapping, used, node_match, edge_match, results);
+        }
+        (None, Some(me)) => {
+            rk_extend(target, bond_order, isolated, i, qb, me, qedge, mapping, used, node_match, edge_match, results);
+        }
+        (None, None) => {
+            for atom in 0..target.node_count() {
+                if used[atom] || !node_match(NodeId(qb as u32), NodeId(atom as u32)) {
+                    continue;
+                }
+                mapping[qb] = Some(atom);
+                used[atom] = true;
+                rk_search(target, bond_order, isolated, i, mapping, used, node_match, edge_match, results);
+                used[atom] = false;
+                mapping[qb] = None;
+            }
+        }
+    }
+}
+
+/// Map the unmapped query endpoint `q_free` of bond `i` to an unused mol neighbor of
+/// the mapped endpoint's image `m_anchor`, then continue with the next bond.
+#[allow(clippy::too_many_arguments)]
+fn rk_extend(
+    target: &Graph,
+    bond_order: &[(usize, usize, EdgeId)],
+    isolated: &[usize],
+    i: usize,
+    q_free: usize,
+    m_anchor: usize,
+    qedge: EdgeId,
+    mapping: &mut [Option<usize>],
+    used: &mut [bool],
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    results: &mut Vec<Vec<usize>>,
+) {
+    for k in 0..target.neighbors(NodeId(m_anchor as u32)).len() {
+        let nb = target.neighbors(NodeId(m_anchor as u32))[k];
+        let t = nb.node.index();
+        if used[t] || !node_match(NodeId(q_free as u32), NodeId(t as u32)) || !edge_match(qedge, nb.edge) {
+            continue;
+        }
+        mapping[q_free] = Some(t);
+        used[t] = true;
+        rk_search(target, bond_order, isolated, i + 1, mapping, used, node_match, edge_match, results);
+        used[t] = false;
+        mapping[q_free] = None;
+    }
+}
+
+/// Map degree-0 query atoms (skipping any already pinned, e.g. an anchor) over the
+/// remaining unused mol atoms, recording each complete assignment.
+fn rk_finish(
+    target: &Graph,
+    isolated: &[usize],
+    k: usize,
+    mapping: &mut [Option<usize>],
+    used: &mut [bool],
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+    results: &mut Vec<Vec<usize>>,
+) {
+    if k == isolated.len() {
+        results.push(mapping.iter().map(|m| m.expect("complete")).collect());
+        return;
+    }
+    let q = isolated[k];
+    if mapping[q].is_some() {
+        rk_finish(target, isolated, k + 1, mapping, used, node_match, results);
+        return;
+    }
+    for t in 0..target.node_count() {
+        if used[t] || !node_match(NodeId(q as u32), NodeId(t as u32)) {
+            continue;
+        }
+        mapping[q] = Some(t);
+        used[t] = true;
+        rk_finish(target, isolated, k + 1, mapping, used, node_match, results);
+        used[t] = false;
+        mapping[q] = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -1341,7 +1710,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::SubgraphIsomorphismAlgorithm::{ArcMatch, Ri, Ullmann, Vf2};
+    use super::SubgraphIsomorphismAlgorithm::{ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit};
     use super::ARCMATCH_DEFAULT_PATH_LENGTH;
     use super::*;
 
@@ -1430,7 +1799,7 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        for alg in [Vf2, Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }] {
+        for alg in [Vf2, Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, Vf2Rdkit, RayKirsch] {
             let mut r = target.subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg);
             r.sort();
             assert_eq!(r, expected, "algorithm {alg:?}");
@@ -1456,7 +1825,7 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        for alg in [Vf2, Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }] {
+        for alg in [Vf2, Ullmann, Ri, ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH }, Vf2Rdkit, RayKirsch] {
             let mut r = target.subgraph_isomorphisms_at(
                 &query,
                 anchor,
