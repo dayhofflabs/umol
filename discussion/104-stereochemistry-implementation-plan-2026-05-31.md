@@ -1494,7 +1494,10 @@ Phases A–E are in scope; F (3D) and G follow.
     correspondence (correctly constraining overlay-only connectivity), then the **same** exact
     `verify_overlays` filters/builds — so `Incidence` returns the identical match set as `GraphAndOverlays`
     (decided: exact participation, not subset). All three substructure tests now run over BOTH strategies ×
-    6 subiso]; (5) E6 validation.
+    6 subiso]; **(5) E6 validation** [done 2026-06-21 — `umol-ast/tests/property/substructure.rs`:
+    cross-validation (random host × random pattern) and planted (pattern induced from host) proptests, both
+    over BOTH strategies × 6 subiso; malformed generated stereo is handled by the umol-perm `Option` family
+    (doc 119), not matcher-side code. RDKit offline fixtures and criterion benches remain Stage-6 work].
     - `GraphAndOverlays` — atom-bond subiso with `AtomAst`/`BondAst::matches` predicates (query is the
       general side; host folds in derived topological constraints), then per-overlay post-verification
       against the atom correspondence: dative/noncovalent via the views' `connecting`; aromatic/multicenter
@@ -1514,11 +1517,13 @@ Phases A–E are in scope; F (3D) and G follow.
   - **E5 — relative stereo** (`?o`/`~?o`, `matches_capturing`/`Env`): **deferred** with the variable
     facility (doc 115). Phase E ships absolute-stereo matching.
 
-  - **E6 — validation:** (1) internal cross-validation — `Ullmann`/`Ri`/`ArcMatch` return identical match
-    sets to `Vf2` over the corpus; (2) offline reference fixtures from RDKit (and the ArcMatch reference),
-    committed — exact agreement, no FFI; (3) stereo: frame-permuted target (reindex), enantiomer
-    no-match, noncovalent/aromatic/multicenter match; (4) criterion benches across the four + the
-    RDKit-variant baseline (neighbor-restricted + look-ahead off).
+  - **E6 — validation:** (1) internal cross-validation — `Ullmann`/`Ri`/`ArcMatch`/`Vf2Rdkit`/`RayKirsch`
+    return identical match sets to `Vf2` over the corpus **[done 2026-06-21]**; (2) offline reference
+    fixtures from RDKit (and the ArcMatch reference), committed — exact agreement, no FFI **[Stage 6]**;
+    (3) stereo: frame-permuted target (reindex), enantiomer no-match, noncovalent/aromatic/multicenter match
+    **[done 2026-06-21 — exercised by the planted proptest + the hand-written `#[case]` table]**;
+    (4) criterion benches across the algorithms + the RDKit-variant baseline (neighbor-restricted +
+    look-ahead off) **[Stage 6]**.
 
   - **Port order:** `Ullmann` → `Ri` → `ArcMatch` (RI's ordering feeds ArcMatch's variable ordering), fold
     the `Vf2` candidate-gen optimization, then `substructure_matches` (`GraphAndOverlays` first,

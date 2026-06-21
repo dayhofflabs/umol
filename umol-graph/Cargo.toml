@@ -3,6 +3,7 @@ name = "umol-graph"
 version = "0.1.0"
 authors = ["Dmitrij Rappoport <dmitrij@rappoport.org>"]
 edition = "2021"
+rust-version.workspace = true
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/rappoport/umol"
 keywords = [
@@ -56,7 +57,7 @@ umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "ind
 umol-graph-core = { path = "../umol-graph-core", version = "0.1.0" }
 umol-io = { path = "../umol-io", version = "0.1.0" }
 murmur3 = "0.5"
-nalgebra = "0.35.0"
+nalgebra = "0.34.0"
 rand = "0.10"
 rand_chacha = "0.10"
 regex = "1.11.2"

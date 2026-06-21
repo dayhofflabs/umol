@@ -13,6 +13,7 @@ keywords = [
 ]
 description = "3D geometric molecular models for umol."
 edition = "2021"
+rust-version.workspace = true
 
 [lib]
 bench = false

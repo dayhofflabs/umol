@@ -121,3 +121,4 @@
 | [117-entity-model-extensibility-2026-06-20.md](117-entity-model-extensibility-2026-06-20.md)                     | Active        | 2026-06-20   |
 | [118-validator-architecture-2026-06-20.md](118-validator-architecture-2026-06-20.md)                             | Completed     | 2026-06-20   |
 | [119-umol-perm-review-2026-06-21.md](119-umol-perm-review-2026-06-21.md)                                         | Completed     | 2026-06-21   |
+| [120-molecular-graph-generation-2026-06-21.md](120-molecular-graph-generation-2026-06-21.md)                     | Active        | 2026-06-21   |

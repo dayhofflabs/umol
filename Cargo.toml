@@ -18,6 +18,9 @@ members = [
 exclude = ["umol-ast/fuzz", "umol-edn/fuzz", "umol-io/fuzz"]
 resolver = "2"
 
+[workspace.package]
+rust-version = "1.87"
+
 [profile.bench]
 debug = true
 
