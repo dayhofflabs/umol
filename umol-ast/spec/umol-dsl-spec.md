@@ -114,8 +114,7 @@ aromatic-system-entry    ::= { [:id keyword] :atoms [ atom-ref+ ] [:electrons [ 
 multicenter-bond-entry ::= { [:id keyword] :atoms [ atom-ref+ ] [:electrons [ value-expr+ ]] :type "multicenter-string" }
 noncovalent-bond-entry ::= { [:id keyword] :a atom-ref :b atom-ref :type noncovalent-bond-spec }
 
-noncovalent-bond-spec ::= "noncovalent-string" | noncovalent-keyword
-noncovalent-keyword ::= :h-bond | :halogen-bond | :chalcogen-bond | :ionic | :van-der-waals
+noncovalent-bond-spec ::= "noncovalent-string"
 
 stereo-atom-list ::= [ stereo-atom-entry* ]
 stereo-bond-list ::= [ stereo-bond-entry* ]
@@ -142,7 +141,7 @@ Whether an empty string **`:type ""`** parses depends on the subgrammar:
 
 **`:electrons` vector (aromatic and multicenter entries).** Both **`aromatic-system-entry`** and **`multicenter-bond-entry`** **MAY** carry an optional **`:electrons`** key holding the **per-atom** electron contributions as a **single atomic value**: **either** **`:undetermined`** (the whole vector unknown) **or** a vector of **concrete integers**, one per member atom. A concrete vector **MUST** have the same length as the entry's **`:atoms`** vector — position **`i`** is the contribution of the atom at position **`i`** of **`:atoms`**. When **`:electrons`** is omitted the contributions are **`:undetermined`**. Its content is independent of the optional **`#e`** total on the entry's **`:type`** — when both are present, downstream validation **MAY** require **`sum(:electrons) == #e`** on ground inputs.
 
-**Noncovalent kind.** A **`noncovalent-bond-entry`** **MUST** carry **`:type`**. The value is either a **`noncovalent-keyword`** (ground shorthand) or a **`noncovalent-string`** (**§7.13**) carrying the kind as an expression. The five **`noncovalent-keyword`** values expand to the corresponding ground literal in **§7.13** and are accepted wherever a **`noncovalent-bond-spec`** is expected.
+**Noncovalent kind.** A **`noncovalent-bond-entry`** **MUST** carry **`:type`**. The value is a **`noncovalent-string`** (**§7.13**) carrying the interaction kind (e.g. **`"Hbd"`**).
 
 **Stereo atom / stereo bond entry.** A **`stereo-atom-entry`** overlays a coordination-stereo configuration (tetrahedral and the higher geometries) on an atom site; a **`stereo-bond-entry`** overlays a cis/trans configuration on a bond site.
 
@@ -351,7 +350,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 | aromatic system | charge (**`#c`**), spin (**`#u`**, **`#s`**), π-electron count (**`#e`**) |
 | multicenter bond | charge (**`#c`**), spin (**`#u`**, **`#s`**), electron count (**`#e`**) |
 | dative bond | a single **`:acceptor`** and its one-or-more **`:donor`** atoms — the assignment on the map entry (**§4**) — plus the leading **`order`** token of the dative-string (number of donated electron pairs; **§7.12**). |
-| noncovalent bond | interaction kind (**`:h-bond`**, **`:halogen-bond`**, **`:chalcogen-bond`**, **`:ionic`**, **`:van-der-waals`**) |
+| noncovalent bond | interaction kind (**`Hbd`**, **`Xbd`**, **`Ybd`**, **`Ion`**, **`Vdw`**) |
 | stereo atom | coordination **`class`** (geometry) and **`coset`** configuration index (the **`:type`** payload, **§7.14**). The bearing **`:site`** atom and ordered **`:ligands`** frame (**§4**) are the relation's participants, not payload fields. |
 | stereo bond | cis/trans **`class`** and **`coset`** configuration (the **`:type`** payload, **§7.14**). The bearing **`:site`** bond and ordered **`:ligands`** frame (**§4**) are the relation's participants. |
 
@@ -379,7 +378,7 @@ In **Query** and **Rule**, any predicate slot that allows a full **`value-expr`*
 
 **Element matching.** Parallels the above: **`element-literal`** against **`element-literal`** by equality; **`element-set`** against a target iff the target's admissible symbols are a subset; **`element-bind`** behaves as its inner **`element-set`** for the match (the nominal binding is a side effect, not a match filter, **§6.3**); **`element-ref`** outside a resolved rule-scope binding context matches nothing.
 
-**Noncovalent-kind matching.** Same shape as element matching, over the five-literal domain **`{:h-bond, :halogen-bond, :chalcogen-bond, :ionic, :van-der-waals}`**.
+**Noncovalent-kind matching.** Same shape as element matching, over the five-literal domain **`{Hbd, Xbd, Ybd, Ion, Vdw}`**.
 
 **Molecule-level match.** A molecule-map pattern matches a target iff (a) every **`atom-string`** matches its corresponding target atom-string field-wise — element and every inherent-field predicate payload, per the rules above; (b) every **`bond-string`** matches field-wise; (c) each structural relation (**`:aromatic-systems`**, **`:multicenter-bonds`**, **`:dative-bonds`**, **`:noncovalent-bonds`**, **`:stereo-atoms`**, **`:stereo-bonds`**) matches per its own inherent fields; (d) every derived predicate holds on the resulting embedding (**§6.1**). Any failure rejects the embedding.
 
@@ -955,21 +954,19 @@ noncovalent-kind-literal ::= 'Hbd' | 'Xbd' | 'Ybd' | 'Ion' | 'Vdw'
 
 **Literal meanings.**
 
-| Literal | Interaction kind | Keyword equivalent (**§4**) |
-|---------|------------------|-------------------------------|
-| **`Hbd`** | hydrogen bond | **`:h-bond`** |
-| **`Xbd`** | halogen bond | **`:halogen-bond`** |
-| **`Ybd`** | chalcogen bond | **`:chalcogen-bond`** |
-| **`Ion`** | ionic interaction | **`:ionic`** |
-| **`Vdw`** | van der Waals interaction | **`:van-der-waals`** |
+| Literal | Interaction kind |
+|---------|------------------|
+| **`Hbd`** | hydrogen bond |
+| **`Xbd`** | halogen bond |
+| **`Ybd`** | chalcogen bond |
+| **`Ion`** | ionic interaction |
+| **`Vdw`** | van der Waals interaction |
 
 Each **`noncovalent-kind-literal`** is exactly three ASCII characters: one leading uppercase letter followed by two lowercase letters. The parser consumes the full three-character token; partial prefixes (**`H`**, **`Hb`**, …) **MUST** be rejected. Leading / trailing whitespace on the whole **noncovalent-string** is ignored (**§7.1**).
 
 **Wildcard and sets.** **`*`** admits any kind. An **`noncovalent-kind-set`** **`{Hbd,Ion}`** admits its members. These forms are **invalid** in **Ground**; **Query** / **Rule** **MAY** use them.
 
 **Bind and ref.** **`noncovalent-kind-bind`** introduces a **nominal** variable **`id`** constrained to membership in the given set (**§6**); **`noncovalent-kind-ref`** references a nominal binding established elsewhere in the rule scope. Both are **invalid** in **Ground**. **`::`** here means **set membership in a set of noncovalent-kind symbols**, parallel to its use in **`element-bind`** (**§7.4**, **§5**).
-
-**Relation to `noncovalent-keyword` (`§4`).** The five **`noncovalent-keyword`** values (**`:h-bond`** etc.) are a ground-only EDN shorthand on the **`noncovalent-bond-entry`**'s **`:type`**; they expand to the corresponding **`noncovalent-kind-literal`** and are semantically identical. The keyword shorthand **MUST NOT** be used inside a **`noncovalent-kind-set`** or a **`noncovalent-kind-bind`**; those take kind literals only.
 
 ### 7.14 Stereo subgrammar
 

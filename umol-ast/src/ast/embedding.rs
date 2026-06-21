@@ -56,14 +56,23 @@ impl<'a> MoleculeEmbedding<'a> {
         }
     }
 
-    /// Build an embedding from a substructure-match atom correspondence:
-    /// `atom_map[sub_atom] = host_atom` (the query→host vector from subgraph
-    /// isomorphism). Bonds are recovered from the host topology; overlay maps are
-    /// left empty (populated by the overlay-aware matching stages).
-    pub(crate) fn from_correspondence(
+    /// Build an embedding from a substructure match: `atom_map[sub_atom] =
+    /// host_atom` (the query→host vector from subgraph isomorphism) plus the
+    /// per-overlay-type sub→host id maps recovered during overlay verification.
+    /// Bonds are recovered from the host topology. Overlay maps a caller leaves
+    /// empty (e.g. an overlay-free pattern, or stereo before its post-filter) stay
+    /// empty.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn from_match(
         host: &'a MoleculeAst,
         pattern: &MoleculeAst,
         atom_map: Vec<AtomId>,
+        host_dative_bonds: Vec<DativeBondId>,
+        host_aromatic_systems: Vec<AromaticSystemId>,
+        host_multicenter_bonds: Vec<MulticenterBondId>,
+        host_noncovalent_bonds: Vec<NoncovalentBondId>,
+        host_stereo_atoms: Vec<StereoAtomId>,
+        host_stereo_bonds: Vec<StereoBondId>,
     ) -> Self {
         let sub_atoms = atom_map
             .iter()
@@ -88,12 +97,12 @@ impl<'a> MoleculeEmbedding<'a> {
         Self::new(
             atom_map,
             host_bonds,
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
+            host_dative_bonds,
+            host_aromatic_systems,
+            host_multicenter_bonds,
+            host_noncovalent_bonds,
+            host_stereo_atoms,
+            host_stereo_bonds,
             sub_atoms,
             host,
         )

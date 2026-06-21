@@ -1477,9 +1477,12 @@ Phases A–E are in scope; F (3D) and G follow.
     constraints())`, last-wins), precomputed once per call. Footgun fixed: `GraphView::subgraph_isomorphisms`
     closures are `(query, host)` order (already the behavior; the wrapper's internal names were swapped and
     are corrected + documented). Staged like ArcMatch: **(1) skeleton `GraphAndOverlays`** [done 2026-06-20 —
-    `ast/substructure.rs`, `MoleculeEmbedding::from_correspondence`, cross-validated across all six subiso
-    algs]; (2) overlay post-verification; (3) stereo coset post-filter (E3/E4); (4) `Incidence`
-    (`unimplemented!` placeholder until then); (5) E6 validation.
+    `ast/substructure.rs`, `MoleculeEmbedding::from_match`, cross-validated across all six subiso algs];
+    **(2) overlay post-verification** [done 2026-06-20 — `verify_overlays`: dative (with donor/acceptor role
+    check), noncovalent, aromatic, multicenter located by exact-set `connecting`, overlay AST `matches`, host
+    overlay ids recorded in the embedding; per-atom `#a`/`#m` already covered by the stage-1 predicate;
+    rejects when a pattern overlay is absent; cross-validated]; (3) stereo coset post-filter (E3/E4);
+    (4) `Incidence` (`unimplemented!` placeholder until then); (5) E6 validation.
     - `GraphAndOverlays` — atom-bond subiso with `AtomAst`/`BondAst::matches` predicates (query is the
       general side; host folds in derived topological constraints), then per-overlay post-verification
       against the atom correspondence: dative/noncovalent via the views' `connecting`; aromatic/multicenter
