@@ -1,10 +1,15 @@
-//! Subgraph isomorphism via VF2.
+//! Subgraph isomorphism (monomorphism: query edges map to target edges, no
+//! induced-subgraph reverse check). Multiple named algorithms behind a selector;
+//! all return the same match set (a query→target index vector per occurrence).
 
 use crate::graph::{EdgeId, Graph, NodeId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubgraphIsomorphismAlgorithm {
+    /// VF2 — terminal-set backtracking + look-ahead (Cordella et al. 2004).
     Vf2,
+    /// Ullmann — candidate-matrix refinement + backtracking (Ullmann 1976).
+    Ullmann,
 }
 
 impl Graph {
@@ -22,6 +27,9 @@ impl Graph {
             SubgraphIsomorphismAlgorithm::Vf2 => {
                 self.subgraph_isomorphisms_vf2(query, node_match, edge_match)
             }
+            SubgraphIsomorphismAlgorithm::Ullmann => {
+                self.subgraph_isomorphisms_ullmann(query, node_match, edge_match)
+            }
         }
     }
 
@@ -36,6 +44,9 @@ impl Graph {
         match alg {
             SubgraphIsomorphismAlgorithm::Vf2 => {
                 self.subgraph_isomorphisms_at_vf2(query, anchor, node_match, edge_match)
+            }
+            SubgraphIsomorphismAlgorithm::Ullmann => {
+                self.subgraph_isomorphisms_at_ullmann(query, anchor, node_match, edge_match)
             }
         }
     }
@@ -84,6 +95,69 @@ impl Graph {
         state.seed_anchor(anchor);
         state.search(node_match, edge_match);
         state.results
+    }
+
+    // Ullmann 1976 "An algorithm for subgraph isomorphism": candidate matrix
+    // (label- and degree-compatible) refined to a fixpoint, then row-by-row
+    // backtracking with re-refinement. Monomorphism (substructure) semantics.
+    fn subgraph_isomorphisms_ullmann(
+        &self,
+        query: &Graph,
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() {
+            return Vec::new();
+        }
+        if query.node_count() == 0 {
+            return vec![vec![]];
+        }
+        let mut m = ullmann_matrix(query, self, node_match);
+        ullmann_refine(query, self, &mut m, edge_match);
+        let mut results = Vec::new();
+        let mut mapping = vec![usize::MAX; query.node_count()];
+        let mut used = vec![false; self.node_count()];
+        ullmann_search(query, self, 0, &m, &mut mapping, &mut used, edge_match, &mut results);
+        results
+    }
+
+    fn subgraph_isomorphisms_at_ullmann(
+        &self,
+        query: &Graph,
+        anchor: (NodeId, NodeId),
+        node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+        edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    ) -> Vec<Vec<usize>> {
+        if query.node_count() > self.node_count() || query.node_count() == 0 {
+            return Vec::new();
+        }
+        if anchor.0.index() >= query.node_count() || anchor.1.index() >= self.node_count() {
+            return Vec::new();
+        }
+        if !node_match(anchor.0, anchor.1) {
+            return Vec::new();
+        }
+        let n2 = self.node_count();
+        let (qa, ta) = (anchor.0.index(), anchor.1.index());
+        let mut m = ullmann_matrix(query, self, node_match);
+        // Pin the anchor: its row keeps only the anchor target, its target column
+        // keeps only the anchor row.
+        for k in 0..n2 {
+            if k != ta {
+                m[qa * n2 + k] = false;
+            }
+        }
+        for r in 0..query.node_count() {
+            if r != qa {
+                m[r * n2 + ta] = false;
+            }
+        }
+        ullmann_refine(query, self, &mut m, edge_match);
+        let mut results = Vec::new();
+        let mut mapping = vec![usize::MAX; query.node_count()];
+        let mut used = vec![false; n2];
+        ullmann_search(query, self, 0, &m, &mut mapping, &mut used, edge_match, &mut results);
+        results
     }
 }
 
@@ -283,12 +357,131 @@ impl<'g> Vf2State<'g> {
     }
 }
 
+/// Ullmann candidate matrix `m[i * n2 + j]`: query node `i` may map to target
+/// node `j` when labels are compatible and `deg(i) <= deg(j)`.
+fn ullmann_matrix(
+    query: &Graph,
+    target: &Graph,
+    node_match: &mut impl FnMut(NodeId, NodeId) -> bool,
+) -> Vec<bool> {
+    let n1 = query.node_count();
+    let n2 = target.node_count();
+    let target_deg: Vec<usize> = (0..n2)
+        .map(|j| target.neighbors(NodeId(j as u32)).len())
+        .collect();
+    let mut m = vec![false; n1 * n2];
+    for i in 0..n1 {
+        let di = query.neighbors(NodeId(i as u32)).len();
+        for j in 0..n2 {
+            if di <= target_deg[j] && node_match(NodeId(i as u32), NodeId(j as u32)) {
+                m[i * n2 + j] = true;
+            }
+        }
+    }
+    m
+}
+
+/// Ullmann refinement to a fixpoint: clear `m[i][j]` unless every query neighbor
+/// `x` of `i` has a target neighbor `y` of `j` with `m[x][y]` and a matching edge.
+fn ullmann_refine(
+    query: &Graph,
+    target: &Graph,
+    m: &mut [bool],
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+) {
+    let n2 = target.node_count();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for i in 0..query.node_count() {
+            for j in 0..n2 {
+                if !m[i * n2 + j] {
+                    continue;
+                }
+                let supported = query.neighbors(NodeId(i as u32)).iter().all(|qn| {
+                    let x = qn.node.index();
+                    target
+                        .neighbors(NodeId(j as u32))
+                        .iter()
+                        .any(|tn| m[x * n2 + tn.node.index()] && edge_match(qn.edge, tn.edge))
+                });
+                if !supported {
+                    m[i * n2 + j] = false;
+                    changed = true;
+                }
+            }
+        }
+    }
+}
+
+/// Row-by-row backtracking over the refined matrix. Query nodes are assigned in
+/// index order (`depth` = next query node); each complete injective,
+/// edge-consistent mapping is recorded.
+#[allow(clippy::too_many_arguments)]
+fn ullmann_search(
+    query: &Graph,
+    target: &Graph,
+    depth: usize,
+    m: &[bool],
+    mapping: &mut Vec<usize>,
+    used: &mut [bool],
+    edge_match: &mut impl FnMut(EdgeId, EdgeId) -> bool,
+    results: &mut Vec<Vec<usize>>,
+) {
+    let n1 = query.node_count();
+    let n2 = target.node_count();
+    if depth == n1 {
+        results.push(mapping.clone());
+        return;
+    }
+    let i = depth;
+    for j in 0..n2 {
+        if !m[i * n2 + j] || used[j] {
+            continue;
+        }
+        // Edges from i to already-assigned query nodes must map to matching target edges.
+        let consistent = query.neighbors(NodeId(i as u32)).iter().all(|qn| {
+            let a = qn.node.index();
+            if a >= depth {
+                return true;
+            }
+            match target.find_edge(NodeId(j as u32), NodeId(mapping[a] as u32)) {
+                Some(f) => edge_match(qn.edge, f),
+                None => false,
+            }
+        });
+        if !consistent {
+            continue;
+        }
+        let mut m2 = m.to_vec();
+        for k in 0..n2 {
+            if k != j {
+                m2[i * n2 + k] = false;
+            }
+        }
+        for r in 0..n1 {
+            if r != i {
+                m2[r * n2 + j] = false;
+            }
+        }
+        ullmann_refine(query, target, &mut m2, edge_match);
+        let future_ok = (depth + 1..n1).all(|r| (0..n2).any(|k| m2[r * n2 + k]));
+        if future_ok {
+            mapping[i] = j;
+            used[j] = true;
+            ullmann_search(query, target, depth + 1, &m2, mapping, used, edge_match, results);
+            mapping[i] = usize::MAX;
+            used[j] = false;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
     use rstest::*;
 
-    use super::SubgraphIsomorphismAlgorithm::Vf2;
+    use super::SubgraphIsomorphismAlgorithm::{Ullmann, Vf2};
     use super::*;
 
     fn any_node(_: NodeId, _: NodeId) -> bool {
@@ -359,9 +552,11 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        let mut r = target.subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, Vf2);
-        r.sort();
-        assert_eq!(r, expected);
+        for alg in [Vf2, Ullmann] {
+            let mut r = target.subgraph_isomorphisms(&query, &mut node_match, &mut edge_match, alg);
+            r.sort();
+            assert_eq!(r, expected, "algorithm {alg:?}");
+        }
     }
 
     #[rstest]
@@ -383,9 +578,11 @@ mod tests {
         #[case] mut edge_match: fn(EdgeId, EdgeId) -> bool,
         #[case] expected: Vec<Vec<usize>>,
     ) {
-        let mut r =
-            target.subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, Vf2);
-        r.sort();
-        assert_eq!(r, expected);
+        for alg in [Vf2, Ullmann] {
+            let mut r = target
+                .subgraph_isomorphisms_at(&query, anchor, &mut node_match, &mut edge_match, alg);
+            r.sort();
+            assert_eq!(r, expected, "algorithm {alg:?}");
+        }
     }
 }

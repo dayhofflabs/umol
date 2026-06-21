@@ -1,8 +1,8 @@
 # 104 — Stereochemistry implementation plan
 
-Status: **Active / implementation plan.** Design record:
+Status: **Active.** Step 1 (graph-core relation infrastructure) and Phases A, A′, B, C, D are done;
+**Phase E (matching) is the only outstanding phase** (Phase F 3D and Phase G deferred). Design record:
 [103-stereochemistry-overlay-and-port-trajectory-2026-05-28.md](103-stereochemistry-overlay-and-port-trajectory-2026-05-28.md).
-Step 1 (graph-core relation infrastructure) lands before the stereo phases; not yet implemented.
 
 The full staged plan for the stereo deliverable. Design and decisions live in doc 103 (molecule-
 level semantics, the `:stereo-atoms`/`:stereo-bonds` DSL, `#T`/`#C`, config algebra, contract D1/D2/D3, port trajectory,
@@ -781,13 +781,13 @@ Phases A–E are in scope; F (3D) and G follow.
   **Validation methodology.** Reference cosets are given in SMILES/bond *source* order; the stored coset is
   that value reindexed by the parity of the source→target permutation (even = unchanged, odd = flipped).
 
-- **Phase C — perception → stereo elements** (chemistry; `umol-graph/src/ops/stereo*`). Lifts `#T`/`#C` +
-  topology into the molecule-level stereo overlay and provides the stereo query/operation surface — modeled on the
-  aromaticity ops (`AromaticityModel` + `AromaticityPerception` + resolver/validator/transformer). The storage
-  overlay is built: `stereo_atoms`/`stereo_bonds` (`FixedVarBirelationSet`), `StereoAtomId`/`StereoBondId`,
-  builders, remap/restore, and `stereo_ligands()` (real neighbors in adjacency order, then implicit-H ×h, then
-  lone pairs — materializes the virtual ligands). Same-frame lift: the element's ligand order is `#T`'s incidence
-  frame (equivariant, not canonical), so config copies through with no reindex.
+- **Phase C — perception → stereo elements** (chemistry; `umol-graph/src/ops/stereo*`). **DONE (2026-06-20)**
+  Lifts `#T`/`#C` + topology into the molecule-level stereo overlay and provides the stereo query/operation surface —
+  modeled on the aromaticity ops (`AromaticityModel` + `AromaticityPerception` + resolver/validator/transformer). The
+  storage overlay is built: `stereo_atoms`/`stereo_bonds` (`FixedVarBirelationSet`), `StereoAtomId`/`StereoBondId`,
+  builders, remap/restore, and `stereo_ligands()` (real neighbors in adjacency order, then implicit-H ×h, then lone
+  pairs — materializes the virtual ligands). Same-frame lift: the element's ligand order is `#T`'s incidence frame
+  (equivariant, not canonical), so config copies through with no reindex.
 
   Implementation in separate doc [111-stereo-phase-c-impl-2026-06-11.md](111-stereo-phase-c-impl-2026-06-11.md).
 
@@ -1258,7 +1258,7 @@ Phases A–E are in scope; F (3D) and G follow.
 
 - **Phase D — DSL round-trip** (`umol-ast/src/dsl/stereo.rs`, new; wired into `dsl/molecule.rs`, mirror
   `aromatic`). Faithful round-trip, no frame conversion (config stored relative to the written `:ligands`
-  order; `#T`/`#C` relative to the local frame).
+  order; `#T`/`#C` relative to the local frame). **DONE (2026-06-20)**
   - **D1** — config-string parser/writer: `class config` ↔ `(StereoKind, StereoConfigurationAst)`. Head
     `Th`/`Ct`; config `* | ! | + | <coset-term>`, coset-term recursive (`nat`→`Lit`, `?id`→`Expr(Var)`,
     `~e`→`Expr(SwapOp)`, `e^<image-number>`→`Expr(ApplyOp(perm))`); `Expr::LitSet`/`VarDomain` (`{…}`, `?o :: {…}`) reserved at the
@@ -1437,6 +1437,64 @@ Phases A–E are in scope; F (3D) and G follow.
     to canonical with `matches` its empty-env wrapper, and grows `Env` from singletons to domains/relations for
     non-stereo variable types — `meet`/`join` stay pure throughout).
   - **E6** — tests: pattern↔target over the corpus — TH/CT absolute + relative-stereo binds; assert match/no-match.
+
+  **Phase E — substructure matching: implementation plan (2026-06-20).** Supersedes the E3–E6 sketch
+  above; E1/E2 are done (`AsLit` + `Lattice` on all stereo types, `matches` meet-derived per doc 113).
+  Two composed algorithm selectors, in umol-graph-core's named-algorithm + selector style.
+
+  - **Subgraph isomorphism** (`SubgraphIsomorphismAlgorithm`, `umol-graph-core` `subiso`). Verified by
+    reading the local references (`materials/codes/{rdkit,cdk,mx,vf2lib}`): RDKit, CDK `VentoFoggia`, mx,
+    and vf2lib are all VF2 (Cordella 2004) or weaker — the "variants" are implementation knobs (candidate
+    generation, look-ahead, node ordering), not distinct algorithms (mx has no terminal sets / look-ahead
+    = Ullmann-grade). So one `Vf2` plus genuinely distinct approaches:
+
+    | variant | approach | source |
+    |---|---|---|
+    | `Vf2` (exists) | terminal-set backtracking + look-ahead | Cordella et al. 2004 |
+    | `Ullmann` | matrix-refinement backtracking | Ullmann 1976 (CDK) |
+    | `Ri` | static most-constrained ordering, no domain reduction | Bonnici et al. 2013 |
+    | `ArcMatch` | vertex/edge-domain reduction (exploits bond labels) | Bonnici et al. 2024 |
+
+    Dropped: VF2++ (generic-graph ordering; not expected to beat RI/ArcMatch on sparse edge-labeled
+    molecular graphs), DF (CDK `DfPattern` — unpublished), SD (vf2lib Schmidt-Druffel — superseded). All
+    ported natively; a one-time dev-only oracle wrap is acceptable while porting ArcMatch, not a standing
+    dependency. `Vf2` folds in one behavior-preserving optimization (always on, no flag): RDKit's
+    neighbor-restricted candidate generation (enumerate only the mapped query-neighbor's image's
+    neighbors, not all targets) — identical match set (subset of the terminal set the consistency check
+    already filters), changes enumeration order only (results stay set-based). RDKit's production variant
+    also disables look-ahead — kept only as a benchmark baseline, not shipped/configurable.
+
+  - **Substructure matching** (`SubstructureMatchAlgorithm`, `MoleculeAst::substructure_matches`), each
+    strategy composing over a chosen subiso algorithm:
+    - `GraphAndOverlays` — atom-bond subiso with `AtomAst`/`BondAst::matches` predicates (query is the
+      general side; host folds in derived topological constraints), then per-overlay post-verification
+      against the atom correspondence: dative/noncovalent via the views' `connecting`; aromatic/multicenter
+      by **exact participant set** (atoms outside a pattern overlay are constrained per-atom with
+      `#a`/`#m` — no expressivity loss); stereo via the coset post-filter. Sound when the localized-bond
+      skeleton carries the connectivity; a hyperedge that is the sole link between atoms degrades it.
+    - `Incidence` — subiso on the incidence (Levi) graph (`incidence_graph`) = true hypergraph matching;
+      pure 3c-2e / haptic / noncovalent-only connectivity matches correctly. Directed/ordered relations
+      and the stereo coset still need the post-step.
+
+  - **E3/E4 — stereo coset post-filter** (both strategies): induce σ from the correspondence over the two
+    ligand frames (neighbors in atom-index order + virtual H/lp, per `resolve_stereo_atom`),
+    `space(kind).reindex` the pattern coset into the host frame, compare via coset `meet`/`matches`.
+    Topological-only, evaluated per complete candidate. Builds `MoleculeEmbedding` (second producer after
+    `induced_subgraph`).
+
+  - **E5 — relative stereo** (`?o`/`~?o`, `matches_capturing`/`Env`): **deferred** with the variable
+    facility (doc 115). Phase E ships absolute-stereo matching.
+
+  - **E6 — validation:** (1) internal cross-validation — `Ullmann`/`Ri`/`ArcMatch` return identical match
+    sets to `Vf2` over the corpus; (2) offline reference fixtures from RDKit (and the ArcMatch reference),
+    committed — exact agreement, no FFI; (3) stereo: frame-permuted target (reindex), enantiomer
+    no-match, noncovalent/aromatic/multicenter match; (4) criterion benches across the four + the
+    RDKit-variant baseline (neighbor-restricted + look-ahead off).
+
+  - **Port order:** `Ullmann` → `Ri` → `ArcMatch` (RI's ordering feeds ArcMatch's variable ordering), fold
+    the `Vf2` candidate-gen optimization, then `substructure_matches` (`GraphAndOverlays` first,
+    `Incidence` after).
+
 - **Phase F — 3D (deferred).** umol-geometric (greenfield): config constrains local geometry at
   embedding (signed volume / cis-trans side). Substrate = doc 071.
 - **Phase G — later.** Config operators `~`/`^` (relative stereo); deeper perception (stereogenicity on
