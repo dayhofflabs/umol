@@ -46,10 +46,10 @@ fn named_struct_fields(input: &DeriveInput, derive: &str) -> Result<Vec<Ident>, 
 /// - `is_undetermined` / `is_ground`: conjunction of the field-wise calls
 /// - `meet`: field-wise meet; returns `None` as soon as any field's meet is `None`
 /// - `join`: field-wise join
-///
-/// `matches` is not generated: every field's `meet`/`join` is already canonical, so a
-/// struct of canonical fields is canonical, and the trait's `meet`-derived `matches`
-/// default is exactly the field-wise conjunction.
+/// - `matches`: conjunction of the field-wise `matches`. Equal to the trait's
+///   `meet`-derived default (a struct of canonical fields is canonical), but built
+///   from each field's `matches` directly so the per-candidate path allocates no
+///   intermediate `meet`/`canonical`.
 #[proc_macro_derive(Lattice)]
 pub fn derive_lattice(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -76,6 +76,9 @@ pub fn derive_lattice(input: TokenStream) -> TokenStream {
                 Self {
                     #( #fields: #lattice::join(&self.#fields, &other.#fields), )*
                 }
+            }
+            fn matches(&self, target: &Self) -> bool {
+                true #( && #lattice::matches(&self.#fields, &target.#fields) )*
             }
         }
     }

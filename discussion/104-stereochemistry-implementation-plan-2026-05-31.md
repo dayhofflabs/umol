@@ -1523,7 +1523,70 @@ Phases A–E are in scope; F (3D) and G follow.
     (3) stereo: frame-permuted target (reindex), enantiomer no-match, noncovalent/aromatic/multicenter match
     **[done 2026-06-21 — exercised by the planted proptest + the hand-written `#[case]` table]**;
     (4) criterion benches across the algorithms + the RDKit-variant baseline (neighbor-restricted +
-    look-ahead off) **[Stage 6]**.
+    look-ahead off) **[done 2026-06-21 — see E6(4) results below]**.
+
+  - **E6(4) benchmark results (2026-06-21).** Two criterion benches plus an out-of-band actual-RDKit
+    comparison:
+    - `umol-graph-core/benches/algorithms.rs::subgraph_isomorphism` — raw subiso on `Graph`, **bond-labeled**
+      (alternating synthetic edge labels; unlabeled regular graphs hide the label-aware algorithms'
+      advantage), sweeping all six variants over the fixture matrix incl. C60.
+    - `umol-graph/benches/substructure.rs` — end-to-end `MoleculeAst::substructure_matches`, 2 strategies ×
+      6 subiso, over the ~9k basic_opensmiles corpus × three patterns (branched / phenol / bicyclic). Replaces
+      the stale legacy-API bench. Corpus, patterns, and semantics (element-only atoms, any-bonds, all
+      embeddings) mirror the RDKit script for a fair comparison.
+    - `scripts/rdkit_substructure_baseline.py` — non-permanent dev oracle (not a build dep), run in the
+      `rdkit-ref` micromamba env (RDKit 2026.03.3). Same corpus/patterns as SMARTS with `~` (any) bonds and
+      `[#6]`/`[#7]`/`[#8]` (element-only) atoms, `GetSubstructMatches(uniquify=False)`.
+
+    Actual-RDKit baseline (8969 parsed, 153 rejected — matches doc 082's "~150"): branched 53.7 ms, phenol
+    87.6 ms, bicyclic 54.4 ms per corpus pass.
+
+    umol end-to-end (GraphAndOverlays strategy, ms/pass; `--sample-size 10`), **before** the
+    cheap-`matches` fix:
+
+    | pattern  | Vf2  | Ullmann | Ri   | ArcMatch | Vf2Rdkit | RayKirsch | RDKit | best gap |
+    |----------|------|---------|------|----------|----------|-----------|-------|----------|
+    | branched | 1125 | 632     | 793  | 597      | **584**  | 786       | 53.7  | 10.9×    |
+    | phenol   | 1901 | 943     | 1184 | 951      | **942**  | 1244      | 87.6  | 10.8×    |
+    | bicyclic | 1174 | 1197    | 775  | 1287     | **527**  | 1114      | 54.4  | 9.7×     |
+
+    Findings: (a) **algorithm choice ≈ 2×** — `Vf2Rdkit` (RDKit's neighbor-restricted ordering, look-ahead
+    off) is fastest everywhere; vanilla `Vf2` is consistently the slowest (there is no default algorithm —
+    callers choose explicitly, by design). (b) The dominant cost was the **per-candidate predicate**:
+    `AtomAst`/`BondAst::matches` used the generic `meet`-derived default, which allocates a `BTreeSet<Element>`
+    (`ElementAst::meet`) and rebuilds the constraint `SmallVec` on every candidate comparison inside VF2. dhat
+    attributed ~84% of allocations there; inverted samply showed the same as VF2 self-time. doc 082's ~2× was
+    *raw* VF2, so the extra ~4–5× was this AST-predicate overhead, not the relational model. (c) Pre-screening
+    (fingerprint quick-reject) is excluded per the "balanced matcher, not screening-only" goal.
+
+    **Fix (2026-06-21).** Allocation-free `matches`: explicit literal-path overrides on `ValueAst` /
+    `ElementAst` / `IsotopeMassAst` (symbolic operands — `Term`/`Predicate`/`Var`/`NotSet` — defer to the
+    `meet`-derived check), and the `Lattice` derive now generates a field-wise `matches` so
+    `AtomAst`/`BondAst`/`SpinStateAst` recurse into them (the constraint collections already had cheap
+    `matches`). Gated by `matches == meet`-derived proptests (`assert_lattice_laws`, plus new
+    `test_atom_ast_lattice_laws` / `test_bond_ast_lattice_laws`); zero behavior change. After (same bench,
+    ms/pass):
+
+    | pattern  | Vf2 | Ullmann | Ri  | ArcMatch | Vf2Rdkit | RayKirsch | RDKit | best gap |
+    |----------|-----|---------|-----|----------|----------|-----------|-------|----------|
+    | branched | 277 | 194     | 210 | 217      | **167**  | 195       | 53.7  | 3.1×     |
+    | phenol   | 464 | 255     | 289 | 347      | **254**  | 271       | 87.6  | 2.9×     |
+    | bicyclic | 300 | 329     | 205 | 531      | **164**  | 261       | 54.4  | 3.0×     |
+
+    The best-algorithm gap to RDKit drops **~10× → ~3×** — to doc 082's raw VF2-vs-RDKit margin, so the AST
+    generality overhead is essentially gone; the residual is the algorithmic gap (RDKit's VF2+ ordering +
+    fingerprint pre-screening) plus per-call host derivation. Criterion baselines are named after the
+    pre-change commit SHA with `--baseline-lenient`; the Incidence-strategy half and the full graph-core sweep
+    are produced by a plain `cargo bench`.
+
+    **Derive-skip (2026-06-21).** `derive_constraints` was then ~16% of time / ~39% of allocations (a larger
+    slice once the predicate was cheap). It folds topological constraints *only* into the host match-target's
+    constraints field, which an unconstrained pattern never consults — so `host_match_targets` skips it per
+    entity kind when the pattern has no atom/bond constraints (the element/bond-order case, e.g. SMILES-raised
+    hosts under SMARTS-lite queries). Behavior-preserving (gated by the substructure suite). `Vf2Rdkit`
+    GraphAndOverlays ms/pass: branched 167→**125**, phenol 254→**212**, bicyclic 164→**123** — best gap to
+    RDKit now **~2.3×**, below doc 082's raw VF2 margin. Per-host caching of the derived target (`OnceLock`)
+    is a later screening-workload optimization, not done. Combined with the cheap `matches`: **~10× → ~2.3×**.
 
   - **Port order:** `Ullmann` → `Ri` → `ArcMatch` (RI's ordering feeds ArcMatch's variable ordering), fold
     the `Vf2` candidate-gen optimization, then `substructure_matches` (`GraphAndOverlays` first,

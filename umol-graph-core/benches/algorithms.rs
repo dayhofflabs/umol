@@ -1,9 +1,12 @@
 use criterion::{criterion_group, criterion_main, Criterion};
+use umol_graph_core::SubgraphIsomorphismAlgorithm::{
+    ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
+};
 use umol_graph_core::{
     AutomorphismAlgorithm, BiconnectedComponentsAlgorithm, ConnectedComponentsAlgorithm,
     CycleEnumerationAlgorithm, EdgeId, Graph, MatchingEnumerationAlgorithm,
     MaxIndependentSetAlgorithm, MaxMatchingAlgorithm, NodeId, ShortestCycleAlgorithm,
-    SubgraphIsomorphismAlgorithm,
+    SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH,
 };
 
 fn path(n: usize) -> Graph {
@@ -316,6 +319,33 @@ fn automorphism(c: &mut Criterion) {
     group.finish();
 }
 
+const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
+    Vf2,
+    Ullmann,
+    Ri,
+    ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH },
+    Vf2Rdkit,
+    RayKirsch,
+];
+
+fn subiso_name(algorithm: SubgraphIsomorphismAlgorithm) -> &'static str {
+    match algorithm {
+        Vf2 => "vf2",
+        Ullmann => "ullmann",
+        Ri => "ri",
+        ArcMatch { .. } => "arcmatch",
+        Vf2Rdkit => "vf2rdkit",
+        RayKirsch => "raykirsch",
+    }
+}
+
+// Alternating synthetic bond orders so the edge-label-aware algorithms (ArcMatch's
+// edge domains, RI's ordering) are exercised — unlabeled regular graphs hide their
+// advantage. Values are deterministic, not chemically meaningful.
+fn edge_labels(graph: &Graph) -> Vec<u8> {
+    (0..graph.edge_count()).map(|i| (i % 2) as u8).collect()
+}
+
 fn subgraph_isomorphism(c: &mut Criterion) {
     let targets: Vec<(&str, Graph)> = vec![
         ("hexagon", cycle(6)),
@@ -337,20 +367,26 @@ fn subgraph_isomorphism(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("subgraph_isomorphism");
     for (tname, target) in &targets {
+        let t_labels = edge_labels(target);
         for (qname, query) in &queries {
             if query.node_count() > target.node_count() {
                 continue;
             }
-            group.bench_function(format!("{tname}/{qname}"), |b| {
-                b.iter(|| {
-                    target.subgraph_isomorphisms(
-                        query,
-                        &mut |_: NodeId, _: NodeId| true,
-                        &mut |_: EdgeId, _: EdgeId| true,
-                        SubgraphIsomorphismAlgorithm::Vf2,
-                    )
+            let q_labels = edge_labels(query);
+            for algorithm in SUBISO {
+                group.bench_function(format!("{tname}/{qname}/{}", subiso_name(algorithm)), |b| {
+                    b.iter(|| {
+                        target.subgraph_isomorphisms(
+                            query,
+                            &mut |_: NodeId, _: NodeId| true,
+                            &mut |qe: EdgeId, he: EdgeId| {
+                                q_labels[qe.index()] == t_labels[he.index()]
+                            },
+                            algorithm,
+                        )
+                    });
                 });
-            });
+            }
         }
     }
     group.finish();

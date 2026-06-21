@@ -327,4 +327,24 @@ proptest! {
         assert_canonical_lattice_laws(&a, &b, &c)?;
     }
 
+    #[test]
+    fn test_atom_ast_lattice_laws(
+        a in atom_ast_strategy(),
+        b in atom_ast_strategy(),
+        c in atom_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
+    #[test]
+    fn test_bond_ast_lattice_laws(
+        a in bond_ast_strategy(),
+        b in bond_ast_strategy(),
+        c in bond_ast_strategy(),
+    ) {
+        assert_lattice_laws(&a, &b, &c)?;
+        assert_canonical_lattice_laws(&a, &b, &c)?;
+    }
+
 }

@@ -443,6 +443,28 @@ impl Lattice for ElementAst {
             }
         }
     }
+
+    /// Partial-order check `target ⊑ self`, allocation-free for the literal
+    /// cases. `NotSet` (complement) and `Var` on either side fall back to the
+    /// canonicalizing `meet`-derived default, which this must equal.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::NotSet(_) | Self::Var(_), _) | (_, Self::NotSet(_) | Self::Var(_)) => {
+                match (self.meet(target), target.canonical()) {
+                    (Some(meet), Ok(target)) => meet == *target,
+                    _ => false,
+                }
+            }
+            (Self::Undetermined, Self::Undetermined | Self::Lit(_)) => true,
+            (Self::Lit(_), Self::Undetermined) => false,
+            (Self::Lit(p), Self::Lit(t)) => p == t,
+            (Self::Undetermined, Self::LitSet(t)) => !t.is_empty(),
+            (Self::LitSet(_), Self::Undetermined) => false,
+            (Self::Lit(p), Self::LitSet(t)) => t.len() == 1 && t.contains(p),
+            (Self::LitSet(p), Self::Lit(t)) => p.contains(t),
+            (Self::LitSet(p), Self::LitSet(t)) => !t.is_empty() && t.iter().all(|x| p.contains(x)),
+        }
+    }
 }
 
 /// Isotope-mass expression: undetermined, the natural isotopic mixture
@@ -617,6 +639,30 @@ impl Lattice for IsotopeMassAst {
                     .canonicalize()
                     .unwrap_or(Undetermined)
             }
+        }
+    }
+
+    /// Partial-order check `target ⊑ self`, allocation-free for the literal
+    /// cases. `Natural` is an isolated ground (matches only `Natural`); only
+    /// `Var` on either side falls back to the `meet`-derived default.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Var(_), _) | (_, Self::Var(_)) => {
+                match (self.meet(target), target.canonical()) {
+                    (Some(meet), Ok(target)) => meet == *target,
+                    _ => false,
+                }
+            }
+            (Self::Undetermined, Self::Undetermined | Self::Natural | Self::Lit(_)) => true,
+            (Self::Natural, Self::Natural) => true,
+            (Self::Natural, _) | (_, Self::Natural) => false,
+            (Self::Lit(_), Self::Undetermined) => false,
+            (Self::Lit(p), Self::Lit(t)) => p == t,
+            (Self::Undetermined, Self::LitSet(t)) => !t.is_empty(),
+            (Self::LitSet(_), Self::Undetermined) => false,
+            (Self::Lit(p), Self::LitSet(t)) => t.len() == 1 && t.contains(p),
+            (Self::LitSet(p), Self::Lit(t)) => p.contains(t),
+            (Self::LitSet(p), Self::LitSet(t)) => !t.is_empty() && t.iter().all(|x| p.contains(x)),
         }
     }
 }

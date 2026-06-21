@@ -535,6 +535,29 @@ impl Lattice for ValueAst {
             }
         }
     }
+
+    /// Partial-order check `target ⊑ self` (pattern admits every value target
+    /// admits), specialized for the literal cases so the matcher's per-candidate
+    /// path allocates nothing. `Term`/`Predicate` on either side fall back to the
+    /// canonicalizing `meet`-derived default, which this must equal.
+    fn matches(&self, target: &Self) -> bool {
+        match (self, target) {
+            (Self::Term(_) | Self::Predicate(_), _) | (_, Self::Term(_) | Self::Predicate(_)) => {
+                match (self.meet(target), target.canonical()) {
+                    (Some(meet), Ok(target)) => meet == *target,
+                    _ => false,
+                }
+            }
+            (Self::Undetermined, Self::Undetermined | Self::Lit(_)) => true,
+            (Self::Lit(_), Self::Undetermined) => false,
+            (Self::Lit(p), Self::Lit(t)) => p == t,
+            (Self::Undetermined, Self::LitSet(t)) => !t.is_empty(),
+            (Self::LitSet(_), Self::Undetermined) => false,
+            (Self::Lit(p), Self::LitSet(t)) => t.len() == 1 && t.contains(p),
+            (Self::LitSet(p), Self::Lit(t)) => p.contains(t),
+            (Self::LitSet(p), Self::LitSet(t)) => !t.is_empty() && t.iter().all(|x| p.contains(x)),
+        }
+    }
 }
 
 /// A non-empty canonical set as a `ValueAst`: a singleton collapses to `Lit`.

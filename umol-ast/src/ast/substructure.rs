@@ -55,6 +55,39 @@ impl MoleculeAst {
         }
     }
 
+    /// Host atom/bond match-targets: each stored entity with its derived
+    /// topological constraints folded in (last-wins) — but only for the entity kind
+    /// the *pattern* constrains. An unconstrained pattern never consults the host's
+    /// derived constraints (empty pattern constraints match any target), so deriving
+    /// them is wasted; element/bond patterns over SMILES-raised hosts skip it.
+    fn host_match_targets(&self, host: &MoleculeAst) -> (Vec<AtomAst>, Vec<BondAst>) {
+        let derive_atoms = self.atoms().iter().any(|a| !a.ast.constraints.is_empty());
+        let host_atoms: Vec<AtomAst> = host
+            .atoms()
+            .iter()
+            .map(|a| {
+                if derive_atoms {
+                    a.ast.clone().with_constraints(a.derive_constraints())
+                } else {
+                    a.ast.clone()
+                }
+            })
+            .collect();
+        let derive_bonds = self.bonds().iter().any(|b| !b.ast.constraints.is_empty());
+        let host_bonds: Vec<BondAst> = host
+            .bonds()
+            .iter()
+            .map(|b| {
+                if derive_bonds {
+                    b.ast.clone().with_constraints(b.derive_constraints())
+                } else {
+                    b.ast.clone()
+                }
+            })
+            .collect();
+        (host_atoms, host_bonds)
+    }
+
     fn substructure_matches_graph_and_overlays<'h>(
         &self,
         host: &'h MoleculeAst,
@@ -64,18 +97,7 @@ impl MoleculeAst {
         if pattern.atoms().count() > host.atoms().count() {
             return Vec::new();
         }
-        // Host match-targets: stored constraints with derived topological ones folded
-        // in (last-wins). Precomputed once, not per candidate.
-        let host_atoms: Vec<AtomAst> = host
-            .atoms()
-            .iter()
-            .map(|a| a.ast.clone().with_constraints(a.derive_constraints()))
-            .collect();
-        let host_bonds: Vec<BondAst> = host
-            .bonds()
-            .iter()
-            .map(|b| b.ast.clone().with_constraints(b.derive_constraints()))
-            .collect();
+        let (host_atoms, host_bonds) = pattern.host_match_targets(host);
 
         host.graph()
             .subgraph_isomorphisms(
@@ -111,16 +133,7 @@ impl MoleculeAst {
         let selection = IncidenceNodeSelection::constitution();
         let pattern_levi = pattern.incidence_graph(selection);
         let host_levi = host.incidence_graph(selection);
-        let host_atoms: Vec<AtomAst> = host
-            .atoms()
-            .iter()
-            .map(|a| a.ast.clone().with_constraints(a.derive_constraints()))
-            .collect();
-        let host_bonds: Vec<BondAst> = host
-            .bonds()
-            .iter()
-            .map(|b| b.ast.clone().with_constraints(b.derive_constraints()))
-            .collect();
+        let (host_atoms, host_bonds) = pattern.host_match_targets(host);
         let atom_count = pattern.atoms().count();
 
         host_levi

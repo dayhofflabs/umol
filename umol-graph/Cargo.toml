@@ -53,7 +53,10 @@ conformance = []
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 umol-ast = { path = "../umol-ast", version = "0.1.0" }
-umol-edn = { path = "../umol-edn", version = "0.1.0", features = ["macros", "indexmap"] }
+umol-edn = { path = "../umol-edn", version = "0.1.0", features = [
+    "macros",
+    "indexmap",
+] }
 umol-graph-core = { path = "../umol-graph-core", version = "0.1.0" }
 umol-io = { path = "../umol-io", version = "0.1.0" }
 murmur3 = "0.5"
@@ -87,7 +90,6 @@ required-features = ["legacy"]
 [[bench]]
 name = "substructure"
 harness = false
-required-features = ["legacy"]
 
 [lints.clippy]
 absolute_paths = "warn"

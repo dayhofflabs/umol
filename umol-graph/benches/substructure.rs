@@ -1,161 +1,185 @@
-//! Substructure matching benchmark against 9k SMILES corpus.
+//! End-to-end substructure matching over the basic_opensmiles corpus
+//! (`umol-io/tests/smiles_parsing/data/basic_opensmiles`, ~9k molecules).
 //!
-//! Three query patterns of increasing complexity:
-//! 1. Branched: C(C)C(C)N  — 5 atoms, 4 single bonds
-//! 2. Phenol:   c1ccccc1O  — 7 atoms, 7 any-bonds (6-ring + O)
-//! 3. Bicyclic: C1~C(~C~C~C2)~C2~C~C~C1 — 9 atoms, 10 any-bonds (fused 5-6)
+//! Sweeps both `MoleculeAst::substructure_matches` strategies against all six
+//! subgraph-isomorphism algorithms, over three patterns of increasing cost. The
+//! corpus, patterns, and matching semantics (element-only atoms, any-bonds,
+//! all-embeddings enumeration) mirror `scripts/rdkit_substructure_baseline.py`
+//! so the timings are directly comparable to the actual-RDKit baseline.
 
+use std::fs::read_to_string;
 use std::hint::black_box;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use umol_ast::ast::value::ValueAst;
-use umol_graph::api::molecule::Molecule;
-use umol_graph::api::pattern::MoleculePattern;
-use umol_graph::ast::atom::AtomAst;
-use umol_graph::ast::bond::BondAst;
-use umol_graph::ast::molecule::MoleculeAst;
-use umol_graph::ast::AtomId;
-use umol_graph::ops::matcher::Matcher;
+use criterion::{criterion_group, criterion_main, Criterion};
+use umol_ast::ast::SubstructureMatchAlgorithm::{GraphAndOverlays, Incidence};
+use umol_ast::ast::{AtomAst, AtomId, BondAst, MoleculeAst, SubstructureMatchAlgorithm, ValueAst};
 use umol_graph::parse::parse_smiles;
+use umol_graph_core::SubgraphIsomorphismAlgorithm::{
+    ArcMatch, RayKirsch, Ri, Ullmann, Vf2, Vf2Rdkit,
+};
+use umol_graph_core::{SubgraphIsomorphismAlgorithm, ARCMATCH_DEFAULT_PATH_LENGTH};
 use umol_shared::element::Element;
+use walkdir::WalkDir;
 
-fn load_smiles() -> Vec<String> {
-    let data_dir = concat!(
+const SUBISO: [SubgraphIsomorphismAlgorithm; 6] = [
+    Vf2,
+    Ullmann,
+    Ri,
+    ArcMatch { path_length: ARCMATCH_DEFAULT_PATH_LENGTH },
+    Vf2Rdkit,
+    RayKirsch,
+];
+const STRATEGIES: [SubstructureMatchAlgorithm; 2] = [GraphAndOverlays, Incidence];
+
+fn subiso_name(algorithm: SubgraphIsomorphismAlgorithm) -> &'static str {
+    match algorithm {
+        Vf2 => "vf2",
+        Ullmann => "ullmann",
+        Ri => "ri",
+        ArcMatch { .. } => "arcmatch",
+        Vf2Rdkit => "vf2rdkit",
+        RayKirsch => "raykirsch",
+    }
+}
+
+fn strategy_name(strategy: SubstructureMatchAlgorithm) -> &'static str {
+    match strategy {
+        GraphAndOverlays => "graph_overlays",
+        Incidence => "incidence",
+    }
+}
+
+fn load_corpus() -> Vec<MoleculeAst> {
+    let dir = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/smiles_parsing/data/basic_opensmiles"
+        "/../umol-io/tests/smiles_parsing/data/basic_opensmiles"
     );
-    let mut smiles_list = Vec::new();
-    for entry in walkdir::WalkDir::new(data_dir)
+    let mut molecules = Vec::new();
+    for entry in WalkDir::new(dir)
         .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "smiles"))
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|x| x == "smiles"))
     {
-        let content = std::fs::read_to_string(entry.path()).unwrap();
-        if let Some(s) = content.lines().nth(1) {
-            if !s.is_empty() {
-                smiles_list.push(s.to_string());
+        let Ok(content) = read_to_string(entry.path()) else {
+            continue;
+        };
+        if let Some(smiles) = content.lines().nth(1) {
+            if !smiles.is_empty() {
+                if let Ok(molecule) = parse_smiles(smiles) {
+                    molecules.push(molecule);
+                }
             }
         }
     }
-    smiles_list
+    molecules
 }
 
-fn load_corpus(smiles_list: &[String]) -> Vec<Molecule> {
-    let mut mols = Vec::new();
-    for s in smiles_list {
-        if let Ok(mol) = parse_smiles(s) {
-            mols.push(mol);
-        }
-    }
-    mols
+fn carbon() -> AtomAst {
+    AtomAst::from_element(Element::C)
 }
 
-fn wb() -> BondAst {
+fn any_bond() -> BondAst {
     BondAst::new(ValueAst::Undetermined)
 }
 
-fn a(e: Element) -> AtomAst {
-    AtomAst::from_element(e)
-}
-
-fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(usize, usize, BondAst)>) -> MoleculePattern {
-    let bond_list: Vec<(AtomId, AtomId, BondAst)> = bonds
+fn pattern(atoms: Vec<AtomAst>, bonds: Vec<(u32, u32, BondAst)>) -> MoleculeAst {
+    let bond_list = bonds
         .into_iter()
-        .map(|(s, t, b)| (AtomId(s as u32), AtomId(t as u32), b))
+        .map(|(s, t, b)| (AtomId(s), AtomId(t), b))
         .collect();
-    let ast = MoleculeAst::from_parts(atoms, bond_list, vec![], vec![], vec![], vec![], vec![]);
-    MoleculePattern::new(ast)
+    MoleculeAst::from_atoms_and_bonds(atoms, bond_list)
 }
 
-fn pattern_branched() -> MoleculePattern {
+/// `C(C)C(C)N` — 5 atoms, all any-bonds.
+fn pattern_branched() -> MoleculeAst {
     pattern(
         vec![
-            a(Element::C),
-            a(Element::C),
-            a(Element::C),
-            a(Element::C),
-            a(Element::N),
-        ],
-        vec![(0, 1, wb()), (0, 2, wb()), (2, 3, wb()), (2, 4, wb())],
-    )
-}
-
-fn pattern_phenol() -> MoleculePattern {
-    pattern(
-        vec![
-            a(Element::C),
-            a(Element::C),
-            a(Element::C),
-            a(Element::C),
-            a(Element::C),
-            a(Element::C),
-            a(Element::O),
+            carbon(),
+            carbon(),
+            carbon(),
+            carbon(),
+            AtomAst::from_element(Element::N),
         ],
         vec![
-            (0, 1, wb()),
-            (1, 2, wb()),
-            (2, 3, wb()),
-            (3, 4, wb()),
-            (4, 5, wb()),
-            (5, 0, wb()),
-            (5, 6, wb()),
+            (0, 1, any_bond()),
+            (0, 2, any_bond()),
+            (2, 3, any_bond()),
+            (2, 4, any_bond()),
         ],
     )
 }
 
-// Ring 1: 0-1-5-6-7-8 (6-membered)
-// Ring 2: 1-2-3-4-5   (5-membered)
-// Fused edge: 1-5
-fn pattern_bicyclic() -> MoleculePattern {
+/// `c1ccccc1O` — 6-ring + hydroxyl, all any-bonds.
+fn pattern_phenol() -> MoleculeAst {
     pattern(
-        (0..9).map(|_| a(Element::C)).collect(),
         vec![
-            (0, 1, wb()),
-            (1, 2, wb()),
-            (2, 3, wb()),
-            (3, 4, wb()),
-            (4, 5, wb()),
-            (1, 5, wb()),
-            (5, 6, wb()),
-            (6, 7, wb()),
-            (7, 8, wb()),
-            (8, 0, wb()),
+            carbon(),
+            carbon(),
+            carbon(),
+            carbon(),
+            carbon(),
+            carbon(),
+            AtomAst::from_element(Element::O),
+        ],
+        vec![
+            (0, 1, any_bond()),
+            (1, 2, any_bond()),
+            (2, 3, any_bond()),
+            (3, 4, any_bond()),
+            (4, 5, any_bond()),
+            (5, 0, any_bond()),
+            (5, 6, any_bond()),
+        ],
+    )
+}
+
+/// Fused 5-6 bicyclic carbon skeleton (ring A 0-1-5-6-7-8, ring B 1-2-3-4-5,
+/// fused edge 1-5), all any-bonds.
+fn pattern_bicyclic() -> MoleculeAst {
+    pattern(
+        (0..9).map(|_| carbon()).collect(),
+        vec![
+            (0, 1, any_bond()),
+            (1, 2, any_bond()),
+            (2, 3, any_bond()),
+            (3, 4, any_bond()),
+            (4, 5, any_bond()),
+            (1, 5, any_bond()),
+            (5, 6, any_bond()),
+            (6, 7, any_bond()),
+            (7, 8, any_bond()),
+            (8, 0, any_bond()),
         ],
     )
 }
 
 fn substructure_benchmark(c: &mut Criterion) {
-    let smiles_list = load_smiles();
-    let corpus = load_corpus(&smiles_list);
-    let corpus_size = corpus.len();
-
-    let patterns: Vec<(&str, MoleculePattern)> = vec![
+    let corpus = load_corpus();
+    let patterns: [(&str, MoleculeAst); 3] = [
         ("branched", pattern_branched()),
         ("phenol", pattern_phenol()),
         ("bicyclic", pattern_bicyclic()),
     ];
 
-    let matcher = Matcher::new();
     let mut group = c.benchmark_group("substructure");
-
-    for (name, pat) in &patterns {
-        let match_count = corpus
-            .iter()
-            .filter(|t| !matcher.find(pat, t).is_empty())
-            .count();
-
-        group.bench_function(
-            BenchmarkId::new(*name, format!("{corpus_size}_hits_{match_count}")),
-            |b| {
-                b.iter(|| {
-                    for target in &corpus {
-                        black_box(matcher.find(pat, target));
-                    }
+    for (pattern_name, pat) in &patterns {
+        for strategy in STRATEGIES {
+            for algorithm in SUBISO {
+                let id = format!(
+                    "{pattern_name}/{}/{}",
+                    strategy_name(strategy),
+                    subiso_name(algorithm)
+                );
+                group.bench_function(id, |b| {
+                    b.iter(|| {
+                        for target in &corpus {
+                            black_box(pat.substructure_matches(target, strategy, algorithm));
+                        }
+                    });
                 });
-            },
-        );
+            }
+        }
     }
-
     group.finish();
 }
 
